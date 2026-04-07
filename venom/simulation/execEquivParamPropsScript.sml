@@ -16,7 +16,7 @@ Theorem step_inst_preserves_R:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
+    lift_result R_ok R_term R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
 Proof
   ACCEPT_TAC step_inst_preserves_R_proof
 QED
@@ -34,11 +34,11 @@ Theorem run_block_preserves_R:
   ==>
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                                 (run_block fuel ctx bb s2)) /\
     (!fuel ctx s1 s2.
        R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_function fuel ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s1)
                                 (run_function fuel ctx fn s2))
 Proof
   ACCEPT_TAC run_block_preserves_R_proof
@@ -69,7 +69,7 @@ Theorem run_block_same_preserves_RQ:
        R_ok v1 v2 ==>
        Q (v1 with vs_inst_idx := SUC i)
          (v2 with vs_inst_idx := SUC i)) ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (run_block fuel ctx bb s1)
       (run_block fuel ctx bb s2)
 Proof

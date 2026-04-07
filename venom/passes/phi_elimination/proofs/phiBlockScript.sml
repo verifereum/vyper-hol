@@ -306,7 +306,7 @@ Triviality phi_step_lift_result[local]:
     (!e. step_inst_base inst s = Error e ==>
          lookup_var src_var s = NONE)
   ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (step_inst_base inst s)
       (step_inst_base (transform_inst dfg inst) s)
 Proof
@@ -364,7 +364,7 @@ Theorem phi_elim_block_sim:
        step_inst fuel' ctx' inst s' = Error e ==>
        lookup_var src_var s' = NONE)
   ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_block fuel ctx bb s)
       (run_block fuel ctx (transform_block dfg bb) s)
 Proof
@@ -431,7 +431,7 @@ Proof
       (fn th => REWRITE_TAC [th] >> ASSUME_TAC th) >>
     qpat_x_assum `step_inst fuel ctx (transform_inst dfg inst) s = _`
       (fn th => REWRITE_TAC [th] >> ASSUME_TAC th) >>
-    `lift_result (state_equiv {}) (execution_equiv {})
+    `lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
        (step_inst_base inst s) (step_inst_base (transform_inst dfg inst) s)` by (
       irule phi_step_lift_result >> simp[] >>
       conj_tac >- (

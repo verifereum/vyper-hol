@@ -158,7 +158,8 @@ QED
 
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:
-  !vars. result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars)
+  !vars. result_equiv vars =
+         lift_result (state_equiv vars) (execution_equiv vars) revert_equiv
 Proof
   rw[FUN_EQ_THM] >> Cases_on `x` >> Cases_on `x'` >>
   simp[result_equiv_def, lift_result_def]

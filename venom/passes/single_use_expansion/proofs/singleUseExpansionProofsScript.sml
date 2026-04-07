@@ -1126,7 +1126,7 @@ Theorem sue_inst_sim[local]:
     (!v k. MEM (Var v) inst.inst_operands /\
            k < LENGTH inst.inst_operands ==>
            v <> sue_fresh_var inst.inst_id k) ==>
-    lift_result (state_equiv fresh) (execution_equiv fresh)
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (step_inst fuel ctx inst st)
       (run_insts fuel ctx (sue_expand_inst dfg inst) st)
 Proof
@@ -1222,7 +1222,7 @@ Proof
       simp[]) >>
     (* Step J: lift_result from step_inst_preserves_R *)
     `lift_result (state_equiv (sue_fresh_vars_fn fn))
-                 (execution_equiv (sue_fresh_vars_fn fn))
+                 (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
        (step_inst fuel ctx inst st) (step_inst fuel ctx inst st')` by (
       irule execEquivParamProofsTheory.step_inst_preserves_R_proof >>
       simp[execEquivParamProofsTheory.state_equiv_execution_equiv_valid_state_rel_proof] >>
@@ -1373,7 +1373,7 @@ Triviality sue_inst_sim_at[local]:
     sue_operands_wf inst /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
     fresh = sue_fresh_vars_fn fn ==>
-    lift_result (state_equiv fresh) (execution_equiv fresh)
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (step_inst fuel ctx inst st)
       (run_insts fuel ctx (sue_expand_inst dfg inst) st)
 Proof
@@ -1430,7 +1430,7 @@ Triviality sue_assigns_error_lift[local]:
   !fuel ctx inst s assigns expanded_insts bb i j e fn.
     run_insts fuel ctx assigns (s with vs_inst_idx := 0) = Error e /\
     lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
                (step_inst fuel ctx inst (s with vs_inst_idx := 0))
                (Error e) /\
     EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -1441,7 +1441,7 @@ Triviality sue_assigns_error_lift[local]:
     valid_state_rel (state_equiv (sue_fresh_vars_fn fn))
                     (execution_equiv (sue_fresh_vars_fn fn)) ==>
     lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
       (case step_inst fuel ctx inst s of
          OK s'' =>
            if is_terminator inst.inst_opcode then
@@ -1465,17 +1465,17 @@ Proof
     metis_tac[analysisSimProofsBaseTheory.step_inst_error_idx_recover] >>
   simp[] >>
   `lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
                (Error e') (Error e)` by gvs[lift_result_def] >>
   (* Expanded block errors via run_insts_lift_run_block *)
   `lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
                (Error e)
                (run_block fuel ctx
                   (bb with bb_instructions := expanded_insts)
                   (s with vs_inst_idx := j))` by (
     `lift_result (state_equiv (sue_fresh_vars_fn fn))
-                 (execution_equiv (sue_fresh_vars_fn fn))
+                 (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
                  (run_insts fuel ctx assigns (s with vs_inst_idx := 0))
                  (run_block fuel ctx
                     (bb with bb_instructions := expanded_insts)
@@ -1596,7 +1596,7 @@ Triviality sue_rbp_state_equiv[local]:
     (!inst x. MEM inst bb.bb_instructions /\
               MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
     state_equiv fresh s1 s2 ==>
-    lift_result (state_equiv fresh) (execution_equiv fresh)
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (run_block fuel ctx bb (s1 with vs_inst_idx := n))
       (run_block fuel ctx bb (s2 with vs_inst_idx := n))
 Proof
@@ -1645,7 +1645,7 @@ Triviality sue_nonterm_case[local]:
     sa.vs_inst_idx = 0 /\
     run_insts fuel ctx assigns (s with vs_inst_idx := 0) = OK sa /\
     lift_result (state_equiv (sue_fresh_vars_fn fn))
-                (execution_equiv (sue_fresh_vars_fn fn))
+                (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
       (step_inst fuel ctx inst (s with vs_inst_idx := 0))
       (step_inst fuel ctx mod_inst sa) /\
     jm <= LENGTH (FLAT (MAP exp bb.bb_instructions)) /\
@@ -1655,7 +1655,7 @@ Triviality sue_nonterm_case[local]:
       !fuel ctx s. m = LENGTH bb.bb_instructions - s.vs_inst_idx /\
         s.vs_inst_idx <= LENGTH bb.bb_instructions ==>
         lift_result (state_equiv (sue_fresh_vars_fn fn))
-          (execution_equiv (sue_fresh_vars_fn fn))
+          (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
           (run_block fuel ctx bb s)
           (run_block fuel ctx
              (bb with bb_instructions := FLAT (MAP exp bb.bb_instructions))
@@ -1663,7 +1663,7 @@ Triviality sue_nonterm_case[local]:
                 SUM (MAP (LENGTH o exp) (TAKE s.vs_inst_idx bb.bb_instructions)))))
   ==>
     lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
       (case step_inst fuel ctx inst s of
          OK s'' => run_block fuel ctx bb (s'' with vs_inst_idx := SUC i)
        | Halt s' => Halt s'
@@ -1741,7 +1741,7 @@ Triviality sue_block_sim_induct[local]:
     !n fuel ctx s.
       n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
       s.vs_inst_idx <= LENGTH bb.bb_instructions ==>
-      lift_result (state_equiv fresh) (execution_equiv fresh)
+      lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (run_block fuel ctx bb s)
         (run_block fuel ctx
            (bb with bb_instructions :=
@@ -1811,7 +1811,7 @@ Proof
     simp[get_instruction_def, Abbr `inst`, Abbr `i`]) >>
   pop_assum SUBST1_TAC >>
   (* Per-instruction simulation at idx=0 *)
-  `lift_result (state_equiv fresh) (execution_equiv fresh)
+  `lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
      (step_inst fuel ctx inst (s with vs_inst_idx := 0))
      (run_insts fuel ctx (sue_expand_inst dfg inst) (s with vs_inst_idx := 0))` by (
     qspecl_then [`dfg`, `inst`, `fuel`, `ctx`,
@@ -1965,7 +1965,7 @@ Theorem sue_block_sim[local]:
               MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
     fresh = sue_fresh_vars_fn fn /\
     st.vs_inst_idx = 0 ==>
-    lift_result (state_equiv fresh) (execution_equiv fresh)
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (run_block fuel ctx bb st)
       (run_block fuel ctx (sue_expand_block dfg bb) st)
 Proof
@@ -1989,7 +1989,7 @@ Theorem sue_expand_function_correct_proof:
        ~is_alloca_op inst.inst_opcode /\ sue_operands_wf inst) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
       (run_function fuel ctx fn s)
       (run_function fuel ctx (sue_expand_function fn) s)
 Proof

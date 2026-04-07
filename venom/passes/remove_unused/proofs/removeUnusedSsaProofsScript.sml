@@ -782,7 +782,7 @@ Theorem remove_unused_single_pass_correct_ssa:
     fn_entry_label fn = SOME s.vs_current_bb ==>
     let elim = single_pass_nop_outputs fn in
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (remove_unused_single_pass fn) s)
 Proof

@@ -27,7 +27,7 @@ Theorem step_inst_preserves_R_proof:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
+    lift_result R_ok R_term R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`
@@ -145,7 +145,7 @@ Theorem run_block_same_preserves_RQ_proof:
        R_ok v1 v2 ==>
        Q (v1 with vs_inst_idx := SUC i)
          (v2 with vs_inst_idx := SUC i)) ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (run_block fuel ctx bb s1)
       (run_block fuel ctx bb s2)
 Proof
@@ -169,7 +169,7 @@ Proof
   `!x. MEM (Var x) inst.inst_operands ==>
        lookup_var x s1 = lookup_var x s2` by
     (rpt strip_tac >> first_x_assum irule >> gvs[]) >>
-  `lift_result R_ok R_term (step_inst fuel ctx inst s1)
+  `lift_result R_ok R_term R_term (step_inst fuel ctx inst s1)
      (step_inst fuel ctx inst s2)` by
     (match_mp_tac step_inst_preserves_R_proof >> fs[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
@@ -211,7 +211,7 @@ Triviality run_block_preserves_R_helper:
   ==>
     !fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                                 (run_block fuel ctx bb s2)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -230,7 +230,7 @@ Proof
   rename1 `get_instruction bb _ = SOME inst` >>
   `MEM inst bb.bb_instructions` by
     (gvs[get_instruction_def] >> irule listTheory.EL_MEM >> simp[]) >>
-  `lift_result R_ok R_term (step_inst fuel ctx inst s1)
+  `lift_result R_ok R_term R_term (step_inst fuel ctx inst s1)
      (step_inst fuel ctx inst s2)` by
     (irule step_inst_preserves_R_proof >> simp[] >> metis_tac[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
@@ -258,11 +258,11 @@ Theorem run_block_preserves_R_proof:
   ==>
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                                 (run_block fuel ctx bb s2)) /\
     (!fuel ctx s1 s2.
        R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_function fuel ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s1)
                                 (run_function fuel ctx fn s2))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -283,7 +283,7 @@ Proof
   rename1 `lookup_block _ _ = SOME bb` >>
   `MEM bb fn.fn_blocks` by
     (fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
-  `lift_result R_ok R_term (run_block fuel ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
      (run_block fuel ctx bb s2)` by
     (drule_all run_block_preserves_R_helper >> simp[]) >>
   Cases_on `run_block fuel ctx bb s1` >>

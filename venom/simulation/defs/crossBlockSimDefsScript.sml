@@ -36,9 +36,9 @@ Ancestors
    n=k+1: lift_result, OR one side takes a block step and resolves in k *)
 Definition resolves_to_def:
   (resolves_to R_ok R_term bbs1 bbs2 0 r1 r2 <=>
-    lift_result R_ok R_term r1 r2) /\
+    lift_result R_ok R_term R_term r1 r2) /\
   (resolves_to R_ok R_term bbs1 bbs2 (SUC n) r1 r2 <=>
-    lift_result R_ok R_term r1 r2 \/
+    lift_result R_ok R_term R_term r1 r2 \/
     (* Original continues: run next block, resolve remainder *)
     (?v bb. r1 = OK v /\ ~v.vs_halted /\
       lookup_block v.vs_current_bb bbs1 = SOME bb /\

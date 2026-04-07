@@ -4,7 +4,7 @@
  * The frozen theorem statement:
  *   !fuel ctx fn fn' s.
  *     ssa_form fn /\ sccp_function fn = SOME fn' ==>
- *     lift_result (state_equiv {}) (execution_equiv {})
+ *     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
  *       (run_function fuel ctx fn s) (run_function fuel ctx fn' s)
  *
  * is FALSE. This file contains a machine-checked counterexample.
@@ -176,7 +176,7 @@ QED
 Theorem sccp_function_correct_proof_false:
   ~!fuel ctx fn fn' s.
     ssa_form fn /\ sccp_function fn = SOME fn' ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s) (run_function fuel ctx fn' s)
 Proof
   simp[] >>
@@ -2842,7 +2842,7 @@ Theorem sccp_per_block_sim:
       cond_const_sound
         (df_at sccp_bottom (sccp_df_analyze fn) bb.bb_label 0).sl_vals s ==>
       (?e. run_block fuel ctx bb s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {})
+      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
         (run_block fuel ctx bb s)
         (run_block fuel ctx
           (analysis_block_transform sccp_bottom (sccp_df_analyze fn)
@@ -3196,7 +3196,7 @@ Theorem sccp_block_induction_core:
               = SOME CL_Bottom)
       ==>
       (?e. run_block fuel ctx bb (s with vs_inst_idx := idx) = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {})
+      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
         (run_block fuel ctx bb (s with vs_inst_idx := idx))
         (run_block fuel ctx
           (analysis_block_transform sccp_bottom (sccp_df_analyze f)
@@ -3354,7 +3354,7 @@ Theorem sccp_per_block_sim_nophi:
          FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
            <> SOME CL_Top) ==>
       (?e. run_block fuel ctx bb s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {})
+      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
         (run_block fuel ctx bb s)
         (run_block fuel ctx
           (analysis_block_transform sccp_bottom (sccp_df_analyze f)

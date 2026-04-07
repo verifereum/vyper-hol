@@ -45,7 +45,7 @@ Theorem assign_elim_function_correct:
        MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==> x NOTIN elim) ==>
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (assign_elim_function fn) s)
 Proof

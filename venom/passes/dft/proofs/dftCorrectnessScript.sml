@@ -80,7 +80,7 @@ Theorem dft_block_simulates:
     s.vs_inst_idx = 0 /\
     valid_topo_order bb.bb_instructions order eda
                      (dft_block order bb).bb_instructions ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_block fuel ctx bb s)
       (run_block fuel ctx (dft_block order bb) s)
 Proof
@@ -104,11 +104,11 @@ Theorem dft_function_correct:
     (!bb order. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        lift_result (state_equiv {}) (execution_equiv {})
+        lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
           (run_block fuel ctx bb s)
           (run_block fuel ctx (dft_block order bb) s)) /\
     s.vs_inst_idx = 0 ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s)
       (run_function fuel ctx (dft_fn fn) s)
 Proof
@@ -124,10 +124,10 @@ Theorem dft_pass_correct:
     (!bb order. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        lift_result (state_equiv {}) (execution_equiv {})
+        lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
           (run_block fuel ctx bb s)
           (run_block fuel ctx (dft_block order bb) s)) ==>
-    pass_correct (state_equiv {}) (execution_equiv {})
+    pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (\fuel. run_function fuel ctx fn s)
       (\fuel. run_function fuel ctx (dft_fn fn) s)
 Proof

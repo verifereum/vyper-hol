@@ -231,7 +231,7 @@ Triviality resolves_to_terminal_collapses:
     resolves_to R_ok R_term bbs1 bbs2 n r1 r2 /\
     (!v. r1 = OK v ==> v.vs_halted) /\
     (!v. r2 = OK v ==> v.vs_halted) ==>
-    lift_result R_ok R_term r1 r2
+    lift_result R_ok R_term R_term r1 r2
 Proof
   Induct_on `n` >> rw[resolves_to_def] >> gvs[] >> metis_tac[]
 QED
@@ -241,7 +241,7 @@ Triviality lift_result_term_error_F:
   !R_ok R_term r1 e.
     terminates r1 /\
     (!v. r1 = OK v ==> v.vs_halted) ==>
-    ~lift_result R_ok R_term r1 (Error e)
+    ~lift_result R_ok R_term R_term r1 (Error e)
 Proof
   Cases_on `r1` >> simp[lift_result_def, terminates_def]
 QED
@@ -251,7 +251,7 @@ Triviality lift_result_error_term_F:
   !R_ok R_term e r2.
     terminates r2 /\
     (!v. r2 = OK v ==> v.vs_halted) ==>
-    ~lift_result R_ok R_term (Error e) r2
+    ~lift_result R_ok R_term R_term (Error e) r2
 Proof
   Cases_on `r2` >> simp[lift_result_def, terminates_def]
 QED
@@ -321,9 +321,9 @@ Triviality resolve_right_fn:
       ==>
         ?fuel. terminates (run_function fuel ctx fn' v2) /\
           ((!v. r1 <> OK v) ==>
-            lift_result R_ok R_term r1 (run_function fuel ctx fn' v2)) /\
+            lift_result R_ok R_term R_term r1 (run_function fuel ctx fn' v2)) /\
           (!v. r1 = OK v ==>
-            lift_result R_ok R_term (Halt v) (run_function fuel ctx fn' v2))
+            lift_result R_ok R_term R_term (Halt v) (run_function fuel ctx fn' v2))
 Proof
   rpt gen_tac >> strip_tac >>
   Induct_on `n` >> rpt strip_tac
@@ -393,7 +393,7 @@ QED
 
 Triviality lift_result_flip:
   !R_ok R_term r1 r2.
-    lift_result R_ok R_term r1 r2 <=>
+    lift_result R_ok R_term R_term r1 r2 <=>
     lift_result (\a b. R_ok b a) (\a b. R_term b a) r2 r1
 Proof
   Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def] >> metis_tac[]
@@ -419,9 +419,9 @@ Triviality resolve_left_fn:
       ==>
         ?fuel. terminates (run_function fuel ctx fn v1) /\
           ((!v. r2 <> OK v) ==>
-            lift_result R_ok R_term (run_function fuel ctx fn v1) r2) /\
+            lift_result R_ok R_term R_term (run_function fuel ctx fn v1) r2) /\
           (!v. r2 = OK v ==>
-            lift_result R_ok R_term (run_function fuel ctx fn v1) (Halt v))
+            lift_result R_ok R_term R_term (run_function fuel ctx fn v1) (Halt v))
 Proof
   rpt gen_tac >> strip_tac >>
   Induct_on `n` >> rpt strip_tac
@@ -516,10 +516,10 @@ Triviality fuel_alignment:
     (!fuel k ctx s. terminates (run_function fuel ctx fn s) ==>
        run_function (fuel + k) ctx fn s = run_function fuel ctx fn s) /\
     (!fuel ctx s1 s2. R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_function fuel ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s1)
                                 (run_function fuel ctx fn s2))
   ==>
-    lift_result R_ok R_term (run_function f1 ctx fn s1)
+    lift_result R_ok R_term R_term (run_function f1 ctx fn s1)
                              (run_function f2 ctx fn s2)
 Proof
   rpt strip_tac >>
@@ -559,11 +559,11 @@ Triviality lift_result_resolves_to:
     (!s1 s2. R_ok s1 s2 ==>
        R_ok (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0)) /\
     (!fuel ctx bb s1 s2. MEM bb bbs1 /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                                 (run_block fuel ctx bb s2))
   ==>
     !n r1 r2 r3.
-      lift_result R_ok R_term r1 r2 /\
+      lift_result R_ok R_term R_term r1 r2 /\
       resolves_to R_ok R_term bbs1 bbs2 n r2 r3 ==>
       resolves_to R_ok R_term bbs1 bbs2 n r1 r3
 Proof
@@ -589,7 +589,7 @@ Proof
     `MEM bb bbs1` by metis_tac[lookup_block_MEM] >>
     `R_ok (v' with vs_inst_idx := 0) (v with vs_inst_idx := 0)` by metis_tac[] >>
     rpt gen_tac >>
-    `lift_result R_ok R_term
+    `lift_result R_ok R_term R_term
        (run_block fuel ctx' bb (v' with vs_inst_idx := 0))
        (run_block fuel ctx' bb (v with vs_inst_idx := 0))` by metis_tac[] >>
     metis_tac[])
@@ -630,7 +630,7 @@ Triviality resolve_left_lift:
     terminates r2 /\ (!v'. r2 = OK v' ==> v'.vs_halted) /\
     terminates (run_function f ctx fn v)
   ==>
-    lift_result R_ok R_term (run_function f ctx fn v)
+    lift_result R_ok R_term R_term (run_function f ctx fn v)
       (case r2 of OK v' => Halt v' | other => other)
 Proof
   rpt strip_tac >>
@@ -665,9 +665,9 @@ Triviality left_terminal_right_fn:
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn' s2) /\
       ((!v. r1 <> OK v) ==>
-        lift_result R_ok R_term r1 (run_function fuel' ctx fn' s2)) /\
+        lift_result R_ok R_term R_term r1 (run_function fuel' ctx fn' s2)) /\
       (!v. r1 = OK v ==>
-        lift_result R_ok R_term (Halt v) (run_function fuel' ctx fn' s2))
+        lift_result R_ok R_term R_term (Halt v) (run_function fuel' ctx fn' s2))
 Proof
   rpt strip_tac >>
   Cases_on `run_block f ctx bb' s2`
@@ -678,7 +678,7 @@ Proof
     >- (
       (* OK halted *)
       `!v'. OK v2 = OK v' ==> v'.vs_halted` by fs[] >>
-      `lift_result R_ok R_term r1 (OK v2)` by
+      `lift_result R_ok R_term R_term r1 (OK v2)` by
         metis_tac[resolves_to_terminal_collapses] >>
       qexists_tac `SUC f` >>
       `run_function (SUC f) ctx fn' s2 = Halt v2` by
@@ -746,7 +746,7 @@ Triviality fwd_left_block_terminal:
     terminates (run_function (SUC f) ctx fn s1)
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn' s2) /\
-      lift_result R_ok R_term (run_function (SUC f) ctx fn s1)
+      lift_result R_ok R_term R_term (run_function (SUC f) ctx fn s1)
         (run_function fuel' ctx fn' s2)
 Proof
   rpt strip_tac >>
@@ -787,11 +787,11 @@ Triviality fwd_term_one_step:
        v'.vs_inst_idx = 0 /\ ~v'.vs_halted /\
        terminates (run_function f ctx fn v) ==>
        ?fuel2. terminates (run_function fuel2 ctx fn' v') /\
-         lift_result R_ok R_term (run_function f ctx fn v)
+         lift_result R_ok R_term R_term (run_function f ctx fn v)
            (run_function fuel2 ctx fn' v'))
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn' s2) /\
-      lift_result R_ok R_term (run_function (SUC f) ctx fn s1)
+      lift_result R_ok R_term R_term (run_function (SUC f) ctx fn s1)
         (run_function fuel' ctx fn' s2)
 Proof
   rpt strip_tac >>
@@ -928,7 +928,7 @@ Triviality fwd_left_terminal:
     (!v. run_block f ctx bb s1 = OK v ==> v.vs_halted)
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn2 s2) /\
-      lift_result R_ok R_term (run_function (SUC f) ctx fn1 s1)
+      lift_result R_ok R_term R_term (run_function (SUC f) ctx fn1 s1)
         (run_function fuel' ctx fn2 s2)
 Proof
   rpt strip_tac >>
@@ -983,11 +983,11 @@ Triviality gen_term_lift_left_step:
        v'.vs_inst_idx = 0 /\ ~v'.vs_halted /\
        terminates (run_function f ctx fn1 v) ==>
        ?fuel2. terminates (run_function fuel2 ctx fn2 v') /\
-         lift_result R_ok R_term (run_function f ctx fn1 v)
+         lift_result R_ok R_term R_term (run_function f ctx fn1 v)
            (run_function fuel2 ctx fn2 v'))
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn2 s2) /\
-      lift_result R_ok R_term (run_function (SUC f) ctx fn1 s1)
+      lift_result R_ok R_term R_term (run_function (SUC f) ctx fn1 s1)
         (run_function fuel' ctx fn2 s2)
 Proof
   rpt strip_tac >>
@@ -1035,7 +1035,7 @@ Triviality fwd_right_terminal:
     (!v. run_block 0 ctx bb s2 = OK v ==> v.vs_halted)
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn2 s2) /\
-      lift_result R_ok R_term (run_function fuel ctx fn1 s1)
+      lift_result R_ok R_term R_term (run_function fuel ctx fn1 s1)
         (run_function fuel' ctx fn2 s2)
 Proof
   rpt strip_tac >>
@@ -1101,11 +1101,11 @@ Triviality gen_term_lift_right_step:
        v'.vs_inst_idx = 0 /\ ~v'.vs_halted /\
        terminates (run_function fuel ctx fn1 v) ==>
        ?fuel2. terminates (run_function fuel2 ctx fn2 v') /\
-         lift_result R_ok R_term (run_function fuel ctx fn1 v)
+         lift_result R_ok R_term R_term (run_function fuel ctx fn1 v)
            (run_function fuel2 ctx fn2 v'))
   ==>
     ?fuel'. terminates (run_function fuel' ctx fn2 s2) /\
-      lift_result R_ok R_term (run_function fuel ctx fn1 s1)
+      lift_result R_ok R_term R_term (run_function fuel ctx fn1 s1)
         (run_function fuel' ctx fn2 s2)
 Proof
   rpt strip_tac >>
@@ -1187,7 +1187,7 @@ Theorem gen_term_lift:
       s2.vs_inst_idx = 0 /\ ~s2.vs_halted /\
       terminates (run_function fuel ctx fn1 s1) ==>
       ?fuel'. terminates (run_function fuel' ctx fn2 s2) /\
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (run_function fuel ctx fn1 s1)
           (run_function fuel' ctx fn2 s2)
 Proof
@@ -1342,7 +1342,7 @@ Triviality fwd_lift:
       s.vs_inst_idx = 0 /\ ~s.vs_halted /\
       terminates (run_function fuel ctx fn s) ==>
       ?fuel'. terminates (run_function fuel' ctx fn' s) /\
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (run_function fuel ctx fn s)
           (run_function fuel' ctx fn' s)
 Proof
@@ -1359,7 +1359,7 @@ Proof
     (rpt strip_tac >> irule vsr_inst_idx_R_ok >> metis_tac[]) >>
   `!s. R_ok s s` by (rpt strip_tac >> irule vsr_R_ok_refl >> metis_tac[]) >>
   `!fuel ctx bb s1 s2. MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-     lift_result R_ok R_term (run_block fuel ctx bb s1)
+     lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                               (run_block fuel ctx bb s2)` by (
     rpt strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac run_block_preserves_R_proof >>
@@ -1380,7 +1380,7 @@ Proof
     conj_tac
     >- simp[function_map_transform_def, lookup_block_map_proof]
     >- (
-      `lift_result R_ok R_term (run_block fuel ctx bb s1)
+      `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
          (run_block fuel ctx bb s2)` by (
         qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _`
           (irule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
@@ -1430,7 +1430,7 @@ Triviality bwd_lift:
       s.vs_inst_idx = 0 /\ ~s.vs_halted /\
       terminates (run_function fuel ctx fn' s) ==>
       ?fuel'. terminates (run_function fuel' ctx fn s) /\
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (run_function fuel' ctx fn s)
           (run_function fuel ctx fn' s)
 Proof
@@ -1448,7 +1448,7 @@ Proof
     (rpt strip_tac >> irule vsr_inst_idx_R_ok >> metis_tac[]) >>
   `!s. R_ok s s` by (rpt strip_tac >> irule vsr_R_ok_refl >> metis_tac[]) >>
   `!fuel ctx bb s1 s2. MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-     lift_result R_ok R_term (run_block fuel ctx bb s1)
+     lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                               (run_block fuel ctx bb s2)` by (
     rpt strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac run_block_preserves_R_proof >>
@@ -1474,8 +1474,8 @@ Proof
     ) >>
     qexists_tac `bb` >> simp[] >>
     `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-    (* Triangle: lift_result R_ok R_term (bb s2) (bb s1) *)
-    `lift_result R_ok R_term (run_block fuel ctx bb s2)
+    (* Triangle: lift_result R_ok R_term R_term (bb s2) (bb s1) *)
+    `lift_result R_ok R_term R_term (run_block fuel ctx bb s2)
        (run_block fuel ctx bb s1)` by (
       qpat_x_assum `!f c b a b'. MEM _ _ /\ R_ok _ _ ==> lift_result _ _ _ _`
         (irule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
@@ -1551,7 +1551,7 @@ Theorem resolving_block_sim_function_proof:
     (!fuel fuel'.
        terminates (run_function fuel ctx fn s) /\
        terminates (run_function fuel' ctx fn' s) ==>
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (run_function fuel ctx fn s)
          (run_function fuel' ctx fn' s))
 Proof
@@ -1562,7 +1562,7 @@ Proof
      terminates (run_function fuel ctx fn s) ==>
      ?fuel'. terminates (run_function fuel' ctx
                 (function_map_transform bt fn) s) /\
-       lift_result R_ok R_term (run_function fuel ctx fn s)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s)
          (run_function fuel' ctx (function_map_transform bt fn) s)` by (
     match_mp_tac
       (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] fwd_lift)) >>
@@ -1572,7 +1572,7 @@ Proof
   `!fuel ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted /\
      terminates (run_function fuel ctx (function_map_transform bt fn) s) ==>
      ?fuel'. terminates (run_function fuel' ctx fn s) /\
-       lift_result R_ok R_term (run_function fuel' ctx fn s)
+       lift_result R_ok R_term R_term (run_function fuel' ctx fn s)
          (run_function fuel ctx (function_map_transform bt fn) s)` by (
     match_mp_tac
       (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] bwd_lift)) >>
@@ -1586,7 +1586,7 @@ Proof
     rpt strip_tac >>
     `?fuel_f. terminates (run_function fuel_f ctx
                 (function_map_transform bt fn) s) /\
-       lift_result R_ok R_term (run_function fuel ctx fn s)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s)
          (run_function fuel_f ctx (function_map_transform bt fn) s)` by (
       qpat_x_assum `!fuel ctx s.
         s.vs_inst_idx = 0 /\ ~s.vs_halted /\
@@ -1635,7 +1635,7 @@ Theorem resolving_block_sim_function_v2:
     (!fuel fuel'.
        terminates (run_function fuel ctx fn s) /\
        terminates (run_function fuel' ctx fn' s) ==>
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (run_function fuel ctx fn s)
          (run_function fuel' ctx fn' s))
 Proof
@@ -1645,7 +1645,7 @@ Proof
      terminates (run_function fuel ctx fn s) ==>
      ?fuel'. terminates (run_function fuel' ctx
                 (function_map_transform bt fn) s) /\
-       lift_result R_ok R_term (run_function fuel ctx fn s)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s)
          (run_function fuel' ctx (function_map_transform bt fn) s)` by (
     match_mp_tac
       (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] fwd_lift)) >>
@@ -1654,7 +1654,7 @@ Proof
   `!fuel ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted /\
      terminates (run_function fuel ctx (function_map_transform bt fn) s) ==>
      ?fuel'. terminates (run_function fuel' ctx fn s) /\
-       lift_result R_ok R_term (run_function fuel' ctx fn s)
+       lift_result R_ok R_term R_term (run_function fuel' ctx fn s)
          (run_function fuel ctx (function_map_transform bt fn) s)` by (
     match_mp_tac
       (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] bwd_lift)) >>
@@ -1666,7 +1666,7 @@ Proof
     rpt strip_tac >>
     `?fuel_f. terminates (run_function fuel_f ctx
                 (function_map_transform bt fn) s) /\
-       lift_result R_ok R_term (run_function fuel ctx fn s)
+       lift_result R_ok R_term R_term (run_function fuel ctx fn s)
          (run_function fuel_f ctx (function_map_transform bt fn) s)` by (
       qpat_x_assum `!fuel ctx s.
         s.vs_inst_idx = 0 /\ ~s.vs_halted /\

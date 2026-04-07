@@ -68,7 +68,7 @@ Theorem sccp_function_lift_result:
       s.vs_inst_idx = 0 /\
       nophi_inv f s ==>
       (?e. run_function fuel ctx f s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {})
+      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
         (run_function fuel ctx f s)
         (run_function fuel ctx
           (analysis_function_transform sccp_bottom (sccp_df_analyze f)
@@ -162,7 +162,7 @@ Theorem sccp_function_lift_result_entry[local]:
       fn_entry_label f = SOME s.vs_current_bb /\
       FDOM s.vs_vars = {} ==>
       (?e. run_function fuel ctx f s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {})
+      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
         (run_function fuel ctx f s)
         (run_function fuel ctx
           (analysis_function_transform sccp_bottom (sccp_df_analyze f)

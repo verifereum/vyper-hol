@@ -360,7 +360,7 @@ QED
 Theorem result_equiv_is_lift_result[local]:
   !vars r1 r2.
     result_equiv vars r1 r2 ==>
-    lift_result (state_equiv vars) (execution_equiv vars) r1 r2
+    lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars) r1 r2
 Proof
   Cases_on `r1` >> Cases_on `r2` >> simp[result_equiv_def, lift_result_def]
 QED
@@ -400,7 +400,7 @@ Theorem remove_unused_block_sim[local]:
     s1.vs_inst_idx = s2.vs_inst_idx /\
     state_equiv V s1 s2 ==>
     (?e. run_block fuel ctx bb s1 = Error e) \/
-    lift_result (state_equiv V) (execution_equiv V)
+    lift_result (state_equiv V) (execution_equiv V) (execution_equiv V)
       (run_block fuel ctx bb s1)
       (run_block fuel ctx (remove_unused_block lr fence bb) s2)
 Proof
@@ -502,7 +502,7 @@ Theorem remove_unused_block_correct_proof:
     s.vs_inst_idx = 0 ==>
     let nop_outs = block_nop_outputs lr fence bb in
     (?e. run_block fuel ctx bb s = Error e) \/
-    lift_result (state_equiv nop_outs) (execution_equiv nop_outs)
+    lift_result (state_equiv nop_outs) (execution_equiv nop_outs) (execution_equiv nop_outs)
       (run_block fuel ctx bb s)
       (run_block fuel ctx (remove_unused_block lr fence bb) s)
 Proof
@@ -568,9 +568,9 @@ QED
    Key pattern: NOP-insertion phase (lift_result) + NOP-cleanup (result_equiv). *)
 Theorem lift_result_compose_result_equiv[local]:
   !vars r1 r2 r3.
-    lift_result (state_equiv vars) (execution_equiv vars) r1 r2 /\
+    lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars) r1 r2 /\
     result_equiv {} r2 r3 ==>
-    lift_result (state_equiv vars) (execution_equiv vars) r1 r3
+    lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars) r1 r3
 Proof
   rpt strip_tac >>
   irule (REWRITE_RULE [AND_IMP_INTRO]
@@ -759,7 +759,7 @@ Theorem result_equiv_weaken_lift_result[local]:
   !V V_out r1 r2.
     result_equiv V r1 r2 /\ V SUBSET V_out ==>
     (?e. r1 = Error e) \/
-    lift_result (state_equiv V_out) (execution_equiv V_out) r1 r2
+    lift_result (state_equiv V_out) (execution_equiv V_out) (execution_equiv V_out) r1 r2
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   simp[result_equiv_def, lift_result_def] >>
@@ -909,7 +909,7 @@ Theorem remove_unused_block_sim_ssa:
                                   bb.bb_instructions in
     let V_out = V_in UNION block_nop_outputs lr fence bb in
     (?e. run_block fuel ctx bb s1 = Error e) \/
-    lift_result (state_equiv V_out) (execution_equiv V_out)
+    lift_result (state_equiv V_out) (execution_equiv V_out) (execution_equiv V_out)
       (run_block fuel ctx bb s1)
       (run_block fuel ctx (remove_unused_block lr fence bb) s2)
 Proof
@@ -1682,14 +1682,14 @@ Theorem two_state_block_sim_reachable[local]:
       !fuel ctx s1 s2.
         R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
         (?e. run_block fuel ctx bb s1 = Error e) \/
-        lift_result R_ok R_term (run_block fuel ctx bb s1)
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                                  (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 /\
       fn_entry_label fn = SOME s.vs_current_bb ==>
       (?e. run_function fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term (run_function fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_function fuel ctx fn s)
                  (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1709,7 +1709,7 @@ Proof
      R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
      MEM s1.vs_current_bb (cfg_analyze fn).cfg_dfs_pre ==>
      (?e. run_function fuel ctx fn s1 = Error e) \/
-     lift_result R_ok R_term (run_function fuel ctx fn s1)
+     lift_result R_ok R_term R_term (run_function fuel ctx fn s1)
        (run_function fuel ctx (function_map_transform bt fn) s2)`
   suffices_by (
     rpt strip_tac >>
@@ -1799,7 +1799,7 @@ Theorem remove_unused_phase1_correct[local]:
                                       bb.bb_instructions) bb in
     let elim = single_pass_nop_outputs fn in
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (function_map_transform bt fn) s)
 Proof
@@ -1843,7 +1843,7 @@ Theorem remove_unused_single_pass_correct_proof:
        v NOTIN single_pass_nop_outputs fn) ==>
     let elim = single_pass_nop_outputs fn in
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (remove_unused_single_pass fn) s)
 Proof
@@ -1870,7 +1870,7 @@ QED
 (* lift_result reflexivity *)
 Theorem lift_result_refl_state_equiv:
   !vars r.
-    lift_result (state_equiv vars) (execution_equiv vars) r r
+    lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars) r r
 Proof
   gen_tac >> Cases >> simp[lift_result_def] >>
   metis_tac[stateEquivPropsTheory.state_equiv_refl,
@@ -1881,8 +1881,8 @@ QED
 Theorem lift_result_weaken_vars:
   !V1 V2 r1 r2.
     V1 SUBSET V2 /\
-    lift_result (state_equiv V1) (execution_equiv V1) r1 r2 ==>
-    lift_result (state_equiv V2) (execution_equiv V2) r1 r2
+    lift_result (state_equiv V1) (execution_equiv V1) (execution_equiv V1) r1 r2 ==>
+    lift_result (state_equiv V2) (execution_equiv V2) (execution_equiv V2) r1 r2
 Proof
   rpt strip_tac >> irule lift_result_weaken >>
   qexistsl_tac [`state_equiv V1`, `execution_equiv V1`] >>
@@ -1897,7 +1897,7 @@ QED
 (* Helper: lift_result with Error on right forces Error on left *)
 Theorem lift_result_error_right[local]:
   !R_ok R_term r e.
-    lift_result R_ok R_term r (Error e) ==> ?e'. r = Error e'
+    lift_result R_ok R_term R_term r (Error e) ==> ?e'. r = Error e'
 Proof
   Cases_on `r` >> simp[lift_result_def]
 QED
@@ -1915,11 +1915,11 @@ Theorem owhile_lift_result_compose:
     (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
     (!x. G x /\ P x ==>
       (?e. Q x = Error e) \/
-      lift_result R_ok R_term (Q x) (Q (f x))) /\
+      lift_result R_ok R_term R_term (Q x) (Q (f x))) /\
     (!x. G x /\ P x ==> P (f x)) ==>
     !x y. OWHILE G f x = SOME y ==> P x ==>
       (?e. Q x = Error e) \/
-      lift_result R_ok R_term (Q x) (Q y)
+      lift_result R_ok R_term R_term (Q x) (Q y)
 Proof
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac WhileTheory.OWHILE_IND >> rpt conj_tac
@@ -1930,7 +1930,7 @@ Proof
     rpt gen_tac >>
     disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
     strip_tac >>
-    `(∃e. Q x = Error e) ∨ lift_result R_ok R_term (Q x) (Q (f x))` by metis_tac[] >>
+    `(∃e. Q x = Error e) ∨ lift_result R_ok R_term R_term (Q x) (Q (f x))` by metis_tac[] >>
     `P (f x)` by metis_tac[] >>
     fs[]
     >- metis_tac[lift_result_error_right]
@@ -1956,7 +1956,7 @@ Theorem owhile_step_condition[local]:
        v NOTIN single_pass_nop_outputs x) /\
     single_pass_nop_outputs x SUBSET elim ==>
     (?e. run_function fuel ctx x s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx x s)
       (run_function fuel ctx (remove_unused_single_pass x) s)
 Proof
@@ -2053,7 +2053,7 @@ Theorem remove_unused_function_correct_proof:
         remove_unused_eliminated_vars fn) ==>
     let elim = remove_unused_eliminated_vars fn in
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (remove_unused_function fn) s)
 Proof
@@ -2105,7 +2105,7 @@ Proof
           MEM (Var v) inst.inst_operands ==> v NOTIN single_pass_nop_outputs x) /\
        single_pass_nop_outputs x SUBSET elim ==>
        (?e. run_function fuel ctx x s = Error e) \/
-       lift_result (state_equiv elim) (execution_equiv elim)
+       lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
          (run_function fuel ctx x s)
          (run_function fuel ctx (remove_unused_single_pass x) s)``
     assume_tac
@@ -2388,7 +2388,7 @@ QED
 (* pass_correct {} is FALSE: original halts with v1=42w,
    transformed halts with v1 unchanged => execution_equiv {} fails on "v1" *)
 Theorem pass_correct_empty_false_for_nop[local]:
-  ~pass_correct (state_equiv {}) (execution_equiv {})
+  ~pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
     (\fuel. run_function fuel ARB cx_ru_fn1
        (ARB with <|vs_vars := FEMPTY;
                    vs_current_bb := "entry"; vs_inst_idx := 0; vs_halted := F|>))

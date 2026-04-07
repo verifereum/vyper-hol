@@ -598,7 +598,7 @@ Theorem df_analysis_pass_correct_sound_proof:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
         (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
           (run_function fuel ctx (analysis_function_transform bottom result f fn) s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
@@ -616,7 +616,7 @@ Proof
        MEM s1.vs_current_bb cfg.cfg_dfs_pre /\
        sound (df_at bottom result s1.vs_current_bb 0) s1 ==>
        (?e. run_function fuel run_ctx fn s1 = Error e) \/
-       lift_result R_ok R_term (run_function fuel run_ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel run_ctx fn s1)
          (run_function fuel run_ctx (function_map_transform bt fn) s2)`
   >- (
     rpt strip_tac >>
@@ -660,7 +660,7 @@ Proof
       (fn th => irule th) >>
     qexists_tac `s1` >> simp[]) >>
   (* Per-block R_ok preservation: run_block bb s1 ~ run_block bb s2 *)
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx bb s2)` by (
     mp_tac (cj 1 run_block_preserves_R_proof) >>
     disch_then (qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac) >>
@@ -677,7 +677,7 @@ Proof
      impl_tac >- gvs[Abbr `result`, Abbr `cfg`] >>
      simp[Abbr `result`]) >>
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
-   lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+   lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
      (run_block fuel run_ctx (bt bb) s2)` by (
     simp_tac std_ss [Abbr `bt`] >>
     mp_tac (Q.SPECL [`R_ok`, `R_term`, `sound`, `f`, `bb`, `bottom`,
@@ -695,10 +695,10 @@ Proof
   Cases_on `?e. run_block fuel run_ctx bb s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
                             (run_block fuel run_ctx (bt bb) s2)` by metis_tac[] >>
   (* Compose: s1 ~ s2 ~ bt via transitivity *)
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -774,7 +774,7 @@ Theorem df_analysis_pass_correct_sound_inv2_proof:
       (!fuel ctx' v inst s.
          sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
          (?e. step_inst fuel ctx' inst s = Error e) \/
-         lift_result R_ok R_term (step_inst fuel ctx' inst s)
+         lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
       fn_inst_wf fn /\
@@ -797,7 +797,7 @@ Theorem df_analysis_pass_correct_sound_inv2_proof:
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s ==>
         (?e. run_function fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx' fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx' fn s)
           (run_function fuel ctx' (analysis_function_transform bottom result f fn) s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
@@ -815,7 +815,7 @@ Proof
        sound (df_at bottom result s1.vs_current_bb 0) s1 /\
        state_inv s1 ==>
        (?e. run_function fuel run_ctx fn s1 = Error e) \/
-       lift_result R_ok R_term (run_function fuel run_ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel run_ctx fn s1)
          (run_function fuel run_ctx (function_map_transform bt fn) s2)`
   >- (
     rpt strip_tac >>
@@ -863,7 +863,7 @@ Proof
   sg `state_inv s2`
   >- metis_tac[] >>
   (* Per-block R_ok preservation: run_block bb s1 ~ run_block bb s2 *)
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx bb s2)` by (
     mp_tac (cj 1 run_block_preserves_R_proof) >>
     disch_then (qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac) >>
@@ -880,7 +880,7 @@ Proof
      impl_tac >- gvs[Abbr `result`, Abbr `cfg`] >>
      simp[Abbr `result`]) >>
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
-   lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+   lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
      (run_block fuel run_ctx (bt bb) s2)` by (
     simp_tac std_ss [Abbr `bt`] >>
     mp_tac (Q.SPECL [`R_ok`, `R_term`, `sound`, `state_inv`, `f`, `bb`,
@@ -901,10 +901,10 @@ Proof
   Cases_on `?e. run_block fuel run_ctx bb s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
                             (run_block fuel run_ctx (bt bb) s2)` by metis_tac[] >>
   (* Compose: s1 ~ s2 ~ bt via transitivity *)
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -977,7 +977,7 @@ Theorem df_analysis_pass_correct_sound_inv3_proof:
       (!fuel ctx' v inst s.
          sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
          (?e. step_inst fuel ctx' inst s = Error e) \/
-         lift_result R_ok R_term (step_inst fuel ctx' inst s)
+         lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
       fn_inst_wf fn /\
@@ -1000,7 +1000,7 @@ Theorem df_analysis_pass_correct_sound_inv3_proof:
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s ==>
         (?e. run_function fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx' fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx' fn s)
           (run_function fuel ctx' (analysis_function_transform bottom result f fn) s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
@@ -1018,7 +1018,7 @@ Proof
        sound (df_at bottom result s1.vs_current_bb 0) s1 /\
        state_inv s1 ==>
        (?e. run_function fuel run_ctx fn s1 = Error e) \/
-       lift_result R_ok R_term (run_function fuel run_ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel run_ctx fn s1)
          (run_function fuel run_ctx (function_map_transform bt fn) s2)`
   >- (
     rpt strip_tac >>
@@ -1066,7 +1066,7 @@ Proof
   sg `state_inv s2`
   >- metis_tac[] >>
   (* Per-block R_ok preservation: run_block bb s1 ~ run_block bb s2 *)
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx bb s2)` by (
     mp_tac (cj 1 run_block_preserves_R_proof) >>
     disch_then (qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac) >>
@@ -1083,7 +1083,7 @@ Proof
      impl_tac >- gvs[Abbr `result`, Abbr `cfg`] >>
      simp[Abbr `result`]) >>
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
-   lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+   lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
      (run_block fuel run_ctx (bt bb) s2)` by (
     simp_tac std_ss [Abbr `bt`] >>
     mp_tac (Q.SPECL [`R_ok`, `R_term`, `sound`, `state_inv`, `f`, `bb`,
@@ -1104,10 +1104,10 @@ Proof
   Cases_on `?e. run_block fuel run_ctx bb s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
                             (run_block fuel run_ctx (bt bb) s2)` by metis_tac[] >>
   (* Compose: s1 ~ s2 ~ bt via transitivity *)
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -1224,7 +1224,7 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
         (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -1245,7 +1245,7 @@ Proof
        MEM s1.vs_current_bb cfg.cfg_dfs_pre /\
        sound (df_at bottom result s1.vs_current_bb 0) s1 ==>
        (?e. run_function fuel run_ctx fn s1 = Error e) \/
-       lift_result R_ok R_term (run_function fuel run_ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel run_ctx fn s1)
          (run_function fuel run_ctx (function_map_transform bt fn) s2)`
   >- (
     rpt strip_tac >>
@@ -1286,7 +1286,7 @@ Proof
   >- (qpat_x_assum `!v a b. R_ok a b /\ sound v a ==> sound v b`
       (fn th => irule th) >>
     qexists_tac `s1` >> simp[]) >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx bb s2)` by (
     mp_tac (cj 1 run_block_preserves_R_proof) >>
     disch_then (qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac) >>
@@ -1307,7 +1307,7 @@ Proof
      impl_tac >- (qunabbrev_tac `cfg` >> gvs[]) >>
      disch_then ACCEPT_TAC) >>
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
-   lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+   lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
      (run_block fuel run_ctx (bt bb) s2)` by (
     simp_tac std_ss [Abbr `bt`] >>
     mp_tac (Q.SPECL [`R_ok`, `R_term`, `sound`, `f`, `bb`, `bottom`,
@@ -1324,9 +1324,9 @@ Proof
   Cases_on `?e. run_block fuel run_ctx bb s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
                             (run_block fuel run_ctx (bt bb) s2)` by metis_tac[] >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -1400,7 +1400,7 @@ Theorem df_analysis_pass_correct_widen_block_sim_proof:
            bb.bb_label 0) s /\
          state_inv s ==>
          (?e. run_block fuel run_ctx bb s = Error e) \/
-         lift_result R_ok R_term (run_block fuel run_ctx bb s)
+         lift_result R_ok R_term R_term (run_block fuel run_ctx bb s)
            (run_block fuel run_ctx
              (analysis_block_transform bottom
                (widen_to_df (df_analyze_widen Forward bottom join widen
@@ -1420,7 +1420,7 @@ Theorem df_analysis_pass_correct_widen_block_sim_proof:
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
         (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -1440,7 +1440,7 @@ Proof
        sound (df_at bottom result s1.vs_current_bb 0) s1 /\
        state_inv s1 ==>
        (?e. run_function fuel run_ctx fn s1 = Error e) \/
-       lift_result R_ok R_term (run_function fuel run_ctx fn s1)
+       lift_result R_ok R_term R_term (run_function fuel run_ctx fn s1)
          (run_function fuel run_ctx (function_map_transform bt fn) s2)`
   >- (
     rpt strip_tac >>
@@ -1484,7 +1484,7 @@ Proof
     qexists_tac `s1` >> simp[]) >>
   sg `state_inv s2`
   >- metis_tac[] >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx bb s2)` by (
     mp_tac (cj 1 run_block_preserves_R_proof) >>
     disch_then (qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac) >>
@@ -1492,7 +1492,7 @@ Proof
     disch_then drule_all >> simp[]) >>
   (* Block sim - from hypothesis *)
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
-   lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+   lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
      (run_block fuel run_ctx (bt bb) s2)` by (
     qpat_x_assum `!bb fuel run_ctx s. MEM bb fn.fn_blocks /\ _ ==> _`
       (qspecl_then [`bb`, `fuel`, `run_ctx`, `s2`] mp_tac) >>
@@ -1501,9 +1501,9 @@ Proof
   Cases_on `?e. run_block fuel run_ctx bb s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
                             (run_block fuel run_ctx (bt bb) s2)` by metis_tac[] >>
-  `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                             (run_block fuel run_ctx (bt bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
@@ -1577,7 +1577,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv_proof:
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
         (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
           (run_function fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -1664,7 +1664,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2_proof:
       (!fuel ctx' v inst s.
          sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
          (?e. step_inst fuel ctx' inst s = Error e) \/
-         lift_result R_ok R_term (step_inst fuel ctx' inst s)
+         lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
       fn_inst_wf fn /\
@@ -1687,7 +1687,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2_proof:
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
         (?e. run_function fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx' fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx' fn s)
           (run_function fuel ctx'
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -1807,7 +1807,7 @@ Theorem df_analysis_pass_correct_prepend_proof:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
         (?e. run_function fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_function fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_function fuel ctx fn s)
           (run_function fuel ctx fn' s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac
@@ -1827,7 +1827,7 @@ Proof
           MEM s1.vs_current_bb cfg.cfg_dfs_pre /\
           sound (df_at bottom result s1.vs_current_bb 0) s1 ==>
           (?e. run_function fuel run_ctx fn s1 = Error e) \/
-          lift_result R_ok R_term (run_function fuel run_ctx fn s1)
+          lift_result R_ok R_term R_term (run_function fuel run_ctx fn s1)
             (run_function fuel run_ctx (function_map_transform btp fn) s2)`
   >- (
     rpt strip_tac
@@ -1868,7 +1868,7 @@ Proof
         (fn th => irule th) >>
       qexists_tac `s1` >> simp[])
   (* Step 1: R_ok bridge on original bb: run_block bb s1 ~ run_block bb s2 *)
-  \\ `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  \\ `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                                (run_block fuel run_ctx bb s2)` by (
        mp_tac (cj 1 run_block_preserves_R_proof) >>
        disch_then (qspecl_then [`R_ok`, `R_term`, `fn`] mp_tac) >>
@@ -1886,7 +1886,7 @@ Proof
         simp[Abbr `result`])
   (* Step 2: Block sim: run_block bb s2 ~ run_block (bt bb) s2 *)
   \\ `(?e. run_block fuel run_ctx bb s2 = Error e) \/
-      lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+      lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
         (run_block fuel run_ctx (bt bb) s2)` by (
        simp_tac std_ss [Abbr `bt`] >>
        mp_tac (Q.SPECL [`R_ok`, `R_term`, `sound`, `f`, `bb`, `bottom`,
@@ -1903,13 +1903,13 @@ Proof
   (* Handle error *)
   \\ Cases_on `?e. run_block fuel run_ctx bb s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
-  \\ `lift_result R_ok R_term (run_block fuel run_ctx bb s2)
+  \\ `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
                                (run_block fuel run_ctx (bt bb) s2)` by metis_tac[]
   (* Step 3: Prepend insertion: run_block (bt bb) s2 ~ run_block (btp bb) s2 *)
   \\ qabbrev_tac `btp = analysis_block_transform_prepend bottom result prepend f`
   \\ `!b. (btp b).bb_label = b.bb_label` by
        simp[Abbr `btp`, abtp_label]
-  \\ `lift_result R_ok R_term (run_block fuel run_ctx (bt bb) s2)
+  \\ `lift_result R_ok R_term R_term (run_block fuel run_ctx (bt bb) s2)
                                 (run_block fuel run_ctx (btp bb) s2)` by (
     irule run_block_with_prefix >> rpt conj_tac
     (* operand condition for (bt bb) instructions *)
@@ -1940,7 +1940,7 @@ Proof
         >> (fs[EVERY_MEM] >> rpt strip_tac >> res_tac))
     >> first_assum ACCEPT_TAC  (* valid_state_rel *))
   (* Compose steps 1+2+3: bb s1 ~ bb s2 ~ bt s2 ~ btp s2 *)
-  \\ `lift_result R_ok R_term (run_block fuel run_ctx bb s1)
+  \\ `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
                                (run_block fuel run_ctx (btp bb) s2)` by (
        irule lift_result_trans_proof
        \\ conj_tac >- first_assum ACCEPT_TAC
@@ -2002,7 +2002,7 @@ Theorem analysis_function_transform_compare_proof:
        let inst = EL idx bb.bb_instructions in
        let v = df_at bottom result bb.bb_label idx in
        (?e. run_insts fuel ctx (f1 v inst) s = Error e) \/
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (run_insts fuel ctx (f1 v inst) s)
          (run_insts fuel ctx (f2 v inst) s)) /\
     inst_transform_structural f1 /\
@@ -2016,7 +2016,7 @@ Theorem analysis_function_transform_compare_proof:
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. run_function fuel ctx fn1 s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_function fuel ctx fn1 s)
         (run_function fuel ctx fn2 s)
 Proof

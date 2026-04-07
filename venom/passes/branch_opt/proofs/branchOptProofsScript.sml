@@ -119,10 +119,10 @@ Theorem run_block_agree_prefix[local]:
     (!st. P st /\
           st.vs_inst_idx = LENGTH bb.bb_instructions - 1 /\
           st.vs_inst_idx < LENGTH bb'.bb_instructions ==>
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_block fuel ctx bb st)
         (run_block fuel ctx bb' st)) ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (run_block fuel ctx bb s)
       (run_block fuel ctx bb' s)
 Proof
@@ -133,7 +133,7 @@ Proof
      n = N - st.vs_inst_idx /\
      st.vs_inst_idx < N /\
      P st ==>
-     lift_result R_ok R_term
+     lift_result R_ok R_term R_term
        (run_block fuel ctx bb st)
        (run_block fuel ctx bb' st)`
     suffices_by (
@@ -180,10 +180,10 @@ Theorem run_block_agree_prefix_noP[local]:
       EL i bb'.bb_instructions = EL i bb.bb_instructions) /\
     (!st. st.vs_inst_idx = LENGTH bb.bb_instructions - 1 /\
           st.vs_inst_idx < LENGTH bb'.bb_instructions ==>
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_block fuel ctx bb st)
         (run_block fuel ctx bb' st)) ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (run_block fuel ctx bb s)
       (run_block fuel ctx bb' s)
 Proof
@@ -218,7 +218,7 @@ Theorem run_block_replace_last[local]:
           st.vs_inst_idx = LENGTH bb.bb_instructions - 1 ==>
       step_inst_base (LAST bb.bb_instructions) st =
       step_inst_base new_last st) ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (run_block fuel ctx bb s)
       (run_block fuel ctx
         (bb with bb_instructions := FRONT bb.bb_instructions ++ [new_last]) s)
@@ -232,7 +232,7 @@ Proof
   `LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions` by
     simp[Abbr `bb'`, LENGTH_FRONT_APPEND1] >>
   `!n st. n = N - st.vs_inst_idx /\ st.vs_inst_idx < N /\ P st ==>
-     lift_result R_ok R_term
+     lift_result R_ok R_term R_term
        (run_block fuel ctx bb st) (run_block fuel ctx bb' st)`
     suffices_by (
       disch_then (qspecl_then [`N`, `s`] mp_tac) >> simp[]) >>
@@ -288,7 +288,7 @@ Theorem bo_block_sim_iszero_removal[local]:
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     let new_term = (LAST bb.bb_instructions) with inst_operands :=
       [new_cond; Label snd_lbl; Label fst_lbl] in
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_block fuel ctx bb s)
       (run_block fuel ctx
         (bb with bb_instructions := FRONT bb.bb_instructions ++ [new_term]) s)
@@ -332,7 +332,7 @@ Theorem jnz_iszero_insertion_core[local]:
     bb'.bb_instructions = FRONT bb.bb_instructions ++ [iz; new_term] /\
     LENGTH bb'.bb_instructions = N + 1
   ==>
-    lift_result (state_equiv {tmp}) (execution_equiv {tmp})
+    lift_result (state_equiv {tmp}) (execution_equiv {tmp}) (execution_equiv {tmp})
       (run_block fuel ctx bb st) (run_block fuel ctx bb' st)
 Proof
   rpt strip_tac >>
@@ -380,7 +380,7 @@ Theorem bo_block_sim_iszero_insertion[local]:
                 inst_operands := [Var v]; inst_outputs := [tmp] |> in
     let new_term = (LAST bb.bb_instructions) with inst_operands :=
       [Var tmp; Label snd_lbl; Label fst_lbl] in
-    lift_result (state_equiv {tmp}) (execution_equiv {tmp})
+    lift_result (state_equiv {tmp}) (execution_equiv {tmp}) (execution_equiv {tmp})
       (run_block fuel ctx bb s)
       (run_block fuel ctx
         (bb with bb_instructions := FRONT bb.bb_instructions ++ [iz; new_term]) s)
@@ -451,8 +451,8 @@ QED
 Theorem lift_result_subset[local]:
   !vars1 vars2 r1 r2.
     vars1 SUBSET vars2 /\
-    lift_result (state_equiv vars1) (execution_equiv vars1) r1 r2 ==>
-    lift_result (state_equiv vars2) (execution_equiv vars2) r1 r2
+    lift_result (state_equiv vars1) (execution_equiv vars1) (execution_equiv vars1) r1 r2 ==>
+    lift_result (state_equiv vars2) (execution_equiv vars2) (execution_equiv vars2) r1 r2
 Proof
   rpt strip_tac >>
   irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_mono) >>
@@ -485,7 +485,7 @@ Theorem bo_block_sim[local]:
        step_inst fuel ctx inst st = OK st' ==>
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
       (run_block fuel ctx bb s)
       (run_block fuel ctx (branch_opt_block dfg live_at bb) s)
 Proof
@@ -552,7 +552,7 @@ Theorem bo_cross_block_sim[local]:
        step_inst fuel' ctx' inst st = OK st' ==>
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
       (run_block fuel ctx bb s1)
       (run_block fuel ctx (branch_opt_block dfg live_at bb) s2)
 Proof
@@ -626,7 +626,7 @@ Theorem branch_opt_function_correct_proof:
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
       (run_function fuel ctx fn s)
       (run_function fuel ctx fn' s)
 Proof

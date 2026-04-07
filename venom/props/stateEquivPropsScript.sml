@@ -289,7 +289,7 @@ Definition observable_result_equiv_def:
   observable_result_equiv (OK s1) (OK s2) = observable_equiv s1 s2 /\
   observable_result_equiv (Halt s1) (Halt s2) = observable_equiv s1 s2 /\
   observable_result_equiv (Abort a1 s1) (Abort a2 s2) =
-    ((a1 = a2) /\ observable_equiv s1 s2) /\
+    ((a1 = a2) /\ revert_equiv s1 s2) /\
   observable_result_equiv (IntRet v1 s1) (IntRet v2 s2) =
     (observable_equiv s1 s2 /\ (v1 = v2)) /\
   observable_result_equiv (Error e1) (Error e2) = T /\

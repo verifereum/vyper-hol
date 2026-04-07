@@ -324,7 +324,7 @@ Proof
 QED
 
 (* ==========================================================================
-   Category helpers: exec_* preserves lift_result R_ok R_term
+   Category helpers: exec_* preserves lift_result R_ok R_term R_term
    ========================================================================== *)
 
 fun vsr_eval_ops_tac () =
@@ -337,7 +337,7 @@ Theorem vsr_exec_pure1:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (exec_pure1 f inst s1) (exec_pure1 f inst s2)
+    lift_result R_ok R_term R_term (exec_pure1 f inst s1) (exec_pure1 f inst s2)
 Proof
   rw[exec_pure1_def] >> vsr_eval_ops_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -349,7 +349,7 @@ Theorem vsr_exec_pure2:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (exec_pure2 f inst s1) (exec_pure2 f inst s2)
+    lift_result R_ok R_term R_term (exec_pure2 f inst s1) (exec_pure2 f inst s2)
 Proof
   rw[exec_pure2_def] >> vsr_eval_ops_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -361,7 +361,7 @@ Theorem vsr_exec_pure3:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (exec_pure3 f inst s1) (exec_pure3 f inst s2)
+    lift_result R_ok R_term R_term (exec_pure3 f inst s1) (exec_pure3 f inst s2)
 Proof
   rw[exec_pure3_def] >> vsr_eval_ops_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -372,7 +372,7 @@ Theorem vsr_exec_read0:
   !R_ok R_term f inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     f s1 = f s2 ==>
-    lift_result R_ok R_term (exec_read0 f inst s1) (exec_read0 f inst s2)
+    lift_result R_ok R_term R_term (exec_read0 f inst s1) (exec_read0 f inst s2)
 Proof
   rw[exec_read0_def] >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -385,7 +385,7 @@ Theorem vsr_exec_read1:
     (!v. f v s1 = f v s2) /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (exec_read1 f inst s1) (exec_read1 f inst s2)
+    lift_result R_ok R_term R_term (exec_read1 f inst s1) (exec_read1 f inst s2)
 Proof
   rw[exec_read1_def] >> vsr_eval_ops_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -398,7 +398,7 @@ Theorem vsr_exec_write2:
     (!v1 v2. R_ok (f v1 v2 s1) (f v1 v2 s2)) /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (exec_write2 f inst s1) (exec_write2 f inst s2)
+    lift_result R_ok R_term R_term (exec_write2 f inst s1) (exec_write2 f inst s2)
 Proof
   rw[exec_write2_def] >> vsr_eval_ops_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def])
@@ -427,7 +427,7 @@ fun ext_call_proof_tac def_thms =
 Theorem vsr_exec_ext_call:
   !R_ok R_term inst s1 s2 gas addr value ao as_ ro rs is_static.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
@@ -437,7 +437,7 @@ QED
 Theorem vsr_exec_delegatecall:
   !R_ok R_term inst s1 s2 gas addr ao as_ ro rs.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (exec_delegatecall inst s1 gas addr ao as_ ro rs)
       (exec_delegatecall inst s2 gas addr ao as_ ro rs)
 Proof
@@ -447,7 +447,7 @@ QED
 Theorem vsr_exec_create:
   !R_ok R_term inst s1 s2 value offset sz salt_opt.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (exec_create inst s1 value offset sz salt_opt)
       (exec_create inst s2 value offset sz salt_opt)
 Proof
@@ -458,7 +458,7 @@ QED
 Theorem vsr_exec_alloca:
   !R_ok R_term inst s1 s2 alloc_size.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (exec_alloca inst s1 alloc_size)
       (exec_alloca inst s2 alloc_size)
 Proof

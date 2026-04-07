@@ -561,7 +561,7 @@ Theorem assign_subst_function_eq[local]:
         ~is_terminator (EL i bb.bb_instructions).inst_opcode)
     ==>
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_function fuel ctx fn s)
       (run_function fuel ctx fn_subst s)
 Proof
@@ -641,7 +641,7 @@ Theorem assign_elim_function_correct_proof:
        MEM (Var x) inst.inst_operands ==> x NOTIN elim)
     ==>
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (assign_elim_function fn) s)
 Proof
@@ -687,7 +687,7 @@ Proof
   fs[result_equiv_is_lift_result] >>
   (* Weaken Phase 1 from state_equiv {} to state_equiv elim *)
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
-     (execution_equiv (assign_elim_eliminated_vars fn))
+     (execution_equiv (assign_elim_eliminated_vars fn) (execution_equiv (assign_elim_eliminated_vars fn))
      (run_function fuel ctx fn s)
      (run_function fuel ctx
         (analysis_function_transform NONE (copy_prop_analyze fn)
@@ -699,7 +699,7 @@ Proof
   ) >>
   (* Compose Phases 1+2 via lift_result_trans *)
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
-     (execution_equiv (assign_elim_eliminated_vars fn))
+     (execution_equiv (assign_elim_eliminated_vars fn) (execution_equiv (assign_elim_eliminated_vars fn))
      (run_function fuel ctx fn s)
      (run_function fuel ctx fn_elim s)` by (
     irule lift_result_trans >>

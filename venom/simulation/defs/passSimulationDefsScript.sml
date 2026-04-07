@@ -5,11 +5,12 @@
  * parameterized by dual state relations (R_ok, R_term).
  *
  * R_ok governs OK results (execution continues — needs control flow match).
- * R_term governs Halt/Revert results (terminal — control flow irrelevant).
+ * R_term governs Halt/IntRet results (terminal, state commits).
+ * R_abort governs Abort results (rolled back — only returndata observable).
  *
  * Instantiations:
- *   result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars)
- *   uniform R         = lift_result R R
+ *   result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars) revert_equiv
+ *   uniform R         = lift_result R R R
  *
  * TOP-LEVEL:
  *   block_map_transform      — MAP f over block instructions
@@ -49,7 +50,7 @@ End
 Definition inst_simulates_def:
   inst_simulates R_ok R_term f <=>
     (!fuel ctx inst s.
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (step_inst fuel ctx inst s) (step_inst fuel ctx (f inst) s)) /\
     (!inst. is_terminator inst.inst_opcode =
             is_terminator (f inst).inst_opcode)
@@ -60,8 +61,8 @@ End
 Definition block_simulates_def:
   block_simulates R_ok R_term bt <=>
     !fuel ctx bb s.
-      lift_result R_ok R_term (run_block fuel ctx bb s)
-                               (run_block fuel ctx (bt bb) s)
+      lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                      (run_block fuel ctx (bt bb) s)
 End
 
 (* ===== Pass correctness predicates ===== *)
@@ -91,9 +92,9 @@ Definition rel_seq_def:
 End
 
 Definition pass_correct_def:
-  pass_correct R_ok R_term exec1 exec2 <=>
+  pass_correct R_ok R_term R_abort exec1 exec2 <=>
     ((?fuel. terminates (exec1 fuel)) <=> (?fuel'. terminates (exec2 fuel'))) /\
     (!fuel fuel'.
        terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
-       lift_result R_ok R_term (exec1 fuel) (exec2 fuel'))
+       lift_result R_ok R_term R_abort (exec1 fuel) (exec2 fuel'))
 End

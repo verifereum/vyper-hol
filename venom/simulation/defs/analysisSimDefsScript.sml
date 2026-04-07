@@ -37,7 +37,7 @@ Definition analysis_inst_simulates_1_def:
     (!v fuel ctx inst s.
        sound v s /\ inst_wf inst ==>
        (?e. step_inst fuel ctx inst s = Error e) \/
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
     (!v inst. is_terminator inst.inst_opcode ==>
        is_terminator (f v inst).inst_opcode) /\
@@ -164,7 +164,7 @@ Definition analysis_inst_simulates_def:
     (!fuel ctx v inst s.
        sound v s /\ inst_wf inst ==>
        (?e. step_inst fuel ctx inst s = Error e) \/
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (step_inst fuel ctx inst s)
          (run_insts fuel ctx (f v inst) s)) /\
     inst_transform_structural f

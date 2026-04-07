@@ -122,7 +122,7 @@ Theorem rusp_step_condition[local]:
     fn_all_outputs x SUBSET fn_all_outputs fn ==>
     let elim = remove_unused_eliminated_vars fn in
     (?e. run_function fuel ctx x s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx x s)
       (run_function fuel ctx (remove_unused_single_pass x) s)
 Proof
@@ -193,7 +193,7 @@ Theorem remove_unused_function_correct_ssa:
     fn_entry_label fn = SOME s.vs_current_bb ==>
     let elim = remove_unused_eliminated_vars fn in
     (?e. run_function fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim)
+    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_function fuel ctx fn s)
       (run_function fuel ctx (remove_unused_function fn) s)
 Proof
@@ -239,7 +239,7 @@ Proof
        fn_entry_label x = SOME s.vs_current_bb /\
        fn_all_outputs x SUBSET fn_all_outputs fn ==>
        (?e. run_function fuel ctx x s = Error e) \/
-       lift_result (state_equiv elim) (execution_equiv elim)
+       lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
          (run_function fuel ctx x s)
          (run_function fuel ctx (remove_unused_single_pass x) s)` by (
     rpt strip_tac >>

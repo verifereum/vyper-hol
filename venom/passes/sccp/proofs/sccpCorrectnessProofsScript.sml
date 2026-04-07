@@ -1276,7 +1276,7 @@ Theorem sccp_pass_correct_fn:
       lookup_function entry ctx'.ctx_functions = SOME f' /\
       !s. s.vs_inst_idx = 0 /\ fn_entry_label f = SOME s.vs_current_bb /\
           FDOM s.vs_vars = {} ==>
-          pass_correct (state_equiv {}) (execution_equiv {})
+          pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
             (\fuel. run_function fuel ctx f s)
             (\fuel. run_function fuel ctx' f' s)
 Proof

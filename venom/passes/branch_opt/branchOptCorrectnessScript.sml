@@ -34,7 +34,7 @@ Theorem branch_opt_function_correct:
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
       (run_function fuel ctx fn s)
       (run_function fuel ctx fn' s)
 Proof

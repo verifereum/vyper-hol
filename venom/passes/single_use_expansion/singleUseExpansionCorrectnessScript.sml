@@ -13,7 +13,7 @@ Theorem sue_expand_function_correct:
        ~is_alloca_op inst.inst_opcode /\ sue_operands_wf inst) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (sue_fresh_vars_fn fn))
-               (execution_equiv (sue_fresh_vars_fn fn))
+               (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
       (run_function fuel ctx fn s)
       (run_function fuel ctx (sue_expand_function fn) s)
 Proof

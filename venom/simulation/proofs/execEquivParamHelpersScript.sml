@@ -37,7 +37,7 @@ Theorem vsr_step_inst_pure2:
     MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;OFFSET] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_pure2 >> simp[]
@@ -48,7 +48,7 @@ Theorem vsr_step_inst_pure1:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [NOT;ISZERO] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_pure1 >> simp[]
@@ -59,7 +59,7 @@ Theorem vsr_step_inst_pure3:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [ADDMOD;MULMOD] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_pure3 >> simp[]
@@ -73,7 +73,7 @@ Theorem vsr_step_inst_read0:
        COINBASE;TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;
        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MSIZE;
        CODESIZE] ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_read0 >> simp[] >>
@@ -87,7 +87,7 @@ Theorem vsr_step_inst_read1:
       [MLOAD;SLOAD;TLOAD;BLOCKHASH;BALANCE;CALLDATALOAD;
        EXTCODESIZE;BLOBHASH;ILOAD;DLOAD] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
@@ -100,7 +100,7 @@ Theorem vsr_step_inst_extcodehash:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = EXTCODEHASH /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
@@ -112,7 +112,7 @@ Theorem vsr_step_inst_write2:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [MSTORE;MSTORE8;SSTORE;TSTORE] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   vsr_irule vsr_exec_write2 >> simp[] >> rw[] >>
@@ -125,7 +125,7 @@ Theorem vsr_step_inst_terminator:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [STOP;SINK] ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def, lift_result_def] >>
   imp_res_tac vsr_terminal_R_term >> simp[]
@@ -136,7 +136,7 @@ Theorem vsr_step_inst_return:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = RETURN /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def, halt_state_def, set_returndata_def]) >>
@@ -148,7 +148,7 @@ Theorem vsr_step_inst_revert:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = REVERT /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def, revert_state_def, set_returndata_def]) >>
@@ -160,7 +160,7 @@ Theorem vsr_step_inst_control:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [JMP;JNZ] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -172,7 +172,7 @@ Theorem vsr_step_inst_djmp:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = DJMP /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -184,7 +184,7 @@ Theorem vsr_step_inst_ssa:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [PHI;ASSIGN;NOP] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -198,7 +198,7 @@ Theorem vsr_step_inst_assert:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [ASSERT;ASSERT_UNREACHABLE] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def,
@@ -211,7 +211,7 @@ Theorem vsr_step_inst_sha3:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = SHA3 /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -223,7 +223,7 @@ Theorem vsr_step_inst_mcopy:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = MCOPY /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -235,7 +235,7 @@ Theorem vsr_step_inst_istore:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = ISTORE /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -247,7 +247,7 @@ Theorem vsr_step_inst_data_copy:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [DLOADBYTES;CODECOPY] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -259,7 +259,7 @@ Theorem vsr_step_inst_extcodecopy:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = EXTCODECOPY /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -271,7 +271,7 @@ Theorem vsr_step_inst_copy:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [CALLDATACOPY;RETURNDATACOPY] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def,
@@ -286,7 +286,7 @@ Theorem vsr_step_inst_param:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = PARAM ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
   imp_res_tac vsr_R_ok_fields >> simp[step_inst_base_def] >>
@@ -299,7 +299,7 @@ Theorem vsr_step_inst_ret:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = RET /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
   imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >>
@@ -316,7 +316,7 @@ Theorem vsr_step_inst_log:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = LOG /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
   imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >>
