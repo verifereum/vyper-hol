@@ -1458,7 +1458,7 @@ Proof
   rpt strip_tac >>
   (* step_inst inst (s,0) must also error *)
   `?e'. step_inst fuel ctx inst (s with vs_inst_idx := 0) = Error e'` by (
-    qpat_x_assum `lift_result _ _ _ (Error _)` mp_tac >>
+    qpat_x_assum `lift_result _ _ _ _ (Error _)` mp_tac >>
     Cases_on `step_inst fuel ctx inst (s with vs_inst_idx := 0)` >>
     simp[lift_result_def]) >>
   `step_inst fuel ctx inst s = Error e'` by
