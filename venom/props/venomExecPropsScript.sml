@@ -443,3 +443,50 @@ Proof
   simp[venomInstTheory.fn_entry_label_def,
        venomInstTheory.entry_block_def]
 QED
+
+(* ===== Layer 2: Function-level block chaining ===== *)
+
+(* One step of run_function: if run_block produces OK (not halted),
+   run_function continues at the next block. *)
+Theorem run_function_step:
+  ∀ fuel ctx fn bb ss ss'.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
+    run_block fuel ctx bb ss = OK ss' ∧
+    ¬ss'.vs_halted
+    ⇒
+    run_function (SUC fuel) ctx fn ss = run_function fuel ctx fn ss'
+Proof ACCEPT_TAC run_function_step_proof
+QED
+
+(* Two blocks chained: block A produces OK, run_function continues *)
+Theorem run_function_two_blocks:
+  ∀ fuel ctx fn bb_A ss ss_mid result.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
+    run_block fuel ctx bb_A ss = OK ss_mid ∧
+    ¬ss_mid.vs_halted ∧
+    run_function fuel ctx fn ss_mid = result
+    ⇒
+    run_function (SUC fuel) ctx fn ss = result
+Proof ACCEPT_TAC run_function_two_blocks_proof
+QED
+
+(* Terminal: run_block produces OK with halted → run_function returns Halt *)
+Theorem run_function_halt:
+  ∀ fuel ctx fn bb ss ss'.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
+    run_block fuel ctx bb ss = OK ss' ∧
+    ss'.vs_halted
+    ⇒
+    run_function (SUC fuel) ctx fn ss = Halt ss'
+Proof ACCEPT_TAC run_function_halt_proof
+QED
+
+(* Terminal: run_block produces Abort → run_function returns Abort *)
+Theorem run_function_abort:
+  ∀ fuel ctx fn bb ss a ss'.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
+    run_block fuel ctx bb ss = Abort a ss'
+    ⇒
+    run_function (SUC fuel) ctx fn ss = Abort a ss'
+Proof ACCEPT_TAC run_function_abort_proof
+QED
