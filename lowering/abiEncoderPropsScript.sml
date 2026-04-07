@@ -350,6 +350,22 @@ Proof
   rw[dividesTheory.divides_def]
 QED
 
+(* Flag types: same argument as prims but FlagTV instead of BaseTV *)
+Theorem val_in_memory_flag_enc:
+  ∀ m k off mem.
+    val_in_memory (FlagTV m) (FlagV k) off mem ∧
+    off + 32 ≤ LENGTH mem
+    ⇒
+    mem_bytes_at off 32 mem = enc (Uint 256) (NumV k)
+Proof
+  rw[val_in_memory_def, enc_def, enc_number_def,
+     mem_word_at_def, mem_bytes_at_def, val_to_w256_def] >>
+  qpat_x_assum`_ = n2w _`(SUBST_ALL_TAC o SYM) >>
+  irule EQ_SYM >>
+  irule word_bytes_roundtrip >>
+  simp[dividesTheory.divides_def]
+QED
+
 (* Memory length fits in a word — needed so w2n/n2w round-trips *)
 Definition venom_memory_bound_def:
   venom_memory_bound ss ⇔ LENGTH ss.vs_memory < dimword(:256)
@@ -633,7 +649,8 @@ Resume compile_abi_encode_to_buf_correct[prim]:
     strip_tac >>
     Cases >> rpt strip_tac >>
     gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
-  `ty ≠ NoneT` by cheat >> (* fix type_to_abi_enc_info on NoneT *)
+  `ty ≠ NoneT` by (
+      strip_tac >> gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
   `static_length aty = 32` by (
     ntac 4 (pop_assum mp_tac) >>
     qunabbrev_tac`aty` >>
@@ -654,7 +671,15 @@ Resume compile_abi_encode_to_buf_correct[prim]:
   simp[eval_operand_def] >>
   reverse conj_tac >- first_x_assum MATCH_ACCEPT_TAC >>
   qunabbrev_tac`aty` >>
-  Cases_on`∃n. ty = FlagT n` >- cheat >>
+  Cases_on`∃n. ty = FlagT n` >- (
+    gvs[vyper_to_abi_type_def] >>
+    Cases_on`av` >> gvs[has_type_def,Excl"enc_def"] >>
+    irule val_in_memory_flag_enc >>
+    gvs[vyperValueTheory.evaluate_type_def,
+        CaseEq"option",CaseEq"type_args",PULL_EXISTS] >>
+    Cases_on`v` >> gvs[value_has_type_def] >>
+    goal_assum $ drule_at Any >>
+    gvs[type_memory_size_def]) >>
   `∃bt. ty = BaseT bt` by (Cases_on`ty` \\ gvs[] >>
      pop_assum mp_tac >> CASE_TAC >> gvs[] >>
      CASE_TAC >> gvs[vyperValueTheory.evaluate_type_def] >>
