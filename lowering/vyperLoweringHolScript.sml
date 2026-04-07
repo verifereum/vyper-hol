@@ -1,4 +1,4 @@
-(* Rollup theory for Vyper→Venom lowering *)
+(* Rollup theory for Vyper->Venom lowering + e2e correctness *)
 Theory vyperLoweringHol
 Ancestors
   (* definitions *)
@@ -6,3 +6,7 @@ Ancestors
   (* property statements and proofs *)
   moduleLoweringProps
   valueEncodingProofs
+  (* compiler + correctness *)
+  vyperCompiler
+  vyperLoweringCorrect
+  e2eCorrectness

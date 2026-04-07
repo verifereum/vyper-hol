@@ -1,11 +1,12 @@
 (*
  * Stack Plan Generation — Per-Instruction/Block/Function
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Port of _generate_evm_for_instruction, _generate_evm_for_basicblock_r,
  * generate_evm_assembly from venom_to_assembly.py.
  *
  * TOP-LEVEL:
- *   generate_context_plan — plan for entire ir_context
+ *   generate_context_plan — plan for entire venom_context
  *)
 
 Theory stackPlanGen
@@ -262,11 +263,10 @@ End
 (* Opcodes that should never appear at codegen time.
    These must be eliminated by earlier passes:
      ALLOCA — eliminated by mem2var / memory layout
-     GEP    — eliminated by lower passes
      SINK   — test-only pseudo-instruction
      DLOAD, DLOADBYTES — lowered by lower_dload pass *)
 Definition is_pre_codegen_opcode_def:
-  is_pre_codegen_opcode opc ⇔ MEM opc [ALLOCA; GEP; SINK; DLOAD; DLOADBYTES]
+  is_pre_codegen_opcode opc ⇔ MEM opc [ALLOCA; SINK; DLOAD; DLOADBYTES]
 End
 
 (* =========================================================================
@@ -283,7 +283,9 @@ End
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     wf_function fn ∧
+    fn_inst_wf fn ∧
     ssa_form fn ∧
+    def_dominates_uses fn ∧
     single_use_form fn ∧
     cfg_is_normalized (cfg_analyze fn) fn ∧
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
@@ -468,10 +470,10 @@ val fn_plan_defn = Hol_defn "generate_fn_plan_aux" `
     SOME ([] : stack_op list, visited, ps)) /\
 
   (generate_fn_plan_aux liveness dfg cfg fn (lbl :: rest) visited ps =
-    if lbl IN visited then
+    if MEM lbl visited then
       generate_fn_plan_aux liveness dfg cfg fn rest visited ps
     else
-      let visited' = lbl INSERT visited in
+      let visited' = lbl :: visited in
       case lookup_block lbl fn.fn_blocks of
         NONE => generate_fn_plan_aux liveness dfg cfg fn rest visited' ps
       | SOME bb =>
@@ -527,18 +529,18 @@ val fn_plan_R = ``inv_image ($< LEX $< LEX ($< : num -> num -> bool))
   (\(x : ^(ty_antiq sum_ty)).
     case x of
       INL (liveness, dfg, cfg, fn, worklist, visited, ps) =>
-        (CARD (set (fn_labels fn) DIFF visited), LENGTH worklist, 0n)
+        (CARD (set (fn_labels fn) DIFF set visited), LENGTH worklist, 0n)
     | INR (liveness, dfg, cfg, fn, saved_stack, saved_spilled,
            succs, visited, ps_g) =>
-        (CARD (set (fn_labels fn) DIFF visited), LENGTH succs, 1n))``;
+        (CARD (set (fn_labels fn) DIFF set visited), LENGTH succs, 1n))``;
 
 val fn_plan_P = ``\(x : ^(ty_antiq sum_ty)) (result : ^(ty_antiq result_ty)).
   case result of
     NONE => T
   | SOME (ops, visited_out, ps_out) =>
     (case x of
-      INL (_, _, _, _, _, visited, _) => visited SUBSET visited_out
-    | INR (_, _, _, _, _, _, _, visited, _) => visited SUBSET visited_out)``;
+      INL (_, _, _, _, _, visited, _) => set visited SUBSET set visited_out
+    | INR (_, _, _, _, _, _, _, visited, _) => set visited SUBSET set visited_out)``;
 
 val fn_plan_wf = prove(``WF ^fn_plan_R``,
   MATCH_MP_TAC WF_inv_image >>
@@ -563,7 +565,7 @@ val fn_plan_mono_inl = prove(
   ``!liveness dfg cfg fn wl visited ps ops vis' ps'.
     generate_fn_plan_aux_UNION_aux ^fn_plan_R
       (INL (liveness,dfg,cfg,fn,wl,visited,ps)) = SOME (ops,vis',ps')
-    ==> visited SUBSET vis'``,
+    ==> set visited SUBSET set vis'``,
   rpt strip_tac >>
   mp_tac (Q.SPEC `INL(liveness,dfg,cfg,fn,wl,visited,ps)` fn_plan_mono_simp) >>
   gvs[]
@@ -574,7 +576,7 @@ val fn_plan_mono_inr = prove(
   ``!liveness dfg cfg fn ss sp succs visited ps ops vis' ps'.
     generate_fn_plan_aux_UNION_aux ^fn_plan_R
       (INR (liveness,dfg,cfg,fn,ss,sp,succs,visited,ps)) = SOME (ops,vis',ps')
-    ==> visited SUBSET vis'``,
+    ==> set visited SUBSET set vis'``,
   rpt strip_tac >>
   mp_tac (Q.SPEC `INR(liveness,dfg,cfg,fn,ss,sp,succs,visited,ps)` fn_plan_mono_simp) >>
   gvs[]
@@ -586,59 +588,66 @@ fun fn_plan_obl_tac () =
   conj_tac >- ACCEPT_TAC fn_plan_wf >>
   (* Obl 1: INR → INR rest (after INL [succ], uses mono_inl) *)
   conj_tac >- (
-    rpt strip_tac >> gvs[] >>
+    rpt strip_tac >>
+    rpt BasicProvers.VAR_EQ_TAC >>
     drule fn_plan_mono_inl >> simp[] >> strip_tac >>
     simp[inv_image_def, LEX_DEF] >>
-    `CARD (set (fn_labels fn) DIFF visited_after) <=
-     CARD (set (fn_labels fn) DIFF visited)` by (
+    `CARD (set (fn_labels fn) DIFF set visited_after) <=
+     CARD (set (fn_labels fn) DIFF set visited)` by (
       irule CARD_SUBSET >> simp[SUBSET_DEF] >>
       rpt strip_tac >> gvs[SUBSET_DEF]) >>
-    simp[]) >>
+    gvs[]) >>
   (* Obl 2: INR → INL [succ] *)
   conj_tac >- (
     rpt strip_tac >> gvs[inv_image_def, LEX_DEF] >>
     Cases_on `rest` >> simp[]) >>
   (* Obl 3: INL → INL rest after INR (uses mono_inr) *)
   conj_tac >- (
-    rpt strip_tac >> gvs[] >>
+    rpt strip_tac >>
+    rpt BasicProvers.VAR_EQ_TAC >>
     drule fn_plan_mono_inr >> simp[] >> strip_tac >>
     simp[inv_image_def, LEX_DEF] >>
     `MEM lbl (fn_labels fn)` by
       (simp[venomInstTheory.fn_labels_def] >>
        irule lookup_block_mem_fn_labels >> metis_tac[]) >>
-    `CARD (set (fn_labels fn) DIFF visited'') <=
-     CARD (set (fn_labels fn) DIFF (lbl INSERT visited))` by (
+    `CARD (set (fn_labels fn) DIFF set visited'') <=
+     CARD (set (fn_labels fn) DIFF (lbl INSERT set visited))` by (
       irule CARD_SUBSET >> simp[SUBSET_DEF] >>
       rpt strip_tac >> gvs[SUBSET_DEF]) >>
-    `CARD (set (fn_labels fn) DIFF (lbl INSERT visited)) <
-     CARD (set (fn_labels fn) DIFF visited)` by (
+    `CARD (set (fn_labels fn) DIFF (lbl INSERT set visited)) <
+     CARD (set (fn_labels fn) DIFF set visited)` by (
       irule CARD_PSUBSET >>
       simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
       qexists_tac `lbl` >> simp[]) >>
-    simp[]) >>
+    gvs[]) >>
   (* Obl 4: INL → INR succs *)
   conj_tac >- (
-    rpt strip_tac >> gvs[inv_image_def, LEX_DEF] >>
+    rpt strip_tac >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    qmatch_goalsub_abbrev_tac`inv_image _ ff` >>
+    simp[inv_image_def, LEX_DEF] >>
     `MEM lbl (fn_labels fn)` by
       (simp[venomInstTheory.fn_labels_def] >>
        irule lookup_block_mem_fn_labels >> metis_tac[]) >>
+    qunabbrev_tac`ff` >>
+    simp_tac (std_ss ++ pairSimps.PAIR_ss) [pair_case_def] >>
     disj1_tac >> irule CARD_PSUBSET >>
     simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
     qexists_tac `lbl` >> simp[]) >>
   (* Obl 5: INL, lookup NONE → INL rest *)
   conj_tac >- (
-    rpt strip_tac >> gvs[inv_image_def, LEX_DEF] >>
-    `CARD (set (fn_labels fn) DIFF (lbl INSERT visited)) <=
-     CARD (set (fn_labels fn) DIFF visited)` by (
+    rpt strip_tac >> gvs[inv_image_def, LEX_DEF, Excl"CARD_DIFF"] >>
+    `CARD (set (fn_labels fn) DIFF (lbl INSERT set visited)) <=
+     CARD (set (fn_labels fn) DIFF set visited)` by (
       irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
-    simp[]) >>
-  (* Obl 6: INL, lbl IN visited → INL rest *)
+    simp[Excl"CARD_DIFF"]) >>
+  (* Obl 6: INL, MEM lbl visited → INL rest *)
   rpt strip_tac >> gvs[inv_image_def, LEX_DEF];
 
 val (fn_plan_aux_eqs, fn_plan_aux_ind) =
   Defn.tprove(fn_plan_defn, fn_plan_obl_tac());
 
-Theorem generate_fn_plan_aux_def = fn_plan_aux_eqs
+Theorem generate_fn_plan_aux_def[compute] = fn_plan_aux_eqs
 Theorem generate_fn_plan_aux_ind = fn_plan_aux_ind
 
 (* =========================================================================
@@ -654,7 +663,7 @@ Definition generate_fn_plan_def:
     case fn_entry_label fn of
       NONE => SOME ([] : stack_op list, ps)
     | SOME lbl =>
-        case generate_fn_plan_aux liveness dfg cfg fn [lbl] {} ps of
+        case generate_fn_plan_aux liveness dfg cfg fn [lbl] [] ps of
           NONE => NONE
         | SOME (ops, _, ps') => SOME (ops, ps')
 End

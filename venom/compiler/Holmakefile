@@ -1,0 +1,32 @@
+INCLUDES = $(VFMDIR) \
+  ../defs ../simulation/defs ../simulation ../simulation/proofs ../props \
+  ../passes/shared ../passes/shared/defs \
+  ../analysis/shared ../analysis/shared/defs \
+  ../passes/phi_elimination/defs \
+  ../passes/assign_elim/defs \
+  ../passes/revert_to_assert/defs \
+  ../passes/sccp/defs \
+  ../passes/remove_unused/defs \
+  ../passes/mem2var/defs \
+  ../passes/memory_copy_elision/defs \
+  ../passes/load_elim/defs \
+  ../passes/concretize_mem_loc/defs \
+  ../passes/dead_store_elim/defs \
+  ../passes/simplify_cfg/defs \
+  ../passes/cfg_normalization/defs \
+  ../passes/tail_merge/defs \
+  ../passes/branch_opt/defs \
+  ../passes/lower_dload/defs \
+  ../passes/single_use_expansion/defs \
+  ../passes/literals_codesize/defs \
+  ../passes/cse/defs \
+  ../passes/algebraic_opt/defs \
+  ../passes/affine_folding/defs \
+  ../passes/assert_elim/defs \
+  ../passes/overflow_elim/defs \
+  ../passes/assert_combiner/defs \
+  ../passes/internal_return_copy_fwd/defs \
+  ../passes/readonly_invoke_copy_fwd/defs \
+  ../passes/dft/defs \
+  ../passes/function_inliner/defs \
+  ../passes/make_ssa/defs

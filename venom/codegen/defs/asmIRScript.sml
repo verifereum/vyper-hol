@@ -1,6 +1,7 @@
 (*
  * Assembly IR Types
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Intermediate representation between Venom codegen and EVM bytecode.
  * Defines assembly instruction types and the stack operation plan type.
  *
@@ -16,7 +17,7 @@
 
 Theory asmIR
 Ancestors
-  stackModel venomEffects cfgTransform
+  stackModel venomEffects cfgTransform venomInst
 
 (* =========================================================================
    Assembly Instructions
@@ -100,6 +101,7 @@ Definition venom_to_evm_name_def:
   venom_to_evm_name BYTE = SOME "BYTE" ∧
   venom_to_evm_name MLOAD = SOME "MLOAD" ∧
   venom_to_evm_name MSTORE = SOME "MSTORE" ∧
+  venom_to_evm_name MSTORE8 = SOME "MSTORE8" ∧
   venom_to_evm_name MCOPY = SOME "MCOPY" ∧
   venom_to_evm_name MSIZE = SOME "MSIZE" ∧
   venom_to_evm_name SLOAD = SOME "SLOAD" ∧
@@ -162,7 +164,6 @@ Definition venom_to_evm_name_def:
   venom_to_evm_name ASSERT = NONE ∧
   venom_to_evm_name ASSERT_UNREACHABLE = NONE ∧
   venom_to_evm_name ALLOCA = NONE ∧
-  venom_to_evm_name GEP = NONE ∧
   venom_to_evm_name OFFSET = NONE ∧
   venom_to_evm_name SINK = NONE ∧
   venom_to_evm_name DLOAD = NONE ∧
@@ -189,21 +190,9 @@ Definition label_of_def:
 End
 
 (* =========================================================================
-   Data Segment Types
-   Port of DataItem/DataSection from vyper/venom/context.py.
-   Data items are either raw bytes or label references (resolved later).
+   Data Segment Assembly
+   data_item/data_section types are in venomInstTheory.
    ========================================================================= *)
-
-Datatype:
-  data_item = DataBytes (word8 list) | DataLabel string
-End
-
-Datatype:
-  data_section = <|
-    ds_label : string;
-    ds_items : data_item list
-  |>
-End
 
 (* Convert data segment to assembly instructions *)
 Definition data_section_asm_def:

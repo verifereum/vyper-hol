@@ -1,6 +1,8 @@
 (*
  * Codegen Context: data locations, VyperValue, buffer/ptr, memory operations
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ *
  * TOP-LEVEL:
  *   data_location      — where a value lives (MEMORY, STORAGE, TRANSIENT, CODE, CALLDATA)
  *   vyper_value      — StackValue type operand | LocatedValue type ptr
@@ -595,8 +597,8 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
       | (TupleT dst_tys, TupleT src_tys) =>
           compile_typed_copy_fields cenv dst src dst_tys src_tys 0 0
       | (StructT dst_name, StructT src_name) =>
-          let dst_fields = cenv.ce_struct_fields dst_name in
-          let src_fields = cenv.ce_struct_fields src_name in
+          let dst_fields = get_struct_fields cenv.ce_struct_fields dst_name in
+          let src_fields = get_struct_fields cenv.ce_struct_fields src_name in
           compile_struct_typed_copy cenv
             dst src dst_fields src_fields 0 0
       | _ =>
@@ -849,14 +851,14 @@ Definition compile_iload_to_memory_def:
     od
 End
 
-(* Helper: copy from GEP-based source to memory buffer, word by word.
+(* Helper: copy from ADD-based source to memory buffer, word by word.
    Mirrors the loop in Python load_immutable_ctor for complex types. *)
 Definition compile_gep_to_memory_def:
   compile_gep_to_memory src_base src_offset dst_buf 0 = return () ∧
   compile_gep_to_memory src_base src_offset dst_buf (SUC n) =
     let byte_off_val = n * 32 in
     do imm_off <- emit_op ADD [src_offset; Lit (n2w byte_off_val)];
-       ptr <- emit_op GEP [src_base; imm_off];
+       ptr <- emit_op ADD [src_base; imm_off];
        word_op <- emit_op MLOAD [ptr];
        mem_ptr <- emit_op ADD [dst_buf; Lit (n2w byte_off_val)];
        emit_void MSTORE [mem_ptr; word_op];
@@ -867,10 +869,10 @@ End
 (* ===== Load Immutable (Constructor) ===== *)
 (* Mirrors Python: context.py load_immutable_ctor
    During constructor, immutables live in an alloca'd buffer.
-   If immutables_alloca is available, use GEP + MLOAD.
+   If immutables_alloca is available, use ADD + MLOAD.
    Otherwise, fall back to ILOAD (same as runtime).
    NOTE: Currently unused — will be wired in when constructor immutable
-   loading is added to compile_expr. The SOME imm_alloca (GEP) path
+   loading is added to compile_expr. The SOME imm_alloca (ADD) path
    has no direct Python equivalent; Python always uses iload/dload. *)
 Definition compile_load_immutable_ctor_def:
   compile_load_immutable_ctor offset is_prim_word word_count alloca_size
@@ -892,7 +894,7 @@ Definition compile_load_immutable_ctor_def:
           od
     | SOME imm_alloca =>
       if is_prim_word then
-        do ptr <- emit_op GEP [imm_alloca; offset];
+        do ptr <- emit_op ADD [imm_alloca; offset];
            emit_op MLOAD [ptr]
         od
       else

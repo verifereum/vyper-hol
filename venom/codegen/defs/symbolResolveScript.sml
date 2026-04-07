@@ -44,6 +44,7 @@ Definition evm_opcode_table_def:
     ("CHAINID", 0x46w); ("SELFBALANCE", 0x47w); ("BASEFEE", 0x48w);
     ("BLOBHASH", 0x49w); ("BLOBBASEFEE", 0x4Aw);
     ("POP", 0x50w); ("MLOAD", 0x51w); ("MSTORE", 0x52w);
+    ("MSTORE8", 0x53w);
     ("SLOAD", 0x54w); ("SSTORE", 0x55w);
     ("JUMP", 0x56w); ("JUMPI", 0x57w);
     ("MSIZE", 0x59w); ("GAS", 0x5Aw); ("JUMPDEST", 0x5Bw);
@@ -158,6 +159,20 @@ Definition encode_inst_def:
     (case FLOOKUP offsets lbl of
       SOME off => pad_bytes symbol_size (encode_num_bytes off)
     | NONE => REPLICATE symbol_size (0w : byte))
+End
+
+(* =========================================================================
+   Byte Offset → Instruction Index (inverse of layout)
+   ========================================================================= *)
+
+(* Maps byte offsets to instruction indices. Companion to
+   compute_label_offsets; both use asm_inst_size. *)
+Definition build_offset_to_pc_def:
+  build_offset_to_pc prog =
+    FST (FOLDL (λ(m, off) (i, inst).
+      (m |+ (off, i), off + asm_inst_size inst))
+    (FEMPTY : (num, num) fmap, 0n)
+    (MAPi (λi inst. (i, inst)) prog))
 End
 
 (* =========================================================================

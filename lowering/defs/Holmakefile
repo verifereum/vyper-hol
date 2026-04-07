@@ -3,4 +3,6 @@
 #   ../..    = project root
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
            ../../syntax ../../semantics \
-           ../../venom/defs
+           ../../venom/defs \
+           ../../venom/codegen/defs \
+           ../../venom/compiler

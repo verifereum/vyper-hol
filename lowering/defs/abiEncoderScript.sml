@@ -3,11 +3,7 @@
  *
  * TOP-LEVEL:
  *   compile_abi_encode_static   — encode primitive word type
- *   compile_abi_encode_bytestring — encode bytes/string to ABI format
- *   compile_abi_decode_static   — decode primitive word type (Props only)
- *   compile_abi_decode_bool     — decode bool (Props only)
- *   compile_abi_encode_tuple    — encode tuple (Props only)
- *   compile_abi_decode_tuple    — decode tuple (Props only)
+ *   compile_abi_decode_static   — decode primitive word type
  *   compile_abi_encode_to_buf   — recursive dispatcher for ABI encoding
  *   compile_abi_decode_to_buf   — recursive dispatcher for ABI decoding
  *   compile_abi_encode_child    — encode dynamic child with offset tracking
@@ -122,92 +118,20 @@ End
 
 (* ===== ABI Encode (static types) ===== *)
 Definition compile_abi_encode_static_def:
-  compile_abi_encode_static src_op dst_op =
-    emit_void MSTORE [dst_op; src_op]
-End
-
-(* ===== ABI Encode Bytestring ===== *)
-Definition compile_abi_encode_bytestring_def:
-  compile_abi_encode_bytestring src_ptr dst head_offset =
-    do len_op <- emit_op MLOAD [src_ptr];
-       emit_void MSTORE [dst; Lit (n2w head_offset)];
-       tail <- emit_op ADD [dst; Lit (n2w head_offset)];
-       emit_void MSTORE [tail; len_op];
-       tail_data <- emit_op ADD [tail; Lit 32w];
-       src_data <- emit_op ADD [src_ptr; Lit 32w];
-       emit_void MCOPY [tail_data; src_data; len_op];
-       padded <- emit_op ADD [len_op; Lit 31w];
-       ceil32_len <- emit_op AND [padded; Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w];
-       emit_op ADD [ceil32_len; Lit 32w]
+  compile_abi_encode_static dst src =
+    do val_op <- emit_op MLOAD [src];
+       emit_void MSTORE [dst; val_op];
+       return (Lit 32w)
     od
 End
 
-(* ===== ABI Decode (standalone helpers — Props proof only) ===== *)
+(* ===== ABI Decode (standalone helpers) ===== *)
 Definition compile_abi_decode_static_def:
-  compile_abi_decode_static src_op dst_op clamp_fn =
-    do val_op <- emit_op MLOAD [src_op];
+  compile_abi_decode_static src_op dst_op load_opc clamp_fn =
+    do val_op <- emit_op load_opc [src_op];
        clamp_fn val_op;
        emit_void MSTORE [dst_op; val_op]
     od
-End
-
-Definition compile_abi_decode_bool_def:
-  compile_abi_decode_bool src_op dst_op =
-    do val_op <- emit_op MLOAD [src_op];
-       too_big <- emit_op GT [val_op; Lit 1w];
-       ok <- emit_op ISZERO [too_big];
-       emit_void ASSERT [ok];
-       emit_void MSTORE [dst_op; val_op]
-    od
-End
-
-(* ===== ABI Encode Tuple (standalone — Props proof only) ===== *)
-Definition compile_abi_encode_tuple_def:
-  compile_abi_encode_tuple src_ptr dst_ptr [] _ = return (Lit 0w) ∧
-  compile_abi_encode_tuple src_ptr dst_ptr
-      ((is_dyn, mem_size) :: rest) head_offset =
-    (if is_dyn then
-      do head_pos <- emit_op ADD [dst_ptr; Lit (n2w head_offset)];
-         src_elem <- emit_op ADD [src_ptr; Lit (n2w head_offset)];
-         emit_void MSTORE [head_pos; Lit 0w];
-         compile_abi_encode_tuple src_ptr dst_ptr rest (head_offset + 32)
-      od
-    else
-      do src_elem <- emit_op ADD [src_ptr; Lit (n2w head_offset)];
-         dst_elem <- emit_op ADD [dst_ptr; Lit (n2w head_offset)];
-         val_op <- emit_op MLOAD [src_elem];
-         emit_void MSTORE [dst_elem; val_op];
-         compile_abi_encode_tuple src_ptr dst_ptr rest (head_offset + 32)
-      od)
-End
-
-(* ===== ABI Decode Tuple (element-by-element) ===== *)
-Definition compile_abi_decode_tuple_def:
-  compile_abi_decode_tuple src_base dst_ptr hi_op [] _ = return () ∧
-  compile_abi_decode_tuple src_base dst_ptr hi_op
-      ((is_dyn, mem_size, max_len) :: rest) head_offset =
-    (if is_dyn then
-      do head_pos <- emit_op ADD [src_base; Lit (n2w head_offset)];
-         offset <- emit_op MLOAD [head_pos];
-         data_base <- emit_op ADD [src_base; offset];
-         len_op <- emit_op MLOAD [data_base];
-         too_long <- emit_op GT [len_op; Lit (n2w max_len)];
-         ok <- emit_op ISZERO [too_long];
-         emit_void ASSERT [ok];
-         dst_elem <- emit_op ADD [dst_ptr; Lit (n2w head_offset)];
-         emit_void MSTORE [dst_elem; len_op];
-         src_data <- emit_op ADD [data_base; Lit 32w];
-         dst_data <- emit_op ADD [dst_elem; Lit 32w];
-         emit_void MCOPY [dst_data; src_data; len_op];
-         compile_abi_decode_tuple src_base dst_ptr hi_op rest (head_offset + 32)
-      od
-    else
-      do src_elem <- emit_op ADD [src_base; Lit (n2w head_offset)];
-         val_op <- emit_op MLOAD [src_elem];
-         dst_elem <- emit_op ADD [dst_ptr; Lit (n2w head_offset)];
-         emit_void MSTORE [dst_elem; val_op];
-         compile_abi_decode_tuple src_base dst_ptr hi_op rest (head_offset + 32)
-      od)
 End
 
 (* ===== Recursive ABI Encode Dispatcher ===== *)
@@ -239,10 +163,7 @@ Definition compile_abi_encode_child_def:
 
   compile_abi_encode_to_buf (dst:operand) (src:operand)
                             AbiPrimWord =
-    (do val_op <- emit_op MLOAD [src];
-        emit_void MSTORE [dst; val_op];
-        return (Lit 32w)
-     od) ∧
+    (compile_abi_encode_static dst src) ∧
 
   compile_abi_encode_to_buf dst src (AbiBytestring max_len) =
     (let mem_size = 32 + ((max_len + 31) DIV 32) * 32 in
@@ -412,10 +333,8 @@ End
 Definition compile_abi_decode_to_buf_def:
   compile_abi_decode_to_buf (dst:operand) (src_op:operand) (load_opc:opcode)
                             (hi_op:operand) (DecPrimWord clamp_info) =
-    (do val_op <- emit_op load_opc [src_op];
-        compile_abi_clamp_basetype val_op clamp_info;
-        emit_void MSTORE [dst; val_op]
-     od) ∧
+    (compile_abi_decode_static src_op dst load_opc
+       (λval_op. compile_abi_clamp_basetype val_op clamp_info)) ∧
 
   compile_abi_decode_to_buf dst src_op load_opc hi_op
                             (DecBytestring max_len) =

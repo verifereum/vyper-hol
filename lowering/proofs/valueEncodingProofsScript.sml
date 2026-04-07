@@ -213,3 +213,459 @@ Proof
   >> simp[byteTheory.word_of_bytes_be_def,
           vfmTypesTheory.word_to_bytes_word_of_bytes_256]
 QED
+
+(* ===== Layer 1: mstore / mem_word_at interaction ===== *)
+
+(* mstore at offset, then read mem_word_at same offset, gets original word back.
+   Core fact: word_of_bytes T 0w (word_to_bytes w T) = w
+   (vfmTypesTheory.word_to_bytes_word_of_bytes_256).
+   The byte-list surgery is: mstore writes TAKE off expanded ++ word_to_bytes w T ++ DROP (off+32) expanded,
+   then mem_word_at reads TAKE 32 (DROP off result ++ REPLICATE 32 0w).
+   Need to show DROP off (TAKE off X ++ bytes ++ tail) = bytes ++ tail,
+   then TAKE 32 (bytes ++ ...) = bytes when LENGTH bytes = 32.
+   See lowerDloadProofsScript.sml:write_then_mload for a similar local proof. *)
+Theorem drop_take_append[local]:
+  ∀ off (xs : α list) ys.
+    off ≤ LENGTH xs ⇒ DROP off (TAKE off xs ++ ys) = ys
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[listTheory.DROP_APPEND] >>
+  REWRITE_TAC[rich_listTheory.DROP_TAKE_EQ_NIL] >>
+  simp[listTheory.LENGTH_TAKE]
+QED
+
+Theorem LENGTH_word_to_bytes_256[local,simp]:
+  LENGTH (word_to_bytes (w:bytes32) T) = 32
+Proof
+  simp[byteTheory.LENGTH_word_to_bytes,
+       fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
+(* ===== Core splice/expansion helpers ===== *)
+
+(* mstore = write_memory_with_expansion on word_to_bytes *)
+Theorem mstore_eq_wmwe:
+  ∀ off (w:bytes32) s.
+    mstore off w s = write_memory_with_expansion off (word_to_bytes w T) s
+Proof
+  simp[mstore_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+(* TAKE k (xs ++ REPLICATE m c) only depends on the first k elements:
+   extra padding beyond k is irrelevant. *)
+Theorem TAKE_append_REPLICATE:
+  ∀ k (xs : α list) m n (c : α).
+    k ≤ LENGTH xs + m ∧ k ≤ LENGTH xs + n ⇒
+    TAKE k (xs ++ REPLICATE m c) = TAKE k (xs ++ REPLICATE n c)
+Proof
+  rpt strip_tac >> irule listTheory.LIST_EQ >>
+  simp[listTheory.LENGTH_TAKE_EQ, listTheory.EL_TAKE,
+       listTheory.EL_APPEND_EQN, rich_listTheory.EL_REPLICATE]
+QED
+
+(* Appending zero-bytes is invisible to mem_word_at, because
+   mem_word_at already zero-pads via REPLICATE 32 0w. *)
+(* Merge REPLICATE padding after DROP *)
+Theorem drop_append_replicate_merge:
+  ∀ off (mem : α list) n k (c : α).
+    DROP off (mem ++ REPLICATE n c) ++ REPLICATE k c =
+    DROP off mem ++ REPLICATE (n − (off − LENGTH mem) + k) c
+Proof
+  rpt gen_tac >>
+  REWRITE_TAC[listTheory.DROP_APPEND] >>
+  simp[rich_listTheory.DROP_REPLICATE,
+       GSYM listTheory.APPEND_ASSOC,
+       rich_listTheory.REPLICATE_APPEND]
+QED
+
+Theorem mem_word_at_append_zero:
+  ∀ off mem n.
+    mem_word_at off (mem ++ REPLICATE n (0w:byte)) = mem_word_at off mem
+Proof
+  rpt gen_tac >> simp[mem_word_at_def] >>
+  AP_TERM_TAC >>
+  REWRITE_TAC[drop_append_replicate_merge] >>
+  irule TAKE_append_REPLICATE >> simp[]
+QED
+
+(* Same for mem_bytes_at *)
+Theorem mem_bytes_at_append_zero:
+  ∀ off len mem n.
+    mem_bytes_at off len (mem ++ REPLICATE n (0w:byte)) =
+    mem_bytes_at off len mem
+Proof
+  rpt gen_tac >> simp[mem_bytes_at_def] >>
+  REWRITE_TAC[drop_append_replicate_merge] >>
+  irule TAKE_append_REPLICATE >> simp[]
+QED
+
+(* Reading n bytes from a splice at a disjoint offset returns
+   the same as reading from the unspliced list.
+   splice = TAKE off2 xs ++ bs ++ DROP (off2 + LENGTH bs) xs *)
+Theorem take_drop_splice_disjoint:
+  ∀ off1 n off2 (bs : α list) (xs : α list) (pad : α list).
+    off2 + LENGTH bs ≤ LENGTH xs ∧
+    (off1 + n ≤ off2 ∨ off2 + LENGTH bs ≤ off1) ⇒
+    TAKE n (DROP off1
+      (TAKE off2 xs ++ bs ++ DROP (off2 + LENGTH bs) xs) ++ pad) =
+    TAKE n (DROP off1 xs ++ pad)
+Proof
+  rpt strip_tac >>
+  irule listTheory.LIST_EQ >>
+  simp[listTheory.LENGTH_TAKE_EQ, listTheory.EL_TAKE,
+       listTheory.EL_APPEND_EQN, listTheory.EL_DROP,
+       listTheory.LENGTH_DROP]
+QED
+
+Theorem mstore_mem_word_at_same_proof:
+  ∀ off (w:bytes32) s.
+    mem_word_at off (mstore off w s).vs_memory = w
+Proof
+  rpt strip_tac >>
+  simp[mstore_eq_wmwe, mem_word_at_def,
+       write_memory_with_expansion_def, LET_THM] >>
+  qabbrev_tac `mem = s.vs_memory` >>
+  Cases_on `0 < off + 32 - LENGTH mem`
+  >- (simp[] >>
+      qabbrev_tac `expanded = mem ++ REPLICATE (off + 32 - LENGTH mem) 0w` >>
+      `LENGTH expanded = off + 32` by
+        (simp[Abbr `expanded`]) >>
+      `off ≤ LENGTH expanded` by simp[] >>
+      `DROP (off + 32) expanded = []` by
+        metis_tac[rich_listTheory.DROP_LENGTH_NIL] >>
+      simp[] >>
+      `DROP off (TAKE off expanded ++ word_to_bytes w T) =
+       word_to_bytes w T` by
+        (irule drop_take_append >> simp[]) >>
+      simp[listTheory.TAKE_APPEND1, listTheory.TAKE_LENGTH_ID_rwt,
+           vfmTypesTheory.word_to_bytes_word_of_bytes_256])
+  >- (simp[] >>
+      `off + 32 ≤ LENGTH mem` by simp[] >>
+      `off ≤ LENGTH mem` by simp[] >>
+      ONCE_REWRITE_TAC[GSYM listTheory.APPEND_ASSOC] >>
+      `DROP off (TAKE off mem ++
+         (word_to_bytes w T ++ DROP (off + 32) mem)) =
+       word_to_bytes w T ++ DROP (off + 32) mem` by
+        (irule drop_take_append >> simp[]) >>
+      simp[listTheory.TAKE_APPEND1, listTheory.TAKE_LENGTH_ID_rwt,
+           vfmTypesTheory.word_to_bytes_word_of_bytes_256])
+QED
+
+(* mstore at off2 preserves mem_word_at at off1 when regions don't overlap.
+   Regions are [off1, off1+32) and [off2, off2+32). *)
+(* Shared tactic for disjoint read proofs: unfold mstore, case split on
+   expansion, apply splice disjoint in each case, clean up expansion. *)
+(* Shared proof structure for disjoint mem_word_at / mem_bytes_at.
+   Strategy: unfold mstore to splice, apply take_drop_splice_disjoint,
+   then use mem_word/bytes_at_append_zero for expansion case. *)
+(* Helper tactic pattern: rewrite DROP (off + 32) to DROP (off + LENGTH (word_to_bytes w T))
+   so irule take_drop_splice_disjoint can match *)
+Theorem splice_disjoint_word:
+  ∀ off1 n off2 (w : bytes32) (xs : byte list) (pad : byte list).
+    off2 + 32 ≤ LENGTH xs ∧
+    (off1 + n ≤ off2 ∨ off2 + 32 ≤ off1) ⇒
+    TAKE n (DROP off1
+      (TAKE off2 xs ++ word_to_bytes w T ++ DROP (off2 + 32) xs) ++ pad) =
+    TAKE n (DROP off1 xs ++ pad)
+Proof
+  rpt strip_tac >>
+  `32 = LENGTH (word_to_bytes w T)` by simp[] >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+  irule take_drop_splice_disjoint >> simp[]
+QED
+
+Theorem mstore_mem_word_at_disjoint_proof:
+  ∀ off1 off2 (w:bytes32) s.
+    (off1 + 32 ≤ off2 ∨ off2 + 32 ≤ off1) ⇒
+    mem_word_at off1 (mstore off2 w s).vs_memory =
+    mem_word_at off1 s.vs_memory
+Proof
+  rpt gen_tac >> DISCH_TAC >>
+  simp[mstore_eq_wmwe, write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < off2 + 32 - LENGTH s.vs_memory` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `TAKE off2 exp` >>
+      `off2 + 32 ≤ LENGTH exp` by simp[Abbr `exp`] >>
+      `mem_word_at off1 (TAKE off2 exp ++ word_to_bytes w T ++
+        DROP (off2 + 32) exp) = mem_word_at off1 exp` by (
+        simp[mem_word_at_def] >> AP_TERM_TAC >>
+        irule splice_disjoint_word >> simp[]) >>
+      simp[Abbr `exp`, mem_word_at_append_zero])
+  >- (`off2 + 32 ≤ LENGTH s.vs_memory` by simp[] >>
+      simp[mem_word_at_def] >> AP_TERM_TAC >>
+      irule splice_disjoint_word >> simp[])
+QED
+
+Theorem mstore_mem_bytes_at_disjoint_proof:
+  ∀ off1 len off2 (w:bytes32) s.
+    (off1 + len ≤ off2 ∨ off2 + 32 ≤ off1) ⇒
+    mem_bytes_at off1 len (mstore off2 w s).vs_memory =
+    mem_bytes_at off1 len s.vs_memory
+Proof
+  rpt gen_tac >> DISCH_TAC >>
+  simp[mstore_eq_wmwe, write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < off2 + 32 - LENGTH s.vs_memory` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `TAKE off2 exp` >>
+      `off2 + 32 ≤ LENGTH exp` by simp[Abbr `exp`] >>
+      `mem_bytes_at off1 len (TAKE off2 exp ++ word_to_bytes w T ++
+        DROP (off2 + 32) exp) = mem_bytes_at off1 len exp` by (
+        simp[mem_bytes_at_def] >>
+        irule splice_disjoint_word >> simp[]) >>
+      simp[Abbr `exp`, mem_bytes_at_append_zero])
+  >- (`off2 + 32 ≤ LENGTH s.vs_memory` by simp[] >>
+      simp[mem_bytes_at_def] >>
+      irule splice_disjoint_word >> simp[])
+QED
+
+(* mstore establishes val_in_memory for primitive (word-sized) values.
+   The value must be one that val_in_memory checks via mem_word_at
+   (BoolV, IntV, FlagV, DecimalV). *)
+Theorem mstore_establishes_val_in_memory_prim_proof:
+  ∀ off v s ty.
+    ((∃ b. v = BoolV b) ∨ (∃ n. v = IntV n) ∨
+     (∃ k. v = FlagV k) ∨ (∃ n. v = DecimalV n)) ⇒
+    val_in_memory ty v off (mstore off (val_to_w256 v) s).vs_memory
+Proof
+  rpt strip_tac >> gvs[] >>
+  simp[val_in_memory_def, mstore_mem_word_at_same_proof]
+QED
+
+(* NOTE: mstore_preserves_val_in_memory_prim was removed as redundant —
+   subsumed by mstore_preserves_val_in_memory conjunct 1 + val_in_memory_prim. *)
+
+(* ===== Layer 2: type_memory_size properties ===== *)
+
+(* Primitive base types always occupy 32 bytes in memory.
+   Excludes dynamic bytes and strings which have variable size. *)
+Theorem type_memory_size_prim_proof:
+  ∀ bt.
+    (∀ n. bt ≠ BytesT (Dynamic n)) ∧
+    (∀ n. bt ≠ StringT n) ⇒
+    type_memory_size (BaseTV bt) = 32
+Proof
+  Cases >> simp[type_memory_size_def] >>
+  Cases_on `b` >> simp[type_memory_size_def]
+QED
+
+(* FlagTV always 32 bytes *)
+Theorem type_memory_size_flag_proof:
+  ∀ name. type_memory_size (FlagTV name) = 32
+Proof
+  simp[type_memory_size_def]
+QED
+
+(* ===== Layer 2: val_in_memory compound disjointness ===== *)
+
+(* Core disjointness theorem: writing 32 bytes outside the region
+   [off, off + type_memory_size ty) preserves val_in_memory.
+
+   Requires mutual induction on val_in_memory's recursive structure
+   (val, fields, elems, kvs, tuple). Each leaf case reduces to
+   mstore_mem_word_at_disjoint or mstore_mem_bytes_at_disjoint.
+   The val_in_memory case dispatches on value constructor; for
+   compound constructors (StructV, ArrayV, StringV, BytesV dynamic),
+   the size bound propagates through type_memory_size arithmetic.
+
+   The free variable s is scaffolding: mstore only reads s.vs_memory
+   (overridden to mem), so the result is independent of other fields. *)
+(* Helper: kvs_val_wf implies val_wf for each MEM element *)
+Theorem kvs_val_wf_mem[local]:
+  ∀ kvs tv bound k v.
+    kvs_val_wf kvs tv bound ∧ MEM (k,v) kvs ⇒ val_wf tv v
+Proof
+  Induct >> simp[val_wf_def] >>
+  Cases >> rpt gen_tac >> strip_tac >> gvs[val_wf_def] >>
+  metis_tac[]
+QED
+
+(* Helper: kvs_val_wf implies k < bound for each MEM element *)
+Theorem kvs_val_wf_bound[local]:
+  ∀ kvs tv bound k v.
+    kvs_val_wf kvs tv bound ∧ MEM (k,v) kvs ⇒ k < bound
+Proof
+  Induct >> simp[val_wf_def] >>
+  Cases >> rpt gen_tac >> strip_tac >> gvs[val_wf_def] >>
+  metis_tac[]
+QED
+
+Theorem mstore_preserves_val_in_memory_proof:
+  (∀ ty v off mem off2 (w:bytes32).
+    val_in_memory ty v off mem ∧ val_wf ty v ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size ty ≤ off2) ⇒
+    val_in_memory ty v off (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ fields field_tvs off mem off2 (w:bytes32).
+    fields_in_memory fields field_tvs off mem ∧
+    fields_val_wf fields field_tvs ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size_fields field_tvs ≤ off2) ⇒
+    fields_in_memory fields field_tvs off
+      (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ vs off tv mem off2 (w:bytes32).
+    elems_in_memory vs off tv mem ∧ elems_val_wf vs tv ∧
+    (off2 + 32 ≤ off ∨
+     off + LENGTH vs * type_memory_size tv ≤ off2) ⇒
+    elems_in_memory vs off tv
+      (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ (kvs : (num # value) list) base_off tv mem off2 (w:bytes32).
+    kvs_in_memory kvs base_off tv mem ∧
+    (∀ k v. MEM (k,v) kvs ⇒ val_wf tv v) ∧
+    (∀ k v. MEM (k,v) kvs ⇒
+      off2 + 32 ≤ base_off + k * type_memory_size tv ∨
+      base_off + k * type_memory_size tv + type_memory_size tv ≤ off2) ⇒
+    kvs_in_memory kvs base_off tv
+      (mstore off2 w (s with vs_memory := mem)).vs_memory) ∧
+  (∀ vs tvs off mem off2 (w:bytes32).
+    tuple_in_memory vs tvs off mem ∧ tuple_val_wf vs tvs ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size_list tvs ≤ off2) ⇒
+    tuple_in_memory vs tvs off
+      (mstore off2 w (s with vs_memory := mem)).vs_memory)
+Proof
+  ho_match_mp_tac val_in_memory_ind >> rpt conj_tac
+  (* 1-4: Primitives (BoolV, IntV, FlagV, DecimalV) + NoneV + base [] cases *)
+  >> TRY (rpt gen_tac >> rpt strip_tac >>
+          gvs[val_in_memory_def, val_wf_def] >>
+          `off + 32 ≤ off2 ∨ off2 + 32 ≤ off` by DECIDE_TAC >>
+          simp[mstore_mem_word_at_disjoint_proof] >> NO_TAC)
+  >> TRY (simp[val_in_memory_def] >> NO_TAC)
+  (* 5: BytesV — case split to resolve type, then use disjoint lemmas *)
+  >- (rpt gen_tac >> rpt strip_tac >>
+      Cases_on `ty` >>
+      gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+      TRY (rename1 `BaseTV bt` >> Cases_on `bt` >>
+           gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+           TRY (rename1 `BytesT bnd` >> Cases_on `bnd` >>
+                gvs[val_in_memory_def, val_wf_def, type_memory_size_def])) >>
+      `off + 32 ≤ off2 ∨ off2 + 32 ≤ off` by DECIDE_TAC >>
+      TRY (`(off + 32) + LENGTH bs ≤ off2 ∨ off2 + 32 ≤ off + 32`
+             by DECIDE_TAC) >>
+      fs[mstore_mem_word_at_disjoint_proof, mstore_mem_bytes_at_disjoint_proof])
+  (* 6: StringV *)
+  >- (rpt gen_tac >> rpt strip_tac >>
+      gvs[val_in_memory_def, val_wf_def] >>
+      `off + 32 ≤ off2 ∨ off2 + 32 ≤ off` by DECIDE_TAC >>
+      simp[mstore_mem_word_at_disjoint_proof, mstore_mem_bytes_at_disjoint_proof] >>
+      gvs[])
+  (* 8: StructV *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      gvs[val_in_memory_def, val_wf_def, AllCaseEqs(), type_memory_size_def] >>
+      Cases_on `ty` >> gvs[] >>
+      first_x_assum irule >> gvs[type_memory_size_def])
+  (* 9: DynArrayV — fs splits disjunction, Cases_on gives t:type_value, b:bound *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      fs[val_wf_def] >>
+      Cases_on `ty` >> fs[] >>
+      Cases_on `b` >> fs[val_in_memory_def, type_memory_size_def] >>
+      rpt conj_tac >>
+      TRY (`off + 32 ≤ off2 ∨ off2 + 32 ≤ off` by DECIDE_TAC >>
+           fs[mstore_mem_word_at_disjoint_proof] >> NO_TAC) >>
+      first_x_assum irule >> simp[] >>
+      `LENGTH vs * type_memory_size t ≤ n * type_memory_size t`
+        suffices_by DECIDE_TAC >>
+      simp[arithmeticTheory.LE_MULT_RCANCEL])
+  (* 10: SArrayV *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      fs[val_wf_def] >>
+      Cases_on `ty` >> fs[] >>
+      Cases_on `b` >> fs[val_in_memory_def, type_memory_size_def] >>
+      first_x_assum irule >>
+      rpt conj_tac >> rpt strip_tac >>
+      TRY (metis_tac[kvs_val_wf_mem] >> NO_TAC) >>
+      drule_all kvs_val_wf_bound >> strip_tac >>
+      `SUC k * type_memory_size t ≤ n * type_memory_size t`
+        by simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+      `type_memory_size t + k * type_memory_size t =
+       SUC k * type_memory_size t` by simp[arithmeticTheory.MULT] >>
+      DECIDE_TAC)
+  (* 11: TupleV *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      fs[val_wf_def] >>
+      Cases_on `ty` >> fs[val_in_memory_def, type_memory_size_def] >>
+      first_x_assum irule >> simp[])
+  (* 13: fields cons *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      Cases_on `field_tvs` >> TRY (Cases_on `h`) >>
+      gvs[val_in_memory_def, val_wf_def, LET_THM, AllCaseEqs(),
+          type_memory_size_def] >>
+      conj_tac >> first_x_assum irule >> simp[type_memory_size_def])
+  (* 15: elems cons — simp[] leaves arithmetic from SUC(LENGTH vs)*tms;
+     fs[MULT] expands to tms + LENGTH vs * tms which is decidable *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      gvs[val_in_memory_def, val_wf_def, LET_THM] >>
+      conj_tac >> first_x_assum irule >>
+      simp[] >> fs[arithmeticTheory.MULT])
+  (* 17: kvs cons *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      gvs[val_in_memory_def, LET_THM] >>
+      conj_tac
+      >- (first_x_assum irule >> simp[])
+      >> metis_tac[])
+  (* 19: tuple cons *)
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
+      Cases_on `tvs` >>
+      gvs[val_in_memory_def, val_wf_def, type_memory_size_def, LET_THM,
+          AllCaseEqs()] >>
+      conj_tac >> first_x_assum irule >> simp[type_memory_size_def])
+QED
+
+(* ===== Layer 2: val_in_memory decomposition lemmas ===== *)
+
+(* These are essentially the definition clauses restated as rewrite-friendly
+   biconditionals. They simplify consumer proofs by eliminating case splits
+   on ty that the definition introduces. *)
+
+(* Struct decomposition: val_in_memory for StructV unfolds to fields_in_memory *)
+Theorem val_in_memory_struct_proof:
+  ∀ fields field_tvs offset mem.
+    val_in_memory (StructTV field_tvs) (StructV fields) offset mem ⇔
+    fields_in_memory fields field_tvs offset mem
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* DynArray decomposition *)
+Theorem val_in_memory_dynarray_proof:
+  ∀ vs elem_tv bound offset mem.
+    val_in_memory (ArrayTV elem_tv (Dynamic bound))
+                  (ArrayV (DynArrayV vs)) offset mem ⇔
+    (mem_word_at offset mem = n2w (LENGTH vs) ∧
+     elems_in_memory vs (offset + 32) elem_tv mem)
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* SArray decomposition *)
+Theorem val_in_memory_sarray_proof:
+  ∀ kvs elem_tv bound offset mem.
+    val_in_memory (ArrayTV elem_tv (Fixed bound))
+                  (ArrayV (SArrayV kvs)) offset mem ⇔
+    kvs_in_memory kvs offset elem_tv mem
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* Tuple decomposition *)
+Theorem val_in_memory_tuple_proof:
+  ∀ vs tvs offset mem.
+    val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) offset mem ⇔
+    tuple_in_memory vs tvs offset mem
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* BytesV with fixed bytes type: word encoding *)
+Theorem val_in_memory_fixed_bytes_proof:
+  ∀ bs n offset mem.
+    val_in_memory (BaseTV (BytesT (Fixed n))) (BytesV bs) offset mem ⇔
+    (mem_word_at offset mem =
+     typed_val_to_w256 (BaseTV (BytesT (Fixed n))) (BytesV bs))
+Proof
+  simp[val_in_memory_def]
+QED
+
+(* BytesV with AddressT: word encoding *)
+Theorem val_in_memory_address_proof:
+  ∀ bs offset mem.
+    val_in_memory (BaseTV AddressT) (BytesV bs) offset mem ⇔
+    (mem_word_at offset mem =
+     typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
+Proof
+  simp[val_in_memory_def]
+QED
