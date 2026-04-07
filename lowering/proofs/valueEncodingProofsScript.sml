@@ -161,18 +161,141 @@ Proof
   simp[]
 QED
 
+(* ===== truncate_signed roundtrip helpers ===== *)
+
+Theorem dimword_256_exp[local]:
+  dimword(:256) = 2 ** 256
+Proof
+  simp[wordsTheory.dimword_def]
+QED
+
+Theorem w2n_i2w_nonneg[local]:
+  !i. 0 <= i /\ Num i < dimword(:256) ==>
+    w2n ((i2w i):256 word) = Num i
+Proof
+  rpt strip_tac >>
+  `&(w2n ((i2w i):256 word)) = i % &(dimword(:256))` by
+    simp[integer_wordTheory.w2n_i2w] >>
+  `i < &(dimword(:256))` by intLib.ARITH_TAC >>
+  `i % &(dimword(:256)) = i` by simp[integerTheory.INT_LESS_MOD] >>
+  `i = &(Num i)` by simp[integerTheory.INT_OF_NUM] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem w2n_i2w_neg[local]:
+  !i. i < 0 /\ -&(dimword(:256)) < i ==>
+    w2n ((i2w i):256 word) = Num (i + &(dimword(:256)))
+Proof
+  rpt strip_tac >>
+  `&(w2n ((i2w i):256 word)) = i % &(dimword(:256))` by
+    simp[integer_wordTheory.w2n_i2w] >>
+  `0 < dimword(:256)` by simp[wordsTheory.ZERO_LT_dimword] >>
+  `&(dimword(:256)) <> (0:int)` by intLib.ARITH_TAC >>
+  `0 <= i + &(dimword(:256)) /\ i + &(dimword(:256)) < &(dimword(:256))` by
+    intLib.ARITH_TAC >>
+  `(i + &(dimword(:256))) % &(dimword(:256)) = i + &(dimword(:256))` by
+    simp[integerTheory.INT_LESS_MOD] >>
+  `(-1 * &(dimword(:256)) + (i + &(dimword(:256)))) % &(dimword(:256)) =
+   (i + &(dimword(:256))) % &(dimword(:256))` by
+    simp[integerTheory.INT_MOD_ADD_MULTIPLES] >>
+  `-1 * &(dimword(:256)) + (i + &(dimword(:256))) = i` by intLib.ARITH_TAC >>
+  `0 <= i + &(dimword(:256))` by intLib.ARITH_TAC >>
+  `&(w2n ((i2w i):256 word)) = i + &(dimword(:256))` by metis_tac[] >>
+  metis_tac[integerTheory.NUM_OF_INT, integerTheory.INT_INJ]
+QED
+
+Theorem dimword_sub_mod[local]:
+  !n (k:num). 0 < k /\ k <= 2 ** (n-1) /\ 0 < n /\ n <= 256 ==>
+    (dimword(:256) - k) MOD 2 ** n = 2 ** n - k
+Proof
+  rpt strip_tac >>
+  `k < 2 ** n` by
+    (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+     qexists_tac `2 ** (n-1)` >> simp[] >>
+     `n - 1 < n` by simp[] >> simp[]) >>
+  `0 < 2 ** n` by simp[] >>
+  `0 < 2 ** (256 - n)` by simp[] >>
+  `k < 2 ** (256 - n) * 2 ** n` by
+    (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `2 ** n` >> simp[] >>
+     `1 <= 2 ** (256 - n)` by simp[] >> simp[]) >>
+  `dimword(:256) = 2 ** (256 - n) * 2 ** n` by
+    (REWRITE_TAC[dimword_256_exp, GSYM arithmeticTheory.EXP_ADD] >>
+     AP_TERM_TAC >> simp[]) >>
+  pop_assum (fn eq => REWRITE_TAC[eq]) >>
+  mp_tac (Q.SPECL [`2 ** n`, `2 ** (256 - n)`, `k`]
+    wordsTheory.MOD_COMPLEMENT) >>
+  impl_tac >- simp[] >>
+  `k MOD 2 ** n = k` by simp[arithmeticTheory.LESS_MOD] >>
+  `2 ** n - k < 2 ** n` by simp[] >>
+  disch_then (fn th => REWRITE_TAC[th]) >>
+  simp[arithmeticTheory.LESS_MOD]
+QED
+
 (* Helper: truncate_signed roundtrips for values in signed range *)
-(* TODO: prove — word arithmetic with INT_MOD and dimword.
-   The statement is correct: truncate_signed recovers the original
-   integer when it's in the n-bit signed range [-2^(n-1), 2^(n-1)).
-   Difficulty: intLib.ARITH_TAC cannot handle symbolic 2**n expressions
-   mixed with dimword(:256). Needs manual MOD_TIMES decomposition. *)
 Theorem truncate_signed_i2w_roundtrip:
   !n (i:int). 0 < n /\ n <= 256 /\
     -&(2 ** (n - 1)) <= i /\ i < &(2 ** (n - 1)) ==>
     truncate_signed n ((i2w i) : bytes32) = i
 Proof
-  cheat
+  rpt strip_tac >>
+  `?m. n = SUC m` by (Cases_on `n` >> fs[]) >> gvs[] >>
+  `m <= 255` by simp[] >>
+  Cases_on `i < 0` >> gvs[]
+  (* Negative case *)
+  >- (
+    `0 <= -i` by intLib.ARITH_TAC >>
+    `0 < Num(-i)` by intLib.ARITH_TAC >>
+    `Num(-i) <= 2 ** m` by intLib.ARITH_TAC >>
+    (* Derive -&dimword < i via nat→int lifting *)
+    `Num(-i) < dimword(:256)` by
+      (REWRITE_TAC[dimword_256_exp] >>
+       irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+       qexists_tac `2 ** m` >> simp[]) >>
+    `&(Num(-i)) < &(dimword(:256))` by
+      simp[integerTheory.INT_LT] >>
+    `-i = &(Num(-i))` by simp[integerTheory.INT_OF_NUM] >>
+    `-&(dimword(:256)) < i` by intLib.ARITH_TAC >>
+    (* Compute w2n(i2w i) *)
+    `w2n ((i2w i):256 word) = Num (i + &(dimword(:256)))` by
+      (irule w2n_i2w_neg >> simp[]) >>
+    `i = -&(Num(-i))` by intLib.ARITH_TAC >>
+    `Num(i + &(dimword(:256))) = dimword(:256) - Num(-i)` by
+      (`i + &(dimword(:256)) = &(dimword(:256) - Num(-i))` by
+         intLib.ARITH_TAC >>
+       pop_assum (fn th => REWRITE_TAC[th]) >>
+       simp[integerTheory.NUM_OF_INT]) >>
+    `w2n ((i2w i):256 word) = dimword(:256) - Num(-i)` by
+      metis_tac[] >>
+    (* Unfold truncate_signed and rewrite w2n *)
+    CONV_TAC (RATOR_CONV (RAND_CONV
+      (PURE_REWRITE_CONV [truncate_signed_def, LET_THM]
+       THENC DEPTH_CONV BETA_CONV))) >>
+    qpat_x_assum `w2n _ = dimword _ - _` (fn th => REWRITE_TAC[th]) >>
+    `(dimword(:256) - Num(-i)) MOD 2 ** SUC m = 2 ** SUC m - Num(-i)` by
+      (irule dimword_sub_mod >> simp[]) >>
+    pop_assum (fn th => REWRITE_TAC[th]) >>
+    `SUC m - 1 = m` by simp[] >>
+    pop_assum (fn th => REWRITE_TAC[th]) >>
+    `Num(-i) <= 2 ** SUC m` by simp[arithmeticTheory.EXP] >>
+    `~(2 ** SUC m - Num(-i) < 2 ** m)` by simp[arithmeticTheory.EXP] >>
+    ASM_SIMP_TAC bool_ss [] >>
+    REWRITE_TAC[GSYM (Q.SPECL [`2 ** SUC m`, `Num(-i)`]
+      integerTheory.INT_SUB |> UNDISCH)] >>
+    intLib.ARITH_TAC)
+  (* Non-negative case *)
+  >> (
+    `0 <= i` by intLib.ARITH_TAC >>
+    `Num i < 2 ** m` by intLib.ARITH_TAC >>
+    `Num i < dimword(:256)` by
+      (REWRITE_TAC[dimword_256_exp] >>
+       irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+       qexists_tac `2 ** m` >> simp[]) >>
+    `w2n ((i2w i):256 word) = Num i` by
+      (irule w2n_i2w_nonneg >> simp[]) >>
+    simp[truncate_signed_def] >>
+    `Num i < 2 ** SUC m` by simp[arithmeticTheory.EXP] >>
+    simp[integerTheory.INT_OF_NUM])
 QED
 
 (* w256_roundtrip: encode then decode is identity.
