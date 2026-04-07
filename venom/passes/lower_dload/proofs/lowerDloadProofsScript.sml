@@ -101,18 +101,18 @@ Proof
             step_inst_preserves_labels_always]
 QED
 
-(* run_block preserves layout: strong induction on remaining instructions *)
-Theorem run_block_preserves_layout_aux[local]:
+(* exec_block preserves layout: strong induction on remaining instructions *)
+Theorem exec_block_preserves_layout_aux[local]:
   !n f c bb st st'.
     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
-    run_block f c bb st = OK st' ==>
+    exec_block f c bb st = OK st' ==>
     st'.vs_code = st.vs_code /\
     st'.vs_data_section = st.vs_data_section /\
     st'.vs_labels = st.vs_labels
 Proof
   completeInduct_on `n` >> rw[] >>
-  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >> simp[get_instruction_def] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>
   Cases_on `st.vs_inst_idx < LENGTH bb.bb_instructions` >> simp[] >>
   Cases_on `step_inst f c (EL st.vs_inst_idx bb.bb_instructions) st` >>
   simp[] >>
@@ -131,24 +131,24 @@ Proof
     mp_tac) >> simp[]
 QED
 
-Theorem run_block_preserves_layout_fields:
+Theorem exec_block_preserves_layout_fields:
   !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     v.vs_code = s.vs_code /\
     v.vs_data_section = s.vs_data_section /\
     v.vs_labels = s.vs_labels
 Proof
-  metis_tac[run_block_preserves_layout_aux]
+  metis_tac[exec_block_preserves_layout_aux]
 QED
 
-Theorem run_block_preserves_code_layout_valid:
+Theorem exec_block_preserves_code_layout_valid:
   !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v /\
+    exec_block fuel ctx bb s = OK v /\
     code_layout_valid s ==>
     code_layout_valid v
 Proof
   rpt strip_tac >>
-  drule run_block_preserves_layout_fields >> strip_tac >>
+  drule exec_block_preserves_layout_fields >> strip_tac >>
   gvs[code_layout_valid_def] >>
   qexists_tac `prefix` >> simp[]
 QED
@@ -196,16 +196,16 @@ Proof
   simp[] >> strip_tac >> simp[exec_result_map_def]
 QED
 
-(* run_block_skip_prefix: if run_insts succeeds on prefix, skip it *)
-Theorem run_block_skip_prefix_local:
+(* exec_block_skip_prefix: if run_insts succeeds on prefix, skip it *)
+Theorem exec_block_skip_prefix_local:
   !prefix fuel ctx bb s j s'.
     j + LENGTH prefix <= LENGTH bb.bb_instructions /\
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) prefix /\
     (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
     run_insts fuel ctx prefix s = OK s'
   ==>
-    run_block fuel ctx bb (s with vs_inst_idx := j) =
-    run_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
+    exec_block fuel ctx bb (s with vs_inst_idx := j) =
+    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
 Proof
   Induct >> rw[run_insts_def] >>
   rename1 `h :: prefix` >>
@@ -220,7 +220,7 @@ Proof
   rename1 `step_inst _ _ h s = OK s1` >>
   `s1.vs_inst_idx = s.vs_inst_idx` by
     metis_tac[step_inst_preserves_inst_idx] >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   simp[get_instruction_def] >>
   `EL j bb.bb_instructions = h` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>

@@ -2,14 +2,14 @@
  * Venom Memory Proofs
  *
  * TOP-LEVEL:
- *   alloca_inv_empty_proof                  — alloca_inv for empty allocas
- *   alloca_inv_step_inst_proof               — alloca_inv preserved by step_inst
- *   alloca_inv_run_block_proof               — alloca_inv preserved by run_block
- *   allocas_non_overlapping_empty_proof      — base case (backward compat)
- *   allocas_non_overlapping_step_inst_proof  — preserved by step_inst (needs alloca_inv)
- *   allocas_non_overlapping_run_block_proof  — preserved by run_block (needs alloca_inv)
- *   mload_mstore_disjoint_proof              — 32-byte write/read independence
- *   mload_mstore8_disjoint_proof             — 1-byte write / 32-byte read
+ *   alloca_inv_empty_proof                   — alloca_inv for empty allocas
+ *   alloca_inv_step_inst_proof                — alloca_inv preserved by step_inst
+ *   alloca_inv_run_block_proof                — alloca_inv preserved by run_block
+ *   allocas_non_overlapping_empty_proof       — base case
+ *   allocas_non_overlapping_step_inst_proof   — preserved by step_inst
+ *   allocas_non_overlapping_exec_block_proof  — preserved by exec_block
+ *   mload_mstore_disjoint_proof               — 32-byte write/read independence
+ *   mload_mstore8_disjoint_proof              — 1-byte write / 32-byte read
  *)
 
 Theory venomMemProofs
@@ -442,17 +442,17 @@ Proof
   rpt gen_tac >> Cases_on `r` >> rw[result_alloca_inv_def]
 QED
 
-(* Joint induction: step_inst/run_block/run_function preserve alloca_inv *)
+(* Joint induction: step_inst/exec_block/run_blocks preserve alloca_inv *)
 Theorem alloca_inv_joint[local]:
   (!fuel ctx inst s.
      alloca_inv s ==>
      result_alloca_inv s.vs_alloca_next (step_inst fuel ctx inst s)) /\
   (!fuel ctx bb s.
      alloca_inv s ==>
-     result_alloca_inv s.vs_alloca_next (run_block fuel ctx bb s)) /\
+     result_alloca_inv s.vs_alloca_next (exec_block fuel ctx bb s)) /\
   (!fuel ctx fn s.
      alloca_inv s ==>
-     result_alloca_inv s.vs_alloca_next (run_function fuel ctx fn s))
+     result_alloca_inv s.vs_alloca_next (run_blocks fuel ctx fn s))
 Proof
   ho_match_mp_tac run_defs_ind >> rpt conj_tac >> rpt strip_tac
   >- (
@@ -485,8 +485,8 @@ Proof
     )
   )
   >- (
-    (* P1: run_block *)
-    ONCE_REWRITE_TAC[run_block_def] >> simp[] >>
+    (* P1: exec_block *)
+    ONCE_REWRITE_TAC[exec_block_def] >> simp[] >>
     rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
     (* Remaining: recursive case, ¬is_terminator *)
     `alloca_inv (v with vs_inst_idx := SUC s.vs_inst_idx)` by
@@ -496,11 +496,24 @@ Proof
     qexists_tac `v.vs_alloca_next` >> gvs[]
   )
   >- (
-    (* P2: run_function *)
-    ONCE_REWRITE_TAC[run_function_def] >> simp[] >>
+    (* P2: run_blocks *)
+    ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
     rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
+    (* Recursive case: exec_block returned OK, not halted *)
+    (* Use exec_block IH to get alloca_inv on exec_block result *)
+    `alloca_inv (s with vs_inst_idx := 0)` by
+      (irule alloca_fields_eq_inv >> qexists_tac `s` >> simp[]) >>
+    `alloca_inv v` by (
+      first_x_assum drule >> strip_tac >>
+      gvs[result_alloca_inv_def, AllCaseEqs()]) >>
+    (* Use run_blocks IH *)
+    first_x_assum drule >> simp[] >> strip_tac >>
     irule result_alloca_inv_mono >>
-    qexists_tac `v.vs_alloca_next` >> gvs[]
+    qexists_tac `v.vs_alloca_next` >> gvs[] >>
+    (* alloca_next monotonicity from exec_block *)
+    first_x_assum (qspec_then `s with vs_inst_idx := 0` mp_tac) >>
+    simp[] >> strip_tac >>
+    gvs[result_alloca_inv_def, AllCaseEqs()]
   )
 QED
 
@@ -528,13 +541,25 @@ Proof
   metis_tac[alloca_inv_joint, result_alloca_inv_def]
 QED
 
+Theorem alloca_inv_exec_block_proof:
+  !fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' /\
+    alloca_inv s ==>
+    alloca_inv s'
+Proof
+  metis_tac[alloca_inv_joint, result_alloca_inv_def]
+QED
+
 Theorem alloca_inv_run_block_proof:
   !fuel ctx bb s s'.
     run_block fuel ctx bb s = OK s' /\
     alloca_inv s ==>
     alloca_inv s'
 Proof
-  metis_tac[alloca_inv_joint, result_alloca_inv_def]
+  rw[run_block_def] >> rpt strip_tac >>
+  `alloca_inv (s with vs_inst_idx := 0)` by
+    (irule alloca_fields_eq_inv >> qexists_tac `s` >> simp[]) >>
+  metis_tac[alloca_inv_exec_block_proof]
 QED
 
 (* Backward-compatible: allocas_non_overlapping preserved under alloca_inv *)
@@ -554,6 +579,15 @@ Theorem allocas_non_overlapping_run_block_proof:
     allocas_non_overlapping s'
 Proof
   metis_tac[alloca_inv_run_block_proof, alloca_inv_def]
+QED
+
+Theorem allocas_non_overlapping_exec_block_proof:
+  ∀fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ∧
+    alloca_inv s ⇒
+    allocas_non_overlapping s'
+Proof
+  metis_tac[alloca_inv_exec_block_proof, alloca_inv_def]
 QED
 
 Theorem did8[local] = EVAL``dimindex(:256) DIV 8``

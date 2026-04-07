@@ -121,10 +121,10 @@ Theorem rusp_step_condition[local]:
     fn_entry_label x = SOME s.vs_current_bb /\
     fn_all_outputs x SUBSET fn_all_outputs fn ==>
     let elim = remove_unused_eliminated_vars fn in
-    (?e. run_function fuel ctx x s = Error e) \/
+    (?e. run_blocks fuel ctx x s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim)
-      (run_function fuel ctx x s)
-      (run_function fuel ctx (remove_unused_single_pass x) s)
+      (run_blocks fuel ctx x s)
+      (run_blocks fuel ctx (remove_unused_single_pass x) s)
 Proof
   rpt strip_tac >> simp_tac std_ss [LET_THM] >>
   (* Apply single-pass correctness *)
@@ -192,10 +192,10 @@ Theorem remove_unused_function_correct_ssa:
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     let elim = remove_unused_eliminated_vars fn in
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (remove_unused_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (remove_unused_function fn) s)
 Proof
   rpt strip_tac >> simp_tac std_ss [LET_THM] >>
   simp[remove_unused_function_def] >>
@@ -210,7 +210,7 @@ Proof
     `remove_unused_single_pass`,
     `state_equiv elim`,
     `execution_equiv elim`,
-    `\x. run_function fuel ctx x s`
+    `\x. run_blocks fuel ctx x s`
   ] removeUnusedProofsTheory.owhile_lift_result_compose)) >>
   disch_then (qspec_then
     `\x. OWHILE ^G_def ^f_def x = SOME result /\
@@ -238,10 +238,10 @@ Proof
        ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
        fn_entry_label x = SOME s.vs_current_bb /\
        fn_all_outputs x SUBSET fn_all_outputs fn ==>
-       (?e. run_function fuel ctx x s = Error e) \/
+       (?e. run_blocks fuel ctx x s = Error e) \/
        lift_result (state_equiv elim) (execution_equiv elim)
-         (run_function fuel ctx x s)
-         (run_function fuel ctx (remove_unused_single_pass x) s)` by (
+         (run_blocks fuel ctx x s)
+         (run_blocks fuel ctx (remove_unused_single_pass x) s)` by (
     rpt strip_tac >>
     mp_tac (SIMP_RULE std_ss [LET_THM] rusp_step_condition) >>
     disch_then (qspecl_then [`fuel`, `ctx`, `fn`, `s`, `result`, `x`] mp_tac) >>

@@ -1100,17 +1100,21 @@ Proof
 QED
 
 (* --------------------------------------------------------------------------
-   Execution (3-way mutually recursive: step_inst / run_block / run_function)
+   Execution (3-way mutually recursive: step_inst / exec_block / run_blocks)
 
-   step_inst handles ALL opcodes including INVOKE (which calls run_function).
-   run_block sequences instructions within a basic block.
-   run_function dispatches blocks using fuel.
+   step_inst handles ALL opcodes including INVOKE (which calls run_blocks).
+   exec_block sequences instructions within a basic block from vs_inst_idx.
+   run_blocks dispatches blocks using fuel.
 
    Fuel bounds function-call depth (not instruction count).  Within a
    block, termination is structural (inst_idx increases toward block end).
 
-   run_block explicitly sets vs_inst_idx := SUC s.vs_inst_idx for the
+   exec_block explicitly sets vs_inst_idx := SUC s.vs_inst_idx for the
    continuation, decoupling termination from step_inst's behavior.
+
+   Public wrappers (defined below):
+     run_block    — exec_block with vs_inst_idx := 0
+     run_function — run_blocks with entry-block setup
    -------------------------------------------------------------------------- *)
 
 Definition run_defs:
@@ -1128,7 +1132,7 @@ Definition run_defs:
                   case setup_callee callee_fn args s of
                     NONE => Error "invoke: empty function"
                   | SOME callee_s =>
-                      case run_function fuel ctx callee_fn callee_s of
+                      case run_blocks fuel ctx callee_fn callee_s of
                         IntRet vals callee_s' =>
                           (case bind_outputs inst.inst_outputs vals
                                   (merge_callee_state s callee_s') of
@@ -1140,7 +1144,7 @@ Definition run_defs:
                       | OK _ => Error "invoke: callee did not return"
     else step_inst_base inst s)
   /\
-  (run_block fuel ctx bb s =
+  (exec_block fuel ctx bb s =
     case get_instruction bb s.vs_inst_idx of
       NONE => Error "block not terminated"
     | SOME inst =>
@@ -1148,24 +1152,24 @@ Definition run_defs:
           OK s' =>
             if is_terminator inst.inst_opcode then
               if s'.vs_halted then Halt s' else OK s'
-            else run_block fuel ctx bb
+            else exec_block fuel ctx bb
                    (s' with vs_inst_idx := SUC s.vs_inst_idx)
         | IntRet vals s' => IntRet vals s'
         | Halt s' => Halt s'
         | Abort a s' => Abort a s'
         | Error e => Error e)
   /\
-  (run_function fuel ctx fn s =
+  (run_blocks fuel ctx fn s =
     case fuel of
       0 => Error "out of fuel"
     | SUC fuel' =>
         case lookup_block s.vs_current_bb fn.fn_blocks of
           NONE => Error "block not found"
         | SOME bb =>
-            case run_block fuel' ctx bb s of
+            case exec_block fuel' ctx bb (s with vs_inst_idx := 0) of
               OK s' =>
                 if s'.vs_halted then Halt s'
-                else run_function fuel' ctx fn s'
+                else run_blocks fuel' ctx fn s'
             | IntRet vals s' => IntRet vals s'
             | other => other)
 Termination
@@ -1180,8 +1184,18 @@ End
 
 (* Extract individual definitions for downstream use *)
 val step_inst_def = save_thm("step_inst_def", cj 1 run_defs);
-val run_block_def = save_thm("run_block_def", cj 2 run_defs);
-val run_function_def = save_thm("run_function_def", cj 3 run_defs);
+val exec_block_def = save_thm("exec_block_def", cj 2 run_defs);
+val run_blocks_def = save_thm("run_blocks_def", cj 3 run_defs);
+
+(* --------------------------------------------------------------------------
+   Block Entry Point
+
+   run_block always starts execution from instruction 0.
+   -------------------------------------------------------------------------- *)
+
+Definition run_block_def:
+  run_block fuel ctx bb s = exec_block fuel ctx bb (s with vs_inst_idx := 0)
+End
 
 (* step_inst preserves inst_idx for non-terminators (all opcodes incl INVOKE) *)
 Theorem step_inst_preserves_inst_idx:
@@ -1209,6 +1223,23 @@ Proof
 QED
 
 (* --------------------------------------------------------------------------
+   Function Entry Point
+
+   run_function sets up the entry block and inst_idx, then delegates to
+   run_blocks.  This separates "start executing a function" from
+   "continue iterating blocks within a function".
+   -------------------------------------------------------------------------- *)
+
+Definition run_function_def:
+  run_function fuel ctx fn s =
+    case fn_entry_label fn of
+      NONE => Error "no entry block"
+    | SOME lbl =>
+        run_blocks fuel ctx fn
+          (s with <| vs_current_bb := lbl; vs_inst_idx := 0 |>)
+End
+
+(* --------------------------------------------------------------------------
    Context Entry Point
    -------------------------------------------------------------------------- *)
 
@@ -1220,13 +1251,6 @@ Definition run_context_def:
         case lookup_function entry_name ctx.ctx_functions of
           NONE => Error "entry function not found"
         | SOME entry_fn =>
-            case entry_block entry_fn of
-              NONE => Error "empty entry function"
-            | SOME entry_bb =>
-                run_function fuel ctx entry_fn
-                  (s with <|
-                    vs_current_bb := entry_bb.bb_label;
-                    vs_inst_idx   := 0;
-                    vs_prev_bb    := NONE
-                  |>)
+            run_function fuel ctx entry_fn
+              (s with vs_prev_bb := NONE)
 End

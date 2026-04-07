@@ -40,10 +40,10 @@ Theorem ircf_pass_correct:
     wf_function fn /\ fn_inst_wf fn /\
     alloca_pointer_confined fn /\
     s.vs_inst_idx = 0 ==>
-    (?e. run_function fuel run_ctx fn s = Error e) \/
+    (?e. run_blocks fuel run_ctx fn s = Error e) \/
     result_equiv {}
-      (run_function fuel run_ctx fn s)
-      (run_function fuel run_ctx
+      (run_blocks fuel run_ctx fn s)
+      (run_blocks fuel run_ctx
         (ircf_transform_function fn_meta ctx_fns rma fn) s)
 Proof
   cheat

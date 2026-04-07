@@ -5,7 +5,7 @@
  *   !fuel ctx fn fn' s.
  *     ssa_form fn /\ sccp_function fn = SOME fn' ==>
  *     lift_result (state_equiv {}) (execution_equiv {})
- *       (run_function fuel ctx fn s) (run_function fuel ctx fn' s)
+ *       (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn' s)
  *
  * is FALSE. This file contains a machine-checked counterexample.
  *
@@ -172,12 +172,17 @@ QED
 
 (* ===== THE COUNTEREXAMPLE ===== *)
 
-(* The frozen theorem statement is FALSE. *)
+(* The frozen theorem statement WAS false due to missing vs_inst_idx=0
+   precondition. After run_block/run_function refactoring, run_blocks now
+   internally resets vs_inst_idx := 0 via exec_block wrapper, so the
+   counterexample (which used vs_inst_idx := 1) no longer applies.
+   The original statement may now be provable without the precondition. *)
+(*
 Theorem sccp_function_correct_proof_false:
   ~!fuel ctx fn fn' s.
     ssa_form fn /\ sccp_function fn = SOME fn' ==>
     lift_result (state_equiv {}) (execution_equiv {})
-      (run_function fuel ctx fn s) (run_function fuel ctx fn' s)
+      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn' s)
 Proof
   simp[] >>
   qexists_tac `SUC 0` >>
@@ -189,6 +194,7 @@ Proof
   simp[lift_result_def] >>
   EVAL_TAC
 QED
+*)
 
 (* ================================================================
    SCCP Correctness Proof
@@ -1443,7 +1449,7 @@ Proof
   \\ gvs[] \\ metis_tac[flookup_thm, sccp_transfer_fdom_mono]
 QED
 
-(* ===== FDOM tracking through run_block ===== *)
+(* ===== FDOM tracking through exec_block ===== *)
 
 (* ===== Intra-block FDOM+non-CL_Top invariant preservation ===== *)
 
@@ -1689,7 +1695,7 @@ Triviality sccp_exit_covered[local]:
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze fn) bb.bb_label 0).sl_vals /\
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze fn) bb.bb_label 0).sl_vals x
          <> SOME CL_Top) /\
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     (!x. x IN FDOM v.vs_vars ==>
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze fn) bb.bb_label
                     (LENGTH bb.bb_instructions)).sl_vals /\
@@ -2020,7 +2026,7 @@ Triviality sccp_nophi_exit_props[local]:
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
          <> SOME CL_Top) /\
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     cond_const_sound
       (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
          (LENGTH bb.bb_instructions)).sl_vals v /\
@@ -2085,7 +2091,7 @@ Proof
         x IN FDOM (df_at sccp_bottom result lbl s'.vs_inst_idx).sl_vals /\
         FLOOKUP (df_at sccp_bottom result lbl s'.vs_inst_idx).sl_vals x
           <> SOME CL_Top) /\
-     run_block fuel' ctx' bb s' = OK v ==>
+     exec_block fuel' ctx' bb s' = OK v ==>
      cond_const_sound (df_at sccp_bottom result lbl (SUC ti)).sl_vals v /\
      (!x. x IN FDOM v.vs_vars ==>
         x IN FDOM (df_at sccp_bottom result lbl (SUC ti)).sl_vals /\
@@ -2101,18 +2107,18 @@ Proof
   `idx < LENGTH instrs` by decide_tac >>
   qabbrev_tac `inst = EL idx instrs` >>
   `inst_wf inst` by metis_tac[EVERY_EL, markerTheory.Abbrev_def] >>
-  (* Unfold run_block one step *)
-  `run_block fuel' ctx' bb s' =
+  (* Unfold exec_block one step *)
+  `exec_block fuel' ctx' bb s' =
    case step_inst fuel' ctx' inst s' of
      OK s'' =>
        if is_terminator inst.inst_opcode then
          if s''.vs_halted then Halt s'' else OK s''
-       else run_block fuel' ctx' bb (s'' with vs_inst_idx := SUC idx)
+       else exec_block fuel' ctx' bb (s'' with vs_inst_idx := SUC idx)
    | Halt s'' => Halt s''
    | Abort a s'' => Abort a s''
    | IntRet rv ss => IntRet rv ss
    | Error e => Error e` by (
-    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
     simp[get_instruction_def, Abbr `inst`, Abbr `idx`]) >>
   pop_assum (fn th => FULL_SIMP_TAC std_ss [th]) >>
   Cases_on `step_inst fuel' ctx' inst s'` >> fs[]
@@ -2179,7 +2185,7 @@ Proof
       `~is_terminator inst.inst_opcode` by
         (qpat_x_assum `!j. j < ti ==> _` (qspec_then `idx` mp_tac) >>
          simp[Abbr `inst`]) >>
-      `run_block fuel' ctx' bb (s'' with vs_inst_idx := SUC idx) = OK v` by
+      `exec_block fuel' ctx' bb (s'' with vs_inst_idx := SUC idx) = OK v` by
         (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> simp[]) >>
       `step_inst fuel' ctx' inst (s' with vs_inst_idx := 0) =
        OK (s'' with vs_inst_idx := 0)` by (
@@ -2404,7 +2410,7 @@ Triviality sccp_nophi_exit_cond_sound[local]:
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
          <> SOME CL_Top) /\
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     cond_const_sound
       (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
          (LENGTH bb.bb_instructions)).sl_vals v
@@ -2428,7 +2434,7 @@ Triviality sccp_nophi_exit_covered[local]:
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
          <> SOME CL_Top) /\
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     (!x. x IN FDOM v.vs_vars ==>
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
                     (LENGTH bb.bb_instructions)).sl_vals /\
@@ -2454,7 +2460,7 @@ Triviality sccp_nophi_exit_succ_in_targets[local]:
        x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
          <> SOME CL_Top) /\
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     v.vs_current_bb IN
       (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
          (LENGTH bb.bb_instructions)).sl_targets
@@ -2637,7 +2643,7 @@ Triviality sccp_cross_block_inv:
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
          <> SOME CL_Top) /\
     s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
-    run_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v ==>
     (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) v.vs_current_bb 0).sl_vals x
               = SOME (CL_Const c) /\
            x IN FDOM v.vs_vars /\
@@ -2687,7 +2693,7 @@ Proof
     fs[]) >>
   `MEM bb.bb_label (cfg_preds_of (cfg_analyze f) v.vs_current_bb)` by (
     `MEM v.vs_current_bb (bb_succs bb)` by
-      metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
+      metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs,
               cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]) >>
   (* sl_targets chain *)
@@ -2841,10 +2847,10 @@ Theorem sccp_per_block_sim:
       s.vs_inst_idx = 0 /\
       cond_const_sound
         (df_at sccp_bottom (sccp_df_analyze fn) bb.bb_label 0).sl_vals s ==>
-      (?e. run_block fuel ctx bb s = Error e) \/
+      (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv {}) (execution_equiv {})
-        (run_block fuel ctx bb s)
-        (run_block fuel ctx
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx
           (analysis_block_transform sccp_bottom (sccp_df_analyze fn)
             (\lat inst. [sccp_inst lat.sl_vals inst]) bb) s)
 Proof
@@ -3195,10 +3201,10 @@ Theorem sccp_block_induction_core:
                 bb.bb_label idx).sl_vals y
               = SOME CL_Bottom)
       ==>
-      (?e. run_block fuel ctx bb (s with vs_inst_idx := idx) = Error e) \/
+      (?e. exec_block fuel ctx bb (s with vs_inst_idx := idx) = Error e) \/
       lift_result (state_equiv {}) (execution_equiv {})
-        (run_block fuel ctx bb (s with vs_inst_idx := idx))
-        (run_block fuel ctx
+        (exec_block fuel ctx bb (s with vs_inst_idx := idx))
+        (exec_block fuel ctx
           (analysis_block_transform sccp_bottom (sccp_df_analyze f)
             (\lat inst. [sccp_inst lat.sl_vals inst]) bb)
           (s with vs_inst_idx := idx))
@@ -3233,7 +3239,7 @@ Proof
   >- (
     (* Base: n=0 => idx = LENGTH instrs => past end *)
     `idx = LENGTH instrs` by simp[] >>
-    ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
     simp[get_instruction_def])
   >- suspend "step"
 QED
@@ -3241,7 +3247,7 @@ QED
 Resume sccp_block_induction_core[step]:
   (* Step case *)
   `idx < LENGTH instrs` by simp[] >>
-  ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_block_def] >>
+  ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
   simp[get_instruction_def] >>
   `idx < LENGTH bt.bb_instructions` by simp[] >>
   simp[] >>
@@ -3353,10 +3359,10 @@ Theorem sccp_per_block_sim_nophi:
          x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
          FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
            <> SOME CL_Top) ==>
-      (?e. run_block fuel ctx bb s = Error e) \/
+      (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv {}) (execution_equiv {})
-        (run_block fuel ctx bb s)
-        (run_block fuel ctx
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx
           (analysis_block_transform sccp_bottom (sccp_df_analyze f)
             (\lat inst. [sccp_inst lat.sl_vals inst]) bb) s)
 Proof

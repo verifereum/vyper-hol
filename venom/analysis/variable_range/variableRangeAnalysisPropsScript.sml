@@ -29,7 +29,7 @@ Theorem range_analyze_block_sound:
     bb_well_formed bb ∧
     s.vs_inst_idx = 0 ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
-    run_block fuel ctx bb s = OK s' ⇒
+    exec_block fuel ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
 Proof
   ACCEPT_TAC rangeAnalysisProofsTheory.range_analyze_block_sound_proof

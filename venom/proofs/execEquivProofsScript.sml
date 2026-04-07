@@ -1,15 +1,15 @@
 (*
  * Execution Equivalence Proofs
  *
- * Proves that step_inst_base / run_block preserve state_equiv / result_equiv.
+ * Proves that step_inst_base / exec_block preserve state_equiv / result_equiv.
  * All theorems parameterized by variable exception set (vars).
  *
  * Internal proofs — consumers use props/execEquivPropsScript.sml
  *
  * TOP-LEVEL THEOREMS:
  *   - step_inst_result_equiv  : Instruction step preserves result_equiv
- *   - run_block_state_equiv   : Block execution preserves state_equiv (OK case)
- *   - run_block_result_equiv  : Block execution preserves result_equiv (all cases)
+ *   - exec_block_state_equiv   : Block execution preserves state_equiv (OK case)
+ *   - exec_block_result_equiv  : Block execution preserves result_equiv (all cases)
  *)
 
 Theory execEquivProofs
@@ -828,19 +828,19 @@ Proof
 QED
 
 (* ==========================================================================
-   run_block Preserves Equivalence
+   exec_block Preserves Equivalence
    ========================================================================== *)
 
-(* Induction on run_block to show result_equiv is preserved.
+(* Induction on exec_block to show result_equiv is preserved.
    Requires no INVOKE instructions in block (for cross-function equiv,
-   use run_function-level simulation). *)
-Theorem run_block_result_equiv:
+   use run_blocks-level simulation). *)
+Theorem exec_block_result_equiv:
   !fuel ctx vars bb s1 s2.
     state_equiv vars s1 s2 /\
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
+    result_equiv vars (exec_block fuel ctx bb s1) (exec_block fuel ctx bb s2)
 Proof
   rpt gen_tac >> strip_tac >>
   pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
@@ -849,8 +849,8 @@ Proof
   qexists_tac `\fuel ctx inst s. T` >>
   qexists_tac `\fuel ctx fn s. T` >> rw[] >>
   (* Unfold both LHS and RHS *)
-  simp[Once run_block_def] >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  simp[Once exec_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   `s1.vs_inst_idx = s2.vs_inst_idx` by
     fs[state_equiv_def, execution_equiv_def] >>
   Cases_on `get_instruction bb s1.vs_inst_idx` >>
@@ -882,19 +882,19 @@ Proof
 QED
 
 (* Corollary: OK case gives state_equiv *)
-Theorem run_block_state_equiv:
+Theorem exec_block_state_equiv:
   !fuel ctx vars bb s1 s2 r1.
     state_equiv vars s1 s2 /\
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    run_block fuel ctx bb s1 = OK r1
+    exec_block fuel ctx bb s1 = OK r1
   ==>
-    ?r2. run_block fuel ctx bb s2 = OK r2 /\ state_equiv vars r1 r2
+    ?r2. exec_block fuel ctx bb s2 = OK r2 /\ state_equiv vars r1 r2
 Proof
   rw[] >>
-  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by
-    (irule run_block_result_equiv >> metis_tac[]) >>
+  `result_equiv vars (exec_block fuel ctx bb s1) (exec_block fuel ctx bb s2)` by
+    (irule exec_block_result_equiv >> metis_tac[]) >>
   gvs[result_equiv_def] >>
-  Cases_on `run_block fuel ctx bb s2` >> gvs[result_equiv_def]
+  Cases_on `exec_block fuel ctx bb s2` >> gvs[result_equiv_def]
 QED

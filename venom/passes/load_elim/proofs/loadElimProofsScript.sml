@@ -21,10 +21,10 @@ Theorem load_elim_one_correct_proof:
   !ctx ir_cfg fuel run_ctx fn s.
     let fresh = load_elim_one_fresh ctx ir_cfg fn in
     fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
-    (?e. run_function fuel run_ctx fn s = Error e) \/
+    (?e. run_blocks fuel run_ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)
-      (run_function fuel run_ctx fn s)
-      (run_function fuel run_ctx (load_elim_one ctx ir_cfg fn) s)
+      (run_blocks fuel run_ctx fn s)
+      (run_blocks fuel run_ctx (load_elim_one ctx ir_cfg fn) s)
 Proof
   cheat
 QED
@@ -38,10 +38,10 @@ Theorem load_elim_function_correct_proof:
     fn_inst_wf fn /\ s.vs_inst_idx = 0 /\
     bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s ==>
     ?fresh.
-    (?e. run_function fuel ctx fn s = Error e) \/
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fresh) (execution_equiv fresh)
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (load_elim_function fn) s)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (load_elim_function fn) s)
 Proof
   cheat
 QED

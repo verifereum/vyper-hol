@@ -7,11 +7,12 @@
  *
  * TOP-LEVEL:
  *   allocas_non_overlapping_empty     — base case (no allocas)
- *   alloca_inv_empty                  — alloca_inv for empty allocas
- *   alloca_inv_step_inst              — alloca_inv preserved by step_inst
- *   alloca_inv_run_block              — alloca_inv preserved by run_block
- *   allocas_non_overlapping_step_inst — preserved by step_inst (needs alloca_inv)
- *   allocas_non_overlapping_run_block — preserved by run_block (needs alloca_inv)
+ *   alloca_inv_empty                   — alloca_inv for empty allocas
+ *   alloca_inv_step_inst               — alloca_inv preserved by step_inst
+ *   alloca_inv_run_block               — alloca_inv preserved by run_block
+ *   allocas_non_overlapping_step_inst  — preserved by step_inst (needs alloca_inv)
+ *   allocas_non_overlapping_run_block  — preserved by run_block (needs alloca_inv)
+ *   allocas_non_overlapping_exec_block — preserved by exec_block
  *   mload_mstore_disjoint            — disjoint 32-byte write/read independence
  *   mload_mstore8_disjoint           — disjoint 1-byte write / 32-byte read
  *)
@@ -60,6 +61,14 @@ Theorem allocas_non_overlapping_run_block:
     alloca_inv s ⇒
     allocas_non_overlapping s'
 Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_run_block_proof
+QED
+
+Theorem allocas_non_overlapping_exec_block:
+  ∀fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ∧
+    alloca_inv s ⇒
+    allocas_non_overlapping s'
+Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_exec_block_proof
 QED
 
 Theorem mload_mstore_disjoint:

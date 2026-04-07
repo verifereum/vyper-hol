@@ -661,7 +661,7 @@ Theorem bp_process_block_sound_gen[local]:
     bb_well_formed bb ∧
     bp_ptr_sound bp0 s0 ∧
     bp_process_block bp0 (DROP s0.vs_inst_idx bb.bb_instructions) = (c0, bp') ∧
-    run_block fuel ctx bb s0 = OK s' ∧
+    exec_block fuel ctx bb s0 = OK s' ∧
     s0.vs_inst_idx ≤ LENGTH bb.bb_instructions ∧
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs)
       (DROP s0.vs_inst_idx bb.bb_instructions))) ∧
@@ -687,11 +687,11 @@ Theorem bp_process_block_sound_gen[local]:
 Proof
   Induct_on `n`
   >- (
-    (* Base: n = 0, idx = LENGTH ⇒ DROP = [] ⇒ run_block errors *)
+    (* Base: n = 0, idx = LENGTH ⇒ DROP = [] ⇒ exec_block errors *)
     rpt strip_tac >>
     `s0.vs_inst_idx = LENGTH bb.bb_instructions` by decide_tac >>
     fs[DROP_LENGTH_TOO_LONG, bp_process_block_def,
-       Once run_block_def, venomInstTheory.get_instruction_def])
+       Once exec_block_def, venomInstTheory.get_instruction_def])
   >- (
   rpt strip_tac >>
   `s0.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
@@ -718,11 +718,11 @@ Proof
     ASM_REWRITE_TAC[MEM]) >>
   `inst_wf inst` by metis_tac[] >>
   qpat_x_assum `DROP _ _ = _ :: _` kall_tac >>
-  (* Pop IH and inst_eq to protect from simp, unfold run_block *)
+  (* Pop IH and inst_eq to protect from simp, unfold exec_block *)
   qpat_x_assum `inst = _` (fn inst_eq =>
     qpat_x_assum `∀fuel ctx bb s' bp0 s0 c0 bp'. _` (fn ih =>
-      qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
-      PURE_ONCE_REWRITE_TAC [run_block_def] >>
+      qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
+      PURE_ONCE_REWRITE_TAC [exec_block_def] >>
       PURE_REWRITE_TAC [venomInstTheory.get_instruction_def] >>
       PURE_ONCE_REWRITE_TAC [GSYM inst_eq] >>
       simp[] >> strip_tac >>
@@ -959,7 +959,7 @@ QED
 
 Resume bp_process_block_sound_gen[non_terminator]:
   RULE_ASSUM_TAC BETA_RULE >>
-  (* Step 1: simplify run_block assumption *)
+  (* Step 1: simplify exec_block assumption *)
   qpat_x_assum `(if _ then _ else _) = OK _` mp_tac >>
   ASM_REWRITE_TAC[] >> strip_tac >>
   (* Step 2: establish bp_ptr_sound r1 s1 *)
@@ -1110,11 +1110,12 @@ QED
 
 Finalise bp_process_block_sound_gen;
 
+(* Block-level: processing a block preserves soundness through exec_block. *)
 Theorem bp_process_block_sound_proof:
   ∀bp bb c bp' fuel ctx s s'.
     bp_ptr_sound bp s ∧
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
-    run_block fuel ctx bb s = OK s' ∧
+    exec_block fuel ctx bb s = OK s' ∧
     s.vs_inst_idx = 0 ∧
     bb_well_formed bb ∧
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧

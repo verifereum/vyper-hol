@@ -7,7 +7,7 @@
  *
  * TOP-LEVEL:
  *   codegen_correct    — whole-context correctness (run_context vs run)
- *   codegen_fn_correct — per-function correctness (run_function vs run)
+ *   codegen_fn_correct — per-function correctness (run_blocks vs run)
  *
  * EVM Exception Classification
  * ============================
@@ -157,7 +157,7 @@ Theorem codegen_fn_correct:
                 ctxt.msgParams.code = bytecode ∧
                 ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
             | [] => F) ⇒
-        (case run_function fuel ctx fn vs of
+        (case run_blocks fuel ctx fn vs of
            Halt vs' =>
              ∃es'. run es = SOME (INR NONE, es') ∧
                    final_state_rel vs' es'

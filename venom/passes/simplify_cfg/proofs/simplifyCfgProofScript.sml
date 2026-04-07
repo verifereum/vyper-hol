@@ -22,8 +22,8 @@ Theorem simplify_cfg_fn_correct:
     let func' = simplify_cfg_fn func in
     ?fuel'.
       result_equiv {}
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   cheat
 QED

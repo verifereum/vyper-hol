@@ -1219,11 +1219,11 @@ QED
  *   Analysis: entry_state = FEMPTY, exit_state = {x : VR_Range 1 1}.
  *   State s with vs_inst_idx = 1, vs_vars = {x : 3w}.
  *     • in_range_state FEMPTY {x:3w} = T  (FEMPTY has no constraints)
- *     • run_block skips instruction 0, executes JMP → OK s'
+ *     • exec_block skips instruction 0, executes JMP → OK s'
  *     • s'.vs_vars = {x:3w} (JMP preserves vars)
  *     • in_range_state {x:[1,1]} {x:3w} = F  (3 ∉ [1,1])
  *
- * FIX: added s.vs_inst_idx = 0 hypothesis.  All consumers call run_block
+ * FIX: added s.vs_inst_idx = 0 hypothesis.  All consumers call exec_block
  * after jump_to which sets vs_inst_idx := 0, so no downstream breakage.
  *)
 
@@ -1316,14 +1316,14 @@ QED
    range_evaluate_inst is identity for PHI and bb_well_formed ensures
    all PHIs precede non-PHIs, so the accumulated range state at any
    PHI instruction equals the initial entry state. *)
-Triviality fold_run_block_sound[local]:
+Triviality fold_exec_block_sound[local]:
   ∀idx fuel ctx (bb : basic_block) (bbs : basic_block list)
    s s' rs (dfg : dfg_analysis) (lbl : string) im.
     bb_well_formed bb ∧
     s.vs_inst_idx = idx ∧
     idx ≤ LENGTH bb.bb_instructions ∧
     in_range_state (range_unwrap rs) s.vs_vars ∧
-    run_block fuel ctx bb s = OK s' ∧
+    exec_block fuel ctx bb s = OK s' ∧
     (∀inst rs_val s_pre s_post.
        MEM inst (DROP idx bb.bb_instructions) ∧
        step_inst fuel ctx inst s_pre = OK s_post ∧
@@ -1344,8 +1344,8 @@ Proof
   >- (
     fs[listTheory.DROP_LENGTH_NIL,
        dfAnalyzeDefsTheory.df_fold_forward_def]
-    \\ qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac
-    \\ asm_simp_tac std_ss [Once run_block_def, get_instruction_def]
+    \\ qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac
+    \\ asm_simp_tac std_ss [Once exec_block_def, get_instruction_def]
     \\ simp[]
   )
   \\ `idx < LENGTH bb.bb_instructions` by DECIDE_TAC
@@ -1353,8 +1353,8 @@ Proof
       EL idx bb.bb_instructions :: DROP (SUC idx) bb.bb_instructions` by (
        imp_res_tac rich_listTheory.DROP_CONS_EL \\ fs[])
   \\ asm_simp_tac std_ss [dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM]
-  \\ qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac
-  \\ asm_simp_tac std_ss [Once run_block_def, get_instruction_def]
+  \\ qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac
+  \\ asm_simp_tac std_ss [Once exec_block_def, get_instruction_def]
   \\ Cases_on `step_inst fuel ctx (EL idx bb.bb_instructions) s`
   \\ simp[] \\ rename [`step_inst _ _ _ _ = OK step_st`]
   \\ reverse (Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode`)
@@ -1394,7 +1394,7 @@ Proof
         )
         \\ simp[]
       )
-      \\ conj_tac >- fs[] (* run_block *)
+      \\ conj_tac >- fs[] (* exec_block *)
       (* Pass per-inst hypothesis to IH: DROP (SUC idx) ⊆ DROP idx *)
       \\ rpt strip_tac
       \\ qpat_x_assum `∀inst rs_val s_pre s_post. _`
@@ -1908,7 +1908,7 @@ Theorem range_analyze_block_sound_proof:
     bb_well_formed bb ∧
     s.vs_inst_idx = 0 ∧
     in_range_state (range_entry_state ra lbl) s.vs_vars ∧
-    run_block fuel ctx bb s = OK s' ⇒
+    exec_block fuel ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
@@ -1942,11 +1942,11 @@ Proof
     `lbl`, `0`, `df_widen_entry NONE ra lbl`, `FEMPTY`]
     fold_forward_range_some) >>
   simp[] >> strip_tac >>
-  (* fold_run_block_sound gives fold result sound *)
+  (* fold_exec_block_sound gives fold result sound *)
   mp_tac (Q.SPECL [`0`, `fuel`, `ctx`, `bb`, `fn.fn_blocks`,
     `s`, `s'`, `df_widen_entry NONE ra lbl`,
     `dfg_build_function fn`, `lbl`, `FEMPTY`]
-    fold_run_block_sound) >>
+    fold_exec_block_sound) >>
   simp[listTheory.DROP_0] >>
   impl_tac
   >- (
