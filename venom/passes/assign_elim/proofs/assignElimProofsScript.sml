@@ -687,7 +687,8 @@ Proof
   fs[result_equiv_is_lift_result] >>
   (* Weaken Phase 1 from state_equiv {} to state_equiv elim *)
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
-     (execution_equiv (assign_elim_eliminated_vars fn) (execution_equiv (assign_elim_eliminated_vars fn))
+     (execution_equiv (assign_elim_eliminated_vars fn))
+                  (execution_equiv (assign_elim_eliminated_vars fn))
      (run_function fuel ctx fn s)
      (run_function fuel ctx
         (analysis_function_transform NONE (copy_prop_analyze fn)
@@ -699,7 +700,8 @@ Proof
   ) >>
   (* Compose Phases 1+2 via lift_result_trans *)
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
-     (execution_equiv (assign_elim_eliminated_vars fn) (execution_equiv (assign_elim_eliminated_vars fn))
+     (execution_equiv (assign_elim_eliminated_vars fn))
+                  (execution_equiv (assign_elim_eliminated_vars fn))
      (run_function fuel ctx fn s)
      (run_function fuel ctx fn_elim s)` by (
     irule lift_result_trans >>

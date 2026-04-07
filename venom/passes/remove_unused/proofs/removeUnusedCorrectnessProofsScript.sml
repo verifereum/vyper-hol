@@ -202,7 +202,8 @@ Theorem run_block_cross_ctx_change_ru:
       fn_entry_label f = SOME callee_s.vs_current_bb ==>
       (?e. run_function fuel ctx f callee_s = Error e) \/
       lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx) (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
         (run_function fuel ctx f callee_s)
         (run_function fuel (remove_unused_context ctx)
                            (remove_unused_function f) callee_s)) ==>
@@ -318,7 +319,8 @@ Theorem remove_unused_cross_ctx_fn_equiv:
       s.vs_inst_idx = 0 ==>
       (?e. run_function fuel ctx fn_t s = Error e) \/
       lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx) (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
         (run_function fuel ctx fn_t s)
         (run_function fuel (remove_unused_context ctx) fn_t s))
 Proof
@@ -335,7 +337,8 @@ Proof
       fn_entry_label fn = SOME s.vs_current_bb ==>
       (?e. run_function fuel ctx fn s = Error e) \/
       lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx) (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
         (run_function fuel ctx fn s)
         (run_function fuel (remove_unused_context ctx)
                            (remove_unused_function fn) s)) /\
@@ -343,7 +346,8 @@ Proof
       s.vs_inst_idx = 0 ==>
       (?e. run_function fuel ctx fn_t s = Error e) \/
       lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx) (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
         (run_function fuel ctx fn_t s)
         (run_function fuel (remove_unused_context ctx) fn_t s))`
     by (first_x_assum (qspec_then `ctx` mp_tac) >> simp[]) >>
@@ -352,7 +356,8 @@ Proof
     s.vs_inst_idx = 0 ==>
     (?e. run_function (SUC fuel) ctx fn_t s = Error e) \/
     lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                (execution_equiv (remove_unused_all_eliminated ctx) (execution_equiv (remove_unused_all_eliminated ctx))
+                (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
       (run_function (SUC fuel) ctx fn_t s)
       (run_function (SUC fuel) (remove_unused_context ctx) fn_t s)`
     by suspend "PartB" >>
@@ -413,7 +418,8 @@ Resume remove_unused_cross_ctx_fn_equiv[PartB]:
       fn_entry_label f = SOME callee_s.vs_current_bb ==>
       (?e. run_function fuel ctx f callee_s = Error e) \/
       lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx) (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
+                  (execution_equiv (remove_unused_all_eliminated ctx))
         (run_function fuel ctx f callee_s)
         (run_function fuel (remove_unused_context ctx)
                            (remove_unused_function f) callee_s)` by (

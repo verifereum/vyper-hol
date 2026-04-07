@@ -99,7 +99,7 @@ QED
 
 Theorem result_equiv_abort[local,simp]:
   result_equiv vars (Abort a1 s1) (Abort a2 s2) =
-    ((a1 = a2) /\ revert_equiv s1 s2)
+    ((a1 = a2) /\ execution_equiv vars s1 s2)
 Proof
   rw[result_equiv_def]
 QED
@@ -159,7 +159,7 @@ QED
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:
   !vars. result_equiv vars =
-         lift_result (state_equiv vars) (execution_equiv vars) revert_equiv
+         lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars)
 Proof
   rw[FUN_EQ_THM] >> Cases_on `x` >> Cases_on `x'` >>
   simp[result_equiv_def, lift_result_def]

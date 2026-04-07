@@ -107,7 +107,7 @@ QED
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:
   !vars. result_equiv vars =
-         lift_result (state_equiv vars) (execution_equiv vars) revert_equiv
+         lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars)
 Proof
   ACCEPT_TAC stateEquivProofsTheory.result_equiv_is_lift_result
 QED
@@ -303,8 +303,10 @@ Theorem result_equiv_implies_observable_result:
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   rw[result_equiv_def, observable_result_equiv_def] >>
-  metis_tac[execution_equiv_implies_observable,
-            state_equiv_implies_observable]
+  rpt strip_tac >>
+  TRY (metis_tac[execution_equiv_implies_observable,
+                 state_equiv_implies_observable]) >>
+  gvs[revert_equiv_def, execution_equiv_def]
 QED
 
 (* Empty excluded set means full equality *)

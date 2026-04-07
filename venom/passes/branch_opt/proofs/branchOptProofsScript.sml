@@ -485,7 +485,8 @@ Theorem bo_block_sim[local]:
        step_inst fuel ctx inst st = OK st' ==>
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn))
+                  (execution_equiv (bo_fresh_vars_fn fn))
       (run_block fuel ctx bb s)
       (run_block fuel ctx (branch_opt_block dfg live_at bb) s)
 Proof
@@ -552,7 +553,8 @@ Theorem bo_cross_block_sim[local]:
        step_inst fuel' ctx' inst st = OK st' ==>
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn))
+                  (execution_equiv (bo_fresh_vars_fn fn))
       (run_block fuel ctx bb s1)
       (run_block fuel ctx (branch_opt_block dfg live_at bb) s2)
 Proof
@@ -626,7 +628,8 @@ Theorem branch_opt_function_correct_proof:
        bo_iszero_inv dfg (st' with vs_inst_idx := SUC st.vs_inst_idx)) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
-               (execution_equiv (bo_fresh_vars_fn fn) (execution_equiv (bo_fresh_vars_fn fn))
+               (execution_equiv (bo_fresh_vars_fn fn))
+                  (execution_equiv (bo_fresh_vars_fn fn))
       (run_function fuel ctx fn s)
       (run_function fuel ctx fn' s)
 Proof

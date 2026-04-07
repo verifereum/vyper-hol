@@ -901,7 +901,8 @@ Proof
        terminates (run_function fuel' ctx'
          (function_map_transform (transform_block fn) fn) s) ==>
        lift_result (state_equiv (fresh_vars_in_context ctx))
-         (execution_equiv (fresh_vars_in_context ctx) (execution_equiv (fresh_vars_in_context ctx))
+         (execution_equiv (fresh_vars_in_context ctx))
+                  (execution_equiv (fresh_vars_in_context ctx))
          (run_function fuel ctx' fn s)
          (run_function fuel' ctx'
            (function_map_transform (transform_block fn) fn) s))` by (

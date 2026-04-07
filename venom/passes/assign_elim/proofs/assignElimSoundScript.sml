@@ -139,7 +139,8 @@ Theorem assign_nop_per_inst[local]:
     let v = df_at NONE (copy_prop_analyze fn) bb.bb_label idx in
     (?e. step_inst fuel ctx (assign_subst_inst v inst) s = Error e) \/
     lift_result (state_equiv (assign_elim_eliminated_vars fn))
-      (execution_equiv (assign_elim_eliminated_vars fn) (execution_equiv (assign_elim_eliminated_vars fn))
+      (execution_equiv (assign_elim_eliminated_vars fn))
+                  (execution_equiv (assign_elim_eliminated_vars fn))
       (step_inst fuel ctx (assign_subst_inst v inst) s)
       (step_inst fuel ctx (assign_elim_inst (phi_used_vars fn) v inst) s)
 Proof

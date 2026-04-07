@@ -158,15 +158,15 @@ Definition lift_result_def:
   lift_result R_ok R_term R_abort _ _ = F
 End
 
-(* Canonical instantiation: state_equiv for OK, execution_equiv for terminal,
-   revert_equiv for abort. Defined by pattern-matching for proof compatibility
-   (simp[result_equiv_def] works directly).
+(* Canonical instantiation: state_equiv for OK, execution_equiv for terminal.
+   Abort also uses execution_equiv (stronger than needed, but proof-compatible).
+   DFT uses lift_result with revert_equiv directly for Abort.
    Equivalence with lift_result proven in stateEquivProps. *)
 Definition result_equiv_def:
   result_equiv vars (OK s1) (OK s2) = state_equiv vars s1 s2 /\
   result_equiv vars (Halt s1) (Halt s2) = execution_equiv vars s1 s2 /\
   result_equiv vars (Abort a1 s1) (Abort a2 s2) =
-    ((a1 = a2) /\ revert_equiv s1 s2) /\
+    ((a1 = a2) /\ execution_equiv vars s1 s2) /\
   result_equiv vars (IntRet v1 s1) (IntRet v2 s2) =
     (execution_equiv vars s1 s2 /\ (v1 = v2)) /\
   result_equiv vars (Error e1) (Error e2) = T /\
