@@ -977,15 +977,10 @@ Resume bp_process_block_sound_gen[non_terminator]:
   `bp_ptr_sound r1 s1` by (
     irule bp_handle_inst_sound_in_block >>
     qexistsl_tac [`bp0`, `c1`, `ctx`, `fuel`, `inst`, `s0`] >>
-    ASM_REWRITE_TAC[] >> rpt conj_tac
-    >- (rpt strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC)
-    >- (strip_tac >> first_x_assum irule >> ASM_REWRITE_TAC[])
-    >- (rpt strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC)
-    >- (rpt strip_tac >> first_x_assum irule >> ASM_REWRITE_TAC[])
-  ) >>
-  (* Get inst_eq without Abbrev wrapper *)
-  `inst = EL s0.vs_inst_idx bb.bb_instructions` by
-    fs[markerTheory.Abbrev_def] >>
+    gvs[markerTheory.Abbrev_def] >> rpt conj_tac >> metis_tac[]) >>
+  (* Unwrap Abbrev without VAR_EQ_TAC (which hangs with this assumption set) *)
+  qpat_x_assum `Abbrev (inst = _)`
+    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   (* Step 3: establish DROP decomposition *)
   `DROP s0.vs_inst_idx bb.bb_instructions =
    inst :: DROP (s0.vs_inst_idx + 1) bb.bb_instructions` by (
@@ -1038,7 +1033,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
       (impl_tac >- (
         qpat_x_assum `DROP _ _ = _ :: _`
           (fn eq => PURE_REWRITE_TAC [eq]) >>
-        REWRITE_TAC[MEM] >> DISJ2_TAC >> first_assum ACCEPT_TAC)) >>
+        REWRITE_TAC[MEM] >> ASM_REWRITE_TAC[])) >>
       strip_tac >> ASM_REWRITE_TAC[]) >>
     conj_tac >- (                        (* 10 *)
       rpt strip_tac >>
@@ -1047,7 +1042,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
       (impl_tac >- (
         qpat_x_assum `DROP _ _ = _ :: _`
           (fn eq => PURE_REWRITE_TAC [eq]) >>
-        REWRITE_TAC[MEM] >> DISJ2_TAC >> first_assum ACCEPT_TAC)) >>
+        REWRITE_TAC[MEM] >> ASM_REWRITE_TAC[])) >>
       strip_tac >> ASM_REWRITE_TAC[]) >>
     conj_tac >- (                        (* 10 *)
       rpt gen_tac >> strip_tac >>
@@ -1068,7 +1063,7 @@ Resume bp_process_block_sound_gen[non_terminator]:
       ASM_REWRITE_TAC[MAP, ALL_DISTINCT]
       >- (DISCH_TAC >> pop_assum (ACCEPT_TAC o CONJUNCT2))
       >> (DISCH_TAC >> first_assum ACCEPT_TAC)) >>
-    conj_tac >- (                        (* 13 *)
+    (* 13 - phi transfer *)
       rpt strip_tac >>
       rename1 `MEM inst2 (DROP _ _)` >>
       rename1 `MEM v2 (MAP SND _)` >>
@@ -1112,7 +1107,6 @@ Resume bp_process_block_sound_gen[non_terminator]:
         qpat_x_assum `inst2 = _` (fn eq =>
           PURE_ONCE_REWRITE_TAC[GSYM eq]) >>
         ASM_REWRITE_TAC[])) >>
-  strip_tac >> first_assum ACCEPT_TAC) >>
   strip_tac
 QED
 
