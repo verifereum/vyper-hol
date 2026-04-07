@@ -38,6 +38,16 @@
  *
  *   Commutativity:
  *     effects_independent_commute          — independent instructions commute
+ *
+ *   Copy forwarding equivalence:
+ *     copy_fwd_cross_equiv                — mcopy vs nop establishes cross-region equiv
+ *     copy_fwd_rel_observable_equiv       — simulation invariant implies observable equiv
+ *     copy_fwd_read_equiv                 — rewritten read (dst→src) gives same output
+ *     copy_fwd_write_equiv                — rewritten write preserves observable + vars + src equiv
+ *     copy_fwd_terminator_equiv           — RETURN/REVERT with rewritten operand
+ *     copy_fwd_rel_preserved_identical_inst — identical non-clobbering inst preserves invariant
+ *     assign_transparent                  — ASSIGN forwards value unchanged
+ *     phi_transparent                     — PHI forwards value unchanged
  *)
 
 Theory passSharedProps
@@ -45,6 +55,7 @@ Ancestors
   passSharedDefs venomExecSemantics venomEffects stateEquiv venomInstProofs
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep venomState venomInst venomWf
+  copyFwdEquiv
 Libs
   pred_setTheory listTheory rich_listTheory
 
@@ -872,3 +883,31 @@ Theorem step_inst_base_effect_free_output_determined_vars =
 (* Operand equivalence *)
 Theorem step_inst_operands_equiv =
   passSharedSubstTheory.step_inst_operands_equiv
+
+(* ===================================================================== *)
+(* ===== Copy forwarding equivalence =================================== *)
+(* ===================================================================== *)
+
+Theorem copy_fwd_cross_equiv =
+  copyFwdEquivTheory.copy_fwd_cross_equiv
+
+Theorem copy_fwd_rel_observable_equiv =
+  copyFwdEquivTheory.copy_fwd_rel_observable_equiv
+
+Theorem copy_fwd_read_equiv =
+  copyFwdEquivTheory.copy_fwd_read_equiv
+
+Theorem copy_fwd_write_equiv =
+  copyFwdEquivTheory.copy_fwd_write_equiv
+
+Theorem copy_fwd_terminator_equiv =
+  copyFwdEquivTheory.copy_fwd_terminator_equiv
+
+Theorem copy_fwd_rel_preserved_identical_inst =
+  copyFwdEquivTheory.copy_fwd_rel_preserved_identical_inst
+
+Theorem assign_transparent =
+  copyFwdEquivTheory.assign_transparent
+
+Theorem phi_transparent =
+  copyFwdEquivTheory.phi_transparent
