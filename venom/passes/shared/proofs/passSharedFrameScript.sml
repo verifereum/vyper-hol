@@ -247,7 +247,7 @@ Proof
       by (irule setup_callee_state_equiv >> metis_tac[]) >>
     Cases_on `setup_callee x args s2` >> gvs[result_equiv_def] >>
     Cases_on `run_function fuel ctx x x'` >> simp[] >>
-    gvs[result_equiv_def, execution_equiv_refl] >>
+    gvs[result_equiv_def, execution_equiv_refl, revert_equiv_def] >>
     (* Only IntRet case remains *)
     `state_equiv vars (merge_callee_state s1 v)
                       (merge_callee_state s2 v)` by
@@ -1493,14 +1493,14 @@ Proof
          (step_inst fuel ctx inst2 s) (step_inst fuel ctx inst2 v)` by (
         irule cross_case_result_equiv >> metis_tac[]) >>
       simp[] >> Cases_on `step_inst fuel ctx inst2 v` >>
-      gvs[result_equiv_def, execution_equiv_def])
+      gvs[result_equiv_def, execution_equiv_def, revert_equiv_def])
     (* OK×Abort: use cross_case_result_equiv (works for INVOKE too) *)
     >- (
       `result_equiv (set inst1.inst_outputs)
          (step_inst fuel ctx inst2 s) (step_inst fuel ctx inst2 v)` by (
         irule cross_case_result_equiv >> metis_tac[]) >>
       simp[] >> Cases_on `step_inst fuel ctx inst2 v` >>
-      gvs[result_equiv_def, execution_equiv_def])
+      gvs[result_equiv_def, execution_equiv_def, revert_equiv_def])
     (* OK×IntRet *)
     >- (imp_res_tac step_inst_no_intret >> gvs[])
     (* OK×Error *)
