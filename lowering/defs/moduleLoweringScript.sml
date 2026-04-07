@@ -406,7 +406,7 @@ Definition compile_init_kwargs_def:
     if kwargs_from_calldata > 0 then
       let is_prim = is_word_type kwarg_type in
       if is_prim then
-        let dec_info = type_to_abi_dec_info cenv kwarg_type in
+        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
         let clamp_info = (case dec_info of DecPrimWord c => c | _ => NoClamp) in
         do val_op <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
            compile_abi_clamp_basetype val_op clamp_info;
@@ -415,7 +415,7 @@ Definition compile_init_kwargs_def:
                                (kwargs_from_calldata - 1) hi_op
         od
       else if is_abi_dynamic (cenv_sft cenv) kwarg_type then
-        let dec_info = type_to_abi_dec_info cenv kwarg_type in
+        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
         let abi_sz = abi_embedded_static_size (cenv_sft cenv) kwarg_type in
         do offset_val <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
            actual_src <- emit_op ADD [Lit 4w; offset_val];
@@ -425,7 +425,7 @@ Definition compile_init_kwargs_def:
                                (kwargs_from_calldata - 1) hi_op
         od
       else
-        let dec_info = type_to_abi_dec_info cenv kwarg_type in
+        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
         let src = Lit (n2w (4 + calldata_offset)) in
         let abi_sz = abi_embedded_static_size (cenv_sft cenv) kwarg_type in
         do compile_abi_decode_to_buf alloca_ptr src

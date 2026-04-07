@@ -235,7 +235,7 @@ Datatype:
     ce_storage_layout : (string, bytes32) fmap;
     ce_module : num option;
     (* Struct metadata: struct_name → list of (field_name, member_type, memory_bytes) *)
-    ce_struct_fields : string -> (string # type # num) list;
+    ce_struct_fields : (string, (string # type # num) list) fmap;
     (* DynArray metadata: target_name → max capacity *)
     ce_dynarray_capacity : string -> num;
     (* Method ID lookup: func_name → 4-byte keccak selector as num *)
@@ -291,6 +291,14 @@ Datatype:
        Mirrors Python: func_t.do_raw_return *)
     ce_raw_return : bool
   |>
+End
+
+(* Lookup struct fields, defaulting to [] for unknown structs *)
+Definition get_struct_fields_def:
+  get_struct_fields (sfields : (string, (string # type # num) list) fmap) name =
+    case FLOOKUP sfields name of
+      SOME fields => fields
+    | NONE => []
 End
 
 (* ===== Compilation State (monad state) ===== *)
@@ -444,6 +452,29 @@ End
    and all offsets are within reasonable bounds.
    Prerequisite for ANY correctness proof about variable access — without this,
    writing one variable could corrupt another. *)
+(* Struct field map (sfields) agrees with type environment (tenv).
+   Both are built from the same toplevel declarations:
+   sfields = make_struct_fields_map tops, tenv = type_env tops.
+   This ensures type_to_abi_enc_info and vyper_to_abi_type/evaluate_type
+   see the same struct definitions. *)
+Definition sfields_tenv_consistent_def:
+  sfields_tenv_consistent sfields tenv ⇔
+    (* Every struct in tenv exists in sfields with matching field types *)
+    (∀ name args.
+       FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ⇒
+       ∃ fields.
+         FLOOKUP sfields name = SOME fields ∧
+         MAP FST fields = MAP FST args ∧
+         MAP (FST o SND) fields = MAP SND args) ∧
+    (* Every struct in sfields exists in tenv *)
+    (∀ name fields.
+       FLOOKUP sfields name = SOME fields ⇒
+       ∃ args.
+         FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ∧
+         MAP FST fields = MAP FST args ∧
+         MAP (FST o SND) fields = MAP SND args)
+End
+
 Definition well_formed_cenv_def:
   well_formed_cenv cenv ⇔
     (* MemLoc regions don't overlap *)
@@ -708,7 +739,7 @@ End
    Used as the sft parameter for is_abi_dynamic/abi_static_size/abi_size_bound.
    Extracts just the type from (name, type, byte_size) triples. *)
 Definition cenv_sft_def:
-  cenv_sft cenv name = MAP (FST o SND) (cenv.ce_struct_fields name)
+  cenv_sft cenv name = MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
 End
 
 (* True for types that fit in a single EVM word (≤ 256 bits).
@@ -893,7 +924,7 @@ Definition type_memory_bytes_def:
   type_memory_bytes cenv (ArrayT elem_ty (Dynamic n)) =
     32 + n * type_memory_bytes cenv elem_ty ∧
   type_memory_bytes cenv (StructT name) =
-    SUM (MAP (SND o SND) (cenv.ce_struct_fields name)) ∧
+    SUM (MAP (SND o SND) (get_struct_fields cenv.ce_struct_fields name)) ∧
   type_memory_bytes cenv (TupleT tys) =
     SUM (MAP (type_memory_bytes cenv) tys) ∧
   type_memory_bytes cenv NoneT = 0

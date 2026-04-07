@@ -80,7 +80,14 @@ Theorem bp_handle_inst_sound:
     bp_handle_inst bp inst = (c, bp') ∧
     step_inst fuel ctx inst s = OK s' ∧
     inst_wf inst ∧
-    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ⇒
+    (∀out. inst_output inst = SOME out ⇒ bp_get_ptrs bp out = []) ∧
+    (inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
+    (∀v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
+       FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ∧
+    (∀v. inst.inst_opcode = PHI ∧
+         MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+         IS_SOME (lookup_var v s) ⇒
+         bp_get_ptrs bp v ≠ []) ⇒
     bp_ptr_sound bp' s'
 Proof ACCEPT_TAC basePtrProofsTheory.bp_handle_inst_sound_proof
 QED
@@ -91,11 +98,29 @@ Theorem bp_process_block_sound:
     bp_process_block bp bb.bb_instructions = (c, bp') ∧
     run_block fuel ctx bb s = OK s' ∧
     s.vs_inst_idx = 0 ∧
+    bb_well_formed bb ∧
     (∀inst. MEM inst bb.bb_instructions ⇒ inst_wf inst) ∧
     ALL_DISTINCT (FLAT (MAP (λi. i.inst_outputs) bb.bb_instructions)) ∧
     (∀inst out. MEM inst bb.bb_instructions ∧
                inst_output inst = SOME out ⇒
-               bp_get_ptrs bp out = []) ⇒
+               bp_get_ptrs bp out = []) ∧
+    (* Inst ids globally unique across context — ensures ALLOCAs in this
+       block and in INVOKE callees don't collide with tracked alloca ids *)
+    ctx_inst_ids_distinct ctx ∧
+    (* ALLOCA freshness: inst_ids don't collide with initial bp pointers *)
+    (∀inst v aid off. MEM inst bb.bb_instructions ∧
+       inst.inst_opcode = ALLOCA ∧
+       MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ⇒
+       aid ≠ inst.inst_id) ∧
+    (* ALLOCA inst_ids within the block are pairwise distinct *)
+    ALL_DISTINCT (MAP (λi. i.inst_id)
+      (FILTER (λi. i.inst_opcode = ALLOCA) bb.bb_instructions)) ∧
+    (* PHI sources that are defined must have tracked ptrs *)
+    (∀inst v. MEM inst bb.bb_instructions ∧
+       inst.inst_opcode = PHI ∧
+       MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+       IS_SOME (lookup_var v s) ⇒
+       bp_get_ptrs bp v ≠ []) ⇒
     bp_ptr_sound bp' s'
 Proof ACCEPT_TAC basePtrProofsTheory.bp_process_block_sound_proof
 QED

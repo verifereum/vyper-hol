@@ -27,6 +27,7 @@
 
 Theory valueEncodingProps
 Ancestors
+  list rich_list
   valueEncoding valueEncodingProofs
 
 (* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
@@ -67,6 +68,15 @@ Proof
   ACCEPT_TAC mem_word_at_eq_mload_proof
 QED
 
+(* If mload at two addresses/states gives the same word,
+   the underlying 32 bytes are identical. *)
+Theorem mload_eq_mem_bytes_at_eq:
+  ∀ off1 off2 s1 s2.
+    mload off1 s1 = mload off2 s2 ⇒
+    mem_bytes_at off1 32 s1.vs_memory = mem_bytes_at off2 32 s2.vs_memory
+Proof ACCEPT_TAC mload_eq_mem_bytes_at_eq_proof
+QED
+
 (* ===== Primitive val_in_memory reduces to word check ===== *)
 
 Theorem val_in_memory_prim:
@@ -93,6 +103,32 @@ Theorem mstore_mem_word_at_disjoint:
     mem_word_at off1 (mstore off2 w s).vs_memory =
     mem_word_at off1 s.vs_memory
 Proof ACCEPT_TAC mstore_mem_word_at_disjoint_proof
+QED
+
+(* Splitting mem_bytes_at into adjacent regions *)
+Theorem LENGTH_mem_bytes_at[simp]:
+  ∀ offset len mem. LENGTH (mem_bytes_at offset len mem) = len
+Proof ACCEPT_TAC LENGTH_mem_bytes_at_proof
+QED
+
+Theorem mem_bytes_at_split:
+  ∀ offset m n mem.
+    offset + (m + n) ≤ LENGTH mem ⇒
+    mem_bytes_at offset (m + n) mem =
+      mem_bytes_at offset m mem ++ mem_bytes_at (offset + m) n mem
+Proof
+  rw[mem_bytes_at_def] >>
+  `LENGTH (DROP offset mem) ≥ m + n` by simp[LENGTH_DROP] >>
+  `TAKE (m + n) (DROP offset mem ++ REPLICATE (m + n) 0w) =
+   TAKE (m + n) (DROP offset mem)` by
+    simp[TAKE_APPEND1] >>
+  `TAKE m (DROP offset mem ++ REPLICATE m 0w) =
+   TAKE m (DROP offset mem)` by
+    simp[TAKE_APPEND1] >>
+  `TAKE n (DROP (offset + m) mem ++ REPLICATE n 0w) =
+   TAKE n (DROP (offset + m) mem)` by
+    simp[TAKE_APPEND1, LENGTH_DROP] >>
+  simp[TAKE_SUM, DROP_DROP, TAKE_APPEND]
 QED
 
 Theorem mstore_mem_bytes_at_disjoint:
