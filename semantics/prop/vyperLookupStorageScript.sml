@@ -2,7 +2,7 @@ Theory vyperLookupStorage
 
 Ancestors
   vyperLookup vyperMisc vyperContext vyperState vyperStorage vyperStorageBackend
-  vyperInterpreter
+  vyperInterpreter vyperStatePreservation
   vyperValue vyperValueOperation vyperTyping vyperEncodeDecode
 Libs
   wordsLib
@@ -79,19 +79,15 @@ End
    Captures all conditions needed for decode_value to succeed and
    produce well-typed values. *)
 Definition slots_in_range_def:
-  slots_in_range storage offset (BaseTV (UintT n)) =
-    (w2n (read_slot storage offset) < 2 ** n) ∧
-  slots_in_range storage offset (BaseTV (IntT n)) =
-    within_int_bound (Signed n) (w2i (read_slot storage offset)) ∧
+  slots_in_range storage offset (BaseTV (UintT n)) = T ∧
+  slots_in_range storage offset (BaseTV (IntT n)) = T ∧
   slots_in_range storage offset (BaseTV (BytesT (Dynamic max))) =
     (w2n (read_slot storage offset) ≤ max) ∧
   slots_in_range storage offset (BaseTV (StringT max)) =
     (w2n (read_slot storage offset) ≤ max) ∧
-  slots_in_range storage offset (BaseTV DecimalT) =
-    within_int_bound (Signed 168) (w2i (read_slot storage offset)) ∧
+  slots_in_range storage offset (BaseTV DecimalT) = T ∧
   slots_in_range storage offset (BaseTV _) = T ∧
-  slots_in_range storage offset (FlagTV m) =
-    (w2n (read_slot storage offset) < 2 ** m) ∧
+  slots_in_range storage offset (FlagTV m) = T ∧
   slots_in_range storage offset NoneTV = T ∧
   slots_in_range storage offset (TupleTV tvs) =
     tuple_slots_in_range storage offset tvs ∧
@@ -279,19 +275,22 @@ Proof
   rpt conj_tac >> rpt gen_tac >>
   strip_tac >> gvs[decode_value_def, decode_base_from_slot_def,
     AllCaseEqs(), value_has_type_def,
-    wordsTheory.w2n_lt, integer_wordTheory.w2i_le,
-    integer_wordTheory.w2i_ge, LENGTH_word_to_bytes_be_256] >>
+    LENGTH_word_to_bytes_be_256] >>
   rpt strip_tac >>
   gvs[value_has_type_def,
       well_formed_type_value_def, within_int_bound_def,
       listTheory.LENGTH_TAKE_EQ, LENGTH_word_to_bytes_be_256,
       all_have_type_EVERY,
       slots_in_range_def] >>
+  TRY (simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
+              truncate_signed_range] >> NO_TAC) >>
   TRY (metis_tac[decode_dyn_bytes_LENGTH]) >>
   TRY (imp_res_tac LENGTH_decode_static_array >>
        simp[sparse_has_type_enumerate, SORTED_enumerate_static_array] >>
        NO_TAC) >>
-  imp_res_tac LENGTH_decode_dyn_array >> simp[]
+  TRY (imp_res_tac LENGTH_decode_dyn_array >> simp[] >> NO_TAC) >>
+  simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
+         (Q.SPEC `168` truncate_signed_range)]
 QED
 
 (* Helper: sparse_has_type on enumerate implies EVERY on the original list,
@@ -887,4 +886,26 @@ Theorem lookup_toplevel_name_stk:
 Proof
   rpt gen_tac >>
   simp[lookup_toplevel_name_def, lookup_global_stk]
+QED
+
+(* ===== Connecting lookup_toplevel_name with lookup_global ===== *)
+
+Theorem lookup_toplevel_name_lookup_global:
+  ∀cx st src_id_opt n href0.
+    lookup_toplevel_name cx st src_id_opt n = SOME href0 ⇒
+    lookup_global cx src_id_opt (string_to_num n) st = (INL href0, st)
+Proof
+  rw[lookup_toplevel_name_def] >>
+  Cases_on `lookup_global cx src_id_opt (string_to_num n) st` >>
+  Cases_on `q` >> gvs[] >>
+  drule lookup_global_state >> simp[]
+QED
+
+Theorem lookup_global_get_module_code:
+  ∀cx src_id_opt n st href0.
+    lookup_global cx src_id_opt n st = (INL href0, st) ⇒
+    ∃code. get_module_code cx src_id_opt = SOME code
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]
 QED

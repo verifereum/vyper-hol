@@ -679,6 +679,27 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   \\ gvs[]
 QED
 
+(* Lock operations preserve scopes: needed for IntCall handler.
+   Uses bind form (not ignore_bind) because earlier SIMP_TAC expands ignore_bind.
+   Uses ≠ form because simp normalizes ¬(A ∨ B) to ¬A ∧ ¬B. *)
+Theorem finally_intcall_handler_scopes[local]:
+  ∀f nr mut cx prev s res s'.
+    finally f
+      (bind (set_scopes prev) (λx.
+          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ())) s = (res, s') ⇒
+    MAP FDOM s'.scopes = MAP FDOM prev
+Proof
+  rw[finally_def, bind_def, ignore_bind_def,
+     set_scopes_def, return_def, raise_def, AllCaseEqs()]
+  \\ gvs[]
+  \\ Cases_on `cx.nonreentrant_slot` \\ gvs[return_def]
+  \\ imp_res_tac release_nonreentrant_lock_scopes \\ gvs[]
+QED
+
 Resume eval_mutual_preserves_scopes_dom[IntCall]:
   rpt gen_tac
   \\ strip_tac
@@ -739,38 +760,50 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
     imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ rw[] \\ gvs[])
+  (* Expand get_scopes — always succeeds, simplify directly *)
+  \\ SIMP_TAC std_ss [bind_def, ignore_bind_def, get_scopes_def, return_def]
+  (* Peel evaluate_type *)
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ rw[] \\ gvs[] )
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ rw[get_scopes_def, return_def]
-  \\ pop_assum mp_tac
-  \\ rewrite_tac[bind_def, ignore_bind_def]
+  >- (rpt(qpat_x_assum`!x. _`kall_tac)
+      \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+      \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+      \\ rw[] \\ gvs[])
+  (* Peel evaluate_type *)
+  \\ rewrite_tac[bind_def, ignore_bind_def, COND_RATOR]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ rw[] \\ gvs[] )
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ rw[push_function_def, return_def]
-  \\ pop_assum mp_tac
-  \\ rewrite_tac[bind_def, ignore_bind_def, pop_function_def]
+  >- (rpt(qpat_x_assum`!x. _`kall_tac)
+      \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+      \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+      \\ rw[] \\ gvs[])
+  (* Peel lock acquire — COND_RATOR already applied above *)
   \\ BasicProvers.TOP_CASE_TAC
-  \\ drule finally_set_scopes_dom
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ rw[] \\ gvs[] )
+  >- (rpt(qpat_x_assum`!x. _`kall_tac)
+      \\ strip_tac \\ gvs[]
+      \\ Cases_on `nr` \\ gvs[return_def]
+      \\ Cases_on `cx.nonreentrant_slot` \\ gvs[raise_def]
+      \\ imp_res_tac acquire_nonreentrant_lock_scopes
+      \\ imp_res_tac lift_option_type_scopes
+      \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes \\ gvs[])
+  (* Expand push_function — always succeeds — and pop_function *)
+  \\ simp[push_function_def, return_def, pop_function_def]
+  (* Now goal has: case finally (...) (bind (set_scopes prev) ...) s of ... *)
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ drule finally_intcall_handler_scopes
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+      \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+      \\ imp_res_tac acquire_nonreentrant_lock_scopes
+      \\ rw[] \\ gvs[])
+  (* Peel safe_cast + return *)
   \\ rewrite_tac[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
   \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+  \\ imp_res_tac acquire_nonreentrant_lock_scopes
   \\ BasicProvers.TOP_CASE_TAC
   \\ rw[] \\ gvs[return_def]
 QED

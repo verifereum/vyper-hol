@@ -1,7 +1,7 @@
 Theory vyperEvalMisc
 Ancestors
   vyperMisc vyperContext vyperState vyperInterpreter
-  vyperArray vyperValue vyperValueOperation
+  vyperArray vyperBareGlobalName vyperValue vyperValueOperation
 Libs
   intLib
 
@@ -37,6 +37,23 @@ Proof
   rpt strip_tac >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def]
+QED
+
+Theorem eval_base_target_BareGlobalNameTarget:
+  ∀cx st n.
+    IS_SOME (lookup_bare_global_name cx st n) ∧
+    is_immutable cx n ⇒
+    eval_base_target cx (BareGlobalNameTarget n) st =
+    (INL (ImmutableVar n, []), st)
+Proof
+  rpt strip_tac >>
+  gvs[is_immutable_def, lookup_bare_global_name_def, lookup_immutable_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
+  Cases_on `get_module_code cx (current_module cx)` >> gvs[] >>
+  simp[Once evaluate_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, return_def,
+       lift_option_type_def, type_check_def, assert_def,
+       ignore_bind_def]
 QED
 
 (* ===== Binop Helper Lemmas ===== *)

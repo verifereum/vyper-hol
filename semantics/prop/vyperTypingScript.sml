@@ -585,3 +585,13 @@ Proof
   imp_res_tac safe_cast_well_typed >> gvs[]
 QED
 
+(* NOTE: safe_cast_result_well_typed (well_formed_type_value tv ∧ safe_cast tv v = SOME v'
+   ⇒ value_has_type tv v') is FALSE for SArrayV with unsorted keys:
+   safe_cast preserves the key ordering of input SArrayV, so unsorted input gives unsorted
+   output which fails SORTED check in value_has_type.
+   Counterexample: safe_cast (ArrayTV (BaseTV (UintT 256)) (Fixed 3))
+                     (ArrayV (SArrayV [(2,IntV 1);(0,IntV 2)]))
+                 = SOME (ArrayV (SArrayV [(2,IntV 1);(0,IntV 2)]))
+   but value_has_type requires SORTED $< [2;0] which is false.
+   In practice, safe_cast_preserves_well_typed (requires value_has_type tv v for input)
+   suffices for all proof obligations. *)
