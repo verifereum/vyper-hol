@@ -134,11 +134,30 @@ QED
    Lookup Helpers
    ========================================================================== *)
 
+Theorem FIND_MEM:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  ACCEPT_TAC venomExecProofsTheory.FIND_MEM
+QED
+
+Theorem FIND_P:
+  !P l x. FIND P l = SOME x ==> P x
+Proof
+  ACCEPT_TAC venomExecProofsTheory.FIND_P
+QED
+
 Theorem lookup_block_MEM:
   !lbl bbs bb.
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
   ACCEPT_TAC venomExecProofsTheory.lookup_block_MEM
+QED
+
+Theorem lookup_block_label:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
+Proof
+  ACCEPT_TAC venomExecProofsTheory.lookup_block_label
 QED
 
 Theorem block_step_prefix_same:
@@ -234,6 +253,13 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.step_terminator_preserves_vars
 QED
 
+Theorem step_inst_preserves_labels_always:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_preserves_labels_always
+QED
+
 Theorem MEM_lookup_block:
   !lbl bbs (bb:basic_block).
     MEM bb bbs /\ bb.bb_label = lbl /\
@@ -278,4 +304,142 @@ Theorem run_block_current_bb_in_succs:
     MEM s1.vs_current_bb (bb_succs bb)
 Proof
   ACCEPT_TAC venomExecProofsTheory.run_block_current_bb_in_succs
+QED
+
+Theorem step_inst_base_term_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    s'.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_prev_bb
+QED
+
+Theorem run_block_ok_prev_bb:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_ok_prev_bb
+QED
+
+Theorem run_block_preserves_non_output_vars:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    !v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+    lookup_var v s' = lookup_var v s
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_preserves_non_output_vars
+QED
+
+Theorem run_block_same_insts:
+  !fuel ctx bb1 bb2 s.
+    s.vs_inst_idx < LENGTH bb1.bb_instructions /\
+    LENGTH bb2.bb_instructions = LENGTH bb1.bb_instructions /\
+    (!i. s.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
+      EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
+    run_block fuel ctx bb1 s = run_block fuel ctx bb2 s
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_same_insts
+QED
+
+Theorem fuel_mono:
+  (!n m ctx inst s r.
+     step_inst n ctx inst s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     step_inst m ctx inst s = r) /\
+  (!n m ctx bb s r.
+     run_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_block m ctx bb s = r) /\
+  (!n m ctx fn s r.
+     run_function n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_function m ctx fn s = r)
+Proof
+  ACCEPT_TAC venomExecProofsTheory.fuel_mono
+QED
+
+Theorem step_inst_base_nonerr_var_fdom:
+  !inst s x.
+    inst_wf inst /\
+    ~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE] /\
+    MEM (Var x) inst.inst_operands /\
+    (!e. step_inst_base inst s <> Error e) ==>
+    x IN FDOM s.vs_vars
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_nonerr_var_fdom
+QED
+
+Theorem step_inst_base_fdom:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_base_fdom
+QED
+
+Theorem step_inst_fdom:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.step_inst_fdom
+QED
+
+Theorem bind_outputs_fdom:
+  !outs vals s s'.
+    bind_outputs outs vals s = SOME s' ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set outs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.bind_outputs_fdom
+QED
+
+(* Non-INVOKE step_inst is context-independent *)
+Theorem step_inst_ctx_irrel:
+  !fuel ctx1 ctx2 inst s.
+    inst.inst_opcode <> INVOKE ==>
+    step_inst fuel ctx1 inst s = step_inst fuel ctx2 inst s
+Proof
+  rw[Once venomExecSemanticsTheory.step_inst_def] >>
+  rw[Once venomExecSemanticsTheory.step_inst_def]
+QED
+
+(* Non-terminator at idx < LENGTH means SUC idx < LENGTH *)
+Theorem non_terminator_not_last:
+  !bb idx.
+    bb_well_formed bb /\ idx < LENGTH bb.bb_instructions /\
+    ~is_terminator (EL idx bb.bb_instructions).inst_opcode ==>
+    SUC idx < LENGTH bb.bb_instructions
+Proof
+  rpt strip_tac >> fs[venomWfTheory.bb_well_formed_def] >>
+  `idx <> PRE (LENGTH bb.bb_instructions)` by (
+    strip_tac >>
+    `LAST bb.bb_instructions = EL idx bb.bb_instructions` by
+      metis_tac[listTheory.LAST_EL] >>
+    metis_tac[]) >>
+  simp[]
+QED
+
+(* setup_callee gives a clean initial callee state *)
+Theorem setup_callee_props:
+  !fn args s cs.
+    setup_callee fn args s = SOME cs ==>
+    cs.vs_inst_idx = 0 /\ FDOM cs.vs_vars = {} /\
+    fn_entry_label fn = SOME cs.vs_current_bb
+Proof
+  simp[venomExecSemanticsTheory.setup_callee_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[venomInstTheory.fn_entry_label_def,
+       venomInstTheory.entry_block_def]
 QED

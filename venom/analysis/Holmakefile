@@ -2,7 +2,7 @@
 INCLUDES = \
   $(VFMDIR)/util \
   $(VFMDIR)/spec \
-  .. \
+  ../defs ../props \
   ../../syntax \
   ../../semantics \
   shared \

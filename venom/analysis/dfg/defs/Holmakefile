@@ -1,2 +1,2 @@
 # DFG analysis definitions
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics

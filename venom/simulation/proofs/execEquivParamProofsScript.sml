@@ -13,7 +13,7 @@ Ancestors
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
   stateEquiv venomInst venomExecSemantics venomState
 Libs
-  finite_mapTheory listTheory rich_listTheory optionTheory
+  finite_mapTheory listTheory rich_listTheory optionTheory pred_setTheory
 
 open execEquivParamLib
 
@@ -98,7 +98,6 @@ Proof
     irule vsr_step_inst_data_copy >> simp[] >> metis_tac[],
     irule vsr_step_inst_extcodecopy >> simp[] >> metis_tac[],
     irule vsr_step_inst_copy >> simp[] >> metis_tac[],
-    irule vsr_step_inst_offset >> simp[] >> metis_tac[],
     irule vsr_step_inst_param >> simp[] >> metis_tac[],
     irule vsr_step_inst_ret >> simp[] >> metis_tac[],
     irule vsr_step_inst_log >> simp[] >> metis_tac[],
@@ -112,8 +111,91 @@ Proof
 QED
 
 (* run_block/run_function preserve R. Mutual induction via run_block_ind.
-   New run_block is simpler (no INVOKE special case — step_inst handles it).
+   New run_block is simpler (no INVOKE special case - step_inst handles it).
    Uses vs_inst_idx := SUC s.vs_inst_idx (not next_inst). *)
+
+(* Generalized: run_block preserves R with auxiliary invariant Q.
+   Q tracks additional agreement (e.g., fresh variable agreement) that R_ok
+   alone doesn't capture. Operand agreement uses R_ok AND Q; Q is preserved
+   by non-terminator steps. *)
+Theorem run_block_same_preserves_RQ_proof:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (Q : venom_state -> venom_state -> bool)
+   bb fuel ctx s1 s2.
+    valid_state_rel R_ok R_term /\
+    R_ok s1 s2 /\ Q s1 s2 /\
+    s1.vs_inst_idx = s2.vs_inst_idx /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            inst.inst_opcode <> INVOKE) /\
+    (* Operand agreement using R_ok AND Q *)
+    (!i s1' s2'. i < LENGTH bb.bb_instructions /\
+       R_ok s1' s2' /\ Q s1' s2' /\
+       s1'.vs_inst_idx = i /\ s2'.vs_inst_idx = i ==>
+       !x. MEM (Var x) (EL i bb.bb_instructions).inst_operands ==>
+           lookup_var x s1' = lookup_var x s2') /\
+    (* Q preserved by non-terminator steps *)
+    (!i s1' s2' v1 v2.
+       i < LENGTH bb.bb_instructions /\
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode /\
+       R_ok s1' s2' /\ Q s1' s2' /\
+       s1'.vs_inst_idx = i /\ s2'.vs_inst_idx = i /\
+       step_inst fuel ctx (EL i bb.bb_instructions) s1' = OK v1 /\
+       step_inst fuel ctx (EL i bb.bb_instructions) s2' = OK v2 /\
+       R_ok v1 v2 ==>
+       Q (v1 with vs_inst_idx := SUC i)
+         (v2 with vs_inst_idx := SUC i)) ==>
+    lift_result R_ok R_term
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx bb s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  ntac 6 (pop_assum mp_tac) >>
+  MAP_EVERY qid_spec_tac [`s2`, `s1`, `bb`, `ctx`, `fuel`] >>
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
+  qexists_tac `\fuel ctx fn s. T` >> rw[] >>
+  simp[Once run_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_block_def])) >>
+  `s1.vs_inst_idx = s2.vs_inst_idx` by
+    (imp_res_tac vsr_R_ok_fields >> gvs[]) >>
+  gvs[] >>
+  Cases_on `get_instruction bb s2.vs_inst_idx`
+  >- simp[lift_result_def] >>
+  rename1 `get_instruction bb _ = SOME inst` >>
+  `s2.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s2.vs_inst_idx bb.bb_instructions` by
+    fs[get_instruction_def] >>
+  `!x. MEM (Var x) inst.inst_operands ==>
+       lookup_var x s1 = lookup_var x s2` by
+    (rpt strip_tac >> first_x_assum irule >> gvs[]) >>
+  `lift_result R_ok R_term (step_inst fuel ctx inst s1)
+     (step_inst fuel ctx inst s2)` by
+    (match_mp_tac step_inst_preserves_R_proof >> fs[]) >>
+  Cases_on `step_inst fuel ctx inst s1` >>
+  Cases_on `step_inst fuel ctx inst s2` >>
+  fs[lift_result_def] >>
+  IF_CASES_TAC >> fs[]
+  >- (imp_res_tac vsr_R_ok_R_term >>
+      imp_res_tac vsr_R_ok_fields >> fs[] >>
+      Cases_on `v.vs_halted` >> fs[lift_result_def])
+  >>
+  (* Substitute inst = EL ... so IH guard matches *)
+  qpat_x_assum `inst = _` SUBST_ALL_TAC >>
+  (* Apply IH: spec s'' := v, discharge step_inst guard *)
+  qpat_x_assum `!s''. _ ==> !s2'. _ ==> _ ==> _ ==> _ ==>
+    lift_result _ _ (run_block _ _ _ _) (run_block _ _ _ _)`
+    (qspec_then `v` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then (qspec_then `v' with vs_inst_idx := SUC s2.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- metis_tac[]
+  >- (irule vsr_inst_idx_R_ok >> metis_tac[])
+QED
+
 (* Helper: run_block preserves R. By induction on the instruction list via
    run_defs_ind, using step_inst_preserves_R at each step. *)
 Triviality run_block_preserves_R_helper:
@@ -219,6 +301,21 @@ Proof
   rw[valid_state_rel_def] >>
   fs[state_equiv_def, execution_equiv_def,
      update_var_def, lookup_var_def] >>
+  rpt strip_tac >>
+  simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
+  TRY (Cases_on `op` >> fs[eval_operand_def, lookup_var_def] >> NO_TAC) >>
+  TRY (rw[] >> first_x_assum irule >> simp[] >> NO_TAC) >>
+  metis_tac[]
+QED
+
+(* Generalized: R_ok vars can differ from R_term vars' when vars SUBSET vars' *)
+Theorem valid_state_rel_mixed_proof:
+  !vars vars'. vars SUBSET vars' ==>
+    valid_state_rel (state_equiv vars) (execution_equiv vars')
+Proof
+  rw[valid_state_rel_def] >>
+  fs[state_equiv_def, execution_equiv_def,
+     update_var_def, lookup_var_def, SUBSET_DEF] >>
   rpt strip_tac >>
   simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
   TRY (Cases_on `op` >> fs[eval_operand_def, lookup_var_def] >> NO_TAC) >>

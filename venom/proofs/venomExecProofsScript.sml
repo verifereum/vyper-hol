@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomState venomWf rich_list list
+  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map
 
 (* ==========================================================================
    bool_to_word Properties
@@ -229,7 +229,7 @@ Proof
           extract_venom_result_def] >>
      strip_tac >> gvs[AllCaseEqs()] >>
      rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
-     gvs[update_var_def, mstore_def, sstore_def, tstore_def,
+     gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
          write_memory_with_expansion_def, mcopy_def, revert_state_def]
 QED
 
@@ -301,7 +301,7 @@ Proof
   gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
       update_var_def, AllCaseEqs(), jump_to_def,
-      mstore_def, mload_def, sstore_def, sload_def,
+      mstore_def, mstore8_def, mload_def, sstore_def, sload_def,
       tstore_def, tload_def, write_memory_with_expansion_def,
       mcopy_def, exec_alloca_def,
       exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
@@ -349,13 +349,13 @@ QED
    FIND Lemmas
    ========================================================================== *)
 
-Triviality FIND_MEM:
+Theorem FIND_MEM:
   !P l x. FIND P l = SOME x ==> MEM x l
 Proof
   Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
 QED
 
-Triviality FIND_P:
+Theorem FIND_P:
   !P l x. FIND P l = SOME x ==> P x
 Proof
   Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
@@ -376,6 +376,14 @@ Theorem lookup_block_MEM:
     lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
   rw[lookup_block_def] >> drule FIND_MEM >> simp[]
+QED
+
+(* lookup_block returns a block whose label matches the query *)
+Theorem lookup_block_label:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
+Proof
+  rw[lookup_block_def] >> drule FIND_P >> simp[]
 QED
 
 Theorem run_block_invoke_cases:
@@ -478,6 +486,26 @@ Proof
   rw[]
 QED
 
+(* step_inst ALWAYS preserves vs_labels (both terminator and non-terminator) *)
+Theorem step_inst_preserves_labels_always:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (
+    `inst.inst_opcode <> INVOKE` by (
+      Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
+    fs[step_inst_non_invoke] >>
+    Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+    fs[step_inst_base_def, LET_THM] >>
+    rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+         fs[jump_to_def, halt_state_def, revert_state_def,
+            set_returndata_def]) >>
+    rw[])
+  >- metis_tac[step_preserves_labels]
+QED
+
 (* MEM + ALL_DISTINCT labels ==> lookup_block finds the block *)
 Theorem MEM_lookup_block:
   !lbl bbs (bb:basic_block).
@@ -524,6 +552,22 @@ Proof
       fs[MAP_MAP_o] >>
     Cases_on `IS_SOME (get_label sel)` >> asm_rewrite_tac[MAP, MEM] >>
     fs[MEM_EL] >> metis_tac[MEM_EL])
+QED
+
+(* After a terminator step_inst_base returns OK,
+   vs_prev_bb = SOME (input vs_current_bb).
+   Only JMP/JNZ/DJMP return OK; all use jump_to which sets this. *)
+Theorem step_inst_base_term_prev_bb:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    s'.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[is_terminator_def] >>
+  fs[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+  gvs[]
 QED
 
 (* run_block OK with vs_inst_idx=0 implies nonempty block *)
@@ -602,3 +646,845 @@ Proof
     )
   )
 QED
+
+(* After run_block OK, vs_prev_bb = SOME (initial vs_current_bb).
+   Terminators (JMP/JNZ/DJMP) all use jump_to which sets vs_prev_bb. *)
+Theorem run_block_ok_prev_bb:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx = 0 /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  `!n fuel ctx s'.
+     n = LENGTH bb.bb_instructions - s'.vs_inst_idx /\
+     s'.vs_inst_idx <= LENGTH bb.bb_instructions /\
+     s'.vs_current_bb = s.vs_current_bb /\
+     run_block fuel ctx bb s' = OK s1 ==>
+     s1.vs_prev_bb = SOME s.vs_current_bb`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
+      simp[]) >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `i = s'.vs_inst_idx` >>
+  Cases_on `i >= LENGTH bb.bb_instructions`
+  >- (
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[run_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  `i < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst fuel' ctx' (EL i bb.bb_instructions) s'` >>
+  gvs[]
+  >- (
+    strip_tac >>
+    Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >> gvs[]
+    >- (
+      Cases_on `v.vs_halted` >> gvs[] >>
+      `~(i < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
+      `i = PRE (LENGTH bb.bb_instructions)` by fs[] >> gvs[] >>
+      `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode
+         <> INVOKE` by
+        (CCONTR_TAC >> gvs[is_terminator_def]) >>
+      `step_inst_base
+         (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) s' = OK s1` by
+        gvs[step_inst_non_invoke] >>
+      drule_all step_inst_base_term_prev_bb >> simp[]
+    )
+    >- (
+      `v.vs_current_bb = s'.vs_current_bb` by
+        (drule_all step_preserves_control_flow >> simp[]) >>
+      qpat_x_assum `!m. m < _ ==> _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- simp[Abbr `i`] >>
+      disch_then (qspecl_then [`fuel'`, `ctx'`,
+        `v with vs_inst_idx := SUC i`] mp_tac) >>
+      simp[]
+    )
+  )
+QED
+
+(* ==========================================================================
+   Variable Preservation Across Block Execution
+
+   If a variable v is not in ANY instruction's outputs within a block,
+   then run_block preserves lookup_var v.
+   ========================================================================== *)
+
+Theorem run_block_preserves_non_output_vars:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    !v. ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+    lookup_var v s' = lookup_var v s
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  (* Strong induction on remaining instructions *)
+  `!n f c st st'.
+     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
+     run_block f c bb st = OK st' ==>
+     lookup_var v st' = lookup_var v st`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
+         `fuel`, `ctx`, `s`, `s'`] mp_tac) >>
+      simp[]) >>
+  completeInduct_on `n` >> rw[] >>
+  qabbrev_tac `idx = st.vs_inst_idx` >>
+  (* Case split: idx past end or within block *)
+  Cases_on `idx >= LENGTH bb.bb_instructions`
+  >- (
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[run_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  `idx < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst f c (EL idx bb.bb_instructions) st` >> gvs[] >>
+  Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> gvs[]
+  >- (
+    (* Terminator: halted contradicts OK, so st' = v' *)
+    Cases_on `v'.vs_halted` >> gvs[] >>
+    metis_tac[step_terminator_preserves_vars]
+  ) >>
+  (* Non-terminator: step preserves v, then IH *)
+  strip_tac >>
+  `~MEM v (EL idx bb.bb_instructions).inst_outputs` by (
+    fs[MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL]) >>
+  `lookup_var v v' = lookup_var v st` by
+    metis_tac[step_preserves_non_output_vars] >>
+  `lookup_var v st' = lookup_var v (v' with vs_inst_idx := SUC idx)` by (
+    first_x_assum (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
+    (impl_tac >- simp[Abbr `idx`]) >>
+    disch_then (qspecl_then [`f`, `c`,
+      `v' with vs_inst_idx := SUC idx`, `st'`] mp_tac) >>
+    simp[]) >>
+  fs[lookup_var_def]
+QED
+
+(* ==========================================================================
+   Block Equivalence Under Shared Instructions
+
+   If two blocks agree on all instructions from current index onwards
+   (within bb1's range), then run_block gives the same result.
+   ========================================================================== *)
+
+Theorem run_block_same_insts:
+  !fuel ctx bb1 bb2 s.
+    s.vs_inst_idx < LENGTH bb1.bb_instructions /\
+    LENGTH bb2.bb_instructions = LENGTH bb1.bb_instructions /\
+    (!i. s.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
+      EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
+    run_block fuel ctx bb1 s = run_block fuel ctx bb2 s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n f c st.
+     n = LENGTH bb1.bb_instructions - st.vs_inst_idx /\
+     st.vs_inst_idx < LENGTH bb1.bb_instructions /\
+     (!i. st.vs_inst_idx <= i /\ i < LENGTH bb1.bb_instructions ==>
+       EL i bb1.bb_instructions = EL i bb2.bb_instructions) ==>
+     run_block f c bb1 st = run_block f c bb2 st`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb1.bb_instructions - s.vs_inst_idx`,
+         `fuel`, `ctx`, `s`] mp_tac) >> simp[]) >>
+  completeInduct_on `n` >> rw[] >>
+  qabbrev_tac `idx = st.vs_inst_idx` >>
+  `idx < LENGTH bb2.bb_instructions` by simp[Abbr `idx`] >>
+  `EL idx bb1.bb_instructions = EL idx bb2.bb_instructions` by (
+    first_x_assum (qspec_then `idx` mp_tac) >> simp[Abbr `idx`]) >>
+  (* Expand run_block on both sides; both see the same instruction *)
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[get_instruction_def] >>
+  (* Case split on step_inst result — common to both sides *)
+  Cases_on `step_inst f c (EL idx bb2.bb_instructions) st` >> simp[] >>
+  (* OK case: check terminator *)
+  Cases_on `is_terminator (EL idx bb2.bb_instructions).inst_opcode` >>
+  simp[] >>
+  (* Non-terminator: apply IH or show idx was last instruction *)
+  Cases_on `SUC idx < LENGTH bb1.bb_instructions`
+  >- (
+    qpat_x_assum `!m. m < _ ==> _` (qspec_then
+      `LENGTH bb1.bb_instructions - SUC idx` mp_tac) >>
+    (impl_tac >- simp[Abbr `idx`]) >>
+    disch_then (qspecl_then [`f`, `c`,
+      `v with vs_inst_idx := SUC idx`] mp_tac) >>
+    simp[Abbr `idx`]) >>
+  (* idx was last instruction: both blocks have no instruction at SUC idx *)
+  `~(SUC idx < LENGTH bb2.bb_instructions)` by simp[] >>
+  simp[Once run_block_def, get_instruction_def] >>
+  simp[Once run_block_def, get_instruction_def]
+QED
+
+(* ==========================================================================
+   Fuel Monotonicity
+   ==========================================================================
+   If a computation terminates with result R (not Error) using fuel n,
+   then it also terminates with R using any fuel m >= n.
+   This is the key compositionality property for simulation proofs where
+   the transformed program may use different fuel than the original.
+   ========================================================================== *)
+
+Theorem fuel_mono:
+  (!n m ctx inst s r.
+     step_inst n ctx inst s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     step_inst m ctx inst s = r) /\
+  (!n m ctx bb s r.
+     run_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_block m ctx bb s = r) /\
+  (!n m ctx fn s r.
+     run_function n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_function m ctx fn s = r)
+Proof
+  (* Reshape for run_defs_ind: P(fuel, ctx, X, s) = !m r. ... *)
+  `(!fuel ctx inst s.
+      !m r. step_inst fuel ctx inst s = r /\ (!e. r <> Error e) /\
+             fuel <= m ==> step_inst m ctx inst s = r) /\
+   (!fuel ctx bb s.
+      !m r. run_block fuel ctx bb s = r /\ (!e. r <> Error e) /\
+             fuel <= m ==> run_block m ctx bb s = r) /\
+   (!fuel ctx fn s.
+      !m r. run_function fuel ctx fn s = r /\ (!e. r <> Error e) /\
+             fuel <= m ==> run_function m ctx fn s = r)`
+    suffices_by (rpt strip_tac >> res_tac >> simp[]) >>
+  ho_match_mp_tac run_defs_ind >> rpt conj_tac
+  (* --- step_inst case --- *)
+  >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    Cases_on `inst.inst_opcode = INVOKE`
+    >- (
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      ASM_REWRITE_TAC[step_inst_def] >>
+      BasicProvers.every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+      (* Derive run_function m = run_function fuel for the callee *)
+      first_x_assum (qspecl_then [`(q, r')`, `q`, `r'`, `x'`, `x`, `x''`] mp_tac) >>
+      simp[] >>
+      disch_then (qspecl_then [`m`, `run_function fuel ctx x' x''`] mp_tac) >>
+      simp[] >> strip_tac >> fs[] >> gvs[]
+    )
+    >- gvs[step_inst_non_invoke]
+  )
+  (* --- run_block case --- *)
+  >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+    simp[Once run_block_def] >>
+    Cases_on `get_instruction bb s.vs_inst_idx`
+    >- (simp[] >> strip_tac >> gvs[]) >>
+    rename1 `SOME inst` >> simp[] >>
+    (* Derive step_inst fuel_mono from step_inst IH *)
+    `!si_r. step_inst fuel ctx inst s = si_r /\ (!e. si_r <> Error e) ==>
+            step_inst m ctx inst s = si_r` by
+      (rpt strip_tac >>
+       qpat_x_assum `!inst'. _ ==> _` (qspec_then `inst` mp_tac) >> simp[] >>
+       disch_then (qspecl_then [`m`, `si_r`] mp_tac) >> simp[]) >>
+    Cases_on `step_inst fuel ctx inst s` >> simp[]
+    >- (
+      `step_inst m ctx inst s = OK v` by
+        (first_x_assum (qspec_then `OK v` mp_tac) >> simp[]) >>
+      Cases_on `is_terminator inst.inst_opcode` >> simp[]
+      >- (strip_tac >> gvs[] >> simp[Once run_block_def])
+      >- (
+        strip_tac >> simp[Once run_block_def] >>
+        (* Use run_block continuation IH *)
+        qpat_x_assum `!inst' s''. _ /\ _ /\ _ ==> _`
+          (qspecl_then [`inst`, `v`] mp_tac) >> simp[] >>
+        disch_then (qspecl_then [`m`, `r`] mp_tac) >> simp[]
+      )
+    )
+    >- (`step_inst m ctx inst s = Halt v` by
+          (first_x_assum (qspec_then `Halt v` mp_tac) >> simp[]) >>
+        strip_tac >> gvs[] >> simp[Once run_block_def])
+    >- (`step_inst m ctx inst s = Abort a v` by
+          (first_x_assum (qspec_then `Abort a v` mp_tac) >> simp[]) >>
+        strip_tac >> gvs[] >> simp[Once run_block_def])
+    >- (`step_inst m ctx inst s = IntRet l v` by
+          (first_x_assum (qspec_then `IntRet l v` mp_tac) >> simp[]) >>
+        strip_tac >> gvs[] >> simp[Once run_block_def])
+  )
+  (* --- run_function case --- *)
+  >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    Cases_on `fuel`
+    >- gvs[run_function_def] >>
+    rename1 `SUC fuel'` >>
+    (* Expand source run_function assumption, simplify case SUC *)
+    qpat_x_assum `run_function _ _ _ _ = _`
+      (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+        (ONCE_REWRITE_RULE [run_function_def] th))) >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> fs[] >>
+    rename1 `SOME bb` >>
+    (* Case split on run_block to learn what r is *)
+    Cases_on `run_block fuel' ctx bb s` >> gvs[]
+    (* -- OK case -- *)
+    >- (
+      Cases_on `v.vs_halted` >> gvs[]
+      (* halted: r = Halt v *)
+      >- (
+        Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+        `run_block m'' ctx bb s = OK v` by
+          (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+        simp[Once run_function_def]
+      )
+      (* not halted: r = run_function fuel' ctx fn v *)
+      >- (
+        Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+        `run_block m'' ctx bb s = OK v` by
+          (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+        simp[Once run_function_def] >>
+        (* Use run_function recursive IH *)
+        first_x_assum (qspec_then `v` mp_tac) >> simp[] >>
+        disch_then (qspec_then `m''` mp_tac) >> simp[]
+      )
+    )
+    (* -- Halt case: r = Halt v -- *)
+    >- (
+      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+      `run_block m'' ctx bb s = Halt v` by
+        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+      simp[Once run_function_def]
+    )
+    (* -- Abort case -- *)
+    >- (
+      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+      `run_block m'' ctx bb s = Abort a v` by
+        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+      simp[Once run_function_def]
+    )
+    (* -- IntRet case -- *)
+    >- (
+      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+      `run_block m'' ctx bb s = IntRet l v` by
+        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+      simp[Once run_function_def]
+    )
+  )
+QED
+
+
+(* ==========================================================================
+   Operand FDOM Properties
+   ========================================================================== *)
+
+
+
+(* For non-excluded opcodes with inst_wf:
+   if a Var operand is not in FDOM (eval returns NONE), step_inst_base returns Error.
+   Contrapositive: non-Error implies all Var operands are in FDOM. *)
+Triviality eval_operands_mem_none[local]:
+  !ops s op. MEM op ops /\ eval_operand op s = NONE ==>
+    eval_operands ops s = NONE
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `op = h` >> gvs[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
+
+
+(* General: if eval_operands returns NONE for the full operand list,
+   step_inst_base returns Error for non-excluded opcodes.
+   Note: DJMP/OFFSET excluded because they don't eval all operands via
+   eval_operands (DJMP uses extract_labels, OFFSET has Label operand).
+   JMP/PARAM/ALLOCA also excluded because their operands are Lit/Label only. *)
+(* Split into two parts to stay under 5s per tactic step *)
+
+(* Part 1: "uniform" opcodes that go through exec_pure/read/write wrappers *)
+Triviality step_inst_base_operands_none_uniform[local]:
+  !inst s.
+    MEM inst.inst_opcode [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
+      ADDMOD; MULMOD; EQ; LT; GT; SLT; SGT; ISZERO;
+      AND; OR; XOR; NOT; SHL; SHR; SAR; SIGNEXTEND; BYTE;
+      MLOAD; MSTORE; MSTORE8; SLOAD; SSTORE; TLOAD; TSTORE;
+      BLOCKHASH; BLOBHASH; BALANCE; CALLDATALOAD;
+      EXTCODESIZE; EXTCODEHASH; ILOAD; DLOAD] /\
+    inst_wf inst /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      step_inst_base_def,
+      exec_pure1_def, exec_pure2_def, exec_pure3_def,
+      exec_read1_def, exec_write2_def,
+      eval_operands_def, eval_operand_def, lookup_var_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+(* Part 2: custom opcodes with inline operand handling.
+   JNZ excluded: its Label operands cause eval_operands=NONE but
+   step_inst_base only evaluates the condition, so it can succeed. *)
+Triviality step_inst_base_operands_none_custom[local]:
+  !inst s.
+    MEM inst.inst_opcode [MCOPY; ISTORE; RET; RETURN; REVERT;
+      ASSIGN; INVOKE; CALLDATACOPY; RETURNDATACOPY; CODECOPY;
+      EXTCODECOPY; SHA3; CALL; STATICCALL; DELEGATECALL;
+      CREATE; CREATE2; SELFDESTRUCT; ASSERT; ASSERT_UNREACHABLE;
+      DLOADBYTES] /\
+    inst_wf inst /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      step_inst_base_def,
+      eval_operands_def, eval_operand_def, lookup_var_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+(* Part 3: LOG — needs special handling because inst_wf gives parametric-length
+   operand list (Lit tc :: rest with LENGTH rest = w2n tc + 2).
+   The key insight: eval_operand (Lit tc) s = SOME tc always, so
+   eval_operands returning NONE means some element of rest evals to NONE.
+   step_inst_base for LOG evaluates all of rest, so it must hit the NONE and error. *)
+Triviality step_inst_base_operands_none_log[local]:
+  !inst s.
+    inst.inst_opcode = LOG /\
+    inst_wf inst /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >>
+  gvs[inst_wf_def] >>
+  (* Now: inst.inst_operands = Lit tc :: rest, LENGTH rest = w2n tc + 2,
+     eval_operands (Lit tc :: rest) s = NONE *)
+  (* Lit tc always evaluates, so eval_operands rest s = NONE *)
+  gvs[eval_operands_def, eval_operand_def] >>
+  (* rest has length >= 2, so destructure it *)
+  `?h1 h2 tl. rest = h1 :: h2 :: tl` by
+    (Cases_on `rest` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  gvs[step_inst_base_def, eval_operands_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Triviality step_inst_base_operands_none[local]:
+  !inst s.
+    inst_wf inst /\
+    ~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE;
+      DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET] /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[MEM] >>
+  metis_tac[step_inst_base_operands_none_uniform,
+            step_inst_base_operands_none_custom,
+            step_inst_base_operands_none_log, MEM]
+QED
+
+Theorem step_inst_base_nonerr_var_fdom:
+  !inst s x.
+    inst_wf inst /\
+    ~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE] /\
+    MEM (Var x) inst.inst_operands /\
+    (!e. step_inst_base inst s <> Error e) ==>
+    x IN FDOM s.vs_vars
+Proof
+  SPOSE_NOT_THEN STRIP_ASSUME_TAC >>
+  `eval_operand (Var x) s = NONE` by
+    simp[eval_operand_def, lookup_var_def, finite_mapTheory.flookup_thm] >>
+  qpat_x_assum `!e. _ <> _` mp_tac >> simp[] >>
+  imp_res_tac eval_operands_mem_none >>
+  (* DJMP: Var x is sel => eval NONE => Error;
+     Var x in label_ops => contradicts EVERY IS_SOME get_label *)
+  Cases_on `inst.inst_opcode = DJMP` >-
+    (gvs[inst_wf_def] >>
+     (* gvs splits MEM: subgoals with sel=Var x close via step_inst_base *)
+     TRY (gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >> NO_TAC) >>
+     (* remaining: MEM Var x label_ops contradicts EVERY IS_SOME get_label *)
+     gvs[listTheory.EVERY_MEM] >> res_tac >> fs[get_label_def]) >>
+  (* JMP/PARAM/ALLOCA: no Var operands possible *)
+  Cases_on `inst.inst_opcode = JMP` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
+  Cases_on `inst.inst_opcode = PARAM` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
+  Cases_on `inst.inst_opcode = ALLOCA` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
+  (* OFFSET: Var x must be offset_op, eval_operand NONE => Error *)
+  Cases_on `inst.inst_opcode = OFFSET` >-
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_def,
+        exec_pure2_def] >>
+  (* JNZ: ops = [c; Label l1; Label l2], only Var is c, eval_operand c NONE => Error *)
+  Cases_on `inst.inst_opcode = JNZ` >-
+    (gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_def,
+        eval_operand_def, lookup_var_def] >>
+     BasicProvers.every_case_tac >> gvs[]) >>
+  (* All other opcodes: use step_inst_base_operands_none *)
+  `~MEM inst.inst_opcode [NOP; PHI; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MSIZE; DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET]` by
+    gvs[MEM] >>
+  drule_all step_inst_base_operands_none >> metis_tac[]
+QED
+
+(* ==========================================================================
+   FDOM Monotonicity for step_inst_base
+
+   After a successful non-terminator step_inst_base:
+   1. All existing FDOM vars remain in FDOM
+   2. All inst_outputs are in FDOM
+   Combined: FDOM s'.vs_vars = FDOM s.vs_vars ∪ set inst.inst_outputs
+
+   Proof by opcode case split, grouped to stay under 5s per step.
+   Every non-terminator opcode with outputs uses update_var, giving |+.
+   Every non-terminator opcode without outputs preserves vs_vars.
+   ========================================================================== *)
+
+(* Helper: update_var adds output to FDOM and preserves existing *)
+Triviality update_var_fdom[local]:
+  !x v s. FDOM (update_var x v s).vs_vars = x INSERT FDOM s.vs_vars
+Proof
+  simp[update_var_def, finite_mapTheory.FDOM_FUPDATE]
+QED
+
+(* Helper: FOLDL update_var adds all outputs *)
+Triviality foldl_update_var_fdom[local]:
+  !kvs s.
+    FDOM (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_vars =
+    FDOM s.vs_vars UNION set (MAP FST kvs)
+Proof
+  Induct >> simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> simp[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+(* extract_venom_result preserves vs_vars *)
+Triviality extract_venom_result_preserves_vars[local]:
+  !s out ro rs r output s'.
+    extract_venom_result s out ro rs r = SOME (output, s') ==>
+    s'.vs_vars = s.vs_vars
+Proof
+  rpt gen_tac >>
+  simp[extract_venom_result_def] >>
+  BasicProvers.every_case_tac >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+(* All groups share this tactic pattern *)
+fun prove_fdom_group opcode_list = prove(
+  ``!inst s s'.
+     MEM inst.inst_opcode ^opcode_list /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      step_inst_base_def, exec_pure2_def, exec_pure1_def, exec_pure3_def,
+      exec_read0_def, exec_read1_def, exec_write2_def,
+      exec_alloca_def,
+      mstore_def, mstore8_def, sstore_def, tstore_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+
+val step_inst_base_fdom_pure2 = prove_fdom_group
+  ``[ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
+     ADDMOD; MULMOD; EQ; LT; GT; SLT; SGT;
+     AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND; BYTE]``;
+
+val step_inst_base_fdom_pure1 = prove_fdom_group
+  ``[ISZERO; NOT]``;
+
+val step_inst_base_fdom_read0 = prove_fdom_group
+  ``[CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+     ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+     SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+     CODESIZE; MSIZE]``;
+
+val step_inst_base_fdom_read1 = prove_fdom_group
+  ``[MLOAD; SLOAD; TLOAD; ILOAD; DLOAD;
+     CALLDATALOAD; BALANCE; BLOCKHASH; BLOBHASH;
+     EXTCODESIZE; EXTCODEHASH]``;
+
+val step_inst_base_fdom_write2 = prove_fdom_group
+  ``[MSTORE; MSTORE8; SSTORE; TSTORE; ISTORE]``;
+
+(* Zero-output group needs a different tactic: the state changes are
+   to memory/storage/logs, not vs_vars, so record accessor simp suffices *)
+val step_inst_base_fdom_no_output = prove(
+  ``!inst s s'.
+     MEM inst.inst_opcode [NOP; MCOPY; LOG; CALLDATACOPY; CODECOPY;
+       RETURNDATACOPY; EXTCODECOPY; DLOADBYTES;
+       ASSERT; ASSERT_UNREACHABLE] /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, step_inst_base_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[mstore_def, sstore_def, tstore_def,
+      mcopy_def, write_memory_with_expansion_def]);
+
+val step_inst_base_fdom_custom1 = prove_fdom_group
+  ``[ASSIGN; PHI; SHA3; PARAM; ALLOCA; OFFSET]``;
+
+(* External calls: extract_venom_result preserves vs_vars, then update_var adds output *)
+val step_inst_base_fdom_external = prove(
+  ``!inst s s'.
+     MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[MEM] >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, step_inst_base_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  imp_res_tac extract_venom_result_preserves_vars >> gvs[] >>
+  gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+
+(* INVOKE: step_inst_base returns Error, so premise is vacuously false *)
+val step_inst_base_fdom_invoke = prove(
+  ``!inst s s'.
+     inst.inst_opcode = INVOKE /\
+     inst_wf inst /\ step_inst_base inst s = OK s' ==>
+     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
+  rpt strip_tac >> gvs[step_inst_base_def]);
+
+(* Main theorem: combine all parts *)
+Theorem step_inst_base_fdom:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  metis_tac[step_inst_base_fdom_pure2,
+            step_inst_base_fdom_pure1,
+            step_inst_base_fdom_read0,
+            step_inst_base_fdom_read1,
+            step_inst_base_fdom_write2,
+            step_inst_base_fdom_no_output,
+            step_inst_base_fdom_custom1,
+            step_inst_base_fdom_external,
+            step_inst_base_fdom_invoke,
+            MEM]
+QED
+
+(* bind_outputs FDOM: outputs added to vs_vars *)
+Theorem bind_outputs_fdom:
+  !outs vals s s'.
+    bind_outputs outs vals s = SOME s' ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set outs
+Proof
+  simp[bind_outputs_def] >> rpt strip_tac >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  metis_tac[foldl_update_var_fdom, listTheory.MAP_ZIP]
+QED
+
+(* Lift to step_inst: covers both INVOKE and non-INVOKE *)
+Theorem step_inst_fdom:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode ==>
+    FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    (* INVOKE case: merge_callee preserves vs_vars, bind_outputs adds outputs *)
+    gvs[Once step_inst_def] >>
+    BasicProvers.every_case_tac >> gvs[] >>
+    imp_res_tac bind_outputs_fdom >>
+    gvs[merge_callee_state_def])
+  >- (
+    (* Non-INVOKE: delegate to step_inst_base_fdom *)
+    `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+    metis_tac[step_inst_base_fdom])
+QED
+
+
+
+(* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
+Triviality all_distinct_flat_mem:
+  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+(* Same instruction record at two positions in same block ⟹ same index.
+   Uses fn_inst_ids_distinct (part of wf_function). *)
+Theorem inst_ids_el_eq:
+  !fn bb j idx.
+    fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+    j < LENGTH bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    EL j bb.bb_instructions = EL idx bb.bb_instructions ==>
+    j = idx
+Proof
+  rpt strip_tac >>
+  fs[fn_inst_ids_distinct_def] >>
+  `MEM (MAP (\i. i.inst_id) bb.bb_instructions)
+       (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)` by
+    (simp[MEM_MAP] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[all_distinct_flat_mem] >>
+  `ALL_DISTINCT bb.bb_instructions` by metis_tac[ALL_DISTINCT_MAP] >>
+  metis_tac[ALL_DISTINCT_EL_IMP]
+QED
+
+(* ===== CFG path / dominance helpers ===== *)
+
+Theorem is_fn_path_rtc:
+  !fn path. is_fn_path fn path /\ path <> [] ==>
+    (fn_cfg_edge fn)^* (HD path) (LAST path)
+Proof
+  Induct_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def] >>
+  irule (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES)) >>
+  qexists_tac `h'` >> simp[]
+QED
+
+Theorem rtc_to_fn_path:
+  !fn x y. (fn_cfg_edge fn)^* x y ==>
+    ?path. is_fn_path fn path /\ path <> [] /\ HD path = x /\ LAST path = y
+Proof
+  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> rw[]
+  >- (qexists_tac `[x]` >> simp[is_fn_path_def])
+  >- (qexists_tac `x::path` >> Cases_on `path` >> gvs[is_fn_path_def])
+QED
+
+Theorem is_fn_path_prefix:
+  !fn path d. is_fn_path fn path /\ MEM d path ==>
+    ?pre. is_fn_path fn (pre ++ [d]) /\ HD (pre ++ [d]) = HD path
+Proof
+  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[]
+  >- (qexists_tac `[]` >> simp[is_fn_path_def])
+  >- (Cases_on `path` >> gvs[is_fn_path_def]
+      >- (qexists_tac `[h]` >> simp[is_fn_path_def])
+      >- (first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >>
+          strip_tac >> qexists_tac `h::pre` >>
+          Cases_on `pre` >> gvs[is_fn_path_def]))
+QED
+
+Theorem fn_dominates_dom_reachable:
+  !fn d n. fn_dominates fn d n ==> fn_reachable fn d
+Proof
+  rw[fn_dominates_def, fn_reachable_def] >>
+  qexists_tac `entry` >> simp[] >>
+  drule rtc_to_fn_path >> strip_tac >>
+  `MEM d path` by (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  drule_all is_fn_path_prefix >> strip_tac >>
+  drule is_fn_path_rtc >>
+  simp[listTheory.APPEND_eq_NIL]
+QED
+
+Theorem is_fn_path_snoc:
+  !fn path lbl. is_fn_path fn path /\ path <> [] /\
+    fn_cfg_edge fn (LAST path) lbl ==>
+    is_fn_path fn (path ++ [lbl])
+Proof
+  Induct_on `path` >> simp[is_fn_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def]
+QED
+
+Theorem fn_dominates_predecessor:
+  !fn d n p.
+    fn_dominates fn d n /\ d <> n /\
+    fn_cfg_edge fn p n /\ fn_reachable fn p ==>
+    fn_dominates fn d p
+Proof
+  rw[fn_dominates_def] >> rpt strip_tac >>
+  `is_fn_path fn (path ++ [n])` by (
+    irule is_fn_path_snoc >> simp[]) >>
+  `MEM d (path ++ [n])` by (
+    first_x_assum (qspec_then `path ++ [n]` mp_tac) >>
+    impl_tac >- (
+      simp[listTheory.LAST_APPEND_CONS] >>
+      Cases_on `path` >> gvs[]) >>
+    simp[]) >>
+  gvs[listTheory.MEM_APPEND]
+QED
+
+(* ===== General wf_function helpers ===== *)
+
+Theorem terminator_no_outputs:
+  !inst. is_terminator inst.inst_opcode /\ inst_wf inst ==>
+    inst.inst_outputs = []
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  gvs[inst_wf_def]
+QED
+
+Theorem same_label_same_block:
+  !f bb1 bb2.
+    wf_function f /\ MEM bb1 f.fn_blocks /\ MEM bb2 f.fn_blocks /\
+    bb1.bb_label = bb2.bb_label ==>
+    bb1 = bb2
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) f.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `lookup_block bb1.bb_label f.fn_blocks = SOME bb1` by
+    (irule MEM_lookup_block >> simp[]) >>
+  `lookup_block bb1.bb_label f.fn_blocks = SOME bb2` by
+    (irule MEM_lookup_block >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem phi_before_non_phi:
+  !bb i idx.
+    bb_well_formed bb /\
+    i < LENGTH bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI ==>
+    i < idx
+Proof
+  rpt strip_tac >>
+  CCONTR_TAC >> fs[arithmeticTheory.NOT_LESS] >>
+  `idx = i \/ idx < i` by DECIDE_TAC
+  >- gvs[]
+  >- (fs[bb_well_formed_def] >> metis_tac[])
+QED
+
+(* ===== FDOM monotonicity helpers ===== *)
+
+Theorem lookup_var_fdom:
+  !x s s'.
+    lookup_var x s' = lookup_var x s /\ x IN FDOM s.vs_vars ==>
+    x IN FDOM s'.vs_vars
+Proof
+  rw[lookup_var_def] >>
+  `FLOOKUP s.vs_vars x <> NONE` by metis_tac[flookup_thm] >>
+  Cases_on `FLOOKUP s.vs_vars x` >> gvs[flookup_thm]
+QED
+
+Theorem fn_reachable_step:
+  !f lbl lbl'.
+    fn_reachable f lbl /\ fn_cfg_edge f lbl lbl' ==>
+    fn_reachable f lbl'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `fn_reachable _ _`
+    (strip_assume_tac o REWRITE_RULE[fn_reachable_def]) >>
+  simp[fn_reachable_def] >>
+  metis_tac[relationTheory.RTC_CASES2]
+QED
+
+

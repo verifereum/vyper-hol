@@ -8,7 +8,6 @@
  *   is_removable          — instruction can be NOP'd if output unused
  *   mk_nop_inst           — replace instruction with NOP
  *   mk_assign_inst        — replace instruction with ASSIGN from operand
- *   ml_is_fixed           — memory location has known offset + size
  *   is_copy_opcode        — bulk memory copy opcodes (MCOPY, etc.)
  *   is_store_opcode       — single-word store opcodes (MSTORE, etc.)
  *   load_opcode_addr_space  — map load opcode to address space
@@ -89,6 +88,7 @@ End
 (* Memory/storage/transient store instructions *)
 Definition is_store_opcode_def:
   is_store_opcode MSTORE = T /\
+  is_store_opcode MSTORE8 = T /\
   is_store_opcode SSTORE = T /\
   is_store_opcode TSTORE = T /\
   is_store_opcode _ = F
@@ -121,6 +121,7 @@ End
 (* Map store opcode to its address space *)
 Definition store_opcode_addr_space_def:
   store_opcode_addr_space MSTORE = AddrSp_Memory /\
+  store_opcode_addr_space MSTORE8 = AddrSp_Memory /\
   store_opcode_addr_space SSTORE = AddrSp_Storage /\
   store_opcode_addr_space TSTORE = AddrSp_Transient /\
   store_opcode_addr_space _ = AddrSp_Memory
@@ -178,14 +179,6 @@ Definition is_forwardable_assign_def:
      | _ => F)
 End
 
-(* ===== Memory location helpers ===== *)
-
-(* A memory location is "fixed" when it has known offset + size.
-   Python: MemoryLocation.is_fixed. Only fixed locations are tracked
-   as lattice keys in analyses. *)
-Definition ml_is_fixed_def:
-  ml_is_fixed loc <=> IS_SOME loc.ml_offset /\ IS_SOME loc.ml_size
-End
 
 (* ===== NOP clearing ===== *)
 

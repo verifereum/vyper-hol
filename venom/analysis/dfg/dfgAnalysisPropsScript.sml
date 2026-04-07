@@ -224,3 +224,17 @@ Proof
   ACCEPT_TAC dfg_build_function_ids_complete_proof
 QED
 
+(* ==========================================================================
+   7) Normalization correctness
+   ========================================================================== *)
+
+(* dfg_assigns_sound: every ASSIGN in the DFG is faithfully reflected in
+   the runtime state (the output variable holds eval_operand of the operand). *)
+Theorem normalize_operand_eval:
+  !dfg visited op s.
+    dfg_assigns_sound dfg s ==>
+    eval_operand (normalize_operand dfg visited op) s = eval_operand op s
+Proof
+  ACCEPT_TAC normalize_operand_eval_proof
+QED
+

@@ -41,7 +41,7 @@ Proof
 QED
 
 (* Helper: collect_phis returns PHI instructions that are in the original list *)
-Theorem collect_phis_mem[local]:
+Theorem collect_phis_mem:
   ∀instrs inst. MEM inst (collect_phis instrs) ==>
     MEM inst instrs ∧ inst.inst_opcode = PHI
 Proof
@@ -57,9 +57,9 @@ Theorem input_vars_foldl_mem[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base)) ==>
     MEM v acc ∨ MEM v base ∨ ∃i. FLOOKUP matching i = SOME v
@@ -69,7 +69,7 @@ Proof
   >- (strip_tac >>
       first_x_assum drule >> strip_tac >> gvs[MEM_APPEND] >> metis_tac[])
   >- (rename1 `FLOOKUP op_map h = SOME phi_idx` >>
-      Cases_on `phi_idx ∈ placed` >> simp[]
+      Cases_on `MEM phi_idx placed` >> simp[]
       >- (strip_tac >> first_x_assum drule >> metis_tac[])
       >- (Cases_on `FLOOKUP matching phi_idx` >> simp[]
           >- (strip_tac >> first_x_assum drule >> metis_tac[])
@@ -91,7 +91,7 @@ Theorem foldl_phi_matching_inv[local]:
   ∀phis n acc_op acc_m src i v.
     FLOOKUP (SND (FOLDL
       (λ(op_map,matching) (j,phi).
-        (FOLDL (λm (l,w). m |+ (w, j)) op_map (phi_pairs phi.inst_operands),
+        (FOLDL (λm w. m |+ (w, j)) op_map phi.inst_outputs,
          case FIND (λ(l,w). l = src) (phi_pairs phi.inst_operands) of
            NONE => matching
          | SOME (_, w) => matching |+ (j, w)))
@@ -109,7 +109,7 @@ Proof
   strip_tac >>
   first_x_assum (qspecl_then [
     `SUC n`,
-    `FOLDL (λm (l,w). m |+ (w, n)) acc_op (phi_pairs h.inst_operands)`,
+    `FOLDL (λm w. m |+ (w, n)) acc_op h.inst_outputs`,
     `case FIND (λ(l,w). l = src) (phi_pairs h.inst_operands) of
        NONE => acc_m | SOME (_, w) => acc_m |+ (n, w)`,
     `src`, `i`, `v`] mp_tac) >>
@@ -140,7 +140,9 @@ Proof
     mp_tac foldl_phi_matching_inv >> simp[]
 QED
 
-Theorem input_vars_from_phi_correct_proof[local]:
+(* input_vars_from correctness: every output variable either came from
+   the base set or corresponds to a PHI operand in the instruction list *)
+Theorem input_vars_from_phi_correct_proof:
   ∀src_label instrs base v.
     MEM v (input_vars_from src_label instrs base) ==>
     MEM v base ∨
@@ -151,10 +153,7 @@ Proof
   Cases_on `NULL (collect_phis instrs)` >- simp[] >>
   Cases_on `build_phi_maps src_label (collect_phis instrs)` >>
   rename1 `build_phi_maps _ _ = (op_map, matching)` >> simp[] >>
-  (* Normalize (λ(r,p). r) to FST so drule input_vars_foldl_mem matches *)
-  `(λ(result:string list, placed:num -> bool). result) = FST` by
-    simp[FUN_EQ_THM, FORALL_PROD] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
+  simp[Once UNCURRY] >>
   strip_tac >>
   drule input_vars_foldl_mem >> strip_tac >> gvs[] >>
   qspecl_then [`src_label`, `collect_phis instrs`, `i`, `v`]
@@ -735,15 +734,15 @@ Theorem foldl_acc_persists[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base))
 Proof
   Induct >> rw[] >>
   Cases_on `FLOOKUP op_map h` >> simp[] >>
-  Cases_on `x ∈ placed` >> simp[] >>
+  Cases_on `MEM x placed` >> simp[] >>
   Cases_on `FLOOKUP matching x` >> simp[]
 QED
 
@@ -754,9 +753,9 @@ Theorem foldl_mem_tight[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base)) ==>
     MEM v acc ∨
@@ -768,7 +767,7 @@ Proof
   Cases_on `FLOOKUP op_map h` >> simp[]
   >- (strip_tac >> first_x_assum drule >> strip_tac >>
       gvs[MEM_APPEND] >> metis_tac[])
-  >- (Cases_on `x ∈ placed` >> simp[]
+  >- (Cases_on `MEM x placed` >> simp[]
       >- (strip_tac >> first_x_assum drule >> strip_tac >>
           gvs[] >> metis_tac[MEM])
       >- (Cases_on `FLOOKUP matching x` >> simp[]
@@ -786,9 +785,9 @@ Theorem foldl_passthrough[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
       (acc, placed) base))
 Proof
@@ -810,15 +809,15 @@ Theorem foldl_replacement[local]:
       case FLOOKUP op_map w of
         NONE => (acc ++ [w], placed)
       | SOME phi_idx =>
-          if phi_idx ∈ placed then (acc, placed)
+          if MEM phi_idx placed then (acc, placed)
           else case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
                | NONE => (acc, placed))
-      (acc, placed) base)) ∨ idx ∈ placed
+      (acc, placed) base)) ∨ MEM idx placed
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >> gvs[]
   >- ((* w = h: op_map h = SOME idx *)
-      Cases_on `idx ∈ placed` >> simp[] >>
+      Cases_on `MEM idx placed` >> simp[] >>
       irule foldl_acc_persists >> simp[])
   >- ((* MEM w base': abbreviate init, use IH via FST/SND *)
       qmatch_goalsub_abbrev_tac `FOLDL _ init _` >>
@@ -830,7 +829,7 @@ Proof
       (* Right disjunct case: idx ∈ SND init *)
       simp[Abbr`init`] >>
       Cases_on `FLOOKUP op_map h` >> gvs[] >>
-      Cases_on `x ∈ placed` >> gvs[] >>
+      Cases_on `MEM x placed` >> gvs[] >>
       Cases_on `FLOOKUP matching x` >> gvs[IN_INSERT] >>
       irule foldl_acc_persists >> simp[])
 QED
@@ -846,17 +845,14 @@ Proof
   Cases_on `NULL (collect_phis instrs)` >- simp[] >>
   Cases_on `build_phi_maps lbl (collect_phis instrs)` >>
   rename1 `_ = (op_map, matching)` >> simp[] >>
-  (* Normalize UNCURRY to FST *)
-  `(λ(result:string list, placed:num -> bool). result) = FST` by
-    simp[FUN_EQ_THM, FORALL_PROD] >>
-  pop_assum (fn th => REWRITE_TAC [th]) >>
+  simp[Ntimes UNCURRY 2] >>
   strip_tac >> simp[SUBSET_DEF] >> rpt strip_tac >>
   drule foldl_mem_tight >> strip_tac >> gvs[]
   >- ((* passthrough: v ∈ a, op_map v = NONE → v passes through in b too *)
       irule foldl_passthrough >> metis_tac[SUBSET_DEF])
   >- ((* replacement: ∃idx w. w ∈ a, op_map w = SOME idx, matching idx = SOME v *)
       `MEM w b` by metis_tac[SUBSET_DEF] >>
-      qspecl_then [`b`, `[]`, `{}`, `op_map`, `matching`, `idx`, `x`]
+      qspecl_then [`b`, `[]`, `[]`, `op_map`, `matching`, `idx`, `x`]
         mp_tac foldl_replacement >>
       impl_tac >- (simp[] >> metis_tac[]) >>
       simp[])
@@ -1855,7 +1851,7 @@ End
 (* input_vars_from membership: if v is in the output, either v was in the
    base liveness (and survived PHI processing) or v is a PHI operand.
    Proved via input_vars_from_phi_correct_proof (same statement). *)
-Theorem input_vars_from_mem[local]:
+Theorem input_vars_from_mem:
   ∀instrs v src_lbl live.
     MEM v (input_vars_from src_lbl instrs live) ⇒
     MEM v live ∨
@@ -1867,7 +1863,9 @@ QED
 
 (* ===== Path construction helpers ===== *)
 
-Theorem cfg_exec_path_intra[local]:
+(* Intra-block path: consecutive indices within a single block form
+   a valid execution path *)
+Theorem cfg_exec_path_intra:
   ∀n lbl s cfg.
     cfg_exec_path cfg (GENLIST (\i. (lbl:string, s + i)) (SUC n))
 Proof
@@ -1887,7 +1885,9 @@ Proof
   rw[cfg_exec_path_def]
 QED
 
-Theorem cfg_exec_path_extend[local]:
+(* Extending an execution path: append a valid continuation that starts
+   either at the next index in the same block or at index 0 of a successor *)
+Theorem cfg_exec_path_extend:
   ∀path lbl2 idx2 suffix cfg.
     cfg_exec_path cfg path ∧ path <> [] ∧
     ((lbl2 = FST (LAST path) ∧ idx2 = SND (LAST path) + 1) ∨
@@ -1924,7 +1924,8 @@ Proof
   rw[used_before_defined_def] >> qexists_tac `k` >> simp[]
 QED
 
-Theorem used_before_defined_prepend[local]:
+(* Prepending positions that don't define v preserves used-before-defined *)
+Theorem used_before_defined_prepend:
   ∀prefix bbs v suffix.
     used_before_defined bbs v suffix ∧
     (∀j. j < LENGTH prefix ==>
@@ -1996,7 +1997,10 @@ Proof
   metis_tac[use_in_block_path_aux]
 QED
 
-Theorem cross_block_path[local]:
+(* Cross-block path construction: if v is not killed from idx to block end,
+   and a use-before-def path exists from successor entry, then a
+   use-before-def path exists from (lbl, idx) *)
+Theorem cross_block_path:
   ∀bbs cfg lr fn bb lbl idx succ_lbl succ_path v.
     wf_function fn ∧ cfg = cfg_analyze fn ∧ bbs = fn.fn_blocks ∧
     lookup_block lbl bbs = SOME bb ∧ bb.bb_label = lbl ∧
@@ -2509,4 +2513,317 @@ Proof
   simp_tac std_ss [LET_THM] >>
   disch_then (qspecl_then [`lbl`, `bb`, `i`, `v`] mp_tac) >>
   simp[]
+QED
+
+(* ===================================================================
+   Cross-block liveness transfer
+   =================================================================== *)
+
+(* FOLDL of string updates: FLOOKUP in result means in acc or in list *)
+Theorem foldl_string_update_flookup[local]:
+  !outs (m:string |-> num) n v i.
+    FLOOKUP (FOLDL (\m w. m |+ (w, n)) m outs) v = SOME i ==>
+    FLOOKUP m v = SOME i \/ MEM v outs
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[FLOOKUP_UPDATE] >>
+  Cases_on `h = v` >> gvs[]
+QED
+
+(* op_map in build_phi_maps: v in domain ⟹ v appears in some phi's outputs *)
+Theorem build_phi_maps_op_map_mem[local]:
+  !phis n acc_op acc_m src v i.
+    FLOOKUP (FST (FOLDL
+      (\(op_map,matching) (j,phi).
+        (FOLDL (\m w. m |+ (w, j)) op_map phi.inst_outputs,
+         case FIND (\(l,w). l = src) (phi_pairs phi.inst_operands) of
+           NONE => matching
+         | SOME (_, w) => matching |+ (j, w)))
+      (acc_op, acc_m) (MAPi (\k phi. (n + k, phi)) phis))) v = SOME i ==>
+    FLOOKUP acc_op v = SOME i \/
+    ?phi. MEM phi phis /\ MEM v phi.inst_outputs
+Proof
+  Induct >> simp[MAPi_def] >> rpt gen_tac >>
+  simp[combinTheory.o_DEF] >>
+  `MAPi (\k phi'. (n + SUC k, phi')) phis =
+   MAPi (\k phi'. (SUC n + k, phi')) phis` by
+    (irule MAPi_CONG >> simp[]) >>
+  pop_assum SUBST1_TAC >> strip_tac >>
+  first_x_assum (qspecl_then [
+    `SUC n`,
+    `FOLDL (\m w. m |+ (w, n)) acc_op h.inst_outputs`,
+    `case FIND (\(l,w). l = src) (phi_pairs h.inst_operands) of
+       NONE => acc_m | SOME (_, w) => acc_m |+ (n, w)`,
+    `src`, `v`, `i`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >> gvs[]
+  >- (drule foldl_string_update_flookup >> strip_tac >> gvs[] >>
+      disj2_tac >> qexists_tac `h` >> simp[])
+  >- (disj2_tac >> metis_tac[])
+QED
+
+Theorem build_phi_maps_op_map_char[local]:
+  !src phis v i.
+    FLOOKUP (FST (build_phi_maps src phis)) v = SOME i ==>
+    ?phi. MEM phi phis /\ MEM v phi.inst_outputs
+Proof
+  rw[build_phi_maps_def, LET_THM] >>
+  qspecl_then [`phis`, `0`, `FEMPTY`, `FEMPTY`, `src`, `v`, `i`]
+    mp_tac build_phi_maps_op_map_mem >> simp[]
+QED
+
+(* Non-phi-output variables pass through input_vars_from *)
+Theorem input_vars_from_non_phi:
+  !src_lbl instrs base v.
+    MEM v base /\
+    (!inst. MEM inst (collect_phis instrs) ==>
+            ~MEM v inst.inst_outputs) ==>
+    MEM v (input_vars_from src_lbl instrs base)
+Proof
+  rpt strip_tac >> simp[input_vars_from_def, LET_THM] >>
+  Cases_on `NULL (collect_phis instrs)` >- simp[] >>
+  Cases_on `build_phi_maps src_lbl (collect_phis instrs)` >>
+  rename1 `_ = (op_map, matching)` >> simp[] >>
+  simp[Once UNCURRY] >>
+  `FLOOKUP op_map v = NONE` by (
+    Cases_on `FLOOKUP op_map v` >> simp[] >>
+    `FLOOKUP (FST (build_phi_maps src_lbl (collect_phis instrs))) v = SOME x` by
+      gvs[] >>
+    drule build_phi_maps_op_map_char >> strip_tac >> metis_tac[]) >>
+  irule foldl_passthrough >> simp[]
+QED
+
+(* Helper: element of a list in FOLDL list_union is in the result *)
+Theorem foldl_list_union_mem[local]:
+  !ls acc v.
+    MEM v (FOLDL list_union acc ls) <=> MEM v acc \/ ?x. MEM x ls /\ MEM v x
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[list_union_mem_proof] >> metis_tac[]
+QED
+
+(* If v is in some member of a list, it's in the FOLDL list_union *)
+Theorem foldl_list_union_intro[local]:
+  !ls acc x v. MEM x ls /\ MEM v x ==> MEM v (FOLDL list_union acc ls)
+Proof
+  rpt strip_tac >> simp[foldl_list_union_mem] >> disj2_tac >>
+  qexists_tac `x` >> simp[]
+QED
+
+(* Backward liveness: live at block entry ⟹ in boundary.
+   Wraps df_boundary_fixpoint + list_union reasoning. *)
+Theorem live_at_entry_in_boundary:
+  !fn lbl bb v.
+    wf_function fn ==>
+    let lr = liveness_analyze fn in
+    let cfg = cfg_analyze fn in
+    MEM lbl cfg.cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM v (live_vars_at lr lbl 0) ==>
+    MEM v (df_boundary []
+      (df_analyze Backward [] list_union liveness_transfer
+         liveness_edge_transfer fn.fn_blocks NONE fn) lbl)
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >>
+  strip_tac >> strip_tac >>
+  drule liveness_convergence >> simp_tac std_ss [LET_THM] >>
+  simp[liveness_analyze_def] >> strip_tac >>
+  qabbrev_tac `result = df_analyze Backward [] list_union liveness_transfer
+    liveness_edge_transfer fn.fn_blocks NONE fn` >>
+  qabbrev_tac `cfg = cfg_analyze fn` >>
+  mp_tac (INST_TYPE [alpha |-> ``:string list``,
+                     beta |-> ``:basic_block list``]
+    df_boundary_fixpoint) >>
+  disch_then (qspecl_then [`Backward`, `[]`, `list_union`,
+    `liveness_transfer`, `liveness_edge_transfer`, `fn.fn_blocks`,
+    `NONE`, `fn`, `lbl`, `bb`] mp_tac) >>
+  simp_tac std_ss [LET_THM] >>
+  (impl_tac >- gvs[Abbr `cfg`, Abbr `result`]) >>
+  gvs[Abbr `cfg`, Abbr `result`] >>
+  strip_tac >>
+  pop_assum (fn eq => ONCE_REWRITE_TAC [eq]) >>
+  simp[list_union_mem_proof] >> DISJ2_TAC >>
+  gvs[live_vars_at_def, liveness_analyze_def, df_at_def]
+QED
+
+(* Helper: if v is in the edge transfer from a successor, v is in the
+   backward joined value. Avoids painful case-expression handling. *)
+Theorem df_joined_val_mem_backward[local]:
+  !edge_transfer ctx entry_val cfg st lbl nbr bottom v.
+    MEM nbr (cfg_succs_of cfg lbl) /\
+    MEM v (edge_transfer ctx nbr lbl (df_boundary bottom st nbr)) ==>
+    MEM v (df_joined_val Backward bottom list_union edge_transfer
+      ctx entry_val cfg st lbl)
+Proof
+  rpt strip_tac >>
+  simp[df_joined_val_def, LET_THM, direction_case_def] >>
+  (* entry_val: NONE gives base, SOME adds a list_union *)
+  Cases_on `entry_val` >> simp[]
+  >- (
+    (* NONE: result = case edge_vals of [] => bottom | _ => FOLDL ... *)
+    `MEM v (FOLDL list_union bottom
+      (MAP (\nbr'. edge_transfer ctx nbr' lbl (df_boundary bottom st nbr'))
+           (cfg_succs_of cfg lbl)))` suffices_by (
+      strip_tac >>
+      Cases_on `MAP (\nbr'. edge_transfer ctx nbr' lbl
+                       (df_boundary bottom st nbr'))
+                    (cfg_succs_of cfg lbl)` >> gvs[]) >>
+    irule foldl_list_union_intro >>
+    qexists_tac `edge_transfer ctx nbr lbl (df_boundary bottom st nbr)` >>
+    simp[MEM_MAP] >> qexists_tac `nbr` >> simp[])
+  >- (
+    (* SOME: result = if lbl = ev_lbl then list_union v' base else base *)
+    PairCases_on `x` >> simp[] >>
+    IF_CASES_TAC >> gvs[list_union_mem_proof] >>
+    TRY DISJ2_TAC >>
+    `MEM v (FOLDL list_union bottom
+      (MAP (\nbr'. edge_transfer ctx nbr' lbl (df_boundary bottom st nbr'))
+           (cfg_succs_of cfg lbl)))` suffices_by (
+      strip_tac >>
+      Cases_on `MAP (\nbr'. edge_transfer ctx nbr' lbl
+                       (df_boundary bottom st nbr'))
+                    (cfg_succs_of cfg lbl)` >> gvs[]) >>
+    irule foldl_list_union_intro >>
+    qexists_tac `edge_transfer ctx nbr lbl (df_boundary bottom st nbr)` >>
+    simp[MEM_MAP] >> qexists_tac `nbr` >> simp[])
+QED
+
+(* Cross-block liveness transfer: if v is live at entry of a successor
+   and v is not a phi operand variable in the successor, then v is live
+   at exit of the predecessor.
+
+   Requires succ_lbl ∈ cfg_dfs_pre (for df_boundary_fixpoint). *)
+Theorem live_vars_at_cross_block:
+  !fn pred_lbl pred_bb succ_lbl succ_bb v.
+    wf_function fn ==>
+    let lr = liveness_analyze fn in
+    let cfg = cfg_analyze fn in
+    MEM pred_lbl cfg.cfg_dfs_pre /\
+    MEM succ_lbl cfg.cfg_dfs_pre /\
+    MEM succ_lbl (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    lookup_block succ_lbl fn.fn_blocks = SOME succ_bb /\
+    MEM v (live_vars_at lr succ_lbl 0) /\
+    (!inst. MEM inst (collect_phis succ_bb.bb_instructions) ==>
+            ~MEM v inst.inst_outputs) ==>
+    MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions))
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >>
+  strip_tac >> strip_tac >>
+  drule liveness_convergence >> simp_tac std_ss [LET_THM] >>
+  simp[liveness_analyze_def] >> strip_tac >>
+  qabbrev_tac `result = df_analyze Backward [] list_union liveness_transfer
+    liveness_edge_transfer fn.fn_blocks NONE fn` >>
+  qabbrev_tac `cfg = cfg_analyze fn` >>
+  qabbrev_tac `bbs = fn.fn_blocks` >>
+  (* Step 1: live_vars_at at block exit = joined from successors *)
+  mp_tac (INST_TYPE [alpha |-> ``:string list``,
+                     beta |-> ``:basic_block list``]
+    df_at_inter_transfer) >>
+  disch_then (qspecl_then [`Backward`, `[]`, `list_union`,
+    `liveness_transfer`, `liveness_edge_transfer`, `fn.fn_blocks`,
+    `NONE`, `fn`, `pred_lbl`, `pred_bb`] mp_tac) >>
+  simp_tac std_ss [LET_THM] >>
+  (impl_tac >- gvs[Abbr `cfg`, Abbr `bbs`, Abbr `result`]) >>
+  strip_tac >>
+  simp[live_vars_at_def, Abbr `result`, Abbr `bbs`] >>
+  pop_assum (fn eq => REWRITE_TAC [eq]) >>
+  (* Step 2: v is in joined value via edge transfer from succ_lbl *)
+  irule df_joined_val_mem_backward >>
+  qexists_tac `succ_lbl` >> gvs[Abbr `cfg`] >>
+  (* Goal: MEM v (liveness_edge_transfer bbs succ_lbl pred_lbl
+                    (df_boundary [] result succ_lbl)) *)
+  simp[liveness_edge_transfer_def] >>
+  (* lookup_block succ_lbl bbs = SOME succ_bb *)
+  irule input_vars_from_non_phi >>
+  conj_tac
+  >- simp[]
+  >- (
+    (* MEM v (df_boundary [] ... succ_lbl) via fixpoint equation *)
+    drule_then (qspecl_then [`succ_lbl`, `succ_bb`, `v`] mp_tac)
+      live_at_entry_in_boundary >>
+    simp_tac std_ss [LET_THM] >> simp[])
+QED
+
+(* Forward propagation of "not live": if v is not live at the start of
+   a range and no instruction in the range defines v, then v is not live
+   at any point in the range. Contrapositive of live_vars_at_propagate_range. *)
+Theorem not_live_forward_in_block:
+  !fn lbl bb i j v.
+    wf_function fn ==>
+    let lr = liveness_analyze fn in
+    let cfg = cfg_analyze fn in
+    MEM lbl cfg.cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    i <= j /\ j <= LENGTH bb.bb_instructions /\
+    ~MEM v (live_vars_at lr lbl i) /\
+    (!k. i <= k /\ k < j ==> ~MEM v (inst_defs (EL k bb.bb_instructions))) ==>
+    ~MEM v (live_vars_at lr lbl j)
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >> strip_tac >>
+  CCONTR_TAC >> gvs[] >>
+  drule_then assume_tac live_vars_at_propagate_range >>
+  pop_assum (qspecl_then [`lbl`, `bb`, `i`, `j`, `v`] mp_tac) >>
+  simp_tac std_ss [LET_THM] >> simp[]
+QED
+
+(* Cross-block forward propagation: if v is not live at exit of a block,
+   and succ has no phi output for v, then v is not live at entry of succ.
+   Contrapositive of live_vars_at_cross_block. *)
+Theorem not_live_cross_block:
+  !fn pred_lbl pred_bb succ_lbl succ_bb v.
+    wf_function fn ==>
+    let lr = liveness_analyze fn in
+    let cfg = cfg_analyze fn in
+    MEM pred_lbl cfg.cfg_dfs_pre /\
+    MEM succ_lbl cfg.cfg_dfs_pre /\
+    MEM succ_lbl (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    lookup_block succ_lbl fn.fn_blocks = SOME succ_bb /\
+    ~MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions)) /\
+    (!inst. MEM inst (collect_phis succ_bb.bb_instructions) ==>
+            ~MEM v inst.inst_outputs) ==>
+    ~MEM v (live_vars_at lr succ_lbl 0)
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >> strip_tac >>
+  CCONTR_TAC >> gvs[] >>
+  drule_then assume_tac live_vars_at_cross_block >>
+  pop_assum (qspecl_then [`pred_lbl`, `pred_bb`, `succ_lbl`, `succ_bb`, `v`]
+    mp_tac) >>
+  simp_tac std_ss [LET_THM] >> simp[]
+QED
+
+(* Forward propagation: if v is live at position i and not killed in [i,j),
+   then either v is live at j or v is used at some position in [i,j).
+   Uses the transfer equality (both directions). *)
+Theorem live_vars_at_forward_or_used:
+  !fn lbl bb i j v.
+    wf_function fn ==>
+    let lr = liveness_analyze fn in
+    let cfg = cfg_analyze fn in
+    MEM lbl cfg.cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    i <= j /\ j <= LENGTH bb.bb_instructions /\
+    MEM v (live_vars_at lr lbl i) /\
+    (!k. i <= k /\ k < j ==> ~MEM v (inst_defs (EL k bb.bb_instructions))) ==>
+    MEM v (live_vars_at lr lbl j) \/
+    (?k. i <= k /\ k < j /\ MEM v (inst_uses (EL k bb.bb_instructions)))
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  Induct_on `j - i` >> rpt strip_tac
+  >- (`i = j` by DECIDE_TAC >> gvs[])
+  >> `i < j` by DECIDE_TAC >>
+  drule_then assume_tac live_vars_at_transfer >>
+  pop_assum (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >>
+  simp_tac std_ss [LET_THM] >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `MEM v (liveness_transfer fn.fn_blocks (EL i bb.bb_instructions)
+            (live_vars_at (liveness_analyze fn) lbl (SUC i)))` by
+    metis_tac[] >>
+  pop_assum mp_tac >> simp[liveness_transfer_def, live_update_mem] >>
+  strip_tac
+  >- (
+    qpat_x_assum `!j i. _ = j - i ==> _`
+      (qspecl_then [`j`, `SUC i`] mp_tac) >>
+    simp[] >> metis_tac[DECIDE ``SUC i <= k ==> i <= k``])
+  >- (disj2_tac >> qexists_tac `i` >> simp[])
 QED

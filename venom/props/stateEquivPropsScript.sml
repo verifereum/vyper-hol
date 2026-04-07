@@ -22,6 +22,7 @@
 
 Theory stateEquivProps
 Ancestors
+  stateEquiv
   stateEquivProofs
 
 (* ==========================================================================
@@ -146,6 +147,14 @@ Proof
   ACCEPT_TAC stateEquivProofsTheory.mstore_preserves
 QED
 
+Theorem mstore8_preserves:
+  !vars offset v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (mstore8 offset v s1) (mstore8 offset v s2)
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.mstore8_preserves
+QED
+
 (* Storage store preserves state_equiv *)
 Theorem sstore_preserves:
   !vars key v s1 s2.
@@ -232,3 +241,79 @@ Theorem tload_same:
 Proof
   ACCEPT_TAC stateEquivProofsTheory.tload_same
 QED
+
+(* ===== Observable Equivalence Implications ===== *)
+
+(* state_equiv ==> execution_equiv ==> observable_equiv *)
+
+Theorem execution_equiv_implies_observable:
+  !vars s1 s2.
+    execution_equiv vars s1 s2 ==> observable_equiv s1 s2
+Proof
+  rw[execution_equiv_def, observable_equiv_def]
+QED
+
+Theorem state_equiv_implies_observable:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==> observable_equiv s1 s2
+Proof
+  rw[state_equiv_def] >> metis_tac[execution_equiv_implies_observable]
+QED
+
+Theorem state_equiv_implies_execution_equiv:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==> execution_equiv vars s1 s2
+Proof
+  rw[state_equiv_def]
+QED
+
+(* observable_equiv is an equivalence relation (conjunction of field equalities) *)
+
+Theorem observable_equiv_refl:
+  !s. observable_equiv s s
+Proof
+  simp[observable_equiv_def]
+QED
+
+Theorem observable_equiv_trans:
+  !s1 s2 s3.
+    observable_equiv s1 s2 /\ observable_equiv s2 s3 ==>
+    observable_equiv s1 s3
+Proof
+  simp[observable_equiv_def]
+QED
+
+(* Lift through exec_result: result_equiv implies observable result equiv *)
+
+Definition observable_result_equiv_def:
+  observable_result_equiv (OK s1) (OK s2) = observable_equiv s1 s2 /\
+  observable_result_equiv (Halt s1) (Halt s2) = observable_equiv s1 s2 /\
+  observable_result_equiv (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ observable_equiv s1 s2) /\
+  observable_result_equiv (IntRet v1 s1) (IntRet v2 s2) =
+    (observable_equiv s1 s2 /\ (v1 = v2)) /\
+  observable_result_equiv (Error e1) (Error e2) = T /\
+  observable_result_equiv _ _ = F
+End
+
+Theorem result_equiv_implies_observable_result:
+  !vars r1 r2.
+    result_equiv vars r1 r2 ==> observable_result_equiv r1 r2
+Proof
+  Cases_on `r1` >> Cases_on `r2` >>
+  rw[result_equiv_def, observable_result_equiv_def] >>
+  metis_tac[execution_equiv_implies_observable,
+            state_equiv_implies_observable]
+QED
+
+(* Empty excluded set means full equality *)
+Theorem state_equiv_empty_eq:
+  !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
+Proof
+  rpt strip_tac >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  simp[venomStateTheory.venom_state_component_equality] >>
+  simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+  fs[venomStateTheory.lookup_var_def]
+QED
+

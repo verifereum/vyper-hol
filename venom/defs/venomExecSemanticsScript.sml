@@ -1,7 +1,7 @@
 (*
  * Venom Semantics
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * This theory defines the operational semantics for Venom IR execution.
  * It includes the effects system and instruction stepping.
@@ -458,9 +458,10 @@ Definition exec_alloca_def:
       [out] =>
         let offset = next_alloca_offset s in
         let sz = w2n alloc_size in
-        let s' = s with
-          vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz))
-        in
+        let s' = s with <|
+          vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz));
+          vs_alloca_next := offset + sz
+        |> in
         OK (update_var out (n2w offset) s')
     | _ => Error "alloca requires single output"
 End
@@ -511,6 +512,7 @@ Definition step_inst_base_def:
        our model uses semantic order for readability. *)
     | MLOAD => exec_read1 (\addr s. mload (w2n addr) s) inst s
     | MSTORE => exec_write2 (\addr val s. mstore (w2n addr) val s) inst s
+    | MSTORE8 => exec_write2 (\addr val s. mstore8 (w2n addr) val s) inst s
     | MCOPY =>
         (case inst.inst_operands of
           [op_dst; op_src; op_size] =>
@@ -760,9 +762,6 @@ Definition step_inst_base_def:
             else word_of_bytes T (0w:bytes32)
                    (Keccak_256_w64 acct.code)) inst s
 
-    (* Allocation pointer arithmetic - GEP is base + offset, pure *)
-    | GEP => exec_pure2 word_add inst s
-
     (* Immutables - separate from memory, used during constructor *)
     | ILOAD => exec_read1
         (\off s.
@@ -826,21 +825,12 @@ Definition step_inst_base_def:
             | _ => Error "undefined operand")
         | _ => Error "extcodecopy requires 4 operands")
 
-    (* Label offset computation - resolves label address + operand offset.
+    (* Label offset computation - semantically identical to ADD.
+       Kept as separate opcode for codegen: venom_to_assembly emits PUSH_OFST
+       for OFFSET, letting the assembler resolve the label. At IR level,
+       labels resolve via vs_labels (eval_operand handles Label operands).
        Operand order matches Python builder: offset(operand, label). *)
-    | OFFSET =>
-        (case inst.inst_operands of
-          [offset_op; Label lbl] =>
-            (case eval_operand offset_op s of
-              SOME off =>
-                (case inst.inst_outputs of
-                  [out] =>
-                    (case FLOOKUP s.vs_label_offsets lbl of
-                      SOME lbl_addr => OK (update_var out (lbl_addr + off) s)
-                    | NONE => Error "offset: unknown label")
-                | _ => Error "offset requires single output")
-            | NONE => Error "offset: undefined operand")
-        | _ => Error "offset requires operand and label")
+    | OFFSET => exec_pure2 word_add inst s
 
     (* Logging - variable operand count.
        Semantic order: log topic_count, offset, size, topic_0, ..., topic_{n-1}
@@ -991,7 +981,7 @@ Proof
      extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, sstore_def, tstore_def,
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
      revert_state_def, eval_operands_def]
 QED
@@ -1039,7 +1029,8 @@ Definition merge_callee_state_def:
       vs_returndata := callee.vs_returndata;
       vs_logs       := callee.vs_logs;
       vs_immutables := callee.vs_immutables;
-      vs_allocas    := callee.vs_allocas
+      vs_alloca_next := callee.vs_alloca_next
+      (* vs_allocas NOT copied — caller keeps its own frame's allocas *)
     |>
 End
 
@@ -1053,7 +1044,8 @@ Definition setup_callee_def:
       vs_current_bb := (HD fn.fn_blocks).bb_label;
       vs_inst_idx   := 0;
       vs_prev_bb    := NONE;
-      vs_halted     := F
+      vs_halted     := F;
+      vs_allocas    := FEMPTY    (* callee starts with no allocas *)
     |>)
 End
 

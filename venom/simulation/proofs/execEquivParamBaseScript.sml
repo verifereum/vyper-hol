@@ -60,10 +60,11 @@ Theorem vsr_R_ok_fields:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next
 Proof
   rw[valid_state_rel_def]
 QED
@@ -82,10 +83,11 @@ Theorem vsr_R_term_fields:
     s1.vs_logs = s2.vs_logs /\
     s1.vs_immutables = s2.vs_immutables /\
     s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_label_offsets = s2.vs_label_offsets /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    s1.vs_allocas = s2.vs_allocas /\
+    s1.vs_alloca_next = s2.vs_alloca_next
 Proof
   rw[valid_state_rel_def]
 QED
@@ -274,6 +276,16 @@ Theorem vsr_mstore:
     R_ok (mstore off v s1) (mstore off v s2)
 Proof
   rw[mstore_def, LET_THM] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  vsr_reconstruct_R_ok_tac `s1` `s2`
+QED
+
+Theorem vsr_mstore8:
+  !R_ok R_term off v s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+    R_ok (mstore8 off v s1) (mstore8 off v s2)
+Proof
+  rw[mstore8_def, LET_THM] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>
   vsr_reconstruct_R_ok_tac `s1` `s2`
 QED

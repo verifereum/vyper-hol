@@ -318,7 +318,7 @@ val dfs_post_mono_aux = mk_mono_aux dfs_post_inv dfs_post_aux_def;
 val (dfs_post_walk_def, dfs_post_walk_ind) =
   Defn.tprove(dfs_post_defn, dfs_obl_tac dfs_post_mono_aux);
 
-Theorem dfs_post_walk_def = dfs_post_walk_def
+Theorem dfs_post_walk_def[compute] = dfs_post_walk_def
 Theorem dfs_post_walk_ind = dfs_post_walk_ind
 
 (* ===== dfs_pre_walk ===== *)
@@ -345,7 +345,7 @@ val dfs_pre_mono_aux = mk_mono_aux dfs_pre_inv dfs_pre_aux_def;
 val (dfs_pre_walk_def, dfs_pre_walk_ind) =
   Defn.tprove(dfs_pre_defn, dfs_obl_tac dfs_pre_mono_aux);
 
-Theorem dfs_pre_walk_def = dfs_pre_walk_def
+Theorem dfs_pre_walk_def[compute] = dfs_pre_walk_def
 Theorem dfs_pre_walk_ind = dfs_pre_walk_ind
 
 (* ==========================================================================

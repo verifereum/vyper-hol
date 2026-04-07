@@ -1,7 +1,7 @@
 (*
  * Base Pointer Analysis — Definitions
  *
- * Upstream: vyperlang/vyper@c58034a22 (add/sub propagation, ctx removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Forward flow analysis: traces memory/storage pointers back to
  * their base allocation (alloca).
  *
@@ -11,6 +11,9 @@
  *   bp_one_pass, bp_analyze,
  *   bp_ptr_from_op, bp_segment_from_ops,
  *   bp_get_write_location, bp_get_read_location
+ *
+ * Soundness specifications:
+ *   ptr_matches_var, bp_ptr_sound, bp_ptrs_bounded
  *
  * Helper:
  *   phi_operand_vars
@@ -23,7 +26,7 @@
 
 Theory basePtrDefs
 Ancestors
-  memLocDefs cfgDefs dfIterateDefs venomEffects
+  memLocDefs cfgDefs dfIterateDefs venomEffects venomState
 
 (* ===== Pointer Type ===== *)
 
@@ -43,6 +46,17 @@ Definition offset_by_def:
   offset_by (Ptr alloc _) _ = Ptr alloc NONE
 End
 
+(* Subtract from a pointer's offset.
+ * Matches Python offset_by(-delta) for SUB instructions.
+ * Guarded: exact when offset ≥ delta, unknown otherwise
+ * (negative offsets are meaningless for memory locations). *)
+Definition sub_offset_by_def:
+  sub_offset_by (Ptr alloc (SOME base)) (SOME n) =
+    (if n ≤ base then Ptr alloc (SOME (base - n))
+     else Ptr alloc NONE) /\
+  sub_offset_by (Ptr alloc _) _ = Ptr alloc NONE
+End
+
 (* Create a pointer from an alloca instruction *)
 Definition ptr_from_alloca_def:
   ptr_from_alloca inst = Ptr (Allocation (inst.inst_id)) (SOME 0)
@@ -51,14 +65,14 @@ End
 (* ===== Analysis State ===== *)
 
 (* Map from variable name to set of possible base pointers *)
-Type bp_result = ``:(string, ptr set) fmap``
+Type bp_result = ``:(string, ptr list) fmap``
 
 (* Lookup possible pointers for a variable. Empty set if not tracked. *)
 Definition bp_get_ptrs_def:
   bp_get_ptrs (result : bp_result) v =
     case FLOOKUP result v of
       SOME ptrs => ptrs
-    | NONE => {}
+    | NONE => []
 End
 
 (* ===== Transfer Function ===== *)
@@ -75,18 +89,7 @@ Definition bp_handle_inst_def:
         let new_result =
           case inst.inst_opcode of
             (* alloca: fresh allocation at offset 0 *)
-            ALLOCA => result |+ (out, {ptr_from_alloca inst})
-            (* gep/add: base + offset. operands = [base_var, offset_operand]
-             * add propagates pointers when one operand is a tracked pointer
-             * and the other is a literal offset. Matches Python (c58034a22). *)
-          | GEP =>
-              (case inst.inst_operands of
-                 [Var base_var; offset_op] =>
-                   let base_ptrs = bp_get_ptrs result base_var in
-                   let off = case offset_op of Lit n => SOME (w2n n)
-                                             | _ => NONE in
-                   result |+ (out, IMAGE (λp. offset_by p off) base_ptrs)
-               | _ => result)
+            ALLOCA => result |+ (out, [ptr_from_alloca inst])
             (* add/sub: pointer arithmetic. Matches Python (c58034a22).
              * HOL semantic order: [lhs; rhs].
              * Python stack order: rhs, lhs = inst.operands.
@@ -97,41 +100,41 @@ Definition bp_handle_inst_def:
               (case inst.inst_operands of
                  [Var lhs; Lit rhs] =>
                    let ptrs = bp_get_ptrs result lhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p (SOME (w2n rhs))) ptrs)
+                   if ptrs ≠ [] then
+                     result |+ (out, MAP (λp. offset_by p (SOME (w2n rhs))) ptrs)
                    else result
                | [Lit lhs; Var rhs] =>
                    let ptrs = bp_get_ptrs result rhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p (SOME (w2n lhs))) ptrs)
+                   if ptrs ≠ [] then
+                     result |+ (out, MAP (λp. offset_by p (SOME (w2n lhs))) ptrs)
                    else result
                | [Var lhs; Var rhs] =>
                    let p_lhs = bp_get_ptrs result lhs in
                    let p_rhs = bp_get_ptrs result rhs in
-                   if p_lhs ≠ {} ∧ p_rhs = {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) p_lhs)
-                   else if p_lhs = {} ∧ p_rhs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) p_rhs)
+                   if p_lhs ≠ [] ∧ p_rhs = [] then
+                     result |+ (out, MAP (λp. offset_by p NONE) p_lhs)
+                   else if p_lhs = [] ∧ p_rhs ≠ [] then
+                     result |+ (out, MAP (λp. offset_by p NONE) p_rhs)
                    else result
                | _ => result)
           | SUB =>
               (case inst.inst_operands of
-                 [Var lhs; Lit _] =>
+                 [Var lhs; Lit rhs] =>
                    let ptrs = bp_get_ptrs result lhs in
-                   if ptrs ≠ {} then
-                     (* sub ptr literal: same alloca, unknown offset *)
-                     result |+ (out, IMAGE (λp. offset_by p NONE) ptrs)
+                   if ptrs ≠ [] then
+                     result |+ (out, MAP (λp. sub_offset_by p (SOME (w2n rhs))) ptrs)
                    else result
-               | [Var lhs; Var _] =>
-                   let ptrs = bp_get_ptrs result lhs in
-                   if ptrs ≠ {} then
-                     result |+ (out, IMAGE (λp. offset_by p NONE) ptrs)
+               | [Var lhs; Var rhs] =>
+                   let p_lhs = bp_get_ptrs result lhs in
+                   let p_rhs = bp_get_ptrs result rhs in
+                   if p_lhs ≠ [] ∧ p_rhs = [] then
+                     result |+ (out, MAP (λp. offset_by p NONE) p_lhs)
                    else result
                | _ => result)
             (* phi: union of all operand pointer sets *)
           | PHI =>
               let vars = MAP SND (phi_pairs inst.inst_operands) in
-              let all_ptrs = BIGUNION (set (MAP (bp_get_ptrs result) vars)) in
+              let all_ptrs = nub (FLAT (MAP (bp_get_ptrs result) vars)) in
               result |+ (out, all_ptrs)
             (* assign: propagate pointers from source variable *)
           | ASSIGN =>
@@ -194,9 +197,9 @@ Definition bp_ptr_from_op_def:
   bp_ptr_from_op (result : bp_result) op =
     case op of
       Var v =>
-        let ptrs = bp_get_ptrs result v in
-        if CARD ptrs = 1 then SOME (CHOICE ptrs)
-        else NONE
+        (case bp_get_ptrs result v of
+           [p] => SOME p
+         | _ => NONE)
     | _ => NONE
 End
 
@@ -220,6 +223,54 @@ Definition bp_segment_from_ops_def:
              <| ml_offset := off; ml_size := size;
                 ml_alloca := SOME alloc; ml_volatile := F |>)
     | Label _ => ml_undefined
+End
+
+(* ===== Soundness Specifications ===== *)
+
+(* A pointer correctly describes a variable's runtime value.
+   Known offset: v holds n2w(alloca_base + off).
+   Unknown offset: v holds n2w(alloca_base + delta) for some delta. *)
+Definition ptr_matches_var_def:
+  ptr_matches_var (Ptr (Allocation aid) (SOME off)) v s =
+    (∃base sz.
+       FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
+       lookup_var v s = SOME (n2w (base + off))) ∧
+  ptr_matches_var (Ptr (Allocation aid) NONE) v s =
+    (∃base sz delta.
+       FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
+       lookup_var v s = SOME (n2w (base + delta)))
+End
+
+(* Every tracked variable with a defined runtime value matches some
+   pointer in its tracked set (over-approximation soundness).
+   Variables that are undefined (not yet assigned) are unconstrained
+   since the analysis runs over all blocks including unexecuted ones. *)
+Definition bp_ptr_sound_def:
+  bp_ptr_sound (bp : bp_result) (s : venom_state) ⇔
+    ∀v. bp_get_ptrs bp v ≠ [] ∧ IS_SOME (lookup_var v s) ⇒
+      ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
+End
+
+(* Every memory access through an alloca-backed pointer is fully within
+ * the alloca's allocated region (accounting for access size).
+ *
+ * Strengthened from the earlier "off ≤ sz" formulation which only
+ * checked the pointer offset, not the access extent. The full check
+ * "off + access_size ≤ alloca_size" is needed by ma_may_alias_sound:
+ * without it, an access from one alloca could extend into an adjacent
+ * alloca's region, breaking the "different allocas → disjoint" guarantee.
+ *
+ * Discharge path: Vyper→Venom lowering generates ALLOCAs sized to cover
+ * all accesses (struct layouts, ABI buffers). Passes that preserve
+ * memory access semantics preserve this automatically. *)
+Definition bp_ptrs_bounded_def:
+  bp_ptrs_bounded (bp : bp_result) (fn : ir_function) (s : venom_state) ⇔
+    ∀bb inst ops ml.
+      MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions ∧
+      (mem_write_ops inst = SOME ops ∨ mem_read_ops inst = SOME ops) ∧
+      bp_segment_from_ops bp ops = ml ∧
+      IS_SOME ml.ml_alloca ⇒
+      memloc_within_alloca ml s
 End
 
 (* ===== Write Location ===== *)

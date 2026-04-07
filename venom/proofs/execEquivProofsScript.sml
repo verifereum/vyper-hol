@@ -106,7 +106,7 @@ Triviality step_inst_pure2_equiv:
     MEM inst.inst_opcode
       [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
        AND; OR; XOR; SHL; SHR; SAR; SIGNEXTEND; BYTE;
-       EQ; LT; GT; SLT; SGT; GEP] ==>
+       EQ; LT; GT; SLT; SGT; OFFSET] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rw[] >> simp[step_inst_base_def] >>
@@ -188,13 +188,13 @@ Triviality step_inst_write2_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    MEM inst.inst_opcode [MSTORE; SSTORE; TSTORE] ==>
+    MEM inst.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rw[] >> simp[step_inst_base_def] >>
   irule exec_write2_result_equiv >> simp[] >> rw[] >>
-  FIRST [irule mstore_preserves, irule sstore_preserves,
-         irule tstore_preserves] >> simp[]
+  FIRST [irule mstore_preserves, irule mstore8_preserves,
+         irule sstore_preserves, irule tstore_preserves] >> simp[]
 QED
 
 (* Terminators without operands: STOP, SINK *)
@@ -414,21 +414,7 @@ Proof
   irule write_memory_with_expansion_preserves >> simp[]
 QED
 
-(* OFFSET: label address + operand offset *)
-Triviality step_inst_offset_equiv:
-  !vars inst s1 s2.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    inst.inst_opcode = OFFSET ==>
-    result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
-Proof
-  rw[] >> simp[step_inst_base_def] >>
-  imp_res_tac eval_operand_equiv >>
-  `s1.vs_label_offsets = s2.vs_label_offsets` by
-    fs[state_equiv_def, execution_equiv_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def] >>
-  irule update_var_preserves >> simp[]
-QED
+(* OFFSET: now handled by step_inst_pure2_equiv (same as ADD) *)
 
 (* LOG: appends event to vs_logs.
    Prove all operand evals are equal, then case analysis collapses. *)
@@ -735,7 +721,7 @@ Proof
   (* Dispatch: derive MEM for the opcode's category, then use helper *)
   FIRST [
     `MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
-       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;GEP]`
+       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;OFFSET]`
        by simp[] >>
       drule_all step_inst_pure2_equiv >> simp[],
     `MEM inst.inst_opcode [NOT;ISZERO]` by simp[] >>
@@ -754,7 +740,7 @@ Proof
       by simp[] >> drule_all step_inst_read1_equiv >> simp[],
     `inst.inst_opcode = EXTCODEHASH` by simp[] >>
       drule_all step_inst_extcodehash_equiv >> simp[],
-    `MEM inst.inst_opcode [MSTORE;SSTORE;TSTORE]` by simp[] >>
+    `MEM inst.inst_opcode [MSTORE;MSTORE8;SSTORE;TSTORE]` by simp[] >>
       drule_all step_inst_write2_equiv >> simp[],
     `MEM inst.inst_opcode [STOP;SINK]` by simp[] >>
       drule_all step_inst_terminator_equiv >> simp[],
@@ -788,8 +774,6 @@ Proof
       drule_all step_inst_data_copy_equiv >> simp[],
     `inst.inst_opcode = EXTCODECOPY` by simp[] >>
       drule_all step_inst_extcodecopy_equiv >> simp[],
-    `inst.inst_opcode = OFFSET` by simp[] >>
-      drule_all step_inst_offset_equiv >> simp[],
     `inst.inst_opcode = PARAM` by simp[] >>
       drule_all step_inst_param_equiv >> simp[],
     `inst.inst_opcode = RET` by simp[] >>

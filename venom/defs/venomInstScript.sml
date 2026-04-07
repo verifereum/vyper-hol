@@ -1,7 +1,7 @@
 (*
  * Venom Instructions
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * This theory defines the instruction set for Venom IR.
  *)
@@ -29,7 +29,7 @@ Datatype:
     (* Bitwise *)
     | AND | OR | XOR | NOT | SHL | SHR | SAR | SIGNEXTEND | BYTE
     (* Memory *)
-    | MLOAD | MSTORE | MCOPY | MSIZE
+    | MLOAD | MSTORE | MSTORE8 | MCOPY | MSIZE
     (* Storage *)
     | SLOAD | SSTORE
     (* Transient storage *)
@@ -41,7 +41,7 @@ Datatype:
     (* SSA/IR-specific *)
     | PHI | PARAM | ASSIGN | NOP
     (* Allocation (Vyper-specific stack slots) *)
-    | ALLOCA | GEP
+    | ALLOCA
     (* Internal function calls *)
     | INVOKE
     (* Environment *)
@@ -162,9 +162,24 @@ End
    -------------------------------------------------------------------------- *)
 
 Datatype:
-  ir_context = <|
+  venom_context = <|
     ctx_functions : ir_function list;
     ctx_entry : string option
+  |>
+End
+
+(* --------------------------------------------------------------------------
+   Data segment types (shared between lowering and codegen)
+   -------------------------------------------------------------------------- *)
+
+Datatype:
+  data_item = DataBytes (word8 list) | DataLabel string
+End
+
+Datatype:
+  data_section = <|
+    ds_label : string;
+    ds_items : data_item list
   |>
 End
 
@@ -249,6 +264,7 @@ Definition is_volatile_def:
   is_volatile ISTORE = T /\
   is_volatile TSTORE = T /\
   is_volatile MSTORE = T /\
+  is_volatile MSTORE8 = T /\
   is_volatile CALLDATACOPY = T /\
   is_volatile MCOPY = T /\
   is_volatile EXTCODECOPY = T /\
@@ -300,7 +316,7 @@ Definition is_effect_free_op_def:
   is_effect_free_op SAR = T /\
   is_effect_free_op SIGNEXTEND = T /\
   is_effect_free_op BYTE = T /\
-  is_effect_free_op GEP = T /\
+
   (* State reads (exec_read0/1) *)
   is_effect_free_op MLOAD = T /\
   is_effect_free_op SLOAD = T /\
@@ -348,6 +364,7 @@ End
 (* Memory-writing opcodes: modify vs_memory (and possibly output var) *)
 Definition is_mem_write_op_def:
   is_mem_write_op MSTORE = T /\
+  is_mem_write_op MSTORE8 = T /\
   is_mem_write_op MCOPY = T /\
   is_mem_write_op CALLDATACOPY = T /\
   is_mem_write_op RETURNDATACOPY = T /\
@@ -406,6 +423,18 @@ Theorem lookup_function_MEM:
 Proof
   Induct_on `fns` >> rw[lookup_function_def, FIND_thm] >>
   gvs[lookup_function_def] >> res_tac >> simp[]
+QED
+
+(* lookup_function commutes with MAP when f preserves fn_name *)
+Theorem lookup_function_map:
+  !name fns g.
+    (!fn. (g fn).fn_name = fn.fn_name) ==>
+    lookup_function name (MAP g fns) =
+      OPTION_MAP g (lookup_function name fns)
+Proof
+  Induct_on `fns` >>
+  rw[lookup_function_def, FIND_thm] >>
+  gvs[lookup_function_def]
 QED
 
 (* Get instruction at index in a block *)

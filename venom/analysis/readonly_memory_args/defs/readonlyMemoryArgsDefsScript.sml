@@ -1,13 +1,13 @@
 (*
  * Readonly Memory Args Analysis — Definitions
  *
- * Upstream: vyperlang/vyper@cff4f6822
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * Interprocedural analysis inferring which invoke memory parameters
  * of each function are read-only (never written to).
  *
  * The analysis iterates to fixpoint over all functions. For each function,
- * it traces memory operands back through assign/phi/add/sub/gep chains
+ * it traces memory operands back through assign/phi/add/sub chains
  * to find which invoke parameter indices may alias a memory write.
  * Parameters never aliased are read-only.
  *
@@ -122,13 +122,12 @@ End
 (* Extract variable names from operands that should be traced for
    origin analysis. Depends on the producing instruction's opcode.
    Matches Python _root_from_inst / _root_from_add / _root_from_sub /
-   _root_from_gep dispatch.
+   dispatch.
 
    ASSIGN: trace through source
    PHI: trace all variable operands
    ADD: trace all variable operands
    SUB: trace both operands (EVM order: [b; a] → a - b)
-   GEP: trace base and offset
    Other: empty (not a param alias) *)
 Definition root_from_inst_ops_def:
   root_from_inst_ops inst =
@@ -148,12 +147,6 @@ Definition root_from_inst_ops_def:
            [op_b; op_a] =>
              FLAT (MAP (\op. case op of Var v => [v] | _ => [])
                        [op_a; op_b])
-         | _ => [])
-    | GEP =>
-        (case inst.inst_operands of
-           [op_base; op_off] =>
-             FLAT (MAP (\op. case op of Var v => [v] | _ => [])
-                       [op_base; op_off])
          | _ => [])
     | _ => []
 End
@@ -333,7 +326,7 @@ End
    Returns map from function name → list of bools (T = readonly). *)
 Definition rma_analyze_def:
   rma_analyze (fn_meta : (string, invoke_fn_meta) fmap)
-              (ctx : ir_context) =
+              (ctx : venom_context) =
     let functions = ctx.ctx_functions in
     let infos = FOLDL (\fm fn.
       fm |+ (fn.fn_name, collect_param_info fn_meta fn))

@@ -98,11 +98,12 @@ Datatype:
     vs_logs : event list;            (* Log/event accumulator *)
     vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
-    vs_label_offsets : (string, bytes32) fmap; (* Label→address map (OFFSET) *)
+    vs_labels : (string, bytes32) fmap; (* Label->address map for data offset labels *)
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
     vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
-    vs_allocas : (num, num # num) fmap  (* inst_id -> (offset, size) *)
+    vs_allocas : (num, num # num) fmap;  (* inst_id -> (offset, size) *)
+    vs_alloca_next : num  (* bump pointer: next free alloca offset *)
   |>
 End
 
@@ -158,11 +159,12 @@ Definition init_venom_state_def:
     vs_logs := [];
     vs_immutables := FEMPTY;
     vs_data_section := [];
-    vs_label_offsets := FEMPTY;
+    vs_labels := FEMPTY;
     vs_code := [];
     vs_params := [];
     vs_prev_hashes := [];
-    vs_allocas := FEMPTY
+    vs_allocas := FEMPTY;
+    vs_alloca_next := 0
   |>
 End
 
@@ -211,10 +213,7 @@ End
 (* Next free alloca offset: past all existing allocas and physical memory.
    ALLOCA uses this as a bump pointer without extending vs_memory. *)
 Definition next_alloca_offset_def:
-  next_alloca_offset s =
-    FOLDL (\m (k,(off,sz)). MAX m (off + sz))
-          (LENGTH s.vs_memory)
-          (fmap_to_alist s.vs_allocas)
+  next_alloca_offset s = MAX s.vs_alloca_next (LENGTH s.vs_memory)
 End
 
 (* Load a 32-byte word from memory (big-endian) *)
@@ -232,6 +231,16 @@ Definition mstore_def:
     let needed = (offset + 32) - LENGTH mem in
     let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
     s with vs_memory := TAKE offset expanded ++ bytes ++ DROP (offset + 32) expanded
+End
+
+(* Store a single byte to memory (low byte of value) *)
+Definition mstore8_def:
+  mstore8 offset (value:bytes32) s =
+    let b : word8 = w2w value in
+    let mem = s.vs_memory in
+    let needed = (offset + 1) - LENGTH mem in
+    let expanded = if needed > 0 then mem ++ REPLICATE needed 0w else mem in
+    s with vs_memory := TAKE offset expanded ++ [b] ++ DROP (offset + 1) expanded
 End
 
 (* Contract storage: stored in the current account within vs_accounts.
@@ -303,11 +312,13 @@ End
    Operand Evaluation
    -------------------------------------------------------------------------- *)
 
-(* Evaluate an operand to a value (NONE if variable not defined) *)
+(* Evaluate an operand to a value.
+   Labels resolve via vs_labels (data offset labels like "code_end").
+   Returns NONE if variable not defined or label not in map. *)
 Definition eval_operand_def:
   eval_operand (Lit v) s = SOME v /\
   eval_operand (Var x) s = lookup_var x s /\
-  eval_operand (Label _) s = NONE
+  eval_operand (Label lbl) s = FLOOKUP s.vs_labels lbl
 End
 
 (* Get label from operand *)

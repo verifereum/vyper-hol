@@ -51,15 +51,15 @@ Definition collect_phis_def:
     else []
 End
 
-(* Build operand→phi_index map from a list of PHIs.
- * Each PHI operand (from all sources) maps to its phi's index.
+(* Build output→phi_index map from a list of PHIs.
+ * Each PHI output variable maps to its phi's index.
  * Also record the matching operand from src_label for each phi. *)
 Definition build_phi_maps_def:
   build_phi_maps src_label phis =
     let indexed = MAPi (λi phi. (i, phi)) phis in
     FOLDL (λ(op_map, matching) (i, phi).
       let pairs = phi_pairs phi.inst_operands in
-      let op_map' = FOLDL (λm (l,v). m |+ (v, i)) op_map pairs in
+      let op_map' = FOLDL (λm v. m |+ (v, i)) op_map phi.inst_outputs in
       let src_var = FIND (λ(l,v). l = src_label) pairs in
       let matching' = case src_var of
                         SOME (_, v) => matching |+ (i, v)
@@ -80,13 +80,13 @@ Definition input_vars_from_def:
       let (result, placed) = FOLDL (λ(acc, placed) v.
         case FLOOKUP op_map v of
           SOME phi_idx =>
-            if phi_idx ∈ placed then (acc, placed)
+            if MEM phi_idx placed then (acc, placed)
             else
               (case FLOOKUP matching phi_idx of
-                 SOME src_v => (acc ++ [src_v], phi_idx INSERT placed)
+                 SOME src_v => (acc ++ [src_v], phi_idx :: placed)
                | NONE => (acc, placed))
         | NONE => (acc ++ [v], placed))
-        ([], {} : num set) base_liveness in
+        ([], [] : num list) base_liveness in
       result
 End
 

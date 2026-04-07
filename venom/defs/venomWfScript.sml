@@ -1,7 +1,7 @@
 (*
  * Venom Well-Formedness Predicates
  *
- * Upstream: vyperlang/vyper@8780b3134 (alloca_id removal)
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  *
  * This theory defines structural well-formedness for Venom IR functions
  * and contexts: entry blocks, block structure, successor closure, and
@@ -60,7 +60,6 @@ Definition inst_wf_def:
     | SAR => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     | SIGNEXTEND => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     | BYTE => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
-    | GEP => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     (* ---- exec_pure1: 1 operand, 1 output ---- *)
     | ISZERO => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | NOT => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
@@ -99,37 +98,40 @@ Definition inst_wf_def:
     | CALLDATALOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | EXTCODESIZE => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | EXTCODEHASH => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
-    (* ---- exec_write2: 2 operands ---- *)
-    | MSTORE => LENGTH inst.inst_operands = 2
-    | SSTORE => LENGTH inst.inst_operands = 2
-    | TSTORE => LENGTH inst.inst_operands = 2
-    | ISTORE => LENGTH inst.inst_operands = 2
-    (* ---- 3 operands, no output constraint ---- *)
-    | MCOPY => LENGTH inst.inst_operands = 3
-    | CALLDATACOPY => LENGTH inst.inst_operands = 3
-    | RETURNDATACOPY => LENGTH inst.inst_operands = 3
-    | DLOADBYTES => LENGTH inst.inst_operands = 3
-    | CODECOPY => LENGTH inst.inst_operands = 3
-    (* ---- 4 operands ---- *)
-    | EXTCODECOPY => LENGTH inst.inst_operands = 4
+    (* ---- exec_write2: 2 operands, no output ---- *)
+    | MSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | MSTORE8 => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | SSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | TSTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | ISTORE => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    (* ---- copy/bulk ops: no output ---- *)
+    | MCOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | CALLDATACOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | RETURNDATACOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | DLOADBYTES => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    | CODECOPY => LENGTH inst.inst_operands = 3 /\ inst.inst_outputs = []
+    (* ---- 4 operands, no output ---- *)
+    | EXTCODECOPY => LENGTH inst.inst_operands = 4 /\ inst.inst_outputs = []
     (* ---- SHA3: 2 operands, 1 output ---- *)
     | SHA3 => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
     (* ---- Control flow ---- *)
-    | JMP => ∃lbl. inst.inst_operands = [Label lbl]
-    | JNZ => ∃c l1 l2. inst.inst_operands = [c; Label l1; Label l2]
+    | JMP => ∃lbl. inst.inst_operands = [Label lbl] /\ inst.inst_outputs = []
+    | JNZ => ∃c l1 l2. inst.inst_operands = [c; Label l1; Label l2] /\
+                        inst.inst_outputs = []
     | DJMP => ∃sel label_ops.
                inst.inst_operands = sel :: label_ops ∧
-               EVERY (λop. IS_SOME (get_label op)) label_ops
-    | RET => T
-    | RETURN => LENGTH inst.inst_operands = 2
-    | REVERT => LENGTH inst.inst_operands = 2
-    | STOP => T
-    | SINK => T
+               EVERY (λop. IS_SOME (get_label op)) label_ops /\
+               inst.inst_outputs = []
+    | RET => inst.inst_outputs = []
+    | RETURN => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | REVERT => LENGTH inst.inst_operands = 2 /\ inst.inst_outputs = []
+    | STOP => inst.inst_outputs = []
+    | SINK => inst.inst_outputs = []
     (* ---- SSA ---- *)
     | PHI => LENGTH inst.inst_outputs = 1 ∧
              phi_well_formed inst.inst_operands
     | ASSIGN => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
-    | NOP => T
+    | NOP => inst.inst_outputs = []
     | PARAM => ∃idx. inst.inst_operands = [Lit idx] ∧
                      LENGTH inst.inst_outputs = 1
     (* ---- Allocation ---- *)
@@ -145,13 +147,14 @@ Definition inst_wf_def:
     | OFFSET => ∃op lbl. inst.inst_operands = [op; Label lbl] ∧
                          LENGTH inst.inst_outputs = 1
     | LOG => ∃tc rest. inst.inst_operands = Lit tc :: rest ∧
-                       LENGTH rest = w2n tc + 2
-    | SELFDESTRUCT => LENGTH inst.inst_operands = 1
-    | INVALID => T
+                       LENGTH rest = w2n tc + 2 /\ inst.inst_outputs = []
+    | SELFDESTRUCT => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
+    | INVALID => inst.inst_outputs = []
     (* ---- Assertions ---- *)
-    | ASSERT => LENGTH inst.inst_operands = 1
-    | ASSERT_UNREACHABLE => LENGTH inst.inst_operands = 1
-    (* ---- INVOKE: Label + args ---- *)
+    | ASSERT => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
+    | ASSERT_UNREACHABLE => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
+    (* ---- INVOKE: Label + args, outputs unconstrained (matches callee return
+       arity which can be 0, 1, or more - see check_venom._collect_ret_arities) ---- *)
     | INVOKE => ∃lbl args. inst.inst_operands = Label lbl :: args
 End
 
@@ -206,16 +209,13 @@ End
    SSA and instruction predicates (general IR concepts)
    ========================================================================== *)
 
-(* SSA form: each variable is defined at most once across all instructions. *)
+(* SSA form: each variable is defined at most once across all instructions.
+   Every output variable name appears at most once across all instruction
+   output lists. This is the textbook definition: every variable has exactly
+   one definition point, including multi-output instructions like INVOKE. *)
 Definition ssa_form_def:
   ssa_form fn <=>
-    !v inst1 inst2.
-      MEM inst1 (fn_insts fn) /\
-      MEM inst2 (fn_insts fn) /\
-      inst1.inst_outputs = [v] /\
-      inst2.inst_outputs = [v]
-      ==>
-      inst1 = inst2
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))
 End
 
 (* CFG edge relation on block labels within a function. *)
@@ -255,7 +255,9 @@ End
 (* Every variable use is dominated by its definition.
    Standard SSA property: if instruction inst in block bb uses Var v,
    then v is defined by some instruction in some block def_bb, and
-   def_bb dominates bb. *)
+   def_bb dominates bb.  When def and use are in the same block, the
+   def must appear at a strictly earlier index (intra-block ordering).
+   This is the standard formulation: "every def reaches its use." *)
 Definition def_dominates_uses_def:
   def_dominates_uses fn <=>
     !bb inst v.
@@ -266,10 +268,16 @@ Definition def_dominates_uses_def:
         MEM def_bb fn.fn_blocks /\
         MEM def_inst def_bb.bb_instructions /\
         MEM v def_inst.inst_outputs /\
-        fn_dominates fn def_bb.bb_label bb.bb_label
+        fn_dominates fn def_bb.bb_label bb.bb_label /\
+        (def_bb = bb ==>
+          ?i j. i < j /\ j < LENGTH bb.bb_instructions /\
+                EL i bb.bb_instructions = def_inst /\
+                EL j bb.bb_instructions = inst)
 End
 
-(* Well-formed SSA: unique definitions AND definitions dominate uses. *)
+(* Well-formed SSA: unique definitions AND definitions dominate uses.
+   Within-block ordering follows from def_dominates_uses + fn_inst_ids_distinct
+   (part of wf_function). *)
 Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
 End
@@ -298,6 +306,16 @@ End
 (* Well-formed context. *)
 Definition ctx_wf_def:
   ctx_wf ctx <=> ctx_distinct_fn_names ctx /\ ctx_has_entry ctx
+End
+
+(* All instruction ids across all functions in the context are distinct.
+   Matches Python: inst_id is a global counter across the whole module. *)
+Definition ctx_inst_ids_distinct_def:
+  ctx_inst_ids_distinct ctx ⇔
+    ALL_DISTINCT
+      (FLAT (MAP (λfn.
+        FLAT (MAP (λbb. MAP (λi. i.inst_id) bb.bb_instructions)
+          fn.fn_blocks)) ctx.ctx_functions))
 End
 
 (* Every INVOKE instruction's first operand is a Label naming a
@@ -335,6 +353,7 @@ Definition venom_wf_def:
   venom_wf ctx ⇔
     ctx_wf ctx ∧
     wf_invoke_targets ctx ∧
+    ctx_inst_ids_distinct ctx ∧
     (∀fn. MEM fn ctx.ctx_functions ==>
           wf_function fn ∧ fn_inst_wf fn)
 End
