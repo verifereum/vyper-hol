@@ -10,7 +10,7 @@
 
 Theory concretizeMemLocCorrectness
 Ancestors
-  concretizeMemLocProofs
+  concretizeMemLocProofs venomExecSemantics
 
 Theorem concretize_function_correct:
   !amap fn fuel ctx s1 s2.

@@ -40,6 +40,7 @@
 Theory concretizeMemLocProofs
 Ancestors
   concretizeMemLocDefs passSimulationProps venomWf pointerConfinedDefs
+  venomExecSemantics
 
 (* ===== Helpers ===== *)
 
