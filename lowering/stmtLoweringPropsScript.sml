@@ -45,19 +45,30 @@ Definition assemble_function_def:
        fn_blocks := assemble_blocks st' |>
 End
 
-(* Run multi-block compiled code: assemble blocks from compile state,
-   build a function, and execute via run_function starting at the entry
-   block's first new instruction (after previously-emitted instructions).
-   Used for statements that create multi-block CFGs (If, For).
+(* Run multi-block compiled code.
+   The first block starts at entry_idx (mid-block, after pre-existing
+   instructions). Subsequent blocks start at idx 0 via run_blocks.
+   Used for statements that create multi-block CFGs (If, For, Assert).
    The ctx parameter supplies the function-call context (for INVOKE). *)
 Definition run_compiled_blocks_def:
   run_compiled_blocks (ctx:venom_context) (st:compile_state) (st':compile_state)
                       (ss:venom_state) fuel =
     let fn = assemble_function st st' in
+    let entry_lbl = st.cs_current_bb in
     let entry_idx = LENGTH st.cs_current_insts in
-    run_function fuel ctx fn
-      (ss with <| vs_current_bb := st.cs_current_bb;
-                  vs_inst_idx := entry_idx |>)
+    case lookup_block entry_lbl fn.fn_blocks of
+      NONE => Error "entry block not found"
+    | SOME bb =>
+        case exec_block fuel ctx bb
+               (ss with <| vs_current_bb := entry_lbl;
+                            vs_inst_idx := entry_idx |>) of
+          OK ss' =>
+            if ss'.vs_halted then Halt ss'
+            else run_blocks fuel ctx fn ss'
+        | IntRet vals ss' => IntRet vals ss'
+        | Halt ss' => Halt ss'
+        | Abort a ss' => Abort a ss'
+        | Error e => Error e
 End
 
 (* ===== Main Statement Correctness ===== *)

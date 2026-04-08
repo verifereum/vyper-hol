@@ -1487,48 +1487,48 @@ Proof
   metis_tac[relationTheory.RTC_CASES2]
 QED
 
-(* ===== Layer 2: Function-level block chaining ===== *)
+(* ===== Layer 2: Block chaining in run_blocks ===== *)
 
-Theorem run_function_step_proof:
+Theorem run_blocks_step_proof:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    run_block fuel ctx bb ss = OK ss' ∧
+    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
     ¬ss'.vs_halted
     ⇒
-    run_function (SUC fuel) ctx fn ss = run_function fuel ctx fn ss'
+    run_blocks (SUC fuel) ctx fn ss = run_blocks fuel ctx fn ss'
 Proof
-  rw[] >> simp[Once run_defs]
+  rw[] >> simp[Once run_blocks_def]
 QED
 
-Theorem run_function_two_blocks_proof:
+Theorem run_blocks_two_blocks_proof:
   ∀ fuel ctx fn bb_A ss ss_mid result.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
-    run_block fuel ctx bb_A ss = OK ss_mid ∧
+    exec_block fuel ctx bb_A (ss with vs_inst_idx := 0) = OK ss_mid ∧
     ¬ss_mid.vs_halted ∧
-    run_function fuel ctx fn ss_mid = result
+    run_blocks fuel ctx fn ss_mid = result
     ⇒
-    run_function (SUC fuel) ctx fn ss = result
+    run_blocks (SUC fuel) ctx fn ss = result
 Proof
-  rw[] >> rw[Once run_defs]
+  rw[] >> rw[Once run_blocks_def]
 QED
 
-Theorem run_function_halt_proof:
+Theorem run_blocks_halt_proof:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    run_block fuel ctx bb ss = OK ss' ∧
+    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
     ss'.vs_halted
     ⇒
-    run_function (SUC fuel) ctx fn ss = Halt ss'
+    run_blocks (SUC fuel) ctx fn ss = Halt ss'
 Proof
-  rw[] >> rw[Once run_defs]
+  rw[] >> rw[Once run_blocks_def]
 QED
 
-Theorem run_function_abort_proof:
+Theorem run_blocks_abort_proof:
   ∀ fuel ctx fn bb ss a ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    run_block fuel ctx bb ss = Abort a ss'
+    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = Abort a ss'
     ⇒
-    run_function (SUC fuel) ctx fn ss = Abort a ss'
+    run_blocks (SUC fuel) ctx fn ss = Abort a ss'
 Proof
-  rw[] >> rw[Once run_defs]
+  rw[] >> rw[Once run_blocks_def]
 QED
