@@ -265,11 +265,16 @@ Proof
   rw[exec_alloca_def, LET_THM] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
-  fs[alloca_inv_def, allocas_non_overlapping_def,
-     alloca_next_valid_def, update_var_def] >>
-  rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-  res_tac >> fs[next_alloca_offset_def, arithmeticTheory.MAX_DEF]
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> gvs[]
+  >- ((* NONE — fresh allocation *)
+      fs[alloca_inv_def, allocas_non_overlapping_def,
+         alloca_next_valid_def, update_var_def] >>
+      rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+      res_tac >> fs[next_alloca_offset_def, arithmeticTheory.MAX_DEF])
+  >- ((* SOME — already allocated, state unchanged except var *)
+      Cases_on `x` >> gvs[update_var_def, alloca_inv_def,
+        allocas_non_overlapping_def, alloca_next_valid_def] >> metis_tac[])
 QED
 
 (* exec_alloca: vs_alloca_next monotone *)
@@ -281,6 +286,8 @@ Proof
   rw[exec_alloca_def, LET_THM, update_var_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> gvs[] >>
+  TRY (Cases_on `x` >> gvs[]) >>
   simp[next_alloca_offset_def, arithmeticTheory.MAX_DEF]
 QED
 
@@ -372,14 +379,19 @@ Theorem exec_alloca_result_inv[local]:
     result_alloca_inv s.vs_alloca_next (exec_alloca inst s alloc_size)
 Proof
   rw[exec_alloca_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[result_alloca_inv_def] >>
-  `exec_alloca inst s alloc_size =
-     OK (update_var h (n2w (next_alloca_offset s))
-       (s with <| vs_allocas :=
-          s.vs_allocas |+ (inst.inst_id, (next_alloca_offset s, w2n alloc_size));
-          vs_alloca_next := next_alloca_offset s + w2n alloc_size |>))` by
-    simp[exec_alloca_def] >>
-  metis_tac[exec_alloca_preserves_inv, exec_alloca_next_mono]
+  BasicProvers.EVERY_CASE_TAC >> gvs[result_alloca_inv_def]
+  >- ((* NONE — fresh allocation *)
+      `exec_alloca inst s alloc_size =
+         OK (update_var h (n2w (next_alloca_offset s))
+           (s with <| vs_allocas :=
+              s.vs_allocas |+ (inst.inst_id, (next_alloca_offset s, w2n alloc_size));
+              vs_alloca_next := next_alloca_offset s + w2n alloc_size |>))` by
+        simp[exec_alloca_def] >>
+      metis_tac[exec_alloca_preserves_inv, exec_alloca_next_mono])
+  >- ((* SOME — idempotent *)
+      `exec_alloca inst s alloc_size = OK (update_var h (n2w q) s)` by
+        simp[exec_alloca_def] >>
+      metis_tac[exec_alloca_preserves_inv, exec_alloca_next_mono])
 QED
 
 (* FOLDL of update_var preserves vs_allocas and vs_alloca_next *)
