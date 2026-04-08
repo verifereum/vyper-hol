@@ -20,6 +20,7 @@ Theorem concretize_function_correct:
     lift_result
       (mem_remap_equiv amap fn)
       (mem_remap_equiv amap fn)
+      (mem_remap_equiv amap fn)
       (run_blocks fuel ctx fn s1)
       (run_blocks fuel ctx (concretize_function amap fn) s2)
 Proof
