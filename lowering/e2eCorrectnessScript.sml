@@ -274,10 +274,11 @@ Proof
     (gvs[] >> metis_tac[]) >>
   qexists_tac `fuel'` >>
   first_x_assum drule_all >> strip_tac >>
-  `!r1 r2. lift_result R_ok R_term r1 r2 ==>
+  `!r1 r2. lift_result R_ok R_term R_term r1 r2 ==>
            observable_result_equiv r1 r2` by
     (rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
-     fs[lift_result_def, observable_result_equiv_def] >>
+     fs[lift_result_def, observable_result_equiv_def,
+        observable_equiv_def, revert_equiv_def] >>
      metis_tac[]) >>
   metis_tac[]
 QED
