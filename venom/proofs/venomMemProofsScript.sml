@@ -2,9 +2,12 @@
  * Venom Memory Proofs
  *
  * TOP-LEVEL:
- *   alloca_inv_empty_proof                   — alloca_inv for empty allocas
- *   alloca_inv_step_inst_proof                — alloca_inv preserved by step_inst
- *   alloca_inv_run_block_proof                — alloca_inv preserved by run_block
+ *   alloca_inv_empty_proof                    — alloca_inv for empty allocas
+ *   alloca_inv_step_inst_proof                 — alloca_inv preserved by step_inst
+ *   alloca_inv_exec_block_proof                — alloca_inv preserved by exec_block
+ *   alloca_inv_run_block_proof                 — alloca_inv preserved by run_block
+ *   alloca_inv_run_blocks_proof                — alloca_inv preserved by run_blocks
+ *   alloca_inv_run_function_proof              — alloca_inv preserved by run_function
  *   allocas_non_overlapping_empty_proof       — base case
  *   allocas_non_overlapping_step_inst_proof   — preserved by step_inst
  *   allocas_non_overlapping_exec_block_proof  — preserved by exec_block
@@ -556,6 +559,28 @@ Proof
   `alloca_inv (s with vs_inst_idx := 0)` by
     (irule alloca_fields_eq_inv >> qexists_tac `s` >> simp[]) >>
   metis_tac[alloca_inv_exec_block_proof]
+QED
+
+Theorem alloca_inv_run_blocks_proof:
+  !fuel ctx fn s s'.
+    run_blocks fuel ctx fn s = OK s' /\
+    alloca_inv s ==>
+    alloca_inv s'
+Proof
+  metis_tac[alloca_inv_joint, result_alloca_inv_def]
+QED
+
+Theorem alloca_inv_run_function_proof:
+  !fuel ctx fn s s'.
+    run_function fuel ctx fn s = OK s' /\
+    alloca_inv s ==>
+    alloca_inv s'
+Proof
+  rw[run_function_def] >> rpt strip_tac >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+  `alloca_inv (s with <| vs_current_bb := x; vs_inst_idx := 0 |>)` by
+    (irule alloca_fields_eq_inv >> qexists_tac `s` >> simp[]) >>
+  metis_tac[alloca_inv_run_blocks_proof]
 QED
 
 (* Backward-compatible: allocas_non_overlapping preserved under alloca_inv *)

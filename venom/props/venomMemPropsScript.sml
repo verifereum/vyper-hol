@@ -9,7 +9,10 @@
  *   allocas_non_overlapping_empty     — base case (no allocas)
  *   alloca_inv_empty                   — alloca_inv for empty allocas
  *   alloca_inv_step_inst               — alloca_inv preserved by step_inst
+ *   alloca_inv_exec_block              — alloca_inv preserved by exec_block
  *   alloca_inv_run_block               — alloca_inv preserved by run_block
+ *   alloca_inv_run_blocks              — alloca_inv preserved by run_blocks
+ *   alloca_inv_run_function            — alloca_inv preserved by run_function
  *   allocas_non_overlapping_step_inst  — preserved by step_inst (needs alloca_inv)
  *   allocas_non_overlapping_run_block  — preserved by run_block (needs alloca_inv)
  *   allocas_non_overlapping_exec_block — preserved by exec_block
@@ -45,6 +48,30 @@ Theorem alloca_inv_run_block:
     alloca_inv s ⇒
     alloca_inv s'
 Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_block_proof
+QED
+
+Theorem alloca_inv_exec_block:
+  ∀fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ∧
+    alloca_inv s ⇒
+    alloca_inv s'
+Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_exec_block_proof
+QED
+
+Theorem alloca_inv_run_blocks:
+  ∀fuel ctx fn s s'.
+    run_blocks fuel ctx fn s = OK s' ∧
+    alloca_inv s ⇒
+    alloca_inv s'
+Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_blocks_proof
+QED
+
+Theorem alloca_inv_run_function:
+  ∀fuel ctx fn s s'.
+    run_function fuel ctx fn s = OK s' ∧
+    alloca_inv s ⇒
+    alloca_inv s'
+Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_function_proof
 QED
 
 Theorem allocas_non_overlapping_step_inst:
