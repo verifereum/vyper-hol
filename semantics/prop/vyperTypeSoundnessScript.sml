@@ -1610,7 +1610,7 @@ QED
 
 Theorem for_loop_scope_bracket_ec[local]:
   env_consistent (env with var_types updated_by flip $|+ (nm, typ)) cx st_body /\
-  eval_stmts cx body (st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))) =
+  eval_stmts cx body (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))) =
     (res_body, st_body) /\
   nm NOTIN FDOM env.var_types ==>
   env_consistent env cx (st_body with scopes := TL st_body.scopes)
@@ -1651,22 +1651,22 @@ Resume eval_preserves_swt[for_cons]:
   (* Case split on the finally result *)
   Cases_on `finally (try do eval_stmts cx body; return F od
     handle_loop_exception) pop_scope
-    (st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v))))` >>
+    (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>)))` >>
   (* Apply for_body_decompose BEFORE case splitting q, to keep clauses *)
   drule for_body_decompose >> strip_tac >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Establish pushed state properties for P1 IH *)
-  `state_well_typed (st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v))))` by (
+  `state_well_typed (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>)))` by (
     irule push_scope_with_var_swt >> ASM_REWRITE_TAC []) >>
   `env_consistent (env with var_types updated_by flip FUPDATE (nm, typ)) cx
-     (st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v))))` by (
+     (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>)))` by (
     irule push_scope_with_var_ec >> ASM_REWRITE_TAC []) >>
   (* P1 IH for eval_stmts body *)
   first_x_assum (qspecl_then
     [`env with var_types updated_by flip FUPDATE (nm, typ)`,
      `ret_ty`,
-     `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
+     `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
      `res_body`, `st_body`] mp_tac) >>
   (impl_tac >- ASM_REWRITE_TAC []) >>
   strip_tac >>
@@ -1694,8 +1694,8 @@ Resume eval_preserves_swt[for_cons]:
   (* F case: recurse with P6 IH *)
   qpat_x_assum `!s'' x t s''' broke t'. _` (qspecl_then
     [`st`, `()`,
-     `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
-     `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
+     `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
+     `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
      `F`, `st_body with scopes := TL st_body.scopes`] mp_tac) >>
   simp_tac std_ss [push_scope_with_var_def, return_def] >>
   (impl_tac >- ASM_REWRITE_TAC []) >>

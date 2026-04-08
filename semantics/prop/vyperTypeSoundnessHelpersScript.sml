@@ -380,8 +380,8 @@ End
 
 Definition scope_well_typed_def:
   scope_well_typed (sc : scope) ⇔
-    ∀id tv v. FLOOKUP sc id = SOME (tv, v) ⇒
-      value_has_type tv v ∧ well_formed_type_value tv
+    ∀id entry. FLOOKUP sc id = SOME entry ⇒
+      value_has_type entry.type entry.value ∧ well_formed_type_value entry.type
 End
 
 Definition imms_well_typed_def:
@@ -400,10 +400,10 @@ End
 
 (* Helper: looking up a variable in well-typed scopes gives a well-typed value *)
 Theorem lookup_scopes_well_typed:
-  !scopes id tv v.
+  !scopes id entry.
     EVERY scope_well_typed scopes /\
-    lookup_scopes id scopes = SOME (tv, v) ==>
-    value_has_type tv v /\ well_formed_type_value tv
+    lookup_scopes id scopes = SOME entry ==>
+    value_has_type entry.type entry.value /\ well_formed_type_value entry.type
 Proof
   Induct >> simp[lookup_scopes_def] >>
   rpt gen_tac >>
@@ -417,13 +417,12 @@ Theorem lookup_scopes_val_well_typed:
   !scopes id v.
     EVERY scope_well_typed scopes /\
     lookup_scopes_val id scopes = SOME v ==>
-    ?tv. lookup_scopes id scopes = SOME (tv, v) /\
-         value_has_type tv v
+    ?entry. lookup_scopes id scopes = SOME entry /\
+            entry.value = v /\ value_has_type entry.type v
 Proof
   Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
   rpt gen_tac >> strip_tac >>
   Cases_on `FLOOKUP h id` >> gvs[] >>
-  Cases_on `x` >> simp[] >>
   fs[scope_well_typed_def] >> res_tac
 QED
 
@@ -747,10 +746,10 @@ Definition env_consistent_def:
   env_consistent env cx st <=>
     env.type_defs = get_tenv cx /\
     fn_sigs_consistent env.fn_sigs cx /\
-    (!id ty tv v.
+    (!id ty entry.
        FLOOKUP env.var_types id = SOME ty /\
-       lookup_scopes id st.scopes = SOME (tv, v) ==>
-       evaluate_type (get_tenv cx) ty = SOME tv) /\
+       lookup_scopes id st.scopes = SOME entry ==>
+       evaluate_type (get_tenv cx) ty = SOME entry.type) /\
     (!id ty tv v.
        FLOOKUP env.global_types id = SOME ty /\
        FLOOKUP (get_source_immutables (current_module cx)
@@ -1671,10 +1670,10 @@ Theorem env_consistent_scopes_only:
     env_consistent env cx (st with scopes := scopes) <=>
     env.type_defs = get_tenv cx /\
     fn_sigs_consistent env.fn_sigs cx /\
-    (!id ty tv v.
+    (!id ty entry.
        FLOOKUP env.var_types id = SOME ty /\
-       lookup_scopes id scopes = SOME (tv, v) ==>
-       evaluate_type (get_tenv cx) ty = SOME tv) /\
+       lookup_scopes id scopes = SOME entry ==>
+       evaluate_type (get_tenv cx) ty = SOME entry.type) /\
     (!id ty tv v.
        FLOOKUP env.global_types id = SOME ty /\
        FLOOKUP (get_source_immutables (current_module cx)
@@ -1753,10 +1752,10 @@ QED
    MAP FDOM equality to show lookup_scopes finds the same position with
    the same tv after evaluation. *)
 Theorem lookup_scopes_EL:
-  !scopes id tv v.
-    lookup_scopes id scopes = SOME (tv, v) ==>
+  !scopes id entry.
+    lookup_scopes id scopes = SOME entry ==>
     ?i. i < LENGTH scopes /\
-        FLOOKUP (EL i scopes) id = SOME (tv, v) /\
+        FLOOKUP (EL i scopes) id = SOME entry /\
         !j. j < i ==> FLOOKUP (EL j scopes) id = NONE
 Proof
   Induct >> simp[lookup_scopes_def] >>
@@ -1798,12 +1797,12 @@ Proof
   rw[env_consistent_def] >- (
     (* var_types clause *)
     drule_at Any lookup_scopes_EL >> strip_tac >>
-    rename1 `FLOOKUP (EL i st'.scopes) id = SOME (tv, v)` >>
+    rename1 `FLOOKUP (EL i st'.scopes) id = SOME entry'` >>
     `i < LENGTH st.scopes` by gvs[preserves_tv_def] >>
     `FDOM (EL i st'.scopes) = FDOM (EL i st.scopes)` by (
       imp_res_tac listTheory.MAP_EQ_EVERY2 >>
       gvs[listTheory.LIST_REL_EL_EQN, preserves_tv_def]) >>
-    `?tv0v0. FLOOKUP (EL i st.scopes) id = SOME tv0v0` by
+    `?entry0. FLOOKUP (EL i st.scopes) id = SOME entry0` by
       gvs[finite_mapTheory.FLOOKUP_DEF, PULL_EXISTS] >>
     `!j. j < i ==> FLOOKUP (EL j st.scopes) id = NONE` by (
       rpt strip_tac >>
@@ -1813,12 +1812,11 @@ Proof
       `FLOOKUP (EL j st'.scopes) id = NONE` by res_tac >>
       gvs[finite_mapTheory.FLOOKUP_DEF] >>
       first_x_assum drule >> rw[]) >>
-    `lookup_scopes id st.scopes = SOME tv0v0` by (
+    `lookup_scopes id st.scopes = SOME entry0` by (
       irule lookup_scopes_from_EL >>
       goal_assum drule >> simp[]) >>
-    PairCases_on`tv0v0` >>
-    `evaluate_type (get_tenv cx) ty = SOME tv0v00` by res_tac >>
-    `?v0'. FLOOKUP (EL i st'.scopes) id = SOME (tv0v00, v0')` by
+    `evaluate_type (get_tenv cx) ty = SOME entry0.type` by res_tac >>
+    `?entry1. FLOOKUP (EL i st'.scopes) id = SOME entry1 /\ entry1.type = entry0.type` by
       gvs[preserves_tv_def] >>
     gvs[])
   (* global_types clause *)
@@ -1856,12 +1854,12 @@ QED
 
 (* bind_arguments stores evaluate_type results *)
 Theorem bind_arguments_evaluate_type:
-  !tenv params vs sc n tv v.
+  !tenv params vs sc n entry.
     bind_arguments tenv params vs = SOME sc /\
-    FLOOKUP sc n = SOME (tv, v) ==>
+    FLOOKUP sc n = SOME entry ==>
     ?id typ. n = string_to_num id /\
              MEM (id, typ) params /\
-             evaluate_type tenv typ = SOME tv
+             evaluate_type tenv typ = SOME entry.type
 Proof
   Induct_on `params` >> simp[bind_arguments_def] >>
   Cases >> simp[bind_arguments_def] >>
@@ -2163,10 +2161,12 @@ Proof
   \\ conj_tac >- (
     rw[assign_target_def, bind_apply, CaseEq"prod", CaseEq"sum"]
     \\ drule get_scopes_result \\ rw[]
-    \\ gvs[bind_def, ignore_bind_def, CaseEq"prod", CaseEq"sum"]
+    \\ gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
+           sum_CASE_rator, CaseEq"prod", CaseEq"sum"]
     \\ TRY (drule lift_option_error \\ rw[])
-    \\ pairarg_tac \\ gvs[bind_apply, CaseEq"prod", CaseEq"sum"]
-    \\ gvs[set_scopes_def, get_scopes_def, return_def]
+    \\ pairarg_tac \\ gvs[bind_apply, type_check_def, assert_def,
+           sum_CASE_rator, CaseEq"prod", CaseEq"sum"]
+    \\ gvs[set_scopes_def, get_scopes_def, return_def, raise_def, AllCaseEqs()]
     \\ TRY (drule lift_sum_error \\ rw[])
     \\ strip_tac \\ gvs[]
     \\ drule assign_result_error \\ rw[])
@@ -2346,7 +2346,8 @@ QED
 (* loc_type: the runtime type stored at a target location *)
 Definition loc_type_def:
   loc_type cx st (ScopedVar s) tv =
-    (?a. lookup_scopes (string_to_num s) st.scopes = SOME (tv, a)) /\
+    (?entry. lookup_scopes (string_to_num s) st.scopes = SOME entry /\
+             entry.type = tv) /\
   loc_type cx st (ImmutableVar s) tv =
     (?imms a. get_immutables cx (current_module cx) st = (INL imms, st) /\
               FLOOKUP imms (string_to_num s) = SOME (tv, a)) /\
@@ -2630,8 +2631,9 @@ Proof
     \\ TRY(
       gvs[bind_def, CaseEq"prod",CaseEq"sum"]
       \\ TRY(drule lift_option_state \\ simp[])
-      \\ pairarg_tac \\ gvs[bind_apply,CaseEq"prod",CaseEq"sum",ignore_bind_apply]
-      \\ gvs[set_scopes_def, return_def]
+      \\ pairarg_tac \\ gvs[bind_apply,CaseEq"prod",CaseEq"sum",ignore_bind_apply,
+                            type_check_def, assert_def, sum_CASE_rator, AllCaseEqs()]
+      \\ gvs[set_scopes_def, return_def, raise_def]
       \\ TRY(drule lift_sum_state \\ simp[])
       \\ ntac 3 strip_tac \\ gvs[]
       \\ drule assign_result_state
@@ -2730,13 +2732,14 @@ QED
 
 Resume assign_target_well_typed[replace]:
   qmatch_asmsub_rename_tac`get_scopes st`
-  \\ sg `lookup_scopes (string_to_num s) st.scopes = SOME (tv,a)`
-  >- (
+  \\ `?sc_entry. lookup_scopes (string_to_num s) st.scopes = SOME sc_entry`
+  by (
     gvs[get_scopes_def, return_def, lift_option_def, option_CASE_rator]
     >> gvs[AllCaseEqs(), return_def, raise_def]
-    >> irule find_containing_scope_lookup
+    >> irule_at Any find_containing_scope_lookup
     >> goal_assum drule )
-  \\ `loc_type cx st (ScopedVar s) tv` by rw[loc_type_def]
+  \\ pop_assum strip_assume_tac
+  \\ `loc_type cx st (ScopedVar s) sc_entry.type` by (rw[loc_type_def] >> qexists_tac `sc_entry` >> simp[])
   \\ gvs[well_typed_atarget_def]
   \\ drule_all eval_base_target_type_connection
   \\ strip_tac \\ gvs[]
@@ -2842,8 +2845,9 @@ Proof
     >> gvs[bind_def, CaseEq"prod", CaseEq"sum"]
     >> TRY(imp_res_tac lift_option_state >> gvs[])
     >> pairarg_tac
-    >> gvs[bind_apply, CaseEq"prod", CaseEq"sum", ignore_bind_apply]
-    >> gvs[set_scopes_def, return_def]
+    >> gvs[bind_apply, CaseEq"prod", CaseEq"sum", ignore_bind_apply,
+           type_check_def, assert_def, sum_CASE_rator, AllCaseEqs()]
+    >> gvs[set_scopes_def, return_def, raise_def]
     >> TRY(imp_res_tac lift_sum_state >> gvs[])
     >> imp_res_tac assign_result_state >> gvs[]
     >> suspend "ScopedVar")
@@ -2864,12 +2868,13 @@ QED
 
 (* ScopedVar: now the monadic chain is fully decomposed *)
 Resume assign_target_well_typed_ao[ScopedVar]:
-  sg `lookup_scopes (string_to_num s) s''.scopes = SOME (tv,a)`
+  sg `?sc_entry. lookup_scopes (string_to_num s) s''.scopes = SOME sc_entry`
   >- (
     gvs[lift_option_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]
-    >> irule find_containing_scope_lookup
+    >> irule_at Any find_containing_scope_lookup
     >> goal_assum drule )
-  \\ `loc_type cx s'' (ScopedVar s) tv` by rw[loc_type_def]
+  \\ pop_assum strip_assume_tac
+  \\ `loc_type cx s'' (ScopedVar s) sc_entry.type` by (rw[loc_type_def] >> qexists_tac `sc_entry` >> simp[])
   \\ gvs[well_typed_atarget_def]
   \\ drule_all eval_base_target_type_connection \\ strip_tac \\ gvs[]
   \\ drule_at Any lookup_scopes_well_typed
@@ -3028,8 +3033,9 @@ Proof
     >> gvs[bind_def, CaseEq"prod", CaseEq"sum"]
     >> TRY(imp_res_tac lift_option_state >> gvs[])
     >> pairarg_tac
-    >> gvs[bind_apply, CaseEq"prod", CaseEq"sum", ignore_bind_apply]
-    >> gvs[set_scopes_def, return_def]
+    >> gvs[bind_apply, CaseEq"prod", CaseEq"sum", ignore_bind_apply,
+           type_check_def, assert_def, sum_CASE_rator, AllCaseEqs()]
+    >> gvs[set_scopes_def, return_def, raise_def]
     >> TRY(imp_res_tac lift_sum_state >> gvs[])
     >> imp_res_tac assign_result_state >> gvs[]
     >> suspend "ScopedVar")
@@ -3050,13 +3056,14 @@ QED
 
 Resume assign_target_preserves_swt_ec[ScopedVar]:
   (* From find_containing_scope, establish lookup_scopes *)
-  sg `lookup_scopes (string_to_num s) s''.scopes = SOME (tv,a)`
+  sg `?sc_entry. lookup_scopes (string_to_num s) s''.scopes = SOME sc_entry`
   >- (
     qpat_x_assum `lift_option _ _ _ = _` mp_tac
     >> gvs[lift_option_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]
     >> strip_tac
-    >> irule find_containing_scope_lookup
+    >> irule_at Any find_containing_scope_lookup
     >> goal_assum drule )
+  \\ pop_assum strip_assume_tac
   (* From state_well_typed + lookup_scopes, get value_has_type + well_formed *)
   \\ drule_at Any lookup_scopes_well_typed
   \\ impl_tac >- gvs[state_well_typed_def]
@@ -4011,8 +4018,8 @@ Theorem pop_scope_ec:
     env_consistent env cx (st with scopes := tl)
 Proof
   rw[env_consistent_def] >> rpt strip_tac
-  >- (`lookup_scopes id st.scopes = SOME (tv,v)` by
-        (res_tac >> gvs[lookup_scopes_def]) >>
+  >- (`?entry. lookup_scopes id st.scopes = SOME entry` by
+        (res_tac >> gvs[lookup_scopes_def] >> metis_tac[]) >>
       metis_tac[])
   >> metis_tac[]
 QED
@@ -4057,8 +4064,8 @@ Proof
   >- (
     (* var_types *)
     Cases_on `id' = string_to_num id` >- fs[FLOOKUP_DEF] >>
-    `lookup_scopes id' (h::t) = SOME (tv',v')` by metis_tac[] >>
-    `lookup_scopes id' st.scopes = SOME (tv',v')` by gvs[] >>
+    `?entry. lookup_scopes id' (h::t) = SOME entry` by metis_tac[] >>
+    `lookup_scopes id' st.scopes = SOME entry` by gvs[] >>
     res_tac)
   (* global_types + toplevel_types: identical *)
   >> res_tac
@@ -4164,8 +4171,8 @@ Proof
   >- (
     Cases_on `FLOOKUP (HD st_body.scopes) id`
     (* id not in head: lookup in full scopes = lookup in tail *)
-    >- (`lookup_scopes id st_body.scopes = SOME (tv, v)` by (
-          Cases_on `st_body.scopes` >> gvs[lookup_scopes_def]) >>
+    >- (`?entry. lookup_scopes id st_body.scopes = SOME entry` by (
+          Cases_on `st_body.scopes` >> gvs[lookup_scopes_def] >> metis_tac[]) >>
         res_tac)
     (* id in head of st_body *)
     >> `id IN FDOM (HD st_body.scopes)` by gvs[FLOOKUP_DEF] >>
@@ -4212,7 +4219,7 @@ Theorem push_scope_with_var_ec:
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     nm NOTIN FDOM env.var_types ==>
     env_consistent (env with var_types updated_by flip FUPDATE (nm, typ)) cx
-      (st with scopes updated_by CONS (FEMPTY |+ (nm, (tyv, v))))
+      (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)))
 Proof
   rw[env_consistent_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
   Cases_on `id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
