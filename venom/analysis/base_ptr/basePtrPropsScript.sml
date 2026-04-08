@@ -104,6 +104,8 @@ Theorem bp_process_block_sound:
     (∀inst out. MEM inst bb.bb_instructions ∧
                inst_output inst = SOME out ⇒
                bp_get_ptrs bp out = []) ∧
+    (∀inst. MEM inst bb.bb_instructions ∧
+           inst_output inst = NONE ⇒ inst.inst_outputs = []) ∧
     (* Inst ids globally unique across context — ensures ALLOCAs in this
        block and in INVOKE callees don't collide with tracked alloca ids *)
     ctx_inst_ids_distinct ctx ∧

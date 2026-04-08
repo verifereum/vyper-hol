@@ -6,10 +6,10 @@
 
 Theory valueEncodingProofs
 Ancestors
-  valueEncoding vyperStorage venomState
   list rich_list venomMemProofs
+  valueEncoding vyperStorage venomState
 Libs
-  blastLib
+  blastLib intLib
 
 (* ===== word_of_bytes helpers ===== *)
 
@@ -130,44 +130,217 @@ Proof
          rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_REPLICATE]
 QED
 
+(* Helper: truncate_unsigned roundtrips for nat values in range *)
+Theorem truncate_unsigned_n2w_roundtrip:
+  !n (k:num). k < 2 ** n /\ n <= 256 ==>
+    truncate_unsigned n ((n2w k) : bytes32) = k
+Proof
+  PURE_REWRITE_TAC[truncate_unsigned_def, wordsTheory.w2n_n2w] >>
+  rpt strip_tac >>
+  `k MOD dimword(:256) = k` by
+    (irule arithmeticTheory.LESS_MOD >>
+     simp[wordsTheory.dimword_def] >>
+     irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `2 ** n` >> simp[]) >>
+  simp[]
+QED
+
+(* Helper: truncate_unsigned roundtrips for int values via i2w *)
+Theorem truncate_unsigned_i2w_roundtrip:
+  !n (i:int). 0 <= i /\ i < &(2 ** n) /\ n <= 256 ==>
+    &(truncate_unsigned n ((i2w i) : bytes32)) = i
+Proof
+  PURE_REWRITE_TAC[truncate_unsigned_def] >> rpt strip_tac >>
+  `2 ** n <= dimword(:256)` by simp[wordsTheory.dimword_def] >>
+  `0 <= i /\ i < &dimword(:256)` by intLib.ARITH_TAC >>
+  `i % &dimword(:256) = i` by simp[integerTheory.INT_LESS_MOD] >>
+  `&(w2n ((i2w i) : bytes32)) = i` by
+    simp[integer_wordTheory.w2n_i2w] >>
+  `w2n ((i2w i) : bytes32) = Num i` by intLib.ARITH_TAC >>
+  `Num i < 2 ** n` by intLib.ARITH_TAC >>
+  simp[]
+QED
+
+(* ===== truncate_signed roundtrip helpers ===== *)
+
+Theorem dimword_256_exp[local]:
+  dimword(:256) = 2 ** 256
+Proof
+  simp[wordsTheory.dimword_def]
+QED
+
+Theorem w2n_i2w_nonneg[local]:
+  !i. 0 <= i /\ Num i < dimword(:256) ==>
+    w2n ((i2w i):256 word) = Num i
+Proof
+  rpt strip_tac >>
+  `&(w2n ((i2w i):256 word)) = i % &(dimword(:256))` by
+    simp[integer_wordTheory.w2n_i2w] >>
+  `i < &(dimword(:256))` by intLib.ARITH_TAC >>
+  `i % &(dimword(:256)) = i` by simp[integerTheory.INT_LESS_MOD] >>
+  `i = &(Num i)` by simp[integerTheory.INT_OF_NUM] >>
+  intLib.ARITH_TAC
+QED
+
+Theorem w2n_i2w_neg[local]:
+  !i. i < 0 /\ -&(dimword(:256)) < i ==>
+    w2n ((i2w i):256 word) = Num (i + &(dimword(:256)))
+Proof
+  rpt strip_tac >>
+  `&(w2n ((i2w i):256 word)) = i % &(dimword(:256))` by
+    simp[integer_wordTheory.w2n_i2w] >>
+  `0 < dimword(:256)` by simp[wordsTheory.ZERO_LT_dimword] >>
+  `&(dimword(:256)) <> (0:int)` by intLib.ARITH_TAC >>
+  `0 <= i + &(dimword(:256)) /\ i + &(dimword(:256)) < &(dimword(:256))` by
+    intLib.ARITH_TAC >>
+  `(i + &(dimword(:256))) % &(dimword(:256)) = i + &(dimword(:256))` by
+    simp[integerTheory.INT_LESS_MOD] >>
+  `(-1 * &(dimword(:256)) + (i + &(dimword(:256)))) % &(dimword(:256)) =
+   (i + &(dimword(:256))) % &(dimword(:256))` by
+    simp[integerTheory.INT_MOD_ADD_MULTIPLES] >>
+  `-1 * &(dimword(:256)) + (i + &(dimword(:256))) = i` by intLib.ARITH_TAC >>
+  `0 <= i + &(dimword(:256))` by intLib.ARITH_TAC >>
+  `&(w2n ((i2w i):256 word)) = i + &(dimword(:256))` by metis_tac[] >>
+  metis_tac[integerTheory.NUM_OF_INT, integerTheory.INT_INJ]
+QED
+
+Theorem dimword_sub_mod[local]:
+  !n (k:num). 0 < k /\ k <= 2 ** (n-1) /\ 0 < n /\ n <= 256 ==>
+    (dimword(:256) - k) MOD 2 ** n = 2 ** n - k
+Proof
+  rpt strip_tac >>
+  `k < 2 ** n` by
+    (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+     qexists_tac `2 ** (n-1)` >> simp[] >>
+     `n - 1 < n` by simp[] >> simp[]) >>
+  `0 < 2 ** n` by simp[] >>
+  `0 < 2 ** (256 - n)` by simp[] >>
+  `k < 2 ** (256 - n) * 2 ** n` by
+    (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `2 ** n` >> simp[] >>
+     `1 <= 2 ** (256 - n)` by simp[] >> simp[]) >>
+  `dimword(:256) = 2 ** (256 - n) * 2 ** n` by
+    (REWRITE_TAC[dimword_256_exp, GSYM arithmeticTheory.EXP_ADD] >>
+     AP_TERM_TAC >> simp[]) >>
+  pop_assum (fn eq => REWRITE_TAC[eq]) >>
+  mp_tac (Q.SPECL [`2 ** n`, `2 ** (256 - n)`, `k`]
+    wordsTheory.MOD_COMPLEMENT) >>
+  impl_tac >- simp[] >>
+  `k MOD 2 ** n = k` by simp[arithmeticTheory.LESS_MOD] >>
+  `2 ** n - k < 2 ** n` by simp[] >>
+  disch_then (fn th => REWRITE_TAC[th]) >>
+  simp[arithmeticTheory.LESS_MOD]
+QED
+
+(* Helper: truncate_signed roundtrips for values in signed range *)
+Theorem truncate_signed_i2w_roundtrip:
+  !n (i:int). 0 < n /\ n <= 256 /\
+    -&(2 ** (n - 1)) <= i /\ i < &(2 ** (n - 1)) ==>
+    truncate_signed n ((i2w i) : bytes32) = i
+Proof
+  rpt strip_tac >>
+  `?m. n = SUC m` by (Cases_on `n` >> fs[]) >> gvs[] >>
+  `m <= 255` by simp[] >>
+  Cases_on `i < 0` >> gvs[]
+  (* Negative case *)
+  >- (
+    `0 <= -i` by intLib.ARITH_TAC >>
+    `0 < Num(-i)` by intLib.ARITH_TAC >>
+    `Num(-i) <= 2 ** m` by intLib.ARITH_TAC >>
+    (* Derive -&dimword < i via nat→int lifting *)
+    `Num(-i) < dimword(:256)` by
+      (REWRITE_TAC[dimword_256_exp] >>
+       irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+       qexists_tac `2 ** m` >> simp[]) >>
+    `&(Num(-i)) < &(dimword(:256))` by
+      simp[integerTheory.INT_LT] >>
+    `-i = &(Num(-i))` by simp[integerTheory.INT_OF_NUM] >>
+    `-&(dimword(:256)) < i` by intLib.ARITH_TAC >>
+    (* Compute w2n(i2w i) *)
+    `w2n ((i2w i):256 word) = Num (i + &(dimword(:256)))` by
+      (irule w2n_i2w_neg >> simp[]) >>
+    `i = -&(Num(-i))` by intLib.ARITH_TAC >>
+    `Num(i + &(dimword(:256))) = dimword(:256) - Num(-i)` by
+      (`i + &(dimword(:256)) = &(dimword(:256) - Num(-i))` by
+         intLib.ARITH_TAC >>
+       pop_assum (fn th => REWRITE_TAC[th]) >>
+       simp[integerTheory.NUM_OF_INT]) >>
+    `w2n ((i2w i):256 word) = dimword(:256) - Num(-i)` by
+      metis_tac[] >>
+    (* Unfold truncate_signed and rewrite w2n *)
+    CONV_TAC (RATOR_CONV (RAND_CONV
+      (PURE_REWRITE_CONV [truncate_signed_def, LET_THM]
+       THENC DEPTH_CONV BETA_CONV))) >>
+    qpat_x_assum `w2n _ = dimword _ - _` (fn th => REWRITE_TAC[th]) >>
+    `(dimword(:256) - Num(-i)) MOD 2 ** SUC m = 2 ** SUC m - Num(-i)` by
+      (irule dimword_sub_mod >> simp[]) >>
+    pop_assum (fn th => REWRITE_TAC[th]) >>
+    `SUC m - 1 = m` by simp[] >>
+    pop_assum (fn th => REWRITE_TAC[th]) >>
+    `Num(-i) <= 2 ** SUC m` by simp[arithmeticTheory.EXP] >>
+    `~(2 ** SUC m - Num(-i) < 2 ** m)` by simp[arithmeticTheory.EXP] >>
+    ASM_SIMP_TAC bool_ss [] >>
+    REWRITE_TAC[GSYM (Q.SPECL [`2 ** SUC m`, `Num(-i)`]
+      integerTheory.INT_SUB |> UNDISCH)] >>
+    intLib.ARITH_TAC)
+  (* Non-negative case *)
+  >> (
+    `0 <= i` by intLib.ARITH_TAC >>
+    `Num i < 2 ** m` by intLib.ARITH_TAC >>
+    `Num i < dimword(:256)` by
+      (REWRITE_TAC[dimword_256_exp] >>
+       irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+       qexists_tac `2 ** m` >> simp[]) >>
+    `w2n ((i2w i):256 word) = Num i` by
+      (irule w2n_i2w_nonneg >> simp[]) >>
+    simp[truncate_signed_def] >>
+    `Num i < 2 ** SUC m` by simp[arithmeticTheory.EXP] >>
+    simp[integerTheory.INT_OF_NUM])
+QED
+
+(* w256_roundtrip: encode then decode is identity.
+   Preconditions require per-type bounds (n-bit range, not 256-bit)
+   because decode_base_from_slot truncates to the declared type's range. *)
 Theorem w256_roundtrip_proof:
   ∀ v tv w.
     encode_base_to_slot v tv = SOME w ∧
-    (* Well-typedness: value fits in word (conditioned on type) *)
     (∀ i n. v = IntV i ∧ tv = BaseTV (UintT n) ⇒
-            0 ≤ i ∧ i < &(dimword (:256))) ∧
+            0 ≤ i ∧ i < &(2 ** n) ∧ n ≤ 256) ∧
     (∀ i n. v = IntV i ∧ tv = BaseTV (IntT n) ⇒
-            INT_MIN (:256) ≤ i ∧ i ≤ INT_MAX (:256)) ∧
-    (∀ k. v = FlagV k ⇒ k < dimword (:256)) ∧
-    (∀ n. v = DecimalV n ⇒ INT_MIN (:256) ≤ n ∧ n ≤ INT_MAX (:256))
+            0 < n ∧ n ≤ 256 ∧
+            -&(2 ** (n - 1)) ≤ i ∧ i < &(2 ** (n - 1))) ∧
+    (∀ k m. v = FlagV k ∧ tv = FlagTV m ⇒ k < 2 ** m ∧ m ≤ 256) ∧
+    (∀ n. v = DecimalV n ⇒ -&(2 ** 167) ≤ n ∧ n < &(2 ** 167))
     ⇒
     w256_to_val w tv = v
 Proof
   Cases_on `v` >> Cases_on `tv` >>
   simp[encode_base_to_slot_def, w256_to_val_def,
        decode_base_from_slot_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  rename1 `encode_base_to_slot _ (BaseTV bt) = SOME _` >>
-  Cases_on `bt` >>
-  gvs[encode_base_to_slot_def, decode_base_from_slot_def,
-      bool_to_slot_def, slot_to_bool_def, AllCaseEqs(),
-      integer_wordTheory.w2n_i2w, integer_wordTheory.w2i_i2w,
-      integerTheory.INT_LESS_MOD] >>
-  TRY (Cases_on `b` >> gvs[bool_to_slot_def, slot_to_bool_def] >> NO_TAC) >>
-  (* BytesV + BytesT: split bound; BytesV + AddressT: pad_left roundtrip *)
-  FIRST [
-    Cases_on `b` >>
-    gvs[encode_base_to_slot_def, decode_base_from_slot_def,
-        AllCaseEqs(), TAKE_word_to_bytes_be_word_of_bytes_be],
-    simp[word_to_bytes_be_pad_left_roundtrip]
-  ]
-QED
-
-Theorem LENGTH_mem_bytes_at_proof:
-  ∀ offset len mem. LENGTH (mem_bytes_at offset len mem) = len
-Proof
-  rw[mem_bytes_at_def, LENGTH_TAKE_EQ, LENGTH_DROP, LENGTH_APPEND,
-     LENGTH_REPLICATE]
+  rpt strip_tac >> gvs[]
+  (* 0: BoolV + BaseTV *)
+  >- (Cases_on `b'` >> Cases_on `b` >>
+      gvs[encode_base_to_slot_def, decode_base_from_slot_def,
+          bool_to_slot_def, slot_to_bool_def, AllCaseEqs()])
+  (* 1: IntV + BaseTV *)
+  >- (rename1 `encode_base_to_slot _ (BaseTV bt) = SOME _` >>
+      Cases_on `bt` >>
+      gvs[encode_base_to_slot_def, decode_base_from_slot_def, AllCaseEqs()]
+      (* UintT *)
+      >- simp[truncate_unsigned_i2w_roundtrip]
+      (* IntT *)
+      >> simp[truncate_signed_i2w_roundtrip])
+  (* 2: FlagV + FlagTV *)
+  >- simp[truncate_unsigned_n2w_roundtrip]
+  (* 3: DecimalV + BaseTV *)
+  >- (Cases_on `b` >> gvs[encode_base_to_slot_def, decode_base_from_slot_def,
+         AllCaseEqs()] >>
+      irule truncate_signed_i2w_roundtrip >> simp[])
+  (* 4: BytesV + BaseTV *)
+  >> (Cases_on `b` >> TRY (Cases_on `b'`) >>
+      gvs[encode_base_to_slot_def, decode_base_from_slot_def,
+          AllCaseEqs(), TAKE_word_to_bytes_be_word_of_bytes_be,
+          word_to_bytes_be_pad_left_roundtrip])
 QED
 
 (* ===== mem_word_at = mload ===== *)
@@ -179,6 +352,13 @@ Proof
   rw[mem_word_at_def, mload_def]
 QED
 
+Theorem LENGTH_mem_bytes_at_proof:
+  ∀ offset len mem. LENGTH (mem_bytes_at offset len mem) = len
+Proof
+  rw[mem_bytes_at_def, LENGTH_TAKE_EQ, LENGTH_DROP, LENGTH_APPEND,
+     LENGTH_REPLICATE]
+QED
+
 Theorem mload_eq_mem_bytes_at_eq_proof:
   ∀ off1 off2 s1 s2.
     mload off1 s1 = mload off2 s2 ⇒
@@ -186,7 +366,7 @@ Theorem mload_eq_mem_bytes_at_eq_proof:
     mem_bytes_at off2 32 s2.vs_memory
 Proof
   rw[mload_def, mem_bytes_at_def] >>
-  irule (INST_TYPE[alpha|->“:256”]word_of_bytes_be_inj_proof) >>
+  irule (INST_TYPE[alpha |-> ``:256``] word_of_bytes_be_inj_proof) >>
   simp[dividesTheory.divides_def]
 QED
 

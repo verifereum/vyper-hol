@@ -1,15 +1,14 @@
 (*
  * Memory Alias Analysis — Proofs (internal)
  *
- * Cheated proofs for safety properties. The externally-facing API
+ * Safety property proofs. The externally-facing API
  * is in memAliasPropsScript.sml (ACCEPT_TAC wrappers).
  *)
 
 Theory memAliasProofs
 Ancestors
   memAliasDefs memLocDefs memLocProps basePtrDefs venomMemDefs venomExecSemantics
-Libs
-  finite_mapTheory alistTheory listTheory pairTheory
+  finite_map alist list pair
 
 (* ===================================================================
    Layer 1: Generic FOLDL helpers
@@ -1008,6 +1007,27 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> gvs[]
 QED
 
+(* ===== Soundness helpers ===== *)
+
+(* Reprove bp_ptr_from_op_sound locally since basePtrProofs is not an ancestor *)
+Theorem bp_ptr_from_op_sound_local[local]:
+  ∀bp v aid off s.
+    bp_ptr_sound bp s ∧
+    bp_ptr_from_op bp (Var v) = SOME (Ptr (Allocation aid) (SOME off)) ∧
+    IS_SOME (lookup_var v s) ⇒
+    ∃base sz.
+      FLOOKUP s.vs_allocas aid = SOME (base, sz) ∧
+      lookup_var v s = SOME (n2w (base + off))
+Proof
+  rpt strip_tac >>
+  gvs[bp_ptr_from_op_def] >>
+  Cases_on `bp_get_ptrs bp v` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  fs[bp_ptr_sound_def] >>
+  first_x_assum (qspec_then `v` mp_tac) >> rw[] >>
+  gvs[ptr_matches_var_def]
+QED
+
 (* ===== Soundness ===== *)
 
 Theorem ma_may_alias_sound_proof:
@@ -1021,7 +1041,16 @@ Theorem ma_may_alias_sound_proof:
     memloc_runtime_region loc2 s = SOME r2 ⇒
     regions_disjoint r1 r2
 Proof
-  cheat
+  rpt strip_tac >>
+  `~may_overlap loc1 loc2` by metis_tac[ma_may_alias_iff] >>
+  (* Extract structure from memloc_runtime_region returning SOME *)
+  gvs[memloc_runtime_region_def, AllCaseEqs()] >>
+  gvs[may_overlap_def, regions_disjoint_def, memloc_within_alloca_def,
+      AllCaseEqs(), LET_THM] >>
+  gvs[allocas_non_overlapping_def] >>
+  Cases_on `aid = aid'` >> gvs[] >>
+  first_x_assum (qspecl_then [`aid`, `aid'`] mp_tac) >> simp[] >>
+  Cases_on `p` >> Cases_on `p'` >> gvs[]
 QED
 
 Theorem ma_may_alias_sound_no_alloca_proof:
@@ -1035,7 +1064,11 @@ Theorem ma_may_alias_sound_no_alloca_proof:
       (THE loc1.ml_offset, THE loc1.ml_size)
       (THE loc2.ml_offset, THE loc2.ml_size)
 Proof
-  cheat
+  rw[] >>
+  `~may_overlap loc1 loc2` by metis_tac[ma_may_alias_iff] >>
+  fs[may_overlap_def, regions_disjoint_def] >>
+  Cases_on `loc1.ml_size` >> Cases_on `loc2.ml_size` >>
+  Cases_on `loc1.ml_offset` >> Cases_on `loc2.ml_offset` >> gvs[LET_THM]
 QED
 
 Theorem bp_segment_from_ops_runtime_region_proof:
@@ -1048,5 +1081,23 @@ Theorem bp_segment_from_ops_runtime_region_proof:
       eval_operand ops.iao_ofst s = SOME (n2w addr) ∧
       memloc_runtime_region ml s = SOME (addr, THE ml.ml_size)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `ops.iao_ofst` >>
+  gvs[bp_segment_from_ops_def, LET_THM, ml_is_fixed_def,
+      ml_undefined_def, venomStateTheory.eval_operand_def,
+      memloc_runtime_region_def]
+  >- ((* Lit c *)
+      qexists_tac `w2n c` >> simp[] >>
+      Cases_on `ops.iao_size` >> gvs[] >>
+      Cases_on `x` >> gvs[])
+  >> (* Var s' *)
+  Cases_on `bp_ptr_from_op bp (Var s')` >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  Cases_on `o'` >> gvs[] >>
+  Cases_on `a` >> gvs[] >>
+  rename1 `Ptr (Allocation aid) (SOME off)` >>
+  drule_all bp_ptr_from_op_sound_local >> strip_tac >>
+  gvs[] >> qexists_tac `base' + off` >> simp[] >>
+  Cases_on `ops.iao_size` >> gvs[] >>
+  Cases_on `x` >> gvs[]
 QED

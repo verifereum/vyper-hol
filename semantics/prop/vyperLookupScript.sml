@@ -83,7 +83,7 @@ End
 (****************************************)
 (* Helpers *)
 
-Theorem lookup_scopes_update_other[local]:
+Theorem lookup_scopes_update_other:
   ∀pre n1 n2 env v rest.
     n1 ≠ n2 ⇒
     lookup_scopes n2 (pre ⧺ env |+ (n1, v) :: rest) =
@@ -94,7 +94,7 @@ Proof
   simp[lookup_scopes_def]
 QED
 
-Theorem lookup_scopes_val_update_other[local]:
+Theorem lookup_scopes_val_update_other:
   ∀pre n1 n2 env v rest.
     n1 ≠ n2 ⇒
     lookup_scopes_val n2 (pre ⧺ env |+ (n1, v) :: rest) =
@@ -118,7 +118,7 @@ Proof
   rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
-Theorem lookup_scopes_val_SOME[local]:
+Theorem lookup_scopes_val_SOME:
   ∀id sc v.
     lookup_scopes_val id sc = SOME v ⇔
     ∃tv. lookup_scopes id sc = SOME (tv, v)
@@ -128,14 +128,14 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem lookup_scopes_val_NONE[local]:
+Theorem lookup_scopes_val_NONE:
   ∀id sc. lookup_scopes_val id sc = NONE ⇔ lookup_scopes id sc = NONE
 Proof
   Induct_on `sc` >> simp[lookup_scopes_val_def, lookup_scopes_def] >>
   rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
-Theorem find_containing_scope_none_lookup_scopes_none[local]:
+Theorem find_containing_scope_none_lookup_scopes_none:
   ∀id sc. find_containing_scope id sc = NONE ⇒ lookup_scopes id sc = NONE
 Proof
   Induct_on `sc` >> simp[Once find_containing_scope_def, Once lookup_scopes_def] >>
@@ -157,7 +157,7 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-Theorem lookup_scopes_update[local]:
+Theorem lookup_scopes_update:
   ∀id pre env v rest.
     lookup_scopes id pre = NONE ⇒
     lookup_scopes id (pre ++ env |+ (id,v) :: rest) = SOME v
@@ -167,7 +167,7 @@ Proof
   rpt strip_tac >> gvs[lookup_scopes_def, AllCaseEqs()]
 QED
 
-Theorem find_containing_scope_pre_none[local]:
+Theorem find_containing_scope_pre_none:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre,env,tv,v,rest) ⇒
     lookup_scopes id pre = NONE
@@ -179,7 +179,7 @@ Proof
   Cases_on `x` >> simp[lookup_scopes_def]
 QED
 
-Theorem find_containing_scope_structure[local]:
+Theorem find_containing_scope_structure:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     sc = pre ++ env :: rest ∧ FLOOKUP env id = SOME (tv, v)
@@ -192,7 +192,7 @@ Proof
   Cases_on `x` >> strip_tac >> gvs[]
 QED
 
-Theorem find_containing_scope_lookup[local]:
+Theorem find_containing_scope_lookup:
   ∀id sc pre env tv v rest.
     find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
     lookup_scopes id sc = SOME (tv, v)
@@ -212,7 +212,7 @@ Proof
   PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
 QED
 
-Theorem lookup_scopes_update_preserves[local]:
+Theorem lookup_scopes_update_preserves:
   ∀n pre env id v rest.
     FLOOKUP env id = SOME w ⇒
     (IS_SOME (lookup_scopes n (pre ++ [env] ++ rest)) ⇔

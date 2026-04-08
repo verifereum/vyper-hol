@@ -187,6 +187,20 @@ val () = declare_monad ("vyper_evaluation",
 val () = enable_monad "vyper_evaluation";
 val () = enable_monadsyntax();
 
+Theorem bind_apply:
+  !f g s. (do v <- f; g v od) s =
+    case f s of (INL v,s') => g v s' | (INR e,s') => (INR e,s')
+Proof
+  rpt gen_tac >> simp[bind_def, pairTheory.UNCURRY]
+QED
+
+Theorem ignore_bind_apply:
+  !f g s. (do f; g od) s =
+    case f s of (INL x,s') => g s' | (INR e,s') => (INR e,s')
+Proof
+  EVAL_TAC >> simp[bind_def]
+QED
+
 Definition try_def:
   try f h s : α evaluation_result =
   case f s of (INR e, s) => h e s | x => x

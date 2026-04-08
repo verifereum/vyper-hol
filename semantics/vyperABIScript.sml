@@ -990,13 +990,9 @@ Proof
   ho_match_mp_tac evaluate_type_ind
   (* BaseT bt: direct computation, AddressT needs word_of_bytes_word_to_bytes *)
   \\ conj_tac >- (
-    Cases_on `bt` \\
-    rw[evaluate_type_def, vyper_to_abi_def,
-       default_value_def, default_to_abi_def] \\
-    TRY (rename1`BytesT bd` \\ Cases_on `bd`) \\
-    rw[evaluate_type_def, vyper_to_abi_def,
-       default_value_def, default_to_abi_def,
-       word_of_bytes_be_def] \\
+    rw[evaluate_type_def]
+    \\ gvs[CaseEq"base_type", vyper_to_abi_base_def, default_value_def,
+           default_to_abi_def, CaseEq"bound", word_of_bytes_be_def] \\
     DEP_REWRITE_TAC[word_of_bytes_word_to_bytes] \\
     rw[divides_def] )
   (* TupleT ts: use IH on list, default_value_tuple_MAP *)

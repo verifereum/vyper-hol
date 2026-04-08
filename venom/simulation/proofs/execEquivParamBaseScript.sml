@@ -465,7 +465,8 @@ Proof
   rw[exec_alloca_def, next_alloca_offset_def, LET_THM] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>
   rpt CASE_TAC >> gvs[lift_result_def] >>
-  ext_call_result_tac ()
+  vsr_irule vsr_update_var_R_ok >> simp[] >>
+  vsr_reconstruct_R_ok_tac `s1` `s2`
 QED
 
 (* ==========================================================================

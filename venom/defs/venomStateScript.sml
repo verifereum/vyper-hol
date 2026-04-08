@@ -102,7 +102,7 @@ Datatype:
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
     vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
-    vs_allocas : (num, num # num) fmap;  (* inst_id -> (offset, size) *)
+    vs_allocas : (num, num # num) fmap;  (* inst_id -> (offset, size), per frame *)
     vs_alloca_next : num  (* bump pointer: next free alloca offset *)
   |>
 End
@@ -211,7 +211,7 @@ Definition write_memory_with_expansion_def:
 End
 
 (* Next free alloca offset: past all existing allocas and physical memory.
-   ALLOCA uses this as a bump pointer without extending vs_memory. *)
+   vs_alloca_next tracks the bump pointer across call frames. *)
 Definition next_alloca_offset_def:
   next_alloca_offset s = MAX s.vs_alloca_next (LENGTH s.vs_memory)
 End
