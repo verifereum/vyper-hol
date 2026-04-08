@@ -452,18 +452,24 @@ End
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.
    Memory is extended lazily by mstore when the region is actually written.
    vs_allocas is per-frame (keyed by inst_id, unique within a function).
-   vs_alloca_next is global (bump pointer across all call frames). *)
+   vs_alloca_next is global (bump pointer across all call frames).
+   Idempotent: if inst_id already allocated, return existing offset. *)
 Definition exec_alloca_def:
   exec_alloca inst s alloc_size =
     case inst.inst_outputs of
       [out] =>
-        let offset = next_alloca_offset s in
-        let sz = w2n alloc_size in
-        let s' = s with <|
-          vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz));
-          vs_alloca_next := offset + sz
-        |> in
-        OK (update_var out (n2w offset) s')
+        (case FLOOKUP s.vs_allocas inst.inst_id of
+          SOME (offset, sz) =>
+            (* Already allocated — return existing base address *)
+            OK (update_var out (n2w offset) s)
+        | NONE =>
+            let offset = next_alloca_offset s in
+            let sz = w2n alloc_size in
+            let s' = s with <|
+              vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz));
+              vs_alloca_next := offset + sz
+            |> in
+            OK (update_var out (n2w offset) s'))
     | _ => Error "alloca requires single output"
 End
 

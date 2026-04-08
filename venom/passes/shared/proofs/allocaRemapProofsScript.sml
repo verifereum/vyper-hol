@@ -37,7 +37,7 @@
 Theory allocaRemapProofs
 Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs
-  venomExecSemantics venomEffects
+  venomExecSemantics venomEffects venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
 Libs
   listTheory rich_listTheory byteTheory arithmeticTheory
@@ -286,18 +286,17 @@ QED
 Theorem next_alloca_offset_ge_mem[local]:
   !s. LENGTH s.vs_memory <= next_alloca_offset s
 Proof
-  simp[next_alloca_offset_def, foldl_max_ge_init]
+  simp[next_alloca_offset_def]
 QED
 
 Theorem next_alloca_offset_ge_alloca[local]:
   !s aid off sz.
+    alloca_next_valid s /\
     FLOOKUP s.vs_allocas aid = SOME (off, sz) ==>
     off + sz <= next_alloca_offset s
 Proof
-  rw[next_alloca_offset_def] >>
-  irule foldl_max_ge_mem >>
-  qexists_tac `aid` >>
-  simp[MEM_pair_fmap_to_alist_FLOOKUP]
+  rw[next_alloca_offset_def, alloca_next_valid_def] >>
+  res_tac >> simp[]
 QED
 
 (* mem_byte_at beyond memory length is 0w *)
@@ -385,7 +384,9 @@ Theorem exec_alloca_preserves_remap:
     fn_alloca_id_of_var fn out = SOME inst.inst_id /\
     inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [out] /\
-    out IN roots ==>
+    out IN roots /\
+    FLOOKUP s1.vs_allocas inst.inst_id = NONE /\
+    FLOOKUP s2.vs_allocas inst.inst_id = NONE ==>
     let base1 = next_alloca_offset s1 in
     let base2 = next_alloca_offset s2 in
     let sz = w2n alloc_size in

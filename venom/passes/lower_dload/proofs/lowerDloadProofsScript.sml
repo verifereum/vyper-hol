@@ -472,6 +472,9 @@ Proof
     (Cases_on `inst.inst_outputs` >> fs[] >>
      Cases_on `t` >> fs[]) >>
   gvs[step_inst_base_def, LET_THM, exec_alloca_def, eval_operand_def] >>
+  Cases_on `FLOOKUP s1.vs_allocas inst.inst_id` >> gvs[] >>
+  Cases_on `FLOOKUP s2.vs_allocas inst.inst_id` >> gvs[] >>
+  TRY (Cases_on `x` >> gvs[]) >> TRY (Cases_on `x'` >> gvs[]) >>
   irule ld_ok_update_exempt >> simp[] >>
   fs[ld_ok_def, lookup_var_def]
 QED
@@ -625,6 +628,7 @@ Proof
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
        exec_alloca_def, eval_operand_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
        exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
@@ -866,7 +870,7 @@ Proof
   gvs[inst_wf_def] >>
   simp[step_inst_base_def, eval_operand_def, exec_alloca_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  Cases_on `t` >> gvs[]
+  BasicProvers.EVERY_CASE_TAC
 QED
 
 (* DLOADBYTES: only returns OK or Error (never Halt/IntRet/Abort) *)

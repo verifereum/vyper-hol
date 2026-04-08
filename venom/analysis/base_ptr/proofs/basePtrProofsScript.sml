@@ -435,6 +435,8 @@ Resume bp_handle_inst_sound_proof[alloca]:
       venomWfTheory.inst_wf_def] >>
   gvs[venomStateTheory.update_var_def,
       venomStateTheory.lookup_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> gvs[] >>
+  TRY (Cases_on `x` >> gvs[]) >>
   simp[ptr_from_alloca_def, ptr_matches_var_def, FLOOKUP_UPDATE,
        venomStateTheory.lookup_var_def]
 QED
