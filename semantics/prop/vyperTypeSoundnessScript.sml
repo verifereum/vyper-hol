@@ -8,20 +8,17 @@
 
 Theory vyperTypeSoundness
 Ancestors
+  pair list option rich_list vyperInterpreter vyperState
+  vyperContext vyperStorage vyperValue vyperValueOperation
+  vyperAST vyperMisc vyperStatePreservation vyperScopePreservation
+  vyperLookup vyperImmutablesPreservation vyperEvalExprPreservesScopesDom
+  vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
+  vyperTyping vyperEncodeDecode vyperAssignPreservesType
   vyperTypeSoundnessHelpers vyperBuiltinTyping
 Libs
   wordsLib
 
-open pairTheory listTheory optionTheory rich_listTheory
-     vyperInterpreterTheory vyperStateTheory vyperContextTheory
-     vyperStorageTheory vyperValueTheory vyperValueOperationTheory
-     vyperASTTheory vyperMiscTheory
-     vyperStatePreservationTheory vyperScopePreservationTheory
-     vyperLookupTheory vyperImmutablesPreservationTheory
-     vyperEvalExprPreservesScopesDomTheory
-     vyperEvalPreservesScopesTheory vyperEvalPreservesImmutablesDomTheory
-     vyperTypingTheory vyperEncodeDecodeTheory vyperAssignPreservesTypeTheory
-     vyperTypeSoundnessHelpersTheory vyperBuiltinTypingTheory
+val () = (); (* TODO: workaround https://github.com/HOL-Theorem-Prover/HOL/issues/1898, remove when fixed *)
 
 (* ===== ML bindings: fast conjunct access ===== *)
 
@@ -3733,5 +3730,3 @@ Proof
       drule_all (cj 8 eval_preserves_swt) >> metis_tac[])
   (* P8 *) >> metis_tac[cj 9 eval_preserves_swt]
 QED
-
-val _ = export_theory();
