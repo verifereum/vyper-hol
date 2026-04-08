@@ -53,37 +53,6 @@ Definition slots_to_bytes_def:
 End
 val () = cv_auto_trans slots_to_bytes_def;
 
-(* ===== Slot Size Computation ===== *)
-
-Definition base_type_slot_size_def:
-  base_type_slot_size (UintT _) = 1 /\
-  base_type_slot_size (IntT _) = 1 /\
-  base_type_slot_size DecimalT = 1 /\
-  base_type_slot_size BoolT = 1 /\
-  base_type_slot_size AddressT = 1 /\
-  base_type_slot_size (BytesT (Fixed _)) = 1 /\
-  base_type_slot_size (BytesT (Dynamic n)) = 1 + word_size n /\
-  base_type_slot_size (StringT n) = 1 + word_size n
-End
-val () = cv_auto_trans base_type_slot_size_def;
-
-Definition type_slot_size_def:
-  type_slot_size (BaseTV (BytesT (Dynamic n))) = 1 + word_size n /\
-  type_slot_size (BaseTV (StringT n)) = 1 + word_size n /\
-  type_slot_size (BaseTV _) = 1 /\
-  type_slot_size (FlagTV _) = 1 /\
-  type_slot_size NoneTV = 0 /\
-  type_slot_size (TupleTV tvs) = type_slot_size_list tvs /\
-  type_slot_size (ArrayTV tv (Fixed n)) = n * type_slot_size tv /\
-  type_slot_size (ArrayTV tv (Dynamic n)) = 1 + n * type_slot_size tv /\
-  type_slot_size (StructTV fields) = type_slot_size_fields fields /\
-  type_slot_size_list [] = 0 /\
-  type_slot_size_list (tv::tvs) = type_slot_size tv + type_slot_size_list tvs /\
-  type_slot_size_fields [] = 0 /\
-  type_slot_size_fields ((_, tv)::fields) = type_slot_size tv + type_slot_size_fields fields
-End
-val () = cv_auto_trans type_slot_size_def;
-
 (* ===== Base Type Encoding ===== *)
 
 Definition encode_base_to_slot_def:
@@ -105,18 +74,43 @@ Definition encode_base_to_slot_def:
 End
 val () = cv_auto_trans encode_base_to_slot_def;
 
+(* truncate_unsigned: mask a word's numeric value to n bits *)
+Definition truncate_unsigned_def:
+  truncate_unsigned n (w : bytes32) = w2n w MOD 2 ** n
+End
+
+(* truncate_signed: interpret the low n bits of a word as signed.
+   Result is in [-2^(n-1), 2^(n-1)) when 0 < n.
+   For well-formed storage (written by Vyper's encoder), this is a no-op. *)
+Definition truncate_signed_def:
+  truncate_signed 0 (w : bytes32) = (0 : int) /\
+  truncate_signed n w =
+    let u = w2n w MOD 2 ** n in
+    if u < 2 ** (n - 1) then &u else &u - &(2 ** n)
+End
+
+val () = cv_auto_trans truncate_unsigned_def;
+val () = cv_auto_trans truncate_signed_def;
+
+(* decode_base_from_slot masks values to their declared type's range.
+   This ensures decoded values always satisfy value_has_type, even
+   when reading adversarial/corrupt storage. For well-formed storage
+   (written by Vyper's encoder), the masking is a no-op.
+   FIX for counterexample: decode_value (λn. 1000w) 0 (BaseTV (UintT 8))
+   previously returned IntV 1000, violating value_has_type. *)
 Definition decode_base_from_slot_def:
   decode_base_from_slot (slot : bytes32) (BaseTV (UintT n)) =
-    IntV (&(w2n slot)) /\
+    IntV (&(truncate_unsigned n slot)) /\
   decode_base_from_slot slot (BaseTV (IntT n)) =
-    IntV (w2i slot) /\
-  decode_base_from_slot slot (BaseTV DecimalT) = DecimalV (w2i slot) /\
+    IntV (truncate_signed n slot) /\
+  decode_base_from_slot slot (BaseTV DecimalT) =
+    DecimalV (truncate_signed 168 slot) /\
   decode_base_from_slot slot (BaseTV BoolT) = BoolV (slot_to_bool slot) /\
   decode_base_from_slot slot (BaseTV AddressT) =
     BytesV (DROP 12 (word_to_bytes_be slot)) /\
   decode_base_from_slot slot (BaseTV (BytesT (Fixed n))) =
     BytesV (TAKE n (word_to_bytes_be slot)) /\
-  decode_base_from_slot slot (FlagTV m) = FlagV (w2n slot) /\
+  decode_base_from_slot slot (FlagTV m) = FlagV (truncate_unsigned m slot) /\
   decode_base_from_slot slot NoneTV = NoneV /\
   decode_base_from_slot slot _ = NoneV
 End

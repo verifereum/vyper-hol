@@ -7,5 +7,7 @@ Ancestors
   vyperEvalPureExpr
   vyperLookupStorageScopes
   vyperBareGlobalName
+  vyperTypeSoundness
+  vyperUpdateTarget
   vyperHashMap
   vyperExprNoControl

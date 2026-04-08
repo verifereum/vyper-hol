@@ -309,7 +309,7 @@ QED
 Theorem evaluate_binop_expmod:
   ∀tv x y.
     evaluate_binop (Unsigned 256) tv ExpMod (IntV x) (IntV y) =
-    INL (IntV (w2i (word_exp ((i2w x):bytes32) (i2w y))))
+    INL (IntV (&(w2n (word_exp ((i2w x):bytes32) (i2w y)))))
 Proof
   simp[vyperValueOperationTheory.evaluate_binop_def]
 QED

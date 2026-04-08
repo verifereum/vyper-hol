@@ -295,7 +295,7 @@ Definition evaluate_binop_def:
      | ExpMod => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            (if u = Unsigned 256
-            then INL $ IntV (w2i (word_exp (i2w i1 : bytes32) (i2w i2)))
+            then INL $ IntV (&(w2n (word_exp (i2w i1 : bytes32) (i2w i2))))
             else INR (TypeError "ExpMod")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | ShL => (case v1 of
@@ -670,11 +670,11 @@ Definition safe_cast_def:
   case t of
   | BaseTV (UintT n) =>
     (case v of
-     | IntV _ => SOME v
+     | IntV i => if within_int_bound (Unsigned n) i then SOME v else NONE
      | _ => NONE)
   | BaseTV (IntT n) =>
     (case v of
-     | IntV _ => SOME v
+     | IntV i => if within_int_bound (Signed n) i then SOME v else NONE
      | _ => NONE)
   | BaseTV BoolT =>
     (case v of
@@ -682,7 +682,7 @@ Definition safe_cast_def:
      | _ => NONE)
   | BaseTV DecimalT =>
     (case v of
-     | DecimalV _ => SOME v
+     | DecimalV d => if within_int_bound (Signed 168) d then SOME v else NONE
      | _ => NONE)
   | BaseTV (StringT n) =>
     (case v of
@@ -704,7 +704,7 @@ Definition safe_cast_def:
      | _ => NONE)
   | FlagTV n =>
     (case v of
-     | FlagV _ => SOME v
+     | FlagV m => if m < 2 ** n then SOME v else NONE
      | _ => NONE)
   | TupleTV ts =>
     (case v of
