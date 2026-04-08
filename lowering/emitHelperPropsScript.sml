@@ -537,6 +537,54 @@ Proof
   rw[eval_operand_def]
 QED
 
+(* ===== Compile monad: emit_inst, fresh_label, new_block properties ===== *)
+
+(* emit_inst: appends one instruction, preserves block structure *)
+Theorem emit_inst_extends:
+  ∀ opc ops outs st st'.
+    emit_inst opc ops outs st = ((), st') ⇒
+    st'.cs_current_insts = st.cs_current_insts ++
+      [mk_inst st.cs_next_id opc ops outs] ∧
+    st'.cs_current_bb = st.cs_current_bb ∧
+    st'.cs_blocks = st.cs_blocks ∧
+    st'.cs_next_id = st.cs_next_id + 1 ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_next_label = st.cs_next_label
+Proof
+  rw[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >> rw[]
+QED
+
+(* fresh_label: only changes cs_next_label *)
+Theorem fresh_label_props:
+  ∀ prefix st lbl st'.
+    fresh_label prefix st = (lbl, st') ⇒
+    st'.cs_current_bb = st.cs_current_bb ∧
+    st'.cs_blocks = st.cs_blocks ∧
+    st'.cs_current_insts = st.cs_current_insts ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_next_id = st.cs_next_id ∧
+    st'.cs_next_label = st.cs_next_label + 1
+Proof
+  rw[fresh_label_def, comp_bind_def, comp_return_def] >> rw[]
+QED
+
+(* new_block: finalizes current block, starts new one *)
+Theorem new_block_props:
+  ∀ label st old_lbl st'.
+    new_block label st = (old_lbl, st') ⇒
+    old_lbl = st.cs_current_bb ∧
+    st'.cs_current_bb = label ∧
+    st'.cs_current_insts = [] ∧
+    st'.cs_blocks =
+      <| bb_label := st.cs_current_bb;
+         bb_instructions := st.cs_current_insts |> :: st.cs_blocks ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_next_id = st.cs_next_id ∧
+    st'.cs_next_label = st.cs_next_label
+Proof
+  rw[new_block_def] >> rw[]
+QED
+
 (* ===== Layer 1: Connecting run_inst_seq to exec_block ===== *)
 
 (* Running non-terminator, non-INVOKE instructions within a block:

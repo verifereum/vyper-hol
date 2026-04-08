@@ -21,6 +21,7 @@
 
 Theory stmtLoweringProps
 Ancestors
+  list
   stmtLowering exprLoweringProps exprLowering emitHelper
   compileEnv venomExecSemantics venomInst venomState
 
@@ -70,6 +71,40 @@ Definition run_compiled_blocks_def:
         | Abort a ss' => Abort a ss'
         | Error e => Error e
 End
+
+(* ===== Main Statement Correctness ===== *)
+
+(* ===== lookup_block on assembled blocks ===== *)
+
+(* Find the current (last) block in assembled blocks *)
+Theorem lookup_block_assemble_current:
+  ∀ st' lbl.
+    st'.cs_current_bb = lbl ∧
+    ¬MEM lbl (MAP (λbb. bb.bb_label) st'.cs_blocks) ⇒
+    lookup_block lbl (assemble_blocks st') =
+      SOME <| bb_label := lbl; bb_instructions := st'.cs_current_insts |>
+Proof
+  rw[assemble_blocks_def, lookup_block_def] >>
+  pop_assum mp_tac >>
+  qspec_tac(`st'.cs_current_bb`,`v`) >>
+  qspec_tac(`st'.cs_current_insts`,`insts`) >>
+  qspec_tac(`st'.cs_blocks`,`ls`) >>
+  Induct >> rw[FIND_thm]
+QED
+
+(* Find a finalized block in assembled blocks *)
+Theorem lookup_block_assemble_in_blocks:
+  ∀ st' bb lbl.
+    FIND (λb. b.bb_label = lbl) st'.cs_blocks = SOME bb ⇒
+    lookup_block lbl (assemble_blocks st') = SOME bb
+Proof
+  rw[assemble_blocks_def, lookup_block_def] >>
+  qspec_tac(`st'.cs_current_bb`,`v`) >>
+  qspec_tac(`st'.cs_current_insts`,`insts`) >>
+  pop_assum mp_tac >>
+  qspec_tac(`st'.cs_blocks`,`ls`) >>
+  Induct >> rw[FIND_thm] >> gvs[FIND_thm]
+QED
 
 (* ===== Main Statement Correctness ===== *)
 
@@ -191,6 +226,20 @@ Theorem compile_assert_bare_correct_false:
       run_compiled_blocks ctx st st' ss fuel =
         Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
+  rw[compile_stmt_def, comp_bind_def, comp_ignore_bind_def] >>
+  (* Unfold the monad: lower_value, fresh_label, emit_inst, new_block *)
+  pairarg_tac >> gvs[] >>  (* lower_value compile_expr *)
+  pairarg_tac >> gvs[] >>  (* fresh_label "assert_ok" *)
+  pairarg_tac >> gvs[] >>  (* fresh_label "assert_fail" *)
+  pairarg_tac >> gvs[] >>  (* emit_inst JNZ *)
+  pairarg_tac >> gvs[] >>  (* new_block fail_lbl *)
+  pairarg_tac >> gvs[] >>  (* emit_inst REVERT *)
+  pairarg_tac >> gvs[] >>  (* new_block ok_lbl *)
+  gvs[comp_return_def] >>
+  (* Now st' is fully characterized *)
+  (* Unfold run_compiled_blocks *)
+  simp[run_compiled_blocks_def, assemble_function_def, assemble_blocks_def] >>
+  (* Need to find entry block via lookup_block *)
   cheat
 QED
 
