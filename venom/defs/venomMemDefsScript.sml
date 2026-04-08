@@ -6,7 +6,9 @@
  *
  * TOP-LEVEL:
  *   allocas_non_overlapping — distinct allocas have disjoint regions
- *   regions_disjoint        — two byte ranges don't overlap
+ *   alloca_next_valid        — bump pointer past all existing allocas
+ *   alloca_inv               — combined: non-overlapping + next-valid
+ *   regions_disjoint         — two byte ranges don't overlap
  *)
 
 Theory venomMemDefs
@@ -25,11 +27,20 @@ Definition allocas_non_overlapping_def:
       b1 + sz1 ≤ b2 ∨ b2 + sz2 ≤ b1
 End
 
+(* vs_alloca_next is ≥ end of every existing alloca region.
+ * Invariant maintained by exec_alloca (which updates vs_alloca_next). *)
 Definition alloca_next_valid_def:
   alloca_next_valid (s : venom_state) ⇔
     ∀aid base sz.
       FLOOKUP s.vs_allocas aid = SOME (base, sz) ⇒
       base + sz ≤ s.vs_alloca_next
+End
+
+(* Combined alloca invariant: non-overlapping + bump pointer valid.
+ * Holds from init (FEMPTY) and preserved by all execution steps.
+ * This is the correct inductive invariant for alloca safety. *)
+Definition alloca_inv_def:
+  alloca_inv s ⇔ allocas_non_overlapping s ∧ alloca_next_valid s
 End
 
 Definition regions_disjoint_def:

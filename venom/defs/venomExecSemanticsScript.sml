@@ -451,7 +451,8 @@ End
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.
    Memory is extended lazily by mstore when the region is actually written.
-   Keyed by inst.inst_id (HOL4 analog of Python Allocation identity). *)
+   vs_allocas is per-frame (keyed by inst_id, unique within a function).
+   vs_alloca_next is global (bump pointer across all call frames). *)
 Definition exec_alloca_def:
   exec_alloca inst s alloc_size =
     case inst.inst_outputs of
@@ -1020,6 +1021,9 @@ End
    must be propagated.  Only caller-local fields are kept:
    vs_vars, vs_params, vs_current_bb, vs_inst_idx, vs_prev_bb,
    vs_halted, and the context fields (call/tx/block/code/data/labels/hashes). *)
+(* Merge callee state back into caller.
+   vs_allocas stays as caller's (per-frame scoping).
+   vs_alloca_next propagates (global bump pointer). *)
 Definition merge_callee_state_def:
   merge_callee_state caller callee =
     caller with <|
@@ -1034,7 +1038,7 @@ Definition merge_callee_state_def:
     |>
 End
 
-(* Prepare callee state: fresh vars, params, entry block *)
+(* Prepare callee state: fresh vars, params, entry block, clean allocas *)
 Definition setup_callee_def:
   setup_callee fn args s =
     if NULL fn.fn_blocks then NONE
@@ -1045,7 +1049,7 @@ Definition setup_callee_def:
       vs_inst_idx   := 0;
       vs_prev_bb    := NONE;
       vs_halted     := F;
-      vs_allocas    := FEMPTY    (* callee starts with no allocas *)
+      vs_allocas    := FEMPTY
     |>)
 End
 
