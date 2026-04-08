@@ -475,6 +475,15 @@ Definition sfields_tenv_consistent_def:
          MAP (FST o SND) fields = MAP SND args)
 End
 
+(* Compiler's fresh variable counter is ahead of all %-named vars in the
+   venom state. Ensures emit_op/emit_void produce names that don't alias
+   any existing operand. *)
+Definition fresh_vars_wrt_def:
+  fresh_vars_wrt (st:compile_state) (ss:venom_state) ⇔
+    ∀ n. n ≥ st.cs_next_var ⇒
+      STRING #"%" (toString n) ∉ FDOM ss.vs_vars
+End
+
 Definition well_formed_cenv_def:
   well_formed_cenv cenv ⇔
     (* MemLoc regions don't overlap *)

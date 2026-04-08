@@ -416,15 +416,7 @@ QED
 Theorem emitted_insts_seq2 = emitted_insts_append;
 
 (* ===== Fresh variable invariant ===== *)
-
-(* Compiler's fresh variable counter is ahead of all %-named vars in the
-   venom state. Ensures emit_op/emit_void produce names that don't alias
-   any existing operand. *)
-Definition fresh_vars_wrt_def:
-  fresh_vars_wrt (st:compile_state) (ss:venom_state) ⇔
-    ∀ n. n ≥ st.cs_next_var ⇒
-      STRING #"%" (toString n) ∉ FDOM ss.vs_vars
-End
+(* fresh_vars_wrt is defined in compileEnvScript.sml *)
 
 (* fresh_vars_wrt preserved by update_var of a name below the counter *)
 Theorem fresh_vars_wrt_update_var:

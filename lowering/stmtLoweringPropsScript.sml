@@ -22,8 +22,8 @@
 Theory stmtLoweringProps
 Ancestors
   list
-  stmtLowering exprLoweringProps exprLowering emitHelper
-  compileEnv venomExecSemantics venomInst venomState
+  stmtLowering exprLoweringProps exprLowering emitHelper emitHelperProps
+  compileEnv venomExecSemantics venomExecProps venomInst venomState
 
 (* ===== Multi-Block Execution ===== *)
 
@@ -219,6 +219,8 @@ QED
 Theorem compile_assert_bare_correct_false:
   ∀ cenv cx lctx ty cond_e es ss st st' es'.
     state_rel cenv cx es ss ∧
+    fresh_vars_wrt st ss ∧
+    supported_expr cond_e ∧
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st')
     ⇒
@@ -227,19 +229,17 @@ Theorem compile_assert_bare_correct_false:
         Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
   rw[compile_stmt_def, comp_bind_def, comp_ignore_bind_def] >>
-  (* Unfold the monad: lower_value, fresh_label, emit_inst, new_block *)
-  pairarg_tac >> gvs[] >>  (* lower_value compile_expr *)
-  pairarg_tac >> gvs[] >>  (* fresh_label "assert_ok" *)
-  pairarg_tac >> gvs[] >>  (* fresh_label "assert_fail" *)
-  pairarg_tac >> gvs[] >>  (* emit_inst JNZ *)
-  pairarg_tac >> gvs[] >>  (* new_block fail_lbl *)
-  pairarg_tac >> gvs[] >>  (* emit_inst REVERT *)
-  pairarg_tac >> gvs[] >>  (* new_block ok_lbl *)
+  rpt (pairarg_tac >> gvs[]) >>
   gvs[comp_return_def] >>
-  (* Now st' is fully characterized *)
-  (* Unfold run_compiled_blocks *)
+  drule_all compile_expr_correct >> strip_tac >>
+  qspec_then`"assert_ok"`drule fresh_label_props >>
+  qspec_then`"assert_fail"`drule fresh_label_props >>
+  qspec_then`REVERT`drule emit_inst_extends >>
+  qspec_then`JNZ`drule emit_inst_extends >>
+  qspec_then`fail_lbl`drule new_block_props >>
+  qspec_then`ok_lbl`drule new_block_props >>
+  rpt strip_tac >>
   simp[run_compiled_blocks_def, assemble_function_def, assemble_blocks_def] >>
-  (* Need to find entry block via lookup_block *)
   cheat
 QED
 
