@@ -1493,8 +1493,12 @@ Proof
   irule (REWRITE_RULE [AND_IMP_INTRO]
            passSimulationProofsTheory.lift_result_trans_proof) >>
   rpt conj_tac
-  >- metis_tac[stateEquivProofsTheory.state_equiv_trans]
-  >- metis_tac[stateEquivProofsTheory.execution_equiv_trans]
+  >- metis_tac[stateEquivProofsTheory.state_equiv_trans,
+              stateEquivProofsTheory.execution_equiv_trans]
+  >- metis_tac[stateEquivProofsTheory.state_equiv_trans,
+              stateEquivProofsTheory.execution_equiv_trans]
+  >- metis_tac[stateEquivProofsTheory.state_equiv_trans,
+              stateEquivProofsTheory.execution_equiv_trans]
   >- (qexists_tac `Error e` >> simp[])
 QED
 
@@ -1585,8 +1589,8 @@ QED
 
 (* Prove state_equiv/execution_equiv transitivity conjuncts *)
 val se_trans_tac =
-  conj_tac >- metis_tac[stateEquivProofsTheory.state_equiv_trans] >>
-  conj_tac >- metis_tac[stateEquivProofsTheory.execution_equiv_trans];
+  rpt (conj_tac >- metis_tac[stateEquivProofsTheory.state_equiv_trans,
+                             stateEquivProofsTheory.execution_equiv_trans]);
 
 (* Specialized exec_block_preserves_R_block for state_equiv/execution_equiv
    with idx change: given state_equiv s1 s2 and freshness, proves
