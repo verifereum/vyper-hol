@@ -26,6 +26,7 @@ Theory emitHelperProps
 Ancestors
   exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
+  instIdxIndep
 Libs
   intLib
 
@@ -415,15 +416,7 @@ QED
 Theorem emitted_insts_seq2 = emitted_insts_append;
 
 (* ===== Fresh variable invariant ===== *)
-
-(* Compiler's fresh variable counter is ahead of all %-named vars in the
-   venom state. Ensures emit_op/emit_void produce names that don't alias
-   any existing operand. *)
-Definition fresh_vars_wrt_def:
-  fresh_vars_wrt (st:compile_state) (ss:venom_state) ⇔
-    ∀ n. n ≥ st.cs_next_var ⇒
-      STRING #"%" (toString n) ∉ FDOM ss.vs_vars
-End
+(* fresh_vars_wrt is defined in compileEnvScript.sml *)
 
 (* fresh_vars_wrt preserved by update_var of a name below the counter *)
 Theorem fresh_vars_wrt_update_var:
@@ -534,6 +527,144 @@ Proof
      comp_ignore_bind_def, comp_return_def, emit_def, emitted_insts_def] >>
   gvs[rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def] >>
   rw[eval_operand_def]
+QED
+
+(* ===== Compile monad: emit_inst, fresh_label, new_block properties ===== *)
+
+(* emit_inst: appends one instruction, preserves block structure *)
+Theorem emit_inst_extends:
+  ∀ opc ops outs st st'.
+    emit_inst opc ops outs st = ((), st') ⇒
+    st'.cs_current_insts = st.cs_current_insts ++
+      [mk_inst st.cs_next_id opc ops outs] ∧
+    st'.cs_current_bb = st.cs_current_bb ∧
+    st'.cs_blocks = st.cs_blocks ∧
+    st'.cs_next_id = st.cs_next_id + 1 ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_next_label = st.cs_next_label
+Proof
+  rw[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >> rw[]
+QED
+
+(* fresh_label: only changes cs_next_label *)
+Theorem fresh_label_props:
+  ∀ prefix st lbl st'.
+    fresh_label prefix st = (lbl, st') ⇒
+    st'.cs_current_bb = st.cs_current_bb ∧
+    st'.cs_blocks = st.cs_blocks ∧
+    st'.cs_current_insts = st.cs_current_insts ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_next_id = st.cs_next_id ∧
+    st'.cs_next_label = st.cs_next_label + 1
+Proof
+  rw[fresh_label_def, comp_bind_def, comp_return_def] >> rw[]
+QED
+
+(* new_block: finalizes current block, starts new one *)
+Theorem new_block_props:
+  ∀ label st old_lbl st'.
+    new_block label st = (old_lbl, st') ⇒
+    old_lbl = st.cs_current_bb ∧
+    st'.cs_current_bb = label ∧
+    st'.cs_current_insts = [] ∧
+    st'.cs_blocks =
+      <| bb_label := st.cs_current_bb;
+         bb_instructions := st.cs_current_insts |> :: st.cs_blocks ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_next_id = st.cs_next_id ∧
+    st'.cs_next_label = st.cs_next_label
+Proof
+  rw[new_block_def] >> rw[]
+QED
+
+(* ===== Layer 1: Connecting run_inst_seq to exec_block ===== *)
+
+(* Running non-terminator, non-INVOKE instructions within a block:
+   If instructions at indices [idx .. idx + LENGTH insts) match `insts`,
+   and run_inst_seq succeeds, then exec_block from idx reaches
+   idx + LENGTH insts with the same state.
+
+   This lets us "fast forward" through a prefix of a block's instructions
+   using run_inst_seq, then reason about the terminator separately. *)
+Theorem exec_block_inst_seq_prefix:
+  ∀ insts fuel ctx bb idx ss ss'.
+    run_inst_seq insts ss = OK ss' ∧
+    EVERY (λi. ¬is_terminator i.inst_opcode) insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE) insts ∧
+    (∀ k. k < LENGTH insts ⇒
+          get_instruction bb (idx + k) = SOME (EL k insts))
+    ⇒
+    exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
+      exec_block fuel ctx bb (ss' with vs_inst_idx := idx + LENGTH insts)
+Proof
+  Induct_on `insts` >>
+  rw[run_inst_seq_def] >>
+  Cases_on `step_inst_base h ss` >> gvs[] >>
+  simp[Once exec_block_def] >>
+  CASE_TAC >- (first_x_assum(qspec_then`0`mp_tac) >> rw[]) >>
+  first_assum(qspec_then`0`mp_tac) >>
+  impl_tac >- rw[] >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
+  simp[Once step_inst_def] >>
+  drule step_inst_inst_idx_indep >>
+  simp[] >> disch_then kall_tac >>
+  simp[exec_result_map_def] >>
+  first_x_assum drule >>
+  `idx + SUC (LENGTH insts) = SUC idx + LENGTH insts` by simp[] >>
+  pop_assum SUBST_ALL_TAC >>
+  disch_then irule >>
+  rw[] >>
+  first_x_assum(qspec_then`SUC k`mp_tac) >>
+  rw[] >> gvs[arithmeticTheory.ADD1]
+QED
+
+(* Full single-block execution ending with JMP:
+   Non-terminator instructions followed by a JMP. *)
+Theorem exec_block_inst_seq_jmp:
+  ∀ insts fuel ctx bb idx ss ss' target_lbl jmp_id.
+    run_inst_seq insts ss = OK ss' ∧
+    EVERY (λi. ¬is_terminator i.inst_opcode) insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE) insts ∧
+    (∀ k. k < LENGTH insts ⇒
+          get_instruction bb (idx + k) = SOME (EL k insts)) ∧
+    get_instruction bb (idx + LENGTH insts) =
+      SOME (mk_inst jmp_id JMP [Label target_lbl] []) ∧
+    ¬ss'.vs_halted
+    ⇒
+    exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
+      OK (jump_to target_lbl ss')
+Proof
+  rw[] >>
+  drule_all exec_block_inst_seq_prefix >> simp[] >>
+  disch_then kall_tac >>
+  simp[Once exec_block_def] >>
+  simp[Once step_inst_def] >>
+  simp[step_inst_base_def, is_terminator_def, jump_to_def]
+QED
+
+(* Full single-block execution ending with JNZ *)
+Theorem exec_block_inst_seq_jnz:
+  ∀ insts fuel ctx bb idx ss ss' cond_op cond_v
+    lbl_nz lbl_z jnz_id.
+    run_inst_seq insts ss = OK ss' ∧
+    EVERY (λi. ¬is_terminator i.inst_opcode) insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE) insts ∧
+    (∀ k. k < LENGTH insts ⇒
+          get_instruction bb (idx + k) = SOME (EL k insts)) ∧
+    get_instruction bb (idx + LENGTH insts) =
+      SOME (mk_inst jnz_id JNZ [cond_op; Label lbl_nz; Label lbl_z] []) ∧
+    eval_operand cond_op ss' = SOME cond_v ∧
+    ¬ss'.vs_halted
+    ⇒
+    exec_block fuel ctx bb (ss with vs_inst_idx := idx) =
+      OK (jump_to (if cond_v ≠ 0w then lbl_nz else lbl_z) ss')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all exec_block_inst_seq_prefix >> simp[] >>
+  disch_then kall_tac >>
+  simp[Once exec_block_def] >>
+  simp[Once step_inst_def] >>
+  simp[step_inst_base_def, is_terminator_def, jump_to_def] >>
+  simp[eval_op_inst_idx] >> rw[]
 QED
 
 (* ===== Combined emit_op + step + frame lemmas ===== *)

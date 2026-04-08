@@ -79,15 +79,22 @@ End
 Theorem compile_expr_correct:
   ∀ cenv cx ty e es ss st op st' v es'.
     state_rel cenv cx es ss ∧
+    fresh_vars_wrt st ss ∧
     supported_expr e ∧
     eval_expr cx e es = (INL (Value v), es') ∧
-    lower_value compile_expr cenv ty e st = (op, st') ∧
-    same_blocks st st'
+    lower_value compile_expr cenv ty e st = (op, st')
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel cenv cx es' ss'
+      state_rel cenv cx es' ss' ∧
+      same_blocks st st' ∧
+      st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
+      ¬ss'.vs_halted ∧
+      EVERY (λi. ¬is_terminator i.inst_opcode ∧ i.inst_opcode ≠ INVOKE)
+        (emitted_insts st st') ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w)
 Proof
   cheat
 QED

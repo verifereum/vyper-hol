@@ -21,8 +21,9 @@
 
 Theory stmtLoweringProps
 Ancestors
-  stmtLowering exprLoweringProps exprLowering emitHelper
-  compileEnv venomExecSemantics venomInst venomState
+  list
+  stmtLowering exprLoweringProps exprLowering emitHelper emitHelperProps
+  compileEnv venomExecSemantics venomExecProps venomInst venomState
 
 (* ===== Multi-Block Execution ===== *)
 
@@ -45,20 +46,65 @@ Definition assemble_function_def:
        fn_blocks := assemble_blocks st' |>
 End
 
-(* Run multi-block compiled code: assemble blocks from compile state,
-   build a function, and execute via run_function starting at the entry
-   block's first new instruction (after previously-emitted instructions).
-   Used for statements that create multi-block CFGs (If, For).
+(* Run multi-block compiled code.
+   The first block starts at entry_idx (mid-block, after pre-existing
+   instructions). Subsequent blocks start at idx 0 via run_blocks.
+   Used for statements that create multi-block CFGs (If, For, Assert).
    The ctx parameter supplies the function-call context (for INVOKE). *)
 Definition run_compiled_blocks_def:
   run_compiled_blocks (ctx:venom_context) (st:compile_state) (st':compile_state)
                       (ss:venom_state) fuel =
     let fn = assemble_function st st' in
+    let entry_lbl = st.cs_current_bb in
     let entry_idx = LENGTH st.cs_current_insts in
-    run_function fuel ctx fn
-      (ss with <| vs_current_bb := st.cs_current_bb;
-                  vs_inst_idx := entry_idx |>)
+    case lookup_block entry_lbl fn.fn_blocks of
+      NONE => Error "entry block not found"
+    | SOME bb =>
+        case exec_block fuel ctx bb
+               (ss with <| vs_current_bb := entry_lbl;
+                            vs_inst_idx := entry_idx |>) of
+          OK ss' =>
+            if ss'.vs_halted then Halt ss'
+            else run_blocks fuel ctx fn ss'
+        | IntRet vals ss' => IntRet vals ss'
+        | Halt ss' => Halt ss'
+        | Abort a ss' => Abort a ss'
+        | Error e => Error e
 End
+
+(* ===== Main Statement Correctness ===== *)
+
+(* ===== lookup_block on assembled blocks ===== *)
+
+(* Find the current (last) block in assembled blocks *)
+Theorem lookup_block_assemble_current:
+  ∀ st' lbl.
+    st'.cs_current_bb = lbl ∧
+    ¬MEM lbl (MAP (λbb. bb.bb_label) st'.cs_blocks) ⇒
+    lookup_block lbl (assemble_blocks st') =
+      SOME <| bb_label := lbl; bb_instructions := st'.cs_current_insts |>
+Proof
+  rw[assemble_blocks_def, lookup_block_def] >>
+  pop_assum mp_tac >>
+  qspec_tac(`st'.cs_current_bb`,`v`) >>
+  qspec_tac(`st'.cs_current_insts`,`insts`) >>
+  qspec_tac(`st'.cs_blocks`,`ls`) >>
+  Induct >> rw[FIND_thm]
+QED
+
+(* Find a finalized block in assembled blocks *)
+Theorem lookup_block_assemble_in_blocks:
+  ∀ st' bb lbl.
+    FIND (λb. b.bb_label = lbl) st'.cs_blocks = SOME bb ⇒
+    lookup_block lbl (assemble_blocks st') = SOME bb
+Proof
+  rw[assemble_blocks_def, lookup_block_def] >>
+  qspec_tac(`st'.cs_current_bb`,`v`) >>
+  qspec_tac(`st'.cs_current_insts`,`insts`) >>
+  pop_assum mp_tac >>
+  qspec_tac(`st'.cs_blocks`,`ls`) >>
+  Induct >> rw[FIND_thm] >> gvs[FIND_thm]
+QED
 
 (* ===== Main Statement Correctness ===== *)
 
@@ -173,6 +219,8 @@ QED
 Theorem compile_assert_bare_correct_false:
   ∀ cenv cx lctx ty cond_e es ss st st' es'.
     state_rel cenv cx es ss ∧
+    fresh_vars_wrt st ss ∧
+    supported_expr cond_e ∧
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st')
     ⇒
@@ -180,6 +228,18 @@ Theorem compile_assert_bare_correct_false:
       run_compiled_blocks ctx st st' ss fuel =
         Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
+  rw[compile_stmt_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[comp_return_def] >>
+  drule_all compile_expr_correct >> strip_tac >>
+  qspec_then`"assert_ok"`drule fresh_label_props >>
+  qspec_then`"assert_fail"`drule fresh_label_props >>
+  qspec_then`REVERT`drule emit_inst_extends >>
+  qspec_then`JNZ`drule emit_inst_extends >>
+  qspec_then`fail_lbl`drule new_block_props >>
+  qspec_then`ok_lbl`drule new_block_props >>
+  rpt strip_tac >>
+  simp[run_compiled_blocks_def, assemble_function_def, assemble_blocks_def] >>
   cheat
 QED
 

@@ -443,3 +443,50 @@ Proof
   simp[venomInstTheory.fn_entry_label_def,
        venomInstTheory.entry_block_def]
 QED
+
+(* ===== Layer 2: Block chaining in run_blocks ===== *)
+
+(* One step of run_blocks: if exec_block produces OK (not halted),
+   run_blocks continues at the next block. *)
+Theorem run_blocks_step:
+  ∀ fuel ctx fn bb ss ss'.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
+    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
+    ¬ss'.vs_halted
+    ⇒
+    run_blocks (SUC fuel) ctx fn ss = run_blocks fuel ctx fn ss'
+Proof ACCEPT_TAC run_blocks_step_proof
+QED
+
+(* Two blocks chained: block A produces OK, run_blocks continues *)
+Theorem run_blocks_two_blocks:
+  ∀ fuel ctx fn bb_A ss ss_mid result.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
+    exec_block fuel ctx bb_A (ss with vs_inst_idx := 0) = OK ss_mid ∧
+    ¬ss_mid.vs_halted ∧
+    run_blocks fuel ctx fn ss_mid = result
+    ⇒
+    run_blocks (SUC fuel) ctx fn ss = result
+Proof ACCEPT_TAC run_blocks_two_blocks_proof
+QED
+
+(* Terminal: exec_block produces OK with halted → run_blocks returns Halt *)
+Theorem run_blocks_halt:
+  ∀ fuel ctx fn bb ss ss'.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
+    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
+    ss'.vs_halted
+    ⇒
+    run_blocks (SUC fuel) ctx fn ss = Halt ss'
+Proof ACCEPT_TAC run_blocks_halt_proof
+QED
+
+(* Terminal: exec_block produces Abort → run_blocks returns Abort *)
+Theorem run_blocks_abort:
+  ∀ fuel ctx fn bb ss a ss'.
+    lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
+    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = Abort a ss'
+    ⇒
+    run_blocks (SUC fuel) ctx fn ss = Abort a ss'
+Proof ACCEPT_TAC run_blocks_abort_proof
+QED
