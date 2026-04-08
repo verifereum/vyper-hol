@@ -10,7 +10,7 @@
 
 Theory concretizeMemLocCorrectness
 Ancestors
-  concretizeMemLocProofs
+  concretizeMemLocProofs venomExecSemantics
 
 Theorem concretize_function_correct:
   !amap fn fuel ctx s1 s2.
@@ -18,6 +18,7 @@ Theorem concretize_function_correct:
     concretize_pointer_confined fn amap /\
     mem_remap_equiv amap fn s1 s2 ==>
     lift_result
+      (mem_remap_equiv amap fn)
       (mem_remap_equiv amap fn)
       (mem_remap_equiv amap fn)
       (run_blocks fuel ctx fn s1)

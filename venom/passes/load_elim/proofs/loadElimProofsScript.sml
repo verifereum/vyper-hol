@@ -22,7 +22,7 @@ Theorem load_elim_one_correct_proof:
     let fresh = load_elim_one_fresh ctx ir_cfg fn in
     fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
     (?e. run_blocks fuel run_ctx fn s = Error e) \/
-    lift_result (state_equiv fresh) (execution_equiv fresh)
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (run_blocks fuel run_ctx fn s)
       (run_blocks fuel run_ctx (load_elim_one ctx ir_cfg fn) s)
 Proof
@@ -39,7 +39,7 @@ Theorem load_elim_function_correct_proof:
     bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s ==>
     ?fresh.
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv fresh) (execution_equiv fresh)
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (load_elim_function fn) s)
 Proof

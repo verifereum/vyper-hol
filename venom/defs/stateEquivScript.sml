@@ -22,17 +22,21 @@
  *
  * Result Equivalence:
  *
- *   lift_result R_ok R_term     : Generic combinator — lift two state relations
- *                                 through exec_result (R_ok for OK, R_term for
- *                                 Halt/Revert, T for Error)
+ *   revert_equiv               : Only returndata (what survives EVM abort rollback)
+ *   lift_result R_ok R_term R_abort : Generic combinator — lift three state
+ *                                 relations through exec_result (R_ok for OK,
+ *                                 R_term for Halt/IntRet, R_abort for Abort,
+ *                                 T for Error)
  *   result_equiv vars           : Canonical instantiation —
- *                                 lift_result (state_equiv vars) (execution_equiv vars)
+ *                                 lift_result (state_equiv vars)
+ *                                   (execution_equiv vars) revert_equiv
  *
  * TOP-LEVEL DEFINITIONS:
  *   - observable_equiv : Only externally visible effects
  *   - execution_equiv  : State equiv ignoring control flow fields
  *   - state_equiv      : Full state equivalence with variable exceptions
- *   - lift_result      : Generic dual-relation lift through exec_result
+ *   - revert_equiv     : Only returndata (abort rollback)
+ *   - lift_result      : Generic triple-relation lift through exec_result
  *   - result_equiv     : Canonical result equivalence (lift_result alias)
  *)
 
@@ -131,24 +135,33 @@ End
    Result Equivalence
    ========================================================================== *)
 
-(* Generic combinator: lift two state relations through exec_result.
+(* What survives EVM rollback on abort — only returndata.
+   REVERT: returndata preserved. ExHalt: returndata cleared to [].
+   All other state (memory, storage, logs, vars) is rolled back. *)
+Definition revert_equiv_def:
+  revert_equiv s1 s2 <=> s1.vs_returndata = s2.vs_returndata
+End
+
+(* Generic combinator: lift three state relations through exec_result.
    R_ok for OK (continuation — needs control flow for next step).
-   R_term for Halt/Revert (terminal — control flow irrelevant).
+   R_term for Halt/IntRet (terminal — state commits, full equiv needed).
+   R_abort for Abort (rolled back — only returndata observable).
    Error results are always equivalent (messages may differ). *)
 Definition lift_result_def:
-  lift_result R_ok R_term (OK s1) (OK s2) = R_ok s1 s2 /\
-  lift_result R_ok R_term (Halt s1) (Halt s2) = R_term s1 s2 /\
-  lift_result R_ok R_term (Abort a1 s1) (Abort a2 s2) =
-    ((a1 = a2) /\ R_term s1 s2) /\
-  lift_result R_ok R_term (IntRet v1 s1) (IntRet v2 s2) =
+  lift_result R_ok R_term R_abort (OK s1) (OK s2) = R_ok s1 s2 /\
+  lift_result R_ok R_term R_abort (Halt s1) (Halt s2) = R_term s1 s2 /\
+  lift_result R_ok R_term R_abort (Abort a1 s1) (Abort a2 s2) =
+    ((a1 = a2) /\ R_abort s1 s2) /\
+  lift_result R_ok R_term R_abort (IntRet v1 s1) (IntRet v2 s2) =
     (R_term s1 s2 /\ (v1 = v2)) /\
-  lift_result R_ok R_term (Error e1) (Error e2) = T /\
-  lift_result R_ok R_term _ _ = F
+  lift_result R_ok R_term R_abort (Error e1) (Error e2) = T /\
+  lift_result R_ok R_term R_abort _ _ = F
 End
 
 (* Canonical instantiation: state_equiv for OK, execution_equiv for terminal.
-   Defined by pattern-matching for proof compatibility (simp[result_equiv_def]
-   works directly). Equivalence with lift_result proven in stateEquivProps. *)
+   Abort also uses execution_equiv (stronger than needed, but proof-compatible).
+   DFT uses lift_result with revert_equiv directly for Abort.
+   Equivalence with lift_result proven in stateEquivProps. *)
 Definition result_equiv_def:
   result_equiv vars (OK s1) (OK s2) = state_equiv vars s1 s2 /\
   result_equiv vars (Halt s1) (Halt s2) = execution_equiv vars s1 s2 /\

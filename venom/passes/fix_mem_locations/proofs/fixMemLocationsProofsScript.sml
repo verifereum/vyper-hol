@@ -14,6 +14,7 @@ Theorem fix_mem_function_correct_proof:
   !fuel ctx fn s.
     lift_result (state_equiv (fml_fresh_vars_fn fn))
                (execution_equiv (fml_fresh_vars_fn fn))
+                  (execution_equiv (fml_fresh_vars_fn fn))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (fix_mem_function fn) s)
 Proof

@@ -301,18 +301,18 @@ Proof
   Cases_on `inst.inst_opcode = INVOKE`
   >- (
     simp[step_inst_def, eval_ops_inst_idx] >>
-    Cases_on `decode_invoke inst` >> simp[result_equiv_def] >>
+    Cases_on `decode_invoke inst` >> simp[result_equiv_def, revert_equiv_def] >>
     Cases_on `x` >> simp[] >>
     Cases_on `lookup_function q ctx.ctx_functions` >>
-    simp[result_equiv_def] >>
-    Cases_on `eval_operands r s` >> simp[result_equiv_def] >>
+    simp[result_equiv_def, revert_equiv_def] >>
+    Cases_on `eval_operands r s` >> simp[result_equiv_def, revert_equiv_def] >>
     rename1 `eval_operands _ s = SOME args` >>
     rename1 `lookup_function _ _ = SOME callee_fn` >>
     `setup_callee callee_fn args (s with vs_inst_idx := j) =
      setup_callee callee_fn args s` by simp[setup_callee_def] >>
     simp[] >>
     Cases_on `setup_callee callee_fn args s` >>
-    simp[result_equiv_def] >>
+    simp[result_equiv_def, revert_equiv_def] >>
     rename1 `setup_callee _ _ s = SOME callee_s` >>
     Cases_on `run_blocks fuel ctx callee_fn callee_s` >>
     simp[result_equiv_def, execution_equiv_def, lookup_var_def,
@@ -325,13 +325,13 @@ Proof
     simp[bind_outputs_idx] >>
     Cases_on `bind_outputs inst.inst_outputs ret_vals
                 (merge_callee_state s callee_s')` >>
-    simp[result_equiv_def, execution_equiv_def, lookup_var_def,
+    simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
          venom_state_component_equality]
   ) >>
   (* Non-INVOKE: step_inst = step_inst_base, use idx_indep *)
   simp[step_inst_non_invoke, step_inst_inst_idx_indep] >>
   Cases_on `step_inst_base inst s` >>
-  simp[exec_result_map_def, result_equiv_def, execution_equiv_def,
+  simp[exec_result_map_def, result_equiv_def, execution_equiv_def, revert_equiv_def,
        lookup_var_def, venom_state_component_equality]
 QED
 
@@ -365,7 +365,7 @@ Proof
   (* All cross-constructor cases eliminated by gvs. Remaining: same constructor. *)
   (* From v' with idx:=0 = v with idx:=0, extract all non-idx fields equal *)
   gvs[venom_state_component_equality] >>
-  simp[result_equiv_def, execution_equiv_def, lookup_var_def] >>
+  simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def] >>
   (* OK-OK case: use terminator_OK_inst_idx_0 to get idx=0 *)
   imp_res_tac terminator_OK_inst_idx_0 >> gvs[] >>
   Cases_on `v.vs_halted` >>
@@ -448,7 +448,7 @@ Proof
   CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   simp[] >>
   Cases_on `step_inst fuel ctx inst (s with vs_inst_idx := j)` >>
-  fs[result_equiv_def, execution_equiv_def, lookup_var_def,
+  fs[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
      venom_state_component_equality]
 QED
 
@@ -523,7 +523,7 @@ Proof
   once_rewrite_tac[run_blocks_def] >>
   simp[clear_nops_function_def, lookup_block_clear_nops] >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
-  simp[result_equiv_def] >>
+  simp[result_equiv_def, revert_equiv_def] >>
   rename1 `SOME bb` >>
   mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`] clear_nops_block_correct) >>
   simp[] >>
@@ -533,7 +533,7 @@ Proof
   imp_res_tac state_equiv_empty_eq >>
   imp_res_tac exec_block_ok_inst_idx_0 >> gvs[] >>
   rw[] >>
-  simp[result_equiv_def, execution_equiv_def, lookup_var_def,
+  simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
        clear_nops_function_def] >>
   rewrite_tac[GSYM clear_nops_function_def] >>
   first_x_assum irule >> simp[]

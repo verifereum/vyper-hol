@@ -35,6 +35,7 @@ Theorem branch_opt_function_correct:
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (bo_fresh_vars_fn fn))
                (execution_equiv (bo_fresh_vars_fn fn))
+                  (execution_equiv (bo_fresh_vars_fn fn))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn' s)
 Proof

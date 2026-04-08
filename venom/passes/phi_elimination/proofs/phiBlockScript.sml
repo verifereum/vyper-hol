@@ -306,7 +306,7 @@ Triviality phi_step_lift_result[local]:
     (!e. step_inst_base inst s = Error e ==>
          lookup_var src_var s = NONE)
   ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (step_inst_base inst s)
       (step_inst_base (transform_inst dfg inst) s)
 Proof
@@ -364,7 +364,7 @@ Theorem phi_elim_block_sim:
        step_inst fuel' ctx' inst s' = Error e ==>
        lookup_var src_var s' = NONE)
   ==>
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (exec_block fuel ctx bb s)
       (exec_block fuel ctx (transform_block dfg bb) s)
 Proof
@@ -431,7 +431,7 @@ Proof
       (fn th => REWRITE_TAC [th] >> ASSUME_TAC th) >>
     qpat_x_assum `step_inst fuel ctx (transform_inst dfg inst) s = _`
       (fn th => REWRITE_TAC [th] >> ASSUME_TAC th) >>
-    `lift_result (state_equiv {}) (execution_equiv {})
+    `lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
        (step_inst_base inst s) (step_inst_base (transform_inst dfg inst) s)` by (
       irule phi_step_lift_result >> simp[] >>
       conj_tac >- (
@@ -452,13 +452,13 @@ Proof
       TRY (`inst.inst_opcode = PHI` by fs[is_phi_inst_def] >>
            simp[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> NO_TAC) >>
       (* For Error: resolve second side via lift_result assumption *)
-      TRY (qpat_x_assum `lift_result _ _ _ (step_inst_base _ _)` mp_tac >>
+      TRY (qpat_x_assum `lift_result _ _ _ _ (step_inst_base _ _)` mp_tac >>
            Cases_on `step_inst_base (transform_inst dfg inst) s` >>
            simp[lift_result_def, execution_equiv_refl] >> NO_TAC) >>
       (* OK case: derive both sides return OK with same state *)
       rename1 `step_inst_base inst s = OK s_orig` >>
       `step_inst_base (transform_inst dfg inst) s = OK s_orig` by (
-        qpat_x_assum `lift_result _ _ (OK _) _` mp_tac >>
+        qpat_x_assum `lift_result _ _ _ (OK _) _` mp_tac >>
         Cases_on `step_inst_base (transform_inst dfg inst) s` >>
         simp[lift_result_def] >>
         strip_tac >> imp_res_tac state_equiv_empty_eq >> fs[]) >>

@@ -25,9 +25,9 @@ Theorem lift_result_refl:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool).
     (!s. R_ok s s) /\ (!s. R_term s s) ==>
-    !r. lift_result R_ok R_term r r
+    !r. lift_result R_ok R_term R_term r r
 Proof
-  ACCEPT_TAC lift_result_refl_proof
+  rpt strip_tac >> irule lift_result_refl_proof >> simp[]
 QED
 
 Theorem lift_result_trans:
@@ -35,11 +35,11 @@ Theorem lift_result_trans:
    (R_term : venom_state -> venom_state -> bool).
     (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
     (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) ==>
-    !r1 r2 r3. lift_result R_ok R_term r1 r2 /\
-               lift_result R_ok R_term r2 r3 ==>
-               lift_result R_ok R_term r1 r3
+    !r1 r2 r3. lift_result R_ok R_term R_term r1 r2 /\
+               lift_result R_ok R_term R_term r2 r3 ==>
+               lift_result R_ok R_term R_term r1 r3
 Proof
-  ACCEPT_TAC lift_result_trans_proof
+  rpt strip_tac >> irule lift_result_trans_proof >> simp[] >> metis_tac[]
 QED
 
 (* lift_result covariant in both R_ok and R_term *)
@@ -50,10 +50,10 @@ Theorem lift_result_weaken:
    (R2' : venom_state -> venom_state -> bool).
     (!s1 s2. R1 s1 s2 ==> R1' s1 s2) /\
     (!s1 s2. R2 s1 s2 ==> R2' s1 s2) ==>
-    !r1 r2. lift_result R1 R2 r1 r2 ==>
-            lift_result R1' R2' r1 r2
+    !r1 r2. lift_result R1 R2 R2 r1 r2 ==>
+            lift_result R1' R2' R2' r1 r2
 Proof
-  ACCEPT_TAC lift_result_weaken_proof
+  rpt strip_tac >> irule lift_result_weaken_proof >> simp[] >> metis_tac[]
 QED
 
 (* ===== General (relational) block sim ⟹ function sim ===== *)
@@ -73,14 +73,14 @@ Theorem block_sim_function:
       !fuel ctx s1 s2.
         R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
         (?e. exec_block fuel ctx bb s1 = Error e) \/
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (exec_block fuel ctx bb s1)
           (exec_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_blocks fuel ctx fn s)
         (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
@@ -110,14 +110,14 @@ Theorem block_sim_function_with_pred:
       !fuel ctx s1 s2.
         R_ok s1 s2 /\ P s1 /\ s1.vs_inst_idx = 0 ==>
         (?e. exec_block fuel ctx bb s1 = Error e) \/
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (exec_block fuel ctx bb s1)
           (exec_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       P s /\ s.vs_inst_idx = 0 ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_blocks fuel ctx fn s)
         (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
@@ -140,12 +140,12 @@ Theorem same_state_to_rel_block_sim:
     MEM bb fn.fn_blocks /\
     (!fuel ctx s. s.vs_inst_idx = 0 ==>
       (?e. exec_block fuel ctx bb s = Error e) \/
-      lift_result R_ok R_term (exec_block fuel ctx bb s)
+      lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                (exec_block fuel ctx bt_bb s))
   ==>
     !fuel ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
       (?e. exec_block fuel ctx bb s1 = Error e) \/
-      lift_result R_ok R_term (exec_block fuel ctx bb s1)
+      lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
                                (exec_block fuel ctx bt_bb s2)
 Proof
   ACCEPT_TAC same_state_to_rel_block_sim_proof
@@ -165,7 +165,7 @@ Theorem block_sim_function_pointwise:
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
         (?e. exec_block fuel ctx bb s = Error e) \/
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -175,7 +175,7 @@ Theorem block_sim_function_pointwise:
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_pointwise_proof
@@ -194,7 +194,7 @@ Theorem block_sim_function_pointwise_reachable:
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
         (bb = HD fn.fn_blocks \/ s.vs_prev_bb <> NONE) ==>
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -206,7 +206,7 @@ Theorem block_sim_function_pointwise_reachable:
       (fn.fn_blocks <> [] /\
        s.vs_current_bb = (HD fn.fn_blocks).bb_label \/
        s.vs_prev_bb <> NONE) ==>
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_pointwise_reachable_proof
@@ -227,14 +227,14 @@ Theorem block_sim_function_rel:
       !fuel ctx s1 s2.
         R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
         (?e. exec_block fuel ctx bb s1 = Error e) \/
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (exec_block fuel ctx bb s1)
           (exec_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_blocks fuel ctx fn s)
         (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
@@ -251,13 +251,13 @@ Theorem two_state_block_sim_function:
       !fuel ctx s1 s2.
         R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
         (?e. exec_block fuel ctx bb s1 = Error e) \/
-        lift_result R_ok R_term (exec_block fuel ctx bb s1)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
                                  (exec_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC two_state_block_sim_function_proof
@@ -278,7 +278,7 @@ Theorem block_sim_function_unconditional:
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -287,7 +287,7 @@ Theorem block_sim_function_unconditional:
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_unconditional_proof
@@ -298,10 +298,10 @@ Theorem lift_result_mono:
   !R1 R2 T1 T2 r1 r2.
     (!s1 s2. R1 s1 s2 ==> R2 s1 s2) /\
     (!s1 s2. T1 s1 s2 ==> T2 s1 s2) /\
-    lift_result R1 T1 r1 r2 ==>
-    lift_result R2 T2 r1 r2
+    lift_result R1 T1 T1 r1 r2 ==>
+    lift_result R2 T2 T2 r1 r2
 Proof
-  ACCEPT_TAC lift_result_mono_proof
+  rpt strip_tac >> irule lift_result_weaken_proof >> simp[] >> metis_tac[]
 QED
 
 (* Invariant-carrying version: per-block sim only required when Inv holds.
@@ -321,7 +321,7 @@ Theorem block_sim_function_inv:
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
         Inv s /\ s.vs_inst_idx = 0 ==>
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -334,7 +334,7 @@ Theorem block_sim_function_inv:
   ==>
     !fuel ctx s.
       Inv s /\ s.vs_inst_idx = 0 ==>
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC block_sim_function_inv_proof
@@ -361,7 +361,7 @@ Theorem block_sim_function_inv_rbpr:
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
         Inv s /\ s.vs_inst_idx = 0 ==>
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb fuel ctx s s'.
        MEM bb fn'.fn_blocks /\ Inv s /\ s.vs_inst_idx = 0 /\
@@ -369,12 +369,12 @@ Theorem block_sim_function_inv_rbpr:
     (!fuel ctx bb s1 s2.
        MEM bb fn'.fn_blocks /\ R_ok s1 s2 /\
        Inv s1 /\ Inv s2 /\ s1.vs_inst_idx = 0 ==>
-       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
                                 (exec_block fuel ctx bb s2))
   ==>
     !fuel ctx s.
       Inv s /\ s.vs_inst_idx = 0 ==>
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC block_sim_function_inv_rbpr_proof
@@ -401,12 +401,12 @@ Theorem block_sim_function_inv_cross:
     (!bb fuel ctx s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 /\
        Inv s1 /\ Inv s2 /\ s1.vs_inst_idx = 0 ==>
-       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
                                 (exec_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       Inv s /\ s.vs_inst_idx = 0 ==>
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC block_sim_function_inv_cross_proof
@@ -425,7 +425,7 @@ Theorem block_sim_function_error:
       !fuel ctx s.
         s.vs_inst_idx = 0 /\ block_inv s ==>
         (?e. exec_block fuel ctx bb s = Error e) \/
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb fuel ctx s v.
        MEM bb fn.fn_blocks /\ block_inv s /\ s.vs_inst_idx = 0 /\
@@ -439,7 +439,7 @@ Theorem block_sim_function_error:
     !fuel ctx s.
       s.vs_inst_idx = 0 /\ block_inv s ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_error_proof
@@ -459,7 +459,7 @@ Theorem block_sim_function_error_bb:
         s.vs_inst_idx = 0 /\ block_inv s /\
         s.vs_current_bb = bb.bb_label ==>
         (?e. exec_block fuel ctx bb s = Error e) \/
-        lift_result R_ok R_term (exec_block fuel ctx bb s)
+        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
                                  (exec_block fuel ctx (bt bb) s)) /\
     (!bb fuel ctx s v.
        MEM bb fn.fn_blocks /\ block_inv s /\ s.vs_inst_idx = 0 /\
@@ -474,7 +474,7 @@ Theorem block_sim_function_error_bb:
     !fuel ctx s.
       s.vs_inst_idx = 0 /\ block_inv s ==>
       (?e. run_blocks fuel ctx fn s = Error e) \/
-      lift_result R_ok R_term (run_blocks fuel ctx fn s)
+      lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
                  (run_blocks fuel ctx (function_map_transform bt fn) s)
 Proof
   ACCEPT_TAC block_sim_function_error_bb_proof
@@ -486,15 +486,15 @@ QED
 Theorem lift_result_implies_pass_correct:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) exec1 exec2.
-    (!fuel. lift_result R_ok R_term (exec1 fuel) (exec2 fuel)) /\
+    (!fuel. lift_result R_ok R_term R_term (exec1 fuel) (exec2 fuel)) /\
     (!fuel fuel'. terminates (exec1 fuel) /\ terminates (exec1 fuel') ==>
                   exec1 fuel = exec1 fuel') /\
     (!fuel fuel'. terminates (exec2 fuel) /\ terminates (exec2 fuel') ==>
                   exec2 fuel = exec2 fuel')
   ==>
-    pass_correct R_ok R_term exec1 exec2
+    pass_correct R_ok R_term R_term exec1 exec2
 Proof
-  ACCEPT_TAC lift_result_implies_pass_correct_proof
+  rpt strip_tac >> irule lift_result_implies_pass_correct_proof >> simp[]
 QED
 
 Theorem state_equiv_execution_equiv_valid_state_rel:
@@ -534,13 +534,13 @@ Theorem module_sim_dual_ctx:
           R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
           ((?e1. run_blocks fuel ctx1 cfn1 cs1 = Error e1) /\
            (?e2. run_blocks fuel ctx2 cfn2 cs2 = Error e2)) \/
-          lift_result R_ok R_term
+          lift_result R_ok R_term R_term
             (run_blocks fuel ctx1 cfn1 cs1)
             (run_blocks fuel ctx2 cfn2 cs2))
        ==>
        ((?e1. exec_block fuel ctx1 bb1 s1 = Error e1) /\
         (?e2. exec_block fuel ctx2 bb2 s2 = Error e2)) \/
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (exec_block fuel ctx1 bb1 s1)
          (exec_block fuel ctx2 bb2 s2))
   ==>
@@ -550,7 +550,7 @@ Theorem module_sim_dual_ctx:
       R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
       ((?e1. run_blocks fuel ctx1 fn1 s1 = Error e1) /\
        (?e2. run_blocks fuel ctx2 fn2 s2 = Error e2)) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_blocks fuel ctx1 fn1 s1)
         (run_blocks fuel ctx2 fn2 s2)
 Proof

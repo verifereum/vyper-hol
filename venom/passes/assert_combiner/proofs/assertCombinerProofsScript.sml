@@ -99,7 +99,7 @@ Theorem ac_run_insts_sim[local]:
     (!i x. MEM i insts /\ MEM x i.inst_outputs ==>
        ~IS_SOME (lookup_var x s)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (run_insts fuel ctx insts s)
       (run_insts fuel ctx
         (SND (FOLDL (ac_apply_merge_step cands) (mp, []) insts)) s)
@@ -790,11 +790,11 @@ Triviality run_insts_front_sim_exec_block_fail[local]:
           (FRONT bb2.bb_instructions) /\
     s.vs_inst_idx = 0 /\
     ~(?s1'. run_insts fuel ctx (FRONT bb1.bb_instructions) s = OK s1') /\
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (run_insts fuel ctx (FRONT bb1.bb_instructions) s)
       (run_insts fuel ctx (FRONT bb2.bb_instructions) s)
   ==>
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb1 s)
       (exec_block fuel ctx bb2 s)
 Proof
@@ -844,7 +844,7 @@ Triviality terminator_halted_wrap_lift_result[local]:
     s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 /\
     state_equiv V s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN V) ==>
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (case step_inst_base inst (s1 with vs_inst_idx := n1) of
          OK s => if s.vs_halted then Halt s else OK s
        | Halt s => Halt s | Abort a s => Abort a s
@@ -895,7 +895,7 @@ Triviality run_insts_front_sim_exec_block_ok[local]:
     state_equiv V s1' s2' /\
     (!x. MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==> x NOTIN V)
   ==>
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb1 s)
       (exec_block fuel ctx bb2 s)
 Proof
@@ -959,12 +959,12 @@ Triviality run_insts_front_sim_exec_block[local]:
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
           (FRONT bb2.bb_instructions) /\
     s.vs_inst_idx = 0 /\
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (run_insts fuel ctx (FRONT bb1.bb_instructions) s)
       (run_insts fuel ctx (FRONT bb2.bb_instructions) s) /\
     (!x. MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==> x NOTIN V)
   ==>
-    lift_result (state_equiv V) (execution_equiv UNIV)
+    lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb1 s)
       (exec_block fuel ctx bb2 s)
 Proof
@@ -1106,7 +1106,7 @@ Theorem ac_block_sim_same_nonempty[local]:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
     lift_result
       (state_equiv V)
-      (execution_equiv UNIV)
+      (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb s)
       (exec_block fuel ctx (ac_transform_block dfg bb) s)
 Proof
@@ -1125,7 +1125,7 @@ Proof
      >- (rpt strip_tac >> first_x_assum irule >> metis_tac[MEM_FRONT_NOT_NIL])
      >- metis_tac[all_distinct_outputs_front])) >>
   (Q.SUBGOAL_THEN
-    `lift_result (state_equiv V) (execution_equiv UNIV)
+    `lift_result (state_equiv V) (execution_equiv UNIV) (execution_equiv UNIV)
        (run_insts fuel ctx (FRONT bb.bb_instructions) s)
        (run_insts fuel ctx
           (SND (FOLDL (ac_apply_merge_step cands) ([], [])
@@ -1183,7 +1183,7 @@ Theorem ac_block_sim_same[local]:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
     lift_result
       (state_equiv V)
-      (execution_equiv UNIV)
+      (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb s)
       (exec_block fuel ctx (ac_transform_block dfg bb) s)
 Proof
@@ -1408,7 +1408,7 @@ Triviality ac_block_sim_same_from_fn[local]:
        MEM x i.inst_outputs ==> ~IS_SOME (lookup_var x s)) ==>
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
-      (execution_equiv UNIV)
+      (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb s)
       (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s)
 Proof
@@ -1462,7 +1462,7 @@ Theorem ac_block_sim[local]:
        MEM x i.inst_outputs ==> ~IS_SOME (lookup_var x s2)) ==>
     lift_result
       (state_equiv (ac_fresh_vars_fn fn))
-      (execution_equiv UNIV)
+      (execution_equiv UNIV) (execution_equiv UNIV)
       (exec_block fuel ctx bb s1)
       (exec_block fuel ctx (ac_transform_block dfg bb) s2)
 Proof
@@ -1479,7 +1479,7 @@ Proof
   (* Step 2: same-state sim for s2 via helper *)
   (Q.SUBGOAL_THEN
     `lift_result (state_equiv (ac_fresh_vars_fn fn))
-       (execution_equiv UNIV)
+       (execution_equiv UNIV) (execution_equiv UNIV)
        (exec_block fuel ctx bb s2)
        (exec_block fuel ctx (ac_transform_block (dfg_build_function fn) bb) s2)`
     ASSUME_TAC >-
@@ -1544,7 +1544,7 @@ Theorem ac_transform_function_correct_proof:
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (ac_fresh_vars_fn fn))
-               (execution_equiv UNIV)
+               (execution_equiv UNIV) (execution_equiv UNIV)
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn' s)
 Proof

@@ -27,7 +27,7 @@ Theorem step_inst_preserves_R_proof:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
+    lift_result R_ok R_term R_term (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`
@@ -145,7 +145,7 @@ Theorem exec_block_same_preserves_RQ_proof:
        R_ok v1 v2 ==>
        Q (v1 with vs_inst_idx := SUC i)
          (v2 with vs_inst_idx := SUC i)) ==>
-    lift_result R_ok R_term
+    lift_result R_ok R_term R_term
       (exec_block fuel ctx bb s1)
       (exec_block fuel ctx bb s2)
 Proof
@@ -169,7 +169,7 @@ Proof
   `!x. MEM (Var x) inst.inst_operands ==>
        lookup_var x s1 = lookup_var x s2` by
     (rpt strip_tac >> first_x_assum irule >> gvs[]) >>
-  `lift_result R_ok R_term (step_inst fuel ctx inst s1)
+  `lift_result R_ok R_term R_term (step_inst fuel ctx inst s1)
      (step_inst fuel ctx inst s2)` by
     (match_mp_tac step_inst_preserves_R_proof >> fs[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
@@ -184,7 +184,7 @@ Proof
   qpat_x_assum `inst = _` SUBST_ALL_TAC >>
   (* Apply IH: spec s'' := v, discharge step_inst guard *)
   qpat_x_assum `!s''. _ ==> !s2'. _ ==> _ ==> _ ==> _ ==>
-    lift_result _ _ (exec_block _ _ _ _) (exec_block _ _ _ _)`
+    lift_result _ _ _ (exec_block _ _ _ _) (exec_block _ _ _ _)`
     (qspec_then `v` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qspec_then `v' with vs_inst_idx := SUC s2.vs_inst_idx` mp_tac) >>
@@ -211,7 +211,7 @@ Triviality exec_block_preserves_R_helper:
   ==>
     !fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
                                 (exec_block fuel ctx bb s2)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -230,7 +230,7 @@ Proof
   rename1 `get_instruction bb _ = SOME inst` >>
   `MEM inst bb.bb_instructions` by
     (gvs[get_instruction_def] >> irule listTheory.EL_MEM >> simp[]) >>
-  `lift_result R_ok R_term (step_inst fuel ctx inst s1)
+  `lift_result R_ok R_term R_term (step_inst fuel ctx inst s1)
      (step_inst fuel ctx inst s2)` by
     (irule step_inst_preserves_R_proof >> simp[] >> metis_tac[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
@@ -258,11 +258,11 @@ Theorem exec_block_preserves_R_proof:
   ==>
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term (exec_block fuel ctx bb s1)
+       lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
                                 (exec_block fuel ctx bb s2)) /\
     (!fuel ctx s1 s2.
        R_ok s1 s2 ==>
-       lift_result R_ok R_term (run_blocks fuel ctx fn s1)
+       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s1)
                                 (run_blocks fuel ctx fn s2))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -285,7 +285,7 @@ Proof
     (fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
   `R_ok (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0)` by
     (irule vsr_inst_idx_R_ok >> metis_tac[]) >>
-  `lift_result R_ok R_term
+  `lift_result R_ok R_term R_term
      (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
      (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by
     (drule_all exec_block_preserves_R_helper >> simp[]) >>

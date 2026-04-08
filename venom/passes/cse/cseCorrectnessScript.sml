@@ -13,7 +13,7 @@ Theorem cse_function_correct:
   !fuel ctx fn s.
     fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (cse_function fn) s)
 Proof

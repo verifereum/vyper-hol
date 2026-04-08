@@ -1493,14 +1493,14 @@ Proof
          (step_inst fuel ctx inst2 s) (step_inst fuel ctx inst2 v)` by (
         irule cross_case_result_equiv >> metis_tac[]) >>
       simp[] >> Cases_on `step_inst fuel ctx inst2 v` >>
-      gvs[result_equiv_def, execution_equiv_def])
+      gvs[result_equiv_def, execution_equiv_def, revert_equiv_def])
     (* OK×Abort: use cross_case_result_equiv (works for INVOKE too) *)
     >- (
       `result_equiv (set inst1.inst_outputs)
          (step_inst fuel ctx inst2 s) (step_inst fuel ctx inst2 v)` by (
         irule cross_case_result_equiv >> metis_tac[]) >>
       simp[] >> Cases_on `step_inst fuel ctx inst2 v` >>
-      gvs[result_equiv_def, execution_equiv_def])
+      gvs[result_equiv_def, execution_equiv_def, revert_equiv_def])
     (* OK×IntRet *)
     >- (imp_res_tac step_inst_no_intret >> gvs[])
     (* OK×Error *)

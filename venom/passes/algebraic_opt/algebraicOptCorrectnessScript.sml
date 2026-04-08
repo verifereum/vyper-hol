@@ -7,7 +7,7 @@ Ancestors
    equivalent results under state_equiv and execution_equiv. *)
 Theorem ao_transform_function_correct:
   !fuel ctx fn s.
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof

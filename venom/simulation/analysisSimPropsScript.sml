@@ -33,7 +33,7 @@ Theorem analysis_inst_sim_block_sim:
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. exec_block fuel ctx bb s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx
           (analysis_block_transform bottom result f bb) s)
@@ -56,7 +56,7 @@ Theorem analysis_inst_sim_block_sim_inv:
     (!fuel ctx v inst s.
        sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
        (?e. step_inst fuel ctx inst s = Error e) \/
-       lift_result R_ok R_term (step_inst fuel ctx inst s)
+       lift_result R_ok R_term R_term (step_inst fuel ctx inst s)
          (run_insts fuel ctx (f v inst) s)) /\
     inst_transform_structural f /\
     fn_inst_wf fn /\
@@ -81,7 +81,7 @@ Theorem analysis_inst_sim_block_sim_inv:
       sound (df_at bottom result bb.bb_label 0) s /\
       state_inv s ==>
       (?e. exec_block fuel ctx bb s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx
            (analysis_block_transform bottom result f bb) s)
@@ -142,7 +142,7 @@ Theorem df_analysis_pass_correct_sound:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
         (?e. run_blocks fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
           (run_blocks fuel ctx (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_proof
@@ -186,7 +186,7 @@ Theorem df_analysis_pass_correct_sound_inv2:
       (!fuel ctx' v inst s.
          sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
          (?e. step_inst fuel ctx' inst s = Error e) \/
-         lift_result R_ok R_term (step_inst fuel ctx' inst s)
+         lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
       fn_inst_wf fn /\
@@ -208,7 +208,7 @@ Theorem df_analysis_pass_correct_sound_inv2:
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s ==>
         (?e. run_blocks fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx' fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx' fn s)
           (run_blocks fuel ctx' (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_inv2_proof
@@ -252,7 +252,7 @@ Theorem df_analysis_pass_correct_sound_inv3:
       (!fuel ctx' v inst s.
          sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
          (?e. step_inst fuel ctx' inst s = Error e) \/
-         lift_result R_ok R_term (step_inst fuel ctx' inst s)
+         lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
       fn_inst_wf fn /\
@@ -274,7 +274,7 @@ Theorem df_analysis_pass_correct_sound_inv3:
         fn_entry_label fn = SOME s.vs_current_bb /\
         state_inv s ==>
         (?e. run_blocks fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx' fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx' fn s)
           (run_blocks fuel ctx' (analysis_function_transform bottom result f fn) s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_inv3_proof
@@ -323,7 +323,7 @@ Theorem df_analysis_pass_correct_widen_sound:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
         (?e. run_blocks fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
           (run_blocks fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -377,7 +377,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv:
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
         (?e. run_blocks fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
           (run_blocks fuel ctx
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -419,7 +419,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
       (!fuel ctx' v inst s.
          sound v s /\ state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
          (?e. step_inst fuel ctx' inst s = Error e) \/
-         lift_result R_ok R_term (step_inst fuel ctx' inst s)
+         lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
       fn_inst_wf fn /\
@@ -442,7 +442,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
         state_inv s /\
         sound (df_widen_at bottom result s.vs_current_bb 0) s ==>
         (?e. run_blocks fuel ctx' fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx' fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx' fn s)
           (run_blocks fuel ctx'
             (analysis_function_transform_widen bottom result f fn) s)
 Proof
@@ -515,7 +515,7 @@ Theorem df_analysis_pass_correct_prepend:
         s.vs_inst_idx = 0 /\
         fn_entry_label fn = SOME s.vs_current_bb ==>
         (?e. run_blocks fuel ctx fn s = Error e) \/
-        lift_result R_ok R_term (run_blocks fuel ctx fn s)
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
           (run_blocks fuel ctx fn' s)
 Proof
   ACCEPT_TAC df_analysis_pass_correct_prepend_proof
@@ -540,7 +540,7 @@ Theorem analysis_function_transform_compare:
        let inst = EL idx bb.bb_instructions in
        let v = df_at bottom result bb.bb_label idx in
        (?e. run_insts fuel ctx (f1 v inst) s = Error e) \/
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (run_insts fuel ctx (f1 v inst) s)
          (run_insts fuel ctx (f2 v inst) s)) /\
     inst_transform_structural f1 /\
@@ -554,7 +554,7 @@ Theorem analysis_function_transform_compare:
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
       (?e. run_blocks fuel ctx fn1 s = Error e) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_blocks fuel ctx fn1 s)
         (run_blocks fuel ctx fn2 s)
 Proof

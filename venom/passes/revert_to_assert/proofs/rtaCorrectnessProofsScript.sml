@@ -22,7 +22,7 @@ val rveq = VAR_EQ_TAC;
 (* lift_result implies resolving_block_sim (avoids unfolding defs in rich contexts) *)
 Triviality lift_result_resolving_block_sim:
   !R_ok R_term bbs1 bbs2 r1 r2.
-    lift_result R_ok R_term r1 r2 ==>
+    lift_result R_ok R_term R_term r1 r2 ==>
     resolving_block_sim R_ok R_term bbs1 bbs2 r1 r2
 Proof
   rpt strip_tac >>
@@ -866,7 +866,7 @@ Theorem rta_pass_correct_proof:
       lookup_function entry ctx.ctx_functions = SOME fn /\
       lookup_function entry ctx'.ctx_functions = SOME fn' /\
       !s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-          pass_correct (state_equiv fresh) (execution_equiv fresh)
+          pass_correct (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
             (\fuel. run_blocks fuel ctx fn s)
             (\fuel. run_blocks fuel ctx fn' s)
 Proof
@@ -901,6 +901,7 @@ Proof
        terminates (run_blocks fuel' ctx'
          (function_map_transform (transform_block fn) fn) s) ==>
        lift_result (state_equiv (fresh_vars_in_context ctx))
+         (execution_equiv (fresh_vars_in_context ctx))
          (execution_equiv (fresh_vars_in_context ctx))
          (run_blocks fuel ctx' fn s)
          (run_blocks fuel' ctx'

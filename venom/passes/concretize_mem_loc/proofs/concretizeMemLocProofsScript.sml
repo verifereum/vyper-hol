@@ -40,6 +40,7 @@
 Theory concretizeMemLocProofs
 Ancestors
   concretizeMemLocDefs passSimulationProps venomWf pointerConfinedDefs
+  venomExecSemantics
 
 (* ===== Helpers ===== *)
 
@@ -182,6 +183,7 @@ Theorem concretize_function_correct_proof:
     concretize_pointer_confined fn amap /\
     mem_remap_equiv amap fn s1 s2 ==>
     lift_result
+      (mem_remap_equiv amap fn)
       (mem_remap_equiv amap fn)
       (mem_remap_equiv amap fn)
       (run_blocks fuel ctx fn s1)

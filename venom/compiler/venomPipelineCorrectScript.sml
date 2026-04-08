@@ -31,7 +31,7 @@ Ancestors
    R_ok/R_term are the per-state relations for OK/terminal results. *)
 Definition ctx_pass_correct_def:
   ctx_pass_correct (p : venom_context -> venom_context) R_ok R_term ctx s <=>
-    pass_correct R_ok R_term
+    pass_correct R_ok R_term R_term
       (\fuel. run_context fuel ctx s)
       (\fuel. run_context fuel (p ctx) s)
 End
@@ -45,16 +45,16 @@ Theorem pass_correct_trans:
   !R1_ok R1_term R2_ok R2_term R12_ok R12_term exec1 exec2 exec3.
     (!s1 s2 s3. R1_ok s1 s2 /\ R2_ok s2 s3 ==> R12_ok s1 s3) /\
     (!s1 s2 s3. R1_term s1 s2 /\ R2_term s2 s3 ==> R12_term s1 s3) /\
-    pass_correct R1_ok R1_term exec1 exec2 /\
-    pass_correct R2_ok R2_term exec2 exec3 ==>
-    pass_correct R12_ok R12_term exec1 exec3
+    pass_correct R1_ok R1_term R1_term exec1 exec2 /\
+    pass_correct R2_ok R2_term R2_term exec2 exec3 ==>
+    pass_correct R12_ok R12_term R12_term exec1 exec3
 Proof
   rw[pass_correct_def] >>
   (* exec2 terminates at some fuel (from either direction) *)
   `?fuel2. terminates (exec2 fuel2)` by metis_tac[] >>
   (* Get lift_results for exec1-exec2 and exec2-exec3 *)
-  `lift_result R1_ok R1_term (exec1 fuel) (exec2 fuel2)` by metis_tac[] >>
-  `lift_result R2_ok R2_term (exec2 fuel2) (exec3 fuel')` by metis_tac[] >>
+  `lift_result R1_ok R1_term R1_term (exec1 fuel) (exec2 fuel2)` by metis_tac[] >>
+  `lift_result R2_ok R2_term R2_term (exec2 fuel2) (exec3 fuel')` by metis_tac[] >>
   (* Compose via case analysis *)
   Cases_on `exec1 fuel` >> Cases_on `exec2 fuel2` >> Cases_on `exec3 fuel'` >>
   gvs[lift_result_def] >> metis_tac[]
@@ -175,7 +175,7 @@ Triviality ctx_fn_transform_module_sim:
         ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
          (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
                  (f cfn) cs2 = Error e2)) \/
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (run_blocks fuel ctx cfn cs1)
           (run_blocks fuel (apply_ctx_fn_transform f ctx)
             (f cfn) cs2))
@@ -183,7 +183,7 @@ Triviality ctx_fn_transform_module_sim:
       ((?e1. exec_block fuel ctx bb1 s1 = Error e1) /\
        (?e2. exec_block fuel (apply_ctx_fn_transform f ctx)
                bb2 s2 = Error e2)) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (exec_block fuel ctx bb1 s1)
         (exec_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
   ==>
@@ -195,7 +195,7 @@ Triviality ctx_fn_transform_module_sim:
       ((?e1. run_blocks fuel ctx fn1 s1 = Error e1) /\
        (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
                fn2 s2 = Error e2)) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (run_blocks fuel ctx fn1 s1)
         (run_blocks fuel (apply_ctx_fn_transform f ctx) fn2 s2)
 Proof
@@ -279,7 +279,7 @@ Theorem apply_ctx_fn_transform_correct:
         ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
          (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
                  (f cfn) cs2 = Error e2)) \/
-        lift_result R_ok R_term
+        lift_result R_ok R_term R_term
           (run_blocks fuel ctx cfn cs1)
           (run_blocks fuel (apply_ctx_fn_transform f ctx)
             (f cfn) cs2))
@@ -287,7 +287,7 @@ Theorem apply_ctx_fn_transform_correct:
       ((?e1. exec_block fuel ctx bb1 s1 = Error e1) /\
        (?e2. exec_block fuel (apply_ctx_fn_transform f ctx)
                bb2 s2 = Error e2)) \/
-      lift_result R_ok R_term
+      lift_result R_ok R_term R_term
         (exec_block fuel ctx bb1 s1)
         (exec_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
   ==>
@@ -345,7 +345,7 @@ Proof
   `!fuel.
      ((?e1. run_blocks fuel ctx entry_fn s0 = Error e1) /\
       (?e2. run_blocks fuel ctx2 (f entry_fn) s0 = Error e2)) \/
-     lift_result R_ok R_term
+     lift_result R_ok R_term R_term
        (run_blocks fuel ctx entry_fn s0)
        (run_blocks fuel ctx2 (f entry_fn) s0)` by (
     gen_tac >>
@@ -430,6 +430,7 @@ Theorem compose_passes_correct:
         (FOLDL (\c p. p c) ctx (TAKE i passes)) s)
     ==>
     pass_correct (FOLDL rel_seq (=) R_oks) (FOLDL rel_seq (=) R_terms)
+      (FOLDL rel_seq (=) R_terms)
       (\fuel. run_context fuel ctx s)
       (\fuel. run_context fuel (FOLDL (\c p. p c) ctx passes) s)
 Proof
@@ -543,17 +544,20 @@ QED
    imply observable equivalence. *)
 Theorem pass_correct_implies_observable:
   !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) exec1 exec2 fuel fuel'.
+   (R_term : venom_state -> venom_state -> bool)
+   (R_abort : venom_state -> venom_state -> bool) exec1 exec2 fuel fuel'.
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
-    pass_correct R_ok R_term exec1 exec2 /\
+    (!s1 s2. R_abort s1 s2 ==> revert_equiv s1 s2) /\
+    pass_correct R_ok R_term R_abort exec1 exec2 /\
     terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
     observable_result_equiv (exec1 fuel) (exec2 fuel')
 Proof
   rw[pass_correct_def] >>
   first_x_assum drule_all >> strip_tac >>
   Cases_on `exec1 fuel` >> Cases_on `exec2 fuel'` >>
-  gvs[lift_result_def, observable_result_equiv_def, terminates_def]
+  gvs[lift_result_def, observable_result_equiv_def, revert_equiv_def,
+      terminates_def]
 QED
 
 (* rel_seq of observable-equiv-preserving relations preserves observable_equiv.

@@ -14,7 +14,7 @@ Theorem copy_elision_function_correct:
     fn_inst_wf fn /\ s.vs_inst_idx = 0 /\
     bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (copy_elision_function fn) s)
 Proof

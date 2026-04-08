@@ -106,7 +106,8 @@ QED
 
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:
-  !vars. result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars)
+  !vars. result_equiv vars =
+         lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars)
 Proof
   ACCEPT_TAC stateEquivProofsTheory.result_equiv_is_lift_result
 QED
@@ -289,7 +290,7 @@ Definition observable_result_equiv_def:
   observable_result_equiv (OK s1) (OK s2) = observable_equiv s1 s2 /\
   observable_result_equiv (Halt s1) (Halt s2) = observable_equiv s1 s2 /\
   observable_result_equiv (Abort a1 s1) (Abort a2 s2) =
-    ((a1 = a2) /\ observable_equiv s1 s2) /\
+    ((a1 = a2) /\ revert_equiv s1 s2) /\
   observable_result_equiv (IntRet v1 s1) (IntRet v2 s2) =
     (observable_equiv s1 s2 /\ (v1 = v2)) /\
   observable_result_equiv (Error e1) (Error e2) = T /\
@@ -302,8 +303,10 @@ Theorem result_equiv_implies_observable_result:
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   rw[result_equiv_def, observable_result_equiv_def] >>
-  metis_tac[execution_equiv_implies_observable,
-            state_equiv_implies_observable]
+  rpt strip_tac >>
+  TRY (metis_tac[execution_equiv_implies_observable,
+                 state_equiv_implies_observable]) >>
+  gvs[revert_equiv_def, execution_equiv_def]
 QED
 
 (* Empty excluded set means full equality *)

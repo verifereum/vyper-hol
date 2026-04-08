@@ -25,6 +25,7 @@ Theorem lower_dload_function_correct:
     lift_result
       (ld_ok (ld_exempt_vars_fn fn))
       (ld_equiv (ld_exempt_vars_fn fn))
+      (ld_equiv (ld_exempt_vars_fn fn))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (lower_dload_function fn) s)
 Proof

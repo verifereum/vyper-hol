@@ -149,7 +149,7 @@ Theorem result_equiv_trans:
     result_equiv vars r1 r3
 Proof
   Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
-  gvs[result_equiv_def] >>
+  gvs[result_equiv_def, revert_equiv_def] >>
   metis_tac[state_equiv_trans, execution_equiv_trans]
 QED
 
@@ -158,7 +158,8 @@ QED
 
 (* result_equiv is the canonical instantiation of lift_result *)
 Theorem result_equiv_is_lift_result:
-  !vars. result_equiv vars = lift_result (state_equiv vars) (execution_equiv vars)
+  !vars. result_equiv vars =
+         lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars)
 Proof
   rw[FUN_EQ_THM] >> Cases_on `x` >> Cases_on `x'` >>
   simp[result_equiv_def, lift_result_def]

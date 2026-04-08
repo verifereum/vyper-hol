@@ -306,7 +306,7 @@ Theorem copy_fwd_terminator_equiv:
     lookup_var src_var s2 = SOME (n2w src_addr) ∧
     (∀sz_val. eval_operand (EL 1 i_orig.inst_operands) s1 = SOME sz_val ⇒
               w2n sz_val ≤ alloca_sz) ⇒
-    lift_result observable_equiv observable_equiv
+    lift_result observable_equiv observable_equiv observable_equiv
       (step_inst_base i_orig s1)
       (step_inst_base i_xfrm s2)
 Proof

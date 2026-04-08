@@ -11,7 +11,7 @@ Ancestors
 
 Theorem lit_codesize_function_correct:
   !fuel ctx fn s.
-    lift_result (state_equiv {}) (execution_equiv {})
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (lit_codesize_function fn) s)
 Proof

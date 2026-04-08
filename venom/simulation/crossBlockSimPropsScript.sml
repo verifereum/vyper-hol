@@ -19,7 +19,7 @@ Ancestors
 (* lift_result is resolves_to at n=0 *)
 Theorem resolves_to_lift_result:
   !R_ok R_term bbs1 bbs2 r1 r2.
-    lift_result R_ok R_term r1 r2 ==>
+    lift_result R_ok R_term R_term r1 r2 ==>
     resolves_to R_ok R_term bbs1 bbs2 0 r1 r2
 Proof
   simp[resolves_to_def]
@@ -96,7 +96,7 @@ Theorem resolving_block_sim_function:
     (!fuel fuel'.
        terminates (run_blocks fuel ctx fn s) /\
        terminates (run_blocks fuel' ctx fn' s) ==>
-       lift_result R_ok R_term
+       lift_result R_ok R_term R_term
          (run_blocks fuel ctx fn s)
          (run_blocks fuel' ctx fn' s))
 Proof

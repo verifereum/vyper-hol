@@ -34,7 +34,7 @@ Theorem vsr_step_inst_selfdestruct:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = SELFDESTRUCT /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def, halt_state_def]) >>
@@ -45,7 +45,7 @@ Theorem vsr_step_inst_invalid:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = INVALID ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
   simp[step_inst_base_def, lift_result_def, halt_state_def, set_returndata_def] >>
@@ -57,7 +57,7 @@ Theorem vsr_step_inst_ext_call:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [CALL;STATICCALL] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -69,7 +69,7 @@ Theorem vsr_step_inst_delegatecall:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = DELEGATECALL /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -81,7 +81,7 @@ Theorem vsr_step_inst_create:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode [CREATE;CREATE2] /\
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
@@ -92,7 +92,7 @@ Theorem vsr_step_inst_alloca:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     inst.inst_opcode = ALLOCA ==>
-    lift_result R_ok R_term (step_inst_base inst s1) (step_inst_base inst s2)
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[step_inst_base_def] >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>

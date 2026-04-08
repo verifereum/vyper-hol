@@ -144,9 +144,9 @@ QED
 (* Monotonicity: weaker relation (larger fresh) preserves lift_result *)
 Theorem lift_result_state_equiv_mono:
   !fresh1 fresh2 r1 r2.
-    lift_result (state_equiv fresh1) (execution_equiv fresh1) r1 r2 /\
+    lift_result (state_equiv fresh1) (execution_equiv fresh1) (execution_equiv fresh1) r1 r2 /\
     fresh1 SUBSET fresh2 ==>
-    lift_result (state_equiv fresh2) (execution_equiv fresh2) r1 r2
+    lift_result (state_equiv fresh2) (execution_equiv fresh2) (execution_equiv fresh2) r1 r2
 Proof
   Cases_on `r1` >> Cases_on `r2` >>
   simp[lift_result_def] >>
@@ -168,7 +168,7 @@ Theorem mm_block_simulates_mode:
     mm_block_fresh_mode dfg mode bb SUBSET fresh ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      lift_result (state_equiv fresh) (execution_equiv fresh)
+      lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx (transform_block_mode dfg mode bb) s)
 Proof
@@ -181,7 +181,7 @@ Theorem mm_block_simulates_memzero:
     mm_block_fresh_memzero dfg bb SUBSET fresh ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      lift_result (state_equiv fresh) (execution_equiv fresh)
+      lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx (transform_block_memzero dfg bb) s)
 Proof
@@ -194,7 +194,7 @@ Theorem mm_block_simulates_dload:
     mm_block_fresh_dload dfg bb SUBSET fresh ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      lift_result (state_equiv fresh) (execution_equiv fresh)
+      lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx (transform_block_dload dfg bb) s)
 Proof
@@ -210,7 +210,7 @@ Theorem mm_block_simulates:
     mm_block_fresh dfg bb SUBSET fresh ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      lift_result (state_equiv fresh) (execution_equiv fresh)
+      lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx (transform_block dfg bb) s)
 Proof
@@ -219,14 +219,14 @@ Proof
   qpat_x_assum `_ SUBSET _` mp_tac >> simp[mm_block_fresh_def] >>
   strip_tac >>
   (* Step 1: dload *)
-  sg `lift_result (state_equiv fresh) (execution_equiv fresh)
+  sg `lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx bb s)
         (exec_block fuel ctx (transform_block_dload dfg bb) s)`
   >- (irule lift_result_state_equiv_mono >>
       qexists_tac `mm_block_fresh_dload dfg bb` >> simp[] >>
       irule mm_block_simulates_dload >> simp[]) >>
   (* Step 2: memzero *)
-  sg `lift_result (state_equiv fresh) (execution_equiv fresh)
+  sg `lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx (transform_block_dload dfg bb) s)
         (exec_block fuel ctx
            (transform_block_memzero dfg (transform_block_dload dfg bb)) s)`
@@ -234,7 +234,7 @@ Proof
       qexists_tac `mm_block_fresh_memzero dfg (transform_block_dload dfg bb)` >>
       simp[] >> irule mm_block_simulates_memzero >> simp[]) >>
   (* Step 3: CalldataMerge *)
-  sg `lift_result (state_equiv fresh) (execution_equiv fresh)
+  sg `lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx
            (transform_block_memzero dfg (transform_block_dload dfg bb)) s)
         (exec_block fuel ctx
@@ -245,7 +245,7 @@ Proof
         (transform_block_memzero dfg (transform_block_dload dfg bb))` >>
       simp[] >> irule mm_block_simulates_mode >> simp[]) >>
   (* Step 4: DloadMerge *)
-  sg `lift_result (state_equiv fresh) (execution_equiv fresh)
+  sg `lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx
            (transform_block_mode dfg CalldataMerge
               (transform_block_memzero dfg (transform_block_dload dfg bb))) s)
@@ -260,7 +260,7 @@ Proof
            (transform_block_memzero dfg (transform_block_dload dfg bb)))` >>
       simp[] >> irule mm_block_simulates_mode >> simp[]) >>
   (* Step 5: Mem2Mem *)
-  sg `lift_result (state_equiv fresh) (execution_equiv fresh)
+  sg `lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (exec_block fuel ctx
            (transform_block_mode dfg DloadMerge
               (transform_block_mode dfg CalldataMerge
@@ -312,7 +312,7 @@ Theorem mm_function_correct:
     ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
-      lift_result (state_equiv fresh) (execution_equiv fresh)
+      lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
         (run_blocks fuel ctx fn s)
         (run_blocks fuel ctx (transform_function fn) s)
 (* TEMPORARILY CHEATED - block_sim_function_proof signature may have changed
@@ -354,7 +354,7 @@ Theorem mm_pass_correct:
                  MEM (Var x) inst.inst_operands ==>
       !s1 s2. state_equiv fresh s1 s2 ==>
         lookup_var x s1 = lookup_var x s2) ==>
-    pass_correct (state_equiv fresh) (execution_equiv fresh)
+    pass_correct (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
       (\fuel. run_blocks fuel ctx fn s)
       (\fuel. run_blocks fuel ctx (transform_function fn) s)
 Proof
