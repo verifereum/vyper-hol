@@ -241,10 +241,6 @@ QED
    =================================================================== *)
 
 (* Combined alloca invariant: non-overlapping + bump pointer valid *)
-Definition alloca_inv_def:
-  alloca_inv s <=> allocas_non_overlapping s /\ alloca_next_valid s
-End
-
 (* next_alloca_offset >= base + sz for any existing alloca (conditional) *)
 Theorem next_alloca_offset_ge[local]:
   !s aid base sz.
