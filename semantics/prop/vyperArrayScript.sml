@@ -468,3 +468,27 @@ Theorem make_array_value_length:
 Proof
   simp[make_array_value_def]
 QED
+
+Theorem array_index_bounds:
+  ∀tv a i v.
+    array_index tv a i = SOME v ∧
+    (∀al. a = SArrayV al ⇒ ∃t n. tv = ArrayTV t (Fixed n)) ⇒
+    valid_index tv a i
+Proof
+  rpt gen_tac >> strip_tac
+  >> `0 <= i` by (Cases_on `a` >> gvs[array_index_def])
+  >> drule integerTheory.NUM_POSINT_EXISTS >> strip_tac >> gvs[]
+  >> Cases_on `a`
+  >> gvs[array_index_def, array_length_def, listTheory.oEL_THM,
+         AllCaseEqs()]
+QED
+
+Theorem evaluate_subscript_array_bounds:
+  ∀tenv tv av i x.
+    evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) = INL x ∧
+    (∀al. av = SArrayV al ⇒ ∃t n. tv = ArrayTV t (Fixed n)) ⇒
+    valid_index tv av i
+Proof
+  rw[evaluate_subscript_def, AllCaseEqs()]
+  >> drule_all array_index_bounds >> simp[]
+QED
