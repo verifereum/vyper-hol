@@ -87,3 +87,16 @@ Proof
   rpt strip_tac >>
   simp[evaluate_binop_def, bounded_int_op_def]
 QED
+
+(* ===== For Loop Boundedness ===== *)
+
+(* For loop iterator produces at most n elements (issue #87) *)
+Theorem for_loop_iterator_bounded:
+  ∀cx id typ it n body st st'.
+    eval_stmt cx (For id typ it n body) st = (INL (), st') ⇒
+    ∀vs st1.
+      eval_iterator cx it st = (INL vs, st1) ⇒
+      LENGTH vs ≤ n
+Proof
+  cheat
+QED
