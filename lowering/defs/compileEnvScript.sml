@@ -495,13 +495,13 @@ End
    - Scopes only contain local (stack-like) variables *)
 Definition vars_rel_def:
   vars_rel cenv scopes ss =
-    ∀ name tv v offset size.
-      lookup_scopes (string_to_num name) scopes = SOME (tv, v) ∧
+    ∀ name entry offset size.
+      lookup_scopes (string_to_num name) scopes = SOME entry ∧
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
       ⇒
-      (* tv from scope provides correct type for val_in_memory dispatch
+      (* entry.type from scope provides correct type for val_in_memory dispatch
          (e.g., AddressT → right-aligned BytesV encoding). *)
-      val_in_memory tv v offset ss.vs_memory
+      val_in_memory entry.type entry.value offset ss.vs_memory
 End
 
 (* Storage is identical between Vyper accounts and Venom state *)
