@@ -104,22 +104,6 @@ End
 
 val () = cv_auto_trans no_recursion_def;
 
-val option_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
-
-val sum_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
-
-val prod_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
-
-val toplevel_value_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="toplevel_value"}));
-
 Definition eval_base_target_cps_def:
   eval_base_target_cps cx (NameTarget id) st k =
     (let r = do
