@@ -73,7 +73,9 @@ val df_at_inter_liveness = let
   val th0 = INST_TYPE [alpha |-> ``:string list``,
                        beta |-> ``:basic_block list``] df_at_inter_transfer
   val th1 = CONV_RULE (SIMP_CONV (srw_ss()) [LET_THM]) th0
-  val th2 = SPEC_ALL th1
+  val th2 = Q.SPECL [`Backward`, `[]`, `list_union`, `liveness_transfer`,
+    `liveness_edge_transfer`, `fn.fn_blocks`, `NONE`, `fn`,
+    `lbl`, `bb`] th1
   val th3 = GENL [``lbl:string``, ``bb:basic_block``] th2
   in CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) th3
   end;
