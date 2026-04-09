@@ -16,8 +16,7 @@
 Theory mmCopyEquiv
 Ancestors
   mmCopy mmInterval venomState venomExecSemantics
-Libs
-  byteTheory wordsTheory fcpTheory listTheory rich_listTheory arithmeticTheory
+  byte words fcp list rich_list arithmetic
 
 (* ===== dimindex(:256) helpers ===== *)
 
@@ -399,6 +398,75 @@ Proof
   >> rw[word_to_bytes_def]
   >> simp[EL_word_to_bytes_aux, EL_REPLICATE, get_byte_def, byte_index_def]
   >> simp[ZERO_SHIFT, w2w_0]
+QED
+
+(* mstore of 0w = write_memory_with_expansion of 32 zero bytes *)
+Theorem mstore_0w_eq_write:
+  !dst (s:venom_state).
+    mstore dst (0w:bytes32) s =
+    write_memory_with_expansion dst (REPLICATE 32 (0w:word8)) s
+Proof
+  rw[mstore_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+(* N consecutive zero-stores = one write of 32*n zero bytes.
+   FOLDL (\st i. mstore (dst + 32*i) 0w st) s (GENLIST I n)
+   = write_memory_with_expansion dst (REPLICATE (32*n) 0w) s
+   Base case: n=1 (single mstore). Inductive: SNOC composition. *)
+Theorem n_zero_stores_eq_write:
+  !n dst (s:venom_state).
+    0 < n ==>
+    FOLDL (\st i. mstore (dst + 32 * i) (0w:bytes32) st)
+          s (GENLIST I n)
+    = write_memory_with_expansion dst (REPLICATE (32 * n) (0w:word8)) s
+Proof
+  Induct >- simp[]
+  >> rpt strip_tac
+  >> simp[GENLIST, FOLDL_SNOC]
+  >> Cases_on `n = 0`
+  >- (simp[GENLIST, FOLDL, mstore_0w_eq_write] >>
+      simp[LENGTH_REPLICATE])
+  >> `0 < n` by simp[]
+  >> `32 * SUC n = 32 * n + 32` by simp[MULT_CLAUSES]
+  >> pop_assum SUBST_ALL_TAC
+  >> first_x_assum (qspecl_then [`dst`, `s`] mp_tac) >> simp[]
+  >> disch_then SUBST1_TAC
+  >> simp[mstore_0w_eq_write]
+  >> `REPLICATE (32 * n + 32) (0w:word8) =
+      REPLICATE (32 * n) 0w ++ REPLICATE 32 0w` by
+    simp[GSYM REPLICATE_APPEND]
+  >> pop_assum SUBST_ALL_TAC
+  >> `dst + 32 * n = dst + LENGTH (REPLICATE (32 * n) (0w:word8))` by
+    simp[LENGTH_REPLICATE]
+  >> pop_assum SUBST_ALL_TAC
+  >> simp[GSYM write_memory_append]
+QED
+
+(* Calldatacopy past end writes zero bytes.
+   When offset >= LENGTH calldata, the copied bytes are all zero. *)
+Theorem calldatacopy_past_end_bytes:
+  !offset size calldata.
+    LENGTH calldata <= offset ==>
+    TAKE size (DROP offset calldata ++ REPLICATE size (0w:word8)) =
+    REPLICATE size (0w:word8)
+Proof
+  rw[] >> `DROP offset calldata = []` by simp[DROP_LENGTH_TOO_LONG]
+  >> simp[TAKE_APPEND1, LENGTH_REPLICATE, TAKE_LENGTH_ID_rwt]
+QED
+
+(* N zero-stores = calldatacopy past end of calldata *)
+Theorem n_zero_stores_eq_calldatacopy_past_end:
+  !n dst (s:venom_state) offset.
+    0 < n /\
+    LENGTH s.vs_call_ctx.cc_calldata <= offset ==>
+    FOLDL (\st i. mstore (dst + 32 * i) (0w:bytes32) st)
+          s (GENLIST I n)
+    = write_memory_with_expansion dst
+        (TAKE (32 * n)
+          (DROP offset s.vs_call_ctx.cc_calldata ++
+           REPLICATE (32 * n) (0w:word8))) s
+Proof
+  rw[n_zero_stores_eq_write, calldatacopy_past_end_bytes]
 QED
 
 (* ===== Memzero equivalence ===== *)
