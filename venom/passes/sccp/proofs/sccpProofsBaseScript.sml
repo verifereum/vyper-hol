@@ -100,6 +100,9 @@ QED
 (* Helper: wl_step on the concrete initial state *)
 Triviality cx_wl_step[local]:
   wl_step
+    (\lbl old new.
+       df_boundary <|sl_vals := FEMPTY; sl_targets := {} |> new lbl <>
+       df_boundary <|sl_vals := FEMPTY; sl_targets := {} |> old lbl)
     (df_process_block Forward <|sl_vals := FEMPTY; sl_targets := {} |>
       sccp_join sccp_transfer_inst sccp_edge_transfer
       (ir_function "test_fn"
@@ -122,10 +125,7 @@ Triviality cx_wl_step[local]:
        ds_boundary :=
          FEMPTY |+ ("entry", <|sl_vals := FEMPTY; sl_targets := {} |>) |>) =
   ([],
-   <|ds_inst :=
-       FEMPTY |+ (("entry",0:num), <|sl_vals := FEMPTY; sl_targets := {} |>)
-              |+ (("entry",1), <|sl_vals := FEMPTY; sl_targets := {} |>)
-              |+ (("entry",2), <|sl_vals := FEMPTY; sl_targets := {} |>);
+   <|ds_inst := FEMPTY;
      ds_boundary :=
        FEMPTY |+ ("entry", <|sl_vals := FEMPTY; sl_targets := {} |>) |>)
 Proof
@@ -279,6 +279,10 @@ val sccp_intra = ISPECL [``sccp_bottom``, ``sccp_join``, ``sccp_transfer_inst``,
 val sccp_bdry = ISPECL [``sccp_bottom``, ``sccp_join``, ``sccp_transfer_inst``,
   ``sccp_edge_transfer``] boundary_fixpoint_fwd;
 
+val fixpoint_restricted_fwd = SIMP_RULE (srw_ss()) []
+  (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
+    dfAnalyzeProofsTheory.df_analyze_fixpoint_process_restricted));
+
 (* SCCP is_fixpoint *)
 Triviality sccp_is_fixpoint[local]:
   !fn. wf_function fn ==>
@@ -291,47 +295,34 @@ Triviality sccp_is_fixpoint[local]:
       (sccp_df_analyze fn)
 Proof
   gen_tac >> strip_tac >>
-  simp[sccp_df_analyze_def, df_analyze_def, LET_THM] >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[] >>
-  irule worklistPropsTheory.wl_iterate_fixpoint_process_restricted >>
+  simp[sccp_df_analyze_def] >>
+  irule fixpoint_restricted_fwd >>
   conj_tac
-  >- (rw[] >> metis_tac[dfAnalyzePropsTheory.cfg_dfs_pre_mem_post]) >>
-  conj_tac >- (
-  qexistsl_tac [
-    `sccp_measure_inv fn`,
-    `sccp_measure_bound fn`,
-    `sccp_measure fn`,
-    `\lbl. MEM lbl (cfg_analyze fn).cfg_dfs_pre`] >>
-  rpt conj_tac >|
-  [ (* P init_state *)
-    mp_tac (Q.SPEC `fn` sccpConvergenceTheory.sccp_measure_inv_initial) >>
-    Cases_on `fn_entry_label fn` >> simp[],
-    (* bounded: sccp_measure_inv ==> sccp_state_inv ==> bounded *)
-    rpt strip_tac >>
-    `sccp_state_inv fn x` by fs[sccpConvergenceTheory.sccp_measure_inv_def] >>
-    metis_tac[sccpConvergenceTheory.sccp_measure_bounded],
-    (* P preserved *)
-    metis_tac[sccpConvergenceTheory.sccp_measure_inv_preserved],
-    (* monotone *)
-    metis_tac[sccpConvergenceTheory.sccp_measure_monotone],
-    (* succs closure *)
-    metis_tac[analysisSimProofsTheory.cfg_dfs_pre_succs_closed],
-    (* EVERY valid_lbl dfs_pre *)
-    simp[listTheory.EVERY_MEM]
-  ]) >>
+  >- (
+    qexistsl_tac [
+      `sccp_measure_inv fn`,
+      `sccp_measure_bound fn`,
+      `sccp_measure fn`,
+      `\lbl. MEM lbl (cfg_analyze fn).cfg_dfs_pre`] >>
+    rpt conj_tac
+    >- ((* bounded *)
+        rpt strip_tac >>
+        `sccp_state_inv fn x` by fs[sccpConvergenceTheory.sccp_measure_inv_def] >>
+        metis_tac[sccpConvergenceTheory.sccp_measure_bounded])
+    >- metis_tac[sccpConvergenceTheory.sccp_measure_inv_preserved]
+    >- metis_tac[sccpConvergenceTheory.sccp_measure_monotone, MEM_APPEND]
+    >- metis_tac[analysisSimProofsTheory.cfg_dfs_pre_succs_closed]
+    >- simp[listTheory.EVERY_MEM]
+    >- (mp_tac (Q.SPEC `fn` sccpConvergenceTheory.sccp_measure_inv_initial) >>
+        Cases_on `fn_entry_label fn` >> simp[]))
+  >>
   (* wl_deps_complete *)
-  `!cfg bbs ctx. (!a b. MEM b (cfg_succs_of cfg a) <=>
-     MEM a (cfg_preds_of cfg b)) ==>
-     wl_deps_complete (df_process_block Forward sccp_bottom sccp_join
-       sccp_transfer_inst sccp_edge_transfer ctx
-       (OPTION_MAP (\x. (x, sccp_bottom)) (fn_entry_label fn))
-       cfg bbs) (cfg_succs_of cfg)` suffices_by
-    (disch_then (qspecl_then [`cfg_analyze fn`, `fn.fn_blocks`, `fn`] mp_tac) >>
-     simp[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]) >>
-  rpt strip_tac >>
-  irule (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPEC `Forward`
-    dfAnalyzePropsTheory.df_process_deps_complete)) >>
-  simp[sccpConvergenceTheory.sccp_join_absorption]
+  match_mp_tac (SIMP_RULE std_ss [LET_THM]
+    dfAnalyzeProofsTheory.df_process_deps_complete_proof |>
+    SPEC ``Forward : direction`` |>
+    SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def]) >>
+  rw[sccpConvergenceTheory.sccp_join_absorption] >>
+  metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
 QED
 
 (* Intra-block transfer at fixpoint for SCCP *)

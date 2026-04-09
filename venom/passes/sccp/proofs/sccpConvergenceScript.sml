@@ -715,9 +715,9 @@ Theorem sccp_process_eq:
     let (fv, inst_map) = df_fold_block Forward
                            (sccp_transfer_inst fn) lbl
                            instrs (sccp_joined fn st lbl) in
-      st with <|ds_boundary := st.ds_boundary |+
-                  (lbl, sccp_join (df_boundary sccp_bottom st lbl) fv);
-                ds_inst := FUNION inst_map st.ds_inst|>
+    let new_bnd = sccp_join (df_boundary sccp_bottom st lbl) fv in
+      if new_bnd = df_boundary sccp_bottom st lbl then st
+      else st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd)
 Proof
   rw[df_process_block_def, df_joined_val_def] >>
   simp_tac std_ss [LET_THM, direction_case_def] >>
@@ -1220,34 +1220,26 @@ Triviality sccp_inv_preserved[local]:
          fn (OPTION_MAP (\lbl. (lbl, sccp_bottom)) (fn_entry_label fn))
          (cfg_analyze fn) fn.fn_blocks lbl st)
 Proof
-  rpt strip_tac
-  \\ simp[sccp_state_inv_def, sccp_process_eq, LET_THM]
-  \\ pairarg_tac \\ simp[]
-  (* Derive fold results *)
-  \\ (sg `FDOM fv.sl_vals SUBSET set (fn_all_assignments fn) /\
-          fv.sl_targets SUBSET set (fn_labels fn) /\
-          !k v. FLOOKUP inst_map k = SOME v ==>
-            FDOM v.sl_vals SUBSET set (fn_all_assignments fn) /\
-            v.sl_targets SUBSET set (fn_labels fn)`
-      >- (drule sccp_fold_inv >>
-          disch_then (qspecl_then [`set (fn_all_assignments fn)`,
-                                    `set (fn_labels fn)`] match_mp_tac) >>
-          simp[sccp_joined_inv] >>
-          metis_tac[sccp_transfer_inv]))
-  (* Establish df_boundary fact BEFORE expanding invariant *)
-  \\ imp_res_tac sccp_df_boundary_inv
-  \\ fs[sccp_state_inv_def]
-  \\ conj_tac
-  (* boundary *)
+  rpt strip_tac >>
+  simp[sccp_process_eq] >>
+  simp_tac std_ss [LET_THM] >> pairarg_tac >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  (* Boundary-changed case: only ds_boundary updated *)
+  imp_res_tac sccp_df_boundary_inv >>
+  drule sccp_fold_inv >>
+  disch_then (qspecl_then [`set (fn_all_assignments fn)`,
+                            `set (fn_labels fn)`] mp_tac) >>
+  simp[sccp_joined_inv] >>
+  (impl_tac >- metis_tac[sccp_transfer_inv]) >>
+  strip_tac >>
+  fs[sccp_state_inv_def] >>
+  rpt conj_tac
   >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >> rw[] >> gvs[] >>
       TRY res_tac >>
       TRY (irule sccp_join_fdom_subset) >>
       TRY (irule sccp_join_targets_subset) >>
       simp[])
-  (* inst *)
-  >- (rpt gen_tac >> simp[FLOOKUP_FUNION] >>
-      Cases_on `FLOOKUP inst_map k` >> simp[] >>
-      strip_tac >> gvs[] >> res_tac >> simp[])
+  >- metis_tac[]
 QED
 
 (* measure_inv preservation *)
@@ -1266,59 +1258,20 @@ Proof
   conj_tac >- (
     irule sccp_inv_preserved >>
     fs[sccp_measure_inv_def]) >>
-  simp[sccp_process_eq, LET_THM] >>
+  (* New df_process_block only updates ds_boundary, ds_inst unchanged.
+     So C3-C5 (about ds_inst) are trivially preserved. *)
+  simp[sccp_process_eq] >>
   simp_tac std_ss [LET_THM] >>
   pairarg_tac >> simp[] >>
-  fs[sccp_measure_inv_def, LET_THM] >>
-  qabbrev_tac `instrs = case lookup_block lbl fn.fn_blocks of
-                           NONE => [] | SOME bb => bb.bb_instructions` >>
-  qabbrev_tac `joined = sccp_joined fn st lbl` >>
-  rpt conj_tac
-  (* C3: fold coherence *)
-  >- (rpt strip_tac >>
-      qunabbrev_tac `instrs` >>
-      qpat_x_assum `df_fold_block _ _ lbl _ joined = _`
-        (fn th => assume_tac th >>
-                  strip_assume_tac (MATCH_MP sccp_fold_inst_map_props th)) >>
-      Cases_on `lbl' = lbl`
-      >- (`v0 = joined` by fs[FLOOKUP_FUNION] >>
-          fs[] >> simp[FLOOKUP_FUNION])
-      >- (`(lbl', 0n) NOTIN FDOM inst_map` by
-            (strip_tac >> `FST (lbl', 0n) = lbl` by metis_tac[] >> fs[]) >>
-          `FLOOKUP st.ds_inst (lbl', 0n) = SOME v0` by
-            fs[FLOOKUP_FUNION, FLOOKUP_DEF] >>
-          `FLOOKUP st.ds_inst k = SOME v` by metis_tac[] >>
-          `k NOTIN FDOM inst_map` suffices_by
-            (strip_tac >> simp[FLOOKUP_FUNION, FLOOKUP_DEF]) >>
-          strip_tac >>
-          `FST k = lbl` by metis_tac[] >>
-          Cases_on `df_fold_block Forward (sccp_transfer_inst fn)
-                      lbl' (case lookup_block lbl' fn.fn_blocks of
-                              NONE => [] | SOME bb => bb.bb_instructions) v0` >>
-          qpat_x_assum `df_fold_block _ _ lbl' _ _ = (q, r)` (fn th =>
-            strip_assume_tac (MATCH_MP sccp_fold_inst_map_props th)) >>
-          fs[] >>
-          `FST k = lbl'` by metis_tac[flookup_thm] >>
-          fs[]))
-  (* C4: key closure *)
-  >- (rpt strip_tac >>
-      qpat_x_assum `df_fold_block _ _ lbl _ _ = _` (fn th =>
-        strip_assume_tac (MATCH_MP sccp_fold_inst_map_props th)) >>
-      fs[FDOM_FUNION] >>
-      res_tac >> fs[])
-  (* C5: processed implies boundary exists *)
-  >- (rpt strip_tac >>
-      qpat_x_assum `df_fold_block _ _ lbl _ _ = _` (fn th =>
-        strip_assume_tac (MATCH_MP sccp_fold_inst_map_props th)) >>
-      fs[FDOM_FUNION, FDOM_FUPDATE] >>
-      res_tac >> fs[])
+  IF_CASES_TAC >> simp[] >>
+  fs[sccp_measure_inv_def] >> metis_tac[]
 QED
 
 (* ===== Monotonicity ===== *)
 
 Theorem sccp_measure_monotone:
   !fn lbl st.
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    MEM lbl (fn_labels fn ++ (cfg_analyze fn).cfg_dfs_pre) /\
     sccp_measure_inv fn st /\
     df_process_block Forward sccp_bottom sccp_join sccp_transfer_inst
       sccp_edge_transfer
@@ -1339,194 +1292,367 @@ Proof
   qabbrev_tac `instrs = case lookup_block lbl fn.fn_blocks of
                            NONE => [] | SOME bb => bb.bb_instructions` >>
   qabbrev_tac `new_bnd = sccp_join (df_boundary sccp_bottom st lbl) fv` >>
-  `(!k. k IN FDOM inst_map ==> FST k = lbl) /\
-   (lbl, 0n) IN FDOM inst_map /\
-   FLOOKUP inst_map (lbl, 0n) = SOME joined` by (
-    qpat_x_assum `df_fold_block _ _ _ _ _ = _` (fn th =>
-      strip_assume_tac (MATCH_MP sccp_fold_inst_map_props th)) >>
-    fs[Abbr `joined`]) >>
-  `df_process_block Forward sccp_bottom sccp_join sccp_transfer_inst
-     sccp_edge_transfer
-     fn (OPTION_MAP (\lbl. (lbl, sccp_bottom)) (fn_entry_label fn))
-     (cfg_analyze fn) fn.fn_blocks lbl st =
-   st with <|ds_inst := FUNION inst_map st.ds_inst;
-             ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|>` by (
+  (* New df_process_block: if boundary unchanged, result = st.
+     Since result <> st, boundary must have changed. *)
+  `new_bnd <> df_boundary sccp_bottom st lbl` by (
+    strip_tac >>
+    qpat_x_assum `_ <> st` mp_tac >> simp[] >>
     rewrite_tac[sccp_process_eq] >>
-    simp_tac std_ss [LET_THM, Abbr `instrs`, Abbr `joined`, Abbr `new_bnd`] >>
-    qpat_x_assum `df_fold_block _ _ _ _ _ = _` (fn th =>
-      simp[th])) >>
-  (* MEM lbl in fn_labels or dfs_pre *)
-  `MEM lbl (fn_labels fn ++ (cfg_analyze fn).cfg_dfs_pre)` by
-    simp[MEM_APPEND] >>
-  (* Get invariant facts *)
+    simp_tac std_ss [LET_THM] >>
+    qunabbrev_tac `instrs` >> qunabbrev_tac `joined` >>
+    qpat_x_assum `df_fold_block _ _ _ _ _ = _` (fn th => simp[th]) >>
+    fs[markerTheory.Abbrev_def]) >>
+  (* Result is st with updated boundary only — ds_inst unchanged *)
+  (* lbl is now directly in fn_labels ++ dfs_pre from hypothesis *)
   `sccp_state_inv fn st` by fs[sccp_measure_inv_def] >>
   `FDOM (df_boundary sccp_bottom st lbl).sl_vals
      SUBSET set (fn_all_assignments fn) /\
    (df_boundary sccp_bottom st lbl).sl_targets
      SUBSET set (fn_labels fn)` by
     metis_tac[sccp_df_boundary_inv] >>
-  (* === Case split: did boundary value at lbl change? === *)
-  Cases_on `df_boundary sccp_bottom st lbl = new_bnd`
-  >- ( (* Case B: boundary unchanged *)
-    Cases_on `lbl IN FDOM st.ds_boundary`
-    >- ( (* B1: lbl IN FDOM, boundary unchanged *)
-      `st.ds_boundary ' lbl = new_bnd` by (
-        qpat_x_assum `df_boundary _ st lbl = new_bnd` mp_tac >>
-        simp[df_boundary_def, FLOOKUP_DEF]) >>
-      `st.ds_boundary |+ (lbl, new_bnd) = st.ds_boundary` by
-        (irule FUPDATE_ELIM >> metis_tac[]) >>
-      simp_tac std_ss [sccp_measure_def, LET_THM] >>
-      `sccp_boundary_measure fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> =
-       sccp_boundary_measure fn st` by
-        simp[sccp_boundary_measure_def, LET_THM, df_boundary_def,
-             FLOOKUP_UPDATE] >>
-      `CARD (FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-             set (cfg_analyze fn).cfg_dfs_pre) =
-       CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre)` by
-        asm_rewrite_tac[] >>
-      `CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-       CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-             df_valid_inst_keys fn.fn_blocks)` by
-        metis_tac[inst_card_mono] >>
-      simp[] >>
-      Cases_on `FLOOKUP st.ds_inst (lbl, 0n) = SOME joined`
-      >- ( (* B1-YES: FUNION absorbed -> contradiction *)
-        mp_tac (Q.SPECL [`fn`, `lbl`, `st`, `joined`,
-          `instrs`, `fv`, `inst_map`] funion_fold_coherent) >>
-        impl_tac >- (
-          qpat_x_assum `Abbrev (instrs = _)` (mp_tac o
-            REWRITE_RULE [markerTheory.Abbrev_def]) >>
-          strip_tac >> simp[]) >>
-        strip_tac >>
-        qpat_x_assum `FUNION inst_map st.ds_inst = st.ds_inst` (fn funion_th =>
-          qpat_x_assum `st.ds_boundary |+ _ = st.ds_boundary` (fn fupd_th =>
-            qpat_x_assum `df_process_block _ _ _ _ _ _ _ _ _ _ st = _`
-              (fn dpb_th => assume_tac
-                (REWRITE_RULE [funion_th, fupd_th] dpb_th)))) >>
-        gvs[df_state_component_equality]
-      )
-      >- ( (* B1-NO: fresh_count strictly increases *)
-        mp_tac fresh_count_increase >>
-        disch_then (qspecl_then [`fn`, `st`, `inst_map`, `lbl`] mp_tac) >>
-        impl_tac >- (
-          conj_tac >- simp[MEM_APPEND] >>
-          conj_tac >- (
-            qpat_x_assum `Abbrev (joined = _)` (mp_tac o
-              REWRITE_RULE [markerTheory.Abbrev_def]) >>
-            strip_tac >> ASM_REWRITE_TAC []) >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          simp[FLOOKUP_FUNION]) >>
-        disch_then (assume_tac o ONCE_REWRITE_RULE [ds_inst_update_literal]) >>
-        gvs[] >> DECIDE_TAC
-      )
-    )
-    >- ( (* B2: lbl NOT in boundary, boundary value unchanged *)
-      `new_bnd = sccp_bottom` by (
-        fs[df_boundary_def] >>
-        Cases_on `FLOOKUP st.ds_boundary lbl` >> fs[FLOOKUP_DEF]) >>
-      simp_tac std_ss [sccp_measure_def, LET_THM] >>
-      `sccp_boundary_measure fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> =
-       sccp_boundary_measure fn st` by (
-        rw[sccp_boundary_measure_def] >>
-        AP_TERM_TAC >> ONCE_REWRITE_TAC [GSYM MAP_APPEND] >>
-        simp[MAP_EQ_f, df_boundary_def, FLOOKUP_UPDATE] >>
-        rw[] >> fs[FLOOKUP_DEF]) >>
-      `CARD (FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-             set (cfg_analyze fn).cfg_dfs_pre) =
-       CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre) + 1` by (
-        `FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-           set (cfg_analyze fn).cfg_dfs_pre =
-         lbl INSERT (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre)` by (
-          simp[EXTENSION, FDOM_FUPDATE, IN_INTER] >> metis_tac[]) >>
-        simp[] >>
-        `lbl NOTIN (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre)` by
-          simp[IN_INTER] >>
-        simp[CARD_INSERT, FINITE_INTER]) >>
-      `CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-       CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-             df_valid_inst_keys fn.fn_blocks)` by
-        metis_tac[inst_card_mono] >>
-      `sccp_fresh_count fn st <=
-       sccp_fresh_count fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|>` by (
-        mp_tac fresh_count_mono >>
-        disch_then (qspecl_then [`fn`, `st`, `inst_map`, `lbl`,
-          `st.ds_boundary |+ (lbl, new_bnd)`] mp_tac) >>
-        impl_tac >- (
-          conj_tac >- first_assum ACCEPT_TAC >>
-          conj_tac >- (
-            qpat_x_assum `Abbrev (joined = _)` (mp_tac o
-              REWRITE_RULE [markerTheory.Abbrev_def]) >>
-            strip_tac >> ASM_REWRITE_TAC []) >>
-          irule sccp_joined_boundary_eq >>
-          simp[df_boundary_def, FLOOKUP_UPDATE] >>
-          rw[] >> gvs[df_boundary_def, FLOOKUP_DEF]) >>
-        simp[]) >>
-      gvs[] >> DECIDE_TAC
-    )
-  )
-  >- (
-    (* Case A: boundary strictly changed — weighted measure argument *)
-    qunabbrev_tac `joined` >> qunabbrev_tac `instrs` >> qunabbrev_tac `new_bnd` >>
-    drule sccp_fold_inv >>
-    disch_then (qspecl_then [`set (fn_all_assignments fn)`,
-                              `set (fn_labels fn)`] mp_tac) >>
-    simp[sccp_joined_inv] >>
-    (impl_tac >- (fs[sccp_measure_inv_def] >> metis_tac[sccp_transfer_inv])) >>
-    strip_tac >>
-    (* Flip ≠ for sccp_val_measure_join_strict *)
-    qpat_x_assum `_ <> sccp_join _ _` (assume_tac o GSYM) >>
-    drule_all sccp_val_measure_join_strict >> strip_tac >>
-    drule_all boundary_measure_strict >> strip_tac >>
-    (* Bridge bm syntactic mismatch using boundary_measure_inst_irrelevant *)
-    assume_tac (Q.SPECL [`fn`, `FUNION inst_map st.ds_inst`, `st.ds_inst`,
-      `st.ds_boundary |+ (lbl, sccp_join (df_boundary sccp_bottom st lbl) fv)`]
-      boundary_measure_inst_irrelevant) >>
-    (* Component: ic monotone *)
-    `CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-     CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-           df_valid_inst_keys fn.fn_blocks)` by metis_tac[inst_card_mono] >>
-    (* Component: fc bounded by all_count *)
-    `sccp_fresh_count fn st <=
-     LENGTH (fn_labels fn) + LENGTH ((cfg_analyze fn).cfg_dfs_pre)` by (
-      simp_tac std_ss [sccp_fresh_count_def, LET_THM] >>
-      irule LESS_EQ_TRANS >>
-      qexists_tac `CARD (set (fn_labels fn ++ (cfg_analyze fn).cfg_dfs_pre))` >>
-      conj_tac >- (
-        irule CARD_SUBSET >> simp[FINITE_LIST_TO_SET, SUBSET_DEF]) >>
-      irule LESS_EQ_TRANS >>
-      qexists_tac `CARD (set (fn_labels fn)) +
-                    CARD (set ((cfg_analyze fn).cfg_dfs_pre))` >>
-      simp[LIST_TO_SET_APPEND] >>
-      conj_tac >- (
-        irule CARD_UNION_LE >> simp[FINITE_LIST_TO_SET]) >>
-      mp_tac (Q.INST [`ls` |-> `fn_labels fn`]
-        (INST_TYPE [alpha |-> ``:string``] CARD_LIST_TO_SET)) >>
-      mp_tac (Q.INST [`ls` |-> `(cfg_analyze fn).cfg_dfs_pre`]
-        (INST_TYPE [alpha |-> ``:string``] CARD_LIST_TO_SET)) >>
-      DECIDE_TAC) >>
-    (* Component: bc monotone *)
-    `CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre) <=
-     CARD (FDOM (st.ds_boundary |+ (lbl,
-       sccp_join (df_boundary sccp_bottom st lbl) fv)) INTER
-       set (cfg_analyze fn).cfg_dfs_pre)` by (
-      irule CARD_SUBSET >> simp[FINITE_INTER, FDOM_FUPDATE] >>
-      simp[SUBSET_DEF, IN_INTER] >> metis_tac[IN_INSERT]) >>
-    (* Use weighted_four_component_strict for the final arithmetic *)
-    qpat_x_assum `sccp_boundary_measure _ _ = sccp_boundary_measure _ _`
-      (fn eq =>
-        REWRITE_TAC [sccp_measure_def, LET_THM] >>
-        CONV_TAC (DEPTH_CONV BETA_CONV) >>
-        REWRITE_TAC [eq]) >>
-    irule weighted_four_component_strict >>
-    rpt conj_tac >> fs[sccp_boundary_measure_def, df_boundary_def]
-  )
+  qunabbrev_tac `joined` >> qunabbrev_tac `instrs` >> qunabbrev_tac `new_bnd` >>
+  drule sccp_fold_inv >>
+  disch_then (qspecl_then [`set (fn_all_assignments fn)`,
+                            `set (fn_labels fn)`] mp_tac) >>
+  simp[sccp_joined_inv] >>
+  (impl_tac >- (fs[sccp_measure_inv_def] >> metis_tac[sccp_transfer_inv])) >>
+  strip_tac >>
+  (* Boundary strictly changed — sccp_val_measure_join_strict *)
+  `df_boundary sccp_bottom st lbl <> sccp_join (df_boundary sccp_bottom st lbl) fv`
+    by metis_tac[] >>
+  drule_all sccp_val_measure_join_strict >> strip_tac >>
+  drule_all boundary_measure_strict >> strip_tac >>
+  (* Component: fc bounded by all_count *)
+  assume_tac (Q.SPECL [`fn`, `st`] fresh_count_bounded) >>
+  (* Component: bc monotone *)
+  `CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre) <=
+   CARD (FDOM (st.ds_boundary |+ (lbl,
+     sccp_join (df_boundary sccp_bottom st lbl) fv)) INTER
+     set (cfg_analyze fn).cfg_dfs_pre)` by (
+    irule CARD_SUBSET >> simp[FINITE_INTER, FDOM_FUPDATE] >>
+    simp[SUBSET_DEF, IN_INTER] >> metis_tac[IN_INSERT]) >>
+  (* Use weighted_four_component_strict for the final arithmetic.
+     ds_inst unchanged so ic_old = ic_new, fc bounded, bm strict, bc mono *)
+  simp_tac std_ss [sccp_measure_def, LET_THM] >>
+  irule weighted_four_component_strict >>
+  gvs[FDOM_FUPDATE]
 QED
+
+Triviality foldl_inst_only_boundary[local]:
+  !lbls (f : 'a df_state -> string -> 'a df_state) acc.
+    (!st lbl. (f st lbl).ds_boundary = st.ds_boundary) ==>
+    (FOLDL f acc lbls).ds_boundary = acc.ds_boundary
+Proof Induct >> simp[]
+QED
+
+Triviality populate_inst_ds_boundary[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
+    (df_populate_inst dir bottom join transfer edge_transfer ctx
+       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
+Proof
+  rpt gen_tac >>
+  simp[df_populate_inst_def] >>
+  irule foldl_inst_only_boundary >>
+  simp[LET_THM] >>
+  rpt gen_tac >> pairarg_tac >> simp[]
+QED
+
+(* ===== Helpers for df_populate_inst structural properties ===== *)
+
+(* Fold outputs for different labels have disjoint domains *)
+Triviality fold_block_keys_disjoint[local]:
+  !dir transfer lbl1 lbl2 instrs1 instrs2 init1 init2.
+    lbl1 <> lbl2 ==>
+    DISJOINT (FDOM (SND (df_fold_block dir transfer lbl1 instrs1 init1)))
+             (FDOM (SND (df_fold_block dir transfer lbl2 instrs2 init2)))
+Proof
+  rpt strip_tac >>
+  Cases_on `df_fold_block dir transfer lbl1 instrs1 init1` >>
+  Cases_on `df_fold_block dir transfer lbl2 instrs2 init2` >>
+  simp[DISJOINT_DEF, EXTENSION, IN_INTER, NOT_IN_EMPTY] >>
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  qpat_assum `df_fold_block _ _ lbl1 _ _ = _`
+    (strip_assume_tac o MATCH_MP dfAnalyzeProofsTheory.df_fold_block_keys) >>
+  qpat_assum `df_fold_block _ _ lbl2 _ _ = _`
+    (strip_assume_tac o MATCH_MP dfAnalyzeProofsTheory.df_fold_block_keys) >>
+  metis_tac[FLOOKUP_DEF, NOT_NONE_SOME]
+QED
+
+(* Step 1: monotonicity — if m ⊑ acc and disjoint, then m ⊑ FOLDL *)
+Triviality foldl_funion_preserves_submap[local]:
+  !lbls (f : string -> ('a # num, 'b) fmap) acc m.
+    m SUBMAP acc /\
+    (!l. MEM l lbls ==> DISJOINT (FDOM (f l)) (FDOM m)) ==>
+    m SUBMAP FOLDL (\st' l. FUNION (f l) st') acc lbls
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> rpt conj_tac >>
+  metis_tac[SUBMAP_FUNION, DISJOINT_SYM]
+QED
+
+(* Step 2: FOLDL of FUNION submap — if MEM and ALL_DISTINCT, component ⊑ result *)
+Triviality foldl_funion_submap[local]:
+  !lbls (f : string -> ('a # num, 'b) fmap) acc lbl.
+    MEM lbl lbls /\ ALL_DISTINCT lbls /\
+    (!l1 l2. MEM l1 lbls /\ MEM l2 lbls /\ l1 <> l2 ==>
+             DISJOINT (FDOM (f l1)) (FDOM (f l2))) ==>
+    f lbl SUBMAP FOLDL (\acc l. FUNION (f l) acc) acc lbls
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >> gvs[]
+  >- (irule foldl_funion_preserves_submap >>
+      simp[SUBMAP_FUNION_ID] >> metis_tac[MEM])
+QED
+
+(* Populate inst result's ds_inst is a FOLDL of FUNIONs *)
+Triviality populate_inst_ds_inst[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
+    (df_populate_inst dir bottom join transfer edge_transfer
+       ctx entry_val cfg bbs lbls st).ds_inst =
+    FOLDL (\acc lbl.
+      let joined = df_joined_val dir bottom join edge_transfer ctx
+                                 entry_val cfg st lbl in
+      let instrs = (case lookup_block lbl bbs of
+                      NONE => [] | SOME bb => bb.bb_instructions) in
+      let (final_val, inst_map) = df_fold_block dir (transfer ctx)
+                                    lbl instrs joined in
+      FUNION inst_map acc) st.ds_inst lbls
+Proof
+  Induct_on `lbls`
+  \\ simp[df_populate_inst_def, LET_THM]
+  \\ rpt gen_tac
+  \\ pairarg_tac \\ simp[]
+  \\ last_x_assum (qspecl_then [`dir`, `bottom`, `join`, `transfer`,
+       `edge_transfer`, `ctx`, `entry_val`, `cfg`, `bbs`,
+       `st with ds_inst := FUNION inst_map st.ds_inst`] mp_tac)
+  \\ simp_tac std_ss [df_joined_val_def, df_boundary_def, df_state_accfupds,
+       df_populate_inst_def, LET_THM]
+QED
+
+(* Fold from populate submap: for each label in the list, the fold inst_map
+   is a submap of the final populated ds_inst *)
+Triviality populate_inst_submap[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st
+   lbl bb.
+    MEM lbl lbls /\ ALL_DISTINCT lbls /\
+    lookup_block lbl bbs = SOME bb ==>
+    let joined = df_joined_val dir bottom join edge_transfer ctx
+                               entry_val cfg st lbl in
+    let (fv, im) = df_fold_block dir (transfer ctx) lbl
+                      bb.bb_instructions joined in
+    im SUBMAP (df_populate_inst dir bottom join transfer edge_transfer
+                 ctx entry_val cfg bbs lbls st).ds_inst
+Proof
+  rpt gen_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  simp[populate_inst_ds_inst] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  qho_match_abbrev_tac `_ SUBMAP FOLDL (\acc lbl. FUNION (f lbl) acc) _ _` >>
+  `im = f lbl` by simp[Abbr `f`] >>
+  pop_assum SUBST1_TAC >>
+  irule foldl_funion_submap >> rw[Abbr `f`] >>
+  irule fold_block_keys_disjoint >> simp[]
+QED
+
+(* Helper: FOLDL FUNION membership — if k in FDOM (FOLDL FUNION),
+   then k came from some f(l) with MEM l lbls *)
+Triviality foldl_funion_mem[local]:
+  !lbls (f : string -> ('a # num, 'b) fmap) acc k.
+    k IN FDOM (FOLDL (\acc l. FUNION (f l) acc) acc lbls) /\
+    k NOTIN FDOM acc ==>
+    ?l. MEM l lbls /\ k IN FDOM (f l)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  gvs[FUNION_DEF] >> metis_tac[MEM]
+QED
+
+(* FLOOKUP from FOLDL of disjoint FUNIONs: value came from exactly one f(l) *)
+(* df_fold_block Forward stores init_val at (lbl, 0) *)
+Triviality df_fold_block_at_zero[local]:
+  !transfer lbl instrs init_val fv im.
+    df_fold_block Forward transfer lbl instrs init_val = (fv, im) ==>
+    FLOOKUP im (lbl, 0n) = SOME init_val
+Proof
+  rw[dfAnalyzeDefsTheory.df_fold_block_def] >>
+  drule dfAnalyzeProofsTheory.df_fold_forward_at >> simp[]
+QED
+
+Triviality foldl_funion_flookup[local]:
+  !lbls (f : string -> ('a # num, 'b) fmap) k v.
+    FLOOKUP (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls) k = SOME v /\
+    ALL_DISTINCT lbls /\
+    (!l1 l2. MEM l1 lbls /\ MEM l2 lbls /\ l1 <> l2 ==>
+       DISJOINT (FDOM (f l1)) (FDOM (f l2))) ==>
+    ?l. MEM l lbls /\ FLOOKUP (f l) k = SOME v
+Proof
+  rpt strip_tac >>
+  `k IN FDOM (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls)` by
+    fs[FLOOKUP_DEF] >>
+  drule foldl_funion_mem >> simp[] >> strip_tac >>
+  qexists `l` >> simp[] >>
+  `f l SUBMAP FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls` by (
+    irule foldl_funion_submap >> metis_tac[]) >>
+  fs[SUBMAP_FLOOKUP_EQN, FLOOKUP_DEF]
+QED
+
+(* All inst keys in populated result have (lbl,0) present (key closure) *)
+(* Helper: in a FOLDL of disjoint FUNIONs, if (lbl,j) is a key then
+   (lbl,0) is also a key, provided each f(l) has that closure property
+   and keys from f(l) have FST = l. *)
+Triviality foldl_funion_key_closure[local]:
+  !lbls (f : string -> (string # num, 'b) fmap) lbl j.
+    (lbl, j) IN FDOM (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls) /\
+    ALL_DISTINCT lbls /\
+    (!l. (lbl,j) IN FDOM (f l) ==> lbl = l) /\
+    (!l. (lbl,0n) IN FDOM (f l) ==> lbl = l) /\
+    (lbl, 0n) IN FDOM (f lbl) /\
+    (!l1 l2. l1 <> l2 ==> DISJOINT (FDOM (f l1)) (FDOM (f l2))) ==>
+    (lbl, 0n) IN FDOM (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls)
+Proof
+  rpt strip_tac >>
+  drule foldl_funion_mem >> (impl_tac >- simp[]) >> strip_tac >>
+  `lbl = l` by metis_tac[] >> gvs[] >>
+  `f l SUBMAP FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls` by (
+    irule foldl_funion_submap >> metis_tac[]) >>
+  fs[SUBMAP_DEF, FLOOKUP_DEF]
+QED
+
+Triviality populate_inst_key_closure[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st lbl j.
+    (lbl, j) IN FDOM (df_populate_inst dir bottom join transfer edge_transfer
+                        ctx entry_val cfg bbs lbls st).ds_inst /\
+    ALL_DISTINCT lbls /\
+    st.ds_inst = FEMPTY ==>
+    (lbl, 0n) IN FDOM (df_populate_inst dir bottom join transfer edge_transfer
+                         ctx entry_val cfg bbs lbls st).ds_inst
+Proof
+  rpt strip_tac >>
+  (* Abbreviate the ds_inst result to avoid alpha-variant FOLDL issues *)
+  qabbrev_tac `R = (df_populate_inst dir bottom join transfer edge_transfer
+    ctx entry_val cfg bbs lbls st).ds_inst` >>
+  gvs[populate_inst_ds_inst] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  qpat_x_assum `Abbrev (R = _)` mp_tac >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  strip_tac >>
+  (* Now goal is (lbl,0) IN FDOM R, with R abbreviated.
+     Hypothesis: (lbl,j) IN FDOM R and R = FOLDL ... FEMPTY ... *)
+  qpat_x_assum `Abbrev (R = _)` (strip_assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qabbrev_tac `f = \l. SND (df_fold_block dir (transfer ctx) l
+    (case lookup_block l bbs of NONE => [] | SOME bb => bb.bb_instructions)
+    (df_joined_val dir bottom join edge_transfer ctx entry_val cfg st l))` >>
+  `R = FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls` by
+    (simp[Abbr `f`]) >>
+  (* Step 1: find which f(l) contains (lbl,j) *)
+  `?l. MEM l lbls /\ (lbl,j) IN FDOM (f l)` by (
+    `(lbl,j) IN FDOM (FOLDL (\acc l. FUNION (f l) acc) FEMPTY lbls)` by
+      fs[] >>
+    drule foldl_funion_mem >> simp[]) >>
+  suspend "main"
+QED
+
+Resume populate_inst_key_closure[main]:
+  (* Case-split df_fold_block for l *)
+  Cases_on `df_fold_block dir (transfer ctx) l
+    (case lookup_block l bbs of NONE => [] | SOME bb => bb.bb_instructions)
+    (df_joined_val dir bottom join edge_transfer ctx entry_val cfg st l)` >>
+  rename1 `df_fold_block _ _ l _ _ = (fv_l, im_l)` >>
+  `f l = im_l` by simp[Abbr `f`] >>
+  (* Step 1: lbl = l *)
+  `lbl = l` by (
+    drule dfAnalyzeProofsTheory.df_fold_block_keys >>
+    disch_then (qspec_then `(lbl,j)` mp_tac) >>
+    simp[] >> impl_tac >- fs[FLOOKUP_DEF] >> simp[]) >>
+  fs[] >> (* substitute lbl=l but keep im_l *)
+  (* Step 2: (l,0) in im_l *)
+  `(l, 0n) IN FDOM im_l` by (
+    Cases_on `dir` >> fs[]
+    >- (drule dfAnalyzeProofsTheory.df_fold_block_fdom >>
+        simp[IN_IMAGE, IN_COUNT])
+    >- (drule dfAnalyzeProofsTheory.df_fold_block_fdom_backward >>
+        simp[IN_IMAGE, IN_COUNT])) >>
+  (* Step 3: im_l = f l SUBMAP R, so (l,0) IN FDOM R *)
+  `f l SUBMAP R` by (
+    qpat_x_assum `R = FOLDL _ _ _` (fn th => REWRITE_TAC [th]) >>
+    irule foldl_funion_submap >> simp[] >> rw[Abbr `f`] >>
+    irule fold_block_keys_disjoint >> simp[]) >>
+  `(l, 0n) IN FDOM (f l)` by fs[] >>
+  metis_tac[SUBMAP_DEF, FLOOKUP_DEF]
+QED
+
+Finalise populate_inst_key_closure
+
+(* df_process_block never modifies ds_inst *)
+Triviality df_process_block_inst_unchanged[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
+    (df_process_block dir bottom join transfer edge_transfer
+       ctx entry_val cfg bbs lbl st).ds_inst = st.ds_inst
+Proof
+  rpt gen_tac >> simp[df_process_block_def] >>
+  pairarg_tac >> simp[] >> rpt IF_CASES_TAC >> simp[]
+QED
+
+(* Helper: FOLDL |+ accumulates FDOM *)
+Triviality foldl_fupdate_fdom[local]:
+  !lbls (bottom : 'a) acc.
+    FDOM (FOLDL (\m lbl. m |+ (lbl, bottom)) acc lbls) =
+    FDOM acc UNION set lbls
+Proof
+  Induct >> simp[FDOM_FUPDATE] >>
+  simp[EXTENSION] >> metis_tac[]
+QED
+
+(* init_df_state boundary contains all labels *)
+Triviality init_df_state_boundary_fdom[local]:
+  !bottom lbls.
+    FDOM (init_df_state bottom lbls).ds_boundary = set lbls
+Proof
+  simp[init_df_state_def, foldl_fupdate_fdom]
+QED
+
+(* populate_inst_mem: key in populated ds_inst implies MEM label *)
+Triviality populate_inst_mem[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st lbl j.
+    (lbl, j) IN FDOM (df_populate_inst dir bottom join transfer edge_transfer
+                        ctx entry_val cfg bbs lbls st).ds_inst /\
+    (lbl, j) NOTIN FDOM st.ds_inst ==>
+    MEM lbl lbls
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `_ IN FDOM _` mp_tac >>
+  simp[populate_inst_ds_inst] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  qho_match_abbrev_tac `(lbl,j) IN FDOM (FOLDL (\acc l. FUNION (f l) acc)
+    st.ds_inst lbls) ==> _` >>
+  strip_tac >>
+  drule foldl_funion_mem >> (impl_tac >- fs[]) >> strip_tac >>
+  (* f(l) = SND(df_fold_block ...), and (lbl,j) IN FDOM (f l) *)
+  Cases_on `df_fold_block dir (transfer ctx) l
+    (case lookup_block l bbs of NONE => [] | SOME bb => bb.bb_instructions)
+    (df_joined_val dir bottom join edge_transfer ctx entry_val cfg st l)` >>
+  `f l = r` by simp[Abbr `f`] >>
+  `lbl = l` by (
+    drule dfAnalyzeProofsTheory.df_fold_block_keys >>
+    disch_then (qspec_then `(lbl,j)` mp_tac) >>
+    simp[] >> impl_tac >- fs[FLOOKUP_DEF] >> simp[]) >>
+  gvs[]
+QED
+
+(* df_analyze_invariant_forward with Q = combined sccp invariant.
+   Proves sccp_measure_inv, ds_inst = FEMPTY, and boundary FDOM in one shot. *)
+local
+  val base = INST_TYPE [alpha |-> ``:sccp_lattice``, beta |-> ``:ir_function``]
+    (SIMP_RULE std_ss [LET_THM]
+      dfAnalyzeProofsTheory.df_analyze_invariant_forward);
+  val Q_var = mk_var("Q", ``:sccp_lattice df_state -> bool``);
+  val fn_var = mk_var("fn", ``:ir_function``);
+in
+  val df_inv_fwd_combined = SPEC_ALL base
+    |> INST [Q_var |-> ``\st:sccp_lattice df_state.
+         sccp_measure_inv (^fn_var) st /\ st.ds_inst = FEMPTY /\
+         set (MAP (\bb:basic_block. bb.bb_label) (^fn_var).fn_blocks) SUBSET
+         FDOM st.ds_boundary``]
+    |> SIMP_RULE bool_ss [] |> GEN_ALL;
+end;
 
 (* The measure invariant holds at the fixpoint. *)
 Theorem sccp_measure_inv_at_fixpoint:
@@ -1536,26 +1662,220 @@ Proof
   gen_tac >> strip_tac >>
   simp[sccp_df_analyze_def, df_analyze_def, LET_THM] >>
   CONV_TAC (DEPTH_CONV (PairRules.PBETA_CONV)) >> simp[] >>
-  irule worklistPropsTheory.wl_iterate_invariant_process_restricted >>
+  qmatch_goalsub_abbrev_tac `df_populate_inst _ _ _ _ _ _ _ _ _ _ wl_result` >>
+  (* Step 1: prove measure_inv, ds_inst = FEMPTY, and boundary FDOM for
+     wl_result in one df_analyze_invariant_forward call *)
+  (* Step 1: prove measure_inv, ds_inst = FEMPTY, and boundary FDOM
+     for wl_result in one combined df_analyze_invariant_forward call *)
+  `sccp_measure_inv fn wl_result /\ wl_result.ds_inst = FEMPTY /\
+   set (MAP (\bb. bb.bb_label) fn.fn_blocks) SUBSET
+   FDOM wl_result.ds_boundary` by (
+    qunabbrev_tac `wl_result` >>
+    irule df_inv_fwd_combined >>
+    simp[df_process_block_inst_unchanged] >>
+    rpt conj_tac
+    (* bounded measure: sccp_measure_inv gives the bound *)
+    >- (qexistsl_tac [`sccp_measure_bound fn`, `sccp_measure fn`] >>
+        rpt conj_tac
+        >- (rpt strip_tac >> irule sccp_measure_bounded >>
+            fs[sccp_measure_inv_def])
+        >> rpt gen_tac >> strip_tac >>
+        irule sccp_measure_monotone >> fs[MEM_APPEND])
+    (* preservation: measure_inv, boundary grows *)
+    >- (rpt gen_tac >> strip_tac >> rpt conj_tac
+        >- (irule sccp_measure_inv_preserved >> simp[])
+        >> simp[df_process_block_def, LET_THM] >>
+        pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
+        fs[SUBSET_DEF, FDOM_FUPDATE])
+    (* initial state: ds_inst = FEMPTY *)
+    >- (Cases_on `fn_entry_label fn` >> simp[init_df_state_def])
+    (* initial state: boundary FDOM *)
+    >- (Cases_on `fn_entry_label fn` >>
+        simp[init_df_state_boundary_fdom, FDOM_FUPDATE, SUBSET_DEF])
+    (* initial state: sccp_measure_inv *)
+    >> mp_tac (SPEC_ALL sccp_measure_inv_initial) >>
+    Cases_on `fn_entry_label fn` >> simp[]) >>
+  (* Step 2: populate preserves measure_inv *)
+  qabbrev_tac `result = df_populate_inst Forward sccp_bottom sccp_join
+    sccp_transfer_inst sccp_edge_transfer fn
+    (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks (MAP (\bb. bb.bb_label) fn.fn_blocks)
+    wl_result` >>
+  simp[sccp_measure_inv_def] >>
   conj_tac
-  >- (mp_tac (SPEC_ALL sccp_measure_inv_initial) >>
-      Cases_on `fn_entry_label fn` >> simp[] >> metis_tac[])
-  >>
-  qexistsl_tac [
-    `sccp_measure_bound fn`,
-    `sccp_measure fn`,
-    `\lbl. MEM lbl (cfg_analyze fn).cfg_dfs_pre`] >>
+  >- suspend "state_inv"
+  >> simp[LET_THM] >>
   rpt conj_tac
-  >- (rpt strip_tac >> irule sccp_measure_bounded >>
-      fs[sccp_measure_inv_def])
-  >- (rpt strip_tac >>
-      metis_tac[sccp_measure_inv_preserved])
-  >- (rpt strip_tac >> irule sccp_measure_monotone >>
-      metis_tac[])
-  >> (rpt strip_tac >> fs[] >>
-      imp_res_tac analysisSimProofsTheory.cfg_dfs_pre_succs_closed >>
-      fs[listTheory.EVERY_MEM])
+  >- suspend "C3"
+  >- suspend "C4"
+  >> suspend "C5"
 QED
+
+Resume sccp_measure_inv_at_fixpoint[state_inv]:
+  simp[sccp_state_inv_def] >> conj_tac
+  (* boundary part: result.ds_boundary = wl_result.ds_boundary *)
+  >- (qunabbrev_tac `result` >> simp[populate_inst_ds_boundary] >>
+      fs[sccp_measure_inv_def, sccp_state_inv_def])
+  (* inst part: each value in result.ds_inst satisfies FDOM bounds.
+     result.ds_inst = FOLDL of fold results over FEMPTY.
+     Each fold result satisfies bounds by sccp_fold_inv + sccp_joined_inv. *)
+  >> rpt gen_tac >> disch_tac >>
+  (* Unfold result abbreviation *)
+  qpat_x_assum `Abbrev (result = _)` (mp_tac o
+    REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  strip_tac >>
+  qpat_x_assum `FLOOKUP result.ds_inst k = SOME lat` mp_tac >>
+  qpat_x_assum `result = _` (fn th => REWRITE_TAC [th]) >>
+  (* Derive MEM lbl *)
+  strip_tac >>
+  `MEM (FST k) (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (
+    Cases_on `k` >> gvs[] >>
+    `(q,r) IN FDOM (df_populate_inst Forward sccp_bottom sccp_join
+        sccp_transfer_inst sccp_edge_transfer fn
+        (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+        (cfg_analyze fn) fn.fn_blocks
+        (MAP (\bb. bb.bb_label) fn.fn_blocks) wl_result).ds_inst` by
+      fs[FLOOKUP_DEF] >>
+    drule populate_inst_mem >> simp[]) >>
+  (* unfold to FOLDL *)
+  qpat_x_assum `FLOOKUP (df_populate_inst _ _ _ _ _ _ _ _ _ _ _).ds_inst
+                  k = SOME lat` mp_tac >>
+  simp[populate_inst_ds_inst] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  qho_match_abbrev_tac `FLOOKUP (FOLDL (\acc l. FUNION (f l) acc) FEMPTY _)
+                          k = SOME lat ==> _` >>
+  strip_tac >>
+  (* lat came from some f(l) for MEM l *)
+  (* Use foldl_funion_flookup to find which f(l) contains k *)
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `!l1 l2. MEM l1 (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+            MEM l2 (MAP (\bb. bb.bb_label) fn.fn_blocks) /\ l1 <> l2 ==>
+            DISJOINT (FDOM (f l1)) (FDOM (f l2))` by (
+    rw[Abbr `f`] >> irule fold_block_keys_disjoint >> simp[]) >>
+  drule_all foldl_funion_flookup >> strip_tac >>
+  (* f(l) = SND(df_fold_block ...) and lat ∈ f(l), so lat satisfies P *)
+  (* Decompose f(l) via Cases_on *)
+  Cases_on `df_fold_block Forward (sccp_transfer_inst fn) l
+    (case lookup_block l fn.fn_blocks of NONE => []
+     | SOME bb => bb.bb_instructions)
+    (df_joined_val Forward sccp_bottom sccp_join sccp_edge_transfer fn
+       (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+       (cfg_analyze fn) wl_result l)` >>
+  rename1 `df_fold_block _ _ l _ _ = (fv_l, im_l)` >>
+  `f l = im_l` by simp[Abbr `f`] >>
+  `FLOOKUP im_l k = SOME lat` by fs[] >>
+  (* Convert df_joined_val to sccp_joined for sccp_fold_inv *)
+  `df_joined_val Forward sccp_bottom sccp_join sccp_edge_transfer fn
+     (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+     (cfg_analyze fn) wl_result l = sccp_joined fn wl_result l` by (
+    simp[dfAnalyzeDefsTheory.df_joined_val_def, sccp_joined_def, LET_THM,
+         dfAnalyzeDefsTheory.direction_case_def] >>
+    Cases_on `fn_entry_label fn` >> simp[sccp_edge_transfer_def]) >>
+  fs[] >>
+  drule sccp_fold_inv >>
+  disch_then (qspecl_then [`set (fn_all_assignments fn)`,
+                            `set (fn_labels fn)`] mp_tac) >>
+  `sccp_state_inv fn wl_result` by fs[sccp_measure_inv_def] >>
+  simp[sccp_joined_inv] >>
+  (impl_tac >- metis_tac[sccp_transfer_inv]) >>
+  strip_tac >> res_tac >> simp[]
+QED
+
+Resume sccp_measure_inv_at_fixpoint[C3]:
+  (* Goal: ∀lbl v0. FLOOKUP result.ds_inst (lbl,0) = SOME v0 ⇒
+       ∀k v. FLOOKUP (SND(df_fold_block ...)) k = SOME v ⇒
+             FLOOKUP result.ds_inst k = SOME v
+     Why true: result.ds_inst = FOLDL of fold results. The fold for lbl
+     with input joined_val is a SUBMAP of result. v0 = joined_val because
+     df_fold_forward_at stores it at (lbl,0). So the fold with v0 is the
+     same fold, and its result is a submap. *)
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  (* Derive MEM lbl from FLOOKUP result.ds_inst *)
+  `MEM lbl (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (
+    `(lbl, 0n) IN FDOM result.ds_inst` by fs[flookup_thm] >>
+    qpat_assum `Abbrev (result = _)` (strip_assume_tac o
+      REWRITE_RULE [markerTheory.Abbrev_def]) >> fs[] >>
+    drule populate_inst_mem >> simp[]) >>
+  `?bb. lookup_block lbl fn.fn_blocks = SOME bb` by
+    metis_tac[dfAnalyzeProofsTheory.lookup_block_exists] >>
+  (* Unfold result to FOLDL form *)
+  qpat_x_assum `Abbrev (result = _)` (mp_tac o
+    REWRITE_RULE [markerTheory.Abbrev_def]) >> strip_tac >>
+  qpat_x_assum `FLOOKUP result.ds_inst _ = SOME v0` mp_tac >>
+  qpat_x_assum `result = _` (fn th => REWRITE_TAC [th]) >>
+  simp[populate_inst_ds_inst] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  qho_match_abbrev_tac `FLOOKUP (FOLDL (\acc l. FUNION (f l) acc)
+    FEMPTY _) _ = SOME _ ==> _` >>
+  strip_tac >>
+  (* f lbl is the fold result for lbl; it's a submap of the FOLDL *)
+  `f lbl SUBMAP FOLDL (\acc l. FUNION (f l) acc) FEMPTY
+     (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (
+    irule foldl_funion_submap >> simp[] >>
+    rw[Abbr `f`] >> irule fold_block_keys_disjoint >> simp[]) >>
+  (* Cases_on the fold for lbl *)
+  Cases_on `df_fold_block Forward (sccp_transfer_inst fn) lbl
+    bb.bb_instructions
+    (df_joined_val Forward sccp_bottom sccp_join sccp_edge_transfer fn
+       (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+       (cfg_analyze fn) wl_result lbl)` >>
+  rename1 `df_fold_block _ _ lbl _ _ = (fv_pop, im_pop)` >>
+  `f lbl = im_pop` by simp[Abbr `f`] >>
+  (* df_fold_forward_at: FLOOKUP im_pop (lbl,0) = SOME joined_val *)
+  `FLOOKUP im_pop (lbl, 0n) = SOME
+    (df_joined_val Forward sccp_bottom sccp_join sccp_edge_transfer fn
+       (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+       (cfg_analyze fn) wl_result lbl)` by (
+    drule df_fold_block_at_zero >> simp[]) >>
+  (* From submap: same FLOOKUP in the FOLDL *)
+  `FLOOKUP (FOLDL (\acc l. FUNION (f l) acc) FEMPTY
+     (MAP (\bb. bb.bb_label) fn.fn_blocks)) (lbl, 0n) = SOME
+    (df_joined_val Forward sccp_bottom sccp_join sccp_edge_transfer fn
+       (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+       (cfg_analyze fn) wl_result lbl)` by
+    metis_tac[SUBMAP_FLOOKUP_EQN] >>
+  (* v0 = joined_val *)
+  `v0 = df_joined_val Forward sccp_bottom sccp_join sccp_edge_transfer fn
+     (OPTION_MAP (\lbl. (lbl,sccp_bottom)) (fn_entry_label fn))
+     (cfg_analyze fn) wl_result lbl` by fs[] >>
+  fs[] >>
+  (* v0 = joined_val, so the outer fold with v0 IS f(lbl) = im_pop.
+     im_pop SUBMAP FOLDL, so FLOOKUP in FOLDL follows from FLOOKUP in im_pop *)
+  metis_tac[SUBMAP_FLOOKUP_EQN]
+QED
+
+Resume sccp_measure_inv_at_fixpoint[C4]:
+  (* Goal: (lbl,j) ∈ FDOM result.ds_inst ⇒ (lbl,0) ∈ FDOM result.ds_inst *)
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `Abbrev (result = _)` (strip_assume_tac o
+    REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `result = _` (fn th =>
+    fs[th] >> assume_tac (SYM th)) >>
+  irule populate_inst_key_closure >>
+  gvs[wf_function_def, fn_labels_def] >>
+  metis_tac[]
+QED
+
+Resume sccp_measure_inv_at_fixpoint[C5]:
+  (* Goal: (lbl,0) ∈ FDOM result.ds_inst ⇒ lbl ∈ FDOM result.ds_boundary *)
+  rpt gen_tac >> strip_tac >>
+  (* result.ds_boundary = wl_result.ds_boundary *)
+  `result.ds_boundary = wl_result.ds_boundary` by
+    (qunabbrev_tac `result` >> simp[populate_inst_ds_boundary]) >>
+  simp[] >>
+  (* (lbl,0) ∈ FDOM result.ds_inst implies MEM lbl (MAP ...) *)
+  `MEM lbl (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (
+    qpat_assum `Abbrev (result = _)` (strip_assume_tac o
+      REWRITE_RULE [markerTheory.Abbrev_def]) >> fs[] >>
+    drule populate_inst_mem >> simp[]) >>
+  (* boundary FDOM already proved in Step 1 *)
+  fs[SUBSET_DEF]
+QED
+
+Finalise sccp_measure_inv_at_fixpoint
 
 (* Corollary: domain of analysis is bounded by fn_all_assignments. *)
 Theorem sccp_state_inv_at_fixpoint:

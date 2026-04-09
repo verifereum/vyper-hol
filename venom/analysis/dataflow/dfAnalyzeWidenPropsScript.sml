@@ -21,6 +21,11 @@ Theorem df_analyze_widen_fixpoint:
     let bbs = fn.fn_blocks in
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in
+    let changed lbl old new =
+          (df_widen_boundary bottom new lbl <>
+           df_widen_boundary bottom old lbl \/
+           df_widen_entry bottom new lbl <>
+           df_widen_entry bottom old lbl) in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
@@ -32,7 +37,7 @@ Theorem df_analyze_widen_fixpoint:
        | SOME (lbl, v) =>
            P (st0 with dws_boundary := st0.dws_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
-      wl_deps_complete process deps
+      wl_deps_complete changed process deps
     ==>
       is_fixpoint process all_lbls
         (df_analyze_widen dir bottom join widen threshold
@@ -52,6 +57,7 @@ Theorem df_widen_at_intra_transfer:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
+      wf_function fn /\
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb /\
@@ -81,6 +87,7 @@ Theorem df_widen_at_inter_transfer:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze_widen dir bottom join widen threshold
                    transfer edge_transfer ctx entry_val fn in
+      wf_function fn /\
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
@@ -204,6 +211,11 @@ Theorem df_analyze_widen_fixpoint_by_visits_no_idem:
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
+    let chg lbl old new =
+          (df_widen_boundary bottom new lbl <>
+           df_widen_boundary bottom old lbl \/
+           df_widen_entry bottom new lbl <>
+           df_widen_entry bottom old lbl) in
     let all_lbls = cfg.cfg_dfs_pre in
       (!lbl st. P st ==> P (process lbl st)) /\
       (case entry_val of
@@ -216,7 +228,7 @@ Theorem df_analyze_widen_fixpoint_by_visits_no_idem:
                 process lbl st = st) /\
       (!lbl. MEM lbl all_lbls ==>
              EVERY (\s. MEM s all_lbls) (deps lbl)) /\
-      wl_deps_complete process deps
+      wl_deps_complete chg process deps
     ==>
       is_fixpoint process all_lbls
         (df_analyze_widen dir bottom join widen threshold
@@ -237,10 +249,15 @@ Theorem df_process_widen_deps_complete:
   ==>
     let process = df_process_block_widen dir bottom join widen threshold
                     transfer edge_transfer ctx entry_val cfg bbs in
+    let changed lbl old new =
+          (df_widen_boundary bottom new lbl <>
+           df_widen_boundary bottom old lbl \/
+           df_widen_entry bottom new lbl <>
+           df_widen_entry bottom old lbl) in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    wl_deps_complete process deps
+    wl_deps_complete changed process deps
 Proof
   ACCEPT_TAC df_process_widen_deps_complete_proof
 QED

@@ -918,15 +918,14 @@ Definition range_fixpoint_P_def:
           SOME (df_widen_entry NONE st lbl) ∧
         range_join_opt (df_widen_boundary NONE st lbl)
           (FST (range_fold_result fn st lbl)) =
-          df_widen_boundary NONE st lbl ∧
-        SND (range_fold_result fn st lbl) SUBMAP st.dws_inst) ∧
+          df_widen_boundary NONE st lbl) ∧
       (df_widen_visits st lbl > WIDEN_THRESHOLD ⇒
         df_widen_entry NONE st lbl = SOME FEMPTY)
 End
 
 (* --- P_preserved decomposed into helpers to avoid huge unfolded goals --- *)
 
-(* Helper: identity-widen case → 3-field record equals st *)
+(* Helper: at fixpoint, boundary absorption holds *)
 Triviality range_process_identity[local]:
   ∀fn lbl st final_val inst_map.
     range_fixpoint_P fn st ⇒
@@ -934,20 +933,12 @@ Triviality range_process_identity[local]:
     df_fold_block Forward (range_transfer_opt (dfg_build_function fn, fn.fn_blocks))
       lbl (case lookup_block lbl fn.fn_blocks of NONE => [] | SOME bb => bb.bb_instructions)
       (df_widen_entry NONE st lbl) = (final_val, inst_map) ⇒
-    st with <|dws_boundary := st.dws_boundary |+ (lbl,
-                range_join_opt (df_widen_boundary NONE st lbl) final_val);
-              dws_entry := st.dws_entry |+ (lbl, df_widen_entry NONE st lbl);
-              dws_inst := inst_map ⊌ st.dws_inst|> = st
+    range_join_opt (df_widen_boundary NONE st lbl) final_val =
+      df_widen_boundary NONE st lbl
 Proof
   rpt strip_tac >>
   fs[range_fixpoint_P_def, range_fold_result_def] >>
-  first_x_assum (qspec_then `lbl` mp_tac) >> simp[] >> strip_tac >>
-  simp[dfAnalyzeWidenDefsTheory.df_widen_state_component_equality] >>
-  rpt conj_tac >>
-  TRY (irule finite_mapTheory.FUPDATE_ELIM >>
-       fs[df_widen_boundary_def, df_widen_entry_def,
-          finite_mapTheory.FLOOKUP_DEF] >> NO_TAC) >>
-  fs[finite_mapTheory.SUBMAP_FUNION_ABSORPTION]
+  first_x_assum (qspec_then `lbl` mp_tac) >> simp[]
 QED
 
 (* P at lbl when visits > WT: widen either gives SOME FEMPTY or
@@ -960,10 +951,9 @@ Triviality range_P_entry_fempty[local]:
     df_fold_block Forward (range_transfer_opt (dfg_build_function fn, fn.fn_blocks))
       lbl (case lookup_block lbl fn.fn_blocks of NONE => [] | SOME bb => bb.bb_instructions)
       entry = (final_val, inst_map) ⇒
-    st with <|dws_boundary := st.dws_boundary |+ (lbl,
-                range_join_opt (df_widen_boundary NONE st lbl) final_val);
-              dws_entry := st.dws_entry |+ (lbl, entry);
-              dws_inst := inst_map ⊌ st.dws_inst|> ≠ st ⇒
+    ¬(range_join_opt (df_widen_boundary NONE st lbl) final_val =
+        df_widen_boundary NONE st lbl ∧
+      entry = df_widen_entry NONE st lbl) ⇒
     entry = SOME FEMPTY
 Proof
   rpt strip_tac >>
@@ -973,11 +963,8 @@ Proof
    range_widen_opt (df_widen_entry NONE st lbl) joined =
      df_widen_entry NONE st lbl` by
     simp[widen_opt_dichotomy] >>
-  fs[] >>
-  (* Identity case: entry = old_entry → record = st → contradiction *)
-  qpat_x_assum `entry = _` (SUBST_ALL_TAC) >>
-  `F` suffices_by simp[] >>
-  qpat_x_assum `_ ≠ st` mp_tac >>
+  gvs[] >>
+  (* Identity case: entry = old_entry → boundary absorbs → contradiction *)
   mp_tac range_process_identity >>
   disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`] mp_tac) >>
   simp[]
@@ -1013,29 +1000,25 @@ Proof
         [range_fixpoint_P_def, range_fold_result_def] th)) >>
   reverse (Cases_on `lbl' = lbl`)
   (* -- lbl' ≠ lbl -- *)
-  >- (
-    simp[] >>
-    first_x_assum (qspec_then `lbl'` mp_tac) >> strip_tac >>
-    conj_tac
-    >- (strip_tac >>
-        `df_widen_visits st lbl' > 0` by fs[df_widen_visits_def] >>
-        res_tac >> fs[] >>
-        irule submap_funion_disjoint >> simp[] >>
-        metis_tac[dfAnalyzeWidenProofsTheory.fold_inst_disjoint,
-                  pairTheory.PAIR])
-    >> (strip_tac >>
-        `df_widen_visits st lbl' > WIDEN_THRESHOLD` by
-          fs[df_widen_visits_def] >>
-        res_tac >> fs[df_widen_entry_def]))
+  >- suspend "neq_case"
   >> (* -- lbl' = lbl -- *)
   pop_assum SUBST_ALL_TAC >> simp[] >>
-  conj_tac
-  >- (strip_tac >> simp[] >>
-      simp[range_join_opt_absorb, finite_mapTheory.SUBMAP_FUNION_ID])
-  >> strip_tac >>
+  suspend "eq_case"
+QED
+
+Resume range_fixpoint_P_preserved[neq_case]:
+  simp[] >>
+  first_x_assum (qspec_then `lbl'` mp_tac) >>
+  simp[df_widen_visits_def, df_widen_boundary_def, df_widen_entry_def]
+QED
+
+Resume range_fixpoint_P_preserved[eq_case]:
+  conj_tac >- simp[range_join_opt_absorb] >>
+  strip_tac >>
+  (* old_visits + 1 > WT means old_visits >= WT *)
   Cases_on `FLOOKUP st.dws_visits lbl`
-  >- fs[WIDEN_THRESHOLD_def]
-  >> `df_widen_visits st lbl >= WIDEN_THRESHOLD` by
+  >- fs[WIDEN_THRESHOLD_def] >>
+  `df_widen_visits st lbl >= WIDEN_THRESHOLD` by
     fs[df_widen_visits_def, WIDEN_THRESHOLD_def] >>
   `df_widen_visits st lbl > WIDEN_THRESHOLD \/
    df_widen_visits st lbl = WIDEN_THRESHOLD` by DECIDE_TAC
@@ -1049,18 +1032,25 @@ Proof
     (INST_TYPE [alpha |-> ``:string``, beta |-> ``:value_range``]
       widen_opt_dichotomy))
   >- first_x_assum ACCEPT_TAC
-  >> (* Identity case: entry = old_entry → process = st → contradiction *)
+  >> (* Identity case: widen = old_entry. Show boundary absorbs → contradiction *)
   `F` suffices_by simp[] >>
   `df_widen_visits st lbl > 0` by
-    (fs[dfAnalyzeWidenDefsTheory.df_widen_visits_def,
-        WIDEN_THRESHOLD_def] >> DECIDE_TAC) >>
-  qpat_x_assum `_ <> st` mp_tac >>
-  mp_tac range_process_identity >>
-  disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`]
-    mp_tac) >>
-  simp[] >>
-  qpat_x_assum `df_fold_block _ _ _ _ _ = _` mp_tac >> simp[]
+    (fs[df_widen_visits_def, WIDEN_THRESHOLD_def] >> DECIDE_TAC) >>
+  (* entry_val = old_entry, so fold with old_entry gives absorption (from P) *)
+  `df_fold_block Forward
+     (range_transfer_opt (dfg_build_function fn, fn.fn_blocks)) lbl
+     (case lookup_block lbl fn.fn_blocks of NONE => [] | SOME bb => bb.bb_instructions)
+     (df_widen_entry NONE st lbl) = (final_val, inst_map)` by
+    (qpat_x_assum `df_fold_block _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `range_join_opt (df_widen_boundary NONE st lbl) final_val =
+     df_widen_boundary NONE st lbl` by
+    (mp_tac range_process_identity >>
+     disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`] mp_tac) >>
+     simp[]) >>
+  qpat_x_assum `~(_ /\ _)` mp_tac >> simp[]
 QED
+
+Finalise range_fixpoint_P_preserved
 
 (* P holds for the initial state *)
 Triviality range_fixpoint_P_initial[local]:
@@ -1110,11 +1100,12 @@ Proof
   `range_widen_opt (SOME FEMPTY) joined_val = SOME FEMPTY` by
     (Cases_on `joined_val` >> simp[range_widen_opt_def]) >>
   simp[] >>
-  (* 3-field record = st follows from range_process_identity *)
+  (* Resolve IF in fold assumption, then boundary absorption *)
+  fs[] >>
   mp_tac range_process_identity >>
-  disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`] mp_tac) >>
-  simp[] >>
-  rpt strip_tac >> gvs[]
+  disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`]
+    mp_tac) >>
+  simp[]
 QED
 
 (* The range analysis computes a fixpoint.
@@ -1606,6 +1597,37 @@ Proof
       res_tac >> simp[])
 QED
 
+Triviality foldl_inst_only_preserves[local]:
+  ∀lbls (f:'a df_widen_state -> string -> 'a df_widen_state) acc.
+    (∀st lbl. (f st lbl).dws_boundary = st.dws_boundary) ∧
+    (∀st lbl. (f st lbl).dws_entry = st.dws_entry) ∧
+    (∀st lbl. (f st lbl).dws_visits = st.dws_visits) ⇒
+    (FOLDL f acc lbls).dws_boundary = acc.dws_boundary ∧
+    (FOLDL f acc lbls).dws_entry = acc.dws_entry ∧
+    (FOLDL f acc lbls).dws_visits = acc.dws_visits
+Proof
+  Induct >> rw[]
+QED
+
+Triviality populate_widen_preserves[local]:
+  ∀dir bottom join widen threshold transfer edge_transfer ctx entry_val
+   cfg bbs lbls (st:'a df_widen_state).
+  (df_populate_widen_inst dir bottom join widen threshold transfer
+    edge_transfer ctx entry_val cfg bbs lbls st).dws_boundary =
+    st.dws_boundary ∧
+  (df_populate_widen_inst dir bottom join widen threshold transfer
+    edge_transfer ctx entry_val cfg bbs lbls st).dws_entry =
+    st.dws_entry ∧
+  (df_populate_widen_inst dir bottom join widen threshold transfer
+    edge_transfer ctx entry_val cfg bbs lbls st).dws_visits =
+    st.dws_visits
+Proof
+  rpt gen_tac >>
+  simp[dfAnalyzeWidenDefsTheory.df_populate_widen_inst_def] >>
+  irule foldl_inst_only_preserves >>
+  rw[] >> pairarg_tac >> rw[]
+QED
+
 Triviality range_analyze_invariant[local]:
   ∀fn.
     let ra = range_analyze fn in
@@ -1632,19 +1654,38 @@ Proof
               df_widen_boundary NONE st l = SOME FEMPTY)) ra`
     suffices_by simp[] >>
   qunabbrev_tac `ra` >>
+  suspend "wl_inv"
+QED
+
+Resume range_analyze_invariant[wl_inv]:
+  (* 1. Beta-reduce the lambda application *)
+  BETA_TAC >>
+  (* 2. Abbreviate SND(wl_iterate ...) to strip populate wrapper *)
+  qmatch_goalsub_abbrev_tac
+    `df_populate_widen_inst _ _ _ _ _ _ _ _ _ _ _ _ swli` >>
+  (* 3. Rewrite field accesses through populate to swli *)
+  simp[range_fixpoint_P_def, df_widen_visits_def, df_widen_boundary_def,
+       df_widen_entry_def, range_fold_result_def,
+       populate_widen_preserves] >>
+  (* 4. Re-package as (λst. P st) swli for irule *)
+  `(λst. range_fixpoint_P fn st ∧
+         (∀l. df_widen_visits st l ≤ WIDEN_THRESHOLD + 1) ∧
+         (∀l. df_widen_visits st l = 0 ⇒
+              df_widen_boundary NONE st l = NONE ∨
+              df_widen_boundary NONE st l = SOME FEMPTY)) swli`
+    suffices_by simp[range_fixpoint_P_def, df_widen_visits_def,
+      df_widen_boundary_def, df_widen_entry_def, range_fold_result_def] >>
+  qunabbrev_tac `swli` >>
   irule worklistProofsTheory.wl_iterate_invariant_process_restricted >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  conj_tac >- (
-    (* P initial *)
-    Cases_on `fn_entry_label fn` >>
-    simp[range_fixpoint_P_def, init_df_widen_state_def,
-         df_widen_visits_def, finite_mapTheory.FLOOKUP_EMPTY] >>
-    rpt strip_tac >>
-    Cases_on `l = x` >>
-    simp[df_widen_boundary_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-    CASE_TAC >> simp[] >>
-    imp_res_tac foldl_update_all_same >>
-    fs[finite_mapTheory.FLOOKUP_EMPTY]) >>
+  (* P initial — first conjunct after irule *)
+  conj_tac
+  >- suspend "P_initial"
+  >>
+  (* changed ⇔ process ≠ st — second conjunct *)
+  conj_tac
+  >- suspend "changed"
+  >>
   qexistsl_tac [
     `(WIDEN_THRESHOLD + 1) * LENGTH all_lbls`,
     `λst. SUM (MAP (λl. df_widen_visits st l) all_lbls)`,
@@ -1676,6 +1717,42 @@ Proof
    simp[listTheory.EVERY_MEM, markerTheory.Abbrev_def]
   ]
 QED
+
+Resume range_analyze_invariant[P_initial]:
+  Cases_on `fn_entry_label fn` >>
+  simp[range_fixpoint_P_def, init_df_widen_state_def,
+       df_widen_visits_def, finite_mapTheory.FLOOKUP_EMPTY] >>
+  rpt strip_tac >>
+  Cases_on `l = x` >>
+  simp[df_widen_boundary_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  CASE_TAC >> simp[] >>
+  imp_res_tac foldl_update_all_same >>
+  fs[finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+Resume range_analyze_invariant[changed]:
+  rpt strip_tac >>
+  simp[Abbr `process`, df_process_block_widen_def, LET_THM,
+       dfAnalyzeDefsTheory.direction_case_def] >>
+  pairarg_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac
+    `if new_bnd = old_bnd /\ entry_expr = old_entry then st else _` >>
+  IF_CASES_TAC >>
+  simp[df_widen_boundary_def, df_widen_entry_def,
+       finite_mapTheory.FLOOKUP_UPDATE,
+       df_widen_state_component_equality, df_widen_visits_def] >>
+  fs[] >>
+  (* visits ≠: |+(lbl, v+1) can't equal original map *)
+  rpt strip_tac >>
+  `FLOOKUP (st.dws_visits |+ (lbl,
+     (case FLOOKUP st.dws_visits lbl of NONE => 0 | SOME n => n) + 1)) lbl <>
+   FLOOKUP st.dws_visits lbl` by (
+    simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `FLOOKUP st.dws_visits lbl` >> simp[]) >>
+  metis_tac[]
+QED
+
+Finalise range_analyze_invariant
 
 (* Bridge: exec_pure2 success extracts operand values and output *)
 Triviality exec_pure2_output[local]:

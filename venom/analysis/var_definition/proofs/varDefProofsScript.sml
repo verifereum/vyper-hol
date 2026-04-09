@@ -492,10 +492,10 @@ Triviality vardef_process_eq:
                    NONE => [] | SOME bb => bb.bb_instructions in
     let (fv, inst_map) = df_fold_block Forward (vardef_transfer ()) lbl
                            instrs (vardef_joined fn st lbl) in
-      st with <|ds_boundary := st.ds_boundary |+
-                  (lbl, list_intersect
-                    (df_boundary (fn_all_assignments fn) st lbl) fv);
-                ds_inst := FUNION inst_map st.ds_inst|>
+    let new_bnd = list_intersect
+                    (df_boundary (fn_all_assignments fn) st lbl) fv in
+      if new_bnd = df_boundary (fn_all_assignments fn) st lbl then st
+      else st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd)
 Proof
   rw[dfAnalyzeDefsTheory.df_process_block_def,
      dfAnalyzeDefsTheory.df_joined_val_def] >>
@@ -585,252 +585,56 @@ Theorem vardef_inv_preserved[local]:
          (cfg_analyze fn) fn.fn_blocks lbl st)
 Proof
   rpt strip_tac >>
-  (* Extract old invariant conjuncts, keeping original for helpers *)
-  qpat_assum `vardef_state_inv fn st`
-    (fn th => assume_tac th >>
-     strip_assume_tac (SIMP_RULE std_ss [vardef_state_inv_def, LET_THM] th)) >>
-  (* Rewrite process to fold form *)
-  simp[vardef_process_eq] >> simp_tac std_ss [LET_THM] >>
+  rewrite_tac[vardef_process_eq] >> simp_tac std_ss [LET_THM] >>
   pairarg_tac >> simp[] >>
-  (* Get fold invariant: fv and inst_map values ⊆ all_vars *)
-  drule (dfAnalyzeProofsTheory.df_fold_block_forward_invariant
-    |> REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
-  disch_then (qspec_then
-    `\v. set v SUBSET set (fn_all_assignments fn)` mp_tac) >>
-  simp[varDefDefsTheory.vardef_edge_transfer_def] >>
-  impl_tac >- (conj_tac
-    >- metis_tac[vardef_joined_subset]
-    >- metis_tac[vardef_transfer_subset]) >>
-  strip_tac >>
-  drule df_fold_block_fdom >> strip_tac >>
-  (* inst_map keys all have FST = lbl *)
-  `!k. k IN FDOM inst_map ==> FST k = lbl` by
-    (rw[] >> fs[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]) >>
-  (* Unfold goal invariant *)
-  simp[vardef_state_inv_def, LET_THM,
-       finite_mapTheory.FLOOKUP_UPDATE,
-       finite_mapTheory.FDOM_FUNION] >>
+  IF_CASES_TAC >- simp[] >>
+  simp_tac (srw_ss()) [vardef_state_inv_def, LET_THM,
+    finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FDOM_FUPDATE] >>
+  qpat_assum `vardef_state_inv fn st`
+    (strip_assume_tac o SIMP_RULE std_ss [vardef_state_inv_def, LET_THM]) >>
   rpt conj_tac
-  (* C1: boundary AD + subset *)
-  >- (rpt gen_tac >> Cases_on `lbl = lbl'` >> simp[] >> strip_tac
-      >- (rw[] >-
-            (irule list_intersect_all_distinct >>
-             metis_tac[df_boundary_all_distinct]) >>
-          rw[list_intersect_set, pred_setTheory.SUBSET_DEF,
-             pred_setTheory.IN_INTER] >>
-          metis_tac[df_boundary_subset, pred_setTheory.SUBSET_DEF])
-      >- (res_tac >> fs[]))
-  (* C2: FDOM union subset valid_keys *)
-  >- (`?bb. lookup_block lbl fn.fn_blocks = SOME bb` by
-        (irule lookup_block_exists >>
-         fs[venomInstTheory.fn_labels_def]) >>
-      imp_res_tac lookup_block_mem >> imp_res_tac lookup_block_label >>
-      fs[] >>
-      `FDOM inst_map SUBSET vardef_valid_inst_keys fn` suffices_by fs[] >>
-      irule (GEN_ALL df_fold_block_fdom_subset) >> metis_tac[])
-  (* C3: inst values ⊆ all_vars *)
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `FLOOKUP (FUNION _ _) _ = _`
-        (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_FUNION]) >>
-      Cases_on `FLOOKUP inst_map k` >> simp[]
-      >- (qpat_x_assum `!k v. FLOOKUP st.ds_inst k = SOME v ==> _`
-            (qspecl_then [`k`, `v`] mp_tac) >> simp[])
-      >- (strip_tac >>
-          qpat_x_assum `!k v. FLOOKUP inst_map k = SOME v ==> _`
-            (qspecl_then [`k`, `x`] mp_tac) >> simp[]))
-  (* C4: vardef_joined new_st ⊆ stored v0 *)
-  >- (rpt gen_tac >> strip_tac >>
-      (* vardef_joined ignores ds_inst *)
-      `vardef_joined fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+
-             (lbl, list_intersect
-               (df_boundary (fn_all_assignments fn) st lbl) fv)|> =
-       vardef_joined fn
-         (st with ds_boundary := st.ds_boundary |+
-           (lbl, list_intersect
-             (df_boundary (fn_all_assignments fn) st lbl) fv))` by
-        simp[vardef_joined_def, LET_THM,
-             dfAnalyzeDefsTheory.df_boundary_def, FUN_EQ_THM] >>
-      pop_assum (fn eq => REWRITE_TAC [AP_THM eq ``lbl':string``]) >>
-      irule pred_setTheory.SUBSET_TRANS >>
-      qexists_tac `set (vardef_joined fn st lbl')` >>
-      conj_tac
-      >- (irule vardef_joined_boundary_mono >>
-          rw[list_intersect_set, pred_setTheory.INTER_SUBSET])
-      (* Split on lbl' = lbl vs lbl' ≠ lbl *)
-      >> Cases_on `lbl' = lbl`
-      (* SOME case: lbl' = lbl, fold at lbl starts from joined *)
-      >- (rw[] >>
-          qpat_x_assum `FLOOKUP (FUNION _ _) _ = _`
-            (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_FUNION]) >>
-          `(lbl, 0n) IN FDOM inst_map` by
-            (qpat_x_assum `FDOM inst_map = _` (fn th => REWRITE_TAC [th]) >>
-             simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]) >>
-          `?val0. FLOOKUP inst_map (lbl, 0n) = SOME val0` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF,
-                      optionTheory.NOT_NONE_SOME] >>
-          simp[] >> strip_tac >> rw[] >>
-          qpat_x_assum `df_fold_block _ _ _ _ _ = _`
-            (mp_tac o REWRITE_RULE
-              [dfAnalyzeDefsTheory.df_fold_block_def,
-               dfAnalyzeDefsTheory.direction_case_def]) >>
-          strip_tac >>
-          drule dfAnalyzeProofsTheory.df_fold_forward_at >> strip_tac >>
-          `v0 = vardef_joined fn st lbl` by
-            (qpat_x_assum `FLOOKUP inst_map (lbl,0n) = SOME v0` mp_tac >>
-             qpat_x_assum `FLOOKUP _ (lbl,0n) = SOME _` mp_tac >>
-             simp[]) >>
-          rw[pred_setTheory.SUBSET_REFL])
-      (* NONE case: lbl' ≠ lbl, use old C4 directly *)
-      >> (qpat_x_assum `FLOOKUP (FUNION _ _) _ = _`
-            (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_FUNION]) >>
-          `(lbl', 0n) NOTIN FDOM inst_map` by
-            (simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
-             rw[] >> fs[]) >>
-          `FLOOKUP inst_map (lbl', 0n) = NONE` by
-            (Cases_on `FLOOKUP inst_map (lbl', 0n)` >> simp[] >>
-             fs[finite_mapTheory.FLOOKUP_DEF]) >>
-          simp[] >> strip_tac >>
-          qpat_x_assum `!lbl v0. FLOOKUP st.ds_inst (lbl, 0n) = SOME v0 ==>
-            set (vardef_joined fn st lbl) SUBSET set v0`
-            (qspecl_then [`lbl'`, `v0`] mp_tac) >> simp[]))
-  (* C5: fold structure — ds_inst values match fold from (lbl',0) *)
-  >- (rpt gen_tac >> rpt strip_tac >>
-      Cases_on `lbl' = lbl`
-      (* SOME case: lbl' = lbl *)
-      >- (rw[] >>
-          (* Get v0 from FUNION: (lbl,0) ∈ FDOM inst_map, so v0 = FLOOKUP inst_map (lbl,0) *)
-          qpat_x_assum `FLOOKUP (FUNION inst_map st.ds_inst) (lbl, 0n) = _`
-            (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_FUNION]) >>
-          `(lbl, 0n) IN FDOM inst_map` by
-            (simp_tac std_ss [Once (ASSUME
-               ``FDOM inst_map = IMAGE (\i. (lbl,i))
-                   (count (LENGTH (case lookup_block lbl fn.fn_blocks of
-                      NONE => [] | SOME bb => bb.bb_instructions) + 1))``)] >>
-             simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]) >>
-          `?val0. FLOOKUP inst_map (lbl, 0n) = SOME val0` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF,
-                      optionTheory.NOT_NONE_SOME] >>
-          simp[] >> strip_tac >> rw[] >>
-          (* v0 = vardef_joined fn st lbl via fold_forward_at *)
-          qpat_x_assum `df_fold_block _ _ _ _ _ = _`
-            (mp_tac o REWRITE_RULE
-              [dfAnalyzeDefsTheory.df_fold_block_def,
-               dfAnalyzeDefsTheory.direction_case_def]) >>
-          strip_tac >>
-          drule dfAnalyzeProofsTheory.df_fold_forward_at >> strip_tac >>
-          `v0 = vardef_joined fn st lbl` by
-            (qpat_x_assum `FLOOKUP inst_map (lbl,0n) = SOME v0` mp_tac >>
-             qpat_x_assum `FLOOKUP _ (lbl,0n) = SOME _` mp_tac >>
-             simp[]) >>
-          rw[] >>
-          (* fold from (vardef_joined fn st lbl) = (fv, inst_map), so SND = inst_map *)
-          `FLOOKUP inst_map k = SOME v` by
-            (qpat_x_assum `FLOOKUP (SND _) k = _` mp_tac >>
-             simp[dfAnalyzeDefsTheory.df_fold_block_def,
-                  dfAnalyzeDefsTheory.direction_case_def]) >>
-          simp[finite_mapTheory.FLOOKUP_FUNION])
-      (* NONE case: lbl' ≠ lbl *)
-      >> (`(lbl', 0n) NOTIN FDOM inst_map` by
-            (simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
-             rw[] >> fs[]) >>
-          `FLOOKUP st.ds_inst (lbl', 0n) = SOME v0` by
-            (qpat_x_assum `FLOOKUP (FUNION _ _) (lbl', 0n) = _` mp_tac >>
-             simp[finite_mapTheory.FLOOKUP_FUNION,
-                  finite_mapTheory.FLOOKUP_DEF]) >>
-          (* Get fold result as pair for lbl' *)
-          `?fv' im'. df_fold_block Forward (vardef_transfer ()) lbl'
-            (case lookup_block lbl' fn.fn_blocks of
-               NONE => [] | SOME bb => bb.bb_instructions) v0
-            = (fv', im')` by metis_tac[pairTheory.PAIR] >>
-          `FLOOKUP im' k = SOME v` by
-            (qpat_x_assum `FLOOKUP (SND _) k = SOME v` mp_tac >> simp[]) >>
-          drule df_fold_block_fdom >> strip_tac >>
-          `k IN FDOM im'` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF,
-                      optionTheory.NOT_SOME_NONE] >>
-          `?j. k = (lbl', j)` by
-            (qpat_x_assum `k IN FDOM im'` mp_tac >> rw[] >>
-             fs[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
-             metis_tac[]) >>
-          rw[] >>
-          `(lbl', j) NOTIN FDOM inst_map` by
-            (strip_tac >> `FST (lbl', j) = lbl` by metis_tac[] >> fs[]) >>
-          simp[finite_mapTheory.FLOOKUP_FUNION] >>
-          `FLOOKUP inst_map (lbl', j) = NONE` by
-            (Cases_on `FLOOKUP inst_map (lbl', j)` >> simp[] >>
-             fs[finite_mapTheory.FLOOKUP_DEF]) >>
-          simp[] >>
-          (* Use old C5 *)
-          qpat_x_assum `!lbl' v0. FLOOKUP st.ds_inst (lbl',0n) = SOME v0 ==>
-            !k v. FLOOKUP (SND _) k = SOME v ==> _`
-            (qspecl_then [`lbl'`, `v0`] mp_tac) >>
-          simp[]))
-  (* C6: v0 is a FILTER of all_vars *)
-  >- (rpt gen_tac >> strip_tac >>
-      Cases_on `lbl' = lbl`
-      (* lbl' = lbl: v0 = vardef_joined fn st lbl via fold_forward_at *)
-      >- (rw[] >>
-          qpat_x_assum `FLOOKUP (FUNION _ _) _ = _`
-            (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_FUNION]) >>
-          `(lbl, 0n) IN FDOM inst_map` by
-            (qpat_x_assum `FDOM inst_map = _` (fn th => REWRITE_TAC [th]) >>
-             simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]) >>
-          `?val0. FLOOKUP inst_map (lbl, 0n) = SOME val0` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF,
-                      optionTheory.NOT_NONE_SOME] >>
-          simp[] >> strip_tac >> rw[] >>
-          qpat_x_assum `df_fold_block _ _ _ _ _ = _`
-            (mp_tac o REWRITE_RULE
-              [dfAnalyzeDefsTheory.df_fold_block_def,
-               dfAnalyzeDefsTheory.direction_case_def]) >>
-          strip_tac >>
-          drule dfAnalyzeProofsTheory.df_fold_forward_at >> strip_tac >>
-          `v0 = vardef_joined fn st lbl` by
-            (qpat_x_assum `FLOOKUP inst_map (lbl,0n) = SOME v0` mp_tac >>
-             qpat_x_assum `FLOOKUP _ (lbl,0n) = SOME _` mp_tac >>
-             simp[]) >>
-          rw[] >> metis_tac[vardef_joined_is_filter])
-      (* lbl' ≠ lbl: use old C6 *)
-      >> (qpat_x_assum `FLOOKUP (FUNION _ _) _ = _`
-            (mp_tac o REWRITE_RULE [finite_mapTheory.FLOOKUP_FUNION]) >>
-          `(lbl', 0n) NOTIN FDOM inst_map` by
-            (simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT] >>
-             rw[] >> fs[]) >>
-          `FLOOKUP inst_map (lbl', 0n) = NONE` by
-            (Cases_on `FLOOKUP inst_map (lbl', 0n)` >> simp[] >>
-             fs[finite_mapTheory.FLOOKUP_DEF]) >>
-          simp[] >> metis_tac[]))
-  (* C7: (lbl',j) ∈ FDOM ds_inst ⟹ (lbl',0) ∈ FDOM ds_inst *)
-  >- (rpt gen_tac >> simp[finite_mapTheory.FDOM_FUNION] >> strip_tac
-      >- (* (lbl',j) ∈ FDOM inst_map *)
-         (Cases_on `lbl' = lbl`
-          >- (rw[] >>
-              `(lbl, 0n) IN FDOM inst_map` by
-                (qpat_x_assum `FDOM inst_map = _` (fn th => REWRITE_TAC [th]) >>
-                 simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]) >>
-              simp[])
-          >- (`(lbl', j) NOTIN FDOM inst_map` by
-                (strip_tac >> `FST (lbl', j) = lbl` by metis_tac[] >> fs[]) >>
-              fs[]))
-      >- (* (lbl',j) ∈ FDOM old ds_inst *)
-         metis_tac[])
-  (* C8: (lbl',0) ∈ FDOM ds_inst ⟹ lbl' ∈ FDOM ds_boundary *)
-  >> (rpt gen_tac >>
-      simp[finite_mapTheory.FDOM_FUNION, finite_mapTheory.FDOM_FUPDATE] >>
-      strip_tac
-      >- (* (lbl',0) ∈ FDOM inst_map — inst_map keys have FST = lbl *)
-         (Cases_on `lbl' = lbl`
-          >- simp[]
-          >- (`(lbl', 0n) NOTIN FDOM inst_map` by
-                (strip_tac >> `FST (lbl', 0n) = lbl` by metis_tac[] >> fs[]) >>
-              fs[]))
-      >- (* (lbl',0) ∈ FDOM old ds_inst — use old C8 *)
-         (Cases_on `lbl' = lbl`
-          >- simp[]
-          >- metis_tac[]))
+  >- suspend "C1"
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- suspend "C4"
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >> suspend "C8"
 QED
+
+Resume vardef_inv_preserved[C1]:
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac
+  (* lbl = lbl': v = list_intersect (df_boundary ...) fv *)
+  >- (gvs[] >> conj_tac
+      >- (irule list_intersect_all_distinct >>
+          irule df_boundary_all_distinct >> first_assum ACCEPT_TAC)
+      >> simp[list_intersect_set] >>
+      irule pred_setTheory.SUBSET_TRANS >>
+      qexists `set (df_boundary (fn_all_assignments fn) st lbl)` >>
+      simp[pred_setTheory.INTER_SUBSET] >>
+      irule df_boundary_subset >> first_assum ACCEPT_TAC)
+  (* lbl ≠ lbl': exact match with C1 assumption *)
+  >> qpat_x_assum `!l v. FLOOKUP st.ds_boundary l = SOME v ==> _`
+       (drule_then strip_assume_tac) >> simp[]
+QED
+
+Resume vardef_inv_preserved[C4]:
+  rpt gen_tac >> strip_tac >>
+  irule pred_setTheory.SUBSET_TRANS >>
+  qexists `set (vardef_joined fn st lbl')` >> conj_tac
+  >- (irule vardef_joined_boundary_mono >>
+      simp[list_intersect_set, pred_setTheory.INTER_SUBSET])
+  >> res_tac
+QED
+
+Resume vardef_inv_preserved[C8]:
+  rpt strip_tac >>
+  qpat_x_assum `!lbl. _ ==> lbl IN FDOM _` (drule_then assume_tac) >>
+  simp[]
+QED
+
+Finalise vardef_inv_preserved
 
 (* ===== Measure increases helpers ===== *)
 
@@ -1176,14 +980,13 @@ Proof
      DECIDE_TAC
 QED
 
-(* Boundary length at any label: new state ≤ old state *)
+(* Boundary length at any label: boundary-only update ≤ old state *)
 Triviality df_boundary_len_mono:
-  !fn st lbl new_bv inst_map fv x.
+  !fn st lbl new_bv fv x.
     Abbrev (new_bv = list_intersect
               (df_boundary (fn_all_assignments fn) st lbl) fv) ==>
     LENGTH (df_boundary (fn_all_assignments fn)
-              <|ds_inst := FUNION inst_map st.ds_inst;
-                ds_boundary := st.ds_boundary |+ (lbl, new_bv)|> x) <=
+              (st with ds_boundary := st.ds_boundary |+ (lbl, new_bv)) x) <=
     LENGTH (df_boundary (fn_all_assignments fn) st x)
 Proof
   rpt strip_tac >>
@@ -1195,12 +998,9 @@ Proof
 QED
 
 (* SML-level instantiations of sum_complement_mono/strict for the
-   measure proof. These avoid the bound-variable-name-capture issue
-   where irule/match_mp_tac fails because 'lbl' is both free and bound. *)
-val new_st_tm_ = ``<|ds_inst := (inst_map : (string # num, string list) fmap) ⊌
-                                 st.ds_inst;
-                      ds_boundary := st.ds_boundary |+ (lbl,new_bv)|>
-                    : string list df_state``;
+   measure proof. Boundary-only update (no ds_inst change). *)
+val new_st_tm_ = ``(st : string list df_state) with
+                     ds_boundary := st.ds_boundary |+ (lbl,new_bv)``;
 val bdy_f_ = ``\(x:string). LENGTH
                 (df_boundary (fn_all_assignments fn)
                              (st : string list df_state) x) : num``;
@@ -1219,7 +1019,9 @@ val sum_complement_strict_inst = sum_complement_strict
   |> SPECL [bdy_f_, bdy_g_, bdy_n_, bdy_ls_, ``lbl : string``]
   |> SIMP_RULE std_ss [];
 
-(* When processing a label changes the state, the measure strictly increases. *)
+(* When processing a label changes the state, the measure strictly increases.
+   Since ds_inst is never modified by df_process_block, only the boundary
+   SUM component changes. inst_complement and CARD(FDOM ds_inst) cancel. *)
 Theorem vardef_measure_increases[local]:
   !fn lbl st.
     let process = df_process_block Forward (fn_all_assignments fn)
@@ -1232,159 +1034,49 @@ Theorem vardef_measure_increases[local]:
     vardef_measure fn st < vardef_measure fn (process lbl st)
 Proof
   simp_tac std_ss [LET_THM] >> rpt strip_tac >>
-  (* Rewrite process to fold form *)
-  simp[vardef_process_eq] >> simp_tac std_ss [LET_THM] >>
+  rewrite_tac[vardef_process_eq] >> simp_tac std_ss [LET_THM] >>
   pairarg_tac >> simp[] >>
-  qabbrev_tac `instrs = case lookup_block lbl fn.fn_blocks of
-                          NONE => [] | SOME bb => bb.bb_instructions` >>
-  qabbrev_tac `joined = vardef_joined fn st lbl` >>
   qabbrev_tac `old_bv = df_boundary (fn_all_assignments fn) st lbl` >>
   qabbrev_tac `new_bv = list_intersect old_bv fv` >>
-  (* Key facts about inst_map *)
-  `FLOOKUP inst_map (lbl, 0n) = SOME joined` by
-    (fs[markerTheory.Abbrev_def] >> metis_tac[fold_block_init_value]) >>
-  `FDOM inst_map = IMAGE (\i. (lbl, i)) (count (LENGTH instrs + 1))` by
-    (fs[markerTheory.Abbrev_def] >> metis_tac[df_fold_block_fdom]) >>
-  `(lbl, 0n) IN FDOM inst_map` by
-    (qpat_x_assum `FDOM inst_map = _` (fn th => REWRITE_TAC [th]) >>
-     simp[pred_setTheory.IN_IMAGE, pred_setTheory.IN_COUNT]) >>
-  (* Fold values ⊆ ds_inst values at overlapping keys *)
-  `!k v_old v_new. FLOOKUP st.ds_inst k = SOME v_old /\
-     FLOOKUP inst_map k = SOME v_new ==>
-     set v_new SUBSET set v_old` by
-    (rpt strip_tac >>
-     qspecl_then [`fn`, `st`, `lbl`, `instrs`, `joined`, `inst_map`, `fv`]
-       mp_tac fold_inst_map_subset_ds_inst >>
-     simp[] >> disch_then (qspecl_then [`k`, `v_old`, `v_new`] mp_tac) >>
-     simp[]) >>
-  (* === Monotonicity of all three components === *)
-  `vardef_inst_complement fn
-     (st with <|ds_boundary := st.ds_boundary |+ (lbl, new_bv);
-                ds_inst := FUNION inst_map st.ds_inst|>) =
-   vardef_inst_complement fn
-     (st with ds_inst := FUNION inst_map st.ds_inst)` by
-    simp[vardef_inst_complement_def, LET_THM] >>
-  `vardef_inst_complement fn st <=
-   vardef_inst_complement fn
-     (st with <|ds_boundary := st.ds_boundary |+ (lbl, new_bv);
-                ds_inst := FUNION inst_map st.ds_inst|>)` by
-    (simp[] >> irule inst_complement_mono >> rw[] >> metis_tac[]) >>
-  `CARD (FDOM st.ds_inst) <=
-   CARD (FDOM (FUNION inst_map st.ds_inst))` by
-    (simp[finite_mapTheory.FDOM_FUNION] >>
-     irule pred_setTheory.CARD_SUBSET >>
-     simp[pred_setTheory.SUBSET_UNION]) >>
-  (* === Expand measure and use three_sum_strict === *)
+  (* IF-true: process = st, contradicts assumption *)
+  IF_CASES_TAC
+  >- (qpat_x_assum `_ <> st` mp_tac >> simp[] >>
+      rewrite_tac[vardef_process_eq] >> simp_tac std_ss [LET_THM] >>
+      qpat_x_assum `df_fold_block _ _ _ _ _ = _`
+        (fn th => simp[th]) >>
+      fs[markerTheory.Abbrev_def])
+  >>
+  (* IF-false: only ds_boundary updated. ds_inst unchanged so
+     inst_complement and CARD cancel. Only boundary SUM is strict. *)
   simp_tac std_ss [vardef_measure_def, LET_THM] >>
-  CONV_TAC (DEPTH_CONV (SIMP_CONV (srw_ss()) [])) >>
-  irule three_sum_strict >> rpt conj_tac
-  (* Subgoal 1: boundary_sum component ≤ *)
-  >- (match_mp_tac sum_complement_mono_inst >> rpt gen_tac >> strip_tac >> conj_tac
-      >- (irule df_boundary_len_mono >>
-          qexists_tac `fv` >> fs[markerTheory.Abbrev_def])
-      >- metis_tac[df_boundary_length_le])
-  (* Subgoal 2: inst_complement component ≤ *)
-  >- (fs[dfAnalyzeDefsTheory.df_state_updates_eq_literal] >>
-      metis_tac[])
-  (* Subgoal 3: CARD component ≤ *)
-  >- (fs[dfAnalyzeDefsTheory.df_state_updates_eq_literal,
-         finite_mapTheory.FDOM_FUNION] >>
-      metis_tac[])
-  (* Subgoal 4: at least one strict (disjunction) *)
-  >> Cases_on `new_bv = old_bv`
-  >- ((* Case B: boundary value at lbl unchanged *)
-      Cases_on `(lbl, 0n) IN FDOM st.ds_inst`
-      >- ((* Case B': (lbl,0) already in ds_inst — inst_complement strict *)
-          DISJ2_TAC >> DISJ1_TAC >>
-          fs[dfAnalyzeDefsTheory.df_state_updates_eq_literal] >>
-          `?v0. FLOOKUP st.ds_inst (lbl, 0n) = SOME v0` by
-            metis_tac[finite_mapTheory.FLOOKUP_DEF,
-                      optionTheory.NOT_NONE_SOME] >>
-          `set v0 SUBSET set (fn_all_assignments fn)` by
-            (qpat_assum `vardef_state_inv fn st` mp_tac >>
-             simp_tac std_ss [vardef_state_inv_def, LET_THM] >>
-             rpt strip_tac >> metis_tac[]) >>
-          `set joined SUBSET set v0` by
-            (qpat_assum `vardef_state_inv fn st` mp_tac >>
-             simp_tac std_ss [vardef_state_inv_def, LET_THM] >>
-             rpt strip_tac >> fs[markerTheory.Abbrev_def] >>
-             metis_tac[]) >>
-          `set joined <> set v0` by
-            (CCONTR_TAC >> fs[] >>
-             `?P. v0 = FILTER P (fn_all_assignments fn)` by
-               (qpat_assum `vardef_state_inv fn st` mp_tac >>
-                simp_tac std_ss [vardef_state_inv_def, LET_THM] >>
-                rpt strip_tac >> metis_tac[]) >>
-             `?Q. joined = FILTER Q (fn_all_assignments fn)` by
-               (fs[markerTheory.Abbrev_def] >>
-                metis_tac[vardef_joined_is_filter]) >>
-             `ALL_DISTINCT (fn_all_assignments fn)` by
-               simp[venomInstTheory.fn_all_assignments_def,
-                    listTheory.all_distinct_nub] >>
-             `FILTER Q (fn_all_assignments fn) =
-              FILTER P (fn_all_assignments fn)` by
-               (irule filter_set_eq_filter_eq >> rw[]) >>
-             `joined = v0` by metis_tac[] >>
-             `inst_map ⊌ st.ds_inst = st.ds_inst` by
-               (fs[markerTheory.Abbrev_def] >>
-                metis_tac[fold_from_same_v0_funion_id]) >>
-             (* C8: (lbl,0) ∈ FDOM ds_inst ⟹ lbl ∈ FDOM ds_boundary *)
-             `lbl IN FDOM st.ds_boundary` by
-               (qpat_assum `vardef_state_inv fn st` mp_tac >>
-                simp_tac std_ss [vardef_state_inv_def, LET_THM] >>
-                metis_tac[]) >>
-             `st.ds_boundary |+ (lbl, old_bv) = st.ds_boundary` by
-               (irule finite_mapTheory.FUPDATE_ELIM >>
-                fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_boundary_def,
-                   finite_mapTheory.FLOOKUP_DEF, finite_mapTheory.FAPPLY_FUPDATE_THM]) >>
-             (* process lbl st = st — contradicts assumption *)
-             qpat_x_assum `df_process_block _ _ _ _ _ _ _ _ _ _ _ <> _` mp_tac >>
-             simp[dfAnalyzeDefsTheory.df_state_component_equality,
-                  vardef_process_eq] >>
-             simp_tac std_ss [LET_THM] >> pairarg_tac >> simp[] >>
-             `(fv', inst_map') = (fv, inst_map)` by metis_tac[] >> fs[] >>
-             fs[markerTheory.Abbrev_def] >> metis_tac[]) >>
-          `CARD (set joined) < CARD (set v0)` by
-            (irule pred_setTheory.CARD_PSUBSET >>
-             rw[listTheory.FINITE_LIST_TO_SET, pred_setTheory.PSUBSET_DEF]) >>
-          `vardef_inst_complement fn st <
-           vardef_inst_complement fn
-             (st with ds_inst := inst_map ⊌ st.ds_inst)` by
-            (irule inst_complement_strict >> conj_tac
-             >- metis_tac[]
-             >- (qexistsl_tac [`(lbl, 0n)`, `v0`, `joined`] >> simp[])) >>
-          metis_tac[])
-      >- ((* Case B: (lbl,0) NOT in ds_inst — CARD strict *)
-          DISJ2_TAC >> DISJ2_TAC >>
-          fs[dfAnalyzeDefsTheory.df_state_updates_eq_literal,
-             finite_mapTheory.FDOM_FUNION] >>
-          `(lbl, 0n) IN FDOM inst_map UNION FDOM st.ds_inst` by
-            simp[pred_setTheory.IN_UNION] >>
-          irule pred_setTheory.CARD_PSUBSET >>
-          rw[pred_setTheory.PSUBSET_DEF, pred_setTheory.SUBSET_UNION] >>
-          metis_tac[pred_setTheory.IN_UNION]))
-  >- ((* Case A: new_bv <> old_bv — boundary_sum strict *)
-      DISJ1_TAC >>
-      match_mp_tac sum_complement_strict_inst >> rpt conj_tac
-      >- rw[]
-      >- ((* strict: boundary at lbl is strictly shorter *)
-          `ALL_DISTINCT old_bv` by
-            (fs[markerTheory.Abbrev_def] >>
-             metis_tac[df_boundary_all_distinct]) >>
-          `list_intersect old_bv fv <> old_bv` by
-            (CCONTR_TAC >> fs[markerTheory.Abbrev_def]) >>
-          `LENGTH (list_intersect old_bv fv) < LENGTH old_bv` by
-            metis_tac[dfHelperPropsTheory.list_intersect_strict_length] >>
-          simp[dfAnalyzeDefsTheory.df_boundary_def,
-               finite_mapTheory.FLOOKUP_UPDATE] >>
-          fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_boundary_def] >>
-          qpat_x_assum `old_bv = _` (fn th => REWRITE_TAC [GSYM th]) >>
-          simp[])
-      >- metis_tac[df_boundary_length_le]
-      >- (rpt gen_tac >> strip_tac >> conj_tac
-          >- (irule df_boundary_len_mono >>
-              qexists_tac `fv` >> fs[markerTheory.Abbrev_def])
-          >- metis_tac[df_boundary_length_le]))
+  simp[] >>
+  (* inst_complement and CARD(FDOM) are equal on both sides *)
+  `vardef_inst_complement fn
+     (st with ds_boundary := st.ds_boundary |+ (lbl, new_bv)) =
+   vardef_inst_complement fn st` by
+    simp[vardef_inst_complement_def, LET_THM] >>
+  simp[] >>
+  (* Reduce to: boundary SUM strictly increases *)
+  match_mp_tac sum_complement_strict_inst >> rpt conj_tac
+  >- simp[]  (* MEM lbl *)
+  >- ((* strict: boundary at lbl is strictly shorter *)
+      `ALL_DISTINCT old_bv` by
+        (fs[markerTheory.Abbrev_def] >>
+         metis_tac[df_boundary_all_distinct]) >>
+      `new_bv <> old_bv` by fs[markerTheory.Abbrev_def] >>
+      `LENGTH new_bv < LENGTH old_bv` by
+        (fs[markerTheory.Abbrev_def] >>
+         metis_tac[dfHelperPropsTheory.list_intersect_strict_length]) >>
+      simp[dfAnalyzeDefsTheory.df_boundary_def,
+           finite_mapTheory.FLOOKUP_UPDATE] >>
+      fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_boundary_def] >>
+      qpat_x_assum `old_bv = _` (fn th => REWRITE_TAC [GSYM th]) >>
+      simp[])
+  >- metis_tac[df_boundary_length_le]
+  >> rpt gen_tac >> strip_tac >> conj_tac
+  >- (irule df_boundary_len_mono >>
+      qexists `fv` >> fs[markerTheory.Abbrev_def])
+  >> metis_tac[df_boundary_length_le]
 QED
 
 (* ===== Shared convergence helpers ===== *)
@@ -1450,6 +1142,10 @@ QED
 
 (* ===== Fixpoint ===== *)
 
+val fixpoint_restricted_fwd = SIMP_RULE (srw_ss()) []
+  (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
+    dfAnalyzeProofsTheory.df_analyze_fixpoint_process_restricted));
+
 Theorem vardef_fixpoint_proof:
   !fn.
     wf_function fn ==>
@@ -1464,27 +1160,31 @@ Theorem vardef_fixpoint_proof:
 Proof
   rpt strip_tac >>
   simp_tac std_ss [LET_THM, varDefDefsTheory.vardef_analyze_def] >>
-  irule (SIMP_RULE std_ss [LET_THM] df_analyze_fixpoint_forward) >>
-  (* irule produces one conjunctive goal: wf ∧ deps ∧ ∃P b m. ... *)
-  conj_tac >- fs[] >>
+  irule fixpoint_restricted_fwd >>
   conj_tac
-  >- (match_mp_tac (SIMP_RULE std_ss [LET_THM] df_process_deps_complete |>
-        SPEC ``Forward : direction`` |>
-        SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def]) >>
-      rw[list_intersect_absorption] >>
-      metis_tac[cfg_edge_symmetry_uncond])
-  >> qexistsl_tac [`vardef_state_inv fn`,
-                    `vardef_measure_bound fn`,
-                    `vardef_measure fn`] >>
-  rpt conj_tac
-  (* measure bounded *)
-  >- rw[vardef_measure_bounded]
-  (* P preserved by process — restricted to fn_labels *)
-  >- metis_tac[vardef_inv_preserved]
-  (* measure increases when state changes — restricted to fn_labels *)
-  >- metis_tac[vardef_measure_increases]
-  (* P holds initially *)
-  >- metis_tac[vardef_init_state_inv]
+  >- ((* Existential witnesses *)
+      qexistsl_tac [`vardef_state_inv fn`,
+                     `vardef_measure_bound fn`,
+                     `vardef_measure fn`,
+                     `\lbl. MEM lbl (fn_labels fn)`] >>
+      rpt conj_tac
+      >- rw[vardef_measure_bounded]
+      >- (rpt strip_tac >> fs[] >>
+          metis_tac[vardef_inv_preserved])
+      >- (rpt strip_tac >> fs[] >>
+          metis_tac[vardef_measure_increases])
+      >- (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+          metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels])
+      >- metis_tac[dfs_pre_in_fn_labels]
+      >- metis_tac[vardef_init_state_inv])
+  >>
+  (* wl_deps_complete *)
+  match_mp_tac (SIMP_RULE std_ss [LET_THM]
+    dfAnalyzeProofsTheory.df_process_deps_complete_proof |>
+    SPEC ``Forward : direction`` |>
+    SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def]) >>
+  rw[list_intersect_absorption] >>
+  metis_tac[cfg_edge_symmetry_uncond]
 QED
 
 (* ===== Boundedness ===== *)
@@ -1832,6 +1532,28 @@ QED
    Since list_intersect([], x) = [], boundary stays [].
    
    Proof via wl_iterate_invariant with P = vardef_state_inv ∧ entry_boundary = []. *)
+
+(* FOLDL that only modifies ds_inst preserves ds_boundary *)
+Triviality foldl_inst_only_boundary[local]:
+  !lbls (f : 'a df_state -> string -> 'a df_state) acc.
+    (!st lbl. (f st lbl).ds_boundary = st.ds_boundary) ==>
+    (FOLDL f acc lbls).ds_boundary = acc.ds_boundary
+Proof
+  Induct >> simp[]
+QED
+
+(* df_populate_inst preserves ds_boundary *)
+Triviality populate_inst_ds_boundary[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
+    (df_populate_inst dir bottom join transfer edge_transfer ctx
+       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
+Proof
+  rpt gen_tac >>
+  simp[dfAnalyzeDefsTheory.df_populate_inst_def] >>
+  irule foldl_inst_only_boundary >>
+  simp[LET_THM] >> rpt gen_tac >> pairarg_tac >> simp[]
+QED
+
 Triviality vardef_entry_boundary_empty[local]:
   !fn.
     wf_function fn /\
@@ -1843,45 +1565,38 @@ Proof
   >> `FLOOKUP (vardef_analyze fn).ds_boundary (HD fn.fn_blocks).bb_label = SOME []`
        suffices_by simp[dfAnalyzeDefsTheory.df_boundary_def]
   >> simp[varDefDefsTheory.vardef_analyze_def, dfAnalyzeDefsTheory.df_analyze_def, LET_THM]
-  >> qmatch_goalsub_abbrev_tac `wl_iterate process deps wl0 st0'`
+  >> qmatch_goalsub_abbrev_tac `wl_iterate changed process deps wl0 st0'`
+  >> `FLOOKUP (SND (wl_iterate changed process deps wl0 st0')).ds_boundary
+        (HD fn.fn_blocks).bb_label = SOME ([] : string list)`
+       suffices_by simp[populate_inst_ds_boundary]
   >> `(\st. vardef_state_inv fn st /\
        FLOOKUP st.ds_boundary (HD fn.fn_blocks).bb_label = SOME ([] : string list))
-      (SND (wl_iterate process deps wl0 st0'))` suffices_by simp[]
-  >> irule worklistProofsTheory.wl_iterate_invariant_process_restricted
-  >> conj_tac
-  >- ((* P st0' *)
+      (SND (wl_iterate changed process deps wl0 st0'))` suffices_by simp[]
+  >> unabbrev_all_tac
+  >> irule (SIMP_RULE std_ss [LET_THM]
+       dfAnalyzeProofsTheory.df_analyze_invariant_forward)
+  >> simp[] >> rpt conj_tac
+  >- ((* vardef_state_inv fn st0' *)
+      mp_tac (Q.SPEC `fn` vardef_init_state_inv) >>
+      Cases_on `fn_entry_label fn` >> simp[])
+  >- ((* FLOOKUP st0'.ds_boundary entry = SOME [] *)
       `fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label`
         by simp[venomInstTheory.fn_entry_label_def,
                 venomInstTheory.entry_block_def, listTheory.NULL_EQ]
-      >> qpat_x_assum `Abbrev (st0' = _)` (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def])
-      >> simp[] >> strip_tac >> conj_tac
-      >- (mp_tac (Q.SPEC `fn` vardef_init_state_inv) >> simp[])
       >> simp[dfAnalyzeDefsTheory.init_df_state_def,
               finite_mapTheory.FLOOKUP_UPDATE])
-  >> qexistsl_tac [
-       `vardef_measure_bound fn`, `vardef_measure fn`,
-       `\lbl. MEM lbl (fn_labels fn)`
-     ] >> simp[] >> rpt conj_tac
-  >- ((* measure bounded *)
-      rpt strip_tac >> irule vardef_measure_bounded >> simp[])
-  >- ((* P preserved *)
+  >- ((* Q preserved *)
       rpt gen_tac >> strip_tac >> conj_tac
-      >- (fs[markerTheory.Abbrev_def] >> metis_tac[vardef_inv_preserved])
-      >> fs[markerTheory.Abbrev_def, dfAnalyzeDefsTheory.df_process_block_def,
-            dfAnalyzeDefsTheory.df_joined_val_def]
-      >> pairarg_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE]
-      >> Cases_on `lbl = (HD fn.fn_blocks).bb_label` >> simp[]
-      >> simp[dfAnalyzeDefsTheory.df_boundary_def,
-              dfHelperDefsTheory.list_intersect_def])
-  >- ((* measure increases *)
-      rpt gen_tac >> strip_tac >> fs[markerTheory.Abbrev_def]
+      >- metis_tac[vardef_inv_preserved]
+      >> rewrite_tac[vardef_process_eq] >> simp_tac std_ss [LET_THM]
+      >> pairarg_tac >> simp[]
+      >> IF_CASES_TAC >> simp[finite_mapTheory.FLOOKUP_UPDATE]
+      >> rw[dfAnalyzeDefsTheory.df_boundary_def,
+            dfHelperDefsTheory.list_intersect_def])
+  >- ((* measure *)
+      qexistsl_tac [`vardef_measure_bound fn`, `vardef_measure fn`]
+      >> simp[vardef_measure_bounded]
       >> metis_tac[vardef_measure_increases])
-  >- ((* succ closure *)
-      simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM] >> rpt strip_tac
-      >> metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels])
-  >- ((* EVERY valid_lbl wl0 *)
-      simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM] >> rpt strip_tac
-      >> mp_tac dfs_pre_in_fn_labels >> simp[listTheory.EVERY_MEM])
 QED
 
 (* ===== Soundness ===== *)

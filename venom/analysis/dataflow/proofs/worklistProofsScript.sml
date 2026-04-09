@@ -33,14 +33,15 @@ QED
 (* Core: wl_step decreases the ranking when the worklist is non-empty
    and P is maintained *)
 Theorem wl_step_decreases[local]:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps (P : 'a -> bool) p.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     bounded_measure P leq m b /\
     P (SND p) /\ FST p <> [] ==>
     (inv_image ($< LEX $<) (wl_rank m b))
-      (wl_step process deps p) p
+      (wl_step changed process deps p) p
 Proof
   rw[wl_step_def, wl_rank_def, relationTheory.inv_image_def,
      pairTheory.LEX_DEF_THM] >>
@@ -58,17 +59,18 @@ QED
    Nested complete induction: outer on b - m(SND s), inner on LENGTH(FST s).
    Change-step: b - m decreases. No-change step: LENGTH decreases. *)
 Theorem wl_terminates[local]:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps (P : 'a -> bool) wl st.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     bounded_measure P leq m b /\
     P st ==>
-    ?n. FST (FUNPOW (wl_step process deps) n (wl, st)) = []
+    ?n. FST (FUNPOW (wl_step changed process deps) n (wl, st)) = []
 Proof
   rw[] >>
   `!d wl st. P st /\ bounded_measure P leq m b /\ b - m st <= d ==>
-    ?n. FST (FUNPOW (wl_step process deps) n (wl, st)) = []`
+    ?n. FST (FUNPOW (wl_step changed process deps) n (wl, st)) = []`
     suffices_by (disch_then (qspecl_then [`b - m st`, `wl`, `st`] mp_tac) >> rw[]) >>
   completeInduct_on `d` >> rw[] >>
   completeInduct_on `LENGTH wl` >> rw[] >>
@@ -76,13 +78,13 @@ Proof
   >- (qexists_tac `0` >> rw[arithmeticTheory.FUNPOW])
   >> Cases_on `process h st' = st'`
   >- ((* No-change: worklist shrinks, d stays *)
-      `wl_step process deps (h::t, st') = (t, st')` by rw[wl_step_def] >>
+      `wl_step changed process deps (h::t, st') = (t, st')` by rw[wl_step_def] >>
       qpat_x_assum `!m. m < LENGTH (h::t) ==> _`
         (qspec_then `LENGTH t` mp_tac) >> rw[] >>
       pop_assum (qspec_then `t` mp_tac) >> rw[] >>
       qexists_tac `SUC n` >> rw[arithmeticTheory.FUNPOW])
   >> (* Change: m increases so b - m(new_st) < b - m(st) <= d *)
-  `wl_step process deps (h::t, st') =
+  `wl_step changed process deps (h::t, st') =
     (t ++ deps h, process h st')` by rw[wl_step_def] >>
   `P (process h st')` by metis_tac[] >>
   `leq st' (process h st')` by metis_tac[] >>
@@ -98,25 +100,26 @@ QED
    preserved by wl_step is preserved by WHILE, and WHILE terminates.
    Uses OWHILE: termination gives SOME result, then OWHILE lemmas give properties. *)
 Theorem wl_while_core[local]:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps (P : 'a -> bool)
    (Q : 'b list # 'a -> bool) s.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     bounded_measure P leq m b /\
     Q s /\
     (!p. Q p ==> P (SND p)) /\
-    (!p. Q p /\ FST p <> [] ==> Q (wl_step process deps p)) ==>
-    Q (WHILE (\p. FST p <> []) (wl_step process deps) s) /\
-    FST (WHILE (\p. FST p <> []) (wl_step process deps) s) = []
+    (!p. Q p /\ FST p <> [] ==> Q (wl_step changed process deps p)) ==>
+    Q (WHILE (\p. FST p <> []) (wl_step changed process deps) s) /\
+    FST (WHILE (\p. FST p <> []) (wl_step changed process deps) s) = []
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `s` >>
   `P r` by metis_tac[pairTheory.SND] >>
-  `?n. FST (FUNPOW (wl_step process deps) n (q, r)) = []` by
-    (irule wl_terminates >> qexistsl_tac [`P`, `b`, `leq`, `m`] >> rw[]) >>
-  `?result. OWHILE (\p. FST p <> []) (wl_step process deps) (q,r) =
+  `?n. FST (FUNPOW (wl_step changed process deps) n (q, r)) = []` by
+    (irule wl_terminates >> metis_tac[]) >>
+  `?result. OWHILE (\p. FST p <> []) (wl_step changed process deps) (q,r) =
     SOME result` by (rw[WhileTheory.OWHILE_def] >> metis_tac[]) >>
-  `WHILE (\p. FST p <> []) (wl_step process deps) (q,r) = result` by
+  `WHILE (\p. FST p <> []) (wl_step changed process deps) (q,r) = result` by
     (drule WhileTheory.OWHILE_WHILE >> rw[]) >>
   `~(FST result <> [])` by
     (drule WhileTheory.OWHILE_ENDCOND >> rw[]) >>
@@ -124,7 +127,7 @@ Proof
     |> INST_TYPE [alpha |-> ``:'b list # 'a``]
     |> Q.INST [`P` |-> `Q`]) >>
   disch_then (qspecl_then
-    [`\p. FST p <> []`, `wl_step process deps`, `(q,r)`] mp_tac) >>
+    [`\p. FST p <> []`, `wl_step changed process deps`, `(q,r)`] mp_tac) >>
   rw[]
 QED
 
@@ -132,10 +135,11 @@ QED
 
 (* P-preservation through wl_step (reused across theorems) *)
 Theorem wl_step_preserves_P[local]:
-  !process deps (P : 'a -> bool) p.
+  !changed process deps (P : 'a -> bool) p.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P (SND p) /\ FST p <> [] ==>
-    P (SND (wl_step process deps p))
+    P (SND (wl_step changed process deps p))
 Proof
   rw[wl_step_def] >>
   Cases_on `p` >> Cases_on `q` >> fs[] >>
@@ -143,16 +147,17 @@ Proof
 QED
 
 Theorem wl_iterate_terminates_proof:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b ==>
-    FST (wl_iterate process deps wl0 st0) = []
+    FST (wl_iterate changed process deps wl0 st0) = []
 Proof
   rw[wl_iterate_def] >>
-  qspecl_then [`leq`,`m`,`b`,`process`,`deps`,`P`,
+  qspecl_then [`leq`,`m`,`b`,`changed`,`process`,`deps`,`P`,
                `\p. P (SND p)`, `(wl0, st0)`]
     mp_tac wl_while_core >>
   impl_tac >- (rw[] >> irule wl_step_preserves_P >> metis_tac[]) >>
@@ -160,16 +165,17 @@ Proof
 QED
 
 Theorem wl_iterate_invariant_proof:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b ==>
-    P (SND (wl_iterate process deps wl0 st0))
+    P (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[wl_iterate_def] >>
-  qspecl_then [`leq`,`m`,`b`,`process`,`deps`,`P`,
+  qspecl_then [`leq`,`m`,`b`,`changed`,`process`,`deps`,`P`,
                `\p. P (SND p)`, `(wl0, st0)`]
     mp_tac wl_while_core >>
   impl_tac >- (rw[] >> irule wl_step_preserves_P >> metis_tac[]) >>
@@ -177,17 +183,18 @@ Proof
 QED
 
 Theorem wl_iterate_above_proof:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     partial_order leq /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b ==>
-    leq st0 (SND (wl_iterate process deps wl0 st0))
+    leq st0 (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[wl_iterate_def] >>
-  qspecl_then [`leq`,`m`,`b`,`process`,`deps`,`P`,
+  qspecl_then [`leq`,`m`,`b`,`changed`,`process`,`deps`,`P`,
                `\p. P (SND p) /\ leq st0 (SND p)`, `(wl0, st0)`]
     mp_tac wl_while_core >>
   impl_tac
@@ -203,18 +210,19 @@ Proof
 QED
 
 Theorem wl_iterate_fixpoint_proof:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b /\
-    wl_deps_complete process deps /\
+    wl_deps_complete changed process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) ==>
-    is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
+    is_fixpoint process all_lbls (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[wl_iterate_def, is_fixpoint_def] >>
-  qspecl_then [`leq`,`m`,`b`,`process`,`deps`,`P`,
+  qspecl_then [`leq`,`m`,`b`,`changed`,`process`,`deps`,`P`,
                `\p. P (SND p) /\
                     !lbl. MEM lbl all_lbls /\
                           process lbl (SND p) <> SND p ==>
@@ -226,6 +234,10 @@ Proof
       >- (irule wl_step_preserves_P >> metis_tac[])
       >- (Cases_on `p` >> Cases_on `q` >>
           fs[wl_step_def, wl_deps_complete_def] >>
+          qpat_x_assum `!lbl st. changed _ _ _ <=> _`
+            (fn equiv =>
+              RULE_ASSUM_TAC (REWRITE_RULE [equiv]) >>
+              assume_tac equiv) >>
           Cases_on `process h r = r` >> fs[] >> rw[] >>
           fs[listTheory.MEM_APPEND] >> metis_tac[])
       >> metis_tac[])
@@ -245,8 +257,9 @@ QED
 
 (* Termination: restricted to valid labels *)
 Theorem wl_terminates2[local]:
-  !m b (process : 'b -> 'a -> 'a) deps (P : 'a -> bool)
+  !m b changed (process : 'b -> 'a -> 'a) deps (P : 'a -> bool)
    (valid_lbl : 'b -> bool) wl st.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
               m st < m (process lbl st)) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
@@ -254,11 +267,11 @@ Theorem wl_terminates2[local]:
     P st /\
     EVERY valid_lbl wl /\
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
-    ?n. FST (FUNPOW (wl_step process deps) n (wl, st)) = []
+    ?n. FST (FUNPOW (wl_step changed process deps) n (wl, st)) = []
 Proof
   rw[] >>
   `!d wl st. P st /\ EVERY valid_lbl wl /\ b - m st <= d ==>
-    ?n. FST (FUNPOW (wl_step process deps) n (wl, st)) = []`
+    ?n. FST (FUNPOW (wl_step changed process deps) n (wl, st)) = []`
     suffices_by
       (disch_then (qspecl_then [`b - m st`, `wl`, `st`] mp_tac) >> rw[]) >>
   completeInduct_on `d` >> rw[] >>
@@ -267,13 +280,13 @@ Proof
   >- (qexists_tac `0` >> rw[arithmeticTheory.FUNPOW])
   >> `valid_lbl h /\ EVERY valid_lbl t` by fs[listTheory.EVERY_DEF] >>
   Cases_on `process h st' = st'`
-  >- (`wl_step process deps (h::t, st') = (t, st')` by rw[wl_step_def] >>
+  >- (`wl_step changed process deps (h::t, st') = (t, st')` by rw[wl_step_def] >>
       qpat_x_assum `!m. m < LENGTH (h::t) ==> _`
         (qspec_then `LENGTH t` mp_tac) >>
       rw[listTheory.LENGTH] >>
       pop_assum (qspec_then `t` mp_tac) >> rw[] >>
       qexists_tac `SUC n` >> rw[arithmeticTheory.FUNPOW])
-  >> `wl_step process deps (h::t, st') =
+  >> `wl_step changed process deps (h::t, st') =
        (t ++ deps h, process h st')` by rw[wl_step_def] >>
   `P (process h st')` by metis_tac[] >>
   `m st' < m (process h st')` by metis_tac[] >>
@@ -289,8 +302,9 @@ QED
 
 (* Core WHILE lemma: restricted to valid labels *)
 Theorem wl_while_core2[local]:
-  !m b (process : 'b -> 'a -> 'a) deps (P : 'a -> bool)
+  !m b changed (process : 'b -> 'a -> 'a) deps (P : 'a -> bool)
    (valid_lbl : 'b -> bool) (Q : 'b list # 'a -> bool) s.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
               m st < m (process lbl st)) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
@@ -298,19 +312,19 @@ Theorem wl_while_core2[local]:
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) /\
     Q s /\
     (!p. Q p ==> P (SND p) /\ EVERY valid_lbl (FST p)) /\
-    (!p. Q p /\ FST p <> [] ==> Q (wl_step process deps p)) ==>
-    Q (WHILE (\p. FST p <> []) (wl_step process deps) s) /\
-    FST (WHILE (\p. FST p <> []) (wl_step process deps) s) = []
+    (!p. Q p /\ FST p <> [] ==> Q (wl_step changed process deps p)) ==>
+    Q (WHILE (\p. FST p <> []) (wl_step changed process deps) s) /\
+    FST (WHILE (\p. FST p <> []) (wl_step changed process deps) s) = []
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `s` >>
   `P r /\ EVERY valid_lbl q` by
     metis_tac[pairTheory.SND, pairTheory.FST] >>
-  `?n. FST (FUNPOW (wl_step process deps) n (q, r)) = []`
+  `?n. FST (FUNPOW (wl_step changed process deps) n (q, r)) = []`
     suffices_by
     (strip_tac >>
-     `?result. OWHILE (\p. FST p <> []) (wl_step process deps) (q,r) =
+     `?result. OWHILE (\p. FST p <> []) (wl_step changed process deps) (q,r) =
        SOME result` by (rw[WhileTheory.OWHILE_def] >> metis_tac[]) >>
-     `WHILE (\p. FST p <> []) (wl_step process deps) (q,r) = result` by
+     `WHILE (\p. FST p <> []) (wl_step changed process deps) (q,r) = result` by
        (drule WhileTheory.OWHILE_WHILE >> rw[]) >>
      `~(FST result <> [])` by
        (drule WhileTheory.OWHILE_ENDCOND >> rw[]) >>
@@ -318,44 +332,44 @@ Proof
        |> INST_TYPE [alpha |-> ``:'b list # 'a``]
        |> Q.INST [`P` |-> `Q`]) >>
      disch_then (qspecl_then
-       [`\p. FST p <> []`, `wl_step process deps`, `(q,r)`] mp_tac) >>
+       [`\p. FST p <> []`, `wl_step changed process deps`, `(q,r)`] mp_tac) >>
      rw[]) >>
-  match_mp_tac wl_terminates2 >>
-  qexistsl_tac [`m`, `b`, `P`, `valid_lbl`] >> rw[]
+  irule wl_terminates2 >> metis_tac[]
 QED
 
 (* --- wl_step preserves EVERY valid_lbl under deps closure --- *)
 Theorem wl_step_preserves_valid[local]:
-  !process deps (valid_lbl : 'b -> bool) (P : 'a -> bool) p.
+  !changed process deps (valid_lbl : 'b -> bool) (P : 'a -> bool) p.
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) /\
     P (SND p) /\ EVERY valid_lbl (FST p) /\ FST p <> [] ==>
-    P (SND (wl_step process deps p)) /\
-    EVERY valid_lbl (FST (wl_step process deps p))
+    P (SND (wl_step changed process deps p)) /\
+    EVERY valid_lbl (FST (wl_step changed process deps p))
 Proof
   rw[wl_step_def] >>
   Cases_on `p` >> Cases_on `q` >> fs[listTheory.EVERY_DEF] >>
-  Cases_on `process h r = r` >> fs[listTheory.EVERY_APPEND] >>
-  metis_tac[]
+  Cases_on `process h r = r` >> fs[listTheory.EVERY_APPEND]
 QED
 
 (* --- Public API: fixpoint (restricted) --- *)
 Theorem wl_iterate_fixpoint_process_restricted:
-  !m b (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls
+  !m b changed (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls
    (P : 'a -> bool) (valid_lbl : 'b -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
               m st < m (process lbl st)) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
     P st0 /\
     (!x. P x ==> m x <= b) /\
-    wl_deps_complete process deps /\
+    wl_deps_complete changed process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) /\
     EVERY valid_lbl wl0 /\
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
-    is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
+    is_fixpoint process all_lbls (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[wl_iterate_def, is_fixpoint_def] >>
-  qspecl_then [`m`,`b`,`process`,`deps`,`P`, `valid_lbl`,
+  qspecl_then [`m`,`b`,`changed`,`process`,`deps`,`P`, `valid_lbl`,
                `\p. P (SND p) /\ EVERY valid_lbl (FST p) /\
                     !lbl. MEM lbl all_lbls /\
                           process lbl (SND p) <> SND p ==>
@@ -377,28 +391,36 @@ Proof
       (* Goal 3: MEM lbl' (FST (wl_step ...)) — all_lbls tracking *)
       >- (Cases_on `p` >> Cases_on `q` >>
           fs[wl_step_def, listTheory.EVERY_DEF] >>
+          qpat_x_assum `wl_deps_complete _ _ _`
+            (mp_tac o REWRITE_RULE [wl_deps_complete_def]) >>
+          qpat_x_assum `!lbl st. changed _ _ _ <=> _`
+            (fn equiv =>
+              RULE_ASSUM_TAC (REWRITE_RULE [equiv]) >>
+              assume_tac equiv >>
+              disch_then (assume_tac o REWRITE_RULE [equiv])) >>
           Cases_on `process h r = r` >> fs[]
           >- (`lbl' = h \/ MEM lbl' t` by metis_tac[] >> fs[])
           >- (fs[listTheory.MEM_APPEND] >>
               Cases_on `process lbl' r = r`
-              >- (disj2_tac >> fs[wl_deps_complete_def] >> metis_tac[])
+              >- (disj2_tac >> first_x_assum drule >> metis_tac[])
               >- (`lbl' = h \/ MEM lbl' t` by metis_tac[] >> fs[] >>
-                  disj2_tac >> fs[wl_deps_complete_def] >> metis_tac[])))
+                  disj2_tac >> first_x_assum drule >> metis_tac[])))
       (* Goal 4: Initial Q — P st0, EVERY valid_lbl wl0, tracking *)
       >> metis_tac[])
-  >> rw[] >> metis_tac[listTheory.MEM]
+  >> simp[] >> metis_tac[listTheory.MEM]
 QED
 
 (* --- Unrestricted corollaries (valid_lbl = \_.T) --- *)
 Theorem wl_iterate_fixpoint_process_proof:
-  !m b (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
+  !m b changed (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st /\ process lbl st <> st ==> m st < m (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     (!x. P x ==> m x <= b) /\
-    wl_deps_complete process deps /\
+    wl_deps_complete changed process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) ==>
-    is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
+    is_fixpoint process all_lbls (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[] >>
   irule wl_iterate_fixpoint_process_restricted >>
@@ -408,15 +430,16 @@ Proof
 QED
 
 Theorem wl_iterate_invariant_process_proof:
-  !m b (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+  !m b changed (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st /\ process lbl st <> st ==> m st < m (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     (!x. P x ==> m x <= b) ==>
-    P (SND (wl_iterate process deps wl0 st0))
+    P (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[wl_iterate_def] >>
-  qspecl_then [`m`,`b`,`process`,`deps`,`P`, `\x:'b. T`,
+  qspecl_then [`m`,`b`,`changed`,`process`,`deps`,`P`, `\x:'b. T`,
                `\p. P (SND p) /\ EVERY (\x:'b. T) (FST p)`,
                `(wl0, st0)`]
     mp_tac wl_while_core2 >>
@@ -432,8 +455,9 @@ QED
    Like wl_iterate_invariant_process_proof but P only needs to be
    preserved for valid labels. *)
 Theorem wl_iterate_invariant_process_restricted:
-  !m b (process : 'b -> 'a -> 'a) deps wl0 st0
+  !m b changed (process : 'b -> 'a -> 'a) deps wl0 st0
    (P : 'a -> bool) (valid_lbl : 'b -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
               m st < m (process lbl st)) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
@@ -441,10 +465,10 @@ Theorem wl_iterate_invariant_process_restricted:
     (!x. P x ==> m x <= b) /\
     EVERY valid_lbl wl0 /\
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
-    P (SND (wl_iterate process deps wl0 st0))
+    P (SND (wl_iterate changed process deps wl0 st0))
 Proof
   rw[wl_iterate_def] >>
-  qspecl_then [`m`,`b`,`process`,`deps`,`P`, `valid_lbl`,
+  qspecl_then [`m`,`b`,`changed`,`process`,`deps`,`P`, `valid_lbl`,
                `\p. P (SND p) /\ EVERY valid_lbl (FST p)`,
                `(wl0, st0)`]
     mp_tac wl_while_core2 >>

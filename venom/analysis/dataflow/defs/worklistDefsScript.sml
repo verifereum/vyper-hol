@@ -5,8 +5,13 @@
  * deque-based worklist (FIFO: pop front, push back).
  *
  * process : 'a -> 'b -> 'b    (process one label, return new state)
+ * changed : 'a -> 'b -> 'b -> bool  (detect whether deps need re-adding)
  * deps    : 'a -> 'a list     (labels to re-add when a label changes)
- * Changed is detected by st' <> st (no explicit flag).
+ *
+ * The changed predicate examines the label, old state, and new state
+ * to decide whether to add deps. This avoids comparing full states
+ * (which may contain structures like fmaps that lack decidable equality
+ * under EVAL). For dataflow analyses, changed compares one boundary value.
  *
  * The convergence theorems (in proofs/) take an invariant P so that
  * inflationary need only hold under P.  For the unconditional case,
@@ -25,35 +30,32 @@ Ancestors
 
 (* Single worklist step: pop front, process, push deps if changed *)
 Definition wl_step_def:
-  wl_step process deps p =
+  wl_step changed process deps p =
     case FST p of
       [] => p
     | lbl :: rest =>
         let st' = process lbl (SND p) in
-        if st' <> SND p then (rest ++ deps lbl, st')
-        else (rest, SND p)
+        if changed lbl (SND p) st' then (rest ++ deps lbl, st')
+        else (rest, st')
 End
 
 (* Iterate to fixpoint *)
 Definition wl_iterate_def:
-  wl_iterate process deps wl0 st0 =
+  wl_iterate changed process deps wl0 st0 =
     WHILE (\p. FST p <> [])
-          (wl_step process deps)
+          (wl_step changed process deps)
           (wl0, st0)
 End
 
-(* Deps are complete: after processing lbl changes st, every label
-   that newly needs processing (including lbl itself if applicable)
-   is in deps(lbl).
-   Specifically: if b wants to change the new state, and either
-   b = lbl (self-affecting) or b was at fixpoint for the old state,
-   then b must be in deps(lbl). *)
+(* Deps are complete: after processing lbl reports a change, every label
+   that would report a change on the new state (and was either lbl itself
+   or was at fixpoint for the old state) is in deps(lbl). *)
 Definition wl_deps_complete_def:
-  wl_deps_complete (process : 'a -> 'b -> 'b) (deps : 'a -> 'a list) <=>
+  wl_deps_complete changed (process : 'a -> 'b -> 'b) (deps : 'a -> 'a list) <=>
     !lbl (st : 'b).
-      process lbl st <> st ==>
-      !b. process b (process lbl st) <> process lbl st /\
-          (b = lbl \/ process b st = st) ==>
+      changed lbl st (process lbl st) ==>
+      !b. changed b (process lbl st) (process b (process lbl st)) /\
+          (b = lbl \/ ~changed b st (process b st)) ==>
           MEM b (deps lbl)
 End
 

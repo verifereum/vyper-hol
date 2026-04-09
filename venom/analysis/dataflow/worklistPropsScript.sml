@@ -13,13 +13,14 @@ Ancestors
 
 (* Worklist empties under inflationary-under-P + bounded measure. *)
 Theorem wl_iterate_terminates:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b ==>
-    FST (wl_iterate process deps wl0 st0) = []
+    FST (wl_iterate changed process deps wl0 st0) = []
 Proof
   ACCEPT_TAC wl_iterate_terminates_proof
 QED
@@ -27,42 +28,45 @@ QED
 (* At termination, processing any initial label is a no-op.
    Requires wl_deps_complete and all labels present in the initial worklist. *)
 Theorem wl_iterate_fixpoint:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b /\
-    wl_deps_complete process deps /\
+    wl_deps_complete changed process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) ==>
-    is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
+    is_fixpoint process all_lbls (SND (wl_iterate changed process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_fixpoint_proof
 QED
 
 (* Result state is above initial state. Requires partial_order. *)
 Theorem wl_iterate_above:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     partial_order leq /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b ==>
-    leq st0 (SND (wl_iterate process deps wl0 st0))
+    leq st0 (SND (wl_iterate changed process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_above_proof
 QED
 
 (* Property P preserved through iteration. *)
 Theorem wl_iterate_invariant:
-  !(leq : 'a -> 'a -> bool) m b
+  !(leq : 'a -> 'a -> bool) m b changed
    (process : 'b -> 'a -> 'a) deps wl0 st0 (P : 'a -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. P st ==> leq st (process lbl st)) /\
     (!lbl st. P st ==> P (process lbl st)) /\
     P st0 /\
     bounded_measure P leq m b ==>
-    P (SND (wl_iterate process deps wl0 st0))
+    P (SND (wl_iterate changed process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_invariant_proof
 QED
@@ -70,26 +74,28 @@ QED
 (* Fixpoint with process-level termination and restricted valid labels.
    Like wl_iterate_fixpoint but P/measure only need to hold for valid_lbl. *)
 Theorem wl_iterate_fixpoint_process_restricted:
-  !m b (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls
+  !m b changed (process : 'b -> 'a -> 'a) deps wl0 st0 all_lbls
    (P : 'a -> bool) (valid_lbl : 'b -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
               m st < m (process lbl st)) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
     P st0 /\
     (!x. P x ==> m x <= b) /\
-    wl_deps_complete process deps /\
+    wl_deps_complete changed process deps /\
     (!lbl. MEM lbl all_lbls ==> MEM lbl wl0) /\
     EVERY valid_lbl wl0 /\
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
-    is_fixpoint process all_lbls (SND (wl_iterate process deps wl0 st0))
+    is_fixpoint process all_lbls (SND (wl_iterate changed process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_fixpoint_process_restricted
 QED
 
 (* Invariant with process-level termination and restricted valid labels. *)
 Theorem wl_iterate_invariant_process_restricted:
-  !m b (process : 'b -> 'a -> 'a) deps wl0 st0
+  !m b changed (process : 'b -> 'a -> 'a) deps wl0 st0
    (P : 'a -> bool) (valid_lbl : 'b -> bool).
+    (!lbl st. changed lbl st (process lbl st) <=> process lbl st <> st) /\
     (!lbl st. valid_lbl lbl /\ P st /\ process lbl st <> st ==>
               m st < m (process lbl st)) /\
     (!lbl st. valid_lbl lbl /\ P st ==> P (process lbl st)) /\
@@ -97,7 +103,7 @@ Theorem wl_iterate_invariant_process_restricted:
     (!x. P x ==> m x <= b) /\
     EVERY valid_lbl wl0 /\
     (!lbl. valid_lbl lbl ==> EVERY valid_lbl (deps lbl)) ==>
-    P (SND (wl_iterate process deps wl0 st0))
+    P (SND (wl_iterate changed process deps wl0 st0))
 Proof
   ACCEPT_TAC wl_iterate_invariant_process_restricted
 QED
