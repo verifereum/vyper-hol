@@ -70,7 +70,7 @@ Proof
   metis_tac[]
 QED
 
-(* df_process_block only adds keys with FST = lbl to ds_inst *)
+(* df_process_block never modifies ds_inst (only ds_boundary) *)
 Triviality df_process_block_keys:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st k.
     k IN FDOM (df_process_block dir bottom join transfer edge_transfer
@@ -80,143 +80,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `k IN _` mp_tac >>
   simp[df_process_block_def, LET_THM] >>
-  pairarg_tac >> fs[] >> strip_tac
-  >- (imp_res_tac dfAnalyzeProofsTheory.df_fold_block_keys >>
-      fs[FLOOKUP_DEF])
-  >- simp[]
-QED
-
-(* Key-domain invariant: all keys in df_analyze result have first component
-   in cfg_dfs_pre. Uses combined P∧Q predicate for wl_iterate invariant. *)
-Triviality df_analyze_keys_in_dfs_pre:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
-   entry_val fn
-   (leq : 'a df_state -> 'a df_state -> bool)
-   m b (P : 'a df_state -> bool).
-    let cfg = cfg_analyze fn in
-    let bbs = fn.fn_blocks in
-    let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx entry_val cfg bbs in
-    let deps = (case dir of
-                  Forward => cfg_succs_of cfg
-                | Backward => cfg_preds_of cfg) in
-    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
-    let result = df_analyze dir bottom join transfer edge_transfer
-                            ctx entry_val fn in
-      dir = Forward /\
-      (!lbl st. P st ==> leq st (process lbl st)) /\
-      (!lbl st. P st ==> P (process lbl st)) /\
-      (case entry_val of NONE => P st0
-       | SOME (lbl, v) =>
-           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
-      bounded_measure P leq m b /\
-      wl_deps_complete process deps
-    ==>
-      !k. k IN FDOM result.ds_inst ==> MEM (FST k) cfg.cfg_dfs_pre
-Proof
-  simp[LET_THM] >> rpt strip_tac >>
-  qabbrev_tac `cfg = cfg_analyze fn` >>
-  qabbrev_tac `bbs = fn.fn_blocks` >>
-  qabbrev_tac `process = df_process_block Forward bottom join transfer
-                           edge_transfer ctx entry_val cfg bbs` >>
-  qabbrev_tac `st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs)` >>
-  (* Unfold df_analyze to wl_iterate, abbreviate the initial state *)
-  `df_analyze Forward bottom join transfer edge_transfer ctx entry_val fn =
-   SND (wl_iterate process (cfg_succs_of cfg) cfg.cfg_dfs_pre
-     (case entry_val of NONE => st0
-      | SOME (lbl,v) => st0 with ds_boundary := st0.ds_boundary |+ (lbl,v)))` by
-    simp[df_analyze_def, LET_THM, Abbr `process`, Abbr `st0`, Abbr `cfg`,
-         Abbr `bbs`] >>
-  qabbrev_tac `st0' = case entry_val of NONE => st0
-    | SOME (lbl,v) => st0 with ds_boundary := st0.ds_boundary |+ (lbl,v)` >>
-  fs[] >>
-  (* Now goal is: MEM (FST k) cfg.cfg_dfs_pre
-     with k IN FDOM (SND (wl_iterate process ... st0')).ds_inst *)
-  qsuff_tac
-    `(\(st:'a df_state). P st /\
-        !k. k IN FDOM st.ds_inst ==> MEM (FST k) cfg.cfg_dfs_pre)
-     (SND (wl_iterate process (cfg_succs_of cfg) cfg.cfg_dfs_pre st0'))`
-  >- (BETA_TAC >> rpt strip_tac >> res_tac) >>
-  MATCH_MP_TAC (SIMP_RULE std_ss [LET_THM]
-    worklistProofsTheory.wl_iterate_invariant_process_restricted) >>
-  qexistsl_tac [`m`, `b`, `\l. MEM l cfg.cfg_dfs_pre`] >>
-  BETA_TAC >> rpt conj_tac
-  >| [ (* 1. monotonicity *)
-       rpt gen_tac >> strip_tac >> fs[] >>
-       qpat_x_assum `bounded_measure _ _ _ _` mp_tac >>
-       simp[latticeDefsTheory.bounded_measure_def] >>
-       strip_tac >> first_x_assum irule >> rpt conj_tac >> fs[] >>
-       metis_tac[],
-       (* 2. preservation *)
-       rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
-       rpt strip_tac >>
-       qpat_x_assum `_ IN FDOM (process _ _).ds_inst` mp_tac >>
-       simp[Abbr `process`] >> strip_tac >>
-       imp_res_tac df_process_block_keys >> metis_tac[],
-       (* 3. P st0' *)
-       Cases_on `entry_val` >> fs[Abbr `st0'`] >>
-       Cases_on `x` >> fs[],
-       (* 4. Q st0': ds_inst is FEMPTY *)
-       Cases_on `entry_val` >>
-       fs[Abbr `st0'`, Abbr `st0`, init_df_state_def, FDOM_FEMPTY] >>
-       Cases_on `x` >> fs[FDOM_FEMPTY],
-       (* 5. bounded *)
-       rpt strip_tac >>
-       qpat_x_assum `bounded_measure _ _ _ _` mp_tac >>
-       simp[latticeDefsTheory.bounded_measure_def] >>
-       metis_tac[],
-       (* 6. wl0 valid *)
-       simp[EVERY_MEM],
-       (* 7. deps closed *)
-       rpt strip_tac >>
-       metis_tac[cfg_dfs_pre_succs_closed, EVERY_MEM]
-     ]
-QED
-
-(* For labels NOT in cfg_dfs_pre, df_at returns bottom.
-   Proof: wl_iterate only processes labels from the worklist, which stays
-   within cfg_dfs_pre (closed under successors). So ds_inst only has
-   keys with first component in cfg_dfs_pre. *)
-Triviality df_at_bottom_unreachable:
-  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
-   entry_val fn
-   (leq : 'a df_state -> 'a df_state -> bool)
-   m b (P : 'a df_state -> bool).
-    let cfg = cfg_analyze fn in
-    let bbs = fn.fn_blocks in
-    let process = df_process_block dir bottom join transfer edge_transfer
-                                   ctx entry_val cfg bbs in
-    let deps = (case dir of
-                  Forward => cfg_succs_of cfg
-                | Backward => cfg_preds_of cfg) in
-    let st0 = init_df_state bottom (MAP (\bb. bb.bb_label) bbs) in
-    let result = df_analyze dir bottom join transfer edge_transfer
-                            ctx entry_val fn in
-      dir = Forward /\
-      (!lbl st. P st ==> leq st (process lbl st)) /\
-      (!lbl st. P st ==> P (process lbl st)) /\
-      (case entry_val of NONE => P st0
-       | SOME (lbl, v) =>
-           P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
-      bounded_measure P leq m b /\
-      wl_deps_complete process deps /\
-      ~MEM lbl (cfg_analyze fn).cfg_dfs_pre
-    ==>
-      !idx. df_at bottom result lbl idx = bottom
-Proof
-  simp[LET_THM] >> rpt strip_tac >>
-  simp[df_at_def] >>
-  Cases_on `FLOOKUP (df_analyze Forward bottom join transfer edge_transfer
-              ctx entry_val fn).ds_inst (lbl, idx)` >> simp[] >>
-  (* SOME case: derive contradiction from key-domain invariant *)
-  `!k. k IN FDOM (df_analyze Forward bottom join transfer edge_transfer
-     ctx entry_val fn).ds_inst ==>
-     MEM (FST k) (cfg_analyze fn).cfg_dfs_pre` by (
-    MATCH_MP_TAC (SIMP_RULE (srw_ss()) [LET_THM] df_analyze_keys_in_dfs_pre) >>
-    qexistsl_tac [`leq`, `m`, `b`, `P`] >> fs[]) >>
-  `(lbl, idx) IN FDOM (df_analyze Forward bottom join transfer edge_transfer
-     ctx entry_val fn).ds_inst` by fs[FLOOKUP_DEF] >>
-  res_tac >> fs[]
+  pairarg_tac >> simp[] >>
+  IF_CASES_TAC >> simp[]
 QED
 
 (* Two-sided join FOLDL soundness: when all list elements are
@@ -394,7 +259,6 @@ Proof
       metis_tac[transfer_sound_def, markerTheory.Abbrev_def]
     )
   )
-  >> fs[AllCaseEqs()]
 QED
 
 (* Like transfer_sound_exit but uses transfer_sound_wf + EVERY inst_wf.
@@ -587,6 +451,7 @@ Theorem df_analysis_pass_correct_sound_proof:
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
@@ -778,6 +643,7 @@ Theorem df_analysis_pass_correct_sound_inv2_proof:
          lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -982,6 +848,7 @@ Theorem df_analysis_pass_correct_sound_inv3_proof:
          lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -1216,6 +1083,7 @@ Theorem df_analysis_pass_correct_widen_sound_proof:
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
@@ -1410,6 +1278,7 @@ Theorem df_analysis_pass_correct_widen_block_sim_proof:
                (widen_to_df (df_analyze_widen Forward bottom join widen
                  threshold transfer edge_transfer ctx entry_val fn)) f bb)
              s)) /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -1568,6 +1437,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv_proof:
          sound (df_widen_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -1672,6 +1542,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2_proof:
          lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -1789,6 +1660,7 @@ Theorem df_analysis_pass_correct_prepend_proof:
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
@@ -2102,13 +1974,12 @@ QED
    Parameters: bottom, join, transfer, edge_transfer, ctx, entry_val, sound.
    Avoids duplicating 6 boilerplate helpers per pass. *)
 
-(* At fixpoint (Forward), df_at bottom result lbl 0 = joined value.
-   Does NOT require lookup_block — works even for labels without blocks
-   because df_fold_forward on [] still records (lbl,0) -> joined. *)
+(* At fixpoint (Forward), df_at bottom result lbl 0 = joined value. *)
 Theorem fwd_df_at_entry_eq_joined:
   !(bottom : 'a) join transfer edge_transfer ctx entry_val fn lbl.
     let result = df_analyze Forward bottom join transfer edge_transfer
                             ctx entry_val fn in
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward bottom join transfer edge_transfer
                         ctx entry_val (cfg_analyze fn) fn.fn_blocks)
@@ -2120,24 +1991,22 @@ Theorem fwd_df_at_entry_eq_joined:
       (cfg_analyze fn) result lbl
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  qabbrev_tac `result = df_analyze Forward bottom join transfer edge_transfer
-    ctx entry_val fn` >>
-  fs[worklistDefsTheory.is_fixpoint_def] >>
-  first_x_assum (qspec_then `lbl` mp_tac) >> simp[] >>
-  simp[df_process_block_def, df_joined_val_def] >>
-  pairarg_tac >> simp[] >>
-  strip_tac >>
-  (* Decompose record eq into component eqs *)
-  gvs[df_state_component_equality] >>
-  (* Now have: inst_map ⊌ result.ds_inst = result.ds_inst, hence SUBMAP *)
-  fs[df_fold_block_def] >>
-  drule df_fold_forward_at >> strip_tac >>
-  (* FLOOKUP inst_map (lbl, 0) = SOME joined_val from df_fold_forward_at.
-     inst_map SUBMAP result.ds_inst from FUNION absorption.
-     Hence FLOOKUP result.ds_inst (lbl, 0) = SOME joined_val. *)
-  imp_res_tac SUBMAP_FUNION_ABSORPTION >>
-  imp_res_tac FLOOKUP_SUBMAP >>
-  fs[df_at_def]
+  (* Derive lookup_block from wf_function + MEM lbl cfg_dfs_pre *)
+  `?bb. lookup_block lbl fn.fn_blocks = SOME bb` by (
+    `cfg_reachable_of (cfg_analyze fn) lbl` by (
+      mp_tac (Q.SPEC `fn` cfgAnalysisPropsTheory.cfg_analyze_reachable_sets) >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      strip_tac >> gvs[EXTENSION, IN_DEF]) >>
+    `MEM lbl (fn_labels fn)` by
+      metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels] >>
+    gvs[venomInstTheory.fn_labels_def, MEM_MAP] >>
+    rename [`MEM blk fn.fn_blocks`] >>
+    qexists_tac `blk` >>
+    irule venomExecProofsTheory.MEM_lookup_block >>
+    gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+  mp_tac inter_fwd >>
+  disch_then (qspecl_then [`bottom`, `join`, `transfer`, `edge_transfer`,
+    `ctx`, `entry_val`, `fn`, `lbl`, `bb`] mp_tac) >> simp[]
 QED
 
 (* At fixpoint, if transfer always preserves SOME (non-bottom), then
@@ -2150,6 +2019,7 @@ Triviality fwd_df_at_not_none_idx[local]:
       (df_process_block Forward bottom join transfer edge_transfer
                         ctx entry_val (cfg_analyze fn) fn.fn_blocks)
       (cfg_analyze fn).cfg_dfs_pre result /\
+    wf_function fn /\
     MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     (!inst v. v <> NONE ==> transfer ctx inst v <> NONE) /\
@@ -2175,6 +2045,7 @@ Theorem fwd_df_at_exit_not_none:
       (df_process_block Forward bottom join transfer edge_transfer
                         ctx entry_val (cfg_analyze fn) fn.fn_blocks)
       (cfg_analyze fn).cfg_dfs_pre result /\
+    wf_function fn /\
     MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     bb.bb_instructions <> [] /\
@@ -2522,6 +2393,7 @@ Triviality fwd_exit_not_none_strong[local]:
   !(bottom : 'a) join transfer edge_transfer ctx entry_val fn lbl bb.
     let result = df_analyze Forward bottom join transfer edge_transfer
                             ctx entry_val fn in
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward bottom join transfer edge_transfer
                         ctx entry_val (cfg_analyze fn) fn.fn_blocks)
@@ -2570,6 +2442,7 @@ Triviality fwd_boundary_not_none[local]:
   !(bottom : 'a) join transfer edge_transfer ctx entry_val fn lbl bb.
     let result = df_analyze Forward bottom join transfer edge_transfer
                             ctx entry_val fn in
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward bottom join transfer edge_transfer
                         ctx entry_val (cfg_analyze fn) fn.fn_blocks)

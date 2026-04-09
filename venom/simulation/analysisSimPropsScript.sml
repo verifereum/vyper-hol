@@ -131,6 +131,7 @@ Theorem df_analysis_pass_correct_sound:
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
@@ -189,6 +190,7 @@ Theorem df_analysis_pass_correct_sound_inv2:
          lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -255,6 +257,7 @@ Theorem df_analysis_pass_correct_sound_inv3:
          lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -312,6 +315,7 @@ Theorem df_analysis_pass_correct_widen_sound:
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
@@ -363,6 +367,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv:
          sound (df_widen_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -422,6 +427,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
          lift_result R_ok R_term R_term (step_inst fuel ctx' inst s)
            (run_insts fuel ctx' (f v inst) s)) /\
       inst_transform_structural f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
@@ -492,6 +498,7 @@ Theorem df_analysis_pass_correct_prepend:
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
+      wf_function fn /\
       fn_inst_wf fn /\
       (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
       (!bb inst x.
@@ -658,6 +665,7 @@ Theorem fwd_df_at_entry_eq_joined:
   !(bottom : 'a) join transfer edge_transfer ctx entry_val fn lbl.
     let result = df_analyze Forward bottom join transfer edge_transfer
                             ctx entry_val fn in
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward bottom join transfer edge_transfer ctx
          entry_val (cfg_analyze fn) fn.fn_blocks)
@@ -680,6 +688,7 @@ Theorem fwd_df_at_exit_not_none:
       (df_process_block Forward bottom join transfer edge_transfer ctx
          entry_val (cfg_analyze fn) fn.fn_blocks)
       (cfg_analyze fn).cfg_dfs_pre result /\
+    wf_function fn /\
     MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     bb.bb_instructions <> [] /\
