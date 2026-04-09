@@ -24,7 +24,7 @@ Definition emit_one_input_def:
   emit_one_input opc next_liveness op ps =
     (* 1. Restore if spilled *)
     let (restore_ops, ps1) =
-      if is_var_operand op ∧ IS_SOME (FLOOKUP ps.ps_spilled op)
+      if is_var_operand op ∧ IS_SOME (ALOOKUP ps.ps_spilled op)
       then do_restore op ps
       else ([] : stack_op list, ps) in
     (* 2. Push labels/literals, or dup live vars *)

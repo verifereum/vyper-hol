@@ -60,7 +60,7 @@ End
 Definition plan_spill_rel_def:
   plan_spill_rel label_offsets vs ps_spilled asm_memory ⇔
     ∀op off.
-      FLOOKUP ps_spilled op = SOME off ⇒
+      ALOOKUP ps_spilled op = SOME off ⇒
       ∃v. operand_val vs label_offsets op = SOME v ∧
           word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP off asm_memory)) = v
