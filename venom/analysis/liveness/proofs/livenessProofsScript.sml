@@ -438,6 +438,16 @@ Proof
       rpt strip_tac >> irule liveness_transfer_bounded >> metis_tac[])
 QED
 
+(* Helper: df_process_block does not modify ds_inst *)
+Triviality df_process_inst_unchanged[local]:
+  ∀dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
+    (df_process_block dir bottom join transfer edge_transfer
+       ctx entry_val cfg bbs lbl st).ds_inst = st.ds_inst
+Proof
+  rpt gen_tac >> simp[df_process_block_def] >>
+  pairarg_tac >> simp[] >> rpt IF_CASES_TAC >> simp[]
+QED
+
 Theorem df_process_bounded[local]:
   ∀bbs dir cfg entry_val lbl st U.
     (∀l v. FLOOKUP st.ds_boundary l = SOME v ==>
@@ -460,37 +470,36 @@ Theorem df_process_bounded[local]:
            ∀x. MEM x v ==> MEM x U)
 Proof
   rpt gen_tac >> strip_tac >>
+  (* ds_inst is unchanged by df_process_block *)
+  conj_tac
+  >| [ALL_TAC, simp[df_process_inst_unchanged] >> metis_tac[]] >>
+  (* ds_boundary case: unfold definition *)
   simp[df_process_block_def, LET_THM] >>
   qmatch_goalsub_abbrev_tac `df_fold_block _ _ _ instrs joined` >>
   qabbrev_tac `fold_result = df_fold_block dir
     (liveness_transfer bbs) lbl instrs joined` >>
   PairCases_on `fold_result` >> fs[] >>
-  (* joined bounded *)
   `!x. MEM x joined ==> MEM x U` by (
     simp[Abbr`joined`] >> rpt strip_tac >>
     drule_all joined_value_bounded >> simp[]) >>
-  (* instrs bounded *)
   `(∀inst. MEM inst instrs ==> ∀v. MEM v (inst_uses inst) ==> MEM v U) ∧
    (∀inst. MEM inst instrs ==> ∀v. MEM v (inst_defs inst) ==> MEM v U)` by (
     simp[Abbr`instrs`] >> rpt strip_tac >>
     Cases_on `lookup_block lbl bbs` >> fs[] >>
     imp_res_tac lookup_block_mem >> metis_tac[]) >>
-  (* fold result bounded - avoid by block, use mp_tac at top level *)
   qspecl_then [`dir`,`bbs`,`lbl`,`instrs`,`joined`,
                `fold_result0`,`fold_result1`,`U`]
     mp_tac fold_block_bounded >>
   impl_tac
   >- (rpt conj_tac >> first_x_assum ACCEPT_TAC)
   >> strip_tac >>
-  (* Boundary case *)
-  rpt conj_tac >> rpt strip_tac
-  >- (Cases_on `l = lbl` >> fs[FLOOKUP_UPDATE]
-      >- (qpat_x_assum `list_union _ _ = _` (SUBST_ALL_TAC o SYM) >>
-          fs[list_union_mem, df_boundary_def] >>
-          Cases_on `FLOOKUP st.ds_boundary lbl` >> fs[] >> res_tac)
-      >- res_tac)
-  >- (fs[FLOOKUP_FUNION] >>
-      Cases_on `FLOOKUP fold_result1 l` >> fs[] >> metis_tac[])
+  (* ds_boundary: IF-conditional; ds_inst: unchanged (discharged by simp) *)
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
+  >- metis_tac[]
+  >- (simp[FLOOKUP_UPDATE] >> rw[] >> gvs[]
+      >- (gvs[list_union_mem, df_boundary_def] >>
+          BasicProvers.every_case_tac >> gvs[] >> metis_tac[])
+      >- metis_tac[])
 QED
 
 (* ===== Convergence + Boundedness infrastructure ===== *)
@@ -627,6 +636,117 @@ Proof
   metis_tac[]
 QED
 
+(* Helper: FOLDL that only modifies ds_inst preserves ds_boundary *)
+Triviality foldl_boundary_unchanged[local]:
+  ∀xs (f : 'a df_state -> string -> 'a df_state) init.
+    (∀st x. (f st x).ds_boundary = st.ds_boundary) ⇒
+    (FOLDL f init xs).ds_boundary = init.ds_boundary
+Proof
+  Induct >> simp[]
+QED
+
+(* Helper: FOLDL preserving P for ds_inst values *)
+Triviality foldl_ds_inst_P[local]:
+  ∀P xs (f : 'a df_state -> string -> 'a df_state) init.
+    (∀st x. (∀k v. FLOOKUP st.ds_inst k = SOME v ⇒ P v) ⇒
+            (∀k v. FLOOKUP (f st x).ds_inst k = SOME v ⇒ P v)) ∧
+    (∀k v. FLOOKUP init.ds_inst k = SOME v ⇒ P v) ⇒
+    (∀k v. FLOOKUP (FOLDL f init xs).ds_inst k = SOME v ⇒ P v)
+Proof
+  gen_tac >> Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`f`, `f init h`] mp_tac) >>
+  impl_tac >- (fs[] >> rpt strip_tac >> res_tac) >>
+  strip_tac >> res_tac
+QED
+
+(* Helper: FOLDL preserving key-dependent Q for ds_inst values *)
+Triviality foldl_ds_inst_sound[local]:
+  ∀Q xs (f : 'a df_state -> string -> 'a df_state) init.
+    (∀st x. (∀k v. FLOOKUP st.ds_inst k = SOME v ⇒ Q k v) ⇒
+            (∀k v. FLOOKUP (f st x).ds_inst k = SOME v ⇒ Q k v)) ∧
+    (∀k v. FLOOKUP init.ds_inst k = SOME v ⇒ Q k v) ⇒
+    (∀k v. FLOOKUP (FOLDL f init xs).ds_inst k = SOME v ⇒ Q k v)
+Proof
+  gen_tac >> Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`f`, `f init h`] mp_tac) >>
+  impl_tac >- (rpt strip_tac >> res_tac) >>
+  strip_tac >> res_tac
+QED
+
+(* df_populate_inst preserves ds_boundary *)
+Triviality df_populate_inst_boundary_unchanged[local]:
+  ∀dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
+    (df_populate_inst dir bottom join transfer edge_transfer ctx
+       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
+Proof
+  rpt gen_tac >> simp[df_populate_inst_def] >>
+  match_mp_tac foldl_boundary_unchanged >>
+  rpt gen_tac >> simp[LET_THM] >> pairarg_tac >> simp[]
+QED
+
+(* Helper: fold_block_bounded gives inst_map values are bounded *)
+Triviality populate_inst_step_bounded[local]:
+  ∀bbs lbl st inst_map final_val cfg k vv.
+    df_fold_block Backward (liveness_transfer bbs) lbl
+      (case lookup_block lbl bbs of NONE => [] | SOME bb => bb.bb_instructions)
+      (df_joined_val Backward [] list_union liveness_edge_transfer bbs NONE
+         cfg st lbl) = (final_val, inst_map) ∧
+    (∀l v. FLOOKUP st.ds_boundary l = SOME v ⇒ ∀x. MEM x v ⇒ MEM x (fn_all_vars bbs)) ∧
+    FLOOKUP inst_map k = SOME vv ⇒
+    ∀x. MEM x vv ⇒ MEM x (fn_all_vars bbs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_assum_abbrev_tac
+    `df_fold_block Backward _ lbl instrs joined = _` >>
+  `!x. MEM x joined ==> MEM x (fn_all_vars bbs)` by (
+    simp[Abbr`joined`] >> rpt strip_tac >>
+    qspecl_then [`bbs`, `st`, `Backward`, `cfg`, `NONE`, `lbl`,
+                 `fn_all_vars bbs`, `x`]
+      mp_tac joined_value_bounded >>
+    simp[] >> disch_then match_mp_tac >>
+    simp[] >> metis_tac[fn_all_vars_mem]) >>
+  `!inst. MEM inst instrs ==>
+     !v. MEM v (inst_uses inst) ==> MEM v (fn_all_vars bbs)` by (
+    simp[Abbr`instrs`] >>
+    Cases_on `lookup_block lbl bbs` >> simp[] >>
+    rpt strip_tac >> irule fn_all_vars_mem >>
+    metis_tac[lookup_block_mem]) >>
+  `!inst. MEM inst instrs ==>
+     !v. MEM v (inst_defs inst) ==> MEM v (fn_all_vars bbs)` by (
+    simp[Abbr`instrs`] >>
+    Cases_on `lookup_block lbl bbs` >> simp[] >>
+    rpt strip_tac >> irule fn_all_vars_mem >>
+    metis_tac[lookup_block_mem]) >>
+  drule_all (REWRITE_RULE [GSYM AND_IMP_INTRO] fold_block_bounded) >>
+  strip_tac >> metis_tac[]
+QED
+
+(* df_populate_inst preserves liveness_bounded *)
+Triviality populate_liveness_bounded[local]:
+  ∀lbls st.
+    liveness_bounded fn.fn_blocks st ⇒
+    liveness_bounded fn.fn_blocks
+      (df_populate_inst Backward ([]:string list) list_union
+         liveness_transfer liveness_edge_transfer
+         fn.fn_blocks NONE (cfg_analyze fn) fn.fn_blocks lbls st)
+Proof
+  rpt strip_tac >> fs[liveness_bounded_def] >>
+  simp[liveness_bounded_def, df_populate_inst_boundary_unchanged] >>
+  conj_tac >- metis_tac[] >>
+  PURE_ONCE_REWRITE_TAC [df_populate_inst_def] >>
+  simp_tac std_ss [LET_THM] >>
+  (* Inst values bounded *)
+  ho_match_mp_tac foldl_ds_inst_P >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >>
+      rpt gen_tac >> simp[FLOOKUP_FUNION] >>
+      Cases_on `FLOOKUP inst_map l` >> gvs[]
+      >- metis_tac[]
+      >- (rpt strip_tac >>
+          irule populate_inst_step_bounded >>
+          simp[] >> metis_tac[]))
+  >- metis_tac[]
+QED
+
 (* Invariant preserved by process *)
 Theorem liveness_bounded_preserved[local]:
   ∀fn lbl st.
@@ -649,6 +769,7 @@ QED
 
 (* Boundary unchanged for l ≠ lbl *)
 (* For labels other than the processed one, inst lookups are unchanged *)
+(* df_process_block does not modify ds_inst at all *)
 Theorem process_inst_other[local]:
   ∀dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st lbl' j.
     lbl' <> lbl ==>
@@ -657,15 +778,7 @@ Theorem process_inst_other[local]:
                         ctx entry_val cfg bbs lbl st).ds_inst (lbl', j) =
     FLOOKUP st.ds_inst (lbl', j)
 Proof
-  rw[df_process_block_def, LET_THM] >>
-  pairarg_tac >> rw[FLOOKUP_FUNION] >>
-  `(lbl', j) NOTIN FDOM inst_map` suffices_by
-    (strip_tac >> simp[FLOOKUP_DEF]) >>
-  strip_tac >> Cases_on `dir`
-  >- (drule dfAnalyzeProofsTheory.df_fold_block_fdom >>
-      strip_tac >> fs[IN_IMAGE, IN_COUNT])
-  >- (drule dfAnalyzeProofsTheory.df_fold_block_fdom_backward >>
-      strip_tac >> fs[IN_IMAGE, IN_COUNT])
+  simp[df_process_inst_unchanged]
 QED
 
 (* For labels other than the processed one, FDOM membership is unchanged *)
@@ -703,7 +816,8 @@ Proof
   drule dfAnalyzeProofsTheory.df_fold_backward_at >> simp[]
 QED
 
-(* Rewrite df_process_block to canonical form for liveness *)
+(* Rewrite df_process_block to canonical form for liveness.
+   New definition: ds_inst unchanged, ds_boundary conditionally updated. *)
 Theorem liveness_process_eq[local]:
   ∀fn lbl st.
     df_process_block Backward [] list_union
@@ -713,9 +827,9 @@ Theorem liveness_process_eq[local]:
     let joined = liveness_joined fn st lbl in
     let (fv, inst_map) = df_fold_block Backward
           (liveness_transfer fn.fn_blocks) lbl instrs joined in
-      st with <|ds_boundary := st.ds_boundary |+
-                  (lbl, list_union (df_boundary [] st lbl) fv);
-                ds_inst := FUNION inst_map st.ds_inst|>
+    if list_union (df_boundary [] st lbl) fv = df_boundary [] st lbl then st
+    else st with ds_boundary := st.ds_boundary |+
+                  (lbl, list_union (df_boundary [] st lbl) fv)
 Proof
   rw[df_process_block_def, df_joined_val_def] >>
   simp_tac std_ss [LET_THM, direction_case_def] >>
@@ -954,6 +1068,7 @@ QED
 (* --- Helpers for liveness_state_inv_preserved --- *)
 
 (* Process FDOM characterization: fold keys have FST = lbl and j ∈ count *)
+(* ds_inst unchanged, so FDOM membership trivially from input *)
 Theorem process_fdom_lbl[local]:
   ∀fn lbl st j.
     (lbl, j) IN FDOM (df_process_block Backward [] list_union
@@ -962,12 +1077,7 @@ Theorem process_fdom_lbl[local]:
     j <= LENGTH (block_instrs lbl fn.fn_blocks) ∨
     (lbl, j) IN FDOM st.ds_inst
 Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
-    (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-  pairarg_tac >> gvs[FDOM_FUNION] >>
-  drule dfAnalyzeProofsTheory.df_fold_block_fdom_backward >>
-  strip_tac >> gvs[IN_IMAGE, IN_COUNT]
+  simp[df_process_inst_unchanged]
 QED
 
 (* Helper: fold key in valid set when MEM lbl *)
@@ -1066,7 +1176,7 @@ Proof
       simp[IN_UNION, IN_CROSS, IN_INSERT])
 QED
 
-(* C3: j→0 preserved *)
+(* C3: j→0 preserved — trivial since ds_inst unchanged *)
 Theorem inv_j_to_zero_preserved[local]:
   ∀fn lbl st lbl' j.
     liveness_state_inv fn st ∧
@@ -1077,17 +1187,7 @@ Theorem inv_j_to_zero_preserved[local]:
       liveness_transfer liveness_edge_transfer fn.fn_blocks NONE
       (cfg_analyze fn) fn.fn_blocks lbl st).ds_inst
 Proof
-  rpt strip_tac >>
-  Cases_on `lbl' = lbl`
-  >- (qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
-        (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-      pairarg_tac >> gvs[FDOM_FUNION] >>
-      drule dfAnalyzeProofsTheory.df_fold_block_fdom_backward >>
-      strip_tac >> simp[IN_IMAGE, IN_COUNT])
-  >- (`(lbl', j) IN FDOM st.ds_inst` by metis_tac[process_fdom_other] >>
-      `(lbl', 0) IN FDOM st.ds_inst` by
-        (fs[liveness_state_inv_def] >> metis_tac[]) >>
-      metis_tac[process_fdom_other])
+  simp[df_process_inst_unchanged, liveness_state_inv_def] >> metis_tac[]
 QED
 
 (* C4: 0→boundary preserved *)
@@ -1102,16 +1202,13 @@ Theorem inv_zero_to_boundary_preserved[local]:
       (cfg_analyze fn) fn.fn_blocks lbl st).ds_boundary
 Proof
   rpt strip_tac >>
-  Cases_on `lbl' = lbl`
-  >- (qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
-        (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-      pairarg_tac >> gvs[FDOM_FUPDATE])
-  >- (`(lbl', 0) IN FDOM st.ds_inst` by metis_tac[process_fdom_other] >>
-      `lbl' IN FDOM st.ds_boundary` by
-        (fs[liveness_state_inv_def] >> metis_tac[]) >>
-      qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
-        (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-      pairarg_tac >> gvs[FDOM_FUPDATE])
+  (* ds_inst unchanged by process *)
+  `(lbl', 0) ∈ FDOM st.ds_inst` by fs[df_process_inst_unchanged] >>
+  `lbl' ∈ FDOM st.ds_boundary` by (fs[liveness_state_inv_def] >> metis_tac[]) >>
+  qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
+    (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
+  pairarg_tac >> gvs[] >>
+  IF_CASES_TAC >> gvs[FDOM_FUPDATE]
 QED
 
 (* C5: fold match preserved *)
@@ -1130,45 +1227,9 @@ Theorem inv_fold_match_preserved[local]:
       (cfg_analyze fn) fn.fn_blocks lbl st).ds_inst k = SOME v
 Proof
   rpt strip_tac >>
-  Cases_on `lbl' = lbl`
-  >- ((* lbl' = lbl: process inst = FUNION inst_map st.ds_inst
-        where inst_map = SND of the same fold *)
-      qpat_x_assum `lbl' = lbl` SUBST_ALL_TAC >>
-      qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
-        (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-      pairarg_tac >> gvs[] >>
-      (* inst_map has init value at (lbl, LENGTH instrs) *)
-      drule fold_block_init_value_backward >> strip_tac >>
-      (* FUNION prefers inst_map, so v_init = liveness_joined *)
-      `v_init = liveness_joined fn st lbl` by
-        fs[FLOOKUP_FUNION] >>
-      gvs[] >>
-      (* fold with same args = (fv, inst_map), so FLOOKUP inst_map k = SOME v *)
-      `FLOOKUP inst_map k = SOME v` by fs[] >>
-      simp[FLOOKUP_FUNION])
-  >- ((* lbl' ≠ lbl: FLOOKUP process = FLOOKUP st by process_inst_other *)
-      (* v_init from process = v_init from st *)
-      `FLOOKUP st.ds_inst
-        (lbl', LENGTH (block_instrs lbl' fn.fn_blocks)) = SOME v_init` by
-        metis_tac[process_inst_other] >>
-      (* Old invariant C5: fold results from v_init are in st.ds_inst *)
-      qpat_x_assum `liveness_state_inv fn st`
-        (strip_assume_tac o REWRITE_RULE [liveness_state_inv_def]) >>
-      `FLOOKUP st.ds_inst k = SOME v` by metis_tac[] >>
-      (* k has FST = lbl' (from fold FDOM), so FST k ≠ lbl *)
-      Cases_on `k` >> rename1 `FLOOKUP st.ds_inst (k1, k2) = SOME v` >>
-      `(k1, k2) ∈ FDOM (SND (df_fold_block Backward
-        (liveness_transfer fn.fn_blocks) lbl'
-        (block_instrs lbl' fn.fn_blocks) v_init))` by
-        (fs[flookup_thm]) >>
-      Cases_on `df_fold_block Backward
-        (liveness_transfer fn.fn_blocks) lbl'
-        (block_instrs lbl' fn.fn_blocks) v_init` >>
-      fs[] >>
-      drule dfAnalyzeProofsTheory.df_fold_block_fdom_backward >> strip_tac >>
-      `k1 = lbl'` by (gvs[IN_IMAGE, IN_COUNT] >> fs[]) >>
-      gvs[] >>
-      metis_tac[process_inst_other])
+  (* ds_inst unchanged by process *)
+  fs[df_process_inst_unchanged] >>
+  fs[liveness_state_inv_def] >> metis_tac[]
 QED
 
 (* All boundaries monotone under process *)
@@ -1184,7 +1245,10 @@ Proof
   Cases_on `l = lbl`
   >- (qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
         (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-      pairarg_tac >> gvs[df_boundary_def, FLOOKUP_UPDATE] >>
+      pairarg_tac >> fs[] >>
+      qpat_x_assum `df_process_block _ _ _ _ _ _ _ _ _ _ _ = _`
+        SUBST_ALL_TAC >>
+      IF_CASES_TAC >> simp[df_boundary_def, FLOOKUP_UPDATE] >>
       simp[list_union_set, SUBSET_UNION])
   >- simp[process_boundary_other]
 QED
@@ -1216,27 +1280,15 @@ Theorem inv_entry_subset_preserved[local]:
         (cfg_analyze fn) fn.fn_blocks lbl st) lbl')
 Proof
   rpt strip_tac >>
-  Cases_on `lbl' = lbl`
-  >- ((* lbl' = lbl: v_init = liveness_joined fn st lbl *)
-      qpat_x_assum `lbl' = lbl` SUBST_ALL_TAC >>
-      (* Show v_init = liveness_joined fn st lbl *)
-      `v_init = liveness_joined fn st lbl` by (
-        qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
-          (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
-        pairarg_tac >> gvs[] >>
-        drule fold_block_init_value_backward >> strip_tac >>
-        fs[FLOOKUP_FUNION]) >>
-      gvs[] >> metis_tac[liveness_joined_process_mono])
-  >- ((* lbl' ≠ lbl: v_init from old state, chain with joined_process_mono *)
-      `FLOOKUP st.ds_inst
-        (lbl', LENGTH (block_instrs lbl' fn.fn_blocks)) = SOME v_init` by
-        metis_tac[process_inst_other] >>
-      qpat_x_assum `liveness_state_inv fn st`
-        (strip_assume_tac o REWRITE_RULE [liveness_state_inv_def]) >>
-      `set v_init ⊆ set (liveness_joined fn st lbl')` by metis_tac[] >>
-      irule SUBSET_TRANS >>
-      qexists_tac `set (liveness_joined fn st lbl')` >>
-      simp[liveness_joined_process_mono])
+  (* ds_inst unchanged by process *)
+  `FLOOKUP st.ds_inst
+    (lbl', LENGTH (block_instrs lbl' fn.fn_blocks)) = SOME v_init`
+    by fs[df_process_inst_unchanged] >>
+  `set v_init ⊆ set (liveness_joined fn st lbl')` by
+    (fs[liveness_state_inv_def] >> metis_tac[]) >>
+  irule SUBSET_TRANS >>
+  qexists_tac `set (liveness_joined fn st lbl')` >>
+  simp[liveness_joined_process_mono]
 QED
 
 (* State invariant preserved — the main work *)
@@ -1544,7 +1596,8 @@ Proof
   DECIDE_TAC
 QED
 
-(* Helper: if boundary_sum unchanged after process, then list_union is identity *)
+(* Helper: if boundary_sum unchanged after boundary update,
+   then list_union is identity *)
 Theorem boundary_unchanged_list_union_identity[local]:
   ∀fn lbl st fv inst_map.
     df_fold_block Backward (liveness_transfer fn.fn_blocks)
@@ -1552,18 +1605,16 @@ Theorem boundary_unchanged_list_union_identity[local]:
       (liveness_joined fn st lbl) = (fv, inst_map) ∧
     liveness_state_inv fn st ∧
     liveness_boundary_sum fn
-      (st with <|ds_boundary := st.ds_boundary |+
-         (lbl, list_union (df_boundary [] st lbl) fv);
-       ds_inst := FUNION inst_map st.ds_inst|>) =
+      (st with ds_boundary := st.ds_boundary |+
+         (lbl, list_union (df_boundary [] st lbl) fv)) =
     liveness_boundary_sum fn st ⇒
     list_union (df_boundary [] st lbl) fv = df_boundary [] st lbl
 Proof
   rpt strip_tac >>
   Cases_on `MEM lbl (fn_labels fn)`
   >- (irule list_union_identity >>
-      qabbrev_tac `st' = st with <|ds_boundary := st.ds_boundary |+
-        (lbl, list_union (df_boundary [] st lbl) fv);
-        ds_inst := FUNION inst_map st.ds_inst|>` >>
+      qabbrev_tac `st' = st with ds_boundary := st.ds_boundary |+
+        (lbl, list_union (df_boundary [] st lbl) fv)` >>
       `!l'. MEM l' (fn_labels fn) ==>
             CARD (set (df_boundary [] st l')) <=
             CARD (set (df_boundary [] st' l'))` by (
@@ -1612,73 +1663,34 @@ Theorem canonical_count_case_c[local]:
     liveness_boundary_sum fn st' = liveness_boundary_sum fn st ==>
     liveness_canonical_count fn st' > liveness_canonical_count fn st
 Proof
-  rpt gen_tac >> disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* Derive process structure *)
   qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
     (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
   pairarg_tac >> gvs[] >>
-  (* Step 1: boundary unchanged *)
-  `list_union (df_boundary [] st lbl) fv = df_boundary [] st lbl` by (
-    mp_tac (Q.SPECL [`fn`, `lbl`, `st`, `fv`, `inst_map`]
-            boundary_unchanged_list_union_identity) >>
-    simp[]) >>
-  (* Step 2: canonical_inst unchanged *)
-  `∀k. liveness_canonical_inst fn
-    <|ds_inst := FUNION inst_map st.ds_inst;
-      ds_boundary := st.ds_boundary |+
-        (lbl, list_union (df_boundary [] st lbl) fv)|> k =
-    liveness_canonical_inst fn st k` by (
-    Cases >> simp[liveness_canonical_inst_def, LET_THM, liveness_joined_def] >>
-    `!nbr. df_boundary []
-        <|ds_inst := FUNION inst_map st.ds_inst;
-          ds_boundary := st.ds_boundary |+ (lbl, df_boundary [] st lbl)|> nbr =
-      df_boundary [] st nbr` by (
-      rw[df_boundary_def, FLOOKUP_UPDATE] >> rw[]) >>
-    simp[MAP_EQ_f]) >>
-  (* Step 3: inst_map values ARE canonical *)
-  `∀k. k ∈ FDOM inst_map ⇒
-     FLOOKUP inst_map k = liveness_canonical_inst fn st k` by (
-    rw[] >>
-    drule df_fold_block_fdom_backward >> strip_tac >>
-    `∃j. k = (lbl, j)` by (fs[IN_IMAGE, IN_COUNT] >> metis_tac[]) >>
-    rw[liveness_canonical_inst_def, LET_THM] >>
-    pairarg_tac >> fs[] >>
-    `im = inst_map` by (
-      qpat_x_assum `df_fold_block _ _ _ _ _ = (fv, inst_map)` mp_tac >>
-      simp[] >> strip_tac >> gvs[]) >>
-    simp[]) >>
-  (* Step 4: FUNION inst_map st.ds_inst ≠ st.ds_inst *)
-  `FUNION inst_map st.ds_inst <> st.ds_inst` by (
-    CCONTR_TAC >> gvs[] >>
-    (* Now: inst unchanged, boundary update is the only difference *)
-    (* Derive lbl ∈ FDOM st.ds_boundary from invariant + fold FDOM *)
-    `lbl IN FDOM st.ds_boundary` by (
-      qpat_x_assum `liveness_state_inv fn st`
-        (strip_assume_tac o REWRITE_RULE [liveness_state_inv_def]) >>
-      qpat_x_assum `df_fold_block _ _ _ _ _ = _`
-        (strip_assume_tac o MATCH_MP df_fold_block_fdom_backward) >>
-      `(lbl, 0n) IN FDOM inst_map` by
-        (fs[IN_IMAGE, IN_COUNT] >> qexists_tac `0` >> simp[]) >>
-      `(lbl, 0n) IN FDOM st.ds_inst` by
-        metis_tac[FDOM_FUNION, IN_UNION] >>
-      metis_tac[]) >>
-    (* Now boundary update is idempotent *)
-    qpat_x_assum `_ <> st` mp_tac >>
-    simp[df_state_component_equality] >>
-    irule FUPDATE_ELIM >> simp[df_boundary_def, FLOOKUP_DEF]) >>
-  (* Step 5: canonical_count st' = CARD {funion canonical set with st targets} *)
-  `liveness_canonical_count fn
-    <|ds_inst := FUNION inst_map st.ds_inst;
-      ds_boundary := st.ds_boundary |+
-        (lbl, list_union (df_boundary [] st lbl) fv)|> =
-   CARD {k | k IN FDOM (FUNION inst_map st.ds_inst) /\
-             FLOOKUP (FUNION inst_map st.ds_inst) k =
-             liveness_canonical_inst fn st k}` by (
-    simp[liveness_canonical_count_def] >>
-    AP_TERM_TAC >> rw[EXTENSION]) >>
-  pop_assum (fn eq => REWRITE_TAC [GREATER_DEF, eq]) >>
-  REWRITE_TAC [liveness_canonical_count_def] >>
-  irule funion_canonical_count_increases >>
-  simp[FDOM_FUNION]
+  (* IF must be false since st' ≠ st *)
+  `list_union (df_boundary [] st lbl) fv ≠ df_boundary [] st lbl` by
+    (CCONTR_TAC >> gvs[]) >>
+  (* Boundary changed → boundary_sum strictly increases *)
+  `liveness_boundary_sum fn
+    (st with ds_boundary :=
+       st.ds_boundary |+ (lbl, list_union (df_boundary [] st lbl) fv)) >
+   liveness_boundary_sum fn st` suffices_by
+    (gvs[GREATER_DEF] >> DECIDE_TAC) >>
+  mp_tac (Q.SPECL [`fn`, `lbl`, `st`,
+    `list_union (df_boundary [] st lbl) fv`] boundary_sum_increases) >>
+  simp[GREATER_DEF] >>
+  (* Need MEM lbl (fn_labels fn): if not, fv=joined=[], contradiction *)
+  Cases_on `MEM lbl (fn_labels fn)` >- simp[] >>
+  (* lbl ∉ fn_labels → instrs=[],joined=[],fv=[] → list_union is identity *)
+  imp_res_tac not_fn_labels_joined_empty >>
+  `block_instrs lbl fn.fn_blocks = []` by
+    (fs[fn_labels_def] >> imp_res_tac not_fn_labels_lookup_none >>
+     imp_res_tac block_instrs_none) >>
+  `fv = []` by
+    (qpat_x_assum `df_fold_block _ _ _ _ _ = _` mp_tac >>
+     simp[df_fold_block_def, df_fold_backward_def]) >>
+  gvs[list_union_def]
 QED
 
 (* Measure strictly increases when state changes *)
@@ -1738,12 +1750,20 @@ Proof
   strip_tac >>
   qabbrev_tac `result = df_analyze Backward [] list_union
     liveness_transfer liveness_edge_transfer fn.fn_blocks NONE fn` >>
-  (* Show liveness_state_inv result holds *)
-  `liveness_state_inv fn result` by (
-    simp[Abbr`result`] >>
+  (* Show liveness_bounded for result *)
+  sg `liveness_bounded fn.fn_blocks result` >-
+  (simp[Abbr`result`] >>
+    PURE_ONCE_REWRITE_TAC [dfAnalyzeDefsTheory.df_analyze_def] >>
+    simp_tac bool_ss [LET_THM, direction_case_def] >>
+    qmatch_goalsub_abbrev_tac `df_populate_inst _ _ _ _ _ _ _ _ _ _ br` >>
+    irule populate_liveness_bounded >>
+    `liveness_state_inv fn br` suffices_by
+      (strip_tac >> fs[liveness_state_inv_def]) >>
+    qunabbrev_tac `br` >>
     irule (SIMP_RULE std_ss [LET_THM]
       dfAnalyzeProofsTheory.df_analyze_invariant_backward_restricted) >>
     conj_tac
+    >- simp[liveness_state_inv_init]
     >- (qexistsl_tac [
           `LENGTH (fn_labels fn) * CARD (set (fn_all_vars fn.fn_blocks)) *
              (liveness_inst_key_bound fn + 1) +
@@ -1758,9 +1778,8 @@ Proof
         >- (rpt strip_tac >>
             mp_tac (Q.SPEC `fn` dfAnalyzeProofsTheory.preds_subset_fn_labels) >>
             simp[EVERY_MEM] >> metis_tac[])
-        >- (simp[EVERY_MEM]))
-    >- simp[liveness_state_inv_init]) >>
-  fs[liveness_state_inv_def, liveness_bounded_def] >>
+        >- (simp[EVERY_MEM]))) >>
+  fs[liveness_bounded_def] >>
   Cases_on `FLOOKUP result.ds_inst (lbl, idx)` >> fs[] >>
   metis_tac[]
 QED
@@ -1780,16 +1799,11 @@ Theorem liveness_convergence:
     is_fixpoint process cfg.cfg_dfs_pre result
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  simp[liveness_analyze_def] >>
+  PURE_ONCE_REWRITE_TAC [liveness_analyze_def] >>
   irule (SIMP_RULE std_ss [LET_THM]
     dfAnalyzeProofsTheory.df_analyze_fixpoint_backward) >>
   conj_tac >- simp[] >>
   conj_tac
-  >- (irule (SIMP_RULE std_ss [LET_THM, direction_case_def]
-        (Q.SPEC `Backward`
-          dfAnalyzeProofsTheory.df_process_deps_complete_proof)) >>
-      simp[list_union_absorption] >>
-      metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond])
   >- (qexistsl_tac [
         `liveness_state_inv fn`,
         `LENGTH (fn_labels fn) * CARD (set (fn_all_vars fn.fn_blocks)) *
@@ -1809,6 +1823,11 @@ Proof
                MEM lbl (cfg_analyze fn).cfg_dfs_post` by simp[] >>
               metis_tac[liveness_measure_increases])
           >- simp[liveness_state_inv_init]))
+  >- (irule (SIMP_RULE std_ss [LET_THM, direction_case_def]
+        (Q.SPEC `Backward`
+          dfAnalyzeProofsTheory.df_process_deps_complete_proof)) >>
+      simp[list_union_absorption] >>
+      metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond])
 QED
 
 (* ===================================================================
@@ -2263,84 +2282,61 @@ Proof
   rpt strip_tac >>
   simp[LET_THM] >> strip_tac >>
   simp[liveness_sound_inv_def] >>
-  (* Set up fold decomposition *)
   qabbrev_tac `process = df_process_block Backward [] list_union
     liveness_transfer liveness_edge_transfer fn.fn_blocks NONE
     (cfg_analyze fn) fn.fn_blocks` >>
-  Cases_on `df_fold_block Backward (liveness_transfer fn.fn_blocks)
-              lbl (block_instrs lbl fn.fn_blocks)
-              (liveness_joined fn st lbl)` >>
-  rename1 `_ = (fv, im)` >>
-  qabbrev_tac `instrs = block_instrs lbl fn.fn_blocks` >>
-  qabbrev_tac `joined = liveness_joined fn st lbl` >>
-  `FDOM im = IMAGE (λi. (lbl,i)) (count (LENGTH instrs + 1))` by
-    metis_tac[df_fold_block_fdom_backward] >>
-  (* Derive process = record form *)
-  `process lbl st =
-     st with <|ds_boundary := st.ds_boundary |+
-                (lbl, list_union (df_boundary [] st lbl) fv);
-               ds_inst := im ⊌ st.ds_inst|>` by (
-    mp_tac (SIMP_RULE std_ss [LET_THM]
-      (Q.SPECL [`fn`, `lbl`, `st`] liveness_process_eq)) >>
-    simp[Abbr `process`]) >>
-  (* Derive joined soundness — reusable in both parts *)
-  `∀w. MEM w joined ⇒
-    ∃path. cfg_exec_path (cfg_analyze fn) ((lbl, LENGTH instrs) :: path) ∧
-           used_before_defined fn.fn_blocks w ((lbl, LENGTH instrs) :: path)` by (
-    simp[Abbr `instrs`, Abbr `joined`] >> rpt strip_tac >>
-    qspecl_then [`fn`, `fn.fn_blocks`, `cfg_analyze fn`, `st`, `lbl`, `w`]
-      mp_tac joined_value_sound >>
-    simp[]) >>
   conj_tac
-  (* Part 1: inst values — case on FLOOKUP im directly *)
+  (* Part 1: inst values — ds_inst unchanged, delegate to old invariant *)
   >- (rpt strip_tac >>
-      Cases_on `FLOOKUP im (lbl', idx)`
-      (* NONE: FUNION falls through to st *)
-      >- (
-        `df_at [] (process lbl st) lbl' idx = df_at [] st lbl' idx` by
-          simp[df_at_def, FLOOKUP_FUNION] >>
-        gvs[] >> metis_tac[liveness_sound_inv_def])
-      (* SOME: (lbl',idx) ∈ FDOM im, so lbl' = lbl *)
-      >- (
-        `(lbl', idx) IN FDOM im` by metis_tac[flookup_thm] >>
-        `lbl' = lbl` by (gvs[IN_IMAGE, IN_COUNT]) >>
-        gvs[] >>
-        (* Normalize df_at to FLOOKUP form *)
-        fs[df_at_def, FLOOKUP_FUNION] >>
-        `idx <= LENGTH instrs` by fs[IN_IMAGE, IN_COUNT] >>
-        qspecl_then [`fn`, `fn.fn_blocks`, `cfg_analyze fn`, `lbl`,
-                     `idx`, `block_instrs lbl fn.fn_blocks`, `joined`,
-                     `im`, `fv`, `v`]
-          mp_tac fold_output_sound >>
-        simp[Abbr `instrs`, Abbr `joined`]))
+      `df_at [] (process lbl st) lbl' idx = df_at [] st lbl' idx` by
+        simp[df_at_def, Abbr `process`, df_process_inst_unchanged] >>
+      gvs[] >> metis_tac[liveness_sound_inv_def])
   (* Part 2: boundary values *)
   >- (rpt strip_tac >>
       Cases_on `lbl' = lbl`
-      (* lbl' = lbl: boundary updated *)
-      >- (
-        gvs[] >>
-        fs[df_boundary_def, FLOOKUP_UPDATE] >>
-        fs[list_union_mem_proof]
-        (* MEM v (old boundary) → fold back to df_boundary, use old invariant *)
-        >- metis_tac[liveness_sound_inv_def, df_boundary_def]
-        (* MEM v fv → derive fv = THE(FLOOKUP im (lbl,0)), apply fold_output_sound *)
-        >- (
-          `df_fold_backward (liveness_transfer fn.fn_blocks)
-             lbl instrs 0 joined FEMPTY = (fv, im)` by
-            fs[df_fold_block_def] >>
-          drule dfAnalyzeProofsTheory.df_fold_backward_at >> strip_tac >>
-          `MEM v (THE (FLOOKUP im (lbl, 0)))` by gvs[] >>
-          qspecl_then [`fn`, `fn.fn_blocks`, `cfg_analyze fn`, `lbl`,
-                       `0`, `block_instrs lbl fn.fn_blocks`, `joined`,
-                       `im`, `fv`, `v`]
-            mp_tac fold_output_sound >>
-          simp[Abbr `instrs`, Abbr `joined`]))
       (* lbl' ≠ lbl: boundary unchanged *)
+      >| [ALL_TAC,
+          `df_boundary [] (process lbl st) lbl' =
+           df_boundary [] st lbl'` by
+            simp[Abbr `process`, process_boundary_other] >>
+          metis_tac[liveness_sound_inv_def]] >>
+      (* lbl' = lbl: boundary possibly updated *)
+      gvs[] >>
+      (* Set up fold decomposition for boundary reasoning *)
+      Cases_on `df_fold_block Backward (liveness_transfer fn.fn_blocks)
+                  lbl (block_instrs lbl fn.fn_blocks)
+                  (liveness_joined fn st lbl)` >>
+      rename1 `_ = (fv, im)` >>
+      qabbrev_tac `instrs = block_instrs lbl fn.fn_blocks` >>
+      qabbrev_tac `joined = liveness_joined fn st lbl` >>
+      (* boundary at lbl = list_union old fv (both IF cases) *)
+      `df_boundary [] (process lbl st) lbl =
+       list_union (df_boundary [] st lbl) fv` by (
+        simp[Abbr `process`] >>
+        qspecl_then [`fn`, `lbl`, `st`] strip_assume_tac
+          (SIMP_RULE std_ss [LET_THM] liveness_process_eq) >>
+        pairarg_tac >> gvs[] >>
+        qpat_x_assum `df_process_block _ _ _ _ _ _ _ _ _ _ _ = _`
+          SUBST_ALL_TAC >>
+        IF_CASES_TAC >> gvs[df_boundary_def, FLOOKUP_UPDATE]) >>
+      fs[] >> fs[list_union_mem_proof]
+      (* MEM v (old boundary) → use old invariant *)
+      >- metis_tac[liveness_sound_inv_def, df_boundary_def]
+      (* MEM v fv → fold_output_sound *)
       >- (
-        `df_boundary [] (process lbl st) lbl' =
-         df_boundary [] st lbl'` by
-          simp[Abbr `process`, process_boundary_other] >>
-        metis_tac[liveness_sound_inv_def]))
+        `df_fold_backward (liveness_transfer fn.fn_blocks)
+           lbl instrs 0 joined FEMPTY = (fv, im)` by
+          fs[df_fold_block_def] >>
+        drule dfAnalyzeProofsTheory.df_fold_backward_at >> strip_tac >>
+        `MEM v (THE (FLOOKUP im (lbl, 0)))` by metis_tac[] >>
+        qspecl_then [`fn`, `fn.fn_blocks`, `cfg_analyze fn`, `lbl`,
+                     `0`, `block_instrs lbl fn.fn_blocks`, `joined`,
+                     `im`, `fv`, `v`]
+          mp_tac fold_output_sound >>
+        disch_then match_mp_tac >>
+        simp[Abbr `instrs`, Abbr `joined`] >>
+        rpt strip_tac >>
+        metis_tac[joined_value_sound]))
 QED
 
 (* Init lemma for soundness invariant *)
@@ -2357,6 +2353,95 @@ Proof
   fs[] >> res_tac >> gvs[]
 QED
 
+(* Step case: values from fold_block are sound *)
+Triviality populate_inst_step_sound[local]:
+  ∀fn br lbl inst_map final_val k vals.
+    wf_function fn ∧
+    liveness_sound_inv fn.fn_blocks (cfg_analyze fn) br ∧
+    df_fold_block Backward (liveness_transfer fn.fn_blocks) lbl
+      (case lookup_block lbl fn.fn_blocks of
+         NONE => [] | SOME bb => bb.bb_instructions)
+      (df_joined_val Backward [] list_union liveness_edge_transfer
+         fn.fn_blocks NONE (cfg_analyze fn) br lbl)
+      = (final_val, inst_map) ∧
+    FLOOKUP inst_map k = SOME vals ⇒
+    ∀v. MEM v vals ⇒
+      ∃path. cfg_exec_path (cfg_analyze fn) (k::path) ∧
+             used_before_defined fn.fn_blocks v (k::path)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `k` >> rename1 `(lbl', idx')` >>
+  qabbrev_tac `instrs = case lookup_block lbl fn.fn_blocks of
+    NONE => [] | SOME bb => bb.bb_instructions` >>
+  qabbrev_tac `joined = df_joined_val Backward [] list_union
+    liveness_edge_transfer fn.fn_blocks NONE (cfg_analyze fn) br lbl` >>
+  (* Establish lbl' = lbl and idx' bound from fold domain *)
+  `lbl' = lbl ∧ idx' ≤ LENGTH instrs` by (
+    qpat_x_assum `df_fold_block _ _ _ _ _ = _` mp_tac >>
+    simp[df_fold_block_def] >> strip_tac >>
+    drule dfAnalyzeProofsTheory.df_fold_backward_fdom >> simp[] >>
+    strip_tac >>
+    `(lbl', idx') ∈ FDOM inst_map` by (
+      qpat_x_assum `FLOOKUP inst_map _ = SOME _`
+        (strip_assume_tac o REWRITE_RULE [flookup_thm])) >>
+    gvs[IN_UNION, IN_IMAGE, IN_COUNT]) >>
+  gvs[] >> rpt strip_tac >>
+  `instrs = block_instrs lbl fn.fn_blocks`
+    by simp[Abbr`instrs`, block_instrs_def] >>
+  `joined = liveness_joined fn br lbl` by (
+    simp[Abbr`joined`, liveness_joined_def, LET_THM,
+         dfAnalyzeDefsTheory.df_joined_val_def]) >>
+  irule fold_output_sound >> simp[] >> gvs[] >>
+  conj_tac >- (qexists_tac `fn` >> simp[]) >>
+  qexistsl_tac [`final_val`, `inst_map`, `liveness_joined fn br lbl`] >>
+  gvs[] >> rpt strip_tac >>
+  irule joined_value_sound >> simp[] >> metis_tac[]
+QED
+
+(* df_populate_inst preserves liveness_sound_inv *)
+Triviality populate_liveness_sound_inv[local]:
+  ∀lbls fn br.
+    wf_function fn ∧
+    liveness_sound_inv fn.fn_blocks (cfg_analyze fn) br ⇒
+    liveness_sound_inv fn.fn_blocks (cfg_analyze fn)
+      (df_populate_inst Backward ([]:string list) list_union
+         liveness_transfer liveness_edge_transfer
+         fn.fn_blocks NONE (cfg_analyze fn) fn.fn_blocks lbls br)
+Proof
+  rpt strip_tac >>
+  simp[liveness_sound_inv_def, df_populate_inst_boundary_unchanged] >>
+  conj_tac
+  (* Part 1: inst values *)
+  >- (simp[df_at_def] >>
+      PURE_ONCE_REWRITE_TAC [df_populate_inst_def] >>
+      simp_tac std_ss [LET_THM] >>
+      rpt gen_tac >> strip_tac >>
+      (* Abbreviate the FOLDL result to avoid qspec_then parse issues *)
+      qmatch_asmsub_abbrev_tac `FLOOKUP foldl_res.ds_inst (lbl, idx)` >>
+      `∀k vals. FLOOKUP foldl_res.ds_inst k = SOME vals ⇒
+         ∀w. MEM w vals ⇒
+           ∃path. cfg_exec_path (cfg_analyze fn) (k::path) ∧
+                  used_before_defined fn.fn_blocks w (k::path)`
+        suffices_by (
+          strip_tac >>
+          Cases_on `FLOOKUP foldl_res.ds_inst (lbl,idx)` >> gvs[] >>
+          metis_tac[]) >>
+      simp[Abbr`foldl_res`] >>
+      ho_match_mp_tac foldl_ds_inst_sound >> conj_tac
+      >- (rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >>
+          rpt gen_tac >> simp[FLOOKUP_FUNION] >>
+          Cases_on `FLOOKUP inst_map k` >> simp[] >>
+          strip_tac >> gvs[] >> metis_tac[populate_inst_step_sound])
+      >- (rpt gen_tac >> strip_tac >>
+          fs[liveness_sound_inv_def, df_at_def] >>
+          Cases_on `k` >>
+          first_x_assum (qspecl_then [`q`, `r`] mp_tac) >>
+          simp[] >> gvs[] >> metis_tac[]))
+  (* Part 2: boundary values — unchanged *)
+  >- metis_tac[liveness_sound_inv_def, df_boundary_def,
+              df_populate_inst_boundary_unchanged]
+QED
+
 (* Helper: soundness invariant holds for analysis result *)
 Theorem liveness_sound_inv_result[local]:
   ∀fn.
@@ -2366,14 +2451,19 @@ Theorem liveness_sound_inv_result[local]:
         liveness_transfer liveness_edge_transfer fn.fn_blocks NONE fn)
 Proof
   rpt strip_tac >>
+  PURE_ONCE_REWRITE_TAC [liveness_analyze_def] >>
+  PURE_ONCE_REWRITE_TAC [dfAnalyzeDefsTheory.df_analyze_def] >>
+  simp_tac bool_ss [LET_THM, dfAnalyzeDefsTheory.direction_case_def] >>
+  qmatch_goalsub_abbrev_tac `df_populate_inst _ _ _ _ _ _ _ _ _ _ br` >>
+  irule populate_liveness_sound_inv >> simp[] >>
   `(λst. liveness_state_inv fn st ∧
-         liveness_sound_inv fn.fn_blocks (cfg_analyze fn) st)
-     (df_analyze Backward [] list_union
-       liveness_transfer liveness_edge_transfer fn.fn_blocks NONE fn)`
+         liveness_sound_inv fn.fn_blocks (cfg_analyze fn) st) br`
     suffices_by simp[] >>
+  qunabbrev_tac `br` >>
   irule (SIMP_RULE std_ss [LET_THM]
     dfAnalyzeProofsTheory.df_analyze_invariant_backward_restricted) >>
   conj_tac
+  >- simp[liveness_state_inv_init, liveness_sound_inv_init]
   >- (qexistsl_tac [
         `LENGTH (fn_labels fn) * CARD (set (fn_all_vars fn.fn_blocks)) *
            (liveness_inst_key_bound fn + 1) +
@@ -2389,7 +2479,6 @@ Proof
           mp_tac (Q.SPEC `fn` dfAnalyzeProofsTheory.preds_subset_fn_labels) >>
           simp[EVERY_MEM] >> metis_tac[])
       >- (simp[EVERY_MEM]))
-  >- simp[liveness_state_inv_init, liveness_sound_inv_init]
 QED
 
 (* Main soundness theorem *)
