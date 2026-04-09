@@ -313,9 +313,9 @@ Triviality copy_prop_process_eq[local]:
     let (fv, inst_map) = df_fold_block Forward
                            (copy_prop_transfer (phi_used_vars fn)) lbl
                            instrs (copy_prop_joined fn st lbl) in
-      st with <|ds_boundary := st.ds_boundary |+
-                  (lbl, copy_prop_join (df_boundary NONE st lbl) fv);
-                ds_inst := FUNION inst_map st.ds_inst|>
+    let new_bnd = copy_prop_join (df_boundary NONE st lbl) fv in
+      if new_bnd = df_boundary NONE st lbl then st
+      else st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd)
 Proof
   rw[df_process_block_def, df_joined_val_def] >>
   simp_tac std_ss [LET_THM, direction_case_def] >>
@@ -493,45 +493,36 @@ Triviality copy_prop_inv_preserved[local]:
          (cfg_analyze fn) fn.fn_blocks lbl st)
 Proof
   rpt strip_tac >>
-  simp[copy_prop_state_inv_def, copy_prop_process_eq] >>
+  simp[copy_prop_process_eq] >>
   simp_tac std_ss [LET_THM] >> pairarg_tac >> simp[] >>
-  (* Establish P(joined) *)
+  IF_CASES_TAC >> simp[] >>
+  (* Boundary-changed case: only ds_boundary updated *)
   `case copy_prop_joined fn st lbl of NONE => T
    | SOME fmap => FDOM fmap SUBSET set (fn_all_assignments fn)`
-    by metis_tac[copy_prop_joined_inv]
-  (* Establish transfer preserves P *)
-  >> `!inst v.
-       MEM inst (case lookup_block lbl fn.fn_blocks of NONE => []
-                 | SOME bb => bb.bb_instructions) /\
-       (case v of NONE => T
-        | SOME fmap => FDOM fmap SUBSET set (fn_all_assignments fn)) ==>
-       (case copy_prop_transfer (phi_used_vars fn) inst v of NONE => T
-        | SOME fmap => FDOM fmap SUBSET set (fn_all_assignments fn))`
-    by metis_tac[copy_prop_transfer_preserves_fdom]
-  (* Apply fold invariant *)
-  >> drule copy_prop_fold_fdom
-  >> disch_then (qspec_then `set (fn_all_assignments fn)` mp_tac)
-  >> simp[]
-  >> strip_tac >>
-  (* Establish df_boundary fact BEFORE expanding invariant *)
+    by metis_tac[copy_prop_joined_inv] >>
+  `!inst v.
+     MEM inst (case lookup_block lbl fn.fn_blocks of NONE => []
+               | SOME bb => bb.bb_instructions) /\
+     (case v of NONE => T
+      | SOME fmap => FDOM fmap SUBSET set (fn_all_assignments fn)) ==>
+     (case copy_prop_transfer (phi_used_vars fn) inst v of NONE => T
+      | SOME fmap => FDOM fmap SUBSET set (fn_all_assignments fn))`
+    by metis_tac[copy_prop_transfer_preserves_fdom] >>
+  drule copy_prop_fold_fdom >>
+  disch_then (qspec_then `set (fn_all_assignments fn)` mp_tac) >>
+  simp[] >> strip_tac >>
   `case df_boundary NONE st lbl of NONE => T
    | SOME fmap => FDOM fmap SUBSET set (fn_all_assignments fn)`
     by metis_tac[df_boundary_inv] >>
   fs[copy_prop_state_inv_def] >>
   rpt conj_tac
-  (* boundary *)
-  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
-      rw[] >> res_tac >>
-      mp_tac (Q.SPECL [`df_boundary NONE st lbl`, `fv`, `set (fn_all_assignments fn)`]
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >> rw[] >> res_tac >>
+      mp_tac (Q.SPECL [`df_boundary NONE st lbl`, `fv`,
+                        `set (fn_all_assignments fn)`]
                        copy_prop_join_fdom_subset) >>
       simp[] >> strip_tac >>
       Cases_on `copy_prop_join (df_boundary NONE st lbl) fv` >> gvs[])
-  (* inst *)
-  >- (rpt gen_tac >> simp[FLOOKUP_FUNION] >>
-      Cases_on `FLOOKUP inst_map k` >> simp[]
-      >- (strip_tac >> res_tac)
-      >- (strip_tac >> gvs[] >>
-          first_x_assum (qspecl_then [`k`, `SOME fmap`] mp_tac) >> simp[]))
+  >- metis_tac[]
 QED
 
 (* measure_inv for initial state — C3,C4,C5 vacuously true since ds_inst=FEMPTY *)
@@ -881,181 +872,59 @@ Proof
   qabbrev_tac `instrs = case lookup_block lbl fn.fn_blocks of
                            NONE => [] | SOME bb => bb.bb_instructions` >>
   qabbrev_tac `new_bnd = copy_prop_join (df_boundary NONE st lbl) fv` >>
-  `(!k. k IN FDOM inst_map ==> FST k = lbl) /\
-   (lbl, 0n) IN FDOM inst_map /\
-   FLOOKUP inst_map (lbl, 0n) = SOME joined` by (
-    qpat_x_assum `df_fold_block _ _ _ _ _ = _` (fn th =>
-      strip_assume_tac (MATCH_MP df_fold_block_inst_map_props th)) >>
-    fs[Abbr `joined`]) >>
-  `df_process_block Forward NONE copy_prop_join copy_prop_transfer
-     copy_prop_edge_transfer (phi_used_vars fn)
-     (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
-     (cfg_analyze fn) fn.fn_blocks lbl st =
-   st with <|ds_inst := FUNION inst_map st.ds_inst;
-             ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|>` by (
+  (* New df_process_block: if boundary unchanged, result = st.
+     Since result <> st, boundary must have changed. *)
+  `new_bnd <> df_boundary NONE st lbl` by (
+    strip_tac >>
+    qpat_x_assum `_ <> st` mp_tac >> simp[] >>
     rewrite_tac[copy_prop_process_eq] >>
-    simp_tac std_ss [LET_THM, Abbr `instrs`, Abbr `joined`, Abbr `new_bnd`] >>
-    qpat_x_assum `df_fold_block _ _ _ _ _ = _` (fn th =>
-      simp[th])) >>
-  (* === Case split: did boundary value at lbl change? === *)
-  Cases_on `df_boundary NONE st lbl = new_bnd`
-  >- ( (* Case B: boundary unchanged *)
-    Cases_on `lbl IN FDOM st.ds_boundary`
-    >- ( (* B1: lbl IN FDOM, boundary unchanged *)
-      `st.ds_boundary ' lbl = new_bnd` by (
-        qpat_x_assum `df_boundary NONE st lbl = new_bnd` mp_tac >>
-        simp[df_boundary_def, FLOOKUP_DEF]) >>
-      `st.ds_boundary |+ (lbl, new_bnd) = st.ds_boundary` by
-        (irule FUPDATE_ELIM >> metis_tac[]) >>
-      simp_tac std_ss [copy_prop_measure_def, LET_THM] >>
-      `copy_boundary_measure fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> =
-       copy_boundary_measure fn st` by
-        simp[copy_boundary_measure_def, LET_THM, df_boundary_def,
-             FLOOKUP_UPDATE] >>
-      `CARD (FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-             set (cfg_analyze fn).cfg_dfs_pre) =
-       CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre)` by
-        asm_rewrite_tac[] >>
-      `CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-       CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-             df_valid_inst_keys fn.fn_blocks)` by
-        metis_tac[inst_card_mono] >>
-      simp[] >>
-      Cases_on `FLOOKUP st.ds_inst (lbl, 0n) = SOME joined`
-      >- ( (* B1-YES: FUNION absorbed -> contradiction *)
-        mp_tac (Q.SPECL [`fn`, `lbl`, `st`, `joined`,
-          `instrs`, `fv`, `inst_map`] funion_fold_coherent) >>
-        impl_tac >- (
-          qpat_x_assum `Abbrev (instrs = _)` (mp_tac o
-            REWRITE_RULE [markerTheory.Abbrev_def]) >>
-          strip_tac >> simp[]) >>
-        strip_tac >>
-        qpat_x_assum `FUNION inst_map st.ds_inst = st.ds_inst` (fn funion_th =>
-          qpat_x_assum `st.ds_boundary |+ _ = st.ds_boundary` (fn fupd_th =>
-            qpat_x_assum `df_process_block _ _ _ _ _ _ _ _ _ _ st = _`
-              (fn dpb_th => assume_tac
-                (REWRITE_RULE [funion_th, fupd_th] dpb_th)))) >>
-        gvs[df_state_component_equality]
-      )
-      >- ( (* B1-NO: fresh_count strictly increases *)
-        mp_tac fresh_count_increase >>
-        disch_then (qspecl_then [`fn`, `st`, `inst_map`, `lbl`] mp_tac) >>
-        impl_tac >- (
-          conj_tac >- simp[MEM_APPEND] >>
-          conj_tac >- (
-            qpat_x_assum `Abbrev (joined = _)` (mp_tac o
-              REWRITE_RULE [markerTheory.Abbrev_def]) >>
-            strip_tac >> ASM_REWRITE_TAC []) >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          simp[FLOOKUP_FUNION]) >>
-        disch_then (assume_tac o ONCE_REWRITE_RULE [ds_inst_update_literal]) >>
-        gvs[] >> DECIDE_TAC
-      ) (* end B1-NO *)
-    ) (* end B1 *)
-    >- ( (* B2: lbl NOT in boundary, boundary value unchanged *)
-      `new_bnd = NONE` by (
-        fs[df_boundary_def] >>
-        Cases_on `FLOOKUP st.ds_boundary lbl` >> fs[FLOOKUP_DEF]) >>
-      simp_tac std_ss [copy_prop_measure_def, LET_THM] >>
-      `copy_boundary_measure fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> =
-       copy_boundary_measure fn st` by (
-        rw[copy_boundary_measure_def] >>
-        AP_TERM_TAC >> ONCE_REWRITE_TAC [GSYM MAP_APPEND] >>
-        simp[MAP_EQ_f, df_boundary_def, FLOOKUP_UPDATE] >>
-        rw[] >> fs[FLOOKUP_DEF]) >>
-      `CARD (FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-             set (cfg_analyze fn).cfg_dfs_pre) =
-       CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre) + 1` by (
-        `FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-           set (cfg_analyze fn).cfg_dfs_pre =
-         lbl INSERT (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre)` by (
-          simp[EXTENSION, FDOM_FUPDATE, IN_INTER] >> metis_tac[]) >>
-        simp[] >>
-        `lbl NOTIN (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre)` by
-          simp[IN_INTER] >>
-        simp[CARD_INSERT, FINITE_INTER]) >>
-      `CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-       CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-             df_valid_inst_keys fn.fn_blocks)` by
-        metis_tac[inst_card_mono] >>
-      `copy_prop_fresh_count fn st <=
-       copy_prop_fresh_count fn
-         <|ds_inst := FUNION inst_map st.ds_inst;
-           ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|>` by (
-        mp_tac fresh_count_mono >>
-        disch_then (qspecl_then [`fn`, `st`, `inst_map`, `lbl`,
-          `st.ds_boundary |+ (lbl, new_bnd)`] mp_tac) >>
-        impl_tac >- (
-          conj_tac >- first_assum ACCEPT_TAC >>
-          conj_tac >- (
-            qpat_x_assum `Abbrev (joined = _)` (mp_tac o
-              REWRITE_RULE [markerTheory.Abbrev_def]) >>
-            strip_tac >> ASM_REWRITE_TAC []) >>
-          irule copy_prop_joined_boundary_eq >>
-          simp[df_boundary_def, FLOOKUP_UPDATE] >>
-          rw[] >> gvs[df_boundary_def, FLOOKUP_DEF]) >>
-        simp[]) >>
-      gvs[] >> DECIDE_TAC
-    ) (* end B2 *)
-  ) (* end Case B *)
-  >- ( (* Case A: boundary strictly changed *)
-    `case fv of NONE => T
-     | SOME fmap => CARD (FDOM fmap) <=
-                    CARD (set (fn_all_assignments fn))` by (
-      mp_tac fold_output_card_bound >>
-      disch_then (qspecl_then [`fn`, `st`, `lbl`, `instrs`, `joined`,
-        `fv`, `inst_map`] mp_tac) >>
-      impl_tac >- (
-        qpat_x_assum `copy_prop_measure_inv _ _` mp_tac >>
-        simp_tac std_ss [copy_prop_measure_inv_def] >> strip_tac >>
-        qpat_x_assum `Abbrev (joined = _)` (mp_tac o
-          REWRITE_RULE [markerTheory.Abbrev_def]) >>
-        qpat_x_assum `Abbrev (instrs = _)` (mp_tac o
-          REWRITE_RULE [markerTheory.Abbrev_def]) >>
-        rpt strip_tac >> ASM_REWRITE_TAC []) >>
-      simp[]) >>
-    `case df_boundary NONE st lbl of NONE => T
-     | SOME fmap => CARD (FDOM fmap) <=
-                    CARD (set (fn_all_assignments fn))` by (
-      irule boundary_card_bound >>
-      fs[copy_prop_measure_inv_def]) >>
-    simp_tac std_ss [copy_prop_measure_def, LET_THM] >>
-    `copy_boundary_measure fn st <
-     copy_boundary_measure fn
-       (st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd))` by (
-      irule boundary_measure_strict >> simp[MEM_APPEND] >>
-      qpat_x_assum `Abbrev (new_bnd = _)` (SUBST_ALL_TAC o
+    simp_tac std_ss [LET_THM] >>
+    qunabbrev_tac `instrs` >> qunabbrev_tac `joined` >>
+    qpat_x_assum `df_fold_block _ _ _ _ _ = _` (fn th => simp[th]) >>
+    fs[markerTheory.Abbrev_def]) >>
+  (* Result is st with updated boundary only *)
+  `case fv of NONE => T
+   | SOME fmap => CARD (FDOM fmap) <=
+                  CARD (set (fn_all_assignments fn))` by (
+    mp_tac fold_output_card_bound >>
+    disch_then (qspecl_then [`fn`, `st`, `lbl`, `instrs`, `joined`,
+      `fv`, `inst_map`] mp_tac) >>
+    impl_tac >- (
+      qpat_x_assum `copy_prop_measure_inv _ _` mp_tac >>
+      simp_tac std_ss [copy_prop_measure_inv_def] >> strip_tac >>
+      qpat_x_assum `Abbrev (joined = _)` (mp_tac o
         REWRITE_RULE [markerTheory.Abbrev_def]) >>
-      irule copy_val_measure_join_strict >> simp[]) >>
-    `copy_boundary_measure fn
-       <|ds_inst := FUNION inst_map st.ds_inst;
-         ds_boundary := st.ds_boundary |+ (lbl, new_bnd)|> =
-     copy_boundary_measure fn
-       (st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd))` by
-      simp[copy_boundary_measure_def, LET_THM, df_boundary_def] >>
-    `CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-     CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-           df_valid_inst_keys fn.fn_blocks)` by
-      metis_tac[inst_card_mono] >>
-    `CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre) <=
-     CARD (FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
-           set (cfg_analyze fn).cfg_dfs_pre)` by (
-      irule CARD_SUBSET >> simp[FINITE_INTER, FDOM_FUPDATE] >>
-      simp[SUBSET_DEF, IN_INTER] >> metis_tac[IN_INSERT]) >>
-    assume_tac (Q.SPECL [`fn`, `st`] fresh_count_bounded) >>
-    gvs[] >>
-    mp_tac (ISPECL [
-      ``LENGTH (fn_labels fn) + LENGTH (cfg_analyze fn).cfg_dfs_pre``,
-      ``copy_boundary_measure fn st``,
-      ``copy_boundary_measure fn
-          (st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd))``,
-      ``copy_prop_fresh_count fn st``] weighted_lt_cancel) >>
-    simp[] >> DECIDE_TAC
-  ) (* end Case A *)
+      qpat_x_assum `Abbrev (instrs = _)` (mp_tac o
+        REWRITE_RULE [markerTheory.Abbrev_def]) >>
+      rpt strip_tac >> ASM_REWRITE_TAC []) >>
+    simp[]) >>
+  `case df_boundary NONE st lbl of NONE => T
+   | SOME fmap => CARD (FDOM fmap) <=
+                  CARD (set (fn_all_assignments fn))` by (
+    irule boundary_card_bound >>
+    fs[copy_prop_measure_inv_def]) >>
+  simp_tac std_ss [copy_prop_measure_def, LET_THM] >>
+  `copy_boundary_measure fn st <
+   copy_boundary_measure fn
+     (st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd))` by (
+    irule boundary_measure_strict >> simp[MEM_APPEND] >>
+    qpat_x_assum `Abbrev (new_bnd = _)` (SUBST_ALL_TAC o
+      REWRITE_RULE [markerTheory.Abbrev_def]) >>
+    irule copy_val_measure_join_strict >> simp[]) >>
+  `CARD (FDOM st.ds_boundary INTER set (cfg_analyze fn).cfg_dfs_pre) <=
+   CARD (FDOM (st.ds_boundary |+ (lbl, new_bnd)) INTER
+         set (cfg_analyze fn).cfg_dfs_pre)` by (
+    irule CARD_SUBSET >> simp[FINITE_INTER, FDOM_FUPDATE] >>
+    simp[SUBSET_DEF, IN_INTER] >> metis_tac[IN_INSERT]) >>
+  assume_tac (Q.SPECL [`fn`, `st`] fresh_count_bounded) >>
+  gvs[] >>
+  mp_tac (ISPECL [
+    ``LENGTH (fn_labels fn) + LENGTH (cfg_analyze fn).cfg_dfs_pre``,
+    ``copy_boundary_measure fn st``,
+    ``copy_boundary_measure fn
+        (st with ds_boundary := st.ds_boundary |+ (lbl, new_bnd))``,
+    ``copy_prop_fresh_count fn st``] weighted_lt_cancel) >>
+  simp[]
 QED
 
 (* measure_inv is preserved by processing *)
@@ -1074,10 +943,19 @@ Proof
   conj_tac >- (
     irule copy_prop_inv_preserved >>
     fs[copy_prop_measure_inv_def]) >>
-  simp[copy_prop_process_eq, LET_THM] >>
+  (* New df_process_block only updates ds_boundary, ds_inst unchanged.
+     So C3-C5 (about ds_inst) are trivially preserved. *)
+  simp[copy_prop_process_eq] >>
   simp_tac std_ss [LET_THM] >>
   pairarg_tac >> simp[] >>
-  fs[copy_prop_measure_inv_def, LET_THM] >>
+  IF_CASES_TAC >> simp[] >>
+  fs[copy_prop_measure_inv_def] >> metis_tac[]
+QED
+
+(* Dead code removed: C3-C5 proofs about ds_inst no longer needed
+   because new df_process_block never modifies ds_inst *)
+
+(*
   qabbrev_tac `instrs = case lookup_block lbl fn.fn_blocks of
                            NONE => [] | SOME bb => bb.bb_instructions` >>
   qabbrev_tac `joined = copy_prop_joined fn st lbl` >>
@@ -1124,5 +1002,5 @@ Proof
         strip_assume_tac (MATCH_MP df_fold_block_inst_map_props th)) >>
       fs[FDOM_FUNION, FDOM_FUPDATE] >>
       res_tac >> fs[])
-QED
+*)
 

@@ -40,6 +40,9 @@ val intra_fwd = SIMP_RULE (srw_ss()) []
 val boundary_fixpoint_fwd = SIMP_RULE (srw_ss()) []
   (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
     dfAnalyzeProofsTheory.df_boundary_fixpoint_proof));
+val inter_fwd = SIMP_RULE (srw_ss()) []
+  (Q.SPEC `Forward` (SIMP_RULE (srw_ss()) [LET_THM]
+    dfAnalyzeProofsTheory.df_at_inter_transfer_proof));
 
 (* copy_prop_join from right preserves soundness when b <> NONE *)
 Theorem copy_sound_join_right[local]:
@@ -128,31 +131,33 @@ Proof
   gen_tac >> strip_tac >>
   irule fixpoint_restricted_fwd >>
   conj_tac
-  >- (match_mp_tac (SIMP_RULE std_ss [LET_THM]
-        dfAnalyzeProofsTheory.df_process_deps_complete_proof |>
-        SPEC ``Forward : direction`` |>
-        SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def]) >>
-      rw[copy_prop_join_absorption] >>
-      metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond])
+  >- ((* Existential: measure + invariant witnesses *)
+    qexistsl_tac [
+      `copy_prop_measure_inv fn`,
+      `copy_prop_measure_bound fn`,
+      `copy_prop_measure fn`,
+      `\lbl. MEM lbl (cfg_analyze fn).cfg_dfs_pre`] >>
+    rpt conj_tac
+    >- (rpt strip_tac >> irule copy_prop_measure_bounded >>
+        fs[copy_prop_measure_inv_def])
+    >- (rpt strip_tac >> fs[] >>
+        metis_tac[copy_prop_measure_inv_preserved])
+    >- (rpt strip_tac >> fs[] >>
+        metis_tac[copy_prop_measure_monotone])
+    >- (rpt strip_tac >> fs[] >>
+        imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+        fs[EVERY_MEM])
+    >- simp[EVERY_MEM]
+    >- (mp_tac (SPEC_ALL copy_prop_measure_inv_initial) >>
+        Cases_on `fn_entry_label fn` >> simp[] >> metis_tac[]))
   >>
-  qexistsl_tac [
-    `copy_prop_measure_inv fn`,
-    `copy_prop_measure_bound fn`,
-    `copy_prop_measure fn`,
-    `\lbl. MEM lbl (cfg_analyze fn).cfg_dfs_pre`] >>
-  rpt conj_tac
-  >- (rpt strip_tac >> irule copy_prop_measure_bounded >>
-      fs[copy_prop_measure_inv_def])
-  >- (rpt strip_tac >> fs[] >>
-      metis_tac[copy_prop_measure_inv_preserved])
-  >- (rpt strip_tac >> fs[] >>
-      metis_tac[copy_prop_measure_monotone])
-  >- (rpt strip_tac >> fs[] >>
-      imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
-      fs[EVERY_MEM])
-  >- simp[EVERY_MEM]
-  >- (mp_tac (SPEC_ALL copy_prop_measure_inv_initial) >>
-      Cases_on `fn_entry_label fn` >> simp[] >> metis_tac[])
+  (* wl_deps_complete *)
+  match_mp_tac (SIMP_RULE std_ss [LET_THM]
+    dfAnalyzeProofsTheory.df_process_deps_complete_proof |>
+    SPEC ``Forward : direction`` |>
+    SIMP_RULE std_ss [dfAnalyzeDefsTheory.direction_case_def]) >>
+  rw[copy_prop_join_absorption] >>
+  metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
 QED
 
 (* Remove is_fixpoint_def from srw_ss() — its expansion breaks
@@ -166,6 +171,7 @@ val _ = delsimps ["is_fixpoint_def"];
 
 Triviality copy_prop_intra_fwd[local]:
   !fn lbl bb idx.
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward NONE copy_prop_join copy_prop_transfer
          copy_prop_edge_transfer (phi_used_vars fn)
@@ -191,11 +197,12 @@ Triviality copy_prop_intra_fwd[local]:
            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
         lbl idx)
 Proof
-  rpt strip_tac >> imp_res_tac intra_fwd >> simp_tac std_ss []
+  rpt strip_tac >> imp_res_tac intra_fwd
 QED
 
 Triviality copy_prop_boundary_fixpoint[local]:
   !fn lbl bb.
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward NONE copy_prop_join copy_prop_transfer
          copy_prop_edge_transfer (phi_used_vars fn)
@@ -225,15 +232,26 @@ Triviality copy_prop_boundary_fixpoint[local]:
            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
         lbl (LENGTH bb.bb_instructions))
 Proof
-  rpt strip_tac >> imp_res_tac boundary_fixpoint_fwd >> first_assum ACCEPT_TAC
+  rpt strip_tac >> imp_res_tac boundary_fixpoint_fwd
 QED
 
-(* copy_prop_inter_fwd_gen: like inter_fwd but doesn't require lookup_block.
-   For Forward direction, df_at lbl 0 = joined regardless of block existence.
-   Proof: at fixpoint, df_process_block writes (lbl,0) -> joined to ds_inst
-   via df_fold_forward (even with empty instrs when lookup_block = NONE). *)
+Triviality cfg_dfs_pre_lookup_block[local]:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+  ?bb. lookup_block lbl fn.fn_blocks = SOME bb
+Proof
+  rpt strip_tac >>
+  drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >> strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by (fs[EXTENSION] >> metis_tac[]) >>
+  drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >> strip_tac >>
+  fs[fn_labels_def, MEM_MAP] >>
+  metis_tac[venomExecPropsTheory.MEM_lookup_block, wf_function_def, fn_labels_def]
+QED
+
+(* copy_prop_inter_fwd_gen: df_at lbl 0 = copy_prop_joined at fixpoint.
+   Uses inter_fwd; derives lookup_block from wf_function + MEM cfg_dfs_pre. *)
 Triviality copy_prop_inter_fwd_gen[local]:
   !fn lbl.
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward NONE copy_prop_join copy_prop_transfer
          copy_prop_edge_transfer (phi_used_vars fn)
@@ -256,36 +274,17 @@ Triviality copy_prop_inter_fwd_gen[local]:
          (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
       lbl
 Proof
-  rpt strip_tac >>
-  qabbrev_tac `result = df_analyze Forward NONE copy_prop_join copy_prop_transfer
-    copy_prop_edge_transfer (phi_used_vars fn)
-    (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn` >>
-  (* At fixpoint, process lbl result = result *)
-  fs[worklistDefsTheory.is_fixpoint_def] >>
-  first_x_assum (qspec_then `lbl` mp_tac) >> simp[] >>
-  simp[dfAnalyzeDefsTheory.df_process_block_def,
-       dfAnalyzeDefsTheory.df_joined_val_def] >>
-  pairarg_tac >> simp[] >>
-  strip_tac >>
-  (* inst_map SUBMAP result.ds_inst *)
-  `inst_map ⊌ result.ds_inst = result.ds_inst` by
-    (qpat_x_assum `<|ds_inst := _; ds_boundary := _|> = result` mp_tac >>
-     rw[dfAnalyzeDefsTheory.df_state_component_equality]) >>
-  `inst_map ⊑ result.ds_inst` by
-    metis_tac[finite_mapTheory.SUBMAP_FUNION_ABSORPTION] >>
-  (* Unfold df_fold_block, then use df_fold_forward_at *)
-  fs[dfAnalyzeDefsTheory.df_fold_block_def] >>
-  drule dfAnalyzeProofsTheory.df_fold_forward_at >> strip_tac >>
-  `FLOOKUP result.ds_inst (lbl, 0) =
-   FLOOKUP inst_map (lbl, 0)` by
-    metis_tac[finite_mapTheory.SUBMAP_FLOOKUP_EQN] >>
-  fs[dfAnalyzeDefsTheory.df_at_def] >>
-  simp[copy_prop_joined_def, copy_prop_edge_transfer_def, LET_THM] >>
-  Cases_on `fn_entry_label fn` >> gvs[]
+  rpt strip_tac
+  \\ drule_all cfg_dfs_pre_lookup_block \\ strip_tac
+  \\ drule_all inter_fwd \\ strip_tac
+  \\ simp[copy_prop_joined_def, copy_prop_edge_transfer_def, LET_THM,
+       dfAnalyzeDefsTheory.df_joined_val_def]
+  \\ Cases_on `fn_entry_label fn` \\ gvs[]
 QED
 
 Triviality copy_prop_df_at_not_none[local]:
   !fn lbl bb.
+    wf_function fn /\
     is_fixpoint
       (df_process_block Forward NONE copy_prop_join copy_prop_transfer
          copy_prop_edge_transfer (phi_used_vars fn)
@@ -523,6 +522,7 @@ Proof
 QED
 
 Triviality copy_sound_opt_at_entry[local]:
+  wf_function fn /\
   fn_inst_wf fn /\
   fn_entry_label fn = SOME lbl
   ==>
@@ -601,6 +601,7 @@ Proof
               TRY (first_assum ACCEPT_TAC) >>
               metis_tac[copy_prop_is_fixpoint]))
       >- metis_tac[assign_subst_inst_simulates]
+      >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- metis_tac[copy_sound_opt_state_equiv]
       >- (rpt strip_tac >>
