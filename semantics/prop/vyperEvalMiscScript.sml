@@ -98,5 +98,9 @@ Theorem for_loop_iterator_bounded:
       eval_iterator cx it st = (INL vs, st1) ⇒
       LENGTH vs ≤ n
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, lift_option_type_def, ignore_bind_def] >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[raise_def, return_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[check_def, type_check_def, assert_def, compatible_bound_def]
 QED
