@@ -116,13 +116,49 @@ Definition df_process_block_widen_def:
       df_fold_block dir (transfer ctx) lbl instrs entry in
     let old_boundary = df_widen_boundary bottom st lbl in
     let new_boundary = join old_boundary final_val in
-    let new_st = st with <|
+    let old_entry = df_widen_entry bottom st lbl in
+    if new_boundary = old_boundary /\ entry = old_entry then st
+    else st with <|
       dws_boundary := st.dws_boundary |+ (lbl, new_boundary);
       dws_entry := st.dws_entry |+ (lbl, entry);
-      dws_inst := FUNION inst_map st.dws_inst
-    |> in
-    if new_st = st then st
-    else new_st with dws_visits := new_st.dws_visits |+ (lbl, visits + 1)
+      dws_visits := st.dws_visits |+ (lbl, visits + 1)
+    |>
+End
+
+(* ===== Inst population (widen) ===== *)
+
+(* After boundary/entry fixpoint, populate dws_inst by folding each block once. *)
+Definition df_populate_widen_inst_def:
+  df_populate_widen_inst dir bottom join widen threshold
+                         transfer edge_transfer ctx entry_val
+                         cfg bbs lbls (st : 'a df_widen_state) =
+    FOLDL (λst' lbl.
+      let neighbors =
+        (case dir of
+           Forward => cfg_preds_of cfg lbl
+         | Backward => cfg_succs_of cfg lbl) in
+      let edge_vals = MAP (λnbr.
+            edge_transfer ctx nbr lbl
+              (df_widen_boundary bottom st nbr)) neighbors in
+      let joined =
+        (case edge_vals of
+           [] => (case entry_val of
+                    NONE => bottom
+                  | SOME (ev_lbl, v) =>
+                      if lbl = ev_lbl then v else bottom)
+         | _ => FOLDL join bottom edge_vals) in
+      let entry =
+        if df_widen_visits st lbl >= threshold then
+          widen (df_widen_entry bottom st lbl) joined
+        else joined in
+      let instrs =
+        (case lookup_block lbl bbs of
+           NONE => []
+         | SOME bb => bb.bb_instructions) in
+      let (final_val, inst_map) =
+        df_fold_block dir (transfer ctx) lbl instrs entry in
+      st' with dws_inst := FUNION inst_map st'.dws_inst
+    ) st lbls
 End
 
 (* ===== Top-level analysis ===== *)
@@ -157,6 +193,11 @@ Definition df_analyze_widen_def:
       df_process_block_widen dir bottom join widen threshold
                              transfer edge_transfer ctx entry_val
                              cfg bbs in
+    let changed = (λlbl (old:'a df_widen_state) new.
+                     df_widen_boundary bottom new lbl <>
+                     df_widen_boundary bottom old lbl \/
+                     df_widen_entry bottom new lbl <>
+                     df_widen_entry bottom old lbl) in
     let deps =
       (case dir of
          Forward => cfg_succs_of cfg
@@ -165,5 +206,8 @@ Definition df_analyze_widen_def:
       (case dir of
          Forward => cfg.cfg_dfs_pre
        | Backward => cfg.cfg_dfs_post) in
-    SND (wl_iterate process deps wl0 st0')
+    let boundary_result = SND (wl_iterate changed process deps wl0 st0') in
+    df_populate_widen_inst dir bottom join widen threshold
+                           transfer edge_transfer ctx entry_val
+                           cfg bbs lbls boundary_result
 End

@@ -20,6 +20,8 @@ Theorem df_analyze_fixpoint:
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in
+    let changed = (\lbl (old:'a df_state) new.
+                     df_boundary bottom new lbl <> df_boundary bottom old lbl) in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
@@ -31,7 +33,7 @@ Theorem df_analyze_fixpoint:
        | SOME (lbl, v) =>
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       bounded_measure P leq m b /\
-      wl_deps_complete process deps
+      wl_deps_complete changed process deps
     ==>
       is_fixpoint process all_lbls
         (df_analyze dir bottom join transfer edge_transfer ctx entry_val fn)
@@ -53,6 +55,7 @@ Theorem df_at_intra_transfer:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
+      wf_function fn /\
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb /\
@@ -86,6 +89,7 @@ Theorem df_at_inter_transfer:
                             ctx entry_val fn in
     let joined = df_joined_val dir bottom join edge_transfer ctx
                                entry_val cfg result lbl in
+      wf_function fn /\
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
@@ -112,6 +116,7 @@ Theorem df_boundary_fixpoint:
     let all_lbls = cfg.cfg_dfs_pre in
     let result = df_analyze dir bottom join transfer edge_transfer
                             ctx entry_val fn in
+      wf_function fn /\
       is_fixpoint process all_lbls result /\
       MEM lbl all_lbls /\
       lookup_block lbl bbs = SOME bb
@@ -149,7 +154,7 @@ Theorem df_analyze_invariant:
       P bottom /\
       (case entry_val of NONE => T
        | SOME (lbl, v) => P v) /\
-      (!a b. P a /\ P b ==> P (join a b)) /\
+      (!a b. P a ==> P (join a b)) /\
       (!inst a. P a ==> P (transfer ctx inst a)) /\
       (!src dst a. P a ==> P (edge_transfer ctx src dst a)) /\
       (* convergence — needed because WHILE result is ARB if non-terminating *)
@@ -199,10 +204,12 @@ Theorem df_process_deps_complete:
   ==>
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in
+    let changed = (\lbl (old:'a df_state) new.
+                     df_boundary bottom new lbl <> df_boundary bottom old lbl) in
     let deps = (case dir of
                   Forward => cfg_succs_of cfg
                 | Backward => cfg_preds_of cfg) in
-    wl_deps_complete process deps
+    wl_deps_complete changed process deps
 Proof
   ACCEPT_TAC df_process_deps_complete_proof
 QED
@@ -217,6 +224,8 @@ Theorem df_analyze_fixpoint_process:
     let bbs = fn.fn_blocks in
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in
+    let changed = (\lbl (old:'a df_state) new.
+                     df_boundary bottom new lbl <> df_boundary bottom old lbl) in
     let deps = (case dir of Forward => cfg_succs_of cfg
                            | Backward => cfg_preds_of cfg) in
     let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
@@ -227,7 +236,7 @@ Theorem df_analyze_fixpoint_process:
        | SOME (lbl, v) =>
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       (!x. P x ==> m x <= b) /\
-      wl_deps_complete process deps
+      wl_deps_complete changed process deps
     ==>
       is_fixpoint process all_lbls
         (df_analyze dir bottom join transfer edge_transfer ctx entry_val fn)
@@ -254,7 +263,10 @@ Theorem df_analyze_fixpoint_forward:
        | SOME (lbl, v) =>
            P (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
       (!x. P x ==> m x <= b) /\
-      wl_deps_complete process (cfg_succs_of cfg)
+      wl_deps_complete
+        (\lbl (old:'a df_state) new.
+           df_boundary bottom new lbl <> df_boundary bottom old lbl)
+        process (cfg_succs_of cfg)
     ==>
       is_fixpoint process cfg.cfg_dfs_pre
         (df_analyze Forward bottom join transfer edge_transfer ctx

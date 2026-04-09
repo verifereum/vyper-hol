@@ -150,10 +150,8 @@ Definition df_process_block_def:
       df_fold_block dir (transfer ctx) lbl instrs joined in
     let old_boundary = df_boundary bottom st lbl in
     let new_boundary = join old_boundary final_val in
-    st with <|
-      ds_boundary := st.ds_boundary |+ (lbl, new_boundary);
-      ds_inst := FUNION inst_map st.ds_inst
-    |>
+    if new_boundary = old_boundary then st
+    else st with ds_boundary := st.ds_boundary |+ (lbl, new_boundary)
 End
 
 (* ===== Initialization ===== *)
@@ -165,10 +163,30 @@ Definition init_df_state_def:
          FOLDL (λm lbl. m |+ (lbl, bottom)) FEMPTY lbls |>
 End
 
+(* ===== Inst population ===== *)
+
+(* After boundary fixpoint, populate ds_inst by folding each block once.
+   The fold uses the stable boundaries, producing deterministic inst_maps. *)
+Definition df_populate_inst_def:
+  df_populate_inst dir bottom join transfer edge_transfer
+                   ctx entry_val cfg bbs lbls (st : 'a df_state) =
+    FOLDL (λst' lbl.
+      let joined = df_joined_val dir bottom join edge_transfer ctx
+                                 entry_val cfg st lbl in
+      let instrs =
+        (case lookup_block lbl bbs of
+           NONE => []
+         | SOME bb => bb.bb_instructions) in
+      let (final_val, inst_map) =
+        df_fold_block dir (transfer ctx) lbl instrs joined in
+      st' with ds_inst := FUNION inst_map st'.ds_inst
+    ) st lbls
+End
+
 (* ===== Top-level analysis ===== *)
 
-(* Generic dataflow analysis: initialize, then worklist iterate.
-   Returns df_state with per-instruction lattice values.
+(* Generic dataflow analysis: initialize, worklist iterate to boundary
+   fixpoint, then populate inst from stable boundaries.
    entry_val: optional (label, value) to override one block's initial boundary.
      Forward analyses use this for the entry block (e.g. dom[entry]={entry}).
      Backward analyses typically pass NONE (exit block's bottom is correct). *)
@@ -186,6 +204,8 @@ Definition df_analyze_def:
     let process =
       df_process_block dir bottom join transfer edge_transfer
                        ctx entry_val cfg bbs in
+    let changed =
+      (λlbl old new. df_boundary bottom new lbl <> df_boundary bottom old lbl) in
     let deps =
       (case dir of
          Forward => cfg_succs_of cfg
@@ -194,5 +214,7 @@ Definition df_analyze_def:
       (case dir of
          Forward => cfg.cfg_dfs_pre
        | Backward => cfg.cfg_dfs_post) in
-    SND (wl_iterate process deps wl0 st0')
+    let boundary_result = SND (wl_iterate changed process deps wl0 st0') in
+    df_populate_inst dir bottom join transfer edge_transfer
+                     ctx entry_val cfg bbs lbls boundary_result
 End
