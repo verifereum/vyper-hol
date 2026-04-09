@@ -2,15 +2,14 @@
  * Alloca Remapping Definitions
  *
  * State relation for reasoning about execution under different alloca
- * layouts. Used by passes that change alloca structure: remove_unused
- * (removes dead ALLOCAs), function_inliner (merges alloca spaces),
- * concretize_mem_loc (dynamic → static offsets).
+ * layouts (same code, different concrete base addresses). Used by
+ * concretize_mem_loc and as a building block for other passes that
+ * change alloca structure.
  *
  * TOP-LEVEL:
  *   mem_byte_at           — safe memory byte access (0w for OOB)
  *   fn_alloca_id_of_var   — find alloca inst_id that produces a variable
  *   in_alloca_region        — address falls within an alloca region
- *   allocas_non_overlapping — alloca regions don't overlap in a state
  *   ptrs_in_alloca_bounds  — pointer-derived values within alloca regions
  *   alloca_mem_agrees       — memory at alloca regions corresponds
  *   alloca_remap_rel        — full state relation for remapping
@@ -28,7 +27,7 @@
 
 Theory allocaRemapDefs
 Ancestors
-  venomState venomExecSemantics pointerConfinedDefs
+  venomState venomExecSemantics pointerConfinedDefs venomMemDefs
 
 (* ===== Memory Byte Access ===== *)
 
@@ -60,15 +59,7 @@ Definition in_alloca_region_def:
       off <= i /\ i < off + sz
 End
 
-(* Alloca regions in a state are pairwise non-overlapping. *)
-Definition allocas_non_overlapping_def:
-  allocas_non_overlapping s <=>
-    !aid1 aid2 off1 sz1 off2 sz2.
-      FLOOKUP s.vs_allocas aid1 = SOME (off1, sz1) /\
-      FLOOKUP s.vs_allocas aid2 = SOME (off2, sz2) /\
-      aid1 <> aid2 ==>
-      off1 + sz1 <= off2 \/ off2 + sz2 <= off1
-End
+(* allocas_non_overlapping now comes from venomMemDefs *)
 
 (* Every pointer-derived variable's runtime value falls within some
    alloca region. Required for memory operations through pointer
@@ -112,6 +103,31 @@ Definition alloca_safe_access_def:
       ops.iao_max_size = SOME sz_op /\
       eval_operand sz_op s = SOME sz_val ==>
       w2n w + w2n sz_val <= off + asz)
+End
+
+(* Step-preservation oracle for alloca_safe_access and ptrs_in_alloca_bounds.
+   alloca_safe_access clause 2 quantifies over ALL memory-accessing
+   instructions in fn — including those with variable-sized operands
+   (MCOPY, CALLDATACOPY, CALL/STATICCALL/DELEGATECALL etc.).
+   When stepping instruction inst', if inst' outputs a variable sz_var
+   that appears as a size operand of some other mem-accessing instruction
+   inst, the new value of sz_var is unrelated to the old value, so the
+   clause-2 bound cannot be transferred from pre-state to post-state
+   without program-specific reasoning.
+   True for Vyper: the compiler ensures all accesses through pointer-
+   derived vars stay within alloca regions at every step.
+   Not derivable from pointer_arith_in_region alone. *)
+Definition step_preserves_safety_def:
+  step_preserves_safety fn roots <=>
+    !inst bb s v.
+      MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+      step_inst_base inst s = OK v /\
+      ~is_terminator inst.inst_opcode /\
+      ~is_ext_call_op inst.inst_opcode /\
+      alloca_safe_access fn roots s /\
+      ptrs_in_alloca_bounds fn roots s ==>
+      alloca_safe_access fn roots v /\
+      ptrs_in_alloca_bounds fn roots v
 End
 
 (* ===== Pointer Arithmetic In-Region ===== *)
