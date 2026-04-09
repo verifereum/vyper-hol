@@ -66,9 +66,17 @@ End
 
 (*
 We don't use identifiers directly because cv compute prefers num keys
-Type scope = “:identifier |-> (type_value # value)”;
 *)
-Type scope = “:num |-> (type_value # value)”;
+
+Datatype:
+  scope_entry = <|
+    assignable: bool
+  ; type: type_value
+  ; value: value
+  |>
+End
+
+Type scope = “:num |-> scope_entry”;
 
 (* find a variable in a list of nested scopes *)
 Definition lookup_scopes_def:
@@ -76,7 +84,7 @@ Definition lookup_scopes_def:
   lookup_scopes id ((env: scope)::rest) =
   case FLOOKUP env id of NONE =>
     lookup_scopes id rest
-  | SOME tv => SOME tv
+  | SOME entry => SOME entry
 End
 
 (* lookup only the value (discarding the type) *)
@@ -85,19 +93,19 @@ Definition lookup_scopes_val_def:
   lookup_scopes_val id ((env: scope)::rest) =
   case FLOOKUP env id of NONE =>
     lookup_scopes_val id rest
-  | SOME tv => SOME (SND tv)
+  | SOME entry => SOME entry.value
 End
 
 val () = cv_auto_trans lookup_scopes_val_def;
 
 (* find the location of a variable in a list of nested scopes (as well as its
-* type and value): this is used when assigning to that variable *)
+* entry): this is used when assigning to that variable *)
 Definition find_containing_scope_def:
   find_containing_scope id ([]:scope list) = NONE ∧
   find_containing_scope id (env::rest) =
   case FLOOKUP env id of NONE =>
     OPTION_MAP (λ(p,q). (env::p, q)) (find_containing_scope id rest)
-  | SOME (tv, v) => SOME ([], env, tv, v, rest)
+  | SOME entry => SOME ([], env, entry, rest)
 End
 
 val () = cv_auto_trans find_containing_scope_def;
@@ -583,7 +591,8 @@ val () = cv_auto_trans push_scope_def;
 
 Definition push_scope_with_var_def:
   push_scope_with_var nm tv v st =
-    return () $ st with scopes updated_by CONS (FEMPTY |+ (nm, (tv, v)))
+    return () $ st with scopes updated_by
+      CONS (FEMPTY |+ (nm, <| assignable := F; type := tv; value := v |>))
 End
 
 val () = cv_auto_trans push_scope_with_var_def;
@@ -605,7 +614,7 @@ Definition new_variable_def:
     env <- get_scopes;
     type_check (IS_NONE (lookup_scopes n env)) "new_variable bound";
     case env of [] => raise $ Error (TypeError "new_variable null")
-    | e::es => set_scopes ((e |+ (n, (tv, v)))::es)
+    | e::es => set_scopes ((e |+ (n, <| assignable := T; type := tv; value := v |>))::es)
   od
 End
 
@@ -618,15 +627,16 @@ Definition set_variable_def:
   set_variable id v = do
     n <<- string_to_num id;
     sc <- get_scopes;
-    (pre, env, tv, _, rest) <-
+    (pre, env, entry, rest) <-
       lift_option_type (find_containing_scope n sc) "set_variable not found";
-    set_scopes (pre ++ (env |+ (n, (tv, v)))::rest)
+    type_check entry.assignable "set_variable not assignable";
+    set_scopes (pre ++ (env |+ (n, entry with value := v))::rest)
   od
 End
 
 val () = set_variable_def
   |> SRULE [FUN_EQ_THM, bind_def, lift_option_def,
-            LET_RATOR, UNCURRY, option_CASE_rator]
+            ignore_bind_def, LET_RATOR, UNCURRY, option_CASE_rator]
   |> cv_auto_trans;
 
 (* assignment to existing locations *)
@@ -868,10 +878,11 @@ Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
     ni <<- string_to_num id;
     sc <- get_scopes;
-    (pre, env, tv, a, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
-    a' <- lift_sum $ assign_subscripts tv a (REVERSE is) ao;
-    set_scopes $ pre ++ env |+ (ni, (tv, a')) :: rest;
-    assign_result tv ao a (REVERSE is)
+    (pre, env, entry, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
+    type_check entry.assignable "assign_target not assignable";
+    a' <- lift_sum $ assign_subscripts entry.type entry.value (REVERSE is) ao;
+    set_scopes $ pre ++ env |+ (ni, entry with value := a') :: rest;
+    assign_result entry.type ao entry.value (REVERSE is)
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;

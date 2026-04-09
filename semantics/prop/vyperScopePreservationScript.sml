@@ -247,8 +247,8 @@ Proof
 QED
 
 Theorem find_containing_scope_map_fdom[local]:
-  ∀id sc pre env tv v rest a'.
-    find_containing_scope id sc = SOME (pre, env, tv, v, rest) ⇒
+  ∀id sc pre env entry rest a'.
+    find_containing_scope id sc = SOME (pre, env, entry, rest) ⇒
     MAP FDOM (pre ++ env |+ (id, a') :: rest) = MAP FDOM sc
 Proof
   Induct_on `sc` >- rw[find_containing_scope_def] >>
@@ -267,7 +267,7 @@ Proof
   Cases_on `tv` >>
   rw[materialise_def, return_def, raise_def] >>
   gvs[bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_storage_slot_scopes >> gvs[]
+  imp_res_tac read_storage_slot_scopes
 QED
 
 Theorem assign_result_scopes:
@@ -432,9 +432,10 @@ Proof
     rpt gen_tac >> strip_tac >>
     gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
     Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
-    PairCases_on `x` >> gvs[bind_def, lift_sum_def] >>
-    Cases_on `assign_subscripts x2 x3 (REVERSE is) ao` >>
-    gvs[return_def, raise_def, bind_def, ignore_bind_def, set_scopes_def] >>
+    PairCases_on `x` >>
+    gvs[assign_target_def, bind_def, get_scopes_def, return_def, raise_def,
+        lift_option_def, type_check_def, assert_def, lift_sum_def,
+        ignore_bind_def, set_scopes_def, AllCaseEqs(), sum_CASE_rator] >>
     imp_res_tac assign_result_scopes >> gvs[] >>
     drule find_containing_scope_map_fdom >> simp[])
   (* TopLevelVar *)
@@ -483,7 +484,7 @@ QED
 Theorem push_scope_with_var_creates_singleton_hd:
   ∀nm tv v st res st'.
     push_scope_with_var nm tv v st = (INL (), st') ⇒
-    HD st'.scopes = FEMPTY |+ (nm, (tv, v)) ∧
+    HD st'.scopes = FEMPTY |+ (nm, <| assignable := F; type := tv; value := v |>) ∧
     TL st'.scopes = st.scopes
 Proof
   rw[push_scope_with_var_def, return_def] >> simp[]

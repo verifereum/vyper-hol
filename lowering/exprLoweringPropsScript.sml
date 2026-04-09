@@ -206,12 +206,13 @@ Theorem compile_name_correct:
     offset < dimword (:256) ∧
     (* Type-value from scope for correct encoding.
        tv must be a base type_value (word-sized, not array/struct/tuple). *)
-    lookup_scopes (string_to_num id) es.scopes = SOME (tv, v) ∧
-    (∃ bt. tv = BaseTV bt ∧ is_word_type (BaseT bt))
+    lookup_scopes (string_to_num id) es.scopes = SOME entry ∧
+    entry.value = v ∧
+    (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt))
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (typed_val_to_w256 tv v) ∧
+      eval_operand op ss' = SOME (typed_val_to_w256 entry.type v) ∧
       es' = es ∧
       same_blocks st st'
 Proof

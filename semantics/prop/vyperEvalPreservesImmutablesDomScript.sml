@@ -89,11 +89,14 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `_ = (_, _)` mp_tac >>
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
+       lift_option_def, lift_option_type_def, lift_sum_def,
+       type_check_def, assert_def, sum_CASE_rator,
+       AllCaseEqs(), raise_def, LET_THM,
        ignore_bind_def, set_scopes_def] >>
   rpt CASE_TAC >> gvs[return_def, raise_def, set_scopes_def, bind_def] >>
   PairCases_on `x` >>
-  simp[bind_def, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
+  simp[bind_def, type_check_def, assert_def, sum_CASE_rator,
+       AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
   rpt CASE_TAC >> gvs[return_def, raise_def, set_scopes_def] >>
   rpt strip_tac >>
   gvs[oneline assign_result_def, return_def, bind_def, lift_sum_def, raise_def,
@@ -889,7 +892,7 @@ Proof
   rpt strip_tac >> gvs[] >|
   [ (* Success case: finally returned INL broke *)
     irule preserves_immutables_dom_trans >>
-    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))` >>
+    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))` >>
     conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
     qpat_x_assum `finally _ _ _ = _` mp_tac >>
     simp[finally_def, AllCaseEqs(), pop_scope_def, return_def, raise_def,
@@ -910,14 +913,14 @@ Proof
         >- (irule preserves_immutables_dom_eq >> simp[]))
     >- (Cases_on `broke` >> gvs[return_def, preserves_immutables_dom_refl] >>
         first_x_assum (qspecl_then [
-            `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
+            `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
             `s_try with scopes := tl`] mp_tac) >>
         simp[finally_def, ignore_bind_def, bind_def,
              pop_scope_def, return_def] >>
         disch_then drule >> simp[]),
     (* Error case: finally returned INR e *)
     irule preserves_immutables_dom_trans >>
-    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))` >>
+    qexists_tac `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))` >>
     conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
     qpat_x_assum `finally _ _ _ = _` mp_tac >>
     simp[finally_def, AllCaseEqs(), pop_scope_def, return_def, raise_def,

@@ -489,7 +489,7 @@ Proof
   simp[finally_def, AllCaseEqs()] >>
   strip_tac >> gvs[bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def, AllCaseEqs()] >>
   (* Use try_body_preserves_tl_dom to establish MAP FDOM preservation *)
-  sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
+  sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
   (qspecl_then [`cx`, `body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
    impl_tac >- (rpt strip_tac >> gvs[push_scope_with_var_def, return_def] >> first_x_assum drule >> simp[]) >>
    simp[push_scope_with_var_def, return_def] >> strip_tac >>
@@ -499,8 +499,8 @@ Proof
   (* broke = T: return () *)
   (Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]) >>
   (* broke = F: use recursive IH *)
-  qpat_x_assum `∀s'⁴' t s'⁵' t'. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
-                                                       `st with scopes updated_by CONS (FEMPTY |+ (nm,(tyv,v)))`,
+  qpat_x_assum `∀s'⁴' t s'⁵' t'. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
+                                                       `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
                                                        `s'³' with scopes := tl`] mp_tac) >>
   simp[push_scope_with_var_def, return_def] >>
   simp[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
@@ -1118,12 +1118,12 @@ QED
 
 (* lookup_scopes through a list with FUPDATE preserves tv *)
 Theorem lookup_scopes_fupdate_preserves_tv:
-  ∀n sc pre env tv_old v_old rest.
-    find_containing_scope n sc = SOME (pre, env, tv_old, v_old, rest) ⇒
-    ∀id tv v new_v.
-      lookup_scopes id sc = SOME (tv, v) ⇒
-      ∃v'. lookup_scopes id (pre ++ [env |+ (n, (tv_old, new_v))] ++ rest) =
-           SOME (tv, v')
+  ∀n sc pre env old_entry rest.
+    find_containing_scope n sc = SOME (pre, env, old_entry, rest) ⇒
+    ∀id entry new_v.
+      lookup_scopes id sc = SOME entry ⇒
+      ∃entry'. lookup_scopes id (pre ++ [env |+ (n, old_entry with value := new_v)] ++ rest) =
+           SOME entry' ∧ entry'.type = entry.type
 Proof
   Induct_on `sc` >>
   simp[vyperStateTheory.find_containing_scope_def] >>
@@ -1139,8 +1139,8 @@ Proof
     Cases_on `FLOOKUP h id` >> gvs[] >>
     first_x_assum drule >> disch_then drule >> simp[]
   ) >>
-  (* FLOOKUP h n = SOME (tv_old, v_old) *)
-  Cases_on `x` >> gvs[] >>
+  (* FLOOKUP h n = SOME old_entry *)
+  gvs[] >>
   rpt strip_tac >>
   simp[vyperStateTheory.lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   gvs[vyperStateTheory.lookup_scopes_def] >>
@@ -1156,9 +1156,10 @@ QED
 Definition preserves_tv_def:
   preserves_tv cx st st' ⇔
     LENGTH st'.scopes = LENGTH st.scopes ∧
-    (∀i id tv v. i < LENGTH st.scopes ∧
-                 FLOOKUP (EL i st.scopes) id = SOME (tv, v) ⇒
-                 ∃v'. FLOOKUP (EL i st'.scopes) id = SOME (tv, v')) ∧
+    (∀i id entry. i < LENGTH st.scopes ∧
+                 FLOOKUP (EL i st.scopes) id = SOME entry ⇒
+                 ∃entry'. FLOOKUP (EL i st'.scopes) id = SOME entry' ∧
+                          entry'.type = entry.type) ∧
     (∀src id tv v.
        FLOOKUP (get_source_immutables src
          (case ALOOKUP st.immutables cx.txn.target of
@@ -1188,7 +1189,8 @@ Theorem preserves_tv_trans:
     preserves_tv cx st2 st3 ⇒
     preserves_tv cx st1 st3
 Proof
-  simp[preserves_tv_def]
+  simp[preserves_tv_def] >> rpt strip_tac >>
+  res_tac >> res_tac >> metis_tac[]
 QED
 
 Theorem preserves_tv_eq:
@@ -1277,17 +1279,18 @@ Proof
     gvs[assign_target_def, bind_def, raise_def,
        get_scopes_def, return_def, option_CASE_rator,
        lift_option_def, AllCaseEqs()] >>
-    pairarg_tac >> gvs[set_scopes_def, return_def,
-      bind_apply, ignore_bind_apply, AllCaseEqs()] >>
-    imp_res_tac lift_sum_state >> gvs[] >>
+    pairarg_tac >> gvs[] >>
+    drule find_containing_scope_structure >> strip_tac >> gvs[] >>
+    gvs[type_check_def, assert_def, sum_CASE_rator,
+       lift_sum_def, set_scopes_def, bind_def, ignore_bind_def,
+       return_def, raise_def, AllCaseEqs()] >>
     imp_res_tac assign_result_state >> gvs[] >>
-    gvs[preserves_tv_def] >>
-    drule find_containing_scope_structure >> rw[] >>
+    gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
     Cases_on`i < LENGTH pre` \\ gvs[rich_listTheory.EL_APPEND1] >>
     Cases_on`i > LENGTH pre` \\
     gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
         arithmeticTheory.PRE_SUB1] >>
-    `i = LENGTH pre` by gvs[] >> gvs[] >>
+    `i = LENGTH pre` by DECIDE_TAC >> gvs[] >>
     gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
   conj_tac >- (
     (* TopLevelVar *)
