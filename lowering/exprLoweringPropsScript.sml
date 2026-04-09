@@ -172,6 +172,49 @@ Proof
   >> simp[rich_listTheory.DROP_APPEND1, DROP_PREFIX]
 QED
 
+(* Chain run_inst_seq across two instruction-emitting steps.
+   Also produces the accumulated cs_current_insts fact for further chaining.
+   Replaces the manual emitted_insts_append + run_inst_seq_append pattern. *)
+Theorem run_inst_seq_chain:
+  ∀ st st1 st' ss ss1.
+    st1.cs_current_insts = st.cs_current_insts ++ emitted_insts st st1 ∧
+    st'.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st' ∧
+    run_inst_seq (emitted_insts st st1) ss = OK ss1
+    ⇒
+    run_inst_seq (emitted_insts st st') ss =
+      run_inst_seq (emitted_insts st1 st') ss1 ∧
+    st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  rw[]
+  >- (`emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'`
+        by (irule emitted_insts_append >> gvs[]) >>
+      gvs[] >> irule run_inst_seq_append >> gvs[])
+  >> `emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'`
+       by (irule emitted_insts_append >> gvs[]) >>
+     gvs[]
+QED
+
+(* Error version of run_inst_seq_chain: if prefix errors, total also errors.
+   Also produces the accumulated cs_current_insts fact. *)
+Theorem run_inst_seq_chain_err:
+  ∀ st st1 st' ss.
+    st1.cs_current_insts = st.cs_current_insts ++ emitted_insts st st1 ∧
+    st'.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st' ∧
+    (∀s. run_inst_seq (emitted_insts st st1) ss ≠ OK s)
+    ⇒
+    run_inst_seq (emitted_insts st st') ss =
+      run_inst_seq (emitted_insts st st1) ss ∧
+    st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  rw[]
+  >- (`emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'`
+        by (irule emitted_insts_append >> gvs[]) >>
+      gvs[] >> irule run_inst_seq_append_err >> gvs[])
+  >> `emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'`
+       by (irule emitted_insts_append >> gvs[]) >>
+     gvs[]
+QED
+
 (* ===== Per-Expression Lemmas ===== *)
 
 (* --- Literal --- *)
