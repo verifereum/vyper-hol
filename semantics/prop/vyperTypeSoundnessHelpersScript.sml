@@ -2759,7 +2759,10 @@ Resume assign_target_well_typed[replace]:
     \\ gvs[state_well_typed_def]
     \\ gvs[scope_well_typed_def, FLOOKUP_UPDATE, CaseEq"bool"]
     \\ rw[] \\ gvs[]
-    \\ res_tac )
+    \\ res_tac >> gvs[]  >>
+    first_x_assum irule >>
+    drule find_containing_scope_lookup >> rw[]
+    >> gvs[])
   \\ irule (iffRL $ cj 1 env_consistent_scopes_only)
   \\ gvs[env_consistent_def]
   \\ rw[]
@@ -2769,6 +2772,7 @@ Resume assign_target_well_typed[replace]:
   \\ TRY (res_tac \\ NO_TAC)
   \\ drule find_containing_scope_structure
   \\ strip_tac \\ gvs[]
+  \\ drule find_containing_scope_lookup >> rw[]
   \\ Cases_on`string_to_num s = id`
   >- (
     drule find_containing_scope_pre_none \\ strip_tac
@@ -2881,10 +2885,11 @@ Resume assign_target_well_typed_ao[ScopedVar]:
   \\ impl_tac >- gvs[state_well_typed_def]
   \\ gvs[lift_sum_def, sum_CASE_rator, CaseEq"sum", raise_def, return_def]
   \\ strip_tac
-  \\ `value_has_type tv a'` by (
-    first_x_assum drule \\ disch_then match_mp_tac
-    \\ qexists_tac `a` \\ simp[])
-  \\ gvs[lift_option_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]
+  \\ gvs[lift_option_def,AllCaseEqs(),option_CASE_rator,raise_def,return_def]
+  \\ drule find_containing_scope_lookup >> strip_tac
+  \\ `value_has_type sc_entry.type a'` by (
+    first_x_assum drule \\ disch_then irule \\ gvs[]
+    \\ goal_assum drule \\ simp[])
   \\ conj_tac
   >- (
     irule state_well_typed_with_scopes
@@ -3073,30 +3078,31 @@ Resume assign_target_preserves_swt_ec[ScopedVar]:
   \\ gvs[lift_sum_def, sum_CASE_rator, CaseEq"sum", raise_def, return_def]
   \\ strip_tac
   (* Apply the type-preservation hypothesis *)
-  \\ `value_has_type tv a'` by (
-    first_x_assum match_mp_tac
-    \\ qexists_tac `a` \\ simp[])
+  \\ gvs[lift_option_def, AllCaseEqs(), option_CASE_rator, raise_def, return_def]
+  \\ drule find_containing_scope_lookup >> strip_tac
+  \\ `value_has_type sc_entry.type a'` by (
+    first_x_assum drule \\ disch_then irule \\ gvs[]
+    \\ goal_assum drule \\ simp[])
   (* Now show state_well_typed for updated scopes *)
   \\ conj_tac
   >- (
     irule state_well_typed_with_scopes
-    \\ qpat_x_assum `lift_option _ _ _ = _` mp_tac
-    \\ gvs[lift_option_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]
-    \\ strip_tac
     \\ drule find_containing_scope_structure \\ strip_tac
     \\ gvs[state_well_typed_def, scope_well_typed_def,
            FLOOKUP_UPDATE, CaseEq"bool"]
-    \\ rw[] \\ gvs[] \\ res_tac )
+    \\ rw[] \\ gvs[]
+    \\ res_tac >> gvs[]
+    >> first_x_assum irule
+    >> drule find_containing_scope_lookup >> rw[]
+    >> gvs[])
   (* Show env_consistent for updated scopes *)
   \\ irule (iffRL $ cj 1 env_consistent_scopes_only)
-  \\ qpat_x_assum `lift_option _ _ _ = _` mp_tac
-  \\ gvs[lift_option_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def,
-         env_consistent_def]
-  \\ strip_tac
+  \\ gvs[env_consistent_def]
   \\ rw[]
   \\ TRY (first_x_assum irule \\ goal_assum drule \\ rw[])
   \\ TRY (res_tac \\ NO_TAC)
   \\ drule find_containing_scope_structure \\ strip_tac \\ gvs[]
+  \\ drule find_containing_scope_lookup >> rw[]
   \\ Cases_on `string_to_num s = id`
   >- (
     drule find_containing_scope_pre_none \\ strip_tac
@@ -4018,10 +4024,8 @@ Theorem pop_scope_ec:
     env_consistent env cx (st with scopes := tl)
 Proof
   rw[env_consistent_def] >> rpt strip_tac
-  >- (`?entry. lookup_scopes id st.scopes = SOME entry` by
-        (res_tac >> gvs[lookup_scopes_def] >> metis_tac[]) >>
-      metis_tac[])
-  >> metis_tac[]
+  >- (res_tac >> gvs[lookup_scopes_def] >> res_tac)
+  >> res_tac
 QED
 
 (* new_variable preserves state_well_typed when the added binding is well-typed *)
@@ -4038,7 +4042,7 @@ Proof
   Cases_on `st.scopes` >>
   gvs[raise_def, set_scopes_def, return_def,
       scope_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
-  metis_tac[]
+  rw[] >> gvs[] >> res_tac
 QED
 
 (* new_variable preserves env_consistent when the id is NOT
@@ -4057,16 +4061,15 @@ Proof
   (* Now: env_consistent env cx st, st.scopes = h::t,
      goal: env_consistent env cx (st with scopes := (h |+ ...) :: t) *)
   `!k. k <> string_to_num id ==>
-    lookup_scopes k ((h |+ (string_to_num id, (tv,v))) :: t) =
+    lookup_scopes k ((h |+ (string_to_num id, <| assignable := T; type := tv; value := v |>)) :: t) =
     lookup_scopes k (h :: t)` by
     (rw[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   rw[env_consistent_def] >> fs[env_consistent_def]
   >- (
     (* var_types *)
     Cases_on `id' = string_to_num id` >- fs[FLOOKUP_DEF] >>
-    `?entry. lookup_scopes id' (h::t) = SOME entry` by metis_tac[] >>
-    `lookup_scopes id' st.scopes = SOME entry` by gvs[] >>
-    res_tac)
+    first_x_assum drule >> strip_tac >>
+    res_tac >> gvs[lookup_scopes_def, FLOOKUP_UPDATE])
   (* global_types + toplevel_types: identical *)
   >> res_tac
 QED
@@ -4171,9 +4174,7 @@ Proof
   >- (
     Cases_on `FLOOKUP (HD st_body.scopes) id`
     (* id not in head: lookup in full scopes = lookup in tail *)
-    >- (`?entry. lookup_scopes id st_body.scopes = SOME entry` by (
-          Cases_on `st_body.scopes` >> gvs[lookup_scopes_def] >> metis_tac[]) >>
-        res_tac)
+    >- (res_tac >> Cases_on `st_body.scopes` >> gvs[lookup_scopes_def] >> res_tac)
     (* id in head of st_body *)
     >> `id IN FDOM (HD st_body.scopes)` by gvs[FLOOKUP_DEF] >>
     (* id not in pushed head sc (by disjointness with env.var_types) *)
@@ -4207,7 +4208,7 @@ QED
 Theorem push_scope_with_var_swt:
   !nm tv v st.
     state_well_typed st /\ value_has_type tv v /\ well_formed_type_value tv ==>
-    state_well_typed (st with scopes updated_by CONS (FEMPTY |+ (nm, (tv, v))))
+    state_well_typed (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tv; value := v |>)))
 Proof
   rw[state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE]
 QED
@@ -5077,13 +5078,14 @@ Resume assign_target_pop_value_well_typed[ScopedVar]:
   ASM_SIMP_TAC (srw_ss()) [return_def, raise_def] >>
   PairCases_on `x` >>
   ASM_SIMP_TAC (srw_ss()) [return_def] >>
-  Cases_on `assign_subscripts x2 x3 (REVERSE sbs) PopOp` >>
+  ASM_SIMP_TAC (srw_ss()) [type_check_def, assert_def, sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `assign_subscripts x2.type x2.value (REVERSE sbs) PopOp` >>
   ASM_SIMP_TAC (srw_ss()) [return_def, raise_def] >>
   strip_tac >>
   (* Get loc_type FIRST (before gvs destroys st.scopes) *)
   imp_res_tac find_containing_scope_lookup >>
-  `loc_type cx st (ScopedVar s) x2` by
-    (PURE_REWRITE_TAC[loc_type_def] >> qexists_tac `x3` >>
+  `loc_type cx st (ScopedVar s) x2.type` by
+    (PURE_REWRITE_TAC[loc_type_def] >> qexists_tac `x2` >>
      ASM_REWRITE_TAC[]) >>
   (* Get type connection *)
   drule eval_base_target_type_connection >>
@@ -5092,10 +5094,10 @@ Resume assign_target_pop_value_well_typed[ScopedVar]:
   imp_res_tac find_containing_scope_structure >>
   `EVERY scope_well_typed st.scopes` by gvs[state_well_typed_def] >>
   `scope_well_typed x1` by (fs[EVERY_APPEND] >> gvs[]) >>
-  `value_has_type x2 x3` by
+  `value_has_type x2.type x2.value` by
     (fs[scope_well_typed_def] >> res_tac >> gvs[]) >>
   (* leaf_type != NoneTV: substitute tyv, unfold evaluate_type for ArrayT *)
-  `leaf_type x2 (REVERSE sbs) <> NoneTV` by (
+  `leaf_type x2.type (REVERSE sbs) <> NoneTV` by (
     CCONTR_TAC >> gvs[evaluate_type_def, AllCaseEqs(), LET_THM]
   ) >>
   (* Apply assign_result_pop_well_typed *)

@@ -767,8 +767,8 @@ Resume eval_preserves_swt[Name]:
   gvs[materialise_def, return_def, expr_type_def, toplevel_value_typed_def] >>
   `EVERY scope_well_typed st.scopes` by fs[state_well_typed_def] >>
   drule lookup_scopes_val_well_typed >> disch_then drule >>
-  strip_tac >> rename1 `value_has_type found_tv _` >>
-  qexists_tac `found_tv` >> simp[] >>
+  strip_tac >>
+  qexists_tac `entry.type` >> simp[] >>
   fs[env_consistent_def] >> res_tac
 QED
 
