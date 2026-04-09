@@ -31,7 +31,6 @@ Ancestors
   contextProps
   arithmeticProps
   abiEncoderProps
-  vyperSmallStep
   vyperInterpreter
   vyperContext
   venomExecSemantics
