@@ -1,2 +1,2 @@
 # Memmerging pass: public API
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../defs ../../simulation ../../simulation/defs ../../simulation/proofs defs proofs ../../../syntax ../../../semantics
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../defs ../../simulation ../../simulation/defs ../../simulation/proofs defs proofs ../../../syntax ../../../semantics ../shared/proofs ../../analysis/dfg
