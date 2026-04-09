@@ -33,7 +33,7 @@ End
 Datatype:
   plan_state = <|
     ps_stack : operand list;
-    ps_spilled : (operand, num) fmap;
+    ps_spilled : (operand # num) list;
     ps_alloc : spill_alloc;
     ps_label_counter : num
   |>
@@ -69,7 +69,7 @@ End
 Definition init_plan_state_def:
   init_plan_state fn_eom = <|
     ps_stack := [];
-    ps_spilled := FEMPTY;
+    ps_spilled := [];
     ps_alloc := init_spill_alloc fn_eom;
     ps_label_counter := 0
   |>

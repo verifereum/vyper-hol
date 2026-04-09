@@ -28,7 +28,7 @@ Definition do_spill_tos_def:
     let op = stack_peek 0 ps.ps_stack in
     ([SOSpill off],
      ps with <| ps_stack := stack_pop 1 ps.ps_stack;
-                ps_spilled := ps.ps_spilled |+ (op, off);
+                ps_spilled := (op, off) :: ps.ps_spilled;
                 ps_alloc := alloc' |>)
 End
 
@@ -45,13 +45,13 @@ End
 (* Restore a spilled operand from memory *)
 Definition do_restore_def:
   do_restore op ps =
-    case FLOOKUP ps.ps_spilled op of
+    case ALOOKUP ps.ps_spilled op of
       NONE => ([] : stack_op list, ps)
     | SOME off =>
         let alloc' = free_spill_slot off ps.ps_alloc in
         ([SORestore off],
          ps with <| ps_stack := stack_push op ps.ps_stack;
-                    ps_spilled := ps.ps_spilled \\ op;
+                    ps_spilled := ADELKEY op ps.ps_spilled;
                     ps_alloc := alloc' |>)
 End
 
@@ -181,7 +181,7 @@ Definition reorder_one_def:
       case stack_get_depth op ps.ps_stack of
         SOME _ => ([] : stack_op list, ps)
       | NONE =>
-          (case FLOOKUP ps.ps_spilled op of
+          (case ALOOKUP ps.ps_spilled op of
             SOME _ => do_restore op ps
           | NONE => ([], ps)) in
     case stack_get_depth op ps1.ps_stack of
@@ -293,9 +293,9 @@ Definition release_dead_spills_def:
   release_dead_spills next_liveness ps =
     let dead = FILTER (λ(op, off).
       case op of Var v => ¬ MEM v next_liveness | _ => T)
-      (fmap_to_alist ps.ps_spilled) in
+      ps.ps_spilled in
     FOLDL (λps' (op, off).
-      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+      ps' with <| ps_spilled := ADELKEY op ps'.ps_spilled;
                   ps_alloc := free_spill_slot off ps'.ps_alloc |>)
     ps dead
 End
