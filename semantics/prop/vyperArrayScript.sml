@@ -78,6 +78,24 @@ Proof
   \\ CASE_TAC \\ simp[]
 QED
 
+Theorem array_index_bounds:
+  ∀tv a i v.
+    array_index tv a i = SOME v ∧
+    (∀al. a = SArrayV al ⇒ ∃t n. tv = ArrayTV t (Fixed n)) ⇒
+    valid_index tv a i
+Proof
+  cheat
+QED
+
+Theorem evaluate_subscript_array_bounds:
+  ∀tenv tv av i x.
+    evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) = INL x ∧
+    (∀al. av = SArrayV al ⇒ ∃t n. tv = ArrayTV t (Fixed n)) ⇒
+    valid_index tv av i
+Proof
+  cheat
+QED
+
 Theorem array_set_index_valid:
   ∀tv a i v. array_is_mutable a ∧ valid_index tv a i ⇒ ∃a'. array_set_index tv a i v = INL (ArrayV a')
 Proof
