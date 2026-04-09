@@ -12,7 +12,7 @@ End
 
 Theorem update_target_name_replace:
   ∀cx st n v.
-    var_in_scope st n ⇒
+    var_assignable st n ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Replace v) =
     update_name st n v
 Proof
@@ -26,7 +26,7 @@ Theorem update_target_name_update:
   ∀cx st n ty bop v1 v2 v.
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
                    NoneTV bop v1 v2 = INL v ∧
-    lookup_name st n = SOME v1 ⇒
+    lookup_name st n = SOME v1 ∧ var_assignable st n ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2) =
     update_name st n v
 Proof
@@ -35,14 +35,14 @@ Proof
 QED
 
 Theorem valid_target_name_implies_var_in_scope:
-  ∀cx st n ao. valid_target cx st (BaseTargetV (ScopedVar n) []) ao ⇒ var_in_scope st n
+  ∀cx st n ao. valid_target cx st (BaseTargetV (ScopedVar n) []) ao ⇒ var_assignable st n
 Proof
   rw[valid_target_def] >>
-  metis_tac[assign_target_scoped_var_implies_var_in_scope]
+  metis_tac[assign_target_scoped_var_implies_var_assignable]
 QED
 
 Theorem valid_target_name_replace:
-  ∀cx st n v. var_in_scope st n ⇒ valid_target cx st (BaseTargetV (ScopedVar n) []) (Replace v)
+  ∀cx st n v. var_assignable st n ⇒ valid_target cx st (BaseTargetV (ScopedVar n) []) (Replace v)
 Proof
   rw[valid_target_def] >>
   imp_res_tac assign_target_name_replace >> simp[]
@@ -50,7 +50,7 @@ QED
 
 Theorem valid_target_name_update:
   ∀cx st n ty bop v1 v2 v.
-    lookup_name st n = SOME v1 ∧
+    lookup_name st n = SOME v1 ∧ var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
                    NoneTV bop v1 v2 = INL v ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2)
@@ -60,9 +60,9 @@ Proof
 QED
 
 Theorem update_target_name_subscripts:
-  ∀cx st n sbs ao tv a a'.
-    lookup_name_typed st n = SOME (tv, a) ∧
-    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+  ∀cx st n sbs ao entry a'.
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
+    assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
     update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_name st n a'
 Proof
   rw[update_target_def] >>
@@ -70,9 +70,9 @@ Proof
 QED
 
 Theorem valid_target_name_subscripts:
-  ∀cx st n sbs ao tv a a'.
-    lookup_name_typed st n = SOME (tv, a) ∧
-    assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
+  ∀cx st n sbs ao entry a'.
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
+    assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao
 Proof
   rw[valid_target_def] >>
@@ -158,7 +158,8 @@ QED
 
 Theorem name_lookup_after_update_target_replace:
   ∀cx st n av v.
-    lookup_name_target cx st n = SOME av ⇒
+    lookup_name_target cx st n = SOME av ∧
+    var_assignable st n ⇒
     lookup_name (update_target cx st av (Replace v)) n = SOME v
 Proof
   rw[lookup_name_target_def, lookup_base_target_def] >>
@@ -169,7 +170,6 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  `var_in_scope r n` by simp[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def] >>
   simp[update_target_name_replace, lookup_after_update]
 QED
 
@@ -177,6 +177,7 @@ Theorem name_lookup_after_update_target_update:
   ∀cx st n ty bop av v1 v2 v.
     lookup_name st n = SOME v1 ∧
     lookup_name_target cx st n = SOME av ∧
+    var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
                    NoneTV bop v1 v2 = INL v ⇒
     lookup_name (update_target cx st av (Update ty bop v2)) n = SOME v
@@ -207,7 +208,7 @@ QED
 
 Theorem lookup_name_target_is_valid_target_Replace:
   ∀cx st n av v.
-    lookup_name_target cx st n = SOME av ⇒
+    lookup_name_target cx st n = SOME av ∧ var_assignable st n ⇒
     valid_target cx st av (Replace v)
 Proof
   rpt strip_tac >>

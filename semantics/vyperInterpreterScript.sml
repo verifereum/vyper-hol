@@ -133,7 +133,8 @@ Definition bind_arguments_def:
   bind_arguments tenv ((id, typ)::params) (v::vs) =
     (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
      case safe_cast tv v of NONE => NONE | SOME v =>
-      OPTION_MAP (λm. m |+ (string_to_num id, (tv, v)))
+      OPTION_MAP (λm. m |+ (string_to_num id,
+        <| assignable := T; type := tv; value := v |>))
         (bind_arguments tenv params vs)) ∧
   bind_arguments _ _ _ = NONE
 End
