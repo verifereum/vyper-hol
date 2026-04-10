@@ -70,3 +70,30 @@ Proof
   Cases_on `bind_arguments tenv args t` >> simp[] >>
   strip_tac >> res_tac
 QED
+
+(* ===== Error Rollback Properties (issue #180) ===== *)
+
+Theorem call_external_function_error_rollback:
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret = (INR e, am') ⇒
+  am' = am
+Proof
+  simp[Once call_external_function_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
+  rpt strip_tac >>
+  gvs[pairTheory.ELIM_UNCURRY, AllCaseEqs()]
+QED
+
+Theorem call_external_error_rollback:
+  call_external am tx = (INR e, am') ⇒
+  am' = am
+Proof
+  simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
+QED
+
+Theorem call_external_error_no_state_change:
+  call_external am tx = (INR e, am') ⇒
+  am'.accounts = am.accounts ∧
+  am'.tStorage = am.tStorage ∧
+  am'.immutables = am.immutables
+Proof
+  strip_tac >> imp_res_tac call_external_error_rollback >> gvs[]
+QED
