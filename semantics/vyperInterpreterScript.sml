@@ -1530,11 +1530,11 @@ Definition call_external_function_def:
   (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
          else SOME am)
    of NONE => (INR $ Error (RuntimeError "call constants_env"), am)
-    | SOME am =>
-   let st = initial_state am [env] in
-   let srcs = am.sources in
-   let exps = am.exports in
-   let layouts = am.layouts in
+    | SOME am_c =>
+   let st = initial_state am_c [env] in
+   let srcs = am_c.sources in
+   let exps = am_c.exports in
+   let layouts = am_c.layouts in
    let is_view = (mut = View ∨ mut = Pure) in
    let lock_action = if nr then
      case cx.nonreentrant_slot of
@@ -1556,13 +1556,13 @@ Definition call_external_function_def:
        | (INR (ReturnException v), st) =>
            (case unlock_action st of
             | (INL (), st) =>
-              (let am = abstract_machine_from_state srcs exps layouts st in
+              (let am_ret = abstract_machine_from_state srcs exps layouts st in
                case evaluate_type all_tenv ret
                of NONE => (INR (Error (RuntimeError "eval ret")), am)
                 | SOME tv =>
                case safe_cast tv v
                of NONE => (INR (Error (RuntimeError "ext cast ret")), am)
-                | SOME v => (INL v, am))
+                | SOME v => (INL v, am_ret))
             | (INR e, st) => (INR e, am))
        | (INR e, st) => (INR e, am)) in
     (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
