@@ -7,8 +7,11 @@
  * TOP-LEVEL:
  *   remove_block          — remove a block by label
  *   replace_block         — replace a block's content by label
- *   subst_label_op/inst/block/fn — label substitution chain
- *   subst_label_map_op/inst/block/fn — batch label substitution from map
+ *   subst_label_op/inst/block/fn — single-pair label substitution
+ *   subst_label_terminator — single-pair, terminators only
+ *   subst_label_map_op/inst — batch label substitution primitives
+ *   subst_block_labels_inst/block/fn — batch substitution, block-refs only
+ *     (restricts to terminators + PHI; leaves INVOKE/OFFSET alone)
  *   is_jmp_only           — block is a single unconditional jump
  *   no_phis               — block has no PHI instructions
  *   single_succ_jmp       — block's terminator is JMP to a given label
@@ -19,6 +22,7 @@
  *   block_preds           — predecessor blocks of a label
  *   num_preds             — number of predecessors
  *   num_succs             — number of successors
+ *   fn_all_vars           — all variable names in a function
  *)
 
 Theory cfgTransform
@@ -144,7 +148,7 @@ End
 
 (* Apply a label map (assoc list) to a single operand.
    Unlike subst_label_op (single old→new), this applies all
-   substitutions in one pass. Matches Python _replace_all_labels. *)
+   substitutions in one pass. *)
 Definition subst_label_map_op_def:
   subst_label_map_op label_map (Label l) =
     (case ALOOKUP label_map l of
@@ -160,16 +164,26 @@ Definition subst_label_map_inst_def:
       MAP (subst_label_map_op label_map) inst.inst_operands
 End
 
-Definition subst_label_map_block_def:
-  subst_label_map_block label_map bb =
-    bb with bb_instructions :=
-      MAP (subst_label_map_inst label_map) bb.bb_instructions
+(* Batch label substitution restricted to block-referencing instructions.
+   Only substitutes in instructions where is_block_label_opcode holds
+   (terminators + PHI). Leaves INVOKE, OFFSET, CALLOCA etc. untouched. *)
+Definition subst_block_labels_inst_def:
+  subst_block_labels_inst label_map inst =
+    if is_block_label_opcode inst.inst_opcode
+    then subst_label_map_inst label_map inst
+    else inst
 End
 
-Definition subst_label_map_fn_def:
-  subst_label_map_fn label_map func =
+Definition subst_block_labels_block_def:
+  subst_block_labels_block label_map bb =
+    bb with bb_instructions :=
+      MAP (subst_block_labels_inst label_map) bb.bb_instructions
+End
+
+Definition subst_block_labels_fn_def:
+  subst_block_labels_fn label_map func =
     func with fn_blocks :=
-      MAP (subst_label_map_block label_map) func.fn_blocks
+      MAP (subst_block_labels_block label_map) func.fn_blocks
 End
 
 (* NOTE: Python _replace_all_labels also updates ctx.data_segment label

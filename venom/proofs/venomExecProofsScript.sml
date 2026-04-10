@@ -1532,3 +1532,32 @@ Theorem run_blocks_abort_proof:
 Proof
   rw[] >> rw[Once run_blocks_def]
 QED
+
+(* ==========================================================================
+   Parallel PHI evaluation helpers
+   ========================================================================== *)
+
+Theorem eval_phis_ok_or_error:
+  !s insts. (?s'. eval_phis s insts = OK s') \/
+            (?e. eval_phis s insts = Error e)
+Proof
+  Induct_on `insts` >> rw[eval_phis_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  first_x_assum (qspec_then `s` strip_assume_tac) >> gvs[]
+QED
+
+Theorem eval_phis_no_phis:
+  !s insts.
+    EVERY (\inst. inst.inst_opcode <> PHI) insts ==>
+    eval_phis s insts = OK s
+Proof
+  Induct_on `insts` >> rw[eval_phis_def]
+QED
+
+Theorem phi_prefix_length_no_phis:
+  !insts.
+    EVERY (\inst. inst.inst_opcode <> PHI) insts ==>
+    phi_prefix_length insts = 0
+Proof
+  Cases >> rw[phi_prefix_length_def] >> gvs[]
+QED

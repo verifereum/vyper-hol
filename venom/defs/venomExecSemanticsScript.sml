@@ -1203,6 +1203,53 @@ Definition run_block_def:
   run_block fuel ctx bb s = exec_block fuel ctx bb (s with vs_inst_idx := 0)
 End
 
+(* Alias: run_block_non_phis is exec_block (for backward compat with
+   proofs written against the pre-merge 4-way mutual recursion). *)
+Overload run_block_non_phis = ``exec_block``
+val run_block_non_phis_def = save_thm("run_block_non_phis_def", exec_block_def);
+
+(* --------------------------------------------------------------------------
+   Parallel PHI evaluation helpers
+
+   Although step_inst handles PHIs sequentially, the parallel-read model
+   is convenient for proving correctness of PHI-rewriting passes.
+   eval_phis reads all PHI sources from the original state s,
+   accumulating writes into the result state.
+   -------------------------------------------------------------------------- *)
+
+Definition eval_one_phi_def:
+  eval_one_phi s inst =
+    case (inst.inst_outputs, s.vs_prev_bb) of
+      ([out], SOME prev) =>
+        (case resolve_phi prev inst.inst_operands of
+           NONE => NONE
+         | SOME val_op =>
+             case eval_operand val_op s of
+               SOME v => SOME (out, v)
+             | NONE => NONE)
+    | _ => NONE
+End
+
+Definition eval_phis_def:
+  eval_phis s [] = OK s /\
+  eval_phis s (inst::rest) =
+    if inst.inst_opcode <> PHI then OK s
+    else
+      case eval_one_phi s inst of
+        NONE => Error "phi evaluation failed"
+      | SOME (out, v) =>
+          case eval_phis s rest of
+            OK s' => OK (update_var out v s')
+          | err => err
+End
+
+Definition phi_prefix_length_def:
+  phi_prefix_length [] = 0 /\
+  phi_prefix_length (inst::rest) =
+    if inst.inst_opcode = PHI then SUC (phi_prefix_length rest)
+    else 0
+End
+
 (* step_inst preserves inst_idx for non-terminators (all opcodes incl INVOKE) *)
 Theorem step_inst_preserves_inst_idx:
   !fuel ctx inst s s'.

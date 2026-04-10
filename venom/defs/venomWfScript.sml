@@ -13,15 +13,36 @@ Ancestors
   venomInst
 
 (* ==========================================================================
-   PHI operand well-formedness: alternating (Label, Var) pairs.
+   PHI operand well-formedness
    ========================================================================== *)
 
+(* Legacy weak version — used by some existing proofs.
+   Allows odd singletons and non-Label at even positions. *)
 Definition phi_well_formed_def:
   phi_well_formed [] = T /\
   phi_well_formed [_] = T /\
   phi_well_formed (Label lbl :: Var v :: rest) = phi_well_formed rest /\
   phi_well_formed (Label lbl :: _ :: rest) = F /\
   phi_well_formed (_ :: _ :: rest) = phi_well_formed rest
+End
+
+(* Strict PHI operand structure: alternating Label/Var pairs.
+   Matches Python's phi_operands assertion exactly:
+     assert isinstance(label, IRLabel)
+     assert isinstance(var, IRVariable)
+   Implies phi_well_formed, EVEN length, and all values are Var. *)
+Definition phi_operands_wf_def:
+  phi_operands_wf [] = T /\
+  phi_operands_wf (Label l :: Var v :: rest) = phi_operands_wf rest /\
+  phi_operands_wf _ = F
+End
+
+(* Labels within a single PHI are distinct — each predecessor appears
+   at most once.  Trivially satisfied by compiler-generated Venom IR
+   (each CFG predecessor contributes exactly one entry). *)
+Definition phi_labels_distinct_def:
+  phi_labels_distinct ops ⇔
+    ALL_DISTINCT (MAP FST (phi_pairs ops))
 End
 
 (* ==========================================================================
@@ -129,7 +150,7 @@ Definition inst_wf_def:
     | SINK => inst.inst_outputs = []
     (* ---- SSA ---- *)
     | PHI => LENGTH inst.inst_outputs = 1 ∧
-             phi_well_formed inst.inst_operands
+             phi_operands_wf inst.inst_operands
     | ASSIGN => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
     | NOP => inst.inst_outputs = []
     | PARAM => ∃idx. inst.inst_operands = [Lit idx] ∧
@@ -285,6 +306,15 @@ End
 (* Check if instruction is a PHI. *)
 Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
+End
+
+(* Generated split-block labels don't collide with existing block labels.
+   Used by cfg_normalization: split_block_name must not produce a label
+   already in fn_labels. Parameterized by the name generator so other
+   passes can reuse this pattern. *)
+Definition split_labels_fresh_def:
+  split_labels_fresh name_fn func ⇔
+    ∀p t. ¬MEM (name_fn p t) (fn_labels func)
 End
 
 (* ==========================================================================

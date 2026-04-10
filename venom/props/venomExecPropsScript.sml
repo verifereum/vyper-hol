@@ -355,11 +355,15 @@ Theorem fuel_mono:
   (!n m ctx bb s r.
      exec_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
      exec_block m ctx bb s = r) /\
+  (!n m ctx bb s r.
+     run_block n ctx bb s = r /\ (!e. r <> Error e) /\ n <= m ==>
+     run_block m ctx bb s = r) /\
   (!n m ctx fn s r.
      run_blocks n ctx fn s = r /\ (!e. r <> Error e) /\ n <= m ==>
      run_blocks m ctx fn s = r)
 Proof
-  ACCEPT_TAC venomExecProofsTheory.fuel_mono
+  rpt strip_tac >> gvs[venomExecSemanticsTheory.run_block_def] >>
+  metis_tac[venomExecProofsTheory.fuel_mono]
 QED
 
 Theorem step_inst_base_nonerr_var_fdom:
@@ -489,4 +493,60 @@ Theorem run_blocks_abort:
     ⇒
     run_blocks (SUC fuel) ctx fn ss = Abort a ss'
 Proof ACCEPT_TAC run_blocks_abort_proof
+QED
+
+(* ==========================================================================
+   run_block wrappers (unfold run_block_def to exec_block)
+   ========================================================================== *)
+
+Theorem run_block_OK_not_halted:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
+Proof
+  rw[venomExecSemanticsTheory.run_block_def] >>
+  metis_tac[exec_block_OK_not_halted]
+QED
+
+Theorem run_block_OK_inst_idx_0:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+Proof
+  rw[venomExecSemanticsTheory.run_block_def] >>
+  metis_tac[exec_block_OK_inst_idx_0]
+QED
+
+Theorem run_block_ok_sets_prev_bb:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==> s'.vs_prev_bb <> NONE
+Proof
+  rw[venomExecSemanticsTheory.run_block_def] >>
+  metis_tac[exec_block_ok_sets_prev_bb]
+QED
+
+Theorem run_block_ok_prev_bb:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  fs[venomExecSemanticsTheory.run_block_def] >>
+  imp_res_tac exec_block_ok_prev_bb >>
+  gvs[]
+QED
+
+Theorem run_block_current_bb_in_succs:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    run_block fuel ctx bb s = OK s1 ==>
+    MEM s1.vs_current_bb (bb_succs bb)
+Proof
+  rpt strip_tac >>
+  fs[venomExecSemanticsTheory.run_block_def] >>
+  imp_res_tac exec_block_current_bb_in_succs >>
+  gvs[]
 QED

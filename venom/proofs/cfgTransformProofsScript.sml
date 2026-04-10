@@ -475,3 +475,50 @@ Proof
   qexists_tac `entry` >> rw[] >>
   metis_tac[relationTheory.RTC_RTC]
 QED
+
+
+(* ===== subst_block_labels structural lemmas ===== *)
+
+Theorem subst_block_labels_block_label:
+  !m bb. (subst_block_labels_block m bb).bb_label = bb.bb_label
+Proof
+  rw[subst_block_labels_block_def]
+QED
+
+Theorem fn_entry_label_subst_block_labels_fn:
+  !m func.
+    fn_entry_label (subst_block_labels_fn m func) = fn_entry_label func
+Proof
+  rw[subst_block_labels_fn_def, fn_entry_label_def, entry_block_def] >>
+  Cases_on `func.fn_blocks` >> simp[] >>
+  simp[subst_block_labels_block_label]
+QED
+
+Theorem fn_labels_subst_block_labels_fn:
+  !m func.
+    fn_labels (subst_block_labels_fn m func) = fn_labels func
+Proof
+  rw[subst_block_labels_fn_def, fn_labels_def, listTheory.MAP_MAP_o,
+     combinTheory.o_DEF, subst_block_labels_block_label]
+QED
+
+Theorem fn_entry_label_MAP_bb_label:
+  !f bbs.
+    (!bb. (f bb).bb_label = bb.bb_label) ==>
+    fn_entry_label (<| fn_blocks := MAP f bbs |>) =
+    fn_entry_label (<| fn_blocks := bbs |>)
+Proof
+  rw[fn_entry_label_def, entry_block_def] >>
+  Cases_on `bbs` >> simp[]
+QED
+
+Theorem fn_entry_label_replace_block:
+  !lbl bb' func.
+    (bb'.bb_label = lbl) ==>
+    fn_entry_label (func with fn_blocks := replace_block lbl bb' func.fn_blocks) =
+    fn_entry_label func
+Proof
+  rw[fn_entry_label_def, entry_block_def, replace_block_def] >>
+  Cases_on `func.fn_blocks` >> simp[] >>
+  IF_CASES_TAC >> simp[]
+QED

@@ -240,6 +240,17 @@ Definition is_terminator_def:
   is_terminator _ = F
 End
 
+(* Does this opcode use Label operands as block references?
+   Terminators (JMP/JNZ/DJMP) use Labels as jump targets.
+   PHI uses Labels as predecessor block identifiers.
+   Other opcodes that take Label operands (INVOKE, OFFSET, CALLOCA)
+   use them for non-block purposes (function names, label_offsets keys)
+   and must NOT be treated as block references. *)
+Definition is_block_label_opcode_def:
+  is_block_label_opcode (opc : opcode) ⇔
+    is_terminator opc ∨ opc = PHI
+End
+
 (* Pseudo-instructions: not real operations, just SSA bookkeeping.
  * Matches Python IRInstruction.is_pseudo (phi, param, source).
  * We omit "source" (test-only opcode not in our IR). *)
