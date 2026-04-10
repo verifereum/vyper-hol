@@ -211,18 +211,9 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "raw_call(",
-  "raw_log(",
-  "raw_revert(",
-  "selfdestruct",
   "msg.mana", "msg.gas",
-  "raw_create(",
-  "create_from_blueprint(",
-  "create_minimal_proxy_to(",
-  "create_copy_of(",
   "gas=",
-  "pragma nonreentrancy",
-  "@nonreentrant"
+  "pragma nonreentrancy"
 ]
 
 fun has_unsupported_patterns src =
