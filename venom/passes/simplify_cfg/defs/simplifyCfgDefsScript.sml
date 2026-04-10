@@ -19,11 +19,13 @@
  *   simplify_cfg_ctx          — transform all functions in context
  *
  * Source: vyper/venom/passes/simplify_cfg.py
+ * Upstream: vyperlang/vyper@9964d4285 (fix phi update in simplify_cfg, #4808)
  *)
 
 Theory simplifyCfgDefs
 Ancestors
   cfgTransform venomWf venomExecSemantics
+  venomInst cfgTransformProofs
 
 (* ===== Unreachable Block Removal ===== *)
 
@@ -76,7 +78,11 @@ End
 Definition fix_phis_in_block_def:
   fix_phis_in_block actual_preds bb =
     let insts' = MAP (fix_phi_inst actual_preds) bb.bb_instructions in
-    let (phis, non_phis) = PARTITION (λi. i.inst_opcode = PHI) insts' in
+    (* Stable partition: PHIs first, then non-PHIs, preserving relative order.
+       Python: bb.instructions.sort(key=lambda inst: inst.opcode != "phi")
+       PARTITION reverses order -- use FILTER for stable reordering. *)
+    let phis = FILTER (λi. i.inst_opcode = PHI) insts' in
+    let non_phis = FILTER (λi. i.inst_opcode <> PHI) insts' in
     bb with bb_instructions := phis ++ non_phis
 End
 
@@ -94,12 +100,16 @@ End
    A has single successor B, B has single predecessor A, B has no PHIs. *)
 (* Python checks: len(cfg_out(bb)) == 1 and len(cfg_in(next_bb)) == 1.
    No JMP opcode check — any terminator with single successor triggers merge.
-   no_phis: defensive (fix_all_phis should have eliminated PHIs already). *)
+   no_phis: defensive (fix_all_phis should have eliminated PHIs already).
+   Entry exclusion: Python cfg_in counts the implicit entry predecessor,
+   so cfg_in(entry) >= 2 always. We model this explicitly. *)
 Definition can_merge_blocks_def:
   can_merge_blocks func a b ⇔
     bb_succs a = [b.bb_label] ∧
+    single_succ_jmp a b.bb_label ∧
     num_preds func b.bb_label = 1 ∧
-    no_phis b
+    no_phis b ∧
+    fn_entry_label func ≠ SOME b.bb_label
 End
 
 (* Merge B into A: drop A's terminator, append B's instructions. *)
@@ -114,14 +124,16 @@ End
 (* Can a trivial jump block be bypassed?
    Python: len(cfg_in(next_bb)) == 1 and len(cfg_out(next_bb)) == 1
            and len(next_bb.instructions) == 1
-   Context: called when len(cfg_out(a)) == 2 (from collapse_dfs). *)
+   Context: called when len(cfg_out(a)) == 2 (from collapse_dfs).
+   Entry exclusion: same as can_merge_blocks — Python cfg_in prevents this. *)
 Definition can_bypass_jump_def:
   can_bypass_jump func a b ⇔
     LENGTH b.bb_instructions = 1 ∧
     num_succs a = 2 ∧
     MEM b.bb_label (bb_succs a) ∧
     num_preds func b.bb_label = 1 ∧
-    num_succs b = 1
+    num_succs b = 1 ∧
+    fn_entry_label func ≠ SOME b.bb_label
 End
 
 (* PHI agreement check: for each PHI in target, if both a and b are
@@ -166,12 +178,15 @@ Definition do_merge_jump_def:
       [target_lbl] =>
         (case lookup_block target_lbl func.fn_blocks of
            SOME target =>
-             (* Update A's terminator: b → target *)
+             (* Update A's terminator: b → target, AND apply PHI bypass
+                to A (needed when a = target; no-op otherwise since A's
+                PHIs don't reference b when b isn't A's predecessor). *)
              let a' = a with bb_instructions :=
-               MAP (λinst.
-                 if ¬is_terminator inst.inst_opcode then inst
-                 else subst_label_inst b.bb_label target_lbl inst)
-               a.bb_instructions in
+               MAP (update_phi_bypass a.bb_label b.bb_label)
+                 (MAP (λinst.
+                   if ¬is_terminator inst.inst_opcode then inst
+                   else subst_label_inst b.bb_label target_lbl inst)
+                 a.bb_instructions) in
              (* Update target's PHIs *)
              let target' = target with bb_instructions :=
                MAP (update_phi_bypass a.bb_label b.bb_label)
@@ -216,6 +231,12 @@ Definition try_bypass_def:
       SOME next_bb =>
         if can_bypass_jump func bb next_bb then
           let target_lbl = HD (bb_succs next_bb) in
+          (* Guard: skip if target is already a successor of bb or
+             bb itself. The Python handles these via merge_blocks on
+             the next DFS iteration instead. *)
+          if MEM target_lbl (bb_succs bb) ∨ (target_lbl = bb.bb_label) then
+            try_bypass func label_map bb rest
+          else
           (case lookup_block target_lbl func.fn_blocks of
              SOME target =>
                if phi_values_agree bb.bb_label next_bb.bb_label
@@ -229,77 +250,211 @@ Definition try_bypass_def:
     | NONE => try_bypass func label_map bb rest)
 End
 
-(* DFS collapse from a block. After a successful merge/bypass, re-process
-   the same block (Python recurses on bb after merge). Tracks visited set.
-   Returns (updated_fn, updated_label_map, updated_visited).
-   collapse_dfs: process a single block
-   collapse_dfs_succs: DFS into a list of successor blocks *)
+(* ===== Termination Helpers ===== *)
+
+(* FIND SOME implies MEM *)
+Theorem FIND_SOME_MEM[local]:
+  !P l x. FIND P l = SOME x ==> MEM x l /\ P x
+Proof
+  Induct_on `l` >> simp[listTheory.FIND_thm] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >> metis_tac[]
+QED
+
+(* lookup_block SOME implies the block is in the list with matching label *)
+Theorem lookup_block_MEM[local]:
+  !lbl bbs bb.
+    lookup_block lbl bbs = SOME bb ==>
+    MEM bb bbs /\ bb.bb_label = lbl
+Proof
+  rw[lookup_block_def] >> imp_res_tac FIND_SOME_MEM >> fs[]
+QED
+
+(* lookup_block NONE implies no block has the label *)
+Theorem lookup_block_NONE_not_MEM[local]:
+  !bbs lbl.
+    lookup_block lbl bbs = NONE ==>
+    !bb. MEM bb bbs ==> bb.bb_label <> lbl
+Proof
+  Induct >> rw[lookup_block_def, listTheory.FIND_thm] >>
+  fs[GSYM lookup_block_def]
+QED
+
+(* remove_block strictly decreases length when label is present *)
+Theorem remove_block_LENGTH_LT[local]:
+  !lbl bbs bb.
+    MEM bb bbs /\ bb.bb_label = lbl ==>
+    LENGTH (remove_block lbl bbs) < LENGTH bbs
+Proof
+  rw[remove_block_def] >>
+  irule rich_listTheory.LENGTH_FILTER_LESS >>
+  rw[listTheory.EXISTS_MEM, combinTheory.o_DEF] >>
+  metis_tac[]
+QED
+
+(* try_bypass returning F leaves func and label_map unchanged *)
+Theorem try_bypass_F_unchanged:
+  !succs func lm bb func' lm'.
+    try_bypass func lm bb succs = (func', lm', F) ==>
+    func' = func /\ lm' = lm
+Proof
+  Induct >> rw[try_bypass_def] >>
+  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _` mp_tac >>
+  rpt (CASE_TAC >> fs[]) >> metis_tac[]
+QED
+
+(* do_merge_jump SOME implies fn_blocks strictly decreases *)
+Theorem do_merge_jump_blocks_decrease[local]:
+  !func a b lm func' lm'.
+    MEM b func.fn_blocks ==>
+    do_merge_jump func a b lm = SOME (func', lm') ==>
+    LENGTH func'.fn_blocks < LENGTH func.fn_blocks
+Proof
+  rw[do_merge_jump_def] >>
+  qpat_x_assum `(case _ of [] => _ | [_] => _ | _ => _) = _` mp_tac >>
+  rpt (CASE_TAC >> fs[]) >> rw[] >>
+  simp[LENGTH_replace_block] >>
+  irule remove_block_LENGTH_LT >>
+  metis_tac[]
+QED
+
+(* try_bypass returning T implies fn_blocks strictly decreases *)
+Theorem try_bypass_T_blocks_decrease[local]:
+  !succs func lm bb func' lm'.
+    try_bypass func lm bb succs = (func', lm', T) ==>
+    LENGTH func'.fn_blocks < LENGTH func.fn_blocks
+Proof
+  Induct >> rw[try_bypass_def] >>
+  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _` mp_tac >>
+  rpt (CASE_TAC >> fs[]) >>
+  rpt (pairarg_tac >> fs[]) >> rw[] >>
+  imp_res_tac lookup_block_MEM >>
+  metis_tac[do_merge_jump_blocks_decrease]
+QED
+
+(* update_succ_phi_labels preserves fn_blocks length *)
+Theorem LENGTH_update_succ_phi_labels[local]:
+  !succs old_lbl new_lbl bbs.
+    LENGTH (update_succ_phi_labels old_lbl new_lbl bbs succs) = LENGTH bbs
+Proof
+  Induct >> rw[update_succ_phi_labels_def, LET_THM] >>
+  CASE_TAC >>
+  fs[LENGTH_replace_block,
+     GSYM (SIMP_RULE (srw_ss()) [LET_THM] update_succ_phi_labels_def)]
+QED
+
+(* FILTER monotonicity for SUM: more restrictive predicate gives smaller SUM *)
+Theorem SUM_MAP_FILTER_mono[local]:
+  !f (P:('a -> bool)) Q l.
+    (!x. P x ==> Q x) ==>
+    SUM (MAP f (FILTER P l)) <= SUM (MAP f (FILTER Q l))
+Proof
+  strip_tac >> Induct_on `l` >> rw[listTheory.FILTER, listTheory.MAP,
+    listTheory.SUM] >>
+  res_tac >> DECIDE_TAC
+QED
+
+(* Quantified visit decrease: the SUM drops by at least f(bb) when we add
+   lbl to visited, because at least that one block is removed from FILTER. *)
+Theorem SUM_visit_decrease_by[local]:
+  !bbs bb lbl vis f.
+    MEM bb bbs /\ bb.bb_label = lbl /\ ~MEM lbl vis ==>
+    SUM (MAP f (FILTER (\b. ~MEM b.bb_label (lbl::vis)) bbs)) + f bb <=
+    SUM (MAP f (FILTER (\b. ~MEM b.bb_label vis) bbs))
+Proof
+  Induct >> rpt strip_tac >>
+  gvs[listTheory.FILTER, listTheory.MAP, listTheory.SUM, listTheory.MEM]
+  (* bb = h: goal is monotonicity *)
+  >- (irule SUM_MAP_FILTER_mono >> rw[] >> metis_tac[])
+  (* bb in tail: case split on h's membership, apply IH *)
+  >> rpt IF_CASES_TAC >> fs[listTheory.MAP, listTheory.SUM] >>
+     first_x_assum (qspecl_then [`bb`,`vis`,`f`] mp_tac) >> rw[]
+QED
+
+(* FILTER with lbl::vis gives ≤ SUM compared to vis *)
+Theorem SUM_MAP_FILTER_visit_le[local]:
+  !bbs lbl vis f.
+    SUM (MAP f (FILTER (\bb. ~MEM bb.bb_label (lbl::vis)) bbs)) <=
+    SUM (MAP f (FILTER (\bb. ~MEM bb.bb_label vis) bbs))
+Proof
+  rpt gen_tac >> irule SUM_MAP_FILTER_mono >>
+  rw[listTheory.MEM] >> metis_tac[]
+QED
+
+(* DFS collapse using explicit worklist.
+   Processes blocks depth-first: after visiting a block, its successors
+   are pushed to the front of the worklist.
+   After a successful merge/bypass, re-processes the same block.
+   Returns (updated_fn, updated_label_map, updated_visited). *)
 Definition collapse_dfs_def:
-  (collapse_dfs func label_map visited lbl =
-    case lookup_block lbl func.fn_blocks of
-      NONE => (func, label_map, visited)
-    | SOME bb =>
-        (* Try chain merge: single successor with single predecessor *)
-        case bb_succs bb of
-          [next_lbl] =>
-            (case lookup_block next_lbl func.fn_blocks of
-               SOME next_bb =>
-                 if can_merge_blocks func bb next_bb then
-                   let merged = merge_blocks bb next_bb in
-                   let bbs' = replace_block lbl merged
-                       (remove_block next_lbl func.fn_blocks) in
-                   (* Immediate successor PHI update: next_lbl → lbl *)
-                   let bbs'' = update_succ_phi_labels
-                       next_lbl lbl bbs' (bb_succs merged) in
-                   let func' = func with fn_blocks := bbs'' in
-                   let label_map' = (next_bb.bb_label, lbl) :: label_map in
-                   (* TERMINATION: merge removes next_lbl block,
-                      fn_blocks count decreases *)
-                   collapse_dfs func' label_map' visited lbl
-                 else
-                   (* No merge — mark visited, DFS into successor *)
-                   if MEM lbl visited then (func, label_map, visited)
+  (collapse_dfs func label_map visited [] = (func, label_map, visited)) ∧
+  (collapse_dfs func label_map visited (lbl::wl) =
+    if MEM lbl visited then collapse_dfs func label_map visited wl
+    else
+      case lookup_block lbl func.fn_blocks of
+        NONE => collapse_dfs func label_map (lbl::visited) wl
+      | SOME bb =>
+          case bb_succs bb of
+            [next_lbl] =>
+              (case lookup_block next_lbl func.fn_blocks of
+                 SOME next_bb =>
+                   if can_merge_blocks func bb next_bb then
+                     let merged = merge_blocks bb next_bb in
+                     let bbs' = replace_block lbl merged
+                         (remove_block next_lbl func.fn_blocks) in
+                     let bbs'' = update_succ_phi_labels
+                         next_lbl lbl bbs' (bb_succs merged) in
+                     let func' = func with fn_blocks := bbs'' in
+                     let label_map' = (next_bb.bb_label, lbl) :: label_map in
+                     collapse_dfs func' label_map' visited (lbl::wl)
                    else
-                     let visited' = lbl :: visited in
-                     (* TERMINATION: lbl added to visited,
-                        unvisited count decreases *)
-                     collapse_dfs func label_map visited' next_lbl
-             | NONE =>
-                 if MEM lbl visited then (func, label_map, visited)
-                 else (func, label_map, lbl :: visited))
-        | succs =>
-            (* Try bypass for 2-successor case *)
-            let (func', lm', bypassed) =
-              try_bypass func label_map bb succs in
-            if bypassed then
-              (* TERMINATION: bypass removes a block,
-                 fn_blocks count decreases *)
-              collapse_dfs func' lm' visited lbl
-            else if MEM lbl visited then (func', lm', visited)
-            else
-              let visited' = lbl :: visited in
-              (* TERMINATION: lbl added to visited,
-                 unvisited count decreases *)
-              collapse_dfs_succs func' lm' visited' succs) ∧
-  (collapse_dfs_succs func label_map visited [] =
-    (func, label_map, visited)) ∧
-  (collapse_dfs_succs func label_map visited (s::rest) =
-    let (func', lm', vis') = collapse_dfs func label_map visited s in
-    (* TERMINATION: fn_blocks non-increasing, visited non-shrinking,
-       succ list strictly shorter *)
-    collapse_dfs_succs func' lm' vis' rest)
+                     collapse_dfs func label_map (lbl::visited) (next_lbl::wl)
+               | NONE =>
+                   collapse_dfs func label_map (lbl::visited) wl)
+          | succs =>
+              let (func', lm', bypassed) =
+                try_bypass func label_map bb succs in
+              if bypassed then
+                collapse_dfs func' lm' visited (lbl::wl)
+              else
+                collapse_dfs func label_map (lbl::visited) (succs ++ wl))
 Termination
-  WF_REL_TAC `inv_image ($< LEX $< LEX $<)
-    (λx. case x of
-       INL (func, lm, vis, lbl) =>
-         (LENGTH func.fn_blocks,
-          LENGTH (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks),
-          0)
-     | INR (func, lm, vis, succs) =>
-         (LENGTH func.fn_blocks,
-          LENGTH (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks),
-          LENGTH succs))`
-  >> cheat
+  WF_REL_TAC `inv_image ($< LEX $<)
+    (λ(func, lm, vis, wl).
+       (LENGTH func.fn_blocks,
+        SUM (MAP (λbb. LENGTH (bb_succs bb) + 1)
+                 (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks))
+        + LENGTH wl))`
+  >> rpt conj_tac >> rpt strip_tac >> gvs[]
+  (* Easy cases: monotonicity + wl shrinks, or vacuous try_bypass [] T *)
+  >> TRY (gvs[try_bypass_def] >> NO_TAC)
+  >> TRY (
+    `SUM (MAP (\bb. LENGTH (bb_succs bb) + 1)
+          (FILTER (\bb. bb.bb_label <> lbl /\ ~MEM bb.bb_label visited)
+                  func.fn_blocks)) <=
+     SUM (MAP (\bb. LENGTH (bb_succs bb) + 1)
+          (FILTER (\bb. ~MEM bb.bb_label visited) func.fn_blocks))` by
+      (irule SUM_MAP_FILTER_mono >> rw[]) >> DECIDE_TAC >> NO_TAC)
+  (* merge: fn_blocks strictly decreases *)
+  >- (DISJ1_TAC >> simp[LENGTH_update_succ_phi_labels, LENGTH_replace_block] >>
+      irule remove_block_LENGTH_LT >> imp_res_tac lookup_block_MEM >> metis_tac[])
+  (* single succ, no merge: SUM strictly decreases by visiting lbl *)
+  >- (imp_res_tac lookup_block_MEM >>
+      drule_all SUM_visit_decrease_by >>
+      disch_then (qspec_then `\bb. LENGTH (bb_succs bb) + 1` mp_tac) >>
+      gvs[] >> DECIDE_TAC)
+  (* multi-succ, bypass T: fn_blocks strictly decreases *)
+  >- (DISJ1_TAC >>
+      `try_bypass func label_map bb (next_lbl::v6::v7) = (func',lm',T)` by
+        metis_tac[] >>
+      imp_res_tac try_bypass_T_blocks_decrease >> fs[])
+  (* multi-succ, bypass F: SUM decreases by visit, succs add to wl *)
+  >> `try_bypass func label_map bb (next_lbl::v6::v7) = (func',lm',F)` by
+       metis_tac[] >>
+     imp_res_tac try_bypass_F_unchanged >> gvs[] >>
+     imp_res_tac lookup_block_MEM >>
+     drule_all SUM_visit_decrease_by >>
+     disch_then (qspec_then `\bb. LENGTH (bb_succs bb) + 1` mp_tac) >>
+     gvs[]
 End
 
 (* ===== Full Pass ===== *)
@@ -316,10 +471,10 @@ Definition simplify_cfg_round_def:
            which calls fix_phi_instructions for all blocks *)
         let func1a = fix_all_phis func1 in
         let (func2, label_map, _) =
-          collapse_dfs func1a [] [] entry in
+          collapse_dfs func1a [] [] [entry] in
         (* Batch label replacement *)
         let func3 = if label_map = [] then func2
-                     else subst_label_map_fn label_map func2 in
+                     else subst_block_labels_fn label_map func2 in
         (* Remove newly unreachable blocks + final PHI fix *)
         let func4 = remove_unreachable_blocks func3 in
         fix_all_phis func4
