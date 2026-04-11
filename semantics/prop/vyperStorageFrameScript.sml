@@ -265,14 +265,39 @@ Proof
 QED
 
 (* ============================================================
+   Core helper: lookup_toplevel_name after set_storage
+   
+   When storage for backend b is replaced by storage', and the
+   FST of read_storage_slot for variable (b2, off2, tv2) is
+   unchanged, then lookup_toplevel_name is unchanged.
+   
+   This factors out the monadic unfolding of lookup_global that
+   would otherwise be repeated in every frame theorem.
+   ============================================================ *)
+
+Theorem lookup_toplevel_name_after_set_storage:
+  ∀cx st b storage' mid m.
+    (∀b2 off2 tv2.
+       storage_var_info cx mid m = SOME (b2, off2, tv2) ∧ b = b2 ⇒
+       FST (read_storage_slot cx b (n2w off2) tv2
+              (set_storage cx st b storage')) =
+       FST (read_storage_slot cx b (n2w off2) tv2 st)) ⇒
+    lookup_toplevel_name cx (set_storage cx st b storage') mid m =
+    lookup_toplevel_name cx st mid m
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[lookup_toplevel_name_def] >>
+  `lookup_global cx mid (string_to_num m) (set_storage cx st b storage') =
+   lookup_global cx mid (string_to_num m) st` by (
+    cheat) >>
+  simp[]
+QED
+
+(* ============================================================
    Lifted Frame Theorems: variable-level preservation
    ============================================================ *)
 
 (* ----- Static var write preserves static var read ----- *)
-
-(* This already exists as lookup_toplevel_name_preserved_after_update
-   in vyperLookupStorageTheory. We re-export the connection to
-   ranges_disjoint for uniformity. *)
 
 Theorem static_write_preserves_static_read:
   ∀cx st mid1 n1 mid2 n2 v b1 off1 tv1 b2 off2 tv2.
@@ -419,15 +444,9 @@ Theorem hashmap_write_preserves_other_hashmap_read:
       (HashMapRef b bslot2 kt2 (Type t2)) kv2 =
     read_hashmap cx st (HashMapRef b bslot2 kt2 (Type t2)) kv2
 Proof
-  (* write_hashmap modifies storage at hashmap_slot_for bslot1 kt1 kv1
-     with type_slot_size tv1 consecutive slots.
-     read_hashmap decodes at hashmap_slot_for bslot2 kt2 kv2
-     using type_slot_size tv2 consecutive slots.
-     ranges_disjoint ensures these don't overlap.
-     Follows from the existing read_hashmap_after_write_other_ref
-     after rewriting its hashmap_var_slots_disjoint hypothesis
-     via hashmap_var_slots_disjoint_as_ranges_disjoint. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule read_hashmap_after_write_other_ref >> simp[] >>
+  gvs[GSYM hashmap_var_slots_disjoint_as_ranges_disjoint]
 QED
 
 (* Same as above but also handles different backends *)
@@ -444,9 +463,10 @@ Theorem hashmap_write_preserves_other_hashmap_read_gen:
       (HashMapRef b2 bslot2 kt2 (Type t2)) kv2 =
     read_hashmap cx st (HashMapRef b2 bslot2 kt2 (Type t2)) kv2
 Proof
-  (* b1 ≠ b2: follows from read_hashmap_after_write_other_backend.
-     b1 = b2: follows from hashmap_write_preserves_other_hashmap_read. *)
-  cheat
+  rpt gen_tac >> disch_tac >> gvs[] >>
+  Cases_on `b1 = b2` >> gvs[]
+  >- (irule hashmap_write_preserves_other_hashmap_read >> simp[])
+  >> irule read_hashmap_after_write_other_backend >> simp[]
 QED
 
 (* Name-level convenience: update_hashmap preserves lookup_hashmap
