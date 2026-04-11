@@ -327,16 +327,25 @@ Resume fst_lookup_global_set_storage[storage]:
   Cases_on `evaluate_type (get_tenv cx) t` >>
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
   rename1 `SOME tv'` >>
-  `FST (read_storage_slot cx b' (n2w x) tv'
-          (set_storage cx st b storage')) =
-   FST (read_storage_slot cx b' (n2w x) tv' st)` by (
-    Cases_on `b = b'`
-    >- (gvs[] >> first_x_assum irule >> simp[storage_var_info_def])
-    >> simp[read_storage_slot_eq, get_storage_after_set_other]) >>
+  Cases_on `b = b'` >> gvs[]
+  >- (first_x_assum (qspecl_then [`x`, `tv'`] mp_tac) >>
+      simp[storage_var_info_def] >> strip_tac >>
+      qpat_x_assum `FST _ = FST _` mp_tac >>
+      Cases_on `read_storage_slot cx b (n2w x) tv'
+                  (set_storage cx st b storage')` >>
+      Cases_on `read_storage_slot cx b (n2w x) tv' st` >>
+      simp[] >> disch_tac >>
+      Cases_on `tv'` >>
+      gvs[vyperStateTheory.bind_def,
+           vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      CASE_TAC >> simp[])
+  >> (* Different backend: b ≠ b' *)
   Cases_on `tv'` >>
   simp[vyperStateTheory.bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  rpt CASE_TAC >> gvs[]
+  simp[Excl "w2n_n2w", read_storage_slot_eq,
+       get_storage_after_set_other] >>
+  CASE_TAC >> simp[]
 QED
 
 Finalise fst_lookup_global_set_storage
@@ -361,6 +370,39 @@ Proof
   gvs[]
 QED
 
+(* Key helper: update_toplevel_name reduces to write_storage_slot
+   when storage_var_info succeeds. This factors out the monadic
+   unfolding of set_global that would otherwise appear in every
+   static-write frame theorem. *)
+Theorem update_toplevel_name_eq_write:
+  ∀cx st mid n v b off tv.
+    storage_var_info cx mid n = SOME (b, off, tv) ⇒
+    update_toplevel_name cx st mid n v =
+    SND (write_storage_slot cx b (n2w off) tv v st)
+Proof
+  rpt strip_tac >>
+  gvs[storage_var_info_def, AllCaseEqs()] >>
+  simp[update_toplevel_name_def,
+       Once vyperStateTheory.set_global_def,
+       vyperStateTheory.bind_def,
+       vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.return_def,
+       vyperStateTheory.raise_def]
+QED
+
+(* Key helper: write_hashmap for a leaf HashMapRef reduces to
+   write_storage_slot at the hashmap_slot_for slot. *)
+Theorem write_hashmap_eq_write_storage:
+  ∀cx st b bslot kt t kv v tv.
+    evaluate_type (get_tenv cx) t = SOME tv ⇒
+    write_hashmap cx st (HashMapRef b bslot kt (Type t)) kv v =
+    SND (write_storage_slot cx b (hashmap_slot_for bslot kt kv) tv v st)
+Proof
+  rpt strip_tac >>
+  simp[write_hashmap_def, hashmap_write_def, write_storage_slot_eq] >>
+  CASE_TAC >> simp[]
+QED
+
 (* ============================================================
    Lifted Frame Theorems: variable-level preservation
    ============================================================ *)
@@ -378,21 +420,20 @@ Theorem static_write_preserves_static_read:
     lookup_toplevel_name cx (update_toplevel_name cx st mid1 n1 v) mid2 n2 =
     lookup_toplevel_name cx st mid2 n2
 Proof
-  (* Follows from lookup_toplevel_name_preserved_after_update.
-     The key observation is that well_formed_layout's disjointness
-     condition for same-backend variables is exactly
-     ranges_disjoint off1 (type_slot_size tv1) off2 (type_slot_size tv2)
-     (without the dimword bounds, which come from well_formed_layout's
-     non-overflow clause). For different backends, the proof is direct
-     from get_storage_after_set_other. *)
-  cheat
+  (* update_toplevel_name = SND(write_storage_slot) by update_toplevel_name_eq_write.
+     Then lookup_toplevel_name_after_set_storage + write_preserves_read_num. *)
+  rpt gen_tac >> strip_tac >>
+  `value_has_type tv1 v` by (
+    gvs[storable_value_def] >>
+    first_x_assum irule >> simp[storage_type_of_def]) >>
+  drule_then (fn th => simp[th]) update_toplevel_name_eq_write >>
+  irule lookup_toplevel_name_after_set_storage >>
+  rpt strip_tac >>
+  irule write_preserves_read_num >> simp[] >>
+  gvs[storage_var_info_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 (* ----- Hashmap write preserves static var read (per-key) ----- *)
-
-(* Already essentially proved as lookup_toplevel_name_write_hashmap,
-   but we restate with ranges_disjoint for uniformity and to make
-   the per-key nature explicit. *)
 
 Theorem hashmap_write_preserves_static_read:
   ∀cx st b bslot kt t kv v mid m tv var_b var_off var_tv.
@@ -406,15 +447,14 @@ Theorem hashmap_write_preserves_static_read:
       (write_hashmap cx st (HashMapRef b bslot kt (Type t)) kv v) mid m =
     lookup_toplevel_name cx st mid m
 Proof
-  (* Follows from lookup_toplevel_name_write_hashmap.
-     The existing theorem's hypothesis asks for
-     hashmap_var_slots_disjoint bslot kt tv kv var_off var_tv
-     when b = var_b, which is exactly
-     ranges_disjoint (w2n (hashmap_slot_for bslot kt kv)) (type_slot_size tv)
-                     var_off (type_slot_size var_tv)
-     by hashmap_var_slots_disjoint_as_ranges_disjoint.
-     When b ≠ var_b, get_storage_after_set_other handles it directly. *)
-  cheat
+  (* write_hashmap = SND(write_storage_slot) by write_hashmap_eq_write_storage.
+     Then lookup_toplevel_name_after_set_storage + write_preserves_read_num. *)
+  rpt gen_tac >> strip_tac >>
+  drule_then (fn th => simp[th]) write_hashmap_eq_write_storage >>
+  irule lookup_toplevel_name_after_set_storage >>
+  rpt strip_tac >>
+  irule write_preserves_read_num >> simp[Excl "w2n_n2w"] >>
+  gvs[storage_var_info_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 (* Name-level convenience: update_hashmap preserves lookup_toplevel_name *)
