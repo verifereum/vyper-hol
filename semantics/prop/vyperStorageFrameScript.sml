@@ -497,6 +497,120 @@ Proof
   irule lookup_toplevel_name_after_write >> simp[Excl "w2n_n2w"]
 QED
 
+(* ============================================================
+   Helpers for name-level hashmap theorems.
+
+   All name-level theorems (update_hashmap_*, update_toplevel_*,
+   lookup_hashmap) follow the same pattern:
+   1. Extract concrete HashMapRef via is_leaf_hashmap
+   2. Reduce update_hashmap to write_hashmap
+   3. Extract value_has_type from hashmap_ref_storable
+   4. Apply ref-level theorem
+
+   These helpers factor out steps 1-3.
+   ============================================================ *)
+
+(* is_leaf_hashmap + hashmap_var_info ⇒ THE(lookup) = HashMapRef *)
+Theorem is_leaf_hashmap_THE_lookup:
+  ∀cx st mid n b off kt vt.
+    is_leaf_hashmap cx mid n ∧
+    hashmap_var_info cx mid n = SOME (b, off, kt, vt) ⇒
+    THE (lookup_toplevel_name cx st mid n) = HashMapRef b (n2w off) kt vt
+Proof
+  rpt strip_tac >>
+  gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs()] >>
+  simp[lookup_toplevel_name_def,
+       vyperStateTheory.lookup_global_def,
+       vyperStateTheory.bind_def,
+       vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.return_def]
+QED
+
+(* is_leaf_hashmap ⇒ update_hashmap = write_hashmap ... (THE lookup) *)
+Theorem is_leaf_hashmap_update_eq:
+  ∀cx st mid n kv v.
+    is_leaf_hashmap cx mid n ⇒
+    update_hashmap cx st mid n kv v =
+    write_hashmap cx st (THE (lookup_toplevel_name cx st mid n)) kv v
+Proof
+  rpt strip_tac >>
+  drule is_leaf_hashmap_lookup >>
+  disch_then (qspec_then `st` strip_assume_tac) >>
+  simp[update_hashmap_def]
+QED
+
+(* is_leaf_hashmap ⇒ lookup_hashmap = read_hashmap ... (THE lookup) *)
+Theorem is_leaf_hashmap_lookup_hashmap_eq:
+  ∀cx st mid n kv.
+    is_leaf_hashmap cx mid n ⇒
+    lookup_hashmap cx st mid n kv =
+    read_hashmap cx st (THE (lookup_toplevel_name cx st mid n)) kv
+Proof
+  rpt strip_tac >>
+  drule is_leaf_hashmap_lookup >>
+  disch_then (qspec_then `st` strip_assume_tac) >>
+  simp[lookup_hashmap_def]
+QED
+
+(* State-independent lookup_hashmap: can substitute any st for the THE *)
+Theorem lookup_hashmap_eq_read_hashmap:
+  ∀cx st st' mid n kv.
+    is_leaf_hashmap cx mid n ⇒
+    lookup_hashmap cx st' mid n kv =
+    read_hashmap cx st' (THE (lookup_toplevel_name cx st mid n)) kv
+Proof
+  rpt strip_tac >>
+  `lookup_toplevel_name cx st' mid n = lookup_toplevel_name cx st mid n` by
+    metis_tac[is_leaf_hashmap_lookup_state_independent] >>
+  drule is_leaf_hashmap_lookup >>
+  disch_then (qspec_then `st` strip_assume_tac) >>
+  simp[lookup_hashmap_def]
+QED
+
+(* hashmap_ref_storable + is_leaf_hashmap ⇒ value_has_type *)
+Theorem is_leaf_hashmap_storable_value_has_type:
+  ∀cx st mid n v b off kt vt tv.
+    is_leaf_hashmap cx mid n ∧
+    hashmap_var_info cx mid n = SOME (b, off, kt, vt) ∧
+    get_leaf_tv (get_tenv cx) vt = SOME tv ∧
+    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st mid n)) v ⇒
+    value_has_type tv v
+Proof
+  rpt strip_tac >>
+  drule_all is_leaf_hashmap_THE_lookup >> strip_tac >>
+  gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
+      get_leaf_tv_def] >>
+  gvs[hashmap_ref_storable_def, AllCaseEqs()]
+QED
+
+(* read_hashmap preserved after write_storage_slot to disjoint range.
+   Symmetric counterpart of lookup_toplevel_name_after_write. *)
+Theorem read_hashmap_after_write_storage:
+  ∀cx b_w slot tv_w v b_r bslot kt t tv_r st kv.
+    value_has_type tv_w v ∧
+    evaluate_type (get_tenv cx) t = SOME tv_r ∧
+    (b_w ≠ b_r ∨
+     ranges_disjoint (w2n slot) (type_slot_size tv_w)
+                     (w2n (hashmap_slot_for bslot kt kv)) (type_slot_size tv_r)) ⇒
+    read_hashmap cx (SND (write_storage_slot cx b_w slot tv_w v st))
+                    (HashMapRef b_r bslot kt (Type t)) kv =
+    read_hashmap cx st (HashMapRef b_r bslot kt (Type t)) kv
+Proof
+  rpt gen_tac >> disch_tac >>
+  simp[read_hashmap_def, hashmap_read_def] >>
+  `IS_SOME (encode_value tv_w v)` by
+    metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
+  Cases_on `encode_value tv_w v` >> gvs[] >>
+  rename1 `encode_value tv_w v = SOME writes` >>
+  simp[write_storage_slot_eq] >>
+  Cases_on `b_w ⇔ b_r`
+  >- (gvs[get_storage_after_set] >>
+      irule decode_value_disjoint_writes_words >>
+      qexists `type_slot_size tv_w` >> simp[] >>
+      metis_tac[CONJUNCT1 encode_writes_bounded])
+  >> gvs[get_storage_after_set_other]
+QED
+
 (* Name-level convenience: update_hashmap preserves lookup_toplevel_name *)
 Theorem update_hashmap_preserves_static_read:
   ∀cx st mid_h n_h kv v mid_v n_v.
@@ -514,30 +628,14 @@ Theorem update_hashmap_preserves_static_read:
 Proof
   rpt gen_tac >> strip_tac >>
   drule is_leaf_hashmap_get_leaf_tv >> strip_tac >>
-  drule is_leaf_hashmap_lookup >>
-  disch_then (qspec_then `st` strip_assume_tac) >>
-  (* update_hashmap reduces to write_hashmap via SOME href *)
-  simp[update_hashmap_def] >>
-  (* href is a leaf HashMapRef — extract structure *)
-  `∃b_h bslot kt_h t_h.
-     href = HashMapRef b_h bslot kt_h (Type t_h) ∧
-     evaluate_type (get_tenv cx) t_h = SOME tv ∧
-     well_formed_type_value tv` by (
-    Cases_on `href` >>
-    gvs[is_leaf_hashmap_ref_def, AllCaseEqs()] >>
-    Cases_on `v'` >> gvs[is_leaf_hashmap_ref_def, AllCaseEqs()] >>
-    (* Connect tv from is_leaf_hashmap_ref with tv from hashmap_var_info *)
-    gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
-        get_leaf_tv_def]) >>
-  gvs[] >>
-  irule hashmap_write_preserves_static_read >> simp[Excl "w2n_n2w"] >>
-  (* value_has_type tv v from hashmap_ref_storable *)
-  qpat_x_assum `hashmap_ref_storable _ _ _` mp_tac >>
-  simp[hashmap_ref_storable_def] >> strip_tac >>
-  (* Disjointness: connect bslot to n2w off from hashmap_var_info *)
-  rpt strip_tac >>
+  drule is_leaf_hashmap_update_eq >>
+  disch_then (qspecl_then [`st`, `kv`, `v`] (fn th => simp[th])) >>
+  drule_all is_leaf_hashmap_THE_lookup >> strip_tac >> simp[] >>
   gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
-      get_leaf_tv_def]
+      get_leaf_tv_def] >>
+  drule_then (fn th => simp[th]) write_hashmap_eq_write_storage >>
+  irule lookup_toplevel_name_after_write >> simp[Excl "w2n_n2w"] >>
+  gvs[hashmap_ref_storable_def, AllCaseEqs()]
 QED
 
 (* ----- Static var write preserves hashmap read (per-key) ----- *)
@@ -559,16 +657,24 @@ Theorem static_write_preserves_hashmap_read:
                     (HashMapRef b_h bslot kt (Type t)) kv =
     read_hashmap cx st (HashMapRef b_h bslot kt (Type t)) kv
 Proof
-  (* update_toplevel_name unfolds to set_global, which calls
-     write_storage_slot cx b_v (n2w off_v) tv_v v.
-     read_hashmap unfolds to hashmap_read = decode_value at
-     w2n (hashmap_slot_for bslot kt kv).
-     Different backend: get_storage_after_set_other shows storage unchanged.
-     Same backend + disjoint ranges:
-       The write modifies slots [off_v, off_v + type_slot_size tv_v).
-       The read uses slots [hm_off, hm_off + type_slot_size tv).
-       decode_value_disjoint_writes gives the result. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (* Extract storage_var_info from var_in_storage *)
+  `∃b_v off_v tv_v. storage_var_info cx mid_v n_v = SOME (b_v, off_v, tv_v)` by
+    (gvs[var_in_storage_def, storage_var_info_def, AllCaseEqs()] >>
+     metis_tac[]) >>
+  (* Get value_has_type from storable_value *)
+  `value_has_type tv_v v` by (
+    gvs[storable_value_def] >>
+    first_x_assum irule >> simp[storage_type_of_def]) >>
+  (* Reduce update_toplevel_name to write_storage_slot *)
+  drule update_toplevel_name_eq_write >>
+  disch_then (fn th => simp[th]) >>
+  (* Apply read_hashmap_after_write_storage *)
+  irule read_hashmap_after_write_storage >> simp[Excl "w2n_n2w"] >>
+  strip_tac >>
+  irule ranges_disjoint_n2w_w2n_l >>
+  first_x_assum (qspecl_then [`b_v`, `off_v`, `tv_v`] mp_tac) >>
+  gvs[]
 QED
 
 (* Name-level convenience *)
@@ -587,12 +693,21 @@ Theorem update_toplevel_preserves_lookup_hashmap:
     lookup_hashmap cx (update_toplevel_name cx st mid_v n_v v) mid_h n_h kv =
     lookup_hashmap cx st mid_h n_h kv
 Proof
-  (* Unfold lookup_hashmap to lookup_toplevel_name + read_hashmap.
-     lookup_toplevel_name for a hashmap variable is state-independent
-     (is_leaf_hashmap_lookup_state_independent), so it returns the same
-     HashMapRef before and after update_toplevel_name.
-     For read_hashmap, apply static_write_preserves_hashmap_read. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule is_leaf_hashmap_get_leaf_tv >> strip_tac >>
+  (* Extract concrete HashMapRef *)
+  drule_all is_leaf_hashmap_THE_lookup >> strip_tac >>
+  gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
+      get_leaf_tv_def] >>
+  (* Reduce lookup_hashmap to read_hashmap at concrete ref *)
+  simp[Once lookup_hashmap_def] >>
+  `lookup_toplevel_name cx (update_toplevel_name cx st mid_v n_v v)
+     mid_h n_h = SOME (HashMapRef b (n2w off) kt (Type t))` by
+    metis_tac[is_leaf_hashmap_lookup_state_independent] >>
+  simp[Once lookup_hashmap_def] >>
+  (* Apply static_write_preserves_hashmap_read *)
+  irule static_write_preserves_hashmap_read >> simp[Excl "w2n_n2w"] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
 (* ----- Hashmap write preserves different hashmap read (per-key-pair) ----- *)
