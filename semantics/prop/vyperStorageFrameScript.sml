@@ -88,13 +88,24 @@ Theorem ranges_disjoint_n2w_w2n:
     ranges_disjoint off1 sz1 off2 sz2 ⇒
     ranges_disjoint off1 sz1 (w2n ((n2w off2):bytes32)) sz2
 Proof
-  rpt gen_tac >> rewrite_tac[ranges_disjoint_def] >> strip_tac >>
+  rpt gen_tac >> rewrite_tac[ranges_disjoint_def] >> disch_tac >>
   Cases_on `off2 < dimword(:256)`
-  >- simp[Excl "dimword_256", wordsTheory.w2n_n2w]
-  >- (`sz2 = 0` by simp[Excl "dimword_256"] >>
-      `w2n ((n2w off2):bytes32) + sz2 ≤ dimword(:256)` by
-        simp[Excl "dimword_256", wordsTheory.w2n_lt] >>
-      simp[Excl "dimword_256", wordsTheory.w2n_lt])
+  >- (gvs[Excl "dimword_256", wordsTheory.w2n_n2w])
+  >> `off2 = dimword(:256) ∧ sz2 = 0` by gvs[Excl "dimword_256"] >>
+  gvs[Excl "dimword_256"]
+QED
+
+(* Helper: write_storage_slot succeeds when value has the right type *)
+Theorem write_storage_slot_succeeds:
+  ∀cx b slot tv v st.
+    value_has_type tv v ⇒
+    write_storage_slot cx b slot tv v st =
+    (INL (), SND (write_storage_slot cx b slot tv v st))
+Proof
+  rpt strip_tac >>
+  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  simp[write_storage_slot_eq]
 QED
 
 (* ===== Relating existing predicates to ranges_disjoint ===== *)
@@ -228,6 +239,30 @@ Resume write_storage_preserves_read[same_backend]:
 QED
 
 Finalise write_storage_preserves_read
+
+(* All-num version: write at num offset preserves read at num offset.
+   Composes write_storage_slot_succeeds + write_storage_preserves_read +
+   ranges_disjoint_n2w_w2n. *)
+Theorem write_preserves_read_num:
+  ∀cx b1 off1 tv1 v b2 off2 tv2 st.
+    value_has_type tv1 v ∧
+    (b1 ≠ b2 ∨
+     ranges_disjoint off1 (type_slot_size tv1) off2 (type_slot_size tv2)) ⇒
+    FST (read_storage_slot cx b2 (n2w off2) tv2
+           (SND (write_storage_slot cx b1 (n2w off1) tv1 v st))) =
+    FST (read_storage_slot cx b2 (n2w off2) tv2 st)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule write_storage_preserves_read >>
+  qexistsl [`b1`, `n2w off1`, `tv1`, `v`] >>
+  simp[Excl "w2n_n2w", write_storage_slot_succeeds] >>
+  strip_tac >>
+  ONCE_REWRITE_TAC [GSYM ranges_disjoint_sym] >>
+  irule ranges_disjoint_n2w_w2n >>
+  ONCE_REWRITE_TAC [GSYM ranges_disjoint_sym] >>
+  irule ranges_disjoint_n2w_w2n >>
+  first_assum ACCEPT_TAC
+QED
 
 (* ============================================================
    Lifted Frame Theorems: variable-level preservation
@@ -521,8 +556,13 @@ Theorem nested_hashmap_write_preserves_static_read_chain:
            (SND (write_storage_slot cx b final_slot tv new_val st))) =
     FST (read_storage_slot cx var_b (n2w var_off) var_tv st)
 Proof
-  rpt gen_tac >> disch_tac >> gvs[] >>
-  irule write_storage_preserves_read >> cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  irule write_storage_preserves_read >>
+  qexistsl [`b`, `final_slot`, `tv`, `new_val`] >>
+  simp[Excl "w2n_n2w", write_storage_slot_succeeds] >>
+  strip_tac >>
+  irule ranges_disjoint_n2w_w2n >>
+  first_assum ACCEPT_TAC
 QED
 
 (* ============================================================
