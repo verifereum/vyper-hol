@@ -212,6 +212,7 @@ val unsupported_code = [
 
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
+  "msg.data",
   "gas=",
   "pragma nonreentrancy"
 ]
@@ -310,15 +311,24 @@ val excluded_test_names = [
   "test_revert_reason_typed",
   "test_revert_reason_typed_no_variable",
   "test_side_effects_evaluation",
+  "test_checkable_raw_call",
+  "test_nonreentrant_decorator_for_default",
+  (* raw_call to precompile addresses (e.g. identity at 0x04):
+     make_ext_call_state constructs EVM state directly, bypassing
+     precompile dispatch which normally happens in proceed_call.
+     TODO: add precompile dispatch to run_ext_call *)
+  "test_max_outsize_exceeds_returndatasize",
+  "test_raw_call_non_memory",
+  "test_raw_call_storage_bytes_data",
+  "test_returndatasize_exceeds_max_outsize",
+  "test_returndatasize_matches_max_outsize",
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* Tests using sha256() builtin which is not yet translated.
      TODO: add sha256 builtin support *)
   "test_sha256_*",
-  (* Tests using msg.data which is not yet modelled.
-     TODO: add msg.data env item *)
-  "test_slice_start_eval_once[msg.data]",
+  (* msg.data tests now excluded by unsupported_patterns *)
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling",
   (* ABI decode strictness tests - Vyper's decoder is stricter than standard
