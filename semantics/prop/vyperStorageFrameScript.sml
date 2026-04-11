@@ -694,20 +694,19 @@ Theorem update_toplevel_preserves_lookup_hashmap:
     lookup_hashmap cx st mid_h n_h kv
 Proof
   rpt gen_tac >> strip_tac >>
+  (* Step 1: Extract hashmap_var_info, get_leaf_tv, well_formed_type_value *)
   drule is_leaf_hashmap_get_leaf_tv >> strip_tac >>
-  (* Extract concrete HashMapRef *)
+  (* Step 2: Extract THE(lookup) = HashMapRef b (n2w off) kt vt *)
   drule_all is_leaf_hashmap_THE_lookup >> strip_tac >>
+  (* Step 3: Reduce BOTH lookup_hashmaps via state-independent rewrite *)
+  qpat_assum `is_leaf_hashmap _ _ _`
+    (fn th => assume_tac (MATCH_MP lookup_hashmap_eq_read_hashmap th)) >>
+  simp[] >>
+  (* Step 4: NOW safe to unfold is_leaf_hashmap to learn vt = Type t *)
   gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
       get_leaf_tv_def] >>
-  (* Reduce lookup_hashmap to read_hashmap at concrete ref *)
-  simp[Once lookup_hashmap_def] >>
-  `lookup_toplevel_name cx (update_toplevel_name cx st mid_v n_v v)
-     mid_h n_h = SOME (HashMapRef b (n2w off) kt (Type t))` by
-    metis_tac[is_leaf_hashmap_lookup_state_independent] >>
-  simp[Once lookup_hashmap_def] >>
-  (* Apply static_write_preserves_hashmap_read *)
-  irule static_write_preserves_hashmap_read >> simp[Excl "w2n_n2w"] >>
-  rpt strip_tac >> first_x_assum irule >> simp[]
+  (* Step 5: Apply static_write_preserves_hashmap_read *)
+  irule static_write_preserves_hashmap_read >> simp[Excl "w2n_n2w"]
 QED
 
 (* ----- Hashmap write preserves different hashmap read (per-key-pair) ----- *)
@@ -772,14 +771,33 @@ Theorem update_hashmap_preserves_other_lookup_hashmap:
     lookup_hashmap cx (update_hashmap cx st mid1 n1 kv1 v) mid2 n2 kv2 =
     lookup_hashmap cx st mid2 n2 kv2
 Proof
-  (* Unfold update_hashmap to write_hashmap and lookup_hashmap to
-     lookup_toplevel_name + read_hashmap.
-     lookup_toplevel_name for mid2/n2 is state-independent (hashmap var),
-     so it returns the same HashMapRef after update_hashmap.
-     For read_hashmap, the write_hashmap went to mid1/n1's ref.
-     Apply hashmap_write_preserves_other_hashmap_read_gen with the
-     concrete refs extracted from hashmap_var_info and is_leaf_hashmap. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (* Derive rewrites from is_leaf_hashmap (before unfolding) *)
+  qpat_assum `is_leaf_hashmap _ mid1 _`
+    (fn th => assume_tac (MATCH_MP is_leaf_hashmap_get_leaf_tv th) >>
+              assume_tac (MATCH_MP is_leaf_hashmap_update_eq th) >>
+              assume_tac th) >>
+  qpat_assum `is_leaf_hashmap _ mid2 _`
+    (fn th => assume_tac (MATCH_MP is_leaf_hashmap_get_leaf_tv th) >>
+              assume_tac (MATCH_MP lookup_hashmap_eq_read_hashmap th) >>
+              assume_tac th) >>
+  gvs[] >>
+  (* Get THE_lookup for mid2 *)
+  drule_all is_leaf_hashmap_THE_lookup >> strip_tac >>
+  (* Get THE_lookup for mid1 — temporarily remove mid2's is_leaf_hashmap *)
+  qpat_x_assum `is_leaf_hashmap _ mid2 _` (fn th2 =>
+    drule_all is_leaf_hashmap_THE_lookup >> strip_tac >>
+    assume_tac th2) >>
+  (* Unfold is_leaf_hashmap to learn vt = Type t for both *)
+  gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
+      get_leaf_tv_def] >>
+  (* Reduce update_hashmap → write_hashmap, lookup_hashmap → read_hashmap,
+     THE_lookup → concrete HashMapRef *)
+  simp[] >>
+  (* Apply hashmap_write_preserves_other_hashmap_read_gen *)
+  irule hashmap_write_preserves_other_hashmap_read_gen >>
+  simp[Excl "w2n_n2w"] >>
+  gvs[hashmap_ref_storable_def, AllCaseEqs()]
 QED
 
 (* ----- Same hashmap, different keys (per-key-pair) ----- *)
@@ -801,14 +819,25 @@ Theorem update_hashmap_preserves_same_lookup_hashmap_other_key:
     lookup_hashmap cx (update_hashmap cx st mid n kv1 v) mid n kv2 =
     lookup_hashmap cx st mid n kv2
 Proof
-  (* Unfold update_hashmap and lookup_hashmap.
-     Both use the same HashMapRef (state-independent for hashmap vars).
-     The write goes to hashmap_slot_for base kt kv1, the read from
-     hashmap_slot_for base kt kv2.
-     ranges_disjoint ensures the slot ranges don't overlap.
-     Follows from hashmap_read_after_write_other via
-     hashmap_slots_disjoint_as_ranges_disjoint. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (* Derive rewrites from is_leaf_hashmap *)
+  qpat_assum `is_leaf_hashmap _ _ _`
+    (fn th => assume_tac (MATCH_MP is_leaf_hashmap_get_leaf_tv th) >>
+              assume_tac (MATCH_MP is_leaf_hashmap_update_eq th) >>
+              assume_tac (MATCH_MP lookup_hashmap_eq_read_hashmap th) >>
+              assume_tac th) >>
+  gvs[] >>
+  (* Get THE_lookup *)
+  drule_all is_leaf_hashmap_THE_lookup >> strip_tac >>
+  (* Unfold is_leaf_hashmap to learn vt = Type t *)
+  gvs[is_leaf_hashmap_def, hashmap_var_info_def, AllCaseEqs(),
+      get_leaf_tv_def] >>
+  (* Reduce update_hashmap → write_hashmap, lookup_hashmap → read_hashmap *)
+  simp[] >>
+  (* Apply hashmap_write_preserves_other_hashmap_read (same backend) *)
+  irule hashmap_write_preserves_other_hashmap_read >>
+  simp[Excl "w2n_n2w"] >>
+  gvs[hashmap_ref_storable_def, AllCaseEqs()]
 QED
 
 (* ============================================================
@@ -884,10 +913,8 @@ Theorem well_formed_layout_implies_ranges_disjoint:
     (mid1, n1) ≠ (mid2, n2) ⇒
     ranges_disjoint off1 (type_slot_size tv1) off2 (type_slot_size tv2)
 Proof
-  (* Unfold well_formed_layout: the disjointness clause gives
-     off1 + type_slot_size tv1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1
-     and the non-overflow clause gives
-     off1 + type_slot_size tv1 ≤ dimword(:256) and similarly for off2.
-     These are exactly ranges_disjoint. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[ranges_disjoint_def] >>
+  gvs[well_formed_layout_def] >>
+  metis_tac[]
 QED
