@@ -286,12 +286,74 @@ Theorem lookup_toplevel_name_after_set_storage:
     lookup_toplevel_name cx st mid m
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[lookup_toplevel_name_def] >>
-  `lookup_global cx mid (string_to_num m) (set_storage cx st b storage') =
-   lookup_global cx mid (string_to_num m) st` by (
-    cheat) >>
-  simp[]
+  rewrite_tac[lookup_toplevel_name_def] >>
+  (* First prove FST equality of lookup_global *)
+  `FST (lookup_global cx mid (string_to_num m)
+          (set_storage cx st b storage')) =
+   FST (lookup_global cx mid (string_to_num m) st)` by (
+    suspend "fst_eq") >>
+  (* Close: FST equality implies case-expression equality *)
+  Cases_on `lookup_global cx mid (string_to_num m)
+              (set_storage cx st b storage')` >>
+  Cases_on `lookup_global cx mid (string_to_num m) st` >>
+  gvs[]
 QED
+
+(* Local helper: get_immutables preserved (up to state) by set_storage *)
+Theorem get_immutables_set_storage[local]:
+  ∀cx mid st b s'.
+    get_immutables cx mid (set_storage cx st b s') =
+    (FST (get_immutables cx mid st), set_storage cx st b s')
+Proof
+  rpt gen_tac >>
+  simp[vyperStateTheory.get_immutables_def, vyperStateTheory.bind_def,
+       vyperStateTheory.get_address_immutables_def,
+       vyperStateTheory.lift_option_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       set_storage_immutables] >>
+  rpt CASE_TAC >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Resume lookup_toplevel_name_after_set_storage[fst_eq]:
+  simp[vyperStateTheory.lookup_global_def,
+       vyperStateTheory.bind_def,
+       vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.ignore_bind_def] >>
+  Cases_on `get_module_code cx mid` >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rename1 `SOME modcode` >>
+  Cases_on `find_var_decl_by_num (string_to_num m) modcode` >> simp[]
+  >- ((* Immutables branch *)
+    suspend "imm2")
+  >> rename1 `SOME found` >> PairCases_on `found` >>
+  Cases_on `found0` >> simp[vyperStateTheory.bind_def]
+  >- ((* StorageVarDecl *)
+    Cases_on `lookup_var_slot_from_layout cx b' mid found1` >>
+    simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+         vyperStateTheory.lift_option_type_def] >>
+    Cases_on `evaluate_type (get_tenv cx) t'` >>
+    simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+    rename1 `SOME tv'` >>
+    `FST (read_storage_slot cx b' (n2w x) tv'
+            (set_storage cx st b storage')) =
+     FST (read_storage_slot cx b' (n2w x) tv' st)` by (
+      Cases_on `b = b'`
+      >- (gvs[] >> first_x_assum irule >>
+          simp[storage_var_info_def])
+      >> simp[read_storage_slot_eq, get_storage_after_set_other]) >>
+    Cases_on `tv'` >>
+    simp[vyperStateTheory.bind_def,
+         vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+    rpt CASE_TAC >> gvs[])
+  >> (* HashMapVarDecl: state-independent *)
+  Cases_on `lookup_var_slot_from_layout cx b' mid found1` >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.lift_option_type_def]
+QED
+
+Finalise lookup_toplevel_name_after_set_storage
 
 (* ============================================================
    Lifted Frame Theorems: variable-level preservation
