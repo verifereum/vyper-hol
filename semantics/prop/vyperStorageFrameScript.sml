@@ -80,6 +80,23 @@ Proof
   simp[ranges_disjoint_def]
 QED
 
+(* Bridge between num-level and word-level offsets.
+   Used in every theorem that composes ranges_disjoint (num)
+   with write_storage_preserves_read (word). *)
+Theorem ranges_disjoint_n2w_w2n:
+  ∀off1 sz1 off2 sz2.
+    ranges_disjoint off1 sz1 off2 sz2 ⇒
+    ranges_disjoint off1 sz1 (w2n ((n2w off2):bytes32)) sz2
+Proof
+  rpt gen_tac >> rewrite_tac[ranges_disjoint_def] >> strip_tac >>
+  Cases_on `off2 < dimword(:256)`
+  >- simp[Excl "dimword_256", wordsTheory.w2n_n2w]
+  >- (`sz2 = 0` by simp[Excl "dimword_256"] >>
+      `w2n ((n2w off2):bytes32) + sz2 ≤ dimword(:256)` by
+        simp[Excl "dimword_256", wordsTheory.w2n_lt] >>
+      simp[Excl "dimword_256", wordsTheory.w2n_lt])
+QED
+
 (* ===== Relating existing predicates to ranges_disjoint ===== *)
 
 Theorem hashmap_slots_disjoint_as_ranges_disjoint:
@@ -504,13 +521,8 @@ Theorem nested_hashmap_write_preserves_static_read_chain:
            (SND (write_storage_slot cx b final_slot tv new_val st))) =
     FST (read_storage_slot cx var_b (n2w var_off) var_tv st)
 Proof
-  (* This is a direct corollary of write_storage_preserves_read.
-     compute_hashmap_slot just tells us what final_slot is;
-     the actual frame property only depends on the slot value.
-     The key insight: it doesn't matter HOW final_slot was computed
-     (single hash, double hash, etc.) — only that the resulting
-     slot range is disjoint from the read range. *)
-  cheat
+  rpt gen_tac >> disch_tac >> gvs[] >>
+  irule write_storage_preserves_read >> cheat
 QED
 
 (* ============================================================
