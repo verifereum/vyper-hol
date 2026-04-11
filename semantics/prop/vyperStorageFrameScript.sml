@@ -47,7 +47,7 @@
 Theory vyperStorageFrame
 
 Ancestors
-  vyperHashMapPreservation vyperHashMap
+  vyperHashMapPreservation vyperHashMap vyperHashMapStorage
   vyperLookupStorage vyperStorageBackend
   vyperEncodeDecode
 
@@ -71,15 +71,13 @@ Theorem ranges_disjoint_sym:
   ∀off1 sz1 off2 sz2.
     ranges_disjoint off1 sz1 off2 sz2 ⇔ ranges_disjoint off2 sz2 off1 sz1
 Proof
-  (* Symmetric by definition: swap the two disjuncts *)
-  cheat
+  simp[ranges_disjoint_def]
 QED
 
 Theorem ranges_disjoint_irrefl:
   ∀off sz. 0 < sz ⇒ ¬ranges_disjoint off sz off sz
 Proof
-  (* A non-empty range overlaps itself *)
-  cheat
+  simp[ranges_disjoint_def]
 QED
 
 (* ===== Relating existing predicates to ranges_disjoint ===== *)
@@ -90,8 +88,7 @@ Theorem hashmap_slots_disjoint_as_ranges_disjoint:
     ranges_disjoint (w2n (hashmap_slot_for base kt kv1)) (type_slot_size tv)
                     (w2n (hashmap_slot_for base kt kv2)) (type_slot_size tv)
 Proof
-  (* Direct unfolding of hashmap_slots_disjoint_def and ranges_disjoint_def *)
-  cheat
+  simp[hashmap_slots_disjoint_def, ranges_disjoint_def, LET_THM]
 QED
 
 Theorem hashmap_var_slots_disjoint_as_ranges_disjoint:
@@ -100,8 +97,7 @@ Theorem hashmap_var_slots_disjoint_as_ranges_disjoint:
     ranges_disjoint (w2n (hashmap_slot_for bslot kt kv)) (type_slot_size hm_tv)
                     var_off (type_slot_size var_tv)
 Proof
-  (* Direct unfolding of hashmap_var_slots_disjoint_def and ranges_disjoint_def *)
-  cheat
+  simp[hashmap_var_slots_disjoint_def, ranges_disjoint_def, LET_THM]
 QED
 
 (* ===== Hashmap Variable Info Accessor ===== *)
@@ -136,8 +132,7 @@ End
 Theorem get_leaf_tv_Type:
   ∀tenv t. get_leaf_tv tenv (Type t) = evaluate_type tenv t
 Proof
-  (* Immediate from get_leaf_tv_def *)
-  cheat
+  simp[get_leaf_tv_def]
 QED
 
 (* Connection: is_leaf_hashmap implies get_leaf_tv succeeds *)
@@ -149,10 +144,25 @@ Theorem is_leaf_hashmap_get_leaf_tv:
       get_leaf_tv (get_tenv cx) vt = SOME tv ∧
       well_formed_type_value tv
 Proof
-  (* Unfold is_leaf_hashmap: vt = Type t, evaluate_type succeeds.
-     hashmap_var_info extracts (b, off, kt, Type t).
-     get_leaf_tv (Type t) = evaluate_type t = SOME tv. *)
-  cheat
+  rw[is_leaf_hashmap_def] >>
+  simp[hashmap_var_info_def, get_leaf_tv_def]
+QED
+
+(* Helper: decode_value unchanged when apply_writes is at a
+   disjoint word-level slot range. Works with word slots directly
+   (vs decode_value_disjoint_writes which uses num offsets). *)
+Theorem decode_value_disjoint_writes_words:
+  ∀tv2 sz1 writes (slot1:bytes32) (slot2:bytes32) storage.
+    (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+    ranges_disjoint (w2n slot1) sz1 (w2n slot2) (type_slot_size tv2) ⇒
+    decode_value (apply_writes slot1 writes storage) (w2n slot2) tv2 =
+    decode_value storage (w2n slot2) tv2
+Proof
+  rpt gen_tac >> strip_tac >>
+  `slot1 = n2w (w2n slot1)` by simp[wordsTheory.n2w_w2n] >>
+  pop_assum SUBST1_TAC >>
+  irule decode_value_disjoint_writes >>
+  fs[ranges_disjoint_def] >> qexists `sz1` >> simp[]
 QED
 
 (* ============================================================
@@ -178,16 +188,29 @@ Theorem write_storage_preserves_read:
     FST (read_storage_slot cx b2 slot2 tv2 st') =
     FST (read_storage_slot cx b2 slot2 tv2 st)
 Proof
-  (* Case split on b1 ≠ b2 vs ranges_disjoint.
-     b1 ≠ b2: write changes one backend, read uses the other;
-       get_storage_after_set_other shows the read backend is unchanged.
-     Same backend + disjoint ranges:
-       write_storage_slot produces apply_writes at slot1 with offsets < type_slot_size tv1.
-       read_storage_slot decodes at slot2 using slots [slot2, slot2 + type_slot_size tv2).
-       ranges_disjoint ensures these intervals don't overlap.
-       decode_value_disjoint_writes (via decode_storage_agree) gives the result. *)
-  cheat
+  rpt gen_tac >> disch_tac >>
+  gvs[write_storage_slot_eq, AllCaseEqs()] >>
+  rename1 `encode_value tv1 v = SOME writes` >>
+  simp[read_storage_slot_eq] >>
+  Cases_on `b1 = b2`
+  >- (
+    (* Same backend: ranges must be disjoint *)
+    gvs[get_storage_after_set] >>
+    suspend "same_backend")
+  >- (simp[get_storage_after_set_other] >> CASE_TAC >> simp[])
 QED
+
+Resume write_storage_preserves_read[same_backend]:
+  `decode_value (apply_writes slot1 writes (get_storage cx st b1))
+     (w2n slot2) tv2 =
+   decode_value (get_storage cx st b1) (w2n slot2) tv2` by (
+    irule decode_value_disjoint_writes_words >>
+    qexists `type_slot_size tv1` >> simp[] >>
+    metis_tac[CONJUNCT1 encode_writes_bounded]) >>
+  simp[] >> CASE_TAC >> simp[]
+QED
+
+Finalise write_storage_preserves_read
 
 (* ============================================================
    Lifted Frame Theorems: variable-level preservation
