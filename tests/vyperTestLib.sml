@@ -211,18 +211,10 @@ val unsupported_code = [
 ]
 
 val unsupported_patterns = unsupported_code @ [
-  "raw_call(",
-  "raw_log(",
-  "raw_revert(",
-  "selfdestruct",
   "msg.mana", "msg.gas",
-  "raw_create(",
-  "create_from_blueprint(",
-  "create_minimal_proxy_to(",
-  "create_copy_of(",
+  "msg.data",
   "gas=",
-  "pragma nonreentrancy",
-  "@nonreentrant"
+  "pragma nonreentrancy"
 ]
 
 fun has_unsupported_patterns src =
@@ -310,6 +302,7 @@ val excluded_test_names = [
   "test_abi_decode_nonstrict_head",
   "test_abi_decode_nonstrict_head_oob",
   "test_create_from_blueprint_bad_code_offset",
+  "test_immutables_initialized2",
   (* abi_encode tests that use ensure_tuple=False or method_id= keywords.
      TODO: support ensure_tuple and method_id keyword arguments for abi_encode *)
   "test_abi_encode",
@@ -319,15 +312,54 @@ val excluded_test_names = [
   "test_revert_reason_typed",
   "test_revert_reason_typed_no_variable",
   "test_side_effects_evaluation",
+  "test_checkable_raw_call",
+  "test_nonreentrant_decorator_for_default",
+  (* raw_call to precompile addresses (e.g. identity at 0x04):
+     make_ext_call_state constructs EVM state directly, bypassing
+     precompile dispatch which normally happens in proceed_call.
+     TODO: add precompile dispatch to run_ext_call *)
+  "test_max_outsize_exceeds_returndatasize",
+  "test_raw_call_non_memory",
+  "test_raw_call_storage_bytes_data",
+  "test_returndatasize_exceeds_max_outsize",
+  "test_returndatasize_matches_max_outsize",
+  (* raw_create semantics: first arg is bytecode, not address.
+     The CreateTarget handler assumes HD args is an address for all
+     create kinds, but raw_create passes bytecode as first arg.
+     TODO: fix CreateTarget to handle RawCreate differently *)
+  "test_raw_create*",
+  "test_bubble_revert_data_raw_create",
+  (* create_from_blueprint tests: blueprint deployments have
+     deployment_type="blueprint" but the test runner tries to run
+     the constructor, which fails because the ABI is empty.
+     TODO: handle blueprint deployments in run_trace (skip constructor) *)
+  "test_create_from_blueprint*",
+  "test_blueprint_evals_once_side_effects",
+  "test_bubble_revert_data_blueprint",
+  (* create_copy_of / create_minimal_proxy_to tests: opaque create
+     model computes addresses via address_for_create but doesn't run
+     actual initcode, so created addresses and contract state don't
+     match the real EVM. TODO: run initcode for create builtins *)
+  "test_create_copy_of*",
+  "test_create_copy_salt_eval_order_regression",
+  "test_create_minimal_proxy_to*",
+  "test_minimal_proxy_exception",
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* Tests using sha256() builtin which is not yet translated.
      TODO: add sha256 builtin support *)
   "test_sha256_*",
-  (* Tests using msg.data which is not yet modelled.
-     TODO: add msg.data env item *)
-  "test_slice_start_eval_once[msg.data]",
+  (* msg.data tests now excluded by unsupported_patterns *)
+  (* extcall to non-existent contract: Vyper reverts when target has
+     no code (EXTCODESIZE == 0), but our semantics doesn't check this.
+     TODO: add is_contract check to ExtCall handler *)
+  "test_default_override",
+  (* Crowdfund tests: senders transfer ETH without set_balance traces,
+     so accounts have 0 balance and transfer_value fails.
+     TODO: either give accounts default balance or fix test export *)
+  "test_crowdfund",
+  "test_crowdfund2",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling",
   (* ABI decode strictness tests - Vyper's decoder is stricter than standard

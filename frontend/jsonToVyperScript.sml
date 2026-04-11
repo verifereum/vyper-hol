@@ -795,7 +795,7 @@ Definition translate_expr_def:
              Pop rty (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
          | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ => Call rty (IntCall (NONE, fname)) args' NONE
+    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ => Call rty (IntCall (source_id_to_nsid (FST ctx) src_id_opt, fname)) args' NONE
     (* Module struct constructor, interface constructor, or module function call *)
     | _ => if is_interface_constructor func then HD args'
            else let nsid = source_id_to_nsid (FST ctx) src_id_opt;
