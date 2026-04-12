@@ -472,7 +472,8 @@ Definition make_builtin_call_def:
                   | _ => TypeBuiltin ty (AbiDecode unwrap) (translate_type ret_ty) [])
     else if name = "abi_encode" ∨ name = "_abi_encode" then
       let ensure = kwarg_bool "ensure_tuple" kwargs T in
-      TypeBuiltin ty (AbiEncode ensure) (translate_type ret_ty) args
+      let arg_types = TupleT (MAP expr_type args) in
+      TypeBuiltin ty (AbiEncode ensure) arg_types args
     else if name = "extract32" then
       TypeBuiltin ty Extract32 (translate_type ret_ty) args
     else if name = "method_id" then

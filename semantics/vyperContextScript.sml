@@ -268,8 +268,13 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin _ (AbiDecode _) _ _ =
     INR (TypeError "abi_decode args") ∧
   evaluate_type_builtin cx (AbiEncode ensure) typ vs =
-    (case evaluate_abi_encode (get_tenv cx) typ (ArrayV (TupleV vs)) of
-       INL v => INL v | INR str => INR (RuntimeError str)) ∧
+    (let tenv = get_tenv cx in
+     let wrap = (ensure ∧ needs_external_call_wrap typ) in
+     let enc_typ = (if wrap then TupleT [typ] else typ) in
+     let enc_val = ArrayV (if wrap then TupleV [ArrayV (TupleV vs)]
+                                   else TupleV vs) in
+     (case evaluate_abi_encode tenv enc_typ enc_val of
+        INL v => INL v | INR str => INR (RuntimeError str))) ∧
   evaluate_type_builtin _ _ _ _ =
     INR (TypeError "evaluate_type_builtin")
 End
