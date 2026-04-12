@@ -2418,30 +2418,35 @@ Proof
   gvs[stateEquivTheory.lift_result_def] >>
   (* Non-OK: transformed gives same result *)
   TRY (
+    `?r. run_block n ctx
+      (fix_phis_in_block (pred_labels fn s.vs_current_bb) bb) s = r` by
+      metis_tac[] >>
     qexists_tac `SUC n` >>
     simp[Once venomExecSemanticsTheory.run_blocks_def,
-         venomExecSemanticsTheory.run_block_def] >>
-    gvs[stateEquivTheory.result_equiv_def,
+         GSYM venomExecSemanticsTheory.run_block_def] >>
+    Cases_on `r` >>
+    gvs[stateEquivTheory.lift_result_def,
+        stateEquivTheory.result_equiv_def,
         stateEquivTheory.execution_equiv_def] >> NO_TAC) >>
   (* OK v case *)
   imp_res_tac venomExecPropsTheory.run_block_OK_not_halted >>
   imp_res_tac venomExecPropsTheory.run_block_OK_inst_idx_0 >> gvs[] >>
-  `v.vs_prev_bb = NONE \/
-   ?prev. v.vs_prev_bb = SOME prev /\
-          MEM prev (pred_labels fn v.vs_current_bb)` by
-    metis_tac[fix_phis_P_preserved] >>
-  `MEM v.vs_current_bb (bb_succs bb)` by (
-    mp_tac (Q.SPECL [`n`, `ctx`, `bb`, `s`, `v`]
-      venomExecPropsTheory.run_block_current_bb_in_succs) >>
-    imp_res_tac wf_function_bb_wf >>
-    fs[venomWfTheory.bb_well_formed_def,
-       venomWfTheory.fn_inst_wf_def] >> metis_tac[]) >>
-  `reachable fn v.vs_current_bb` by (
-    irule cfgTransformPropsTheory.reachable_step >>
-    qexists_tac `s.vs_current_bb` >> simp[] >>
-    simp[cfgTransformTheory.fn_succ_def] >> metis_tac[]) >>
+  (* Apply IH directly — prove all preconditions in impl_tac *)
   first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
-  disch_then drule_all >> strip_tac >>
+  disch_then (qspecl_then [`fn`, `ctx`, `v`] mp_tac) >>
+  impl_tac >- (
+    simp[] >>
+    imp_res_tac wf_function_bb_wf >>
+    conj_tac >- (
+      (* reachable fn v.vs_current_bb *)
+      irule cfgTransformPropsTheory.reachable_step >>
+      qexists_tac `s.vs_current_bb` >> simp[] >>
+      simp[cfgTransformTheory.fn_succ_def] >>
+      fs[venomWfTheory.bb_well_formed_def, venomWfTheory.fn_inst_wf_def] >>
+      metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs]) >>
+    (* P v: prev_bb = NONE \/ ... *)
+    metis_tac[fix_phis_P_preserved]) >>
+  strip_tac >>
   qexists_tac `SUC fuel'` >>
   simp[Once venomExecSemanticsTheory.run_blocks_def]
 QED
