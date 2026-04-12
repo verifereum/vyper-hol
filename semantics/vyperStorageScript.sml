@@ -65,7 +65,7 @@ Definition encode_base_to_slot_def:
      then SOME (word_of_bytes_be (PAD_LEFT 0w 32 bs))
      else NONE) /\
   encode_base_to_slot (BytesV bs) (BaseTV (BytesT (Fixed n))) =
-    (if LENGTH bs = n /\ n ≤ 32 then
+    (if LENGTH bs = n then
        SOME (word_of_bytes_be bs)
      else NONE) /\
   encode_base_to_slot (FlagV k) (FlagTV m') = SOME (n2w k) /\

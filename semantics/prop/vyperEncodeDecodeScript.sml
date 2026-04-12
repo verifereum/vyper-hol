@@ -413,6 +413,7 @@ Theorem truncate_signed_roundtrip[local]:
 Proof
   rpt strip_tac >>
   gvs[within_int_bound_def] >>
+  Cases_on`n = 0` >> gvs[] >- EVAL_TAC >>
   `∃m. n = SUC m` by (Cases_on `n` >> fs[]) >> gvs[] >>
   `m ≤ 255` by simp[] >>
   Cases_on `i < 0` >> gvs[]
@@ -538,6 +539,7 @@ Proof
     (simp[integer_wordTheory.INT_MAX_def,
           wordsTheory.INT_MIN_def] >> EVAL_TAC) >>
   ntac 2 (pop_assum (fn th => REWRITE_TAC[th])) >>
+  Cases_on`n=0` >- gvs[within_int_bound_def] >>
   `(if i < 0 then Num (-i) ≤ 2 ** (n − 1) else Num i < 2 ** (n − 1)) ∧ 0 < n`
     by gvs[within_int_bound_def] >>
   `n − 1 ≤ 255` by simp[] >>
@@ -760,8 +762,7 @@ Definition bounds_compat_def:
   bounds_compat (BaseTV (IntT m)) (IntV i) =
     (within_int_bound (Signed m) i) ∧
   bounds_compat (BaseTV AddressT) (BytesV bs) = (LENGTH bs = 20) ∧
-  bounds_compat (BaseTV (BytesT (Fixed n))) (BytesV bs) =
-    (LENGTH bs = n ∧ n ≤ 32) ∧
+  bounds_compat (BaseTV (BytesT (Fixed n))) (BytesV bs) = (LENGTH bs = n) ∧
   bounds_compat (BaseTV (BytesT (Dynamic max))) (BytesV bs) =
     (LENGTH bs ≤ max) ∧
   bounds_compat (BaseTV (StringT max)) (StringV s) = (LENGTH s ≤ max) ∧
@@ -2117,7 +2118,7 @@ Theorem encode_decode_roundtrip_dyn_array[local]:
     n ≠ 0 ∧
     encode_dyn_array tv 1 vs = SOME slots ∧
     n * type_slot_size tv + 1 ≤ dimword(:256) ∧
-    0 < type_slot_size tv ∧
+    (type_slot_size tv = 0 ⇒ n < dimword(:256)) ∧
     well_formed_type_value tv ⇒
     decode_value (apply_writes (n2w base) ((0,n2w (LENGTH vs))::slots) storage)
       base (ArrayTV tv (Dynamic n)) = SOME (ArrayV (DynArrayV vs))
@@ -2145,11 +2146,14 @@ Proof
   (* establish bounds before simp *)
   `LENGTH vs ≤ n` by gvs[] >>
   `n * type_slot_size tv < dimword(:256)` by gvs[] >>
-  `LENGTH vs ≤ n * type_slot_size tv` by (
-    irule LESS_EQ_TRANS >> qexists_tac `n` >>
-    simp[LE_MULT_CANCEL_LBARE]
+  `LENGTH vs < dimword(:256)` by (
+    Cases_on`type_slot_size tv = 0` >- gvs[] >>
+    `LENGTH vs ≤ n * type_slot_size tv` by (
+      irule LESS_EQ_TRANS >> qexists_tac `n` >>
+      simp[LE_MULT_CANCEL_LBARE]
+    ) >>
+    gvs[]
   ) >>
-  `LENGTH vs < dimword(:256)` by gvs[] >>
   simp[] >>
   `MIN (LENGTH vs) n = LENGTH vs` by gvs[MIN_DEF] >>
   `decode_dyn_array

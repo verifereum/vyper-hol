@@ -33,23 +33,20 @@ End
    Ensures type_slot_size tv ≤ dimword(:256) for all well-formed types. *)
 Definition well_formed_type_value_def:
   well_formed_type_value (BaseTV (BytesT (Fixed n))) = (n ≤ 32) ∧
-  well_formed_type_value (BaseTV (BytesT (Dynamic n))) =
-    (n < dimword(:256) ∧
-     type_slot_size (BaseTV (BytesT (Dynamic n))) ≤ dimword(:256)) ∧
-  well_formed_type_value (BaseTV (StringT n)) =
-    (n < dimword(:256) ∧
-     type_slot_size (BaseTV (StringT n)) ≤ dimword(:256)) ∧
+  well_formed_type_value (BaseTV (BytesT (Dynamic n))) = (n < dimword(:256)) ∧
+  well_formed_type_value (BaseTV (StringT n)) = (n < dimword(:256)) ∧
   well_formed_type_value (TupleTV tvs) =
     (EVERY well_formed_type_value tvs ∧
      type_slot_size (TupleTV tvs) ≤ dimword(:256)) ∧
   well_formed_type_value (ArrayTV tv b) =
-    (0 < type_slot_size tv ∧ well_formed_type_value tv ∧
+    (well_formed_type_value tv ∧
+     (∀n. b = Dynamic n ⇒ n < dimword(:256)) ∧
      type_slot_size (ArrayTV tv b) ≤ dimword(:256)) ∧
   well_formed_type_value (StructTV fields) =
     (EVERY (well_formed_type_value o SND) fields ∧
      type_slot_size (StructTV fields) ≤ dimword(:256)) ∧
   well_formed_type_value (BaseTV (UintT m)) = (m ≤ 256) ∧
-  well_formed_type_value (BaseTV (IntT m)) = (0 < m ∧ m ≤ 256) ∧
+  well_formed_type_value (BaseTV (IntT m)) = (m ≤ 256) ∧
   well_formed_type_value (FlagTV m) = (m ≤ 256) ∧
   well_formed_type_value _ = T
 End
@@ -69,6 +66,8 @@ Proof
   >> gvs[EVERY_MEM, MEM_ZIP, PULL_EXISTS, EL_MAP]
   >> gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF]
   >> gvs[ZIP_MAP, MAP_MAP_o, combinTheory.o_DEF, MEM_MAP, PULL_EXISTS]
+  >> gvs[type_slot_size_def] >> rename1`n * xx`
+  >> Cases_on`xx` >> gvs[arithmeticTheory.ADD1, arithmeticTheory.LEFT_ADD_DISTRIB]
 QED
 
 (* ===== value_has_type: structural characterization of encode_value success ===== *)
@@ -76,10 +75,10 @@ QED
 Definition value_has_type_def:
   (* Unsigned integer *)
   value_has_type (BaseTV (UintT m)) (IntV i) =
-    (0 ≤ i ∧ Num i < 2 ** m ∧ m ≤ 256) ∧
+    (0 ≤ i ∧ Num i < 2 ** m) ∧
   (* Signed integer *)
   value_has_type (BaseTV (IntT m)) (IntV i) =
-    (within_int_bound (Signed m) i ∧ m ≤ 256) ∧
+    (within_int_bound (Signed m) i) ∧
   (* Decimal *)
   value_has_type (BaseTV DecimalT) (DecimalV d) =
     within_int_bound (Signed 168) d ∧
@@ -90,7 +89,7 @@ Definition value_has_type_def:
     (LENGTH bs = 20) ∧
   (* Fixed bytes *)
   value_has_type (BaseTV (BytesT (Fixed n))) (BytesV bs) =
-    (LENGTH bs = n ∧ n ≤ 32) ∧
+    (LENGTH bs = n) ∧
   (* Dynamic bytes *)
   value_has_type (BaseTV (BytesT (Dynamic max))) (BytesV bs) =
     (LENGTH bs ≤ max) ∧
@@ -98,7 +97,7 @@ Definition value_has_type_def:
   value_has_type (BaseTV (StringT max)) (StringV s) =
     (LENGTH s ≤ max) ∧
   (* Flag *)
-  value_has_type (FlagTV m') (FlagV k) = (k < 2 ** m' ∧ m' ≤ 256) ∧
+  value_has_type (FlagTV m') (FlagV k) = (k < 2 ** m') ∧
   (* None *)
   value_has_type NoneTV NoneV = T ∧
   (* Tuple *)
@@ -148,6 +147,12 @@ Termination
   Induct_on `sparse` >> simp[basicSizeTheory.pair_size_def] >>
   Cases >> simp[basicSizeTheory.pair_size_def]
 End
+
+Theorem all_have_type_LIST_REL:
+  ∀t vs. all_have_type t vs <=> LIST_REL value_has_type (REPLICATE (LENGTH vs) t) vs
+Proof
+  gen_tac >> Induct >> rw[value_has_type_def]
+QED
 
 (* ===== Helper lemmas  ===== *)
 
@@ -233,14 +238,30 @@ QED
 
 (* ===== Theorems ===== *)
 
+Theorem lt_dimword_imp_suc_wordsize_lt[local]:
+  n < dimword(:256) ==> word_size n + 1 <= dimword(:256)
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  simp[GSYM arithmeticTheory.ADD1] >>
+  simp[GSYM arithmeticTheory.LESS_EQ, arithmeticTheory.DIV_LT_X]
+QED
+
 Theorem well_formed_type_value_slot_size:
   ∀tv. well_formed_type_value tv ⇒ type_slot_size tv ≤ dimword(:256)
 Proof
   Cases >> simp[well_formed_type_value_def, type_slot_size_def] >>
   rename1 `BaseTV bt` >>
   Cases_on `bt` >> simp[well_formed_type_value_def, type_slot_size_def] >>
+  mp_tac (GEN_ALL lt_dimword_imp_suc_wordsize_lt) >> simp[] >>
   rename1 `BytesT bd` >>
   Cases_on `bd` >> simp[well_formed_type_value_def, type_slot_size_def]
+QED
+
+Theorem well_formed_type_value_size_gt0:
+  ∀tv. well_formed_type_value tv ∧ tv ≠ NoneTV ⇒ 0 < type_value_size tv
+Proof
+  ho_match_mp_tac well_formed_type_value_ind
+  \\ rw[well_formed_type_value_def]
 QED
 
 Theorem value_has_type_equiv:
@@ -316,16 +337,16 @@ Theorem value_has_type_inv:
   (value_has_type tv NoneV ⇔ tv = NoneTV) ∧
   (value_has_type tv (BoolV b) ⇔ tv = BaseTV BoolT) ∧
   (value_has_type tv (IntV i) ⇔
-    (∃n. tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ Num i < 2 ** n ∧ n ≤ 256) ∨
-    (∃n. tv = BaseTV (IntT n) ∧ within_int_bound (Signed n) i ∧ n ≤ 256)) ∧
+    (∃n. tv = BaseTV (UintT n) ∧ 0 ≤ i ∧ Num i < 2 ** n) ∨
+    (∃n. tv = BaseTV (IntT n) ∧ within_int_bound (Signed n) i)) ∧
   (value_has_type tv (DecimalV d) ⇔
     tv = BaseTV DecimalT ∧ within_int_bound (Signed 168) d) ∧
-  (value_has_type tv (FlagV k) ⇔ ∃m. tv = FlagTV m ∧ k < 2 ** m ∧ m ≤ 256) ∧
+  (value_has_type tv (FlagV k) ⇔ ∃m. tv = FlagTV m ∧ k < 2 ** m) ∧
   (value_has_type tv (StringV s) ⇔
     ∃m. tv = BaseTV (StringT m) ∧ LENGTH s ≤ m) ∧
   (value_has_type tv (BytesV bs) ⇔
     (tv = BaseTV AddressT ∧ LENGTH bs = 20) ∨
-    (∃n. tv = BaseTV (BytesT (Fixed n)) ∧ LENGTH bs = n ∧ n ≤ 32) ∨
+    (∃n. tv = BaseTV (BytesT (Fixed n)) ∧ LENGTH bs = n) ∨
     (∃m. tv = BaseTV (BytesT (Dynamic m)) ∧ LENGTH bs ≤ m)) ∧
   (value_has_type tv (ArrayV (TupleV vs)) ⇔
     ∃tvs. tv = TupleTV tvs ∧ values_have_types tvs vs) ∧
