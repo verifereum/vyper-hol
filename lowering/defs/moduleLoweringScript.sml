@@ -354,15 +354,15 @@ End
 Definition compile_constructor_epilogue_def:
   compile_constructor_epilogue runtime_size immutables_len immutables_buf =
     let rt_size_op = (Lit (n2w runtime_size) : operand) in
+    let total_size = runtime_size + immutables_len in
     if immutables_len > 0 then
-      do total_size <- emit_op ADD [rt_size_op; Lit (n2w immutables_len)];
-         deploy_buf <- emit_op ALLOCA [total_size; Lit 0w];
+      do deploy_buf <- emit_op ALLOCA [Lit (n2w total_size)];
          imm_dst <- emit_op ADD [deploy_buf; rt_size_op];
          emit_void MCOPY [imm_dst; immutables_buf;
                           Lit (n2w immutables_len)];
          rt_begin <- emit_op OFFSET [Lit 0w; Label "runtime_begin"];
          emit_void CODECOPY [deploy_buf; rt_begin; rt_size_op];
-         emit_inst RETURN [deploy_buf; total_size] []
+         emit_inst RETURN [deploy_buf; Lit (n2w total_size)] []
       od
     else
       do buf_alloc <- compile_alloc_buffer runtime_size;
@@ -540,8 +540,7 @@ Definition compile_internal_function_def:
        (if is_ctor_context ∧ immutables_len > 0 then
           let touch_offset = if immutables_len > 32 then immutables_len - 32
                              else 0 in
-          do emit_op ALLOCA [Lit (n2w immutables_len);
-                             Lit (n2w immutables_alloca_id)];
+          do emit_op ALLOCA [Lit (n2w immutables_len)];
              emit_op MLOAD [Lit (n2w touch_offset)];
              return ()
           od
