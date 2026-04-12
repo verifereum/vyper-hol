@@ -534,7 +534,6 @@ Definition compile_internal_function_def:
                                  has_return_buf is_nonreentrant
                                  nkey use_transient is_view
                                  is_ctor_context immutables_len
-                                 immutables_alloca_id
                                  body ret_type =
     do (* Reserve immutables region for ctor-context internal functions *)
        (if is_ctor_context ∧ immutables_len > 0 then
@@ -625,12 +624,12 @@ Definition compile_internal_fn_bodies_def:
   compile_internal_fn_bodies [] = return () ∧
   compile_internal_fn_bodies ((fn_lbl, cenv, params, has_ret_buf,
                                is_nr, nkey, use_trans, is_view,
-                               is_ctor, imm_len, imm_aid,
+                               is_ctor, imm_len,
                                body, ret_type) :: rest) =
     do new_block fn_lbl;
        compile_internal_function cenv params has_ret_buf
          is_nr nkey use_trans is_view
-         is_ctor imm_len imm_aid body ret_type;
+         is_ctor imm_len body ret_type;
        compile_internal_fn_bodies rest
     od
 End
