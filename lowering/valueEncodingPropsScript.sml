@@ -53,7 +53,8 @@ Theorem w256_roundtrip:
             0 < n ∧ n ≤ 256 ∧
             -&(2 ** (n - 1)) ≤ i ∧ i < &(2 ** (n - 1))) ∧
     (∀ k m. v = FlagV k ∧ tv = FlagTV m ⇒ k < 2 ** m ∧ m ≤ 256) ∧
-    (∀ n. v = DecimalV n ⇒ -&(2 ** 167) ≤ n ∧ n < &(2 ** 167))
+    (∀ n. v = DecimalV n ⇒ -&(2 ** 167) ≤ n ∧ n < &(2 ** 167)) ∧
+    (∀ bs n. v = BytesV bs ∧ tv = BaseTV (BytesT (Fixed n)) ⇒ n ≤ 32)
     ⇒
     w256_to_val w tv = v
 Proof
