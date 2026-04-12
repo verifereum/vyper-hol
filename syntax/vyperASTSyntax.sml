@@ -1,7 +1,7 @@
 structure vyperASTSyntax :> vyperASTSyntax = struct
 
   open HolKernel vyperASTTheory byteStringCacheLib
-  open stringSyntax pairSyntax optionSyntax listSyntax numSyntax
+  open boolSyntax stringSyntax pairSyntax optionSyntax listSyntax numSyntax
 
   fun astk s = prim_mk_const{Thy="vyperAST",Name=s}
   fun asty s = mk_thy_type{Thy="vyperAST",Tyop=s,Args=[]}
