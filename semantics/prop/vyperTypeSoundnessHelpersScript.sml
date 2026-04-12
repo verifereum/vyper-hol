@@ -502,7 +502,7 @@ QED
 (* Phase 2: bounded_int_op result has the bound's type *)
 Theorem bounded_int_op_unsigned:
   !k r v.
-    bounded_int_op (Unsigned k) r = INL v /\ k ≤ 256 ==>
+    bounded_int_op (Unsigned k) r = INL v ==>
     value_has_type (BaseTV (UintT k)) v
 Proof
   rw[bounded_int_op_def] >>
@@ -511,7 +511,7 @@ QED
 
 Theorem bounded_int_op_signed:
   !k r v.
-    bounded_int_op (Signed k) r = INL v /\ k ≤ 256 ==>
+    bounded_int_op (Signed k) r = INL v ==>
     value_has_type (BaseTV (IntT k)) v
 Proof
   rw[bounded_int_op_def] >> gvs[] >>
@@ -5485,6 +5485,7 @@ Proof
   Cases_on `b` >> simp[within_int_bound_def] >> rpt strip_tac
   (* Signed *)
   >- (
+    Cases_on `n = 0` >- gvs[] >>
     gvs[] >>
     Cases_on `n1 + &k < 0` >> simp[]
     (* n1+&k < 0: need Num(-(n1+&k)) <= 2^(n-1) *)
@@ -5755,12 +5756,12 @@ QED
 
 (* Pure-int characterization of within_int_bound (Signed m) *)
 Theorem within_int_bound_signed_int[local]:
-  !m i. within_int_bound (Signed m) i <=>
-        0 < m /\ -&(2 ** (m - 1)) <= i /\ i < &(2 ** (m - 1))
+  !m i. 0 < m ==>
+        (within_int_bound (Signed m) i <=>
+         -&(2 ** (m - 1)) <= i /\ i < &(2 ** (m - 1)))
 Proof
-  rpt gen_tac >>
+  rpt gen_tac >> strip_tac >>
   simp[within_int_bound_def, LET_THM] >>
-  Cases_on `0 < m` >> simp[] >>
   Cases_on `i < 0`
   >- (
     simp[] >>
@@ -5886,7 +5887,9 @@ Theorem int_shift_right_within_bound[local]:
           within_int_bound (Signed n) (int_shift_right m i)
 Proof
   rpt strip_tac >>
-  fs[within_int_bound_signed_int] >>
+  `!j. within_int_bound (Signed n) j <=> -&(2 ** (n-1)) <= j /\ j < &(2 ** (n-1))`
+    by simp[within_int_bound_signed_int] >>
+  fs[] >>
   Cases_on `0 <= i`
   >- (
     drule int_shift_right_nonneg_bounds >>
@@ -5934,6 +5937,7 @@ Proof
       bounded_decimal_op_def, binop_negate_def,
       AllCaseEqs(), LET_THM, value_has_type_def,
       int_bound_bits_def] >>
+  TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   (* Unsigned Exp: w2n < dimword(:256) *)
   TRY (
     PURE_REWRITE_TAC[GSYM (EVAL ``dimword (:256)``)] >>
@@ -5946,21 +5950,26 @@ Proof
     strip_tac >>
     conj_tac >- ASM_REWRITE_TAC[] >>
     irule (iffRL NUM_LT_INT) >> ASM_REWRITE_TAC[] >> NO_TAC) >>
-  (* Signed ShR: within_int_bound still folded, use preservation lemma *)
-  TRY (
-    qspecl_then [`Num i'`, `n`, `i`] mp_tac int_shift_right_within_bound >>
-    ASM_REWRITE_TAC[] >> NO_TAC) >>
   (* Now unfold within_int_bound_def for remaining goals *)
+  TRY (Cases_on `n = 0` >> gvs[within_int_bound_def] >>
+       gvs[bounded_int_op_def, wrapped_int_op_def, within_int_bound_def,
+           AllCaseEqs()] >> NO_TAC) >>
   gvs[within_int_bound_def] >>
   (* Unsigned mod: x % &(2^n) is in [0, 2^n) *)
   TRY (simp_tac (srw_ss()) [int_mod_pow2_bounds] >> NO_TAC) >>
-  (* Signed: signed_int_mod preserves within_int_bound *)
-  TRY (
-    first_x_assum (fn th =>
-      mp_tac (MATCH_MP signed_int_mod_within_bound th)) >>
-    simp_tac (srw_ss()) [within_int_bound_def, LET_THM] >> NO_TAC) >>
   (* Min/Max: nested IF_CASES_TAC *)
-  rpt IF_CASES_TAC >> gvs[]
+  rw[] >> gvs[] >>
+  TRY (drule signed_int_mod_within_bound >>
+       rw[within_int_bound_def] >>
+       qmatch_goalsub_abbrev_tac`signed_int_mod _ ii` >>
+       first_x_assum(qspec_then`ii`mp_tac) >> rw[]) >>
+  TRY (
+    drule int_shift_right_within_bound >>
+    rw[within_int_bound_def] >>
+    qmatch_goalsub_abbrev_tac`int_shift_right mm ii` >>
+    first_x_assum(qspecl_then[`mm`,`ii`]mp_tac) >>
+    rw[]) >>
+  EVAL_TAC
 QED
 
 (* int_bitwise on non-negative bounded naturals agrees with BITWISE *)
@@ -6169,6 +6178,7 @@ Proof
   Cases_on `v` >>
   gvs[evaluate_binop_def, AllCaseEqs(), LET_THM, value_has_type_def,
       int_bound_bits_def] >>
+  TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   (* ShR: keep within_int_bound folded *)
   TRY (  (* Unsigned ShR *)
     qspecl_then [`Num i'`, `n`, `i`] mp_tac int_shift_right_unsigned_bounds >>
@@ -6177,15 +6187,34 @@ Proof
     strip_tac >>
     conj_tac >- ASM_REWRITE_TAC[] >>
     irule (iffRL NUM_LT_INT) >> ASM_REWRITE_TAC[] >> NO_TAC) >>
-  TRY (  (* Signed ShR *)
-    qspecl_then [`Num i'`, `n`, `i`] mp_tac int_shift_right_within_bound >>
-    ASM_REWRITE_TAC[] >> NO_TAC) >>
-  (* ShL: unfold within_int_bound, use mod bounds *)
+  (* Remaining signed goals: ShR and ShL *)
   gvs[within_int_bound_def] >>
   TRY (simp_tac (srw_ss()) [int_mod_pow2_bounds] >> NO_TAC) >>
-  first_x_assum (fn th =>
-    mp_tac (MATCH_MP signed_int_mod_within_bound th)) >>
-  simp_tac (srw_ss()) [within_int_bound_def, LET_THM]
+  rw[] >> gvs[] >>
+  TRY (drule signed_int_mod_within_bound >>
+       rw[within_int_bound_def] >>
+       qmatch_goalsub_abbrev_tac`signed_int_mod _ ii` >>
+       first_x_assum(qspec_then`ii`mp_tac) >> rw[]) >>
+  TRY (
+    drule int_shift_right_within_bound >>
+    rw[within_int_bound_def] >>
+    qmatch_goalsub_abbrev_tac`int_shift_right mm ii` >>
+    first_x_assum(qspecl_then[`mm`,`ii`]mp_tac) >>
+    rw[]) >>
+  `!m. int_shift_right m 0 = 0` by
+    simp[int_bitwiseTheory.int_shift_right_def,
+         EVAL ``bits_of_int 0``, EVAL ``int_of_bits ([],F)``] >>
+  `!m. int_shift_left m 0 = 0` by (
+    simp[int_bitwiseTheory.int_shift_left_def,
+         EVAL ``bits_of_int 0``,
+         int_bitwiseTheory.int_of_bits_def,
+         int_bitwiseTheory.num_of_bits_def] >>
+    Induct_on `m` >>
+    simp[int_bitwiseTheory.num_of_bits_def,
+         rich_listTheory.GENLIST_K_CONS]) >>
+  `!x. signed_int_mod 0 x = 0` by
+    simp[signed_int_mod_def, integerTheory.INT_MOD_1] >>
+  simp[]
 QED
 
 

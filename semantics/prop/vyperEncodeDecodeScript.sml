@@ -479,9 +479,10 @@ Proof
 QED
 
 Theorem truncate_signed_range:
-  ∀n (w:256 word). 0 < n ⇒ within_int_bound (Signed n) (truncate_signed n w)
+  ∀n (w:256 word). within_int_bound (Signed n) (truncate_signed n w)
 Proof
-  Cases >> simp[] >> rename1 `SUC m` >>
+  Cases >- simp[truncate_signed_def, within_int_bound_def] >>
+  rename1 `SUC m` >>
   simp[truncate_signed_def, LET_THM, within_int_bound_def] >>
   rpt strip_tac >>
   qabbrev_tac `u = w2n w MOD 2 ** SUC m` >>

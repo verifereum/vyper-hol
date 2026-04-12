@@ -1441,8 +1441,9 @@ Resume eval_preserves_swt[Array]:
   gvs[return_def, raise_def] >>
   irule extract_elements_well_typed >>
   `well_formed_type_value (ArrayTV tv bd)` by (
-    simp[well_formed_type_value_def] >>
-    metis_tac[cj 1 evaluate_type_well_formed]) >>
+    irule (cj 1 evaluate_type_well_formed) >>
+    qexists_tac `get_tenv cx` >> qexists_tac `ArrayT typ bd` >>
+    simp[evaluate_type_def]) >>
   Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def] >>
   metis_tac[]
 QED
