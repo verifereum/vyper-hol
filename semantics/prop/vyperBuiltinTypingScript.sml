@@ -12,7 +12,7 @@
 
 Theory vyperBuiltinTyping
 Ancestors
-  vyperTypeSoundnessHelpers keccak
+  vyperTypeSoundnessDefs vyperTypeSoundnessHelpers keccak
 
 Libs
   wordsLib

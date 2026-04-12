@@ -14,7 +14,7 @@ Ancestors
   vyperLookup vyperImmutablesPreservation vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
   vyperTyping vyperEncodeDecode vyperAssignPreservesType
-  vyperTypeSoundnessHelpers vyperBuiltinTyping
+  vyperTypeSoundnessDefs vyperTypeSoundnessHelpers vyperBuiltinTyping
 Libs
   wordsLib
 
