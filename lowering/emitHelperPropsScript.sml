@@ -523,6 +523,20 @@ QED
 (* Chaining: emitted_insts through sequential emit_op calls *)
 Theorem emitted_insts_seq2 = emitted_insts_append;
 
+(* ===== state_rel preservation ===== *)
+
+(* state_rel doesn't depend on vs_vars — only memory, accounts, contexts, etc.
+   So update_var preserves state_rel unconditionally. *)
+Theorem state_rel_update_var:
+  ∀ cenv cx es ss name w.
+    state_rel cenv cx es ss ⇒
+    state_rel cenv cx es (update_var name w ss)
+Proof
+  rw[state_rel_def, update_var_def, vars_rel_def, storage_rel_def,
+     transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+     contract_storage_def, contract_transient_def]
+QED
+
 (* ===== Fresh variable invariant ===== *)
 (* fresh_vars_wrt is defined in compileEnvScript.sml *)
 
@@ -901,6 +915,44 @@ Proof
   rw[] >> irule emit_op_pure2_correct >> gvs[] >>
   goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
   irule step_MUL >> rw[]
+QED
+
+(* Generic read0 opcode: no operands, reads from state, one output.
+   Covers CALLER, ADDRESS, CALLVALUE, GAS, ORIGIN, GASPRICE, CHAINID,
+   COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, BLOBBASEFEE. *)
+Theorem emit_op_read0_correct:
+  ∀ opc w st v st' ss.
+    emit_op opc [] st = (v, st') ∧
+    fresh_vars_wrt st ss ∧
+    step_inst_base (mk_inst st.cs_next_id opc []
+                     [STRING #"%" (toString st.cs_next_var)]) ss =
+      OK (update_var (STRING #"%" (toString st.cs_next_var)) w ss)
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME w ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w'. eval_operand op ss = SOME w' ⇒ eval_operand op ss' = SOME w') ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_tx_ctx = ss.vs_tx_ctx ∧
+      ss'.vs_block_ctx = ss.vs_block_ctx ∧
+      ss'.vs_accounts = ss.vs_accounts ∧
+      ss'.vs_memory = ss.vs_memory ∧
+      ss'.vs_halted = ss.vs_halted
+Proof
+  rw[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def] >>
+  simp[eval_operand_update_var] >>
+  drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 Theorem emit_op_SUB_correct:
