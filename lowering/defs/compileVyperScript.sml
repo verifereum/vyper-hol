@@ -488,7 +488,7 @@ Definition package_internal_fn_def:
     let params = ZIP (MAP FST fargs, pvs) in
     (fn_lbl, cenv_final, params, has_ret_buf,
      nr, nkey, use_trans, is_view,
-     is_ctor_context, 0n, 0n,
+     is_ctor_context, 0n,
      body, SOME ret)
 End
 
