@@ -68,8 +68,7 @@ QED
 Theorem cx_scfg_reachable_main[local]:
   reachable cx_scfg_func "main"
 Proof
-  rw[reachable_def, cx_scfg_entry] >>
-  match_mp_tac relationTheory.RTC_REFL >> rw[]
+  rw[reachable_def, cx_scfg_entry]
 QED
 
 (* remove_unreachable_blocks removes "dead" *)
@@ -704,21 +703,23 @@ Theorem step_inst_fix_phi_inst[local]:
      step_inst fuel ctx (fix_phi_inst preds inst) s =
      step_inst fuel ctx inst s)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   Cases_on `inst.inst_opcode = PHI` >> simp[fix_phi_inst_def] >> *)
-  (*   (* PHI case: reduce both sides to step_inst_base *) *)
-  (*   SUBGOAL_THEN ``(inst:instruction).inst_opcode <> INVOKE`` ASSUME_TAC *)
-  (*   >- fs[] >> *)
-  (*   fs[venomExecSemanticsTheory.step_inst_non_invoke, step_inst_base_def] >> *)
-  (*   BasicProvers.every_case_tac >> gvs[] >> *)
-  (*   imp_res_tac resolve_phi_filter_phi_ops >> *)
-  (*   pop_assum (ASSUME_TAC o SPEC ``inst.inst_operands``) >> *)
-  (*   gvs[resolve_phi_def] >> *)
-  (*   fs[venomExecSemanticsTheory.step_inst_non_invoke, step_inst_base_def, *)
-  (*      resolve_phi_def] >> *)
-  (*   Cases_on `h'` >> gvs[resolve_phi_def] *)
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[fix_phi_inst_def, LET_THM] >>
+  `inst.inst_opcode <> INVOKE` by
+    (qpat_x_assum `inst.inst_opcode = PHI` SUBST_ALL_TAC >> EVAL_TAC) >>
+  imp_res_tac resolve_phi_filter_phi_ops >>
+  pop_assum (qspec_then `inst.inst_operands` ASSUME_TAC) >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  BasicProvers.every_case_tac >> gvs[resolve_phi_def] >>
+  TRY (simp[step_inst_non_invoke] >>
+       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+       BasicProvers.every_case_tac >> gvs[resolve_phi_def] >> NO_TAC) >>
+  (* 2-elem ASSIGN case: derive x = h'' from resolve_phi *)
+  qpat_x_assum `resolve_phi _ [_; _] = SOME _` mp_tac >>
+  Cases_on `h'` >> simp[resolve_phi_def] >> strip_tac >> gvs[] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[]
 QED
 
 (* ---------- run_insts: fold step_inst over instruction list ---------- *)
@@ -785,18 +786,113 @@ QED
 
 (* run_block on MAP fix_phi_inst instructions = run_block on original (or Error) *)
 (* Uses step_inst_fix_phi_inst per instruction. Requires prev_bb in preds. *)
-Theorem run_block_map_fix_phi[local]:
+(* run_block_non_phis on MAP fix_phi_inst instructions = original (or Error) *)
+Theorem run_block_non_phis_map_fix_phi[local]:
   !fuel ctx bb s preds prev.
     bb_well_formed bb /\
     s.vs_prev_bb = SOME prev /\ MEM prev preds /\
     s.vs_inst_idx < LENGTH bb.bb_instructions ==>
+    ((?e. run_block_non_phis fuel ctx bb s = Error e) \/
+     run_block_non_phis fuel ctx
+       (bb with bb_instructions := MAP (fix_phi_inst preds) bb.bb_instructions) s =
+     run_block_non_phis fuel ctx bb s)
+Proof
+  gen_tac >> gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`,
+    `EL s.vs_inst_idx bb.bb_instructions`, `s`, `preds`, `prev`]
+    step_inst_fix_phi_inst) >>
+  (impl_tac >- simp[]) >>
+  strip_tac THENL [
+    (* Case 1: step_inst_fix_phi_inst gives Error *)
+    disj1_tac >> qexists_tac `e` >>
+    simp[Once run_block_non_phis_def,
+         venomInstTheory.get_instruction_def] >>
+    Cases_on `(step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions)
+               (s:venom_state)) : exec_result` >> gvs[],
+    ALL_TAC
+  ] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+  qabbrev_tac `bb' = bb with bb_instructions :=
+       MAP (fix_phi_inst preds) bb.bb_instructions` >>
+  (SUBGOAL_THEN ``get_instruction bb' s.vs_inst_idx =
+                   SOME (fix_phi_inst preds inst)`` ASSUME_TAC
+    >- simp[venomInstTheory.get_instruction_def, Abbr `bb'`,
+            listTheory.EL_MAP, Abbr `inst`]) >>
+  (SUBGOAL_THEN ``get_instruction bb s.vs_inst_idx = SOME inst`` ASSUME_TAC
+    >- simp[venomInstTheory.get_instruction_def, Abbr `inst`]) >>
+  (SUBGOAL_THEN
+     ``is_terminator (fix_phi_inst preds inst).inst_opcode =
+       is_terminator inst.inst_opcode`` ASSUME_TAC
+    >- (simp[Abbr `inst`, fix_phi_inst_def] >>
+        BasicProvers.every_case_tac >>
+        simp[venomInstTheory.is_terminator_def])) >>
+  Cases_on `(step_inst fuel ctx inst (s:venom_state)) : exec_result` >>
+  gvs[] THENL [
+    (* OK case *)
+    Cases_on `is_terminator inst.inst_opcode` >> gvs[] THENL [
+      (* Terminator: both sides give same terminal result *)
+      disj2_tac >>
+      ntac 2 (simp[Once run_block_non_phis_def]),
+      (* Non-terminator: recurse via IH *)
+      (SUBGOAL_THEN ``SUC s.vs_inst_idx < LENGTH bb.bb_instructions``
+         ASSUME_TAC
+        >- (match_mp_tac bb_wf_non_term_suc >> simp[Abbr `inst`])) >>
+      (SUBGOAL_THEN ``v'.vs_prev_bb = SOME prev`` ASSUME_TAC
+        >- (imp_res_tac venomExecPropsTheory.step_inst_preserves_prev_bb >>
+            gvs[])) >>
+      first_x_assum (qspec_then
+         `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+      (impl_tac >- simp[]) >>
+      disch_then (qspecl_then [`bb`,
+         `v' with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      simp[] >>
+      disch_then (qspec_then `preds` mp_tac) >>
+      simp[] >>
+      strip_tac THENL [
+        (* IH: Error *)
+        disj1_tac >> qexists_tac `e` >>
+        simp[Once run_block_non_phis_def],
+        (* IH: Equality *)
+        disj2_tac >>
+        simp[Once run_block_non_phis_def] >>
+        (SUBGOAL_THEN ``run_block_non_phis fuel ctx bb s =
+            run_block_non_phis fuel ctx bb
+              (v' with vs_inst_idx := SUC s.vs_inst_idx)``
+           (fn th => ASM_REWRITE_TAC [th])
+          >- simp[Once run_block_non_phis_def])
+      ]
+    ],
+    disj2_tac >> ntac 2 (simp[Once run_block_non_phis_def]),
+    disj2_tac >> ntac 2 (simp[Once run_block_non_phis_def]),
+    disj2_tac >> ntac 2 (simp[Once run_block_non_phis_def]),
+    disj1_tac >> qexists_tac `s''` >>
+    simp[Once run_block_non_phis_def]
+  ]
+QED
+
+(* run_block corollary — just unfold run_block_def and use run_block_non_phis version *)
+Theorem run_block_map_fix_phi[local]:
+  !fuel ctx bb s preds prev.
+    bb_well_formed bb /\
+    s.vs_prev_bb = SOME prev /\ MEM prev preds /\
+    s.vs_inst_idx = 0 ==>
     ((?e. run_block fuel ctx bb s = Error e) \/
      run_block fuel ctx
        (bb with bb_instructions := MAP (fix_phi_inst preds) bb.bb_instructions) s =
      run_block fuel ctx bb s)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
+  rpt strip_tac >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (gvs[] >> fs[venomWfTheory.bb_well_formed_def] >>
+     Cases_on `bb.bb_instructions` >> fs[]) >>
+  simp[run_block_def] >>
+  `(s with vs_inst_idx := 0) = s` by
+    simp[venomStateTheory.venom_state_component_equality] >>
+  gvs[] >>
+  metis_tac[run_block_non_phis_map_fix_phi]
+QED
   (*   gen_tac >> gen_tac >> *)
   (*   completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >> *)
   (*   rpt strip_tac >> *)
@@ -881,7 +977,7 @@ Proof
   (*     disj1_tac >> qexists_tac `s''` >> *)
   (*     simp[Once venomExecSemanticsTheory.run_block_def] *)
   (*   ] *)
-QED
+(* QED *)
 
 (* --- Phase 2: FILTER partition preserves run_block under phi_no_conflict --- *)
 
@@ -947,11 +1043,10 @@ Theorem step_inst_phi_assign_update[local]:
     step_inst fuel ctx inst s = OK s' ==>
     ?v. s' = update_var (HD inst.inst_outputs) v s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> gvs[venomExecSemanticsTheory.step_inst_non_invoke, *)
-  (*                         venomExecSemanticsTheory.step_inst_base_def] >> *)
-  (*   BasicProvers.every_case_tac >> gvs[] >> metis_tac[] *)
+  rpt strip_tac >> gvs[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  strip_tac >> BasicProvers.every_case_tac >> gvs[] >> metis_tac[]
 QED
 
 (* For PHI/ASSIGN/NOP, step_inst returns OK or Error (never Halt/Abort/IntRet) *)
@@ -962,11 +1057,9 @@ Theorem step_inst_phi_assign_nop_ok_or_error[local]:
     (?s'. step_inst fuel ctx inst s = OK s') \/
     (?e. step_inst fuel ctx inst s = Error e)
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> gvs[venomExecSemanticsTheory.step_inst_non_invoke, *)
-  (*                         venomExecSemanticsTheory.step_inst_base_def] >> *)
-  (*   BasicProvers.every_case_tac *)
+  rpt strip_tac >> gvs[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  BasicProvers.every_case_tac
 QED
 
 (* For PHI/ASSIGN/NOP, step_inst is vs_inst_idx-independent *)
@@ -978,12 +1071,10 @@ Theorem step_inst_phi_assign_nop_idx_indep[local]:
     instIdxIndep$exec_result_map (\s'. s' with vs_inst_idx := n)
       (step_inst fuel ctx inst s)
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   simp[venomExecSemanticsTheory.step_inst_non_invoke] >> *)
-  (*   simp[instIdxIndepTheory.step_inst_inst_idx_indep, *)
-  (*        venomInstTheory.is_terminator_def] *)
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke,
+      instIdxIndepTheory.step_inst_inst_idx_indep,
+      venomInstTheory.is_terminator_def]
 QED
 
 (* If MEM (Var w) ops then MEM w (operand_vars ops) *)
@@ -1029,8 +1120,28 @@ Theorem step_inst_phi_update_var_indep[local]:
     step_inst fuel ctx inst (update_var w v s) =
     instIdxIndep$exec_result_map (update_var w v) (step_inst fuel ctx inst s)
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  Cases_on `inst.inst_outputs` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `t` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  simp[venomStateTheory.update_var_def] >>
+  Cases_on `s.vs_prev_bb` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `resolve_phi x inst.inst_operands` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  imp_res_tac execEquivParamBaseTheory.resolve_phi_MEM >>
+  `eval_operand x' (update_var w v s) = eval_operand x' s` by (
+    simp[GSYM venomStateTheory.update_var_def] >>
+    irule eval_operand_update_var >> rpt strip_tac >> gvs[] >>
+    imp_res_tac MEM_Var_operand_vars) >>
+  simp[] >>
+  Cases_on `eval_operand x' s` >>
+  gvs[venomStateTheory.update_var_def,
+      instIdxIndepTheory.exec_result_map_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
   (*   rpt strip_tac >> *)
   (*   gvs[venomExecSemanticsTheory.step_inst_non_invoke] >> *)
   (*   simp[venomExecSemanticsTheory.step_inst_base_def, *)
@@ -1066,8 +1177,28 @@ Theorem step_inst_assign_update_var_indep[local]:
     step_inst fuel ctx inst (update_var w v s) =
     instIdxIndep$exec_result_map (update_var w v) (step_inst fuel ctx inst s)
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  Cases_on `inst.inst_operands` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `t` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `inst.inst_outputs` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `t` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  simp[venomStateTheory.update_var_def] >>
+  `eval_operand h (update_var w v s) = eval_operand h s` by (
+    simp[GSYM venomStateTheory.update_var_def] >>
+    irule eval_operand_update_var >> rpt strip_tac >> gvs[] >>
+    imp_res_tac MEM_Var_operand_vars >>
+    gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  simp[] >>
+  Cases_on `eval_operand h s` >>
+  gvs[venomStateTheory.update_var_def,
+      instIdxIndepTheory.exec_result_map_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
   (*   rpt strip_tac >> *)
   (*   gvs[venomExecSemanticsTheory.step_inst_non_invoke] >> *)
   (*   simp[venomExecSemanticsTheory.step_inst_base_def, *)
@@ -1101,11 +1232,9 @@ Theorem step_inst_phi_assign_update_var_indep[local]:
     step_inst fuel ctx inst (update_var w v s) =
     instIdxIndep$exec_result_map (update_var w v) (step_inst fuel ctx inst s)
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> gvs[venomInstTheory.inst_uses_def] >> *)
-  (*   metis_tac[step_inst_phi_update_var_indep, *)
-  (*             step_inst_assign_update_var_indep] *)
+  rpt strip_tac >> gvs[venomInstTheory.inst_uses_def] >>
+  metis_tac[step_inst_phi_update_var_indep,
+            step_inst_assign_update_var_indep]
 QED
 
 (* Two independent PHI/ASSIGN instructions swap in run_insts.
@@ -1117,18 +1246,16 @@ Theorem step_inst_phi_assign_ok_outputs[local]:
     step_inst fuel ctx inst s = OK s' ==>
     inst.inst_outputs = [HD inst.inst_outputs]
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   gvs[venomExecSemanticsTheory.step_inst_non_invoke, *)
-  (*       venomExecSemanticsTheory.step_inst_base_def] >> *)
-  (*   BasicProvers.every_case_tac >> gvs[] *)
+  rpt strip_tac >> gvs[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  BasicProvers.every_case_tac >> gvs[]
 QED
 
 Theorem disjoint_len1_not_mem[local]:
   !l (s:'a list). LENGTH l = 1 /\ DISJOINT (set l) (set s) ==> ~MEM (HD l) s
 Proof
-  Cases_on `l` >> simp[] >> Cases_on `t` >> simp[]
+  Cases_on `l` >> simp[]
 QED
 
 Theorem update_var_val_inj[local]:
@@ -1144,8 +1271,7 @@ Theorem disjoint_len1_sym[local]:
     LENGTH l1 = 1 /\ LENGTH l2 = 1 /\ DISJOINT (set l1) (set l2) ==>
     HD l1 <> HD l2 /\ ~MEM (HD l1) l2 /\ ~MEM (HD l2) l1
 Proof
-  Cases_on `l1` >> Cases_on `l2` >> simp[] >>
-  Cases_on `t` >> Cases_on `t'` >> simp[]
+  Cases_on `l1` >> Cases_on `l2` >> simp[]
 QED
 
 Theorem run_insts_swap_independent[local]:
@@ -1158,45 +1284,43 @@ Theorem run_insts_swap_independent[local]:
     (?e. run_insts fuel ctx [i1; i2] s = Error e) \/
     run_insts fuel ctx [i1; i2] s = run_insts fuel ctx [i2; i1] s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt gen_tac >> DISCH_TAC >> *)
-  (*   simp[run_insts_def] >> *)
-  (*   (* i1 OK or Error *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `i1`, `s`] *)
-  (*     step_inst_phi_assign_nop_ok_or_error) >> *)
-  (*   (impl_tac THEN1 (gvs[] >> metis_tac[])) >> *)
-  (*   rpt strip_tac >> gvs[run_insts_def] >> *)
-  (*   (* i1 Error: LHS errors *) *)
-  (*   TRY (disj1_tac >> metis_tac[] >> NO_TAC) >> *)
-  (*   (* i1 OK: get i1's update structure *) *)
-  (*   imp_res_tac step_inst_phi_assign_update >> *)
-  (*   imp_res_tac step_inst_phi_assign_ok_outputs >> gvs[] >> *)
-  (*   (* Derive ~MEM and HD-neq facts from DISJOINT + LENGTH *) *)
-  (*   imp_res_tac disjoint_len1_not_mem >> *)
-  (*   imp_res_tac disjoint_len1_sym >> *)
-  (*   (* Apply indep lemma to i2 on (update_var (HD i1.inst_outputs) v s) *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `i2`, `s`, *)
-  (*     `HD i1.inst_outputs`, `v`] *)
-  (*     step_inst_phi_assign_update_var_indep) >> *)
-  (*   (impl_tac THEN1 simp[]) >> strip_tac >> *)
-  (*   gvs[instIdxIndepTheory.exec_result_map_def] >> *)
-  (*   (* i2 OK or Error *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `i2`, `s`] *)
-  (*     step_inst_phi_assign_nop_ok_or_error) >> *)
-  (*   (impl_tac THEN1 (gvs[] >> metis_tac[])) >> *)
-  (*   rpt strip_tac >> gvs[] >> *)
-  (*   (* i2 Error: both sides Error *) *)
-  (*   TRY (simp[instIdxIndepTheory.exec_result_map_def] >> NO_TAC) >> *)
-  (*   (* i2 OK: commute update_vars *) *)
-  (*   disj2_tac >> *)
-  (*   imp_res_tac step_inst_phi_assign_update >> *)
-  (*   imp_res_tac step_inst_phi_assign_ok_outputs >> gvs[] >> *)
-  (*   (* Resolve step_inst i1 on updated state via indep *) *)
-  (*   simp[step_inst_phi_assign_update_var_indep, *)
-  (*        instIdxIndepTheory.exec_result_map_def] >> *)
-  (*   imp_res_tac update_var_val_inj >> gvs[] >> *)
-  (*   match_mp_tac update_var_comm >> gvs[] *)
+  rpt gen_tac >> DISCH_TAC >>
+  simp[run_insts_def] >>
+  (* i1 OK or Error *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `i1`, `s`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 (gvs[] >> metis_tac[])) >>
+  rpt strip_tac >> gvs[run_insts_def] >>
+  (* i1 Error: LHS errors *)
+  TRY (disj1_tac >> metis_tac[] >> NO_TAC) >>
+  (* i1 OK: get i1's update structure *)
+  imp_res_tac step_inst_phi_assign_update >>
+  imp_res_tac step_inst_phi_assign_ok_outputs >> gvs[] >>
+  (* Derive ~MEM and HD-neq facts from DISJOINT + LENGTH *)
+  imp_res_tac disjoint_len1_not_mem >>
+  imp_res_tac disjoint_len1_sym >>
+  (* Apply indep lemma to i2 on (update_var (HD i1.inst_outputs) v s) *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `i2`, `s`,
+    `HD i1.inst_outputs`, `v`]
+    step_inst_phi_assign_update_var_indep) >>
+  (impl_tac THEN1 simp[]) >> strip_tac >>
+  gvs[instIdxIndepTheory.exec_result_map_def] >>
+  (* i2 OK or Error *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `i2`, `s`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 (gvs[] >> metis_tac[])) >>
+  rpt strip_tac >> gvs[] >>
+  (* i2 Error: both sides Error *)
+  TRY (simp[instIdxIndepTheory.exec_result_map_def] >> NO_TAC) >>
+  (* i2 OK: commute update_vars *)
+  disj2_tac >>
+  imp_res_tac step_inst_phi_assign_update >>
+  imp_res_tac step_inst_phi_assign_ok_outputs >> gvs[] >>
+  (* Resolve step_inst i1 on updated state via indep *)
+  simp[step_inst_phi_assign_update_var_indep,
+       instIdxIndepTheory.exec_result_map_def] >>
+  imp_res_tac update_var_val_inj >> gvs[] >>
+  match_mp_tac update_var_comm >> gvs[]
 QED
 
 (* Bubble one ASSIGN instruction past a list of PHIs.
@@ -1212,8 +1336,34 @@ Theorem run_insts_bubble_assign_past_phis[local]:
     (?e. run_insts fuel ctx (inst :: phis) s = Error e) \/
     run_insts fuel ctx (phis ++ [inst]) s = run_insts fuel ctx (inst :: phis) s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
+  Induct >- simp[run_insts_def] >>
+  rpt gen_tac >> DISCH_TAC >> gvs[] >>
+  (* phis = h :: phis', h is PHI, inst is ASSIGN *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `inst`, `s`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 simp[]) >>
+  strip_tac >> gvs[run_insts_def] >>
+  (* inst Error: immediate *)
+  TRY (disj1_tac >> metis_tac[] >> NO_TAC) >>
+  (* inst OK: use swap *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `inst`, `h`, `s`]
+    run_insts_swap_independent) >>
+  (impl_tac THEN1 gvs[]) >>
+  simp[run_insts_def] >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `h`, `s`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 simp[]) >>
+  strip_tac >> gvs[] >>
+  TRY (strip_tac >> gvs[] >> disj2_tac >> simp[] >> NO_TAC) >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `h`, `s'`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 simp[]) >>
+  strip_tac >> gvs[] >>
+  TRY (strip_tac >> gvs[] >> disj1_tac >> metis_tac[] >> NO_TAC) >>
+  strip_tac >> gvs[] >>
+  first_x_assum (mp_tac o Q.SPECL [`fuel`, `ctx`, `inst`, `s''`]) >>
+  (impl_tac THEN1 gvs[]) >>
+  strip_tac >> gvs[AllCaseEqs()]
   (*   Induct >- simp[run_insts_def] >> *)
   (*   rpt gen_tac >> DISCH_TAC >> gvs[] >> *)
   (*   (* phis = h :: phis', h is PHI, inst is ASSIGN *) *)
@@ -1297,24 +1447,20 @@ Theorem run_insts_bubble_assign_past_phis_suffix[local]:
     run_insts fuel ctx (phis ++ inst :: rest) s =
     run_insts fuel ctx (inst :: phis ++ rest) s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   mp_tac (Q.SPECL [`phis`, `fuel`, `ctx`, `inst`, `s`] *)
-  (*     run_insts_bubble_assign_past_phis) >> *)
-  (*   (impl_tac THEN1 gvs[]) >> *)
-  (*   strip_tac >> gvs[] *)
-  (*   >- ((* Error on inst :: phis at s => Error on (inst :: phis) ++ rest *) *)
-  (*       disj1_tac >> *)
-  (*       drule_then (qspec_then `rest` mp_tac) run_insts_append_error >> *)
-  (*       simp[]) *)
-  (*   >- ((* phis ++ [inst] at s = inst :: phis at s *) *)
-  (*       disj2_tac >> *)
-  (*       `phis ++ inst :: rest = (phis ++ [inst]) ++ rest` by *)
-  (*         simp[listTheory.APPEND_ASSOC] >> *)
-  (*       `inst :: (phis ++ rest) = (inst :: phis) ++ rest` by simp[] >> *)
-  (*       ntac 2 (pop_assum (fn th => ONCE_REWRITE_TAC [th])) >> *)
-  (*       match_mp_tac run_insts_append_cong >> simp[]) *)
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`phis`, `fuel`, `ctx`, `inst`, `s`]
+    run_insts_bubble_assign_past_phis) >>
+  (impl_tac THEN1 gvs[]) >>
+  strip_tac >> gvs[]
+  >- (disj1_tac >>
+      drule_then (qspec_then `rest` mp_tac) run_insts_append_error >>
+      simp[])
+  >- (disj2_tac >>
+      `phis ++ inst :: rest = (phis ++ [inst]) ++ rest` by
+        simp[listTheory.APPEND_ASSOC] >>
+      `inst :: (phis ++ rest) = (inst :: phis) ++ rest` by simp[] >>
+      ntac 2 (pop_assum (fn th => ONCE_REWRITE_TAC [th])) >>
+      match_mp_tac run_insts_append_cong >> simp[])
 QED
 
 (* ASSIGN inductive step for partition: if h is ASSIGN and the IH holds
@@ -1341,32 +1487,22 @@ Theorem run_insts_partition_assign_step[local]:
        h :: FILTER (\i. i.inst_opcode <> PHI) insts) s =
     run_insts fuel ctx (h :: insts) s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   (* Step h: OK or Error *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `h`, `s`] *)
-  (*     step_inst_phi_assign_nop_ok_or_error) >> *)
-  (*   (impl_tac THEN1 simp[]) >> strip_tac >> gvs[run_insts_def] THEN *)
-  (*   TRY (disj1_tac >> metis_tac[] >> NO_TAC) THEN *)
-  (*   (* step h s = OK s'. RHS is now run_insts insts s'. *) *)
-  (*   (* Apply suffix: reorder h past FILTER PHI *) *)
-  (*   mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = PHI) insts`, *)
-  (*                     `fuel`, `ctx`, `h`, *)
-  (*                     `FILTER (\i. i.inst_opcode <> PHI) insts`, `s`] *)
-  (*     run_insts_bubble_assign_past_phis_suffix) >> *)
-  (*   (impl_tac THEN1 *)
-  (*     (gvs[listTheory.EVERY_FILTER_IMP, listTheory.EVERY_MEM, *)
-  (*          listTheory.MEM_FILTER] >> *)
-  (*      rw[] >> first_x_assum match_mp_tac >> metis_tac[])) >> *)
-  (*   (* Suffix gives Error or equality, both involve h :: FILTER PHI ++ FILTER ~PHI *) *)
-  (*   (* Simplify h :: FILTER PHI ++ FILTER ~PHI using step h s = OK s' *) *)
-  (*   simp[run_insts_def] >> *)
-  (*   (* Now: (?e. partitioned s' = Error e) \/ reordered s = partitioned s' *)
-  (*      ==> (?e. insts s' = Error e) \/ reordered s = insts s' *) *)
-  (*   (* Apply IH at s' *) *)
-  (*   first_x_assum (mp_tac o Q.SPECL [`fuel`, `ctx`, `s'`]) >> *)
-  (*   metis_tac[] *)
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `h`, `s`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 simp[]) >> strip_tac >> gvs[run_insts_def] >>
+  TRY (disj1_tac >> metis_tac[] >> NO_TAC) >>
+  mp_tac (Q.SPECL [`FILTER (\i. i.inst_opcode = PHI) insts`,
+                    `fuel`, `ctx`, `h`,
+                    `FILTER (\i. i.inst_opcode <> PHI) insts`, `s`]
+    run_insts_bubble_assign_past_phis_suffix) >>
+  (impl_tac THEN1
+    (gvs[listTheory.EVERY_FILTER_IMP, listTheory.EVERY_MEM,
+         listTheory.MEM_FILTER] >>
+     rw[] >> first_x_assum match_mp_tac >> metis_tac[])) >>
+  simp[run_insts_def] >>
+  first_x_assum (mp_tac o Q.SPECL [`fuel`, `ctx`, `s'`]) >>
+  metis_tac[]
 QED
 
 (* NOP inductive step for partition: NOP is identity on both sides. *)
@@ -1385,20 +1521,16 @@ Theorem run_insts_partition_nop_step[local]:
        h :: FILTER (\i. i.inst_opcode <> PHI) insts) s =
     run_insts fuel ctx (h :: insts) s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   (* h is NOP: h :: insts = insts in execution *) *)
-  (*   simp[run_insts_skip_nop] >> *)
-  (*   (* LHS: FILTER PHI ++ h :: FILTER ¬PHI = FILTER PHI ++ FILTER ¬PHI in execution *) *)
-  (*   `run_insts fuel ctx *)
-  (*     (FILTER (\i. i.inst_opcode = PHI) insts ++ *)
-  (*      h :: FILTER (\i. i.inst_opcode <> PHI) insts) s = *)
-  (*    run_insts fuel ctx *)
-  (*     (FILTER (\i. i.inst_opcode = PHI) insts ++ *)
-  (*      FILTER (\i. i.inst_opcode <> PHI) insts) s` by *)
-  (*     (match_mp_tac run_insts_prepend_cong >> simp[run_insts_skip_nop]) >> *)
-  (*   gvs[] *)
+  rpt strip_tac >>
+  simp[run_insts_skip_nop] >>
+  `run_insts fuel ctx
+    (FILTER (\i. i.inst_opcode = PHI) insts ++
+     h :: FILTER (\i. i.inst_opcode <> PHI) insts) s =
+   run_insts fuel ctx
+    (FILTER (\i. i.inst_opcode = PHI) insts ++
+     FILTER (\i. i.inst_opcode <> PHI) insts) s` by
+    (match_mp_tac run_insts_prepend_cong >> simp[run_insts_skip_nop]) >>
+  gvs[]
 QED
 
 (* FILTER partition of a PHI/ASSIGN/NOP list preserves run_insts
@@ -1419,36 +1551,33 @@ Theorem run_insts_partition_phi_prefix[local]:
        FILTER (\i. i.inst_opcode <> PHI) insts) s =
     run_insts fuel ctx insts s
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   Induct >- simp[run_insts_def] >> *)
-  (*   rpt gen_tac >> DISCH_TAC >> *)
-  (*   `(h.inst_opcode = PHI \/ h.inst_opcode = ASSIGN \/ *)
-  (*     h.inst_opcode = NOP) /\ *)
-  (*    EVERY (\i. i.inst_opcode = PHI \/ i.inst_opcode = ASSIGN \/ *)
-  (*               i.inst_opcode = NOP) insts /\ *)
-  (*    (!i j. MEM i insts /\ MEM j insts /\ *)
-  (*           i.inst_opcode = ASSIGN /\ j.inst_opcode = PHI ==> *)
-  (*           DISJOINT (set i.inst_outputs) (set j.inst_outputs) /\ *)
-  (*           DISJOINT (set i.inst_outputs) (set (inst_uses j)) /\ *)
-  (*           DISJOINT (set j.inst_outputs) (set (inst_uses i)))` by *)
-  (*     (fs[listTheory.EVERY_DEF] >> rw[] >> res_tac) >> *)
-  (*   (* Three cases: PHI / ASSIGN / NOP *) *)
-  (*   gvs[] *)
-  (*   >- ((* PHI: h stays at front *) *)
-  (*       simp[listTheory.FILTER, run_insts_def] >> *)
-  (*       BasicProvers.every_case_tac >> gvs[] >> *)
-  (*       first_x_assum (mp_tac o Q.SPECL [`fuel`, `ctx`, `s'`]) >> *)
-  (*       (impl_tac THEN1 (rw[] >> first_x_assum match_mp_tac >> metis_tac[])) >> *)
-  (*       DISCH_TAC >> gvs[]) *)
-  (*   >- ((* ASSIGN: use extracted helper *) *)
-  (*       simp[listTheory.FILTER] >> *)
-  (*       match_mp_tac run_insts_partition_assign_step >> *)
-  (*       gvs[] >> metis_tac[]) *)
-  (*   >- ((* NOP: use extracted helper *) *)
-  (*       simp[listTheory.FILTER] >> *)
-  (*       match_mp_tac run_insts_partition_nop_step >> *)
-  (*       gvs[] >> metis_tac[]) *)
+  Induct >- simp[run_insts_def] >>
+  rpt gen_tac >> DISCH_TAC >>
+  `(h.inst_opcode = PHI \/ h.inst_opcode = ASSIGN \/
+    h.inst_opcode = NOP) /\
+   EVERY (\i. i.inst_opcode = PHI \/ i.inst_opcode = ASSIGN \/
+              i.inst_opcode = NOP) insts /\
+   (!i j. MEM i insts /\ MEM j insts /\
+          i.inst_opcode = ASSIGN /\ j.inst_opcode = PHI ==>
+          DISJOINT (set i.inst_outputs) (set j.inst_outputs) /\
+          DISJOINT (set i.inst_outputs) (set (inst_uses j)) /\
+          DISJOINT (set j.inst_outputs) (set (inst_uses i)))` by
+    (fs[listTheory.EVERY_DEF] >> rw[] >> res_tac) >>
+  gvs[]
+  >- ((* PHI: h stays at front *)
+      simp[listTheory.FILTER, run_insts_def] >>
+      BasicProvers.every_case_tac >> gvs[] >>
+      first_x_assum (mp_tac o Q.SPECL [`fuel`, `ctx`, `s'`]) >>
+      (impl_tac THEN1 (rw[] >> first_x_assum match_mp_tac >> metis_tac[])) >>
+      DISCH_TAC >> gvs[])
+  >- ((* ASSIGN: use extracted helper *)
+      simp[listTheory.FILTER] >>
+      match_mp_tac run_insts_partition_assign_step >>
+      gvs[] >> metis_tac[])
+  >- ((* NOP: use extracted helper *)
+      simp[listTheory.FILTER] >>
+      match_mp_tac run_insts_partition_nop_step >>
+      gvs[] >> metis_tac[])
 QED
 
 (* run_insts preserves vs_inst_idx for PHI/ASSIGN/NOP lists *)
@@ -1476,15 +1605,12 @@ Theorem run_insts_phi_ok_or_error[local]:
     (?s'. run_insts fuel ctx insts s = OK s') \/
     (?e. run_insts fuel ctx insts s = Error e)
 Proof
-  (* CHEATED: PHI step_inst semantics changed (PHI => OK s) *)
-  cheat
-  (*   Induct *)
-  (*   >- (rw[run_insts_def] >> metis_tac[]) *)
-  (*   >> *)
-  (*   rw[run_insts_def] >> *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `h`, `s`] *)
-  (*     step_inst_phi_assign_nop_ok_or_error) >> *)
-  (*   (impl_tac THEN1 gvs[]) >> strip_tac >> gvs[run_insts_def] *)
+  Induct
+  >- (rw[run_insts_def] >> metis_tac[])
+  >> rw[run_insts_def] >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `h`, `s`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 gvs[]) >> strip_tac >> gvs[run_insts_def]
 QED
 
 (* General: EVERY P on a TAKE prefix implies P for any element in range *)
@@ -1510,163 +1636,141 @@ Proof
   simp[listTheory.LENGTH_TAKE, rich_listTheory.EL_TAKE]
 QED
 
-(* Bridge: run_block on a PHI/ASSIGN/NOP prefix equals run_insts on that prefix,
-   then run_block continuing from past the prefix. *)
-(* Helper: extend run_block_phi_prefix by one step *)
-Theorem run_block_phi_prefix_step[local]:
+(* Bridge: run_block_non_phis on a PHI/ASSIGN/NOP prefix equals run_insts
+   on that prefix, then continuing from past the prefix. *)
+Theorem run_block_non_phis_phi_prefix_step[local]:
   !n' fuel ctx bb s s'.
     EVERY (\i. i.inst_opcode = PHI \/ i.inst_opcode = ASSIGN \/
                i.inst_opcode = NOP) (TAKE (SUC n') bb.bb_instructions) /\
     SUC n' < LENGTH bb.bb_instructions /\
-    s.vs_inst_idx = 0 /\
-    run_insts fuel ctx (TAKE n' bb.bb_instructions) s = OK s' /\
-    run_block fuel ctx bb s =
-      run_block fuel ctx bb (s' with vs_inst_idx := n') ==>
-    (?s''. run_insts fuel ctx (TAKE (SUC n') bb.bb_instructions) s = OK s'' /\
-           run_block fuel ctx bb s =
-             run_block fuel ctx bb (s'' with vs_inst_idx := SUC n')) \/
-    (?e. run_insts fuel ctx (TAKE (SUC n') bb.bb_instructions) s = Error e /\
-         run_block fuel ctx bb s = Error e)
+    s.vs_inst_idx = n' /\
+    run_insts fuel ctx (TAKE n' bb.bb_instructions)
+      (s with vs_inst_idx := 0) = OK s' /\
+    run_block_non_phis fuel ctx bb s =
+      run_block_non_phis fuel ctx bb (s' with vs_inst_idx := n') ==>
+    (?s''. run_insts fuel ctx (TAKE (SUC n') bb.bb_instructions)
+             (s with vs_inst_idx := 0) = OK s'' /\
+           run_block_non_phis fuel ctx bb s =
+             run_block_non_phis fuel ctx bb
+               (s'' with vs_inst_idx := SUC n')) \/
+    (?e. run_insts fuel ctx (TAKE (SUC n') bb.bb_instructions)
+           (s with vs_inst_idx := 0) = Error e /\
+         run_block_non_phis fuel ctx bb s = Error e)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   (* Establish helper facts upfront — NO disjunctive assumptions *) *)
-  (*   imp_res_tac EVERY_TAKE_SUC >> *)
-  (*   drule_all run_insts_preserves_inst_idx >> DISCH_TAC >> *)
-  (*   (* ~is_terminator from EVERY + EVERY_TAKE_EL, resolved immediately *) *)
-  (*   SUBGOAL_THEN ``~is_terminator *)
-  (*     (EL n' bb.bb_instructions).inst_opcode`` ASSUME_TAC *)
-  (*   THEN1 (imp_res_tac EVERY_TAKE_EL >> *)
-  (*          fs[venomInstTheory.is_terminator_def]) >> *)
-  (*   (* TAKE decomposition *) *)
-  (*   SUBGOAL_THEN ``TAKE (SUC n') bb.bb_instructions = *)
-  (*     TAKE n' bb.bb_instructions ++ [EL n' bb.bb_instructions]`` *)
-  (*     ASSUME_TAC *)
-  (*   THEN1 (simp[rich_listTheory.SNOC_APPEND, *)
-  (*               rich_listTheory.TAKE_EL_SNOC, arithmeticTheory.ADD1]) >> *)
-  (*   (* step_inst on EL n' gives OK or Error — use imp_res_tac locally *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `EL n' bb.bb_instructions`, `s'`] *)
-  (*     step_inst_phi_assign_nop_ok_or_error) >> *)
-  (*   (impl_tac THEN1 (imp_res_tac EVERY_TAKE_EL >> fs[])) >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* idx independence for step_inst — use imp_res_tac locally *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `EL n' bb.bb_instructions`, `s'`, `n'`] *)
-  (*     step_inst_phi_assign_nop_idx_indep) >> *)
-  (*   (impl_tac THEN1 (imp_res_tac EVERY_TAKE_EL >> fs[])) >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* Case split: step_inst OK s'' | Error e *) *)
-  (*   ntac 2 (pop_assum mp_tac) >> DISCH_TAC >> *)
-  (*   pop_assum (DISJ_CASES_THEN2 *)
-  (*     (CHOOSE_THEN ASSUME_TAC) (CHOOSE_THEN ASSUME_TAC)) *)
-  (*   THENL [ *)
-  (*     (* === OK case: step_inst ... s' = OK s'' === *) *)
-  (*     DISCH_TAC >> *)
-  (*     disj1_tac >> qexists_tac `s''` >> *)
-  (*     conj_tac THENL [ *)
-  (*       ASM_REWRITE_TAC[run_insts_append] >> simp[run_insts_def], *)
-  (*       ASM_REWRITE_TAC[] >> *)
-  (*       simp[Once venomExecSemanticsTheory.run_block_def, *)
-  (*            venomInstTheory.get_instruction_def] >> *)
-  (*       ASM_REWRITE_TAC[instIdxIndepTheory.exec_result_map_def] >> *)
-  (*       simp[] *)
-  (*     ], *)
-  (*     (* === Error case: step_inst ... s' = Error e === *) *)
-  (*     DISCH_TAC >> *)
-  (*     disj2_tac >> qexists_tac `e` >> *)
-  (*     conj_tac THENL [ *)
-  (*       ASM_REWRITE_TAC[run_insts_append] >> simp[run_insts_def], *)
-  (*       ASM_REWRITE_TAC[] >> *)
-  (*       simp[Once venomExecSemanticsTheory.run_block_def, *)
-  (*            venomInstTheory.get_instruction_def] >> *)
-  (*       ASM_REWRITE_TAC[instIdxIndepTheory.exec_result_map_def] >> *)
-  (*       simp[] *)
-  (*     ] *)
-  (*   ] *)
+  rpt strip_tac >>
+  imp_res_tac EVERY_TAKE_SUC >>
+  SUBGOAL_THEN ``~is_terminator
+    (EL n' bb.bb_instructions).inst_opcode`` ASSUME_TAC
+  THEN1 (imp_res_tac EVERY_TAKE_EL >>
+         fs[venomInstTheory.is_terminator_def]) >>
+  SUBGOAL_THEN ``TAKE (SUC n') bb.bb_instructions =
+    TAKE n' bb.bb_instructions ++ [EL n' bb.bb_instructions]``
+    ASSUME_TAC
+  THEN1 (simp[rich_listTheory.SNOC_APPEND,
+              rich_listTheory.TAKE_EL_SNOC, arithmeticTheory.ADD1]) >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `EL n' bb.bb_instructions`, `s'`]
+    step_inst_phi_assign_nop_ok_or_error) >>
+  (impl_tac THEN1 (imp_res_tac EVERY_TAKE_EL >> fs[])) >>
+  DISCH_TAC >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `EL n' bb.bb_instructions`, `s'`, `n'`]
+    step_inst_phi_assign_nop_idx_indep) >>
+  (impl_tac THEN1 (imp_res_tac EVERY_TAKE_EL >> fs[])) >>
+  DISCH_TAC >>
+  ntac 2 (pop_assum mp_tac) >> DISCH_TAC >>
+  pop_assum (DISJ_CASES_THEN2
+    (CHOOSE_THEN ASSUME_TAC) (CHOOSE_THEN ASSUME_TAC)) >>
+  DISCH_TAC
+  THENL [
+    disj1_tac >> qexists_tac `s''` >>
+    conj_tac THENL [
+      ASM_REWRITE_TAC[run_insts_append] >> simp[run_insts_def],
+      ASM_REWRITE_TAC[] >>
+      simp[Once run_block_non_phis_def,
+           venomInstTheory.get_instruction_def] >>
+      ASM_REWRITE_TAC[instIdxIndepTheory.exec_result_map_def] >>
+      simp[]
+    ],
+    disj2_tac >> qexists_tac `e` >>
+    conj_tac THENL [
+      ASM_REWRITE_TAC[run_insts_append] >> simp[run_insts_def],
+      ASM_REWRITE_TAC[] >>
+      simp[Once run_block_non_phis_def,
+           venomInstTheory.get_instruction_def] >>
+      ASM_REWRITE_TAC[instIdxIndepTheory.exec_result_map_def] >>
+      simp[]
+    ]
+  ]
 QED
 
-Theorem run_block_phi_prefix[local]:
+Theorem run_block_non_phis_phi_prefix[local]:
   !n fuel ctx bb s.
     EVERY (\i. i.inst_opcode = PHI \/ i.inst_opcode = ASSIGN \/
                i.inst_opcode = NOP) (TAKE n bb.bb_instructions) /\
     n < LENGTH bb.bb_instructions /\
     s.vs_inst_idx = 0 ==>
     (?s'. run_insts fuel ctx (TAKE n bb.bb_instructions) s = OK s' /\
-          run_block fuel ctx bb s =
-            run_block fuel ctx bb (s' with vs_inst_idx := n)) \/
+          run_block_non_phis fuel ctx bb (s with vs_inst_idx := 0) =
+            run_block_non_phis fuel ctx bb (s' with vs_inst_idx := n)) \/
     (?e. run_insts fuel ctx (TAKE n bb.bb_instructions) s = Error e /\
-         run_block fuel ctx bb s = Error e)
+         run_block_non_phis fuel ctx bb (s with vs_inst_idx := 0) = Error e)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   completeInduct_on `n` >> rpt strip_tac >> *)
-  (*   Cases_on `n` *)
-  (*   THENL [ *)
-  (*     (* Base: n=0 *) *)
-  (*     disj1_tac >> qexists_tac `s` >> *)
-  (*     simp[run_insts_def] >> *)
-  (*     SUBGOAL_THEN ``(s:venom_state) with vs_inst_idx := 0 = s`` *)
-  (*       (fn th => simp[th]) >> *)
-  (*     simp[venomStateTheory.venom_state_component_equality], *)
-  (*     (* Step: n = SUC n' — apply IH then step helper *) *)
-  (*     rename1 `SUC n' < LENGTH bb.bb_instructions` >> *)
-  (*     first_x_assum (qspec_then `n'` mp_tac) >> simp[] >> *)
-  (*     disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s`] mp_tac) >> *)
-  (*     (impl_tac THEN1 (imp_res_tac EVERY_TAKE_SUC >> simp[])) >> *)
-  (*     DISCH_TAC >> *)
-  (*     pop_assum (DISJ_CASES_THEN2 *)
-  (*       (CHOOSE_THEN (fn th => *)
-  (*         ASSUME_TAC (CONJUNCT1 th) >> ASSUME_TAC (CONJUNCT2 th))) *)
-  (*       (CHOOSE_THEN (fn th => *)
-  (*         ASSUME_TAC (CONJUNCT1 th) >> ASSUME_TAC (CONJUNCT2 th)))) *)
-  (*     THENL [ *)
-  (*       (* IH OK: apply step helper *) *)
-  (*       mp_tac run_block_phi_prefix_step >> *)
-  (*       disch_then (qspecl_then *)
-  (*         [`n'`, `fuel`, `ctx`, `bb`, `s`, `s'`] mp_tac) >> *)
-  (*       simp[], *)
-  (*       (* IH Error: chain with run_insts_append *) *)
-  (*       disj2_tac >> qexists_tac `e` >> *)
-  (*       simp[rich_listTheory.SNOC_APPEND, *)
-  (*            rich_listTheory.TAKE_EL_SNOC, arithmeticTheory.ADD1, *)
-  (*            run_insts_append] *)
-  (*     ] *)
-  (*   ] *)
+  Induct_on `n` >> rpt strip_tac
+  >- (disj1_tac >> qexists_tac `s` >> simp[run_insts_def])
+  >> imp_res_tac EVERY_TAKE_SUC
+  >> imp_res_tac EVERY_TAKE_EL
+  >> SUBGOAL_THEN ``~is_terminator
+       (EL n bb.bb_instructions).inst_opcode`` ASSUME_TAC
+  THEN1 (fs[venomInstTheory.is_terminator_def])
+  >> `TAKE (SUC n) bb.bb_instructions =
+      TAKE n bb.bb_instructions ++ [EL n bb.bb_instructions]`
+       by simp[rich_listTheory.SNOC_APPEND,
+               rich_listTheory.TAKE_EL_SNOC, arithmeticTheory.ADD1]
+  >> first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s`] mp_tac)
+  >> (impl_tac THEN1 simp[])
+  >> strip_tac
+  >- ((* IH = OK *)
+      mp_tac (Q.SPECL [`fuel`, `ctx`,
+        `EL n bb.bb_instructions`, `s'`]
+        step_inst_phi_assign_nop_ok_or_error) >>
+      (impl_tac THEN1 fs[]) >> strip_tac
+      >- ((* step = OK *)
+          mp_tac (Q.SPECL [`fuel`, `ctx`,
+            `EL n bb.bb_instructions`, `s'`, `n`]
+            step_inst_phi_assign_nop_idx_indep) >>
+          (impl_tac THEN1 fs[]) >> DISCH_TAC >>
+          disj1_tac >> qexists_tac `s''` >> conj_tac
+          THEN1 (ASM_REWRITE_TAC[run_insts_append] >>
+                 simp[run_insts_def]) >>
+          ASM_REWRITE_TAC[] >>
+          simp[Once run_block_non_phis_def,
+               venomInstTheory.get_instruction_def] >>
+          ASM_REWRITE_TAC[
+            instIdxIndepTheory.exec_result_map_def] >>
+          simp[])
+      >> (* step = Error *)
+      mp_tac (Q.SPECL [`fuel`, `ctx`,
+        `EL n bb.bb_instructions`, `s'`, `n`]
+        step_inst_phi_assign_nop_idx_indep) >>
+      (impl_tac THEN1 fs[]) >> DISCH_TAC >>
+      disj2_tac >> qexists_tac `e` >> conj_tac
+      THEN1 (ASM_REWRITE_TAC[run_insts_append] >>
+             simp[run_insts_def]) >>
+      ASM_REWRITE_TAC[] >>
+      simp[Once run_block_non_phis_def,
+           venomInstTheory.get_instruction_def] >>
+      ASM_REWRITE_TAC[
+        instIdxIndepTheory.exec_result_map_def] >>
+      simp[])
+  >> (* IH = Error *)
+  disj2_tac >> qexists_tac `e` >>
+  ASM_REWRITE_TAC[run_insts_append] >> simp[run_insts_def]
 QED
 
-(* Corollary: run_block_phi_prefix with explicit prefix/suffix split.
-   Eliminates TAKE from run_block_phi_prefix via ML-level rewriting. *)
-Theorem run_block_phi_prefix_split[local]:
-  !prefix suffix fuel ctx bb s.
-    bb.bb_instructions = prefix ++ suffix /\
-    EVERY (\i. i.inst_opcode = PHI \/ i.inst_opcode = ASSIGN \/
-               i.inst_opcode = NOP) prefix /\
-    suffix <> [] /\
-    s.vs_inst_idx = 0 ==>
-    (?s'. run_insts fuel ctx prefix s = OK s' /\
-          run_block fuel ctx bb s =
-            run_block fuel ctx bb (s' with vs_inst_idx := LENGTH prefix)) \/
-    (?e. run_insts fuel ctx prefix s = Error e /\
-         run_block fuel ctx bb s = Error e)
-Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   first_x_assum (fn bb_eq => *)
-  (*     let val prefix_tm = bb_eq |> concl |> rhs |> dest_comb |> #1 |> dest_comb |> #2 *)
-  (*         val len_prefix = listSyntax.mk_length prefix_tm *)
-  (*         val spec = SPEC len_prefix run_block_phi_prefix *)
-  (*         val spec2 = Q.SPECL [`fuel`, `ctx`, `bb`, `s`] spec *)
-  (*         val rewritten = REWRITE_RULE [bb_eq, rich_listTheory.TAKE_LENGTH_APPEND] *)
-  (*                           spec2 *)
-  (*     in mp_tac rewritten >> ASSUME_TAC bb_eq end) >> *)
-  (*   simp[listTheory.LENGTH_APPEND] >> *)
-  (*   (impl_tac THEN1 (Cases_on `suffix` >> fs[])) >> *)
-  (*   simp[] *)
-QED
+(* REMOVED: run_block_phi_prefix_step, run_block_phi_prefix, run_block_phi_prefix_split
+   had incorrect statements: run_block resets vs_inst_idx to 0, so
+   run_block ... (s' with vs_inst_idx := n) is meaningless.
+   Use run_block_non_phis_phi_prefix directly instead. *)
 
-(* Congruence: if two blocks share suffix and their PHI/ASSIGN/NOP prefixes
-   give the same run_insts result for all states, then run_block is the same *)
 Theorem run_block_prefix_cong[local]:
   !prefix1 prefix2 suffix fuel ctx bb s.
     bb.bb_instructions = prefix1 ++ suffix /\
@@ -1683,37 +1787,34 @@ Theorem run_block_prefix_cong[local]:
     run_block fuel ctx (bb with bb_instructions := prefix2 ++ suffix) s =
     run_block fuel ctx bb s
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   (* Apply run_block_phi_prefix_split for prefix1 on bb *) *)
-  (*   mp_tac (Q.SPECL [`prefix1`, `suffix`, `fuel`, `ctx`, `bb`, `s`] *)
-  (*     run_block_phi_prefix_split) >> *)
-  (*   (impl_tac THEN1 fs[]) >> *)
-  (*   DISCH_TAC >> *)
-  (*   pop_assum (DISJ_CASES_THEN2 *)
-  (*     (CHOOSE_THEN (fn th => *)
-  (*       ASSUME_TAC (CONJUNCT1 th) >> ASSUME_TAC (CONJUNCT2 th))) *)
-  (*     (CHOOSE_THEN (fn th => *)
-  (*       ASSUME_TAC (CONJUNCT1 th) >> ASSUME_TAC (CONJUNCT2 th)))) *)
-  (*   THEN *)
-  (*   TRY (disj1_tac >> metis_tac[] >> NO_TAC) >> *)
-  (*   (* OK case: run_insts prefix1 s = OK s' *) *)
-  (*   (* Specialize forall hypothesis with s *) *)
-  (*   first_x_assum (qspec_then `s` mp_tac) >> fs[] >> DISCH_TAC >> *)
-  (*   (* Now have: run_insts prefix2 s = OK s' *) *)
-  (*   disj2_tac >> *)
-  (*   (* Apply phi_prefix_split for prefix2 on modified bb *) *)
-  (*   mp_tac (Q.SPECL [`prefix2`, `suffix`, `fuel`, `ctx`, *)
-  (*     `bb with bb_instructions := prefix2 ++ suffix`, `s`] *)
-  (*     run_block_phi_prefix_split) >> *)
-  (*   simp[] >> DISCH_TAC >> *)
-  (*   (* Now have: run_block bb2 s = run_block bb2 (s' with idx := LP2) *) *)
-  (*   (* Need: run_block bb2 (s' with idx := LP2) = run_block bb (s' with idx := LP1) *) *)
-  (*   fs[] >> *)
-  (*   irule venomExecPropsTheory.run_block_same_insts >> *)
-  (*   simp[rich_listTheory.EL_APPEND2] >> *)
-  (*   Cases_on `suffix` >> fs[] *)
+  rpt strip_tac >>
+  `0 < LENGTH suffix` by (Cases_on `suffix` >> gvs[]) >>
+  (* Decompose exec_block bb via phi_prefix on prefix1 *)
+  mp_tac (Q.SPECL [`LENGTH (prefix1:instruction list)`, `fuel`, `ctx`, `bb`, `s`]
+    run_block_non_phis_phi_prefix) >>
+  qpat_x_assum `bb.bb_instructions = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC[eq] >> ASSUME_TAC eq) >>
+  PURE_ONCE_REWRITE_TAC[rich_listTheory.TAKE_LENGTH_APPEND] >>
+  simp[] >> DISCH_TAC >> gvs[]
+  >- (
+    first_x_assum (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+    mp_tac (Q.SPECL [`LENGTH (prefix2:instruction list)`, `fuel`, `ctx`,
+      `bb with bb_instructions := prefix2 ++ suffix`, `s`]
+      run_block_non_phis_phi_prefix) >>
+    impl_tac >- simp[rich_listTheory.TAKE_LENGTH_APPEND] >>
+    strip_tac >> gvs[rich_listTheory.TAKE_LENGTH_APPEND] >>
+    disj2_tac >>
+    `run_block_non_phis fuel ctx bb
+       (s' with vs_inst_idx := LENGTH prefix2) =
+     run_block_non_phis fuel ctx
+       (bb with bb_instructions := prefix2 ++ suffix)
+       (s' with vs_inst_idx := LENGTH prefix2)` by (
+      irule EQ_SYM >>
+      irule venomExecPropsTheory.exec_block_same_insts >>
+      simp[listTheory.LENGTH_APPEND] >>
+      rpt strip_tac >> simp[rich_listTheory.EL_APPEND2]) >>
+    simp[run_block_def])
+  >- (disj1_tac >> simp[run_block_def])
 QED
 
 (* fix_phi_inst on PHI: outputs are unchanged or [] *)
@@ -1990,18 +2091,16 @@ Theorem run_insts_partition_phi_prefix_applied[local]:
              FILTER (\i. i.inst_opcode <> PHI) phi_prefix) s0 =
           run_insts fuel ctx phi_prefix s0)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   mp_tac (Q.SPECL [`phi_prefix`, `fuel`, `ctx`, `s0`] *)
-  (*     run_insts_partition_phi_prefix) >> *)
-  (*   simp[] >> *)
-  (*   (impl_tac THEN1 ( *)
-  (*     rpt strip_tac >> mp_tac fix_phi_prefix_indep >> *)
-  (*     simp[LET_THM] >> DISCH_TAC >> *)
-  (*     first_x_assum (fn th => mp_tac (Q.SPECL [`preds`, `bb`, `fn`] th)) >> *)
-  (*     fs[])) >> *)
-  (*   metis_tac[] *)
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`phi_prefix`, `fuel`, `ctx`, `s0`]
+    run_insts_partition_phi_prefix) >>
+  simp[] >>
+  (impl_tac THEN1 (
+    rpt strip_tac >> mp_tac fix_phi_prefix_indep >>
+    simp[LET_THM] >> DISCH_TAC >>
+    first_x_assum (fn th => mp_tac (Q.SPECL [`preds`, `bb`, `fn`] th)) >>
+    fs[])) >>
+  metis_tac[]
 QED
 
 Theorem run_block_partition_phis[local]:
@@ -2017,87 +2116,61 @@ Theorem run_block_partition_phis[local]:
      run_block fuel ctx (bb with bb_instructions := phis ++ non_phis) s =
      run_block fuel ctx (bb with bb_instructions := insts') s)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   simp[LET_THM] >> rpt strip_tac >> *)
-  (*   (* 1. bb_well_formed + nonempty suffix *) *)
-  (*   imp_res_tac wf_function_bb_wf >> *)
-  (*   imp_res_tac filter_non_phi_nonempty >> *)
-  (*   (* 2. partition: bb.insts = phi_orig ++ non_phi_orig *) *)
-  (*   mp_tac (Q.SPEC `bb.bb_instructions` *)
-  (*     simplifyCfgStepTheory.sorted_filter_partition) >> *)
-  (*   (impl_tac THEN1 fs[venomWfTheory.bb_well_formed_def]) >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* 3. MAP distributes *) *)
-  (*   mp_tac (Q.SPECL [`pred_labels fn bb.bb_label`, `bb.bb_instructions`] *)
-  (*     map_fix_phi_inst_partition) >> *)
-  (*   simp[] >> DISCH_TAC >> *)
-  (*   (* 4. EVERY pan *) *)
-  (*   mp_tac (Q.SPECL [`pred_labels fn bb.bb_label`, *)
-  (*     `FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions`] *)
-  (*     EVERY_phi_assign_nop_map_fix_phi) >> *)
-  (*   (impl_tac THEN1 rw[listTheory.EVERY_FILTER]) >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* 5. FILTER decomposition *) *)
-  (*   mp_tac (Q.SPECL [ *)
-  (*     `MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*          (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`, *)
-  (*     `FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions`] *)
-  (*     (ISPEC ``\i:instruction. i.inst_opcode = PHI`` *)
-  (*       (GEN_ALL FILTER_APPEND_EVERY_NOT))) >> *)
-  (*   (impl_tac THEN1 rw[listTheory.EVERY_FILTER]) >> *)
-  (*   DISCH_TAC >> *)
-  (*   mp_tac (Q.SPECL [ *)
-  (*     `MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*          (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`, *)
-  (*     `FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions`] *)
-  (*     (ISPEC ``\i:instruction. i.inst_opcode <> PHI`` *)
-  (*       (GEN_ALL FILTER_APPEND_EVERY))) >> *)
-  (*   (impl_tac THEN1 rw[listTheory.EVERY_FILTER]) >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* 6. run_insts partition *) *)
-  (*   mp_tac (Q.SPECL [ *)
-  (*     `MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*          (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`, *)
-  (*     `fuel`, `ctx`, `pred_labels fn bb.bb_label`, `bb`, `fn`] *)
-  (*     run_insts_partition_phi_prefix_applied) >> *)
-  (*   simp[] >> DISCH_TAC >> *)
-  (*   (* 7. Use run_block_prefix_cong directly *) *)
-  (*   mp_tac (Q.SPECL [ *)
-  (*     `MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*          (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`, *)
-  (*     `FILTER (\i. i.inst_opcode = PHI) *)
-  (*        (MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*             (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)) ++ *)
-  (*      FILTER (\i. i.inst_opcode <> PHI) *)
-  (*        (MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*             (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions))`, *)
-  (*     `FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions`, *)
-  (*     `fuel`, `ctx`, *)
-  (*     `bb with bb_instructions := *)
-  (*        MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*            (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions) ++ *)
-  (*        FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions`, *)
-  (*     `s`] run_block_prefix_cong) >> *)
-  (*   simp[FILTER_partition_length, listTheory.EVERY_APPEND, *)
-  (*        listTheory.EVERY_FILTER, listTheory.EVERY_MAP, *)
-  (*        listTheory.LENGTH_APPEND, listTheory.LENGTH_MAP] >> *)
-  (*   (* Remaining premises: EVERY + LENGTH *) *)
-  (*   DISCH_TAC >> *)
-  (*   first_x_assum match_mp_tac >> *)
-  (*   conj_tac THENL [ *)
-  (*     (* EVERY: fix_phi_inst of PHI is PHI/ASSIGN/NOP *) *)
-  (*     rw[listTheory.EVERY_MEM] >> rpt strip_tac >> *)
-  (*     fs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> *)
-  (*     first_x_assum (fn th => mp_tac (Q.SPEC `fix_phi_inst (pred_labels fn bb.bb_label) x` th)) >> *)
-  (*     (impl_tac THEN1 (qexists_tac `x` >> fs[listTheory.MEM_FILTER])) >> *)
-  (*     strip_tac >> fs[], *)
-  (*     (* LENGTH: FILTER_partition_length + LENGTH_MAP *) *)
-  (*     mp_tac (Q.SPEC `MAP (fix_phi_inst (pred_labels fn bb.bb_label)) *)
-  (*          (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)` *)
-  (*       filter_phi_partition_length) >> *)
-  (*     rw[listTheory.LENGTH_MAP, listTheory.LENGTH_APPEND] *)
-  (*   ] *)
+  simp[LET_THM] >> rpt strip_tac >>
+  imp_res_tac wf_function_bb_wf >>
+  imp_res_tac filter_non_phi_nonempty >>
+  mp_tac (Q.SPEC `bb.bb_instructions`
+    simplifyCfgStepTheory.sorted_filter_partition) >>
+  (impl_tac THEN1 fs[venomWfTheory.bb_well_formed_def]) >>
+  DISCH_TAC >>
+  mp_tac (Q.SPECL [`pred_labels fn bb.bb_label`, `bb.bb_instructions`]
+    map_fix_phi_inst_partition) >>
+  simp[] >> DISCH_TAC >>
+  mp_tac (Q.SPECL [`pred_labels fn bb.bb_label`,
+    `FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions`]
+    EVERY_phi_assign_nop_map_fix_phi) >>
+  (impl_tac THEN1 rw[listTheory.EVERY_FILTER]) >>
+  DISCH_TAC >>
+  mp_tac (Q.SPECL [
+    `MAP (fix_phi_inst (pred_labels fn bb.bb_label))
+         (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`,
+    `FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions`]
+    (ISPEC ``\i:instruction. i.inst_opcode = PHI``
+      (GEN_ALL FILTER_APPEND_EVERY_NOT))) >>
+  (impl_tac THEN1 rw[listTheory.EVERY_FILTER]) >>
+  DISCH_TAC >>
+  mp_tac (Q.SPECL [
+    `MAP (fix_phi_inst (pred_labels fn bb.bb_label))
+         (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`,
+    `FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions`]
+    (ISPEC ``\i:instruction. i.inst_opcode <> PHI``
+      (GEN_ALL FILTER_APPEND_EVERY))) >>
+  (impl_tac THEN1 rw[listTheory.EVERY_FILTER]) >>
+  DISCH_TAC >>
+  mp_tac (Q.SPECL [
+    `MAP (fix_phi_inst (pred_labels fn bb.bb_label))
+         (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)`,
+    `fuel`, `ctx`, `pred_labels fn bb.bb_label`, `bb`, `fn`]
+    run_insts_partition_phi_prefix_applied) >>
+  simp[] >> DISCH_TAC >>
+  (* Use run_block_prefix_cong to conclude *)
+  qabbrev_tac `pfx = MAP (fix_phi_inst (pred_labels fn bb.bb_label))
+    (FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions)` >>
+  qabbrev_tac `sfx = FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions` >>
+  qabbrev_tac `pfx2 = FILTER (\i. i.inst_opcode = PHI) pfx ++
+    FILTER (\i. i.inst_opcode <> PHI) pfx` >>
+  `LENGTH pfx = LENGTH pfx2` by (
+    simp[Abbr`pfx2`] >>
+    mp_tac (Q.SPEC `pfx` filter_phi_partition_length) >>
+    rw[listTheory.LENGTH_APPEND]) >>
+  `EVERY (\i. i.inst_opcode = PHI \/ i.inst_opcode = ASSIGN \/
+              i.inst_opcode = NOP) pfx2` by (
+    simp[Abbr`pfx2`, listTheory.EVERY_APPEND, listTheory.EVERY_FILTER] >>
+    fs[listTheory.EVERY_MEM] >> rpt strip_tac >> res_tac >> fs[]) >>
+  mp_tac (Q.SPECL [`pfx`, `pfx2`, `sfx`, `fuel`, `ctx`,
+    `bb with bb_instructions := pfx ++ sfx`, `s`]
+    run_block_prefix_cong) >>
+  simp[]
 QED
 
 (* --- Helper: inst_idx = 0 + bb_well_formed => inst_idx < LENGTH --- *)
@@ -2121,23 +2194,21 @@ Theorem run_block_fix_phis_in_block[local]:
      run_block fuel ctx (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s =
      run_block fuel ctx bb s)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   imp_res_tac wf_function_bb_wf >> *)
-  (*   imp_res_tac bb_wf_zero_idx_lt >> *)
-  (*   (* Phase 1: MAP fix_phi_inst preserves run_block *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, *)
-  (*     `pred_labels fn bb.bb_label`, `prev`] run_block_map_fix_phi) >> *)
-  (*   asm_rewrite_tac[] >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* Phase 2: partition preserves run_block *) *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `fn`] run_block_partition_phis) >> *)
-  (*   simp[LET_THM] >> *)
-  (*   DISCH_TAC >> *)
-  (*   (* Chain both phase results *) *)
-  (*   rw[simplifyCfgDefsTheory.fix_phis_in_block_def, LET_THM] >> *)
-  (*   metis_tac[] *)
+  rpt strip_tac >>
+  imp_res_tac wf_function_bb_wf >>
+  imp_res_tac bb_wf_zero_idx_lt >>
+  (* Phase 1: MAP fix_phi_inst preserves run_block *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`,
+    `pred_labels fn bb.bb_label`, `prev`] run_block_map_fix_phi) >>
+  asm_rewrite_tac[] >>
+  DISCH_TAC >>
+  (* Phase 2: partition preserves run_block *)
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `fn`] run_block_partition_phis) >>
+  simp[LET_THM] >>
+  DISCH_TAC >>
+  (* Chain both phase results *)
+  rw[simplifyCfgDefsTheory.fix_phis_in_block_def, LET_THM] >>
+  metis_tac[]
 QED
 
 (* --- Helpers for fix_all_phis_correct --- *)
@@ -2163,16 +2234,15 @@ Theorem run_block_phi_none_error[local]:
     (HD bb.bb_instructions).inst_opcode = PHI ==>
     ?e. run_block fuel ctx bb s = Error e
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   Cases_on `bb.bb_instructions` >> fs[] >> *)
-  (*   simp[Once venomExecSemanticsTheory.run_block_def, *)
-  (*        venomInstTheory.get_instruction_def] >> *)
-  (*   simp[venomExecSemanticsTheory.step_inst_def, *)
-  (*        venomExecSemanticsTheory.step_inst_base_def] >> *)
-  (*   Cases_on `h.inst_outputs` >> fs[] >> *)
-  (*   Cases_on `t'` >> fs[] *)
+  rpt strip_tac >>
+  Cases_on `bb.bb_instructions` >> fs[] >>
+  simp[venomExecSemanticsTheory.run_block_def] >>
+  fs[Once venomExecSemanticsTheory.exec_block_def,
+     venomInstTheory.get_instruction_def] >>
+  gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  gvs[] >> Cases_on `h.inst_outputs` >> gvs[] >>
+  Cases_on `t'` >> gvs[]
 QED
 
 (* fix_phis_in_block is identity when no PHIs *)
@@ -2217,21 +2287,19 @@ Theorem run_block_fix_phis_in_block_all[local]:
     run_block fuel ctx (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s =
     run_block fuel ctx bb s
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rw[] >> fs[] >> *)
-  (*   imp_res_tac wf_function_bb_wf >> *)
-  (*   Cases_on `s.vs_prev_bb` >> fs[] *)
-  (*   >- ( *)
-  (*     (* Case: vs_prev_bb = NONE *) *)
-  (*     Cases_on `(HD bb.bb_instructions).inst_opcode = PHI` *)
-  (*     >- (disj1_tac >> *)
-  (*         match_mp_tac run_block_phi_none_error >> *)
-  (*         fs[venomWfTheory.bb_well_formed_def]) *)
-  (*     >> disj2_tac >> *)
-  (*     imp_res_tac bb_wf_hd_not_phi_every >> *)
-  (*     imp_res_tac fix_phis_in_block_no_phis >> simp[]) *)
-  (*   >> metis_tac[run_block_fix_phis_in_block] *)
+  rw[] >> fs[] >>
+  imp_res_tac wf_function_bb_wf >>
+  Cases_on `s.vs_prev_bb` >> fs[]
+  >- (
+    (* Case: vs_prev_bb = NONE *)
+    Cases_on `(HD bb.bb_instructions).inst_opcode = PHI`
+    >- (disj1_tac >>
+        match_mp_tac run_block_phi_none_error >>
+        fs[venomWfTheory.bb_well_formed_def])
+    >> disj2_tac >>
+    imp_res_tac bb_wf_hd_not_phi_every >>
+    imp_res_tac fix_phis_in_block_no_phis >> simp[])
+  >> metis_tac[run_block_fix_phis_in_block]
 QED
 
 (* --- fix_all_phis_correct: main theorem --- *)
@@ -2284,17 +2352,15 @@ Theorem fix_phis_block_sim[local]:
     lift_result $= $= $= (run_block fuel ctx bb s)
       (run_block fuel ctx (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `fn`] *)
-  (*     run_block_fix_phis_in_block_all) >> *)
-  (*   (impl_tac THEN1 (fs[] >> metis_tac[])) >> *)
-  (*   DISCH_TAC >> *)
-  (*   first_x_assum (DISJ_CASES_THEN2 *)
-  (*     (fn th => (disj1_tac >> metis_tac[th])) *)
-  (*     (fn th => (disj2_tac >> REWRITE_TAC[GSYM th] >> *)
-  (*                irule passSimulationPropsTheory.lift_result_refl >> simp[]))) *)
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `fn`]
+    run_block_fix_phis_in_block_all) >>
+  (impl_tac THEN1 (fs[] >> metis_tac[])) >>
+  DISCH_TAC >>
+  first_x_assum (DISJ_CASES_THEN2
+    (fn th => (disj1_tac >> metis_tac[th]))
+    (fn th => (disj2_tac >> REWRITE_TAC[GSYM th] >>
+               irule passSimulationPropsTheory.lift_result_refl >> simp[])))
 QED
 
 Theorem fix_all_phis_correct[local]:
@@ -2304,43 +2370,80 @@ Theorem fix_all_phis_correct[local]:
     phi_no_conflict fn /\
     reachable fn s.vs_current_bb /\
     s.vs_inst_idx = 0 /\
-    s.vs_prev_bb = NONE ==>
+    (s.vs_prev_bb = NONE \/
+     ?prev. s.vs_prev_bb = SOME prev /\
+            MEM prev (pred_labels fn s.vs_current_bb)) ==>
     ?fuel'.
       result_equiv {}
         (run_blocks fuel ctx fn s)
         (run_blocks fuel' ctx (fix_all_phis fn) s)
 Proof
-  (* CHEATED: PHI semantics changed: eval_phis+run_block_non_phis vs old step_inst *)
-  cheat
-  (*   rpt strip_tac >> *)
-  (*   mp_tac (SPECL [ *)
-  (*     ``\(s:venom_state). s.vs_prev_bb = NONE \/ *)
-  (*        ?prev. s.vs_prev_bb = SOME prev /\ *)
-  (*               MEM prev (pred_labels (fn:ir_function) s.vs_current_bb)``, *)
-  (*     ``$= : venom_state -> venom_state -> bool``, *)
-  (*     ``$= : venom_state -> venom_state -> bool``, *)
-  (*     ``\(bb:basic_block). *)
-  (*          fix_phis_in_block (pred_labels (fn:ir_function) bb.bb_label) bb``, *)
-  (*     ``fn:ir_function``] *)
-  (*     passSimulationPropsTheory.block_sim_function_with_pred) >> *)
-  (*   simp[simplifyCfgHelpersTheory.fix_phis_in_block_label] >> *)
-  (*   DISCH_TAC >> *)
-  (*   first_x_assum mp_tac >> *)
-  (*   (impl_tac THEN1 ( *)
-  (*     conj_tac *)
-  (*     >- (rpt strip_tac >> metis_tac[fix_phis_P_preserved]) *)
-  (*     >> rpt strip_tac >> fs[] >> *)
-  (*        metis_tac[fix_phis_block_sim])) >> *)
-  (*   DISCH_TAC >> *)
-  (*   first_x_assum (mp_tac o Q.SPECL [`fuel`, `ctx`, `s`]) >> *)
-  (*   simp[] >> *)
-  (*   simp[simplifyCfgDefsTheory.fix_all_phis_def, *)
-  (*        passSimulationDefsTheory.function_map_transform_def] >> *)
-  (*   strip_tac THENL [ *)
-  (*     qexists_tac `0` >> *)
-  (*     simp[venomExecSemanticsTheory.run_blocks_def, result_equiv_def], *)
-  (*     qexists_tac `fuel` >> imp_res_tac lift_result_eq_result_equiv *)
-  (*   ] *)
+  completeInduct_on `fuel` >> rpt gen_tac >> strip_tac >>
+  Cases_on `fuel` >>
+  simp[Once venomExecSemanticsTheory.run_blocks_def] >>
+  TRY (qexists_tac `0` >>
+    simp[Once venomExecSemanticsTheory.run_blocks_def,
+         stateEquivTheory.result_equiv_def] >> NO_TAC) >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  simp[] >>
+  TRY (qexists_tac `0` >>
+    simp[Once venomExecSemanticsTheory.run_blocks_def,
+         stateEquivTheory.result_equiv_def] >> NO_TAC) >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  (* fix_all_phis lookup *)
+  `lookup_block s.vs_current_bb (fix_all_phis fn).fn_blocks =
+   SOME (fix_phis_in_block (pred_labels fn bb.bb_label) bb)` by (
+    simp[simplifyCfgDefsTheory.fix_all_phis_def] >>
+    simp[passSimulationPropsTheory.lookup_block_map,
+         simplifyCfgHelpersTheory.fix_phis_in_block_label]) >>
+  (* bb.bb_label = s.vs_current_bb from lookup_block *)
+  `bb.bb_label = s.vs_current_bb` by
+    metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `MEM bb fn.fn_blocks` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  (* Block simulation via fix_phis_block_sim *)
+  mp_tac (Q.SPECL [`fn`, `bb`, `n`, `ctx`, `s`] fix_phis_block_sim) >>
+  simp[] >> DISCH_TAC >> gvs[] >>
+  (* Error case from fix_phis_block_sim *)
+  TRY (
+    `run_block_non_phis n ctx bb s = Error e` by
+      gvs[venomExecSemanticsTheory.run_block_def] >>
+    qexists_tac `0` >> gvs[] >>
+    simp[stateEquivTheory.result_equiv_def,
+         Once venomExecSemanticsTheory.run_blocks_def] >> NO_TAC) >>
+  (* lift_result case *)
+  `run_block_non_phis n ctx bb s = run_block n ctx bb s` by
+    simp[venomExecSemanticsTheory.run_block_def] >>
+  Cases_on `run_block n ctx bb s` >>
+  gvs[stateEquivTheory.lift_result_def] >>
+  (* Non-OK: transformed gives same result *)
+  TRY (
+    qexists_tac `SUC n` >>
+    simp[Once venomExecSemanticsTheory.run_blocks_def,
+         venomExecSemanticsTheory.run_block_def] >>
+    gvs[stateEquivTheory.result_equiv_def,
+        stateEquivTheory.execution_equiv_def] >> NO_TAC) >>
+  (* OK v case *)
+  imp_res_tac venomExecPropsTheory.run_block_OK_not_halted >>
+  imp_res_tac venomExecPropsTheory.run_block_OK_inst_idx_0 >> gvs[] >>
+  `v.vs_prev_bb = NONE \/
+   ?prev. v.vs_prev_bb = SOME prev /\
+          MEM prev (pred_labels fn v.vs_current_bb)` by
+    metis_tac[fix_phis_P_preserved] >>
+  `MEM v.vs_current_bb (bb_succs bb)` by (
+    mp_tac (Q.SPECL [`n`, `ctx`, `bb`, `s`, `v`]
+      venomExecPropsTheory.run_block_current_bb_in_succs) >>
+    imp_res_tac wf_function_bb_wf >>
+    fs[venomWfTheory.bb_well_formed_def,
+       venomWfTheory.fn_inst_wf_def] >> metis_tac[]) >>
+  `reachable fn v.vs_current_bb` by (
+    irule cfgTransformPropsTheory.reachable_step >>
+    qexists_tac `s.vs_current_bb` >> simp[] >>
+    simp[cfgTransformTheory.fn_succ_def] >> metis_tac[]) >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  qexists_tac `SUC fuel'` >>
+  simp[Once venomExecSemanticsTheory.run_blocks_def]
 QED
 
 (* ---------- Helper: simplify_cfg_round correctness ---------- *)
