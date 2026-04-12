@@ -387,9 +387,9 @@ Definition evaluate_builtin_def:
     Keccak_256_w64 (MAP (n2w o ORD) s) ∧
   (* TODO: reject BytesV with invalid bounds for Keccak256 *)
   evaluate_builtin cx _ _ Sha256 [BytesV ls] = INL $ BytesV $
-    word_to_bytes (SHA_256_bytes ls : bytes32) F ∧
+    word_to_bytes (SHA_256_bytes ls : bytes32) T ∧
   evaluate_builtin cx _ _ Sha256 [StringV s] = INL $ BytesV $
-    word_to_bytes (SHA_256_bytes (MAP (n2w o ORD) s) : bytes32) F ∧
+    word_to_bytes (SHA_256_bytes (MAP (n2w o ORD) s) : bytes32) T ∧
   evaluate_builtin cx _ _ (Uint2Str n) [IntV i] =
     INL $ StringV (num_to_dec_string (Num i)) ∧
   evaluate_builtin cx _ _ (AsWeiValue dn) [v] = evaluate_as_wei_value dn v ∧
