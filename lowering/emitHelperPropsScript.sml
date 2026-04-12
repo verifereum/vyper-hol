@@ -203,6 +203,26 @@ Proof
   rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
 QED
 
+Theorem step_XOR:
+  ∀ op1 op2 v1 v2 id out ss.
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2 ⇒
+    step_inst_base (mk_inst id XOR [op1; op2] [out]) ss =
+      OK (update_var out (word_xor v1 v2) ss)
+Proof
+  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+QED
+
+Theorem step_SAR:
+  ∀ op1 op2 v1 v2 id out ss.
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2 ⇒
+    step_inst_base (mk_inst id SAR [op1; op2] [out]) ss =
+      OK (update_var out (word_asr v2 (w2n v1)) ss)
+Proof
+  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+QED
+
 Theorem step_NOT:
   ∀ op1 v1 id out ss.
     eval_operand op1 ss = SOME v1 ⇒
@@ -261,7 +281,6 @@ Theorem step_SMOD:
 Proof
   rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
 QED
-
 (* ===== Memory Opcodes ===== *)
 
 Theorem step_MLOAD:

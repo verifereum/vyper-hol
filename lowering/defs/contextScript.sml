@@ -252,7 +252,7 @@ End
    Mirrors Python: context.py allocate_buffer → Buffer *)
 Definition compile_alloc_buffer_def:
   compile_alloc_buffer size =
-    do op <- emit_op ALLOCA [Lit (n2w size); Lit 0w];
+    do op <- emit_op ALLOCA [Lit (n2w size)];
        return <| buf_operand := op; buf_size := size |>
     od
 End
