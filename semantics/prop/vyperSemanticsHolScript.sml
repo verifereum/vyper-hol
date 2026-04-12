@@ -10,4 +10,5 @@ Ancestors
   vyperTypeSoundness
   vyperUpdateTarget
   vyperHashMap
+  vyperStorageFrame
   vyperExprNoControl
