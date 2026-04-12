@@ -254,11 +254,9 @@ Definition evaluate_type_builtin_def:
      else INR (TypeError "Epsilon: not decimal")) ∧
   evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV bs; IntV i] =
     evaluate_extract32 bs (Num i) bt ∧
-  evaluate_type_builtin cx AbiDecode typ [BytesV bs] =
-    (* unwrap_tuple=True (default): single types are wrapped in a tuple.
-       TODO: support unwrap_tuple=False keyword argument *)
+  evaluate_type_builtin cx (AbiDecode unwrap) typ [BytesV bs] =
     (let tenv = get_tenv cx in
-     if needs_external_call_wrap typ then
+     if unwrap ∧ needs_external_call_wrap typ then
        case evaluate_abi_decode tenv (TupleT [typ]) bs of
          INL (ArrayV (TupleV [v])) => INL v
        | INL _ => INR (RuntimeError "abi_decode conversion")
@@ -267,9 +265,9 @@ Definition evaluate_type_builtin_def:
        case evaluate_abi_decode tenv typ bs of
          INL v => INL v
        | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ AbiDecode _ _ =
+  evaluate_type_builtin _ (AbiDecode _) _ _ =
     INR (TypeError "abi_decode args") ∧
-  evaluate_type_builtin cx AbiEncode typ vs =
+  evaluate_type_builtin cx (AbiEncode ensure) typ vs =
     (case evaluate_abi_encode (get_tenv cx) typ (ArrayV (TupleV vs)) of
        INL v => INL v | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ _ _ _ =
@@ -465,8 +463,8 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Epsilon n = (n = 0) ∧
   type_builtin_args_length_ok Extract32 n = (n = 2) ∧
   type_builtin_args_length_ok Convert n = (n = 1) ∧
-  type_builtin_args_length_ok AbiDecode n = (n = 1) ∧
-  type_builtin_args_length_ok AbiEncode n = (n >= 1)
+  type_builtin_args_length_ok (AbiDecode _) n = (n = 1) ∧
+  type_builtin_args_length_ok (AbiEncode _) n = (n >= 1)
 End
 
 val () = cv_auto_trans type_builtin_args_length_ok_def;

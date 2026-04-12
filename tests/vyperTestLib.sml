@@ -383,13 +383,7 @@ val excluded_test_names = [
   "test_abi_decode_max_size",
   "test_clamper*",
   "test_returndatasize_check",
-  (* abi_decode tests using unwrap_tuple=False keyword.
-     TODO: support unwrap_tuple keyword argument for abi_decode *)
-  "test_abi_decode_annassign",
-  "test_abi_decode_double[False*",
-  "test_abi_decode_nested_dynarray2[False*",
-  "test_abi_decode_nested_dynarray[False*",
-  "test_abi_decode_single*False]",
+
   (* Flag conversion tests: convert(int_val, FlagType) requires
      evaluate_convert to support FlagT target types, which needs
      type env access. TODO: refactor FlagV representation first. *)

@@ -467,16 +467,12 @@ Definition make_builtin_call_def:
       (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
                     | _ => Builtin ty (Uint2Str 0) args)
     else if name = "abi_decode" ∨ name = "_abi_decode" then
-      (* abi_decode(data, type, unwrap_tuple=True) has 2-3 args in the AST.
-         We pass only the data arg; the target type comes from ret_ty
-         (the compiler-inferred return type of the Call node), which we
-         assume matches the explicit type argument.
-         TODO: verify that translate_type of arg[1] equals translate_type ret_ty
-         TODO: handle the unwrap_tuple keyword (controls single-element tuple unwrapping) *)
-      (case args of (arg::_) => TypeBuiltin ty AbiDecode (translate_type ret_ty) [arg]
-                  | _ => TypeBuiltin ty AbiDecode (translate_type ret_ty) [])
+      let unwrap = kwarg_bool "unwrap_tuple" kwargs T in
+      (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) (translate_type ret_ty) [arg]
+                  | _ => TypeBuiltin ty (AbiDecode unwrap) (translate_type ret_ty) [])
     else if name = "abi_encode" ∨ name = "_abi_encode" then
-      TypeBuiltin ty AbiEncode (translate_type ret_ty) args
+      let ensure = kwarg_bool "ensure_tuple" kwargs T in
+      TypeBuiltin ty (AbiEncode ensure) (translate_type ret_ty) args
     else if name = "extract32" then
       TypeBuiltin ty Extract32 (translate_type ret_ty) args
     else if name = "method_id" then

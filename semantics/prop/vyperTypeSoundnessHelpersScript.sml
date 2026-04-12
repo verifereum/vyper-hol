@@ -842,7 +842,7 @@ Definition well_typed_expr_def:
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\
      ty = target_ty /\
-     tb <> AbiEncode /\
+     (!b. tb <> AbiEncode b) /\
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Pop ty tgt) =
     (?bd. well_typed_target env tgt (ArrayT ty bd)) /\
@@ -6546,7 +6546,7 @@ QED
 
 Theorem evaluate_type_builtin_well_typed:
   !cx tb typ vs v tv.
-    tb <> AbiEncode /\
+    (!b. tb <> AbiEncode b) /\
     evaluate_type_builtin cx tb typ vs = INL v /\
     evaluate_type (get_tenv cx) typ = SOME tv ==>
     value_has_type tv v

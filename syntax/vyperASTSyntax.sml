@@ -102,6 +102,8 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   val Extract32_tm    = astk"Extract32"
   val AbiDecode_tm    = astk"AbiDecode"
   val AbiEncode_tm    = astk"AbiEncode"
+  fun mk_AbiDecode_flag b = mk_comb(AbiDecode_tm, mk_bool b)
+  fun mk_AbiEncode_flag b = mk_comb(AbiEncode_tm, mk_bool b)
   val MethodId_tm     = astk"MethodId"
   val Name_tm            = astk"Name"
   val BareGlobalName_tm   = astk"BareGlobalName"
@@ -202,9 +204,9 @@ structure vyperASTSyntax :> vyperASTSyntax = struct
   fun mk_Extract32 (ty,t,bytes,idx) = list_mk_comb(TypeBuiltin_tm, [
     ty, Extract32_tm, t, mk_list([bytes,idx], expr_ty)])
   fun mk_AbiDecode (ty,t,bytes) = list_mk_comb(TypeBuiltin_tm, [
-    ty, AbiDecode_tm, t, mk_list([bytes], expr_ty)])
+    ty, mk_AbiDecode_flag true, t, mk_list([bytes], expr_ty)])
   fun mk_AbiEncode (ty,t,v) = list_mk_comb(TypeBuiltin_tm, [
-    ty, AbiEncode_tm, t, mk_list([v], expr_ty)])
+    ty, mk_AbiEncode_flag true, t, mk_list([v], expr_ty)])
   fun mk_Call ty ct args drv = list_mk_comb(AstCall_tm, [ty, ct, mk_list (args, expr_ty), drv])
   fun mk_Assert (e,s) = list_mk_comb(Assert_tm, [e, s])
   fun mk_Log (id,es) = list_mk_comb(Log_tm, [id, es])
