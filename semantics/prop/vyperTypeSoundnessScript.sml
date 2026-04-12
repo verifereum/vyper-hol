@@ -2566,13 +2566,13 @@ Resume eval_preserves_swt[TypeBuiltin]:
   qpat_x_assum `_ = (res, st')` mp_tac >>
   reverse (Cases_on `res_es`) >> simp_tac (srw_ss()) [] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       ASM_REWRITE_TAC[] >> NO_TAC) >>
+       ASM_REWRITE_TAC[sumTheory.INR_neq_INL] >> NO_TAC) >>
   (* eval_exprs success: peel lift_sum *)
   simp_tac std_ss [lift_sum_def, bind_apply, BETA_THM] >>
   Cases_on `evaluate_type_builtin cx tb typ x` >>
   simp_tac (srw_ss()) [return_def, raise_def] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       ASM_REWRITE_TAC[] >> NO_TAC) >>
+       ASM_REWRITE_TAC[sumTheory.INR_neq_INL] >> NO_TAC) >>
   (* evaluate_type_builtin success *)
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   ASM_REWRITE_TAC[] >>
@@ -2584,7 +2584,7 @@ Resume eval_preserves_swt[TypeBuiltin]:
     gvs[GSYM well_formed_type_def] >>
   Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[] >>
   irule evaluate_type_builtin_well_typed >>
-  rpt (first_assum (irule_at Any))
+  rpt (first_assum (irule_at Any)) >> gvs[]
 QED
 
 Resume eval_preserves_swt[Send]:
