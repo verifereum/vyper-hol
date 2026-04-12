@@ -347,9 +347,6 @@ val excluded_test_names = [
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
-  (* Tests using sha256() builtin which is not yet translated.
-     TODO: add sha256 builtin support *)
-  "test_sha256_*",
   (* msg.data tests now excluded by unsupported_patterns *)
   (* extcall to non-existent contract: Vyper reverts when target has
      no code (EXTCODESIZE == 0), but our semantics doesn't check this.

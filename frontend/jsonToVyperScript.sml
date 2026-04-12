@@ -397,6 +397,7 @@ Definition make_builtin_call_def:
                     | JT_Bytes n => Builtin ty (Slice n) args
                     | _ => Builtin ty (Slice 0) args)
     else if name = "keccak256" then Builtin ty Keccak256 args
+    else if name = "sha256" then Builtin ty Sha256 args
     else if name = "floor" then Builtin ty Floor args
     else if name = "ceil" then Builtin ty Ceil args
     else if name = "blockhash" then Builtin ty BlockHash args
