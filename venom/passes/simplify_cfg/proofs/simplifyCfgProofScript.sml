@@ -2023,7 +2023,7 @@ QED
 Theorem FILTER_partition_length[local]:
   !P l. LENGTH (FILTER P l) + LENGTH (FILTER ($~ o P) l) = LENGTH l
 Proof
-  gen_tac >> Induct >> rw[] >> fs[]
+  gen_tac >> Induct >> rw[]
 QED
 
 (* Helper: wf_function implies bb_well_formed for member blocks *)
@@ -2378,7 +2378,8 @@ Theorem fix_all_phis_correct[local]:
         (run_blocks fuel ctx fn s)
         (run_blocks fuel' ctx (fix_all_phis fn) s)
 Proof
-  completeInduct_on `fuel` >> rpt gen_tac >> strip_tac >>
+  completeInduct_on `fuel` >> rpt gen_tac >>
+  DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
   Cases_on `fuel` >>
   simp[Once venomExecSemanticsTheory.run_blocks_def] >>
   TRY (qexists_tac `0` >>
@@ -2403,52 +2404,98 @@ Proof
     metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
   (* Block simulation via fix_phis_block_sim *)
   mp_tac (Q.SPECL [`fn`, `bb`, `n`, `ctx`, `s`] fix_phis_block_sim) >>
-  simp[] >> DISCH_TAC >> gvs[] >>
-  (* Error case from fix_phis_block_sim *)
-  TRY (
-    `run_block_non_phis n ctx bb s = Error e` by
-      gvs[venomExecSemanticsTheory.run_block_def] >>
-    qexists_tac `0` >> gvs[] >>
-    simp[stateEquivTheory.result_equiv_def,
-         Once venomExecSemanticsTheory.run_blocks_def] >> NO_TAC) >>
-  (* lift_result case *)
+  simp[] >> DISCH_TAC >>
+  (* Bridge: run_block_non_phis = run_block (needed for case expression) *)
   `run_block_non_phis n ctx bb s = run_block n ctx bb s` by
     simp[venomExecSemanticsTheory.run_block_def] >>
-  Cases_on `run_block n ctx bb s` >>
-  gvs[stateEquivTheory.lift_result_def] >>
-  (* Non-OK: transformed gives same result *)
-  TRY (
-    `?r. run_block n ctx
-      (fix_phis_in_block (pred_labels fn s.vs_current_bb) bb) s = r` by
-      metis_tac[] >>
-    qexists_tac `SUC n` >>
+  pop_assum SUBST_ALL_TAC >>
+  (* Split block_sim disjunction (Error ∨ lift_result) without gvs *)
+  first_x_assum DISJ_CASES_TAC >-
+  (* Error from block_sim *)
+  (pop_assum strip_assume_tac >>
+   pop_assum SUBST_ALL_TAC >>
+   simp[] >> qexists_tac `0` >>
+   simp[Once venomExecSemanticsTheory.run_blocks_def,
+        stateEquivTheory.result_equiv_def]) >>
+  (* lift_result case: case split on original run_block *)
+  Cases_on `run_block n ctx bb s` >> simp[] >>
+  (* Error: fuel=0 *)
+  TRY (qexists_tac `0` >>
     simp[Once venomExecSemanticsTheory.run_blocks_def,
-         GSYM venomExecSemanticsTheory.run_block_def] >>
-    Cases_on `r` >>
-    gvs[stateEquivTheory.lift_result_def,
-        stateEquivTheory.result_equiv_def,
-        stateEquivTheory.execution_equiv_def] >> NO_TAC) >>
+         stateEquivTheory.result_equiv_def] >> NO_TAC) >>
+  (* Halt/Abort/IntRet: fuel=SUC n, use lift_result *)
+  TRY (
+    qexists_tac `SUC n` >>
+    PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_blocks_def] >>
+    simp[GSYM venomExecSemanticsTheory.run_block_def] >>
+    qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
+    Cases_on `run_block n ctx
+      (fix_phis_in_block (pred_labels fn s.vs_current_bb) bb) s` >>
+    simp[stateEquivTheory.lift_result_def,
+         result_equiv_empty_refl] >> NO_TAC) >>
   (* OK v case *)
+  rename1 `run_block _ _ bb _ = OK v` >>
   imp_res_tac venomExecPropsTheory.run_block_OK_not_halted >>
-  imp_res_tac venomExecPropsTheory.run_block_OK_inst_idx_0 >> gvs[] >>
-  (* Apply IH directly — prove all preconditions in impl_tac *)
-  first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+  imp_res_tac venomExecPropsTheory.run_block_OK_inst_idx_0 >>
+  (* Error continuation: pick fuel'=0 *)
+  Cases_on `?e. run_blocks n ctx fn v = Error e` >>
+  TRY (
+    pop_assum strip_assume_tac >>
+    qexists_tac `0` >>
+    simp[Once venomExecSemanticsTheory.run_blocks_def,
+         stateEquivTheory.result_equiv_def] >> NO_TAC) >>
+  (* Convert ~?e to ∀e. ... ≠ Error e without fs *)
+  pop_assum mp_tac >> simp[] >> DISCH_TAC >>
+  (* Establish IH preconditions BEFORE IH application to avoid
+     by-blocks inside impl_tac region with split goals *)
+  imp_res_tac wf_function_bb_wf >>
+  imp_res_tac bb_wf_non_term_prefix >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (simp[listTheory.EVERY_MEM] >>
+     metis_tac[venomWfTheory.fn_inst_wf_def]) >>
+  `MEM v.vs_current_bb (bb_succs bb)` by
+    metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs,
+              venomWfTheory.bb_well_formed_def] >>
+  `fn_succ fn s.vs_current_bb v.vs_current_bb` by (
+    simp[cfgTransformTheory.fn_succ_def] >>
+    qexists_tac `bb` >> simp[]) >>
+  `reachable fn v.vs_current_bb` by (
+    irule cfgTransformPropsTheory.reachable_step >>
+    qexists_tac `s.vs_current_bb` >> simp[]) >>
+  (* Apply IH *)
+  last_x_assum (qspec_then `n` mp_tac) >> simp[] >>
   disch_then (qspecl_then [`fn`, `ctx`, `v`] mp_tac) >>
-  impl_tac >- (
-    simp[] >>
-    imp_res_tac wf_function_bb_wf >>
-    conj_tac >- (
-      (* reachable fn v.vs_current_bb *)
-      irule cfgTransformPropsTheory.reachable_step >>
-      qexists_tac `s.vs_current_bb` >> simp[] >>
-      simp[cfgTransformTheory.fn_succ_def] >>
-      fs[venomWfTheory.bb_well_formed_def, venomWfTheory.fn_inst_wf_def] >>
-      metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs]) >>
-    (* P v: prev_bb = NONE \/ ... *)
-    metis_tac[fix_phis_P_preserved]) >>
+  impl_tac >- metis_tac[fix_phis_P_preserved] >>
   strip_tac >>
-  qexists_tac `SUC fuel'` >>
-  simp[Once venomExecSemanticsTheory.run_blocks_def]
+  `run_block n ctx
+     (fix_phis_in_block (pred_labels fn s.vs_current_bb) bb) s = OK v` by (
+    Cases_on `run_block n ctx
+      (fix_phis_in_block (pred_labels fn s.vs_current_bb) bb) s` >>
+    gvs[stateEquivTheory.lift_result_def]) >>
+  `run_block (n + fuel') ctx
+     (fix_phis_in_block (pred_labels fn s.vs_current_bb) bb) s = OK v` by (
+    mp_tac (Q.SPECL [`n`, `n + fuel'`, `ctx`,
+      `fix_phis_in_block (pred_labels fn s.vs_current_bb) bb`,
+      `s`, `OK v`] (cj 3 venomExecPropsTheory.fuel_mono)) >>
+    simp[]) >>
+  `!e. run_blocks fuel' ctx (fix_all_phis fn) v <> Error e` by (
+    CCONTR_TAC >> gvs[] >>
+    Cases_on `run_blocks n ctx fn v` >>
+    gvs[stateEquivTheory.result_equiv_def]) >>
+  `run_blocks (n + fuel') ctx (fix_all_phis fn) v =
+   run_blocks fuel' ctx (fix_all_phis fn) v` by (
+    mp_tac (Q.SPECL [`fuel'`, `n + fuel'`, `ctx`,
+      `fix_all_phis fn`, `v`,
+      `run_blocks fuel' ctx (fix_all_phis fn) v`]
+      (cj 4 venomExecPropsTheory.fuel_mono)) >>
+    simp[]) >>
+  `run_blocks (SUC (n + fuel')) ctx (fix_all_phis fn) s =
+   run_blocks fuel' ctx (fix_all_phis fn) v` by (
+    simp[Once venomExecSemanticsTheory.run_blocks_def] >>
+    gvs[venomExecSemanticsTheory.run_block_def]) >>
+  qexists_tac `SUC (n + fuel')` >>
+  pop_assum (fn eq => REWRITE_TAC[eq]) >>
+  simp[]
 QED
 
 (* ---------- Helper: simplify_cfg_round correctness ---------- *)
@@ -2553,7 +2600,7 @@ Theorem entry_reachable[local]:
     fn_entry_label func = SOME lbl ==>
     reachable func lbl
 Proof
-  rw[reachable_def] >> qexists_tac `lbl` >> simp[]
+  rw[reachable_def]
 QED
 
 (*
@@ -2746,7 +2793,7 @@ Theorem phi_outs_fix_phi_sublist[local]:
       (FILTER (\i. (fix_phi_inst preds i).inst_opcode = PHI) insts))
 Proof
   gen_tac >> Induct >> rw[] >>
-  imp_res_tac fix_phi_inst_phi_outputs >> fs[]
+  imp_res_tac fix_phi_inst_phi_outputs
 QED
 
 (* operand_vars of filter_phi_ops is a subset *)
@@ -2889,10 +2936,7 @@ Theorem operand_vars_MAP_label_subst[local]:
     operand_vars (MAP f ops) = operand_vars ops
 Proof
   Induct_on `ops` >>
-  rw[venomInstTheory.operand_vars_def] >>
-  Cases_on `operand_var (f h)` >>
-  Cases_on `operand_var h` >>
-  fs[venomInstTheory.operand_vars_def]
+  rw[venomInstTheory.operand_vars_def]
 QED
 
 (* Helper: subst_label_op preserves operand_var *)
@@ -2932,8 +2976,7 @@ Theorem update_phi_bypass_inst_outputs[local]:
   !a b inst.
     (update_phi_bypass a b inst).inst_outputs = inst.inst_outputs
 Proof
-  rw[simplifyCfgDefsTheory.update_phi_bypass_def, LET_THM] >>
-  BasicProvers.every_case_tac >> simp[]
+  rw[simplifyCfgDefsTheory.update_phi_bypass_def, LET_THM]
 QED
 
 (* Helper: update_phi_bypass shrinks or preserves inst_uses *)
@@ -2960,8 +3003,7 @@ Theorem update_phi_bypass_inst_opcode[local]:
   !a b inst.
     (update_phi_bypass a b inst).inst_opcode = inst.inst_opcode
 Proof
-  rw[simplifyCfgDefsTheory.update_phi_bypass_def, LET_THM] >>
-  BasicProvers.every_case_tac >> simp[]
+  rw[simplifyCfgDefsTheory.update_phi_bypass_def, LET_THM]
 QED
 
 (* Per-block phi_no_conflict condition *)
@@ -2994,9 +3036,7 @@ Proof
     (fn th => ONCE_REWRITE_TAC [th])
   >- simp[listTheory.SNOC_LAST_FRONT] >>
   simp[rich_listTheory.FILTER_SNOC] >>
-  BasicProvers.every_case_tac >> simp[] >>
-  qexists_tac `[LAST l]` >>
-  simp[rich_listTheory.SNOC_APPEND]
+  BasicProvers.every_case_tac >> simp[]
 QED
 
 (* phi_nc_block preserved by dropping last instruction (FRONT).
@@ -3275,8 +3315,7 @@ Theorem subst_block_labels_inst_fields[local]:
     (subst_block_labels_inst lm inst).inst_outputs = inst.inst_outputs
 Proof
   rw[cfgTransformTheory.subst_block_labels_inst_def,
-     cfgTransformTheory.subst_label_map_inst_def] >>
-  simp[cfgTransformProofsTheory.subst_label_inst_fields]
+     cfgTransformTheory.subst_label_map_inst_def]
 QED
 
 Theorem operand_var_subst_label_map_op[local]:
@@ -3951,8 +3990,7 @@ Proof
   `(remove_unreachable_blocks func3).fn_blocks = []` by
     simp[remove_unreachable_blocks_def, fn_entry_label_def, entry_block_def] >>
   `(fix_all_phis (remove_unreachable_blocks func3)).fn_blocks = []` by
-    fs[fix_all_phis_def] >>
-  gvs[]
+    fs[fix_all_phis_def]
 QED
 
 (* Iteration is identity on empty fn_blocks *)
