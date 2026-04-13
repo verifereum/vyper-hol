@@ -797,7 +797,7 @@ QED
    conditions (operands, memory, freshness) are preserved. *)
 
 (* Generic: emit_op for pure 1-operand opcode *)
-Theorem emit_op_pure1_correct:
+Theorem emit_op_pure1_correct_mem:
   ∀ opc f op1 v1 st v st' ss.
     emit_op opc [op1] st = (v, st') ∧
     eval_operand op1 ss = SOME v1 ∧
@@ -917,43 +917,8 @@ Proof
   irule step_MUL >> rw[]
 QED
 
-(* Generic read0 opcode: no operands, reads from state, one output.
-   Covers CALLER, ADDRESS, CALLVALUE, GAS, ORIGIN, GASPRICE, CHAINID,
-   COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, BLOBBASEFEE. *)
-Theorem emit_op_read0_correct:
-  ∀ opc w st v st' ss.
-    emit_op opc [] st = (v, st') ∧
-    fresh_vars_wrt st ss ∧
-    step_inst_base (mk_inst st.cs_next_id opc []
-                     [STRING #"%" (toString st.cs_next_var)]) ss =
-      OK (update_var (STRING #"%" (toString st.cs_next_var)) w ss)
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand v ss' = SOME w ∧
-      same_blocks st st' ∧
-      fresh_vars_wrt st' ss' ∧
-      (∀ op w'. eval_operand op ss = SOME w' ⇒ eval_operand op ss' = SOME w') ∧
-      ss'.vs_call_ctx = ss.vs_call_ctx ∧
-      ss'.vs_tx_ctx = ss.vs_tx_ctx ∧
-      ss'.vs_block_ctx = ss.vs_block_ctx ∧
-      ss'.vs_accounts = ss.vs_accounts ∧
-      ss'.vs_memory = ss.vs_memory ∧
-      ss'.vs_halted = ss.vs_halted
-Proof
-  rw[] >>
-  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def] >>
-  simp[eval_operand_update_var] >>
-  drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
-  conj_tac
-  >- (irule fresh_vars_wrt_advance >> simp[] >>
-      goal_assum $ drule_at Any >> gvs[]) >>
-  conj_tac
-  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
-      goal_assum $ drule_at Any >> gvs[]) >>
-  rw[update_var_def]
-QED
+(* Old emit_op_read0_correct (w version) removed — subsumed by the
+   more general version (f ss version) later in this file. *)
 
 Theorem emit_op_SUB_correct:
   ∀ op1 op2 v1 v2 st v st' ss.
@@ -1045,7 +1010,7 @@ Proof
   irule step_SGT >> rw[]
 QED
 
-Theorem emit_op_LT_correct:
+Theorem emit_op_LT_correct_mem:
   ∀ op1 op2 v1 v2 st v st' ss.
     emit_op LT [op1; op2] st = (v, st') ∧
     eval_operand op1 ss = SOME v1 ∧
@@ -1091,7 +1056,7 @@ Proof
   irule step_GT >> rw[]
 QED
 
-Theorem emit_op_ISZERO_correct:
+Theorem emit_op_ISZERO_correct_mem:
   ∀ op1 v1 st v st' ss.
     emit_op ISZERO [op1] st = (v, st') ∧
     eval_operand op1 ss = SOME v1 ∧
@@ -1108,7 +1073,7 @@ Theorem emit_op_ISZERO_correct:
 Proof
   rw[] >>
   qspecl_then [`ISZERO`, `λx. bool_to_word (x = 0w)`]
-    (ho_match_mp_tac o BETA_RULE) emit_op_pure1_correct >>
+    (ho_match_mp_tac o BETA_RULE) emit_op_pure1_correct_mem >>
   goal_assum $ drule_at (Pat`emit_op`) >> gvs[] >>
   irule step_ISZERO >> rw[]
 QED
@@ -1128,7 +1093,7 @@ Theorem emit_op_NOT_correct:
       (∀ a. a < LENGTH ss.vs_memory ⇒ EL a ss'.vs_memory = EL a ss.vs_memory) ∧
       LENGTH ss'.vs_memory = LENGTH ss.vs_memory
 Proof
-  rw[] >> irule emit_op_pure1_correct >> gvs[] >>
+  rw[] >> irule emit_op_pure1_correct_mem >> gvs[] >>
   goal_assum $ drule_at (Pat`emit_op`) >> gvs[] >>
   irule step_NOT >> rw[]
 QED
@@ -1262,7 +1227,7 @@ QED
 (* ===== emit_void ASSERT helper ===== *)
 
 (* ASSERT with any value: either OK or Revert *)
-Theorem emit_void_ASSERT_ok_or_revert:
+Theorem emit_void_ASSERT_ok_or_revert_mem:
   ∀ op1 v st st' ss.
     emit_void ASSERT [op1] st = ((), st') ∧
     eval_operand op1 ss = SOME v ∧
@@ -1750,4 +1715,533 @@ Proof
   goal_assum (drule_at (Pat `run_inst_seq _ ss2 = OK _`)) >>
   goal_assum (drule_at (Pat `run_inst_seq _ ss = OK _`)) >>
   simp[]
+QED
+(* fresh_vars_wrt monotone in cs_next_var: if counter only grows, freshness wrt
+   the *original* ss is preserved *)
+Theorem fresh_vars_wrt_mono:
+  ∀ st st' ss.
+    fresh_vars_wrt st ss ∧ st'.cs_next_var ≥ st.cs_next_var ⇒
+    fresh_vars_wrt st' ss
+Proof
+  rw[fresh_vars_wrt_def]
+QED
+
+(* fresh_vars_wrt for emit_void: emit_void doesn't change cs_next_var *)
+Theorem fresh_vars_wrt_emit_void_ss:
+  ∀ opc ops st st' ss.
+    emit_void opc ops st = ((), st') ∧ fresh_vars_wrt st ss ⇒
+    fresh_vars_wrt st' ss
+Proof
+  rpt strip_tac >> irule fresh_vars_wrt_mono >> qexists `st` >>
+  imp_res_tac emitted_insts_emit_void >> gvs[]
+QED
+
+(* same_blocks is reflexive *)
+Theorem same_blocks_refl:
+  ∀ st. same_blocks st st
+Proof
+  simp[same_blocks_def]
+QED
+
+(* ===== Generic: emit_op for 0-operand read opcode ===== *)
+(* Covers CALLVALUE, CALLDATASIZE, etc. — reads a field from state. *)
+Theorem emit_op_read0_correct:
+  ∀ opc f st v st' ss.
+    emit_op opc [] st = (v, st') ∧
+    fresh_vars_wrt st ss ∧
+    step_inst_base (mk_inst st.cs_next_id opc []
+                     [STRING #"%" (toString st.cs_next_var)]) ss =
+      OK (update_var (STRING #"%" (toString st.cs_next_var)) (f ss) ss)
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (f ss) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_memory = ss.vs_memory
+Proof
+  rw[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def] >>
+  simp[eval_operand_update_var] >>
+  drule emit_op_extends >>
+  simp[same_blocks_def] >>
+  strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
+QED
+
+(* Instantiation: CALLVALUE *)
+Theorem emit_op_CALLVALUE_correct:
+  ∀ st v st' ss.
+    emit_op CALLVALUE [] st = (v, st') ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME ss.vs_call_ctx.cc_callvalue ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_memory = ss.vs_memory
+Proof
+  rw[] >>
+  qspecl_then [`CALLVALUE`, `λs. s.vs_call_ctx.cc_callvalue`,
+               `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
+  simp[] >> disch_then irule >>
+  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+QED
+
+(* Instantiation: CALLDATASIZE *)
+Theorem emit_op_CALLDATASIZE_correct:
+  ∀ st v st' ss.
+    emit_op CALLDATASIZE [] st = (v, st') ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' =
+        SOME (n2w (LENGTH ss.vs_call_ctx.cc_calldata)) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_memory = ss.vs_memory
+Proof
+  rw[] >>
+  qspecl_then [`CALLDATASIZE`,
+               `λs. n2w (LENGTH s.vs_call_ctx.cc_calldata)`,
+               `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
+  simp[] >> disch_then irule >>
+  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+QED
+
+(* ===== Generic: emit_op for 1-operand pure opcode ===== *)
+(* Covers ISZERO, NOT, etc. *)
+Theorem emit_op_pure1_correct:
+  ∀ opc f op1 v1 st v st' ss.
+    emit_op opc [op1] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    fresh_vars_wrt st ss ∧
+    step_inst_base (mk_inst st.cs_next_id opc [op1]
+                     [STRING #"%" (toString st.cs_next_var)]) ss =
+      OK (update_var (STRING #"%" (toString st.cs_next_var)) (f v1) ss)
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (f v1) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_memory = ss.vs_memory
+Proof
+  rw[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def] >>
+  simp[eval_operand_update_var] >>
+  drule emit_op_extends >>
+  simp[same_blocks_def] >>
+  strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
+QED
+
+(* Instantiation: ISZERO *)
+Theorem emit_op_ISZERO_correct:
+  ∀ op1 v1 st v st' ss.
+    emit_op ISZERO [op1] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (bool_to_word (v1 = 0w)) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_memory = ss.vs_memory
+Proof
+  rw[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def] >>
+  drule step_ISZERO >> simp[] >> disch_then kall_tac >>
+  simp[eval_operand_update_var] >>
+  drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
+QED
+
+(* Instantiation: LT *)
+Theorem emit_op_LT_correct:
+  ∀ op1 op2 v1 v2 st v st' ss.
+    emit_op LT [op1; op2] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2 ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (bool_to_word (w2n v1 < w2n v2)) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ss'.vs_memory = ss.vs_memory
+Proof
+  rw[] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def] >>
+  `step_inst_base (mk_inst st.cs_next_id LT [op1; op2]
+     [STRING #"%" (toString st.cs_next_var)]) ss =
+   OK (update_var (STRING #"%" (toString st.cs_next_var))
+       (bool_to_word (w2n v1 < w2n v2)) ss)`
+    by (irule step_LT >> rw[]) >>
+  gvs[] >>
+  simp[eval_operand_update_var] >>
+  drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule fresh_vars_wrt_advance >> simp[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
+QED
+
+(* ===== ASSERT: combined outcome ===== *)
+(* emit_void ASSERT: either OK (condition nonzero) or Abort Revert (zero) *)
+Theorem emit_void_ASSERT_ok_or_revert:
+  ∀ op1 v1 st st' ss.
+    emit_void ASSERT [op1] st = ((), st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    fresh_vars_wrt st ss
+    ⇒
+    (v1 ≠ 0w ∧
+     run_inst_seq (emitted_insts st st') ss = OK ss ∧
+     same_blocks st st' ∧
+     fresh_vars_wrt st' ss) ∨
+    (v1 = 0w ∧
+     run_inst_seq (emitted_insts st st') ss =
+       Abort Revert_abort (revert_state (set_returndata [] ss)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def] >>
+  Cases_on `v1 = 0w` >> gvs[] >>
+  drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
+  irule fresh_vars_wrt_emit_void >>
+  goal_assum drule >> gvs[]
+QED
+
+
+(* ===== OFFSET (= ADD semantically) ===== *)
+
+Theorem step_OFFSET:
+  ∀ op1 op2 v1 v2 id out ss.
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2 ⇒
+    step_inst_base (mk_inst id OFFSET [op1; op2] [out]) ss =
+      OK (update_var out (v1 + v2) ss)
+Proof
+  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+QED
+
+Theorem emit_op_OFFSET_correct:
+  ∀ op1 op2 v1 v2 st v st' ss.
+    emit_op OFFSET [op1; op2] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2 ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (v1 + v2) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ⇒ EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory = LENGTH ss.vs_memory
+Proof
+  rw[] >> irule emit_op_pure2_correct >> gvs[] >>
+  goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
+  irule step_OFFSET >> rw[]
+QED
+
+(* ===== CODECOPY (void, 3 args) ===== *)
+
+Theorem step_CODECOPY:
+  ∀ op_dst op_src op_sz dst src sz id ss.
+    eval_operand op_dst ss = SOME dst ∧
+    eval_operand op_src ss = SOME src ∧
+    eval_operand op_sz ss = SOME sz ⇒
+    step_inst_base (mk_inst id CODECOPY [op_dst; op_src; op_sz] []) ss =
+      OK (write_memory_with_expansion (w2n dst)
+            (TAKE (w2n sz) (DROP (w2n src) ss.vs_code ++ REPLICATE (w2n sz) 0w))
+            ss)
+Proof
+  rw[step_inst_base_def, mk_inst_def]
+QED
+
+(* ALLOCA lemmas removed — ALLOCA now takes 1 literal operand,
+   see step_inst_base_def. Revisit when ctor epilogue proof needs them. *)
+
+(* ===== RETURN → Halt ===== *)
+
+Theorem step_RETURN:
+  ∀ op1 op2 v1 v2 id ss.
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2 ⇒
+    step_inst_base (mk_inst id RETURN [op1; op2] []) ss =
+      Halt (halt_state (set_returndata
+        (TAKE (w2n v2) (DROP (w2n v1) ss.vs_memory ++ REPLICATE (w2n v2) 0w)) ss))
+Proof
+  rw[step_inst_base_def, mk_inst_def]
+QED
+
+(* ===== emit_inst structural lemma ===== *)
+
+Theorem emitted_insts_emit_inst:
+  ∀ opc ops outs st st'.
+    emit_inst opc ops outs st = ((), st') ⇒
+    emitted_insts st st' = [mk_inst st.cs_next_id opc ops outs] ∧
+    st'.cs_next_id = st.cs_next_id + 1 ∧
+    st'.cs_next_var = st.cs_next_var ∧
+    st'.cs_current_bb = st.cs_current_bb ∧
+    st'.cs_blocks = st.cs_blocks
+Proof
+  rw[emit_inst_def, comp_bind_def, fresh_id_def, emit_def, emitted_insts_def] >>
+  gvs[rich_listTheory.DROP_LENGTH_APPEND]
+QED
+
+(* ===== emit_void CODECOPY ===== *)
+
+Theorem emit_void_CODECOPY_correct:
+  ∀ op_dst op_src op_sz dst_v src_v sz_v st st' ss.
+    emit_void CODECOPY [op_dst; op_src; op_sz] st = ((), st') ∧
+    eval_operand op_dst ss = SOME dst_v ∧
+    eval_operand op_src ss = SOME src_v ∧
+    eval_operand op_sz ss = SOME sz_v ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_def] >>
+  drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
+  conj_tac >- (
+    gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
+        emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
+  conj_tac
+  >- (rw[] >> Cases_on `op` >>
+      gvs[eval_operand_def, write_memory_with_expansion_def,
+          lookup_var_def, LET_THM]) >>
+  rw[write_memory_with_expansion_def, LET_THM]
+QED
+
+(* ===== emit_inst RETURN → Halt ===== *)
+
+Theorem emit_inst_RETURN_halt:
+  ∀ op1 op2 v1 v2 st st' ss.
+    emit_inst RETURN [op1; op2] [] st = ((), st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    eval_operand op2 ss = SOME v2
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = Halt ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_inst >> strip_tac >> gvs[] >>
+  simp[run_inst_seq_def, step_inst_base_def]
+QED
+
+(* ===== Instruction extension predicate and composition ===== *)
+
+(* inst_extends st st' means st' was produced from st by appending instructions.
+   This is the key invariant maintained by emit_op, emit_void, emit_inst. *)
+Definition inst_extends_def:
+  inst_extends st st' ⇔
+    st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+End
+
+(* emit_op preserves inst_extends *)
+Theorem inst_extends_emit_op:
+  ∀ opc ops st v st'.
+    emit_op opc ops st = (v, st') ⇒ inst_extends st st'
+Proof
+  rpt strip_tac >> gvs[inst_extends_def] >>
+  imp_res_tac emitted_insts_emit_op >> gvs[]
+QED
+
+(* emit_void preserves inst_extends *)
+Theorem inst_extends_emit_void:
+  ∀ opc ops st st'.
+    emit_void opc ops st = ((), st') ⇒ inst_extends st st'
+Proof
+  rpt strip_tac >> gvs[inst_extends_def] >>
+  imp_res_tac emitted_insts_emit_void >> gvs[]
+QED
+
+(* emit_inst preserves inst_extends *)
+Theorem inst_extends_emit_inst:
+  ∀ opc ops outs st st'.
+    emit_inst opc ops outs st = ((), st') ⇒ inst_extends st st'
+Proof
+  rpt strip_tac >> gvs[inst_extends_def, emitted_insts_def] >>
+  imp_res_tac emit_inst_extends >>
+  gvs[rich_listTheory.DROP_LENGTH_APPEND]
+QED
+
+(* Transitivity: inst_extends is transitive *)
+Theorem inst_extends_trans:
+  ∀ st0 st1 st2.
+    inst_extends st0 st1 ∧ inst_extends st1 st2 ⇒ inst_extends st0 st2
+Proof
+  rw[inst_extends_def] >>
+  `emitted_insts st0 st2 = emitted_insts st0 st1 ++ emitted_insts st1 st2`
+    by (irule emitted_insts_append >> gvs[]) >>
+  gvs[]
+QED
+
+(* Reflexivity *)
+Theorem inst_extends_refl:
+  ∀ st. inst_extends st st
+Proof
+  rw[inst_extends_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_NIL]
+QED
+
+
+Theorem inst_extends_comp_return:
+  ∀ x st. inst_extends st (SND (comp_return x st))
+Proof
+  rw[comp_return_def, inst_extends_refl]
+QED
+
+(* Derive inst_extends for any monad_bind expression *)
+Theorem inst_extends_monad_bind:
+  ∀ m f st r st'.
+    monad_bind m f st = (r, st') ∧
+    (∀ v st1. m st = (v, st1) ⇒ inst_extends st st1) ∧
+    (∀ v st1 w st2. m st = (v, st1) ∧ f v st1 = (w, st2) ⇒ inst_extends st1 st2)
+    ⇒ inst_extends st st'
+Proof
+  rw[comp_bind_def, LET_THM, pairTheory.PAIR] >>
+  Cases_on `m st` >> gvs[] >>
+  metis_tac[inst_extends_trans]
+QED
+
+(* Core composition: extend an OK prefix by one more segment *)
+Theorem run_inst_seq_emit_extend:
+  ∀ st0 st1 st2 ss0 ss1.
+    run_inst_seq (emitted_insts st0 st1) ss0 = OK ss1 ∧
+    inst_extends st0 st1 ∧ inst_extends st1 st2
+    ⇒
+    run_inst_seq (emitted_insts st0 st2) ss0 =
+    run_inst_seq (emitted_insts st1 st2) ss1
+Proof
+  rw[inst_extends_def] >>
+  `emitted_insts st0 st2 = emitted_insts st0 st1 ++ emitted_insts st1 st2`
+    by (irule emitted_insts_append >> gvs[]) >>
+  gvs[] >> irule run_inst_seq_append >> gvs[]
+QED
+
+(* Non-OK prefix: suffix is irrelevant *)
+Theorem run_inst_seq_emit_extend_err:
+  ∀ st0 st1 st2 ss0.
+    (∀ s. run_inst_seq (emitted_insts st0 st1) ss0 ≠ OK s) ∧
+    inst_extends st0 st1 ∧ inst_extends st1 st2
+    ⇒
+    run_inst_seq (emitted_insts st0 st2) ss0 =
+    run_inst_seq (emitted_insts st0 st1) ss0
+Proof
+  rw[inst_extends_def] >>
+  `emitted_insts st0 st2 = emitted_insts st0 st1 ++ emitted_insts st1 st2`
+    by (irule emitted_insts_append >> gvs[]) >>
+  gvs[] >> irule run_inst_seq_append_err >> gvs[]
+QED
+
+
+(* ===== Composition of OK-or-Abort segments ===== *)
+
+(* Sequential composition of two instruction segments.
+   If phase 1 aborts, the combined aborts.
+   If phase 1 is OK and phase 2 is OK-or-Abort, so is the combined. *)
+Theorem run_inst_seq_compose_ok_or_abort:
+  ∀ st0 st1 st2 ss0 ss1.
+    inst_extends st0 st1 ∧ inst_extends st1 st2 ∧
+    run_inst_seq (emitted_insts st0 st1) ss0 = OK ss1 ∧
+    (∃ ss2.
+       (run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2) ∨
+       (run_inst_seq (emitted_insts st1 st2) ss1 = Abort Revert_abort ss2))
+    ⇒
+    ∃ ss'.
+      (run_inst_seq (emitted_insts st0 st2) ss0 = OK ss') ∨
+      (run_inst_seq (emitted_insts st0 st2) ss0 = Abort Revert_abort ss')
+Proof
+  rpt strip_tac >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* Abort in phase 1 propagates to the combined segment *)
+Theorem run_inst_seq_abort_extends:
+  ∀ st0 st1 st2 ss0 ss1.
+    inst_extends st0 st1 ∧ inst_extends st1 st2 ∧
+    run_inst_seq (emitted_insts st0 st1) ss0 = Abort Revert_abort ss1
+    ⇒
+    run_inst_seq (emitted_insts st0 st2) ss0 = Abort Revert_abort ss1
+Proof
+  rpt strip_tac >>
+  `∀s. run_inst_seq (emitted_insts st0 st1) ss0 ≠ OK s` by gvs[] >>
+  drule_all run_inst_seq_emit_extend_err >> gvs[]
+QED
+
+(* run_inst_seq: OK prefix + Halt suffix = Halt overall *)
+Theorem run_inst_seq_compose_ok_halt:
+  ∀ st0 st1 st2 ss0 ss1 ss2.
+    inst_extends st0 st1 ∧ inst_extends st1 st2 ∧
+    run_inst_seq (emitted_insts st0 st1) ss0 = OK ss1 ∧
+    run_inst_seq (emitted_insts st1 st2) ss1 = Halt ss2
+    ⇒
+    run_inst_seq (emitted_insts st0 st2) ss0 = Halt ss2
+Proof
+  rpt strip_tac >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[]
+QED
+
+(* OK + OK = OK *)
+Theorem run_inst_seq_compose_ok:
+  ∀ st0 st1 st2 ss0 ss1 ss2.
+    inst_extends st0 st1 ∧ inst_extends st1 st2 ∧
+    run_inst_seq (emitted_insts st0 st1) ss0 = OK ss1 ∧
+    run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2
+    ⇒
+    run_inst_seq (emitted_insts st0 st2) ss0 = OK ss2
+Proof
+  rpt strip_tac >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[]
 QED
