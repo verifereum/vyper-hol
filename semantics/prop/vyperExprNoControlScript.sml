@@ -479,86 +479,6 @@ val lean_decompose = lean_step >> TRY (RULE_ASSUM_TAC BETA_RULE);
 
 (* ===== Case 18: ExtCall ===== *)
 
-Theorem ext_call_no_control[local]:
-  ∀cx v15 is_static func_name arg_types ret_type es drv.
-  (∀s'' vs t s'3 x t' s'4 target_addr t'' s'5 value_opt arg_vals t'3
-       s'6 calldata t'4 s'7 accounts t'5 s'8 tStorage t'6 s'9 t'7
-       success accounts' tStorage' s'10 x' t'8 s'11 x'' t'9 s'12 x'3 t'10.
-     eval_exprs cx es s'' = (INL vs,t) ∧
-     check (vs ≠ []) "ExtCall no target" s'3 = (INL x,t') ∧
-     lift_option_type (dest_AddressV (HD vs))
-       "ExtCall target not address" s'4 = (INL target_addr,t'') ∧
-     (if is_static then return (NONE,TL vs)
-      else do
-        check (TL vs ≠ []) "ExtCall no value";
-        v <- lift_option_type (dest_NumV (HD (TL vs)))
-               "ExtCall value not int";
-        return (SOME v,TL (TL vs))
-      od) s'5 = (INL (value_opt,arg_vals),t'3) ∧
-     lift_option
-       (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
-       "ExtCall build_calldata" s'6 = (INL calldata,t'4) ∧
-     get_accounts s'7 = (INL accounts,t'5) ∧
-     get_transient_storage s'8 = (INL tStorage,t'6) ∧
-     lift_option
-       (run_ext_call cx.txn.target target_addr calldata value_opt
-          accounts tStorage (vyper_to_tx_params cx.txn))
-       "ExtCall run failed" s'9 =
-     (INL (success,[],accounts',tStorage'),t'7) ∧
-     check success "ExtCall reverted" s'10 = (INL x',t'8) ∧
-     update_accounts (K accounts') s'11 = (INL x'',t'9) ∧
-     update_transient (K tStorage') s'12 = (INL x'3,t'10) ∧
-     IS_SOME drv ⇒
-     ∀s exc st'. eval_expr cx (THE drv) s = (INR exc,st') ⇒
-       no_control_exc exc) ∧
-  (∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc) ⇒
-  ∀s exc st'.
-    eval_expr cx
-      (Call v15 (ExtCall is_static (func_name,arg_types,ret_type)) es drv)
-      s = (INR exc,st') ⇒ no_control_exc exc
-Proof
-  rpt strip_tac >> pop_assum mp_tac
-  >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
-  (* Step 1: decompose eval_exprs bind *)
-  >> lean_decompose
-  >- (res_tac >> gvs[no_control_exc_def])
-  (* Step 2: stash big drv IH + remove eval_exprs asms, leaving 1 asm *)
-  >> qpat_x_assum `∀s exc st'. eval_exprs _ _ s = _ ⇒ _` kall_tac
-  (* Step 3: stash big drv IH, leave only do-block asm *)
-  (* Step 3: stash big IH into ML var, decompose body, restore *)
-  (* Step 3: stash big IH to goal *)
-  >> last_x_assum (fn ih =>
-    rpt (step_tac >- FIRST [
-      helper_close,
-      Cases_on `is_static'` >> gvs[bind_def, ignore_bind_def, return_def,
-        raise_def, AllCaseEqs()]
-      >> TRY (FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def]
-        >> NO_TAC) helpers))
-      >> TRY (gvs[return_def, no_control_exc_def] >> NO_TAC)])
-    >> RULE_ASSUM_TAC (SIMP_RULE std_ss [pairTheory.ELIM_UNCURRY])
-    >> rpt (step_tac >- helper_close)
-    >> assume_tac ih)
-  (* Handle the if-tail *)
-  >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
-  >> simp[COND_RATOR] >> strip_tac
-  >> gvs[return_def, bind_def, AllCaseEqs()]
-  >> TRY (imp_res_tac lift_sum_runtime_no_control >> NO_TAC)
-  (* Instantiate IH via chained drule *)
-  >> qpat_x_assum `∀s'' vs t. _`
-       (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO])
-  >> disch_then drule  (* eval_exprs *)
-  >> disch_then drule  (* check (vs ≠ []) *)
-  >> disch_then drule  (* lift_option_type (dest_AddressV) *)
-  (* Split pairs for drule matching *)
-  >> qpat_x_assum `(if _ then _ else _) _ = (INL v'', _)` mp_tac
-  >> Cases_on `v''` >> strip_tac
-  >> qpat_x_assum `lift_option (run_ext_call _ _ _ _ _ _ _) _ _ = (INL v'⁶', _)` mp_tac
-  >> Cases_on `v'⁶'` >> Cases_on `r` >> Cases_on `r'` >> Cases_on `r` >> strip_tac
-  >> gvs[]
-  >> rpt (disch_then drule)
-  >> simp[]
-QED
-
 (* ===== Case 19: IntCall ===== *)
 
 (* Sub-helper: cleanup block never errors *)
@@ -712,14 +632,61 @@ Theorem eval_expr_no_control_with_bt:
     no_control_exc exc)
 Proof
   ho_match_mp_tac eval_expr_bt_ind >> rpt conj_tac >> rpt gen_tac
-  >| (List.tabulate(18, fn _ => unfold_tac)
-   @ [rpt strip_tac >> drule_all ext_call_no_control >> simp[]]
-   @ [rpt strip_tac >> drule_all int_call_no_control >> simp[]]
-   @ [rpt strip_tac >> drule_all raw_call_no_control >> simp[]]
-   @ List.tabulate(6, fn _ => unfold_tac))
-  >> (Cases_on `x` >> gvs[bind_def, return_def, AllCaseEqs()]
-      >> TRY resolve_tac)
+  >> TRY (rpt strip_tac >> drule_all int_call_no_control >> simp[] >> NO_TAC)
+  >> TRY (rpt strip_tac >> drule_all raw_call_no_control >> simp[] >> NO_TAC)
+  >> TRY (rename1`ExtCall` >> suspend"ExtCall")
+  >> TRY ((rename1`SubscriptTarget` ORELSE rename1`Pop`) >>
+          unfold_tac >>
+          PairCases_on`x` >>
+          gvs[bind_def, return_def, AllCaseEqs()] >>
+          resolve_tac)
+  >> unfold_tac
 QED
+
+Resume eval_expr_no_control_with_bt[ExtCall]:
+  rpt strip_tac >> pop_assum mp_tac
+  >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
+  (* Step 1: decompose eval_exprs bind *)
+  >> lean_decompose
+  >- (res_tac >> gvs[no_control_exc_def])
+  (* Step 2: stash big drv IH + remove eval_exprs asms, leaving 1 asm *)
+  >> qpat_x_assum `∀s exc st'. eval_exprs _ _ s = _ ⇒ _` kall_tac
+  (* Step 3: stash big drv IH, leave only do-block asm *)
+  (* Step 3: stash big IH into ML var, decompose body, restore *)
+  (* Step 3: stash big IH to goal *)
+  >> last_x_assum (fn ih =>
+    rpt (step_tac >- FIRST [
+      helper_close,
+      Cases_on `is_static'` >> gvs[bind_def, ignore_bind_def, return_def,
+        raise_def, AllCaseEqs()]
+      >> TRY (FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def]
+        >> NO_TAC) helpers))
+      >> TRY (gvs[return_def, no_control_exc_def] >> NO_TAC)])
+    >> RULE_ASSUM_TAC (SIMP_RULE std_ss [pairTheory.ELIM_UNCURRY])
+    >> rpt (step_tac >- helper_close)
+    >> assume_tac ih)
+  (* Handle the if-tail *)
+  >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
+  >> simp[COND_RATOR] >> strip_tac
+  >> gvs[return_def, bind_def, AllCaseEqs()]
+  >> TRY (imp_res_tac lift_sum_runtime_no_control >> NO_TAC)
+  (* Instantiate IH via chained drule *)
+  >> qpat_x_assum `∀s'' vs t. _`
+       (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO])
+  >> disch_then drule  (* eval_exprs *)
+  >> disch_then drule  (* check (vs ≠ []) *)
+  >> disch_then drule  (* lift_option_type (dest_AddressV) *)
+  (* Split pairs for drule matching *)
+  >> qpat_x_assum `(if _ then _ else _) _ = (INL v'', _)` mp_tac
+  >> Cases_on `v''` >> strip_tac
+  >> qpat_x_assum `lift_option (run_ext_call _ _ _ _ _ _ _) _ _ = (INL v'⁶', _)` mp_tac
+  >> Cases_on `v'⁶'` >> Cases_on `r` >> Cases_on `r'` >> Cases_on `r` >> strip_tac
+  >> gvs[]
+  >> rpt (disch_then drule)
+  >> simp[]
+QED
+
+Finalise eval_expr_no_control_with_bt
 
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
