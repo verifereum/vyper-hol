@@ -1931,19 +1931,6 @@ Proof
   simp[venomExecSemanticsTheory.step_inst_non_invoke]
 QED
 
-(* CHEATED: PHI is no longer a no-op in main semantics.
-   Needs rework for sequential PHI model.
-Triviality step_inst_phi:
-  !fuel ctx inst (s:venom_state).
-    inst.inst_opcode = PHI ==> step_inst fuel ctx inst s = OK s
-*)
-Triviality step_inst_phi[local]:
-  !fuel ctx inst (s:venom_state).
-    inst.inst_opcode = PHI ==> step_inst fuel ctx inst s = OK s
-Proof
-  cheat
-QED
-
 (* Running PHI-substituted block on prev_bb_equiv states with appropriate
    prev_bb values gives result_prev_bb_equiv.
    bb1 has old→new substitution in PHIs compared to bb2.
