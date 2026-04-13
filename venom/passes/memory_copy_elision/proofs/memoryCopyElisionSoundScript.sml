@@ -14,7 +14,7 @@
  *   cf_sound_opt_def — soundness predicate
  *   cf_sound_opt_fempty — FEMPTY is trivially sound
  *   cf_sound_opt_state_equiv — soundness preserved by state_equiv {}
- *   cei_simulates — analysis_inst_simulates for copy_elision_inst
+ *   cei_simulates_inv — analysis_inst_simulates for copy_elision_inst
  *   copy_fact_transfer_sound_thm — transfer_sound for copy_fact_transfer
  *)
 
