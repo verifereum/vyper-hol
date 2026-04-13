@@ -1,5 +1,5 @@
 # Codegen correctness proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
-           ../defs ../../defs ../../passes/shared/defs \
-           ../../analysis/liveness/defs ../../analysis/cfg/defs \
-           ../../analysis/dfg/defs ../../../syntax ../../../semantics
+# ../defs transitively includes: $(VFMDIR)/util, $(VFMDIR)/spec,
+#   ../../defs, ../../passes/shared/defs, ../../analysis/*/defs,
+#   ../../../syntax, ../../../semantics
+INCLUDES = ../defs $(VFMDIR)/spec/prop
