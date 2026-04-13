@@ -3630,6 +3630,26 @@ Proof
 QED
 
 
+Triviality resolve_memloc_offset_bp_segment_lt_dimword[local]:
+  !bp ops s addr_res.
+    resolve_memloc_offset (bp_segment_from_ops bp ops) s = SOME addr_res /\
+    allocas_in_word s /\
+    ml_is_fixed (bp_segment_from_ops bp ops) /\
+    memloc_within_alloca (bp_segment_from_ops bp ops) s ==>
+    addr_res < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `ops.iao_ofst` >- gvs[resolve_memloc_offset_def, bp_segment_from_ops_def, LET_THM, w2n_lt] >>
+  all_tac >>> LASTGOAL (gvs[bp_segment_from_ops_def, LET_THM, ml_undefined_def, ml_is_fixed_def]) >>
+  gvs[bp_segment_from_ops_def, LET_THM] >> Cases_on `bp_ptr_from_op bp (Var s')` >> gvs[ml_is_fixed_def] >>
+  Cases_on `x` >> gvs[] >>
+  Cases_on `o'` >> gvs[] >>
+  Cases_on `a` >> gvs[resolve_memloc_offset_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  gvs[memloc_within_alloca_def, allocas_in_word_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`n`, `FST x'`, `SND x'`] mp_tac) >>
+  Cases_on `x'` >> gvs[]
+QED
 
 (* Determine the unique compatible load opcode for each store opcode *)
 Triviality load_store_compatible_elim[local]:
