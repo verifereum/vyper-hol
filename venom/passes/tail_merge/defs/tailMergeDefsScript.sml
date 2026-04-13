@@ -75,13 +75,15 @@ Definition canon_outputs_def:
     (var_map'', idx :: idxs)
 End
 
-(* Canonical instruction: (opcode, canonical_outputs, canonical_operands).
+(* Canonical instruction: (opcode, inst_id, canonical_outputs, canonical_operands).
+   inst_id is included because exec_alloca uses it as vs_allocas key, so two
+   instructions with different inst_ids produce genuinely different states.
    Outputs are processed first (matches Python: outputs tuple before operands). *)
 Definition canon_inst_def:
   canon_inst var_map inst =
     let (var_map', couts) = canon_outputs var_map inst.inst_outputs in
     let (var_map'', cops) = canon_operands var_map' inst.inst_operands in
-    (var_map'', (inst.inst_opcode, couts, cops))
+    (var_map'', (inst.inst_opcode, inst.inst_id, couts, cops))
 End
 
 (* Canonical instruction list: thread var_map through. *)
@@ -149,7 +151,7 @@ Definition tail_merge_fn_def:
         if merge_map = [] then func
         else
           (* Batch label substitution *)
-          let func' = subst_label_map_fn merge_map func in
+          let func' = subst_block_labels_fn merge_map func in
           (* Remove merged blocks *)
           let removed_labels = MAP FST merge_map in
           func' with fn_blocks :=
