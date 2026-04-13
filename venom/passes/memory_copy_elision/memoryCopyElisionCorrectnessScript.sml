@@ -19,7 +19,7 @@ Theorem copy_elision_function_correct:
     let bp = bp_analyze cfg fn in
     wf_function fn /\
     fn_inst_wf fn /\
-    ssa_form fn /\
+    wf_ssa fn /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound dfg s /\
