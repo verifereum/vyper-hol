@@ -1,6 +1,12 @@
 (*
  * Alloca Remapping Definitions
  *
+ * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
+ *   Not a direct Python port — defines verification relations for
+ *   reasoning about execution under different alloca layouts.
+ *   Referenced commit identifies the alloca infrastructure these
+ *   definitions model.
+ *
  * State relation for reasoning about execution under different alloca
  * layouts (same code, different concrete base addresses). Used by
  * concretize_mem_loc and as a building block for other passes that
@@ -10,19 +16,27 @@
  *   mem_byte_at           — safe memory byte access (0w for OOB)
  *   fn_alloca_id_of_var   — find alloca inst_id that produces a variable
  *   in_alloca_region        — address falls within an alloca region
+ *   allocas_non_overlapping — alloca regions don't overlap in a state
  *   ptrs_in_alloca_bounds  — pointer-derived values within alloca regions
- *   alloca_mem_agrees       — memory at alloca regions corresponds
- *   alloca_remap_rel        — full state relation for remapping
+ *   alloca_safe_access     — memory accesses stay within alloca bounds
+ *   pointer_arith_in_region — pointer arithmetic stays within region
+ *   alloca_mem_agrees      — memory at alloca regions corresponds
+ *   alloca_remap_rel       — full state relation for remapping
  *
  * Design: alloca_remap_rel captures what must hold for execution under
  * pointer_confined to be insensitive to alloca base addresses:
  *   - Non-pointer vars agree (clause 1)
  *   - Alloca output vars hold remapped offsets (clause 2)
+ *   - Pointer-derived vars have same displacement from base (clause 2b)
  *   - Memory at alloca regions corresponds (clause 3)
  *   - Memory OUTSIDE alloca regions is identical (clause 4)
  *   - Alloca regions don't overlap in either state (clause 5)
  *   - Alloca maps have same domain and sizes (clause 6)
- *   - Scalar state fields agree (clause 7)
+ *   - Memory lengths agree (clause 7)
+ *   - Scalar state fields agree (clause 8)
+ *
+ * Note: vs_alloca_next is intentionally unconstrained — it naturally
+ * differs when alloca regions are remapped to different offsets.
  *)
 
 Theory allocaRemapDefs
@@ -80,17 +94,14 @@ End
    pointer (as identified by mem_read_ops/mem_write_ops), the address
    operand plus the access size fits within the alloca region containing
    that address.
-   - For MLOAD/MSTORE (iao_size = SOME (Lit 32w)): addr + 32 <= off + sz
-   - For MSTORE8 (iao_size = SOME (Lit 1w)): addr + 1 <= off + sz
-   - For MCOPY/CODECOPY/etc. (iao_size = SOME size_op): addr + size <= off + sz
+   Uses iao_max_size (upper bound on access width):
+   - For MLOAD/MSTORE: iao_max_size = SOME (Lit 32w), so addr + 32 <= off + sz
+   - For MSTORE8: iao_max_size = SOME (Lit 1w), so addr + 1 <= off + sz
+   - For MCOPY/CODECOPY/etc.: iao_max_size = SOME size_op, addr + size <= off + sz
    True for Vyper: allocas are 32-byte aligned, all accesses fit. *)
 Definition alloca_safe_access_def:
   alloca_safe_access fn (roots : string set) s <=>
     let pv = pointer_derived_vars fn roots in
-    (* All alloca regions fit within memory (no expansion on access) *)
-    (!aid off asz.
-      FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
-      off + asz <= LENGTH s.vs_memory) /\
     (* Memory accesses through pointer-derived vars stay within alloca *)
     (!bb inst ops v w sz_op sz_val aid off asz.
       MEM bb fn.fn_blocks /\
@@ -235,7 +246,9 @@ Definition alloca_remap_rel_def:
       FLOOKUP s2.vs_allocas aid = SOME (new_off, sz)) /\
     (* 7. Memory lengths agree (needed for MSIZE determinism) *)
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
-    (* 8. Scalar state fields agree *)
+    (* 8. Scalar state fields agree.
+       vs_alloca_next intentionally omitted — naturally differs
+       when alloca regions are at different offsets. *)
     s1.vs_halted = s2.vs_halted /\
     s1.vs_returndata = s2.vs_returndata /\
     s1.vs_accounts = s2.vs_accounts /\
