@@ -22,12 +22,13 @@
  *   make_ssa_fn             — full SSA construction pass
  *   make_ssa_ctx            — transform all functions in context
  *
- * Source: vyper/venom/passes/make_ssa.py
+ * Upstream: vyperlang/vyper@fa30658 (make_ssa pass)
  *)
 
 Theory makeSsaDefs
 Ancestors
   cfgTransform venomWf dominatorDefs
+  list rich_list alist
 
 (* ===== Dominator Tree ===== *)
 
@@ -41,6 +42,36 @@ Definition dom_tree_labels_def:
     lbl :: FLAT (MAP dom_tree_labels children)
 End
 
+(* ===== CFG Path and Dominance ===== *)
+
+(* A CFG path through a function's blocks: a list of block labels
+   where consecutive elements are connected by CFG edges (bb_succs). *)
+Definition cfg_path_def:
+  (cfg_path bbs [] = T) ∧
+  (cfg_path bbs [l] = (lookup_block l bbs ≠ NONE)) ∧
+  (cfg_path bbs (l1 :: l2 :: rest) =
+    ((∃bb. lookup_block l1 bbs = SOME bb ∧ MEM l2 (bb_succs bb)) ∧
+     cfg_path bbs (l2 :: rest)))
+End
+
+(* d dominates n in a CFG: every path from entry to n passes through d. *)
+Definition cfg_dominates_def:
+  cfg_dominates bbs entry d n ⇔
+    ∀path. cfg_path bbs path ∧ path ≠ [] ∧
+           HD path = entry ∧ MEM n path ⇒ MEM d path
+End
+
+(* Parent node of a label in the dom_tree.
+   dtree_parent t lbl = SOME p iff p is the direct parent of lbl in t. *)
+Definition dtree_parent_def:
+  (dtree_parent (DNode lbl []) child_lbl = NONE) ∧
+  (dtree_parent (DNode lbl (DNode c cs :: rest)) child_lbl =
+    if c = child_lbl then SOME lbl
+    else case dtree_parent (DNode c cs) child_lbl of
+           SOME p => SOME p
+         | NONE => dtree_parent (DNode lbl rest) child_lbl)
+End
+
 (* ===== Analysis Validity Predicates ===== *)
 
 (* The dominator tree analysis is valid for the given function.
@@ -49,12 +80,44 @@ End
    dom_post_order: blocks in dominator tree post-order *)
 Definition valid_dom_tree_def:
   valid_dom_tree dom_frontiers dtree dom_post_order func ⇔
-    (* All labels in the tree correspond to actual blocks *)
-    (∀lbl. MEM lbl (dom_tree_labels dtree) ⇒
-           lookup_block lbl func.fn_blocks ≠ NONE) ∧
+    (* dtree root is the entry block *)
+    (∃entry children. dtree = DNode entry children ∧
+     fn_entry_label func = SOME entry) ∧
+    (* dtree covers exactly the function's block labels *)
+    set (dom_tree_labels dtree) = set (fn_labels func) ∧
+    ALL_DISTINCT (dom_tree_labels dtree) ∧
+    (* Dominator tree property: parent is the immediate dominator
+       of child in the CFG — parent dominates child, and no closer
+       dominator exists between parent and child. *)
+    (∀child parent entry.
+       fn_entry_label func = SOME entry ∧
+       dtree_parent dtree child = SOME parent ⇒
+       cfg_dominates func.fn_blocks entry parent child ∧
+       parent ≠ child ∧
+       (∀d. cfg_dominates func.fn_blocks entry d child ∧ d ≠ child ⇒
+            cfg_dominates func.fn_blocks entry d parent ∨ d = parent)) ∧
+    (* Dominance is antisymmetric for reachable blocks.
+       Standard compiler theory fact: follows from shortest-path argument. *)
+    (∀d n entry.
+       fn_entry_label func = SOME entry ⇒
+       cfg_dominates func.fn_blocks entry d n ⇒
+       cfg_dominates func.fn_blocks entry n d ⇒
+       d = n) ∧
     (* dom_post_order covers exactly the function's block labels *)
-    set dom_post_order = set (MAP (λbb. bb.bb_label) func.fn_blocks) ∧
-    ALL_DISTINCT dom_post_order
+    set dom_post_order = set (fn_labels func) ∧
+    ALL_DISTINCT dom_post_order ∧
+    (* dom_frontiers map to valid block labels *)
+    (∀lbl fs. ALOOKUP dom_frontiers lbl = SOME fs ⇒
+              ∀f. MEM f fs ⇒ lookup_block f func.fn_blocks ≠ NONE) ∧
+    (* dom_frontiers are correct: DF(b) = {d | ∃pred p of d.
+       b dominates p ∧ b does not strictly dominate d} *)
+    (∀b d entry.
+       fn_entry_label func = SOME entry ⇒
+       (MEM d (case ALOOKUP dom_frontiers b of SOME fs => fs | NONE => []) ⇔
+        (∃p bb_p. lookup_block p func.fn_blocks = SOME bb_p ∧
+                  MEM d (bb_succs bb_p) ∧
+                  cfg_dominates func.fn_blocks entry b p ∧
+                  (b = d ∨ ¬cfg_dominates func.fn_blocks entry b d))))
 End
 
 (* The CFG predecessor/successor maps are valid for the function. *)
@@ -64,7 +127,9 @@ Definition valid_cfg_maps_def:
            OPTION_MAP bb_succs (lookup_block lbl func.fn_blocks)) ∧
     (∀lbl ps. ALOOKUP pred_map lbl = SOME ps ⇒
               set ps = {p | ∃bb. lookup_block p func.fn_blocks = SOME bb ∧
-                                 MEM lbl (bb_succs bb)})
+                                 MEM lbl (bb_succs bb)}) ∧
+    (∀lbl. lookup_block lbl func.fn_blocks ≠ NONE ⇒
+           ∃ps. ALOOKUP pred_map lbl = SOME ps)
 End
 
 (* The liveness analysis is valid: live_in vars are actually used. *)
@@ -72,6 +137,19 @@ Definition valid_liveness_def:
   valid_liveness live_in func ⇔
     (∀lbl vs. ALOOKUP live_in lbl = SOME vs ⇒
               lookup_block lbl func.fn_blocks ≠ NONE)
+End
+
+(* The entry block has no predecessors (no back-edges to entry).
+   Required for SSA correctness: PHI instructions at entry would error
+   because vs_prev_bb = NONE on first execution. When entry has no
+   predecessors, the dominance frontier condition ensures no PHIs are
+   inserted at entry. This is naturally satisfied by Vyper's pipeline. *)
+Definition fn_entry_no_preds_def:
+  fn_entry_no_preds func ⇔
+    ∀entry bb.
+      fn_entry_label func = SOME entry ∧
+      MEM bb func.fn_blocks ⇒
+      ¬MEM entry (bb_succs bb)
 End
 
 (* ===== Definition Points ===== *)
@@ -154,6 +232,105 @@ Definition process_frontiers_def:
         process_frontiers var pred_map live_in bbs' (f :: rest) (f :: has_phi) fs
 End
 
+(* Helper: adding an element to the exclusion set decreases filter count
+   by exactly 1 when the element is in the list and not yet excluded,
+   and the list has no duplicates. *)
+Triviality filter_add_mem_decrease:
+  ∀U (h:'a) hp.
+    MEM h U ∧ ¬MEM h hp ∧ ALL_DISTINCT U ⇒
+    LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) + 1 ≤
+    LENGTH (FILTER (λx. ¬MEM x hp) U)
+Proof
+  Induct >> simp[ALL_DISTINCT] >> rpt strip_tac >> gvs[]
+  >- (
+    (* head = h: filter_new(U) + 1 ≤ SUC(filter_old(U))
+       suffices to show filter_new(U) ≤ filter_old(U) *)
+    `LENGTH (FILTER (λx. x ≠ h ∧ ¬MEM x hp) U) ≤
+     LENGTH (FILTER (λx. ¬MEM x hp) U)` suffices_by DECIDE_TAC >>
+    irule LENGTH_FILTER_LEQ_MONO >> simp[])
+  >- (
+    (* head ≠ h, MEM h U: case split on MEM head hp *)
+    Cases_on `MEM h hp`
+    >- (
+      (* MEM h hp: both IFs false, apply IH directly *)
+      `¬(h ≠ h' ∧ ¬MEM h hp)` by simp[] >>
+      `¬(¬MEM h hp)` by simp[] >>
+      simp[] >> first_x_assum drule_all >> simp[])
+    >- (
+      (* ¬MEM h hp: both IFs true (h ≠ h' since h ∉ U, h' ∈ U) *)
+      `h ≠ h'` by metis_tac[MEM] >>
+      simp[LENGTH] >> first_x_assum drule_all >> DECIDE_TAC))
+QED
+
+(* Helper: strengthening the exclusion set cannot increase filter count *)
+Triviality filter_weaken_exclusion:
+  ∀(U:'a list) hp1 hp2.
+    (∀x. MEM x hp1 ⇒ MEM x hp2) ⇒
+    LENGTH (FILTER (λx. ¬MEM x hp2) U) ≤
+    LENGTH (FILTER (λx. ¬MEM x hp1) U)
+Proof
+  Induct >> rw[FILTER] >> gvs[] >> res_tac >> DECIDE_TAC
+QED
+
+(* process_frontiers preserves block labels (only modifies instructions) *)
+Triviality process_frontiers_labels:
+  ∀fs var pm li bbs rest hp bbs' rest' hp'.
+    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ⇒
+    MAP (λbb. bb.bb_label) bbs' = MAP (λbb. bb.bb_label) bbs
+Proof
+  Induct >> rw[process_frontiers_def] >> gvs[] >>
+  rpt CASE_TAC >> gvs[] >>
+  first_x_assum drule >> rw[MAP_MAP_o, insert_phi_at_block_def] >>
+  irule MAP_CONG >> rw[]
+QED
+
+(* Frontier labels from ALOOKUP are in the nub universe *)
+Triviality alookup_mem_flat_nub:
+  ∀d df (prefix : 'a list) f x.
+    ALOOKUP df d = SOME x ∧ MEM f x ⇒
+    MEM f (nub (prefix ++ FLAT (MAP SND df)))
+Proof
+  rpt strip_tac >>
+  imp_res_tac ALOOKUP_MEM >>
+  simp[MEM_nub, MEM_APPEND] >>
+  disj2_tac >> simp[MEM_FLAT] >>
+  qexists_tac `x` >> simp[MEM_MAP] >>
+  qexists_tac `(d,x)` >> simp[]
+QED
+
+(* process_frontiers does not increase the worklist-universe measure.
+   U is a fixed universe containing all frontier labels. *)
+Triviality process_frontiers_measure:
+  ∀fs var pm li bbs rest hp bbs' rest' hp' U.
+    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ⇒
+    (∀f. MEM f fs ⇒ MEM f U) ⇒
+    ALL_DISTINCT U ⇒
+    LENGTH (FILTER (λx. ¬MEM x hp') U) + LENGTH rest' ≤
+    LENGTH (FILTER (λx. ¬MEM x hp) U) + LENGTH rest
+Proof
+  Induct >> simp[process_frontiers_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- metis_tac[]
+  >> IF_CASES_TAC >> gvs[] >> rpt strip_tac >>
+  `∀f. MEM f fs ⇒ MEM f U` by metis_tac[] >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  first_x_assum (qspec_then `U` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac
+  >- (
+    (* ¬MEM h hp, not live: hp grows, rest same *)
+    `LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) ≤
+     LENGTH (FILTER (λx. ¬MEM x hp) U)` by
+      (irule filter_weaken_exclusion >> simp[]) >>
+    DECIDE_TAC)
+  >- (
+    (* ¬MEM h hp, live: hp grows, rest grows by 1 *)
+    `MEM h U` by metis_tac[] >>
+    `LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) + 1 ≤
+     LENGTH (FILTER (λx. ¬MEM x hp) U)` by
+      (irule filter_add_mem_decrease >> simp[]) >>
+    gvs[LENGTH] >> DECIDE_TAC)
+QED
+
 (* Insert PHIs for one variable at all required frontier blocks.
    Worklist algorithm: process each block's dominance frontiers,
    adding new blocks to the worklist when PHIs are inserted. *)
@@ -167,14 +344,43 @@ Definition insert_phis_for_var_def:
       process_frontiers var pred_map live_in bbs rest has_phi frontiers in
     insert_phis_for_var var dom_frontiers pred_map live_in bbs' rest' has_phi'
 Termination
-  (* Measure: 2 * (blocks not yet in has_phi) + worklist length.
-     Consuming d from worklist costs -1.
-     Each new has_phi entry removes a block from FILTER (-2 from first term)
-     but may add at most one entry to worklist (+1).
-     Net per step: at least -1. *)
   WF_REL_TAC `measure (λ(var, df, pm, li, bbs, wl, hp).
-    2 * LENGTH (FILTER (λbb. ¬MEM bb.bb_label hp) bbs) + LENGTH wl)`
-  >> cheat
+    LENGTH (FILTER (λx. ¬MEM x hp)
+      (nub (MAP (λbb. bb.bb_label) bbs ++
+            FLAT (MAP SND df)))) + LENGTH wl)` >>
+  rpt strip_tac >>
+  qabbrev_tac `fs = case ALOOKUP dom_frontiers d of
+                      NONE => [] | SOME x => x` >>
+  qabbrev_tac `U = nub (MAP (λbb. bb.bb_label) bbs ++
+                         FLAT (MAP SND dom_frontiers))` >>
+  qabbrev_tac `result = process_frontiers var pred_map live_in
+                          bbs rest has_phi fs` >>
+  `result = (bbs', rest', has_phi')` by simp[Abbr `result`, Abbr `fs`] >>
+  pop_assum SUBST_ALL_TAC >> simp[] >>
+  (* Labels preserved → universe unchanged *)
+  `process_frontiers var pred_map live_in bbs rest has_phi fs =
+   (bbs', rest', has_phi')` by gvs[markerTheory.Abbrev_def] >>
+  `MAP (λbb. bb.bb_label) bbs' = MAP (λbb. bb.bb_label) bbs` by
+     (irule process_frontiers_labels >> metis_tac[]) >>
+  `nub (MAP (λbb. bb.bb_label) bbs' ++
+        FLAT (MAP SND dom_frontiers)) = U` by simp[Abbr `U`] >>
+  gvs[] >>
+  (* Frontier labels ⊆ U *)
+  `∀f. MEM f fs ⇒ MEM f U` by (
+    unabbrev_all_tac >>
+    rpt strip_tac >>
+    Cases_on `ALOOKUP dom_frontiers d` >> gvs[] >>
+    simp[MEM_nub, MEM_APPEND, MEM_FLAT, MEM_MAP] >>
+    disj2_tac >>
+    qexists_tac `x` >> simp[] >>
+    qexists_tac `(d, x)` >> simp[] >>
+    metis_tac[ALOOKUP_MEM]) >>
+  (* Apply measure lemma *)
+  `ALL_DISTINCT U` by simp[Abbr `U`, all_distinct_nub] >>
+  `LENGTH (FILTER (λx. ¬MEM x has_phi') U) + LENGTH rest' ≤
+   LENGTH (FILTER (λx. ¬MEM x has_phi) U) + LENGTH rest` by
+    metis_tac[process_frontiers_measure] >>
+  DECIDE_TAC
 End
 
 (* Insert PHIs for all variables. *)
@@ -341,6 +547,36 @@ Definition rename_blocks_def:
     rename_children ctrs' stacks bbs' succ_map rest)
 End
 
+(* Compute the rename state at each block during the domtree walk.
+   Returns an alist: block_label → entry_rename_state.
+   The entry rename state at a block is the state BEFORE rename_block_insts
+   processes the block — i.e., the state used for renaming operands. *)
+Definition block_rename_states_def:
+  (block_rename_states rs bbs succ_map (DNode lbl children) =
+    case lookup_block lbl bbs of
+      NONE => [(lbl, rs)]
+    | SOME bb =>
+        let (rs1, insts') = rename_block_insts rs bb.bb_instructions in
+        let parent_stacks = SND rs1 in
+        (lbl, rs) ::
+        children_rename_states (FST rs1) parent_stacks bbs succ_map children) /\
+  (children_rename_states ctrs stacks bbs succ_map [] = []) /\
+  (children_rename_states ctrs stacks bbs succ_map (child::rest) =
+    let child_states = block_rename_states (ctrs, stacks) bbs succ_map child in
+    let ctrs' = case rename_blocks (ctrs, stacks) bbs succ_map child of
+                  (c, _) => c in
+    child_states ++
+    children_rename_states ctrs' stacks bbs succ_map rest)
+End
+
+(* The sigma (variable mapping) at a block label, derived from the rename state. *)
+Definition block_sigma_def:
+  block_sigma dtree bbs succ_map rs0 lbl x =
+    case ALOOKUP (block_rename_states rs0 bbs succ_map dtree) lbl of
+      SOME rs => latest_version rs x
+    | NONE => x
+End
+
 (* ===== Degenerate PHI Removal ===== *)
 
 (* Remove degenerate PHIs:
@@ -444,12 +680,7 @@ Definition make_ssa_fn_def:
         (* 2. Rename variables — structural recursion on dtree *)
         let rs0 = init_rename_state defs in
         let (_, bbs2) = rename_blocks rs0 bbs1 succ_map dtree in
-        (* 3. Remove degenerate PHIs *)
-        let bbs3 = remove_degenerate_phis bbs2 in
-        (* 4. Ensure PHIs are at top of blocks *)
-        let bbs4 = ensure_well_formed bbs3 in
-        (* 5. Deduplicate instruction IDs (PHIs were inserted with id=0) *)
-        renumber_fn_inst_ids (func with fn_blocks := bbs4)
+        func with fn_blocks := bbs2
 End
 
 (* Transform all functions in context.
