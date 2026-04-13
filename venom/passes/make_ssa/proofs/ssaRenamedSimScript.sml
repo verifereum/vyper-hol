@@ -234,10 +234,10 @@ Proof
   rw[exec_ext_call_def, LET_THM] >>
   imp_res_tac ssa_sim_fields >> gvs[read_memory_def] >>
   `make_venom_call_state s1 (w2w addr_w) (w2n gas) (w2n value)
-     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory))
+     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory ++ REPLICATE (w2n as_) 0w))
      (lookup_account (w2w addr_w) s2.vs_accounts).code is_static =
    make_venom_call_state s2 (w2w addr_w) (w2n gas) (w2n value)
-     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory))
+     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory ++ REPLICATE (w2n as_) 0w))
      (lookup_account (w2w addr_w) s2.vs_accounts).code is_static` by
     metis_tac[make_venom_call_state_ssa_sim] >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
@@ -264,11 +264,11 @@ Proof
   rw[exec_delegatecall_def, LET_THM] >>
   imp_res_tac ssa_sim_fields >> gvs[read_memory_def] >>
   `make_venom_delegatecall_state s1 (w2w addr_w) (w2n gas)
-     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory))
+     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory ++ REPLICATE (w2n as_) 0w))
      (lookup_account (w2w addr_w) s2.vs_accounts).code
      s2.vs_call_ctx.cc_static =
    make_venom_delegatecall_state s2 (w2w addr_w) (w2n gas)
-     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory))
+     (TAKE (w2n as_) (DROP (w2n ao) s2.vs_memory ++ REPLICATE (w2n as_) 0w))
      (lookup_account (w2w addr_w) s2.vs_accounts).code
      s2.vs_call_ctx.cc_static` by
     metis_tac[make_venom_delegatecall_state_ssa_sim] >>
@@ -300,17 +300,17 @@ Proof
         NONE => address_for_create s2.vs_call_ctx.cc_address
           (lookup_account s2.vs_call_ctx.cc_address s2.vs_accounts).nonce
       | SOME salt => address_for_create2 s2.vs_call_ctx.cc_address salt
-          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory)))
+          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)))
      (s2.vs_call_ctx.cc_gas - s2.vs_call_ctx.cc_gas DIV 64)
-     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory)) =
+     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)) =
    make_venom_create_state s2
      (case salt_opt of
         NONE => address_for_create s2.vs_call_ctx.cc_address
           (lookup_account s2.vs_call_ctx.cc_address s2.vs_accounts).nonce
       | SOME salt => address_for_create2 s2.vs_call_ctx.cc_address salt
-          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory)))
+          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)))
      (s2.vs_call_ctx.cc_gas - s2.vs_call_ctx.cc_gas DIV 64)
-     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory))` by (
+     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w))` by (
     Cases_on `salt_opt` >> simp[] >>
     metis_tac[make_venom_create_state_ssa_sim]) >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
