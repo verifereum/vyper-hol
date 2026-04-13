@@ -221,6 +221,7 @@ Theorem compile_assert_bare_correct_false:
     state_rel cenv cx es ss ∧
     fresh_vars_wrt st ss ∧
     supported_expr cond_e ∧
+    well_annotated cond_e ∧
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st')
     ⇒

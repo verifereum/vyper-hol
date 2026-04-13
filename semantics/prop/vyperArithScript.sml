@@ -48,6 +48,7 @@ Theorem w2i_i2w_within_signed:
     w2i ((i2w x):bytes32) = x
 Proof
   rpt strip_tac >> gvs[within_int_bound_def] >>
+  Cases_on`n = 0` >> gvs[] >- EVAL_TAC >>
   Cases_on `0 ≤ x` >> gvs[] >- (
     `¬(x < 0)` by intLib.ARITH_TAC >> gvs[] >>
     `x = &Num x` by simp[Once $ GSYM INT_OF_NUM] >>
@@ -86,6 +87,7 @@ Theorem within_int_bound_in_word_range:
 Proof
   rpt gen_tac \\ strip_tac
   \\ gvs[within_int_bound_def, LET_THM]
+  \\ Cases_on`n = 0` >> gvs[]
   \\ `2 ** (n − 1) ≤ words$INT_MIN (:256)` by
        simp[wordsTheory.INT_MIN_def, arithmeticTheory.EXP_BASE_LE_MONO]
   \\ Cases_on `i < 0` \\ gvs[]

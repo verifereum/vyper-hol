@@ -143,29 +143,35 @@ QED
 
 (* step_inst preserves FLOOKUP of alloca ids that aren't the current inst_id.
    Non-ALLOCA: full vs_allocas preservation. ALLOCA: only inst_id changes. *)
-Theorem step_inst_alloca_flookup[local]:
+Theorem step_inst_alloca_flookup:
   ∀fuel ctx inst (s : venom_state) s' aid.
     step_inst fuel ctx inst s = OK s' ∧
-    inst.inst_opcode ≠ INVOKE ∧
     (inst.inst_opcode = ALLOCA ⇒ aid ≠ inst.inst_id) ⇒
     FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid
 Proof
   rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    gvs[Once venomExecSemanticsTheory.step_inst_def, AllCaseEqs()] >>
+    qpat_x_assum `bind_outputs _ _ _ = _` mp_tac >>
+    simp[venomExecSemanticsTheory.bind_outputs_def, AllCaseEqs()] >>
+    strip_tac >> gvs[foldl_update_var_allocas,
+      venomExecSemanticsTheory.merge_callee_state_def]) >>
   Cases_on `inst.inst_opcode = ALLOCA`
   >- (
-    (* ALLOCA: s'.vs_allocas = s.vs_allocas |+ (inst_id, ...) *)
     `step_inst_base inst s = OK s'` by
       metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
     gvs[venomExecSemanticsTheory.step_inst_base_def] >>
     gvs[AllCaseEqs(), venomExecSemanticsTheory.exec_alloca_def,
         venomStateTheory.update_var_def, FLOOKUP_UPDATE])
-  >> (* non-ALLOCA: full preservation *)
+  >>
+    `inst.inst_opcode <> INVOKE` by simp[] >>
     drule_all step_inst_allocas >> strip_tac >> ASM_REWRITE_TAC[]
 QED
 
 (* For non-output vars, lookup_var is preserved across step_inst = OK.
    Covers all opcodes: terminators (JMP/JNZ/DJMP), INVOKE, and rest. *)
-Theorem step_inst_preserves_lookup[local]:
+Theorem step_inst_preserves_lookup:
   ∀fuel ctx inst (s : venom_state) s' v.
     step_inst fuel ctx inst s = OK s' ∧
     ¬MEM v inst.inst_outputs ⇒
@@ -196,7 +202,7 @@ Proof
 QED
 
 (* ptr_matches_var is preserved when allocas and lookup_var are unchanged *)
-Theorem ptr_matches_var_preserved[local]:
+Theorem ptr_matches_var_preserved:
   ∀p v v' s s'.
     ptr_matches_var p v s ∧
     lookup_var v' s' = lookup_var v s ∧
@@ -210,7 +216,7 @@ Proof
 QED
 
 (* ptr_matches_var on Allocation gives FLOOKUP ≠ NONE *)
-Theorem ptr_matches_var_alloca_exists[local]:
+Theorem ptr_matches_var_alloca_exists:
   ∀aid off v s.
     ptr_matches_var (Ptr (Allocation aid) off) v s ⇒
     FLOOKUP s.vs_allocas aid ≠ NONE
@@ -555,6 +561,93 @@ Resume bp_handle_inst_sound_proof[assign]:
 QED
 
 Finalise bp_handle_inst_sound_proof
+
+(* DOMSUB helpers for fixpoint proof *)
+Theorem bp_ptr_sound_domsub[local]:
+  !bp v s. bp_ptr_sound bp s ==> bp_ptr_sound (bp \\ v) s
+Proof
+  rw[bp_ptr_sound_def] >>
+  rename1 `bp_get_ptrs (bp \\ v) w` >>
+  `w <> v` by (CCONTR_TAC >> gvs[bp_get_ptrs_def, FLOOKUP_DEF, fmap_domsub]) >>
+  `bp_get_ptrs (bp \\ v) w = bp_get_ptrs bp w` by
+    simp[bp_get_ptrs_def, DOMSUB_FLOOKUP_NEQ] >>
+  gvs[]
+QED
+
+Theorem bp_get_ptrs_domsub_self[local]:
+  !bp v. bp_get_ptrs (bp \\ v) v = []
+Proof
+  rw[bp_get_ptrs_def, FLOOKUP_DEF, DOMSUB_FAPPLY_NEQ, fmap_domsub]
+QED
+
+Theorem bp_get_ptrs_domsub_neq[local]:
+  !bp v w. v <> w ==> bp_get_ptrs (bp \\ v) w = bp_get_ptrs bp w
+Proof
+  rw[bp_get_ptrs_def, DOMSUB_FLOOKUP_NEQ]
+QED
+
+(* phi_pairs vars are a subset of operand_vars *)
+Theorem phi_pairs_subset_operand_vars[local]:
+  !ops x. MEM x (MAP SND (phi_pairs ops)) ==> MEM x (operand_vars ops)
+Proof
+  Induct_on `ops` using venomInstTheory.phi_pairs_ind >>
+  rpt strip_tac >>
+  gvs[venomInstTheory.phi_pairs_def,
+      venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def] >>
+  Cases_on `operand_var v1` >> gvs[]
+QED
+
+(* General frame lemma: bp_ptr_sound preserved by step_inst.
+   For the output variable, caller provides either:
+   (a) bp_get_ptrs bp out = [] — vacuously true, or
+   (b) a direct proof that ptr_matches_var holds for the new value.
+   This separates frame reasoning from per-opcode reasoning. *)
+Theorem bp_ptr_sound_preserved_by_step:
+  !bp inst fuel ctx s s'.
+    bp_ptr_sound bp s /\
+    step_inst fuel ctx inst s = OK s' /\
+    inst_wf inst /\
+    (inst_output inst = NONE ==> inst.inst_outputs = []) /\
+    (!out. inst_output inst = SOME out ==>
+       bp_get_ptrs bp out = [] \/
+       (IS_SOME (lookup_var out s') ==>
+        ?p. MEM p (bp_get_ptrs bp out) /\ ptr_matches_var p out s')) /\
+    (!v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ==>
+       FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ==>
+    bp_ptr_sound bp s'
+Proof
+  rpt strip_tac >>
+  simp[bp_ptr_sound_def] >>
+  rpt strip_tac >>
+  Cases_on `inst_output inst = SOME v`
+  >- suspend "output"
+  >> suspend "frame"
+QED
+
+Resume bp_ptr_sound_preserved_by_step[output]:
+  gvs[] >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp[] >>
+  strip_tac >> metis_tac[]
+QED
+
+Resume bp_ptr_sound_preserved_by_step[frame]:
+  (* v is not the output → lookup_var v preserved *)
+  `lookup_var v s' = lookup_var v s` by (
+    irule step_inst_preserves_lookup >>
+    qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+    Cases_on `inst_output inst` >> gvs[venomInstTheory.inst_output_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  (* bp_ptr_sound bp s gives a matching pointer for v *)
+  `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s` by
+    gvs[bp_ptr_sound_def] >>
+  qexists `p` >> simp[] >>
+  MATCH_MP_TAC ptr_matches_var_preserved >>
+  qexists `v` >> simp[] >> metis_tac[]
+QED
+
+Finalise bp_ptr_sound_preserved_by_step
 
 (* ===================================================================
    Block-level soundness.
@@ -1193,4 +1286,127 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   irule bp_ptr_from_op_sound_proof >>
   metis_tac[]
+QED
+
+open pred_setTheory venomInstTheory;
+
+(* FDOM of bp_handle_inst: only adds the output variable *)
+Theorem bp_handle_inst_fdom:
+  !bp inst c bp'.
+    bp_handle_inst bp inst = (c, bp') ==>
+    FDOM bp' SUBSET FDOM bp UNION set (inst_defs inst)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst_output inst`
+  >- (drule bp_handle_inst_no_output_unchanged_proof >> simp[] >>
+      disch_then (fn th => rewrite_tac[th]) >> simp[SUBSET_DEF]) >>
+  rename1 `SOME out` >>
+  `inst.inst_outputs = [out]` by (
+    gvs[inst_output_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  `inst_defs inst = [out]` by simp[inst_defs_def] >>
+  simp[] >>
+  qpat_x_assum `bp_handle_inst _ _ = _` mp_tac >>
+  rewrite_tac[bp_handle_inst_def, inst_output_def] >>
+  asm_rewrite_tac[] >>
+  simp_tac std_ss [LET_THM] >> BETA_TAC >>
+  Cases_on `inst.inst_opcode` >> simp_tac std_ss [LET_THM] >>
+  TRY (strip_tac >> gvs[SUBSET_DEF] >> NO_TAC) >>
+  rpt (IF_CASES_TAC >> simp_tac std_ss []) >>
+  rpt (CASE_TAC >> simp_tac std_ss []) >>
+  strip_tac >> gvs[FDOM_FUPDATE, SUBSET_DEF] >> metis_tac[]
+QED
+
+(* FDOM of bp_process_block *)
+Theorem bp_process_block_fdom:
+  !bp insts c bp'.
+    bp_process_block bp insts = (c, bp') ==>
+    FDOM bp' SUBSET
+      FDOM bp UNION BIGUNION (set (MAP (set o inst_defs) insts))
+Proof
+  Induct_on `insts`
+  >- (simp[bp_process_block_def] >> simp[SUBSET_DEF]) >>
+  rpt strip_tac >>
+  fs[bp_process_block_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  drule bp_handle_inst_fdom >>
+  first_x_assum drule >>
+  simp[SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem phi_pairs_mem_operand_vars:
+  !ops x. MEM x (MAP SND (phi_pairs ops)) ==> MEM x (operand_vars ops)
+Proof
+  ho_match_mp_tac phi_pairs_ind >> rpt strip_tac >>
+  gvs[phi_pairs_def, operand_vars_def, operand_var_def] >>
+  Cases_on `v1` >> gvs[operand_vars_def, operand_var_def]
+QED
+
+(* For tracking opcodes, when output var is NOT in FDOM bp (fresh), the
+   output ptrs depend only on non-output input ptrs. *)
+Theorem bp_handle_inst_tracking_output_ptrs:
+  !bp1 bp2 inst c1 bp1' c2 bp2' out.
+    bp_handle_inst bp1 inst = (c1, bp1') /\
+    bp_handle_inst bp2 inst = (c2, bp2') /\
+    inst_output inst = SOME out /\
+    inst_wf inst /\
+    out NOTIN FDOM bp1 /\ out NOTIN FDOM bp2 /\
+    (inst.inst_opcode = ALLOCA \/ inst.inst_opcode = ADD \/
+     inst.inst_opcode = SUB \/ inst.inst_opcode = PHI \/
+     inst.inst_opcode = ASSIGN) /\
+    (!v. v <> out ==> bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    EVERY (\v. v <> out) (inst_uses inst) ==>
+    bp_get_ptrs bp1' out = bp_get_ptrs bp2' out
+Proof
+  rpt strip_tac >>
+  `inst.inst_outputs = [out]` by (drule_all inst_wf_outputs_some >> simp[]) >>
+  (* Key: bp_get_ptrs bp_i out = [] since out ∉ FDOM bp_i *)
+  `bp_get_ptrs bp1 out = []` by simp[bp_get_ptrs_def, FLOOKUP_DEF] >>
+  `bp_get_ptrs bp2 out = []` by simp[bp_get_ptrs_def, FLOOKUP_DEF] >>
+  (* Rewrite operand bp_get_ptrs to use bp2 everywhere.
+     inst_uses gives all operand vars; EVERY says they're ≠ out. *)
+  `!v. MEM v (inst_uses inst) ==> bp_get_ptrs bp1 v = bp_get_ptrs bp2 v` by
+    metis_tac[EVERY_MEM] >>
+  (* Now expand bp_handle_inst and case-split on opcode *)
+  qpat_x_assum `bp_handle_inst bp1 _ = _` mp_tac >>
+  qpat_x_assum `bp_handle_inst bp2 _ = _` mp_tac >>
+  rewrite_tac[bp_handle_inst_def, inst_output_def] >>
+  asm_rewrite_tac[] >>
+  simp_tac std_ss [LET_THM] >> BETA_TAC >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
+  (* ALLOCA: result independent of bp *)
+  TRY (gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >> NO_TAC) >>
+  (* ADD/SUB/ASSIGN: use operand bp_get_ptrs agreement *)
+  TRY (
+    BasicProvers.EVERY_CASE_TAC >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
+    gvs[inst_uses_def, operand_vars_def, operand_var_def] >> NO_TAC) >>
+  (* PHI: simplify FUPDATE, then show MAPs agree *)
+  simp[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
+  AP_TERM_TAC >> AP_TERM_TAC >>
+  irule MAP_CONG >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  simp[inst_uses_def] >> metis_tac[phi_pairs_mem_operand_vars]
+QED
+
+(* For non-tracking opcodes with output, bp_handle_inst doesn't modify bp. *)
+Theorem bp_handle_inst_passthrough_output:
+  !bp inst c bp' out.
+    bp_handle_inst bp inst = (c, bp') /\
+    inst_output inst = SOME out /\
+    inst_wf inst /\
+    inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> ADD /\
+    inst.inst_opcode <> SUB /\ inst.inst_opcode <> PHI /\
+    inst.inst_opcode <> ASSIGN ==>
+    bp' = bp
+Proof
+  rpt strip_tac >>
+  drule_all inst_wf_outputs_some >> strip_tac >>
+  qpat_x_assum `bp_handle_inst _ _ = _` mp_tac >>
+  once_rewrite_tac[bp_handle_inst_def] >>
+  asm_rewrite_tac[] >>
+  simp_tac std_ss [LET_THM] >> BETA_TAC >>
+  Cases_on `inst.inst_opcode` >> gvs[]
 QED

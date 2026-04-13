@@ -1696,7 +1696,7 @@ Proof
 QED
 
 (* Helper: P holds for df_joined_val *)
-Theorem df_joined_val_P[local]:
+Theorem df_joined_val_P:
   !dir bottom join edge_transfer ctx entry_val cfg st lbl.
     P bottom /\
     (case entry_val of NONE => T | SOME (lbl, v) => P v) /\
@@ -2118,6 +2118,133 @@ Proof
         in ACCEPT_TAC (MP thm conj_thm) (asl, gl) end))
   (* Boundary part already proved *)
   \\ first_x_assum ACCEPT_TAC
+QED
+
+(* Bilateral boundary P: like df_process_boundary_P but uses bilateral join
+   (P a ∧ P b ⟹ P (join a b)) instead of unilateral (P a ⟹ P (join a b)).
+   Needs transfer and edge_transfer to preserve P so that final_val has P. *)
+Theorem df_process_boundary_P_bilateral[local]:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st P.
+    P bottom /\
+    (case entry_val of NONE => T | SOME (lbl, v) => P v) /\
+    (!a b. P a /\ P b ==> P (join a b)) /\
+    (!inst a. P a ==> P (transfer ctx inst a)) /\
+    (!src dst a. P a ==> P (edge_transfer ctx src dst a)) /\
+    (!k v. FLOOKUP st.ds_boundary k = SOME v ==> P v)
+    ==>
+    (!k v. FLOOKUP (df_process_block dir bottom join transfer edge_transfer
+                      ctx entry_val cfg bbs lbl st).ds_boundary k = SOME v
+           ==> P v)
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ simp_tac std_ss [df_process_block_def, LET_THM]
+  \\ pairarg_tac \\ asm_rewrite_tac[]
+  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
+  \\ IF_CASES_TAC
+  >- metis_tac[]
+  \\ simp[]
+  \\ rpt gen_tac
+  \\ simp_tac std_ss [finite_mapTheory.FLOOKUP_UPDATE]
+  \\ IF_CASES_TAC
+  >- (* k = lbl: updated boundary *)
+     (strip_tac \\ gvs[]
+      \\ qpat_assum `!a b. P a /\ P b ==> P (join a b)` irule
+      \\ conj_tac
+      >- (simp_tac std_ss [df_boundary_def]
+          \\ Cases_on `FLOOKUP st.ds_boundary k` \\ simp[]
+          \\ metis_tac[])
+      \\ (* P final_val *)
+      `P (df_joined_val dir bottom join edge_transfer ctx entry_val cfg st k)` by
+        (match_mp_tac df_joined_val_P
+         \\ rpt conj_tac \\ first_x_assum ACCEPT_TAC)
+      \\ drule_all df_fold_block_P \\ simp[])
+  >- (* k ≠ lbl: unchanged boundary *)
+     metis_tac[]
+QED
+
+(* Bilateral boundary invariant: like df_analyze_boundary_invariant but uses
+   bilateral join hypothesis (!a b. P a /\ P b ==> P (join a b)) instead of
+   unilateral (!a b. P a ==> P (join a b)). Useful for properties like
+   cf_keys_ok where join(NONE, b) = b makes unilateral impossible.
+   Does NOT prove inst invariant — derive that locally using df_at step
+   equations + boundary result + transfer preservation. *)
+Theorem df_analyze_boundary_invariant_bilateral:
+  !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
+   entry_val fn (P : 'a -> bool)
+   (leq : 'a df_state -> 'a df_state -> bool)
+   m b (Q : 'a df_state -> bool).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let st0 = init_df_state bottom (MAP (λbb. bb.bb_label) bbs) in
+    let result = df_analyze dir bottom join transfer edge_transfer
+                            ctx entry_val fn in
+      P bottom /\
+      (case entry_val of NONE => T
+       | SOME (lbl, v) => P v) /\
+      (!a b. P a /\ P b ==> P (join a b)) /\
+      (!inst a. P a ==> P (transfer ctx inst a)) /\
+      (!src dst a. P a ==> P (edge_transfer ctx src dst a)) /\
+      (!lbl st. Q st ==> leq st (process lbl st)) /\
+      (!lbl st. Q st ==> Q (process lbl st)) /\
+      (case entry_val of NONE => Q st0
+       | SOME (lbl, v) =>
+           Q (st0 with ds_boundary := st0.ds_boundary |+ (lbl, v))) /\
+      bounded_measure Q leq m b
+    ==>
+      (!lbl. P (df_boundary bottom result lbl))
+Proof
+  rpt gen_tac
+  \\ simp_tac std_ss [LET_THM]
+  \\ strip_tac
+  \\ CONV_TAC (REWRITE_CONV [df_analyze_def, LET_THM, direction_case_def])
+  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
+  \\ PURE_REWRITE_TAC [df_boundary_populate]
+  \\ gen_tac
+  \\ qmatch_goalsub_abbrev_tac`wl_iterate changed process deps wl0 st0`
+  \\ qho_match_abbrev_tac`P (df_boundary bottom swli lbl)`
+  \\ `(λst. Q st ∧ ∀lbl. P (df_boundary bottom st lbl)) swli`
+     suffices_by simp[]
+  \\ qunabbrev_tac`swli`
+  \\ irule wl_iterate_invariant_proof
+  \\ simp[]
+  (* 1. initial *)
+  \\ conj_tac
+  >- (simp[Abbr`st0`] >>
+      conj_tac
+      >- (BasicProvers.every_case_tac >> first_x_assum ACCEPT_TAC)
+      >- (gen_tac >> simp[df_boundary_def] >>
+          BasicProvers.every_case_tac >>
+          gvs[init_df_state_def, finite_mapTheory.FLOOKUP_UPDATE,
+              CaseEq"bool"] >>
+          imp_res_tac foldl_fempty_val >> gvs[]))
+  (* 2. changed ⟺ ≠ *)
+  \\ conj_tac
+  >- (simp[Abbr`changed`, Abbr`process`] >>
+      rpt gen_tac >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] df_process_changed_equiv) >>
+      disch_then (qspecl_then [`dir`,`bottom`,`join`,`transfer`,
+        `edge_transfer`,`ctx`,`entry_val`,`cfg_analyze fn`,
+        `fn.fn_blocks`, `lbl`, `st`] mp_tac) >>
+      simp[])
+  (* 3. preservation — using bilateral *)
+  \\ conj_tac
+  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+      `∀k v. FLOOKUP (process lbl st).ds_boundary k = SOME v ⇒ P v` by
+        (simp[Abbr`process`] >>
+         match_mp_tac df_process_boundary_P_bilateral >>
+         rpt conj_tac >> TRY (first_x_assum ACCEPT_TAC) >>
+         qx_gen_tac`lk` >> gen_tac >>
+         first_x_assum(qspec_then`lk`mp_tac) >>
+         simp[df_boundary_def] >>
+         CASE_TAC >> rw[] >> rw[]) >>
+      simp_tac std_ss [df_boundary_def] >>
+      reverse CASE_TAC >- res_tac >> simp[])
+  (* 4. measure *)
+  \\ qexistsl_tac [`b`, `leq`, `m`]
+  \\ simp[Abbr`process`, bounded_measure_def]
+  \\ gvs[bounded_measure_def]
 QED
 
 (* Process-level boundary invariant: like df_analyze_boundary_invariant but
