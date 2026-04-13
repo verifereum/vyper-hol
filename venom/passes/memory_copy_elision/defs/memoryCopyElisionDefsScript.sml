@@ -466,13 +466,19 @@ Definition load_store_step_def:
       let write_loc = bp_get_write_location bp inst AddrSp_Memory in
       let lf' = invalidate_loads aliases lf write_loc AddrSp_Memory in
       (lf', inst)
-    (* 4. Volatile memory writers: clear MEMORY loads only.
-       Python: _volatile_memory → self.loads[Effects.MEMORY].clear()
-       Storage and transient load facts survive. *)
+    (* 4. Volatile writers: clear loads for every address space whose
+       effect is in the instruction's write_effects.
+       DIVERGENCE from Python: upstream only clears MEMORY loads here
+       (vyper/venom/passes/memory_copy_elision.py L276-280), keeping
+       STORAGE and TRANSIENT facts alive across INVOKE/CALL/etc.
+       That is unsound — see https://github.com/vyperlang/vyper/pull/4914 *)
     else if Eff_MEMORY IN write_effects inst.inst_opcode then
+      let weffs = write_effects inst.inst_opcode in
       let lf' = DRESTRICT lf
-        { v | !lfact. FLOOKUP lf v = SOME lfact ==>
-              load_opcode_addr_space lfact.lf_opcode <> AddrSp_Memory } in
+        { v | !lfact eff. FLOOKUP lf v = SOME lfact /\
+              effect_of_addr_space
+                (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
+              eff NOTIN weffs } in
       (lf', inst)
     else (lf, inst)
 End

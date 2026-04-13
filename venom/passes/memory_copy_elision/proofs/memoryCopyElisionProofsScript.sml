@@ -18,7 +18,7 @@ Ancestors
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   stateEquiv stateEquivProps
   basePtrDefs basePtrProps basePtrProofs
-  venomWf venomInst venomInstProps venomExecSemantics venomExecProps
+  venomWf venomInst venomInstProps venomEffects venomExecSemantics venomExecProps
   venomState venomMemDefs venomMemProps
   dfgAnalysisProps dfgCorrectnessProof dfgDefs dfAnalyzeDefs
   dfIterateProps dfIterateProofs
@@ -3813,22 +3813,34 @@ QED
    accounts/transient/call_ctx/allocas/lookup_var are unchanged.
    Used for Branch 4 (Eff_MEMORY ∈ write_effects) where MLOAD entries are
    removed but SLOAD/TLOAD entries survive. *)
+(* DRESTRICT to entries whose address-space effect is not in weffs.
+   Requires that the surviving facts' state components are preserved.
+   Used for Branch 4 where volatile instructions clear affected loads. *)
 Triviality lf_sound_drestrict_non_memory[local]:
-  !lf s s'.
+  !lf weffs s s'.
     lf_sound lf s /\
+    Eff_MEMORY IN weffs /\
     s'.vs_accounts = s.vs_accounts /\
     s'.vs_transient = s.vs_transient /\
     s'.vs_call_ctx = s.vs_call_ctx /\
     s'.vs_allocas = s.vs_allocas /\
     (!v. lookup_var v s' = lookup_var v s) ==>
     lf_sound (DRESTRICT lf
-      {v | !lfact. FLOOKUP lf v = SOME lfact ==>
-           load_opcode_addr_space lfact.lf_opcode <> AddrSp_Memory}) s'
+      {v | !lfact eff. FLOOKUP lf v = SOME lfact /\
+           effect_of_addr_space
+             (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
+           eff NOTIN weffs}) s'
 Proof
   simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
   first_x_assum drule >> strip_tac >>
+  (* The surviving entry has effect_of_addr_space ... = SOME eff
+     with eff NOTIN weffs, so in particular eff <> Eff_MEMORY,
+     meaning the load opcode is SLOAD or TLOAD, not MLOAD. *)
+  `load_opcode_addr_space lfact.lf_opcode <> AddrSp_Memory` by
+    (CCONTR_TAC >> gvs[load_opcode_addr_space_def,
+       effect_of_addr_space_def]) >>
   qexists `addr` >> rpt conj_tac
   >- gvs[resolve_memloc_offset_def]
   >- (qpat_x_assum `lookup_var _ _ = _` mp_tac >>
@@ -4175,7 +4187,7 @@ Resume lse_inv_preserved[branch4]:
        branch4_state_preserves >> simp[]) >>
   simp[load_store_step_def, LET_THM] >>
   irule lf_sound_drestrict_non_memory >>
-  qexists `s` >> simp[]
+  simp[] >> qexists_tac `s` >> simp[]
 QED
 
 Resume lse_inv_preserved[branch1_load]:
