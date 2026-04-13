@@ -13,12 +13,13 @@ Theorem cfg_norm_pass_correct:
     wf_function func /\
     (!pred_lbl tgt_lbl var.
        MEM (STRCAT (split_block_name pred_lbl tgt_lbl)
-                   (STRCAT "_fwd_" var)) (fn_all_vars func) ==> F) ==>
+                   (STRCAT "_fwd_" var)) (fn_all_vars func) ==> F) /\
+    split_labels_fresh split_block_name func ==>
     let func' = cfg_norm_fn func in
     ?fresh fuel'.
       result_equiv fresh
-        (run_blocks fuel ctx func s)
-        (run_blocks fuel' ctx func' s)
+        (run_function fuel ctx func s)
+        (run_function fuel' ctx func' s)
 Proof
   ACCEPT_TAC cfg_norm_fn_correct
 QED
