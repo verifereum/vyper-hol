@@ -1903,9 +1903,16 @@ Proof
     BasicProvers.VAR_EQ_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
     first_x_assum drule >> strip_tac >>
+    rewrite_tac[ignore_bind_apply] >>
+    BasicProvers.TOP_CASE_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC
+    >- (rw[] >> imp_res_tac check_state >> gvs[] ) >>
+    first_x_assum drule >> strip_tac >>
+    simp[bind_apply] >>
     BasicProvers.TOP_CASE_TAC >>
     imp_res_tac get_transient_storage_state >>
-    BasicProvers.VAR_EQ_TAC >>
+    imp_res_tac check_state >>
+    rpt BasicProvers.VAR_EQ_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
     first_x_assum drule >> strip_tac >>
     BasicProvers.TOP_CASE_TAC >>
