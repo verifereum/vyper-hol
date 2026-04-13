@@ -240,6 +240,13 @@ Definition is_terminator_def:
   is_terminator _ = F
 End
 
+(* Opcodes whose operands reference block labels (terminators + PHI).
+   Used by subst_block_labels to restrict label substitution. *)
+Definition is_block_label_opcode_def:
+  is_block_label_opcode (opc : opcode) ⇔
+    is_terminator opc ∨ opc = PHI
+End
+
 (* Pseudo-instructions: not real operations, just SSA bookkeeping.
  * Matches Python IRInstruction.is_pseudo (phi, param, source).
  * We omit "source" (test-only opcode not in our IR). *)
