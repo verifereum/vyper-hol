@@ -2064,6 +2064,79 @@ Proof
   rw[write_memory_with_expansion_def, LET_THM]
 QED
 
+(* ===== ALLOCA ===== *)
+
+(* ALLOCA allocates from the alloca region. Result is an offset (n2w).
+   Only modifies vs_vars, vs_allocas, vs_alloca_next — memory untouched. *)
+Theorem emit_op_ALLOCA_correct:
+  ∀ sz st v st' ss.
+    emit_op ALLOCA [Lit (n2w sz)] st = (v, st') ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      (∃ offset. eval_operand v ss' = SOME (n2w offset)) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ⇒ EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory = LENGTH ss.vs_memory ∧
+      ss'.vs_labels = ss.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  drule emit_op_same_blocks >> strip_tac >>
+  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  Cases_on `FLOOKUP ss.vs_allocas st.cs_next_id` >> simp[]
+  >- suspend "none_case"
+  >> suspend "some_case"
+QED
+
+Resume emit_op_ALLOCA_correct[none_case]:
+  conj_tac >- (
+    qexists_tac `next_alloca_offset ss` >>
+    simp[eval_operand_update_var]
+  ) >>
+  conj_tac >- (
+    gvs[fresh_vars_wrt_def, update_var_def,
+        finite_mapTheory.FDOM_FUPDATE] >>
+    rpt strip_tac >>
+    Cases_on `n = st.cs_next_var` >> gvs[]
+  ) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `op` >>
+      gvs[eval_operand_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+      spose_not_then strip_assume_tac >> gvs[] >>
+      gvs[fresh_vars_wrt_def] >>
+      first_x_assum (qspec_then `st.cs_next_var` mp_tac) >>
+      simp[finite_mapTheory.FLOOKUP_DEF] >>
+      Cases_on `STRING #"%" (toString st.cs_next_var) = s` >>
+      gvs[finite_mapTheory.FLOOKUP_DEF]) >>
+  simp[update_var_def]
+QED
+
+Resume emit_op_ALLOCA_correct[some_case]:
+  Cases_on `x` >> gvs[] >>
+  conj_tac >- (
+    qexists_tac `q` >> simp[eval_operand_update_var]
+  ) >>
+  conj_tac >- (
+    irule fresh_vars_wrt_advance >>
+    qexistsl [`st.cs_next_var`, `st`] >> gvs[]
+  ) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      irule eval_operand_update_fresh >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists `st.cs_next_var` >> simp[] >>
+      qexists `st` >> simp[]) >>
+  simp[update_var_def]
+QED
+
+Finalise emit_op_ALLOCA_correct
+
 (* ===== emit_inst RETURN → Halt ===== *)
 
 Theorem emit_inst_RETURN_halt:
