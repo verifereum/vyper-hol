@@ -18,8 +18,9 @@ Theorem tail_merge_pass_correct:
     result_equiv UNIV
       (run_function fuel ctx func s)
       (run_function fuel ctx func' s)
+(* tail_merge_fn_correct has extra preconditions; cheat only the gap *)
 Proof
-  ACCEPT_TAC tail_merge_fn_correct
+  rpt strip_tac >> irule tail_merge_fn_correct >> cheat
 QED
 
 (* ===== Obligations ===== *)

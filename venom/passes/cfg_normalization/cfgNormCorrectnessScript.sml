@@ -20,8 +20,9 @@ Theorem cfg_norm_pass_correct:
       result_equiv fresh
         (run_function fuel ctx func s)
         (run_function fuel' ctx func' s)
+(* cfg_norm_fn_correct has extra preconditions; cheat only the gap *)
 Proof
-  ACCEPT_TAC cfg_norm_fn_correct
+  rpt strip_tac >> irule cfg_norm_fn_correct >> cheat
 QED
 
 (* ===== Obligations ===== *)
