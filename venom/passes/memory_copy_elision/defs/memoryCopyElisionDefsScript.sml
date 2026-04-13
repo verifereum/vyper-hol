@@ -179,6 +179,24 @@ Definition copy_fact_resolve_def:
     else (inst_opcode, src)
 End
 
+(* Check if an operand references any variable in a killed set *)
+Definition operand_var_killed_def:
+  operand_var_killed killed (Var v) = (v IN killed) /\
+  operand_var_killed killed _ = F
+End
+
+(* Prune entries whose normalized source operand references a killed variable.
+   Used in Case 4 of copy_fact_transfer: non-memory instructions may write
+   variables that appear in lattice source operands. *)
+Definition copy_fact_prune_vars_def:
+  copy_fact_prune_vars dfg killed (cfl : copy_fact_lattice_raw) =
+    DRESTRICT cfl
+      (FDOM cfl DIFF
+        {ml | ?cf. FLOOKUP cfl ml = SOME cf /\
+              operand_var_killed killed
+                (normalize_operand dfg [] cf.cf_source)})
+End
+
 (* Transfer: update copy facts after an instruction.
    Copy instructions compute write MemoryLocation, store only if fixed.
    Non-copy memory writes invalidate by alias; volatile clears all.
@@ -215,8 +233,16 @@ Definition copy_fact_transfer_def:
           (* Invalidate facts aliasing the write destination *)
           let cfl' = copy_fact_invalidate ctx.ce_aliases ctx.ce_bp
                        cfl write_loc in
-          (* Only track if write location is fixed *)
-          if ml_is_fixed write_loc then
+          (* Only track if write location is fixed and source is not
+             a Label.  Python's _traverse_assign_chain always returns
+             an IRVariable, never an IRLabel; our normalize_operand
+             is more permissive so we guard here. *)
+          if ml_is_fixed write_loc ∧ (∀l. final_src ≠ Label l) ∧
+             (final_op = MCOPY ⇒
+                ml_is_fixed (ce_memloc_from_ops ctx.ce_bp final_src sz) ∧
+                ¬ma_may_alias ctx.ce_aliases write_loc
+                  (ce_memloc_from_ops ctx.ce_bp final_src sz))
+          then
             cfl' |+ (write_loc, <| cf_opcode := final_op;
                                     cf_source := final_src;
                                     cf_size := sz |>)
@@ -228,11 +254,19 @@ Definition copy_fact_transfer_def:
       (* MSTORE writes to memory — alias-based invalidation *)
       let write_loc = bp_get_write_location ctx.ce_bp inst AddrSp_Memory in
       copy_fact_invalidate ctx.ce_aliases ctx.ce_bp cfl write_loc
-    else if Eff_MEMORY IN write_effects inst.inst_opcode then
-      (* Volatile memory writer (CALL, CREATE, etc.): clear all.
-         Matches Python _volatile_memory → copies.clear(). *)
+    else if Eff_MEMORY IN write_effects inst.inst_opcode \/
+            is_alloca_op inst.inst_opcode \/
+            is_ext_call_op inst.inst_opcode then
+      (* Volatile memory writer (CALL, CREATE, etc.) or ALLOCA/ext-call:
+         clear all. Matches Python _volatile_memory → copies.clear(). *)
       FEMPTY
-    else cfl)
+    else
+      (* No memory effect: prune entries whose normalized source operand
+         references a variable written by this instruction.
+         In SSA this never triggers, but pruning makes transfer_sound
+         provable without requiring an SSA precondition. *)
+      let killed = set (inst_defs inst) in
+      copy_fact_prune_vars ctx.ce_dfg killed cfl)
 End
 
 (* Edge transfer: identity *)
@@ -284,19 +318,26 @@ Definition copy_elision_inst_def:
                else
                (* 2. Copy forwarding: source was copied from somewhere.
                   Canonicalize source via _traverse_assign_chain.
-                  Size match guaranteed by MemoryLocation key (Python L215). *)
+                  Size match guaranteed by MemoryLocation key (Python L215).
+                  Guard: only forward if stored opcode is a copy opcode.
+                  The analysis invariant guarantees this, but the guard
+                  makes inst_transform_structural provable unconditionally. *)
                (case FLOOKUP cfl read_loc of
                   SOME src_cf =>
-                    inst with <| inst_opcode := src_cf.cf_opcode;
-                                 inst_operands :=
-                                   [dst; norm src_cf.cf_source; sz] |>
+                    if is_copy_opcode src_cf.cf_opcode then
+                      inst with <| inst_opcode := src_cf.cf_opcode;
+                                   inst_operands :=
+                                     [dst; norm src_cf.cf_source; sz] |>
+                    else inst
                 | NONE => inst)
            | NONE =>
                (case FLOOKUP cfl read_loc of
                   SOME src_cf =>
-                    inst with <| inst_opcode := src_cf.cf_opcode;
-                                 inst_operands :=
-                                   [dst; norm src_cf.cf_source; sz] |>
+                    if is_copy_opcode src_cf.cf_opcode then
+                      inst with <| inst_opcode := src_cf.cf_opcode;
+                                   inst_operands :=
+                                     [dst; norm src_cf.cf_source; sz] |>
+                    else inst
                 | NONE => inst))
       | _ => inst
     else inst
