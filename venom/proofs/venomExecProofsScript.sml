@@ -1317,7 +1317,85 @@ Proof
     metis_tac[step_inst_base_fdom])
 QED
 
+(* Well-formed terminators have no outputs. *)
+Theorem terminator_no_outputs:
+  !inst. inst_wf inst /\ is_terminator inst.inst_opcode ==>
+    inst.inst_outputs = []
+Proof
+  rw[inst_wf_def] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+QED
 
+(* IS_SOME(lookup_var v s) is monotone across step_inst OK.
+   Non-terminator: step_inst_fdom says FDOM grows.
+   Terminator: step_terminator_preserves_vars says all vars preserved. *)
+Theorem step_inst_lookup_mono:
+  !fuel ctx inst s s' v.
+    step_inst fuel ctx inst s = OK s' /\ inst_wf inst /\
+    IS_SOME (lookup_var v s) ==>
+    IS_SOME (lookup_var v s')
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (`lookup_var v s' = lookup_var v s`
+        by metis_tac[step_terminator_preserves_vars] >> gvs[])
+  >> (Cases_on `MEM v inst.inst_outputs`
+      >- (drule_all step_inst_fdom >> strip_tac >>
+          fs[lookup_var_def, FLOOKUP_DEF])
+      >> (`lookup_var v s' = lookup_var v s` by
+            metis_tac[step_preserves_non_output_vars] >>
+          gvs[]))
+QED
+
+(* IS_SOME(lookup_var v s) is monotone across exec_block OK.
+   Proof by strong induction on remaining instructions,
+   same structure as exec_block_preserves_non_output_vars. *)
+Theorem exec_block_lookup_mono:
+  !fuel ctx bb s s' v.
+    exec_block fuel ctx bb s = OK s' /\
+    EVERY inst_wf bb.bb_instructions /\
+    IS_SOME (lookup_var v s) ==>
+    IS_SOME (lookup_var v s')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n f c st st'.
+     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
+     EVERY inst_wf bb.bb_instructions /\
+     exec_block f c bb st = OK st' /\
+     IS_SOME (lookup_var v st) ==>
+     IS_SOME (lookup_var v st')`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
+         `fuel`, `ctx`, `s`, `s'`] mp_tac) >> simp[]) >>
+  completeInduct_on `n` >> rw[] >>
+  qabbrev_tac `idx = st.vs_inst_idx` >>
+  Cases_on `idx >= LENGTH bb.bb_instructions`
+  >- (qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+      ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def]) >>
+  `idx < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>
+  Cases_on `step_inst f c (EL idx bb.bb_instructions) st` >> gvs[] >>
+  `inst_wf (EL idx bb.bb_instructions)` by fs[EVERY_EL] >>
+  Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> gvs[]
+  >- (Cases_on `v'.vs_halted` >> gvs[] >>
+      metis_tac[step_inst_lookup_mono]) >>
+  strip_tac >>
+  `IS_SOME (lookup_var v v')` by metis_tac[step_inst_lookup_mono] >>
+  `IS_SOME (lookup_var v (v' with vs_inst_idx := SUC idx))` by
+    fs[lookup_var_def] >>
+  first_x_assum (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
+  (impl_tac >- simp[Abbr `idx`]) >>
+  disch_then (qspecl_then [`f`, `c`,
+    `v' with vs_inst_idx := SUC idx`, `st'`] mp_tac) >>
+  simp[]
+QED
+
+(* exec_block_output_defined: if v is in outputs of some instruction in bb,
+   exec_block OK from inst_idx=0 implies IS_SOME(lookup_var v s').
+   NOTE: proof goes in mem2varCorrectness locally due to build iteration speed.
+   It depends on step_inst_lookup_mono, exec_block_lookup_mono,
+   step_inst_fdom, and terminator_no_outputs above. *)
 
 (* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
 Triviality all_distinct_flat_mem:
@@ -1422,15 +1500,6 @@ QED
 
 (* ===== General wf_function helpers ===== *)
 
-Theorem terminator_no_outputs:
-  !inst. is_terminator inst.inst_opcode /\ inst_wf inst ==>
-    inst.inst_outputs = []
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  gvs[inst_wf_def]
-QED
-
 Theorem same_label_same_block:
   !f bb1 bb2.
     wf_function f /\ MEM bb1 f.fn_blocks /\ MEM bb2 f.fn_blocks /\
@@ -1445,6 +1514,17 @@ Proof
   `lookup_block bb1.bb_label f.fn_blocks = SOME bb2` by
     (irule MEM_lookup_block >> gvs[]) >>
   gvs[]
+QED
+
+Theorem wf_function_bb_well_formed:
+  !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==> bb_well_formed bb
+Proof simp[wf_function_def] >> metis_tac[]
+QED
+
+Theorem fn_inst_wf_every_bb:
+  !fn bb. fn_inst_wf fn /\ MEM bb fn.fn_blocks ==>
+    EVERY inst_wf bb.bb_instructions
+Proof simp[fn_inst_wf_def] >> metis_tac[EVERY_MEM]
 QED
 
 Theorem phi_before_non_phi:

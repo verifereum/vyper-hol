@@ -12,7 +12,7 @@
 
 Theory vyperBuiltinTyping
 Ancestors
-  vyperTypeSoundnessHelpers keccak
+  vyperTypeSoundnessDefs vyperTypeSoundnessHelpers keccak
 
 Libs
   wordsLib
@@ -524,9 +524,9 @@ QED
 (* value_has_type simplification helpers — include ALL conditions *)
 Theorem vht_BytesV_Fixed[local]:
   value_has_type (BaseTV (BytesT (Fixed n))) (BytesV bs) <=>
-  LENGTH bs = n /\ n <= 32
+  LENGTH bs = n
 Proof
-  simp[value_has_type_def, compatible_bound_def]
+  simp[value_has_type_def]
 QED
 
 Theorem vht_BytesV_Dynamic[local]:
@@ -545,7 +545,7 @@ QED
 
 Theorem vht_IntV_UintT[local]:
   value_has_type (BaseTV (UintT m)) (IntV i) <=>
-  0 <= i /\ Num i < 2 ** m /\ m <= 256
+  0 <= i /\ Num i < 2 ** m
 Proof
   simp[value_has_type_def]
 QED
@@ -591,17 +591,19 @@ Proof
   rw[bounded_decimal_op_def, AllCaseEqs()]
 QED
 
-(* Any well-typed IntV has Num i < 2^256 *)
+(* Any well-typed IntV with well-formed type has Num i < 2^256 *)
 Theorem int_type_Num_bound[local]:
-  !tyv i. value_has_type tyv (IntV i) ==> Num i < 2 ** 256
+  !tyv i. value_has_type tyv (IntV i) /\ well_formed_type_value tyv ==>
+          Num i < 2 ** 256
 Proof
   rpt strip_tac >>
   qmatch_goalsub_abbrev_tac `_ < bound` >>
   qpat_x_assum `value_has_type _ _` mp_tac >>
-  simp[value_has_type_inv] >> strip_tac >> gvs[]
+  simp[value_has_type_inv] >> strip_tac >> gvs[well_formed_type_value_def]
   >- (irule LESS_LESS_EQ_TRANS >> qexists `2 ** n` >>
       unabbrev_all_tac >> simp[] >>
       irule (iffRL EXP_BASE_LE_MONO) >> simp[])
+  >> Cases_on `n = 0` >- (unabbrev_all_tac >> gvs[within_int_bound_def])
   >> gvs[within_int_bound_def, LET_THM, Num_neg] >>
      Cases_on `i < 0` >> gvs[] >>
      irule LESS_EQ_LESS_TRANS >>
@@ -611,7 +613,7 @@ QED
 
 (* Uint2Str: toString of any well-typed integer has at most 78 characters *)
 Theorem uint2str_strlen_bound[local]:
-  !tyv i. value_has_type tyv (IntV i) ==>
+  !tyv i. value_has_type tyv (IntV i) /\ well_formed_type_value tyv ==>
           STRLEN (toString (Num i)) <= 78
 Proof
   rpt strip_tac >>
@@ -936,6 +938,8 @@ Resume evaluate_builtin_well_typed[Uint2Str]:
   Cases_on `vs` >> gvs[LIST_REL_CONS1] >>
   rename1 `evaluate_builtin _ _ _ _ [av]` >>
   Cases_on `av` >> gvs[evaluate_builtin_def, AllCaseEqs()] >>
+  `well_formed_type_value tyv` by
+    (imp_res_tac evaluate_type_well_formed >> gvs[]) >>
   imp_res_tac uint2str_strlen_bound >>
   gvs[vht_StringV, compatible_bound_def]
 QED

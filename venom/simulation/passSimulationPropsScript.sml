@@ -124,6 +124,83 @@ Proof
   ACCEPT_TAC block_sim_function_with_pred_proof
 QED
 
+(* Like block_sim_function_with_pred but P is a two-state predicate:
+   P : state -> state -> bool.
+   Useful when the side condition depends on BOTH s1 and s2 (e.g.
+   tracking which promoted variables are set in the transformed state). *)
+Theorem block_sim_function_with_pred2:
+  !P R_ok R_term bt fn.
+    (!s. P s s ==> R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb fuel ctx s1 s2 s1' s2'.
+       MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 s2 /\
+       exec_block fuel ctx bb s1 = OK s1' /\
+       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       R_ok s1' s2' ==>
+       P s1' s2') /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s1 s2.
+        R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 ==>
+        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        lift_result R_ok R_term R_term
+          (exec_block fuel ctx bb s1)
+          (exec_block fuel ctx (bt bb) s2))
+  ==>
+    !fuel ctx s.
+      P s s /\ s.vs_inst_idx = 0 ==>
+      (?e. run_blocks fuel ctx fn s = Error e) \/
+      lift_result R_ok R_term R_term
+        (run_blocks fuel ctx fn s)
+        (run_blocks fuel ctx (function_map_transform bt fn) s)
+Proof
+  ACCEPT_TAC block_sim_function_with_pred2_proof
+QED
+
+(* Like block_sim_function_with_pred2 but the preservation clause also gets
+   bb.bb_label = s1.vs_current_bb and ~s1'.vs_halted.
+   Useful when preservation needs to know which block was executed
+   (e.g. for tracking cross-block domination of promoted variables). *)
+Theorem block_sim_function_with_pred2_bb:
+  !P R_ok R_term bt fn.
+    (!s. P s s ==> R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb fuel ctx s1 s2 s1' s2'.
+       MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 s2 /\
+       bb.bb_label = s1.vs_current_bb /\ s1.vs_inst_idx = 0 /\
+       ~s1'.vs_halted /\
+       exec_block fuel ctx bb s1 = OK s1' /\
+       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       R_ok s1' s2' ==>
+       P s1' s2') /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s1 s2.
+        R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 /\
+        bb.bb_label = s1.vs_current_bb ==>
+        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        lift_result R_ok R_term R_term
+          (exec_block fuel ctx bb s1)
+          (exec_block fuel ctx (bt bb) s2))
+  ==>
+    !fuel ctx s.
+      P s s /\ s.vs_inst_idx = 0 ==>
+      (?e. run_blocks fuel ctx fn s = Error e) \/
+      lift_result R_ok R_term R_term
+        (run_blocks fuel ctx fn s)
+        (run_blocks fuel ctx (function_map_transform bt fn) s)
+Proof
+  ACCEPT_TAC block_sim_function_with_pred2_bb_proof
+QED
+
 (* ===== Pointwise block sim ⟹ function sim ===== *)
 
 (* Triangle combiner: same-state per-block sim + valid_state_rel ⟹
