@@ -356,14 +356,16 @@ Theorem e2e_venom_to_evm:
   !ctx fn_eom_map data_seg bytecode spill_hwm vs fuel.
     codegen_ready ctx /\
     ctx_wf ctx /\
+    (!name efn. ctx.ctx_entry = SOME name /\
+                lookup_function name ctx.ctx_functions = SOME efn ==>
+                entry_fn_no_ret efn) /\
     codegen ctx fn_eom_map data_seg = SOME bytecode /\
     (!fn inst vs1 vs2 fuel'.
        MEM fn ctx.ctx_functions /\
        step_inst fuel' ctx inst vs1 = OK vs2 ==>
        step_mem_safe <| sa_fn_eom := 0;
                         sa_next_offset := spill_hwm;
-                        sa_free_slots := [] |> vs1 vs2) /\
-    spill_mem_covered spill_hwm vs.vs_memory
+                        sa_free_slots := [] |> vs1 vs2)
     ==>
     ?gas_needed.
       !es. initial_evm_rel bytecode vs es /\
@@ -387,13 +389,29 @@ Theorem e2e_venom_to_evm:
        | Error _ => T)
 Proof
   rpt strip_tac >>
-  drule_all codegen_correct >>
-  disch_then $ qspec_then `fuel` strip_assume_tac >>
-  qexists `gas_needed` >> rpt strip_tac >>
-  first_x_assum irule >>
-  gvs[initial_evm_rel_def, initial_ctx_rel_def] >>
-  Cases_on `es.contexts` >> gvs[] >>
-  PairCases_on `h` >> gvs[]
+  qsuff_tac `?gas_needed. !es.
+    initial_ctx_rel ctx vs es /\
+    (case es.contexts of
+       [] => F
+     | (ctxt,rb)::_ =>
+       ctxt.msgParams.gasLimit >= gas_needed /\
+       ctxt.msgParams.code = bytecode /\
+       ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode) ==>
+    (case run_context fuel ctx vs of
+       OK _ => F
+     | Halt vs' => ?es'. run es = SOME (INR NONE, es') /\ final_state_rel vs' es'
+     | Abort Revert_abort vs' => ?es'. run es = SOME (INR (SOME Reverted), es') /\ final_state_rel vs' es'
+     | Abort ExHalt_abort vs' => ?es' exc. run es = SOME (INR (SOME exc), es') /\ exc <> Reverted /\ final_state_rel vs' es'
+     | IntRet _ _ => F
+     | Error _ => T)`
+  >- (strip_tac >> qexists `gas_needed` >> rpt strip_tac >>
+      first_x_assum irule >>
+      Cases_on `es.contexts` >> gvs[initial_evm_rel_def, initial_ctx_rel_def] >>
+      PairCases_on `h` >> gvs[]) >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `fn_eom_map`, `data_seg`,
+    `bytecode`, `spill_hwm`, `vs`] codegen_correct) >>
+  impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  simp[]
 QED
 
 (* ===== Codegen Hypothesis Theorems ===== *)
@@ -410,13 +428,12 @@ Proof
   cheat
 QED
 
-(* Successful codegen implies step_mem_safe and spill_mem_covered.
+(* Successful codegen implies step_mem_safe.
    The codegen plan allocates spill slots with specific offsets;
    step_mem_safe holds because compiled instructions only access
-   memory within the planned spill region, and spill_mem_covered
-   holds because the entry code allocates sufficient memory. *)
+   memory within the planned spill region. *)
 Theorem codegen_implies_mem_safe[local]:
-  !ctx fn_eom_map data_seg bytecode vs.
+  !ctx fn_eom_map data_seg bytecode.
     codegen ctx fn_eom_map data_seg = SOME bytecode ==>
     ?spill_hwm.
       (!fn inst vs1 vs2 fuel'.
@@ -424,8 +441,17 @@ Theorem codegen_implies_mem_safe[local]:
          step_inst fuel' ctx inst vs1 = OK vs2 ==>
          step_mem_safe <| sa_fn_eom := 0;
                           sa_next_offset := spill_hwm;
-                          sa_free_slots := [] |> vs1 vs2) /\
-      spill_mem_covered spill_hwm vs.vs_memory
+                          sa_free_slots := [] |> vs1 vs2)
+Proof
+  cheat
+QED
+
+Theorem codegen_implies_entry_fn_no_ret[local]:
+  !ctx fn_eom_map data_seg bytecode.
+    codegen ctx fn_eom_map data_seg = SOME bytecode ==>
+    (!name efn. ctx.ctx_entry = SOME name /\
+                lookup_function name ctx.ctx_functions = SOME efn ==>
+                entry_fn_no_ret efn)
 Proof
   cheat
 QED
@@ -433,7 +459,7 @@ QED
 Theorem compile_vyper_raw_well_formed:
   !selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
-    pipeline fn_eom_map bytecode vs.
+    pipeline fn_eom_map bytecode.
   let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label in
@@ -444,14 +470,16 @@ Theorem compile_vyper_raw_well_formed:
       pipeline fn_eom_map = SOME bytecode
     ==>
     codegen_ready ctx' /\ ctx_wf ctx' /\
+    (!name efn. ctx'.ctx_entry = SOME name /\
+                lookup_function name ctx'.ctx_functions = SOME efn ==>
+                entry_fn_no_ret efn) /\
     ?spill_hwm.
       (!fn inst vs1 vs2 fuel'.
          MEM fn ctx'.ctx_functions /\
          step_inst fuel' ctx' inst vs1 = OK vs2 ==>
          step_mem_safe <| sa_fn_eom := 0;
                           sa_next_offset := spill_hwm;
-                          sa_free_slots := [] |> vs1 vs2) /\
-      spill_mem_covered spill_hwm vs.vs_memory
+                          sa_free_slots := [] |> vs1 vs2)
 Proof
   rpt gen_tac
   \\ simp[pairTheory.UNCURRY]
@@ -466,10 +494,10 @@ Proof
       gvs[compile_vyper_raw_def, pairTheory.UNCURRY] >>
       CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> gvs[])
   \\ drule codegen_implies_wf \\ strip_tac \\ simp[]
+  \\ drule codegen_implies_entry_fn_no_ret \\ strip_tac \\ simp[]
   \\ drule (SRULE [] codegen_implies_mem_safe)
-  \\ disch_then (qspec_then `vs` strip_assume_tac)
+  \\ strip_tac
   \\ qexists `spill_hwm` \\ gvs[]
-  \\ first_x_assum ACCEPT_TAC
 QED
 
 (* ===== Lowering Log Correspondence ===== *)
@@ -620,7 +648,7 @@ Proof
        `entry_info`, `entry_label`] strip_assume_tac)
   (* Step 2: Apply codegen well-formedness *)
   \\ drule (expand_pair_let compile_vyper_raw_well_formed)
-  \\ disch_then (qspec_then `vs` strip_assume_tac)
+  \\ strip_tac
   (* Abbreviate ctx for readability *)
   \\ qmatch_asmsub_abbrev_tac `ctx_pass_correct pipeline _ _ ctx vs`
   (* Extract codegen from compile_vyper_raw *)
@@ -645,7 +673,7 @@ Proof
    \\ gvs[observable_result_equiv_def]
    (* Now: Halt ss2' with observable_equiv ss' ss2' *)
    \\ drule_all (SRULE [] e2e_venom_to_evm)
-   \\ disch_then $ qspec_then `fuel'` strip_assume_tac
+   \\ disch_then $ qspecl_then [`vs`, `fuel'`] strip_assume_tac
    \\ qexists `gas_needed` \\ rpt strip_tac
    \\ first_x_assum (qspec_then `es` mp_tac)
    \\ simp[pairTheory.UNCURRY]
@@ -679,7 +707,7 @@ Proof
   \\ Cases_on `run_context fuel' (pipeline ctx) vs`
   \\ gvs[observable_result_equiv_def]
   \\ drule_all (SRULE [] e2e_venom_to_evm)
-  \\ disch_then $ qspec_then `fuel'` strip_assume_tac
+  \\ disch_then $ qspecl_then [`vs`, `fuel'`] strip_assume_tac
   \\ qexists `gas_needed` \\ rpt strip_tac
   \\ first_x_assum (qspec_then `es` mp_tac)
   \\ simp[pairTheory.UNCURRY]
