@@ -1540,131 +1540,6 @@ QED
 
 (* ===== Helper lemmas for ExtCall/IntCall cases ===== *)
 
-Theorem case_ExtCall_imm_dom[local]:
-  ∀cx is_static' func_name arg_types ret_type es drv st res st'.
-  eval_expr cx
-    (Call _ (ExtCall is_static' (func_name,arg_types,ret_type)) es drv) st =
-    (res,st') ⇒
-  (∀st res st'.
-    eval_exprs cx es st = (res,st') ⇒ preserves_immutables_dom cx st st') ⇒
-  (∀s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv
-      s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' tStorage t'⁶' txParams caller
-      s'⁹' result t'⁷' success returnData accounts' tStorage' s'¹⁰' x' t'⁸'
-      s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰'.
-    eval_exprs cx es s'' = (INL vs,t) ∧
-    check (vs ≠ []) "ExtCall no target" s'³' = (INL x,t') ∧
-    lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address" s'⁴' =
-    (INL target_addr,t'') ∧
-    (if is_static' then return (NONE,TL vs)
-     else
-       do
-         check (TL vs ≠ []) "ExtCall no value";
-         v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-         return (SOME v,TL (TL vs))
-       od) s'⁵' = (INL (value_opt,arg_vals),t'³') ∧ tenv = get_tenv cx ∧
-    lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
-      "ExtCall build_calldata" s'⁶' = (INL calldata,t'⁴') ∧
-    get_accounts s'⁷' = (INL accounts,t'⁵') ∧
-    get_transient_storage s'⁸' = (INL tStorage,t'⁶') ∧
-    txParams = vyper_to_tx_params cx.txn ∧ caller = cx.txn.target ∧
-    lift_option
-      (run_ext_call caller target_addr calldata value_opt accounts tStorage
-         txParams) "ExtCall run failed" s'⁹' = (INL result,t'⁷') ∧
-    (success,returnData,accounts',tStorage') = result ∧
-    check success "ExtCall reverted" s'¹⁰' = (INL x',t'⁸') ∧
-    update_accounts (K accounts') s'¹¹' = (INL x'',t'⁹') ∧
-    update_transient (K tStorage') s'¹²' = (INL x'³',t'¹⁰') ∧ returnData = [] ∧
-    IS_SOME drv ⇒
-    ∀st res st'.
-      eval_expr cx (THE drv) st = (res,st') ⇒
-      preserves_immutables_dom cx st st') ⇒
-  preserves_immutables_dom cx st st'
-Proof
-  rpt strip_tac
-  \\ qpat_x_assum `eval_expr _ _ _ = _` mp_tac
-  \\ simp[Once evaluate_def, bind_def, LET_THM]
-  \\ Cases_on `eval_exprs cx es st` \\ Cases_on `q`
-  \\ simp[return_def, raise_def, preserves_immutables_dom_refl]
-  \\ strip_tac
-  \\ irule preserves_immutables_dom_trans \\ qexists_tac `r`
-  \\ conj_tac >- (last_x_assum match_mp_tac \\ simp[])
-  \\ qpat_x_assum `do _ od _ = _` mp_tac
-  \\ last_x_assum drule \\ strip_tac
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ drule check_same_state \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rw[] \\ rw[preserves_immutables_dom_refl])
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ qmatch_asmsub_rename_tac`_ s1 = (_, s2)`
-  \\ sg `s1 = s2`
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
-    \\ gvs[CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_same_state
-    \\ imp_res_tac lift_option_same_state
-    \\ imp_res_tac lift_option_type_same_state
-    \\ gvs[] )
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- rw[preserves_immutables_dom_refl]
-  \\ pairarg_tac
-  \\ asm_simp_tac std_ss []
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ drule lift_option_same_state
-  \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ qmatch_asmsub_rename_tac`_ s2 = (_, s3)`
-  \\ sg `s2 = s3`
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[get_accounts_def, return_def] )
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- rw[preserves_immutables_dom_refl]
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ qmatch_asmsub_rename_tac`_ s3 = (_, s4)`
-  \\ sg `s3 = s4`
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[get_transient_storage_def, return_def] )
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- rw[preserves_immutables_dom_refl]
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ drule lift_option_same_state
-  \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ pairarg_tac \\ asm_simp_tac std_ss []
-  \\ last_x_assum drule \\ strip_tac
-  \\ strip_tac
-  \\ irule extcall_inner_pipeline_imm_dom
-  \\ first_assum (irule_at Any)
-  \\ rpt strip_tac
-  \\ first_x_assum $ drule_then drule
-  \\ gvs[ignore_bind_def]
-  \\ disch_then $ funpow 4 drule_then drule
-  \\ gvs[bind_def, CaseEq"prod", CaseEq"sum"]
-  \\ gvs[update_accounts_def, update_transient_def, return_def,
-         check_def, type_check_def, raise_def, assert_def]
-QED
-
 Theorem case_IntCall_imm_dom[local]:
   ∀cx src_id_opt fn es vs st res st'.
   eval_expr cx (Call _ (IntCall (src_id_opt,fn)) es vs) st = (res,st') ⇒
@@ -1971,7 +1846,7 @@ Proof
   >- (drule_all case_Pop_imm_dom >> simp[])
   >- (drule_all case_TypeBuiltin_imm_dom >> simp[])
   >- (drule_all case_Send_imm_dom >> simp[])
-  >- (drule_all case_ExtCall_imm_dom >> simp[])
+  >- suspend "ExtCall"
   >- (drule_all case_IntCall_imm_dom >> simp[])
   (* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
   (* All 5 cases: eval_exprs first, then pure/state ops that preserve immutables.
@@ -2033,6 +1908,99 @@ Proof
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED
+
+Resume immutables_dom_mutual[ExtCall]:
+  rpt strip_tac
+  \\ qpat_x_assum `eval_expr _ _ _ = _` mp_tac
+  \\ simp[Once evaluate_def, bind_def, LET_THM]
+  \\ Cases_on `eval_exprs cx es st` \\ Cases_on `q`
+  \\ simp[return_def, raise_def, preserves_immutables_dom_refl]
+  \\ strip_tac
+  \\ irule preserves_immutables_dom_trans \\ qexists_tac `r`
+  \\ conj_tac >- (last_x_assum match_mp_tac \\ simp[])
+  \\ qpat_x_assum `do _ od _ = _` mp_tac
+  \\ last_x_assum drule \\ strip_tac
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ drule check_same_state \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rw[] \\ rw[preserves_immutables_dom_refl])
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (
+    last_x_assum(qspec_then`ARB`kall_tac)
+    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ qmatch_asmsub_rename_tac`_ s1 = (_, s2)`
+  \\ sg `s1 = s2`
+  >- (
+    last_x_assum(qspec_then`ARB`kall_tac)
+    \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
+    \\ gvs[CaseEq"sum", CaseEq"prod"]
+    \\ imp_res_tac check_same_state
+    \\ imp_res_tac lift_option_same_state
+    \\ imp_res_tac lift_option_type_same_state
+    \\ gvs[] )
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- rw[preserves_immutables_dom_refl]
+  \\ pairarg_tac
+  \\ asm_simp_tac std_ss []
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ drule lift_option_same_state
+  \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (
+    last_x_assum(qspec_then`ARB`kall_tac)
+    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ qmatch_asmsub_rename_tac`_ s2 = (_, s3)`
+  \\ sg `s2 = s3`
+  >- (
+    last_x_assum(qspec_then`ARB`kall_tac)
+    \\ gvs[get_accounts_def, return_def] )
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- rw[preserves_immutables_dom_refl]
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ imp_res_tac check_state
+  \\ rpt BasicProvers.VAR_EQ_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- ( rw[] \\ rw[preserves_immutables_dom_refl] )
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ qmatch_asmsub_rename_tac`_ s3 = (_, s4)`
+  \\ sg `s3 = s4`
+  >- (
+    last_x_assum(qspec_then`ARB`kall_tac)
+    \\ gvs[get_transient_storage_def, return_def] )
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- rw[preserves_immutables_dom_refl]
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ drule lift_option_same_state
+  \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (
+    last_x_assum(qspec_then`ARB`kall_tac)
+    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
+  \\ pairarg_tac \\ asm_simp_tac std_ss []
+  \\ last_x_assum drule \\ strip_tac
+  \\ strip_tac
+  \\ irule extcall_inner_pipeline_imm_dom
+  \\ first_assum (irule_at Any)
+  \\ rpt strip_tac
+  \\ first_x_assum $ drule_then drule
+  \\ gvs[ignore_bind_def]
+  \\ disch_then $ funpow 5 drule_then drule
+  \\ gvs[bind_def, CaseEq"prod", CaseEq"sum"]
+  \\ gvs[update_accounts_def, update_transient_def, return_def,
+         check_def, type_check_def, raise_def, assert_def]
+QED
+
+Finalise immutables_dom_mutual
 
 (* ===== Main theorems ===== *)
 

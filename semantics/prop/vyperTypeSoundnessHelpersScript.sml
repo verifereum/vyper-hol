@@ -1,7 +1,6 @@
 (*
  * Type system definitions and type soundness proof infrastructure.
  *
- * TOP-LEVEL:
  *   typing_env          : static type environment (var_types, global_types, etc.)
  *   well_typed_expr     : typing_env → expr → bool (static type consistency)
  *   well_typed_stmt     : typing_env → ty → stmt → bool
@@ -10,65 +9,6 @@
  *   functions_well_typed: cx → bool (callable functions have well-typed bodies)
  *   type_preservation   : well_typed + consistent + eval ⇒ preserves types
  *
- * KEY HELPERS (proved):
- *   assign_target_well_typed    : assign_target preserves state_well_typed + env_consistent
- *   assign_target_no_return     : assign_target never returns ReturnException
- *   evaluate_no_return          : eval_expr and related never return ReturnException
- *   eval_base_target_type_connection : connects AST target type to runtime type
- *   IntCall                     : internal call type preservation (6 sub-proofs)
- *   set_immutable_well_typed    : set_immutable preserves state_well_typed + env_consistent
- *   set_global_well_typed       : set_global preserves state_well_typed + env_consistent
- *   write_storage_slot_well_typed : storage writes preserve state_well_typed + env_consistent
- *   (uses value_has_type from vyperTypingTheory for value/type compatibility)
- *   (uses assign_subscripts_preserves_type from vyperAssignPreservesTypeTheory)
- *
- * PROOF STATUS:
- *   type_preservation: 33 Resume blocks still cheated (out of 47 total).
- *     Proved inline: Pass, Continue, Break, Return NONE,
- *                    eval_stmts nil/cons, eval_targets nil, eval_for nil,
- *                    eval_exprs nil, Name
- *     Proved via Resume: ReturnSome, Raise1/2/3, IntCall (6 sub-proofs),
- *                        eval_for cons, P8cons (eval_exprs cons), assign
- *     Partial (trailing cheat): Subscript
- *
- * REMAINING CHEATS (33 Resume blocks + 1 helper, ordered by risk):
- *
- * --- HIGHEST RISK: evaluate_builtin type preservation ---
- *   39: Builtin — ~43 cases of evaluate_builtin, needs per-builtin
- *       value_has_type lemma. System builtins (RawCall, RawLog, etc.) have
- *       permissive typing (well_typed_builtin_app = T) — fundamental gap.
- *   41: TypeBuiltin — evaluate_type_builtin (Empty, Convert, AbiDecode, etc.)
- *
- * --- HIGH RISK: external calls ---
- *   43: Call ExtCall — needs evaluate_abi_decode_return to produce well-typed
- *       values (ABI decode correctness)
- *   42: Call Send — transfer_value state preservation
- *
- * --- MEDIUM RISK: decode/subscript/attribute ---
- *   decode_value_well_typed (helper) — mutual induction over 5 decode fns,
- *       currently cheated, used only by read_storage_slot_well_typed (unused)
- *   37: Subscript — partial proof, trailing cheat needs value_has_type for
- *       result after array index or storage read
- *   38: Attribute — attribute access typing
- *   36: StructLit — struct type evaluation
- *
- * --- MEDIUM RISK: control flow ---
- *   13: For — eval_iterator + scope manipulation
- *   40: Pop — array pop typing
- *
- * --- LOW RISK: simple stmt cases (follow Raise/ReturnSome pattern) ---
- *   6: Assert1/2/3, 7: Log, 8: AnnAssign, 9: Append,
- *   11: AugAssign, 12: If, 14: Expr
- *
- * --- LOW RISK: mechanical (read-only state preservation) ---
- *   17-18: eval_iterator (Array, Range)
- *   19-20: eval_target (BaseTarget, TupleTarget)
- *   22: eval_targets (g::gs)
- *   23-27: eval_base_target (5 constructor cases)
- *
- * --- LOW RISK: expr cases similar to proved Name case ---
- *   31: BareGlobalName, 32: TopLevelName, 33: FlagMember
- *   34: IfExp, 35: Literal
  *)
 
 Theory vyperTypeSoundnessHelpers
@@ -1561,6 +1501,26 @@ Proof
   \\ first_x_assum drule \\ rw[]
 QED
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Theorem values_have_types_LIST_REL:
   !tys tvs. values_have_types tys tvs =
   LIST_REL value_has_type tys tvs
@@ -2853,15 +2813,15 @@ Resume evaluate_no_return[ExtCall_nr]:
   \\ strip_tac \\ gvs[get_transient_storage_def, return_def] \\ enr_tac
   \\ TRY pairarg_tac \\ gvs[]
   \\ pop_assum mp_tac \\ enr_tac
+  \\ TRY pairarg_tac \\ gvs[]
+  \\ pop_assum mp_tac \\ enr_tac
   \\ gvs[update_transient_def, update_accounts_def,
          get_transient_storage_def, return_def]
   >- (goal_assum drule_all)
   \\ gvs[lift_sum_runtime_def, CaseEq"sum", return_def, raise_def,
          sum_CASE_rator]
-  \\ pairarg_tac
   \\ gvs[ignore_bind_apply, AllCaseEqs(), bind_apply,
          assert_def, return_def]
-  \\ pop_assum mp_tac \\ enr_tac
   \\ rpt(goal_assum $ drule_at Any)
   \\ gvs[update_transient_def, update_accounts_def, return_def]
 QED
@@ -5848,7 +5808,7 @@ QED
 
 Theorem evaluate_type_builtin_well_typed:
   !cx tb typ vs v tv.
-    tb <> AbiEncode /\
+    (!b. tb <> AbiEncode b) /\
     evaluate_type_builtin cx tb typ vs = INL v /\
     evaluate_type (get_tenv cx) typ = SOME tv ==>
     value_has_type tv v
@@ -6371,5 +6331,3 @@ Proof
       Cases_on `is_view` >> simp[return_def, update_transient_def]) >>
   qexists `ARB` >> simp[return_def]
 QED
-
-val _ = export_theory();
