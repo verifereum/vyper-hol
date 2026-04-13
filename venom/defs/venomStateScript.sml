@@ -184,7 +184,7 @@ End
 (* Memory operations - using verifereum-style byte list memory *)
 Definition read_memory_def:
   read_memory offset size s =
-    TAKE size (DROP offset s.vs_memory)
+    TAKE size (DROP offset s.vs_memory ++ REPLICATE size 0w)
 End
 
 Definition write_memory_def:

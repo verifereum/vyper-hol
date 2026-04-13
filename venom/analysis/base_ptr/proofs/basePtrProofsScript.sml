@@ -556,6 +556,93 @@ QED
 
 Finalise bp_handle_inst_sound_proof
 
+(* DOMSUB helpers for fixpoint proof *)
+Theorem bp_ptr_sound_domsub[local]:
+  !bp v s. bp_ptr_sound bp s ==> bp_ptr_sound (bp \\ v) s
+Proof
+  rw[bp_ptr_sound_def] >>
+  rename1 `bp_get_ptrs (bp \\ v) w` >>
+  `w <> v` by (CCONTR_TAC >> gvs[bp_get_ptrs_def, FLOOKUP_DEF, fmap_domsub]) >>
+  `bp_get_ptrs (bp \\ v) w = bp_get_ptrs bp w` by
+    simp[bp_get_ptrs_def, DOMSUB_FLOOKUP_NEQ] >>
+  gvs[]
+QED
+
+Theorem bp_get_ptrs_domsub_self[local]:
+  !bp v. bp_get_ptrs (bp \\ v) v = []
+Proof
+  rw[bp_get_ptrs_def, FLOOKUP_DEF, DOMSUB_FAPPLY_NEQ, fmap_domsub]
+QED
+
+Theorem bp_get_ptrs_domsub_neq[local]:
+  !bp v w. v <> w ==> bp_get_ptrs (bp \\ v) w = bp_get_ptrs bp w
+Proof
+  rw[bp_get_ptrs_def, DOMSUB_FLOOKUP_NEQ]
+QED
+
+(* phi_pairs vars are a subset of operand_vars *)
+Theorem phi_pairs_subset_operand_vars[local]:
+  !ops x. MEM x (MAP SND (phi_pairs ops)) ==> MEM x (operand_vars ops)
+Proof
+  Induct_on `ops` using venomInstTheory.phi_pairs_ind >>
+  rpt strip_tac >>
+  gvs[venomInstTheory.phi_pairs_def,
+      venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def] >>
+  Cases_on `operand_var v1` >> gvs[]
+QED
+
+(* General frame lemma: bp_ptr_sound preserved by step_inst.
+   For the output variable, caller provides either:
+   (a) bp_get_ptrs bp out = [] — vacuously true, or
+   (b) a direct proof that ptr_matches_var holds for the new value.
+   This separates frame reasoning from per-opcode reasoning. *)
+Theorem bp_ptr_sound_preserved_by_step:
+  !bp inst fuel ctx s s'.
+    bp_ptr_sound bp s /\
+    step_inst fuel ctx inst s = OK s' /\
+    inst_wf inst /\
+    (inst_output inst = NONE ==> inst.inst_outputs = []) /\
+    (!out. inst_output inst = SOME out ==>
+       bp_get_ptrs bp out = [] \/
+       (IS_SOME (lookup_var out s') ==>
+        ?p. MEM p (bp_get_ptrs bp out) /\ ptr_matches_var p out s')) /\
+    (!v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ==>
+       FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) ==>
+    bp_ptr_sound bp s'
+Proof
+  rpt strip_tac >>
+  simp[bp_ptr_sound_def] >>
+  rpt strip_tac >>
+  Cases_on `inst_output inst = SOME v`
+  >- suspend "output"
+  >> suspend "frame"
+QED
+
+Resume bp_ptr_sound_preserved_by_step[output]:
+  gvs[] >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp[] >>
+  strip_tac >> metis_tac[]
+QED
+
+Resume bp_ptr_sound_preserved_by_step[frame]:
+  (* v is not the output → lookup_var v preserved *)
+  `lookup_var v s' = lookup_var v s` by (
+    irule step_inst_preserves_lookup >>
+    qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+    Cases_on `inst_output inst` >> gvs[venomInstTheory.inst_output_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  (* bp_ptr_sound bp s gives a matching pointer for v *)
+  `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s` by
+    gvs[bp_ptr_sound_def] >>
+  qexists `p` >> simp[] >>
+  MATCH_MP_TAC ptr_matches_var_preserved >>
+  qexists `v` >> simp[] >> metis_tac[]
+QED
+
+Finalise bp_ptr_sound_preserved_by_step
+
 (* ===================================================================
    Block-level soundness.
 
