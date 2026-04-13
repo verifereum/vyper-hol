@@ -95,6 +95,13 @@ Proof
   ACCEPT_TAC stateEquivProofsTheory.result_equiv_subset
 QED
 
+(* result_equiv is symmetric *)
+Theorem result_equiv_sym:
+  !vars r1 r2. result_equiv vars r1 r2 ==> result_equiv vars r2 r1
+Proof
+  ACCEPT_TAC stateEquivProofsTheory.result_equiv_sym
+QED
+
 (* result_equiv is transitive *)
 Theorem result_equiv_trans:
   !vars r1 r2 r3.
