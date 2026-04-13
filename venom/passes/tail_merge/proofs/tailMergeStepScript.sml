@@ -205,7 +205,7 @@ val pair_case_simp = pairTheory.pair_CASE_def;
 
 val cat_close_defs = [execution_equiv_def, update_var_def,
   write_memory_with_expansion_def, read_memory_def,
-  mload_def, mstore_def, sload_def, sstore_def,
+  mload_def, mstore_def, mstore8_def, sload_def, sstore_def,
   tload_def, tstore_def, mcopy_def,
   contract_storage_def, contract_transient_def];
 
@@ -485,7 +485,7 @@ fun get_exec_fn cr = let
 
 val solve_f_eq = BETA_TAC >> rpt gen_tac >> simp[LET_THM] >>
   gvs[execution_equiv_def, mload_def, sload_def, tload_def,
-      mstore_def, sstore_def, tstore_def,
+      mstore_def, mstore8_def, sstore_def, tstore_def,
       contract_storage_def, contract_transient_def,
       write_memory_with_expansion_def];
 
@@ -1066,7 +1066,7 @@ val output_close = [update_var_def, lookup_var_def,
   extract_venom_result_def, set_returndata_def, mcopy_def, LET_THM,
   exec_pure1_def, exec_pure2_def, exec_pure3_def,
   exec_read0_def, exec_read1_def, exec_write2_def,
-  mstore_def, sstore_def, tstore_def, exec_alloca_def];
+  mstore_def, mstore8_def, sstore_def, tstore_def, exec_alloca_def];
 
 (* Extract inst2's opcode from sim_pre so imp_res_tac cr can match both *)
 val sim_pre_opcode_eq = prove(
@@ -1177,7 +1177,7 @@ fun prove_output_inline cr opc =
    cover vs_vars). In practice they have 0 outputs, so the conclusion is
    vacuously true. We exclude them from the per-opcode dispatch and add
    has_outputs as precondition to the combined theorem *)
-val state_mod_opcodes = [``MSTORE``, ``SSTORE``, ``TSTORE``,
+val state_mod_opcodes = [``MSTORE``, ``MSTORE8``, ``SSTORE``, ``TSTORE``,
   ``MCOPY``, ``CODECOPY``, ``CALLDATACOPY``, ``RETURNDATACOPY``,
   ``EXTCODECOPY``, ``DLOADBYTES``, ``LOG``, ``ISTORE``,
   ``NOP``, ``ASSERT``, ``ASSERT_UNREACHABLE``];
@@ -1234,7 +1234,7 @@ val all_output_thms = map timed_prove_output output_target_opcodes;
 (* Define the set of output-producing opcodes for downstream use *)
 Definition is_output_opcode_def:
   is_output_opcode opc <=>
-    opc <> MSTORE /\ opc <> SSTORE /\ opc <> TSTORE /\
+    opc <> MSTORE /\ opc <> MSTORE8 /\ opc <> SSTORE /\ opc <> TSTORE /\
     opc <> MCOPY /\ opc <> CODECOPY /\ opc <> CALLDATACOPY /\
     opc <> RETURNDATACOPY /\ opc <> EXTCODECOPY /\ opc <> DLOADBYTES /\
     opc <> LOG /\ opc <> ISTORE /\ opc <> NOP /\
