@@ -92,7 +92,8 @@ End
 Theorem compile_selector_dispatch_linear_correct:
   ∀ selectors fallback_lbl ss st st' ctx.
     compile_selector_dispatch_linear selectors fallback_lbl st = ((), st') ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_halted
     ⇒
     ∃ fuel ss'.
       run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
@@ -107,7 +108,8 @@ Theorem compile_selector_dispatch_sparse_correct:
   ∀ selectors bucket_count fallback_lbl ss st st' ctx.
     compile_selector_dispatch_sparse selectors bucket_count fallback_lbl st =
       ((), st') ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_halted
     ⇒
     ∃ fuel ss'.
       run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
@@ -128,7 +130,8 @@ Theorem compile_entry_point_kwargs_correct:
     ss st st' ctx.
     compile_entry_point_kwargs cenv kwarg_vars calldata_offset
                                kwargs_from_calldata common_label st = ((), st') ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_halted
     ⇒
     ∃ fuel.
       (∃ ss'. run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
