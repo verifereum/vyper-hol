@@ -1,7 +1,8 @@
 (*
  * Plan Executor
  *
- * Mechanical translation: stack_op list → asm_inst list.
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Mechanical translation: stack_op list -> asm_inst list.
  * No intelligence — just maps each stack_op to assembly instructions.
  *
  * TOP-LEVEL:
@@ -12,9 +13,7 @@ Theory planExec
 Ancestors
   stackPlanGen
 
-(* =========================================================================
-   SWAP/DUP Name Tables (1..16)
-   ========================================================================= *)
+(* ===== SWAP/DUP Name Tables (1..16) ===== *)
 
 Definition swap_name_def:
   swap_name (n:num) =
@@ -42,9 +41,7 @@ Definition dup_name_def:
     else "DUP?" (* should not happen *)
 End
 
-(* =========================================================================
-   Execute a Single Stack Operation
-   ========================================================================= *)
+(* ===== Execute a Single Stack Operation ===== *)
 
 Definition exec_stack_op_def:
   exec_stack_op (SOPush (Lit v)) =
@@ -67,9 +64,7 @@ Definition exec_stack_op_def:
   exec_stack_op (SOPushOfst lbl off) = [AsmPushOfst lbl off]
 End
 
-(* =========================================================================
-   Execute Full Plan
-   ========================================================================= *)
+(* ===== Execute Full Plan ===== *)
 
 Definition execute_plan_def:
   execute_plan ops = FLAT (MAP exec_stack_op ops)

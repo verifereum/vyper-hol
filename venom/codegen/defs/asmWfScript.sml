@@ -1,14 +1,16 @@
 (*
  * Assembly Program Well-formedness
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Predicates ensuring an asm_inst program is suitable for execution
  * and assembly to EVM bytecode.
  *
  * TOP-LEVEL:
- *   asm_wf             — combined well-formedness predicate
+ *   asm_wf              — combined well-formedness predicate
  *   asm_labels_unique   — all labels are distinct
  *   asm_jumps_valid     — jump targets resolve to JUMPDEST
  *   asm_data_at_end     — data section unreachable
+ *   asm_encoding_wf     — opcodes valid, push sizes ≤ 32, offsets fit symbol_size
  *   is_data_inst        — classify data-section instructions
  *)
 
@@ -62,7 +64,8 @@ End
 
 (* ===== Encoding Well-formedness ===== *)
 
-(* All opcodes encode to valid bytes and label offsets fit symbol_size *)
+(* All opcodes encode to valid bytes, label offsets fit symbol_size,
+   and push data fits the EVM Push range (≤ 32 bytes) *)
 Definition asm_encoding_wf_def:
   asm_encoding_wf prog ⇔
     let (_, offsets) = compute_label_offsets prog in
@@ -72,7 +75,9 @@ Definition asm_encoding_wf_def:
        LENGTH (encode_num_bytes off) ≤ symbol_size) ∧
     (∀i lbl d off. i < LENGTH prog ∧ EL i prog = AsmPushOfst lbl d ∧
        FLOOKUP offsets lbl = SOME off ⇒
-       LENGTH (encode_num_bytes (off + d)) ≤ symbol_size)
+       LENGTH (encode_num_bytes (off + d)) ≤ symbol_size) ∧
+    (∀i bytes. i < LENGTH prog ∧ EL i prog = AsmPush bytes ⇒
+       LENGTH bytes ≤ 32)
 End
 
 (* ===== Combined Well-formedness ===== *)

@@ -1,13 +1,14 @@
 (*
  * Stack Plan Types and Spill Management
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Types for the plan generator state and spill slot allocation.
  *
  * TOP-LEVEL:
  *   spill_alloc, plan_state — state types
- *   alloc_spill_slot, free_spill_slot — slot management
+ *   alloc_spill_slot, free_spill_slot, init_spill_alloc — slot management
  *   init_plan_state, fresh_label — state initialization
- *   operand_to_string, is_var_operand — operand helpers
+ *   operand_to_string, is_var_operand, is_label_operand — operand helpers
  *)
 
 Theory stackPlanTypes
@@ -33,7 +34,7 @@ End
 Datatype:
   plan_state = <|
     ps_stack : operand list;
-    ps_spilled : (operand # num) list;
+    ps_spilled : (operand, num) fmap;
     ps_alloc : spill_alloc;
     ps_label_counter : num
   |>
@@ -69,7 +70,7 @@ End
 Definition init_plan_state_def:
   init_plan_state fn_eom = <|
     ps_stack := [];
-    ps_spilled := [];
+    ps_spilled := FEMPTY;
     ps_alloc := init_spill_alloc fn_eom;
     ps_label_counter := 0
   |>
