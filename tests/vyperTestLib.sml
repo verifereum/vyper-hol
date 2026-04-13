@@ -347,15 +347,15 @@ val excluded_test_names = [
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* msg.data tests now excluded by unsupported_patterns *)
-  (* extcall to non-existent contract: Vyper reverts when target has
-     no code (EXTCODESIZE == 0), but our semantics doesn't check this.
-     TODO: add is_contract check to ExtCall handler *)
-  "test_default_override",
+
   (* Crowdfund tests: senders transfer ETH without set_balance traces,
      so accounts have 0 balance and transfer_value fails.
      TODO: either give accounts default balance or fix test export *)
   "test_crowdfund",
   "test_crowdfund2",
+  (* skip_contract_check=True keyword not yet supported in ExtCall.
+     TODO: add skip_contract_check flag to ExtCall AST *)
+  "test_skip_contract_check",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling",
   (* ABI decode strictness tests - Vyper's decoder is stricter than standard

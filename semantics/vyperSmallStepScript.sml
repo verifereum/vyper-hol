@@ -641,6 +641,8 @@ Definition apply_vals_def:
       calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
                               "ExtCall build_calldata";
       accounts <- get_accounts;
+      (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
+      check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
       tStorage <- get_transient_storage;
       txParams <<- vyper_to_tx_params cx.txn;
       caller <<- cx.txn.target;
@@ -1400,7 +1402,7 @@ Proof
     >- gvs[bind_def, return_def, CaseEq"prod", CaseEq"sum"]
     \\ gvs[return_def]
     \\ first_x_assum drule
-    \\ disch_then $ funpow 9 drule_then drule
+    \\ disch_then $ funpow 10 drule_then drule
     \\ rw[] )
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
