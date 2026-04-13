@@ -701,8 +701,8 @@ Theorem insert_split_correct_from_inv[local]:
          s.vs_prev_bb <> SOME pred_bb.bb_label /\
          s.vs_prev_bb <> SOME split_lbl) ==>
         ?fuel'. fuel' >= fuel /\
-          result_equiv UNIV (run_function fuel ctx func s)
-            (run_function fuel' ctx func' s)
+          result_equiv UNIV (run_blocks fuel ctx func s)
+            (run_blocks fuel' ctx func' s)
 Proof
   rpt strip_tac >>
   mp_tac (Q.SPECL [`func`, `pred_bb`, `target_bb`, `id_base`]
@@ -735,8 +735,8 @@ Theorem find_and_split_correct[local]:
     find_and_split func id_base bbs = (func', T, id_base') ==>
     ?fuel'.
       result_equiv UNIV
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   Induct_on `bbs` >> rpt gen_tac
   >- (strip_tac >> fs[find_and_split_def])
@@ -803,8 +803,8 @@ Theorem cfg_norm_round_correct[local]:
     cfg_norm_round func id_base = (func', T, id_base') ==>
     ?fuel'.
       result_equiv UNIV
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   rpt strip_tac >>
   fs[cfg_norm_round_def] >>
@@ -847,6 +847,16 @@ QED
    Section 7: cfg_norm_iter correctness -- iteration preserves semantics
    ================================================================ *)
 
+Theorem cfg_norm_iter_preserves_entry[local]:
+  !n func id_base.
+    fn_entry_label (cfg_norm_iter n func id_base) = fn_entry_label func
+Proof
+  Induct_on `n` >> rw[cfg_norm_iter_def, LET_THM] >>
+  pairarg_tac >> fs[] >>
+  Cases_on `changed` >> fs[] >>
+  imp_res_tac cfg_norm_round_preserves_entry >> simp[]
+QED
+
 Theorem cfg_norm_iter_correct[local]:
   !n func func0 id_base s fuel ctx.
     cfg_norm_inv func0 func /\
@@ -858,8 +868,8 @@ Theorem cfg_norm_iter_correct[local]:
     let func' = cfg_norm_iter n func id_base in
     ?fuel'.
       result_equiv UNIV
-        (run_function fuel ctx func s)
-        (run_function fuel' ctx func' s)
+        (run_blocks fuel ctx func s)
+        (run_blocks fuel' ctx func' s)
 Proof
   Induct_on `n` >>
   rw[cfg_norm_iter_def, LET_THM] >-
@@ -870,8 +880,8 @@ Proof
    rename1 `cfg_norm_round func id_base = (func1, T, id_base1)` >>
    (* Step 1: one round preserves semantics *)
    `?fuel1. result_equiv UNIV
-      (run_function fuel ctx func s)
-      (run_function fuel1 ctx func1 s)` by
+      (run_blocks fuel ctx func s)
+      (run_blocks fuel1 ctx func1 s)` by
      (mp_tac (Q.SPECL [`func`, `func0`, `id_base`, `func1`,
         `id_base1`, `s`, `fuel`, `ctx`] cfg_norm_round_correct) >>
       simp[]) >>
@@ -887,15 +897,15 @@ Proof
       simp[cfg_norm_round_def]) >>
    (* Step 4: IH gives iteration correctness *)
    `?fuel2. result_equiv UNIV
-      (run_function fuel1 ctx func1 s)
-      (run_function fuel2 ctx (cfg_norm_iter n func1 id_base1) s)` by
+      (run_blocks fuel1 ctx func1 s)
+      (run_blocks fuel2 ctx (cfg_norm_iter n func1 id_base1) s)` by
      (first_x_assum (qspecl_then [`func1`, `func0`, `id_base1`, `s`,
         `fuel1`, `ctx`] mp_tac) >> simp[]) >>
    (* Step 5: transitivity *)
    qexists_tac `fuel2` >>
-   mp_tac (Q.SPECL [`run_function fuel ctx func s`,
-     `run_function fuel1 ctx func1 s`,
-     `run_function fuel2 ctx (cfg_norm_iter n func1 id_base1) s`]
+   mp_tac (Q.SPECL [`run_blocks fuel ctx func s`,
+     `run_blocks fuel1 ctx func1 s`,
+     `run_blocks fuel2 ctx (cfg_norm_iter n func1 id_base1) s`]
      result_equiv_UNIV_trans) >>
    simp[]) >>
   (* changed = F: no change *)
@@ -1000,5 +1010,16 @@ Proof
   strip_tac >>
   mp_tac (Q.SPECL [`2 * LENGTH func.fn_blocks`, `func`, `func`,
     `0`, `s`, `fuel`, `ctx`] cfg_norm_iter_correct) >>
-  simp[cfg_norm_fn_def, LET_THM]
+  simp[cfg_norm_fn_def, LET_THM] >>
+  strip_tac >>
+  (* Bridge: unfold run_function to run_blocks *)
+  `fn_entry_label (cfg_norm_iter (2 * LENGTH func.fn_blocks) func 0) =
+   fn_entry_label func`
+    by simp[cfg_norm_iter_preserves_entry] >>
+  qexists_tac `fuel'` >>
+  ONCE_REWRITE_TAC[run_function_def] >>
+  simp[cfg_norm_fn_def, LET_THM] >>
+  `s with <|vs_current_bb := s.vs_current_bb; vs_inst_idx := 0|> = s`
+    by simp[venomStateTheory.venom_state_component_equality] >>
+  gvs[]
 QED
