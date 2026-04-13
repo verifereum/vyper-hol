@@ -14,9 +14,8 @@
 
 Theory execEquivProofs
 Ancestors
-  stateEquivProofs stateEquiv venomExecSemantics venomState venomInst
-Libs
-  rich_listTheory finite_mapTheory
+  stateEquivProofs stateEquiv venomExecSemantics venomExecProofs venomState venomInst venomWf
+  rich_list finite_map
 
 (* ==========================================================================
    exec_* Category Helpers
@@ -897,4 +896,178 @@ Proof
     (irule exec_block_result_equiv >> metis_tac[]) >>
   gvs[result_equiv_def] >>
   Cases_on `exec_block fuel ctx bb s2` >> gvs[result_equiv_def]
+QED
+
+(* run_block wrappers (run_block = exec_block with vs_inst_idx := 0) *)
+Triviality run_block_result_equiv:
+  !fuel ctx vars bb s1 s2.
+    state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
+Proof
+  rw[run_block_def] >> rpt strip_tac >>
+  `state_equiv vars (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0)` by
+    (fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+  drule_all exec_block_result_equiv >> simp[]
+QED
+
+Triviality run_block_OK_inst_idx_0:
+  !fuel ctx bb s v.
+    run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+Proof
+  rw[run_block_def] >> metis_tac[exec_block_OK_inst_idx_0]
+QED
+
+Triviality run_block_current_bb_in_succs:
+  !fuel ctx bb s v.
+    run_block fuel ctx bb s = OK v /\
+    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+    bb.bb_instructions <> [] /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+         ~is_terminator (EL i bb.bb_instructions).inst_opcode) ==>
+    MEM v.vs_current_bb (bb_succs bb)
+Proof
+  rw[run_block_def] >> rpt strip_tac >>
+  irule exec_block_current_bb_in_succs >> simp[] >>
+  qexistsl_tac [`ctx`, `fuel`, `s with vs_inst_idx := 0`] >> simp[]
+QED
+
+(* ==========================================================================
+   run_function Preserves Result Equivalence
+   ========================================================================== *)
+
+(* If two states are state_equiv and all blocks in fn have no INVOKE
+   and all operand vars are outside vars, then run_function results
+   are result_equiv. Used for state-patching: patching non-live vars
+   doesn't affect function execution. *)
+Triviality run_blocks_result_equiv:
+  !fuel ctx vars fn s1 s2.
+    state_equiv vars s1 s2 /\
+    (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+      (!inst x. MEM inst bb.bb_instructions /\
+               MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
+    result_equiv vars (run_blocks fuel ctx fn s1) (run_blocks fuel ctx fn s2)
+Proof
+  Induct_on `fuel`
+  >- (simp[run_blocks_def, result_equiv_def]) >>
+  rpt strip_tac >>
+  `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  simp[] >>
+  Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
+  >- simp[result_equiv_def] >>
+  rename1 `lookup_block _ _ = SOME bb` >> simp[] >>
+  `result_equiv vars
+    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
+    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
+    PURE_REWRITE_TAC[GSYM run_block_def] >>
+    irule run_block_result_equiv >> simp[] >>
+    first_x_assum drule >> strip_tac >> simp[] >>
+    rpt strip_tac >> res_tac) >>
+  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
+  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
+  gvs[result_equiv_def]
+  >> `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `v.vs_halted` >> gvs[result_equiv_def]
+  >- fs[state_equiv_def, execution_equiv_def] >>
+  first_x_assum irule >>
+  rpt strip_tac >> TRY res_tac >> TRY (first_assum ACCEPT_TAC)
+QED
+
+Theorem run_function_result_equiv:
+  !fuel ctx vars fn s1 s2.
+    state_equiv vars s1 s2 /\
+    (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+      (!inst x. MEM inst bb.bb_instructions /\
+               MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
+    result_equiv vars (run_function fuel ctx fn s1) (run_function fuel ctx fn s2)
+Proof
+  rpt strip_tac >>
+  simp[run_function_def] >>
+  Cases_on `fn_entry_label fn` >> simp[result_equiv_def] >>
+  irule run_blocks_result_equiv >> simp[] >> conj_tac
+  >- (rpt strip_tac >> res_tac)
+  >> qpat_x_assum `state_equiv _ _ _` mp_tac >>
+  simp[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
+(* Same as run_function_result_equiv but with a safe set closed under
+   successors, allowing the operand condition to be restricted to
+   reachable blocks rather than all blocks. *)
+Triviality run_blocks_result_equiv_closed:
+  !fuel ctx vars fn s1 s2 safe.
+    state_equiv vars s1 s2 /\
+    s1.vs_current_bb IN safe /\
+    (!lbl bb. lbl IN safe /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+      bb_well_formed bb /\
+      EVERY inst_wf bb.bb_instructions /\
+      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+      (!inst x. MEM inst bb.bb_instructions /\
+               MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+      (!s. MEM s (bb_succs bb) ==> s IN safe)) ==>
+    result_equiv vars (run_blocks fuel ctx fn s1) (run_blocks fuel ctx fn s2)
+Proof
+  Induct_on `fuel` >-
+  (simp[run_blocks_def, result_equiv_def]) >>
+  rpt strip_tac >>
+  `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  simp[] >>
+  Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >-
+  simp[result_equiv_def] >>
+  rename1 `lookup_block _ _ = SOME bb` >> simp[] >>
+  `bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+   EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+   (!inst x. MEM inst bb.bb_instructions /\
+            MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+   (!s. MEM s (bb_succs bb) ==> s IN safe)` by metis_tac[] >>
+  `result_equiv vars
+    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
+    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
+    PURE_REWRITE_TAC[GSYM run_block_def] >>
+    irule run_block_result_equiv >> simp[] >>
+    rpt strip_tac >> res_tac) >>
+  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
+  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
+  gvs[result_equiv_def] >>
+  `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `v.vs_halted` >> gvs[result_equiv_def] >-
+  fs[state_equiv_def, execution_equiv_def] >>
+  (* OK/OK, not halted - apply IH *)
+  `v.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
+  `!i. i < LENGTH bb.bb_instructions - 1 ==>
+    ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
+    rpt strip_tac >> CCONTR_TAC >> fs[bb_well_formed_def] >> res_tac >> fs[]) >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `MEM v.vs_current_bb (bb_succs bb)` by (
+    irule exec_block_current_bb_in_succs >> simp[] >>
+    qexistsl_tac [`ctx`, `fuel`, `s1 with vs_inst_idx := 0`] >> simp[]) >>
+  first_x_assum irule >> simp[] >>
+  qexists_tac `safe` >> simp[] >> metis_tac[]
+QED
+
+Theorem run_function_result_equiv_closed:
+  !fuel ctx vars fn s1 s2 safe.
+    state_equiv vars s1 s2 /\
+    (!lbl. fn_entry_label fn = SOME lbl ==> lbl IN safe) /\
+    (!lbl bb. lbl IN safe /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+      bb_well_formed bb /\
+      EVERY inst_wf bb.bb_instructions /\
+      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+      (!inst x. MEM inst bb.bb_instructions /\
+               MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+      (!s. MEM s (bb_succs bb) ==> s IN safe)) ==>
+    result_equiv vars (run_function fuel ctx fn s1) (run_function fuel ctx fn s2)
+Proof
+  rpt strip_tac >>
+  simp[run_function_def] >>
+  Cases_on `fn_entry_label fn` >> simp[result_equiv_def] >>
+  rename1 `fn_entry_label fn = SOME lbl` >>
+  cheat
 QED

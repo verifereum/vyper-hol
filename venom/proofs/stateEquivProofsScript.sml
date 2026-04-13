@@ -53,6 +53,12 @@ Proof
   rw[execution_equiv_def]
 QED
 
+Theorem execution_equiv_sym:
+  !vars s1 s2. execution_equiv vars s1 s2 ==> execution_equiv vars s2 s1
+Proof
+  rw[execution_equiv_def]
+QED
+
 Theorem execution_equiv_trans:
   !vars s1 s2 s3.
     execution_equiv vars s1 s2 /\ execution_equiv vars s2 s3 ==>
@@ -140,6 +146,15 @@ Theorem result_equiv_mismatch[local,simp]:
   result_equiv vars (Error e) (IntRet v s) = F
 Proof
   rw[result_equiv_def]
+QED
+
+(* result_equiv is symmetric *)
+Theorem result_equiv_sym:
+  !vars r1 r2. result_equiv vars r1 r2 ==> result_equiv vars r2 r1
+Proof
+  Cases_on `r1` >> Cases_on `r2` >>
+  gvs[result_equiv_def] >>
+  metis_tac[state_equiv_sym, execution_equiv_sym]
 QED
 
 (* result_equiv is transitive *)
