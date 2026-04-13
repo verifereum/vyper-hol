@@ -1,5 +1,5 @@
 # Venom codegen correctness theorem statements (Props) and proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec $(VFMDIR)/spec/prop \
            defs proofs ../defs ../passes/shared/defs \
            ../analysis/liveness/defs ../analysis/cfg/defs \
            ../analysis/dfg/defs ../../syntax ../../semantics

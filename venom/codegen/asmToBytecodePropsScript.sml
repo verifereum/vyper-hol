@@ -1,14 +1,12 @@
 (*
- * Assembly → Bytecode Correctness — Theorem Statements
+ * Assembly -> Bytecode Correctness -- Properties and Simulation
  *
- * Properties of asm→bytecode lowering. States that asm execution
- * produces the same result as vfmExecution$run on the assembled
- * bytecode (assemble prog).
+ * Per-step correspondence: asm_step on one instruction matches
+ * vfmExecution$step on the assembled bytecode.
+ * Forward simulation: multi-step asm execution matches EVM run.
  *
- * Key insight: both use the same label offsets (compute_label_offsets).
- * The asm interpreter pushes concrete byte offsets for labels and maps
- * them back to asm indices for jumps. The EVM interpreter uses byte
- * offsets directly. At each step, stacks/memory/storage are identical.
+ * Structural helpers (offset maps, encoding) proved in
+ * proofs/asmToBytecodeProofsScript.sml and proofs/asmEncodeParseScript.sml.
  *
  * The bisimulation invariant is asm_evm_rel, which says:
  *   - stacks identical
@@ -16,7 +14,7 @@
  *   - PC related by asm_pc_to_offset (sum of instruction sizes)
  *   - code = assemble prog, parsed = parse_code thereof
  *
- * Gas: disjunctive - either results correspond, or EVM returns OutOfGas.
+ * Gas: disjunctive -- either results correspond, or EVM returns OutOfGas.
  *
  * TOP-LEVEL:
  *   asm_bytecode_sim         - forward simulation (asm terminates => EVM matches)
@@ -31,87 +29,28 @@
 
 Theory asmToBytecodeProps
 Ancestors
-  codegenRel vfmExecution
+  codegenRel asmToBytecodeProofs asmParseProofs asmEncodeParse
+  evmStepSim asmBytecodeSim vfmContext vfmExecution vfmExecutionProp
+  asmWf symbolResolve asmSem arithmetic
+  list rich_list finite_map While
 
-(* ===== Structural Properties ===== *)
+(* ===== Structural Helpers ===== *)
 
-(* build_offset_to_pc is left-inverse of asm_pc_to_offset at
-   instruction boundaries: byte_offset → asm_index round-trips.
-   Requires positive instruction size at pc so later entries don't
-   overwrite (AsmDataHeader has size 0 but is never executed). *)
-Theorem offset_to_pc_inverse:
-  ∀prog pc.
-    pc < LENGTH prog ∧
-    0 < asm_inst_size (EL pc prog) ⇒
-    FLOOKUP (build_offset_to_pc prog) (asm_pc_to_offset prog pc) =
-      SOME pc
-Proof
-  cheat
-QED
-
-(* compute_label_offsets agrees with asm_pc_to_offset for labels:
-   the byte offset assigned to a label matches its position.
-   Requires the label name is unique after position i
-   (no later AsmLabel or AsmDataHeader with the same name). *)
-Theorem label_offset_consistent:
-  ∀prog i lbl.
-    i < LENGTH prog ∧ EL i prog = AsmLabel lbl ∧
-    (∀j. i < j ∧ j < LENGTH prog ⇒
-       EL j prog ≠ AsmLabel lbl ∧
-       (∀l. EL j prog = AsmDataHeader l ⇒ l ≠ lbl)) ⇒
-    FLOOKUP (SND (compute_label_offsets prog)) lbl =
-      SOME (asm_pc_to_offset prog i)
-Proof
-  cheat
-QED
-
-(* encode_inst produces exactly asm_inst_size bytes when
-   the encoding well-formedness conditions hold. *)
-Theorem encode_inst_length:
-  ∀offsets inst.
-    (∀name. inst = AsmOp name ⇒ IS_SOME (evm_opcode_byte name)) ∧
-    (∀lbl off. FLOOKUP offsets lbl = SOME off ⇒
-       LENGTH (encode_num_bytes off) ≤ symbol_size) ∧
-    (∀lbl d off. inst = AsmPushOfst lbl d ∧
-       FLOOKUP offsets lbl = SOME off ⇒
-       LENGTH (encode_num_bytes (off + d)) ≤ symbol_size) ⇒
-    LENGTH (encode_inst offsets inst) = asm_inst_size inst
-Proof
-  cheat
-QED
-
-(* Bytes at offset asm_pc_to_offset in assemble prog match encode_inst.
-   This bridges the asm instruction index to the EVM byte position. *)
-Theorem encode_at:
-  ∀prog offsets i.
-    i < LENGTH prog ∧
-    (_, offsets) = compute_label_offsets prog ∧
-    asm_encoding_wf prog ⇒
-    TAKE (asm_inst_size (EL i prog))
-      (DROP (asm_pc_to_offset prog i) (assemble prog)) =
-    encode_inst offsets (EL i prog)
-Proof
-  cheat
-QED
-
-(* parse_code on assembled bytecode yields the correct opname at each
-   non-data instruction boundary. This connects the asm instruction
-   to what the EVM step function will dispatch on.
-
-   Existentially quantified over the opname: the proof must show
-   which opname parse_opcode selects for each encode_inst output. *)
+(* Weaker (IS_PREFIX) version of assemble_parse_exact *)
 Theorem assemble_parse_correct:
-  ∀prog i.
-    asm_wf prog ∧
-    i < LENGTH prog ∧
-    ¬ is_data_inst (EL i prog) ⇒
-    ∃op.
+  !prog i.
+    asm_wf prog /\
+    i < LENGTH prog /\
+    (!j. j <= i ==> ~is_data_inst (EL j prog)) ==>
+    ?op.
       FLOOKUP (parse_code 0 FEMPTY (assemble prog))
-              (asm_pc_to_offset prog i) = SOME op ∧
+              (asm_pc_to_offset prog i) = SOME op /\
       opcode op ≼ encode_inst (SND (compute_label_offsets prog))
                               (EL i prog)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all assemble_parse_exact >> strip_tac >>
+  qexists_tac `op` >> simp[IS_PREFIX_REFL]
 QED
 
 (* ===== Forward Simulation ===== *)
@@ -143,5 +82,16 @@ Theorem asm_bytecode_sim:
                   exc <> Reverted /\
                   asm_evm_rel prog as' es'))
 Proof
+  (* FALSE AS STATED. Missing preconditions (counterexamples in
+     counterexamplesScript.sml, Counterexample 6):
+     1. no_asm_calls prog
+        — pipeline obligation: codegen never emits CALL/CREATE/etc.
+          asm uses single-context model; EVM pushes new contexts.
+          Dischargeable from generate_fn_plan output.
+     2. LENGTH es.contexts = 1
+        — pipeline obligation: codegen targets single-context execution.
+          EVM with 2+ contexts: STOP pops context instead of halting.
+          Preserved by asm_evm_step (proven in its conclusion).
+          Dischargeable from initial_state_rel. *)
   cheat
 QED

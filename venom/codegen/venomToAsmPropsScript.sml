@@ -18,7 +18,7 @@
 
 Theory venomToAsmProps
 Ancestors
-  codegenRel
+  codegenRel blockSimHelpers cleanOpsSim genBlockSim
 
 (* ===== Per-Instruction Simulation ===== *)
 
@@ -46,6 +46,25 @@ Theorem gen_inst_simulation:
         asm_steps label_offsets offset_to_pc prog n as = AsmOK as' ∧
         venom_asm_rel label_offsets ps' vs' as'
 Proof
+  (* FALSE AS STATED. Missing preconditions vs gen_inst_ok_sim:
+     1. inst_wf inst
+        — dischargeable at block level from codegen_ready_fn + MEM bb/inst
+     2. LENGTH (compute_operands inst) ≤ 16
+        — pipeline obligation: EVM only has LOG0–LOG4 (tc ≤ 4 → 6 operands),
+          INVOKE args bounded by callee arity. Add to codegen_ready_fn or
+          a new evm_compatible predicate.
+     3. Label resolution: ∀l. MEM (Label l) ... ⇒ IS_SOME (FLOOKUP lo l)
+        — pipeline obligation from compute_label_offsets over full program.
+     4. prefix_spill_wf lo (FRONT ops) ps
+        — provable from generate_inst_plan output (needs new lemma).
+     5. SSA freshness: output vars not in ps.ps_stack / ps.ps_spilled
+        — dischargeable from ssa_form + plan_state invariant.
+     6. Stack depth after emit_input_plan ≥ operand count
+        — dischargeable from plan_state invariant.
+     7. PHI soundness: stack-found phi var evaluates correctly
+        — dischargeable from block entry invariant.
+     Items 1,4,5,6,7 are dischargeable at block/fn level from their
+     own invariants. Items 2,3 are pipeline obligations. *)
   cheat
 QED
 
@@ -95,6 +114,26 @@ Theorem gen_block_simulation:
             AsmFault as')) ∧
         venom_asm_terminal_rel vs' as')
 Proof
+  (* Missing preconditions from gen_inst_ok/halt/abort_sim:
+     1. MEM bb fn.fn_blocks
+        — dischargeable at fn level: generate_fn_plan iterates over fn.fn_blocks.
+     2. LENGTH (compute_operands inst) ≤ 16  (per instruction)
+        — pipeline obligation: evm_compatible (LOG tc ≤ 4, INVOKE arity bounded).
+          Propagated from fn-level hypothesis.
+     3. Label resolution: ∀l. MEM (Label l) ... ⇒ IS_SOME (FLOOKUP lo l)
+        — pipeline obligation from compute_label_offsets.
+     4. prefix_spill_wf as loop invariant
+        — provable from generate_inst_plan output (needs new lemma);
+          maintained across instructions by plan_state monotonicity.
+     5. SSA freshness / output-disjointness
+        — dischargeable from ssa_form + plan_state invariant across block.
+     6. PHI soundness
+        — dischargeable from block entry invariant.
+     7. Stack depth after emit_input_plan
+        — dischargeable from plan_state invariant.
+     Item 1 is dischargeable at fn level. Items 2,3 propagate from
+     fn-level hypotheses. Items 4–7 are block-internal invariants
+     provable from generate_block_plan structure. *)
   cheat
 QED
 
