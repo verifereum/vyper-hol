@@ -160,24 +160,49 @@ Definition bp_process_block_def:
     (c1 ∨ c2, r2)
 End
 
+(* ===== Forward-Edge PHI Filtering ===== *)
+
+(* Filter a PHI instruction's operands to only include predecessors
+ * from the forward-edge set (already processed in this pass).
+ * Non-PHI instructions pass through unchanged.
+ *
+ * Divergence from Python: Python unions ALL PHI operands including
+ * back edges, which causes non-termination on programs with
+ * pointer arithmetic in loops (e.g. v = PHI(alloca, ADD(v, 5))).
+ * Filtering to forward edges makes the analysis structurally
+ * terminating while preserving precision for all Vyper programs
+ * (Vyper never generates loop-carried pointer arithmetic). *)
+Definition phi_filter_fwd_def:
+  phi_filter_fwd fwd inst =
+    if inst.inst_opcode = PHI then
+      inst with inst_operands :=
+        FLAT (MAP (λ(l,v). [Label l; Var v])
+                  (FILTER (λ(l,v). MEM l fwd)
+                          (phi_pairs inst.inst_operands)))
+    else inst
+End
+
 (* ===== Fixpoint Iteration ===== *)
 
 (* One pass over all blocks in DFS pre-order.
- * Returns (changed, result). *)
+ * Returns (changed, result).
+ * Tracks forward-edge set: labels already processed this pass.
+ * PHI operands from back edges (not yet processed) are excluded. *)
 Definition bp_one_pass_aux_def:
-  bp_one_pass_aux fn result [] = (F, result) ∧
-  bp_one_pass_aux fn result (lbl::lbls) =
+  bp_one_pass_aux fn result fwd [] = (F, result) ∧
+  bp_one_pass_aux fn result fwd (lbl::lbls) =
     case FIND (λbb. bb.bb_label = lbl) fn.fn_blocks of
-      NONE => bp_one_pass_aux fn result lbls
+      NONE => bp_one_pass_aux fn result (lbl::fwd) lbls
     | SOME bb =>
-        let (c1, r1) = bp_process_block result bb.bb_instructions in
-        let (c2, r2) = bp_one_pass_aux fn r1 lbls in
+        let insts = MAP (phi_filter_fwd fwd) bb.bb_instructions in
+        let (c1, r1) = bp_process_block result insts in
+        let (c2, r2) = bp_one_pass_aux fn r1 (lbl::fwd) lbls in
         (c1 ∨ c2, r2)
 End
 
 Definition bp_one_pass_def:
   bp_one_pass fn order result =
-    bp_one_pass_aux fn result order
+    bp_one_pass_aux fn result [] order
 End
 
 (* Top-level analysis: iterate one-pass until fixpoint.
