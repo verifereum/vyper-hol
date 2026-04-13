@@ -287,6 +287,12 @@ Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
 End
 
+(* No generated split-block label collides with existing labels. *)
+Definition split_labels_fresh_def:
+  split_labels_fresh name_fn func ⇔
+    ∀p t. ¬MEM (name_fn p t) (fn_labels func)
+End
+
 (* ==========================================================================
    Context well-formedness
    ========================================================================== *)

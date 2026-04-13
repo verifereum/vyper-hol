@@ -490,3 +490,47 @@ Theorem run_blocks_abort:
     run_blocks (SUC fuel) ctx fn ss = Abort a ss'
 Proof ACCEPT_TAC run_blocks_abort_proof
 QED
+
+(* exec_block preserves vs_labels: helper with measure *)
+Theorem exec_block_preserves_labels_aux[local]:
+  !n fuel ctx bb s s'.
+    n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+    exec_block fuel ctx bb s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  Induct_on `n` >>
+  rpt strip_tac >>
+  pop_assum mp_tac >>
+  simp[Once venomExecSemanticsTheory.exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  Cases_on `step_inst fuel ctx x s` >> simp[] >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac step_inst_preserves_labels_always >> gvs[] >>
+  (* base: n=0 contradicts get_instruction = SOME *)
+  TRY (fs[venomInstTheory.get_instruction_def] >> NO_TAC) >>
+  (* step: apply IH *)
+  first_x_assum (qspecl_then [`fuel`,`ctx`,`bb`,
+    `v with vs_inst_idx := SUC s.vs_inst_idx`, `s'`] mp_tac) >>
+  imp_res_tac venomExecSemanticsTheory.step_inst_preserves_inst_idx >>
+  gvs[venomInstTheory.get_instruction_def]
+QED
+
+Theorem exec_block_preserves_labels:
+  !fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  metis_tac[exec_block_preserves_labels_aux]
+QED
+
+(* run_blocks preserves vs_labels *)
+Theorem run_blocks_preserves_labels:
+  !fuel ctx fn s s'.
+    run_blocks fuel ctx fn s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  Induct_on `fuel` >>
+  simp[Once venomExecSemanticsTheory.run_blocks_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac exec_block_preserves_labels >> gvs[] >>
+  metis_tac[]
+QED

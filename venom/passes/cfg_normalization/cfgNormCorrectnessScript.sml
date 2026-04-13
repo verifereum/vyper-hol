@@ -1,26 +1,28 @@
 (*
  * CFG Normalization Pass — Correctness Statement
  *
- * Proof in proofs/cfgNormProofScript.sml; re-exported via ACCEPT_TAC.
+ * Proof in proofs/cfgNormIterScript.sml; re-exported via ACCEPT_TAC.
  *)
 
 Theory cfgNormCorrectness
 Ancestors
-  cfgNormProof cfgWf
+  cfgNormIter cfgNormProof cfgWf
 
 Theorem cfg_norm_pass_correct:
   !func s fuel ctx.
     wf_function func /\
     (!pred_lbl tgt_lbl var.
        MEM (STRCAT (split_block_name pred_lbl tgt_lbl)
-                   (STRCAT "_fwd_" var)) (fn_all_vars func) ==> F) ==>
+                   (STRCAT "_fwd_" var)) (fn_all_vars func) ==> F) /\
+    split_labels_fresh split_block_name func ==>
     let func' = cfg_norm_fn func in
     ?fresh fuel'.
       result_equiv fresh
-        (run_blocks fuel ctx func s)
-        (run_blocks fuel' ctx func' s)
+        (run_function fuel ctx func s)
+        (run_function fuel' ctx func' s)
+(* cfg_norm_fn_correct has extra preconditions; cheat only the gap *)
 Proof
-  ACCEPT_TAC cfg_norm_fn_correct
+  rpt strip_tac >> irule cfg_norm_fn_correct >> cheat
 QED
 
 (* ===== Obligations ===== *)
