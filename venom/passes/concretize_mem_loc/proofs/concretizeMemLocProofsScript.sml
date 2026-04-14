@@ -5308,8 +5308,14 @@ Triviality alloca_size_le_remaining:
     FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
     w2n sz <= fn_remaining_alloca_size fn s
 Proof
-  (* TEMPORARILY CHEATED - MEM_SUM_FILTER_LE irule doesn't match case expr *)
-  cheat
+  rpt strip_tac >>
+  simp[fn_remaining_alloca_size_def] >>
+  `MEM inst (fn_insts fn)` by metis_tac[mem_fn_insts] >>
+  qmatch_goalsub_abbrev_tac `SUM (MAP f (FILTER P _))` >>
+  `MEM inst (FILTER P (fn_insts fn))` by
+    (rw[MEM_FILTER, Abbr `P`] >> fs[flookup_thm]) >>
+  drule SUM_MAP_MEM_bound >> disch_then (qspec_then `f` mp_tac) >>
+  simp[Abbr `f`]
 QED
 
 (* Helper: alloca step through step_inst (not step_inst_base).
@@ -5342,12 +5348,10 @@ Proof
     simp[mk_assign_inst_def] >>
   simp[step_inst_non_invoke] >>
   irule concretize_step_alloca_assign >> simp[] >>
-  (* TEMPORARILY CHEATED - needs alloca_size_le_remaining + nao derivation *)
-  (* fs[alloca_overflow_safe_def] >>
-     (`s1.vs_alloca_next = s1.vs_alloca_next` by
-       (simp[MAX_DEF])) >>
-     rpt conj_tac >> metis_tac[] *)
-  cheat
+  fs[alloca_overflow_safe_def] >>
+  rpt conj_tac >> TRY (metis_tac[]) >>
+  TRY (`0 <= fn_remaining_alloca_size fn s1` by simp[] >> simp[]) >>
+  rpt strip_tac >> drule_all alloca_size_le_remaining >> simp[]
 QED
 
 (* FIND with predicate Q /\ id = FIND with id /\ Q (needed because
