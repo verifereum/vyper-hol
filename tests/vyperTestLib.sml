@@ -328,10 +328,11 @@ val excluded_test_names = [
      TODO: fix CreateTarget to handle RawCreate differently *)
   "test_raw_create*",
   "test_bubble_revert_data_raw_create",
-  (* create_from_blueprint tests: blueprint deployments have
-     deployment_type="blueprint" but the test runner tries to run
-     the constructor, which fails because the ABI is empty.
-     TODO: handle blueprint deployments in run_trace (skip constructor) *)
+
+  (* create_from_blueprint / create_copy_of / create_minimal_proxy_to tests:
+     opaque create model doesn't run initcode or load sources for created
+     contracts, so calls to created contracts fail.
+     TODO: run initcode for create builtins *)
   "test_create_from_blueprint*",
   "test_blueprint_evals_once_side_effects",
   "test_bubble_revert_data_blueprint",
@@ -476,7 +477,7 @@ end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn ((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+  JSONDecode.map (fn (((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
              let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
                  val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
@@ -498,9 +499,10 @@ val deployment : term decoder =
                ("chainId", numSyntax.term_of_int 1),
                ("callData", d),
                ("runtimeBytecode", bc),
-               ("storageLayout", sl)
+               ("storageLayout", sl),
+               ("isBlueprint", bp)
              ]) end)
-          (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
+          (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
@@ -519,7 +521,9 @@ val deployment : term decoder =
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm),
                   field "runtime_bytecode" bytes),
-                 field "storage_layout" storage_layout))
+                 field "storage_layout" storage_layout),
+                JSONDecode.map (fn s => mk_bool (s = "blueprint"))
+                  (field "deployment_type" string)))
 
 val trace : term decoder =
   achoose "trace" [
