@@ -89,6 +89,7 @@ Definition ext_bi_independent_def:
     DISJOINT (set (inst_defs i2)) (set (inst_uses i1)) /\
     DISJOINT (set (inst_defs i1)) (set (inst_defs i2)) /\
     effects_independent i1.inst_opcode i2.inst_opcode /\
+    abort_compatible i1.inst_opcode i2.inst_opcode /\
     ~is_terminator i1.inst_opcode /\ ~is_terminator i2.inst_opcode /\
     ~is_alloca_op i1.inst_opcode /\ ~is_alloca_op i2.inst_opcode /\
     ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode
@@ -97,7 +98,8 @@ End
 Theorem ext_bi_independent_sym:
   !i1 i2. ext_bi_independent i1 i2 <=> ext_bi_independent i2 i1
 Proof
-  rw[ext_bi_independent_def, effects_independent_def] >>
+  rw[ext_bi_independent_def, effects_independent_def,
+     abort_compatible_def] >>
   metis_tac[DISJOINT_SYM]
 QED
 
@@ -608,6 +610,8 @@ Triviality step_swap_ok_ext_invoke_one_out:
     DISJOINT (set (inst_defs a)) (set (inst_uses b)) /\
     DISJOINT (set (inst_defs b)) (set (inst_uses a)) /\
     DISJOINT (set (inst_defs a)) (set (inst_defs b)) /\
+    effects_independent a.inst_opcode b.inst_opcode /\
+    abort_compatible a.inst_opcode b.inst_opcode /\
     step_inst fuel ctx a s = OK (update_var out val_ s) /\
     step_inst fuel ctx b (update_var out val_ s) = OK sab ==>
     ?sb. step_inst fuel ctx b s = OK sb /\
@@ -641,7 +645,7 @@ Proof
                `update_var out val_ sb`,`sba`] mp_tac
     independent_commute_eq_ext >>
   simp[] >>
-  (impl_tac >- gvs[effects_independent_def, is_terminator_def,
+  (impl_tac >- gvs[is_terminator_def,
                     is_alloca_op_def, is_ext_call_op_def]) >>
   simp[]
 QED

@@ -221,6 +221,43 @@ Proof
     imp_res_tac step_pres_all_applied >> gvs[])
 QED
 
+(* Effect-free account-reading ops: exactly BALANCE/SELFBALANCE/EXTCODESIZE/EXTCODEHASH *)
+Triviality effect_free_account_read_opcodes[local]:
+  !op. is_effect_free_op op /\
+    (Eff_BALANCE IN read_effects op \/ Eff_EXTCODE IN read_effects op) ==>
+    op = BALANCE \/ op = SELFBALANCE \/ op = EXTCODESIZE \/ op = EXTCODEHASH
+Proof Cases >> EVAL_TAC
+QED
+
+(* Account-reading opcodes: output values depend only on
+   account sub-fields (balance/nonce/code) and call_ctx,
+   NOT on full vs_accounts record equality. *)
+Triviality account_read_output_agree[local]:
+  !inst s1 s2 r1 r2 w.
+    step_inst_base inst s1 = OK r1 /\
+    step_inst_base inst s2 = OK r2 /\
+    (inst.inst_opcode = BALANCE \/ inst.inst_opcode = SELFBALANCE \/
+     inst.inst_opcode = EXTCODESIZE \/ inst.inst_opcode = EXTCODEHASH) /\
+    (!op. MEM op inst.inst_operands ==>
+          eval_operand op s1 = eval_operand op s2) /\
+    (!addr. (s1.vs_accounts addr).balance =
+            (s2.vs_accounts addr).balance /\
+            (s1.vs_accounts addr).nonce =
+            (s2.vs_accounts addr).nonce /\
+            (s1.vs_accounts addr).code =
+            (s2.vs_accounts addr).code) /\
+    s1.vs_call_ctx = s2.vs_call_ctx /\
+    MEM w inst.inst_outputs ==>
+    lookup_var w r1 = lookup_var w r2
+Proof
+  rpt strip_tac >> gvs[] >>
+  gvs[step_inst_base_def, exec_read0_def, exec_read1_def,
+      AllCaseEqs(), update_var_def, lookup_var_def,
+      FLOOKUP_UPDATE, lookup_account_def] >>
+  (* EXTCODEHASH: account_empty tautology on s2's own fields *)
+  gvs[account_empty_def] >> metis_tac[]
+QED
+
 (* Non-effect-free eligible ops preserve all vars.
    These ops (MSTORE, SSTORE, MCOPY, LOG, ASSERT, etc.) modify
    side-effect fields only — vs_vars is untouched. *)
@@ -351,12 +388,33 @@ Proof
       metis_tac[step_nop_identity] >>
     `step_inst fuel ctx inst_a vb = OK vb` by
       metis_tac[step_nop_identity] >>
-    gvs[])
-  >> Cases_on `is_effect_free_op inst_a.inst_opcode`
+    gvs[]) >>
+  Cases_on `is_effect_free_op inst_a.inst_opcode`
   >- (
-    irule step_inst_base_effect_free_output_determined_vars >>
-    qexistsl_tac [`inst_a`, `ss`, `vb`] >>
-    rpt conj_tac >> gvs[] >> res_tac >> gvs[])
+    (* Account-reading opcodes need special handling because SSTORE
+       modifies .storage but preserves .balance/.nonce/.code.
+       The generic theorem demands full vs_accounts equality which
+       fails for BALANCE × SSTORE pairs. *)
+    Cases_on `Eff_BALANCE IN read_effects inst_a.inst_opcode \/
+              Eff_EXTCODE IN read_effects inst_a.inst_opcode`
+    >- (
+      (* inst_a ∈ {BALANCE, SELFBALANCE, EXTCODESIZE, EXTCODEHASH}.
+         Prove output agreement directly from sub-field preservation. *)
+      irule account_read_output_agree >> simp[] >>
+      metis_tac[effect_free_account_read_opcodes])
+    >- (
+      (* No account-reading effects: generic theorem applies *)
+      irule step_inst_base_effect_free_output_determined_vars >>
+      qexistsl_tac [`inst_a`, `ss`, `vb`] >>
+      rpt conj_tac >> gvs[] >>
+      TRY (res_tac >> gvs[] >> NO_TAC) >>
+      Cases_on `Eff_STORAGE IN read_effects inst_a.inst_opcode`
+      >- (
+        `Eff_STORAGE NOTIN write_effects inst_b.inst_opcode` by res_tac >>
+        `Eff_BALANCE NOTIN write_effects inst_b.inst_opcode` by
+          metis_tac[eligible_write_constraints] >>
+        `vb.vs_accounts = ss.vs_accounts` by gvs[] >> gvs[])
+      >- gvs[]))
   >> (
     (* Non-effect-free: all vars preserved *)
     `!v. lookup_var v va = lookup_var v ss` by
@@ -380,6 +438,7 @@ Theorem independent_commute_eq:
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
     effects_independent inst1.inst_opcode inst2.inst_opcode /\
+    abort_compatible inst1.inst_opcode inst2.inst_opcode /\
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode /\
@@ -390,7 +449,7 @@ Proof
   (* A: commute_equiv *)
   `commute_equiv (set (inst_defs inst1) UNION set (inst_defs inst2)) s12 s21` by (
     mp_tac (Q.SPECL [`fuel`, `ctx`, `inst1`, `inst2`, `ss`]
-                      effects_independent_commute) >> simp[]) >>
+                      effects_independent_commute) >> simp[LET_THM]) >>
   (* B: vs_allocas *)
   `s12.vs_allocas = s21.vs_allocas` by (
     `v1.vs_allocas = ss.vs_allocas` by metis_tac[step_inst_preserves_allocas] >>
@@ -645,6 +704,7 @@ Theorem invoke_commute_eq[local]:
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
     effects_independent inst1.inst_opcode inst2.inst_opcode /\
+    abort_compatible inst1.inst_opcode inst2.inst_opcode /\
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode ==>
@@ -667,7 +727,7 @@ Proof
   `commute_equiv (set (inst_defs inst1) UNION set (inst_defs inst2))
      s12 s21` by (
     mp_tac (Q.SPECL [`fuel`, `ctx`, `inst1`, `inst2`, `ss`]
-                      effects_independent_commute) >> simp[]) >>
+                      effects_independent_commute) >> simp[LET_THM]) >>
   (* 4-5: step_inst_base reductions *)
   `step_inst_base inst2 ss = OK v2` by gvs[step_inst_non_invoke] >>
   `step_inst_base inst2 v1 = OK s12` by gvs[step_inst_non_invoke] >>
@@ -724,6 +784,7 @@ Theorem independent_commute_eq_ext:
     DISJOINT (set (inst_defs inst2)) (set (inst_uses inst1)) /\
     DISJOINT (set (inst_defs inst1)) (set (inst_defs inst2)) /\
     effects_independent inst1.inst_opcode inst2.inst_opcode /\
+    abort_compatible inst1.inst_opcode inst2.inst_opcode /\
     ~is_terminator inst1.inst_opcode /\ ~is_terminator inst2.inst_opcode /\
     ~is_alloca_op inst1.inst_opcode /\ ~is_alloca_op inst2.inst_opcode /\
     ~is_ext_call_op inst1.inst_opcode /\ ~is_ext_call_op inst2.inst_opcode ==>
@@ -738,6 +799,8 @@ Proof
   >- (
     `effects_independent inst2.inst_opcode inst1.inst_opcode` by (
       gvs[effects_independent_def]) >>
+    `abort_compatible inst2.inst_opcode inst1.inst_opcode` by (
+      gvs[abort_compatible_def]) >>
     `s21 = s12` suffices_by simp[] >>
     qspecl_then [`fuel`, `ctx`, `inst2`, `inst1`, `ss`, `v2`, `v1`, `s21`, `s12`]
       mp_tac invoke_commute_eq >>

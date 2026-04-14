@@ -6827,11 +6827,20 @@ val run_blocks_SUC = let
   val inst = SPECL [sv, mk_comb(``SUC``, fv), fnv, cv] rb
 in SIMP_RULE (srw_ss()) [] inst |> GENL [sv, fv, fnv, cv] end;
 
+(* DFT preserves fn_pseudos_prefix: dft_block outputs phis ++ scheduled,
+   so pseudos remain at the front. Cheated pending proof of
+   schedule_from_entries producing only non-pseudo instructions. *)
+Triviality dft_fn_pseudos_prefix:
+  !fn. fn_pseudos_prefix fn ==> fn_pseudos_prefix (dft_fn fn)
+Proof
+  cheat
+QED
+
 (* run_blocks with DFT-transformed blocks produces lift_result-equivalent
    results. Fuel induction on run_blocks. *)
-Triviality dft_fn_run_blocks_lift:
+Theorem dft_fn_run_blocks_lift:
   !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn ==>
+    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dft_fn fn) s)
@@ -6863,6 +6872,12 @@ Proof
        (fs[lookup_block_def] >> imp_res_tac venomExecPropsTheory.FIND_MEM) >>
      `bb_well_formed bb'` by
        (irule dft_fn_blocks_well_formed >> metis_tac[]) >>
+     `pseudos_prefix bb` by
+       (gvs[fn_pseudos_prefix_def]) >>
+     `pseudos_prefix bb'` by
+       (`fn_pseudos_prefix (dft_fn fn)` by
+          (irule dft_fn_pseudos_prefix >> simp[]) >>
+        gvs[fn_pseudos_prefix_def]) >>
      (* DFT output is topo_sorted under full_dep *)
      `topo_sorted (full_dep (build_full_eda bb.bb_instructions))
         (MAP (choose_original (block_body bb)) (block_body bb'))` by
@@ -6891,7 +6906,7 @@ QED
 
 Triviality dft_fn_run_function_lift:
   !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\
+    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_function fuel ctx fn s)

@@ -476,8 +476,9 @@ Triviality inst_in_unique_block:
     bb1 = bb2
 Proof
   rpt strip_tac >>
-  qspecl_then [`\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-               `bbs`, `bb1`, `bb2`, `id`]
+  qspecl_then [`bbs`,
+               `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
+               `bb1`, `bb2`, `id`]
     mp_tac all_distinct_flat_map_unique >>
   simp[]
 QED
@@ -526,8 +527,9 @@ Proof
   gvs[] >>
   (* Step 4: Same block: def_bb = bb *)
   `def_bb = bb` by (
-    qspecl_then [`\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-                 `fn.fn_blocks`, `def_bb`, `bb`, `def_inst.inst_id`]
+    qspecl_then [`fn.fn_blocks`,
+                 `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
+                 `def_bb`, `bb`, `def_inst.inst_id`]
       mp_tac all_distinct_flat_map_unique >>
     impl_tac >- (
       gvs[fn_inst_ids_distinct_def] >>
