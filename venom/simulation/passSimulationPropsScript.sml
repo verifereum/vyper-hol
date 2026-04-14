@@ -844,6 +844,31 @@ Proof
       fs[get_successors_def, is_terminator_def])
 QED
 
+(* Weaker variant: bb_succs preserved when f preserves get_successors
+   of the terminator and non-terminators map to non-terminators.
+   Handles passes that substitute operands (e.g. copy propagation)
+   where subst_op_map preserves Label operands. *)
+Theorem mapi_transform_bb_succs_weak:
+  !f bb.
+    (!i inst. is_terminator inst.inst_opcode ==>
+              get_successors (f i inst) = get_successors inst) /\
+    (!i inst. ~is_terminator inst.inst_opcode ==>
+              ~is_terminator (f i inst).inst_opcode)
+    ==>
+    bb_succs (bb with bb_instructions := MAPi f bb.bb_instructions) =
+    bb_succs bb
+Proof
+  rpt strip_tac >>
+  Cases_on `bb.bb_instructions` >> simp[bb_succs_def, MAPi_def] >>
+  qspecl_then [`f`, `h::t`] mp_tac last_mapi >> simp[] >> strip_tac >>
+  fs[] >>
+  Cases_on `is_terminator (LAST (h::t)).inst_opcode`
+  >- (res_tac >> fs[])
+  >- (`~is_terminator (f (LENGTH t) (LAST (h::t))).inst_opcode`
+        by metis_tac[] >>
+      fs[get_successors_def, is_terminator_def])
+QED
+
 (* fn_inst_ids_distinct preserved when inst_id preserved *)
 Theorem mapi_transform_fn_inst_ids:
   !f fn.
@@ -994,6 +1019,39 @@ Proof
   rpt conj_tac
   >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[])
   >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[])
+  >> (* fn_inst_ids_distinct *)
+  fs[wf_function_def, fn_inst_ids_distinct_def, function_map_transform_def,
+     MAP_MAP_o, combinTheory.o_DEF, analysis_block_transform_def,
+     map_inst_id_mapi_eq]
+QED
+
+(* Weaker variant: wf preservation for operand-substitution passes.
+   Replaces the terminator identity condition with:
+   - terminator opcode preserved (for bb_well_formed)
+   - get_successors preserved (for bb_succs / fn_succs_closed)
+   Handles passes like assign_elim/SCCP that substitute operands
+   in terminators without changing the opcode or Label operands. *)
+Theorem aft_singleton_preserves_wf_weak:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    (!v inst. (f v inst).inst_id = inst.inst_id) /\
+    (!v inst. is_terminator inst.inst_opcode ==>
+              is_terminator (f v inst).inst_opcode) /\
+    (!v inst. is_terminator inst.inst_opcode ==>
+              get_successors (f v inst) = get_successors inst) /\
+    (!v inst. ~is_terminator inst.inst_opcode ==>
+              ~is_terminator (f v inst).inst_opcode) /\
+    (!v inst. inst.inst_opcode = PHI ==> (f v inst).inst_opcode = PHI) /\
+    (!v inst. inst.inst_opcode <> PHI ==> (f v inst).inst_opcode <> PHI) /\
+    wf_function fn ==>
+    wf_function (analysis_function_transform bottom result
+                   (\v inst. [f v inst]) fn)
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[aft_singleton_eq_fmt_mapi] >>
+  irule fmt_preserves_wf_function >> simp[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[])
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs_weak >> simp[])
   >> (* fn_inst_ids_distinct *)
   fs[wf_function_def, fn_inst_ids_distinct_def, function_map_transform_def,
      MAP_MAP_o, combinTheory.o_DEF, analysis_block_transform_def,
