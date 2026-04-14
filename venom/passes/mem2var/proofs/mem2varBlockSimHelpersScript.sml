@@ -2870,8 +2870,8 @@ Theorem m2v_nonterminal_step_dispatch:
     m2v_non32_ok fn s1 s2 /\
     m2v_ao_undef_sync fn s1 s2 /\
     m2v_pvars_set fn bb i s2 /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
-    next_alloca_offset s1 < dimword (:256) /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
+    s1.vs_alloca_next < dimword (:256) /\
     step_inst fuel ctx (EL i bb.bb_instructions) s1 = OK v1 ==>
     ?v2. step_inst fuel ctx
            (HD (m2v_rewrite_inst fn (EL i bb.bb_instructions))) s2 = OK v2 /\
@@ -3104,7 +3104,7 @@ QED
 
 Resume m2v_nonterminal_step_dispatch[alloca]:
   (* ALLOCA: same instruction on both sides (not transformed).
-     Both execute exec_alloca identically when next_alloca_offset agrees. *)
+     Both execute exec_alloca identically when vs_alloca_next agrees. *)
   `inst.inst_opcode = ALLOCA` by
     (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
   gvs[step_inst_non_invoke] >>
@@ -3115,7 +3115,7 @@ Resume m2v_nonterminal_step_dispatch[alloca]:
   gvs[step_inst_base_def, exec_alloca_def] >>
   `s1.vs_allocas = s2.vs_allocas` by gvs[m2v_inv_noix_def] >>
   `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
-  (* next_alloca_offset agreement from dispatch precondition *)
+  (* vs_alloca_next agreement from dispatch precondition *)
   Cases_on `FLOOKUP s1.vs_allocas inst.inst_id`
   >- ((* NONE: new allocation — both sides compute identical result.
         Both sides: allocas |+ (id, (nao, w2n alloc_sz)),
@@ -3185,7 +3185,7 @@ QED
 
 Resume m2v_nonterminal_step_dispatch[alloca_none_inv_overlap]:
   gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-      FLOOKUP_UPDATE, AllCaseEqs(), next_alloca_offset_def] >>
+      FLOOKUP_UPDATE, AllCaseEqs()] >>
   rpt strip_tac >> res_tac >> simp[] >>
   gvs[arithmeticTheory.MAX_LE]
 QED
@@ -3905,7 +3905,7 @@ Proof
 QED
 
 (* ================================================================== *)
-(* nao (next_alloca_offset) preservation helpers — moved early for     *)
+(* nao (vs_alloca_next) preservation helpers — moved early for     *)
 (* use in Resume blocks below.                                         *)
 (* ================================================================== *)
 
@@ -3924,13 +3924,13 @@ Proof
   Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def]
 QED
 
-(* next_alloca_offset preserved by halt/revert/set_returndata/jump_to *)
+(* vs_alloca_next preserved by halt/revert/set_returndata/jump_to *)
 Theorem nao_halt_revert:
-  !s rd. next_alloca_offset (halt_state s) = next_alloca_offset s /\
-         next_alloca_offset (revert_state s) = next_alloca_offset s /\
-         next_alloca_offset (set_returndata rd s) = next_alloca_offset s
+  !s rd. (halt_state s).vs_alloca_next = s.vs_alloca_next /\
+         (revert_state s).vs_alloca_next = s.vs_alloca_next /\
+         (set_returndata rd s).vs_alloca_next = s.vs_alloca_next
 Proof
-  simp[next_alloca_offset_def, halt_state_def, revert_state_def,
+  simp[halt_state_def, revert_state_def,
        set_returndata_def]
 QED
 
@@ -3940,23 +3940,23 @@ Theorem m2v_terminal_inv_preserved:
   !fn s1 s2 rd.
     m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
     m2v_ao_undef_sync fn s1 s2 /\
-    next_alloca_offset s1 = next_alloca_offset s2 ==>
+    s1.vs_alloca_next = s2.vs_alloca_next ==>
     (m2v_inv_noix fn (halt_state (set_returndata rd s1))
                      (halt_state (set_returndata rd s2)) /\
      m2v_non32_ok fn (halt_state (set_returndata rd s1))
                      (halt_state (set_returndata rd s2)) /\
      m2v_ao_undef_sync fn (halt_state (set_returndata rd s1))
                           (halt_state (set_returndata rd s2)) /\
-     next_alloca_offset (halt_state (set_returndata rd s1)) =
-     next_alloca_offset (halt_state (set_returndata rd s2))) /\
+     (halt_state (set_returndata rd s1)).vs_alloca_next =
+     (halt_state (set_returndata rd s2)).vs_alloca_next) /\
     (m2v_inv_noix fn (revert_state (set_returndata rd s1))
                      (revert_state (set_returndata rd s2)) /\
      m2v_non32_ok fn (revert_state (set_returndata rd s1))
                      (revert_state (set_returndata rd s2)) /\
      m2v_ao_undef_sync fn (revert_state (set_returndata rd s1))
                           (revert_state (set_returndata rd s2)) /\
-     next_alloca_offset (revert_state (set_returndata rd s1)) =
-     next_alloca_offset (revert_state (set_returndata rd s2)))
+     (revert_state (set_returndata rd s1)).vs_alloca_next =
+     (revert_state (set_returndata rd s2)).vs_alloca_next)
 Proof
   rpt strip_tac >>
   `revert_state = halt_state` by simp[FUN_EQ_THM, revert_state_def, halt_state_def] >>
@@ -3983,20 +3983,20 @@ Theorem m2v_step_return_revert_find_none:
     m2v_nonpromoted_access_safe fn s1 /\
     MEM inst (fn_insts fn) /\
     inst_wf inst /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     MEM bb fn.fn_blocks /\
     MEM inst bb.bb_instructions ==>
     (?e. step_inst fuel ctx inst s1 = Error e) \/
     lift_result
       (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                m2v_ao_undef_sync fn s1 s2 /\
-               next_alloca_offset s1 = next_alloca_offset s2)
+               s1.vs_alloca_next = s2.vs_alloca_next)
       (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                m2v_ao_undef_sync fn s1 s2 /\
-               next_alloca_offset s1 = next_alloca_offset s2)
+               s1.vs_alloca_next = s2.vs_alloca_next)
       (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                m2v_ao_undef_sync fn s1 s2 /\
-               next_alloca_offset s1 = next_alloca_offset s2)
+               s1.vs_alloca_next = s2.vs_alloca_next)
       (step_inst fuel ctx inst s1)
       (step_inst fuel ctx inst s2)
 Proof
@@ -4048,9 +4048,9 @@ Proof
 QED
 
 Theorem nao_jump_to:
-  !s lbl. next_alloca_offset (jump_to lbl s) = next_alloca_offset s
+  !s lbl. (jump_to lbl s).vs_alloca_next = s.vs_alloca_next
 Proof
-  simp[next_alloca_offset_def, jump_to_def]
+  simp[jump_to_def]
 QED
 
 (* nao preserved through non-terminal easy terminator step_inst
@@ -4061,7 +4061,7 @@ QED
 Theorem nao_easy_terminator:
   !fn inst s1 s2 fuel ctx.
     m2v_inv_noix fn s1 s2 /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     m2v_fresh_names_disjoint fn /\
     MEM inst (fn_insts fn) /\
     is_terminator inst.inst_opcode /\
@@ -4070,7 +4070,7 @@ Theorem nao_easy_terminator:
     inst.inst_opcode <> REVERT ==>
     !s1' s2'. step_inst fuel ctx inst s1 = OK s1' /\
               step_inst fuel ctx inst s2 = OK s2' ==>
-              next_alloca_offset s1' = next_alloca_offset s2'
+              s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
@@ -4748,7 +4748,7 @@ Proof
   simp[m2v_fresh_undef_def, lookup_var_def]
 QED
 
-(*  next_alloca_offset preservation helpers *)
+(*  vs_alloca_next preservation helpers *)
 
 (* MAX a L1 = MAX a L2 /\ a <= c ==> MAX c L1 = MAX c L2.
    Used when alloca_next grows but memory is unchanged. *)
@@ -4762,43 +4762,33 @@ QED
    Requires alloca_next grows monotonically (a <= c) and agrees on both. *)
 Theorem nao_preserved_mem_unchanged:
   !s1 s2 s1' s2'.
-    next_alloca_offset s1 = next_alloca_offset s2 /\
     s1.vs_alloca_next = s2.vs_alloca_next /\
-    s1'.vs_memory = s1.vs_memory /\ s2'.vs_memory = s2.vs_memory /\
-    s1'.vs_alloca_next = s2'.vs_alloca_next /\
-    s1.vs_alloca_next <= s1'.vs_alloca_next ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
-Proof
-  rw[next_alloca_offset_def] >>
-  irule max_eq_mono >> qexists `s1.vs_alloca_next` >> simp[]
+    s1'.vs_alloca_next = s2'.vs_alloca_next ==>
+    s1'.vs_alloca_next = s2'.vs_alloca_next
+Proof simp[]
 QED
 
 (* For ops that don't change memory or alloca_next on either side *)
 Theorem nao_preserved_no_mem_change:
   !s1 s2 s1' s2'.
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     s1'.vs_memory = s1.vs_memory /\ s2'.vs_memory = s2.vs_memory /\
     s1'.vs_alloca_next = s1.vs_alloca_next /\
     s2'.vs_alloca_next = s2.vs_alloca_next ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
-Proof simp[next_alloca_offset_def]
+    s1'.vs_alloca_next = s2'.vs_alloca_next
+Proof simp[]
 QED
 
 (* For ops where both sides expand memory by the same amount D:
    LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D, same for s2.
-   Then next_alloca_offset is preserved by MAX-associativity. *)
+   Then vs_alloca_next is preserved by MAX-associativity. *)
 Theorem nao_preserved_same_expansion:
-  !s1 s2 s1' s2' D.
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+  !s1 s2 s1' s2'.
     s1.vs_alloca_next = s2.vs_alloca_next /\
     s1'.vs_alloca_next = s1.vs_alloca_next /\
-    s2'.vs_alloca_next = s2.vs_alloca_next /\
-    LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
-    LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
-Proof
-  simp[next_alloca_offset_def, arithmeticTheory.MAX_ASSOC] >>
-  metis_tac[]
+    s2'.vs_alloca_next = s2.vs_alloca_next ==>
+    s1'.vs_alloca_next = s2'.vs_alloca_next
+Proof simp[]
 QED
 
 (* exec_alloca doesn't decrease vs_alloca_next *)
@@ -4806,9 +4796,8 @@ Theorem exec_alloca_alloca_next_mono:
   !inst s sz s'. exec_alloca inst s sz = OK s' ==>
     s.vs_alloca_next <= s'.vs_alloca_next
 Proof
-  simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM,
-       next_alloca_offset_def] >>
-  rpt strip_tac >> gvs[arithmeticTheory.MAX_DEF]
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
 QED
 
 (* step_inst for ALLOCA doesn't decrease vs_alloca_next *)
@@ -5082,10 +5071,10 @@ Theorem step_inst_ext_call_nao:
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
          (m2v_promo_list fn) = NONE /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
+    s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
   `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
@@ -5156,11 +5145,11 @@ Theorem nao_dispatch_preserved:
     idx < LENGTH bb.bb_instructions /\
     ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
     m2v_inv_noix fn s1 s2 /\ m2v_inv_noix fn s1' s2' /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     step_inst fuel ctx (EL idx bb.bb_instructions) s1 = OK s1' /\
     step_inst fuel ctx (HD (m2v_rewrite_inst fn
         (EL idx bb.bb_instructions))) s2 = OK s2' ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
+    s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
   `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
@@ -5265,15 +5254,15 @@ Theorem step_inst_base_same_mem_growth:
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_data_section = s2.vs_data_section /\
     s1.vs_alloca_next = s2.vs_alloca_next /\
-    next_alloca_offset s1 = next_alloca_offset s2 ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
+    s1.vs_alloca_next = s2.vs_alloca_next ==>
+    s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
   `s1'.vs_alloca_next = s1.vs_alloca_next` by
     metis_tac[step_inst_base_preserves_allocas] >>
   `s2'.vs_alloca_next = s2.vs_alloca_next` by
     metis_tac[step_inst_base_preserves_allocas] >>
-  gvs[next_alloca_offset_def] >>
+  gvs[] >>
   Cases_on `Eff_MEMORY IN write_effects inst.inst_opcode`
   >- metis_tac[smg_mem_writers]
   >> (
@@ -5314,10 +5303,10 @@ Theorem nao_promoted_mstore:
     m2v_promo_sizes_bounded fn /\
     alloca_inv s1 /\
     m2v_inv_noix fn s1 s2 /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     step_inst fuel ctx inst s1 = OK s1' /\
     step_inst fuel ctx (HD (m2v_promote_inst pvar ao sz inst)) s2 = OK s2' ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
+    s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
   (* 1. Operand structure + sz=32 *)
@@ -5357,10 +5346,9 @@ Proof
     mp_tac (Q.SPECL [`fuel`,`ctx`,`hinst`,`s2`,`s2'`]
               step_inst_preserves_allocas) >>
     simp[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
-  (* 6. MAX algebra: off+32 <= alloca_next absorbs memory growth *)
+  (* 6. vs_alloca_next preserved: both sides unchanged *)
   `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
-  simp[next_alloca_offset_def] >>
-  irule nao_bounded_ext >> gvs[next_alloca_offset_def]
+  simp[]
 QED
 
 (* nao preserved for non-MSTORE promoted instructions.
@@ -5374,11 +5362,11 @@ Theorem nao_promoted_non_mstore:
     ~is_ext_call_op inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     step_inst fuel ctx inst s1 = OK s1' /\
     step_inst fuel ctx
       (HD (m2v_promote_inst pvar ao sz inst)) s2 = OK s2' ==>
-    next_alloca_offset s1' = next_alloca_offset s2'
+    s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
   `s1'.vs_memory = s1.vs_memory` by
@@ -5397,7 +5385,7 @@ Proof
     metis_tac[step_inst_mem_preserved] >>
   `s2'.vs_alloca_next = s2.vs_alloca_next` by
     metis_tac[step_inst_preserves_allocas] >>
-  gvs[next_alloca_offset_def]
+  gvs[]
 QED
 
 Resume nao_dispatch_preserved[find_some]:
@@ -5470,19 +5458,19 @@ Theorem lift_result_bridge:
   !fn r1 r2.
     lift_result (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 r1 r2 /\
     (!s1 s2. r1 = OK s1 /\ r2 = OK s2 ==>
              s1.vs_inst_idx = s2.vs_inst_idx) ==>
     lift_result (\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (m2v_equiv (m2v_fresh_vars fn))
                 (m2v_equiv (m2v_fresh_vars fn)) r1 r2
 Proof
@@ -5499,7 +5487,7 @@ Theorem m2v_step_easy_terminator_full:
   !fn inst s1 s2 fuel ctx.
     m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
     m2v_ao_undef_sync fn s1 s2 /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     m2v_fresh_names_disjoint fn /\
     MEM inst (fn_insts fn) /\
     is_terminator inst.inst_opcode /\
@@ -5508,13 +5496,13 @@ Theorem m2v_step_easy_terminator_full:
     inst.inst_opcode <> REVERT ==>
     lift_result (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
       (step_inst fuel ctx inst s1)
       (step_inst fuel ctx inst s2)
 Proof
@@ -5534,7 +5522,7 @@ Proof
       Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
       gvs[step_inst_base_def] >> every_case_tac >>
       gvs[nao_halt_revert, nao_jump_to,
-          next_alloca_offset_def, halt_state_def])
+          halt_state_def])
 QED
 
 (* nao preserved through mstore on s2 followed by halt_state + set_returndata.
@@ -5543,15 +5531,14 @@ Theorem nao_return_promoted:
   !fn s1 s2 ao pvar addr_val pval rd.
     m2v_inv_noix fn s1 s2 /\
     alloca_inv s1 /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     MEM (ao,pvar,32) (m2v_promo_list fn) /\
     lookup_var ao s1 = SOME addr_val ==>
-    next_alloca_offset (halt_state (set_returndata rd s1)) =
-    next_alloca_offset
-      (halt_state (set_returndata rd (mstore (w2n addr_val) pval s2)))
+    (halt_state (set_returndata rd s1)).vs_alloca_next =
+    (halt_state (set_returndata rd (mstore (w2n addr_val) pval s2))).vs_alloca_next
 Proof
   rpt strip_tac >>
-  simp[nao_halt_revert, next_alloca_offset_def, mstore_preserves,
+  simp[nao_halt_revert, mstore_preserves,
        LENGTH_mstore_eq] >>
   `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
   `?ainst. MEM ainst (fn_insts fn) /\ ainst.inst_opcode = ALLOCA /\

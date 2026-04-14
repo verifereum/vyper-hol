@@ -321,12 +321,12 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-(* Under ssa_sim, next_alloca_offset is equal *)
-Triviality next_alloca_offset_ssa_sim:
+(* Under ssa_sim, vs_alloca_next is equal *)
+Triviality vs_alloca_next_ssa_sim:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==>
-    next_alloca_offset s1 = next_alloca_offset s2
+    s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rw[ssa_sim_def, next_alloca_offset_def]
+  rw[ssa_sim_def]
 QED
 
 (* ssa_sim preserved by identical vs_allocas + vs_alloca_next update *)
@@ -374,7 +374,7 @@ Proof
        simp[opcode_has_output_def] >> NO_TAC) >>
   (* Phase 2: remaining goals — get field equalities, unfold defs *)
   imp_res_tac ssa_sim_fields >>
-  imp_res_tac next_alloca_offset_ssa_sim >>
+  imp_res_tac vs_alloca_next_ssa_sim >>
   gvs[exec_read0_def, exec_read1_def, exec_write2_def,
       exec_alloca_def, LET_THM, AllCaseEqs(), renamed_operand_def] >>
   TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>

@@ -1516,7 +1516,7 @@ Triviality step_alloca_reuse_goal:
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     alloca_inv s1 /\
-    next_alloca_offset s1 < dimword (:256) /\
+    s1.vs_alloca_next < dimword (:256) /\
     w2n addr + w2n alloc_size < dimword (:256) /\
     (!aid off sz addr'.
        FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\
@@ -1539,7 +1539,7 @@ Proof
      simp[]) >>
   `entry0 + entry1 < dimword (:256)` by (
     imp_res_tac alloca_inv_alloca_bound >>
-    fs[next_alloca_offset_def, MAX_DEF]) >>
+    fs[MAX_DEF]) >>
   irule cr_update_var_alloca_reuse >>
   conj_tac >- (qexistsl [`inst.inst_id`, `entry1`] >> simp[])
   >> simp[]
@@ -1549,14 +1549,14 @@ Triviality nao_ge_alloca_end:
   !s aid off sz.
     alloca_inv s /\
     FLOOKUP s.vs_allocas aid = SOME (off, sz) ==>
-    off + sz <= next_alloca_offset s
+    off + sz <= s.vs_alloca_next
 Proof
-  rw[next_alloca_offset_def, alloca_inv_def, alloca_next_valid_def] >>
+  rw[alloca_inv_def, alloca_next_valid_def] >>
   res_tac >> simp[MAX_DEF]
 QED
 
 (* Fresh alloca case: side 1 bump-allocates, side 2 assigns concrete addr.
-   New alloca at next_alloca_offset doesn't overlap existing because
+   New alloca at vs_alloca_next doesn't overlap existing because
    alloca_inv ensures off + sz <= vs_alloca_next <= nao. *)
 Triviality step_alloca_fresh_goal:
   !inst bb amap fn livesets init s1 s2 out addr alloc_size.
@@ -1568,7 +1568,7 @@ Triviality step_alloca_fresh_goal:
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     alloca_inv s1 /\
     0 < w2n alloc_size /\
-    next_alloca_offset s1 + w2n alloc_size < dimword (:256) /\
+    s1.vs_alloca_next + w2n alloc_size < dimword (:256) /\
     w2n addr + w2n alloc_size < dimword (:256) /\
     (!aid off sz addr'.
        FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\
@@ -1579,16 +1579,16 @@ Triviality step_alloca_fresh_goal:
     FLOOKUP s1.vs_allocas inst.inst_id = NONE ==>
     concretize_rel amap fn livesets (init \\ inst.inst_id)
       (s1 with
-       <|vs_vars := s1.vs_vars |+ (out, n2w (next_alloca_offset s1));
+       <|vs_vars := s1.vs_vars |+ (out, n2w (s1.vs_alloca_next));
          vs_allocas :=
            s1.vs_allocas |+ (inst.inst_id,
-             (next_alloca_offset s1, w2n alloc_size));
+             (s1.vs_alloca_next, w2n alloc_size));
          vs_alloca_next :=
-           next_alloca_offset s1 + w2n alloc_size|>)
+           s1.vs_alloca_next + w2n alloc_size|>)
       (s2 with vs_vars := s2.vs_vars |+ (out, addr))
 Proof
   rpt strip_tac >>
-  qabbrev_tac `nao = next_alloca_offset s1` >>
+  qabbrev_tac `nao = s1.vs_alloca_next` >>
   `is_alloca_op inst.inst_opcode` by simp[is_alloca_op_def] >>
   imp_res_tac alloca_concrete_addr_from_inst >>
   imp_res_tac flookup_in_pv >>
@@ -5062,9 +5062,9 @@ Theorem concretize_step_alloca_assign:
     fn_inst_ids_distinct fn /\
     alloca_inv s1 /\
     0 < w2n alloc_size /\
-    next_alloca_offset s1 < dimword (:256) /\
+    s1.vs_alloca_next < dimword (:256) /\
     (FLOOKUP s1.vs_allocas inst.inst_id = NONE ==>
-     next_alloca_offset s1 + w2n alloc_size < dimword (:256)) /\
+     s1.vs_alloca_next + w2n alloc_size < dimword (:256)) /\
     w2n addr + w2n alloc_size < dimword (:256) /\
     (!aid off sz addr'.
        FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\
@@ -5328,8 +5328,8 @@ Proof
   irule concretize_step_alloca_assign >> simp[] >>
   (* TEMPORARILY CHEATED - needs alloca_size_le_remaining + nao derivation *)
   (* fs[alloca_overflow_safe_def] >>
-     (`next_alloca_offset s1 = s1.vs_alloca_next` by
-       (simp[next_alloca_offset_def, MAX_DEF])) >>
+     (`s1.vs_alloca_next = s1.vs_alloca_next` by
+       (simp[MAX_DEF])) >>
      rpt conj_tac >> metis_tac[] *)
   cheat
 QED

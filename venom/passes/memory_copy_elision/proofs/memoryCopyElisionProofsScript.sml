@@ -1832,7 +1832,7 @@ Resume stage1_correct[state_inv_pres]:
   >- metis_tac[alloca_inv_step_inst]   (* alloca_inv — PROVEN *)
   >- (       (* allocas_in_word *)
     Cases_on `inst.inst_opcode = ALLOCA`
-    >- cheat (* ALLOCA: needs pipeline bound next_alloca_offset + sz < dimword *)
+    >- cheat (* ALLOCA: needs pipeline bound vs_alloca_next + sz < dimword *)
     >> (gvs[allocas_in_word_def] >> rpt strip_tac >>
         `FLOOKUP s''.vs_allocas aid = FLOOKUP s'.vs_allocas aid` by
           (qspecl_then [`fuel`, `ctx'`, `inst`, `s'`, `s''`, `aid`]

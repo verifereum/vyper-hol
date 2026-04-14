@@ -242,7 +242,7 @@ Proof
     fs[step_inst_base_def,
        exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def,
-       exec_alloca_def, next_alloca_offset_def, eval_operands_def] >>
+       exec_alloca_def, eval_operands_def] >>
     RULE_ASSUM_TAC (SIMP_RULE list_ss []) >>
     gvs[AllCaseEqs()] >>
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>

@@ -463,7 +463,7 @@ Definition exec_alloca_def:
             (* Already allocated — return existing base address *)
             OK (update_var out (n2w offset) s)
         | NONE =>
-            let offset = next_alloca_offset s in
+            let offset = s.vs_alloca_next in
             let sz = w2n alloc_size in
             let s' = s with <|
               vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz));

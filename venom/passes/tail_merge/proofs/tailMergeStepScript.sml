@@ -529,7 +529,7 @@ val decompose_ops =
 val inline_close_defs = [execution_equiv_def, update_var_def,
   write_memory_with_expansion_def, read_memory_def,
   halt_state_def, revert_state_def, set_returndata_def,
-  next_alloca_offset_def, mcopy_def, lookup_var_def,
+  mcopy_def, lookup_var_def,
   finite_mapTheory.FLOOKUP_UPDATE];
 
 (* Standard inline tactic: imp_res_tac cr, unfold step_sim,
@@ -1060,7 +1060,7 @@ val output_close = [update_var_def, lookup_var_def,
   finite_mapTheory.FLOOKUP_UPDATE, execution_equiv_def,
   read_memory_def, mload_def, sload_def, tload_def,
   contract_storage_def, contract_transient_def,
-  write_memory_with_expansion_def, next_alloca_offset_def,
+  write_memory_with_expansion_def,
   make_venom_call_state_def, make_venom_delegatecall_state_def,
   make_venom_create_state_def, venom_to_tx_params_def,
   extract_venom_result_def, set_returndata_def, mcopy_def, LET_THM,
