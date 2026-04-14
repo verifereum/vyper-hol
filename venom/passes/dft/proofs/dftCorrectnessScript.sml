@@ -6944,135 +6944,14 @@ Proof
   >> (`fuel' <= fuel` by simp[] >> metis_tac[fuel_mono |> CONJUNCTS |> last])
 QED
 
-(* ===== COUNTEREXAMPLE: dft_pass_correct is FALSE as stated ===== *)
-(*
- * The theorem is false because bb_well_formed only constrains PHI
- * instructions to form a prefix, but PARAM (also a pseudo) can appear
- * after non-pseudos. dft_block moves ALL pseudos to the front, which
- * can move a failing PARAM before an aborting non-pseudo instruction.
- *
- * Counterexample: Block [ASSERT(Lit 0w), PARAM(0)->x, STOP]
- *   with s.vs_params = [].
- *
- * Original execution: ASSERT(0w) -> Abort (terminates)
- * DFT reorders to:    [PARAM(0)->x, ASSERT(Lit 0w), STOP]
- * DFT execution:      PARAM(0) -> Error (does not terminate)
- *
- * Fix: strengthen bb_well_formed to require ALL pseudos (not just PHI)
- * form a prefix of the block.
- *)
+(* ===== Pass-level correctness ===== *)
 
-Definition cex_fn_def:
-  cex_fn = <| fn_name := "entry"; fn_blocks := [
-    <| bb_label := "entry"; bb_instructions := [
-      <| inst_id := 1; inst_opcode := ASSERT;
-         inst_operands := [Lit 0w]; inst_outputs := [] |>;
-      <| inst_id := 2; inst_opcode := PARAM;
-         inst_operands := [Lit 0w]; inst_outputs := ["x"] |>;
-      <| inst_id := 3; inst_opcode := STOP;
-         inst_operands := []; inst_outputs := [] |>
-    ] |>] |>
-End
-
-Definition cex_ctx_def:
-  cex_ctx = <| ctx_functions := []; ctx_entry := NONE |>
-End
-
-Definition cex_s_def:
-  cex_s = init_venom_state "entry"
-End
-
-(* DFT reorders [ASSERT, PARAM, STOP] to [PARAM, ASSERT, STOP] *)
-Triviality cex_dft_reorders:
-  (dft_fn cex_fn).fn_blocks = [
-    <| bb_label := "entry"; bb_instructions := [
-      <| inst_id := 2; inst_opcode := PARAM;
-         inst_operands := [Lit 0w]; inst_outputs := ["x"] |>;
-      <| inst_id := 1; inst_opcode := ASSERT;
-         inst_operands := [Lit 0w]; inst_outputs := [] |>;
-      <| inst_id := 3; inst_opcode := STOP;
-         inst_operands := []; inst_outputs := [] |>
-    ] |>]
-Proof
-  EVAL_TAC
-QED
-
-(* Preconditions hold *)
-Triviality cex_wf_ssa:
-  wf_ssa cex_fn
-Proof
-  simp[wf_ssa_def, ssa_form_def, def_dominates_uses_def, cex_fn_def,
-       fn_insts_def, fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-Triviality cex_wf_function:
-  wf_function cex_fn
-Proof
-  rw[wf_function_def, cex_fn_def, fn_has_entry_def, fn_inst_ids_distinct_def,
-     bb_well_formed_def, fn_succs_closed_def, bb_succs_def,
-     fn_labels_def, is_terminator_def]
-  (* terminator only at end *)
-  >- (`i = 0 \/ i = 1 \/ i = 2` by decide_tac >> gvs[is_terminator_def])
-  (* PHI prefix — vacuous (no PHI) *)
-  >- (`j = 0 \/ j = 1 \/ j = 2` by decide_tac >> gvs[])
-  (* succs_closed — STOP has no successors *)
-  >> gvs[get_successors_def]
-QED
-
-Triviality cex_init_state:
-  cex_s.vs_inst_idx = 0 /\ ~cex_s.vs_halted
-Proof
-  EVAL_TAC
-QED
-
-(* Original execution terminates (Abort) *)
-Triviality cex_orig_terminates:
-  terminates (run_function 10 cex_ctx cex_fn cex_s)
-Proof
-  EVAL_TAC
-QED
-
-(* DFT execution does not terminate (Error) for any fuel *)
-Triviality cex_dft_not_terminates:
-  !fuel. ~terminates (run_function fuel cex_ctx (dft_fn cex_fn) cex_s)
-Proof
-  Cases >- EVAL_TAC >>
-  simp[cex_fn_def, cex_ctx_def, cex_s_def, run_function_def,
-       fn_entry_label_def, dft_fn_def, dft_block_def] >>
-  ONCE_REWRITE_TAC[run_blocks_def] >>
-  simp[lookup_block_def] >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  ONCE_REWRITE_TAC[step_inst_def] >>
-  EVAL_TAC
-QED
-
-(* The theorem is FALSE *)
-Theorem dft_pass_correct_is_false:
-  ?fn ctx s.
-    wf_ssa fn /\ wf_function fn /\
-    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    ~pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv
-      (\fuel. run_function fuel ctx fn s)
-      (\fuel. run_function fuel ctx (dft_fn fn) s)
-Proof
-  qexistsl [`cex_fn`, `cex_ctx`, `cex_s`] >>
-  simp[cex_wf_ssa, cex_wf_function, cex_init_state] >>
-  rewrite_tac[pass_correct_def] >>
-  strip_tac >>
-  `?fuel. terminates (run_function fuel cex_ctx cex_fn cex_s)` by
-    (qexists `10` >> EVAL_TAC) >>
-  `!fuel. ~terminates (run_function fuel cex_ctx (dft_fn cex_fn) cex_s)` by
-    simp[cex_dft_not_terminates] >>
-  metis_tac[]
-QED
-
-(* ===== Pass-level correctness (FALSE — see above) ===== *)
-
-(* dft_pass_correct requires fn_pseudos_prefix — see dft_pass_correct_is_false
- * above for a counterexample without it. pseudos_prefix is a separate
- * predicate (not added to bb_well_formed) to avoid 30+ min rebuild. *)
+(* dft_pass_correct requires fn_pseudos_prefix: without it, the theorem is
+ * false. Counterexample: Block [ASSERT(Lit 0w), PARAM(0)->x, STOP] with
+ * s.vs_params = []. Original aborts at ASSERT; DFT moves PARAM before
+ * ASSERT, hitting Error instead (PARAM with empty params list).
+ * pseudos_prefix is a separate predicate (not added to bb_well_formed)
+ * to avoid 30+ min rebuild of execEquivProofs. *)
 Theorem dft_pass_correct:
   !fn ctx s.
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
