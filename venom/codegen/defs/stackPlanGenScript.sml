@@ -12,8 +12,7 @@
 Theory stackPlanGen
 Ancestors
   stackPlanOps livenessDefs cfgDefs venomWf passSharedDefs
-Libs
-  listTheory relationTheory pairTheory pred_setTheory arithmeticTheory
+  list relation pair pred_set arithmetic
 
 (* =========================================================================
    Emit Input Operands
@@ -22,12 +21,12 @@ Libs
 
 Definition emit_one_input_def:
   emit_one_input opc next_liveness op ps =
-    (* 1. Restore if spilled *)
+    (* Restore if spilled *)
     let (restore_ops, ps1) =
-      if is_var_operand op ∧ IS_SOME (ALOOKUP ps.ps_spilled op)
+      if is_var_operand op ∧ IS_SOME (FLOOKUP ps.ps_spilled op)
       then do_restore op ps
       else ([] : stack_op list, ps) in
-    (* 2. Push labels/literals, or dup live vars *)
+    (* Push labels/literals, or dup live vars *)
     case op of
       Label l =>
         let ps2 = ps1 with ps_stack := stack_push op ps1.ps_stack in
@@ -192,11 +191,11 @@ Definition generate_regular_inst_plan_def:
         (case HD inst.inst_operands of Lit v => w2n v | _ => 0)
       | _ => 0 in
 
-    (* Step 1: Emit input operands *)
+    (* Emit input operands *)
     let (input_ops, ps1) =
       emit_input_plan opc operands next_liveness ps in
 
-    (* Step 2: Join-point reorder (jmp only) *)
+    (* Join-point reorder (jmp only) *)
     let (join_ops, ps2) =
       if opc = JMP then
         (case inst.inst_operands of
@@ -212,7 +211,7 @@ Definition generate_regular_inst_plan_def:
         | _ => ([], ps1))
       else ([], ps1) in
 
-    (* Step 3: Commutative optimization *)
+    (* Commutative optimization *)
     let (operands', ps3) =
       if is_commutative opc ∧ LENGTH operands ≥ 2 then
         let (ops_a, _) = reorder_plan dfg operands ps2 in
@@ -226,10 +225,10 @@ Definition generate_regular_inst_plan_def:
         else (swapped, ps2)
       else (operands, ps2) in
 
-    (* Step 4: Final reorder *)
+    (* Final reorder *)
     let (reorder_ops, ps4) = reorder_plan dfg operands' ps3 in
 
-    (* Step 5: Pop consumed, push outputs *)
+    (* Pop consumed, push outputs *)
     let ps5 = ps4 with ps_stack :=
       stack_pop (LENGTH operands') ps4.ps_stack in
     let outputs = inst.inst_outputs in
@@ -237,10 +236,10 @@ Definition generate_regular_inst_plan_def:
       ps' with ps_stack := stack_push (Var out) ps'.ps_stack)
       ps5 outputs in
 
-    (* Step 6: Emit EVM opcode(s) *)
+    (* Emit EVM opcode(s) *)
     let (emit_ops, ps7) = generate_emit_ops inst log_topic_count ps6 in
 
-    (* Step 7: Post-processing *)
+    (* Post-processing *)
     if outputs = [] then
       let ps8 = release_dead_spills next_liveness ps7 in
       (input_ops ++ join_ops ++ reorder_ops ++ emit_ops, ps8)
@@ -547,11 +546,121 @@ val fn_plan_wf = prove(``WF ^fn_plan_R``,
   MATCH_MP_TAC WF_LEX >> simp[] >>
   MATCH_MP_TAC WF_LEX >> simp[]);
 
-(* INDUCTIVE_INVARIANT: visited grows monotonically
-   Temporarily cheated while debugging — see HANDOFF for status *)
-val fn_plan_inv = prove(
-  ``INDUCTIVE_INVARIANT ^fn_plan_R ^fn_plan_P ^fn_plan_M``,
-  cheat);
+(* INDUCTIVE_INVARIANT: visited grows monotonically *)
+Theorem fn_plan_inv_thm:
+  INDUCTIVE_INVARIANT ^fn_plan_R ^fn_plan_P ^fn_plan_M
+Proof
+  simp[INDUCTIVE_INVARIANT_DEF, inv_image_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `x` >> simp[]
+  (* ===== INL case ===== *)
+  >- (
+    PairCases_on `x'` >> simp[] >>
+    Cases_on `x'4` >> simp[]
+    >> Cases_on `MEM h x'5` >> simp[]
+    >- (
+      first_x_assum (qspec_then `INL (x'0,x'1,x'2,x'3,t,x'5,x'6)` mp_tac) >>
+      simp[LEX_DEF]
+    )
+    >> Cases_on `lookup_block h (x'3.fn_blocks)` >> simp[]
+    >- (
+      first_x_assum (qspec_then `INL (x'0,x'1,x'2,x'3,t,h::x'5,x'6)` mp_tac) >>
+      (impl_tac >- (
+        simp[] >> simp[LEX_DEF] >>
+        Cases_on `MEM h (fn_labels x'3)` >> simp[]
+        >- (DISJ1_TAC >>
+            `set (fn_labels x'3) INTER set x'5 PSUBSET
+             set (fn_labels x'3) INTER (h INSERT set x'5)` by (
+              simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+              Q.EXISTS_TAC `h` >> simp[]) >>
+            `CARD (set (fn_labels x'3) INTER set x'5) <
+             CARD (set (fn_labels x'3) INTER (h INSERT set x'5))` by
+              metis_tac[CARD_PSUBSET, FINITE_INTER,
+                        FINITE_LIST_TO_SET, FINITE_INSERT] >>
+            `CARD (set (fn_labels x'3) INTER set x'5) <=
+             CARD (set (fn_labels x'3))` by
+              (irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
+            `CARD (set (fn_labels x'3) INTER (h INSERT set x'5)) <=
+             CARD (set (fn_labels x'3))` by
+              (irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
+            simp[])
+        >- (DISJ2_TAC >>
+            `set (fn_labels x'3) INTER (h INSERT set x'5) =
+             set (fn_labels x'3) INTER set x'5` by
+              (simp[EXTENSION] >> metis_tac[]) >>
+            simp[])
+      )) >>
+      strip_tac >> rpt CASE_TAC >> fs[] >>
+      metis_tac[SUBSET_DEF, listTheory.MEM]
+    )
+    (* SOME bb: block_plan then two recursive calls *)
+    >> rpt CASE_TAC >> simp[] >> fs[]
+    (* Apply IH to INR (succs) call *)
+    >> first_assum (qspec_then
+        `INR (x'0,x'1,x'2,x'3,r.ps_stack,r.ps_spilled,
+              cfg_succs_of x'2 h, h::x'5, r)` mp_tac) >>
+    (impl_tac >- (
+      simp[] >> simp[LEX_DEF] >>
+      DISJ1_TAC >>
+      `set (fn_labels x'3) INTER set x'5 PSUBSET
+       set (fn_labels x'3) INTER (h INSERT set x'5)` by (
+        simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+        Q.EXISTS_TAC `h` >> simp[] >>
+        imp_res_tac lookup_block_mem_fn_labels >>
+        fs[venomInstTheory.fn_labels_def]) >>
+      `CARD (set (fn_labels x'3) INTER set x'5) <
+       CARD (set (fn_labels x'3) INTER (h INSERT set x'5))` by
+        metis_tac[CARD_PSUBSET, FINITE_INTER,
+                  FINITE_LIST_TO_SET, FINITE_INSERT] >>
+      `CARD (set (fn_labels x'3) INTER set x'5) <=
+       CARD (set (fn_labels x'3))` by
+        (irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
+      `CARD (set (fn_labels x'3) INTER (h INSERT set x'5)) <=
+       CARD (set (fn_labels x'3))` by
+        (irule CARD_SUBSET >> simp[SUBSET_DEF]) >>
+      simp[]
+    )) >> simp[] >> strip_tac >>
+    (* Apply IH to INL (rest) call *)
+    first_x_assum (qspec_then
+        `INL (x'0,x'1,x'2,x'3,t,q'',r'')` mp_tac) >>
+    (impl_tac >- (
+      simp[] >> simp[LEX_DEF] >>
+      `CARD (set (fn_labels x'3) INTER set x'5) <=
+       CARD (set (fn_labels x'3) INTER set q'')` by (
+        irule CARD_SUBSET >> simp[SUBSET_DEF] >>
+        metis_tac[SUBSET_DEF]) >>
+      simp[]
+    )) >> simp[] >> strip_tac >>
+    metis_tac[SUBSET_TRANS, SUBSET_DEF, listTheory.MEM]
+  )
+  (* ===== INR case ===== *)
+  >- (
+    PairCases_on `y` >> simp[] >>
+    Cases_on `y6` >> simp[]
+    >> rpt CASE_TAC >> simp[] >> fs[]
+    (* Apply IH to INL [h] call *)
+    >> first_assum (qspec_then
+        `INL (y0,y1,y2,y3,[h],y7,
+              y8 with <| ps_stack := y4; ps_spilled := y5 |>)` mp_tac) >>
+    (impl_tac >- (simp[] >> simp[LEX_DEF] >> Cases_on `t` >> simp[])) >>
+    simp[] >> strip_tac >>
+    (* Apply IH to INR rest call *)
+    first_x_assum (qspec_then
+        `INR (y0,y1,y2,y3,y4,y5,t,q',
+              y8 with <| ps_alloc := r'.ps_alloc;
+                         ps_label_counter := r'.ps_label_counter |>)` mp_tac) >>
+    (impl_tac >- (
+      simp[] >> simp[LEX_DEF] >>
+      `CARD (set (fn_labels y3) INTER set y7) <=
+       CARD (set (fn_labels y3) INTER set q')` by (
+        irule CARD_SUBSET >> simp[SUBSET_DEF] >>
+        metis_tac[SUBSET_DEF]) >>
+      simp[]
+    )) >> simp[] >> strip_tac >>
+    metis_tac[SUBSET_TRANS]
+  )
+QED
+val fn_plan_inv = DB.fetch "-" "fn_plan_inv_thm";
 
 (* Extract monotonicity: fn_plan_aux_UNION_AUX preserves visited *)
 val fn_plan_mono_raw =
@@ -649,6 +758,13 @@ val (fn_plan_aux_eqs, fn_plan_aux_ind) =
 
 Theorem generate_fn_plan_aux_def[compute] = fn_plan_aux_eqs
 Theorem generate_fn_plan_aux_ind = fn_plan_aux_ind
+
+(* Visited monotonicity: set visited ⊆ set visited' after fn_plan_aux *)
+Theorem generate_fn_plan_aux_visited_mono =
+  REWRITE_RULE [GSYM fn_plan_aux_def] fn_plan_mono_inl
+
+Theorem generate_succs_plan_visited_mono =
+  REWRITE_RULE [GSYM fn_plan_aux_def] fn_plan_mono_inr
 
 (* =========================================================================
    Top-Level Entry Points

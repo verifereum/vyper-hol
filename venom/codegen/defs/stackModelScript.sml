@@ -1,6 +1,7 @@
 (*
  * Stack Model
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * HOL4 formalization of Python's stack_model.py.
  * The stack is a list of operands: HD = bottom, LAST = TOS.
  * Distance from TOS: 0 = TOS, 1 = one below, etc.
@@ -8,11 +9,14 @@
  * TOP-LEVEL:
  *   stack_push, stack_pop, stack_peek, stack_poke,
  *   stack_swap, stack_dup, stack_get_depth, stack_get_phi_depth
+ *
+ * Helper:
+ *   stack_find — generic search from head of list, used by get_depth/get_phi_depth
  *)
 
 Theory stackModel
 Ancestors
-  venomState rich_list
+  rich_list
 
 (* =========================================================================
    Stack Operations

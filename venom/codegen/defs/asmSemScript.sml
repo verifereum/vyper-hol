@@ -1,6 +1,7 @@
 (*
  * Assembly Interpreter
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Executes asm_inst programs directly, using pre-computed label offsets.
  * Bridges between Venom IR codegen and EVM bytecode execution.
  *
@@ -50,18 +51,17 @@ Datatype:
     | AsmError string
 End
 
-(* ===== Pre-computation ===== *)
-
-
 (* ===== Memory Helpers (pure, matching vfm structure) ===== *)
 
-(* Expand memory to at least `needed` bytes (zero-fill).
-   Matches vfm's expand_memory: memory only grows, never shrinks.
-   After expansion, TAKE/DROP work without bounds issues. *)
+(* Expand memory to at least 'needed' bytes (zero-fill), rounded up
+   to a 32-byte (EVM word) boundary.
+   Matches vfm's expand_memory + word_size rounding: ensures
+   LENGTH (asm_expand_memory n mem) is always a multiple of 32. *)
 Definition asm_expand_memory_def:
   asm_expand_memory needed (mem : byte list) =
-    if needed ≤ LENGTH mem then mem
-    else mem ++ REPLICATE (needed - LENGTH mem) (0w : byte)
+    let rounded = ((needed + 31) DIV 32) * 32 in
+    if rounded ≤ LENGTH mem then mem
+    else mem ++ REPLICATE (rounded - LENGTH mem) (0w : byte)
 End
 
 (* ===== Stack Operation Helpers ===== *)
@@ -280,7 +280,9 @@ Definition asm_return_op_def:
       off_w :: sz_w :: stk =>
         let off = w2n off_w in
         let sz = w2n sz_w in
-        let mem = asm_expand_memory (off + sz) s.as_memory in
+        (* EVM: memory_expansion_info only expands when size > 0 *)
+        let mem = if sz = 0 then s.as_memory
+                  else asm_expand_memory (off + sz) s.as_memory in
         let rd = TAKE sz (DROP off mem) in
         AsmHalt (s with <|
           as_stack := stk; as_returndata := rd; as_memory := mem |>)
@@ -293,7 +295,9 @@ Definition asm_revert_op_def:
       off_w :: sz_w :: stk =>
         let off = w2n off_w in
         let sz = w2n sz_w in
-        let mem = asm_expand_memory (off + sz) s.as_memory in
+        (* EVM: memory_expansion_info only expands when size > 0 *)
+        let mem = if sz = 0 then s.as_memory
+                  else asm_expand_memory (off + sz) s.as_memory in
         let rd = TAKE sz (DROP off mem) in
         AsmRevert (s with <|
           as_stack := stk; as_returndata := rd; as_memory := mem |>)
@@ -312,7 +316,9 @@ Definition asm_log_def:
       let stk = DROP (n + 2) s.as_stack in
       let off = w2n offset in
       let size = w2n sz in
-      let mem = asm_expand_memory (off + size) s.as_memory in
+      (* EVM: memory_expansion_info only expands when size > 0 *)
+      let mem = if size = 0 then s.as_memory
+                else asm_expand_memory (off + size) s.as_memory in
       let data = TAKE size (DROP off mem) in
       let ev = <| logger := w2w s.as_call_ctx.cc_address;
                   topics := topics;
@@ -331,7 +337,9 @@ Definition asm_sha3_def:
       off_w :: sz_w :: stk =>
         let off = w2n off_w in
         let sz = w2n sz_w in
-        let mem = asm_expand_memory (off + sz) s.as_memory in
+        (* EVM: memory_expansion_info only expands when size > 0 *)
+        let mem = if sz = 0 then s.as_memory
+                  else asm_expand_memory (off + sz) s.as_memory in
         let bs = TAKE sz (DROP off mem) in
         let h = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs) in
         AsmOK (asm_next (s with <|
@@ -352,9 +360,12 @@ Definition asm_copy_to_mem_def:
         let doff = w2n destOff in
         let soff = w2n srcOff in
         let size = w2n sz in
-        let src_expanded = asm_expand_memory (soff + size) src in
+        (* EVM: memory_expansion_info only expands when size > 0 *)
+        let src_expanded = if size = 0 then src
+                           else asm_expand_memory (soff + size) src in
         let bytes = TAKE size (DROP soff src_expanded) in
-        let mem = asm_expand_memory (doff + size) s.as_memory in
+        let mem = if size = 0 then s.as_memory
+                  else asm_expand_memory (doff + size) s.as_memory in
         AsmOK (asm_next (s with <|
           as_stack := stk;
           as_memory :=
@@ -362,7 +373,8 @@ Definition asm_copy_to_mem_def:
     | _ => AsmError "copy: stack underflow"
 End
 
-(* RETURNDATACOPY: OOB is exceptional halt per EIP-211 *)
+(* RETURNDATACOPY: OOB is exceptional halt per EIP-211.
+   EVM only expands memory when size > 0. *)
 Definition asm_returndatacopy_def:
   asm_returndatacopy s =
     case s.as_stack of
@@ -370,11 +382,12 @@ Definition asm_returndatacopy_def:
         let soff = w2n srcOff in
         let size = w2n sz in
         if soff + size > LENGTH s.as_returndata then
-          AsmFault s
+          AsmFault (s with as_returndata := [])
         else
           let doff = w2n destOff in
           let bytes = TAKE size (DROP soff s.as_returndata) in
-          let mem = asm_expand_memory (doff + size) s.as_memory in
+          let mem = if size = 0 then s.as_memory
+                    else asm_expand_memory (doff + size) s.as_memory in
           AsmOK (asm_next (s with <|
             as_stack := stk;
             as_memory :=
@@ -382,7 +395,8 @@ Definition asm_returndatacopy_def:
     | _ => AsmError "returndatacopy: stack underflow"
 End
 
-(* EXTCODECOPY: 4 args (addr, destOff, srcOff, sz) *)
+(* EXTCODECOPY: 4 args (addr, destOff, srcOff, sz).
+   EVM only expands memory when size > 0. *)
 Definition asm_extcodecopy_def:
   asm_extcodecopy s =
     case s.as_stack of
@@ -391,14 +405,37 @@ Definition asm_extcodecopy_def:
         let soff = w2n srcOff in
         let size = w2n sz in
         let doff = w2n destOff in
-        let src_expanded = asm_expand_memory (soff + size) code in
+        let src_expanded = if size = 0 then code
+                           else asm_expand_memory (soff + size) code in
         let bytes = TAKE size (DROP soff src_expanded) in
-        let mem = asm_expand_memory (doff + size) s.as_memory in
+        let mem = if size = 0 then s.as_memory
+                  else asm_expand_memory (doff + size) s.as_memory in
         AsmOK (asm_next (s with <|
           as_stack := stk;
           as_memory :=
             TAKE doff mem ++ bytes ++ DROP (doff + size) mem |>))
     | _ => AsmError "extcodecopy: stack underflow"
+End
+
+(* MCOPY: memory-to-memory copy. EVM expands memory once for
+   max(source+size, dest+size) via max_expansion_range.
+   Must use single expansion, not independent source/dest expansions. *)
+Definition asm_mcopy_def:
+  asm_mcopy s =
+    case s.as_stack of
+      destOff :: srcOff :: sz :: stk =>
+        let doff = w2n destOff in
+        let soff = w2n srcOff in
+        let size = w2n sz in
+        let mem = if size = 0 then s.as_memory
+                  else asm_expand_memory
+                    (MAX (soff + size) (doff + size)) s.as_memory in
+        let bytes = TAKE size (DROP soff mem) in
+        AsmOK (asm_next (s with <|
+          as_stack := stk;
+          as_memory :=
+            TAKE doff mem ++ bytes ++ DROP (doff + size) mem |>))
+    | _ => AsmError "mcopy: stack underflow"
 End
 
 Definition asm_selfdestruct_def:
@@ -705,7 +742,7 @@ Definition asm_step_memory_def:
     if name = "MLOAD" then SOME (asm_mload s) else
     if name = "MSTORE" then SOME (asm_mstore s) else
     if name = "MSTORE8" then SOME (asm_mstore8 s) else
-    if name = "MCOPY" then SOME (asm_copy_to_mem s.as_memory s) else
+    if name = "MCOPY" then SOME (asm_mcopy s) else
     if name = "MSIZE" then
       SOME (asm_push_val (n2w (LENGTH s.as_memory)) s) else
     if name = "SLOAD" then SOME (asm_sload s) else
@@ -721,10 +758,12 @@ Definition asm_step_control_def:
     if name = "JUMP" then SOME (asm_jump offset_to_pc s) else
     if name = "JUMPI" then SOME (asm_jumpi offset_to_pc s) else
     if name = "JUMPDEST" then SOME (AsmOK (asm_next s)) else
-    if name = "STOP" then SOME (AsmHalt s) else
+    if name = "STOP" then
+      SOME (AsmHalt (s with as_returndata := [])) else
     if name = "RETURN" then SOME (asm_return_op s) else
     if name = "REVERT" then SOME (asm_revert_op s) else
-    if name = "INVALID" then SOME (AsmFault s) else
+    if name = "INVALID" then
+      SOME (AsmFault (s with as_returndata := [])) else
     NONE
 End
 
@@ -758,13 +797,13 @@ Definition asm_step_context_def:
       SOME (asm_push_val (w2w s.as_call_ctx.cc_address) s) else
     if name = "CALLVALUE" then
       SOME (asm_push_val s.as_call_ctx.cc_callvalue s) else
-    if name = "GAS" then
-      SOME (asm_push_val (n2w s.as_call_ctx.cc_gas) s) else
+    (* GAS omitted: no gas model correspondence at asm level.
+       Programs using GAS get AsmError from asm_step_op fallthrough. *)
     if name = "CALLDATASIZE" then
       SOME (asm_push_val (n2w (LENGTH s.as_call_ctx.cc_calldata)) s) else
     if name = "CALLDATALOAD" then SOME (asm_state_unop (λoff s.
-      word_of_bytes T (0w:bytes32)
-        (take_pad_0 32 (DROP (w2n off) s.as_call_ctx.cc_calldata))) s) else
+      word_of_bytes F (0w:bytes32)
+        (REVERSE (take_pad_0 32 (DROP (w2n off) s.as_call_ctx.cc_calldata)))) s) else
     if name = "ORIGIN" then
       SOME (asm_push_val (w2w s.as_tx_ctx.tc_origin) s) else
     if name = "GASPRICE" then
@@ -839,7 +878,7 @@ Definition asm_step_def:
       AsmOp name => asm_step_op offset_to_pc name s
     | AsmPush bytes =>
         AsmOK (asm_next (s with as_stack :=
-          word_of_bytes T (0w:bytes32) bytes :: s.as_stack))
+          word_of_bytes F (0w:bytes32) (REVERSE bytes) :: s.as_stack))
     | AsmPushLabel lbl =>
         (case FLOOKUP label_offsets lbl of
            SOME off =>

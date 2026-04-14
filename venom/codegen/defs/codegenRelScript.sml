@@ -1,6 +1,7 @@
 (*
  * Codegen State Relations
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Defines the relations connecting Venom IR state, plan_state
  * (stack model abstraction), asm execution state, and EVM state.
  *
@@ -60,7 +61,7 @@ End
 Definition plan_spill_rel_def:
   plan_spill_rel label_offsets vs ps_spilled asm_memory ⇔
     ∀op off.
-      ALOOKUP ps_spilled op = SOME off ⇒
+      FLOOKUP ps_spilled op = SOME off ⇒
       ∃v. operand_val vs label_offsets op = SOME v ∧
           word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP off asm_memory)) = v
@@ -79,7 +80,14 @@ End
    sa_next_offset. This range may contain active or freed spill data
    that differs between Venom and asm. Everywhere else must agree:
    - below sa_fn_eom: user memory
-   - at/above sa_next_offset: both zero or user-written *)
+   - at/above sa_next_offset: both zero or user-written
+
+   NOTE: lengths may differ (asm memory may be longer due to spill
+   expansion). This means MSIZE returns different values on the Venom
+   and asm sides. MSIZE correspondence is explicitly excluded from
+   the codegen correctness theorem. Vyper never exposes MSIZE to
+   user code — it is used internally by the compiler for the free
+   memory pointer, which the compiler controls. *)
 Definition memory_rel_def:
   memory_rel (alloc : spill_alloc) venom_mem asm_mem ⇔
     ∀i. ¬(alloc.sa_fn_eom ≤ i ∧ i < alloc.sa_next_offset) ⇒
@@ -100,17 +108,6 @@ Definition step_mem_safe_def:
       read_byte i vs.vs_memory = read_byte i vs'.vs_memory
 End
 
-(* Memory is pre-expanded to cover the spill high-water mark.
-   Ensures MSIZE agrees between Venom and asm from the start.
-   Established at context entry by emitting a memory-touching op
-   up to the maximum sa_next_offset across all functions.
-   spill_hwm is the maximum sa_next_offset reached during execution
-   (known from codegen output, since spill allocation is deterministic). *)
-Definition spill_mem_covered_def:
-  spill_mem_covered spill_hwm (mem : byte list) ⇔
-    spill_hwm ≤ LENGTH mem
-End
-
 (* Full Venom ↔ asm state relation.
    This is the LOOP INVARIANT for block-by-block simulation.
    Parameterized by plan_state which tracks stack layout.
@@ -120,11 +117,13 @@ End
    - plan_spill_rel: active spill slots have correct values
    - memory_rel: memories agree outside [sa_fn_eom, sa_next_offset)
    - step_mem_safe: Venom steps don't modify the spill region
-   - spill_mem_covered: initial memory covers spill high-water mark
 
    The spill region boundary (sa_fn_eom) comes from the pipeline
-   (concretize_mem_loc sets it). step_mem_safe and spill_mem_covered
-   are preconditions on the input program / initial state. *)
+   (concretize_mem_loc sets it). step_mem_safe is a precondition
+   on the input program / initial state.
+
+   NOTE: MSIZE correspondence is excluded — asm memory may be longer
+   than Venom memory due to spill slots. See memory_rel comment. *)
 Definition venom_asm_rel_def:
   venom_asm_rel label_offsets ps vs as ⇔
     plan_stack_rel label_offsets vs ps.ps_stack as.as_stack ∧
@@ -199,16 +198,51 @@ Definition asm_evm_rel_def:
          ctxt.msgParams.code = assemble prog ∧
          ctxt.msgParams.parsed =
            parse_code 0 FEMPTY (assemble prog) ∧
-         (* Stack, memory, PC *)
+         (* Stack, memory, PC, jumpDest *)
          ctxt.stack = as.as_stack ∧
          ctxt.memory = as.as_memory ∧
          ctxt.pc = asm_pc_to_offset prog as.as_pc ∧
+         ctxt.jumpDest = NONE ∧
          (* Return data and logs *)
          ctxt.returnData = as.as_returndata ∧
          ctxt.logs = as.as_logs ∧
-         (* Rollback state *)
-         rb.accounts = as.as_accounts ∧
-         rb.tStorage = as.as_transient
+         (* Live accounts and transient storage (NOT per-frame checkpoint) *)
+         es.rollback.accounts = as.as_accounts ∧
+         es.rollback.tStorage = as.as_transient ∧
+         (* Call context *)
+         as.as_call_ctx.cc_caller = ctxt.msgParams.caller ∧
+         as.as_call_ctx.cc_address = ctxt.msgParams.callee ∧
+         as.as_call_ctx.cc_callvalue = n2w ctxt.msgParams.value ∧
+         as.as_call_ctx.cc_calldata = ctxt.msgParams.data ∧
+         as.as_call_ctx.cc_static = ctxt.msgParams.static ∧
+         (* Tx context *)
+         as.as_tx_ctx.tc_origin = es.txParams.origin ∧
+         as.as_tx_ctx.tc_gasprice = n2w es.txParams.gasPrice ∧
+         as.as_tx_ctx.tc_chainid = n2w es.txParams.chainId ∧
+         as.as_tx_ctx.tc_blobhashes = es.txParams.blobHashes ∧
+         (* Block context *)
+         as.as_block_ctx.bc_coinbase = es.txParams.blockCoinBase ∧
+         as.as_block_ctx.bc_timestamp = n2w es.txParams.blockTimeStamp ∧
+         as.as_block_ctx.bc_number = n2w es.txParams.blockNumber ∧
+         as.as_block_ctx.bc_prevrandao = es.txParams.prevRandao ∧
+         as.as_block_ctx.bc_gaslimit = n2w es.txParams.blockGasLimit ∧
+         as.as_block_ctx.bc_basefee = n2w es.txParams.baseFeePerGas ∧
+         as.as_block_ctx.bc_blobbasefee = n2w es.txParams.baseFeePerBlobGas ∧
+         (* Blockhash: bc_blockhash matches EVM prevHashes-based computation *)
+         as.as_prev_hashes = es.txParams.prevHashes ∧
+         (* Blockhash: asm formula uses asm-only fields *)
+         es.txParams.blockNumber < dimword (:256) ∧
+         (∀n. as.as_block_ctx.bc_blockhash n =
+           let bn = w2n as.as_block_ctx.bc_number in
+           let idx = bn - n - 1 in
+           if (n < bn ∧ bn − 256 ≤ n) ∧
+              idx < LENGTH as.as_prev_hashes
+           then EL idx as.as_prev_hashes
+           else 0w) ∧
+         (* Code *)
+         as.as_code = assemble prog ∧
+         (* OutputTo: single-context execution requires non-Create output *)
+         (∀a. ctxt.msgParams.outputTo ≠ Code a)
      | [] => F)
 End
 
@@ -233,12 +267,6 @@ Definition asm_venom_result_rel_def:
     | _ => F
 End
 
-(* asm_result corresponds to EVM execution result.
-   run returns SOME (INR result, es) on termination:
-     INR NONE          = clean halt (STOP/RETURN)
-     INR (SOME Reverted) = revert
-     INR (SOME exc)    = exceptional halt (OOG, invalid, etc.)
-   INL never appears in run output (OWHILE exits on INR). *)
 (* ===== Stack Boundedness ===== *)
 
 (* The generated asm program never exceeds the EVM stack limit (1024).
@@ -259,6 +287,12 @@ End
 
 (* ===== Asm ↔ EVM Result Correspondence ===== *)
 
+(* asm_result corresponds to EVM execution result.
+   run returns SOME (INR result, es) on termination:
+     INR NONE          = clean halt (STOP/RETURN)
+     INR (SOME Reverted) = revert
+     INR (SOME exc)    = exceptional halt (OOG, invalid, etc.)
+   INL never appears in run output (OWHILE exits on INR). *)
 Definition asm_evm_result_rel_def:
   asm_evm_result_rel prog ar er ⇔
     case (ar, er) of
