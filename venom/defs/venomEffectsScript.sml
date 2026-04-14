@@ -73,10 +73,6 @@ Definition read_effects_def:
   read_effects SHA3 = {Eff_MEMORY} /\
   read_effects MSIZE = {Eff_MSIZE} /\
   read_effects RETURN = {Eff_MEMORY} /\
-  (* ALLOCA uses next_alloca_offset which depends on LENGTH vs_memory.
-     Marking it as reading Eff_MSIZE prevents reordering with ops that
-     extend memory (MLOAD, MSTORE, etc. which write Eff_MSIZE). *)
-  read_effects ALLOCA = {Eff_MSIZE} /\
   read_effects _ = empty_effects
 End
 
@@ -131,10 +127,6 @@ Definition write_effects_def:
   write_effects RETURN = {Eff_MSIZE} /\
   (* SELFDESTRUCT: transfers balance to beneficiary, zeros own balance *)
   write_effects SELFDESTRUCT = {Eff_BALANCE} /\
-  (* ALLOCA modifies vs_alloca_next which is part of next_alloca_offset.
-     Writing Eff_MSIZE ensures ALLOCA-ALLOCA WAW deps via build_eda,
-     complementing the read_effects ALLOCA = {Eff_MSIZE} above. *)
-  write_effects ALLOCA = {Eff_MSIZE} /\
   write_effects _ = empty_effects
 End
 
