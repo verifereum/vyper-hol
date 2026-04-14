@@ -2578,7 +2578,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
           let (raw, st3) = compile_extract32 src_mem off_op st2 in
           let clamp = mk_extract32_clamp ret_ty in
           as_stack_val vv_ty (compile_clamp_extract32 raw clamp st3))
-     | AbiEncode =>
+     | AbiEncode _ =>
          (let e1 = HD args in
           let src_ty = expr_type e1 in
           let enc_ty = TupleT [src_ty] in
@@ -2595,7 +2595,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
             let (src_vv, st1) = compile_expr cenv src_ty e1 st in
             let (src_op, st2) = unwrap_value cenv src_vv st1 in
             as_ptr_val vv_ty LocMemory (lower_abi_encode T NONE src_op enc_info maxlen st2))
-     | AbiDecode =>
+     | AbiDecode _ =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in

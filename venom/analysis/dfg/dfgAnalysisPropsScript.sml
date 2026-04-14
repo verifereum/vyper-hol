@@ -238,3 +238,19 @@ Proof
   ACCEPT_TAC normalize_operand_eval_proof
 QED
 
+(* Restricted version: only requires ASSIGN equalities for variables NOT
+   in the visited set.  Enables use at program points where
+   dfg_assigns_sound may not hold globally. *)
+Theorem normalize_operand_eval_restricted:
+  !dfg visited op s.
+    (!v inst. ~MEM v visited ==>
+       FLOOKUP dfg.dfg_defs v = SOME inst /\
+       inst.inst_opcode = ASSIGN ==>
+       case inst.inst_operands of
+         [op'] => lookup_var v s = eval_operand op' s
+       | _ => T) ==>
+    eval_operand (normalize_operand dfg visited op) s = eval_operand op s
+Proof
+  ACCEPT_TAC normalize_operand_eval_restricted_proof
+QED
+

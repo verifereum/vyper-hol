@@ -571,12 +571,22 @@ Definition dfg_assigns_sound_def:
       | _ => T
 End
 
-(* normalize_operand preserves eval_operand under DFG soundness.
-   Key infrastructure: enables connecting lattice-tracked values
-   (which use normalized operands) to actual runtime values. *)
-Theorem normalize_operand_eval_proof:
+(* Restricted normalize_operand_eval: only requires ASSIGN equalities for
+   variables NOT already in the visited set.  This is strictly weaker than
+   dfg_assigns_sound because the universal quantifier is scoped to
+   ~MEM v visited, and visited grows at each recursive step.
+   
+   Key use: at an intermediate block point where dfg_assigns_sound may
+   not hold globally, we can still use normalize_operand_eval provided
+   the specific variables in the normalize chain satisfy the equality. *)
+Theorem normalize_operand_eval_restricted_proof:
   !dfg visited op s.
-    dfg_assigns_sound dfg s ==>
+    (!v inst. ~MEM v visited ==>
+       FLOOKUP dfg.dfg_defs v = SOME inst /\
+       inst.inst_opcode = ASSIGN ==>
+       case inst.inst_operands of
+         [op'] => lookup_var v s = eval_operand op' s
+       | _ => T) ==>
     eval_operand (normalize_operand dfg visited op) s = eval_operand op s
 Proof
   ho_match_mp_tac normalize_operand_ind >>
@@ -592,15 +602,31 @@ Proof
     Cases_on `inst.inst_operands` >> simp[] >>
     Cases_on `t` >> simp[] >>
     rename1 `inst.inst_operands = [src_op]` >>
-    (* Apply IH *)
+    (* Use hypothesis for dfg' (not in visited): lookup = eval src_op *)
+    `lookup_var dfg' s = eval_operand src_op s` by (
+      first_x_assum (qspecl_then [`dfg'`, `inst`] mp_tac) >>
+      simp[]) >>
+    (* Apply IH with weakened hypothesis *)
     first_x_assum (qspecl_then [`inst`, `src_op`, `[]`] mp_tac) >>
-    simp[] >> disch_then (qspec_then `s` mp_tac) >> simp[] >>
-    strip_tac >>
-    (* dfg_assigns_sound gives: lookup_var dfg' s = eval_operand src_op s *)
-    fs[dfg_assigns_sound_def] >>
-    first_x_assum (qspecl_then [`dfg'`, `inst`] mp_tac) >>
+    simp[] >>
+    disch_then (qspec_then `s` mp_tac) >>
+    impl_tac >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
     simp[eval_operand_def]
   )
   >- simp[normalize_operand_def, eval_operand_def]
   >- simp[normalize_operand_def, eval_operand_def]
+QED
+
+(* Full dfg_assigns_sound version: corollary of the restricted version.
+   normalize_operand preserves eval_operand under DFG soundness.
+   Key infrastructure: enables connecting lattice-tracked values
+   (which use normalized operands) to actual runtime values. *)
+Theorem normalize_operand_eval_proof:
+  !dfg visited op s.
+    dfg_assigns_sound dfg s ==>
+    eval_operand (normalize_operand dfg visited op) s = eval_operand op s
+Proof
+  rpt strip_tac >>
+  irule normalize_operand_eval_restricted_proof >>
+  fs[dfg_assigns_sound_def]
 QED

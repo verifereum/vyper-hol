@@ -308,10 +308,7 @@ Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
 End
 
-(* Generated split-block labels don't collide with existing block labels.
-   Used by cfg_normalization: split_block_name must not produce a label
-   already in fn_labels. Parameterized by the name generator so other
-   passes can reuse this pattern. *)
+(* No generated split-block label collides with existing labels. *)
 Definition split_labels_fresh_def:
   split_labels_fresh name_fn func ⇔
     ∀p t. ¬MEM (name_fn p t) (fn_labels func)

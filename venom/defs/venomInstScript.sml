@@ -240,12 +240,8 @@ Definition is_terminator_def:
   is_terminator _ = F
 End
 
-(* Does this opcode use Label operands as block references?
-   Terminators (JMP/JNZ/DJMP) use Labels as jump targets.
-   PHI uses Labels as predecessor block identifiers.
-   Other opcodes that take Label operands (INVOKE, OFFSET, CALLOCA)
-   use them for non-block purposes (function names, label_offsets keys)
-   and must NOT be treated as block references. *)
+(* Opcodes whose operands reference block labels (terminators + PHI).
+   Used by subst_block_labels to restrict label substitution. *)
 Definition is_block_label_opcode_def:
   is_block_label_opcode (opc : opcode) ⇔
     is_terminator opc ∨ opc = PHI

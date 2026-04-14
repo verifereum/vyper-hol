@@ -303,11 +303,10 @@ val excluded_test_names = [
   "test_abi_decode_nonstrict_head_oob",
   "test_create_from_blueprint_bad_code_offset",
   "test_immutables_initialized2",
-  (* abi_encode tests that use ensure_tuple=False or method_id= keywords.
-     TODO: support ensure_tuple and method_id keyword arguments for abi_encode *)
+  (* abi_encode tests that use method_id= keyword.
+     TODO: support method_id keyword argument for abi_encode *)
   "test_abi_encode",
   "test_abi_encode_dynarray",
-  "test_abi_encode_empty_string*",
   "test_abi_encode_nested_dynarray*",
   "test_revert_reason_typed",
   "test_revert_reason_typed_no_variable",
@@ -347,19 +346,16 @@ val excluded_test_names = [
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
-  (* Tests using sha256() builtin which is not yet translated.
-     TODO: add sha256 builtin support *)
-  "test_sha256_*",
   (* msg.data tests now excluded by unsupported_patterns *)
-  (* extcall to non-existent contract: Vyper reverts when target has
-     no code (EXTCODESIZE == 0), but our semantics doesn't check this.
-     TODO: add is_contract check to ExtCall handler *)
-  "test_default_override",
+
   (* Crowdfund tests: senders transfer ETH without set_balance traces,
      so accounts have 0 balance and transfer_value fails.
      TODO: either give accounts default balance or fix test export *)
   "test_crowdfund",
   "test_crowdfund2",
+  (* skip_contract_check=True keyword not yet supported in ExtCall.
+     TODO: add skip_contract_check flag to ExtCall AST *)
+  "test_skip_contract_check",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling",
   (* ABI decode strictness tests - Vyper's decoder is stricter than standard
@@ -386,13 +382,7 @@ val excluded_test_names = [
   "test_abi_decode_max_size",
   "test_clamper*",
   "test_returndatasize_check",
-  (* abi_decode tests using unwrap_tuple=False keyword.
-     TODO: support unwrap_tuple keyword argument for abi_decode *)
-  "test_abi_decode_annassign",
-  "test_abi_decode_double[False*",
-  "test_abi_decode_nested_dynarray2[False*",
-  "test_abi_decode_nested_dynarray[False*",
-  "test_abi_decode_single*False]",
+
   (* Flag conversion tests: convert(int_val, FlagType) requires
      evaluate_convert to support FlagT target types, which needs
      type env access. TODO: refactor FlagV representation first. *)

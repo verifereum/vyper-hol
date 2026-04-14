@@ -186,6 +186,28 @@ Definition subst_block_labels_fn_def:
       MAP (subst_block_labels_block label_map) func.fn_blocks
 End
 
+(* Batch label substitution restricted to block-referencing instructions.
+   Only substitutes in instructions where is_block_label_opcode holds
+   (terminators + PHI). Leaves INVOKE, OFFSET, CALLOCA etc. untouched. *)
+Definition subst_block_labels_inst_def:
+  subst_block_labels_inst label_map inst =
+    if is_block_label_opcode inst.inst_opcode
+    then subst_label_map_inst label_map inst
+    else inst
+End
+
+Definition subst_block_labels_block_def:
+  subst_block_labels_block label_map bb =
+    bb with bb_instructions :=
+      MAP (subst_block_labels_inst label_map) bb.bb_instructions
+End
+
+Definition subst_block_labels_fn_def:
+  subst_block_labels_fn label_map func =
+    func with fn_blocks :=
+      MAP (subst_block_labels_block label_map) func.fn_blocks
+End
+
 (* NOTE: Python _replace_all_labels also updates ctx.data_segment label
    references. Deferred until venom_to_bytecode is specified — data segment
    label resolution depends on bytecode layout (see lower_dload pass). *)

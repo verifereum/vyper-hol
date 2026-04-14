@@ -589,8 +589,19 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (pop_assum mp_tac \\ rw[get_accounts_def, return_def])
-  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ rewrite_tac[bind_def, ignore_bind_def, check_def, assert_def]
   \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    first_x_assum drule >>
+    first_x_assum(qspec_then`ARB`kall_tac) \\ rw[] >>
+    imp_res_tac lift_option_scopes >>
+    imp_res_tac lift_option_type_scopes >>
+    gvs[COND_RATOR, AllCaseEqs(),return_def,bind_def,check_def,
+        assert_def,get_accounts_def] >>
+    imp_res_tac lift_option_type_scopes >> gvs[] ) >>
+  BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (pop_assum mp_tac \\ rw[get_transient_storage_def, return_def])
   \\ BasicProvers.LET_ELIM_TAC
@@ -645,6 +656,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ first_x_assum drule
     \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
+           check_def, assert_def,
            COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
     \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
@@ -664,7 +676,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
            COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
     \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ gvs[] )
+    \\ gvs[assert_def] )
   \\ first_x_assum drule
   \\ first_x_assum(qspec_then`ARB`kall_tac)
   \\ rw[return_def] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
@@ -676,7 +688,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
          COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
   \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
   \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-  \\ gvs[]
+  \\ gvs[assert_def]
 QED
 
 (* Lock operations preserve scopes: needed for IntCall handler.

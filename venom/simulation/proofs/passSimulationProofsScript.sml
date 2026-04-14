@@ -233,6 +233,166 @@ Proof
   cheat
 QED
 
+(* Two-state predicate variant of block_sim_function_with_pred.
+   P : state -> state -> bool instead of P : state -> bool.
+   Follows the exact same induction, with P s1 replaced by P s1 s2. *)
+Theorem block_sim_function_with_pred2_proof:
+  !P R_ok R_term bt fn.
+    (!s. P s s ==> R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb fuel ctx s1 s2 s1' s2'.
+       MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 s2 /\
+       exec_block fuel ctx bb s1 = OK s1' /\
+       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       R_ok s1' s2' ==>
+       P s1' s2') /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s1 s2.
+        R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 ==>
+        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        lift_result R_ok R_term R_term
+          (exec_block fuel ctx bb s1)
+          (exec_block fuel ctx (bt bb) s2))
+  ==>
+    !fuel ctx s.
+      P s s /\ s.vs_inst_idx = 0 ==>
+      (?e. run_blocks fuel ctx fn s = Error e) \/
+      lift_result R_ok R_term R_term
+        (run_blocks fuel ctx fn s)
+        (run_blocks fuel ctx (function_map_transform bt fn) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qsuff_tac
+    `!fuel ctx s1 s2. R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 ==>
+       (?e. run_blocks fuel ctx fn s1 = Error e) \/
+       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s1)
+         (run_blocks fuel ctx (function_map_transform bt fn) s2)`
+  >- (rpt strip_tac >>
+      first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
+      metis_tac[])
+  >>
+  Induct_on `fuel` >> rw[]
+  >- (DISJ1_TAC >> simp[run_blocks_def])
+  >>
+  `s1.vs_current_bb = s2.vs_current_bb` by metis_tac[] >>
+  `s2.vs_inst_idx = 0` by metis_tac[] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >>
+  simp[function_map_transform_def, lookup_block_map_proof] >>
+  Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
+  >- (DISJ1_TAC >> gvs[])
+  >>
+  gvs[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `(?e. exec_block fuel ctx bb s1 = Error e) \/
+   lift_result R_ok R_term R_term
+     (exec_block fuel ctx bb s1)
+     (exec_block fuel ctx (bt bb) s2)` by metis_tac[] >>
+  Cases_on `exec_block fuel ctx bb s1` >>
+  Cases_on `exec_block fuel ctx (bt bb) s2` >>
+  gvs[lift_result_def]
+  >- (
+    `v'.vs_halted <=> v.vs_halted` by metis_tac[] >>
+    Cases_on `v.vs_halted` >> fs[] >>
+    gvs[lift_result_def, function_map_transform_def] >>
+    `v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0` by
+      metis_tac[exec_block_OK_inst_idx_0] >>
+    `P v v'` by (
+      qpat_x_assum `!bb fuel ctx s1 s2 s1' s2'. _ ==> P s1' s2'`
+        (qspecl_then [`bb`, `fuel`, `ctx`, `s1`, `s2`, `v`, `v'`] mp_tac) >>
+      simp[]) >>
+    qpat_x_assum `!ctx' s1' s2'. _ ==> _ \/ lift_result _ _ _ (run_blocks _ _ fn _) _`
+      (qspecl_then [`ctx`, `v`, `v'`] mp_tac) >> simp[]
+  )
+QED
+
+(* Like block_sim_function_with_pred2_proof but preservation clause gets
+   bb.bb_label = s1.vs_current_bb and ~s1'.vs_halted. *)
+Theorem block_sim_function_with_pred2_bb_proof:
+  !P R_ok R_term bt fn.
+    (!s. P s s ==> R_ok s s) /\
+    (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
+    (!s1 s2. R_ok s1 s2 ==>
+      s1.vs_current_bb = s2.vs_current_bb /\
+      s1.vs_inst_idx = s2.vs_inst_idx /\
+      s1.vs_halted = s2.vs_halted) /\
+    (!bb. (bt bb).bb_label = bb.bb_label) /\
+    (!bb fuel ctx s1 s2 s1' s2'.
+       MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 s2 /\
+       bb.bb_label = s1.vs_current_bb /\ s1.vs_inst_idx = 0 /\
+       ~s1'.vs_halted /\
+       exec_block fuel ctx bb s1 = OK s1' /\
+       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       R_ok s1' s2' ==>
+       P s1' s2') /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !fuel ctx s1 s2.
+        R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 /\
+        bb.bb_label = s1.vs_current_bb ==>
+        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        lift_result R_ok R_term R_term
+          (exec_block fuel ctx bb s1)
+          (exec_block fuel ctx (bt bb) s2))
+  ==>
+    !fuel ctx s.
+      P s s /\ s.vs_inst_idx = 0 ==>
+      (?e. run_blocks fuel ctx fn s = Error e) \/
+      lift_result R_ok R_term R_term
+        (run_blocks fuel ctx fn s)
+        (run_blocks fuel ctx (function_map_transform bt fn) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qsuff_tac
+    `!fuel ctx s1 s2. R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 ==>
+       (?e. run_blocks fuel ctx fn s1 = Error e) \/
+       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s1)
+         (run_blocks fuel ctx (function_map_transform bt fn) s2)`
+  >- (rpt strip_tac >>
+      first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
+      metis_tac[])
+  >>
+  Induct_on `fuel` >> rw[]
+  >- (DISJ1_TAC >> simp[run_blocks_def])
+  >>
+  `s1.vs_current_bb = s2.vs_current_bb` by metis_tac[] >>
+  `s2.vs_inst_idx = 0` by metis_tac[] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >>
+  simp[function_map_transform_def, lookup_block_map_proof] >>
+  Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
+  >- (DISJ1_TAC >> gvs[])
+  >>
+  gvs[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb.bb_label = s2.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `bb.bb_label = s1.vs_current_bb` by metis_tac[] >>
+  `(?e. exec_block fuel ctx bb s1 = Error e) \/
+   lift_result R_ok R_term R_term
+     (exec_block fuel ctx bb s1)
+     (exec_block fuel ctx (bt bb) s2)` by metis_tac[] >>
+  Cases_on `exec_block fuel ctx bb s1` >>
+  Cases_on `exec_block fuel ctx (bt bb) s2` >>
+  gvs[lift_result_def]
+  >- (
+    `v'.vs_halted <=> v.vs_halted` by metis_tac[] >>
+    Cases_on `v.vs_halted` >> fs[] >>
+    gvs[lift_result_def, function_map_transform_def] >>
+    `v.vs_inst_idx = 0 /\ v'.vs_inst_idx = 0` by
+      metis_tac[exec_block_OK_inst_idx_0] >>
+    `P v v'` by (
+      qpat_x_assum `!bb fuel ctx s1 s2 s1' s2'. _ ==> P s1' s2'`
+        (qspecl_then [`bb`, `fuel`, `ctx`, `s1`, `s2`, `v`, `v'`] mp_tac) >>
+      simp[]) >>
+    qpat_x_assum `!ctx' s1' s2'. _ ==> _ \/ lift_result _ _ _ (run_blocks _ _ fn _) _`
+      (qspecl_then [`ctx`, `v`, `v'`] mp_tac) >> simp[]
+  )
+QED
+
 (* Pointwise version: per-block sim proved on a single state (not R-related pair).
    Corollary of block_sim_function_proof + same_state_to_rel_block_sim_proof.
    Requires valid_state_rel, R_ok/R_term transitivity, and operand condition

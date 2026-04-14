@@ -14,7 +14,7 @@ Ancestors
   vyperLookup vyperImmutablesPreservation vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
   vyperTyping vyperEncodeDecode vyperAssignPreservesType
-  vyperTypeSoundnessHelpers vyperBuiltinTyping
+  vyperTypeSoundnessDefs vyperTypeSoundnessHelpers vyperBuiltinTyping
 Libs
   wordsLib
 
@@ -1441,8 +1441,9 @@ Resume eval_preserves_swt[Array]:
   gvs[return_def, raise_def] >>
   irule extract_elements_well_typed >>
   `well_formed_type_value (ArrayTV tv bd)` by (
-    simp[well_formed_type_value_def] >>
-    metis_tac[cj 1 evaluate_type_well_formed]) >>
+    irule (cj 1 evaluate_type_well_formed) >>
+    qexists_tac `get_tenv cx` >> qexists_tac `ArrayT typ bd` >>
+    simp[evaluate_type_def]) >>
   Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def] >>
   metis_tac[]
 QED
@@ -2566,13 +2567,13 @@ Resume eval_preserves_swt[TypeBuiltin]:
   qpat_x_assum `_ = (res, st')` mp_tac >>
   reverse (Cases_on `res_es`) >> simp_tac (srw_ss()) [] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       ASM_REWRITE_TAC[] >> NO_TAC) >>
+       ASM_REWRITE_TAC[sumTheory.INR_neq_INL] >> NO_TAC) >>
   (* eval_exprs success: peel lift_sum *)
   simp_tac std_ss [lift_sum_def, bind_apply, BETA_THM] >>
   Cases_on `evaluate_type_builtin cx tb typ x` >>
   simp_tac (srw_ss()) [return_def, raise_def] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       ASM_REWRITE_TAC[] >> NO_TAC) >>
+       ASM_REWRITE_TAC[sumTheory.INR_neq_INL] >> NO_TAC) >>
   (* evaluate_type_builtin success *)
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   ASM_REWRITE_TAC[] >>
@@ -2584,7 +2585,7 @@ Resume eval_preserves_swt[TypeBuiltin]:
     gvs[GSYM well_formed_type_def] >>
   Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[] >>
   irule evaluate_type_builtin_well_typed >>
-  rpt (first_assum (irule_at Any))
+  rpt (first_assum (irule_at Any)) >> gvs[]
 QED
 
 Resume eval_preserves_swt[Send]:
@@ -2647,9 +2648,9 @@ Resume eval_preserves_swt[ExtCall]:
      to substitute equalities (tenv, txParams, caller, result destructuring,
      returnData=[]), then drule_all matches remaining guard conjuncts. *)
   rpt gen_tac >> disch_then STRIP_ASSUME_TAC >>
-  pop_assum (fn ih_p8 =>
-  pop_assum (fn ih_p7_raw =>
-  let val ih_p7 = SIMP_RULE std_ss [] ih_p7_raw in
+  pop_assum $ markerLib.ASSUME_NAMED_TAC "ih_p8" >>
+  pop_assum $ markerLib.ASSUME_NAMED_TAC "ih_p7" o
+                SIMP_RULE std_ss [] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_ExtCall]) >>
@@ -2658,7 +2659,7 @@ Resume eval_preserves_swt[ExtCall]:
   simp_tac std_ss [bind_apply, ignore_bind_apply] >>
   (* 1. eval_exprs cx es *)
   BasicProvers.TOP_CASE_TAC >>
-  (fn (asl, g) => (assume_tac ih_p8 (asl, g))) >>
+  markerLib.LABEL_X_ASSUM "ih_p8" assume_tac >>
   first_x_assum drule_all >> strip_tac >>
   reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
   (* 2. check (vs <> []) *)
@@ -2698,9 +2699,14 @@ Resume eval_preserves_swt[ExtCall]:
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac get_accounts_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  rewrite_tac[ignore_bind_apply, bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac get_transient_storage_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  rewrite_tac[bind_apply] >>
   (* 9. lift_option (run_ext_call ...) *)
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_state >> BasicProvers.VAR_EQ_TAC >>
@@ -2753,11 +2759,9 @@ Resume eval_preserves_swt[ExtCall]:
     Cases_on `drv` >> gvs[well_typed_opt_SOME] ) >>
   `expr_type (THE drv) = ret_type` by (
     Cases_on `drv` >> gvs[] ) >>
-  (fn (asl, g) =>
-    (assume_tac ih_p7 >>
-     first_x_assum drule_all >> strip_tac >>
-     simp[expr_type_def] >> gvs[]) (asl, g))
-  end))
+  markerLib.LABEL_X_ASSUM "ih_p7" assume_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[expr_type_def] >> gvs[]
 QED
 
 val type_check_success = prove(

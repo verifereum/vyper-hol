@@ -208,7 +208,9 @@ Datatype:
 End
 
 Datatype:
-  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32 | AbiDecode | AbiEncode
+  type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32
+  | AbiDecode bool (* unwrap_tuple *)
+  | AbiEncode bool (* ensure_tuple *)
 End
 
 Datatype:

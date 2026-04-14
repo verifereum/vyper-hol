@@ -283,6 +283,71 @@ Proof
   ACCEPT_TAC df_analysis_pass_correct_sound_inv3_proof
 QED
 
+(* Block-level simulation variant (non-widen).
+   Takes block-level sim + cross-block hypotheses directly.
+   NO per-inst transfer_sound, NO per-inst state_inv_step.
+   Useful when state_inv is not per-instruction preserved. *)
+Theorem df_analysis_pass_correct_block_sim:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (bottom : 'a) join
+   transfer edge_transfer ctx entry_val fn
+   (sound : 'a -> venom_state -> bool)
+   (state_inv : venom_state -> bool)
+   (f : 'a -> instruction -> instruction list).
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let process = df_process_block Forward bottom join
+                    transfer edge_transfer ctx entry_val cfg bbs in
+    let result = df_analyze Forward bottom join
+                   transfer edge_transfer ctx entry_val fn in
+      valid_state_rel R_ok R_term /\
+      (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+      (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+      is_fixpoint process cfg.cfg_dfs_pre result /\
+      (!bb fuel run_ctx s v.
+         MEM bb fn.fn_blocks /\
+         MEM bb.bb_label cfg.cfg_dfs_pre /\
+         s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
+         sound (df_at bottom result bb.bb_label 0) s /\
+         state_inv s /\
+         exec_block fuel run_ctx bb s = OK v ==>
+         MEM v.vs_current_bb cfg.cfg_dfs_pre /\
+         sound (df_at bottom result v.vs_current_bb 0) v /\
+         state_inv v) /\
+      (!bb fuel run_ctx s.
+         MEM bb fn.fn_blocks /\
+         MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+         lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+         s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
+         sound (df_at bottom result bb.bb_label 0) s /\
+         state_inv s ==>
+         (?e. exec_block fuel run_ctx bb s = Error e) \/
+         lift_result R_ok R_term R_term (exec_block fuel run_ctx bb s)
+           (exec_block fuel run_ctx
+             (analysis_block_transform bottom result f bb) s)) /\
+      wf_function fn /\
+      fn_inst_wf fn /\
+      (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+      (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2) /\
+      (!bb inst x.
+         MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+         MEM (Var x) inst.inst_operands ==>
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+    ==>
+      !fuel ctx s.
+        s.vs_inst_idx = 0 /\
+        fn_entry_label fn = SOME s.vs_current_bb /\
+        state_inv s /\
+        sound (df_at bottom result s.vs_current_bb 0) s ==>
+        (?e. run_blocks fuel ctx fn s = Error e) \/
+        lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
+          (run_blocks fuel ctx
+            (analysis_function_transform bottom result f fn) s)
+Proof
+  ACCEPT_TAC df_analysis_pass_correct_block_sim_proof
+QED
+
 (* Widening variant. Uses entry/successor soundness with df_widen_at. *)
 Theorem df_analysis_pass_correct_widen_sound:
   !(R_ok : venom_state -> venom_state -> bool)

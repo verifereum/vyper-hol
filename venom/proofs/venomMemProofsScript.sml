@@ -292,7 +292,7 @@ Proof
 QED
 
 (* Non-ALLOCA, non-INVOKE step_inst_base preserves vs_allocas *)
-Theorem step_inst_base_preserves_allocas[local]:
+Theorem step_inst_base_preserves_allocas:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/
      step_inst_base inst s = Halt s' \/
@@ -318,7 +318,7 @@ Proof
 QED
 
 (* Same for vs_alloca_next *)
-Theorem step_inst_base_preserves_alloca_next[local]:
+Theorem step_inst_base_preserves_alloca_next:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/
      step_inst_base inst s = Halt s' \/
@@ -344,7 +344,7 @@ Proof
 QED
 
 (* Combined *)
-Theorem step_inst_base_preserves_alloca_fields[local]:
+Theorem step_inst_base_preserves_alloca_fields:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/
      step_inst_base inst s = Halt s' \/

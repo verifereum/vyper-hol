@@ -32,7 +32,9 @@ Theory copyFwdEquiv
 Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs
   venomExecSemantics venomState stateEquiv
-  finite_map
+  finite_map list rich_list
+Libs
+  dep_rewrite
 
 (* =========================================================================
    1. Cross-State Memory Region Equivalence
@@ -77,12 +79,96 @@ Proof
 QED
 
 (* =========================================================================
-   2. MCOPY and Region Equivalence
+   2. MCOPY and Region Equivalence — Helpers
+   ========================================================================= *)
+
+(* Reading from TAKE n (DROP m l ++ REPLICATE n 0w) equals mem_byte_at *)
+Theorem take_drop_replicate_el:
+  ∀i n m (l : word8 list).
+    i < n ⇒
+    EL i (TAKE n (DROP m l ++ REPLICATE n 0w)) = mem_byte_at l (m + i)
+Proof
+  rpt strip_tac >> simp[mem_byte_at_def, EL_TAKE, EL_APPEND_EQN, LENGTH_DROP] >>
+  Cases_on `i < LENGTH l - m` >> simp[EL_DROP, EL_REPLICATE]
+QED
+
+(* Length of memory after write_memory_with_expansion *)
+Theorem wmwe_length:
+  ∀offset bytes s.
+    LENGTH (write_memory_with_expansion offset bytes s).vs_memory ≥
+    offset + LENGTH bytes
+Proof
+  rw[write_memory_with_expansion_def, LET_THM]
+QED
+
+(* The actual newmem in wmwe *)
+Theorem wmwe_vs_memory:
+  ∀offset bytes s.
+    (write_memory_with_expansion offset bytes s).vs_memory =
+    let mem = s.vs_memory in
+    let needed = offset + LENGTH bytes − LENGTH mem in
+    let expanded = if needed > 0 then mem ++ REPLICATE needed 0w
+                   else mem in
+    TAKE offset expanded ++ bytes ++ DROP (offset + LENGTH bytes) expanded
+Proof
+  rw[write_memory_with_expansion_def, LET_THM]
+QED
+
+(* write_memory_with_expansion: reading a written byte *)
+Theorem wmwe_byte_at_written:
+  ∀offset bytes s i.
+    i < LENGTH bytes ⇒
+    mem_byte_at (write_memory_with_expansion offset bytes s).vs_memory
+      (offset + i) = EL i bytes
+Proof
+  rpt strip_tac >>
+  rewrite_tac[wmwe_vs_memory] >> simp_tac std_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `TAKE offset expanded ++ bytes ++ _` >>
+  `LENGTH expanded >= offset + LENGTH bytes` by
+    (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[LENGTH_APPEND, LENGTH_REPLICATE]) >>
+  simp[mem_byte_at_def, LENGTH_APPEND, LENGTH_TAKE_EQ, LENGTH_DROP,
+       EL_APPEND_EQN]
+QED
+
+(* write_memory_with_expansion: reading an unwritten byte *)
+Theorem wmwe_byte_at_outside:
+  ∀offset bytes s addr.
+    (addr < offset ∨ offset + LENGTH bytes ≤ addr) ⇒
+    mem_byte_at (write_memory_with_expansion offset bytes s).vs_memory addr =
+    mem_byte_at s.vs_memory addr
+Proof
+  rpt strip_tac >>
+  rewrite_tac[wmwe_vs_memory] >> simp_tac std_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `TAKE offset expanded ++ _ ++ _` >>
+  rename1 `Abbrev (expanded = if _ then mem ++ _ else mem)` >>
+  `LENGTH expanded >= offset + LENGTH bytes ∧
+   LENGTH expanded >= LENGTH mem ∧
+   (∀a. a < LENGTH mem ⇒ EL a expanded = EL a mem)` by
+    (simp[Abbr `expanded`] >> IF_CASES_TAC >>
+     simp[LENGTH_APPEND, LENGTH_REPLICATE, EL_APPEND_EQN]) >>
+  simp[mem_byte_at_def, LENGTH_APPEND, LENGTH_TAKE_EQ, LENGTH_DROP,
+       EL_APPEND_EQN] >>
+  rpt strip_tac >> gvs[EL_TAKE, EL_DROP] >>
+  Cases_on `addr < LENGTH mem` >> gvs[] >>
+  simp[Abbr `expanded`] >>
+  rpt IF_CASES_TAC >>
+  gvs[EL_APPEND_EQN, EL_REPLICATE, LENGTH_APPEND, LENGTH_REPLICATE]
+QED
+
+(* =========================================================================
+   2b. MCOPY and Region Equivalence
    ========================================================================= *)
 
 (* After mcopy dst src sz, each byte in [dst, dst+sz) equals the
    corresponding byte from [src, src+sz) in the PRE-copy memory.
    This is the foundational property of the copy. *)
+(* LENGTH of mcopy data *)
+Theorem mcopy_data_length:
+  ∀src sz mem. LENGTH (TAKE sz (DROP src mem ++ REPLICATE sz 0w)) = sz
+Proof
+  simp[LENGTH_TAKE_EQ, LENGTH_APPEND, LENGTH_DROP, LENGTH_REPLICATE]
+QED
+
 Theorem mcopy_establishes_equiv:
   ∀s dst src sz.
     let s' = mcopy dst src sz s in
@@ -90,7 +176,8 @@ Theorem mcopy_establishes_equiv:
       mem_byte_at s'.vs_memory (dst + i) =
       mem_byte_at s.vs_memory (src + i)
 Proof
-  cheat
+  simp[mcopy_def, LET_THM] >> rpt strip_tac >>
+  simp[wmwe_byte_at_written, mcopy_data_length, take_drop_replicate_el]
 QED
 
 (* mcopy does not modify bytes outside [dst, dst+sz).
@@ -103,7 +190,8 @@ Theorem mcopy_preserves_disjoint:
       mem_byte_at s'.vs_memory (addr + i) =
       mem_byte_at s.vs_memory (addr + i)
 Proof
-  cheat
+  simp[mcopy_def, LET_THM] >> rpt strip_tac >>
+  irule wmwe_byte_at_outside >> simp[mcopy_data_length]
 QED
 
 (* The cross-state property needed at the mcopy/nop divergence point.
@@ -135,7 +223,10 @@ Theorem cross_equiv_take_drop:
     TAKE sz (DROP addr1 mem1 ++ REPLICATE sz 0w) =
     TAKE sz (DROP addr2 mem2 ++ REPLICATE sz 0w)
 Proof
-  cheat
+  rw[cross_mem_region_equiv_def] >>
+  irule LIST_EQ >> simp[LENGTH_TAKE_EQ, LENGTH_APPEND, LENGTH_DROP,
+                         LENGTH_REPLICATE] >>
+  rpt strip_tac >> simp[take_drop_replicate_el]
 QED
 
 (* MLOAD: reading 32 bytes from cross-equivalent regions gives same word. *)
