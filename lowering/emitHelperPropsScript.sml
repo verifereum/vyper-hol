@@ -896,6 +896,21 @@ Proof
   irule step_ADD >> rw[]
 QED
 
+Theorem emit_op_SHR_correct:
+  ∀ op1 op2 v1 v2 st v st' ss.
+    emit_op SHR [op1; op2] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧ eval_operand op2 ss = SOME v2 ∧
+    fresh_vars_wrt st ss ⇒
+    ∃ ss'. run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (word_lsr v2 (w2n v1)) ∧
+      same_blocks st st' ∧ fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ⇒ EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory = LENGTH ss.vs_memory
+Proof
+  rw[] >> qspecl_then [`SHR`, `\x y. y >>> w2n x`] (ho_match_mp_tac o BETA_RULE) emit_op_pure2_correct >> goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >> irule step_SHR >> rw[]
+QED
+
 Theorem emit_op_MUL_correct:
   ∀ op1 op2 v1 v2 st v st' ss.
     emit_op MUL [op1; op2] st = (v, st') ∧
@@ -1381,6 +1396,17 @@ Proof
   rw[step_inst_base_def, exec_read1_def]
 QED
 
+Theorem step_CALLDATALOAD:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    step_inst_base (mk_inst id CALLDATALOAD [op1] [out]) ss =
+      OK (update_var out
+        (let data = ss.vs_call_ctx.cc_calldata in
+         word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ss)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+QED
+
 Theorem step_SSTORE:
   ∀ op1 op2 v1 v2 id ss.
     eval_operand op1 ss = SOME v1 ∧
@@ -1534,6 +1560,36 @@ Proof
   rw[] >> irule emit_op_read1_correct >> gvs[] >>
   goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
   irule step_SLOAD >> rw[]
+QED
+
+Theorem emit_op_CALLDATALOAD_correct:
+  ∀ op1 v1 st v st' ss.
+    emit_op CALLDATALOAD [op1] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME
+        (let data = ss.vs_call_ctx.cc_calldata in
+         word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_memory = ss.vs_memory ∧
+      ss'.vs_accounts = ss.vs_accounts ∧
+      ss'.vs_labels = ss.vs_labels
+Proof
+  rw[] >>
+  mp_tac (Q.SPECL [`CALLDATALOAD`,
+    `\v1 ss. let data = ss.vs_call_ctx.cc_calldata in
+       word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))`]
+    emit_op_read1_correct) >>
+  simp[] >> disch_then irule >> gvs[] >>
+  goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
+  qspecl_then [`op1`, `v1`, `st.cs_next_id`,
+    `STRING #"%" (toString st.cs_next_var)`, `ss`]
+    mp_tac step_CALLDATALOAD >> simp[]
 QED
 
 (* ===== Generic emit_void for write2 opcodes ===== *)
