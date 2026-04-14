@@ -213,8 +213,7 @@ val unsupported_code = [
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
   "msg.data",
-  "gas=",
-  "pragma nonreentrancy"
+  "gas="
 ]
 
 fun has_unsupported_patterns src =
