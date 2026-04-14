@@ -102,6 +102,10 @@ End
 Definition alloca_safe_access_def:
   alloca_safe_access fn (roots : string set) s <=>
     let pv = pointer_derived_vars fn roots in
+    (* All alloca regions fit within memory (no expansion on access) *)
+    (!aid off asz.
+      FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
+      off + asz <= LENGTH s.vs_memory) /\
     (* Memory accesses through pointer-derived vars stay within alloca *)
     (!bb inst ops v w sz_op sz_val aid off asz.
       MEM bb fn.fn_blocks /\

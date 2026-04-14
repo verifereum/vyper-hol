@@ -2849,7 +2849,8 @@ Resume concretize_step_mload[mload_core]:
   (* Step 1: alloca_safe_access => w2n w1 + 32 <= orig_off + sz *)
   qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
   simp[alloca_safe_access_def, LET_THM] >>
-  disch_then (qspecl_then
+  strip_tac >>
+  pop_assum (qspecl_then
     [`bb`, `inst`,
      `<| iao_ofst := Var v; iao_size := SOME (Lit 32w);
          iao_max_size := SOME (Lit 32w) |>`,
@@ -3049,7 +3050,8 @@ Resume concretize_step_sha3[sha3_sz]:
   `w2n w1 + w2n sz_val <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then
+    strip_tac >>
+    pop_assum (qspecl_then
       [`bb`, `inst`,
        `<| iao_ofst := Var v; iao_size := SOME op_sz;
            iao_max_size := SOME op_sz |>`,
@@ -3165,7 +3167,8 @@ Resume concretize_step_return[ret_bytes]:
   `w2n w1 + w2n sz_val <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then
+    strip_tac >>
+    pop_assum (qspecl_then
       [`bb`, `inst`,
        `<| iao_ofst := Var v; iao_size := SOME op_sz;
            iao_max_size := SOME op_sz |>`,
@@ -3277,7 +3280,8 @@ Resume concretize_step_revert[rev_bytes]:
   `w2n w1 + w2n sz_val <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then
+    strip_tac >>
+    pop_assum (qspecl_then
       [`bb`, `inst`,
        `<| iao_ofst := Var v; iao_size := SOME op_sz;
            iao_max_size := SOME op_sz |>`,
@@ -4106,7 +4110,8 @@ Resume concretize_step_mstore[alloca_byte]:
   `w2n w1 + 32 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w) |>`,
       `v_addr`, `w1`, `Lit 32w`, `32w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4135,7 +4140,8 @@ Resume concretize_step_mstore[nonalloca_byte]:
   `w2n w1 + 32 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w) |>`,
       `v_addr`, `w1`, `Lit 32w`, `32w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4272,7 +4278,8 @@ Resume concretize_step_mstore8[alloca_byte]:
   `w2n w1 + 1 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 1w); iao_max_size := SOME (Lit 1w) |>`,
       `v_addr`, `w1`, `Lit 1w`, `1w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4301,7 +4308,8 @@ Resume concretize_step_mstore8[nonalloca_byte]:
   `w2n w1 + 1 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 1w); iao_max_size := SOME (Lit 1w) |>`,
       `v_addr`, `w1`, `Lit 1w`, `1w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4455,7 +4463,8 @@ Resume concretize_step_calldatacopy[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4484,7 +4493,8 @@ Resume concretize_step_calldatacopy[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4598,7 +4608,8 @@ Resume concretize_step_codecopy[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4625,7 +4636,8 @@ Resume concretize_step_codecopy[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4739,7 +4751,8 @@ Resume concretize_step_dloadbytes[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4766,7 +4779,8 @@ Resume concretize_step_dloadbytes[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4906,7 +4920,8 @@ Resume concretize_step_returndatacopy[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4933,7 +4948,8 @@ Resume concretize_step_returndatacopy[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>

@@ -3745,6 +3745,9 @@ Theorem step_preserves_remap[local]:
          LENGTH (FILTER ($= (Var u)) inst.inst_operands) <= 1) /\
     (* ALLOCA-specific conditions *)
     (is_alloca_op inst.inst_opcode ==>
+       alloca_inv s1 /\ alloca_inv s2 /\
+       LENGTH s1.vs_memory <= s1.vs_alloca_next /\
+       LENGTH s2.vs_memory <= s2.vs_alloca_next /\
        inst.inst_outputs = [HD inst.inst_outputs] /\
        HD inst.inst_outputs IN roots /\
        fn_alloca_id_of_var fn (HD inst.inst_outputs) = SOME inst.inst_id /\
