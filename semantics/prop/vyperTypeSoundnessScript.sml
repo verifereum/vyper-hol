@@ -392,7 +392,7 @@ fun tp_pure_base_target_tac ev_thm =
 (* type_preservation is derived from this at the end.                *)
 
 Theorem eval_preserves_swt:
-  (* P0: eval_stmt — state + env preserved, return exceptions well-typed *)
+  (* P0: eval_stmt — state + env preserved, no type errors, return well-typed *)
   (!cx s. !env ret_ty st res st'.
     well_typed_stmt env ret_ty s /\
     env_consistent env cx st /\
@@ -401,10 +401,11 @@ Theorem eval_preserves_swt:
     context_well_typed cx /\
     eval_stmt cx s st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
-  (* P1: eval_stmts — state + env preserved, return exceptions well-typed *)
+  (* P1: eval_stmts — state + env preserved, no type errors, return well-typed *)
   (!cx ss. !env ret_ty st res st'.
     well_typed_stmts env ret_ty ss /\
     env_consistent env cx st /\
@@ -413,10 +414,11 @@ Theorem eval_preserves_swt:
     context_well_typed cx /\
     eval_stmts cx ss st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
-  (* P2: eval_iterator — STRENGTHENED with value typing *)
+  (* P2: eval_iterator — no type errors, value typing on success *)
   (!cx it. !env typ st res st'.
     well_typed_iterator env typ it /\
     env_consistent env cx st /\
@@ -425,10 +427,11 @@ Theorem eval_preserves_swt:
     context_well_typed cx /\
     eval_iterator cx it st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!vs tyv. res = INL vs /\
               evaluate_type (get_tenv cx) typ = SOME tyv ==>
               EVERY (value_has_type tyv) vs)) /\
-  (* P3: eval_target *)
+  (* P3: eval_target — no type errors *)
   (!cx g. !env st res st'.
     (?ty. well_typed_atarget env g ty) /\
     env_consistent env cx st /\
@@ -436,8 +439,9 @@ Theorem eval_preserves_swt:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_target cx g st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
-  (* P4: eval_targets *)
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
+  (* P4: eval_targets — no type errors *)
   (!cx gs. !env st res st'.
     EVERY (\g. ?ty. well_typed_atarget env g ty) gs /\
     env_consistent env cx st /\
@@ -445,8 +449,9 @@ Theorem eval_preserves_swt:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_targets cx gs st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
-  (* P5: eval_base_target *)
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
+  (* P5: eval_base_target — no type errors *)
   (!cx bt. !env st res st'.
     (?ty. well_typed_target env bt ty) /\
     env_consistent env cx st /\
@@ -454,8 +459,9 @@ Theorem eval_preserves_swt:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
-  (* P6: eval_for *)
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
+  (* P6: eval_for — no type errors, return well-typed *)
   (!cx tyv nm body vs. !env typ ret_ty st res st'.
     well_typed_stmts (env with var_types updated_by (flip FUPDATE (nm, typ)))
                      ret_ty body /\
@@ -468,10 +474,11 @@ Theorem eval_preserves_swt:
     nm NOTIN FDOM env.var_types /\
     eval_for cx tyv nm body vs st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
-    !v ret_tv. res = INR (ReturnException v) /\
+    (!s. res <> INR (Error (TypeError s))) /\
+    (!v ret_tv. res = INR (ReturnException v) /\
                evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-               value_has_type ret_tv v) /\
-  (* P7: eval_expr -- covers both success and failure *)
+               value_has_type ret_tv v)) /\
+  (* P7: eval_expr — no type errors, typing on success *)
   (!cx e. !env st res st'.
     well_typed_expr env e /\
     env_consistent env cx st /\
@@ -480,6 +487,7 @@ Theorem eval_preserves_swt:
     context_well_typed cx /\
     eval_expr cx e st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!tv. res = INL tv ==>
        (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               toplevel_value_typed tv tyv) /\
@@ -487,7 +495,7 @@ Theorem eval_preserves_swt:
           state_well_typed st'' /\ env_consistent env cx st'' /\
           (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
                  value_has_type tyv v)))) /\
-  (* P8: eval_exprs -- covers both success and failure *)
+  (* P8: eval_exprs — no type errors, typing on success *)
   (!cx es. !env st res st'.
     well_typed_exprs env es /\
     env_consistent env cx st /\
@@ -496,6 +504,7 @@ Theorem eval_preserves_swt:
     context_well_typed cx /\
     eval_exprs cx es st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!vs. res = INL vs ==>
       LIST_REL (\v e. ?tyv.
         evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -3612,6 +3621,8 @@ QED
 
 (* ===== type_preservation: derived from eval_preserves_swt ===== *)
 (* Requires context_well_typed cx — see counterexample above for why.
+   Includes no-TypeError (type soundness / progress): well-typed programs
+   never raise TypeError exceptions.
    P2 (eval_iterator) drops well_typed_iterator; swt+ec follow from swt P2
    which is strictly stronger. *)
 
@@ -3625,6 +3636,7 @@ Theorem type_preservation:
     context_well_typed cx /\
     eval_stmt cx s st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
@@ -3637,10 +3649,11 @@ Theorem type_preservation:
     context_well_typed cx /\
     eval_stmts cx ss st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
-  (* P2: eval_iterator — needs well_typed_iterator (see FOCUS P2 analysis) *)
+  (* P2: eval_iterator *)
   (!cx it. !env typ st res st'.
     well_typed_iterator env typ it /\
     env_consistent env cx st /\
@@ -3648,7 +3661,8 @@ Theorem type_preservation:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_iterator cx it st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P3: eval_target *)
   (!cx g. !env st res st'.
     (?ty. well_typed_atarget env g ty) /\
@@ -3657,7 +3671,8 @@ Theorem type_preservation:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_target cx g st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P4: eval_targets *)
   (!cx gs. !env st res st'.
     EVERY (\g. ?ty. well_typed_atarget env g ty) gs /\
@@ -3666,7 +3681,8 @@ Theorem type_preservation:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_targets cx gs st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P5: eval_base_target *)
   (!cx bt. !env st res st'.
     (?ty. well_typed_target env bt ty) /\
@@ -3675,7 +3691,8 @@ Theorem type_preservation:
     functions_well_typed cx /\
     context_well_typed cx /\
     eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P6: eval_for *)
   (!cx tyv nm body vs. !env typ ret_ty st res st'.
     well_typed_stmts (env with var_types updated_by (flip FUPDATE (nm, typ)))
@@ -3689,9 +3706,10 @@ Theorem type_preservation:
     nm NOTIN FDOM env.var_types /\
     eval_for cx tyv nm body vs st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
-    !v ret_tv. res = INR (ReturnException v) /\
+    (!s. res <> INR (Error (TypeError s))) /\
+    (!v ret_tv. res = INR (ReturnException v) /\
                evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-               value_has_type ret_tv v) /\
+               value_has_type ret_tv v)) /\
   (* P7: eval_expr *)
   (!cx e. !env st res st'.
     well_typed_expr env e /\
@@ -3701,6 +3719,7 @@ Theorem type_preservation:
     context_well_typed cx /\
     eval_expr cx e st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!tv. res = INL tv ==>
        (!v st''. materialise cx tv st' = (INL v, st'') ==>
           state_well_typed st'' /\ env_consistent env cx st'' /\
@@ -3715,6 +3734,7 @@ Theorem type_preservation:
     context_well_typed cx /\
     eval_exprs cx es st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!vs. res = INL vs ==>
       LIST_REL (\v e. ?tyv.
         evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
