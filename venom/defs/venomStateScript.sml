@@ -210,11 +210,7 @@ Definition write_memory_with_expansion_def:
     s with vs_memory := newmem
 End
 
-(* Next free alloca offset: past all existing allocas and physical memory.
-   vs_alloca_next tracks the bump pointer across call frames. *)
-Definition next_alloca_offset_def:
-  next_alloca_offset s = MAX s.vs_alloca_next (LENGTH s.vs_memory)
-End
+
 
 (* Load a 32-byte word from memory (big-endian) *)
 Definition mload_def:

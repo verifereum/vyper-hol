@@ -2094,7 +2094,7 @@ QED
 
 Resume emit_op_ALLOCA_correct[none_case]:
   conj_tac >- (
-    qexists_tac `next_alloca_offset ss` >>
+    qexists_tac `ss.vs_alloca_next` >>
     simp[eval_operand_update_var]
   ) >>
   conj_tac >- (

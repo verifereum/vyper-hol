@@ -1516,7 +1516,7 @@ Triviality step_alloca_reuse_goal:
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     alloca_inv s1 /\
-    next_alloca_offset s1 < dimword (:256) /\
+    s1.vs_alloca_next < dimword (:256) /\
     w2n addr + w2n alloc_size < dimword (:256) /\
     (!aid off sz addr'.
        FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\
@@ -1539,7 +1539,7 @@ Proof
      simp[]) >>
   `entry0 + entry1 < dimword (:256)` by (
     imp_res_tac alloca_inv_alloca_bound >>
-    fs[next_alloca_offset_def, MAX_DEF]) >>
+    fs[MAX_DEF]) >>
   irule cr_update_var_alloca_reuse >>
   conj_tac >- (qexistsl [`inst.inst_id`, `entry1`] >> simp[])
   >> simp[]
@@ -1549,14 +1549,14 @@ Triviality nao_ge_alloca_end:
   !s aid off sz.
     alloca_inv s /\
     FLOOKUP s.vs_allocas aid = SOME (off, sz) ==>
-    off + sz <= next_alloca_offset s
+    off + sz <= s.vs_alloca_next
 Proof
-  rw[next_alloca_offset_def, alloca_inv_def, alloca_next_valid_def] >>
+  rw[alloca_inv_def, alloca_next_valid_def] >>
   res_tac >> simp[MAX_DEF]
 QED
 
 (* Fresh alloca case: side 1 bump-allocates, side 2 assigns concrete addr.
-   New alloca at next_alloca_offset doesn't overlap existing because
+   New alloca at vs_alloca_next doesn't overlap existing because
    alloca_inv ensures off + sz <= vs_alloca_next <= nao. *)
 Triviality step_alloca_fresh_goal:
   !inst bb amap fn livesets init s1 s2 out addr alloc_size.
@@ -1568,7 +1568,7 @@ Triviality step_alloca_fresh_goal:
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     alloca_inv s1 /\
     0 < w2n alloc_size /\
-    next_alloca_offset s1 + w2n alloc_size < dimword (:256) /\
+    s1.vs_alloca_next + w2n alloc_size < dimword (:256) /\
     w2n addr + w2n alloc_size < dimword (:256) /\
     (!aid off sz addr'.
        FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\
@@ -1579,16 +1579,16 @@ Triviality step_alloca_fresh_goal:
     FLOOKUP s1.vs_allocas inst.inst_id = NONE ==>
     concretize_rel amap fn livesets (init \\ inst.inst_id)
       (s1 with
-       <|vs_vars := s1.vs_vars |+ (out, n2w (next_alloca_offset s1));
+       <|vs_vars := s1.vs_vars |+ (out, n2w (s1.vs_alloca_next));
          vs_allocas :=
            s1.vs_allocas |+ (inst.inst_id,
-             (next_alloca_offset s1, w2n alloc_size));
+             (s1.vs_alloca_next, w2n alloc_size));
          vs_alloca_next :=
-           next_alloca_offset s1 + w2n alloc_size|>)
+           s1.vs_alloca_next + w2n alloc_size|>)
       (s2 with vs_vars := s2.vs_vars |+ (out, addr))
 Proof
   rpt strip_tac >>
-  qabbrev_tac `nao = next_alloca_offset s1` >>
+  qabbrev_tac `nao = s1.vs_alloca_next` >>
   `is_alloca_op inst.inst_opcode` by simp[is_alloca_op_def] >>
   imp_res_tac alloca_concrete_addr_from_inst >>
   imp_res_tac flookup_in_pv >>
@@ -2849,7 +2849,8 @@ Resume concretize_step_mload[mload_core]:
   (* Step 1: alloca_safe_access => w2n w1 + 32 <= orig_off + sz *)
   qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
   simp[alloca_safe_access_def, LET_THM] >>
-  disch_then (qspecl_then
+  strip_tac >>
+  pop_assum (qspecl_then
     [`bb`, `inst`,
      `<| iao_ofst := Var v; iao_size := SOME (Lit 32w);
          iao_max_size := SOME (Lit 32w) |>`,
@@ -3049,7 +3050,8 @@ Resume concretize_step_sha3[sha3_sz]:
   `w2n w1 + w2n sz_val <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then
+    strip_tac >>
+    pop_assum (qspecl_then
       [`bb`, `inst`,
        `<| iao_ofst := Var v; iao_size := SOME op_sz;
            iao_max_size := SOME op_sz |>`,
@@ -3165,7 +3167,8 @@ Resume concretize_step_return[ret_bytes]:
   `w2n w1 + w2n sz_val <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then
+    strip_tac >>
+    pop_assum (qspecl_then
       [`bb`, `inst`,
        `<| iao_ofst := Var v; iao_size := SOME op_sz;
            iao_max_size := SOME op_sz |>`,
@@ -3277,7 +3280,8 @@ Resume concretize_step_revert[rev_bytes]:
   `w2n w1 + w2n sz_val <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then
+    strip_tac >>
+    pop_assum (qspecl_then
       [`bb`, `inst`,
        `<| iao_ofst := Var v; iao_size := SOME op_sz;
            iao_max_size := SOME op_sz |>`,
@@ -4106,7 +4110,8 @@ Resume concretize_step_mstore[alloca_byte]:
   `w2n w1 + 32 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w) |>`,
       `v_addr`, `w1`, `Lit 32w`, `32w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4135,7 +4140,8 @@ Resume concretize_step_mstore[nonalloca_byte]:
   `w2n w1 + 32 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w) |>`,
       `v_addr`, `w1`, `Lit 32w`, `32w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4272,7 +4278,8 @@ Resume concretize_step_mstore8[alloca_byte]:
   `w2n w1 + 1 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 1w); iao_max_size := SOME (Lit 1w) |>`,
       `v_addr`, `w1`, `Lit 1w`, `1w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4301,7 +4308,8 @@ Resume concretize_step_mstore8[nonalloca_byte]:
   `w2n w1 + 1 <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_addr;
           iao_size := SOME (Lit 1w); iao_max_size := SOME (Lit 1w) |>`,
       `v_addr`, `w1`, `Lit 1w`, `1w`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4455,7 +4463,8 @@ Resume concretize_step_calldatacopy[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4484,7 +4493,8 @@ Resume concretize_step_calldatacopy[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4598,7 +4608,8 @@ Resume concretize_step_codecopy[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4625,7 +4636,8 @@ Resume concretize_step_codecopy[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4739,7 +4751,8 @@ Resume concretize_step_dloadbytes[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4766,7 +4779,8 @@ Resume concretize_step_dloadbytes[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4906,7 +4920,8 @@ Resume concretize_step_returndatacopy[alloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -4933,7 +4948,8 @@ Resume concretize_step_returndatacopy[nonalloca_byte]:
   `w2n w1 + w2n x' <= orig_off + sz` by (
     qpat_x_assum `alloca_safe_access _ _ _` mp_tac >>
     simp[alloca_safe_access_def, LET_THM] >>
-    disch_then (qspecl_then [`bb`, `inst`,
+    strip_tac >>
+    pop_assum (qspecl_then [`bb`, `inst`,
       `<| iao_ofst := Var v_dst;
          iao_size := SOME op_sz; iao_max_size := SOME op_sz |>`,
       `v_dst`, `w1`, `op_sz`, `x'`, `aid`, `orig_off`, `sz`] mp_tac) >>
@@ -5062,9 +5078,9 @@ Theorem concretize_step_alloca_assign:
     fn_inst_ids_distinct fn /\
     alloca_inv s1 /\
     0 < w2n alloc_size /\
-    next_alloca_offset s1 < dimword (:256) /\
+    s1.vs_alloca_next < dimword (:256) /\
     (FLOOKUP s1.vs_allocas inst.inst_id = NONE ==>
-     next_alloca_offset s1 + w2n alloc_size < dimword (:256)) /\
+     s1.vs_alloca_next + w2n alloc_size < dimword (:256)) /\
     w2n addr + w2n alloc_size < dimword (:256) /\
     (!aid off sz addr'.
        FLOOKUP s1.vs_allocas aid = SOME (off, sz) /\
@@ -5263,6 +5279,76 @@ Proof
 QED
 
 
+(* General: removing one element from a SUM over MAP/FILTER *)
+Triviality SUM_MAP_FILTER_REMOVE:
+  !(f:'a -> num) P l x.
+    ALL_DISTINCT l /\ MEM x l /\ P x ==>
+    SUM (MAP f (FILTER (\y. P y /\ y <> x) l)) =
+    SUM (MAP f (FILTER P l)) - f x
+Proof
+  gen_tac >> gen_tac >> Induct >> simp[FILTER] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- ( (* x = h: h is removed, FILTER on rest is unchanged *)
+    `FILTER (\y. P y /\ y <> h) l = FILTER P l` by
+      (simp[rich_listTheory.FILTER_EQ] >> metis_tac[]) >>
+    simp[])
+  >- ( (* x in tail: h <> x because ~MEM h l and MEM x l *)
+    `h <> x` by metis_tac[] >>
+    Cases_on `P h` >> simp[] >>
+    first_x_assum drule_all >> strip_tac >>
+    `f x <= SUM (MAP f (FILTER P l))` by
+      (`MEM x (FILTER P l)` by simp[MEM_FILTER] >>
+       pop_assum (mp_tac o MATCH_MP SUM_MAP_MEM_bound) >> simp[]) >>
+    simp[])
+QED
+
+(* inst_id distinct => element-level distinct for FILTER'ed ALLOCA list *)
+Triviality filter_alloca_inst_id_eq:
+  !l (inst:instruction).
+    ALL_DISTINCT (MAP (\i. i.inst_id) l) /\ MEM inst l ==>
+    !P. FILTER (\i. P i /\ i.inst_id <> inst.inst_id) l =
+        FILTER (\i. P i /\ i <> inst) l
+Proof
+  Induct >> simp[FILTER] >> rpt strip_tac >> gvs[] >>
+  (* h not in l => i.inst_id <> h.inst_id for all i in l *)
+  `!i. MEM i l ==> i.inst_id <> h.inst_id /\ i <> h` by
+    (rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+  simp[rich_listTheory.FILTER_EQ]
+QED
+
+(* fn_remaining decreases by alloc_size when a fresh ALLOCA executes *)
+Triviality fn_remaining_alloca_step:
+  !fn s inst sz v.
+    fn_inst_ids_distinct fn /\
+    MEM inst (fn_insts fn) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit sz] /\
+    FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+    fn_remaining_alloca_size fn
+      (s with vs_allocas := s.vs_allocas |+ (inst.inst_id, v)) =
+    fn_remaining_alloca_size fn s - w2n sz
+Proof
+  rpt strip_tac >>
+  simp[fn_remaining_alloca_size_def, FDOM_FUPDATE] >>
+  qabbrev_tac `f = \i:instruction.
+    case i.inst_operands of [Lit sz'] => w2n sz' | _ => 0` >>
+  qabbrev_tac `P = \i:instruction.
+    i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM s.vs_allocas` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
+    gvs[fn_inst_ids_distinct_alt] >>
+  `P inst` by (simp[Abbr `P`] >> fs[flookup_thm]) >>
+  `f inst = w2n sz` by simp[Abbr `f`] >>
+  (* Rewrite goal's FILTER pred: expand P, combine with inst_id <> *)
+  `(\i:instruction. i.inst_opcode = ALLOCA /\ i.inst_id <> inst.inst_id /\
+      i.inst_id NOTIN FDOM s.vs_allocas) =
+   (\i. P i /\ i.inst_id <> inst.inst_id)` by
+    (simp[FUN_EQ_THM, Abbr `P`] >> metis_tac[]) >>
+  pop_assum (fn th => REWRITE_TAC[th]) >>
+  drule_all filter_alloca_inst_id_eq >>
+  disch_then (qspec_then `P` (fn th => REWRITE_TAC[th])) >>
+  `ALL_DISTINCT (fn_insts fn)` by metis_tac[ALL_DISTINCT_MAP] >>
+  drule_all SUM_MAP_FILTER_REMOVE >> simp[]
+QED
+
 (* alloca_overflow_safe preserved by vs_inst_idx update *)
 Triviality alloca_overflow_safe_update_inst_idx:
   !fn amap s n.
@@ -5292,8 +5378,14 @@ Triviality alloca_size_le_remaining:
     FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
     w2n sz <= fn_remaining_alloca_size fn s
 Proof
-  (* TEMPORARILY CHEATED - MEM_SUM_FILTER_LE irule doesn't match case expr *)
-  cheat
+  rpt strip_tac >>
+  simp[fn_remaining_alloca_size_def] >>
+  `MEM inst (fn_insts fn)` by metis_tac[mem_fn_insts] >>
+  qmatch_goalsub_abbrev_tac `SUM (MAP f (FILTER P _))` >>
+  `MEM inst (FILTER P (fn_insts fn))` by
+    (rw[MEM_FILTER, Abbr `P`] >> fs[flookup_thm]) >>
+  drule SUM_MAP_MEM_bound >> disch_then (qspec_then `f` mp_tac) >>
+  simp[Abbr `f`]
 QED
 
 (* Helper: alloca step through step_inst (not step_inst_base).
@@ -5326,12 +5418,10 @@ Proof
     simp[mk_assign_inst_def] >>
   simp[step_inst_non_invoke] >>
   irule concretize_step_alloca_assign >> simp[] >>
-  (* TEMPORARILY CHEATED - needs alloca_size_le_remaining + nao derivation *)
-  (* fs[alloca_overflow_safe_def] >>
-     (`next_alloca_offset s1 = s1.vs_alloca_next` by
-       (simp[next_alloca_offset_def, MAX_DEF])) >>
-     rpt conj_tac >> metis_tac[] *)
-  cheat
+  fs[alloca_overflow_safe_def] >>
+  rpt conj_tac >> TRY (metis_tac[]) >>
+  TRY (`0 <= fn_remaining_alloca_size fn s1` by simp[] >> simp[]) >>
+  rpt strip_tac >> drule_all alloca_size_le_remaining >> simp[]
 QED
 
 (* FIND with predicate Q /\ id = FIND with id /\ Q (needed because

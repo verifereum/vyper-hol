@@ -17,7 +17,7 @@ Ancestors
 
 (* Distinct allocas have disjoint memory regions.
  * Guaranteed by bump allocation: exec_alloca places each new alloca
- * at next_alloca_offset which is ≥ all existing (offset + size). *)
+ * at vs_alloca_next which is ≥ all existing (offset + size). *)
 Definition allocas_non_overlapping_def:
   allocas_non_overlapping (s : venom_state) ⇔
     ∀a1 a2 b1 sz1 b2 sz2.

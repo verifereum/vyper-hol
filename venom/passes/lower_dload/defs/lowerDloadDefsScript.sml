@@ -170,7 +170,7 @@ End
 
 (* No original ALLOCA instructions in the function.
    Required because DLOAD expansion inserts new ALLOCAs that shift
-   next_alloca_offset, causing any pre-existing ALLOCA to produce
+   vs_alloca_next, causing any pre-existing ALLOCA to produce
    different addresses in the original vs expanded execution.
    Satisfied by the pipeline: lower_dload runs before concretize_mem_loc,
    but after mem2var which promotes ALLOCAs to variables; any remaining

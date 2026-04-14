@@ -904,11 +904,11 @@ QED
 Theorem alloca_base_lt_dimword:
   !s iid base sz.
     alloca_inv s /\ FLOOKUP s.vs_allocas iid = SOME (base,sz) /\
-    next_alloca_offset s < dimword (:256) ==>
+    s.vs_alloca_next < dimword (:256) ==>
     base < dimword (:256)
 Proof
   rpt strip_tac >>
-  gvs[alloca_inv_def, alloca_next_valid_def, next_alloca_offset_def] >>
+  gvs[alloca_inv_def, alloca_next_valid_def] >>
   rename1 `FLOOKUP _ _ = SOME (base1, _)` >>
   first_x_assum (qspecl_then [`iid`,`base1`,`sz`] mp_tac) >> simp[]
 QED
@@ -922,7 +922,7 @@ Theorem alloca_bridge_step_alloca:
     ssa_form fn /\ wf_function fn /\ MEM inst (fn_insts fn) /\
     m2v_promo_sizes_bounded fn /\
     alloca_inv s /\
-    next_alloca_offset s < dimword (:256) /\
+    s.vs_alloca_next < dimword (:256) /\
     alloca_bridge fn s ==>
     alloca_bridge fn s'
 Proof
@@ -993,7 +993,7 @@ QED
 Resume alloca_bridge_step_alloca[none_rev]:
   Cases_on `ao2 = out`
   >- (gvs[] >>
-      qexists `n2w (next_alloca_offset s)` >>
+      qexists `n2w (s.vs_alloca_next)` >>
       gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD])
   >> (gvs[] >>
       `inst2 <> inst` by (strip_tac >> gvs[]) >>
@@ -1027,7 +1027,7 @@ Theorem alloca_bridge_step:
     ssa_form fn /\ wf_function fn /\ MEM inst (fn_insts fn) /\
     m2v_promo_sizes_bounded fn /\
     alloca_inv s /\
-    next_alloca_offset s < dimword (:256) /\
+    s.vs_alloca_next < dimword (:256) /\
     alloca_bridge fn s ==>
     alloca_bridge fn s'
 Proof
@@ -1054,7 +1054,7 @@ QED
 
 Triviality vs_inst_idx_update_transparent[simp]:
   alloca_inv (s with vs_inst_idx := n) = alloca_inv s /\
-  next_alloca_offset (s with vs_inst_idx := n) = next_alloca_offset s /\
+  (s with vs_inst_idx := n).vs_alloca_next = s.vs_alloca_next /\
   alloca_bridge fn (s with vs_inst_idx := n) = alloca_bridge fn s /\
   m2v_fresh_undef fn (s with vs_inst_idx := n) = m2v_fresh_undef fn s /\
   bp_ptr_sound bp (s with vs_inst_idx := n) = bp_ptr_sound bp s /\
@@ -1063,7 +1063,6 @@ Proof
   simp[venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
        venomMemDefsTheory.alloca_next_valid_def,
-       venomStateTheory.next_alloca_offset_def,
        alloca_bridge_def, venomStateTheory.lookup_var_def,
        m2v_fresh_undef_def,
        bp_ptr_sound_def,
@@ -1092,18 +1091,18 @@ Theorem alloca_bridge_exec_block:
     m2v_promo_sizes_bounded fn /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     alloca_inv s /\
-    next_alloca_offset s < dimword (:256) /\
+    s.vs_alloca_next < dimword (:256) /\
     (!inst fuel' ctx' s1 s1'.
       MEM inst (fn_insts fn) /\
-      next_alloca_offset s1 < dimword (:256) /\
+      s1.vs_alloca_next < dimword (:256) /\
       step_inst fuel' ctx' inst s1 = OK s1' ==>
-      next_alloca_offset s1' < dimword (:256)) /\
+      s1'.vs_alloca_next < dimword (:256)) /\
     alloca_bridge fn s ==>
     alloca_bridge fn s'
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `alloca_bridge _ _` mp_tac >>
-  qpat_x_assum `next_alloca_offset _ < _` mp_tac >>
+  qpat_x_assum `_.vs_alloca_next < _` mp_tac >>
   qpat_x_assum `alloca_inv _` mp_tac >>
   qpat_x_assum `EVERY _ _` mp_tac >>
   qpat_x_assum `MEM _ _` mp_tac >>

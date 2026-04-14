@@ -219,8 +219,8 @@ Proof
 QED
 
 (* Lift to step_inst (adds INVOKE + ALLOCA exclusions).
-   ALLOCA uses next_alloca_offset which reads LENGTH vs_memory,
-   so it genuinely depends on memory even though its effects are empty. *)
+   ALLOCA uses vs_alloca_next as bump pointer;
+   it does not read LENGTH vs_memory. *)
 Theorem step_inst_mem_frame:
   !fuel ctx inst s s' m.
     step_inst fuel ctx inst s = OK s' /\
