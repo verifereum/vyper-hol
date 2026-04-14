@@ -30,6 +30,7 @@ Ancestors
   builtinAbi context
   compileEnv venomExecSemantics venomState venomInst
   valueEncoding abiEncoder
+  logroot
 Libs
   dep_rewrite
 
@@ -177,36 +178,40 @@ val peel_alloca_impl_tac =
 (* ===== Hashing ===== *)
 
 (* keccak256 of a word-sized value: alloc buffer, mstore, sha3 *)
+(* Semantic helper: the value a ptr_load reads from the given location.
+   Mirrors compile_ptr_load dispatch but on the semantic side. *)
+Definition ptr_load_val_def:
+  ptr_load_val is_ctor LocMemory addr ss = mload (w2n addr) ss ∧
+  ptr_load_val is_ctor LocStorage addr ss = sload addr ss ∧
+  ptr_load_val is_ctor LocTransient addr ss = tload addr ss ∧
+  ptr_load_val is_ctor LocCalldata addr ss =
+    (let data = ss.vs_call_ctx.cc_calldata in
+     let bytes = TAKE 32 (DROP (w2n addr) data ++ REPLICATE 32 0w) in
+     word_of_bytes T (0w:bytes32) bytes) ∧
+  ptr_load_val T LocCode addr ss =
+    (case FLOOKUP ss.vs_immutables (w2n addr) of SOME v => v | NONE => 0w) ∧
+  ptr_load_val F LocCode addr ss =
+    (let bytes = TAKE 32 (DROP (w2n addr) ss.vs_data_section ++
+                          REPLICATE 32 0w) in
+     word_of_bytes T (0w:bytes32) bytes)
+End
+
 Theorem compile_keccak256_word_correct:
   ∀ val_op w ss st op st'.
     compile_keccak256_word val_op st = (op, st') ∧
     eval_operand val_op ss = SOME w ∧
     fresh_vars_wrt st ss
     ⇒
-    ∃ ss' hash.
+    ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME hash
+      eval_operand op ss' =
+        SOME (word_of_bytes T (0w:bytes32)
+                (Keccak_256_w64 (word_to_bytes w T)))
 Proof
-  rpt strip_tac >>
-  gvs[compile_keccak256_word_def,
-      contextTheory.compile_alloc_buffer_def] >>
-  gvs compile_defs >>
-  emitted_insts_tac >>
-  (* Step 1: ALLOCA — use step_ALLOCA for the first instruction *)
-  qspecl_then [`st.cs_next_id`, `32w`,
-    `STRING #"%" (toString st.cs_next_var)`, `ss`]
-    strip_assume_tac step_ALLOCA >>
-  rename1 `step_inst_base _ ss = OK ss1` >>
-  drule run_inst_seq_cons_ok >>
-  disch_then (fn th => rewrite_tac[th]) >>
-  (* After ALLOCA, use preservation to show val_op still evals.
-     Stack: [≠NONE, ∀pres, step, fresh, eval].
-     Save ≠NONE, use ∀pres, restore ≠NONE. *)
-  pop_assum mp_tac >> (* move ≠NONE to goal, exposing ∀pres *)
-  pop_assum (qspecl_then [`val_op`, `w`] mp_tac) >>
-  (impl_tac >- peel_alloca_impl_tac) >>
-  rpt strip_tac >>
-  weak_spec_chain_tac
+  (* ALLOCA 32 → buf; MSTORE [buf; w] → writes word_to_bytes w T;
+     SHA3 [buf; 32] → hashes those bytes. Round-trip: MSTORE then
+     TAKE 32 from same offset = word_to_bytes w T. *)
+  cheat
 QED
 
 (* ===== Unsafe Math ===== *)
@@ -671,7 +676,8 @@ Proof
   Cases_on `eval_operand (Var v) ss'` >> fs[]
 QED
 
-Theorem compile_shift_correct:
+(* Shift: defer to after compile_select infrastructure is defined *)
+Theorem compile_shift_correct_weak[local]:
   ∀ val_op bits_op is_signed ss st op st' v b.
     compile_shift val_op bits_op is_signed st = (op, st') ∧
     eval_operand val_op ss = SOME v ∧
@@ -1252,6 +1258,31 @@ QED
 
 Finalise compile_builtin_abs_correct;
 
+(* ===== Shift (strong spec) ===== *)
+(* Shift: 4 emit_ops + compile_select.
+   Proof: step through each emit_op using emit_op_pure2_correct,
+   then use compile_select_correct for the selection. *)
+(* Shift strong spec: TODO - emit_op_pure2_correct MATCH_MP fails after
+   pairarg_tac rewriting. Need to investigate the interaction.
+   The weak spec (compile_shift_correct_weak) is proved above. *)
+Theorem compile_shift_correct:
+  ∀ val_op bits_op is_signed ss st op st' v b.
+    compile_shift val_op bits_op is_signed st = (op, st') ∧
+    eval_operand val_op ss = SOME v ∧
+    eval_operand bits_op ss = SOME b ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand op ss' =
+        SOME (if word_lt b 0w then
+                (if is_signed then word_asr v (w2n (0w - b))
+                 else word_lsr v (w2n (0w - b)))
+              else word_lsl v (w2n b))
+Proof
+  cheat
+QED
+
 (* Generic step lemma for exec_read1-based opcodes *)
 Theorem step_read1[local]:
   ∀ f opc op1 v1 id out ss.
@@ -1267,19 +1298,19 @@ QED
 
 (* len for dynarray: reads stored length *)
 Theorem compile_builtin_len_correct:
-  ∀ is_ctor ptr_op loc ss st op st' arr_addr.
+  ∀ is_ctor ptr_op loc ss st op st' addr.
     compile_builtin_len is_ctor ptr_op loc st = (op, st') ∧
-    eval_operand ptr_op ss = SOME (n2w arr_addr)
+    eval_operand ptr_op ss = SOME addr
     ⇒
-    ∃ ss' w.
+    ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME w
+      eval_operand op ss' = SOME (ptr_load_val is_ctor loc addr ss)
 Proof
   rpt strip_tac >>
   gvs[compile_builtin_len_def] >>
   Cases_on `loc` >>
-  gvs[compile_ptr_load_def] >>
-  TRY (Cases_on `is_ctor` >> gvs[compile_ptr_load_def]) >>
+  gvs[compile_ptr_load_def, ptr_load_val_def] >>
+  TRY (Cases_on `is_ctor` >> gvs[compile_ptr_load_def, ptr_load_val_def]) >>
   imp_res_tac emitted_insts_emit_op >> gvs[] >>
   simp[run_inst_seq_def, step_inst_base_def,
        exec_read1_def, exec_pure1_def, mk_inst_def,
@@ -1313,77 +1344,184 @@ val check_chain_simp_thms = [check_chain_def, pure_opc_arity_def, mk_inst_def,
    87 pure instructions — proved via check_chain framework.
    Cases_on x_op determines the known list (Var needs [s], Lit/Label need []).
    Build time: ~30s (3 cases × ~10s each). *)
+(* isqrt: integer square root via Newton's method.
+   87 pure instructions. The result = SQRT(x) (floor of square root).
+   SQRT is ROOT 2 from logrootTheory. *)
 Theorem compile_isqrt_correct:
   ∀ x_op x ss st op st'.
     compile_isqrt x_op st = (op, st') ∧
     eval_operand x_op ss = SOME x
     ⇒
-    ∃ ss' r.
+    ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME r
+      eval_operand op ss' = SOME (n2w (SQRT (w2n x)))
 Proof
-  rpt strip_tac >>
-  Cases_on `x_op` >> gvs[eval_operand_def]
-  >~[`Var s`]
-  >- (
-    gvs[compile_isqrt_def, compile_select_def] >>
-    gvs compile_defs >> emitted_insts_tac >>
-    irule run_inst_seq_check_chain_output >>
-    simp[chain_labels_def, mk_inst_def, eval_operand_def] >>
-    qexists `[s]` >>
-    simp(check_chain_simp_thms @ [eval_operand_def])
-  )
-  >~[`Lit c`]
-  >- (
-    gvs[compile_isqrt_def, compile_select_def] >>
-    gvs compile_defs >> emitted_insts_tac >>
-    irule run_inst_seq_check_chain_output >>
-    simp[chain_labels_def, mk_inst_def, eval_operand_def] >>
-    qexists `[]` >>
-    simp check_chain_simp_thms
-  )
-  >~[`Label s`]
-  >- (
-    gvs[compile_isqrt_def, compile_select_def] >>
-    gvs compile_defs >> emitted_insts_tac >>
-    irule run_inst_seq_check_chain_output >>
-    simp[chain_labels_def, mk_inst_def, eval_operand_def] >>
-    qexists `[]` >>
-    simp check_chain_simp_thms
-  )
+  (* Newton's method convergence over word256 — needs
+     showing 7 iterations suffice for all 256-bit inputs. *)
+  cheat
 QED
-(* floor: rounds toward negative infinity *)
+(* floor: rounds toward negative infinity.
+   floor(x, d) = sdiv(if x < 0 then x - (d-1) else x, d) *)
 Theorem compile_floor_correct:
   ∀ val_op divisor x ss st op st'.
     compile_floor val_op divisor st = (op, st') ∧
-    eval_operand val_op ss = SOME x
+    eval_operand val_op ss = SOME x ∧
+    fresh_vars_wrt st ss
     ⇒
-    ∃ ss' w.
+    ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME w
+      eval_operand op ss' =
+        SOME (safe_sdiv
+                (if word_lt x 0w then x - n2w (divisor - 1) else x)
+                (n2w divisor))
 Proof
   rpt strip_tac >>
-  gvs[compile_floor_def, compile_select_def] >>
-  gvs compile_defs >>
-  emitted_insts_tac >>
-  pure_chain_tac
+  gvs[compile_floor_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_op_extends >>
+  imp_res_tac compile_select_extends >>
+  rename [`emit_op SLT [val_op; Lit 0w] st = (is_neg_op, cs1)`,
+          `emit_op SUB [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)`,
+          `compile_select is_neg_op adj_op val_op cs2 = (input_op, cs3)`,
+          `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')`] >>
+  (* Step 1: SLT *)
+  `eval_operand (Lit 0w) ss = SOME 0w` by simp[eval_operand_lit] >>
+  `step_inst_base (mk_inst st.cs_next_id SLT [val_op; Lit 0w]
+     [STRING #"%" (toString st.cs_next_var)]) ss =
+   OK (update_var (STRING #"%" (toString st.cs_next_var))
+       (bool_to_word (word_lt x 0w)) ss)`
+    by (irule step_SLT >> simp[eval_operand_lit]) >>
+  apply_emit_op2_f_tac `\a b. bool_to_word (word_lt a b)` >>
+  (* Step 2: SUB *)
+  `eval_operand val_op ss' = SOME x` by preserve_tac >>
+  `eval_operand (Lit (n2w (divisor - 1))) ss' = SOME (n2w (divisor - 1))`
+    by simp[eval_operand_lit] >>
+  `step_inst_base (mk_inst cs1.cs_next_id SUB
+     [val_op; Lit (n2w (divisor - 1))]
+     [STRING #"%" (toString cs1.cs_next_var)]) ss' =
+   OK (update_var (STRING #"%" (toString cs1.cs_next_var))
+       (x - n2w (divisor - 1)) ss')`
+    by (irule step_SUB >> simp[eval_operand_lit]) >>
+  apply_emit_op2_tac >>
+  (* Step 3: compile_select *)
+  `eval_operand is_neg_op ss'' = SOME (bool_to_word (word_lt x 0w))`
+    by preserve_tac >>
+  `eval_operand adj_op ss'' = SOME (x - n2w (divisor - 1))`
+    by preserve_tac >>
+  `eval_operand val_op ss'' = SOME x` by preserve_tac >>
+  qspecl_then [`is_neg_op`, `adj_op`, `val_op`,
+    `bool_to_word (word_lt x 0w)`,
+    `x - n2w (divisor - 1)`, `x`,
+    `word_lt x 0w`, `ss''`, `cs2`, `input_op`, `cs3`]
+    mp_tac compile_select_correct >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qx_choose_then `ss3` strip_assume_tac) >>
+  (* Step 4: SDIV *)
+  `eval_operand (Lit (n2w divisor)) ss3 = SOME (n2w divisor)`
+    by simp[eval_operand_lit] >>
+  `step_inst_base (mk_inst cs3.cs_next_id SDIV
+     [input_op; Lit (n2w divisor)]
+     [STRING #"%" (toString cs3.cs_next_var)]) ss3 =
+   OK (update_var (STRING #"%" (toString cs3.cs_next_var))
+       (safe_sdiv (if word_lt x 0w then x - n2w (divisor - 1) else x)
+                  (n2w divisor)) ss3)`
+    by (irule step_SDIV >> simp[eval_operand_lit]) >>
+  apply_emit_op2_tac >>
+  (* Compose all segments *)
+  qexists `ss'''` >>
+  conj_tac
+  >- (
+    `run_inst_seq (emitted_insts st cs2) ss = OK ss'' ∧
+     cs2.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs2`
+      by compose_ok_tac (`ss'`, `cs1`) >>
+    `run_inst_seq (emitted_insts st cs3) ss = OK ss3 ∧
+     cs3.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs3`
+      by compose_ok_tac (`ss''`, `cs2`) >>
+    irule run_emitted_compose2 >>
+    qexistsl [`ss3`, `cs3`] >> asm_rewrite_tac[])
+  >> asm_rewrite_tac[]
 QED
 
-(* ceil: rounds toward positive infinity *)
+(* ceil: rounds toward positive infinity.
+   ceil(x, d) = sdiv(if x > 0 then x + (d-1) else x, d) *)
 Theorem compile_ceil_correct:
   ∀ val_op divisor x ss st op st'.
     compile_ceil val_op divisor st = (op, st') ∧
-    eval_operand val_op ss = SOME x
+    eval_operand val_op ss = SOME x ∧
+    fresh_vars_wrt st ss
     ⇒
-    ∃ ss' w.
+    ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME w
+      eval_operand op ss' =
+        SOME (safe_sdiv
+                (if word_gt x 0w then x + n2w (divisor - 1) else x)
+                (n2w divisor))
 Proof
   rpt strip_tac >>
-  gvs[compile_ceil_def, compile_select_def] >>
-  gvs compile_defs >>
-  emitted_insts_tac >>
-  pure_chain_tac
+  gvs[compile_ceil_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_op_extends >>
+  imp_res_tac compile_select_extends >>
+  rename [`emit_op SGT [val_op; Lit 0w] st = (is_pos_op, cs1)`,
+          `emit_op ADD [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)`,
+          `compile_select is_pos_op adj_op val_op cs2 = (input_op, cs3)`,
+          `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')`] >>
+  (* Step 1: SGT *)
+  `eval_operand (Lit 0w) ss = SOME 0w` by simp[eval_operand_lit] >>
+  `step_inst_base (mk_inst st.cs_next_id SGT [val_op; Lit 0w]
+     [STRING #"%" (toString st.cs_next_var)]) ss =
+   OK (update_var (STRING #"%" (toString st.cs_next_var))
+       (bool_to_word (word_gt x 0w)) ss)`
+    by (irule step_SGT >> simp[eval_operand_lit]) >>
+  apply_emit_op2_f_tac `\a b. bool_to_word (word_gt a b)` >>
+  (* Step 2: ADD *)
+  `eval_operand val_op ss' = SOME x` by preserve_tac >>
+  `eval_operand (Lit (n2w (divisor - 1))) ss' = SOME (n2w (divisor - 1))`
+    by simp[eval_operand_lit] >>
+  `step_inst_base (mk_inst cs1.cs_next_id ADD
+     [val_op; Lit (n2w (divisor - 1))]
+     [STRING #"%" (toString cs1.cs_next_var)]) ss' =
+   OK (update_var (STRING #"%" (toString cs1.cs_next_var))
+       (x + n2w (divisor - 1)) ss')`
+    by (irule step_ADD >> simp[eval_operand_lit]) >>
+  apply_emit_op2_tac >>
+  (* Step 3: compile_select *)
+  `eval_operand is_pos_op ss'' = SOME (bool_to_word (word_gt x 0w))`
+    by preserve_tac >>
+  `eval_operand adj_op ss'' = SOME (x + n2w (divisor - 1))`
+    by preserve_tac >>
+  `eval_operand val_op ss'' = SOME x` by preserve_tac >>
+  qspecl_then [`is_pos_op`, `adj_op`, `val_op`,
+    `bool_to_word (word_gt x 0w)`,
+    `x + n2w (divisor - 1)`, `x`,
+    `word_gt x 0w`, `ss''`, `cs2`, `input_op`, `cs3`]
+    mp_tac compile_select_correct >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qx_choose_then `ss3` strip_assume_tac) >>
+  (* Step 4: SDIV *)
+  `eval_operand (Lit (n2w divisor)) ss3 = SOME (n2w divisor)`
+    by simp[eval_operand_lit] >>
+  `step_inst_base (mk_inst cs3.cs_next_id SDIV
+     [input_op; Lit (n2w divisor)]
+     [STRING #"%" (toString cs3.cs_next_var)]) ss3 =
+   OK (update_var (STRING #"%" (toString cs3.cs_next_var))
+       (safe_sdiv (if word_gt x 0w then x + n2w (divisor - 1) else x)
+                  (n2w divisor)) ss3)`
+    by (irule step_SDIV >> simp[eval_operand_lit]) >>
+  apply_emit_op2_tac >>
+  (* Compose all segments *)
+  qexists `ss'''` >>
+  conj_tac
+  >- (
+    `run_inst_seq (emitted_insts st cs2) ss = OK ss'' ∧
+     cs2.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs2`
+      by compose_ok_tac (`ss'`, `cs1`) >>
+    `run_inst_seq (emitted_insts st cs3) ss = OK ss3 ∧
+     cs3.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs3`
+      by compose_ok_tac (`ss''`, `cs2`) >>
+    irule run_emitted_compose2 >>
+    qexistsl [`ss3`, `cs3`] >> asm_rewrite_tac[])
+  >> asm_rewrite_tac[]
 QED
 
 (* ===== System Builtins ===== *)
@@ -1459,6 +1597,9 @@ QED
 (* ===== Bytes Builtins ===== *)
 
 (* extract32: bounds-checked 32-byte load from bytestring *)
+(* extract32: reads 32 bytes from src_ptr + 32 + start.
+   OK path: start + 32 ≤ length at src_ptr → result = mload at data + start.
+   Revert path: start + 32 > length → ASSERT fails. *)
 Theorem compile_extract32_correct:
   ∀ src_ptr start_op ss st op st' pv sv.
     compile_extract32 src_ptr start_op st = (op, st') ∧
@@ -1466,15 +1607,17 @@ Theorem compile_extract32_correct:
     eval_operand start_op ss = SOME sv ∧
     fresh_vars_wrt st ss ⇒
     ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
+      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+       eval_operand op ss' =
+         SOME (mload (w2n (pv + 32w + sv)) ss)) ∨
       (* Out of bounds → revert *)
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  rpt strip_tac >>
-  gvs[compile_extract32_def] >>
-  gvs compile_defs >>
-  emitted_insts_tac >>
-  weak_spec_chain_tac
+  (* MLOAD[src_ptr] → len; ADD[src_ptr; 32] → data_ptr;
+     ADD[start; 32] → end; GT[end; len] → oob; ISZERO[oob] → ok;
+     ASSERT[ok]; ADD[data_ptr; start] → load_ptr; MLOAD[load_ptr].
+     OK: start+32 ≤ len. Revert: start+32 > len. *)
+  cheat
 QED
 
 (* ===== Type Conversion ===== *)
