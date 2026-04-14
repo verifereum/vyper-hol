@@ -410,9 +410,14 @@ Definition well_typed_expr_def:
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
   well_typed_expr env (BareGlobalName ty id) =
     (FLOOKUP env.global_types (string_to_num id) = SOME ty) /\
+  (* ty <> NoneT excludes HashMaps: HashMapVarDecl has type NoneT in
+     toplevel_types, but HashMaps are not first-class values — they can
+     only be accessed via subscripting. materialise(HashMapRef) raises
+     TypeError, so well-typed programs must not use them as values. *)
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
     (FLOOKUP env.toplevel_types (src_id_opt, string_to_num id) = SOME ty /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\
+     ty <> NoneT) /\
   well_typed_expr env (FlagMember ty (src_id_opt, fid) mid) =
     (ty = FlagT fid /\
      well_formed_type env.type_defs ty /\
