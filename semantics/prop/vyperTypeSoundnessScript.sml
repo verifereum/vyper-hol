@@ -178,6 +178,7 @@ val swt_modify_solve =
 val swt_modify_tac = swt_modify_solve;
 
 val not_return_tac =
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   TRY (imp_res_tac eval_expr_not_return >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac eval_exprs_not_return >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac eval_target_not_return >> gvs[] >> NO_TAC) >>
@@ -361,6 +362,7 @@ fun tp_chain_tail_tac value_tac =
     irule tp_preserved_scopes_immutables >>
     qexists_tac `st1` >> gvs[]) >>
   simp[] >>
+  TRY (rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC)) >>
   rpt strip_tac >>
   gvs[bind_apply, ignore_bind_apply, AllCaseEqs(),
       return_def, raise_def, COND_RATOR, LET_THM, UNCURRY,
@@ -606,11 +608,18 @@ Resume eval_preserves_swt[ReturnSome]:
   rewrite_tac[ev_ReturnSome] >>
   simp[bind_def, AllCaseEqs(), raise_def] >> strip_tac >> gvs[] >>
   qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-    drule_all >> strip_tac >> gvs[] >>
-  TRY (qpat_x_assum `!tv. INL _ = INL tv ==> _`
+    drule_all >> strip_tac >>
+  TRY (gvs[] >>
+       qpat_x_assum `!tv. INL _ = INL tv ==> _`
          (mp_tac o SIMP_RULE (srw_ss()) []) >>
        disch_then drule >> strip_tac >> gvs[] >> NO_TAC) >>
-  swt_resolve_state_tac >> not_return_tac
+  gvs[] >>
+  swt_resolve_state_tac >>
+  rpt CONJ_TAC >>
+  TRY not_return_tac >>
+  TRY (imp_res_tac materialise_no_type_error >>
+       gvs[toplevel_value_typed_def] >> NO_TAC) >>
+  TRY (imp_res_tac materialise_error >> gvs[] >> NO_TAC)
 QED
 
 Resume eval_preserves_swt[Raise1]:
@@ -860,7 +869,8 @@ val tp_bind_err_tac =
   TRY (imp_res_tac eval_iterator_not_return >>
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
   TRY (imp_res_tac materialise_error >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []);
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (first_assum ACCEPT_TAC);
 
 Resume eval_preserves_swt[Assert3]:
   rpt gen_tac >> strip_tac >>

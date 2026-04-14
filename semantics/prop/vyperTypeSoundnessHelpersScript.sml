@@ -6331,3 +6331,16 @@ Proof
       Cases_on `is_view` >> simp[return_def, update_transient_def]) >>
   qexists `ARB` >> simp[return_def]
 QED
+
+Theorem materialise_no_type_error:
+  !cx tv st e s.
+    materialise cx tv st = (INR e, s) ==>
+    (!tyv. toplevel_value_typed tv tyv ==> tyv = NoneTV) \/
+    (!m. e <> Error (TypeError m))
+Proof
+  rpt gen_tac >> Cases_on `tv` >>
+  simp[materialise_def, return_def] >-
+  (gvs[raise_def] >> simp[toplevel_value_typed_def]) >>
+  strip_tac >> gvs[bind_apply, AllCaseEqs(), return_def] >>
+  drule read_storage_slot_error >> strip_tac >> gvs[]
+QED
