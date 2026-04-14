@@ -313,15 +313,7 @@ val excluded_test_names = [
   "test_side_effects_evaluation",
   "test_checkable_raw_call",
   "test_nonreentrant_decorator_for_default",
-  (* raw_call to precompile addresses (e.g. identity at 0x04):
-     make_ext_call_state constructs EVM state directly, bypassing
-     precompile dispatch which normally happens in proceed_call.
-     TODO: add precompile dispatch to run_ext_call *)
-  "test_max_outsize_exceeds_returndatasize",
-  "test_raw_call_non_memory",
-  "test_raw_call_storage_bytes_data",
-  "test_returndatasize_exceeds_max_outsize",
-  "test_returndatasize_matches_max_outsize",
+
   (* raw_create semantics: first arg is bytecode, not address.
      The CreateTarget handler assumes HD args is an address for all
      create kinds, but raw_create passes bytecode as first arg.
