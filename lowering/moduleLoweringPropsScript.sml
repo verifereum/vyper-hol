@@ -100,7 +100,46 @@ Theorem compile_selector_dispatch_linear_correct:
       (ss'.vs_current_bb = fallback_lbl ∨
        MEM ss'.vs_current_bb (MAP SND selectors))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_selector_dispatch_linear _ _ _ = _` mp_tac >>
+  simp[compile_selector_dispatch_linear_def, comp_ignore_bind_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  strip_tac >>
+  (* Step 1: execute CDS preamble (CALLDATASIZE, LT, ISZERO) *)
+  drule_all emit_op_CALLDATASIZE_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st cs') ss = OK ss1` >>
+  drule_at (Pos last) emit_op_LT_correct >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `4w` mp_tac) >>
+  simp[eval_operand_lit] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs' cs'') ss1 = OK ss2` >>
+  (* Get inst_extends BEFORE consuming the ISZERO equation *)
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac inst_extends_emit_inst >>
+  imp_res_tac fresh_label_props >>
+  (* Now apply ISZERO correctness *)
+  drule_at (Pos last) emit_op_ISZERO_correct >>
+  disch_then drule >> disch_then drule >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts cs'' cs'³') ss2 = OK ss3` >>
+  (* Compose run_inst_seq: st→cs'→cs''→cs''' *)
+  `run_inst_seq (emitted_insts st cs'') ss = OK ss2` by
+    metis_tac[run_inst_seq_compose_ok] >>
+  `inst_extends st cs''` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st cs'³') ss = OK ss3` by
+    metis_tac[run_inst_seq_compose_ok] >>
+  `inst_extends st cs'³'` by metis_tac[inst_extends_trans] >>
+  (* We have: run_inst_seq (emitted_insts st cs'3') ss = OK ss3
+     Entry block: st.cs_current_insts ++ emitted_insts st cs'3' ++ [JNZ_inst]
+     where cs'4' state has JNZ appended (via emit_inst JNZ).
+     But actually the entry block in assemble_blocks st' is the LAST block
+     assembled. The entry label is st.cs_current_bb.
+     
+     The entry block instructions are st.cs_current_insts ++ [CDS, LT, ISZERO, JNZ].
+     We need to use exec_block_inst_seq_jnz to show exec_block produces
+     jump_to (dispatch_lbl or fallback_lbl). *)
+  (* Step 3: Use exec_block_inst_seq_jnz for entry block execution *)
+  cheat >>
+  suspend "main_after_preamble"
 QED
 
 (* Sparse dispatch: same pattern, selectors have trailing-zeroes flag. *)
@@ -116,6 +155,7 @@ Theorem compile_selector_dispatch_sparse_correct:
       (ss'.vs_current_bb = fallback_lbl ∨
        MEM ss'.vs_current_bb (MAP (FST o SND) selectors))
 Proof
+  gvs[fresh_vars_wrt_def] >>
   cheat
 QED
 
@@ -141,6 +181,9 @@ Theorem compile_entry_point_kwargs_correct:
 Proof
   cheat
 QED
+
+(* Needed for Holmake: mark incomplete theorems *)
+val _ = Feedback.set_trace "Theory.allow_rebinds" 1;
 
 (* ===== Argument Decoding (helpers only) ===== *)
 
@@ -493,3 +536,17 @@ Resume compile_constructor_epilogue_correct[imm_zero]:
 QED
 
 Finalise compile_constructor_epilogue_correct
+
+Theorem run_inst_seq_ok_not_halted:
+  ∀ is ss ss'.
+    run_inst_seq is ss = OK ss' ∧
+    (∀i ss1 ss2. MEM i is ∧ step_inst_base i ss1 = OK ss2 ⇒ (ss2.vs_halted ⇔ ss1.vs_halted)) ∧
+    ¬ss.vs_halted
+    ⇒
+    ¬ss'.vs_halted
+Proof
+  rpt strip_tac >>
+  drule_at (Pos hd) (Q.ISPEC `\s. s.vs_halted` run_inst_seq_preserves_field) >>
+  (impl_tac >- (rpt strip_tac >> res_tac >> fs[])) >>
+  simp[]
+QED
