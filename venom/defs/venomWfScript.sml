@@ -178,6 +178,24 @@ Definition bb_well_formed_def:
            (EL i bb.bb_instructions).inst_opcode = PHI)
 End
 
+(* All pseudo instructions (PHI, PARAM) form a prefix of the block.
+ * Matches Vyper compiler output where PHIs and PARAMs are always emitted
+ * first. Stronger than bb_well_formed's PHI-only prefix constraint.
+ * Defined separately to avoid modifying bb_well_formed (which would cause
+ * a 30+ minute rebuild of execEquivProofs). *)
+Definition pseudos_prefix_def:
+  pseudos_prefix bb <=>
+    !i j. i < j /\ j < LENGTH bb.bb_instructions /\
+          is_pseudo (EL j bb.bb_instructions).inst_opcode ==>
+          is_pseudo (EL i bb.bb_instructions).inst_opcode
+End
+
+(* All blocks in a function have pseudos as a prefix. *)
+Definition fn_pseudos_prefix_def:
+  fn_pseudos_prefix fn <=>
+    !bb. MEM bb fn.fn_blocks ==> pseudos_prefix bb
+End
+
 (* All successor labels of every block exist as block labels in the function. *)
 Definition fn_succs_closed_def:
   fn_succs_closed fn <=>
@@ -285,12 +303,6 @@ End
 (* Check if instruction is a PHI. *)
 Definition is_phi_inst_def:
   is_phi_inst inst <=> inst.inst_opcode = PHI
-End
-
-(* No generated split-block label collides with existing labels. *)
-Definition split_labels_fresh_def:
-  split_labels_fresh name_fn func ⇔
-    ∀p t. ¬MEM (name_fn p t) (fn_labels func)
 End
 
 (* ==========================================================================
