@@ -147,6 +147,9 @@ End
    R_term for Halt/IntRet (terminal — state commits, full equiv needed).
    R_abort for Abort (rolled back — only returndata observable).
    Error results are always equivalent (messages may differ). *)
+(* EVM semantics: on Abort/Halt, all state changes are rolled back.
+   Only the result constructor matters, not the internal state.
+   R_term is retained for IntRet (caller uses returned value + state). *)
 Definition lift_result_def:
   lift_result R_ok R_term R_abort (OK s1) (OK s2) = R_ok s1 s2 /\
   lift_result R_ok R_term R_abort (Halt s1) (Halt s2) = R_term s1 s2 /\
