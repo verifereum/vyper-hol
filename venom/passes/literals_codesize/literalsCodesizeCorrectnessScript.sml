@@ -10,13 +10,13 @@ Ancestors
   literalsCodesizeProofs venomWf
 
 Theorem lit_codesize_function_correct:
-  !fuel ctx fn s.
+  !ctx fn s.
     fn_inst_wf fn ==>
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (lit_codesize_function fn) s)
+    pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (\fuel. run_blocks fuel ctx fn s)
+      (\fuel. run_blocks fuel ctx (lit_codesize_function fn) s)
 Proof
-  rpt strip_tac >> irule lit_codesize_function_correct_proof >> simp[]
+  ACCEPT_TAC lit_codesize_function_correct_proof
 QED
 
 (* ===== Obligations ===== *)

@@ -27,7 +27,8 @@
 
 Theory literalsCodesizeProofs
 Ancestors
-  literalsCodesizeDefs passSimulationProps venomWf venomExecSemantics
+  literalsCodesizeDefs passSimulationDefs passSimulationProps venomWf
+  venomExecSemantics stateEquiv stateEquivProps crossBlockSimProps
 Libs
   fcpLib
 
@@ -239,20 +240,19 @@ Proof
        GSYM lit_codesize_function_def]
 QED
 
-(* TOP-LEVEL: Correctness as lift_result *)
+(* TOP-LEVEL: pass_correct from strict equality *)
 Theorem lit_codesize_function_correct_proof:
-  !fuel ctx fn s.
+  !ctx fn s.
     fn_inst_wf fn ==>
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (lit_codesize_function fn) s)
+    pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (\fuel. run_blocks fuel ctx fn s)
+      (\fuel. run_blocks fuel ctx (lit_codesize_function fn) s)
 Proof
   rpt strip_tac >>
-  `run_blocks fuel ctx (lit_codesize_function fn) s =
-   run_blocks fuel ctx fn s` by
-    metis_tac[lit_codesize_function_eq] >>
-  simp[] >>
-  irule lift_result_refl >>
-  simp[stateEquivPropsTheory.state_equiv_refl,
-       stateEquivPropsTheory.execution_equiv_refl]
+  simp[pass_correct_def, lit_codesize_function_eq] >>
+  rpt strip_tac >>
+  `run_blocks fuel ctx fn s = run_blocks fuel' ctx fn s` by
+    metis_tac[run_blocks_deterministic] >>
+  simp[] >> irule lift_result_refl >>
+  simp[state_equiv_refl, execution_equiv_refl]
 QED
