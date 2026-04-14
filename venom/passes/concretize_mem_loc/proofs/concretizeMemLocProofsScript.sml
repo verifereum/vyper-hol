@@ -5279,6 +5279,76 @@ Proof
 QED
 
 
+(* General: removing one element from a SUM over MAP/FILTER *)
+Triviality SUM_MAP_FILTER_REMOVE:
+  !(f:'a -> num) P l x.
+    ALL_DISTINCT l /\ MEM x l /\ P x ==>
+    SUM (MAP f (FILTER (\y. P y /\ y <> x) l)) =
+    SUM (MAP f (FILTER P l)) - f x
+Proof
+  gen_tac >> gen_tac >> Induct >> simp[FILTER] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- ( (* x = h: h is removed, FILTER on rest is unchanged *)
+    `FILTER (\y. P y /\ y <> h) l = FILTER P l` by
+      (simp[rich_listTheory.FILTER_EQ] >> metis_tac[]) >>
+    simp[])
+  >- ( (* x in tail: h <> x because ~MEM h l and MEM x l *)
+    `h <> x` by metis_tac[] >>
+    Cases_on `P h` >> simp[] >>
+    first_x_assum drule_all >> strip_tac >>
+    `f x <= SUM (MAP f (FILTER P l))` by
+      (`MEM x (FILTER P l)` by simp[MEM_FILTER] >>
+       pop_assum (mp_tac o MATCH_MP SUM_MAP_MEM_bound) >> simp[]) >>
+    simp[])
+QED
+
+(* inst_id distinct => element-level distinct for FILTER'ed ALLOCA list *)
+Triviality filter_alloca_inst_id_eq:
+  !l (inst:instruction).
+    ALL_DISTINCT (MAP (\i. i.inst_id) l) /\ MEM inst l ==>
+    !P. FILTER (\i. P i /\ i.inst_id <> inst.inst_id) l =
+        FILTER (\i. P i /\ i <> inst) l
+Proof
+  Induct >> simp[FILTER] >> rpt strip_tac >> gvs[] >>
+  (* h not in l => i.inst_id <> h.inst_id for all i in l *)
+  `!i. MEM i l ==> i.inst_id <> h.inst_id /\ i <> h` by
+    (rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+  simp[rich_listTheory.FILTER_EQ]
+QED
+
+(* fn_remaining decreases by alloc_size when a fresh ALLOCA executes *)
+Triviality fn_remaining_alloca_step:
+  !fn s inst sz v.
+    fn_inst_ids_distinct fn /\
+    MEM inst (fn_insts fn) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit sz] /\
+    FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+    fn_remaining_alloca_size fn
+      (s with vs_allocas := s.vs_allocas |+ (inst.inst_id, v)) =
+    fn_remaining_alloca_size fn s - w2n sz
+Proof
+  rpt strip_tac >>
+  simp[fn_remaining_alloca_size_def, FDOM_FUPDATE] >>
+  qabbrev_tac `f = \i:instruction.
+    case i.inst_operands of [Lit sz'] => w2n sz' | _ => 0` >>
+  qabbrev_tac `P = \i:instruction.
+    i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM s.vs_allocas` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
+    gvs[fn_inst_ids_distinct_alt] >>
+  `P inst` by (simp[Abbr `P`] >> fs[flookup_thm]) >>
+  `f inst = w2n sz` by simp[Abbr `f`] >>
+  (* Rewrite goal's FILTER pred: expand P, combine with inst_id <> *)
+  `(\i:instruction. i.inst_opcode = ALLOCA /\ i.inst_id <> inst.inst_id /\
+      i.inst_id NOTIN FDOM s.vs_allocas) =
+   (\i. P i /\ i.inst_id <> inst.inst_id)` by
+    (simp[FUN_EQ_THM, Abbr `P`] >> metis_tac[]) >>
+  pop_assum (fn th => REWRITE_TAC[th]) >>
+  drule_all filter_alloca_inst_id_eq >>
+  disch_then (qspec_then `P` (fn th => REWRITE_TAC[th])) >>
+  `ALL_DISTINCT (fn_insts fn)` by metis_tac[ALL_DISTINCT_MAP] >>
+  drule_all SUM_MAP_FILTER_REMOVE >> simp[]
+QED
+
 (* alloca_overflow_safe preserved by vs_inst_idx update *)
 Triviality alloca_overflow_safe_update_inst_idx:
   !fn amap s n.
