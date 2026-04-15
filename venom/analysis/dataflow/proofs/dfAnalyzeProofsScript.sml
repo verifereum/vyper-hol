@@ -1811,7 +1811,7 @@ Proof
 QED
 
 (* Helper: df_populate_inst preserves P for all inst values. *)
-Theorem populate_inst_P[local]:
+Theorem populate_inst_P:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
     P bottom /\
     (case entry_val of NONE => T | SOME (lbl, v) => P v) /\
