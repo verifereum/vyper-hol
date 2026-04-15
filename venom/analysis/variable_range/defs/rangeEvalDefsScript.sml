@@ -2,6 +2,7 @@
  * Range Evaluators — Definitions
  *
  * Ports vyper/venom/analysis/variable_range/evaluators.py to HOL4.
+ * Upstream: vyperlang/vyper@8092fe67f (algebraic representation for range analysis)
  *
  * Per-opcode abstract evaluation: given input value_ranges,
  * produce an output value_range that over-approximates the

@@ -2,6 +2,7 @@
  * Range Analysis — Definitions
  *
  * Ports vyper/venom/analysis/variable_range/analysis.py to HOL4.
+ * Upstream: vyperlang/vyper@8092fe67f (algebraic representation for range analysis)
  *
  * Forward dataflow with widening, expressed as an instance of
  * df_analyze_widen from the generic dataflow framework.
@@ -219,8 +220,8 @@ End
 (* ===== Transfer Function ===== *)
 
 (* Evaluate one instruction in the current state.
-   Matches Python _evaluate_inst. PHIs are skipped because they are
-   handled by edge_transfer (PHI renaming per edge before join). *)
+   Matches Python _evaluate_inst. PHIs delete their output variable;
+   PHI output ranges are re-established by subsequent instructions, not by edge transfer. *)
 Definition range_evaluate_inst_def:
   range_evaluate_inst dfg inst (rs : range_state) =
     if inst.inst_opcode = PHI then
@@ -337,9 +338,13 @@ Definition range_phi_edge_rename_def:
         ) rs bb.bb_instructions
 End
 
-(* Combined edge transfer: branch refinement + PHI renaming,
-   wrapped for the option lattice.
-   Context = (dfg, fn.fn_blocks). *)
+(* Edge transfer: branch refinement, wrapped for the option lattice.
+   Context = (dfg, fn.fn_blocks).
+   Note: PHI output ranges are handled by intra-block transfer
+   (range_evaluate_inst deletes PHI outputs, subsequent instructions
+   re-establish ranges). Putting PHI renaming here would be unsound
+   because the entry value at position 0 is checked against the
+   predecessor exit state, before PHIs have executed. *)
 Definition range_edge_transfer_opt_def:
   range_edge_transfer_opt (ctx : dfg_analysis # basic_block list)
                           pred succ (rs_opt : range_state option) =
@@ -347,8 +352,7 @@ Definition range_edge_transfer_opt_def:
       NONE => NONE
     | SOME rs =>
         let (dfg, bbs) = ctx in
-        let refined = range_branch_refine dfg bbs pred succ rs in
-        SOME (range_phi_edge_rename bbs pred succ refined)
+        SOME (range_branch_refine dfg bbs pred succ rs)
 End
 
 (* ===== Top-level analysis via df_analyze_widen ===== *)

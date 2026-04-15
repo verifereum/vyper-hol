@@ -949,7 +949,26 @@ Proof
             mapi_transform_fn_inst_ids, wf_function_def]
 QED
 
-
+(* SSA preservation for block-dependent MAPi transform *)
+Theorem mapi_transform_preserves_ssa_bb:
+  !(g : basic_block -> num -> instruction -> instruction) fn.
+    (!bb i inst. (g bb i inst).inst_id = inst.inst_id) /\
+    (!bb i inst. (g bb i inst).inst_outputs = inst.inst_outputs \/
+                 (g bb i inst).inst_outputs = []) /\
+    wf_function fn /\ ssa_form fn ==>
+    ssa_form (function_map_transform
+      (\bb. bb with bb_instructions := MAPi (g bb) bb.bb_instructions) fn)
+Proof
+  rpt strip_tac >>
+  irule fmt_preserves_ssa_form_general >> simp[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> fs[MEM_MAPi] >> rw[] >>
+      qexists_tac `EL n bb.bb_instructions` >>
+      simp[EL_MEM])
+  >- fs[wf_function_def]
+  >- (irule mapi_transform_fn_inst_ids_bb >> simp[] >>
+      fs[wf_function_def])
+QED
 
 (* General: FLAT (MAPi (\i x. [f i x]) l) = MAPi f l *)
 Theorem flat_mapi_singleton:
