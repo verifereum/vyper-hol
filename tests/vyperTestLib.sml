@@ -373,12 +373,7 @@ val excluded_test_names = [
   "test_abi_decode_head_roundtrip",
   "test_abi_decode_max_size",
   "test_clamper*",
-  "test_returndatasize_check",
-
-  (* Flag conversion tests: convert(int_val, FlagType) requires
-     evaluate_convert to support FlagT target types, which needs
-     type env access. TODO: refactor FlagV representation first. *)
-  "test_flag_conversion*"
+  "test_returndatasize_check"
 ]
 
 fun glob_match pat str =
