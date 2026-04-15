@@ -41,6 +41,7 @@ Datatype:
   ; callData: byte list
   ; runtimeBytecode: byte list
   ; storageLayout: json_storage_layout
+  ; isBlueprint: bool
   |>
 End
 
@@ -264,7 +265,15 @@ val () = do_transfer_def
 Definition run_trace_def:
   run_trace snss am tr =
   case tr
-  of Deployment dt => let
+  of Deployment dt =>
+    if dt.isBlueprint then
+      (* Blueprint deployment: just store bytecode, no constructor *)
+      let am' = am with accounts updated_by
+            (update_account dt.deployedAddress
+              ((lookup_account dt.deployedAddress am.accounts)
+                with code := dt.runtimeBytecode)) in
+      ((dt.deployedAddress,[])::snss, INL am')
+    else let
       (s_layout, t_layout) = extract_storage_layout dt.importMap dt.storageLayout;
       am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, (s_layout, t_layout));
       result = run_deployment am_with_layout dt;

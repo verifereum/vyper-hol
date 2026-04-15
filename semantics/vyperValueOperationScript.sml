@@ -564,90 +564,96 @@ val () = cv_auto_trans evaluate_attribute_def;
 (* convert *)
 
 Definition evaluate_convert_def:
-  evaluate_convert (BytesV bs) (BaseT BoolT) =
+  evaluate_convert _ (BytesV bs) (BaseT BoolT) =
     INL $ BoolV (EXISTS (λb. b ≠ 0w) bs) ∧
-  evaluate_convert (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
-  evaluate_convert (BoolV b) (BaseT (IntT n)) =
+  evaluate_convert _ (IntV i) (BaseT BoolT) = INL $ BoolV (i ≠ 0) ∧
+  evaluate_convert _ (BoolV b) (BaseT (IntT n)) =
     INL $ IntV (if b then 1 else 0) ∧
-  evaluate_convert (BoolV b) (BaseT (UintT n)) =
+  evaluate_convert _ (BoolV b) (BaseT (UintT n)) =
     INL $ IntV (if b then 1 else 0) ∧
-  evaluate_convert (BytesV bs) (BaseT (BytesT (Fixed n))) =
+  evaluate_convert _ (BytesV bs) (BaseT (BytesT (Fixed n))) =
     (if LENGTH bs ≤ n
      then INL $ BytesV (PAD_RIGHT 0w n bs)
      else INR (RuntimeError "convert BytesV bound")) ∧
-  evaluate_convert (BytesV bs) (BaseT (BytesT (Dynamic n))) =
+  evaluate_convert _ (BytesV bs) (BaseT (BytesT (Dynamic n))) =
     (if LENGTH bs ≤ n
      then INL $ BytesV bs
      else INR (RuntimeError "convert BytesV bound")) ∧
-  evaluate_convert (BytesV bs) (BaseT (UintT n)) =
+  evaluate_convert _ (BytesV bs) (BaseT (UintT n)) =
     (let i = &(w2n $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32)) in
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
-  evaluate_convert (BytesV bs) (BaseT (IntT n)) =
+  evaluate_convert _ (BytesV bs) (BaseT (IntT n)) =
     (let i = w2i $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
-  evaluate_convert (IntV i) (BaseT (IntT n)) =
+  evaluate_convert _ (IntV i) (BaseT (IntT n)) =
     (if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert int bound")) ∧
-  evaluate_convert (IntV i) (BaseT (UintT n)) =
+  evaluate_convert _ (IntV i) (BaseT (UintT n)) =
     (if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert uint bound")) ∧
-  evaluate_convert (IntV i) (BaseT AddressT) =
+  evaluate_convert _ (IntV i) (BaseT AddressT) =
     (if within_int_bound (Unsigned 160) i
      then INL $ AddressV (i2w i)
      else INR (RuntimeError "convert int address")) ∧
-  evaluate_convert (FlagV m) (BaseT (IntT n)) =
+  evaluate_convert _ (FlagV m) (BaseT (IntT n)) =
     (let i = &m in
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert flag int bound")) ∧
-  evaluate_convert (FlagV m) (BaseT (UintT n)) =
+  evaluate_convert _ (FlagV m) (BaseT (UintT n)) =
     (let i = &m in
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert flag uint bound")) ∧
+  evaluate_convert tenv (IntV i) (FlagT id) =
+    (let nid = string_to_num id in
+     case FLOOKUP tenv nid of SOME (FlagArgs m) =>
+       if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)
+       else INR (RuntimeError "convert int flag bound")
+     | _ => INR (TypeError "convert to unknown flag")) ∧
   (* IntV → BytesT: extract upper m bytes of big-endian 32-byte encoding.
      For Fixed m: TAKE m gives bytesM. For Dynamic n: full 32 bytes if n >= 32.
      Mirrors Python: convert.py _to_Bytes for integer sources. *)
-  evaluate_convert (IntV i) (BaseT (BytesT (Fixed m))) =
+  evaluate_convert _ (IntV i) (BaseT (BytesT (Fixed m))) =
     (if m ≤ 32
      then INL $ BytesV (TAKE m (word_to_bytes_be ((i2w i):bytes32)))
      else INR (RuntimeError "convert int to bytes")) ∧
-  evaluate_convert (IntV i) (BaseT (BytesT (Dynamic n))) =
+  evaluate_convert _ (IntV i) (BaseT (BytesT (Dynamic n))) =
     (if n ≥ 32
      then INL $ BytesV (word_to_bytes_be ((i2w i):bytes32))
      else INR (RuntimeError "convert int to bytes")) ∧
-  evaluate_convert (BytesV bs) (BaseT (StringT n)) =
+  evaluate_convert _ (BytesV bs) (BaseT (StringT n)) =
     (if LENGTH bs ≤ n
      then INL $ StringV (MAP (CHR o w2n) bs)
      else INR (RuntimeError "convert bytes string")) ∧
-  evaluate_convert (StringV s) (BaseT (StringT n)) =
+  evaluate_convert _ (StringV s) (BaseT (StringT n)) =
     (if LENGTH s ≤ n
      then INL $ StringV s
      else INR (RuntimeError "convert string string bound")) ∧
-  evaluate_convert (StringV s) (BaseT (BytesT bd)) =
+  evaluate_convert _ (StringV s) (BaseT (BytesT bd)) =
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV (MAP (n2w o ORD) s)
      else INR (RuntimeError "convert string bytes")) ∧
-  evaluate_convert (IntV i) (BaseT DecimalT) =
+  evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
   (* Truncation toward zero, matching EVM SDIV semantics *)
-  evaluate_convert (DecimalV i) (BaseT (IntT n)) =
+  evaluate_convert _ (DecimalV i) (BaseT (IntT n)) =
     (let r = SGN i * (ABS i / 10000000000) in
      if within_int_bound (Signed n) r
      then INL $ IntV r
      else INR (RuntimeError "convert decimal int")) ∧
-  evaluate_convert (DecimalV i) (BaseT (UintT n)) =
+  evaluate_convert _ (DecimalV i) (BaseT (UintT n)) =
     (let r = SGN i * (ABS i / 10000000000) in
      if 0 ≤ r ∧ within_int_bound (Unsigned n) r
      then INL $ IntV r
      else INR (RuntimeError "convert decimal uint")) ∧
-  evaluate_convert _ _ = INR (TypeError "convert")
+  evaluate_convert _ _ _ = INR (TypeError "convert")
 End
 
 val evaluate_convert_pre_def =
@@ -656,7 +662,7 @@ val evaluate_convert_pre_def =
   evaluate_convert_def;
 
 Theorem evaluate_convert_pre[cv_pre]:
-  evaluate_convert_pre x y
+  evaluate_convert_pre t x y
 Proof
   rw[evaluate_convert_pre_def]
 QED
