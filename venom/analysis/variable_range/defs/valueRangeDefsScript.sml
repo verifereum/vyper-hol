@@ -2,6 +2,7 @@
  * Value Range Lattice — Definitions
  *
  * Ports vyper/venom/analysis/variable_range/value_range.py to HOL4.
+ * Upstream: vyperlang/vyper@8092fe67f (algebraic representation for range analysis)
  *
  * Interval lattice over signed 256-bit integer bounds.
  * Python uses (lo, hi) with None→TOP and lo>hi→BOTTOM;
