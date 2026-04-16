@@ -3,7 +3,7 @@
  *
  * TOP-LEVEL:
  *   mm_preserves_wf_function   — wf_function preserved
- *   mm_preserves_ssa_form      — ssa_form preserved (CHEATED, needs mm_fresh_names_ok)
+ *   mm_preserves_ssa_form      — ssa_form preserved (CHEATED, needs mm_fresh_names_ok + fn_inst_ids_distinct)
  *)
 
 Theory mmWf

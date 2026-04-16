@@ -2409,10 +2409,127 @@ Definition mm_fresh_names_ok_def:
              (set (FLAT (MAP (λi. i.inst_outputs) (fn_insts fn))))
 End
 
+(* ===== SSA preservation infrastructure ===== *)
+
+Triviality fn_insts_blocks_flat[local]:
+  !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
+Proof
+  Induct >> simp[fn_insts_blocks_def]
+QED
+
+(* Dload sub-pass: each instruction is either NOP'd or original *)
+Triviality dload_output_traced[local]:
+  !dfg bb inst.
+    MEM inst (transform_block_dload dfg bb).bb_instructions ==>
+    inst.inst_outputs = [] \/ MEM inst bb.bb_instructions
+Proof
+  rw[transform_block_dload_def, LET_THM, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  rpt IF_CASES_TAC >> gvs[mk_nop_from_def] >>
+  CASE_TAC >> gvs[mk_dloadbytes_inst_def]
+QED
+
+(* Memzero sub-pass: each output variable is from the input block or fresh *)
+Triviality memzero_output_traced[local]:
+  !dfg bb inst v.
+    MEM inst (transform_block_memzero dfg bb).bb_instructions /\
+    MEM v inst.inst_outputs ==>
+    (?orig. MEM orig bb.bb_instructions /\ MEM v orig.inst_outputs) \/
+    v IN mm_block_fresh_memzero dfg bb
+Proof
+  rw[transform_block_memzero_def, LET_THM, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  fs[apply_memzero_inst_def, LET_THM] >>
+  BasicProvers.every_case_tac >>
+  gvs[mk_nop_from_def, mk_zero_store_inst_def,
+      mk_calldatasize_inst_def, mk_memzero_calldatacopy_def] >>
+  TRY (disj1_tac >> metis_tac[] >> NO_TAC) >>
+  disj2_tac >> simp[mm_block_fresh_memzero_def, LET_THM] >>
+  disj2_tac >> metis_tac[]
+QED
+
+(* Mode sub-pass: each output variable is from the input block or fresh *)
+Triviality mode_output_traced[local]:
+  !dfg mode bb inst v.
+    MEM inst (transform_block_mode dfg mode bb).bb_instructions /\
+    MEM v inst.inst_outputs ==>
+    (?orig. MEM orig bb.bb_instructions /\ MEM v orig.inst_outputs) \/
+    v IN mm_block_fresh_mode dfg mode bb
+Proof
+  rw[transform_block_mode_def, LET_THM, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  fs[apply_groups_inst_def, LET_THM] >>
+  BasicProvers.every_case_tac >>
+  gvs[mk_nop_from_def, mk_bulk_copy_inst_def,
+      mk_load_inst_def, mk_mstore_from_load_def] >>
+  TRY (disj1_tac >> metis_tac[] >> NO_TAC) >>
+  disj2_tac >> simp[mm_block_fresh_mode_def, LET_THM] >>
+  disj2_tac >> metis_tac[]
+QED
+
+(* Full transform: each output variable is original or in mm_fresh_outputs *)
+Triviality transform_block_output_mem[local]:
+  !fn bb v.
+    MEM bb fn.fn_blocks /\
+    MEM v (FLAT (MAP (\i. i.inst_outputs)
+      (transform_block (dfg_build_function fn) bb).bb_instructions)) ==>
+    MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) \/
+    v IN mm_fresh_outputs fn
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `dfg = dfg_build_function fn` >>
+  gvs[MEM_FLAT, MEM_MAP] >>
+  fs[transform_block_def, LET_THM] >>
+  qabbrev_tac `bb1 = transform_block_dload dfg bb` >>
+  qabbrev_tac `bb2 = transform_block_memzero dfg bb1` >>
+  qabbrev_tac `bb3 = transform_block_mode dfg CalldataMerge bb2` >>
+  qabbrev_tac `bb4 = transform_block_mode dfg DloadMerge bb3` >>
+  (* Track v backwards: Mem2Mem → DloadMerge → CalldataMerge → memzero → dload *)
+  `(?orig. MEM orig bb4.bb_instructions /\ MEM v orig.inst_outputs) \/
+   v IN mm_block_fresh_mode dfg Mem2Mem bb4` by
+    metis_tac[mode_output_traced] >>
+  TRY (disj2_tac >> simp[mm_fresh_outputs_def, LET_THM,
+    Abbr`bb4`,Abbr`bb3`,Abbr`bb2`,Abbr`bb1`] >>
+    simp[PULL_EXISTS] >> qexists_tac `bb` >> simp[] >> NO_TAC) >>
+  `(?orig. MEM orig bb3.bb_instructions /\ MEM v orig.inst_outputs) \/
+   v IN mm_block_fresh_mode dfg DloadMerge bb3` by
+    metis_tac[mode_output_traced] >>
+  TRY (disj2_tac >> simp[mm_fresh_outputs_def, LET_THM,
+    Abbr`bb3`,Abbr`bb2`,Abbr`bb1`] >>
+    simp[PULL_EXISTS] >> qexists_tac `bb` >> simp[] >> NO_TAC) >>
+  `(?orig. MEM orig bb2.bb_instructions /\ MEM v orig.inst_outputs) \/
+   v IN mm_block_fresh_mode dfg CalldataMerge bb2` by
+    metis_tac[mode_output_traced] >>
+  TRY (disj2_tac >> simp[mm_fresh_outputs_def, LET_THM,
+    Abbr`bb2`,Abbr`bb1`] >>
+    simp[PULL_EXISTS] >> qexists_tac `bb` >> simp[] >> NO_TAC) >>
+  `(?orig. MEM orig bb1.bb_instructions /\ MEM v orig.inst_outputs) \/
+   v IN mm_block_fresh_memzero dfg bb1` by
+    metis_tac[memzero_output_traced] >>
+  TRY (disj2_tac >> simp[mm_fresh_outputs_def, LET_THM, Abbr`bb1`] >>
+    simp[PULL_EXISTS] >> qexists_tac `bb` >> simp[] >> NO_TAC) >>
+  (* v from dload output — either empty outputs or original instruction *)
+  disj1_tac >> fs[Abbr `bb1`] >>
+  metis_tac[dload_output_traced, MEM]
+QED
+
+Triviality flat_map_flat_map[local]:
+  !f g l. FLAT (MAP f (FLAT (MAP g l))) =
+          FLAT (MAP (FLAT o MAP f o g) l)
+Proof
+  gen_tac >> gen_tac >> Induct >>
+  simp[FLAT_APPEND, MAP_APPEND]
+QED
+
 Theorem mm_preserves_ssa_form:
-  ∀fn. ssa_form fn ∧ mm_fresh_names_ok fn ⇒
+  ∀fn. ssa_form fn ∧ fn_inst_ids_distinct fn ∧ mm_fresh_names_ok fn ⇒
        ssa_form (transform_function fn)
 Proof
+  rpt strip_tac >>
+  fs[ssa_form_def, fn_insts_def, fn_insts_blocks_flat,
+     transform_function_def, LET_THM,
+     function_map_transform_def, MAP_MAP_o, combinTheory.o_DEF,
+     flat_map_flat_map] >>
   cheat
 QED
 

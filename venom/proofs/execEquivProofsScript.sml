@@ -1069,5 +1069,9 @@ Proof
   simp[run_function_def] >>
   Cases_on `fn_entry_label fn` >> simp[result_equiv_def] >>
   rename1 `fn_entry_label fn = SOME lbl` >>
-  cheat
+  `lbl IN safe` by metis_tac[] >>
+  irule run_blocks_result_equiv_closed >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `state_equiv _ _ _` mp_tac >>
+  simp[state_equiv_def, execution_equiv_def, lookup_var_def]
 QED

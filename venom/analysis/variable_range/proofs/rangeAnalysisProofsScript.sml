@@ -1235,7 +1235,7 @@ QED
    range_evaluate_inst preserves in_range_state, given appropriate
    hypotheses on the output value.  This wraps range_evaluate_inst_sound
    with the step_inst frame conditions. *)
-Triviality step_range_sound[local]:
+Theorem step_range_sound:
   ∀fuel ctx inst s s' rs dfg.
     step_inst fuel ctx inst s = OK s' ∧
     in_range_state rs s.vs_vars ∧

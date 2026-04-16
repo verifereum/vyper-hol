@@ -16,6 +16,11 @@ QED
 
 (* ===== Obligations ===== *)
 
+(* BLOCKER: ao_opt_eq (line 408 of algebraicOptDefsScript.sml) produces
+   2-element lists where BOTH elements share the same inst_id. This violates
+   fn_inst_ids_distinct (part of wf_function). Similarly, ao_cmp_flip_apply_inst
+   inserts instructions with fresh outputs that may collide.
+   Fix needed in defs: new instructions should use id * 1000 + offset. *)
 Theorem ao_preserves_ssa_form:
   ∀fn. ssa_form fn ⇒ ssa_form (ao_transform_function fn)
 Proof
