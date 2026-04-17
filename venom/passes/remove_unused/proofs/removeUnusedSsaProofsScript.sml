@@ -625,7 +625,7 @@ Proof
   gvs[single_pass_nop_outputs_def, LET_THM,
       pred_setTheory.IN_BIGUNION, PULL_EXISTS,
       listTheory.MEM_MAP] >>
-  rename1 `v IN block_nop_outputs _ _ def_bb` >>
+  rename1 `v IN block_nop_outputs _ def_bb` >>
   gvs[block_nop_outputs_def, LET_THM,
       listTheory.MEM_FLAT, MEM_MAPi, PULL_EXISTS] >>
   rename1 `idx_b < LENGTH def_bb.bb_instructions` >>
