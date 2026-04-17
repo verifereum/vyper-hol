@@ -930,7 +930,7 @@ Proof
   (* Reformulate operand condition for step_inst_result_equiv *)
   `!x. MEM (Var x) inst.inst_operands ==> x NOTIN V` by metis_tac[] >>
   (* V SUBSET V_out for weakening *)
-  qabbrev_tac `V_out = V_in UNION block_nop_outputs (liveness_analyze fn)
+  qabbrev_tac `V_out = V_in UNION block_nop_outputs (liveness_analyze fn) bb` >>
   `V SUBSET V_out` by gvs[Abbr `V_out`] >>
   Cases_on `remove_unused_inst
     (live_after_at (liveness_analyze fn) bb.bb_label idx
@@ -948,8 +948,8 @@ Proof
       by (irule step_nop_identity >> simp[mk_nop_inst_def]) >>
     (* Establish subset BEFORE gvs[mk_nop_inst_def] rewrites it away *)
     `set inst.inst_outputs SUBSET
-      block_nop_outputs (liveness_analyze fn)
-      mp_tac (Q.SPECL [`(liveness_analyze fn)`,
+      block_nop_outputs (liveness_analyze fn) bb` by (
+      mp_tac (Q.SPECL [`liveness_analyze fn`,
         `bb`, `idx`, `inst`]
         nop_outputs_in_block_nop_outputs) >>
       gvs[Abbr `inst`]) >>
@@ -1829,7 +1829,7 @@ Proof
   irule lift_result_compose_result_equiv >>
   qexists_tac `run_blocks fuel ctx
     (function_map_transform
-      (\bb. remove_unused_block (liveness_analyze fn)
+      (\bb. remove_unused_block (liveness_analyze fn) bb) fn) s` >>
   conj_tac
   >- (irule passSharedPropsTheory.clear_nops_function_correct >> simp[])
   >- first_assum ACCEPT_TAC
