@@ -1,6 +1,8 @@
 (*
  * Expression Lowering: Vyper expressions → Venom IR instructions
  *
+ * Upstream: vyperlang/vyper@6a3248028 (remove fix_memlocs pass, #4896)
+ *
  * TOP-LEVEL:
  *   compile_expr                 — compile expression, return vyper_value
  *   lower_value                  — compile + unwrap to operand
@@ -2121,7 +2123,22 @@ Definition compile_call_def:
          let (_, st4) = emit_void ASSERT [success] st3 in
          (StackValue ret_ty (Lit 0w), st4)
      | _ => let (_, st') = emit_inst INVALID [] [] st in
-            (StackValue ret_ty (Lit 0w), st'))
+            (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
+    (let (_, st') = emit_inst INVALID [] [] st in
+     (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty RawLog args default_ret st =
+    (let (_, st') = emit_inst INVALID [] [] st in
+     (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty RawRevert args default_ret st =
+    (let (_, st') = emit_inst INVALID [] [] st in
+     (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
+    (let (_, st') = emit_inst INVALID [] [] st in
+     (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty (CreateTarget ck rof) args default_ret st =
+    (let (_, st') = emit_inst INVALID [] [] st in
+     (StackValue ret_ty (Lit 0w), st'))
 End
 
 (* ===== Builtin Dispatch Helpers ===== *)
@@ -2550,6 +2567,9 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
         are handled via call_target, not builtin - see Call cases *)) ∧
 
   compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st =
+    (* Dead branch: forces HOL4 Defn to recognize mutual recursion with
+       compile_builtin_dispatch. Without this call, Defn would not see
+       the recursion edge and would reject the definition group. *)
     if F then
       compile_builtin_dispatch cenv vv_ty ty (Env TimeStamp) [] st
     else
