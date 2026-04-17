@@ -42,6 +42,7 @@ Ancestors
   exprLoweringProps
   moduleLowering compileEnv context
   venomExecSemantics venomState venomInst
+  stateEquiv
   abiEncoder
 Libs
   wordsLib
@@ -118,7 +119,15 @@ Theorem compile_selector_dispatch_linear_correct:
     ∃ fuel ss'.
       run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
       (ss'.vs_current_bb = fallback_lbl ∨
-       MEM ss'.vs_current_bb (MAP SND selectors))
+       MEM ss'.vs_current_bb (MAP SND selectors)) ∧
+      (* Preservation for chaining at the top-level stitcher.
+         Linear dispatch is pure ops + JNZ/JMP, no memory writes. *)
+      observable_equiv ss ss' ∧
+      ss'.vs_memory = ss.vs_memory ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ¬ss'.vs_halted ∧
+      fresh_vars_wrt st' ss' ∧
+      compile_state_ok st'
 Proof
   (* Original proof attempt (pre-hypothesis-fix). Preserved for reference;
      the chain through emit_op_*_correct + exec_block_inst_seq_jnz is the
@@ -166,7 +175,15 @@ Theorem compile_selector_dispatch_sparse_correct:
     ∃ fuel ss'.
       run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
       (ss'.vs_current_bb = fallback_lbl ∨
-       MEM ss'.vs_current_bb (MAP (FST o SND) selectors))
+       MEM ss'.vs_current_bb (MAP (FST o SND) selectors)) ∧
+      (* Sparse dispatch uses CODECOPY to read bucket headers into
+         scratch memory (offset 30w), so vs_memory is NOT preserved.
+         A memory-region preservation predicate is future work. *)
+      observable_equiv ss ss' ∧
+      ss'.vs_call_ctx = ss.vs_call_ctx ∧
+      ¬ss'.vs_halted ∧
+      fresh_vars_wrt st' ss' ∧
+      compile_state_ok st'
 Proof
   cheat
 QED
@@ -190,11 +207,20 @@ Theorem compile_entry_point_kwargs_correct:
     fresh_vars_wrt st ss ∧
     ¬ss.vs_halted
     ⇒
-    ∃ fuel.
-      (∃ ss'. run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
-              ss'.vs_current_bb = common_label) ∨
-      (∃ ss'. run_compiled_fragment ctx st st' ss fuel =
-                Abort Revert_abort ss')
+    ∃ fuel ss'.
+      (run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
+       ss'.vs_current_bb = common_label ∧
+       (* Kwargs writes to kwarg memory regions defined by cenv plus
+          scratch for ABI decode; vs_allocas may also grow via ALLOCA
+          in compile_abi_decode_to_buf. vs_memory is NOT preserved. *)
+       observable_equiv ss ss' ∧
+       ss'.vs_call_ctx = ss.vs_call_ctx ∧
+       ¬ss'.vs_halted ∧
+       fresh_vars_wrt st' ss' ∧
+       compile_state_ok st') ∨
+      (run_compiled_fragment ctx st st' ss fuel = Abort Revert_abort ss'
+       (* Abort state is EVM-rolled back; only returndata observable.
+          Callers use revert_equiv / lift_result, not state preservation. *))
 Proof
   cheat
 QED
