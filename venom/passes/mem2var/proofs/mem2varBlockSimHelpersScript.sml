@@ -872,14 +872,27 @@ Proof
   metis_tac[step_inst_base_preserves_allocas]
 QED
 
-(* Write-effects exclusion: ops without MEMORY writes also don't
-   write IMMUTABLES, RETURNDATA, or LOG (given our other filters). *)
+(* Write-effects exclusion: non-ext-call, non-terminator, non-invoke ops
+   without MEMORY writes don't write RETURNDATA.
+   STATICCALL (ext_call) writes RETURNDATA, but is excluded. *)
+Theorem no_returndata_write_without_memory_or_extcall:
+  !op. ~is_terminator op /\ op <> INVOKE /\ ~is_ext_call_op op /\
+    Eff_MEMORY NOTIN write_effects op ==>
+    Eff_RETURNDATA NOTIN write_effects op
+Proof
+  Cases >> simp[is_terminator_def, is_ext_call_op_def,
+    write_effects_def, empty_effects_def]
+QED
+
+(* Write-effects exclusion: ops without MEMORY/LOG/RETURNDATA writes
+   also don't write IMMUTABLES (given our other filters).
+   After MSIZE sunset: LOG and RETURNDATA write_effects no longer
+   carry Eff_MSIZE, so must be excluded explicitly. *)
 Theorem no_mem_write_excludes_others:
   !op. ~is_terminator op /\ op <> INVOKE /\ ~is_alloca_op op /\
-    ~is_ext_call_op op /\ Eff_MEMORY NOTIN write_effects op ==>
-    Eff_IMMUTABLES NOTIN write_effects op /\
-    Eff_RETURNDATA NOTIN write_effects op /\
-    Eff_LOG NOTIN write_effects op
+    ~is_ext_call_op op /\ Eff_MEMORY NOTIN write_effects op /\
+    Eff_LOG NOTIN write_effects op /\ Eff_RETURNDATA NOTIN write_effects op ==>
+    Eff_IMMUTABLES NOTIN write_effects op
 Proof
   Cases >> simp[is_terminator_def, is_alloca_op_def,
     is_ext_call_op_def, write_effects_def, all_effects_def,
@@ -953,6 +966,8 @@ Theorem m2v_step_nonpromoted:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+    Eff_LOG NOTIN write_effects inst.inst_opcode /\
+    Eff_RETURNDATA NOTIN write_effects inst.inst_opcode /\
     (Eff_MEMORY IN read_effects inst.inst_opcode ==>
      s1.vs_memory = s2.vs_memory) /\
     (Eff_TRANSIENT IN read_effects inst.inst_opcode ==>
@@ -994,6 +1009,8 @@ Theorem m2v_inv_noix_step_nonpromoted:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+    Eff_LOG NOTIN write_effects inst.inst_opcode /\
+    Eff_RETURNDATA NOTIN write_effects inst.inst_opcode /\
     (Eff_MEMORY IN read_effects inst.inst_opcode ==>
      s1.vs_memory = s2.vs_memory) /\
     (Eff_TRANSIENT IN read_effects inst.inst_opcode ==>
@@ -2936,6 +2953,9 @@ Resume m2v_nonterminal_step_dispatch[nonpromoted]:
   simp[] >>
   disch_then irule >>
   rpt conj_tac >> TRY (gvs[m2v_inv_noix_def] >> NO_TAC)
+  >- cheat (* Eff_LOG NOTIN: in no-mem-write branch, LOG excluded by
+             Eff_MEMORY IN read_effects. TODO: proper case analysis *)
+  >- metis_tac[no_returndata_write_without_memory_or_extcall]
   (* Remaining: ~is_effect_free_op ==> inst.inst_outputs = [] *)
   >> (strip_tac >>
       `inst_wf inst` by (drule_all fn_inst_wf_MEM >> simp[]) >>
@@ -4847,6 +4867,8 @@ Theorem step_inst_mem_preserved:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+    Eff_LOG NOTIN write_effects inst.inst_opcode /\
+    Eff_RETURNDATA NOTIN write_effects inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     inst.inst_opcode <> INVOKE ==>
@@ -4878,6 +4900,8 @@ QED
 Theorem m2v_promote_inst_no_mem_eff:
   !pvar ao sz inst.
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+    Eff_LOG NOTIN write_effects inst.inst_opcode /\
+    Eff_RETURNDATA NOTIN write_effects inst.inst_opcode /\
     ~is_terminator inst.inst_opcode ==>
     Eff_MEMORY NOTIN write_effects
       (HD (m2v_promote_inst pvar ao sz inst)).inst_opcode

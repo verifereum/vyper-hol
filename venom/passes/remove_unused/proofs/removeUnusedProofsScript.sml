@@ -986,8 +986,7 @@ Proof
       `(V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) SUBSET V_out` by (
         gvs[pred_setTheory.UNION_SUBSET, Abbr `V_out`] >>
         irule pred_setTheory.SUBSET_TRANS >>
-        qexists_tac `block_nop_outputs (liveness_analyze fn)
-        gvs[]) >>
+        qexists_tac `block_nop_outputs (liveness_analyze fn) bb` >> gvs[]) >>
       (* Liveness: v IN V ∪ outputs ⇒ not live at SUC s2.vs_inst_idx *)
       `!v. v IN (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) ==>
            ~MEM v (live_vars_at (liveness_analyze fn)
