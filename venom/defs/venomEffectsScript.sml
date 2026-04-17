@@ -110,8 +110,6 @@ Definition write_effects_def:
   write_effects CODECOPY = {Eff_MEMORY} /\
   write_effects EXTCODECOPY = {Eff_MEMORY} /\
   write_effects MCOPY = {Eff_MEMORY} /\
-  write_effects _ = empty_effects
-End
   (* SELFDESTRUCT: transfers balance to beneficiary, zeros own balance *)
   write_effects SELFDESTRUCT = {Eff_BALANCE} /\
   write_effects _ = empty_effects

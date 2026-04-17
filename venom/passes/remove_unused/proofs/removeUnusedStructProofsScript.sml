@@ -51,12 +51,12 @@ QED
 
 (* Helper: remove_unused_inst preserves non-ALLOCA *)
 Theorem rui_preserves_opcode[local]:
-  !live fence inst P.
+  !live inst P.
     P inst.inst_opcode /\ P NOP ==>
-    P (remove_unused_inst live fence inst).inst_opcode
+    P (remove_unused_inst live inst).inst_opcode
 Proof
   rpt strip_tac >>
-  qspecl_then [`live`, `fence`, `inst`] strip_assume_tac
+  qspecl_then [`live`, `inst`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def]
 QED
@@ -107,30 +107,30 @@ Proof
 QED
 
 Theorem rui_preserves_inst_id[local]:
-  !live fence inst. (remove_unused_inst live fence inst).inst_id = inst.inst_id
+  !live inst. (remove_unused_inst live inst).inst_id = inst.inst_id
 Proof
   rpt strip_tac >>
-  qspecl_then [`live`, `fence`, `inst`] strip_assume_tac
+  qspecl_then [`live`, `inst`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def]
 QED
 
 Theorem rui_identity_on_terminator[local]:
-  !live fence inst.
+  !live inst.
     is_terminator inst.inst_opcode ==>
-    remove_unused_inst live fence inst = inst
+    remove_unused_inst live inst = inst
 Proof
   rw[remove_unused_inst_def, is_removable_def]
 QED
 
 Theorem rui_not_new_terminator[local]:
-  !live fence inst.
+  !live inst.
     ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (remove_unused_inst live fence inst).inst_opcode \/
-    remove_unused_inst live fence inst = inst
+    ~is_terminator (remove_unused_inst live inst).inst_opcode \/
+    remove_unused_inst live inst = inst
 Proof
   rpt strip_tac >>
-  qspecl_then [`live`, `fence`, `inst`] strip_assume_tac
+  qspecl_then [`live`, `inst`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def] >> EVAL_TAC
 QED
@@ -235,29 +235,29 @@ Proof
 QED
 
 Theorem rui_mapi_only_last_terminator[local]:
-  !lr fence insts.
+  !lr insts.
     (!i. i < LENGTH insts /\ is_terminator (EL i insts).inst_opcode ==>
          i = PRE (LENGTH insts)) ==>
     !i. i < LENGTH (MAPi (\idx inst. remove_unused_inst
-            (lr idx) (fence idx) inst) insts) /\
+            (lr idx) inst) insts) /\
         is_terminator (EL i (MAPi (\idx inst. remove_unused_inst
-            (lr idx) (fence idx) inst) insts)).inst_opcode ==>
+            (lr idx) inst) insts)).inst_opcode ==>
         i = PRE (LENGTH (MAPi (\idx inst. remove_unused_inst
-            (lr idx) (fence idx) inst) insts))
+            (lr idx) inst) insts))
 Proof
   rpt strip_tac >> gvs[EL_MAPi, LENGTH_MAPi] >>
-  qspecl_then [`lr i`, `fence i`, `EL i insts`] strip_assume_tac
+  qspecl_then [`lr i`, `EL i insts`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def, EL_MAPi, EVAL ``is_terminator NOP``]
 QED
 
 Theorem filter_rui_preserves_phi_prefix[local]:
-  !lr fence insts.
+  !lr insts.
     (!i j. i < j /\ j < LENGTH insts /\
            (EL j insts).inst_opcode = PHI ==>
            (EL i insts).inst_opcode = PHI) ==>
     let mapped = MAPi (\idx inst. remove_unused_inst
-                    (lr idx) (fence idx) inst) insts in
+                    (lr idx) inst) insts in
     let filtered = FILTER (\inst. inst.inst_opcode <> NOP) mapped in
     !i j. i < j /\ j < LENGTH filtered /\
           (EL j filtered).inst_opcode = PHI ==>
@@ -265,34 +265,34 @@ Theorem filter_rui_preserves_phi_prefix[local]:
 Proof
   rpt strip_tac >> gvs[LET_THM] >> rpt strip_tac >>
   drule_all filter_el_mono >> strip_tac >>
-  `(EL j2 (MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst)
+  `(EL j2 (MAPi (\idx inst. remove_unused_inst (lr idx) inst)
       insts)).inst_opcode = PHI` by metis_tac[] >>
   gvs[EL_MAPi, LENGTH_MAPi] >>
-  qspecl_then [`lr j2`, `fence j2`, `EL j2 insts`] strip_assume_tac
+  qspecl_then [`lr j2`, `EL j2 insts`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def, EVAL ``NOP = PHI``] >>
   `j1 < LENGTH insts` by gvs[] >>
   `(EL j1 insts).inst_opcode = PHI` by metis_tac[] >>
-  qspecl_then [`lr j1`, `fence j1`, `EL j1 insts`] strip_assume_tac
+  qspecl_then [`lr j1`, `EL j1 insts`] strip_assume_tac
     remove_unused_inst_cases >> gvs[mk_nop_inst_def] >>
   `MEM (EL i (FILTER (\inst. inst.inst_opcode <> NOP)
-      (MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts)))
+      (MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts)))
     (FILTER (\inst. inst.inst_opcode <> NOP)
-      (MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts))`
+      (MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts))`
     by (irule EL_MEM >> gvs[]) >>
   gvs[MEM_FILTER]
 QED
 
 Theorem rui_mapi_preserves_last[local]:
-  !lr fence insts.
+  !lr insts.
     insts <> [] /\
     is_terminator (LAST insts).inst_opcode ==>
     LAST (MAPi (\idx inst. remove_unused_inst
-            (lr idx) (fence idx) inst) insts) = LAST insts
+            (lr idx) inst) insts) = LAST insts
 Proof
   rpt strip_tac >>
   `0 < LENGTH insts` by (Cases_on `insts` >> gvs[]) >>
-  `MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts <> []`
+  `MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts <> []`
     by (Cases_on `insts` >> gvs[]) >>
   simp[LAST_EL, LENGTH_MAPi] >>
   simp[EL_MAPi] >>
@@ -301,29 +301,29 @@ Proof
 QED
 
 Theorem rui_filter_nonempty_last[local]:
-  !lr fence insts.
+  !lr insts.
     insts <> [] /\ is_terminator (LAST insts).inst_opcode ==>
     FILTER (\inst. inst.inst_opcode <> NOP)
-      (MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts)
+      (MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts)
       <> [] /\
     LAST (FILTER (\inst. inst.inst_opcode <> NOP)
-      (MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts))
+      (MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts))
       = LAST insts
 Proof
   rpt gen_tac >> strip_tac >>
-  `LAST (MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts)
+  `LAST (MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts)
     = LAST insts` by (irule rui_mapi_preserves_last >> simp[]) >>
-  `MAPi (\idx inst. remove_unused_inst (lr idx) (fence idx) inst) insts <> []`
+  `MAPi (\idx inst. remove_unused_inst (lr idx) inst) insts <> []`
     by (Cases_on `insts` >> gvs[]) >>
   `LAST insts = LAST (MAPi (\idx inst. remove_unused_inst
-    (lr idx) (fence idx) inst) insts)` by gvs[] >>
+    (lr idx) inst) insts)` by gvs[] >>
   pop_assum (fn th => rewrite_tac [th]) >>
   irule filter_last_when_last_passes >>
   gvs[] >> CCONTR_TAC >> gvs[EVAL ``is_terminator NOP``]
 QED
 
 Theorem filter_rui_bb_wf[local]:
-  !lr fence insts.
+  !lr insts.
     insts <> [] /\
     is_terminator (LAST insts).inst_opcode /\
     (!i. i < LENGTH insts /\ is_terminator (EL i insts).inst_opcode ==>
@@ -333,7 +333,7 @@ Theorem filter_rui_bb_wf[local]:
            (EL i insts).inst_opcode = PHI) ==>
     let result = FILTER (\inst. inst.inst_opcode <> NOP)
                    (MAPi (\idx inst. remove_unused_inst
-                     (lr idx) (fence idx) inst) insts) in
+                     (lr idx) inst) insts) in
     result <> [] /\
     is_terminator (LAST result).inst_opcode /\
     (!i. i < LENGTH result /\ is_terminator (EL i result).inst_opcode ==>
@@ -343,49 +343,49 @@ Theorem filter_rui_bb_wf[local]:
            (EL i result).inst_opcode = PHI)
 Proof
   rpt strip_tac >> simp[LET_THM] >>
-  mp_tac (Q.SPECL [`lr`, `fence`, `insts`] rui_filter_nonempty_last) >>
+  mp_tac (Q.SPECL [`lr`, `insts`] rui_filter_nonempty_last) >>
   simp[] >> strip_tac >>
   conj_tac
   >- (match_mp_tac filter_nop_preserves_only_last_terminator >> conj_tac
       >- (simp[LENGTH_NIL, LENGTH_MAPi] >> Cases_on `insts` >> gvs[])
       >- (match_mp_tac rui_mapi_only_last_terminator >> simp[]))
-  >- (mp_tac (SRULE [LET_THM] (Q.SPECL [`lr`, `fence`, `insts`]
+  >- (mp_tac (SRULE [LET_THM] (Q.SPECL [`lr`, `insts`]
         filter_rui_preserves_phi_prefix)) >>
       simp[] >> disch_then match_mp_tac >> metis_tac[])
 QED
 
 Theorem bb_wf_preserved[local]:
-  !lr fence bb.
+  !lr bb.
     bb_well_formed bb ==>
     bb_well_formed
-      (clear_nops_block (remove_unused_block lr fence bb))
+      (clear_nops_block (remove_unused_block lr bb))
 Proof
   rpt strip_tac >> fs[bb_well_formed_def] >>
   simp[clear_nops_block_def, remove_unused_block_def, LET_THM,
        bb_well_formed_def] >>
   mp_tac (SRULE [LET_THM] (Q.SPECL [`\idx. live_after_at lr bb.bb_label idx
-      (LENGTH bb.bb_instructions)`, `fence`, `bb.bb_instructions`]
+      (LENGTH bb.bb_instructions)`, `bb.bb_instructions`]
     filter_rui_bb_wf)) >>
   disch_then irule >> metis_tac[]
 QED
 
 Theorem rusp_preserves_bb_succs[local]:
-  !lr fence bb.
+  !lr bb.
     bb_well_formed bb ==>
-    bb_succs (clear_nops_block (remove_unused_block lr fence bb)) =
+    bb_succs (clear_nops_block (remove_unused_block lr bb)) =
     bb_succs bb
 Proof
   rw[bb_succs_def, bb_well_formed_def,
      clear_nops_block_def, remove_unused_block_def, LET_THM] >>
   mp_tac (Q.SPECL [`\idx. live_after_at lr bb.bb_label idx
-    (LENGTH bb.bb_instructions)`, `fence`, `bb.bb_instructions`]
+    (LENGTH bb.bb_instructions)`, `bb.bb_instructions`]
     rui_filter_nonempty_last) >>
   simp[] >> strip_tac >>
   Cases_on `bb.bb_instructions` >> gvs[] >>
   Cases_on `FILTER (\inst. inst.inst_opcode <> NOP)
     (MAPi (\idx inst. remove_unused_inst
       (live_after_at lr bb.bb_label idx (LENGTH (h::t)))
-      (fence idx) inst) (h::t))` >> gvs[]
+      inst) (h::t))` >> gvs[]
 QED
 
 Theorem rusp_preserves_fn_succs_closed[local]:
@@ -399,9 +399,7 @@ Proof
   fs[wf_function_def, fn_succs_closed_def] >>
   `bb_well_formed y` by metis_tac[] >>
   `bb_succs (clear_nops_block
-      (remove_unused_block (liveness_analyze fn)
-        (\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                 y.bb_label idx y.bb_instructions) y)) =
+      (remove_unused_block (liveness_analyze fn) y)) =
    bb_succs y` by
     (irule rusp_preserves_bb_succs >> simp[]) >>
   `MEM succ (bb_succs y)` by gvs[] >>
@@ -431,10 +429,10 @@ QED
 
 (* Exported: MAPi rui preserves inst_id *)
 Theorem map_inst_id_mapi_rui:
-  !lr lbl n fence insts.
+  !lr lbl n insts.
     MAP (\i. i.inst_id)
       (MAPi (\idx inst. remove_unused_inst
-        (live_after_at lr lbl idx n) (fence idx) inst) insts) =
+        (live_after_at lr lbl idx n) inst) insts) =
     MAP (\i. i.inst_id) insts
 Proof
   gen_tac >> gen_tac >> gen_tac >> gen_tac >> Induct >>
@@ -443,9 +441,9 @@ Proof
 QED
 
 Theorem rusp_block_inst_ids_sublist[local]:
-  !lr fence bb.
+  !lr bb.
     sublist (MAP (\i. i.inst_id)
-               (clear_nops_block (remove_unused_block lr fence bb)).bb_instructions)
+               (clear_nops_block (remove_unused_block lr bb)).bb_instructions)
             (MAP (\i. i.inst_id) bb.bb_instructions)
 Proof
   rw[clear_nops_block_def, remove_unused_block_def, LET_THM] >>
@@ -453,7 +451,7 @@ Proof
   qexists_tac `MAP (\i. i.inst_id)
     (MAPi (\idx inst. remove_unused_inst
       (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-      (fence idx) inst) bb.bb_instructions)` >>
+      inst) bb.bb_instructions)` >>
   conj_tac
   >- (irule MAP_SUBLIST >> simp[FILTER_sublist])
   >- simp[map_inst_id_mapi_rui, sublist_refl]
@@ -524,16 +522,16 @@ Proof
 QED
 
 Theorem rusp_block_insts_sublist[local]:
-  !lr fence bb.
+  !lr bb.
     sublist
-      (clear_nops_block (remove_unused_block lr fence bb)).bb_instructions
+      (clear_nops_block (remove_unused_block lr bb)).bb_instructions
       bb.bb_instructions
 Proof
   rw[clear_nops_block_def, remove_unused_block_def, LET_THM] >>
   irule filter_mapi_sublist >>
   rpt strip_tac >>
   qspecl_then [`live_after_at lr bb.bb_label i (LENGTH bb.bb_instructions)`,
-               `fence i`, `EL i bb.bb_instructions`]
+               `EL i bb.bb_instructions`]
     strip_assume_tac remove_unused_inst_cases >>
   gvs[mk_nop_inst_def]
 QED
@@ -618,8 +616,6 @@ Proof
       MEM_FILTER, MEM_MAPi] >>
   qspecl_then [`live_after_at (liveness_analyze fn) bk.bb_label idx
     (LENGTH bk.bb_instructions)`,
-    `msize_fence (liveness_analyze fn) (cfg_analyze fn) fn bk.bb_label idx
-      bk.bb_instructions`,
     `EL idx bk.bb_instructions`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def] >>
@@ -683,16 +679,12 @@ Theorem rui_identity_when_output_not_nopd[local]:
     remove_unused_inst
       (live_after_at (liveness_analyze func) bb.bb_label k
         (LENGTH bb.bb_instructions))
-      (msize_fence (liveness_analyze func) (cfg_analyze func) func
-        bb.bb_label k bb.bb_instructions)
       (EL k bb.bb_instructions) = EL k bb.bb_instructions
 Proof
   rpt strip_tac >> CCONTR_TAC >>
   qspecl_then
     [`live_after_at (liveness_analyze func) bb.bb_label k
         (LENGTH bb.bb_instructions)`,
-     `msize_fence (liveness_analyze func) (cfg_analyze func) func
-        bb.bb_label k bb.bb_instructions`,
      `EL k bb.bb_instructions`] strip_assume_tac
     remove_unused_inst_cases >> gvs[] >>
   qpat_x_assum `v NOTIN _` mp_tac >>
@@ -704,8 +696,6 @@ Proof
   qexists_tac `k` >> simp[] >>
   gvs[remove_unused_inst_def] >>
   Cases_on `is_removable (EL k bb.bb_instructions)` >> gvs[mk_nop_inst_def] >>
-  Cases_on `msize_fence (liveness_analyze func) (cfg_analyze func) func
-    bb.bb_label k bb.bb_instructions` >> gvs[mk_nop_inst_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
   rpt IF_CASES_TAC >> gvs[] >>
@@ -732,18 +722,14 @@ Proof
     FILTER (\i. i.inst_opcode <> NOP)
       (MAPi (\idx i. remove_unused_inst
         (live_after_at (liveness_analyze func) ob.bb_label idx
-          (LENGTH ob.bb_instructions))
-        (msize_fence (liveness_analyze func) (cfg_analyze func) func
-          ob.bb_label idx ob.bb_instructions) i)
+          (LENGTH ob.bb_instructions)) i)
       ob.bb_instructions)` >>
   simp[MEM_FILTER, MEM_MAPi] >>
   conj_tac >- (
     qexists_tac `ob with bb_instructions :=
       MAPi (\idx i. remove_unused_inst
         (live_after_at (liveness_analyze func) ob.bb_label idx
-          (LENGTH ob.bb_instructions))
-        (msize_fence (liveness_analyze func) (cfg_analyze func) func
-          ob.bb_label idx ob.bb_instructions) i)
+          (LENGTH ob.bb_instructions)) i)
       ob.bb_instructions` >>
     simp[] >> qexists_tac `ob` >> simp[]
   ) >>
@@ -752,12 +738,12 @@ QED
 
 (* Core identity: if rui result has opcode <> NOP, it returned the original *)
 Theorem rui_not_nop_identity_ssa[local]:
-  !live fenced inst.
-    (remove_unused_inst live fenced inst).inst_opcode <> NOP ==>
-    remove_unused_inst live fenced inst = inst
+  !live inst.
+    (remove_unused_inst live inst).inst_opcode <> NOP ==>
+    remove_unused_inst live inst = inst
 Proof
   rpt strip_tac >>
-  qspecl_then [`live`, `fenced`, `inst`] strip_assume_tac
+  qspecl_then [`live`, `inst`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def]
 QED
@@ -820,9 +806,7 @@ Proof
   (`bb'.bb_instructions = FILTER (\i. i.inst_opcode <> NOP)
     (MAPi (\idx i. remove_unused_inst
       (live_after_at (liveness_analyze func) bb_orig.bb_label idx
-        (LENGTH bb_orig.bb_instructions))
-      (msize_fence (liveness_analyze func) (cfg_analyze func) func
-        bb_orig.bb_label idx bb_orig.bb_instructions) i)
+        (LENGTH bb_orig.bb_instructions)) i)
     bb_orig.bb_instructions)` by (
     gvs[remove_unused_single_pass_def, LET_THM,
         clear_nops_function_def, function_map_transform_def, MEM_MAP,
@@ -830,9 +814,7 @@ Proof
     metis_tac[all_distinct_map_inj_mem])) >>
   qabbrev_tac `mapi_list = MAPi (\idx i. remove_unused_inst
     (live_after_at (liveness_analyze func) bb_orig.bb_label idx
-      (LENGTH bb_orig.bb_instructions))
-    (msize_fence (liveness_analyze func) (cfg_analyze func) func
-      bb_orig.bb_label idx bb_orig.bb_instructions) i)
+      (LENGTH bb_orig.bb_instructions)) i)
     bb_orig.bb_instructions` >>
   (`EL k_def mapi_list = EL k_def bb_orig.bb_instructions` by (
     simp[Abbr `mapi_list`, EL_MAPi] >>

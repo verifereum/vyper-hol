@@ -20,7 +20,7 @@
  * Helper:
  *   flush_copies           — finalize pending copies into output
  *   invalidate_loads       — remove loads overlapping a write
- *   is_volatile_memory     — barrier-triggering instruction
+ *   is_volatile_memory     — barrier-triggering instruction (write-effects check)
  *)
 
 Theory mmScan
@@ -56,13 +56,12 @@ End
 
 (* ===== Volatile memory check ===== *)
 
-(* Python: _volatile_memory — checks MEMORY or MSIZE in effects *)
+(* Python: _volatile_memory (#4914) — checks STORAGE/TRANSIENT/MEMORY write effects *)
 Definition is_volatile_memory_def:
   is_volatile_memory inst <=>
-    Eff_MEMORY IN read_effects inst.inst_opcode \/
-    Eff_MEMORY IN write_effects inst.inst_opcode \/
-    Eff_MSIZE IN read_effects inst.inst_opcode \/
-    Eff_MSIZE IN write_effects inst.inst_opcode
+    Eff_STORAGE IN write_effects inst.inst_opcode \/
+    Eff_TRANSIENT IN write_effects inst.inst_opcode \/
+    Eff_MEMORY IN write_effects inst.inst_opcode
 End
 
 (* ===== Operand helpers ===== *)

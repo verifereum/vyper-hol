@@ -32,7 +32,7 @@ Ancestors
 Definition effects_to_list_def:
   effects_to_list effs =
     FILTER (\e. e IN effs)
-      [Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY; Eff_MSIZE;
+      [Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY;
        Eff_IMMUTABLES; Eff_RETURNDATA; Eff_LOG; Eff_BALANCE; Eff_EXTCODE]
 End
 
@@ -103,9 +103,8 @@ Definition compute_effect_deps_def:
        This affects dep ordering in nub → EDA list → children → tiebreaker. *)
     let write_deps = FLAT (MAP (\weff.
       let war = et_get_reads et weff in
-      let waw = if weff = Eff_MSIZE then []
-                else case FLOOKUP et.et_last_write weff of
-                       SOME w => [w] | NONE => [] in
+      let waw = case FLOOKUP et.et_last_write weff of
+                      SOME w => [w] | NONE => [] in
       war ++ waw) w_effs) in
     (* RAW from reads *)
     let raw_deps = MAP THE (FILTER IS_SOME (MAP (\reff.

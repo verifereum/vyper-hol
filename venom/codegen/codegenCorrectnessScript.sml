@@ -9,11 +9,11 @@
  *   codegen_correct    — whole-context correctness (run_context vs run)
  *   codegen_fn_correct — per-function correctness (run_blocks vs run)
  *
- * MSIZE Exclusion
+ * MEMTOP Exclusion
  * ===============
- * MSIZE correspondence is excluded: asm/EVM memory may be longer
+ * MEMTOP correspondence is excluded: asm/EVM memory may be longer
  * than Venom memory due to spill slot expansion. Vyper never exposes
- * MSIZE to user code (used internally for free memory pointer).
+ * MEMTOP to user code (used internally for free memory pointer).
  * See memory_rel in codegenRelScript.sml.
  *
  * EVM Exception Classification

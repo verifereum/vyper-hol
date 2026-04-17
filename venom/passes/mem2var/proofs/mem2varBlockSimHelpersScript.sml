@@ -872,12 +872,11 @@ Proof
   metis_tac[step_inst_base_preserves_allocas]
 QED
 
-(* Write-effects exclusion: ops without MEMORY/MSIZE writes also don't
+(* Write-effects exclusion: ops without MEMORY writes also don't
    write IMMUTABLES, RETURNDATA, or LOG (given our other filters). *)
 Theorem no_mem_write_excludes_others:
   !op. ~is_terminator op /\ op <> INVOKE /\ ~is_alloca_op op /\
-    ~is_ext_call_op op /\ Eff_MEMORY NOTIN write_effects op /\
-    Eff_MSIZE NOTIN write_effects op ==>
+    ~is_ext_call_op op /\ Eff_MEMORY NOTIN write_effects op ==>
     Eff_IMMUTABLES NOTIN write_effects op /\
     Eff_RETURNDATA NOTIN write_effects op /\
     Eff_LOG NOTIN write_effects op
@@ -954,9 +953,7 @@ Theorem m2v_step_nonpromoted:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode /\
-    (Eff_MEMORY IN read_effects inst.inst_opcode \/
-     Eff_MSIZE IN read_effects inst.inst_opcode ==>
+    (Eff_MEMORY IN read_effects inst.inst_opcode ==>
      s1.vs_memory = s2.vs_memory) /\
     (Eff_TRANSIENT IN read_effects inst.inst_opcode ==>
      s1.vs_transient = s2.vs_transient) /\
@@ -997,9 +994,7 @@ Theorem m2v_inv_noix_step_nonpromoted:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode /\
-    (Eff_MEMORY IN read_effects inst.inst_opcode \/
-     Eff_MSIZE IN read_effects inst.inst_opcode ==>
+    (Eff_MEMORY IN read_effects inst.inst_opcode ==>
      s1.vs_memory = s2.vs_memory) /\
     (Eff_TRANSIENT IN read_effects inst.inst_opcode ==>
      s1.vs_transient = s2.vs_transient) /\
@@ -2862,7 +2857,7 @@ Theorem m2v_nonterminal_step_dispatch:
     alloca_bridge fn s1 /\
     m2v_nonpromoted_access_safe fn s1 /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
     MEM bb fn.fn_blocks /\
     bb_well_formed bb /\
     i < LENGTH bb.bb_instructions - 1 /\
@@ -2917,21 +2912,19 @@ Resume m2v_nonterminal_step_dispatch[nonpromoted]:
      gvs[m2v_fresh_names_disjoint_def] >> res_tac) >>
   (* INVOKE: contradicts precondition *)
   `inst.inst_opcode <> INVOKE` by (gvs[EVERY_MEM] >> res_tac) >>
-  (* Case split: memory/MSIZE/alloca/ext_call effects? *)
+  (* Case split: memory/alloca/ext_call effects? *)
   Cases_on `Eff_MEMORY IN write_effects inst.inst_opcode \/
-            Eff_MSIZE IN write_effects inst.inst_opcode \/
             Eff_MEMORY IN read_effects inst.inst_opcode \/
-            Eff_MSIZE IN read_effects inst.inst_opcode \/
             is_alloca_op inst.inst_opcode \/
             is_ext_call_op inst.inst_opcode`
-  >- ((* Complex: mem/MSIZE/alloca/ext_call effects *)
+  >- ((* Complex: mem/alloca/ext_call effects *)
       Cases_on `is_alloca_op inst.inst_opcode`
       >- (suspend "alloca")
       >> Cases_on `is_ext_call_op inst.inst_opcode`
       >- (suspend "ext_call")
-      >> (* Memory/MSIZE effects on nonpromoted inst *)
+      >> (* Memory effects on nonpromoted inst *)
       suspend "nonpromoted_mem")
-  >> (* No mem/MSIZE/alloca/ext_call effects.
+  >> (* No mem/alloca/ext_call effects.
         Side-effectful ops (SSTORE etc.) have inst_outputs=[] from fn_inst_wf,
         so they satisfy m2v_step_nonpromoted's preconditions. *)
   gvs[] >>
@@ -3213,14 +3206,14 @@ Proof
   simp[mstore8_def, write_memory_with_expansion_def, LET_THM]
 QED
 
-(* Enumerate the ~14 opcodes with memory/MSIZE effects that are
-   not alloca, not ext_call, not terminator, not INVOKE, not MSIZE.
+(* Enumerate the ~14 opcodes with memory effects that are
+   not alloca, not ext_call, not terminator, not INVOKE, not MEMTOP.
    Proved by Cases_on once; avoids repeating 70-way split inline. *)
 Triviality mem_effect_opcodes:
   !op. ~is_alloca_op op /\ ~is_ext_call_op op /\ ~is_terminator op /\
-       op <> INVOKE /\ op <> MSIZE /\
-       (Eff_MEMORY IN write_effects op \/ Eff_MSIZE IN write_effects op \/
-        Eff_MEMORY IN read_effects op \/ Eff_MSIZE IN read_effects op) ==>
+       op <> INVOKE /\ op <> MEMTOP /\
+       (Eff_MEMORY IN write_effects op \/
+        Eff_MEMORY IN read_effects op) ==>
        op = MLOAD \/ op = MSTORE \/ op = MSTORE8 \/ op = MCOPY \/
        op = SHA3 \/ op = LOG \/ op = CALLDATACOPY \/ op = CODECOPY \/
        op = EXTCODECOPY \/ op = RETURNDATACOPY \/ op = DLOADBYTES \/
@@ -3642,9 +3635,9 @@ QED
 Finalise m2v_nonpromoted_mem_dispatch
 
 Resume m2v_nonterminal_step_dispatch[nonpromoted_mem]:
-  (* Opcodes with memory/MSIZE effects, not alloca, not ext_call.
+  (* Opcodes with memory effects, not alloca, not ext_call.
      Narrow to 14 opcodes, then handle per-category. *)
-  `inst.inst_opcode <> MSIZE`
+  `inst.inst_opcode <> MEMTOP`
     by (qpat_x_assum `EVERY _ bb.bb_instructions` mp_tac >>
         simp[EVERY_MEM] >> disch_then irule >>
         simp[Abbr `inst`] >> simp[EL_MEM]) >>

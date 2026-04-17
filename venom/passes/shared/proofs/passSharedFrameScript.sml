@@ -751,26 +751,9 @@ Proof
   gvs[inst_defs_def, pred_setTheory.SUBSET_UNION]
 QED
 
-(* Any write effect implies Eff_MSIZE (for eligible ops, proved generally) *)
-Theorem memory_implies_msize[local]:
-  Eff_MEMORY IN write_effects op ==> Eff_MSIZE IN write_effects op
-Proof Cases_on `op` >> EVAL_TAC
-QED
-
-Theorem immutables_implies_msize[local]:
-  Eff_IMMUTABLES IN write_effects op ==> Eff_MSIZE IN write_effects op
-Proof Cases_on `op` >> EVAL_TAC
-QED
-
-Theorem returndata_implies_msize[local]:
-  Eff_RETURNDATA IN write_effects op ==> Eff_MSIZE IN write_effects op
-Proof Cases_on `op` >> EVAL_TAC
-QED
-
-Theorem log_implies_msize[local]:
-  Eff_LOG IN write_effects op ==> Eff_MSIZE IN write_effects op
-Proof Cases_on `op` >> EVAL_TAC
-QED
+(* Eff_MSIZE no longer exists (MSIZE→MEMTOP, upstream #4909).
+   The *_implies_msize theorems are deleted because their conclusion
+   references a non-existent effect. *)
 
 (* sstore only modifies .storage sub-field of accounts *)
 Theorem sstore_preserves_code[local]:

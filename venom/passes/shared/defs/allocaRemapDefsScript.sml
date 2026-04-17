@@ -248,7 +248,7 @@ Definition alloca_remap_rel_def:
       FLOOKUP s1.vs_allocas aid = SOME (off1, sz) /\
       FLOOKUP remap aid = SOME new_off ==>
       FLOOKUP s2.vs_allocas aid = SOME (new_off, sz)) /\
-    (* 7. Memory lengths agree (needed for MSIZE determinism) *)
+    (* 7. Memory lengths agree (needed for MEMTOP determinism) *)
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
     (* 8. Scalar state fields agree.
        vs_alloca_next intentionally omitted — naturally differs

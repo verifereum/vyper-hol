@@ -84,9 +84,9 @@ End
    - at/above sa_next_offset: both zero or user-written
 
    NOTE: lengths may differ (asm memory may be longer due to spill
-   expansion). This means MSIZE returns different values on the Venom
-   and asm sides. MSIZE correspondence is explicitly excluded from
-   the codegen correctness theorem. Vyper never exposes MSIZE to
+   expansion). This means MEMTOP returns different values on the Venom
+   and asm sides. MEMTOP correspondence is explicitly excluded from
+   the codegen correctness theorem. Vyper never exposes MEMTOP to
    user code — it is used internally by the compiler for the free
    memory pointer, which the compiler controls. *)
 Definition memory_rel_def:
@@ -110,7 +110,7 @@ Definition step_mem_safe_def:
 End
 
 (* Memory is pre-expanded to cover the spill high-water mark.
-   Ensures MSIZE agrees between Venom and asm from the start.
+   Ensures MEMTOP agrees between Venom and asm from the start.
    Established at context entry by emitting a memory-touching op
    up to the maximum sa_next_offset across all functions.
    spill_hwm is the maximum sa_next_offset reached during execution
@@ -134,7 +134,7 @@ End
    (concretize_mem_loc sets it). step_mem_safe is a precondition
    on the input program / initial state.
 
-   NOTE: MSIZE correspondence is excluded — asm memory may be longer
+   NOTE: MEMTOP correspondence is excluded — asm memory may be longer
    than Venom memory due to spill slots. See memory_rel comment. *)
 Definition venom_asm_rel_def:
   venom_asm_rel label_offsets ps vs as ⇔

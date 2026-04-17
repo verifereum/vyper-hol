@@ -107,7 +107,7 @@ QED
 (* ===== NOP output liveness helpers ===== *)
 
 Theorem remove_unused_inst_nop_outputs_not_live[local]:
-  !live fence inst. remove_unused_inst live fence inst = mk_nop_inst inst ==>
+  !live inst. remove_unused_inst live inst = mk_nop_inst inst ==>
     EVERY (\v. ~MEM v live) inst.inst_outputs
 Proof
   rpt gen_tac >> simp[remove_unused_inst_def] >>
@@ -117,7 +117,7 @@ Proof
 QED
 
 Theorem nop_output_not_live_at_exit:
-  !fn lr cfg lbl bb idx inst v fence.
+  !fn lr cfg lbl bb idx inst v.
     wf_function fn /\ ssa_form fn /\
     lr = liveness_analyze fn /\
     cfg = cfg_analyze fn /\
@@ -127,7 +127,7 @@ Theorem nop_output_not_live_at_exit:
     EL idx bb.bb_instructions = inst /\
     remove_unused_inst
       (live_after_at lr lbl idx (LENGTH bb.bb_instructions))
-      (fence idx) inst = mk_nop_inst inst /\
+      inst = mk_nop_inst inst /\
     MEM v inst.inst_outputs ==>
     ~MEM v (live_vars_at lr lbl (LENGTH bb.bb_instructions))
 Proof
@@ -150,7 +150,7 @@ QED
 
 (* v not live at idx+1 (directly from NOP condition) *)
 Theorem nop_output_not_live_after_def[local]:
-  !fn lr cfg lbl bb idx inst v fence.
+  !fn lr cfg lbl bb idx inst v.
     wf_function fn /\ ssa_form fn /\
     lr = liveness_analyze fn /\
     cfg = cfg_analyze fn /\
@@ -160,7 +160,7 @@ Theorem nop_output_not_live_after_def[local]:
     EL idx bb.bb_instructions = inst /\
     remove_unused_inst
       (live_after_at lr lbl idx (LENGTH bb.bb_instructions))
-      (fence idx) inst = mk_nop_inst inst /\
+      inst = mk_nop_inst inst /\
     MEM v inst.inst_outputs ==>
     ~MEM v (live_vars_at lr lbl (SUC idx))
 Proof
@@ -639,8 +639,7 @@ Proof
   qabbrev_tac `def_inst = EL idx_b def_bb.bb_instructions` >>
   qabbrev_tac `lr = liveness_analyze func` >>
   qabbrev_tac `cfg = cfg_analyze func` >>
-  qabbrev_tac `fence = \idx. msize_fence lr cfg func def_bb.bb_label idx
-                                        def_bb.bb_instructions` >>
+
   (* lookup_block for both blocks *)
   `lookup_block def_bb.bb_label func.fn_blocks = SOME def_bb` by (
     irule wf_lookup_block >> simp[]) >>
@@ -724,8 +723,6 @@ Proof
     `remove_unused_inst
        (live_after_at (liveness_analyze func) def_bb.bb_label idx_b
           (LENGTH def_bb.bb_instructions))
-       (msize_fence (liveness_analyze func) (cfg_analyze func) func
-          def_bb.bb_label idx_b def_bb.bb_instructions)
        def_bb.bb_instructions❲idx_b❳ =
      mk_nop_inst def_bb.bb_instructions❲idx_b❳` by (
       simp[remove_unused_inst_def] >>
@@ -735,9 +732,7 @@ Proof
                (LENGTH def_bb.bb_instructions))` by (
       qspecl_then [`func`, `liveness_analyze func`, `cfg_analyze func`,
         `def_bb.bb_label`, `def_bb`, `idx_b`,
-        `def_bb.bb_instructions❲idx_b❳`, `v`,
-        `\idx. msize_fence (liveness_analyze func) (cfg_analyze func)
-                 func def_bb.bb_label idx def_bb.bb_instructions`]
+        `def_bb.bb_instructions❲idx_b❳`, `v`]
         mp_tac nop_output_not_live_at_exit >>
       simp[]) >>
     (* v is live at use block entry *)
