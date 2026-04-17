@@ -14,7 +14,6 @@ INCLUDES = \
   remove_unused \
   concretize_mem_loc \
   lower_dload \
-  fix_mem_locations \
   branch_opt \
   single_use_expansion \
   assert_combiner \
