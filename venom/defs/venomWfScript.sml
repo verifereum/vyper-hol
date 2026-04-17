@@ -83,7 +83,7 @@ Definition inst_wf_def:
     | BLOBBASEFEE => LENGTH inst.inst_outputs = 1
     | CALLDATASIZE => LENGTH inst.inst_outputs = 1
     | RETURNDATASIZE => LENGTH inst.inst_outputs = 1
-    | MSIZE => LENGTH inst.inst_outputs = 1
+    | MEMTOP => LENGTH inst.inst_outputs = 1
     | CODESIZE => LENGTH inst.inst_outputs = 1
     | SELFBALANCE => LENGTH inst.inst_outputs = 1
     (* ---- exec_read1: 1 operand, 1 output ---- *)

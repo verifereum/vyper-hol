@@ -144,7 +144,7 @@ Triviality step_inst_read0_equiv:
       [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE;
        CHAINID; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO;
        GASLIMIT; BASEFEE; BLOBBASEFEE; SELFBALANCE;
-       CALLDATASIZE; RETURNDATASIZE; MSIZE; CODESIZE] ==>
+       CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rw[] >> simp[step_inst_base_def] >>
@@ -730,7 +730,7 @@ Proof
     `MEM inst.inst_opcode
        [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;
         COINBASE;TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;
-        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MSIZE;
+        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MEMTOP;
         CODESIZE]`
       by simp[] >> drule_all step_inst_read0_equiv >> simp[],
     `MEM inst.inst_opcode
