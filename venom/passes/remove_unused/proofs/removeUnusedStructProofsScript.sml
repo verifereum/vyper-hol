@@ -435,7 +435,7 @@ Theorem map_inst_id_mapi_rui:
         (live_after_at lr lbl idx n) inst) insts) =
     MAP (\i. i.inst_id) insts
 Proof
-  gen_tac >> gen_tac >> gen_tac >> gen_tac >> Induct >>
+  Induct_on `insts` >>
   simp[MAPi_def, rui_preserves_inst_id, combinTheory.o_DEF] >>
   simp[SF ETA_ss]
 QED
