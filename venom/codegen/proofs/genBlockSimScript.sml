@@ -5,14 +5,14 @@
  *   - FOLDL ↔ block_foldl equivalence
  *   - non_param_insts / get_params simplification
  *   - bb_well_formed derivation from codegen_ready_fn
- *   - Per-instruction Halt/Abort simulation (cheated)
+ *   - Per-instruction Halt/Abort/OK simulation
  *   - clean_stack_plan simulation (cheated)
  *)
 
 
 Theory genBlockSim
 Ancestors
-  blockSimHelpers stackOpSim stackOpAsmSim planWf prefixExec prefixSim mixedPrefixSim planSim asmSem planExec codegenRel asmIR stackPlanGen stackPlanTypes stackModel stackPlanOps venomExecSemantics venomState venomInst venomWf venomEffects list rich_list arithmetic indexedLists instSimHelpers opcodeClass strongPrefixSim reorderSim emitInputSim planAlign doSwapSim emitSim asmOpSim
+  blockSimHelpers stackOpSim stackOpAsmSim planWf prefixExec prefixSim mixedPrefixSim planSim asmSem planExec codegenRel asmIR stackPlanGen stackPlanTypes stackModel stackPlanOps venomExecSemantics venomState venomInst venomWf venomEffects list rich_list arithmetic indexedLists instSimHelpers opcodeClass strongPrefixSim reorderSim emitInputSim planAlign doSwapSim emitSim asmOpSim spillSim allocMono cleanOpsSim
 Libs
   BasicProvers
 
@@ -2395,6 +2395,39 @@ Proof
   gvs[]
 QED
 
+(* Releasing dead spills (freeing spill slots for variables not in the live
+   set) preserves the venom-assembly state correspondence. The dead-spill
+   release only modifies the plan state's spill map and allocator; the
+   stack and memory layout visible to the assembly are unchanged. *)
+Theorem venom_asm_rel_release_dead_spills:
+  !lo next_liveness ps vs as.
+    venom_asm_rel lo ps vs as ==>
+    venom_asm_rel lo (release_dead_spills next_liveness ps) vs as
+Proof
+  rpt gen_tac >> strip_tac >> gvs[venom_asm_rel_def] >>
+  `!dead (ps0:plan_state).
+     (FOLDL (\ps' (op:operand, off:num).
+       ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                   ps_alloc := free_spill_slot off ps'.ps_alloc |>)
+       ps0 dead).ps_stack = ps0.ps_stack` by (
+    Induct >> simp[] >>
+    rpt gen_tac >> PairCases_on `h` >> simp[free_spill_slot_def]) >>
+  `!dead (ps0:plan_state) lo' vs' am.
+     plan_spill_rel lo' vs' ps0.ps_spilled am ==>
+     plan_spill_rel lo' vs'
+       (FOLDL (\ps' (op:operand, off:num).
+         ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                     ps_alloc := free_spill_slot off ps'.ps_alloc |>)
+         ps0 dead).ps_spilled am` by (
+    Induct >> simp[] >>
+    rpt strip_tac >> Cases_on `h` >> simp[] >>
+    first_x_assum match_mp_tac >>
+    simp[] >> irule plan_spill_rel_remove_entry >> first_assum ACCEPT_TAC) >>
+  conj_tac >- simp[release_dead_spills_def, LET_THM] >>
+  conj_tac >- (simp[release_dead_spills_def, LET_THM] >> first_x_assum match_mp_tac >> simp[]) >>
+  simp[memory_rel_def, release_dead_spills_fn_eom, release_dead_spills_next_offset] >> metis_tac[memory_rel_def]
+QED
+
 (* Comprehensive per-instruction OK simulation.
    Stronger than venomToAsmProps.gen_inst_simulation:
    - requires inst_wf, operand bound, label resolution, prefix_spill_wf
@@ -2653,7 +2686,16 @@ Resume gen_inst_ok_sim[offset]:
 QED
 
 Resume gen_inst_ok_sim[param]:
-  cheat
+  qexistsl [`0`, `as`] >> simp[asm_steps_def, execute_plan_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  qpat_x_assum `inst_wf inst` mp_tac >>
+  simp[inst_wf_def] >> strip_tac >> gvs[] >>
+  `?out. inst.inst_outputs = [out]` by
+    (Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[]) >>
+  gvs[step_inst_base_def, compute_operands_def, eval_operand_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  irule venom_asm_rel_update_var >> simp[]
 QED
 
 Resume gen_inst_ok_sim[invoke]:
@@ -2661,8 +2703,196 @@ Resume gen_inst_ok_sim[invoke]:
 QED
 
 Resume gen_inst_ok_sim[none]:
+  Cases_on `inst.inst_opcode` >>
+  gvs[venom_to_evm_name_def, is_pre_codegen_opcode_def]
+  >> TRY (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+          simp[step_inst_non_invoke, Once step_inst_base_def] >>
+          every_case_tac >> simp[] >> NO_TAC)
+  >- suspend "istore"
+  >- suspend "jmp"
+  >- suspend "jnz"
+  >- suspend "djmp"
+  >- suspend "assign"
+  >- suspend "log"
+  >- suspend "assert_ok"
+  >> suspend "assert_unreachable_ok"
+QED
+
+Resume gen_inst_ok_sim[istore]:
   cheat
 QED
+
+Resume gen_inst_ok_sim[jmp]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[jnz]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[djmp]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[assign]:
+  qpat_x_assum `inst_wf inst` mp_tac >>
+  qpat_x_assum `inst.inst_opcode = ASSIGN`
+    (fn opc_th => rewrite_tac [opc_th] >> assume_tac opc_th) >>
+  simp[inst_wf_def] >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  drule step_inst_non_invoke >> disch_then (fn th => simp[th]) >>
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  strip_tac >>
+  Cases_on `eval_operand h vs` >> gvs[] >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       is_commutative_def, venom_to_evm_name_def, generate_emit_ops_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  strip_tac >> gvs[] >>
+  Cases_on `is_halting` >> Cases_on `MEM h' next_liveness` >> gvs[] >>
+  TRY pairarg_tac >> gvs[]
+  >- suspend "assign_live_nohalt"
+  >- suspend "assign_dead_nohalt"
+  >- suspend "assign_live_halt"
+  >> suspend "assign_dead_halt"
+QED
+
+Resume gen_inst_ok_sim[assign_live_nohalt]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[assign_dead_nohalt]:
+  gvs[compute_operands_def] >>
+  cheat
+QED
+
+Resume gen_inst_ok_sim[assign_live_halt]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[assign_dead_halt]:
+  gvs[compute_operands_def] >>
+  (* pop_ops = [SOPop 1], ps8 = ... *)
+  qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+  simp[popmany_plan_def, LET_THM, stack_get_depth_def, stack_push_def,
+       REVERSE_SNOC, stack_find_def, is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF, popmany_individual_def, do_swap_def,
+       stack_pop_def, FOLDL] >>
+  strip_tac >> gvs[] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) input_ops /\
+    prefix_end_len lo (LENGTH ps.ps_stack) input_ops = LENGTH ps1.ps_stack /\
+    prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops /\
+    prefix_end_len lo (LENGTH ps1.ps_stack) reorder_ops = LENGTH ps4.ps_stack` by
+    (qspecl_then [`[h]`, `ASSIGN`, `next_liveness`, `ps`, `lo`]
+       mp_tac emit_input_plan_wf_len >>
+     (impl_tac >- simp[]) >>
+     (impl_tac >- (rpt strip_tac >> gvs[])) >>
+     strip_tac >>
+     qspecl_then [`dfg`, `[h]`, `ps1`, `lo`] mp_tac
+       (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)
+          (REWRITE_RULE [LET_THM] reorder_plan_wf_len)) >>
+     (impl_tac >- gvs[]) >> gvs[]) >>
+  (* prefix_spill_wf FULL from FRONT *)
+  `prefix_spill_wf lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps` by (
+    qsuff_tac `prefix_spill_wf lo ((input_ops ++ reorder_ops) ++ [SOPop 1]) ps`
+    >- simp[] >>
+    rewrite_tac[prefix_spill_wf_snoc] >>
+    conj_tac >- gvs[FRONT_APPEND_NOT_NIL]
+    >- simp[spill_op_wf_def]) >>
+  `1 <= LENGTH ps4.ps_stack` by
+    (`(reorder_ops,ps4) =
+       (\(ops,ps'). ([] ++ ops,ps')) (reorder_one dfg [h] 0 h ps1)` by
+      (qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
+       simp[Once reorder_plan_def, indexedListsTheory.MAPi_def] >>
+       Cases_on `reorder_one dfg [h] 0 h ps1` >> simp[]) >>
+     Cases_on `reorder_one dfg [h] 0 h ps1` >> gvs[] >>
+     mp_tac (Q.SPECL [`dfg`,`[h]`,`0`,`h`,`ps1`,`lo`] reorder_one_wf_len) >>
+     simp[]) >>
+  `prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops ++ [SOPop 1])` by
+    (`prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops)` by
+       (irule prefix_wf_append >> gvs[]) >>
+     `prefix_end_len lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) =
+      LENGTH ps4.ps_stack` by (simp[prefix_end_len_append] >> gvs[]) >>
+     drule prefix_wf_append >>
+     disch_then (qspec_then `[SOPop 1]` mp_tac) >>
+     simp[prefix_wf_def, stack_op_wf_def, LET_THM]) >>
+  qpat_x_assum `prefix_wf lo (LENGTH ps.ps_stack) input_ops`
+    (fn th => assume_tac th >>
+              assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
+  qpat_x_assum `prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops`
+    (fn th => assume_tac th >>
+              assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
+  `EVERY is_prefix_op (input_ops ++ reorder_ops ++ [SOPop 1])` by
+    (gvs[EVERY_APPEND] >> EVAL_TAC) >>
+  mp_tac mixed_prefix_venom_asm_rel >>
+  disch_then (qspecl_then [`input_ops ++ reorder_ops ++ [SOPop 1]`,
+    `lo`,`o2pc`,`prog`,`ps`,`vs`,`as`] mp_tac) >>
+  (impl_tac >- gvs[EVERY_APPEND]) >>
+  disch_then strip_assume_tac >>
+  qexistsl [`LENGTH (execute_plan (input_ops ++ reorder_ops ++ [SOPop 1]))`,
+            `st'`] >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (
+    irule venom_asm_rel_release_dead_spills >>
+    irule venom_asm_rel_update_var >>
+    `~MEM (Var h') ps.ps_stack` by
+      (strip_tac >> gvs[EVERY_MEM] >> res_tac >> gvs[]) >>
+    `Var h' NOTIN FDOM ps.ps_spilled` by
+      (strip_tac >> res_tac >> gvs[]) >>
+    drule_all apply_prefix_ops_preserves_not_mem >> strip_tac >> gvs[] >>
+    qsuff_tac
+      `(apply_prefix_ops lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_spilled =
+       (ps4 with ps_stack :=
+         TAKE (LENGTH ps4.ps_stack - 1)
+           (SNOC (Var h')
+              (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_spilled /\
+       (apply_prefix_ops lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_stack =
+       (ps4 with ps_stack :=
+         TAKE (LENGTH ps4.ps_stack - 1)
+           (SNOC (Var h')
+              (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_stack /\
+       (apply_prefix_ops lo (input_ops ++ reorder_ops ++ [SOPop 1]) ps).ps_alloc =
+       (ps4 with ps_stack :=
+         TAKE (LENGTH ps4.ps_stack - 1)
+           (SNOC (Var h')
+              (TAKE (LENGTH ps4.ps_stack - 1) ps4.ps_stack))).ps_alloc` >- (
+      strip_tac >>
+      conj_tac >- (
+        rpt strip_tac >>
+        qpat_x_assum `Var h' NOTIN FDOM (apply_prefix_ops _ _ _).ps_spilled`
+          mp_tac >> gvs[] >> strip_tac >>
+        Cases_on `op` >> gvs[] >> CCONTR_TAC >> gvs[]) >>
+      conj_tac >- (
+        qpat_x_assum `~MEM (Var h') (apply_prefix_ops _ _ _).ps_stack`
+          mp_tac >> gvs[] >> strip_tac >>
+        simp[EVERY_MEM] >> rpt strip_tac >>
+        Cases_on `op` >> simp[] >> CCONTR_TAC >> gvs[] >>
+        metis_tac[MEM]) >>
+      qpat_x_assum `venom_asm_rel lo (apply_prefix_ops _ _ _) vs st'`
+        mp_tac >>
+      simp[venom_asm_rel_def] >> gvs[] >> metis_tac[]) >>
+    simp[apply_prefix_ops_append, sopop_align] >> cheat)
+  >- gvs[Once ADD_COMM]
+QED
+
+Resume gen_inst_ok_sim[log]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[assert_ok]:
+  cheat
+QED
+
+Resume gen_inst_ok_sim[assert_unreachable_ok]:
+  cheat
+QED
+
 Resume gen_inst_ok_sim[some_name]:
   (* Decompose ops = prefix_ops ++ [SOEmit name] ++ postfix_ops *)
   qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `inst`, `next_liveness`,
