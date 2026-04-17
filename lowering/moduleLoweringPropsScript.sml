@@ -8,6 +8,12 @@
  *   compile_entry_checks_correct — nonpayable/calldatasize checks (single-block)
  *   compile_entry_checks_nonpayable_revert — nonpayable revert (derived)
  *   compile_constructor_epilogue_correct — runtime code copy + RETURN (single-block)
+ *   compile_generate_runtime_correct — top-level module correctness (stitching)
+ *
+ * Definitions:
+ *   runtime_input_labels — labels the caller must supply as external
+ *   runtime_inputs_ok — well-formed runtime compilation inputs
+ *   dispatch_labels_covered — selector labels ⊆ external fn entry labels
  *
  * Helper (no standalone correctness — always composed):
  *   compile_decode_args_nil   — empty arg list is no-op
@@ -88,10 +94,24 @@ End
 
 (* Linear dispatch creates blocks that jump to fallback_lbl or fn_labels
    from the selector list. These are external labels (fn bodies, fallback
-   handler) assembled separately. The fragment exits to one of them. *)
+   handler) assembled separately. The fragment exits to one of them.
+
+   HYPOTHESES (added 2026-04-17 after counterexample):
+   - compile_state_ok st: pre-state has well-formed label bindings
+   - label_external st fallback_lbl: fallback label is not already bound
+     in st and wasn't allocated by a future fresh_label (so
+     compile_selector_dispatch_linear cannot reuse it for an internal
+     @dispatch_/@match_/@next_ label)
+   - EVERY (label_external st) (MAP SND selectors): same for per-fn labels
+   - ALL_DISTINCT (fallback_lbl :: MAP SND selectors): no two external
+     labels collide (so JNZ to one doesn't accidentally equal another) *)
 Theorem compile_selector_dispatch_linear_correct:
   ∀ selectors fallback_lbl ss st st' ctx.
     compile_selector_dispatch_linear selectors fallback_lbl st = ((), st') ∧
+    compile_state_ok st ∧
+    label_external st fallback_lbl ∧
+    EVERY (label_external st) (MAP SND selectors) ∧
+    ALL_DISTINCT (fallback_lbl :: MAP SND selectors) ∧
     fresh_vars_wrt st ss ∧
     ¬ss.vs_halted
     ⇒
@@ -100,12 +120,16 @@ Theorem compile_selector_dispatch_linear_correct:
       (ss'.vs_current_bb = fallback_lbl ∨
        MEM ss'.vs_current_bb (MAP SND selectors))
 Proof
+  (* Original proof attempt (pre-hypothesis-fix). Preserved for reference;
+     the chain through emit_op_*_correct + exec_block_inst_seq_jnz is the
+     intended shape after the new hypotheses discharge the label-collision
+     case in run_fragment_blocks.
+
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_selector_dispatch_linear _ _ _ = _` mp_tac >>
   simp[compile_selector_dispatch_linear_def, comp_ignore_bind_def, comp_bind_def] >>
   rpt (pairarg_tac >> simp[]) >>
   strip_tac >>
-  (* Step 1: execute CDS preamble (CALLDATASIZE, LT, ISZERO) *)
   drule_all emit_op_CALLDATASIZE_correct >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st cs') ss = OK ss1` >>
   drule_at (Pos last) emit_op_LT_correct >>
@@ -113,40 +137,29 @@ Proof
   disch_then (qspec_then `4w` mp_tac) >>
   simp[eval_operand_lit] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts cs' cs'') ss1 = OK ss2` >>
-  (* Get inst_extends BEFORE consuming the ISZERO equation *)
   imp_res_tac inst_extends_emit_op >>
   imp_res_tac inst_extends_emit_inst >>
   imp_res_tac fresh_label_props >>
-  (* Now apply ISZERO correctness *)
   drule_at (Pos last) emit_op_ISZERO_correct >>
   disch_then drule >> disch_then drule >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts cs'' cs'³') ss2 = OK ss3` >>
-  (* Compose run_inst_seq: st→cs'→cs''→cs''' *)
-  `run_inst_seq (emitted_insts st cs'') ss = OK ss2` by
-    metis_tac[run_inst_seq_compose_ok] >>
-  `inst_extends st cs''` by metis_tac[inst_extends_trans] >>
-  `run_inst_seq (emitted_insts st cs'³') ss = OK ss3` by
-    metis_tac[run_inst_seq_compose_ok] >>
-  `inst_extends st cs'³'` by metis_tac[inst_extends_trans] >>
-  (* We have: run_inst_seq (emitted_insts st cs'3') ss = OK ss3
-     Entry block: st.cs_current_insts ++ emitted_insts st cs'3' ++ [JNZ_inst]
-     where cs'4' state has JNZ appended (via emit_inst JNZ).
-     But actually the entry block in assemble_blocks st' is the LAST block
-     assembled. The entry label is st.cs_current_bb.
-     
-     The entry block instructions are st.cs_current_insts ++ [CDS, LT, ISZERO, JNZ].
-     We need to use exec_block_inst_seq_jnz to show exec_block produces
-     jump_to (dispatch_lbl or fallback_lbl). *)
-  (* Step 3: Use exec_block_inst_seq_jnz for entry block execution *)
-  cheat >>
-  suspend "main_after_preamble"
+  ... (Step 3: exec_block_inst_seq_jnz, case split on JNZ cond,
+       induction on selectors for dispatch branch) ...
+  *)
+  cheat
 QED
 
-(* Sparse dispatch: same pattern, selectors have trailing-zeroes flag. *)
+(* Sparse dispatch: like linear dispatch but uses bucket-based matching
+   with selectors that carry a trailing-zeroes flag. Exits to
+   fallback_lbl or one of the per-fn labels in selectors.
+   Same label-space hypotheses as linear dispatch. *)
 Theorem compile_selector_dispatch_sparse_correct:
   ∀ selectors bucket_count fallback_lbl ss st st' ctx.
     compile_selector_dispatch_sparse selectors bucket_count fallback_lbl st =
       ((), st') ∧
+    compile_state_ok st ∧
+    label_external st fallback_lbl ∧
+    EVERY (label_external st) (MAP (FST o SND) selectors) ∧
+    ALL_DISTINCT (fallback_lbl :: MAP (FST o SND) selectors) ∧
     fresh_vars_wrt st ss ∧
     ¬ss.vs_halted
     ⇒
@@ -155,7 +168,6 @@ Theorem compile_selector_dispatch_sparse_correct:
       (ss'.vs_current_bb = fallback_lbl ∨
        MEM ss'.vs_current_bb (MAP (FST o SND) selectors))
 Proof
-  gvs[fresh_vars_wrt_def] >>
   cheat
 QED
 
@@ -164,12 +176,17 @@ QED
 (* compile_entry_point_kwargs: inits kwargs + JMP to common_label.
    Replaces standalone compile_init_kwargs_correct — init_kwargs is a
    fragment (no terminator) always composed within entry_point_kwargs
-   or similar wrapper. *)
+   or similar wrapper.
+
+   Label-space hypothesis: common_label is external to st (not yet bound
+   and outside the future fresh_label co-domain). *)
 Theorem compile_entry_point_kwargs_correct:
   ∀ cenv kwarg_vars calldata_offset kwargs_from_calldata common_label
     ss st st' ctx.
     compile_entry_point_kwargs cenv kwarg_vars calldata_offset
                                kwargs_from_calldata common_label st = ((), st') ∧
+    compile_state_ok st ∧
+    label_external st common_label ∧
     fresh_vars_wrt st ss ∧
     ¬ss.vs_halted
     ⇒
@@ -549,4 +566,79 @@ Proof
   drule_at (Pos hd) (Q.ISPEC `\s. s.vs_halted` run_inst_seq_preserves_field) >>
   (impl_tac >- (rpt strip_tac >> res_tac >> fs[])) >>
   simp[]
+QED
+
+(* ===== Top-Level Module Correctness ===== *)
+
+(* Labels the caller must supply as external: selector fn targets,
+   external entry labels, internal fn labels. These must be pairwise
+   distinct and external to st (not already bound, not in future
+   fresh_label co-domain). In practice the frontend allocates these
+   via fresh_label before calling compile_generate_runtime, and
+   cs_next_label is advanced past all of them. *)
+Definition runtime_input_labels_def:
+  runtime_input_labels selectors external_fns internal_fns =
+    MAP (λ(sel,lbl,has_tz). lbl) selectors ++
+    MAP (λ(entry_lbl, cenv, pos_args, min_cds, is_payable,
+            is_nr, nkey, use_trans, is_view, body, ret_type).
+           entry_lbl) external_fns ++
+    MAP (λ(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
+            is_view, is_ctor, imm_len, body, ret_type).
+           fn_lbl) internal_fns
+End
+
+(* Selector-declared function labels must match up with external_fn
+   entry labels so that a JMP from dispatch lands on an emitted block. *)
+Definition dispatch_labels_covered_def:
+  dispatch_labels_covered selectors external_fns ⇔
+    set (MAP (λ(sel,lbl,_). lbl) selectors) ⊆
+      set (MAP (λ(entry_lbl,_,_,_,_,_,_,_,_,_,_). entry_lbl) external_fns)
+End
+
+Definition runtime_inputs_ok_def:
+  runtime_inputs_ok selectors external_fns internal_fns st ⇔
+    compile_state_ok st ∧
+    EVERY (label_external st)
+          (runtime_input_labels selectors external_fns internal_fns) ∧
+    ALL_DISTINCT (runtime_input_labels selectors external_fns internal_fns) ∧
+    dispatch_labels_covered selectors external_fns
+End
+
+(* Top-level correctness of compile_generate_runtime.
+   Under well-formed inputs (frontend-allocated labels are fresh wrt st,
+   pairwise distinct, selector labels match external_fn labels), the
+   assembled runtime function executes to one of:
+   - Halt ss'              (normal RETURN/STOP from a function body)
+   - Abort Revert_abort    (entry-check failure or explicit REVERT)
+   - IntRet vals ss'       (unusual: an internal function returned to
+                             top level; shouldn't happen for well-typed
+                             modules, but is a legal exec_result shape
+                             given the semantics we have)
+
+   Explicitly excludes Error "out of fuel" (we quantify ∃fuel).
+
+   NOTE: This is the module-level stitching theorem. It consumes the
+   three fragment-level correctness theorems for dispatch/kwargs plus
+   correctness theorems for external/internal function bodies (stated
+   separately; several are still cheated upstream). *)
+Theorem compile_generate_runtime_correct:
+  ∀ selectors external_fns internal_fns fallback_fn dispatch_strategy
+    bucket_count fn_metadata_bytes dense_buckets entry_info
+    st st' ss ctx.
+    compile_generate_runtime selectors external_fns internal_fns
+        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes
+        dense_buckets entry_info st = ((), st') ∧
+    runtime_inputs_ok selectors external_fns internal_fns st ∧
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_halted
+    ⇒
+    ∃ fuel result.
+      run_blocks fuel ctx (assemble_function st st')
+        (ss with <| vs_current_bb := st.cs_current_bb;
+                     vs_inst_idx := LENGTH st.cs_current_insts |>) = result ∧
+      ((∃ ss'. result = Halt ss') ∨
+       (∃ ss'. result = Abort Revert_abort ss') ∨
+       (∃ vals ss'. result = IntRet vals ss'))
+Proof
+  cheat
 QED
