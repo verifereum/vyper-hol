@@ -10,7 +10,6 @@
  *   compile_binop_correct    — binary operation case
  *
  * Helper:
- *   vars_only_change         — compile_expr only adds SSA vars, no mem/storage side effects
  *
  * Mirrors correctness of: exprLoweringScript.sml (compile_expr)
  * Source semantics: vyperInterpreterScript.sml (eval_expr)
@@ -24,7 +23,9 @@ Ancestors
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingProofs
-  vyperAST
+  vyperAST vyperTyping
+Libs
+  pairLib BasicProvers
 
 (* ===== Instruction Sequence Execution ===== *)
 
@@ -63,7 +64,7 @@ End
    NOTE: This covers Literal, Name, BinOp, Compare, UnaryOp, Env vars.
    IfExp (multi-block) needs a separate theorem using run_block. *)
 (* Supported expressions: single-block compilation forms.
-   Phase 1 handles: Literal, Name, Env vars, Not, Neg, BinOp.
+   Handles: Literal, Name, Env vars, Not, Neg, BinOp.
    IfExp is multi-block (separate theorem needed).
    Other forms are not yet implemented in compile_expr. *)
 Definition supported_expr_def:
@@ -153,6 +154,25 @@ Theorem run_inst_seq_append_err:
 Proof
   Induct_on `is1` >> rw[run_inst_seq_def, comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `step_inst_base h ss` >> gvs[]
+QED
+
+(* emit_op emits exactly one instruction and returns Var of the fresh output *)
+Theorem emitted_insts_emit_op_local:
+  ∀ opc ops st v st'.
+    emit_op opc ops st = (v, st') ⇒
+    emitted_insts st st' =
+      [mk_inst st.cs_next_id opc ops
+               [STRING #"%" (toString st.cs_next_var)]] ∧
+    v = Var (STRING #"%" (toString st.cs_next_var)) ∧
+    st'.cs_next_id = st.cs_next_id + 1 ∧
+    st'.cs_next_var = st.cs_next_var + 1 ∧
+    st'.cs_current_insts = st.cs_current_insts ++
+      [mk_inst st.cs_next_id opc ops
+               [STRING #"%" (toString st.cs_next_var)]]
+Proof
+  rw[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+     comp_ignore_bind_def, comp_return_def, emit_def, emitted_insts_def] >>
+  gvs[rich_listTheory.DROP_LENGTH_APPEND]
 QED
 
 (* emit_op extends instructions: appends exactly one instruction *)
@@ -325,14 +345,16 @@ Proof
 QED
 
 (* --- Name (local variable load) --- *)
-(* Phase 1: v must be a primitive (word-sized) value,
+(* v must be a primitive (word-sized) value,
    and offset must fit in a word (offset < dimword(:256)).
    Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
    The type_value tv from the scope correctly distinguishes address from bytesN. *)
-(* NOTE: original statement was FALSE for v = NoneV.
-   val_in_memory (BaseTV (UintT n)) NoneV offset mem = T (vacuously true)
-   but mload offset ss is unconstrained, while typed_val_to_w256 NoneV = 0w.
-   Fix: added v ≠ NoneV. *)
+(* NOTE: original statement was FALSE for v = NoneV and for
+   type/value mismatches like entry.type=BaseTV BoolT with v=BytesV [1w]
+   (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
+   offset mem = T (vacuously true) but mload offset ss is unconstrained,
+   while typed_val_to_w256 NoneV = 0w.
+   Fix: added v ≠ NoneV and value_has_type entry.type v. *)
 Theorem compile_name_correct:
   ∀ cenv cx ty ann id es ss st op st' v es' offset size entry.
     state_rel cenv cx es ss ∧
@@ -343,6 +365,7 @@ Theorem compile_name_correct:
     lookup_scopes (string_to_num id) es.scopes = SOME entry ∧
     entry.value = v ∧
     v ≠ NoneV ∧
+    value_has_type entry.type v ∧
     (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt))
     ⇒
     ∃ ss'.
@@ -451,7 +474,30 @@ Proof
   simp[]
 QED
 
-(* --- Not (boolean negation) --- compositional proof *)
+Theorem lower_value_not_bool_unfold[local]:
+  ∀ e cenv ann ty st.
+    expr_type e = BaseT BoolT ⇒
+    lower_value compile_expr cenv ty (Builtin ann Not [e]) st =
+    (let (sub_op, st1) = lower_value compile_expr cenv (BaseT BoolT) e st in
+       emit_op ISZERO [sub_op] st1)
+Proof
+  rpt strip_tac >>
+  simp[lower_value_def, comp_bind_def, pairTheory.UNCURRY_DEF] >>
+  qabbrev_tac `rhs_ce = compile_expr cenv (BaseT BoolT) e st` >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  ONCE_REWRITE_TAC [cj 1 compile_expr_def] >> simp[] >>
+  ONCE_REWRITE_TAC [cj 2 compile_expr_def] >> simp[] >>
+  simp[expr_type_def, as_stack_val_def, unwrap_value_def, comp_return_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  Cases_on `compile_expr cenv (BaseT BoolT) e st` >>
+  simp[Abbr `rhs_ce`, lower_value_def, comp_bind_def, pairTheory.UNCURRY,
+       unwrap_value_def, comp_return_def] >>
+  Cases_on `unwrap_value cenv q r` >>
+  simp[as_stack_val_def, unwrap_value_def, comp_return_def,
+       emit_op_def, comp_bind_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_ignore_bind_def, LET_THM, pairTheory.UNCURRY_DEF]
+QED
+
 (* Given sub-expression compiles correctly, compile_expr Not is correct. *)
 (* NOTE: original statement was FALSE without expr_type constraint.
    When expr_type e ≠ BaseT BoolT, compiler emits NOT (bitwise complement)
@@ -476,17 +522,41 @@ Theorem compile_not_correct:
       eval_operand op ss' = SOME (val_to_w256 v) ∧
       state_rel cenv cx es' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lower_value compile_expr cenv (BaseT BoolT) e st` >> gvs[] >>
+  qpat_x_assum `lower_value _ _ _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[lower_value_not_bool_unfold] >>
+  qpat_x_assum `lower_value _ _ _ e st = _` (fn th => rewrite_tac [th]) >>
+  simp[] >> strip_tac >>
+  drule emitted_insts_emit_op_local >> strip_tac >> gvs[] >>
+  qexists `update_var (STRING #"%" (toString r.cs_next_var))
+             (val_to_w256 (BoolV (¬b))) ss_sub` >>
+  rpt conj_tac
+  >- (
+    mp_tac (Q.SPECL [`st`, `r`, `st'`, `ss`, `ss_sub`] run_inst_seq_chain) >>
+    simp[] >> strip_tac >> gvs[] >>
+    simp[Once run_inst_seq_def] >>
+    drule iszero_bool_correct >>
+    disch_then (qspecl_then [`r.cs_next_id`,
+      `STRING #"%" (toString r.cs_next_var)`] mp_tac) >>
+    simp[Once run_inst_seq_def]
+  )
+  >- simp[eval_operand_update_var_local]
+  >- (irule state_rel_update_var_local >> first_assum ACCEPT_TAC)
 QED
 
 (* NOTE: original statement was FALSE when annotation type has different
    bounds than expr_type e. Compiler uses type_bounds(expr_type e) but
-   evaluator uses type_to_int_bound(annotation type).
-   Fix: named annotation, added type_to_int_bound constraint. *)
+   evaluator uses type_to_int_bound(annotation type). Additionally, Neg
+   is only defined for signed integers — unsigned annotation (e.g.
+   UintT 256 with IntV 0) gave a spurious counterexample.
+   Fix: named annotation, added type_to_int_bound constraint, and
+   restricted ann to signed IntT. *)
 Theorem compile_neg_correct:
-  ∀ cenv cx ty ann e es ss st op st' v es'.
+  ∀ cenv cx ty ann e es ss st op st' v es' n.
     state_rel cenv cx es ss ∧
     eval_expr cx (Builtin ann Neg [e]) es = (INL (Value v), es') ∧
+    ann = BaseT (IntT n) ∧
     type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
     lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st')
     ⇒
@@ -495,10 +565,13 @@ Theorem compile_neg_correct:
       eval_operand op ss' = SOME (val_to_w256 v) ∧
       state_rel cenv cx es' ss'
 Proof
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  ONCE_REWRITE_TAC [cj 1 compile_expr_def] >> simp[] >> ONCE_REWRITE_TAC [cj 2 compile_expr_def] >> simp[] >>
   cheat
 QED
 
 (* --- Environment variables (CALLER, TIMESTAMP, etc.) --- *)
+
 (* Helper: for simple env vars (single opcode, no args),
    the emitted instruction is a single read0 that matches the Vyper value *)
 Theorem compile_env_var_correct:
@@ -511,10 +584,33 @@ Theorem compile_env_var_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      es' = es ∧
+      (es':evaluation_state) = es ∧
       same_blocks st st'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `item` >> gvs[] >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _`
+    (fn th => assume_tac (SIMP_RULE (srw_ss())
+      [lower_value_def, comp_bind_def, pairTheory.UNCURRY,
+       compile_expr_def, compile_env_var_def, as_stack_val_def,
+       unwrap_value_def, comp_return_def, emit_op_def,
+       fresh_id_def, fresh_var_def, emit_def, LET_THM,
+       comp_ignore_bind_def, venomInstTheory.mk_inst_def] th)) >>
+  fs[cj 44 evaluate_def,
+     vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+     vyperStateTheory.return_def, vyperStateTheory.type_check_def,
+     vyperStateTheory.assert_def, builtin_args_length_ok_def,
+     cj 55 evaluate_def, vyperStateTheory.get_accounts_def,
+     evaluate_builtin_def, vyperStateTheory.lift_sum_def,
+     vyperStateTheory.raise_def] >>
+  gvs[run_inst_seq_def, emitted_insts_def,
+      rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL,
+      step_inst_base_def, exec_read0_def,
+      eval_operand_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE,
+      same_blocks_def, state_rel_def, call_ctx_rel_def,
+      val_to_w256_address, integer_wordTheory.i2w_pos,
+      val_to_w256_def]
 QED
 
 (* ===== Prefix / same_blocks Infrastructure ===== *)
@@ -531,6 +627,12 @@ QED
 (* same_blocks: reflexive, symmetric, transitive *)
 Theorem same_blocks_refl:
   same_blocks st st
+Proof
+  simp[same_blocks_def]
+QED
+
+Theorem same_blocks_sym:
+  same_blocks st st1 ==> same_blocks st1 st
 Proof
   simp[same_blocks_def]
 QED
@@ -1078,7 +1180,1375 @@ Proof
   >> simp[ci_mono_compile_ensure_in_memory]
 QED
 
+Theorem ci_mono_lower_value_cfn[local]:
+  ∀ cfn cenv ty e sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (lower_value cfn cenv ty e sa))
+Proof
+  rpt strip_tac >> simp[lower_value_def] >> irule ci_mono_bind >> simp[ci_mono_unwrap_value]
+QED
+
+Theorem ci_mono_compile_dynarray_pop[local]:
+  ∀ base_op ws es load_opc store_opc sa.
+    ci_mono sa (SND (compile_dynarray_pop base_op ws es load_opc store_opc sa))
+Proof
+  simp[compile_dynarray_pop_def, LET_THM] >>
+  rpt (CHANGED_TAC (rpt gen_tac >>
+    (TRY (irule ci_mono_bind >> conj_tac) >>
+     TRY (irule ci_mono_ignore_bind >> conj_tac) >>
+     simp[ci_mono_emit_op, ci_mono_emit_void])))
+QED
+
 (* ===== compile_expr ci_mono by induction ===== *)
+
+(*
+ * ci_mono for compile_expr: every call either appends to cs_current_insts
+ * (keeping cs_blocks) or increases LENGTH cs_blocks (via new_block).
+ * Proved by unfolding definitions and composing ci_mono lemmas.
+ *)
+
+Theorem ci_mono_compile_store_bytestring[local]:
+  ∀ val_op dst_op sa.
+    ci_mono sa (SND (compile_store_bytestring val_op dst_op sa))
+Proof
+  simp[contextTheory.compile_store_bytestring_def, LET_THM] >>
+  rpt (CHANGED_TAC (rpt gen_tac >>
+    (TRY (irule ci_mono_bind >> conj_tac) >>
+     TRY (irule ci_mono_ignore_bind >> conj_tac) >>
+     simp[ci_mono_emit_op, ci_mono_emit_void])))
+QED
+
+Theorem ci_mono_compile_struct_lit_cfn[local]:
+  ∀ cfn cenv ty fields buf_op cur_offset sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_struct_lit cfn cenv ty fields buf_op cur_offset sa))
+Proof
+  Induct_on `fields` >> simp[compile_struct_lit_def, ci_mono_comp_return] >>
+  rpt gen_tac >> Cases_on `h` >> strip_tac >> simp[Once compile_struct_lit_def, LET_THM] >> rpt (CHANGED_TAC (rpt gen_tac >> TRY (irule ci_mono_bind >> conj_tac) >> TRY (irule ci_mono_ignore_bind >> conj_tac) >> TRY IF_CASES_TAC >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_store_bytestring] >> TRY (irule ci_mono_lower_value_cfn >> metis_tac[]) >> TRY (rpt strip_tac >> first_x_assum irule >> metis_tac[])))
+QED
+
+Theorem ci_mono_compile_concat_cfn[local]:
+  ∀ cfn cenv es data_ptr infos offset_op sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_concat cfn cenv es data_ptr infos offset_op sa))
+Proof
+  recInduct compile_concat_ind >> rpt strip_tac >> gvs[compile_concat_def, ci_mono_comp_return] >>
+Cases_on `is_bs` >> gvs[] >>
+irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void] >>
+TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+TRY (irule ci_mono_ignore_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+TRY (irule ci_mono_lower_value_cfn >> simp[])
+QED
+
+Theorem ci_mono_compile_make_array_cfn[local]:
+  ∀ cfn cenv es elem_size has_lw alloca_size buf_op cur_idx sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_make_array cfn cenv es elem_size has_lw alloca_size buf_op cur_idx sa))
+Proof
+  Induct_on `es` >> rpt strip_tac
+  >- (simp[compile_make_array_def, LET_THM] >> rw[] >>
+      simp[ci_mono_comp_return] >>
+      irule ci_mono_ignore_bind >> simp[ci_mono_emit_void, ci_mono_comp_return])
+  >> simp[Once compile_make_array_def, LET_THM]
+  >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> irule ci_mono_lower_value_cfn >> simp[]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_emit_void] >> IF_CASES_TAC >> simp[ci_mono_compile_store_bytestring, ci_mono_emit_void]) >> rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+(* Reusable tactic for ci_mono composition through monadic expressions *)
+val ci_mono_base_thms =
+  [ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+   ci_mono_fresh_var, ci_mono_fresh_id, ci_mono_fresh_label,
+   ci_mono_new_block, ci_mono_comp_return, ci_mono_emit,
+   ci_mono_compile_ptr_load, ci_mono_unwrap_value,
+   ci_mono_compile_ensure_in_memory, ci_mono_compile_alloc_buffer,
+   ci_mono_compile_word_copy_loop, ci_mono_compile_storage_to_memory,
+   ci_mono_compile_transient_to_memory, ci_mono_compile_code_to_memory,
+   ci_mono_compile_dynarray_pop,
+   ci_mono_compile_store_bytestring,
+   ci_mono_refl];
+
+Theorem ci_mono_compile_multi_exprs[local]:
+  ∀ cfn cenv es sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_multi_exprs cfn cenv es sa))
+Proof
+  Induct_on `es` >> rpt strip_tac
+  >- simp[compile_multi_exprs_def, ci_mono_comp_return]
+  >> simp[Once compile_multi_exprs_def, LET_THM]
+  >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> ho_match_mp_tac ci_mono_lower_value_cfn >> metis_tac[])
+  >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> first_x_assum ho_match_mp_tac >> metis_tac[])
+  >> rpt strip_tac >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_keccak256_key[local]:
+  ∀ key_op is_bytes32 sa.
+    ci_mono sa (SND (compile_keccak256_key key_op is_bytes32 sa))
+Proof
+  rpt gen_tac >> simp[compile_keccak256_key_def, LET_THM] >> IF_CASES_TAC >> rpt gen_tac >> rpt (irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_alloc_buffer, ci_mono_comp_return] >> rpt gen_tac >> rpt (irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_alloc_buffer, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_mapping_subscript[local]:
+  ∀ base_slot key_op sa.
+    ci_mono sa (SND (compile_mapping_subscript base_slot key_op sa))
+Proof
+  simp[compile_mapping_subscript_def, LET_THM] >>
+  rpt (CHANGED_TAC (rpt gen_tac >>
+    (TRY (irule ci_mono_bind >> conj_tac) >>
+     TRY (irule ci_mono_ignore_bind >> conj_tac) >>
+     simp[ci_mono_emit_op, ci_mono_emit_void,
+          ci_mono_compile_alloc_buffer, ci_mono_comp_return])))
+QED
+
+Theorem ci_mono_compile_tuple_subscript[local]:
+  ∀ base_op offset sa.
+    ci_mono sa (SND (compile_tuple_subscript base_op offset sa))
+Proof
+  rpt gen_tac >> Cases_on `offset` >> simp[compile_tuple_subscript_def, ci_mono_emit_op, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_array_subscript[local]:
+  ∀ base_op idx_op is_dyn sc ws es is_signed load_opc sa.
+    ci_mono sa (SND (compile_array_subscript base_op idx_op is_dyn sc ws es is_signed load_opc sa))
+Proof
+  rpt gen_tac >>
+  simp[compile_array_subscript_def, LET_THM] >>
+  rpt (CHANGED_TAC (rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind) >>
+    rpt strip_tac >>
+    simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+         ci_mono_compile_alloc_buffer, ci_mono_refl] >>
+    TRY (IF_CASES_TAC >>
+         simp[ci_mono_emit_op, ci_mono_comp_return, LET_THM])))
+QED
+
+Theorem ci_mono_compile_subscript_cfn[local]:
+  ∀ cfn cenv ret_ty ty base_e idx_e sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_subscript cfn cenv ret_ty ty base_e idx_e sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[compile_subscript_def] >> BETA_TAC >>
+  PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
+  IF_CASES_TAC >-
+  (* hashmap case *)
+  (irule ci_mono_bind >> conj_tac >-
+   (rpt strip_tac >> BETA_TAC >>
+    irule ci_mono_bind >> conj_tac >-
+    (rpt strip_tac >> BETA_TAC >>
+     irule ci_mono_bind >> conj_tac >-
+     (rpt strip_tac >> simp[ci_mono_comp_return]) >>
+     simp[ci_mono_compile_mapping_subscript]) >>
+    IF_CASES_TAC >>
+    simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
+   irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+  (* non-hashmap: case on ce_var_type *)
+  rpt BasicProvers.TOP_CASE_TAC >> simp[] >> rpt (irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript, ci_mono_compile_array_subscript] >> rpt strip_tac) >> TRY (irule ci_mono_lower_value_cfn >> rpt strip_tac >> first_x_assum irule)
+QED
+
+Theorem ci_mono_compile_acc_cfn[local]:
+  ∀ cfn cenv addr_e item sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_acc cfn cenv addr_e item sa))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `item`
+  >- (rewrite_tac[Once compile_acc_def] >> irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+  simp[compile_acc_def, LET_THM, pairTheory.UNCURRY] >>
+  rpt strip_tac >>
+  TRY (irule ci_mono_emit_inst >> NO_TAC) >>
+  TRY (irule ci_mono_trans >>
+       qexists_tac `SND (lower_value cfn cenv (BaseT AddressT) addr_e sa)` >>
+       conj_tac >- (irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+       simp[ci_mono_emit_op] >> NO_TAC) >>
+  irule ci_mono_trans >>
+  qexists_tac `SND (emit_op EXTCODESIZE
+    [FST (lower_value cfn cenv (BaseT AddressT) addr_e sa)]
+    (SND (lower_value cfn cenv (BaseT AddressT) addr_e sa)))` >>
+  conj_tac >- (
+    irule ci_mono_trans >>
+    qexists_tac `SND (lower_value cfn cenv (BaseT AddressT) addr_e sa)` >>
+    conj_tac >- (irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+    simp[ci_mono_emit_op]) >>
+  simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_attribute_cfn[local]:
+  ∀ cfn cenv ret_ty ty base_e field sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_attribute cfn cenv ret_ty ty base_e field sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[compile_attribute_def] >> BETA_TAC >>
+  irule ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >>
+      Cases_on `FLOOKUP (compile_env_ce_vars cenv) field'` >>
+      simp[LET_THM, ci_mono_comp_return] >>
+      BasicProvers.every_case_tac >> simp[ci_mono_comp_return] >>
+      irule ci_mono_bind >> conj_tac >>
+      simp[ci_mono_emit_op, ci_mono_comp_return] >>
+      rpt gen_tac >> simp[ci_mono_comp_return])
+  >> metis_tac[]
+QED
+
+Theorem ci_mono_as_stack_val[local]:
+  ∀ ty p sa. SND (as_stack_val ty p) = SND p
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[as_stack_val_def]
+QED
+
+Theorem ci_mono_as_ptr_val[local]:
+  ∀ ty loc p sa. SND (as_ptr_val ty loc p) = SND p
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
+QED
+
+Theorem ci_mono_compile_clamp[local]:
+  ∀ val_op ty sa. ci_mono sa (SND (compile_clamp val_op ty sa))
+Proof
+  rpt gen_tac >> simp[compile_clamp_def, LET_THM, pairTheory.UNCURRY] >> IF_CASES_TAC >> gvs[] >> rpt (rpt gen_tac >> (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind) >> (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void])) >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_select[local]:
+  ∀ cmp a b sa. ci_mono sa (SND (compile_select cmp a b sa))
+Proof
+  rpt gen_tac >> simp[builtinSimpleTheory.compile_select_def, LET_THM, pairTheory.UNCURRY_DEF] >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_env_var[local]:
+  ∀ item sa. ci_mono sa (SND (compile_env_var item sa))
+Proof
+  rpt gen_tac >> Cases_on `item` >> simp[compile_env_var_def] >> TRY (simp[ci_mono_emit_op] >> NO_TAC) >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_invert[local]:
+  ∀ v ty cenv sa. ci_mono sa (SND (compile_invert v ty cenv sa))
+Proof
+  rpt gen_tac >> Cases_on `ty` >> simp[compile_invert_def, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_emit_multi_op[local]:
+  ∀ opc ops n sa. ci_mono sa (SND (emit_multi_op opc ops n sa))
+Proof
+  rpt gen_tac >>
+`!n sa. ci_mono sa (SND (fresh_vars n sa))` by (
+  Induct >> simp[fresh_vars_def, ci_mono_comp_return] >>
+  rpt gen_tac >>
+  irule ci_mono_bind >>
+  simp[ci_mono_fresh_var] >>
+  rpt strip_tac >>
+  irule ci_mono_bind >>
+  simp[ci_mono_comp_return]
+) >>
+simp[emit_multi_op_def] >>
+irule ci_mono_bind >>
+simp[] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >>
+simp[ci_mono_emit_inst, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_store_multi_results[local]:
+  ∀ buf_op results offset sa. ci_mono sa (SND (store_multi_results buf_op results offset sa))
+Proof
+  Induct_on `results` >- simp[store_multi_results_def, ci_mono_comp_return] >> rpt strip_tac >> once_rewrite_tac[store_multi_results_def] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> simp[]
+QED
+
+Theorem ci_mono_compile_store_byte_chunks[local]:
+  ∀ data_ptr bs offset sa. ci_mono sa (SND (compile_store_byte_chunks data_ptr bs offset sa))
+Proof
+  ho_match_mp_tac compile_store_byte_chunks_ind >> rpt strip_tac >- simp[compile_store_byte_chunks_def, ci_mono_comp_return] >> simp[Once compile_store_byte_chunks_def, LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> first_x_assum (qspecl_then [`TAKE 32 (v4::v5 ++ REPLICATE 31 0w)`, `word_of_bytes T 0w (TAKE 32 (v4::v5 ++ REPLICATE 31 0w))`] mp_tac) >> simp[]
+QED
+
+Theorem ci_mono_compile_store_words[local]:
+  ∀ buf_op vs offset sa. ci_mono sa (SND (compile_store_words buf_op vs offset sa))
+Proof
+  Induct_on `vs` >- simp[compile_store_words_def, ci_mono_comp_return] >> rpt strip_tac >> once_rewrite_tac[compile_store_words_def] >> simp_tac std_ss [LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_clamp_and_return[local]:
+  ∀ res ty sa. ci_mono sa (SND (clamp_and_return res ty sa))
+Proof
+  simp[clamp_and_return_def] >> metis_tac[ci_mono_ignore_bind, ci_mono_compile_clamp, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_wrap_truncate[local]:
+  ∀ res ty sa. ci_mono sa (SND (wrap_truncate res ty sa))
+Proof
+  rpt gen_tac >> simp[Once wrap_truncate_def] >> IF_CASES_TAC >> simp[ci_mono_comp_return] >> IF_CASES_TAC >> simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_safe_add[local]:
+  ∀ x y ty sa. ci_mono sa (SND (compile_safe_add x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_add_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_safe_sub[local]:
+  ∀ x y ty sa. ci_mono sa (SND (compile_safe_sub x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_sub_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_mul_overflow_check[local]:
+  ∀ x y res is_signed bits sa. ci_mono sa (SND (compile_mul_overflow_check x y res is_signed bits sa))
+Proof
+  rpt gen_tac >> simp[Once compile_mul_overflow_check_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_safe_mul[local]:
+  ∀ x y ty sa. ci_mono sa (SND (compile_safe_mul x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_mul_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_compile_mul_overflow_check ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_safe_div[local]:
+  ∀ x y ty sa. ci_mono sa (SND (compile_safe_div x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_div_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_safe_mod[local]:
+  ∀ x y ty sa. ci_mono sa (SND (compile_safe_mod x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_mod_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_safe_decimal_div[local]:
+  ∀ x y d ty sa. ci_mono sa (SND (compile_safe_decimal_div x y d ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_decimal_div_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_safe_pow[local]:
+  ∀ x y ty sa. ci_mono sa (SND (compile_safe_pow x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_safe_pow_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_clamp_and_return ORELSE irule ci_mono_compile_clamp ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_compare[local]:
+  ∀ op x y ty sa. ci_mono sa (SND (compile_compare op x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_compare_def, LET_THM] >>
+  BasicProvers.every_case_tac >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_inst ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_neg_helper[local]:
+  ∀ v ty sa. ci_mono sa (SND (compile_neg v ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_neg_def, LET_THM, pairTheory.UNCURRY] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_builtin_abs[local]:
+  ∀ val_op sa. ci_mono sa (SND (compile_builtin_abs val_op sa))
+Proof
+  rpt gen_tac >> simp[Once builtinSimpleTheory.compile_builtin_abs_def, LET_THM] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE irule ci_mono_compile_select ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_binop[local]:
+  ∀ op x y ty sa. ci_mono sa (SND (compile_binop op x y ty sa))
+Proof
+  rpt gen_tac >> simp[Once compile_binop_def, LET_THM] >>
+  BasicProvers.every_case_tac >>
+  simp[ci_mono_compile_safe_add, ci_mono_compile_safe_sub, ci_mono_compile_safe_mul, ci_mono_compile_safe_div, ci_mono_compile_safe_mod, ci_mono_compile_safe_decimal_div, ci_mono_compile_safe_pow, ci_mono_compile_compare, ci_mono_emit_op] >>
+  rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_wrap_truncate ORELSE irule ci_mono_compile_select ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_inst ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
+QED
+
+Theorem ci_mono_compile_bytelike_literal[local]:
+  ∀ bs max_len sa. ci_mono sa (SND (compile_bytelike_literal bs max_len sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[exprLoweringTheory.compile_bytelike_literal_def, LET_THM] >>
+  BETA_TAC >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_compile_store_byte_chunks] >> rpt strip_tac >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_literal_vv[local]:
+  ∀ ty l sa. ci_mono sa (SND (compile_literal_vv ty l sa))
+Proof
+  rpt gen_tac >> Cases_on `l` >>
+  rewrite_tac[exprLoweringTheory.compile_literal_vv_def, LET_THM] >> BETA_TAC >>
+  BasicProvers.every_case_tac >>
+  simp[ci_mono_comp_return] >>
+  TRY (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_compile_bytelike_literal] >> NO_TAC) >>
+  Cases_on `b` >> simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_name_vv[local]:
+  ∀ cenv ty id sa. ci_mono sa (SND (compile_name_vv cenv ty id sa))
+Proof
+  rpt gen_tac >>
+  simp[exprLoweringTheory.compile_name_vv_def] >>
+  BasicProvers.every_case_tac >>
+  simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_ignore_bind >> simp[ci_mono_comp_return, ci_mono_emit_inst]
+QED
+
+Theorem ci_mono_compile_blockhash[local]:
+  ∀ n_op sa. ci_mono sa (SND (compile_blockhash n_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_blockhash_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_blobhash[local]:
+  ∀ n_op sa. ci_mono sa (SND (compile_blobhash n_op sa))
+Proof
+  simp[builtinMiscTheory.compile_blobhash_def, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_addmod[local]:
+  ∀ a b c sa. ci_mono sa (SND (compile_addmod a b c sa))
+Proof
+  rpt gen_tac >>
+  simp[builtinMathTheory.compile_addmod_def] >>
+  irule ci_mono_ignore_bind >> simp[ci_mono_emit_void, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_mulmod[local]:
+  ∀ a b c sa. ci_mono sa (SND (compile_mulmod a b c sa))
+Proof
+  rpt gen_tac >>
+  simp[builtinMathTheory.compile_mulmod_def] >>
+  irule ci_mono_ignore_bind >> simp[ci_mono_emit_void, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_pow_mod256[local]:
+  ∀ x y sa. ci_mono sa (SND (compile_pow_mod256 x y sa))
+Proof
+  simp[builtinMathTheory.compile_pow_mod256_def, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_isqrt[local]:
+  ∀ v sa. ci_mono sa (SND (compile_isqrt v sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_isqrt_def, LET_THM] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+                          ci_mono_fresh_var, ci_mono_comp_return, ci_mono_compile_select]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+       ci_mono_fresh_var, ci_mono_comp_return, ci_mono_compile_select]
+QED
+
+Theorem ci_mono_compile_ceil[local]:
+  ∀ v d sa. ci_mono sa (SND (compile_ceil v d sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_ceil_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_compile_select]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_compile_select]
+QED
+
+Theorem ci_mono_compile_floor[local]:
+  ∀ v d sa. ci_mono sa (SND (compile_floor v d sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_floor_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_compile_select]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_compile_select]
+QED
+
+Theorem ci_mono_compile_builtin_calldatasize[local]:
+  ∀ sa. ci_mono sa (SND (compile_builtin_calldatasize sa))
+Proof
+  simp[builtinSimpleTheory.compile_builtin_calldatasize_def, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_builtin_len[local]:
+  ∀ ic v loc sa. ci_mono sa (SND (compile_builtin_len ic v loc sa))
+Proof
+  simp[builtinSimpleTheory.compile_builtin_len_def, ci_mono_compile_ptr_load]
+QED
+
+Theorem ci_mono_compile_bytestring_hash[local]:
+  ∀ ptr_op sa. ci_mono sa (SND (compile_bytestring_hash ptr_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[exprLoweringTheory.compile_bytestring_hash_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_list_membership_in[local]:
+  ∀ needle ops sa. ci_mono sa (SND (compile_list_membership_in needle ops sa))
+Proof
+  recInduct exprLoweringTheory.compile_list_membership_in_ind >>
+  rpt strip_tac >>
+  simp[exprLoweringTheory.compile_list_membership_in_def, ci_mono_comp_return, ci_mono_emit_op] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[] >>
+  rpt strip_tac >> simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_list_membership_notin[local]:
+  ∀ needle ops sa. ci_mono sa (SND (compile_list_membership_notin needle ops sa))
+Proof
+  recInduct exprLoweringTheory.compile_list_membership_notin_ind >>
+  rpt strip_tac >>
+  simp[exprLoweringTheory.compile_list_membership_notin_def, ci_mono_comp_return] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_array_membership_loop[local]:
+  ∀ needle arr_op len_op elem_size offset_base load_opc is_in sa.
+    ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc is_in sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[exprLoweringTheory.compile_array_membership_loop_def, LET_THM] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+                          ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
+                          ci_mono_comp_return]) ORELSE
+       IF_CASES_TAC ORELSE gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+       ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
+       ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_var_array_membership[local]:
+  ∀ cenv needle arr_vv rhs_ty is_in sa. ci_mono sa (SND (compile_var_array_membership cenv needle arr_vv rhs_ty is_in sa))
+Proof
+  rpt gen_tac >>
+  simp[exprLoweringTheory.compile_var_array_membership_def, LET_THM] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_emit_op] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop]
+QED
+
+Theorem ci_mono_compile_keccak256_bytes[local]:
+  ∀ ptr_op sa. ci_mono sa (SND (compile_keccak256_bytes ptr_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinHashingTheory.compile_keccak256_bytes_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_keccak256_bytesm[local]:
+  ∀ val_op m sa. ci_mono sa (SND (compile_keccak256_bytesm val_op m sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinHashingTheory.compile_keccak256_bytesm_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_keccak256_word[local]:
+  ∀ val_op sa. ci_mono sa (SND (compile_keccak256_word val_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinHashingTheory.compile_keccak256_word_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_sha256_bytes[local]:
+  ∀ ptr_op sa. ci_mono sa (SND (compile_sha256_bytes ptr_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinHashingTheory.compile_sha256_bytes_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_sha256_bytesm[local]:
+  ∀ val_op m sa. ci_mono sa (SND (compile_sha256_bytesm val_op m sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinHashingTheory.compile_sha256_bytesm_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_sha256_word[local]:
+  ∀ val_op sa. ci_mono sa (SND (compile_sha256_word val_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinHashingTheory.compile_sha256_word_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_ecrecover[local]:
+  ∀ hash_op v_op r_op s_op sa. ci_mono sa (SND (compile_ecrecover hash_op v_op r_op s_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_ecrecover_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_ecadd[local]:
+  ∀ x1 y1 x2 y2 sa. ci_mono sa (SND (compile_ecadd x1 y1 x2 y2 sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_ecadd_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_ecmul[local]:
+  ∀ x y scalar sa. ci_mono sa (SND (compile_ecmul x y scalar sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_ecmul_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
+QED
+
+Theorem ci_mono_compile_assert_slice_bounds[local]:
+  ∀ start_op len_op src_len sa. ci_mono sa (SND (compile_assert_slice_bounds start_op len_op src_len sa))
+Proof
+  rpt gen_tac >> simp[builtinBytesTheory.compile_assert_slice_bounds_def] >> rpt (CHANGED_TAC (rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE conj_tac ORELSE gen_tac) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]))
+QED
+
+Theorem ci_mono_compile_slice_calldata[local]:
+  ∀ start_op len_op out_size sa. ci_mono sa (SND (compile_slice_calldata start_op len_op out_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_slice_calldata_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
+Theorem ci_mono_compile_slice_code[local]:
+  ∀ start_op len_op out_size sa. ci_mono sa (SND (compile_slice_code start_op len_op out_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_slice_code_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
+Theorem ci_mono_compile_slice_extcode[local]:
+  ∀ addr_op start_op len_op out_size sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
+Theorem ci_mono_compile_slice_memory[local]:
+  ∀ src_ptr start_op len_op out_size sa. ci_mono sa (SND (compile_slice_memory src_ptr start_op len_op out_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_slice_memory_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
+Theorem ci_mono_compile_uint2str[local]:
+  ∀ val_op n_digits sa. ci_mono sa (SND (compile_uint2str val_op n_digits sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinStringsTheory.compile_uint2str_def, LET_THM] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_select]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_select]
+QED
+
+Theorem ci_mono_compile_as_wei_value_decimal[local]:
+  ∀ val_op scale decimal_divisor sa. ci_mono sa (SND (compile_as_wei_value_decimal val_op scale decimal_divisor sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_as_wei_value_decimal_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_as_wei_value_int[local]:
+  ∀ val_op scale is_signed sa. ci_mono sa (SND (compile_as_wei_value_int val_op scale is_signed sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinMiscTheory.compile_as_wei_value_int_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_load_bytestring_as_word[local]:
+  ∀ v shift_opc sa. ci_mono sa (SND (load_bytestring_as_word v shift_opc sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[exprLoweringTheory.load_bytestring_as_word_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_type_convert[local]:
+  ∀ v conv_op sa. ci_mono sa (SND (compile_type_convert v conv_op sa))
+Proof
+  rpt gen_tac >> Cases_on `conv_op` >>
+  rewrite_tac[exprLoweringTheory.compile_type_convert_def, LET_THM] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+                          ci_mono_compile_alloc_buffer, ci_mono_load_bytestring_as_word]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+       ci_mono_compile_alloc_buffer, ci_mono_load_bytestring_as_word] >>
+  TRY (pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
+       rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+            (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+            gen_tac ORELSE strip_tac) >>
+       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> NO_TAC) >>
+  TRY (pairarg_tac >> simp[] >>
+       rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+            (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+            gen_tac ORELSE strip_tac) >>
+       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> NO_TAC) >>
+  rpt (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac >> rpt strip_tac) >> TRY (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac) >> simp[ci_mono_comp_return, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_extract32[local]:
+  ∀ src_ptr start_op sa. ci_mono sa (SND (compile_extract32 src_ptr start_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_extract32_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_clamp_extract32[local]:
+  ∀ val_op clamp sa. ci_mono sa (SND (compile_clamp_extract32 val_op clamp sa))
+Proof
+  rpt gen_tac >> Cases_on `clamp` >>
+  rewrite_tac[builtinBytesTheory.compile_clamp_extract32_def, LET_THM] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_encode_static[local]:
+  ∀ dst src sa. ci_mono sa (SND (compile_abi_encode_static dst src sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[abiEncoderTheory.compile_abi_encode_static_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_zero_pad[local]:
+  ∀ ptr sa. ci_mono sa (SND (compile_abi_zero_pad ptr sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[abiEncoderTheory.compile_abi_zero_pad_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_int_clamp[local]:
+  ∀ val_op bits is_signed sa. ci_mono sa (SND (compile_abi_int_clamp val_op bits is_signed sa))
+Proof
+  rpt gen_tac >> simp[abiEncoderTheory.compile_abi_int_clamp_def, LET_THM] >> BETA_TAC >> IF_CASES_TAC >> (ho_match_mp_tac ci_mono_ignore_bind ORELSE ho_match_mp_tac ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_bind, ci_mono_ignore_bind]
+QED
+
+Theorem ci_mono_compile_abi_bytes_clamp[local]:
+  ∀ val_op m sa. ci_mono sa (SND (compile_abi_bytes_clamp val_op m sa))
+Proof
+  rpt gen_tac >> simp[abiEncoderTheory.compile_abi_bytes_clamp_def, LET_THM] >> BETA_TAC >> rpt (rpt gen_tac >> (ho_match_mp_tac ci_mono_ignore_bind ORELSE ho_match_mp_tac ci_mono_bind) >> conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_clamp_basetype[local]:
+  ∀ val_op clamp sa. ci_mono sa (SND (compile_abi_clamp_basetype val_op clamp sa))
+Proof
+  Cases_on `clamp` >> simp[abiEncoderTheory.compile_abi_clamp_basetype_def, ci_mono_comp_return, ci_mono_compile_abi_int_clamp, ci_mono_compile_abi_bytes_clamp] >> rpt gen_tac >> TRY (irule ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_op, ci_mono_emit_void] >> NO_TAC) >> TRY (irule ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_op, ci_mono_emit_void] >> NO_TAC) >> TRY (irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac >> FIRST [irule ci_mono_ignore_bind, irule ci_mono_bind] >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac >> FIRST [irule ci_mono_ignore_bind, irule ci_mono_bind] >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return])
+QED
+
+Theorem ci_mono_compile_abi_decode_static[local]:
+  ∀ src_op dst_op load_opc clamp_fn sa.
+    (∀ v sa'. ci_mono sa' (SND (clamp_fn v sa'))) ⇒
+    ci_mono sa (SND (compile_abi_decode_static src_op dst_op load_opc clamp_fn sa))
+Proof
+  rpt strip_tac >> simp[abiEncoderTheory.compile_abi_decode_static_def] >> BETA_TAC >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (first_x_assum irule) >> simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_getelemptr_abi[local]:
+  ∀ src_op is_dyn abi_offset load_opc sa.
+    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc sa))
+Proof
+  rpt gen_tac >> simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >> rpt IF_CASES_TAC >> gvs[] >> rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac) >> TRY (IF_CASES_TAC >> gvs[] >> rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac)) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
+  ∀ load_opc elem_src src_data hi_op elem_abi_sz sa.
+    ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >> BETA_TAC >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_create_tuple_in_memory[local]:
+  ∀ buf_op elems offset sa.
+    ci_mono sa (SND (compile_create_tuple_in_memory buf_op elems offset sa))
+Proof
+  ho_match_mp_tac builtinAbiTheory.compile_create_tuple_in_memory_ind >>
+  rpt strip_tac
+  >- simp[builtinAbiTheory.compile_create_tuple_in_memory_def, ci_mono_comp_return]
+  >> rewrite_tac[builtinAbiTheory.compile_create_tuple_in_memory_def] >> BETA_TAC >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op])
+  >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[ci_mono_emit_void])
+  >> rpt strip_tac >> first_x_assum irule
+QED
+
+Theorem ci_mono_compile_extcodesize_check[local]:
+  ∀ addr_op sa. ci_mono sa (SND (compile_extcodesize_check addr_op sa))
+Proof
+  rpt gen_tac >> simp[exprLoweringTheory.compile_extcodesize_check_def] >> BETA_TAC >> irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_return_value_decode[local]:
+  ∀ buf_op min_sz max_sz sa.
+    ci_mono sa (SND (compile_return_value_decode buf_op min_sz max_sz sa))
+Proof
+  rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
+QED
+
+Theorem ci_mono_compile_copy_memory[local]:
+  ∀ dst src sz sa. ci_mono sa (SND (compile_copy_memory dst src sz sa))
+Proof
+  rpt gen_tac >> Cases_on `sz` >>
+  rewrite_tac[contextTheory.compile_copy_memory_def] >>
+  simp[ci_mono_comp_return, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_copy_memory_dynamic[local]:
+  ∀ dst src len_op sa. ci_mono sa (SND (compile_copy_memory_dynamic dst src len_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[contextTheory.compile_copy_memory_dynamic_def] >>
+  simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_with_byte_offset[local]:
+  ∀ base offset sa. ci_mono sa (SND (compile_with_byte_offset base offset sa))
+Proof
+  rpt gen_tac >> Cases_on `offset` >>
+  rewrite_tac[contextTheory.compile_with_byte_offset_def] >>
+  simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_abi_encode[local]:
+  (∀ dst child_ptr child_info is_dyn static_ofst dyn_ofst_ptr sa.
+    ci_mono sa (SND (compile_abi_encode_child dst child_ptr child_info is_dyn static_ofst dyn_ofst_ptr sa))) ∧
+  (∀ dst src info sa.
+    ci_mono sa (SND (compile_abi_encode_to_buf dst src info sa))) ∧
+  (∀ dst src elems src_offset head_offset dyn_ptr sa.
+    ci_mono sa (SND (compile_abi_encode_complex_elems dst src elems src_offset head_offset dyn_ptr sa))) ∧
+  (∀ dst src elem_info elem_abi_sz elem_mem_sz len_op sa.
+    ci_mono sa (SND (compile_abi_encode_dyn_loop dst src elem_info elem_abi_sz elem_mem_sz len_op sa)))
+Proof
+  ho_match_mp_tac abiEncoderTheory.compile_abi_encode_child_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
+  simp[Once abiEncoderTheory.compile_abi_encode_child_def, LET_THM] >>
+  let
+    val base = [ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+                ci_mono_compile_alloc_buffer, ci_mono_compile_abi_encode_static,
+                ci_mono_compile_abi_zero_pad, ci_mono_fresh_label, ci_mono_new_block,
+                ci_mono_emit_inst, ci_mono_fresh_var]
+    val solve1 = rpt strip_tac >> simp base >> TRY (first_x_assum irule >> simp[])
+    val decomp =
+      rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+           (conj_tac >- solve1) ORELSE gen_tac ORELSE strip_tac)
+    val finish = simp base >> TRY (first_x_assum irule >> simp[])
+  in
+    rpt strip_tac >>
+    (* First try: decompose directly *)
+    TRY (decomp >> finish >> NO_TAC) >>
+    (* Second try: IF_CASES_TAC then decompose each branch *)
+    TRY (IF_CASES_TAC >> gvs[] >> decomp >> finish >> NO_TAC) >>
+    (* Third try: nested IF_CASES_TAC *)
+    TRY (IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[] >> decomp >> finish >> NO_TAC) >>
+    (* compile_abi_encode_complex_elems cons case: goal is
+       do elem_src <- ..; <compile_abi_encode_child inlined>; complex_elems od
+       Decompose as bind(elem_src, ignore_bind(child, complex_elems)) *)
+    TRY (
+      ho_match_mp_tac ci_mono_bind >> conj_tac >-
+        (IF_CASES_TAC >> gvs[] >> simp base) >>
+      rpt strip_tac >>
+      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (
+        (* The inner do..od is compile_abi_encode_child with args inlined.
+           We have IH: ∀child_ptr sa. ci_mono sa (SND (compile_abi_encode_child ...))
+           But the goal is the inlined body, not the opaque call.
+           Rewrite backwards with compile_abi_encode_child_def to fold it back. *)
+        IF_CASES_TAC >> gvs[] >> decomp >> finish) >>
+      rpt strip_tac >> first_x_assum irule >> NO_TAC) >>
+    (* compile_abi_encode_to_buf DynArray case:
+       The definition ALREADY has compile_abi_encode_dyn_loop as a call in the
+       else-branch, NOT expanded. But rewrite_tac expanded ALL definitions.
+       So the dyn_loop body is fully expanded in the goal.
+       Solution: DON'T expand this case at all - use simp[Once def] instead.
+       Or: fold back the dyn_loop body using GSYM conjunct 10. *)
+    TRY (
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp base >>
+      rpt strip_tac >>
+      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp base >>
+      rpt strip_tac >>
+      IF_CASES_TAC >> gvs[] >-
+        (* ¬elem_is_dyn case: all primitives *)
+        (decomp >> finish) >>
+      (* elem_is_dyn case: goal has expanded compile_abi_encode_dyn_loop.
+         Fold it back, then use IH. *)
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp base >>
+      rpt strip_tac >>
+      rewrite_tac[GSYM (List.nth (CONJUNCTS abiEncoderTheory.compile_abi_encode_child_def, 9))] >>
+      first_x_assum irule >> simp[] >> NO_TAC) >>
+    (* compile_abi_encode_complex_elems cons case:
+       bind(elem_src, ignore_bind(child_inlined, complex_elems))
+       The child call is inlined (compile_abi_encode_child expanded).
+       We fold it back using once_rewrite_tac then use IH. *)
+    TRY (
+      ho_match_mp_tac ci_mono_bind >> conj_tac >-
+        (IF_CASES_TAC >> gvs[] >> simp base) >>
+      rpt strip_tac >>
+      once_rewrite_tac[GSYM abiEncoderTheory.compile_abi_encode_child_def] >>
+      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+        (first_x_assum irule) >>
+      rpt strip_tac >> first_x_assum irule >> NO_TAC) >>
+    finish
+  end
+QED
+
+Theorem ci_mono_compile_abi_decode[local]:
+  (∀ dst src_op load_opc hi_op info sa.
+    ci_mono sa (SND (compile_abi_decode_to_buf dst src_op load_opc hi_op info sa))) ∧
+  (∀ dst src_op load_opc hi_op elems abi_offset vyper_offset sa.
+    ci_mono sa (SND (compile_abi_decode_complex_elems dst src_op load_opc hi_op elems abi_offset vyper_offset sa))) ∧
+  (∀ dst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa.
+    ci_mono sa (SND (compile_abi_decode_dyn_loop dst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa)))
+Proof
+  let
+    val [c0,c1,c2,c3,c4,c5,c6] = CONJUNCTS abiEncoderTheory.compile_abi_decode_to_buf_def
+    val db = fn t => ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[t] >> rpt strip_tac
+    val dib = fn t => ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[t] >> rpt strip_tac
+  in
+  ho_match_mp_tac abiEncoderTheory.compile_abi_decode_to_buf_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
+  (* DecPrimWord *)
+  >- (rewrite_tac[c0] >> BETA_TAC >>
+      irule ci_mono_compile_abi_decode_static >> simp[ci_mono_compile_abi_clamp_basetype])
+  (* DecBytestring *)
+  >- (rewrite_tac[c1] >>
+      ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      ntac 4 (db ci_mono_emit_op) >> dib ci_mono_emit_void >> dib ci_mono_emit_void >>
+      db ci_mono_emit_op >> Cases_on `load_opc` >> simp[ci_mono_emit_void])
+  (* DecDynArray *)
+  >- (rpt strip_tac >> rewrite_tac[c2] >> BETA_TAC >>
+      ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      ntac 5 (db ci_mono_emit_op) >> dib ci_mono_emit_void >> dib ci_mono_emit_void >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
+      >- (ntac 3 (db ci_mono_emit_op) >> Cases_on `load_opc` >> simp[ci_mono_emit_void])
+      >> db ci_mono_compile_alloc_buffer >> dib ci_mono_emit_void >>
+      first_x_assum irule >> simp[])
+  (* DecComplex *)
+  >- (rpt strip_tac >> rewrite_tac[c3] >> simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+      ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      first_x_assum irule >> simp[])
+  (* complex_elems nil *)
+  >- (rewrite_tac[c4] >> simp[ci_mono_comp_return])
+  (* complex_elems cons *)
+  >- (rpt strip_tac >> rewrite_tac[c5] >> BETA_TAC >> simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+      db ci_mono_compile_getelemptr_abi >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (first_x_assum (irule o SRULE[]) >> simp[]) >> rpt strip_tac >>
+      first_x_assum (irule o SRULE[]) >> simp[])
+  (* dyn_loop *)
+  >> rpt strip_tac >> rewrite_tac[c6] >> BETA_TAC >> simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  ntac 3 (db ci_mono_fresh_label) >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
+  ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
+  ntac 4 (db ci_mono_emit_op) >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- (
+    IF_CASES_TAC >> simp[ci_mono_compile_abi_decode_dyn_elem_ptr, ci_mono_comp_return]) >> rpt strip_tac >>
+  ntac 3 (db ci_mono_emit_op) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (first_x_assum (irule o SRULE[]) >> simp[]) >> rpt strip_tac >>
+  db ci_mono_emit_op >> dib ci_mono_emit_void >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
+  simp[ci_mono_comp_return]
+  end
+QED
+
+Theorem ci_mono_compile_store_memory_typed[local]:
+  (∀ cenv dst dst_ty src src_ty sa.
+    ci_mono sa (SND (compile_store_memory_typed cenv dst dst_ty src src_ty sa))) ∧
+  (∀ cenv dst src dst_tys src_tys dst_off src_off sa.
+    ci_mono sa (SND (compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off sa))) ∧
+  (∀ cenv dst dst_elem_ty src src_elem_ty count sa.
+    ci_mono sa (SND (compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty count sa))) ∧
+  (∀ cenv dst dst_elem_ty dst_capacity src src_elem_ty sa.
+    ci_mono sa (SND (compile_copy_dynarray_typed cenv dst dst_elem_ty dst_capacity src src_elem_ty sa))) ∧
+  (∀ cenv dst src dst_fields src_fields dst_off src_off sa.
+    ci_mono sa (SND (compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off sa)))
+Proof
+  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
+  simp[Once contextTheory.compile_store_memory_typed_def, LET_THM] >>
+  rpt gen_tac >>
+  rpt (CHANGED_TAC (
+    TRY (ho_match_mp_tac ci_mono_bind >> conj_tac >-
+      (rpt strip_tac >>
+       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+            ci_mono_compile_alloc_buffer, ci_mono_compile_word_copy_loop,
+            ci_mono_compile_store_bytestring, ci_mono_compile_copy_memory,
+            ci_mono_compile_copy_memory_dynamic,
+            ci_mono_compile_with_byte_offset,
+            ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
+            ci_mono_fresh_var] >>
+       TRY (first_x_assum irule >> gvs[]) >>
+       TRY (IF_CASES_TAC >> gvs[] >> simp[ci_mono_emit_op, ci_mono_emit_void,
+            ci_mono_comp_return, ci_mono_compile_copy_memory,
+            ci_mono_compile_copy_memory_dynamic])) >>
+      rpt strip_tac) >>
+    TRY (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+      (rpt strip_tac >>
+       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+            ci_mono_compile_alloc_buffer, ci_mono_compile_word_copy_loop,
+            ci_mono_compile_store_bytestring, ci_mono_compile_copy_memory,
+            ci_mono_compile_copy_memory_dynamic,
+            ci_mono_compile_with_byte_offset,
+            ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
+            ci_mono_fresh_var] >>
+       TRY (first_x_assum irule >> gvs[]) >>
+       TRY (IF_CASES_TAC >> gvs[] >> simp[ci_mono_emit_op, ci_mono_emit_void,
+            ci_mono_comp_return, ci_mono_compile_copy_memory,
+            ci_mono_compile_copy_memory_dynamic])) >>
+      rpt strip_tac) >>
+    TRY IF_CASES_TAC >> TRY (gvs[] >> NO_TAC) >>
+    TRY (BasicProvers.TOP_CASE_TAC) >>
+    TRY (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+              ci_mono_compile_copy_memory, ci_mono_compile_store_bytestring,
+              ci_mono_compile_word_copy_loop, ci_mono_compile_copy_memory_dynamic,
+              ci_mono_compile_with_byte_offset,
+              ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
+              ci_mono_fresh_var]) >>
+    TRY (first_x_assum irule >> gvs[])))
+QED
+
+Theorem ci_mono_lower_abi_encode[local]:
+  ∀ ensure_tuple method_id_opt src_op enc_info maxlen sa.
+    ci_mono sa (SND (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinAbiTheory.lower_abi_encode_def, LET_THM] >> BETA_TAC >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_comp_return] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+    (BasicProvers.TOP_CASE_TAC >> simp[ci_mono_comp_return] >>
+     irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >-
+    simp[cj 2 ci_mono_compile_abi_encode] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+    (IF_CASES_TAC >>
+     simp[ci_mono_emit_void] >>
+     irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  rpt strip_tac >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_lower_abi_decode[local]:
+  ∀ data_op dec_info abi_min_size abi_max_size output_size sa.
+    ci_mono sa (SND (lower_abi_decode data_op dec_info abi_min_size abi_max_size output_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinAbiTheory.lower_abi_decode_def, LET_THM] >> BETA_TAC >>
+  ntac 6 (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_comp_return] >> rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> simp[cj 1 ci_mono_compile_abi_decode, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_dynarray_append[local]:
+  ∀ cenv base_op val_op word_scale elem_size dst_elem_ty src_elem_ty
+    capacity is_prim load_opc store_opc sa.
+    ci_mono sa (SND (compile_dynarray_append cenv base_op val_op word_scale elem_size
+                      dst_elem_ty src_elem_ty capacity is_prim load_opc store_opc sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[exprLoweringTheory.compile_dynarray_append_def, LET_THM] >> BETA_TAC >>
+  ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ntac 3 (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+  IF_CASES_TAC
+  >- simp[ci_mono_emit_void, ci_mono_emit_op, ci_mono_bind, ci_mono_ignore_bind]
+  >> IF_CASES_TAC >> gvs[]
+  >- (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+      >- (rpt strip_tac >>
+          ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+          >- (mp_tac (cj 1 ci_mono_compile_store_memory_typed) >> metis_tac[])
+          >> simp[ci_mono_comp_return])
+      >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_bind, ci_mono_ignore_bind])
+  >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (rpt strip_tac >>
+      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+      >- simp[ci_mono_compile_word_copy_loop]
+      >> simp[ci_mono_comp_return])
+  >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_bind, ci_mono_ignore_bind]
+QED
+
+Theorem ci_mono_compile_default_return_path[local]:
+  ∀ buf_op result_op default_op addr_op skip_check min_return_size
+    max_return_size ret_mem_bytes ret_dec_info is_prim_return sa.
+    ci_mono sa (SND (compile_default_return_path buf_op result_op default_op addr_op
+                      skip_check min_return_size max_return_size ret_mem_bytes
+                      ret_dec_info is_prim_return sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[exprLoweringTheory.compile_default_return_path_def, LET_THM] >> BETA_TAC >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_fresh_label] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_fresh_label] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_fresh_label] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+    (IF_CASES_TAC >> simp[ci_mono_emit_void]) >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+    (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_compile_extcodesize_check]) >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_return_value_decode] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
+    simp[cj 1 ci_mono_compile_abi_decode] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >> rpt strip_tac >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_stage_intcall_args[local]:
+  ∀ cenv vals flags tys sa.
+    ci_mono sa (SND (compile_stage_intcall_args cenv vals flags tys sa))
+Proof
+  ho_match_mp_tac compile_stage_intcall_args_ind >>
+  rpt conj_tac >>
+  simp[Once compile_stage_intcall_args_def, ci_mono_comp_return] >>
+  TRY (rpt gen_tac >> strip_tac >> gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- first_x_assum ACCEPT_TAC >> rpt strip_tac >> simp[ci_mono_comp_return] >> NO_TAC) >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (IF_CASES_TAC >> simp[ci_mono_emit_void] >> IF_CASES_TAC >> simp[ci_mono_emit_void] >- (rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> simp[ci_mono_compile_store_bytestring, ci_mono_comp_return])) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (first_x_assum (fn ih => irule (SRULE [] ih))) >> rpt strip_tac >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_extcall_store_args[local]:
+  ∀ cfn cenv es tys buf_op offset sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_extcall_store_args cfn cenv es tys buf_op offset sa))
+Proof
+  ntac 7 gen_tac >> strip_tac >>
+  MAP_EVERY qid_spec_tac [`sa`, `offset`, `buf_op`, `tys`, `es`, `cenv`] >>
+  Induct_on `es`
+  >- simp[compile_extcall_store_args_def, ci_mono_comp_return]
+  >> rpt gen_tac >> Cases_on `tys`
+  >> simp[Once compile_extcall_store_args_def, LET_THM]
+  >> (ho_match_mp_tac ci_mono_bind >> conj_tac
+      >- (rpt strip_tac >> irule ci_mono_lower_value_cfn >> metis_tac[])
+      >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac
+      >- (rpt strip_tac >> IF_CASES_TAC >>
+          simp[ci_mono_comp_return, ci_mono_emit_op])
+      >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+      >- (rpt strip_tac >> TRY IF_CASES_TAC >>
+          simp[ci_mono_emit_void] >>
+          TRY IF_CASES_TAC >>
+          simp[ci_mono_compile_store_bytestring, ci_mono_emit_void])
+      >> rpt strip_tac >> first_x_assum irule)
+QED
+
+Theorem ci_mono_compile_external_call_kwargs[local]:
+  ∀ addr_op args_op args_abi_size method_id_val
+    return_abi_size min_return_size ret_mem_bytes
+    use_staticcall call_value gas_op
+    skip_check has_default default_op
+    is_prim_return
+    args_enc_info ret_dec_info sa.
+    ci_mono sa (SND (compile_external_call_kwargs addr_op args_op args_abi_size method_id_val
+                      return_abi_size min_return_size ret_mem_bytes
+                      use_staticcall call_value gas_op
+                      skip_check has_default default_op
+                      is_prim_return
+                      args_enc_info ret_dec_info sa))
+Proof
+  rpt gen_tac >> simp[compile_external_call_kwargs_def, LET_THM] >> BETA_TAC >> irule ci_mono_bind >> reverse conj_tac >- simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> BETA_TAC >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  irule ci_mono_ignore_bind >> conj_tac >- simp[cj 2 ci_mono_compile_abi_encode] >>
+  rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> conj_tac >- (IF_CASES_TAC >> simp[ci_mono_compile_extcodesize_check, ci_mono_comp_return]) >>
+  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (gen_tac >> IF_CASES_TAC >> simp[ci_mono_emit_op]) >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_fresh_label] >>
+rpt strip_tac >>
+irule ci_mono_bind >> simp[ci_mono_fresh_label] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >> simp[ci_mono_emit_inst] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >> simp[ci_mono_new_block] >>
+rpt strip_tac >>
+irule ci_mono_bind >> simp[ci_mono_emit_op] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >> simp[ci_mono_emit_void] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >> simp[ci_mono_emit_inst] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >> simp[ci_mono_new_block] >>
+rpt strip_tac >>
+IF_CASES_TAC >> gvs[]
+>- simp[ci_mono_comp_return]
+>> IF_CASES_TAC >> gvs[]
+>- (irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+    rpt strip_tac >> simp[ci_mono_compile_default_return_path])
+>> irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+rpt strip_tac >>
+irule ci_mono_bind >> simp[ci_mono_compile_return_value_decode] >>
+rpt strip_tac >>
+irule ci_mono_ignore_bind >> conj_tac
+>- simp[ci_mono_compile_abi_decode]
+>> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_call[local]:
+  ∀ cfn cenv ret_ty ty target args default_ret sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty target args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `target` >>
+  TRY (simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >> NO_TAC)
+  >- ( (* IntCall *)
+    simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+rpt IF_CASES_TAC >> gvs[] >>
+rpt (CHANGED_TAC (
+  (irule ci_mono_trans >>
+   first_assum (irule_at (Pos last)) >>
+   simp[ci_mono_store_multi_results, ci_mono_emit_multi_op, ci_mono_emit_op,
+        ci_mono_emit_void, ci_mono_compile_stage_intcall_args,
+        ci_mono_compile_alloc_buffer]) ORELSE
+  (irule ci_mono_trans >>
+   irule_at (Pos last) ci_mono_store_multi_results) ORELSE
+  (irule ci_mono_trans >>
+   irule_at (Pos last) ci_mono_emit_multi_op) ORELSE
+  (irule ci_mono_trans >>
+   irule_at (Pos last) ci_mono_emit_op) ORELSE
+  (irule ci_mono_trans >>
+   irule_at (Pos last) ci_mono_emit_void) ORELSE
+  (irule ci_mono_trans >>
+   irule_at (Pos last) ci_mono_compile_stage_intcall_args) ORELSE
+  (irule ci_mono_trans >>
+   irule_at (Pos last) ci_mono_compile_alloc_buffer) ORELSE
+  (irule ci_mono_compile_multi_exprs)
+)) >>
+rpt strip_tac >> first_assum irule)
+  >- ( (* ExtCall *)
+    PairCases_on `p` >> simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+    Cases_on `args` >> simp[ci_mono_emit_inst] >>
+    rpt IF_CASES_TAC >> gvs[] >>
+    Cases_on `default_ret` >> gvs[] >>
+    Cases_on `t` >> gvs[] >>
+    rpt (CHANGED_TAC (
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_lower_value_cfn >> simp[]) ORELSE
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_emit_op >> simp[]) ORELSE
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_compile_extcall_store_args >> simp[]) ORELSE
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_compile_alloc_buffer >> simp[]) ORELSE
+      (irule ci_mono_trans >>
+       first_assum (irule_at (Pos last)) >>
+       simp[ci_mono_compile_alloc_buffer, ci_mono_emit_op,
+            ci_mono_compile_external_call_kwargs, ci_mono_comp_return]) ORELSE
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_compile_external_call_kwargs) ORELSE
+      (irule ci_mono_lower_value_cfn >> simp[]) ORELSE
+      (irule ci_mono_compile_extcall_store_args >> simp[])
+    )) >>
+    gvs[] >> rpt strip_tac >>
+    TRY (first_assum irule >> NO_TAC) >>
+    TRY (irule ci_mono_refl >> NO_TAC) >>
+    simp[ci_mono_emit_inst, ci_mono_comp_return, ci_mono_refl])
+  >> (* Send *)
+  simp[Once compile_call_def, LET_THM] >>
+  Cases_on `args` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  Cases_on `t` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  Cases_on `t'` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
+QED
 
 Theorem compile_expr_ci_mono[local]:
   (∀ cenv ty e st. ci_mono st (SND (compile_expr cenv ty e st))) ∧
@@ -1129,6 +2599,31 @@ QED
 
 (* ===== Structural Properties ===== *)
 
+(* Helper: step_inst_base preserves call/tx/block context for ANY instruction
+   that returns OK. Unlike step_inst_base_preserves_inst_idx, we don't need
+   ~is_terminator because jump_to only modifies vs_prev_bb/vs_current_bb/vs_inst_idx. *)
+Theorem step_inst_base_preserves_ctxs[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
+     write_memory_with_expansion_def, mcopy_def, jump_to_def,
+     revert_state_def, set_returndata_def, halt_state_def,
+     eval_operands_def]
+QED
+
 (* compile_expr preserves external-facing state components.
    Memory MAY be modified (keccak256, struct literals, mapping access, etc.
    all emit MSTORE/ALLOCA). Only call/tx/block context and accounts are
@@ -1148,7 +2643,7 @@ Theorem compile_expr_preserves_contexts:
     ss'.vs_tx_ctx = ss.vs_tx_ctx ∧
     ss'.vs_block_ctx = ss.vs_block_ctx
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt conj_tac >> irule (SRULE [] run_inst_seq_preserves_field) >> qexists `emitted_insts st st'` >> rpt strip_tac >> gvs[] >> drule step_inst_base_preserves_ctxs >> simp[]
 QED
 
 (* Emitted instructions extend the current block.
