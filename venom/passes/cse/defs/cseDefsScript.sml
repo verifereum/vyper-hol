@@ -44,7 +44,7 @@ Definition cse_skip_opcode_def:
   cse_skip_opcode PARAM = T /\
   cse_skip_opcode NOP = T /\
   cse_skip_opcode GAS = T /\
-  cse_skip_opcode MSIZE = T /\
+  cse_skip_opcode MEMTOP = T /\
   cse_skip_opcode CALLDATASIZE = T /\
   cse_skip_opcode GASLIMIT = T /\
   cse_skip_opcode ADDRESS = T /\

@@ -188,7 +188,7 @@ End
    vs_memory layout.  We exclude all opcodes whose behavior depends on
    vs_memory, vs_allocas, or vs_returndata — fields that diverge.
 
-   Memory readers: MLOAD, MSIZE, SHA3, MCOPY, LOG
+   Memory readers: MLOAD, MEMTOP, SHA3, MCOPY, LOG
    External calls: CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2
    INVOKE: callee inherits vs_memory → different returns on divergent memory
    RETURNDATASIZE/RETURNDATACOPY: read vs_returndata (may differ)
@@ -200,7 +200,7 @@ End
    - DLOAD/DLOADBYTES: transformation targets *)
 Definition reads_memory_def:
   reads_memory op <=>
-    op = MLOAD \/ op = MSIZE \/ op = SHA3 \/ op = MCOPY \/
+    op = MLOAD \/ op = MEMTOP \/ op = SHA3 \/ op = MCOPY \/
     op = LOG \/
     op = CALL \/ op = STATICCALL \/ op = DELEGATECALL \/
     op = CREATE \/ op = CREATE2 \/
