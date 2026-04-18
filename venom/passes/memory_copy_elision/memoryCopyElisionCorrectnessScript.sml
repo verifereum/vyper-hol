@@ -1,8 +1,10 @@
 (*
  * Memory Copy Elision — Correctness Statement
  *
- * Eliding redundant memory copies preserves semantics when the
- * destination already contains the expected data.
+ * States the main correctness theorem for the copy-elision pass:
+ * running copy_elision_function produces an observationally equivalent
+ * result whenever the preconditions (well-formedness, SSA, sound
+ * analysis results) hold.
  *)
 
 Theory memoryCopyElisionCorrectness
@@ -387,7 +389,7 @@ Proof
   Cases >> simp[is_copy_opcode_def, is_terminator_def]
 QED
 
-Triviality cei_aft_properties:
+Triviality copy_elision_inst_properties:
   (!bp dfg v inst. (copy_elision_inst bp dfg v inst).inst_id = inst.inst_id) /\
   (!bp dfg v inst. is_terminator inst.inst_opcode ==>
      copy_elision_inst bp dfg v inst = inst) /\
@@ -407,7 +409,7 @@ Proof
 QED
 
 (* copy_elision_inst: id + output property (for SSA trace-back) *)
-Triviality cei_structural:
+Triviality copy_elision_inst_structural:
   !bp dfg v inst.
     (copy_elision_inst bp dfg v inst).inst_id = inst.inst_id /\
     ((copy_elision_inst bp dfg v inst).inst_outputs = inst.inst_outputs \/
@@ -423,6 +425,8 @@ QED
 (* Part 6: WF preservation                                            *)
 (* ================================================================== *)
 
+(* copy_elision_function preserves well-formedness:
+   well-formed input produces a well-formed output function *)
 Theorem copy_elision_preserves_wf_function:
   !fn. wf_function fn ==> wf_function (copy_elision_function fn)
 Proof
@@ -436,7 +440,7 @@ Proof
   (* Layer 1: wf_function fn1 via aft_singleton_preserves_wf *)
   `wf_function fn1` by (
     simp[Abbr `fn1`] >>
-    irule aft_singleton_preserves_wf >> simp[cei_aft_properties]) >>
+    irule aft_singleton_preserves_wf >> simp[copy_elision_inst_properties]) >>
   rpt conj_tac
   >- simp[Abbr `lse_b`, lse_block_label]
   >- (rpt strip_tac >> simp[Abbr `lse_b`] >> irule lse_block_wf >> simp[])
@@ -450,8 +454,8 @@ QED
 (* Part 7: SSA preservation                                           *)
 (* ================================================================== *)
 
-(* SSA for aft layer: use aft_singleton_eq_fmt_mapi + trace-back *)
-Triviality ssa_form_aft_cei:
+(* SSA form is preserved when copy_elision_inst is applied per-instruction *)
+Triviality copy_elision_inst_preserves_ssa:
   !bottom result fn.
     wf_function fn /\ ssa_form fn ==>
     ssa_form (analysis_function_transform bottom result
@@ -470,7 +474,7 @@ Proof
       conj_tac >- (qexists `idx` >> simp[]) >>
       qspecl_then [`bp`,`dfg`,
         `df_at bottom result bb.bb_label idx`,
-        `EL idx bb.bb_instructions`] strip_assume_tac cei_structural >>
+        `EL idx bb.bb_instructions`] strip_assume_tac copy_elision_inst_structural >>
       simp[])
   (* fn_inst_ids_distinct fn *)
   >- gvs[wf_function_def]
@@ -479,7 +483,7 @@ Proof
       `fn_inst_ids_distinct fn` by gvs[wf_function_def] >>
       `wf_function (analysis_function_transform bottom result
          (\v inst. [copy_elision_inst bp dfg v inst]) fn)` by (
-        irule aft_singleton_preserves_wf >> simp[cei_aft_properties]) >>
+        irule aft_singleton_preserves_wf >> simp[copy_elision_inst_properties]) >>
       gvs[wf_function_def])
   (* ssa_form fn *)
   >> simp[]
@@ -503,8 +507,8 @@ Proof
   simp[]
 QED
 
-(* SSA for fmt(lse_block) layer *)
-Triviality ssa_form_fmt_lse:
+(* SSA form is preserved when load_store_elim_block is applied per-block *)
+Triviality load_store_elim_preserves_ssa:
   !aliases bp uc fn.
     fn_inst_ids_distinct fn /\ ssa_form fn ==>
     ssa_form (function_map_transform (load_store_elim_block aliases bp uc) fn)
@@ -516,6 +520,8 @@ Proof
   drule_all lse_block_inst_traceback >> simp[]
 QED
 
+(* copy_elision_function preserves SSA form:
+   given a well-formed SSA input, the output remains in SSA form *)
 Theorem copy_elision_preserves_ssa_form:
   !fn. wf_function fn /\ ssa_form fn ==>
     ssa_form (copy_elision_function fn)
@@ -527,13 +533,13 @@ Proof
   (* Layer 2: fmt(lse_block) *)
   qmatch_goalsub_abbrev_tac `function_map_transform lse_b fn1` >>
   simp[Abbr `lse_b`] >>
-  irule ssa_form_fmt_lse >>
+  irule load_store_elim_preserves_ssa >>
   conj_tac
   (* fn_inst_ids_distinct fn1 *)
   >- (`wf_function fn1` by (
         simp[Abbr `fn1`] >>
-        irule aft_singleton_preserves_wf >> simp[cei_aft_properties]) >>
+        irule aft_singleton_preserves_wf >> simp[copy_elision_inst_properties]) >>
       gvs[wf_function_def])
   (* ssa_form fn1 *)
-  >- simp[Abbr `fn1`, ssa_form_aft_cei]
+  >- simp[Abbr `fn1`, copy_elision_inst_preserves_ssa]
 QED

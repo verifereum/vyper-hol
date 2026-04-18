@@ -18,6 +18,7 @@
  * TOP-LEVEL:
  *   plan_stack_rel          — ps_stack matches concrete stack
  *   plan_spill_rel          — ps_spilled matches memory contents
+ *   spill_mem_covered       — initial memory covers spill high-water mark
  *   venom_asm_rel           — full Venom ↔ asm state relation
  *   venom_asm_terminal_rel  — shared state match (for terminal results)
  *   fn_init_ps              — initial plan state with params pre-loaded
@@ -106,6 +107,17 @@ Definition step_mem_safe_def:
   step_mem_safe (alloc : spill_alloc) vs vs' ⇔
     ∀i. alloc.sa_fn_eom ≤ i ∧ i < alloc.sa_next_offset ⇒
       read_byte i vs.vs_memory = read_byte i vs'.vs_memory
+End
+
+(* Memory is pre-expanded to cover the spill high-water mark.
+   Ensures MSIZE agrees between Venom and asm from the start.
+   Established at context entry by emitting a memory-touching op
+   up to the maximum sa_next_offset across all functions.
+   spill_hwm is the maximum sa_next_offset reached during execution
+   (known from codegen output, since spill allocation is deterministic). *)
+Definition spill_mem_covered_def:
+  spill_mem_covered spill_hwm (mem : byte list) ⇔
+    spill_hwm ≤ LENGTH mem
 End
 
 (* Full Venom ↔ asm state relation.

@@ -12,9 +12,15 @@
  *   type_bounds      — (lo, hi) word256 bounds for type
  *   struct_field_offset — byte offset of struct field
  *   nsid_to_string   — namespace ID to lookup string
+ *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
+ *   label_external   — label not bound and not in future fresh-label co-domain
  *
  * Helper:
  *   fresh_var, fresh_label, emit, new_block — compilation monad ops
+ *   fresh_label_output   — canonical shape of compiler-generated labels (@suffix_k)
+ *   fresh_vars_wrt       — compiler var counter ahead of existing venom vars
+ *   bound_labels         — set of labels bound to blocks in compile state
+ *   compiler_labels_future — co-domain of fresh_label for counter values ≥ n
  *)
 
 Theory compileEnv
@@ -379,12 +385,20 @@ Definition fresh_var_def:
      cs with cs_next_var := n + 1)
 End
 
+(* Canonical shape of a compiler-generated label: @<suffix>_<counter>.
+   Factored out so proofs can talk about the label shape abstractly
+   (set membership) rather than decomposing strings. *)
+Definition fresh_label_output_def:
+  fresh_label_output suffix (k:num) =
+    "@" ++ suffix ++ "_" ++ (toString k)
+End
+
 (* Fresh label *)
 Definition fresh_label_def:
   fresh_label suffix (cs:compile_state) =
     let n = cs.cs_next_label in
-    let name = "@" ++ suffix ++ "_" ++ (toString n) in
-    (name, cs with cs_next_label := n + 1)
+    (fresh_label_output suffix n,
+     cs with cs_next_label := n + 1)
 End
 
 (* Fresh instruction ID *)
@@ -482,6 +496,50 @@ Definition fresh_vars_wrt_def:
   fresh_vars_wrt (st:compile_state) (ss:venom_state) ⇔
     ∀ n. n ≥ st.cs_next_var ⇒
       STRING #"%" (toString n) ∉ FDOM ss.vs_vars
+End
+
+(* ===== Label-Space Invariants =====
+   Track which labels the compiler has allocated (via fresh_label) and
+   which labels are currently bound to blocks. Used by module-level
+   correctness to rule out collisions between caller-supplied "external"
+   labels and compiler-generated labels.
+
+   All predicates are set-valued and phrased in terms of the abstract
+   fresh_label_output co-domain; proofs need not do string decomposition. *)
+
+(* Set of labels bound to blocks in the compile state: the current block
+   plus all finalized blocks. *)
+Definition bound_labels_def:
+  bound_labels (st:compile_state) =
+    st.cs_current_bb INSERT set (MAP (λbb. bb.bb_label) st.cs_blocks)
+End
+
+(* Co-domain of fresh_label for counter values ≥ n. These are the labels
+   fresh_label will produce from a state with cs_next_label = n. *)
+Definition compiler_labels_future_def:
+  compiler_labels_future (n:num) =
+    { fresh_label_output s k | s,k | n ≤ k }
+End
+
+(* lbl is external to st: not already bound, and not in the future
+   fresh_label co-domain starting from st. A caller-supplied label that
+   was allocated by a prior fresh_label call (counter < cs_next_label)
+   satisfies this. *)
+Definition label_external_def:
+  label_external (st:compile_state) lbl ⇔
+    lbl ∉ bound_labels st ∧
+    lbl ∉ compiler_labels_future st.cs_next_label
+End
+
+(* Well-formedness invariant on compile_state:
+   - Bound block labels are disjoint from the future fresh_label co-domain
+     (i.e., every bound label was either caller-supplied before any
+     fresh_label allocation, or allocated by a prior fresh_label call).
+   - Block labels are pairwise distinct. *)
+Definition compile_state_ok_def:
+  compile_state_ok (st:compile_state) ⇔
+    DISJOINT (bound_labels st) (compiler_labels_future st.cs_next_label) ∧
+    ALL_DISTINCT (st.cs_current_bb :: MAP (λbb. bb.bb_label) st.cs_blocks)
 End
 
 Definition well_formed_cenv_def:

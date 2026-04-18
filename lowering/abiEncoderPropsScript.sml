@@ -2,11 +2,15 @@
  * ABI Encoder/Decoder Properties
  *
  * TOP-LEVEL:
- *   compile_abi_int_clamp_correct     — int clamping rejects out-of-range
- *   compile_abi_bytes_clamp_correct   — bytes clamping rejects dirty high bits
+ *   compile_abi_int_clamp_correct       — int clamping either accepts or reverts on out-of-range
+ *   compile_abi_bytes_clamp_correct   — bytes clamping either accepts or reverts on dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
  *   compile_abi_decode_static_correct — static type reads + clamps
- *   compile_get_element_ptr_correct   — element pointer arithmetic
+ *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
+ *   compile_get_element_ptr_zero       — get_element_ptr at offset 0 is identity
+ *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
+ *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
+ *   val_in_memory_flag_enc            — flag val_in_memory matches ABI encoding
  *   compile_abi_zero_pad_correct      — zero-pad bytestring to 32-byte boundary
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
@@ -407,7 +411,7 @@ End
 *)
 
 Theorem compile_abi_encode_to_buf_correct:
-  (* compile_abi_encode_child — P0: static case only for single_block *)
+  (* compile_abi_encode_child — static case only for single_block *)
   (∀ dst child_ptr enc_info is_dyn static_ofst dyn_ofst_ptr
      st op st' ss
      dst_w child_w ty tv v tenv av at
@@ -446,7 +450,7 @@ Theorem compile_abi_encode_to_buf_correct:
             EL a ss'.vs_memory = EL a ss.vs_memory) ∧
       LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
 
-  (* compile_abi_encode_to_buf — P1 *)
+  (* compile_abi_encode_to_buf *)
   (∀ dst src enc_info st op st' ss
      dst_w src_w ty tv v tenv av at
      (sfields : (string, (string # type # num) list) fmap) cenv.
@@ -482,7 +486,7 @@ Theorem compile_abi_encode_to_buf_correct:
             EL a ss'.vs_memory = EL a ss.vs_memory) ∧
       LENGTH ss'.vs_memory ≥ LENGTH ss.vs_memory) ∧
 
-  (* compile_abi_encode_complex_elems — P2: static elements *)
+  (* compile_abi_encode_complex_elems — static elements *)
   (∀ dst src elems src_offset head_offset dyn_ptr
      st op st' ss
      dst_w src_w tys tvs vs tenv avs ats
@@ -542,25 +546,25 @@ Theorem compile_abi_encode_to_buf_correct:
      (elem_abi_sz:num) (elem_mem_sz:num) (len_op:operand). T)
 Proof
   ho_match_mp_tac compile_abi_encode_child_ind >>
-  (* P0: compile_abi_encode_child *)
+  (* compile_abi_encode_child *)
   conj_tac >- suspend "child" >>
-  (* P1: compile_abi_encode_to_buf: AbiPrimWord *)
+  (* compile_abi_encode_to_buf: AbiPrimWord *)
   conj_tac >- suspend "prim" >>
-  (* P1: compile_abi_encode_to_buf: AbiBytestring *)
+  (* compile_abi_encode_to_buf: AbiBytestring *)
   conj_tac >- suspend "bytestring" >>
-  (* P1: compile_abi_encode_to_buf: AbiCopy *)
+  (* compile_abi_encode_to_buf: AbiCopy *)
   conj_tac >- suspend "copy" >>
-  (* P1: compile_abi_encode_to_buf: AbiDynArray *)
+  (* compile_abi_encode_to_buf: AbiDynArray *)
   conj_tac >- suspend "dynarray" >>
-  (* P1: compile_abi_encode_to_buf: AbiComplex [] *)
+  (* compile_abi_encode_to_buf: AbiComplex [] *)
   conj_tac >- suspend "complex_nil" >>
-  (* P1: compile_abi_encode_to_buf: AbiComplex (non-empty) *)
+  (* compile_abi_encode_to_buf: AbiComplex (non-empty) *)
   conj_tac >- suspend "complex_cons" >>
-  (* P2: compile_abi_encode_complex_elems: [] *)
+  (* compile_abi_encode_complex_elems: [] *)
   conj_tac >- suspend "elems_nil" >>
-  (* P2: compile_abi_encode_complex_elems: cons *)
+  (* compile_abi_encode_complex_elems: cons *)
   conj_tac >- suspend "elems_cons" >>
-  (* P3: compile_abi_encode_dyn_loop *)
+  (* compile_abi_encode_dyn_loop *)
   suspend "dyn_loop"
 QED
 
@@ -756,7 +760,15 @@ Theorem compile_get_element_ptr_correct:
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (n2w (base_addr + offset))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[compile_get_element_ptr_def] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+simp[step_ADD, eval_operand_lit, eval_operand_update_var] >>
+qexists `update_var (STRING #"%" (toString st.cs_next_var)) (n2w base_addr + n2w offset) ss` >>
+conj_tac >- (
+  irule run_inst_seq_sing_ok >>
+  simp[step_ADD, eval_operand_lit]
+) >>
+simp[eval_operand_update_var, wordsTheory.word_add_n2w]
 QED
 
 (* ===== Zero Padding ===== *)
