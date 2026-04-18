@@ -884,6 +884,22 @@ Proof
     write_effects_def, empty_effects_def]
 QED
 
+(* Write-effects exclusion: ops that don't read MEMORY don't write LOG.
+   LOG is the only opcode that writes Eff_LOG, and LOG reads Eff_MEMORY.
+   After MSIZE sunset: LOG no longer has Eff_MSIZE, so this requires its own lemma. *)
+Theorem LOG_reads_memory:
+  Eff_MEMORY IN read_effects LOG
+Proof
+  EVAL_TAC
+QED
+
+Theorem no_log_write_without_memory_read:
+  !op. Eff_MEMORY NOTIN read_effects op ==>
+    Eff_LOG NOTIN write_effects op
+Proof
+  Cases >> EVAL_TAC
+QED
+
 (* Write-effects exclusion: ops without MEMORY/LOG/RETURNDATA writes
    also don't write IMMUTABLES (given our other filters).
    After MSIZE sunset: LOG and RETURNDATA write_effects no longer
@@ -2953,8 +2969,7 @@ Resume m2v_nonterminal_step_dispatch[nonpromoted]:
   simp[] >>
   disch_then irule >>
   rpt conj_tac >> TRY (gvs[m2v_inv_noix_def] >> NO_TAC)
-  >- cheat (* Eff_LOG NOTIN: in no-mem-write branch, LOG excluded by
-             Eff_MEMORY IN read_effects. TODO: proper case analysis *)
+  >- metis_tac[no_log_write_without_memory_read]
   >- metis_tac[no_returndata_write_without_memory_or_extcall]
   (* Remaining: ~is_effect_free_op ==> inst.inst_outputs = [] *)
   >> (strip_tac >>
