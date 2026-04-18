@@ -1992,7 +1992,7 @@ Proof
 QED
 
 Theorem ci_mono_compile_abi_zero_pad[local]:
-  ∀ ptr sa. ci_mono sa (SND (compile_abi_zero_pad ptr sa))
+  ∀ ptr length count sa. ci_mono sa (SND (compile_abi_zero_pad ptr length count sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[abiEncoderTheory.compile_abi_zero_pad_def] >> BETA_TAC >>
