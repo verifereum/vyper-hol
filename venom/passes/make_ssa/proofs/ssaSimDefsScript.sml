@@ -309,7 +309,7 @@ Definition opcode_has_output_def:
   opcode_has_output BYTE = T /\
   (* Has output: memory/storage/immutable reads *)
   opcode_has_output MLOAD = T /\
-  opcode_has_output MSIZE = T /\
+  opcode_has_output MEMTOP = T /\
   opcode_has_output SLOAD = T /\
   opcode_has_output TLOAD = T /\
   opcode_has_output ILOAD = T /\

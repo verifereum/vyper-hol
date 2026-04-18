@@ -82,13 +82,15 @@ Definition compile_abi_clamp_basetype_def:
 End
 
 (* zero_pad: zero-pad bytestring data to 32-byte boundary.
-   Mirrors Python: abi/abi_encoder.py _zero_pad *)
+   Mirrors Python: abi/abi_encoder.py _zero_pad (post #4916)
+   Writes exactly `count` zero bytes using CALLDATACOPY from CALLDATASIZE
+   (guaranteed out-of-bounds calldata source of zeros). *)
 Definition compile_abi_zero_pad_def:
-  compile_abi_zero_pad bytez_ptr =
-    do len_op <- emit_op MLOAD [bytez_ptr];
-       data_end <- emit_op ADD [bytez_ptr; Lit 32w];
-       pad_ptr <- emit_op ADD [data_end; len_op];
-       emit_void MSTORE [pad_ptr; Lit 0w]
+  compile_abi_zero_pad bytez_ptr length count =
+    do data_end <- emit_op ADD [bytez_ptr; Lit 32w];
+       pad_ptr <- emit_op ADD [data_end; length];
+       cds <- emit_op CALLDATASIZE [];
+       emit_void CALLDATACOPY [pad_ptr; cds; count]
     od
 End
 
@@ -168,12 +170,14 @@ Definition compile_abi_encode_child_def:
   compile_abi_encode_to_buf dst src (AbiBytestring max_len) =
     (let mem_size = 32 + ((max_len + 31) DIV 32) * 32 in
      do emit_void MCOPY [dst; src; Lit (n2w mem_size)];
-        compile_abi_zero_pad dst;
         len_op <- emit_op MLOAD [dst];
-        padded <- emit_op ADD [Lit 32w; len_op];
-        ceil_len <- emit_op ADD [padded; Lit 31w];
-        emit_op AND [ceil_len;
-          Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w]
+        tmp <- emit_op ADD [Lit 32w; len_op];
+        ceil_len <- emit_op ADD [tmp; Lit 31w];
+        padded <- emit_op AND [ceil_len;
+          Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w];
+        count <- emit_op SUB [padded; tmp];
+        compile_abi_zero_pad dst len_op count;
+        return padded
      od) ∧
 
   compile_abi_encode_to_buf dst src (AbiCopy mem_size) =

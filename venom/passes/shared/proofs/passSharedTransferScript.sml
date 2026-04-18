@@ -171,8 +171,7 @@ Theorem step_inst_base_output_determined_fields:
     (Eff_LOG IN read_effects inst.inst_opcode ==>
        s1.vs_logs = s2.vs_logs) ==>
     (* Memory *)
-    ((Eff_MEMORY IN write_effects inst.inst_opcode \/
-      Eff_MSIZE IN write_effects inst.inst_opcode) /\
+    (Eff_MEMORY IN write_effects inst.inst_opcode /\
      s1.vs_memory = s2.vs_memory ==>
        v1.vs_memory = v2.vs_memory) /\
     (* Transient *)
@@ -387,8 +386,6 @@ Theorem step_inst_base_effect_free_output_determined_vars:
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
     (Eff_MEMORY IN read_effects inst.inst_opcode ==>
-       s1.vs_memory = s2.vs_memory) /\
-    (Eff_MSIZE IN read_effects inst.inst_opcode ==>
        s1.vs_memory = s2.vs_memory) /\
     (Eff_TRANSIENT IN read_effects inst.inst_opcode ==>
        s1.vs_transient = s2.vs_transient) /\

@@ -390,9 +390,8 @@ Triviality raw_deps_map_f:
       | SOME w => FLOOKUP et2.et_last_write eff = SOME (f w)) /\
     (!i. (f i).inst_id = i.inst_id) ==>
     FLAT (MAP (\weff. et_get_reads et2 weff ++
-        (if weff = Eff_MSIZE then []
-         else case FLOOKUP et2.et_last_write weff of
-                NONE => [] | SOME w => [w]))
+        case FLOOKUP et2.et_last_write weff of
+               NONE => [] | SOME w => [w])
         (effects_to_list (write_effects i1.inst_opcode))) ++
     MAP THE (FILTER IS_SOME (MAP (\reff.
         case FLOOKUP et2.et_last_write reff of
@@ -403,9 +402,8 @@ Triviality raw_deps_map_f:
     =
     MAP f (
       FLAT (MAP (\weff. et_get_reads et1 weff ++
-          (if weff = Eff_MSIZE then []
-           else case FLOOKUP et1.et_last_write weff of
-                  NONE => [] | SOME w => [w]))
+          case FLOOKUP et1.et_last_write weff of
+                 NONE => [] | SOME w => [w])
           (effects_to_list (write_effects i1.inst_opcode))) ++
       MAP THE (FILTER IS_SOME (MAP (\reff.
           case FLOOKUP et1.et_last_write reff of
@@ -418,22 +416,18 @@ Proof
   REWRITE_TAC[MAP_APPEND] >>
   (* Write part: use flat_map_map_f *)
   sg `FLAT (MAP (\weff. et_get_reads et2 weff ++
-      (if weff = Eff_MSIZE then []
-       else case FLOOKUP et2.et_last_write weff of
-              NONE => [] | SOME w => [w]))
+      case FLOOKUP et2.et_last_write weff of
+             NONE => [] | SOME w => [w])
       (effects_to_list (write_effects i1.inst_opcode))) =
     MAP f (FLAT (MAP (\weff. et_get_reads et1 weff ++
-      (if weff = Eff_MSIZE then []
-       else case FLOOKUP et1.et_last_write weff of
-              NONE => [] | SOME w => [w]))
+      case FLOOKUP et1.et_last_write weff of
+             NONE => [] | SOME w => [w])
       (effects_to_list (write_effects i1.inst_opcode))))`
   >- (
     irule flat_map_map_f >> rpt strip_tac >> rename1 `MEM weff _` >>
     simp[MAP_APPEND] >>
     first_x_assum (qspec_then `weff` mp_tac) >>
-    Cases_on `FLOOKUP et1.et_last_write weff` >> simp[] >>
-    strip_tac >> gvs[] >>
-    Cases_on `weff = Eff_MSIZE` >> simp[]
+    Cases_on `FLOOKUP et1.et_last_write weff` >> simp[]
   ) >>
   (* Read part: use filter_some_map_option *)
   sg `MAP THE (FILTER IS_SOME (MAP (\reff.

@@ -809,7 +809,7 @@ Theorem m2v_transform_function_correct:
     s.vs_alloca_next < dimword (:256) /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE)
       bb.bb_instructions) fn.fn_blocks /\
-    EVERY (\bb. EVERY (\i. i.inst_opcode <> MSIZE)
+    EVERY (\bb. EVERY (\i. i.inst_opcode <> MEMTOP)
       bb.bb_instructions) fn.fn_blocks /\
     alloca_bridge fn s /\
     fn_reachable fn s.vs_current_bb /\

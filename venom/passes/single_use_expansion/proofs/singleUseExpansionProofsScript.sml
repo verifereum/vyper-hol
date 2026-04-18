@@ -873,7 +873,7 @@ end;
    Proved per-opcode at ML level to avoid case-split timeout on the
    ~90-opcode step_inst_base/inst_wf definitions.
 
-   Note: FALSE for 0-operand exec_read0 opcodes (CALLER, MSIZE, etc.)
+   Note: FALSE for 0-operand exec_read0 opcodes (CALLER, MEMTOP, etc.)
    where step_inst_base ignores operands. These are handled vacuously in
    sue_assigns_error_implies_inst_error because sue_expand_ops produces
    no assigns for 0-operand instructions. *)

@@ -377,7 +377,7 @@ QED
 
 (* All effect values appear in the master list *)
 Triviality effect_mem_all:
-  !e. MEM e [Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY; Eff_MSIZE;
+  !e. MEM e [Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY;
              Eff_IMMUTABLES; Eff_RETURNDATA; Eff_LOG; Eff_BALANCE;
              Eff_EXTCODE]
 Proof
@@ -651,13 +651,11 @@ Proof
   AP_TERM_TAC >>
   `MAP (\weff.
       (case FLOOKUP et1.et_all_reads weff of NONE => [] | SOME rs => rs) ++
-      (if weff = Eff_MSIZE then []
-       else case FLOOKUP et1.et_last_write weff of NONE => [] | SOME w => [w]))
+      case FLOOKUP et1.et_last_write weff of NONE => [] | SOME w => [w])
     (effects_to_list (write_effects inst.inst_opcode)) =
    MAP (\weff.
       (case FLOOKUP et2.et_all_reads weff of NONE => [] | SOME rs => rs) ++
-      (if weff = Eff_MSIZE then []
-       else case FLOOKUP et2.et_last_write weff of NONE => [] | SOME w => [w]))
+      case FLOOKUP et2.et_last_write weff of NONE => [] | SOME w => [w])
     (effects_to_list (write_effects inst.inst_opcode))` by (
     irule MAP_CONG >> simp[] >> rpt strip_tac >> res_tac >> simp[]) >>
   `MAP (\reff. case FLOOKUP et1.et_last_write reff of

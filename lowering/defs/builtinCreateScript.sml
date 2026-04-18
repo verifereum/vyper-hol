@@ -152,9 +152,9 @@ End
    Clone existing contract bytecode:
    1. Get code size via EXTCODESIZE, assert non-zero
    2. Build 11-byte initcode preamble (PUSH3 codesize, codecopy, return)
-   3. Use MSIZE for buffer start (after all alloca buffers)
+   3. Use MEMTOP for buffer start (after all alloca buffers)
    4. MSTORE preamble (with codesize embedded), EXTCODECOPY code after
-   5. CREATE/CREATE2 from buf at msize+21 with preamble_len+codesize
+   5. CREATE/CREATE2 from buf at memtop+21 with preamble_len+codesize
 
    Preamble bytes (11): encodes PUSH3(sz) + CODECOPY + RETURN pattern.
    Codesize is embedded in the preamble via SHL+OR. *)
@@ -166,8 +166,8 @@ Definition compile_create_copy_def:
        code_size <- emit_op EXTCODESIZE [target_op];
        (* Assert target has code *)
        emit_void ASSERT [code_size];
-       (* Use MSIZE as buffer start (past all alloca buffers) *)
-       mem_ofst <- emit_op MSIZE [];
+       (* Use MEMTOP as buffer start (past all alloca buffers) *)
+       mem_ofst <- emit_op MEMTOP [];
        (* Build preamble with embedded codesize: shift codesize into position.
           Preamble template (11 bytes): 62 00 00 00 3d 81 60 0b 3d 39 f3
           PUSH3(sz) RDS DUP2 PUSH1(0x0B) RDS CODECOPY RETURN
@@ -203,7 +203,7 @@ End
    Deploy from ERC-5202 blueprint contract:
    1. Read bytecode from blueprint (skipping code_offset prefix)
    2. Append ABI-encoded ctor args if any (or raw args)
-   3. Use MSIZE for buffer start
+   3. Use MEMTOP for buffer start
    4. CREATE or CREATE2
 
    args_ptr / args_len: pre-encoded constructor arguments to append.
@@ -219,8 +219,8 @@ Definition compile_create_blueprint_def:
        (* Assert blueprint has code after preamble (sgt because underflow) *)
        has_code <- emit_op SGT [code_size; Lit 0w];
        emit_void ASSERT [has_code];
-       (* Use MSIZE for buffer start (past all alloca buffers) *)
-       mem_ofst <- emit_op MSIZE [];
+       (* Use MEMTOP for buffer start (past all alloca buffers) *)
+       mem_ofst <- emit_op MEMTOP [];
        (* Copy blueprint code (skipping preamble) to mem_ofst *)
        emit_void EXTCODECOPY
          [target_op; mem_ofst; code_offset_op; code_size];

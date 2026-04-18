@@ -7,7 +7,7 @@
  * subsequent read before the location is overwritten or the
  * function terminates.
  *
- * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * Framework: analysis_inst_simulates + custom lifting.
  * Uses memory SSA analysis (memSSADefs) to identify dead stores.
@@ -161,8 +161,7 @@ Definition outputs_unused_def:
 End
 
 (* Instruction's effects are confined to the given address space.
-   Memory space also allows MSIZE (Python: NON_MEMORY_EFFECTS
-   excludes MEMORY|MSIZE). Storage/Transient only allow their space. *)
+   Storage/Transient only allow their space. *)
 Definition effects_in_space_def:
   effects_in_space (space : addr_space) inst <=>
     let space_eff = case space of
@@ -171,7 +170,7 @@ Definition effects_in_space_def:
                     | AddrSp_Transient => Eff_TRANSIENT
                     | _ => Eff_MEMORY in
     let allowed_effs = case space of
-                         AddrSp_Memory => {space_eff; Eff_MSIZE}
+                         AddrSp_Memory => {space_eff}
                        | _ => {space_eff} in
     (write_effects inst.inst_opcode UNION read_effects inst.inst_opcode)
       SUBSET allowed_effs

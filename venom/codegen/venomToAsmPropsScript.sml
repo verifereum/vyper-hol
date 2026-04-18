@@ -150,7 +150,7 @@ QED
    Spill safety: required for every Venom step during function
    execution. Uses fn_init_ps alloc (sa_fn_eom = fn_eom).
    spill_mem_covered: initial memory covers spill high-water mark
-   so MSIZE agrees between Venom and asm from the start. *)
+   so MEMTOP agrees between Venom and asm from the start. *)
 Theorem gen_fn_simulation:
   ∀fuel ctx label_offsets offset_to_pc prog fn fn_eom fn_ops
    ps_final vs as.
@@ -162,7 +162,7 @@ Theorem gen_fn_simulation:
     (∀inst vs1 vs2 fuel'.
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
        step_mem_safe (fn_init_ps fn fn_eom).ps_alloc vs1 vs2) ∧
-    (* MSIZE: initial memory covers max spill offset *)
+    (* MEMTOP: initial memory covers max spill offset *)
     spill_mem_covered ps_final.ps_alloc.sa_next_offset vs.vs_memory ⇒
     (* Halt case *)
     (∀vs'. run_blocks fuel ctx fn vs = Halt vs' ⇒

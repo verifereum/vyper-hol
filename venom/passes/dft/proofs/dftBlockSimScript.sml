@@ -178,9 +178,7 @@ Theorem eligible_write_constraints[local]:
        ~is_ext_call_op op /\ op <> INVOKE ==>
        Eff_BALANCE NOTIN write_effects op /\
        Eff_EXTCODE NOTIN write_effects op /\
-       Eff_RETURNDATA NOTIN write_effects op /\
-       (Eff_MEMORY IN write_effects op ==>
-        Eff_MSIZE IN write_effects op)
+       Eff_RETURNDATA NOTIN write_effects op
 Proof
   Cases >> EVAL_TAC
 QED
@@ -369,16 +367,6 @@ Proof
   (* Memory: if read by inst_a, not written by inst_b *)
   `Eff_MEMORY IN read_effects inst_a.inst_opcode ==>
    ss.vs_memory = vb.vs_memory` by (strip_tac >> res_tac >> gvs[]) >>
-  `Eff_MSIZE IN read_effects inst_a.inst_opcode ==>
-   ss.vs_memory = vb.vs_memory` by (
-    strip_tac >>
-    `Eff_MSIZE NOTIN write_effects inst_b.inst_opcode` by res_tac >>
-    `Eff_MEMORY NOTIN write_effects inst_b.inst_opcode` by (
-      CCONTR_TAC >> gvs[] >>
-      `Eff_MSIZE IN write_effects inst_b.inst_opcode` by
-        metis_tac[eligible_write_constraints] >>
-      gvs[]) >>
-    gvs[]) >>
   (* Case split: effect-free uses output_determined_vars,
      non-effect-free eligible ops don't modify vs_vars *)
   (* NOP: step returns state unchanged, so trivially equal *)
@@ -813,7 +801,7 @@ QED
 (* ================================================================
    11. Effect-free commutativity: effect-free instructions with
        disjoint data deps produce identical states in either order.
-       Handles MSIZE-gap pairs ({MLOAD,ILOAD,SHA3}^2) that are
+       Handles memory-only-read pairs ({MLOAD,ILOAD,SHA3,MEMTOP}^2) that are
        NOT effects_independent but still commute.
    ================================================================ *)
 

@@ -1,3 +1,0 @@
-Theory fixMemLocations
-Ancestors
-  fixMemLocationsDefs fixMemLocationsCorrectness

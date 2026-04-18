@@ -775,8 +775,8 @@ QED
 
 (* ABI zero-pad: pads bytestring to 32-byte boundary *)
 Theorem compile_abi_zero_pad_correct:
-  ∀ bytez_ptr ss st st'.
-    compile_abi_zero_pad bytez_ptr st = ((), st')
+  ∀ bytez_ptr length count ss st st'.
+    compile_abi_zero_pad bytez_ptr length count st = ((), st')
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss'

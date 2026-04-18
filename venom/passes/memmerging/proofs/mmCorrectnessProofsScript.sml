@@ -737,17 +737,9 @@ Theorem non_vol_step_preserves_memory[local]:
     s'.vs_memory = s.vs_memory
 Proof
   rpt strip_tac >>
-  `Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-   Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-   Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
-   Eff_MSIZE NOTIN write_effects inst.inst_opcode` by
+  `Eff_MEMORY NOTIN write_effects inst.inst_opcode` by
     fs[is_volatile_memory_def] >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `s.vs_memory`]
-    mp_tac step_inst_mem_frame >>
-  impl_tac >- simp[] >>
-  `s with vs_memory := s.vs_memory = s` by
-    simp[venom_state_component_equality] >>
-  fs[] >> gvs[venom_state_component_equality]
+  metis_tac[write_effects_sound_memory]
 QED
 
 (* ===== Memzero: run_insts level simulation ===== *)
@@ -938,6 +930,7 @@ Theorem non_vol_step_memzero_result[local]:
   !fuel ctx inst s1 s2 fresh.
     memzero_inv fresh s1 s2 /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
@@ -955,10 +948,7 @@ Theorem non_vol_step_memzero_result[local]:
      (!s1'. step_inst fuel ctx inst s1 <> OK s1'))
 Proof
   rpt strip_tac >>
-  `Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-   Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-   Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
-   Eff_MSIZE NOTIN write_effects inst.inst_opcode` by
+  `Eff_MEMORY NOTIN write_effects inst.inst_opcode` by
     fs[is_volatile_memory_def] >>
   rpt conj_tac
   >- ( (* OK case: s1 OK => s2 OK + memzero_inv preserved *)
@@ -1028,6 +1018,7 @@ Theorem non_vol_step_memzero_inv[local]:
   !fuel ctx inst s1 s1' s2 fresh.
     memzero_inv fresh s1 s2 /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
@@ -1107,9 +1098,10 @@ Definition mode_inst_ok_def:
     (MEM inst.inst_id nop_set /\
      inst.inst_opcode IN {MLOAD; CALLDATALOAD; DLOAD} ==>
        EVERY (\v. v IN fresh) inst.inst_outputs) /\
-    (* Identity instructions: non-volatile, non-aborting *)
+    (* Identity instructions: non-volatile, don't read/write memory, non-aborting *)
     (~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = NONE ==>
        ~is_volatile_memory inst /\
+       Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
        ~is_alloca_op inst.inst_opcode /\
        ~is_ext_call_op inst.inst_opcode /\
        inst.inst_opcode <> ASSERT /\
@@ -1396,9 +1388,10 @@ Definition memzero_inst_ok_def:
     inst.inst_opcode <> INVOKE /\
     (* NOP'd instructions are zero-stores *)
     (MEM inst.inst_id nop_set ==> is_zero_store inst) /\
-    (* Unchanged instructions are non-volatile-memory, non-aborting *)
+    (* Unchanged instructions are non-volatile-memory, don't read memory, non-aborting *)
     (~MEM inst.inst_id nop_set /\ ALOOKUP rep_map inst.inst_id = NONE ==>
        ~is_volatile_memory inst /\
+       Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
        ~is_alloca_op inst.inst_opcode /\
        ~is_ext_call_op inst.inst_opcode /\
        inst.inst_opcode <> ASSERT /\

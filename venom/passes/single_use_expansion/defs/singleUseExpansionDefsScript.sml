@@ -1,7 +1,7 @@
 (*
  * Single Use Expansion Pass — Definitions
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * Ports vyper/venom/passes/single_use_expansion.py to HOL4.
  *
@@ -178,7 +178,7 @@ End
 
 (* sue_operands_wf: opcodes that ignore their operands must have no
    operands.  This includes NOP/STOP/SINK/INVALID and all exec_read0
-   opcodes (CALLER, MSIZE, etc.) whose step_inst_base ignores operands.
+   opcodes (CALLER, MEMTOP, etc.) whose step_inst_base ignores operands.
    Without this, SUE expansion could introduce assign errors for operands
    the original instruction never evaluates, breaking semantic equivalence.
    Trivially satisfied by the Vyper pipeline. *)
@@ -195,7 +195,7 @@ Definition sue_operands_wf_def:
      inst.inst_opcode = CHAINID \/ inst.inst_opcode = SELFBALANCE \/
      inst.inst_opcode = BASEFEE \/ inst.inst_opcode = CODESIZE \/
      inst.inst_opcode = RETURNDATASIZE \/ inst.inst_opcode = BLOBBASEFEE \/
-     inst.inst_opcode = MSIZE ==>
+     inst.inst_opcode = MEMTOP ==>
      inst.inst_operands = [])
 End
 

@@ -746,7 +746,7 @@ Triviality step_inst_base_ops_irrel[local]:
       CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
       ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
       SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-      CODESIZE; MSIZE] ==>
+      CODESIZE; MEMTOP] ==>
     step_inst_base (inst with inst_operands := ops) s =
     step_inst_base inst s
 Proof
@@ -794,7 +794,7 @@ Triviality step_inst_nonerr_var_fdom[local]:
       CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
       ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
       SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-      CODESIZE; MSIZE] /\
+      CODESIZE; MEMTOP] /\
     inst_wf inst /\ MEM (Var x) inst.inst_operands ==>
     x IN FDOM s.vs_vars
 Proof
@@ -831,7 +831,7 @@ Triviality sccp_inst_nop_eq[local]:
       CALLER; ADDRESS; CALLVALUE;
       GAS; GASLIMIT; ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER;
       PREVRANDAO; CHAINID; SELFBALANCE; BASEFEE; BLOBBASEFEE;
-      CALLDATASIZE; RETURNDATASIZE; CODESIZE; MSIZE] ==>
+      CALLDATASIZE; RETURNDATASIZE; CODESIZE; MEMTOP] ==>
     step_inst fuel ctx (sccp_inst lat inst) s =
     step_inst fuel ctx inst s
 Proof
@@ -859,7 +859,7 @@ Proof
     CALLER; ADDRESS; CALLVALUE;
     GAS; GASLIMIT; ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER;
     PREVRANDAO; CHAINID; SELFBALANCE; BASEFEE; BLOBBASEFEE;
-    CALLDATASIZE; RETURNDATASIZE; CODESIZE; MSIZE]`
+    CALLDATASIZE; RETURNDATASIZE; CODESIZE; MEMTOP]`
   >- (
     fs[] >> gvs[]
     >- simp[sccp_inst_def]

@@ -852,7 +852,7 @@ Proof
   qpat_x_assum `asm_step_memory _ _ = _` mp_tac >>
   simp[asm_step_memory_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
-  (* 11 cases: POP, MLOAD, MSTORE, MSTORE8, MCOPY, MSIZE,
+  (* 11 cases: POP, MLOAD, MSTORE, MSTORE8, MCOPY, MEMTOP,
                SLOAD, SSTORE, TLOAD, TSTORE, SHA3 *)
   (* === POP === *)
   >- (
@@ -1051,7 +1051,7 @@ Proof
        DECIDE_TAC proves the equality, then gvs substitutes. *)
     `mcpy_s = mcpy_d` by DECIDE_TAC >> gvs[take_drop_expand_len]
   )
-  (* === MSIZE === *)
+  (* === MEMTOP === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
     simp[asm_push_val_def, asm_next_def] >>
