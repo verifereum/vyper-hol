@@ -305,6 +305,39 @@ QED
    - Initial EVM accounts match Vyper abstract machine accounts
    - Vyper and EVM transaction parameters are consistent
    - Block parameters match between Vyper tx and EVM blk *)
+
+(* Helper: post_transaction_accounting with non-NONE result uses the
+   saved accounts (acc), not the dirty execution state accounts.
+   This is the key lemma for revert correctness. *)
+Theorem post_transaction_accounting_revert_uses_saved_acc:
+  !blk tx result acc t tr newAccounts.
+    result <> NONE /\
+    (tr, newAccounts) = post_transaction_accounting blk tx result acc t
+    ==>
+    accounts_match_modulo_gas acc newAccounts tx.from blk.coinBase
+Proof
+  rpt strip_tac
+  \\ gvs[post_transaction_accounting_def, LET_THM]
+  (* When result <> NONE:
+     let accounts = if result = NONE then ... else acc
+     so accounts = acc *)
+  \\ simp[accounts_match_modulo_gas_def]
+  (* All three goals are about update_account structure *)
+  >> conj_tac >- ((* addresses other than sender/coinbase unchanged *)
+      rpt strip_tac
+      \\ pairarg_tac \\ gvs[]
+      \\ simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM])
+  >> conj_tac >- ((* sender: only balance changed *)
+      pairarg_tac \\ gvs[]
+      >> simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM,
+              vfmStateTheory.lookup_account_def])
+  >- ((* coinbase: only balance changed *)
+      pairarg_tac \\ gvs[] >>
+      simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM,
+           vfmStateTheory.lookup_account_def]
+      \\ rw[])
+QED
+
 (* Transaction-level correctness.
    
    Proof approach:
