@@ -1,6 +1,8 @@
 (*
  * Remove Unused Variables — Definitions
  *
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
+ *
  * Ports vyper/venom/passes/remove_unused_variables.py to HOL4.
  *
  * Removes instructions that produce outputs never used, provided

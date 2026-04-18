@@ -1,6 +1,8 @@
 (*
  * Common Subexpression Elimination — Definitions
  *
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
+ *
  * Ports vyper/venom/passes/common_subexpression_elimination.py to HOL4.
  *
  * Replaces instructions whose expression is already available with

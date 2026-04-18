@@ -1,7 +1,7 @@
 (*
  * Lower DLOAD Pass — Definitions
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  * Ports vyper/venom/passes/lower_dload.py to HOL4.
  *
  * Lowers dload and dloadbytes instructions to their EVM equivalents:

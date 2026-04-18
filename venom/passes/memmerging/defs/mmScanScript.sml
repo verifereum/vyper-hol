@@ -1,6 +1,8 @@
 (*
  * Memmerging — Block Scan (Analysis)
  *
+ * Upstream: vyperlang/vyper@fb0ade13e (proper handling of effects in MCE, #4914)
+ *
  * Forward scan over a basic block that identifies copy groups.
  * Ports the core logic of _handle_bb and _handle_bb_memzero
  * from memmerging.py.

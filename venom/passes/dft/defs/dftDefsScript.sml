@@ -5,7 +5,7 @@
  * traversal of data and effect dependencies. Produces an instruction order
  * suitable for stack-based code generation.
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * TOP-LEVEL:
  *   producing_inst         — find instruction producing a variable

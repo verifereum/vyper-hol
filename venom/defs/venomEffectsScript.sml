@@ -1,6 +1,8 @@
 (*
  * Venom Effects System
  *
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
+ *
  * Effects track what state an instruction reads or writes.
  * This is crucial for optimization passes (CSE, DCE, reordering).
  *

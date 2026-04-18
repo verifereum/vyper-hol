@@ -7,7 +7,7 @@
  * subsequent read before the location is overwritten or the
  * function terminates.
  *
- * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * Framework: analysis_inst_simulates + custom lifting.
  * Uses memory SSA analysis (memSSADefs) to identify dead stores.

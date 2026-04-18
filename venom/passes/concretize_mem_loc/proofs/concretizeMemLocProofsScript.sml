@@ -1834,7 +1834,7 @@ Triviality concretize_step_effect_free_non_pv:
     is_effect_free_op inst.inst_opcode /\
     inst.inst_opcode <> NOP /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-        (!v. MEM (Var v) inst.inst_operands ==>
+    (!v. MEM (Var v) inst.inst_operands ==>
          v NOTIN pointer_derived_vars fn (FDOM amap)) /\
     (!v. MEM v inst.inst_outputs ==>
          v NOTIN pointer_derived_vars fn (FDOM amap)) /\
@@ -1928,7 +1928,7 @@ Triviality concretize_step_pure_non_pv:
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-        ~is_pointer_preserving_op inst.inst_opcode /\
+    ~is_pointer_preserving_op inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     concretize_pointer_confined fn amap /\
     (!v. MEM v inst.inst_outputs ==>
@@ -2525,7 +2525,7 @@ Triviality concretize_step_non_mem_identity:
     inst.inst_opcode <> NOP /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     concretize_pointer_confined fn amap /\
     concretize_rel amap fn livesets init s1 s2 ==>
     lift_result
