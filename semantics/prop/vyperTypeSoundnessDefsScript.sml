@@ -126,9 +126,9 @@ Definition well_typed_binop_def:
     (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   (* Membership: result is bool, element type matches array element type *)
   well_typed_binop ty In t1 t2 =
-    (ty = BaseT BoolT /\ ?elem_ty bd. t2 = ArrayT elem_ty bd /\ t1 = elem_ty) /\
+    (ty = BaseT BoolT /\ ?bd. t2 = ArrayT t1 bd) /\
   well_typed_binop ty NotIn t1 t2 =
-    (ty = BaseT BoolT /\ ?elem_ty bd. t2 = ArrayT elem_ty bd /\ t1 = elem_ty)
+    (ty = BaseT BoolT /\ ?bd. t2 = ArrayT t1 bd)
 End
 
 (* ===== Environment item types ===== *)
@@ -473,13 +473,14 @@ Definition well_typed_expr_def:
        MAP expr_type args = TAKE (LENGTH args) param_types) /\
   well_typed_expr env (Call ty (ExtCall _ (_, arg_types, ret_ty)) args drv) =
     (well_typed_exprs env args /\
+     well_typed_opt env drv /\
      well_formed_type env.type_defs ty /\
      ty = ret_ty /\
      MAP expr_type args = arg_types /\
-     drv = NONE) /\
+     (!e. drv = SOME e ==> expr_type e = ret_ty)) /\
   well_typed_expr env (Call ty Send args drv) =
     (well_typed_exprs env args /\
-     LENGTH args = 2 /\ ty = NoneT /\ drv = NONE /\
+     LENGTH args = 2 /\ ty = NoneT /\
      HD (MAP expr_type args) = BaseT AddressT /\
      is_int_type (EL 1 (MAP expr_type args))) /\
   (* Chain interaction builtins — constrained return types *)
@@ -487,30 +488,28 @@ Definition well_typed_expr_def:
     (well_typed_exprs env args /\
      ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
-     drv = NONE /\
      LENGTH args = 3 /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
      ?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd) /\
      is_int_type (EL 2 (MAP expr_type args))) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\
-     ty = NoneT /\ drv = NONE /\
+     ty = NoneT /\
      LENGTH args = 2 /\
      ?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
      ?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd')) /\
   well_typed_expr env (Call ty RawRevert args drv) =
     (well_typed_exprs env args /\
-     drv = NONE /\
      LENGTH args = 1 /\
      ?bd. HD (MAP expr_type args) = BaseT (BytesT bd)) /\
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\
-     ty = NoneT /\ drv = NONE /\
+     ty = NoneT /\
      LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty (CreateTarget kind rof) args drv) =
     (well_typed_exprs env args /\
-     ty = BaseT AddressT /\ drv = NONE /\
+     ty = BaseT AddressT /\
      LENGTH args >= 2 /\
      HD (MAP expr_type args) = BaseT AddressT /\
      is_int_type (LAST (MAP expr_type args))) /\
