@@ -31,12 +31,13 @@ Datatype:
 End
 
 (* ===== msg.data special case ===== *)
-(* Mirrors Python: system.py _is_msg_data + inline handling in lower_raw_call.
-   When raw_call data arg is msg.data, copy all calldata to memory at msize.
-   Returns (data_ptr, data_len). *)
+(* Mirrors Python: system.py _is_msg_data + context.py allocate_dyn.
+   When raw_call data arg is msg.data, copy all calldata to memory at memtop
+   (scratch space past static allocations). MEMTOP lowers to EVM MSIZE at
+   assembly time. Returns (data_ptr, data_len). *)
 Definition compile_msg_data_to_memory_def:
   compile_msg_data_to_memory =
-    do data_ptr <- emit_op MSIZE [];
+    do data_ptr <- emit_op MEMTOP [];
        data_len <- emit_op CALLDATASIZE [];
        emit_void CALLDATACOPY [data_ptr; Lit 0w; data_len];
        return (data_ptr, data_len)

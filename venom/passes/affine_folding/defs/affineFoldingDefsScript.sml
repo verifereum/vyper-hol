@@ -2,6 +2,7 @@
  * Affine Folding Pass — Definitions
  *
  * Ports vyper/venom/passes/affine_folding.py to HOL4.
+ * Upstream: vyperlang/vyper@a7f7bf133 (split algebraic pass into affine folding + peephole)
  *
  * Lattice-driven affine chain folding: collapses chains of add/sub
  * into single operations. For example:

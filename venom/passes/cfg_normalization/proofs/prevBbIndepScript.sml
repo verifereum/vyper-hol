@@ -219,7 +219,7 @@ Theorem exec_alloca_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
                     (exec_alloca inst s alloc_size)
 Proof
-  rpt gen_tac >> simp[exec_alloca_def, next_alloca_offset_def, LET_THM] >>
+  rpt gen_tac >> simp[exec_alloca_def, LET_THM] >>
   BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def] >>
   simp[update_var_def, venom_state_component_equality]
 QED

@@ -102,6 +102,10 @@ End
 Definition alloca_safe_access_def:
   alloca_safe_access fn (roots : string set) s <=>
     let pv = pointer_derived_vars fn roots in
+    (* All alloca regions fit within memory (no expansion on access) *)
+    (!aid off asz.
+      FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
+      off + asz <= LENGTH s.vs_memory) /\
     (* Memory accesses through pointer-derived vars stay within alloca *)
     (!bb inst ops v w sz_op sz_val aid off asz.
       MEM bb fn.fn_blocks /\
@@ -244,7 +248,7 @@ Definition alloca_remap_rel_def:
       FLOOKUP s1.vs_allocas aid = SOME (off1, sz) /\
       FLOOKUP remap aid = SOME new_off ==>
       FLOOKUP s2.vs_allocas aid = SOME (new_off, sz)) /\
-    (* 7. Memory lengths agree (needed for MSIZE determinism) *)
+    (* 7. Memory lengths agree (needed for MEMTOP determinism) *)
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
     (* 8. Scalar state fields agree.
        vs_alloca_next intentionally omitted — naturally differs

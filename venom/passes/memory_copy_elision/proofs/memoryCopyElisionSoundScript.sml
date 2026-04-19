@@ -115,7 +115,9 @@ Triviality cf_entry_sound_none_alloca[local]:
             w2n src_val + sz_num <= LENGTH src_data) /\
            TAKE sz_num (DROP dst_off mem) =
            TAKE sz_num (DROP (w2n src_val) src_data ++ REPLICATE sz_num 0w)
-     | _ => T)
+     | (SOME _, NONE) => T
+     | (NONE, SOME _) => T
+     | (NONE, NONE) => T)
 Proof
   rw[cf_entry_sound_def, memloc_runtime_region_def] >>
   Cases_on `ml.ml_offset` >> Cases_on `ml.ml_size` >> simp[]
@@ -1552,7 +1554,6 @@ Proof
   simp[write_memory_with_expansion_def, LET_THM]
 QED
 
-(* ml_is_fixed_not_label removed — use ce_memloc_fixed_not_label (line 658) *)
 
 (* ml_is_fixed forces sz = Lit n, and THE ml_size = w2n of evaluated sz *)
 Triviality ml_is_fixed_eval_size[local]:
@@ -2287,10 +2288,8 @@ Resume copy_fact_transfer_sound_thm[no_mem_effect]:
 QED
 
 (* --- Case: MSTORE → copy_fact_invalidate --- *)
-(* Approach: derive inst_idx-free forms, then use cft_mstore + keys/alloca helpers.
-   See FOCUS for detailed plan. Key issue: irule cft_mstore after deriving all
-   preconditions in plain-s form. Then cf_keys_ok via cf_keys_ok_invalidate,
-   cf_alloca_ok via cf_alloca_ok_drestrict + allocas_eq. *)
+(* Derive inst_idx-free forms, then apply cft_mstore + cf_keys_ok_invalidate +
+   cf_alloca_ok_drestrict + allocas_eq. *)
 Resume copy_fact_transfer_sound_thm[mstore]:
   rpt conj_tac
   >- suspend "mst_sound"

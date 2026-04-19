@@ -1,7 +1,7 @@
 (*
  * Venom Instructions
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * This theory defines the instruction set for Venom IR.
  *)
@@ -29,7 +29,7 @@ Datatype:
     (* Bitwise *)
     | AND | OR | XOR | NOT | SHL | SHR | SAR | SIGNEXTEND | BYTE
     (* Memory *)
-    | MLOAD | MSTORE | MSTORE8 | MCOPY | MSIZE
+    | MLOAD | MSTORE | MSTORE8 | MCOPY | MEMTOP
     (* Storage *)
     | SLOAD | SSTORE
     (* Transient storage *)
@@ -330,7 +330,7 @@ Definition is_effect_free_op_def:
   is_effect_free_op TLOAD = T /\
   is_effect_free_op ILOAD = T /\
   is_effect_free_op DLOAD = T /\
-  is_effect_free_op MSIZE = T /\
+  is_effect_free_op MEMTOP = T /\
   is_effect_free_op SHA3 = T /\
   (* Environment reads (exec_read0/1) *)
   is_effect_free_op CALLER = T /\

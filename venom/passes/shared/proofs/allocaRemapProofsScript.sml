@@ -281,7 +281,7 @@ Proof
   metis_tac[MEM_SET_TO_LIST]
 QED
 
-(* ===== next_alloca_offset helpers ===== *)
+(* ===== alloca bump pointer helpers ===== *)
 
 Theorem foldl_max_ge_init[local]:
   !l (init:num). init <= FOLDL (\m (k,off,sz). MAX m (off + sz)) init l
@@ -305,53 +305,19 @@ Proof
   >- metis_tac[]
 QED
 
-Theorem next_alloca_offset_ge_mem[local]:
-  !s. LENGTH s.vs_memory <= next_alloca_offset s
-Proof
-  simp[next_alloca_offset_def]
-QED
-
-Theorem next_alloca_offset_ge_alloca[local]:
-  !s aid off sz.
-    alloca_next_valid s /\
-    FLOOKUP s.vs_allocas aid = SOME (off, sz) ==>
-    off + sz <= next_alloca_offset s
-Proof
-  rw[next_alloca_offset_def, alloca_next_valid_def] >>
-  res_tac >> simp[]
-QED
-
-(* Adding a region at next_alloca_offset preserves non-overlapping.
-   Stated with record-update equality to handle combined vs_vars+vs_allocas
-   updates: any state s' with s'.vs_allocas = s.vs_allocas |+ (...) works. *)
-(* next_alloca_offset is >= all existing alloca endpoints when
-   alloca regions fit within memory (first clause of alloca_safe_access) *)
-Theorem next_alloca_offset_ge_alloca_from_mem[local]:
-  !s aid off sz.
-    FLOOKUP s.vs_allocas aid = SOME (off, sz) /\
-    off + sz <= LENGTH s.vs_memory ==>
-    off + sz <= next_alloca_offset s
-Proof
-  rpt strip_tac >>
-  `LENGTH s.vs_memory <= next_alloca_offset s` by
-    simp[next_alloca_offset_def] >>
-  simp[]
-QED
-
+(* Adding a region at vs_alloca_next preserves non-overlapping
+   when alloca_next_valid holds (all existing endpoints <= vs_alloca_next). *)
 Theorem non_overlapping_extend[local]:
   !s s' id sz.
     allocas_non_overlapping s /\
-    (!aid off asz. FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
-                   off + asz <= LENGTH s.vs_memory) /\
-    s'.vs_allocas = s.vs_allocas |+ (id, (next_alloca_offset s, sz)) ==>
+    alloca_next_valid s /\
+    s'.vs_allocas = s.vs_allocas |+ (id, (s.vs_alloca_next, sz)) ==>
     allocas_non_overlapping s'
 Proof
   rpt strip_tac >>
   `!aid off asz. FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
-     off + asz <= next_alloca_offset s` by (
-    rpt strip_tac >> res_tac >>
-    `LENGTH s.vs_memory <= next_alloca_offset s` by
-      simp[next_alloca_offset_def] >> simp[]) >>
+     off + asz <= s.vs_alloca_next` by (
+    rpt strip_tac >> fs[alloca_next_valid_def] >> res_tac >> simp[]) >>
   fs[allocas_non_overlapping_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >>
   Cases_on `id = a1` >> Cases_on `id = a2` >> gvs[] >>
@@ -392,6 +358,9 @@ Proof
     fs[alloca_mem_agrees_def] >>
     first_x_assum (qspecl_then [`aid`, `orig_off`, `sz`, `new_off`] mp_tac) >>
     simp[] >> disch_then (qspec_then `rel_off + x` mp_tac) >> simp[]) >>
+  `x < LENGTH (DROP (orig_off + rel_off) s1.vs_memory)` by simp[LENGTH_DROP] >>
+  `x < LENGTH (DROP (new_off + rel_off) s2.vs_memory)` by simp[LENGTH_DROP] >>
+  simp[rich_listTheory.EL_APPEND1, rich_listTheory.EL_DROP] >>
   gvs[mem_byte_at_def]
 QED
 
@@ -1053,6 +1022,9 @@ Theorem exec_alloca_preserves_remap:
     alloca_remap_rel fn roots remap s1 s2 /\
     FINITE roots /\
     wf_function fn /\
+    alloca_inv s1 /\ alloca_inv s2 /\
+    LENGTH s1.vs_memory <= s1.vs_alloca_next /\
+    LENGTH s2.vs_memory <= s2.vs_alloca_next /\
     inst.inst_id NOTIN FDOM s1.vs_allocas /\
     fn_alloca_id_of_var fn out = SOME inst.inst_id /\
     inst.inst_opcode = ALLOCA /\
@@ -1062,11 +1034,11 @@ Theorem exec_alloca_preserves_remap:
     alloca_safe_access fn roots s2 /\
     FLOOKUP s1.vs_allocas inst.inst_id = NONE /\
     FLOOKUP s2.vs_allocas inst.inst_id = NONE /\
-    next_alloca_offset s1 + w2n alloc_size < dimword (:256) /\
-    next_alloca_offset s2 + w2n alloc_size < dimword (:256) /\
+    s1.vs_alloca_next + w2n alloc_size < dimword (:256) /\
+    s2.vs_alloca_next + w2n alloc_size < dimword (:256) /\
     0 < w2n alloc_size ==>
-    let base1 = next_alloca_offset s1 in
-    let base2 = next_alloca_offset s2 in
+    let base1 = s1.vs_alloca_next in
+    let base2 = s2.vs_alloca_next in
     let sz = w2n alloc_size in
     let s1' = update_var out (n2w base1)
                 (s1 with <| vs_allocas :=
@@ -1129,8 +1101,8 @@ Resume exec_alloca_preserves_remap[pv]:
   Cases_on `out = v` >> gvs[]
   >- ((* out = v: goal is pure existential after gvs simplifies disjunction *)
     qexistsl_tac [`inst.inst_id`,
-                   `next_alloca_offset s1`, `w2n alloc_size`,
-                   `next_alloca_offset s2`] >>
+                   `s1.vs_alloca_next`, `w2n alloc_size`,
+                   `s2.vs_alloca_next`] >>
     simp[WORD_SUB_REFL])
   >- ((* out ≠ v: use old PV hypothesis *)
     qpat_x_assum `!v. v IN pointer_derived_vars _ _ ==> _ \/ _`
@@ -1146,14 +1118,10 @@ QED
 Resume exec_alloca_preserves_remap[mem_agrees]:
   rw[alloca_mem_agrees_def, FLOOKUP_UPDATE] >>
   Cases_on `inst.inst_id = aid` >> gvs[]
-  >- (`mem_byte_at s1.vs_memory (i + next_alloca_offset s1) = 0w` by
-        (irule mem_byte_at_oob >>
-         `LENGTH s1.vs_memory <= next_alloca_offset s1` by
-           simp[next_alloca_offset_ge_mem] >> DECIDE_TAC) >>
-      `mem_byte_at s2.vs_memory (i + next_alloca_offset s2) = 0w` by
-        (irule mem_byte_at_oob >>
-         `LENGTH s2.vs_memory <= next_alloca_offset s2` by
-           simp[next_alloca_offset_ge_mem] >> DECIDE_TAC) >>
+  >- (`mem_byte_at s1.vs_memory (i + s1.vs_alloca_next) = 0w` by
+        (irule mem_byte_at_oob >> DECIDE_TAC) >>
+      `mem_byte_at s2.vs_memory (i + s2.vs_alloca_next) = 0w` by
+        (irule mem_byte_at_oob >> DECIDE_TAC) >>
       simp[])
   >- (fs[alloca_mem_agrees_def] >> res_tac >> fs[])
 QED
@@ -1170,19 +1138,13 @@ QED
 Resume exec_alloca_preserves_remap[non_overlap_s1]:
   irule non_overlapping_extend >>
   qexistsl_tac [`inst.inst_id`, `s1`, `w2n alloc_size`] >> simp[] >>
-  rpt strip_tac >>
-  qpat_x_assum `alloca_safe_access fn roots s1` mp_tac >>
-  simp[alloca_safe_access_def] >> strip_tac >>
-  first_x_assum drule >> simp[]
+  fs[alloca_inv_def]
 QED
 
 Resume exec_alloca_preserves_remap[non_overlap_s2]:
   irule non_overlapping_extend >>
   qexistsl_tac [`inst.inst_id`, `s2`, `w2n alloc_size`] >> simp[] >>
-  rpt strip_tac >>
-  qpat_x_assum `alloca_safe_access fn roots s2` mp_tac >>
-  simp[alloca_safe_access_def] >> strip_tac >>
-  first_x_assum drule >> simp[]
+  fs[alloca_inv_def]
 QED
 
 Resume exec_alloca_preserves_remap[sizes]:
@@ -3783,14 +3745,17 @@ Theorem step_preserves_remap[local]:
          LENGTH (FILTER ($= (Var u)) inst.inst_operands) <= 1) /\
     (* ALLOCA-specific conditions *)
     (is_alloca_op inst.inst_opcode ==>
+       alloca_inv s1 /\ alloca_inv s2 /\
+       LENGTH s1.vs_memory <= s1.vs_alloca_next /\
+       LENGTH s2.vs_memory <= s2.vs_alloca_next /\
        inst.inst_outputs = [HD inst.inst_outputs] /\
        HD inst.inst_outputs IN roots /\
        fn_alloca_id_of_var fn (HD inst.inst_outputs) = SOME inst.inst_id /\
        inst.inst_id NOTIN FDOM s1.vs_allocas /\
        ?alloc_size. inst.inst_operands = [Lit alloc_size] /\
          0 < w2n alloc_size /\
-         next_alloca_offset s1 + w2n alloc_size < dimword (:256) /\
-         next_alloca_offset s2 + w2n alloc_size < dimword (:256)) ==>
+         s1.vs_alloca_next + w2n alloc_size < dimword (:256) /\
+         s2.vs_alloca_next + w2n alloc_size < dimword (:256)) ==>
     ?remap' v2.
       FDOM remap SUBSET FDOM remap' /\
       FDOM remap' SUBSET FDOM v1.vs_allocas /\
@@ -3819,7 +3784,7 @@ Proof
       `inst.inst_id NOTIN FDOM s2.vs_allocas` by gvs[] >>
       simp[FLOOKUP_DEF])) >>
     simp[LET_DEF] >> strip_tac >> gvs[] >>
-    qexists_tac `remap |+ (inst.inst_id, next_alloca_offset s2)` >>
+    qexists_tac `remap |+ (inst.inst_id, s2.vs_alloca_next)` >>
     simp[FLOOKUP_UPDATE, SUBSET_DEF, FDOM_FUPDATE, update_var_def] >>
     rpt strip_tac >> gvs[] >> metis_tac[SUBSET_DEF]
   )
@@ -4459,7 +4424,7 @@ Theorem run_block_preserves_remap:
                 0 < w2n alloc_size) /\
       (!inst s. MEM inst bb.bb_instructions /\ is_alloca_op inst.inst_opcode ==>
                 !alloc_size. inst.inst_operands = [Lit alloc_size] ==>
-                next_alloca_offset s + w2n alloc_size < dimword (:256)) /\
+                s.vs_alloca_next + w2n alloc_size < dimword (:256)) /\
       (!i. s1.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions ==>
            (EL i bb.bb_instructions).inst_id NOTIN FDOM s1.vs_allocas) /\
       MEM bb fn.fn_blocks ==>
@@ -4707,7 +4672,7 @@ Theorem step_preserves_ptrs_in_alloca_bounds[local]:
       inst.inst_id NOTIN FDOM s.vs_allocas /\
       ?alloc_size. inst.inst_operands = [Lit alloc_size] /\
                    0 < w2n alloc_size /\
-                   next_alloca_offset s + w2n alloc_size < dimword (:256)) ==>
+                   s.vs_alloca_next + w2n alloc_size < dimword (:256)) ==>
     ptrs_in_alloca_bounds fn roots v
 Proof
   rpt strip_tac >>
@@ -4864,7 +4829,7 @@ Resume step_preserves_ptrs_in_alloca_bounds[alloca_case]:
    HD inst.inst_outputs IN roots` by simp[] >>
   `?alloc_size. inst.inst_operands = [Lit alloc_size] /\
                 0 < w2n alloc_size /\
-                next_alloca_offset s + w2n alloc_size < dimword (:256)` by
+                s.vs_alloca_next + w2n alloc_size < dimword (:256)` by
     simp[] >>
   `u = HD inst.inst_outputs` by (gvs[] >> Cases_on `inst.inst_outputs` >> gvs[]) >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
@@ -4876,7 +4841,7 @@ Resume step_preserves_ptrs_in_alloca_bounds[alloca_case]:
   simp[in_alloca_region_def] >>
   qexists_tac `inst.inst_id` >>
   simp[FLOOKUP_UPDATE] >>
-  `next_alloca_offset s < dimword (:256)` by simp[] >>
+  `s.vs_alloca_next < dimword (:256)` by simp[] >>
   gvs[w2n_n2w, FLOOKUP_DEF]
 QED
 

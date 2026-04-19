@@ -793,23 +793,23 @@ Theorem m2v_transform_function_correct:
     (* nao bounded per-step *)
     (!inst fuel' ctx' s' s''.
       MEM inst (fn_insts fn) /\
-      next_alloca_offset s' < dimword (:256) /\
+      s'.vs_alloca_next < dimword (:256) /\
       step_inst fuel' ctx' inst s' = OK s'' ==>
-      next_alloca_offset s'' < dimword (:256)) /\
+      s''.vs_alloca_next < dimword (:256)) /\
     (* nao bounded throughout execution *)
     (!bb fuel' ctx' s' s''.
       MEM bb fn.fn_blocks /\
-      next_alloca_offset s' < dimword (:256) /\
+      s'.vs_alloca_next < dimword (:256) /\
       exec_block fuel' ctx' bb s' = OK s'' ==>
-      next_alloca_offset s'' < dimword (:256)) /\
+      s''.vs_alloca_next < dimword (:256)) /\
     alloca_pointer_confined fn /\
     all_mem_via_pointer fn (alloca_roots fn) /\
     m2v_promo_sizes_bounded fn /\
     m2v_return_size_bounded fn /\
-    next_alloca_offset s < dimword (:256) /\
+    s.vs_alloca_next < dimword (:256) /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE)
       bb.bb_instructions) fn.fn_blocks /\
-    EVERY (\bb. EVERY (\i. i.inst_opcode <> MSIZE)
+    EVERY (\bb. EVERY (\i. i.inst_opcode <> MEMTOP)
       bb.bb_instructions) fn.fn_blocks /\
     alloca_bridge fn s /\
     fn_reachable fn s.vs_current_bb /\
@@ -828,7 +828,7 @@ Proof
        `(?e. run_blocks fuel ctx fn (s with vs_inst_idx := 0) = Error e) \/
         lift_result (\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                              m2v_ao_undef_sync fn s1 s2 /\
-                             next_alloca_offset s1 = next_alloca_offset s2)
+                             s1.vs_alloca_next = s2.vs_alloca_next)
                     (m2v_equiv (m2v_fresh_vars fn))
                     (m2v_equiv (m2v_fresh_vars fn))
           (run_blocks fuel ctx fn (s with vs_inst_idx := 0))
@@ -840,7 +840,7 @@ Proof
         >> (DISJ2_TAC >> irule lift_result_weaken >>
             qexists `\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                              m2v_ao_undef_sync fn s1 s2 /\
-                             next_alloca_offset s1 = next_alloca_offset s2` >>
+                             s1.vs_alloca_next = s2.vs_alloca_next` >>
             simp[] >> metis_tac[m2v_inv_implies_equiv])))
   >> irule (SRULE [] block_sim_function_with_pred2_bb)
   >> BETA_TAC >> simp[m2v_bt_preserves_label]
@@ -850,7 +850,7 @@ Proof
        metis_tac[m2v_inv_control_flow])
   (* predicate: original-side invariants + fn_reachable + pvars_at_current *)
   >> qexists `\s1 s2. m2v_fresh_undef fn s1 /\ alloca_inv s1 /\
-       next_alloca_offset s1 < dimword (:256) /\
+       s1.vs_alloca_next < dimword (:256) /\
        m2v_nonpromoted_access_safe fn s1 /\
        alloca_bridge fn s1 /\
        fn_reachable fn s1.vs_current_bb /\

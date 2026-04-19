@@ -24,7 +24,7 @@ Libs
    KEY LEMMA 1: so_analyze_block puts "x" in needed
    =====================================================================
 
-   Block A: inst0 (MSIZE, outputs=["x"]), inst1 (ISZERO, operands=[Var "x"],
+   Block A: inst0 (MEMTOP, outputs=["x"]), inst1 (ISZERO, operands=[Var "x"],
    outputs=["y"]), inst2 (JMP, operands=[Label "B"]).
 
    With from_to("A","B") = ["x"], so_analyze_block returns needed=["x"].
@@ -32,7 +32,7 @@ Libs
    then re-requested by the JMP terminator (from from_to). *)
 
 Definition cex_inst0_def:
-  cex_inst0 = <| inst_id := 0; inst_opcode := MSIZE;
+  cex_inst0 = <| inst_id := 0; inst_opcode := MEMTOP;
                  inst_operands := []; inst_outputs := ["x"] |>
 End
 
@@ -76,7 +76,7 @@ QED
 (* =====================================================================
    KEY LEMMA 2: liveness_transfer kills "x" at inst0
 
-   inst0 = MSIZE with outputs=["x"], so inst_defs inst0 = ["x"].
+   inst0 = MEMTOP with outputs=["x"], so inst_defs inst0 = ["x"].
    liveness_transfer applied to inst0 removes "x" from any live set.
    Therefore "x" cannot be live at block entry (index 0).
    ===================================================================== *)
@@ -129,7 +129,7 @@ QED
    single_use_form doesn't prevent this because ASSIGN uses aren't counted.
 
    Block "succ":
-     inst0: MSIZE → v     (defines v)
+     inst0: MEMTOP → v     (defines v)
      inst1: ASSIGN v → w  (ASSIGN, excluded from single_use_form count)
      inst2: ISZERO v → y  (non-ASSIGN, uses v, counted = 1 use)
      inst3: JMP → exit    (terminator)
@@ -159,7 +159,7 @@ End
 
 Definition cex2_insts_def:
   cex2_insts =
-    [<| inst_id := 0; inst_opcode := MSIZE;
+    [|<| inst_id := 0; inst_opcode := MEMTOP;
         inst_operands := []; inst_outputs := ["v"] |>;
      <| inst_id := 1; inst_opcode := ASSIGN;
         inst_operands := [Var "v"]; inst_outputs := ["w"] |>;
@@ -187,7 +187,7 @@ QED
 Theorem liveness_transfer_kills_v:
   ∀bbs live.
     ¬MEM "v" (liveness_transfer bbs
-      <| inst_id := 0; inst_opcode := MSIZE;
+      <| inst_id := 0; inst_opcode := MEMTOP;
          inst_operands := []; inst_outputs := ["v"] |> live)
 Proof
   rw[liveness_transfer_def, live_update_def, MEM_APPEND, MEM_FILTER,
@@ -217,7 +217,7 @@ QED
    (live_vars_at lr "succ" idx = transfer(live_vars_at lr "succ" (idx+1))),
    then:
    - live_vars_at lr "succ" 2 includes "v" (used by ISZERO at inst2)
-   - live_vars_at lr "succ" 0 does NOT include "v" (killed by MSIZE at inst0)
+   - live_vars_at lr "succ" 0 does NOT include "v" (killed by MEMTOP at inst0)
    - so_analyze_block produces needed=["v"] (via ASSIGN handler)
    - so_record_from_to writes (pred, "succ") ↦ ["v"] into from_to'
    - from_to_wf lr from_to' requires MEM "v" (live_vars_at lr "succ" 0) — FALSE
@@ -240,7 +240,7 @@ QED
 
    2. Liveness at ("A", 0):
       - "x" is live at ("A", 1) — used by inst1
-      - inst0 DEFINES "x" (MSIZE outputs=["x"]), killing it
+      - inst0 DEFINES "x" (MEMTOP outputs=["x"]), killing it
       - So "x" is NOT live at ("A", 0)
 
    3. from_to_wf holds: "x" IS live at ("B", 0) — B uses x

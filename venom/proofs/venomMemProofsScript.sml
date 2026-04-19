@@ -244,14 +244,14 @@ QED
    =================================================================== *)
 
 (* Combined alloca invariant: non-overlapping + bump pointer valid *)
-(* next_alloca_offset >= base + sz for any existing alloca (conditional) *)
-Theorem next_alloca_offset_ge[local]:
+(* vs_alloca_next >= base + sz for any existing alloca (conditional) *)
+Theorem alloca_next_ge[local]:
   !s aid base sz.
     alloca_next_valid s /\
     FLOOKUP s.vs_allocas aid = SOME (base, sz) ==>
-    base + sz <= next_alloca_offset s
+    base + sz <= s.vs_alloca_next
 Proof
-  rw[alloca_next_valid_def, next_alloca_offset_def] >>
+  rw[alloca_next_valid_def] >>
   res_tac >> fs[]
 QED
 
@@ -271,7 +271,7 @@ Proof
          alloca_next_valid_def, update_var_def] >>
       rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
       rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-      res_tac >> fs[next_alloca_offset_def, arithmeticTheory.MAX_DEF])
+      res_tac >> fs[])
   >- ((* SOME — already allocated, state unchanged except var *)
       Cases_on `x` >> gvs[update_var_def, alloca_inv_def,
         allocas_non_overlapping_def, alloca_next_valid_def] >> metis_tac[])
@@ -288,7 +288,7 @@ Proof
   Cases_on `t` >> gvs[] >>
   Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> gvs[] >>
   TRY (Cases_on `x` >> gvs[]) >>
-  simp[next_alloca_offset_def, arithmeticTheory.MAX_DEF]
+  simp[]
 QED
 
 (* Non-ALLOCA, non-INVOKE step_inst_base preserves vs_allocas *)
@@ -382,10 +382,10 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> gvs[result_alloca_inv_def]
   >- ((* NONE — fresh allocation *)
       `exec_alloca inst s alloc_size =
-         OK (update_var h (n2w (next_alloca_offset s))
+         OK (update_var h (n2w s.vs_alloca_next)
            (s with <| vs_allocas :=
-              s.vs_allocas |+ (inst.inst_id, (next_alloca_offset s, w2n alloc_size));
-              vs_alloca_next := next_alloca_offset s + w2n alloc_size |>))` by
+              s.vs_allocas |+ (inst.inst_id, (s.vs_alloca_next, w2n alloc_size));
+              vs_alloca_next := s.vs_alloca_next + w2n alloc_size |>))` by
         simp[exec_alloca_def] >>
       metis_tac[exec_alloca_preserves_inv, exec_alloca_next_mono])
   >- ((* SOME — idempotent *)

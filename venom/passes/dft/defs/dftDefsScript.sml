@@ -5,16 +5,19 @@
  * traversal of data and effect dependencies. Produces an instruction order
  * suitable for stack-based code generation.
  *
- * TOP-LEVEL:
- *   producing_inst       — find instruction producing a variable
- *   build_dda            — data dependency analysis (incremental)
- *   build_eda            — effect dependency analysis (incremental, with clearing)
- *   entry_instructions   — dependency DAG roots
- *   schedule_block       — DFS schedule of a block's non-phi instructions
- *   dft_block            — transform a single block
- *   dft_fn               — transform all blocks in a function
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
- * Source: vyper/venom/passes/dft.py
+ * TOP-LEVEL:
+ *   producing_inst         — find instruction producing a variable
+ *   inst_data_deps         — data dependencies for one instruction
+ *   build_eda              — effect dependency analysis (incremental, with clearing)
+ *   build_full_eda         — combined EDA with barrier/abort/alloca chains
+ *   inst_all_deps          — combined DDA + EDA dependencies
+ *   entry_instructions     — dependency DAG roots
+ *   schedule_from_entries  — DFS schedule of a block's non-phi instructions
+ *   dft_block              — transform a single block
+ *   dft_fn                 — transform all blocks in a function
+ *   dft_ctx                — transform all functions in a context
  *)
 
 Theory dftDefs
@@ -29,7 +32,7 @@ Ancestors
 Definition effects_to_list_def:
   effects_to_list effs =
     FILTER (\e. e IN effs)
-      [Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY; Eff_MSIZE;
+      [Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY;
        Eff_IMMUTABLES; Eff_RETURNDATA; Eff_LOG; Eff_BALANCE; Eff_EXTCODE]
 End
 
@@ -59,7 +62,8 @@ Definition inst_data_deps_def:
       (MAP (operand_producer block_insts) inst.inst_operands)) in
     let order_deps =
       if is_terminator inst.inst_opcode
-      then MAP THE (FILTER IS_SOME (MAP (producing_inst block_insts) order))
+      then FILTER (\d. d.inst_id <> inst.inst_id)
+             (MAP THE (FILTER IS_SOME (MAP (producing_inst block_insts) order)))
       else [] in
     nub (var_deps ++ order_deps)
 End
@@ -99,9 +103,8 @@ Definition compute_effect_deps_def:
        This affects dep ordering in nub → EDA list → children → tiebreaker. *)
     let write_deps = FLAT (MAP (\weff.
       let war = et_get_reads et weff in
-      let waw = if weff = Eff_MSIZE then []
-                else case FLOOKUP et.et_last_write weff of
-                       SOME w => [w] | NONE => [] in
+      let waw = case FLOOKUP et.et_last_write weff of
+                      SOME w => [w] | NONE => [] in
       war ++ waw) w_effs) in
     (* RAW from reads *)
     let raw_deps = MAP THE (FILTER IS_SOME (MAP (\reff.
@@ -132,6 +135,99 @@ Definition build_eda_def:
       let (deps, et') = compute_effect_deps et inst in
       (acc_map |+ (inst.inst_id, deps), et'))
     (FEMPTY, empty_effect_track) non_phis)
+End
+
+(* Generic: chain all instructions matching predicate P in original block
+   order. Each matching instruction gets an EDA edge to the previous matching
+   instruction, ensuring they are never reordered by DFT. *)
+Definition add_chain_deps_def:
+  add_chain_deps P block_insts eda =
+    let non_phis = FILTER (\i. ~is_pseudo i.inst_opcode) block_insts in
+    let matching = FILTER P non_phis in
+    FST (FOLDL (\(acc, prev) inst.
+      let old_deps = case FLOOKUP acc inst.inst_id of
+                       NONE => [] | SOME ds => ds in
+      let new_deps = case prev of
+                       NONE => old_deps
+                     | SOME p => if MEM p old_deps then old_deps
+                                 else p :: old_deps in
+      (acc |+ (inst.inst_id, new_deps), SOME inst))
+    (eda, NONE) matching)
+End
+
+(* Chain all non-NoFail instructions so abort-incompatible pairs can never
+   be reordered. Ensures abort_compatible for every reorderable pair.
+   (Diverges from Python DFT which lacks this — upstream bug.) *)
+Definition add_abort_deps_def:
+  add_abort_deps block_insts eda =
+    add_chain_deps (\i. opcode_fail_class i.inst_opcode <> NoFail)
+                   block_insts eda
+End
+
+(* Chain all ALLOCA instructions. exec_alloca uses vs_alloca_next as a
+   bump-pointer allocator, making results order-dependent. The effects
+   system does not model this implicit state dependency. *)
+Definition add_alloca_deps_def:
+  add_alloca_deps block_insts eda =
+    add_chain_deps (\i. is_alloca_op i.inst_opcode) block_insts eda
+End
+
+(* Barrier predicate: instructions that bi_independent cannot handle.
+   Volatile ops (INVOKE, ext_call, MSTORE, ...) and alloca ops have implicit
+   state dependencies not captured by the effects system. *)
+Definition is_barrier_def:
+  is_barrier inst <=> is_volatile inst.inst_opcode \/ is_alloca_op inst.inst_opcode
+End
+
+(* Pass 1: each non-phi after a barrier gets that barrier as a dep.
+   Tracks only last_barrier — simple 2-component FOLDL. *)
+Definition add_deps_on_barrier_def:
+  add_deps_on_barrier block_insts eda =
+    let non_phis = FILTER (\i. ~is_pseudo i.inst_opcode) block_insts in
+    FST (FOLDL (\(acc, last_bar) inst.
+      let old_deps = case FLOOKUP acc inst.inst_id of
+                       NONE => [] | SOME ds => ds in
+      if is_barrier inst then
+        (acc, SOME inst)
+      else
+        let new_deps = case last_bar of
+                         NONE => old_deps
+                       | SOME b => if MEM b old_deps then old_deps
+                                   else b :: old_deps in
+        (acc |+ (inst.inst_id, new_deps), last_bar))
+    (eda, NONE) non_phis)
+End
+
+(* Pass 2: each barrier depends on ALL preceding non-phis.
+   Uses add_chain_deps pattern but adds ALL prev non-phis, not just matching.
+   Tracks only prev_insts — simple 2-component FOLDL. *)
+Definition add_deps_from_barrier_def:
+  add_deps_from_barrier block_insts eda =
+    let non_phis = FILTER (\i. ~is_pseudo i.inst_opcode) block_insts in
+    FST (FOLDL (\(acc, prev_insts) inst.
+      if is_barrier inst then
+        let old_deps = case FLOOKUP acc inst.inst_id of
+                         NONE => [] | SOME ds => ds in
+        let new_deps = FOLDL (\ds p.
+              if MEM p ds then ds else p :: ds) old_deps prev_insts in
+        (acc |+ (inst.inst_id, new_deps), prev_insts ++ [inst])
+      else
+        (acc, prev_insts ++ [inst]))
+    (eda, []) non_phis)
+End
+
+(* Combined barrier deps: both passes *)
+Definition add_barrier_deps_def:
+  add_barrier_deps block_insts eda =
+    add_deps_from_barrier block_insts
+      (add_deps_on_barrier block_insts eda)
+End
+
+Definition build_full_eda_def:
+  build_full_eda block_insts =
+    add_alloca_deps block_insts
+      (add_barrier_deps block_insts
+        (add_abort_deps block_insts (build_eda block_insts)))
 End
 
 (* ===== Combined Dependencies ===== *)
@@ -249,7 +345,8 @@ Definition dft_cost_def:
           (MAPi (\i op.
             case op of
               Var v => if MEM v child.inst_outputs then SOME i else NONE
-            | _ => NONE) (REVERSE parent.inst_operands))) in
+            | Lit _ => NONE
+            | Label _ => NONE) (REVERSE parent.inst_operands))) in
         case output_idxs of
           idx :: _ => idx + LENGTH order + 1
         | [] =>
@@ -339,7 +436,7 @@ End
 Definition dft_block_def:
   dft_block order bb =
     let phis = FILTER (λi. is_pseudo i.inst_opcode) bb.bb_instructions in
-    let eda = build_eda bb.bb_instructions in
+    let eda = build_full_eda bb.bb_instructions in
     let offspring_map = build_offspring_map bb.bb_instructions order in
     let entries = entry_instructions bb.bb_instructions order eda in
     let scheduled = schedule_from_entries bb.bb_instructions order

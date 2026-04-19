@@ -129,7 +129,7 @@ QED
    
    Non-volatile-memory instructions produce the same result when
    vs_memory is replaced.  "Non-volatile-memory" means no Eff_MEMORY
-   or Eff_MSIZE in read_effects or write_effects.
+   in read_effects or write_effects.
    
    Why: eval_operand only reads vs_vars, update_var only writes
    vs_vars, and the state-reader functions for non-memory opcodes
@@ -208,9 +208,7 @@ Theorem step_inst_base_mem_frame[local]:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-    Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode
     ==>
     step_inst_base inst (s with vs_memory := m) =
     OK (s' with vs_memory := m)
@@ -219,15 +217,13 @@ Proof
 QED
 
 (* Lift to step_inst (adds INVOKE + ALLOCA exclusions).
-   ALLOCA uses next_alloca_offset which reads LENGTH vs_memory,
-   so it genuinely depends on memory even though its effects are empty. *)
+   ALLOCA uses vs_alloca_next as bump pointer;
+   it does not read LENGTH vs_memory. *)
 Theorem step_inst_mem_frame:
   !fuel ctx inst s s' m.
     step_inst fuel ctx inst s = OK s' /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
@@ -251,9 +247,7 @@ Theorem step_inst_base_mem_error_frame[local]:
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-    Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode
     ==>
     step_inst_base inst (s with vs_memory := m) = Error e
 Proof
@@ -265,8 +259,6 @@ Theorem step_inst_mem_error_frame:
     step_inst fuel ctx inst s = Error e /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode /\

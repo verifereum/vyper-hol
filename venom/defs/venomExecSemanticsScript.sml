@@ -1,7 +1,7 @@
 (*
  * Venom Semantics
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * This theory defines the operational semantics for Venom IR execution.
  * It includes the effects system and instruction stepping.
@@ -463,7 +463,7 @@ Definition exec_alloca_def:
             (* Already allocated — return existing base address *)
             OK (update_var out (n2w offset) s)
         | NONE =>
-            let offset = next_alloca_offset s in
+            let offset = s.vs_alloca_next in
             let sz = w2n alloc_size in
             let s' = s with <|
               vs_allocas := s.vs_allocas |+ (inst.inst_id, (offset, sz));
@@ -733,8 +733,8 @@ Definition step_inst_base_def:
             | _ => Error "undefined operand")
         | _ => Error "returndatacopy requires 3 operands")
 
-    (* Memory size *)
-    | MSIZE => exec_read0
+    (* Memory top (lowers to EVM MSIZE at assembly) *)
+    | MEMTOP => exec_read0
         (\s. let size = LENGTH s.vs_memory in
              let words = (size + 31) DIV 32 in
              n2w (words * 32)) inst s

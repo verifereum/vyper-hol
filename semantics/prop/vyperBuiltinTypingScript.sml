@@ -277,12 +277,14 @@ Proof
 QED
 
 (* bn254p is positive and < 2^256 *)
-Theorem bn254p_pos[local]: 0 < bn254$bn254p
+Theorem bn254p_pos[local]:
+   0 < bn254$bn254p
 Proof
   EVAL_TAC
 QED
 
-Theorem bn254p_lt_2_256[local]: bn254$bn254p < 2 ** 256
+Theorem bn254p_lt_2_256[local]:
+   bn254$bn254p < 2 ** 256
 Proof
   EVAL_TAC
 QED
@@ -347,7 +349,8 @@ Proof
 QED
 
 (* zero is bounded *)
-Theorem zero_bounded[local]: fp_bounded bn254$zero
+Theorem zero_bounded[local]:
+   fp_bounded bn254$zero
 Proof
   EVAL_TAC
 QED

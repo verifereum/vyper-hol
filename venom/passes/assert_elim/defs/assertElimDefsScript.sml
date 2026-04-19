@@ -2,6 +2,7 @@
  * Assert Elimination — Definitions
  *
  * Ports vyper/venom/passes/assert_elimination.py to HOL4.
+ * Upstream: vyperlang/vyper@8b4f0a225 (add assert elimination pass)
  *
  * Eliminates ASSERT instructions whose operand is provably nonzero
  * according to the variable range analysis (widening).

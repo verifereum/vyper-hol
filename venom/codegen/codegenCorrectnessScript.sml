@@ -9,6 +9,13 @@
  *   codegen_correct    — whole-context correctness (run_context vs run)
  *   codegen_fn_correct — per-function correctness (run_blocks vs run)
  *
+ * MEMTOP Exclusion
+ * ===============
+ * MEMTOP correspondence is excluded: asm/EVM memory may be longer
+ * than Venom memory due to spill slot expansion. Vyper never exposes
+ * MEMTOP to user code (used internally for free memory pointer).
+ * See memory_rel in codegenRelScript.sml.
+ *
  * EVM Exception Classification
  * ============================
  * How each EVM exception is handled in the correctness argument:
@@ -60,8 +67,11 @@
 Theory codegenCorrectness
 Ancestors
   asmToBytecodeProps venomToAsmProps codegen vfmExecution
-
-
+  codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
+  symbolResolve venomExecSemantics venomState venomInst
+  stackOpSim list rich_list finite_map arithmetic
+Libs
+  BasicProvers
 
 (* ===== Initial State Correspondence ===== *)
 
@@ -79,17 +89,53 @@ Definition initial_state_rel_def:
          (∀i. i < LENGTH params ⇒
             FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
               SOME (EL i (REVERSE ctxt.stack))) ∧
-         (* Environment must match.
-            rb.accounts includes contract storage (per-account). *)
-         rb.accounts = vs.vs_accounts ∧
-         rb.tStorage = vs.vs_transient ∧
+         (* Live accounts and transient storage *)
+         es.rollback.accounts = vs.vs_accounts ∧
+         es.rollback.tStorage = vs.vs_transient ∧
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          (* Memory fully shared at function entry (no spills yet).
             read_byte zero-pads, so this handles different lengths. *)
          (∀i. read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
-         (* EVM starts at pc = 0 *)
-         ctxt.pc = 0
+         (* EVM starts at pc = 0, no pending jump *)
+         ctxt.pc = 0 ∧
+         ctxt.jumpDest = NONE ∧
+         (* Venom state: not halted, at instruction 0 *)
+         vs.vs_halted = F ∧
+         vs.vs_inst_idx = 0 ∧
+         (* Call context *)
+         vs.vs_call_ctx.cc_caller = ctxt.msgParams.caller ∧
+         vs.vs_call_ctx.cc_address = ctxt.msgParams.callee ∧
+         vs.vs_call_ctx.cc_callvalue = n2w ctxt.msgParams.value ∧
+         vs.vs_call_ctx.cc_calldata = ctxt.msgParams.data ∧
+         vs.vs_call_ctx.cc_static = ctxt.msgParams.static ∧
+         (* Tx context *)
+         vs.vs_tx_ctx.tc_origin = es.txParams.origin ∧
+         vs.vs_tx_ctx.tc_gasprice = n2w es.txParams.gasPrice ∧
+         vs.vs_tx_ctx.tc_chainid = n2w es.txParams.chainId ∧
+         vs.vs_tx_ctx.tc_blobhashes = es.txParams.blobHashes ∧
+         (* Block context *)
+         vs.vs_block_ctx.bc_coinbase = es.txParams.blockCoinBase ∧
+         vs.vs_block_ctx.bc_timestamp = n2w es.txParams.blockTimeStamp ∧
+         vs.vs_block_ctx.bc_number = n2w es.txParams.blockNumber ∧
+         vs.vs_block_ctx.bc_prevrandao = es.txParams.prevRandao ∧
+         vs.vs_block_ctx.bc_gaslimit = n2w es.txParams.blockGasLimit ∧
+         vs.vs_block_ctx.bc_basefee = n2w es.txParams.baseFeePerGas ∧
+         vs.vs_block_ctx.bc_blobbasefee = n2w es.txParams.baseFeePerBlobGas ∧
+         (* Blockhash *)
+         vs.vs_prev_hashes = es.txParams.prevHashes ∧
+         es.txParams.blockNumber < dimword (:256) ∧
+         (∀n. vs.vs_block_ctx.bc_blockhash n =
+           let bn = w2n vs.vs_block_ctx.bc_number in
+           let idx = bn - n - 1 in
+           if n < bn ∧ bn − 256 ≤ n ∧
+              idx < LENGTH vs.vs_prev_hashes
+           then EL idx vs.vs_prev_hashes
+           else 0w) ∧
+         (* Code *)
+         vs.vs_code = ctxt.msgParams.code ∧
+         (* Single-context execution (non-Create) *)
+         (∀a. ctxt.msgParams.outputTo ≠ Code a)
      | [] => F)
 End
 
@@ -102,10 +148,155 @@ Definition final_state_rel_def:
        (ctxt, rb) :: _ =>
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
-         rb.accounts = vs.vs_accounts ∧
-         rb.tStorage = vs.vs_transient
+         es.rollback.accounts = vs.vs_accounts ∧
+         es.rollback.tStorage = vs.vs_transient
      | [] => F)
 End
+
+(* ===== Entry Function Constraints ===== *)
+
+(* The entry function (dispatcher) never uses RET.
+   RET produces IntRet which only makes sense for internal function calls.
+   Vyper's entry function dispatches to external-facing functions and
+   terminates via STOP/RETURN/REVERT, never RET. *)
+Definition entry_fn_no_ret_def:
+  entry_fn_no_ret fn ⇔
+    EVERY (λbb. EVERY (λinst. inst.inst_opcode ≠ RET)
+                      bb.bb_instructions) fn.fn_blocks
+End
+
+(* ===== Composition Helpers ===== *)
+
+(* Terminal state composition: venom_asm_terminal_rel + asm_evm_rel → final_state_rel.
+   After asm execution ends at a terminal, the asm state relates to both Venom (terminal_rel)
+   and EVM (evm_rel). Composing these gives the end-to-end final_state_rel. *)
+Theorem terminal_asm_evm_final[local]:
+  !prog vs' as' es'.
+    venom_asm_terminal_rel vs' as' /\
+    asm_evm_rel prog as' es' ==>
+    final_state_rel vs' es'
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[venom_asm_terminal_rel_def, asm_evm_rel_def, final_state_rel_def] >>
+  every_case_tac >> gvs[]
+QED
+
+(* Codegen unfold for single function: codegen with ctx_functions := [fn]
+   gives generate_fn_plan fn fn_eom 0 and assembles the plan. *)
+Theorem codegen_single_fn_unfold[local]:
+  !ctx fn fn_eom data_seg bytecode.
+    codegen (ctx with ctx_functions := [fn])
+            (FEMPTY |+ (fn.fn_name, fn_eom))
+            data_seg = SOME bytecode ==>
+    ?fn_ops ps_final.
+      generate_fn_plan fn fn_eom 0 = SOME (fn_ops, ps_final) /\
+      bytecode = assemble (execute_plan (fn_ops ++ revert_postamble) ++
+                           data_segment_asm data_seg)
+Proof
+  rpt strip_tac >>
+  fs[codegen_def] >>
+  every_case_tac >> gvs[] >>
+  rename1 `generate_context_plan _ _ = SOME plan_ops` >>
+  fs[generate_context_plan_def, LET_THM, FOLDL, FLOOKUP_UPDATE] >>
+  every_case_tac >> gvs[]
+QED
+
+(* Prefix of a list is an asm_block_at position 0 *)
+Theorem asm_block_at_prefix[local]:
+  !xs ys. asm_block_at (xs ++ ys) 0 xs
+Proof
+  Induct >> simp[asm_block_at_def, EL_APPEND1]
+QED
+
+(* Bridge from initial state to asm state:
+   At function entry, we can construct an asm_state that simultaneously
+   satisfies venom_asm_rel (linking plan state to asm state) and
+   asm_evm_rel (linking asm state to EVM state). *)
+Theorem initial_state_bridge[local]:
+  !fn fn_eom fn_ops ps_final prog lo vs es data_seg.
+    initial_state_rel fn vs es /\
+    generate_fn_plan fn fn_eom 0 = SOME (fn_ops, ps_final) /\
+    prog = execute_plan (fn_ops ++ revert_postamble) ++
+           data_segment_asm data_seg /\
+    lo = SND (compute_label_offsets prog) /\
+    (case es.contexts of
+       (ctxt, rb) :: _ =>
+         ctxt.msgParams.code = assemble prog /\
+         ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog)
+     | [] => F) ==>
+    ?as0.
+      venom_asm_rel lo (fn_init_ps fn fn_eom) vs as0 /\
+      asm_evm_rel prog as0 es /\
+      asm_block_at prog 0 (execute_plan fn_ops) /\
+      as0.as_pc = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* Extract ctxt, rb from es.contexts *)
+  every_case_tac >> gvs[] >>
+  rename1 `es.contexts = (ctxt, rb) :: rest` >>
+  (* Construct the asm witness *)
+  qexists_tac `<| as_stack := ctxt.stack;
+                   as_memory := ctxt.memory;
+                   as_accounts := vs.vs_accounts;
+                   as_transient := vs.vs_transient;
+                   as_returndata := vs.vs_returndata;
+                   as_logs := vs.vs_logs;
+                   as_pc := 0;
+                   as_call_ctx := vs.vs_call_ctx;
+                   as_tx_ctx := vs.vs_tx_ctx;
+                   as_block_ctx := vs.vs_block_ctx;
+                   as_code := vs.vs_code;
+                   as_prev_hashes := vs.vs_prev_hashes |>` >>
+  gvs[initial_state_rel_def, venom_asm_rel_def, fn_init_ps_def,
+      init_plan_state_def, init_spill_alloc_def, LET_THM,
+      plan_spill_rel_def, FLOOKUP_DEF, memory_rel_def,
+      asm_evm_rel_def, asm_pc_to_offset_def] >>
+  (* Remaining: plan_stack_rel ∧ blockhash ∧ asm_block_at *)
+  conj_tac >- suspend "plan_stack" >>
+  conj_tac >- (rpt gen_tac >> simp[CONJ_ASSOC]) >>
+  rewrite_tac[execute_plan_append, GSYM APPEND_ASSOC] >>
+  simp[asm_block_at_prefix]
+QED
+
+Resume initial_state_bridge[plan_stack]:
+  simp[plan_stack_rel_def, operand_val_def] >>
+  rpt strip_tac >>
+  simp[EL_REVERSE, EL_MAP, operand_val_def, FLOOKUP_DEF] >>
+  qpat_x_assum `!i. i < LENGTH ctxt.stack ==> _`
+    (qspec_then `PRE (LENGTH ctxt.stack - i)` mp_tac) >>
+  simp[EL_REVERSE] >>
+  `PRE (LENGTH ctxt.stack - PRE (LENGTH ctxt.stack - i)) = i` by simp[] >>
+  simp[]
+QED
+
+Finalise initial_state_bridge
+
+(* run_blocks never returns OK — it always terminates with
+   Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
+   step either recurses (smaller fuel) or passes through non-OK. *)
+Theorem run_blocks_never_ok[local]:
+  !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
+Proof
+  Induct >> simp[Once run_blocks_def] >>
+  rpt gen_tac >> every_case_tac
+QED
+
+(* run_function never returns OK — unfolds to run_blocks. *)
+Theorem run_function_never_ok[local]:
+  !fuel ctx fn vs vs1. run_function fuel ctx fn vs <> OK vs1
+Proof
+  simp[run_function_def] >>
+  rpt gen_tac >> every_case_tac >> simp[run_blocks_never_ok]
+QED
+
+(* run_context also never returns OK — it either dispatches to
+   run_function (which never returns OK) or returns Error. *)
+Theorem run_context_never_ok[local]:
+  !fuel ctx vs vs1. run_context fuel ctx vs <> OK vs1
+Proof
+  rpt gen_tac >> simp[Once run_context_def] >>
+  every_case_tac >> simp[run_function_never_ok]
+QED
 
 (* ===== Per-Function Codegen Correctness ===== *)
 
@@ -118,7 +309,6 @@ End
      - codegen succeeds (SOME bytecode)
      - initial states correspond (stack has args, shared state matches)
      - spill safety: Venom execution doesn't clobber spill region
-     - spill coverage: initial memory covers spill high-water mark
 
    Gas: existential — there exists a gas bound such that with enough
    gas, EVM results correspond to Venom results. This proves the
@@ -147,8 +337,7 @@ Theorem codegen_fn_correct:
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
        step_mem_safe <| sa_fn_eom := fn_eom;
                         sa_next_offset := spill_hwm;
-                        sa_free_slots := [] |> vs1 vs2) ∧
-    spill_mem_covered spill_hwm vs.vs_memory ⇒
+                        sa_free_slots := [] |> vs1 vs2) ⇒
     ∃gas_needed.
       ∀es. initial_state_rel fn vs es ∧
            (case es.contexts of
@@ -172,6 +361,40 @@ Theorem codegen_fn_correct:
          | IntRet _ _ => T
          | Error _ => T)
 Proof
+  rpt gen_tac >> strip_tac >>
+  (* Unfold codegen to get generate_fn_plan *)
+  drule codegen_single_fn_unfold >> strip_tac >>
+  rename1 `generate_fn_plan fn fn_eom 0 = SOME (fn_ops, ps_final)` >>
+  (* Define the assembly program *)
+  qabbrev_tac `prog = execute_plan (fn_ops ++ revert_postamble) ++
+                       data_segment_asm data_seg` >>
+  qabbrev_tac `lo = SND (compute_label_offsets prog)` >>
+  qabbrev_tac `o2p = build_offset_to_pc prog` >>
+  (* Choose gas_needed — cheat for now.
+     Real proof: sum of gas costs for each EVM step in the trace. *)
+  qexists_tac `0` >>
+  rpt gen_tac >> strip_tac >>
+  (* Case split on run_function — IntRet/Error are trivial *)
+  Cases_on `run_function fuel ctx fn vs` >> gvs[] >>
+  (* OK case: run_function never returns OK *)
+  TRY (rename1 `run_function _ _ _ _ = OK _` >> metis_tac[run_function_never_ok]) >>
+  (* IntRet, Error: conclusion is T — discharged by gvs *)
+  (* Halt and Abort cases: compose gen_fn_simulation + asm_bytecode_sim *)
+  (* Construct initial asm state via bridge *)
+  `?as0. venom_asm_rel lo (fn_init_ps fn fn_eom) vs as0 /\
+         asm_evm_rel prog as0 es /\
+         asm_block_at prog 0 (execute_plan fn_ops) /\
+         as0.as_pc = 0` by (
+    qspecl_then [`fn`, `fn_eom`, `fn_ops`, `ps_final`,
+                 `prog`, `lo`, `vs`, `es`, `data_seg`]
+      mp_tac initial_state_bridge >>
+    impl_tac >- (fs[Abbr `prog`, Abbr `lo`] >>
+                  Cases_on `es.contexts` >> gvs[]) >>
+    metis_tac[]) >>
+  (* Apply gen_fn_simulation to get asm execution.
+     step_mem_safe alloc mismatch between codegen_fn_correct (spill_hwm)
+     and gen_fn_simulation (fn_init_ps alloc). Need monotonicity.
+     Then: asm_bytecode_sim composition. *)
   cheat
 QED
 
@@ -204,14 +427,17 @@ Theorem codegen_correct:
   ∀fuel ctx fn_eom_map data_seg bytecode spill_hwm vs.
     codegen_ready ctx ∧
     ctx_wf ctx ∧
+    (* Entry function never uses RET (only internal functions do) *)
+    (∀name efn. ctx.ctx_entry = SOME name ∧
+                lookup_function name ctx.ctx_functions = SOME efn ⇒
+                entry_fn_no_ret efn) ∧
     codegen ctx fn_eom_map data_seg = SOME bytecode ∧
     (∀fn inst vs1 vs2 fuel'.
        MEM fn ctx.ctx_functions ∧
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
        step_mem_safe <| sa_fn_eom := 0;
                         sa_next_offset := spill_hwm;
-                        sa_free_slots := [] |> vs1 vs2) ∧
-    spill_mem_covered spill_hwm vs.vs_memory ⇒
+                        sa_free_slots := [] |> vs1 vs2) ⇒
     ∃gas_needed.
       ∀es. initial_ctx_rel ctx vs es ∧
            (case es.contexts of
@@ -235,5 +461,19 @@ Theorem codegen_correct:
          | IntRet _ _ => F
          | Error _ => T)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (* Choose gas_needed *)
+  qexists_tac `0` >>
+  rpt gen_tac >> strip_tac >>
+  (* Unfold run_context to dispatch to run_function *)
+  simp[Once run_context_def] >>
+  every_case_tac >> gvs[]
+  (* Error cases from run_context dispatch: ctx_entry = NONE,
+     entry function not found, empty entry function.
+     Conclusion is T for Error. *)
+  (* Remaining: run_function on the entry function *)
+  (* OK case: impossible since run_function never returns OK *)
+  >- metis_tac[run_function_never_ok]
+  (* Halt, Abort, IntRet cases: compose gen_fn_simulation + asm_bytecode_sim *)
+  >> cheat
 QED

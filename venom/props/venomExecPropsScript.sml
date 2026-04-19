@@ -369,7 +369,7 @@ Theorem step_inst_base_nonerr_var_fdom:
       CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
       ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
       SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-      CODESIZE; MSIZE] /\
+      CODESIZE; MEMTOP] /\
     MEM (Var x) inst.inst_operands /\
     (!e. step_inst_base inst s <> Error e) ==>
     x IN FDOM s.vs_vars

@@ -1077,7 +1077,7 @@ Triviality step_inst_base_operands_none[local]:
       CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
       ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
       SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-      CODESIZE; MSIZE;
+      CODESIZE; MEMTOP;
       DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET] /\
     eval_operands inst.inst_operands s = NONE ==>
     ?e. step_inst_base inst s = Error e
@@ -1096,7 +1096,7 @@ Theorem step_inst_base_nonerr_var_fdom:
       CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
       ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
       SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-      CODESIZE; MSIZE] /\
+      CODESIZE; MEMTOP] /\
     MEM (Var x) inst.inst_operands /\
     (!e. step_inst_base inst s <> Error e) ==>
     x IN FDOM s.vs_vars
@@ -1135,7 +1135,7 @@ Proof
       CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
       ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
       SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-      CODESIZE; MSIZE; DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET]` by
+      CODESIZE; MEMTOP; DJMP; JMP; JNZ; PARAM; ALLOCA; OFFSET]` by
     gvs[MEM] >>
   drule_all step_inst_base_operands_none >> metis_tac[]
 QED
@@ -1211,7 +1211,7 @@ val step_inst_base_fdom_read0 = prove_fdom_group
   ``[CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
-     CODESIZE; MSIZE]``;
+     CODESIZE; MEMTOP]``;
 
 val step_inst_base_fdom_read1 = prove_fdom_group
   ``[MLOAD; SLOAD; TLOAD; ILOAD; DLOAD;

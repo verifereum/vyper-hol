@@ -1,7 +1,7 @@
 (*
  * Venom Well-Formedness Predicates
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * This theory defines structural well-formedness for Venom IR functions
  * and contexts: entry blocks, block structure, successor closure, and
@@ -83,7 +83,7 @@ Definition inst_wf_def:
     | BLOBBASEFEE => LENGTH inst.inst_outputs = 1
     | CALLDATASIZE => LENGTH inst.inst_outputs = 1
     | RETURNDATASIZE => LENGTH inst.inst_outputs = 1
-    | MSIZE => LENGTH inst.inst_outputs = 1
+    | MEMTOP => LENGTH inst.inst_outputs = 1
     | CODESIZE => LENGTH inst.inst_outputs = 1
     | SELFBALANCE => LENGTH inst.inst_outputs = 1
     (* ---- exec_read1: 1 operand, 1 output ---- *)
@@ -176,6 +176,24 @@ Definition bb_well_formed_def:
     (!i j. i < j /\ j < LENGTH bb.bb_instructions /\
            (EL j bb.bb_instructions).inst_opcode = PHI ==>
            (EL i bb.bb_instructions).inst_opcode = PHI)
+End
+
+(* All pseudo instructions (PHI, PARAM) form a prefix of the block.
+ * Matches Vyper compiler output where PHIs and PARAMs are always emitted
+ * first. Stronger than bb_well_formed's PHI-only prefix constraint.
+ * Defined separately to avoid modifying bb_well_formed (which would cause
+ * a 30+ minute rebuild of execEquivProofs). *)
+Definition pseudos_prefix_def:
+  pseudos_prefix bb <=>
+    !i j. i < j /\ j < LENGTH bb.bb_instructions /\
+          is_pseudo (EL j bb.bb_instructions).inst_opcode ==>
+          is_pseudo (EL i bb.bb_instructions).inst_opcode
+End
+
+(* All blocks in a function have pseudos as a prefix. *)
+Definition fn_pseudos_prefix_def:
+  fn_pseudos_prefix fn <=>
+    !bb. MEM bb fn.fn_blocks ==> pseudos_prefix bb
 End
 
 (* All successor labels of every block exist as block labels in the function. *)

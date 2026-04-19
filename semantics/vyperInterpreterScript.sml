@@ -700,7 +700,8 @@ val () = cv_auto_trans make_ext_call_state_def;
    On revert: return original accounts/tStorage (changes are discarded).
    On other exception: return NONE. *)
 Definition extract_call_result_def:
-  extract_call_result orig_accounts orig_tStorage (result, final_state) =
+  extract_call_result orig_accounts orig_tStorage
+    (result: unit + vfmExecution$exception option, final_state) =
     case final_state.contexts of
     | [(ctxt, _)] =>
         (case result of
@@ -735,10 +736,14 @@ Definition run_ext_call_def:
     let code = (lookup_account callee accounts).code in
     let s0 = make_ext_call_state caller callee code calldata value_opt
                                  accounts tStorage txParams in
-    case vfmExecution$run s0 of
-    | SOME (result, final_state) =>
-        extract_call_result accounts tStorage (result, final_state)
-    | NONE => NONE
+    if fIN callee precompile_addresses then
+      extract_call_result accounts tStorage
+        (vfmExecution$dispatch_precompiles callee s0)
+    else
+      case vfmExecution$run s0 of
+      | SOME (result, final_state) =>
+          extract_call_result accounts tStorage (result, final_state)
+      | NONE => NONE
 End
 
 val () = cv_auto_trans run_ext_call_def;

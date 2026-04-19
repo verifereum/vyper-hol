@@ -291,7 +291,7 @@ Theorem exec_alloca_jump[local]:
                        vs_inst_idx := idx|>)
       (exec_alloca inst s alloc_size)
 Proof
-  rpt gen_tac >> simp[exec_alloca_def, next_alloca_offset_def, LET_THM] >>
+  rpt gen_tac >> simp[exec_alloca_def, LET_THM] >>
   EVERY_CASE_TAC >> simp[instIdxIndepTheory.exec_result_map_def] >>
   simp[update_var_def, venom_state_component_equality]
 QED

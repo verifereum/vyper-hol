@@ -578,6 +578,13 @@ QED
    - For pass-through: bp_get_ptrs bp out = [] (no FUPDATE, FDOM argument)
 *)
 
+Triviality bp_leq_fempty[local]:
+  !f. (!v. set (bp_get_ptrs (FEMPTY : bp_result) v) SUBSET
+           set (bp_get_ptrs (f : bp_result) v))
+Proof
+  simp[bp_get_ptrs_def, FLOOKUP_DEF]
+QED
+
 (* bp_get_ptrs for vars not in FDOM is [] *)
 Triviality bp_get_ptrs_not_in_fdom[local]:
   !bp v. v NOTIN FDOM bp ==> bp_get_ptrs bp v = []
@@ -687,7 +694,45 @@ Triviality bp_one_pass_aux_ptr_fdom[local]:
                set (inst_defs inst) SUBSET ds) ==>
     FDOM r' SUBSET ds
 Proof
-  cheat (* needs update for phi_filter_fwd *)
+  Induct_on `order` >> simp[bp_one_pass_aux_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `FIND (λbb. bb.bb_label = h) fn.fn_blocks` >> gvs[]
+  >- (first_x_assum irule >> metis_tac[]) >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  first_x_assum irule >> qexistsl [`c2`, `fn`, `h::fwd`, `r1`] >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+qpat_x_assum `bp_process_block _ _ = _` mp_tac >>
+disch_then (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] bp_process_block_ptr_fdom)) >>
+disch_then (qspec_then `ds` mp_tac) >>
+(impl_tac >- simp[]) >>
+(impl_tac >- (
+  simp[EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >>
+  rename1 `MEM inst0 x.bb_instructions` >>
+  drule FIND_MEM >> strip_tac >>
+  `inst_wf inst0` by (
+    fs[fn_inst_wf_def] >> res_tac
+  ) >>
+  simp[phi_filter_fwd_def] >>
+  IF_CASES_TAC >> simp[] >>
+  fs[inst_wf_def] >>
+  pop_assum mp_tac >>
+  qabbrev_tac `ps = FILTER (\(l,v). MEM l fwd) (phi_pairs inst0.inst_operands)` >>
+  pop_assum kall_tac >>
+  qid_spec_tac `ps` >>
+  Induct >> simp[phi_well_formed_def] >>
+  PairCases >> simp[phi_well_formed_def]
+)) >>
+(impl_tac >- (
+  rpt strip_tac >>
+  gvs[MEM_MAP] >>
+  rename1 `MEM inst0 x.bb_instructions` >>
+  drule FIND_MEM >> strip_tac >>
+  gvs[phi_filter_fwd_def] >>
+  IF_CASES_TAC >> gvs[inst_defs_def] >>
+  first_x_assum irule >> metis_tac[]
+)) >>
+simp[]
 QED
 
 (* Helper: bp_one_pass preserves tight FDOM bound *)
@@ -1185,6 +1230,83 @@ Proof
   simp[] >> qexistsl [`bp`, `c1`, `h`] >> simp[]
 QED
 
+(* bp_process_block on phi_filter_fwd-filtered instructions preserves bp_vv_inv.
+   For non-PHI instructions, phi_filter_fwd is identity so bp_handle_inst_preserves_vv_inv applies.
+   For PHI instructions, phi_filter_fwd only modifies operands (not outputs/opcode), so
+   bp_handle_inst only updates the PHI output, which by SSA uniqueness can't be an ADD/SUB output. *)
+Triviality bp_handle_phi_filter_preserves_vv_inv[local]:
+  !fn bp hinst h c1 r1' bb fwd.
+    bp_handle_inst bp hinst = (c1, r1') /\
+    bp_vv_inv fn bp /\
+    h.inst_opcode = PHI /\
+    (hinst = h with inst_operands :=
+      FLAT (MAP (\(l,v). [Label l; Var v])
+            (FILTER (\(l,v). MEM l fwd)
+                    (phi_pairs h.inst_operands)))) /\
+    MEM h bb.bb_instructions /\ MEM bb fn.fn_blocks /\
+    ssa_form fn ==>
+    bp_vv_inv fn r1'
+Proof
+  rpt strip_tac >>
+  `hinst.inst_outputs = h.inst_outputs` by gvs[] >>
+  `inst_output hinst = inst_output h` by simp[inst_output_def] >>
+  simp[bp_vv_inv_def] >> rpt strip_tac >> (
+    (* Both ADD and SUB cases handled identically *)
+    Cases_on `inst_output hinst = SOME out`
+    >- (
+      (* Same output => h = inst by SSA uniqueness, contradicts PHI vs ADD/SUB *)
+      `inst_output h = SOME out` by metis_tac[] >>
+      `MEM out h.inst_outputs` by
+        (qpat_x_assum `inst_output h = SOME out` mp_tac >>
+         simp[inst_output_def] >>
+         Cases_on `h.inst_outputs` >> simp[] >>
+         Cases_on `t` >> simp[]) >>
+      `MEM h (fn_insts fn)` by
+        (simp[fn_insts_def] >> irule mem_block_mem_fn_insts >> metis_tac[]) >>
+      `MEM out inst.inst_outputs` by
+        (qpat_x_assum `inst_output inst = SOME out` mp_tac >>
+         simp[inst_output_def] >>
+         Cases_on `inst.inst_outputs` >> simp[] >>
+         Cases_on `t` >> simp[]) >>
+      `h = inst` by metis_tac[ssa_unique_definer] >>
+      gvs[])
+    >- (
+      (* Different output => bp_get_ptrs unchanged *)
+      `inst_output hinst <> SOME out` by metis_tac[] >>
+      `bp_get_ptrs r1' out = bp_get_ptrs bp out` by
+        metis_tac[bp_handle_inst_other_var] >>
+      gvs[bp_vv_inv_def] >> metis_tac[]))
+QED
+
+Triviality bp_process_block_phi_filter_preserves_vv_inv[local]:
+  !insts fn bb fwd bp c r1.
+    bp_process_block bp (MAP (phi_filter_fwd fwd) insts) = (c, r1) /\
+    bp_vv_inv fn bp /\
+    MEM bb fn.fn_blocks /\
+    (!inst. MEM inst insts ==> MEM inst bb.bb_instructions) /\
+    ssa_form fn ==>
+    bp_vv_inv fn r1
+Proof
+  Induct >- simp[bp_process_block_def] >>
+  rpt strip_tac >>
+  gvs[bp_process_block_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  `bp_vv_inv fn r1'` by (
+    Cases_on `h.inst_opcode = PHI`
+    >- (
+      gvs[phi_filter_fwd_def] >>
+      irule bp_handle_phi_filter_preserves_vv_inv >>
+      metis_tac[])
+    >> (
+      gvs[phi_filter_fwd_def] >>
+      irule bp_handle_inst_preserves_vv_inv >>
+      simp[fn_insts_def] >>
+      metis_tac[mem_block_mem_fn_insts])) >>
+  first_x_assum irule >> simp[] >>
+  metis_tac[]
+QED
+
 (* bp_one_pass_aux preserves bp_vv_inv *)
 Triviality bp_one_pass_aux_preserves_vv_inv[local]:
   !fn order fwd bp c bp'.
@@ -1193,11 +1315,20 @@ Triviality bp_one_pass_aux_preserves_vv_inv[local]:
     ssa_form fn ==>
     bp_vv_inv fn bp'
 Proof
-  (* FIXME: proof needs update for phi_filter_fwd in bp_one_pass_aux.
-     Structure unchanged: Induct on order, bp_process_block_preserves_vv_inv
-     on MAP (phi_filter_fwd fwd) bb.bb_instructions. Needs phi_filter_fwd
-     preserves inst_wf / MEM-in-fn_insts helper. *)
-  cheat
+  Induct_on `order` >>
+  rpt strip_tac >> gvs[bp_one_pass_aux_def] >>
+  Cases_on `FIND (λbb. bb.bb_label = h) fn.fn_blocks` >> gvs[]
+  >- metis_tac[] >>
+  pairarg_tac >> pairarg_tac >>
+  Cases_on `bp_one_pass_aux fn r1 (h::fwd) order` >> gvs[] >>
+  first_x_assum irule >>
+  conj_tac >- simp[] >>
+  qexistsl [`r1`, `q`, `h::fwd`] >> simp[] >>
+  (* Need: bp_vv_inv fn r1 where
+     bp_process_block bp (MAP (phi_filter_fwd fwd) x.bb_instructions) = (c1,r1). *)
+  drule FIND_MEM >> strip_tac >>
+  irule bp_process_block_phi_filter_preserves_vv_inv >>
+  metis_tac[]
 QED
 
 (* bp_one_pass preserves bp_vv_inv *)
@@ -1433,10 +1564,33 @@ Triviality bp_one_pass_aux_other_var[local]:
                      inst_output inst <> SOME v) ==>
     bp_get_ptrs bp' v = bp_get_ptrs bp v
 Proof
-  (* FIXME: proof needs update for phi_filter_fwd in bp_one_pass_aux.
-     Structure: Induct on order, IH + bp_process_block_other_var.
-     phi_filter_fwd doesn't change inst_output so preconditions carry over. *)
-  cheat
+  Induct_on `order`
+  >- simp[bp_one_pass_aux_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[bp_one_pass_aux_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) fn.fn_blocks` >> gvs[]
+  >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  (* Step 1: IH gives bp_get_ptrs bp' v = bp_get_ptrs r1 v *)
+  `bp_get_ptrs bp' v = bp_get_ptrs r1 v` by (
+    last_x_assum (qspecl_then [`fn`, `r1`, `h::fwd`, `c2`, `bp'`, `v`] mp_tac) >>
+    impl_tac >- (simp[] >> metis_tac[]) >>
+    simp[]) >>
+  (* Step 2: bp_process_block_other_var gives bp_get_ptrs r1 v = bp_get_ptrs bp v *)
+  `!inst. MEM inst (MAP (phi_filter_fwd fwd) x.bb_instructions) ==>
+          inst_output inst <> SOME v` by (
+    rpt strip_tac >> gvs[MEM_MAP] >>
+    rename1 `MEM inst0 x.bb_instructions` >>
+    `(phi_filter_fwd fwd inst0).inst_outputs = inst0.inst_outputs` by (
+      Cases_on `inst0` >> simp[phi_filter_fwd_def] >>
+      IF_CASES_TAC >> simp[]) >>
+    gvs[inst_output_def] >>
+    first_x_assum (qspecl_then [`h`, `x`] mp_tac) >> simp[] >>
+    disch_then drule >> simp[] >>
+    Cases_on `inst0.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  drule_all bp_process_block_other_var >>
+  simp[]
 QED
 
 (* SSA: block-level outputs are ALL_DISTINCT *)
@@ -1832,7 +1986,7 @@ Resume stage1_correct[state_inv_pres]:
   >- metis_tac[alloca_inv_step_inst]   (* alloca_inv — PROVEN *)
   >- (       (* allocas_in_word *)
     Cases_on `inst.inst_opcode = ALLOCA`
-    >- cheat (* ALLOCA: needs pipeline bound next_alloca_offset + sz < dimword *)
+    >- cheat (* ALLOCA: needs pipeline bound vs_alloca_next + sz < dimword *)
     >> (gvs[allocas_in_word_def] >> rpt strip_tac >>
         `FLOOKUP s''.vs_allocas aid = FLOOKUP s'.vs_allocas aid` by
           (qspecl_then [`fuel`, `ctx'`, `inst`, `s'`, `s''`, `aid`]
@@ -3773,6 +3927,48 @@ Proof
   >> strip_tac >> gvs[load_opcode_addr_space_def]
 QED
 
+(* Like lf_sound_drestrict_non_memory but with weaker hypotheses:
+   contract_storage equality instead of vs_accounts, and
+   lookup_var equality only for FDOM lf entries. *)
+Triviality lf_sound_drestrict_non_memory_weak[local]:
+  !lf weffs s s'.
+    lf_sound lf s /\
+    Eff_MEMORY IN weffs /\
+    Eff_STORAGE NOTIN weffs /\
+    Eff_TRANSIENT NOTIN weffs /\
+    contract_storage s' = contract_storage s /\
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_allocas = s.vs_allocas /\
+    (!v. v IN FDOM lf ==> lookup_var v s' = lookup_var v s) ==>
+    lf_sound (DRESTRICT lf
+      {v | !lfact eff. FLOOKUP lf v = SOME lfact /\
+           effect_of_addr_space
+             (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
+           eff NOTIN weffs}) s'
+Proof
+  simp[lf_sound_def, FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+  last_x_assum $ drule_then strip_assume_tac >> first_x_assum $ drule_then strip_assume_tac >>
+  `load_opcode_addr_space lfact.lf_opcode <> AddrSp_Memory` by (
+  strip_tac >>
+  first_x_assum (qspec_then `Eff_MEMORY` mp_tac) >>
+  simp[effect_of_addr_space_def]
+) >>
+qexists `addr` >>
+  conj_tac >- (
+  qpat_x_assum `resolve_memloc_offset _ s = _` mp_tac >>
+  simp[resolve_memloc_offset_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+) >>
+conj_tac >- (
+  `var ∈ FDOM lf` by (Cases_on `FLOOKUP lf var` >> gvs[FLOOKUP_DEF]) >>
+  first_x_assum drule >> disch_then (fn th => rewrite_tac[th]) >>
+  Cases_on `lfact.lf_opcode` >> gvs[load_opcode_addr_space_def] >>
+  gvs[read_at_offset_def, sload_def, tload_def, contract_storage_def, contract_transient_def]
+) >>
+Cases_on `lfact.lf_opcode` >> gvs[load_opcode_addr_space_def]
+QED
+
 (* Frame lemma for lf_sound: if lf' is a sub-map of lf with lf_sound lf s,
    and each entry's components are preserved in s', then lf_sound lf' s'. *)
 Triviality lf_sound_frame[local]:
@@ -4051,7 +4247,7 @@ Proof
   Cases_on `is_ext_call_op inst.inst_opcode`
   >- cheat (* CREATE/CREATE2: shared gap (write effects unclear) *) >>
   Cases_on `is_alloca_op inst.inst_opcode`
-  >- cheat (* ALLOCA: needs SSA freshness for vs_allocas *) >>
+  >- suspend "branch5_alloca" >>
   (* Remaining: non-ext_call, non-ALLOCA, non-terminator, non-store/load/copy,
      Eff_MEMORY NOTIN write_effects. Split effect-free vs not. *)
   Cases_on `is_effect_free_op inst.inst_opcode`
@@ -4065,6 +4261,80 @@ Proof
   (* Non-effect-free remainder: LOG, ASSERT, ASSERT_UNREACHABLE etc.
      All preserve lf_sound-relevant state fields. *)
   suspend "branch5_nonef"
+QED
+
+Triviality step_inst_alloca_flookup_eq[local]:
+  !fuel ctx inst s s' p.
+    step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME p ==>
+    FLOOKUP s'.vs_allocas inst.inst_id = SOME p
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
+  gvs[step_inst_non_invoke, Once step_inst_base_def, exec_alloca_def,
+      AllCaseEqs(), update_var_def, LET_THM]
+QED
+
+Triviality step_inst_alloca_flookup_all[local]:
+  !fuel ctx inst s s' aid p.
+    step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode /\
+    FLOOKUP s.vs_allocas aid = SOME p ==>
+    FLOOKUP s'.vs_allocas aid = SOME p
+Proof
+  rpt strip_tac >>
+  Cases_on `aid = inst.inst_id`
+  >- (gvs[] >> irule step_inst_alloca_flookup_eq >> metis_tac[])
+  >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `aid`]
+    mp_tac step_inst_alloca_flookup >>
+  simp[is_alloca_op_def]
+QED
+
+Triviality lf_sound_alloca_preserved[local]:
+  !fuel ctx inst s s' lf.
+    step_inst fuel ctx inst s = OK s' /\ is_alloca_op inst.inst_opcode /\
+    lf_sound lf s /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) ==>
+    lf_sound lf s'
+Proof
+  rpt strip_tac >>
+  drule_all (SRULE [GSYM AND_IMP_INTRO] step_alloca_preserves) >>
+  strip_tac >>
+  irule lf_sound_frame >>
+  qexistsl [`lf`, `s`] >>
+  simp[] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (
+    (* lookup_var preserved *)
+    first_x_assum irule >>
+    first_x_assum irule >>
+    gvs[flookup_thm] >> NO_TAC) >>
+  TRY (
+    (* read_at_offset preserved *)
+    Cases_on `lfact.lf_opcode` >>
+    gvs[read_at_offset_def, mload_def, sload_def, tload_def,
+        contract_storage_def, contract_transient_def] >> NO_TAC) >>
+  (* remaining: resolve_memloc_offset + MLOAD bound *)
+  qpat_x_assum `lf_sound lf s` mp_tac >>
+  simp[lf_sound_def] >>
+  disch_then drule >> strip_tac >>
+  gvs[] >>
+  (* resolve_memloc_offset preserved *)
+  qpat_x_assum `resolve_memloc_offset _ s = SOME _` mp_tac >>
+  simp[Once resolve_memloc_offset_def] >>
+  simp[Once resolve_memloc_offset_def] >>
+  BasicProvers.every_case_tac >> rw[] >>
+  rename1 `FLOOKUP s.vs_allocas aid = SOME q` >>
+  drule_all (SRULE [GSYM AND_IMP_INTRO] step_inst_alloca_flookup_all) >>
+  simp[]
+QED
+
+Resume lse_inv_preserved[branch5_alloca]:
+  simp[lf_sound_inst_idx] >>
+  irule lf_sound_alloca_preserved >>
+  goal_assum (first_assum o mp_then Any mp_tac) >>
+  simp[is_alloca_op_def] >>
+  metis_tac[]
 QED
 
 Resume lse_inv_preserved[branch5_nonef]:
@@ -4090,13 +4360,105 @@ Resume lse_inv_preserved[branch5_nonef]:
       irule lf_sound_state_eq >> qexists `s` >> gvs[])
 QED
 
+Triviality lf_at_opcode_inv_early[local]:
+  !i aliases bp uc insts v lfact.
+    FLOOKUP (lf_at aliases bp uc insts i) v = SOME lfact ==>
+    is_load_fact_opcode lfact.lf_opcode
+Proof
+  Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
+  rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
+  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
+  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
+  rpt (CASE_TAC >>
+       gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
+  rpt strip_tac >> gvs[] >> res_tac
+QED
+
+Triviality staticcall_lf_sound_helper[local]:
+  !lf s s' fuel ctx inst.
+    lf_sound lf s /\
+    inst.inst_opcode = STATICCALL /\
+    step_inst fuel ctx inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) ==>
+    lf_sound (DRESTRICT lf
+      {v | !lfact eff. FLOOKUP lf v = SOME lfact /\
+           effect_of_addr_space
+             (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
+           eff NOTIN write_effects STATICCALL}) s'
+Proof
+  rpt strip_tac >>
+  `is_ext_call_op inst.inst_opcode` by simp[is_ext_call_op_def] >> drule_all step_ext_call_preserves >> strip_tac >>
+  `contract_storage s' = contract_storage s` by (
+  drule write_effects_sound_storage >>
+  simp[is_alloca_op_def, is_terminator_def, write_effects_def, all_effects_def, empty_effects_def]
+) >>
+`s'.vs_transient = s.vs_transient` by (
+  drule write_effects_sound_transient >>
+  simp[is_alloca_op_def, is_terminator_def, write_effects_def, all_effects_def, empty_effects_def]
+) >>
+  irule lf_sound_drestrict_non_memory_weak >> rpt conj_tac >> gvs[write_effects_def, all_effects_def, empty_effects_def] >> metis_tac[]
+QED
+
 Resume lse_inv_preserved[branch4]:
   (* Branch 4: Eff_MEMORY IN write_effects, not load/store/copy.
      Analysis removes MLOAD entries via DRESTRICT. *)
   Cases_on `inst.inst_opcode = INVOKE`
-  >- cheat (* shared gap: INVOKE load-fact soundness after state change *) >>
+  >- (
+    simp[] >>
+    simp[lf_sound_inst_idx] >>
+    qpat_x_assum `lf_at _ _ _ _ (SUC i) = _` (fn eq => rewrite_tac[eq]) >>
+    simp[load_store_step_def, LET_THM,
+         is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
+         write_effects_def, all_effects_def] >>
+    simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
+    rpt strip_tac >>
+    gvs[markerTheory.Abbrev_def] >>
+    imp_res_tac lf_at_opcode_inv_early >>
+    Cases_on `lfact.lf_opcode` >>
+    gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
+        effect_of_addr_space_def]
+  ) >>
   Cases_on `is_ext_call_op inst.inst_opcode`
-  >- cheat (* shared gap: ext_call load-fact soundness after state change *) >>
+  >- (
+    (* ext_call: case split on the 5 ext_call opcodes *)
+    Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def] >>
+    gvs[write_effects_def, all_effects_def, empty_effects_def]
+    (* CREATE/CREATE2: Eff_MEMORY NOTIN write_effects — contradiction *)
+    (* CALL/DELEGATECALL: all load effects in weffs — DRESTRICT = FEMPTY *)
+    >- (simp[lf_sound_inst_idx] >>
+        qpat_x_assum `lf_at _ _ _ _ (SUC i) = _` (fn eq => rewrite_tac[eq]) >>
+        simp[load_store_step_def, LET_THM,
+             is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
+             write_effects_def, all_effects_def] >>
+        simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
+        rpt strip_tac >>
+        gvs[markerTheory.Abbrev_def] >>
+        imp_res_tac lf_at_opcode_inv_early >>
+        Cases_on `lfact.lf_opcode` >>
+        gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
+            effect_of_addr_space_def])
+    (* STATICCALL: surviving SLOAD/TLOAD — needs state preservation *)
+    >- (simp[lf_sound_inst_idx] >>
+        qpat_x_assum `lf_at _ _ _ _ (SUC _) = _` (fn eq => rewrite_tac[eq]) >>
+        simp[load_store_step_def, LET_THM,
+             is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
+             write_effects_def, all_effects_def, empty_effects_def] >>
+        irule (SIMP_RULE (srw_ss()) [] (REWRITE_RULE [write_effects_def, all_effects_def, empty_effects_def] staticcall_lf_sound_helper)) >> gvs[markerTheory.Abbrev_def] >> metis_tac[])
+    (* DELEGATECALL: same as CALL *)
+    >> (simp[lf_sound_inst_idx] >>
+        qpat_x_assum `lf_at _ _ _ _ (SUC _) = _` (fn eq => rewrite_tac[eq]) >>
+        simp[load_store_step_def, LET_THM,
+             is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
+             write_effects_def, all_effects_def] >>
+        simp[lf_sound_def, FLOOKUP_DRESTRICT] >>
+        rpt strip_tac >>
+        gvs[markerTheory.Abbrev_def] >>
+        imp_res_tac lf_at_opcode_inv_early >>
+        Cases_on `lfact.lf_opcode` >>
+        gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
+            effect_of_addr_space_def])
+  ) >>
   (* Effect-free (e.g. DLOAD): state_equiv gives fields, then sub-map *)
   Cases_on `is_effect_free_op inst.inst_opcode`
   >- (simp[load_store_step_def, LET_THM] >>
@@ -4104,12 +4466,9 @@ Resume lse_inv_preserved[branch4]:
       drule_all step_effect_free_state_equiv >>
       simp[state_equiv_def, execution_equiv_def] >> strip_tac >>
       irule lf_sound_state_eq >> qexists `s` >> gvs[]) >>
-  (* Remaining (ISTORE/EXTCODECOPY): lf_sound_drestrict_non_memory *)
-  `s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
-   s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_allocas = s.vs_allocas /\
-   (!v. lookup_var v s' = lookup_var v s)` by
-    (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-       branch4_state_preserves >> simp[]) >>
+  (* Remaining (ISTORE/EXTCODECOPY): forward-chain state preservation *)
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+    branch4_state_preserves >> simp[] >> strip_tac >>
   simp[load_store_step_def, LET_THM] >>
   irule lf_sound_drestrict_non_memory >>
   simp[] >> qexists_tac `s` >> simp[]
@@ -4488,6 +4847,16 @@ Proof
   (* Case: i >= LENGTH — lf_at (SUC i) = lf_at i, trivial from IH *)
   >> first_x_assum drule >> strip_tac >>
   qexists `j` >> simp[]
+QED
+
+Triviality lf_at_opcode_inv[local]:
+  !i aliases bp uc insts v lfact.
+    FLOOKUP (lf_at aliases bp uc insts i) v = SOME lfact ==>
+    is_load_fact_opcode lfact.lf_opcode
+Proof
+  Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
+  rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
+  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >> rpt (CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >> rpt strip_tac >> gvs[] >> res_tac
 QED
 
 (* ALL_DISTINCT flat-map disjointness at different indices *)

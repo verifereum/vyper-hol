@@ -21,6 +21,8 @@ Ancestors
   cfgHelpers cfgAnalysisProps
   latticeDefs worklistDefs venomInst
   finite_map list pred_set arithmetic pair
+Libs
+  pairLib
 
 (* ===== Join absorption ===== *)
 

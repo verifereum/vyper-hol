@@ -1,6 +1,7 @@
 (*
  * Stack Plan Operations
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Swap/dup with spilling, reorder, popmany.
  * Port of StackSpiller + _stack_reorder from venom_to_assembly.py.
  *
@@ -13,13 +14,9 @@
 
 Theory stackPlanOps
 Ancestors
-  stackPlanTypes dfgDefs
-Libs
-  sortingTheory
+  stackPlanTypes dfgDefs sorting
 
-(* =========================================================================
-   Basic Spill/Restore Operations
-   ========================================================================= *)
+(* ===== Basic Spill/Restore Operations ===== *)
 
 (* Spill TOS to a fresh memory slot *)
 Definition do_spill_tos_def:
@@ -28,7 +25,7 @@ Definition do_spill_tos_def:
     let op = stack_peek 0 ps.ps_stack in
     ([SOSpill off],
      ps with <| ps_stack := stack_pop 1 ps.ps_stack;
-                ps_spilled := (op, off) :: ps.ps_spilled;
+                ps_spilled := ps.ps_spilled |+ (op, off);
                 ps_alloc := alloc' |>)
 End
 
@@ -45,19 +42,17 @@ End
 (* Restore a spilled operand from memory *)
 Definition do_restore_def:
   do_restore op ps =
-    case ALOOKUP ps.ps_spilled op of
+    case FLOOKUP ps.ps_spilled op of
       NONE => ([] : stack_op list, ps)
     | SOME off =>
         let alloc' = free_spill_slot off ps.ps_alloc in
         ([SORestore off],
          ps with <| ps_stack := stack_push op ps.ps_stack;
-                    ps_spilled := ADELKEY op ps.ps_spilled;
+                    ps_spilled := ps.ps_spilled \\ op;
                     ps_alloc := alloc' |>)
 End
 
-(* =========================================================================
-   Swap/Dup with Deep Stack Support
-   ========================================================================= *)
+(* ===== Swap/Dup with Deep Stack Support ===== *)
 
 (* Get top N items from stack (TOS first) *)
 Definition top_n_def:
@@ -86,14 +81,12 @@ Definition do_swap_def:
       (* Desired order (bottom→top): swap first and last, keep middle *)
       let desired = [chunk - 1] ++
         GENLIST (λi. i + 1) (chunk - 2) ++ [0] in
-      (* Restore in reverse desired order (last pushed = TOS = desired[0])
-         Python: for idx in reversed(desired_indices): PUSH+MLOAD *)
+      (* Restore in reverse desired order: last pushed = TOS *)
       let restore_ops =
         MAP (λidx. SORestore (EL idx offsets)) (REVERSE desired) in
-      (* Free all offsets once (each offset used exactly once for swap) *)
       let alloc'' =
         FOLDL (λal off. free_spill_slot off al) alloc' offsets in
-      let restored = MAP (λidx. EL idx items) (REVERSE desired) in
+      let restored = MAP (λidx. EL idx items) desired in
       (spill_ops ++ restore_ops,
        ps with <| ps_stack := base_stack ++ restored;
                   ps_alloc := alloc'' |>)
@@ -115,32 +108,25 @@ Definition do_dup_def:
           (ops ++ [SOSpill off], SNOC off offs, al'))
         ([], [] : num list, ps.ps_alloc) items in
       let base_stack = TAKE (LENGTH ps.ps_stack - chunk) ps.ps_stack in
-      (* Desired order (bottom→top): [last] ++ all original (duplicates last) *)
-      let desired = [chunk - 1] ++ GENLIST I chunk in
-      (* Restore in reverse desired order (last pushed = TOS = desired[0])
-         Python: for idx in reversed(desired_indices): PUSH+MLOAD *)
+      (* Desired order (bottom→top): all original ++ [first] (duplicates deepest) *)
+      let desired = GENLIST I chunk ++ [0] in
+      (* Restore in reverse desired order: last pushed = TOS *)
       let restore_ops =
         MAP (λidx. SORestore (EL idx offsets)) (REVERSE desired) in
-      (* Free all offsets once — dup has repeated index, don't double-free.
-         Python: for offset in offsets: free(offset) *)
+      (* Free all offsets once — dup has repeated index, don't double-free *)
       let alloc'' =
         FOLDL (λal off. free_spill_slot off al) alloc' offsets in
-      let restored = MAP (λidx. EL idx items) (REVERSE desired) in
+      let restored = MAP (λidx. EL idx items) desired in
       (spill_ops ++ restore_ops,
        ps with <| ps_stack := base_stack ++ restored;
                   ps_alloc := alloc'' |>)
 End
 
-(* =========================================================================
-   Reduce Depth via Selective Spilling
-   Port of _reduce_depth_via_spill + _select_spill_candidate
-   ========================================================================= *)
+(* ===== Reduce Depth via Selective Spilling ===== *)
 
 Definition select_spill_candidate_def:
   select_spill_candidate stk forbidden target_dist =
-    (* Python: max_offset = min(16, -target_depth - 1, stack.height - 1)
-       where -target_depth = target_dist. So max_offset = min(16, dist-1, len-1).
-       The -1 excludes the target position itself (always forbidden anyway). *)
+    (* max_offset excludes the target position itself *)
     let max_offset = MIN 16 (MIN (target_dist - 1) (LENGTH stk - 1)) in
     FIND (λoffset.
       let item = stack_peek offset stk in
@@ -166,10 +152,7 @@ Definition reduce_depth_plan_def:
               (spill_ops ++ rest_ops, ps'')
 End
 
-(* =========================================================================
-   Stack Reorder
-   Port of _stack_reorder
-   ========================================================================= *)
+(* ===== Stack Reorder ===== *)
 
 (* Reorder one operand to its target position *)
 Definition reorder_one_def:
@@ -181,7 +164,7 @@ Definition reorder_one_def:
       case stack_get_depth op ps.ps_stack of
         SOME _ => ([] : stack_op list, ps)
       | NONE =>
-          (case ALOOKUP ps.ps_spilled op of
+          (case FLOOKUP ps.ps_spilled op of
             SOME _ => do_restore op ps
           | NONE => ([], ps)) in
     case stack_get_depth op ps1.ps_stack of
@@ -229,17 +212,9 @@ Definition reorder_cost_def:
       SOSwap _ => T | SOSpill _ => T | SORestore _ => T | _ => F) ops)
 End
 
-(* =========================================================================
-   Popmany
-   Port of popmany.
-   Contiguous optimization: if items to pop occupy the top N stack slots
-   contiguously (depths {0..N-1}) and N ≤ 16, emit one swap + bulk pop
-   instead of individual swap+pop per item.
-   ========================================================================= *)
+(* ===== Popmany ===== *)
 
-(* Check if depths form {1, 2, ..., n} (not including TOS=0).
-   Python: expected = range(deepest, 0) which is {deepest,...,-1},
-   i.e. {-(n),...,-1} in negative convention = {1,...,n} in positive. *)
+(* Check if depths form {1, 2, ..., n} (not including TOS=0) *)
 Definition is_contiguous_top_def:
   is_contiguous_top (depths : num list) =
     let n = LENGTH depths in
@@ -274,9 +249,7 @@ Definition popmany_plan_def:
     if EVERY IS_SOME depths_opt then
       let depths = MAP THE depths_opt in
       if is_contiguous_top depths then
-        (* Contiguous: swap deepest to TOS, then bulk pop.
-           Python: self.spiller.swap(asm, stack, deepest) where
-           deepest = min(depths) = -(n) in negative convention = n. *)
+        (* Contiguous: swap deepest to TOS, then bulk pop *)
         let n = LENGTH to_pop in
         let (swap_ops, ps') = do_swap n ps in
         (swap_ops ++ [SOPop n],
@@ -285,17 +258,15 @@ Definition popmany_plan_def:
     else popmany_individual to_pop ps
 End
 
-(* =========================================================================
-   Release Dead Spills
-   ========================================================================= *)
+(* ===== Release Dead Spills ===== *)
 
 Definition release_dead_spills_def:
   release_dead_spills next_liveness ps =
     let dead = FILTER (λ(op, off).
       case op of Var v => ¬ MEM v next_liveness | _ => T)
-      ps.ps_spilled in
+      (fmap_to_alist ps.ps_spilled) in
     FOLDL (λps' (op, off).
-      ps' with <| ps_spilled := ADELKEY op ps'.ps_spilled;
+      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
                   ps_alloc := free_spill_slot off ps'.ps_alloc |>)
     ps dead
 End

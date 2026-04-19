@@ -1,7 +1,8 @@
 (*
  * Symbol Resolution and Bytecode Encoding
  *
- * Assembly → Bytecode (Stage 2).
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Assembly -> bytecode.
  * Resolves labels to PC offsets, encodes assembly to EVM bytecode.
  *
  * Python uses fixed SYMBOL_SIZE = 2 for ALL label references.

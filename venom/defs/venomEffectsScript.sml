@@ -1,6 +1,8 @@
 (*
  * Venom Effects System
  *
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
+ *
  * Effects track what state an instruction reads or writes.
  * This is crucial for optimization passes (CSE, DCE, reordering).
  *
@@ -11,6 +13,9 @@
  *   has_conflicting_effects, is_nonidempotent,
  *   fail_class, opcode_fail_class, abort_compatible,
  *   addr_space, effect_of_addr_space
+ *
+ * Removed (MSIZE sunset #4909): Eff_MSIZE, strip_msize, adj_effects,
+ *   read_effects_adj, write_effects_adj, overlap_effects_adj, all_effects_adj
  *)
 
 Theory venomEffects
@@ -24,7 +29,6 @@ Datatype:
     | Eff_STORAGE
     | Eff_TRANSIENT
     | Eff_MEMORY
-    | Eff_MSIZE
     | Eff_IMMUTABLES
     | Eff_RETURNDATA
     | Eff_LOG
@@ -40,7 +44,7 @@ End
 
 Definition all_effects_def:
   all_effects : effects =
-    {Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY; Eff_MSIZE;
+    {Eff_STORAGE; Eff_TRANSIENT; Eff_MEMORY;
      Eff_IMMUTABLES; Eff_RETURNDATA; Eff_LOG; Eff_BALANCE; Eff_EXTCODE}
 End
 
@@ -71,7 +75,7 @@ Definition read_effects_def:
   read_effects LOG = {Eff_MEMORY} /\
   read_effects REVERT = {Eff_MEMORY} /\
   read_effects SHA3 = {Eff_MEMORY} /\
-  read_effects MSIZE = {Eff_MSIZE} /\
+  read_effects MEMTOP = {Eff_MEMORY} /\
   read_effects RETURN = {Eff_MEMORY} /\
   read_effects _ = empty_effects
 End
@@ -79,92 +83,38 @@ End
 (* ===== Write Effects ===== *)
 
 (* Which state components an opcode may write.
- * Matches Python _writes table in effects.py AFTER post-processing:
- *   - Eff_MSIZE added for any opcode that reads or writes MEMORY/IMMUTABLES
- *   - ISTORE writes MEMORY (immutables live in memory region)
- *
- * Post-processing rule from effects.py:
- *   for k, v in reads.items():
- *     if MEMORY in v or IMMUTABLES in v:
- *       writes[k] |= MSIZE
- *   for k, v in writes.items():
- *     if MEMORY in v or IMMUTABLES in v:
- *       writes[k] |= MSIZE
- *)
+ * Matches Python _writes table in effects.py.
+ * ISTORE writes MEMORY (immutables live in memory region).
+ * After MSIZE sunset (#4909), no Eff_MSIZE — memory ops just have Eff_MEMORY. *)
 Definition write_effects_def:
   (* Storage/transient: no memory involvement *)
   write_effects SSTORE = {Eff_STORAGE} /\
   write_effects TSTORE = {Eff_TRANSIENT} /\
   (* Memory writes *)
-  write_effects MSTORE = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects MSTORE8 = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects ISTORE = {Eff_IMMUTABLES; Eff_MEMORY; Eff_MSIZE} /\
+  write_effects MSTORE = {Eff_MEMORY} /\
+  write_effects MSTORE8 = {Eff_MEMORY} /\
+  write_effects ISTORE = {Eff_IMMUTABLES; Eff_MEMORY} /\
   (* External calls *)
   write_effects CALL = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects DELEGATECALL = all_effects DIFF {Eff_IMMUTABLES} /\
-  write_effects STATICCALL = {Eff_MEMORY; Eff_RETURNDATA; Eff_MSIZE} /\
+  write_effects STATICCALL = {Eff_MEMORY; Eff_RETURNDATA} /\
   write_effects CREATE = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
   write_effects CREATE2 = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
   write_effects INVOKE = all_effects /\
   (* Logging *)
-  write_effects LOG = {Eff_LOG; Eff_MSIZE} /\
+  write_effects LOG = {Eff_LOG} /\
   (* Memory-writing bulk ops *)
-  write_effects DLOADBYTES = {Eff_MEMORY; Eff_MSIZE} /\
-  (* DLOAD: matches Python effects.py — DLOAD reads from data section into
-     a register (no memory write at Venom level), but at EVM lowering DLOAD
-     expands memory, so write_effects is conservative. *)
-  write_effects DLOAD = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects RETURNDATACOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects CALLDATACOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects CODECOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects EXTCODECOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  write_effects MCOPY = {Eff_MEMORY; Eff_MSIZE} /\
-  (* Memory-reading opcodes write MSIZE (reads can expand memory) *)
-  write_effects ILOAD = {Eff_MSIZE} /\
-  write_effects MLOAD = {Eff_MSIZE} /\
-  write_effects REVERT = {Eff_MSIZE} /\
-  write_effects SHA3 = {Eff_MSIZE} /\
-  write_effects RETURN = {Eff_MSIZE} /\
+  write_effects DLOADBYTES = {Eff_MEMORY} /\
+  (* DLOAD: conservative — at EVM lowering, DLOAD expands memory *)
+  write_effects DLOAD = {Eff_MEMORY} /\
+  write_effects RETURNDATACOPY = {Eff_MEMORY} /\
+  write_effects CALLDATACOPY = {Eff_MEMORY} /\
+  write_effects CODECOPY = {Eff_MEMORY} /\
+  write_effects EXTCODECOPY = {Eff_MEMORY} /\
+  write_effects MCOPY = {Eff_MEMORY} /\
   (* SELFDESTRUCT: transfers balance to beneficiary, zeros own balance *)
   write_effects SELFDESTRUCT = {Eff_BALANCE} /\
   write_effects _ = empty_effects
-End
-
-(* ===== MSIZE Stripping ===== *)
-
-(* Python: if ignore_msize: ret &= ~Effects.MSIZE
-   Used by available expression analysis when the function has no MSIZE inst. *)
-Definition strip_msize_def:
-  strip_msize (eff : effects) = eff DELETE Eff_MSIZE
-End
-
-Definition adj_effects_def:
-  adj_effects (ignore_msize : bool) (eff : effects) =
-    if ignore_msize then strip_msize eff else eff
-End
-
-(* Python: _get_read_effects(opcode, ignore_msize) *)
-Definition read_effects_adj_def:
-  read_effects_adj ignore_msize op = adj_effects ignore_msize (read_effects op)
-End
-
-(* Python: _get_write_effects(opcode, ignore_msize) *)
-Definition write_effects_adj_def:
-  write_effects_adj ignore_msize op = adj_effects ignore_msize (write_effects op)
-End
-
-(* Python: _get_overlap_effects(opcode, ignore_msize) =
-     _get_read_effects & _get_write_effects *)
-Definition overlap_effects_adj_def:
-  overlap_effects_adj ignore_msize op =
-    read_effects_adj ignore_msize op INTER write_effects_adj ignore_msize op
-End
-
-(* Python: _get_effects(opcode, ignore_msize) =
-     _get_read_effects | _get_write_effects *)
-Definition all_effects_adj_def:
-  all_effects_adj ignore_msize op =
-    read_effects_adj ignore_msize op UNION write_effects_adj ignore_msize op
 End
 
 (* ===== Derived Predicates ===== *)

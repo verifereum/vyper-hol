@@ -10,6 +10,7 @@ Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
   venomExecSemantics venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenProps cfgAnalysisProps
+  dfgAnalysisProps dfgCorrectnessProof
 
 (* ===== rs_write helper ===== *)
 
@@ -265,6 +266,48 @@ Proof
     fs[arithmeticTheory.NOT_LESS, arithmeticTheory.NOT_GREATER,
        arithmeticTheory.GREATER_DEF] >>
   res_tac
+QED
+
+(* ===== range_sound wrapper ===== *)
+
+(* range_sound wraps in_range_state for the df_analysis framework.
+   NONE = unprocessed/unreachable → vacuously sound.
+   SOME rs = range constraints that s.vs_vars must satisfy. *)
+Definition range_sound_def:
+  range_sound (rs_opt : (string, value_range) fmap option) s ⇔
+    case rs_opt of
+      NONE => T
+    | SOME rs => in_range_state rs s.vs_vars
+End
+
+Theorem range_join_two_sound_l:
+  ∀s1 s2 env.
+    in_range_state s1 env ⇒
+    in_range_state (range_join_two s1 s2) env
+Proof
+  rw[in_range_state_def, range_join_two_def] >>
+  `FINITE (FDOM s1 ∩ FDOM s2)` by
+    simp[pred_setTheory.FINITE_INTER, finite_mapTheory.FDOM_FINITE] >>
+  fs[finite_mapTheory.FLOOKUP_FUN_FMAP] >>
+  `v ∈ FDOM s1 ∩ FDOM s2` by
+    fs[finite_mapTheory.FLOOKUP_DEF, pred_setTheory.IN_INTER] >>
+  fs[pred_setTheory.IN_INTER] >>
+  `∃r1. FLOOKUP s1 v = SOME r1` by
+    fs[finite_mapTheory.FLOOKUP_DEF] >>
+  gvs[rs_lookup_def] >>
+  irule in_range_union_l >> res_tac
+QED
+
+Theorem range_sound_bottom:
+  ∀s. range_sound NONE s
+Proof
+  simp[range_sound_def]
+QED
+
+Theorem range_sound_fempty:
+  ∀s. range_sound (SOME FEMPTY) s
+Proof
+  simp[range_sound_def, in_range_state_def, finite_mapTheory.FLOOKUP_DEF]
 QED
 
 (* ===== Edge transfer ===== *)
@@ -1110,7 +1153,7 @@ QED
 
 (* The range analysis computes a fixpoint.
    Uses by_visits with K = WIDEN_THRESHOLD + 1 and range_fixpoint_P. *)
-Theorem range_fixpoint[local]:
+Theorem range_fixpoint:
   ∀fn.
     let cfg = cfg_analyze fn in
     let ra = range_analyze fn in
@@ -1154,7 +1197,7 @@ Proof
 QED
 
 (* join_two is sound from right argument alone *)
-Triviality range_join_two_sound_r[local]:
+Theorem range_join_two_sound_r:
   ∀s1 s2 env.
     in_range_state s2 env ⇒
     in_range_state (range_join_two s1 s2) env
@@ -1172,7 +1215,7 @@ Proof
 QED
 
 (* normalize preserves soundness *)
-Triviality range_normalize_sound[local]:
+Theorem range_normalize_sound:
   ∀rs env.
     in_range_state rs env ⇒
     in_range_state (range_normalize rs) env
@@ -1964,7 +2007,7 @@ QED
 
 (* Per-instruction soundness: wraps step_range_sound + step_eval_range_sound
    for all output structures. Avoids nested >- in main theorem. *)
-Triviality per_inst_range_sound[local]:
+Theorem per_inst_range_sound:
   ∀fn fuel ctx inst rs_val s_pre s_post.
     step_inst fuel ctx inst s_pre = OK s_post ∧
     in_range_state rs_val s_pre.vs_vars ⇒
@@ -2061,4 +2104,240 @@ Proof
        rs_lookup_def] >>
   TRY (CASE_TAC >> simp[in_range_top]) >>
   fs[in_range_state_def] >> res_tac
+QED
+
+(* ===== Successor entry soundness infrastructure ===== *)
+
+Theorem range_join_opt_some_sound_right:
+  !a rs s. range_sound (SOME rs) s ==>
+           range_sound (range_join_opt a (SOME rs)) s
+Proof
+  Cases >> simp[range_join_opt_def, range_sound_def] >>
+  rpt strip_tac >>
+  irule range_normalize_sound >>
+  TRY (irule range_join_two_sound_r) >> simp[]
+QED
+
+Theorem range_join_opt_some_sound_left:
+  !b rs s. range_sound (SOME rs) s ==>
+           range_sound (range_join_opt (SOME rs) b) s
+Proof
+  Cases >> simp[range_join_opt_def, range_sound_def] >>
+  rpt strip_tac >>
+  irule range_normalize_sound >>
+  TRY (irule range_join_two_sound_l) >> simp[]
+QED
+
+Theorem foldl_range_join_opt_preserves[local]:
+  !xs acc s.
+    range_sound acc s /\ (?rs. acc = SOME rs) ==>
+    range_sound (FOLDL range_join_opt acc xs) s
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> gvs[] >>
+  conj_tac
+  >- (Cases_on `h` >> simp[range_join_opt_def])
+  >> (irule range_join_opt_some_sound_left >> simp[])
+QED
+
+Theorem foldl_range_join_opt_sound:
+  !xs acc s rs.
+    MEM (SOME rs) xs /\ in_range_state rs s.vs_vars ==>
+    range_sound (FOLDL range_join_opt acc xs) s
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[]
+  >- (irule foldl_range_join_opt_preserves >>
+      conj_tac
+      >- (Cases_on `acc` >> simp[range_join_opt_def])
+      >> (irule range_join_opt_some_sound_right >> simp[range_sound_def]))
+  >> first_x_assum irule >> metis_tac[]
+QED
+
+(* ===== DFG Semantic Soundness — per-opcode predicates ===== *)
+
+(* Each predicate captures what the DFG tells us about variable values
+   in the runtime environment. These are small enough for fs[]/simp[].
+   The monolithic dfg_sound_def caused rewriter timeouts. *)
+
+Definition dfg_assign_sound_def:
+  dfg_assign_sound dfg env =
+    !v inst u. dfg_get_def dfg v = SOME inst /\
+      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var u] /\
+      v IN FDOM env ==>
+      FLOOKUP env v = FLOOKUP env u
+End
+
+Definition dfg_iszero_sound_def:
+  dfg_iszero_sound dfg env =
+    !v inst tv. dfg_get_def dfg v = SOME inst /\
+      inst.inst_opcode = ISZERO /\ inst.inst_operands = [Var tv] ==>
+      !w. FLOOKUP env v = SOME w ==>
+        (w <> 0w ==> FLOOKUP env tv = SOME 0w) /\
+        (w = 0w ==> !w'. FLOOKUP env tv = SOME w' ==> w' <> 0w)
+End
+
+Definition dfg_eq_sound_def:
+  dfg_eq_sound dfg env =
+    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
+      inst.inst_opcode = EQ /\ inst.inst_operands = [lhs; rhs] ==>
+      !w. FLOOKUP env v = SOME w ==> w <> 0w ==>
+        (!u. lhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
+        (!u. rhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
+        (!u wu wl. lhs = Var u /\ rhs = Lit wl /\
+                    FLOOKUP env u = SOME wu ==> wu = wl) /\
+        (!u wu wl. rhs = Var u /\ lhs = Lit wl /\
+                    FLOOKUP env u = SOME wu ==> wu = wl) /\
+        (!u1 u2 w1 w2. lhs = Var u1 /\ rhs = Var u2 /\
+           FLOOKUP env u1 = SOME w1 /\ FLOOKUP env u2 = SOME w2 ==>
+           w1 = w2)
+End
+
+Definition dfg_compare_sound_def:
+  dfg_compare_sound dfg env =
+    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
+      (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+       inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
+      inst.inst_operands = [lhs; rhs] ==>
+      !w. FLOOKUP env v = SOME w ==>
+        (!u wl wu. lhs = Var u /\ rhs = Lit wl /\
+          FLOOKUP env u = SOME wu ==>
+          ((w <> 0w) =
+            (if inst.inst_opcode = LT then w2n wu < w2n wl
+             else if inst.inst_opcode = GT then w2n wu > w2n wl
+             else if inst.inst_opcode = SLT then w2i wu < w2i wl
+             else w2i wu > w2i wl))) /\
+        (!u wl wu. rhs = Var u /\ lhs = Lit wl /\
+          FLOOKUP env u = SOME wu ==>
+          ((w <> 0w) =
+            (if inst.inst_opcode = LT then w2n wl < w2n wu
+             else if inst.inst_opcode = GT then w2n wl > w2n wu
+             else if inst.inst_opcode = SLT then w2i wl < w2i wu
+             else w2i wl > w2i wu)))
+End
+
+(* Combined predicate for convenience *)
+Definition dfg_sound_def:
+  dfg_sound dfg env =
+    (dfg_assign_sound dfg env /\ dfg_iszero_sound dfg env /\
+     dfg_eq_sound dfg env /\ dfg_compare_sound dfg env)
+End
+
+(* ===== range_apply_condition_sound ===== *)
+
+(* Soundness of range_apply_condition: if the DFG accurately reflects
+   the execution state, and the condition operand's truth value matches
+   is_true, then applying the condition refinement preserves in_range_state. *)
+Theorem range_apply_condition_sound:
+  !fuel dfg op is_true rs env.
+    in_range_state rs env /\
+    dfg_sound dfg env /\
+    (!v. op = Var v ==> ?w. FLOOKUP env v = SOME w /\
+                             (is_true = (w <> 0w))) ==>
+    in_range_state (range_apply_condition dfg fuel op is_true rs) env
+Proof
+  Induct >> simp[range_apply_condition_def]
+  \\ rpt strip_tac
+  \\ Cases_on `op` >> simp[range_apply_condition_def]
+  \\ gvs[]
+  \\ Cases_on `dfg_get_def dfg s` >> simp[]
+  \\ IF_CASES_TAC >> gvs[]
+  (* ASSIGN *)
+  >- (Cases_on `x.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      first_x_assum irule >> rpt conj_tac
+      >- (rpt strip_tac >> Cases_on `h` >> gvs[] >>
+          fs[dfg_sound_def, dfg_assign_sound_def] >>
+          `s IN FDOM env` by fs[finite_mapTheory.FLOOKUP_DEF] >>
+          res_tac >> qexists_tac `w` >> gvs[])
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC)
+  \\ IF_CASES_TAC >> gvs[]
+  (* ISZERO *)
+  >- (Cases_on `x.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `h` >> simp[] >>
+      irule range_apply_iszero_sound >> simp[] >>
+      rpt strip_tac >>
+      gvs[dfg_sound_def, dfg_iszero_sound_def] >>
+      first_x_assum drule >> simp[] >>
+      disch_then drule >> simp[])
+  \\ IF_CASES_TAC >> gvs[]
+  (* EQ *)
+  >- (Cases_on `x.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `t'` >> simp[] >>
+      irule range_apply_eq_sound >> simp[] >>
+      strip_tac >>
+      `dfg_eq_sound dfg env` by fs[dfg_sound_def] >>
+      pop_assum mp_tac >> simp[dfg_eq_sound_def] >>
+      disch_then drule >> simp[] >> strip_tac >>
+      rpt conj_tac >> rpt strip_tac >> gvs[] >> res_tac >> gvs[])
+  \\ IF_CASES_TAC
+  (* COMPARE: LT/GT/SLT/SGT *)
+  >- (gvs[] >>
+      Cases_on `x.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `t'` >> simp[] >>
+      irule range_apply_compare_sound >> simp[] >>
+      (rpt conj_tac >> rpt strip_tac >>
+       `dfg_compare_sound dfg env` by fs[dfg_sound_def] >>
+       pop_assum mp_tac >> simp[dfg_compare_sound_def] >>
+       disch_then drule >> simp[] >>
+       disch_then drule >> simp[]))
+  (* Default: identity *)
+  \\ simp[]
+QED
+
+(* ===== DFG semantic soundness ===== *)
+
+Theorem dfg_sound_fempty:
+  !dfg. dfg_sound dfg FEMPTY
+Proof
+  simp[dfg_sound_def, dfg_assign_sound_def, dfg_iszero_sound_def,
+       dfg_eq_sound_def, dfg_compare_sound_def]
+QED
+
+(* range_branch_refine preserves in_range_state soundness when dfg_sound holds.
+   The JNZ condition truth value must match the branch direction. *)
+Theorem range_branch_refine_sound:
+  !dfg bbs pred succ rs env.
+    in_range_state rs env /\
+    dfg_sound dfg env /\
+    (* JNZ condition matches the branch direction *)
+    (!bb cond_op true_lbl false_lbl.
+       lookup_block pred bbs = SOME bb /\
+       bb.bb_instructions <> [] /\
+       (LAST bb.bb_instructions).inst_opcode = JNZ /\
+       (LAST bb.bb_instructions).inst_operands =
+         [cond_op; Label true_lbl; Label false_lbl] ==>
+       (!v. cond_op = Var v ==>
+            ?w. FLOOKUP env v = SOME w /\
+                ((succ = true_lbl) ==> w <> 0w) /\
+                ((succ = false_lbl) ==> w = 0w))) ==>
+    in_range_state (range_branch_refine dfg bbs pred succ rs) env
+Proof
+  rpt strip_tac >>
+  simp[range_branch_refine_def] >>
+  Cases_on `lookup_block pred bbs` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  `x.bb_instructions <> []` by fs[listTheory.NULL_EQ] >>
+  Cases_on `(LAST x.bb_instructions).inst_opcode = JNZ` >> simp[] >>
+  Cases_on `(LAST x.bb_instructions).inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  Cases_on `h'` >> simp[] >>
+  Cases_on `h''` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  (* Instantiate the JNZ hypothesis *)
+  first_x_assum (qspecl_then [`x`, `h`, `s`, `s'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- ((* true branch: s = succ *)
+      irule range_apply_condition_sound >> simp[] >>
+      rpt strip_tac >> res_tac >> qexists_tac `w` >> gvs[])
+  >>
+  IF_CASES_TAC >> gvs[]
+  >- ((* false branch: s' = succ *)
+      irule range_apply_condition_sound >> simp[] >>
+      rpt strip_tac >> res_tac >> qexists_tac `w` >> gvs[])
 QED

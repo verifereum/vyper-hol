@@ -201,13 +201,11 @@ QED
 
 (* Outputs NOP'd by remove_unused_block *)
 Definition block_nop_outputs_def:
-  block_nop_outputs lr fence bb =
+  block_nop_outputs lr bb =
     set (FLAT (MAPi (\idx inst.
       let live = live_after_at lr bb.bb_label idx
                    (LENGTH bb.bb_instructions) in
-      let fenced = fence idx in
       if is_removable inst /\
-         (~fenced \/ Eff_MSIZE NOTIN write_effects inst.inst_opcode) /\
          EVERY (\v. ~MEM v live) inst.inst_outputs
       then inst.inst_outputs
       else [])
@@ -216,13 +214,12 @@ End
 
 (* Helper: get_instruction on transformed block *)
 Theorem get_instruction_remove_unused:
-  !lr fence bb idx.
-    get_instruction (remove_unused_block lr fence bb) idx =
+  !lr bb idx.
+    get_instruction (remove_unused_block lr bb) idx =
     if idx < LENGTH bb.bb_instructions then
       SOME (remove_unused_inst
               (live_after_at lr bb.bb_label idx
                 (LENGTH bb.bb_instructions))
-              (fence idx)
               (EL idx bb.bb_instructions))
     else NONE
 Proof
@@ -232,13 +229,13 @@ QED
 
 (* Helper: NOP'd instruction outputs are in block_nop_outputs *)
 Theorem nop_outputs_in_block_nop_outputs[local]:
-  !lr fence bb idx inst.
+  !lr bb idx inst.
     idx < LENGTH bb.bb_instructions /\
     EL idx bb.bb_instructions = inst /\
     remove_unused_inst
       (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-      (fence idx) inst = mk_nop_inst inst ==>
-    set inst.inst_outputs SUBSET block_nop_outputs lr fence bb
+      inst = mk_nop_inst inst ==>
+    set inst.inst_outputs SUBSET block_nop_outputs lr bb
 Proof
   rpt strip_tac >>
   simp[block_nop_outputs_def, pred_setTheory.SUBSET_DEF,
@@ -253,9 +250,9 @@ QED
 
 (* Helper: remove_unused_inst either returns inst or mk_nop_inst inst *)
 Theorem remove_unused_inst_cases:
-  !live fenced inst.
-    remove_unused_inst live fenced inst = inst \/
-    remove_unused_inst live fenced inst = mk_nop_inst inst
+  !live inst.
+    remove_unused_inst live inst = inst \/
+    remove_unused_inst live inst = mk_nop_inst inst
 Proof
   rw[remove_unused_inst_def] >>
   rpt IF_CASES_TAC >> gvs[]
@@ -264,8 +261,8 @@ QED
 (* NOP'd instruction is effect-free: either it was already NOP,
    or it was removable (and non-ALLOCA by hypothesis). *)
 Theorem remove_unused_inst_nop_effect_free:
-  !live fenced inst.
-    remove_unused_inst live fenced inst = mk_nop_inst inst /\
+  !live inst.
+    remove_unused_inst live inst = mk_nop_inst inst /\
     inst.inst_opcode <> ALLOCA ==>
     is_effect_free_op inst.inst_opcode
 Proof
@@ -282,8 +279,8 @@ QED
 
 (* NOP'd instruction is not a terminator *)
 Theorem remove_unused_inst_nop_not_terminator[local]:
-  !live fenced inst.
-    remove_unused_inst live fenced inst = mk_nop_inst inst ==>
+  !live inst.
+    remove_unused_inst live inst = mk_nop_inst inst ==>
     ~is_terminator inst.inst_opcode
 Proof
   rw[remove_unused_inst_def] >>
@@ -370,7 +367,7 @@ fun apply_block_ih_tac s2_term =
   first_x_assum (qspec_then
     `LENGTH bb.bb_instructions - SUC s1.vs_inst_idx` mp_tac) >>
   (impl_tac >- simp[]) >>
-  disch_then (qspecl_then [`fuel`, `ctx`, `lr`, `fence`, `V`, `bb`,
+  disch_then (qspecl_then [`fuel`, `ctx`, `lr`, `V`, `bb`,
     `s1' with vs_inst_idx := SUC s1.vs_inst_idx`,
     s2_term] mp_tac) >>
   simp[] >>
@@ -390,10 +387,10 @@ fun apply_block_ih_tac s2_term =
    - NOP'd instruction: original runs effect-free inst, outputs ⊆ V.
      NOP identity on transformed. Compose via state_equiv_effect_free_compose. *)
 Theorem remove_unused_block_sim[local]:
-  !n fuel ctx lr fence V bb s1 s2.
+  !n fuel ctx lr V bb s1 s2.
     n = LENGTH bb.bb_instructions - s1.vs_inst_idx /\
     EVERY (\inst. inst.inst_opcode <> ALLOCA) bb.bb_instructions /\
-    block_nop_outputs lr fence bb SUBSET V /\
+    block_nop_outputs lr bb SUBSET V /\
     (!inst v. MEM inst bb.bb_instructions /\
               MEM (Var v) inst.inst_operands ==>
               v NOTIN V) /\
@@ -402,7 +399,7 @@ Theorem remove_unused_block_sim[local]:
     (?e. exec_block fuel ctx bb s1 = Error e) \/
     lift_result (state_equiv V) (execution_equiv V) (execution_equiv V)
       (exec_block fuel ctx bb s1)
-      (exec_block fuel ctx (remove_unused_block lr fence bb) s2)
+      (exec_block fuel ctx (remove_unused_block lr bb) s2)
 Proof
   completeInduct_on `n` >>
   rpt strip_tac >> gvs[] >>
@@ -422,7 +419,7 @@ Proof
   (* Case split: NOP'd or kept *)
   Cases_on `remove_unused_inst
     (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-    (fence idx) inst = mk_nop_inst inst`
+    inst = mk_nop_inst inst`
   >| [
     (* === NOP'd instruction === *)
     `is_effect_free_op inst.inst_opcode`
@@ -432,8 +429,8 @@ Proof
     `inst.inst_opcode <> INVOKE`
       by (strip_tac >> gvs[is_effect_free_op_def]) >>
     `set inst.inst_outputs SUBSET V` by (
-      `set inst.inst_outputs SUBSET block_nop_outputs lr fence bb` by (
-        mp_tac (Q.SPECL [`lr`, `fence`, `bb`, `idx`, `inst`]
+      `set inst.inst_outputs SUBSET block_nop_outputs lr bb` by (
+        mp_tac (Q.SPECL [`lr`, `bb`, `idx`, `inst`]
           nop_outputs_in_block_nop_outputs) >>
         gvs[Abbr `inst`]) >>
       metis_tac[pred_setTheory.SUBSET_TRANS]) >>
@@ -456,7 +453,7 @@ Proof
     (* === Kept instruction === *)
     `remove_unused_inst
        (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-       (fence idx) inst = inst` by
+       inst = inst` by
       metis_tac[remove_unused_inst_cases] >>
     gvs[] >>
     `result_equiv V
@@ -494,22 +491,22 @@ QED
 
 (* Same-starting-state wrapper for backward compat *)
 Theorem remove_unused_block_correct_proof:
-  !fuel ctx lr fence bb s.
+  !fuel ctx lr bb s.
     EVERY (\inst. inst.inst_opcode <> ALLOCA) bb.bb_instructions /\
     (!inst v. MEM inst bb.bb_instructions /\
               MEM (Var v) inst.inst_operands ==>
-              v NOTIN block_nop_outputs lr fence bb) /\
+              v NOTIN block_nop_outputs lr bb) /\
     s.vs_inst_idx = 0 ==>
-    let nop_outs = block_nop_outputs lr fence bb in
+    let nop_outs = block_nop_outputs lr bb in
     (?e. exec_block fuel ctx bb s = Error e) \/
     lift_result (state_equiv nop_outs) (execution_equiv nop_outs) (execution_equiv nop_outs)
       (exec_block fuel ctx bb s)
-      (exec_block fuel ctx (remove_unused_block lr fence bb) s)
+      (exec_block fuel ctx (remove_unused_block lr bb) s)
 Proof
   rpt strip_tac >> simp_tac std_ss [LET_THM] >>
   mp_tac (Q.SPECL [`LENGTH bb.bb_instructions`,
-                    `fuel`, `ctx`, `lr`, `fence`,
-                    `block_nop_outputs lr fence bb`,
+                    `fuel`, `ctx`, `lr`,
+                    `block_nop_outputs lr bb`,
                     `bb`, `s`, `s`]
                    remove_unused_block_sim) >>
   simp[state_equiv_refl, pred_setTheory.SUBSET_REFL] >> metis_tac[]
@@ -647,17 +644,14 @@ QED
 Definition single_pass_nop_outputs_def:
   single_pass_nop_outputs fn =
     let lr = liveness_analyze fn in
-    let cfg = cfg_analyze fn in
     BIGUNION (set (MAP (\bb.
-      block_nop_outputs lr
-        (\idx. msize_fence lr cfg fn bb.bb_label idx bb.bb_instructions)
-        bb)
+      block_nop_outputs lr bb)
       fn.fn_blocks))
 End
 
 (* Label preservation for remove_unused_block *)
 Theorem remove_unused_block_label:
-  !lr fence bb. (remove_unused_block lr fence bb).bb_label = bb.bb_label
+  !lr bb. (remove_unused_block lr bb).bb_label = bb.bb_label
 Proof
   rw[remove_unused_block_def]
 QED
@@ -668,9 +662,7 @@ Theorem block_nop_outputs_subset_single_pass[local]:
     MEM bb fn.fn_blocks ==>
     let lr = liveness_analyze fn in
     let cfg = cfg_analyze fn in
-    block_nop_outputs lr
-      (\idx. msize_fence lr cfg fn bb.bb_label idx bb.bb_instructions)
-      bb SUBSET single_pass_nop_outputs fn
+    block_nop_outputs lr bb SUBSET single_pass_nop_outputs fn
 Proof
   rpt strip_tac >> simp_tac std_ss [LET_THM] >>
   simp[single_pass_nop_outputs_def, LET_THM] >>
@@ -696,12 +688,12 @@ QED
 
 (* Helper: NOP'd instruction means outputs not live after *)
 Theorem nop_inst_outputs_not_live_after[local]:
-  !lr fence bb idx inst v.
+  !lr bb idx inst v.
     idx < LENGTH bb.bb_instructions /\
     EL idx bb.bb_instructions = inst /\
     remove_unused_inst
       (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
-      (fence idx) inst = mk_nop_inst inst /\
+      inst = mk_nop_inst inst /\
     MEM v inst.inst_outputs ==>
     ~MEM v (live_after_at lr bb.bb_label idx (LENGTH bb.bb_instructions))
 Proof
@@ -892,9 +884,7 @@ Theorem remove_unused_block_sim_ssa:
     state_equiv V s1 s2 /\
     V_in SUBSET V /\
     V SUBSET (V_in UNION
-      block_nop_outputs (liveness_analyze fn)
-        (\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                           bb.bb_label idx bb.bb_instructions) bb) /\
+      block_nop_outputs (liveness_analyze fn) bb) /\
     (* Inv 1: V vars not live at current position *)
     (!v. v IN V ==>
          ~MEM v (live_vars_at (liveness_analyze fn)
@@ -904,14 +894,11 @@ Theorem remove_unused_block_sim_ssa:
            k < LENGTH bb.bb_instructions ==>
            ~MEM v (EL k bb.bb_instructions).inst_outputs) ==>
     let lr = liveness_analyze fn in
-    let cfg = cfg_analyze fn in
-    let fence = \idx. msize_fence lr cfg fn bb.bb_label idx
-                                  bb.bb_instructions in
-    let V_out = V_in UNION block_nop_outputs lr fence bb in
+    let V_out = V_in UNION block_nop_outputs lr bb in
     (?e. exec_block fuel ctx bb s1 = Error e) \/
     lift_result (state_equiv V_out) (execution_equiv V_out) (execution_equiv V_out)
       (exec_block fuel ctx bb s1)
-      (exec_block fuel ctx (remove_unused_block lr fence bb) s2)
+      (exec_block fuel ctx (remove_unused_block lr bb) s2)
 Proof
   completeInduct_on `n` >>
   rpt strip_tac >> gvs[] >>
@@ -943,15 +930,11 @@ Proof
   (* Reformulate operand condition for step_inst_result_equiv *)
   `!x. MEM (Var x) inst.inst_operands ==> x NOTIN V` by metis_tac[] >>
   (* V SUBSET V_out for weakening *)
-  qabbrev_tac `V_out = V_in UNION block_nop_outputs (liveness_analyze fn)
-    (\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                       bb.bb_label idx bb.bb_instructions) bb` >>
+  qabbrev_tac `V_out = V_in UNION block_nop_outputs (liveness_analyze fn) bb` >>
   `V SUBSET V_out` by gvs[Abbr `V_out`] >>
   Cases_on `remove_unused_inst
     (live_after_at (liveness_analyze fn) bb.bb_label idx
                    (LENGTH bb.bb_instructions))
-    ((\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                        bb.bb_label idx bb.bb_instructions) idx)
     inst = mk_nop_inst inst`
   >| [
     (* === NOP'd instruction === *)
@@ -965,12 +948,8 @@ Proof
       by (irule step_nop_identity >> simp[mk_nop_inst_def]) >>
     (* Establish subset BEFORE gvs[mk_nop_inst_def] rewrites it away *)
     `set inst.inst_outputs SUBSET
-      block_nop_outputs (liveness_analyze fn)
-        (\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                           bb.bb_label idx bb.bb_instructions) bb` by (
-      mp_tac (Q.SPECL [`(liveness_analyze fn)`,
-        `(\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                            bb.bb_label idx bb.bb_instructions)`,
+      block_nop_outputs (liveness_analyze fn) bb` by (
+      mp_tac (Q.SPECL [`liveness_analyze fn`,
         `bb`, `idx`, `inst`]
         nop_outputs_in_block_nop_outputs) >>
       gvs[Abbr `inst`]) >>
@@ -980,8 +959,6 @@ Proof
                    bb.bb_label idx (LENGTH bb.bb_instructions))`
       by (rpt strip_tac >>
           mp_tac (Q.SPECL [`liveness_analyze fn`,
-            `\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                               bb.bb_label idx bb.bb_instructions`,
             `bb`, `idx`, `inst`, `v`]
             nop_inst_outputs_not_live_after) >>
           simp[Abbr `inst`]) >>
@@ -1009,10 +986,7 @@ Proof
       `(V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) SUBSET V_out` by (
         gvs[pred_setTheory.UNION_SUBSET, Abbr `V_out`] >>
         irule pred_setTheory.SUBSET_TRANS >>
-        qexists_tac `block_nop_outputs (liveness_analyze fn)
-          (\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                             bb.bb_label idx bb.bb_instructions) bb` >>
-        gvs[]) >>
+        qexists_tac `block_nop_outputs (liveness_analyze fn) bb` >> gvs[]) >>
       (* Liveness: v IN V ∪ outputs ⇒ not live at SUC s2.vs_inst_idx *)
       `!v. v IN (V UNION set (EL s2.vs_inst_idx bb.bb_instructions).inst_outputs) ==>
            ~MEM v (live_vars_at (liveness_analyze fn)
@@ -1056,8 +1030,6 @@ Proof
     `remove_unused_inst
        (live_after_at (liveness_analyze fn) bb.bb_label idx
                       (LENGTH bb.bb_instructions))
-       ((\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                           bb.bb_label idx bb.bb_instructions) idx)
        inst = inst` by
       metis_tac[remove_unused_inst_cases] >>
     qunabbrev_tac `inst` >> qunabbrev_tac `idx` >>
@@ -1794,9 +1766,7 @@ Theorem remove_unused_phase1_correct[local]:
        v NOTIN single_pass_nop_outputs fn) ==>
     let lr = liveness_analyze fn in
     let cfg = cfg_analyze fn in
-    let bt = \bb. remove_unused_block lr
-                    (\idx. msize_fence lr cfg fn bb.bb_label idx
-                                      bb.bb_instructions) bb in
+    let bt = \bb. remove_unused_block lr bb in
     let elim = single_pass_nop_outputs fn in
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
@@ -1859,9 +1829,7 @@ Proof
   irule lift_result_compose_result_equiv >>
   qexists_tac `run_blocks fuel ctx
     (function_map_transform
-      (\bb. remove_unused_block (liveness_analyze fn)
-        (\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-                 bb.bb_label idx bb.bb_instructions) bb) fn) s` >>
+      (\bb. remove_unused_block (liveness_analyze fn) bb) fn) s` >>
   conj_tac
   >- (irule passSharedPropsTheory.clear_nops_function_correct >> simp[])
   >- first_assum ACCEPT_TAC
@@ -2159,8 +2127,8 @@ End
 
 (* block_nop_outputs are a subset of the block's instruction outputs *)
 Theorem block_nop_outputs_subset_block_outputs[local]:
-  !lr fence bb.
-    block_nop_outputs lr fence bb SUBSET
+  !lr bb.
+    block_nop_outputs lr bb SUBSET
     set (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
 Proof
   rpt gen_tac >>
@@ -2181,9 +2149,7 @@ Proof
      pred_setTheory.SUBSET_DEF] >>
   gvs[pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP] >>
   rename1 `MEM bb fn.fn_blocks` >>
-  mp_tac (Q.SPECL [`liveness_analyze fn`,
-    `\idx. msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-             bb.bb_label idx bb.bb_instructions`, `bb`]
+  mp_tac (Q.SPECL [`liveness_analyze fn`, `bb`]
     block_nop_outputs_subset_block_outputs) >>
   rw[pred_setTheory.SUBSET_DEF] >>
   first_x_assum drule >> strip_tac >>
@@ -2193,9 +2159,9 @@ QED
 
 (* remove_unused_inst outputs: either same or empty *)
 Theorem remove_unused_inst_outputs[local]:
-  !live fenced inst.
-    (remove_unused_inst live fenced inst).inst_outputs = inst.inst_outputs \/
-    (remove_unused_inst live fenced inst).inst_outputs = []
+  !live inst.
+    (remove_unused_inst live inst).inst_outputs = inst.inst_outputs \/
+    (remove_unused_inst live inst).inst_outputs = []
 Proof
   rw[remove_unused_inst_def] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
@@ -2204,9 +2170,9 @@ QED
 
 (* remove_unused_block outputs are subset of original block outputs *)
 Theorem remove_unused_block_outputs_subset[local]:
-  !lr fence bb.
+  !lr bb.
     set (FLAT (MAP (\inst. inst.inst_outputs)
-      (remove_unused_block lr fence bb).bb_instructions)) SUBSET
+      (remove_unused_block lr bb).bb_instructions)) SUBSET
     set (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
 Proof
   rpt gen_tac >>
@@ -2323,15 +2289,11 @@ Proof
   `(remove_unused_inst
       (live_after_at (liveness_analyze fn) bb'.bb_label m
          (LENGTH bb'.bb_instructions))
-      (msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-         bb'.bb_label m bb'.bb_instructions)
       (EL m bb'.bb_instructions)).inst_outputs =
     (EL m bb'.bb_instructions).inst_outputs` by (
     mp_tac (Q.SPECL [
       `live_after_at (liveness_analyze fn) bb'.bb_label m
          (LENGTH bb'.bb_instructions)`,
-      `msize_fence (liveness_analyze fn) (cfg_analyze fn) fn
-         bb'.bb_label m bb'.bb_instructions`,
       `EL m bb'.bb_instructions`] remove_unused_inst_outputs) >>
     strip_tac >> gvs[]) >>
   (* So v ∈ (EL m bb'.bb_instructions).inst_outputs *)

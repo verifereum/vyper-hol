@@ -1,6 +1,7 @@
 (*
- * Top-Level Venom → EVM Codegen
+ * Top-Level Venom -> EVM Codegen
  *
+ * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
  * Composes the three stages:
  *   1. Stack plan generation (Venom → stack_op list)
  *   2. Plan execution (stack_op list → asm_inst list)
@@ -11,7 +12,7 @@
  * stack plan / plan executor stages.
  *
  * TOP-LEVEL:
- *   codegen — venom_context → data_section list → byte list option
+ *   codegen — venom_context → (string, num) fmap → data_section list → byte list option
  *)
 
 Theory codegen

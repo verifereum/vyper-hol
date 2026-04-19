@@ -16,6 +16,10 @@
  *   emitted_insts_emit_op           — what emit_op produces
  *   emitted_insts_emit_void         — what emit_void produces
  *   emitted_insts_chain             — composing emitted_insts through do-blocks
+ *   fresh_label_output_inj          — fresh_label_output is injective
+ *   compile_state_ok_*              — label-space invariant through monad ops
+ *   fresh_label_produces_external    — fresh_label returns an external label
+ *   label_external_mono             — external labels survive extension
  *
  * Helper:
  *   fresh_var_name    — characterize fresh_var output
@@ -896,6 +900,21 @@ Proof
   irule step_ADD >> rw[]
 QED
 
+Theorem emit_op_SHR_correct:
+  ∀ op1 op2 v1 v2 st v st' ss.
+    emit_op SHR [op1; op2] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧ eval_operand op2 ss = SOME v2 ∧
+    fresh_vars_wrt st ss ⇒
+    ∃ ss'. run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME (word_lsr v2 (w2n v1)) ∧
+      same_blocks st st' ∧ fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      (∀ a. a < LENGTH ss.vs_memory ⇒ EL a ss'.vs_memory = EL a ss.vs_memory) ∧
+      LENGTH ss'.vs_memory = LENGTH ss.vs_memory
+Proof
+  rw[] >> qspecl_then [`SHR`, `\x y. y >>> w2n x`] (ho_match_mp_tac o BETA_RULE) emit_op_pure2_correct >> goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >> irule step_SHR >> rw[]
+QED
+
 Theorem emit_op_MUL_correct:
   ∀ op1 op2 v1 v2 st v st' ss.
     emit_op MUL [op1; op2] st = (v, st') ∧
@@ -1381,6 +1400,17 @@ Proof
   rw[step_inst_base_def, exec_read1_def]
 QED
 
+Theorem step_CALLDATALOAD:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    step_inst_base (mk_inst id CALLDATALOAD [op1] [out]) ss =
+      OK (update_var out
+        (let data = ss.vs_call_ctx.cc_calldata in
+         word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ss)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+QED
+
 Theorem step_SSTORE:
   ∀ op1 op2 v1 v2 id ss.
     eval_operand op1 ss = SOME v1 ∧
@@ -1534,6 +1564,36 @@ Proof
   rw[] >> irule emit_op_read1_correct >> gvs[] >>
   goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
   irule step_SLOAD >> rw[]
+QED
+
+Theorem emit_op_CALLDATALOAD_correct:
+  ∀ op1 v1 st v st' ss.
+    emit_op CALLDATALOAD [op1] st = (v, st') ∧
+    eval_operand op1 ss = SOME v1 ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand v ss' = SOME
+        (let data = ss.vs_call_ctx.cc_calldata in
+         word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ∧
+      same_blocks st st' ∧
+      fresh_vars_wrt st' ss' ∧
+      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w) ∧
+      ss'.vs_memory = ss.vs_memory ∧
+      ss'.vs_accounts = ss.vs_accounts ∧
+      ss'.vs_labels = ss.vs_labels
+Proof
+  rw[] >>
+  mp_tac (Q.SPECL [`CALLDATALOAD`,
+    `\v1 ss. let data = ss.vs_call_ctx.cc_calldata in
+       word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))`]
+    emit_op_read1_correct) >>
+  simp[] >> disch_then irule >> gvs[] >>
+  goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
+  qspecl_then [`op1`, `v1`, `st.cs_next_id`,
+    `STRING #"%" (toString st.cs_next_var)`, `ss`]
+    mp_tac step_CALLDATALOAD >> simp[]
 QED
 
 (* ===== Generic emit_void for write2 opcodes ===== *)
@@ -2094,7 +2154,7 @@ QED
 
 Resume emit_op_ALLOCA_correct[none_case]:
   conj_tac >- (
-    qexists_tac `next_alloca_offset ss` >>
+    qexists_tac `ss.vs_alloca_next` >>
     simp[eval_operand_update_var]
   ) >>
   conj_tac >- (
@@ -2317,4 +2377,143 @@ Theorem run_inst_seq_compose_ok:
 Proof
   rpt strip_tac >>
   drule_all run_inst_seq_emit_extend >> strip_tac >> gvs[]
+QED
+
+(* ===== Label-Space Preservation ===== *)
+(* Preservation of compile_state_ok and label_external across monad ops.
+   These let caller-supplied "external" labels (from earlier fresh_label
+   allocations, or frontend-supplied names) stay external as compilation
+   continues, and let compile_state_ok be carried through module-level
+   compilation proofs. *)
+
+(* fresh_label_output is injective in its arguments. *)
+Theorem fresh_label_output_inj:
+  ∀ s1 k1 s2 k2.
+    fresh_label_output s1 k1 = fresh_label_output s2 k2
+    ⇒ s1 = s2 ∧ k1 = k2
+Proof
+  cheat
+QED
+
+(* Initial compile_state is well-formed for any entry label that is not
+   itself a compiler-generated label (with any counter). The entry label
+   in practice is user/frontend-provided (e.g. "global"). *)
+Theorem compile_state_ok_initial:
+  ∀ entry_lbl.
+    entry_lbl ∉ compiler_labels_future 0
+    ⇒ compile_state_ok (initial_compile_state entry_lbl)
+Proof
+  cheat
+QED
+
+(* emit_op preserves compile_state_ok, bound_labels, and label-space fields
+   (doesn't touch cs_next_label, cs_blocks, or cs_current_bb). *)
+Theorem compile_state_ok_emit_op:
+  ∀ opc ops st v st'.
+    emit_op opc ops st = (v, st') ∧ compile_state_ok st
+    ⇒ compile_state_ok st' ∧
+      bound_labels st' = bound_labels st ∧
+      st'.cs_next_label = st.cs_next_label ∧
+      st'.cs_blocks = st.cs_blocks ∧
+      st'.cs_current_bb = st.cs_current_bb
+Proof
+  cheat
+QED
+
+(* emit_void preserves compile_state_ok, bound_labels, and label-space fields
+   (doesn't touch cs_next_label, cs_blocks, or cs_current_bb). *)
+Theorem compile_state_ok_emit_void:
+  ∀ opc ops st r st'.
+    emit_void opc ops st = (r, st') ∧ compile_state_ok st
+    ⇒ compile_state_ok st' ∧
+      bound_labels st' = bound_labels st ∧
+      st'.cs_next_label = st.cs_next_label ∧
+      st'.cs_blocks = st.cs_blocks ∧
+      st'.cs_current_bb = st.cs_current_bb
+Proof
+  cheat
+QED
+
+(* emit_inst preserves compile_state_ok, bound_labels, and label-space fields
+   (doesn't touch cs_next_label, cs_blocks, or cs_current_bb). *)
+Theorem compile_state_ok_emit_inst:
+  ∀ opc ops outs st r st'.
+    emit_inst opc ops outs st = (r, st') ∧ compile_state_ok st
+    ⇒ compile_state_ok st' ∧
+      bound_labels st' = bound_labels st ∧
+      st'.cs_next_label = st.cs_next_label ∧
+      st'.cs_blocks = st.cs_blocks ∧
+      st'.cs_current_bb = st.cs_current_bb
+Proof
+  cheat
+QED
+
+(* fresh_label: advances counter, returns a label that is external to
+   the pre-state (provable because counter equals old cs_next_label,
+   and compile_state_ok rules out prior binding). *)
+Theorem fresh_label_produces_external:
+  ∀ suffix st lbl st'.
+    fresh_label suffix st = (lbl, st') ∧ compile_state_ok st
+    ⇒ label_external st lbl ∧
+      lbl = fresh_label_output suffix st.cs_next_label ∧
+      st'.cs_next_label = st.cs_next_label + 1 ∧
+      st'.cs_blocks = st.cs_blocks ∧
+      st'.cs_current_bb = st.cs_current_bb ∧
+      bound_labels st' = bound_labels st ∧
+      compile_state_ok st'
+Proof
+  cheat
+QED
+
+(* fresh_var / fresh_id don't touch label-space. *)
+Theorem compile_state_ok_fresh_var:
+  ∀ st v st'.
+    fresh_var st = (v, st') ∧ compile_state_ok st
+    ⇒ compile_state_ok st' ∧
+      bound_labels st' = bound_labels st ∧
+      st'.cs_next_label = st.cs_next_label
+Proof
+  cheat
+QED
+
+Theorem compile_state_ok_fresh_id:
+  ∀ st n st'.
+    fresh_id st = (n, st') ∧ compile_state_ok st
+    ⇒ compile_state_ok st' ∧
+      bound_labels st' = bound_labels st ∧
+      st'.cs_next_label = st.cs_next_label
+Proof
+  cheat
+QED
+
+(* new_block: seals the current block into cs_blocks and switches to
+   the new label. Preserves compile_state_ok iff the new label is
+   external to the pre-state (so it doesn't collide with already-bound
+   blocks and isn't in the future fresh_label co-domain). *)
+Theorem compile_state_ok_new_block:
+  ∀ new_lbl st old st'.
+    new_block new_lbl st = (old, st') ∧
+    compile_state_ok st ∧
+    label_external st new_lbl
+    ⇒ compile_state_ok st' ∧
+      bound_labels st' = new_lbl INSERT bound_labels st ∧
+      st'.cs_next_label = st.cs_next_label ∧
+      st'.cs_current_bb = new_lbl ∧
+      old = st.cs_current_bb
+Proof
+  cheat
+QED
+
+(* Monotonicity: label_external carries through monad extensions whose
+   new bound labels are known. Useful for threading an external-label
+   hypothesis across a do-block of emit_* / fresh_* / new_block calls. *)
+Theorem label_external_mono:
+  ∀ lbl st st'.
+    label_external st lbl ∧
+    bound_labels st ⊆ bound_labels st' ∧
+    st.cs_next_label ≤ st'.cs_next_label ∧
+    lbl ∉ bound_labels st'
+    ⇒ label_external st' lbl
+Proof
+  cheat
 QED

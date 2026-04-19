@@ -5678,8 +5678,8 @@ QED
 (* ---- evaluate_convert typing ---- *)
 
 Theorem evaluate_convert_well_typed:
-  !v typ v' tenv tv.
-    evaluate_convert v typ = INL v' /\
+  !tenv v typ v' tv.
+    evaluate_convert tenv v typ = INL v' /\
     evaluate_type tenv typ = SOME tv ==>
     value_has_type tv v'
 Proof
@@ -5704,8 +5704,8 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_extract32_def, AllCaseEqs()] >>
   TRY (drule evaluate_convert_well_typed >>
-       disch_then (qspecl_then [`tenv`, `tv`] mp_tac) >>
-       simp[evaluate_type_def, AllCaseEqs()] >> NO_TAC) >>
+       disch_then irule >>
+       gvs[evaluate_type_def, AllCaseEqs()] >> NO_TAC) >>
   gvs[value_has_type_def, evaluate_type_def, AllCaseEqs(),
       LENGTH_TAKE, LENGTH_DROP]
 QED

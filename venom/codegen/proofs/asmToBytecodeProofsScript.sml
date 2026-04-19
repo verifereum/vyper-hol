@@ -1,7 +1,7 @@
 (*
  * Assembly → Bytecode Correctness — Proofs
  *
- * Helper lemmas for asm→bytecode correctness. Proved structural
+ * Helper lemmas for asm→bytecode correctness. Structural
  * properties of offset maps, encoding, and label resolution.
  *
  * These are used by asmToBytecodeProps (via ACCEPT_TAC) once complete.
@@ -19,8 +19,9 @@
 
 Theory asmToBytecodeProofs
 Ancestors
-  codegenRel symbolResolve asmSem
-  list rich_list finite_map indexedLists pair option
+  codegenRel symbolResolve asmSem asmWf
+  vfmContext vfmOperation vfmTypes words
+  list rich_list finite_map indexedLists pair option alist
 
 (* ===== FOLDL Helper Lemmas ===== *)
 
@@ -220,7 +221,7 @@ Proof
   ]
 QED
 
-(* ===== Proved Top-Level Structural Lemmas ===== *)
+(* ===== Top-Level Structural Lemmas ===== *)
 
 Theorem offset_to_pc_inverse_proof:
   ∀prog pc.
@@ -339,4 +340,251 @@ Proof
     rpt strip_tac >> first_x_assum (qspec_then `j` mp_tac) >> simp[] >>
     metis_tac[]) >>
   simp[]
+QED
+
+
+(* encoding_wf condition for a single instruction *)
+Definition encoding_wf_inst_def:
+  encoding_wf_inst inst offsets ⇔
+    (∀name. inst = AsmOp name ⇒ IS_SOME (evm_opcode_byte name)) ∧
+    (∀bytes. inst = AsmPush bytes ⇒ LENGTH bytes ≤ 32) ∧
+    (∀lbl off. FLOOKUP offsets lbl = SOME off ⇒
+       LENGTH (encode_num_bytes off) ≤ symbol_size) ∧
+    (∀lbl d off. inst = AsmPushOfst lbl d ∧
+       FLOOKUP offsets lbl = SOME off ⇒
+       LENGTH (encode_num_bytes (off + d)) ≤ symbol_size)
+End
+
+(* Extract per-instruction encoding_wf from whole-program asm_encoding_wf *)
+Theorem asm_encoding_wf_el:
+  ∀prog i.
+    asm_encoding_wf prog ∧ i < LENGTH prog ⇒
+    encoding_wf_inst (EL i prog) (SND (compute_label_offsets prog))
+Proof
+  rw[asm_encoding_wf_def, encoding_wf_inst_def, LET_THM] >>
+  Cases_on `compute_label_offsets prog` >> gvs[] >>
+  metis_tac[]
+QED
+
+(* ===== encoding_wf_inst wrappers ===== *)
+(* These take encoding_wf_inst directly, eliminating boilerplate at call sites *)
+
+Theorem ewi_encode_at:
+  ∀prog i.
+    i < LENGTH prog ∧ asm_encoding_wf prog ⇒
+    TAKE (asm_inst_size (EL i prog))
+      (DROP (asm_pc_to_offset prog i) (assemble prog)) =
+    encode_inst (SND (compute_label_offsets prog)) (EL i prog)
+Proof
+  rpt strip_tac >>
+  Cases_on `compute_label_offsets prog` >> gvs[] >>
+  irule (GEN_ALL encode_at_proof) >>
+  rpt conj_tac >> gvs[] >>
+  rpt strip_tac >>
+  gvs[asm_encoding_wf_def, LET_THM] >> metis_tac[]
+QED
+
+Theorem ewi_length:
+  ∀inst offsets.
+    encoding_wf_inst inst offsets ⇒
+    LENGTH (encode_inst offsets inst) = asm_inst_size inst
+Proof
+  rpt strip_tac >> gvs[encoding_wf_inst_def] >>
+  irule encode_inst_length_proof >>
+  rpt conj_tac >> rpt strip_tac >> res_tac >> simp[]
+QED
+
+(* ===== encode_num_bytes / word_of_bytes roundtrip ===== *)
+
+(* Helper: encode_num_bytes unfold for nonzero n *)
+Theorem encode_num_bytes_nonzero[local]:
+  n <> 0 ==>
+  (encode_num_bytes n = SNOC ((n2w n):word8) (encode_num_bytes (n DIV 256)))
+Proof
+  strip_tac >>
+  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV[asmIRTheory.encode_num_bytes_def])) >>
+  ASM_REWRITE_TAC[]
+QED
+
+(* Core roundtrip: num_of_bytes (REVERSE (encode_num_bytes n)) = n.
+   encode_num_bytes produces big-endian minimal bytes.
+   REVERSE gives little-endian. num_of_bytes is little-endian decode.
+   The roundtrip holds because n MOD 256 + 256 * (n DIV 256) = n.
+   IMPORTANT: uses PURE_REWRITE_TAC/SUBST1_TAC throughout to avoid
+   rewriting loops with the IH (which contains encode_num_bytes). *)
+Theorem num_of_bytes_encode_roundtrip:
+  !n. num_of_bytes (REVERSE (encode_num_bytes n)) = n
+Proof
+  completeInduct_on `n` >>
+  Cases_on `n`
+  >- EVAL_TAC
+  >>
+  rename1 `SUC m` >>
+  SUBST1_TAC (AP_TERM ``\x. num_of_bytes (REVERSE x)``
+    (MP (INST [``n:num`` |-> ``SUC m``] encode_num_bytes_nonzero)
+        (DECIDE ``SUC m <> 0``))
+    |> BETA_RULE) >>
+  PURE_REWRITE_TAC[REVERSE_SNOC] >>
+  PURE_ONCE_REWRITE_TAC[byteTheory.num_of_bytes_def] >>
+  `SUC m DIV 256 < SUC m` by
+    simp[arithmeticTheory.DIV_LESS] >>
+  first_x_assum drule >> disch_then SUBST1_TAC >>
+  simp[wordsTheory.w2n_n2w, wordsTheory.dimword_8] >>
+  `(SUC m = (SUC m DIV 256) * 256 + SUC m MOD 256) /\
+   SUC m MOD 256 < 256` by
+    (irule_at Any arithmeticTheory.DIVISION >> simp[]) >>
+  decide_tac
+QED
+
+(* ===== build_offset_to_pc reverse direction ===== *)
+
+(* Helper: entries in the FOLDL with values below pc0 come from m0 *)
+Theorem botp_small_values_from_init:
+  ∀prog (m0:num|->num) off0 pc0 off v.
+    FLOOKUP
+      (FST (FOLDL (λ(m,off,pc) inst.
+                     (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+              (m0,off0,pc0) prog)) off = SOME v ∧
+    v < pc0 ⇒
+    FLOOKUP m0 off = SOME v
+Proof
+  Induct
+  >- (rpt strip_tac >> gvs[])
+  >> rpt gen_tac >> strip_tac >>
+  gvs[Once listTheory.FOLDL] >>
+  first_x_assum
+    (qspecl_then [`m0 |+ (off0, pc0)`,
+                  `off0 + asm_inst_size h`, `pc0 + 1`,
+                  `off`, `v`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  strip_tac >>
+  Cases_on `off = off0` >> gvs[FLOOKUP_UPDATE]
+QED
+
+(* Helper: positive sizes on a tail from positive sizes on the whole list *)
+Theorem asm_inst_size_pos_tail:
+  ∀h prog.
+    (∀i. i < LENGTH (h::prog) ⇒ 0 < asm_inst_size (EL i (h::prog))) ⇒
+    (∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog))
+Proof
+  rpt strip_tac >>
+  `SUC i < LENGTH (h::prog)` by simp[] >>
+  res_tac >> fs[]
+QED
+
+(* The main range lemma: FOLDL entries with values >= pc0 have canonical offsets *)
+Theorem botp_range_lemma:
+  ∀prog (m0:num|->num) off0 pc0 off pc.
+    (∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog)) ∧
+    (∀off' pc'. FLOOKUP m0 off' = SOME pc' ⇒ pc' < pc0) ∧
+    FLOOKUP
+      (FST (FOLDL (λ(m,off,pc) inst.
+                     (m |+ (off,pc), off + asm_inst_size inst, pc + 1))
+              (m0,off0,pc0) prog)) off = SOME pc ∧
+    pc ≥ pc0 ⇒
+    pc < pc0 + LENGTH prog ∧
+    off = off0 + SUM (MAP asm_inst_size (TAKE (pc - pc0) prog))
+Proof
+  Induct >- (rpt strip_tac >> gvs[] >> res_tac >> gvs[])
+  \\ rpt gen_tac \\ strip_tac
+  \\ rename1 `h :: prog`
+  (* Unfold FOLDL for h::prog in the FLOOKUP assumption *)
+  \\ qpat_x_assum `FLOOKUP (FST (FOLDL _ _ (_::_))) _ = _`
+       (mp_tac o ONCE_REWRITE_RULE [listTheory.FOLDL])
+  \\ simp[] \\ strip_tac
+  (* Derive tail size fact *)
+  \\ sg `∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog)`
+  >- (
+    MATCH_MP_TAC asm_inst_size_pos_tail >>
+    qexists_tac `h` >> first_assum ACCEPT_TAC
+  )
+  (* Case split: pc = pc0 or pc > pc0 *)
+  \\ Cases_on `pc = pc0`
+  >- (
+    gvs[] >>
+    qspecl_then [`prog`, `m0 |+ (off0, pc)`, `off0 + asm_inst_size h`,
+                 `pc + 1`, `off`, `pc`]
+      mp_tac botp_small_values_from_init >>
+    impl_tac >- simp[] >>
+    strip_tac >>
+    Cases_on `off = off0` >- simp[] >>
+    gvs[FLOOKUP_UPDATE] >> res_tac >> gvs[]
+  )
+  (* pc ≠ pc0, so pc ≥ pc0 + 1 *)
+  \\ `pc ≥ pc0 + 1` by simp[]
+  \\ first_x_assum
+       (qspecl_then [`m0 |+ (off0, pc0)`,
+                     `off0 + asm_inst_size h`, `pc0 + 1`,
+                     `off`, `pc`] mp_tac)
+  \\ impl_tac
+  >- (
+    rpt conj_tac
+    >- first_assum ACCEPT_TAC
+    >- (rpt strip_tac >> Cases_on `off' = off0` >> gvs[FLOOKUP_UPDATE] >>
+        res_tac >> gvs[])
+    >- (first_assum ACCEPT_TAC)
+    >- simp[]
+  )
+  \\ strip_tac
+  \\ conj_tac >- simp[]
+  \\ `pc - pc0 = SUC (pc - (pc0 + 1))` by simp[]
+  \\ pop_assum SUBST1_TAC
+  \\ simp[]
+QED
+
+(* Reverse direction of offset_to_pc_inverse:
+   FLOOKUP (build_offset_to_pc prog) off = SOME pc implies
+   pc < LENGTH prog and asm_pc_to_offset prog pc = off.
+   Requires all instruction sizes are positive up to pc. *)
+Theorem offset_to_pc_reverse:
+  ∀prog off pc.
+    (∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog)) ∧
+    FLOOKUP (build_offset_to_pc prog) off = SOME pc ⇒
+    pc < LENGTH prog ∧ asm_pc_to_offset prog pc = off
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`prog`, `FEMPTY`, `0`, `0`, `off`, `pc`]
+    mp_tac botp_range_lemma >>
+  impl_tac >- fs[botp_as_triple, FLOOKUP_EMPTY] >>
+  simp[asm_pc_to_offset_def]
+QED
+
+(* Word-level roundtrip: word_of_bytes F 0w decodes REVERSE encode_num_bytes.
+   Requires dimindex >= 8 and divides 8 (standard for word8, word32, word256).
+   Key bridge for AsmPush simulation. *)
+Theorem word_of_bytes_encode_roundtrip:
+  !v. 8 <= dimindex (:'a) /\ divides 8 (dimindex (:'a)) ==>
+      word_of_bytes F (0w:'a word)
+        (REVERSE (encode_num_bytes (w2n v))) = (v:'a word)
+Proof
+  rpt strip_tac >>
+  fs[GSYM byteTheory.word_of_bytes_le_def,
+     cv_stdTheory.word_of_bytes_le_eq_num_of_bytes,
+     num_of_bytes_encode_roundtrip]
+QED
+
+(* Roundtrip for padded encoding: pad_bytes doesn't affect the decoded value.
+   Key bridge for AsmPushLabel/AsmPushOfst simulation. *)
+Theorem word_of_bytes_pad_encode_roundtrip:
+  ∀off n.
+    8 ≤ dimindex (:'a) ∧ divides 8 (dimindex (:'a)) ⇒
+    word_of_bytes F (0w:'a word)
+      (REVERSE (pad_bytes n (encode_num_bytes off))) = n2w off
+Proof
+  rpt strip_tac >>
+  Cases_on `LENGTH (encode_num_bytes off) ≥ n`
+  >- simp[pad_bytes_def, GSYM byteTheory.word_of_bytes_le_def,
+          cv_stdTheory.word_of_bytes_le_eq_num_of_bytes,
+          num_of_bytes_encode_roundtrip]
+  >> `pad_bytes n (encode_num_bytes off) =
+      REPLICATE (n − LENGTH (encode_num_bytes off)) 0w ++
+      encode_num_bytes off`
+       by simp[pad_bytes_def]
+  >> pop_assum SUBST1_TAC
+  >> simp[REVERSE_APPEND,
+          GSYM byteTheory.word_of_bytes_le_def,
+          cv_stdTheory.word_of_bytes_le_eq_num_of_bytes,
+          byteTheory.num_of_bytes_APPEND,
+          byteTheory.num_of_bytes_REPLICATE_0w,
+          num_of_bytes_encode_roundtrip]
 QED

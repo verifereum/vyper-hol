@@ -30,40 +30,40 @@ Theorem m2v_per_block_sim_at[local]:
     all_mem_via_pointer fn (alloca_roots fn) /\
     alloca_inv s1 /\
     alloca_bridge fn s1 /\
-    next_alloca_offset s1 < dimword (:256) /\
+    s1.vs_alloca_next < dimword (:256) /\
     m2v_nonpromoted_access_safe fn s1 /\
     MEM bb fn.fn_blocks /\
     bb_well_formed bb /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
     s1.vs_inst_idx <= LENGTH bb.bb_instructions /\
     s2.vs_inst_idx = s1.vs_inst_idx /\
     m2v_inv_noix fn s1 s2 /\
     m2v_non32_ok fn s1 s2 /\
     m2v_ao_undef_sync fn s1 s2 /\
     m2v_fresh_undef fn s1 /\
-    next_alloca_offset s1 = next_alloca_offset s2 /\
+    s1.vs_alloca_next = s2.vs_alloca_next /\
     m2v_pvars_set fn bb s1.vs_inst_idx s2 /\
     (* m2v_nonpromoted_access_safe preservation *)
     (!i fuel' ctx' s s'. i < LENGTH bb.bb_instructions /\
       m2v_nonpromoted_access_safe fn s /\
       step_inst fuel' ctx' (EL i bb.bb_instructions) s = OK s' ==>
       m2v_nonpromoted_access_safe fn s') /\
-    (* next_alloca_offset preservation per-step *)
+    (* vs_alloca_next preservation per-step *)
     (!inst fuel' ctx' s s'. MEM inst (fn_insts fn) /\
-      next_alloca_offset s < dimword (:256) /\
+      s.vs_alloca_next < dimword (:256) /\
       step_inst fuel' ctx' inst s = OK s' ==>
-      next_alloca_offset s' < dimword (:256)) ==>
+      s'.vs_alloca_next < dimword (:256)) ==>
     (?e. exec_block fuel ctx bb s1 = Error e) \/
     lift_result (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
                 (\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                          m2v_ao_undef_sync fn s1 s2 /\
-                         next_alloca_offset s1 = next_alloca_offset s2)
+                         s1.vs_alloca_next = s2.vs_alloca_next)
       (exec_block fuel ctx bb s1)
       (exec_block fuel ctx (m2v_bt fn bb) s2)
 Proof
@@ -110,7 +110,7 @@ Resume m2v_per_block_sim_at[find_none]:
   mp_tac (Q.SPECL [
     `\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
              m2v_ao_undef_sync fn s1 s2 /\
-             next_alloca_offset s1 = next_alloca_offset s2`,
+             s1.vs_alloca_next = s2.vs_alloca_next`,
     `inst`, `inst`, `bb`, `m2v_bt fn bb`, `s1`, `s2`, `fuel`, `ctx`]
     exec_block_terminal_lift) >>
   impl_tac
@@ -222,7 +222,7 @@ Resume m2v_per_block_sim_at[find_some]:
   mp_tac (Q.SPECL [
     `\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
              m2v_ao_undef_sync fn s1 s2 /\
-             next_alloca_offset s1 = next_alloca_offset s2`,
+             s1.vs_alloca_next = s2.vs_alloca_next`,
     `inst`, `store_inst`, `inst`, `bb`, `m2v_bt fn bb`,
     `s1`, `s2`, `fuel`, `ctx`,
     `mstore (w2n (addr_val:256 word)) pval s2`] exec_block_1to2_terminal_lift) >>
@@ -273,7 +273,7 @@ Resume m2v_per_block_sim_at[lift_impl]:
            lookup_var_def, LET_THM]) >>
   (* invariant preservation: nao *)
   simp[nao_halt_revert] >>
-  simp[next_alloca_offset_def, mstore_preserves] >>
+  simp[mstore_preserves] >>
   `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
   simp[LENGTH_mstore_eq] >>
   `?ainst. MEM ainst (fn_insts fn) /\ ainst.inst_opcode = ALLOCA /\
@@ -296,10 +296,10 @@ Resume m2v_per_block_sim_at[nonterminal]:
   mp_tac (Q.SPECL
     [`\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
               m2v_ao_undef_sync fn s1 s2 /\
-              next_alloca_offset s1 = next_alloca_offset s2`,
+              s1.vs_alloca_next = s2.vs_alloca_next`,
      `\s1 s2. m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
               m2v_ao_undef_sync fn s1 s2 /\
-              next_alloca_offset s1 = next_alloca_offset s2`,
+              s1.vs_alloca_next = s2.vs_alloca_next`,
     `EL idx bb.bb_instructions`,
     `HD (m2v_rewrite_inst fn (EL idx bb.bb_instructions))`,
     `bb`, `m2v_bt fn bb`, `fuel`, `ctx`, `s1`, `s2`]
@@ -358,7 +358,7 @@ Resume m2v_per_block_sim_at[ok_case]:
         `s1`, `s2`, `v`, `v2`] m2v_ao_undef_sync_preserved_step) >>
       simp[]) >>
   (* nao preserved *)
-  SUBGOAL_THEN ``next_alloca_offset v = next_alloca_offset v2`` assume_tac
+  SUBGOAL_THEN ``v.vs_alloca_next = v2.vs_alloca_next`` assume_tac
   >- (mp_tac (Q.SPECL [`fn`, `bb`, `idx`, `fuel`, `ctx`,
         `s1`, `s2`, `v`, `v2`] nao_dispatch_preserved) >>
       simp[]) >>
@@ -430,9 +430,9 @@ Resume m2v_per_block_sim_at[ih_cont]:
   >- (mp_tac (Q.SPECL [`fn`, `fuel`, `ctx`, `EL idx bb.bb_instructions`,
         `s1`, `s1'`] alloca_bridge_step) >>
       (impl_tac >- (gvs[EVERY_EL])) >> simp[]) >>
-  (* Derive next_alloca_offset preserved *)
-  SUBGOAL_THEN ``next_alloca_offset s1' < dimword (:256)`` assume_tac
-  >- (qpat_x_assum `!inst fuel' ctx' s s'. MEM _ _ /\ next_alloca_offset _ < _ /\ _ ==> _`
+  (* Derive vs_alloca_next preserved *)
+  SUBGOAL_THEN ``s1'.vs_alloca_next < dimword (:256)`` assume_tac
+  >- (qpat_x_assum `!inst fuel' ctx' s s'. MEM _ _ /\ _.vs_alloca_next < _ /\ _ ==> _`
         (qspecl_then [`EL idx bb.bb_instructions`,`fuel`,`ctx`,`s1`,`s1'`] mp_tac) >>
       simp[] >> disch_then irule >>
       irule MEM_fn_insts >> qexists `bb` >> simp[MEM_EL]) >>
@@ -467,7 +467,7 @@ Theorem m2v_per_block_sim:
     all_mem_via_pointer fn (alloca_roots fn) /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE)
       bb.bb_instructions) fn.fn_blocks /\
-    EVERY (\bb. EVERY (\i. i.inst_opcode <> MSIZE)
+    EVERY (\bb. EVERY (\i. i.inst_opcode <> MEMTOP)
       bb.bb_instructions) fn.fn_blocks ==>
     !bb. MEM bb fn.fn_blocks ==>
     !fuel ctx s1 s2.
@@ -477,25 +477,25 @@ Theorem m2v_per_block_sim:
       m2v_fresh_undef fn s1 /\
       alloca_inv s1 /\
       alloca_bridge fn s1 /\
-      next_alloca_offset s1 < dimword (:256) /\
+      s1.vs_alloca_next < dimword (:256) /\
       m2v_nonpromoted_access_safe fn s1 /\
-      next_alloca_offset s1 = next_alloca_offset s2 /\
+      s1.vs_alloca_next = s2.vs_alloca_next /\
       m2v_pvars_set fn bb 0 s2 /\
       (* m2v_nonpromoted_access_safe preservation *)
       (!i fuel' ctx' s s'. i < LENGTH bb.bb_instructions /\
         m2v_nonpromoted_access_safe fn s /\
         step_inst fuel' ctx' (EL i bb.bb_instructions) s = OK s' ==>
         m2v_nonpromoted_access_safe fn s') /\
-      (* next_alloca_offset preservation per-step *)
+      (* vs_alloca_next preservation per-step *)
       (!inst fuel' ctx' s s'. MEM inst (fn_insts fn) /\
-        next_alloca_offset s < dimword (:256) /\
+        s.vs_alloca_next < dimword (:256) /\
         step_inst fuel' ctx' inst s = OK s' ==>
-        next_alloca_offset s' < dimword (:256)) /\
+        s'.vs_alloca_next < dimword (:256)) /\
       s1.vs_inst_idx = 0 ==>
       (?e. exec_block fuel ctx bb s1 = Error e) \/
       lift_result (\s1 s2. m2v_inv fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
                            m2v_ao_undef_sync fn s1 s2 /\
-                           next_alloca_offset s1 = next_alloca_offset s2)
+                           s1.vs_alloca_next = s2.vs_alloca_next)
                   (m2v_equiv (m2v_fresh_vars fn))
                   (m2v_equiv (m2v_fresh_vars fn))
         (exec_block fuel ctx bb s1)
@@ -513,7 +513,7 @@ Proof
   (* Get EVERY no_invoke for this block *)
   `EVERY (\i. i.inst_opcode <> INVOKE)
     bb.bb_instructions` by (gvs[EVERY_MEM] >> metis_tac[]) >>
-  `EVERY (\i. i.inst_opcode <> MSIZE)
+  `EVERY (\i. i.inst_opcode <> MEMTOP)
     bb.bb_instructions` by (gvs[EVERY_MEM] >> metis_tac[]) >>
   (* Extract inst_idx agreement from m2v_inv *)
   `s2.vs_inst_idx = s1.vs_inst_idx` by gvs[m2v_inv_def, m2v_equiv_def] >>

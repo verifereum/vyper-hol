@@ -38,7 +38,7 @@ Theorem concretize_function_correct:
     live_non_overlapping livesets amap fn /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
                 EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-                EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions)
+                EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions)
       fn.fn_blocks /\
     concretize_rel amap fn livesets init s1 s2 ==>
     ?init'.

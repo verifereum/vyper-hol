@@ -223,9 +223,9 @@ Definition evaluate_extract32_def:
             INL $ BytesV (TAKE m bs)
           else INR (RuntimeError "evaluate_extract32 bytesM")
       | UintT m =>
-          evaluate_convert (BytesV (TAKE 32 bs)) (BaseT (UintT m))
+          evaluate_convert FEMPTY (BytesV (TAKE 32 bs)) (BaseT (UintT m))
       | IntT m =>
-          evaluate_convert (BytesV (TAKE 32 bs)) (BaseT (IntT m))
+          evaluate_convert FEMPTY (BytesV (TAKE 32 bs)) (BaseT (IntT m))
       | AddressT =>
           if 32 ≤ LENGTH bs then
             if EVERY ($= 0w) (TAKE 12 bs) then
@@ -248,7 +248,7 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx MinValue typ vs =
     evaluate_min_value typ ∧
   evaluate_type_builtin cx Convert typ [v] =
-    evaluate_convert v typ ∧
+    evaluate_convert (get_tenv cx) v typ ∧
   evaluate_type_builtin cx Epsilon typ [] =
     (if typ = BaseT DecimalT then INL $ DecimalV 1
      else INR (TypeError "Epsilon: not decimal")) ∧

@@ -1,2 +1,2 @@
 # Variable range analysis proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../../syntax ../../../../semantics ../../../proofs ../../../props ../../cfg/defs ../../cfg ../../dataflow/defs ../../dataflow ../../dfg/defs ../defs
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../../syntax ../../../../semantics ../../../proofs ../../../props ../../cfg/defs ../../cfg ../../dataflow/defs ../../dataflow ../../dfg/defs ../../dfg/proofs ../../dfg ../defs

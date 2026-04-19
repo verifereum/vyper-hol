@@ -118,8 +118,8 @@ Definition state_effects_match_def:
     (am' : abstract_machine) es' <=>
     ?ctxt rb rest.
       es'.contexts = (ctxt, rb) :: rest /\
-      rb.accounts = am'.accounts /\
-      rb.tStorage = am'.tStorage /\
+      es'.rollback.accounts = am'.accounts /\
+      es'.rollback.tStorage = am'.tStorage /\
       logs_correspond event_info tenv addr am'.logs ctxt.logs
 End
 
