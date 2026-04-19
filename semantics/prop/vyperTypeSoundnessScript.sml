@@ -394,6 +394,16 @@ fun tp_pure_base_target_tac ev_thm =
 (* type_preservation is derived from this at the end.                *)
 
 Theorem eval_preserves_swt:
+  (* Type soundness: well-typed programs never raise TypeError.
+     Key insight: TypeError in the Vyper interpreter arises from:
+     (1) materialise(HashMapRef) — blocked by ty <> NoneT in well_typed_expr
+     (2) evaluate_binop type mismatches — blocked by well_typed_binop
+     (3) evaluate_builtin type mismatches — blocked by well_typed_builtin_app
+     (4) dest_XV failures after materialise — blocked by well_typed_expr + value_has_type
+     (5) get_Value on non-Value toplevel_value — blocked by TopLevelName ty <> NoneT
+     The no-TypeError conjunct for each case follows from IH + definition constraints.
+     materialise_no_type_error bridges: if tv is well-typed (not NoneTV) then
+     materialise doesn't produce TypeError. *)
   (* P0: eval_stmt — state + env preserved, no type errors, return well-typed *)
   (!cx s. !env ret_ty st res st'.
     well_typed_stmt env ret_ty s /\

@@ -124,11 +124,11 @@ Definition well_typed_binop_def:
     (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Max t1 t2 =
     (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
-  (* Membership: result is bool *)
+  (* Membership: result is bool, element type matches array element type *)
   well_typed_binop ty In t1 t2 =
-    (ty = BaseT BoolT /\ is_ArrayT t2) /\
+    (ty = BaseT BoolT /\ ?elem_ty bd. t2 = ArrayT elem_ty bd /\ t1 = elem_ty) /\
   well_typed_binop ty NotIn t1 t2 =
-    (ty = BaseT BoolT /\ is_ArrayT t2)
+    (ty = BaseT BoolT /\ ?elem_ty bd. t2 = ArrayT elem_ty bd /\ t1 = elem_ty)
 End
 
 (* ===== Environment item types ===== *)
@@ -180,10 +180,10 @@ Definition well_typed_builtin_app_def:
     (ts = [ty] /\ is_numeric_type ty) /\
   (* Keccak256: bytes/string -> bytes32 *)
   well_typed_builtin_app ty Keccak256 ts =
-    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32))) /\
+    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_sized_type (HD ts)) /\
   (* AsWeiValue: numeric -> uint256 *)
   well_typed_builtin_app ty (AsWeiValue _) ts =
-    (LENGTH ts = 1 /\ ty = BaseT (UintT 256)) /\
+    (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_numeric_type (HD ts)) /\
   (* Concat: 2+ bytes/string args -> bytes/string.
      Argument types must be consistent with result type:
      all BytesT for bytes result, all StringT for string result. *)
@@ -197,6 +197,7 @@ Definition well_typed_builtin_app_def:
      First arg type must be consistent with result type. *)
   well_typed_builtin_app ty (Slice n) ts =
     (LENGTH ts = 3 /\
+     is_int_type (EL 1 ts) /\ is_int_type (EL 2 ts) /\
      ((ty = BaseT (BytesT (Dynamic n)) /\
        ?bd. HD ts = BaseT (BytesT bd)) \/
       (ty = BaseT (StringT n) /\
@@ -246,13 +247,17 @@ Definition well_typed_builtin_app_def:
   (* MethodId: string/bytes -> bytes4 *)
   well_typed_builtin_app ty MethodId ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 4))) /\
-  (* EC operations *)
+  (* EC operations — first arg is bytes32, rest are int or bytes *)
   well_typed_builtin_app ty ECRecover ts =
-    (LENGTH ts = 4 /\ ty = BaseT AddressT) /\
+    (LENGTH ts = 4 /\ ty = BaseT AddressT /\
+     HD ts = BaseT (BytesT (Fixed 32)) /\
+     EVERY (\t. is_int_type t \/ ?bd. t = BaseT (BytesT bd)) (TL ts)) /\
   well_typed_builtin_app ty ECAdd ts =
-    (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2)) /\
+    (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+     EVERY (\t. t = ArrayT (BaseT (UintT 256)) (Fixed 2)) ts) /\
   well_typed_builtin_app ty ECMul ts =
-    (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2)) /\
+    (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+     EVERY (\t. t = ArrayT (BaseT (UintT 256)) (Fixed 2)) ts) /\
   (* PowMod256: 2x uint256 -> uint256 *)
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\
@@ -262,7 +267,7 @@ Definition well_typed_builtin_app_def:
     (ts = [ty] /\ is_numeric_type ty) /\
   (* Sha256: bytes/string -> bytes32 *)
   well_typed_builtin_app ty Sha256 ts =
-    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)))
+    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_sized_type (HD ts))
 End
 
 (* ===== Type well-formedness ===== *)
@@ -277,7 +282,7 @@ Definition subscript_type_ok_def:
   subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
     (result_ty = elem_ty /\ is_int_type idx_ty) /\
   subscript_type_ok (TupleT ts) idx_ty result_ty =
-    (is_int_type idx_ty /\ ts <> [] /\ EVERY ($= result_ty) ts) /\
+    (is_int_type idx_ty /\ ts <> [] /\ MEM result_ty ts) /\
   subscript_type_ok _ _ _ = F
 End
 
@@ -468,26 +473,47 @@ Definition well_typed_expr_def:
        MAP expr_type args = TAKE (LENGTH args) param_types) /\
   well_typed_expr env (Call ty (ExtCall _ (_, arg_types, ret_ty)) args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
      well_formed_type env.type_defs ty /\
      ty = ret_ty /\
-     (!e. drv = SOME e ==> expr_type e = ret_ty)) /\
+     MAP expr_type args = arg_types /\
+     drv = NONE) /\
   well_typed_expr env (Call ty Send args drv) =
     (well_typed_exprs env args /\
-     LENGTH args = 2 /\ ty = NoneT) /\
+     LENGTH args = 2 /\ ty = NoneT /\ drv = NONE /\
+     HD (MAP expr_type args) = BaseT AddressT /\
+     is_int_type (EL 1 (MAP expr_type args))) /\
   (* Chain interaction builtins — constrained return types *)
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\
      ty = raw_call_return_type flags /\
-     flags.rcf_max_outsize < dimword(:256)) /\
+     flags.rcf_max_outsize < dimword(:256) /\
+     drv = NONE /\
+     LENGTH args = 3 /\
+     EL 0 (MAP expr_type args) = BaseT AddressT /\
+     ?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd) /\
+     is_int_type (EL 2 (MAP expr_type args))) /\
   well_typed_expr env (Call ty RawLog args drv) =
-    (well_typed_exprs env args /\ ty = NoneT) /\
+    (well_typed_exprs env args /\
+     ty = NoneT /\ drv = NONE /\
+     LENGTH args = 2 /\
+     ?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+     ?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd')) /\
   well_typed_expr env (Call ty RawRevert args drv) =
-    (well_typed_exprs env args) /\
+    (well_typed_exprs env args /\
+     drv = NONE /\
+     LENGTH args = 1 /\
+     ?bd. HD (MAP expr_type args) = BaseT (BytesT bd)) /\
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
-    (well_typed_exprs env args /\ ty = NoneT) /\
+    (well_typed_exprs env args /\
+     ty = NoneT /\ drv = NONE /\
+     LENGTH args = 1 /\
+     HD (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty (CreateTarget kind rof) args drv) =
-    (well_typed_exprs env args /\ ty = BaseT AddressT) /\
+    (well_typed_exprs env args /\
+     ty = BaseT AddressT /\ drv = NONE /\
+     LENGTH args >= 2 /\
+     HD (MAP expr_type args) = BaseT AddressT /\
+     is_int_type (LAST (MAP expr_type args))) /\
   well_typed_target env (NameTarget id) ty =
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
   well_typed_target env (BareGlobalNameTarget id) ty =
@@ -576,7 +602,8 @@ Definition well_typed_stmt_def:
   well_typed_stmt env ret_ty (Assert e (AssertReason se)) =
     (well_typed_expr env e /\
      well_typed_expr env se /\
-     expr_type e = BaseT BoolT) /\
+     expr_type e = BaseT BoolT /\
+     ?n. expr_type se = BaseT (StringT n)) /\
   well_typed_stmt env ret_ty (Log id es) =
     well_typed_exprs env es /\
   well_typed_stmt env ret_ty (AnnAssign id typ e) =
