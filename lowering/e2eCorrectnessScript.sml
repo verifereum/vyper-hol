@@ -133,7 +133,7 @@ End
    Key uniformities across both cases:
    - Returndata: always in (FST (HD es_f.contexts)).returnData
      (callee's context for outermost; caller's after set_return_data
-     for inner — handle_exception copies it before popping)
+     for inner - handle_exception copies it before popping)
    - Accounts on success: es_f.rollback.accounts = am'.accounts
      (update_accounts modifies rollback; pop doesn't change it
      on success)
@@ -338,27 +338,133 @@ Proof
       \\ rw[])
 QED
 
-(* Transaction-level correctness.
+(* ===== Helper Lemmas for Transaction Correctness ===== *)
 
-   Proof approach:
-   1. run_transaction = run_create then (run or precompile) then post_transaction_accounting
-   2. Use vyper_call_correct to get call_result_matches for run_call
-   3. For outermost call (depth=1), run_call = run
-   4. post_transaction_accounting definition (line 1800 of vfmExecutionScript.sml):
-      let accounts = if result = NONE
-                     then process_deletions t.rollback.toDelete t.rollback.accounts
-                     else acc in
-      So on revert (result ≠ NONE), it uses acc (original accounts)!
-   5. This directly gives us accounts_match_modulo_gas with am.accounts on revert
+(* When tx.to = SOME target, run_create returns precomp based on whether
+   target is a precompile address. *)
+Theorem run_create_precomp_from_target:
+  !dom static chainId prevHashes blk accounts tx target acc s precomp.
+    tx.to = SOME target /\
+    run_create dom static chainId prevHashes blk accounts tx =
+      SOME (INR (acc, s, precomp))
+    ==>
+    precomp = if fIN target precompile_addresses then SOME target else NONE
+Proof
+  rpt strip_tac
+  \\ qpat_x_assum `run_create _ _ _ _ _ _ _ = _` mp_tac
+  \\ simp[run_create_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[]
+  (* Now we have:
+     - initial_state ... = SOME s''
+     - precomp = if fIN calleeAddress precompile_addresses then SOME calleeAddress else NONE
+     - calleeAddress = (FST (HD s''.contexts)).msgParams.callee
+     Need to show calleeAddress = target *)
+  \\ qpat_x_assum `initial_state _ _ _ _ _ _ _ = SOME _` mp_tac
+  \\ simp[vfmContextTheory.initial_state_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[]
+  (* initial_state builds context with callee = callee_from_tx_to tx.from tx.nonce tx.to
+     When tx.to = SOME target, callee_from_tx_to returns target *)
+  \\ gvs[vfmContextTheory.callee_from_tx_to_def]
+  (* Now need to trace through the lambdas to show msgParams.callee = target.
+     The key insight is that initial_context sets msgParams.callee to its first arg (target).
 
-   Key lemmas needed:
-   - run_call es = run es when LENGTH es.contexts = 1
-   - initial_state produces es with LENGTH es.contexts = 1
-   - Connecting vyper_call_correct preconditions to run_transaction preconditions *)
+     The structure is:
+     (\(pAA,pAC,aR). (\(code,acc). case apply_intrinsic_cost ... (initial_context target code ...) of
+                                     SOME ctxt => SOME <| contexts := [(ctxt, ...)] ... |>)
+                     (code_from_tx pAA pAC tx))
+     (process_authorizations ...)
+     = SOME s''
+
+     So s''.contexts = [(ctxt, ...)] where ctxt comes from apply_intrinsic_cost applied to
+     initial_context target code ..., which preserves msgParams.callee = target. *)
+  \\ `(FST (HD s''.contexts)).msgParams.callee = target` by (
+       qpat_x_assum `_ = SOME s''` mp_tac
+       \\ simp[AllCaseEqs(), PULL_EXISTS, pairTheory.UNCURRY]
+       \\ rpt strip_tac \\ gvs[]
+       \\ gvs[vfmContextTheory.initial_context_def,
+              vfmContextTheory.initial_msg_params_def,
+              vfmContextTheory.apply_intrinsic_cost_def])
+  \\ gvs[]
+QED
+
+(* Lemma: run_create with tx.to = SOME target produces a single-context state
+   where the context has the target's code. *)
+Theorem run_create_single_context:
+  ∀dom static chainId prevHashes blk accounts tx target saved_acc s precomp.
+    tx.to = SOME target ∧
+    run_create dom static chainId prevHashes blk accounts tx =
+      SOME (INR (saved_acc, s, precomp))
+    ⇒
+    ∃ctxt rb.
+      s.contexts = [(ctxt, rb)] ∧
+      ctxt.msgParams.code = (lookup_account target accounts).code ∧
+      ctxt.msgParams.data = tx.data ∧
+      ctxt.pc = 0 ∧
+      ctxt.stack = []
+Proof
+  rpt strip_tac
+  \\ qpat_x_assum `run_create _ _ _ _ _ _ _ = _` mp_tac
+  \\ simp[run_create_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[]
+  \\ qpat_x_assum `initial_state _ _ _ _ _ _ _ = SOME _` mp_tac
+  \\ simp[vfmContextTheory.initial_state_def, AllCaseEqs(), PULL_EXISTS]
+  \\ rpt strip_tac \\ gvs[]
+  (* initial_state creates contexts = [(ctxt, rb)] where ctxt has:
+     - code from code_from_tx (which for tx.to = SOME target is target's code)
+     - data from tx.data
+     - pc = 0, stack = [] (from initial_context) *)
+  \\ simp[vfmContextTheory.callee_from_tx_to_def]
+  (* The goal now has the complex lambda structure. Simplify to extract contexts. *)
+  \\ qpat_x_assum `_ = SOME s''` mp_tac
+  \\ simp[AllCaseEqs(), PULL_EXISTS]
+  \\ rpt strip_tac \\ gvs[]
+  (* Now s''.contexts = [(ctxt, initial_rollback ...)] where ctxt from apply_intrinsic_cost *)
+  \\ qexists_tac `ctxt`
+  \\ qexists_tac `initial_rollback postAuthAccounts accesses`
+  \\ simp[]
+  (* Need: ctxt.msgParams.code, data, pc, stack from initial_context / apply_intrinsic_cost *)
+  \\ gvs[vfmContextTheory.initial_context_def,
+         vfmContextTheory.initial_msg_params_def,
+         vfmContextTheory.apply_intrinsic_cost_def,
+         vfmContextTheory.code_from_tx_def]
+  \\ cheat (* delegate case in code_from_tx *)
+QED
+
+(* Lemma: Compilation + valid call + EVM execution determines result from Vyper.
+
+   This is the key bridge between Vyper semantics (call_external) and
+   EVM execution (run). It uses vyper_lowering_logs_correct + e2e_venom_to_evm. *)
+Theorem vyper_determines_evm_result:
+  ∀program pipeline dispatch_strategy deploy_bc runtime_bc
+   am (tx : call_txn) tenv args ret selectors calldata es result es_final.
+    compile_vyper program pipeline dispatch_strategy = SOME (deploy_bc, runtime_bc) ∧
+    valid_function_call tenv am tx selectors calldata args ret ∧
+    (∃ctxt rb. es.contexts = [(ctxt, rb)] ∧
+               ctxt.msgParams.code = runtime_bc ∧
+               ctxt.msgParams.data = calldata) ∧
+    run es = SOME (INR result, es_final)
+    ⇒
+    case call_external am tx of
+      (INL v, am') => result = NONE ∧ es_final.rollback.accounts = am'.accounts
+    | (INR (AssertException _), _) => result = SOME Reverted
+    | (INR (Error _), _) => T
+    | _ => F
+Proof
+  rpt strip_tac
+  (* Use the cheated e2e chain. The full proof would:
+     1. Extract lowering parameters from compile_vyper
+     2. Build initial Venom state from tx
+     3. Apply vyper_lowering_logs_correct to get external_call_result_rel
+     4. Apply e2e_venom_to_evm to connect run_context to run
+     5. Case split on call_external result *)
+  \\ cheat
+QED
+
+(* Transaction-level correctness. *)
 Theorem vyper_transaction_correct:
   !program pipeline dispatch_strategy runtime_bc
    am (vyper_tx : call_txn) (evm_tx : transaction)
-   tenv ret blk acc dom chainId prevHashes tr newAccounts.
+   tenv ret args selectors blk acc dom chainId prevHashes tr newAccounts.
     (* Compilation succeeds *)
     (∃deploy_bc.
        compile_vyper program pipeline dispatch_strategy
@@ -376,7 +482,7 @@ Theorem vyper_transaction_correct:
     evm_tx.from = vyper_tx.sender ∧
     evm_tx.value = vyper_tx.value ∧
     (* EVM calldata encodes the function call *)
-    (* (selector ++ abi_encode(args) - established by valid_function_call) *)
+    valid_function_call tenv am vyper_tx selectors evm_tx.data args ret ∧
     (* Block/tx parameters consistent *)
     blk.coinBase = vyper_tx.coinbase ∧
     blk.baseFeePerGas = vyper_tx.base_fee ∧
@@ -420,20 +526,40 @@ Proof
       \\ rename1 `call_external am vyper_tx = (vyper_result, am')`
       \\ Cases_on `vyper_result` \\ gvs[]
       >- ((* INL: Vyper success *)
-          (* Need: result = NONE (EVM success) and accounts match *)
-          (* Use vyper_call_correct here *)
+          (* Use vyper_determines_evm_result: Vyper success => EVM success.
+
+             We have run s1 = SOME (INR result, s2) and call_external returns INL.
+             vyper_determines_evm_result says: given the e2e chain,
+               call_external = INL => result = NONE and accounts match.
+
+             Remaining work:
+             1. Show s1.contexts = [(ctxt, rb)] with correct code/calldata
+                (follows from run_create / initial_state structure)
+             2. Apply vyper_determines_evm_result to get result = NONE
+             3. Use post_transaction_accounting to get tr.result = NONE
+             4. Show accounts_match_modulo_gas *)
           cheat)
       (* Vyper exception cases: INR exc *)
+      (* Need: for AssertException, result = SOME Reverted;
+               for Error, T (anything ok);
+               Break/Continue/ReturnException don't occur in external calls.
+
+         Proof would use e2e_vyper_to_evm which shows:
+         - Vyper AssertException implies Venom Abort Revert_abort
+         - EVM reverts (run returns SOME (INR (SOME Reverted), ...))
+
+         Then tr.result = SOME Reverted from post_transaction_accounting.
+         accounts_match_modulo_gas am.accounts follows from:
+         - post_transaction_accounting uses saved_acc when result <> NONE
+         - saved_acc relates to am.accounts (pre-tx-updates)
+         Note: may need to adjust accounts_match_modulo_gas to account for
+         nonce increment in pre_transaction_updates. *)
       \\ cheat)
   (* SOME precomp: precompile dispatch *)
-  (* This case is impossible: precomp = SOME addr only when
-     fIN calleeAddress precompile_addresses. Our precondition has
-     ~fIN vyper_tx.target precompile_addresses.
-
-     Proof would need: run_create returns precomp based on
-     fIN calleeAddress precompile_addresses, and calleeAddress = target
-     when tx.to = SOME target. *)
-  \\ cheat
+  (* This case is impossible: precomp = SOME x only when fIN target precompile_addresses,
+     but we have ~fIN vyper_tx.target precompile_addresses. *)
+  \\ drule_all run_create_precomp_from_target
+  \\ gvs[]
 QED
 
 (* ===================================================================== *)
@@ -588,7 +714,7 @@ QED
 (* Entry function has no RET instructions.
    The entry function is the dispatcher generated by lowering.
    It ends with STOP/REVERT, never RET (which is for internal returns).
-   
+
    Proof approach:
    1. ctx.ctx_entry is set to "__entry" by run_lowering
    2. The entry function is built by mk_entry_fn or similar
@@ -604,15 +730,15 @@ Proof
   rpt strip_tac
   \\ gvs[entry_fn_no_ret_def]
   (* Need to show: every instruction in entry function has opcode ≠ RET
-     
+
      The entry function is the dispatcher. It:
      - Reads selector from calldata
      - Dispatches to the appropriate function
      - Ends with STOP (success) or REVERT (no match)
-     
+
      Key insight: RET is only generated for internal function returns,
      never in the entry dispatcher.
-     
+
      TODO: Trace through run_lowering / mk_entry_fn to establish this.
      May need a lemma about the structure of lowered entry functions. *)
   \\ cheat
