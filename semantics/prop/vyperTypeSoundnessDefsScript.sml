@@ -8,6 +8,7 @@
  *   env_consistent — typing env matches runtime context
  *   functions_well_typed — all callable functions have well-typed bodies
  *   context_well_typed — transaction context fields fit their types
+ *   accounts_well_typed — account state fields fit their types
  *
  * HELPER DEFINITIONS:
  *   typing_env — record of type environments for expr/stmt typing
@@ -18,9 +19,6 @@
  *     — type classification predicates
  *   subscript_type_ok / attribute_type_ok — subscript/attribute result types
  *   loc_type / toplevel_value_typed — runtime location/value typing
- *
- * LIMITATIONS (deliberately untyped constructs):
- *   MakeArray, Acc, AbiEncode — see comments on those definitions
  *)
 
 Theory vyperTypeSoundnessDefs
@@ -268,16 +266,17 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Uint2Str n) ts =
     (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\
      (?k. HD ts = BaseT (UintT k)) /\ 78 <= n) /\
-  (* MakeArray: deliberately typed as F in this predicate.
-     Rationale: MakeArray constructs either a TupleV (for tuples) or an
-     ArrayV (for arrays). For the tuple case the constructed type
-     TupleT ts has element types that aren't individually constrained
-     against argument types by this predicate; for the array case all
-     elements must have the same element type, which is also not
-     expressible here without extra structure. Programs using
-     make_array therefore fall outside the well-typed fragment and
-     are not covered by the current soundness statement. *)
-  well_typed_builtin_app ty (MakeArray type_opt bd) ts = F /\
+  (* MakeArray: constructs a tuple or array from values.
+     - type_opt = NONE: tuple construction, result is TupleT with element
+       types matching the argument types (heterogeneous allowed)
+     - type_opt = SOME elem_ty: array construction, result is ArrayT elem_ty bd,
+       and all arguments must have type elem_ty (homogeneous) *)
+  well_typed_builtin_app ty (MakeArray NONE bd) ts =
+    (ty = TupleT ts /\ compatible_bound bd (LENGTH ts)) /\
+  well_typed_builtin_app ty (MakeArray (SOME elem_ty) bd) ts =
+    (ty = ArrayT elem_ty bd /\
+     compatible_bound bd (LENGTH ts) /\
+     EVERY ($= elem_ty) ts) /\
   (* Ceil/Floor: decimal -> int256 (Vyper: floor/ceil always return int256) *)
   well_typed_builtin_app ty Ceil ts =
     (LENGTH ts = 1 /\ HD ts = BaseT DecimalT /\
@@ -302,14 +301,14 @@ Definition well_typed_builtin_app_def:
   (* Env: no args, return type depends on item *)
   well_typed_builtin_app ty (Env item) ts =
     (ts = [] /\ ty = env_item_type item) /\
-  (* Acc: deliberately typed as F in this predicate.
-     Rationale: account fields (balance, codesize, etc.) can take any
-     value up to 2**256 in the HOL model of the state; proving
-     value_has_type for those results would require a global
-     accounts_well_typed invariant threaded through the entire
-     soundness proof. Programs using account builtins therefore fall
-     outside the well-typed fragment covered by this predicate. *)
-  well_typed_builtin_app ty (Acc item) ts = F /\
+  (* Acc: account field access. Takes an address (as bytes) and returns
+     the specified field. Type soundness requires an accounts_well_typed
+     invariant (balances < 2^256, code length < 2^256, etc.) which is
+     added to the global preconditions. *)
+  well_typed_builtin_app ty (Acc item) ts =
+    (LENGTH ts = 1 /\
+     (?bd. HD ts = BaseT (BytesT bd)) /\
+     ty = account_item_type item) /\
   (* Isqrt: uint256 -> uint256 *)
   well_typed_builtin_app ty Isqrt ts =
     (ts = [BaseT (UintT 256)] /\
@@ -517,7 +516,7 @@ End
    - Convert: one argument (the value to convert)
    - Extract32: two arguments (bytes source, uint256 index)
    - AbiDecode: one argument (bytes to decode)
-   Note: AbiEncode is excluded from well_typed_expr entirely. *)
+   - AbiEncode: one or more arguments, target_ty = TupleT of arg types *)
 Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Empty target_ty ts = (ts = []) /\
   well_typed_type_builtin_args MaxValue target_ty ts =
@@ -535,8 +534,10 @@ Definition well_typed_type_builtin_args_def:
      (?bt. target_ty = BaseT bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
     (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
-  (* AbiEncode should never reach here - excluded at well_typed_expr level *)
-  well_typed_type_builtin_args (AbiEncode _) _ _ = F
+  (* AbiEncode: encodes values as ABI bytes. The target_ty specifies the
+     tuple type of the arguments being encoded. Result is bytes. *)
+  well_typed_type_builtin_args (AbiEncode _) target_ty ts =
+    (ts <> [] /\ target_ty = TupleT ts)
 End
 
 (* Return type of raw_call depends on flags *)
@@ -602,12 +603,16 @@ Definition well_typed_expr_def:
      well_typed_builtin_app ty blt (MAP expr_type es) /\
      well_formed_type env.type_defs ty) /\
   (* TypeBuiltin: a builtin that takes a type argument.
-     For Empty/MaxValue/MinValue/Convert/Epsilon/Extract32/AbiDecode
-     the result has type target_ty (up to the unwrap special case in
-     AbiDecode, which the frontend avoids when using the expr-level
-     type annotation).
-     AbiEncode always returns bytes, so it doesn't fit the ty = target_ty
-     pattern; it is excluded here and falls outside the covered fragment. *)
+     For Empty/MaxValue/MinValue/Convert/Epsilon/Extract32/AbiDecode:
+       result type = target_ty (the type argument)
+     For AbiEncode:
+       result type = bytes (dynamic), target_ty = TupleT of argument types *)
+  well_typed_expr env (TypeBuiltin ty (AbiEncode ensure) target_ty es) =
+    (well_typed_exprs env es /\
+     (?n. ty = BaseT (BytesT (Dynamic n))) /\
+     target_ty = TupleT (MAP expr_type es) /\
+     well_formed_type env.type_defs ty /\
+     well_typed_type_builtin_args (AbiEncode ensure) target_ty (MAP expr_type es)) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\
      ty = target_ty /\
@@ -914,6 +919,26 @@ Definition context_well_typed_def:
     cx.txn.gas_limit < 2 ** 256 /\
     cx.txn.base_fee < 2 ** 256 /\
     cx.txn.prev_randao < 2 ** 256
+End
+
+(* ===== accounts_well_typed: account fields fit declared types ===== *)
+(*
+ * The Acc builtins (Balance, Codesize, etc.) return values from account
+ * state. For these to satisfy value_has_type, we need:
+ *   - balance < 2^256 (for uint256)
+ *   - code length < 2^256 (for uint256 codesize)
+ *   - code length <= 24576 (for bytes[24576] code, per EIP-170)
+ * The accounts map is part of the external state passed to the interpreter.
+ *)
+Definition account_well_typed_def:
+  account_well_typed (a : account_state) <=>
+    a.balance < 2 ** 256 /\
+    LENGTH a.code <= 24576
+End
+
+Definition accounts_well_typed_def:
+  accounts_well_typed acc <=>
+    !addr. account_well_typed (lookup_account addr acc)
 End
 
 (* Separate predicate: call site type annotations match function return types *)
