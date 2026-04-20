@@ -923,8 +923,30 @@ End
  *)
 Definition functions_well_typed_def:
   functions_well_typed cx <=>
-    ?fn_sigs toplevel_types flag_members.
+    !fn_sigs toplevel_types flag_members.
       fn_sigs_consistent fn_sigs cx /\
+      (!src id ty ts'.
+         FLOOKUP toplevel_types (src, id) = SOME ty /\
+         get_module_code cx src = SOME ts' ==>
+         (!is_transient typ id_str.
+            find_var_decl_by_num id ts' =
+              SOME (StorageVarDecl is_transient typ, id_str) ==>
+            typ = ty) /\
+         (!is_transient kt vt id_str.
+            find_var_decl_by_num id ts' =
+              SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
+            ty = NoneT) /\
+         (* Immutable case: note we don't have st here, so we
+            require that evaluate_type is defined for the declared
+            type. The runtime consistency check is in env_consistent. *)
+         (find_var_decl_by_num id ts' = NONE ==>
+          IS_SOME (evaluate_type (get_tenv cx) ty))) /\
+      (!src fid ls.
+         FLOOKUP flag_members (src, fid) = SOME ls ==>
+         ?ts'. get_module_code cx src = SOME ts' /\
+               lookup_flag fid ts' = SOME ls /\
+               FLOOKUP (get_tenv cx) (string_to_num fid) =
+                 SOME (FlagArgs (LENGTH ls))) ==>
       !src_id_opt fn ts fm nr args dflts ret body.
         get_module_code cx src_id_opt = SOME ts /\
         lookup_callable_function cx.in_deploy fn ts =
@@ -936,30 +958,6 @@ Definition functions_well_typed_def:
           env_body.global_types = FEMPTY /\
           env_body.toplevel_types = toplevel_types /\
           env_body.flag_members = flag_members /\
-          (* toplevel_types: match storage decls + immutable type consistency *)
-          (!src id ty ts'.
-             FLOOKUP toplevel_types (src, id) = SOME ty /\
-             get_module_code cx src = SOME ts' ==>
-             (!is_transient typ id_str.
-                find_var_decl_by_num id ts' =
-                  SOME (StorageVarDecl is_transient typ, id_str) ==>
-                typ = ty) /\
-             (!is_transient kt vt id_str.
-                find_var_decl_by_num id ts' =
-                  SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
-                ty = NoneT) /\
-             (* Immutable case: note we don't have st here, so we
-                require that evaluate_type is defined for the declared
-                type. The runtime consistency check is in env_consistent. *)
-             (find_var_decl_by_num id ts' = NONE ==>
-              IS_SOME (evaluate_type (get_tenv cx) ty))) /\
-          (* flag_members: match module flag declarations *)
-          (!src fid ls.
-             FLOOKUP flag_members (src, fid) = SOME ls ==>
-             ?ts'. get_module_code cx src = SOME ts' /\
-                   lookup_flag fid ts' = SOME ls /\
-                   FLOOKUP (get_tenv cx) (string_to_num fid) =
-                     SOME (FlagArgs (LENGTH ls))) /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\
           well_typed_stmts env_body ret body /\
           well_typed_exprs

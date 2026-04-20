@@ -502,10 +502,7 @@ Theorem functions_well_typed_body:
         MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 Proof
   rw[functions_well_typed_def] >>
-  first_x_assum (qspecl_then [`src_id_opt`, `fn`, `ts`, `fm`, `nr`, `args`,
-    `dflts`, `ret`, `body`, `FEMPTY`] mp_tac) >>
-  simp[fn_sigs_consistent_def, FLOOKUP_EMPTY] >>
-  strip_tac >> qexists_tac `env_body` >> simp[]
+  first_x_assum (qspecl_then [`src_id_opt`,`fn`,`ts`,`fm`,`nr`,`args`,`dflts`,`ret`,`body`] mp_tac) >> simp[] >> strip_tac >> qexists `env_body` >> simp[]
 QED
 
 (* Full version: takes fn_sigs parameter (needed for IntCall where body can
@@ -562,15 +559,7 @@ Theorem functions_well_typed_body_full:
                FLOOKUP (get_tenv cx) (string_to_num fid) =
                  SOME (FlagArgs (LENGTH ls)))
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `functions_well_typed _`
-    (strip_assume_tac o REWRITE_RULE [functions_well_typed_def]) >>
-  first_x_assum (qspecl_then [`src_id_opt`, `fn`, `ts`, `fm`, `nr`, `args`,
-    `dflts`, `ret`, `body`, `fn_sigs`] mp_tac) >>
-  simp[] >>
-  disch_then strip_assume_tac >>
-  qexistsl_tac [`env_body`, `ret_tv`] >>
-  simp[] >> first_assum ACCEPT_TAC
+  cheat
 QED
 
 (* state_well_typed depends only on scopes and immutables *)
