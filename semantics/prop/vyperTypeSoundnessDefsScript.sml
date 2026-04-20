@@ -282,7 +282,7 @@ Definition subscript_type_ok_def:
   subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
     (result_ty = elem_ty /\ is_int_type idx_ty) /\
   subscript_type_ok (TupleT ts) idx_ty result_ty =
-    (is_int_type idx_ty /\ ts <> [] /\ MEM result_ty ts) /\
+    (is_int_type idx_ty /\ ts <> [] /\ EVERY ($= result_ty) ts) /\
   subscript_type_ok _ _ _ = F
 End
 

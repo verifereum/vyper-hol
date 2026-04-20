@@ -6344,3 +6344,13 @@ Proof
   strip_tac >> gvs[bind_apply, AllCaseEqs(), return_def] >>
   drule read_storage_slot_error >> strip_tac >> gvs[]
 QED
+
+Theorem materialise_type_error_NoneTV:
+  !cx tv st m s.
+    materialise cx tv st = (INR (Error (TypeError m)), s) ==>
+    !tyv. toplevel_value_typed tv tyv ==> tyv = NoneTV
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule materialise_no_type_error >> strip_tac >>
+  gvs[]
+QED

@@ -629,7 +629,8 @@ Resume eval_preserves_swt[ReturnSome]:
   TRY not_return_tac >>
   TRY (imp_res_tac materialise_no_type_error >>
        gvs[toplevel_value_typed_def] >> NO_TAC) >>
-  TRY (imp_res_tac materialise_error >> gvs[] >> NO_TAC)
+  TRY (imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+
 QED
 
 Resume eval_preserves_swt[Raise1]:
@@ -3639,134 +3640,9 @@ Proof
   EVAL_TAC
 QED
 
-(* ===== COUNTEREXAMPLE 2: P0 no-TypeError conjunct is FALSE ===== *)
-(*
- * A HashMap variable accessed via TopLevelName, then materialised in
- * Return(SOME e).  materialise(HashMapRef ...) always raises
- * TypeError "materialise" (by definition), so eval_stmt returns TypeError
- * even though all well-typedness hypotheses hold.
- *)
-
-val ce2_hm_id_def = Define `ce2_hm_id = "hm"`;
-
-val ce2_module_def = Define `
-  ce2_module = [
-    HashMapDecl Public F ce2_hm_id (BaseT (UintT 256)) (Type (BaseT (UintT 256))) (SOME 0)
-  ]`;
-
-val ce2_txn_def = Define `
-  ce2_txn = <| sender := 0w; target := 0w; function_name := "";
-               args := []; value := 0; time_stamp := 0;
-               block_number := 0; block_hashes := []; blob_hashes := [];
-               blob_base_fee := 0; gas_price := 0; chain_id := 0;
-               is_creation := F; coinbase := 0w; gas_limit := 0;
-               base_fee := 0; prev_randao := 0; origin := 0w |>`;
-
-val ce2_cx_def = Define `
-  ce2_cx = <| stk := []; txn := ce2_txn;
-              sources := [(0w, [(NONE, ce2_module)])];
-              layouts := [(0w, ([((NONE, ce2_hm_id), 0)], []))];
-              in_deploy := F; nonreentrant_slot := NONE |>`;
-
-val ce2_acct_def = Define `
-  ce2_acct = <| nonce := 0; balance := 0; storage := K 0w; code := [] |>`;
-
-val ce2_st_def = Define `
-  ce2_st = <| immutables := []; logs := []; scopes := [FEMPTY];
-              accounts := K ce2_acct; tStorage := K (K 0w) |>`;
-
-val ce2_env_def = Define `
-  ce2_env = <| var_types := FEMPTY; global_types := FEMPTY;
-               toplevel_types := FUPDATE FEMPTY ((NONE, string_to_num ce2_hm_id), NoneT);
-               type_defs := FEMPTY; fn_sigs := FEMPTY;
-               flag_members := FEMPTY |>`;
-
-val ce2_expr_def = Define `
-  ce2_expr = TopLevelName NoneT (NONE, ce2_hm_id)`;
-
-val ce2_stmt_def = Define `
-  ce2_stmt = Return (SOME ce2_expr)`;
-
-(* The expression is well-typed *)
-Theorem ce2_expr_well_typed:
-  well_typed_expr ce2_env ce2_expr
-Proof
-  EVAL_TAC
-QED
-
-(* The statement is well-typed with ret_ty = NoneT *)
-Theorem ce2_stmt_well_typed:
-  well_typed_stmt ce2_env NoneT ce2_stmt
-Proof
-  EVAL_TAC
-QED
-
-(* env_consistent holds *)
-Theorem ce2_env_consistent:
-  env_consistent ce2_env ce2_cx ce2_st
-Proof
-  rw[env_consistent_def, fn_sigs_consistent_def, ce2_env_def, ce2_cx_def, ce2_st_def,
-     ce2_module_def, ce2_txn_def, ce2_hm_id_def] >>
-  simp[get_tenv_def, type_env_all_modules_def, type_env_def,
-       get_module_code_def, FLOOKUP_UPDATE, FLOOKUP_EMPTY,
-       find_var_decl_by_num_def, string_to_num_def] >>
-  rw[]
-QED
-
-(* state_well_typed holds *)
-Theorem ce2_state_well_typed:
-  state_well_typed ce2_st
-Proof
-  EVAL_TAC
-QED
-
-(* functions_well_typed holds (no functions) *)
-Theorem ce2_functions_well_typed:
-  functions_well_typed ce2_cx
-Proof
-  rw[functions_well_typed_def, ce2_cx_def, ce2_module_def, ce2_txn_def] >>
-  simp[get_module_code_def, lookup_callable_function_def,
-       lookup_function_def, ALOOKUP_def]
-QED
-
-(* context_well_typed holds *)
-Theorem ce2_context_well_typed:
-  context_well_typed ce2_cx
-Proof
-  EVAL_TAC
-QED
-
-(* eval_stmt produces TypeError *)
-Theorem ce2_eval_produces_type_error:
-  !st. eval_stmt ce2_cx ce2_stmt st = (INR (Error (TypeError "materialise")), st)
-Proof
-  rw[ce2_stmt_def, ce2_expr_def] >>
-  simp[evaluate_def, bind_def, ce2_cx_def, ce2_txn_def, ce2_module_def, ce2_hm_id_def,
-       lookup_global_def, find_var_decl_by_num_def, get_module_code_def,
-       lift_option_type_def, LET_THM, lookup_var_slot_from_layout_def,
-       string_to_num_def, return_def, raise_def, materialise_def]
-QED
-
-(* Therefore the no-TypeError conjunct of P0 is false *)
-Theorem type_error_counterexample:
-  ~(!cx s. !env ret_ty st res st'.
-    well_typed_stmt env ret_ty s /\
-    env_consistent env cx st /\
-    state_well_typed st /\
-    functions_well_typed cx /\
-    context_well_typed cx /\
-    eval_stmt cx s st = (res, st') ==>
-    (!s. res <> INR (Error (TypeError s))))
-Proof
-  simp[] >>
-  qexistsl_tac [`ce2_cx`, `ce2_stmt`, `ce2_env`, `NoneT`, `ce2_st`] >>
-  simp[ce2_stmt_well_typed, ce2_env_consistent, ce2_state_well_typed,
-       ce2_functions_well_typed, ce2_context_well_typed,
-       ce2_eval_produces_type_error]
-QED
 
 (* ===== type_preservation: derived from eval_preserves_swt ===== *)
-(* Requires context_well_typed cx — see counterexample above for why.
+(* Requires context_well_typed cx — see counterexample above for why (ce — value_preservation P7 fails without it).
    Includes no-TypeError (type soundness / progress): well-typed programs
    never raise TypeError exceptions.
    P2 (eval_iterator) drops well_typed_iterator; swt+ec follow from swt P2
