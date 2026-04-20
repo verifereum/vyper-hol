@@ -130,6 +130,12 @@ Proof
   gvs[within_int_bound_def]
 QED
 
+Theorem evaluate_type_NoneTV_imp_NoneT:
+  !tenv ty. evaluate_type tenv ty = SOME NoneTV ==> ty = NoneT
+Proof
+  Cases_on `ty` >> gvs[evaluate_type_def, AllCaseEqs()]
+QED
+
 (* Phase 2: bounded_int_op result has the bound's type *)
 Theorem bounded_int_op_unsigned:
   !k r v.
@@ -3858,6 +3864,69 @@ Proof
   Cases >> simp[is_HashMapRef_def, toplevel_value_typed_def]
 QED
 
+Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
+  !env e cx st tv st'. well_typed_expr env e /\ expr_type e = NoneT /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
+Proof
+  qx_gen_tac `env` >>
+  Induct_on `e` >> rpt strip_tac >>
+  fs[expr_type_def] >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >>
+  (* Vacuous cases: well_typed_expr with NoneT is False *)
+  TRY (PairCases_on `p` >> gvs[well_typed_expr_def] >> NO_TAC) >>
+  TRY (Cases_on `s` >> gvs[well_typed_expr_def] >> NO_TAC) >>
+  TRY (gvs[well_typed_expr_def] >> NO_TAC) >>
+  (* Non-vacuous: eval_expr on INL path never returns HashMapRef *)
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  (* Name, BareGlobalName: direct Value return *)
+  TRY (simp[return_def, bind_def, lift_option_type_def, lookup_scopes_val_def,
+            get_scopes_result, get_immutables_SOME, AllCaseEqs()] >> NO_TAC) >>
+  (* Catch-all for simple cases *)
+  TRY (
+    simp[bind_def, return_def, raise_def, get_Value_def, lift_option_type_def,
+         lift_sum_def, lift_option_def, check_def, type_check_def,
+         ignore_bind_def, AllCaseEqs(), evaluate_literal_def,
+         evaluate_subscript_def, evaluate_attribute_def] >> NO_TAC) >>
+  (* IfExp: switch_BoolV dispatches to sub-expression, use IH *)
+  TRY (
+    simp[bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
+    `well_typed_expr env e' /\ expr_type e' = NoneT` by (
+      fs[well_typed_expr_def]) >>
+    `well_typed_expr env e'' /\ expr_type e'' = NoneT` by (
+      fs[well_typed_expr_def]) >>
+    first_x_assum (irule_at (Pos hd)) >> simp[] >>
+    fs[well_typed_expr_def] >> NO_TAC) >>
+  (* Call: split on call_target *)
+  pop_assum mp_tac >> Cases_on `c` >>
+  simp[Once evaluate_def] >>
+  TRY (gvs[well_typed_expr_def] >> NO_TAC) >>
+  TRY (
+    simp[bind_def, return_def, raise_def, lift_option_type_def,
+         lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
+         ignore_bind_def, AllCaseEqs(), is_HashMapRef_def] >> NO_TAC) >>
+  (* IntCall: expand monad, returns Value crv *)
+  TRY (
+    simp[bind_def, return_def, raise_def, lift_option_type_def,
+         lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
+         ignore_bind_def, AllCaseEqs(), is_HashMapRef_def,
+         evaluate_type_NoneTV_imp_NoneT, evaluate_type_def] >>
+    rpt strip_tac >> gvs[toplevel_value_distinct] >> NO_TAC) >>
+  (* ExtCall: expand monad, return goes through materialise *)
+  TRY (
+    simp[bind_def, return_def, raise_def, lift_option_type_def,
+         lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
+         ignore_bind_def, AllCaseEqs(), is_HashMapRef_def,
+         materialise_def, evaluate_type_NoneTV_imp_NoneT,
+         evaluate_type_def, raw_call_return_type_def] >>
+    rpt strip_tac >> gvs[toplevel_value_distinct] >> NO_TAC) >>
+  (* Remaining: RawCallTarget with nested bind chain *)
+  simp[bind_def, return_def, raise_def, lift_option_type_def,
+       lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
+       ignore_bind_def, AllCaseEqs(), is_HashMapRef_def,
+       evaluate_type_NoneTV_imp_NoneT, evaluate_type_def,
+       raw_call_return_type_def] >>
+  rpt strip_tac >> gvs[toplevel_value_distinct]
+QED
 (* ===== env_consistent toplevel clause extraction ===== *)
 (* Reusable lemmas for TopLevelName, BareGlobalName, etc. *)
 
@@ -6353,4 +6422,25 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule materialise_no_type_error >> strip_tac >>
   gvs[]
+QED
+
+Theorem materialise_Value_no_type_error:
+  !cx v st m s. materialise cx (Value v) st ≠ (INR (Error (TypeError m)), s)
+Proof
+  simp[materialise_def, return_def]
+QED
+
+Theorem materialise_type_error_imp_HashMapRef:
+  !cx tv st m s. materialise cx tv st = (INR (Error (TypeError m)), s) ==>
+                 is_HashMapRef tv
+Proof
+  rpt gen_tac >> Cases_on `tv` >> gvs[materialise_def, return_def, raise_def, is_HashMapRef_def] >- (strip_tac >> gvs[bind_apply, AllCaseEqs(), return_def] >> drule read_storage_slot_error >> strip_tac >> gvs[is_HashMapRef_def])
+QED
+
+Theorem well_typed_expr_TopLevelName_NotNoneT:
+  !env ty src_id_opt id.
+    well_typed_expr env (TopLevelName ty (src_id_opt, id)) /\
+    expr_type (TopLevelName ty (src_id_opt, id)) = NoneT ==> F
+Proof
+  rpt strip_tac >> fs[well_typed_expr_def, expr_type_def]
 QED
