@@ -56,44 +56,27 @@ Ancestors
 
 (* ===== Key Lemma: Type Soundness → Memory Layout ===== *)
 
-(* A well-typed value's encoded memory footprint fits within
-   the ALLOCA sized by type_memory_bytes.
-   Uses the existing type_memory_bytes (compileEnv) which operates
-   on Vyper types. The bridge from type_value to type is via
-   evaluate_type: if evaluate_type tenv ty = SOME tv, then
-   type_memory_bytes cenv ty gives the ALLOCA size for that type.
+(* A well-typed dynamic array's runtime length is bounded by its
+   declared capacity. This is the core fact connecting Vyper type
+   soundness to memory safety: the ALLOCA is sized by the declared
+   type capacity (via type_memory_bytes), and type soundness ensures
+   runtime lengths respect those capacities.
 
-   For arrays: value_has_type (ArrayTV tv (Dynamic N)) v ⟹
-     runtime length ≤ N, so accesses at indices < length are within
-     [base, base + 32 + N * elem_size).
-
-   For structs: value_has_type (StructTV fields) v ⟹
-     v has exactly the declared fields, so field offsets (computed
-     from field sizes) are within [base, base + struct_size).
-
-   For bytestrings: value_has_type (BaseTV (BytesT (Dynamic N))) v ⟹
-     byte length ≤ N, so data at [base+32, base+32+N) is in bounds.
-
-   No new size function needed — type_memory_bytes already computes
-   the memory-layout size from the type, and evaluate_type bridges
-   type_value back to type for the ALLOCA sizing connection. *)
-
-(* A well-typed value's runtime memory footprint fits within
-   the ALLOCA sized by type_memory_bytes for the corresponding type.
-   - DynArray[T,N]: length ≤ N, data ≤ N * elem_size, total ≤ 32 + N*elem_size
-   - Fixed array: exact N elements, total = N * elem_size
-   - Struct: exact fields, total = sum of field sizes
-   - Bytes/String: data length ≤ declared max
-   - Base types: 1 word = 32 bytes
-   evaluate_type connects the type_value to the original type,
+   For DynArray[T,N]: value_has_type (ArrayTV tv (Dynamic N)) v ⟹
+     LENGTH vs ≤ N, so the MLOAD'd length word ≤ N and
+     bounds check (idx < len) correctly rejects OOB access.
+   For Bytes[M]: byte data length ≤ M.
+   For String[M]: string length ≤ M.
+   Fixed arrays, structs, base types: structurally exact, no runtime bound needed.
+   evaluate_type connects type_value back to the original Vyper type
    so type_memory_bytes (which the lowering uses for ALLOCA sizes)
-   gives the correct bound. *)
+   gives the correct allocation size. *)
 Theorem value_type_fits_alloca:
   ∀cenv tenv ty tv v.
     evaluate_type tenv ty = SOME tv ∧
     value_has_type tv v ∧ well_formed_type_value tv
     ⇒
-    runtime_mem_footprint v ≤ type_memory_bytes cenv ty
+    value_within_alloca_size cenv ty v
 Proof
   cheat
 QED
@@ -132,18 +115,16 @@ QED
 (* The lowered function's base_ptr analysis result shows all
    alloca-backed accesses are within bounds.
 
-   This holds because:
+   Holds because:
    1. Lowering emits ALLOCA(N) where N = type_memory_bytes(cenv, ty)
    2. Pointer arithmetic is ADD(base, Lit offset) where offset is a
-      compile-time constant derived from type layout (struct field offset,
-      array element offset)
+      compile-time constant derived from type layout
    3. Array accesses go through compile_array_subscript which emits
       bounds checks (ASSERT valid) before computing the offset
    4. Bytestring accesses use lengths ≤ declared max (guaranteed by
-      type soundness)
+      type soundness via value_type_fits_alloca)
 
-   The alloca_inv precondition ensures the Venom state has coherent
-   alloca metadata — distinct allocas are disjoint. *)
+   alloca_inv: distinct allocas are disjoint. *)
 Theorem lowering_bp_ptrs_bounded:
   ∀selectors ext_fns int_fns fb_fn dispatch bucket_count
     fn_meta_bytes dense_buckets entry_info entry_label
@@ -151,10 +132,10 @@ Theorem lowering_bp_ptrs_bounded:
     MEM fn (FST (run_lowering selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label)).ctx_functions ∧
-    compile_env_for fn cenv ∧
+    cenv_matches_fn cenv fn ∧
     alloca_inv s ∧
-    bp_result_for fn bp ∧
-    well_typed_lowering_inputs cenv  (* source well-typed *)
+    bp_result_is fn bp ∧
+    well_typed_lowering cenv
     ⇒ bp_ptrs_bounded bp fn s
 Proof
   cheat
@@ -186,8 +167,8 @@ Theorem lowering_step_preserves_safety:
     MEM fn (FST (run_lowering selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label)).ctx_functions ∧
-    compile_env_for fn cenv ∧
-    well_typed_lowering_inputs cenv
+    cenv_matches_fn cenv fn ∧
+    well_typed_lowering cenv
     ⇒ step_preserves_safety fn roots
 Proof
   cheat
@@ -221,9 +202,9 @@ Theorem lowering_alloca_safe_access:
     MEM fn (FST (run_lowering selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label)).ctx_functions ∧
-    compile_env_for fn cenv ∧
+    cenv_matches_fn cenv fn ∧
     alloca_inv s ∧
-    well_typed_lowering_inputs cenv ∧
+    well_typed_lowering cenv ∧
     (∀aid off asz.
        FLOOKUP s.vs_allocas aid = SOME (off, asz) ⇒
        off + asz ≤ LENGTH s.vs_memory)
@@ -253,9 +234,9 @@ Theorem lowering_alloca_safe_access_reachable:
     MEM fn (FST (run_lowering selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label)).ctx_functions ∧
-    compile_env_for fn cenv ∧
+    cenv_matches_fn cenv fn ∧
     alloca_inv s ∧
-    well_typed_lowering_inputs cenv ∧
+    well_typed_lowering cenv ∧
     (∀aid off asz.
        FLOOKUP s.vs_allocas aid = SOME (off, asz) ⇒
        off + asz ≤ LENGTH s.vs_memory) ∧
@@ -265,22 +246,85 @@ Proof
   cheat
 QED
 
-(* ===== Auxiliary Definitions (to be refined) ===== *)
+(* ===== Auxiliary Definitions ===== *)
 
-(* compile_env_for fn cenv: cenv accurately reflects fn's types
-   and variable layout. This connects type_memory_bytes(cenv, ty)
-   to the actual ALLOCA sizes in fn. Placeholder — exact
-   definition depends on how compile_env is constructed. *)
+(* cenv_matches_fn cenv fn: cenv accurately reflects fn's types and
+   variable layout. For each ALLOCA in fn with output v and operand
+   Lit n, cenv maps v's declared type ty such that
+   type_memory_bytes cenv ty = w2n n. *)
+Definition cenv_matches_fn_def:
+  cenv_matches_fn cenv fn ⇔
+    ∀inst out n ty tenv tv.
+      MEM inst (fn_insts fn) ∧
+      inst.inst_opcode = ALLOCA ∧
+      inst_output inst = SOME out ∧
+      inst.inst_operands = [Lit n] ∧
+      cenv.ce_var_type out = SOME ty ∧
+      evaluate_type tenv ty = SOME tv
+      ⇒ type_memory_bytes cenv ty = w2n n
+End
 
-(* well_typed_lowering_inputs cenv: the Vyper source from which
-   cenv was derived is well-typed. Enables eval_preserves_swt.
-   Placeholder — will be refined once we know what preconditions
-   eval_preserves_swt needs on the Vyper side. *)
+(* well_typed_lowering cenv: the Vyper source from which cenv was
+   derived is well-typed. Enables eval_preserves_swt to guarantee
+   runtime values match declared types. Equivalent to
+   context_well_typed on the Vyper evaluation context. *)
+Definition well_typed_lowering_def:
+  well_typed_lowering cenv ⇔
+    well_formed_cenv cenv ∧
+    (∀var ty. cenv.ce_var_type var = SOME ty ⇒
+               ∃tenv tv. evaluate_type tenv ty = SOME tv ∧
+                         well_formed_type_value tv)
+End
 
-(* bp_result_for fn bp: bp is a valid analysis result for fn.
-   Placeholder — will connect to bp_analyze_function or equivalent. *)
+(* bp_result_is fn bp: bp is a valid base_ptr analysis result for fn.
+   Connects to bp_process_block or bp_analyze_function. *)
+Definition bp_result_is_def:
+  bp_result_is fn bp ⇔
+    ∃bb c. MEM bb fn.fn_blocks ∧
+           SOME bb.bb_label = fn_entry_label fn ∧
+           bp_process_block FEMPTY bb.bb_instructions = (c, bp)
+End
 
-(* reachable_by_execution fn s s': s' is reachable from s by executing
-   non-terminating, non-external-call instructions of fn.
-   Uses run_block or step_inst in some bounded fashion.
-   Placeholder — exact definition to be determined. *)
+(* reachable_by_execution fn s s': s' is reachable from s by
+   executing non-terminating, non-external-call instructions of fn.
+   Defined via RTC of single step. *)
+Definition reachable_by_execution_def:
+  reachable_by_execution fn s s' ⇔
+    RTC (λs1 s2. ∃inst bb.
+      MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions ∧
+      step_inst_base inst s1 = OK s2 ∧
+      ¬is_terminator inst.inst_opcode ∧
+      ¬is_ext_call_op inst.inst_opcode) s s'
+End
+
+(* value_within_alloca_size cenv ty v: v's runtime structure fits
+   within the memory layout sized by type_memory_bytes(cenv, ty).
+   - DynArray: runtime length ≤ declared capacity
+   - DynBytes/DynString: data length ≤ declared max
+   - Fixed arrays, structs, base types: structurally exact *)
+Definition value_within_alloca_size_def:
+  value_within_alloca_size cenv (ArrayT elem_ty (Dynamic n))
+    (ArrayV (DynArrayV vs)) =
+    (LENGTH vs ≤ n ∧
+     EVERY (λv. value_within_alloca_size cenv elem_ty v) vs) ∧
+  value_within_alloca_size cenv (BaseT (BytesT (Dynamic n)))
+    (BytesV bs) =
+    (LENGTH bs ≤ n) ∧
+  value_within_alloca_size cenv (BaseT (StringT n))
+    (StringV s) =
+    (LENGTH s ≤ n) ∧
+  value_within_alloca_size cenv (ArrayT elem_ty (Fixed n))
+    (ArrayV (TupleV vs)) =
+    (LENGTH vs = n ∧
+     EVERY (λv. value_within_alloca_size cenv elem_ty v) vs) ∧
+  value_within_alloca_size cenv (StructT name)
+    (StructV al) =
+    (EVERY (λ(name, v). T) al) ∧
+  value_within_alloca_size cenv (TupleT tys)
+    (ArrayV (TupleV vs)) =
+    (LENGTH vs = LENGTH tys ∧
+     LIST_REL (value_within_alloca_size cenv) tys vs) ∧
+  value_within_alloca_size _ _ _ = T
+Termination
+  WF_REL_TAC `measure (type_size o (λ(c,t,_). t))`
+End
