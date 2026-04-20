@@ -1,3 +1,28 @@
+(*
+ * Type soundness definitions for the Vyper interpreter.
+ *
+ * TOP-LEVEL PREDICATES (external API):
+ *   well_typed_expr / well_typed_stmt / well_typed_stmts
+ *     — static well-typedness of AST nodes
+ *   state_well_typed — runtime state has consistent types
+ *   env_consistent — typing env matches runtime context
+ *   functions_well_typed — all callable functions have well-typed bodies
+ *   context_well_typed — transaction context fields fit their types
+ *
+ * HELPER DEFINITIONS:
+ *   typing_env — record of type environments for expr/stmt typing
+ *   fn_sig — function signature (param types, num defaults, return type)
+ *   well_typed_literal / well_typed_binop / well_typed_builtin_app
+ *     — sub-predicates for literal/op/builtin typing
+ *   is_int_type / is_numeric_type / is_comparable_type / etc.
+ *     — type classification predicates
+ *   subscript_type_ok / attribute_type_ok — subscript/attribute result types
+ *   loc_type / toplevel_value_typed — runtime location/value typing
+ *
+ * LIMITATIONS (deliberately untyped constructs):
+ *   MakeArray, Acc, AbiEncode — see comments on those definitions
+ *)
+
 Theory vyperTypeSoundnessDefs
 Ancestors
   list rich_list pred_set prim_rec sorting relation arithmetic
@@ -45,22 +70,44 @@ Definition is_sized_type_def[simp]:
   is_sized_type _ = F
 End
 
+(* Bytes-or-string (no arrays): argument shape accepted by hashes,
+   slice, method_id, etc. *)
+Definition is_bytes_or_string_type_def[simp]:
+  is_bytes_or_string_type (BaseT (StringT _)) = T /\
+  is_bytes_or_string_type (BaseT (BytesT _)) = T /\
+  is_bytes_or_string_type _ = F
+End
 
-(* ===== well_typed_literal ===== *)
+(* Scalar types for which Eq/NotEq are defined by evaluate_binop.
+   Matches the value constructors supported in the Eq case of
+   evaluate_binop_def: IntV, FlagV, StringV, BytesV, BoolV, DecimalV.
+   Notably excludes TupleT, ArrayT, StructT, NoneT. *)
+Definition is_comparable_type_def[simp]:
+  is_comparable_type (BaseT _) = T /\
+  is_comparable_type (FlagT _) = T /\
+  is_comparable_type _ = F
+End
 
+
+(* ===== well_typed_literal =====
+ *
+ * A literal fits a base type if its value satisfies the type's value
+ * constraint. Type-level well-formedness (e.g. k ≤ 256 for UintT k,
+ * n ≤ 32 for fixed bytes) is enforced separately by well_formed_type
+ * at the Literal case in well_typed_expr, so it is not repeated here.
+ *)
 Definition well_typed_literal_def:
   well_typed_literal (BaseT BoolT) (BoolL _) = T /\
   well_typed_literal (BaseT (UintT k)) (IntL n) =
-    (within_int_bound (Unsigned k) n /\ k ≤ 256) /\
+    within_int_bound (Unsigned k) n /\
   well_typed_literal (BaseT (IntT k)) (IntL n) =
-    (within_int_bound (Signed k) n /\ k ≤ 256) /\
+    within_int_bound (Signed k) n /\
   well_typed_literal (BaseT DecimalT) (DecimalL n) =
     within_int_bound (Signed 168) n /\
   well_typed_literal (BaseT (StringT n)) (StringL s) =
     (LENGTH s <= n) /\
   well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
-    (compatible_bound bd (LENGTH bs) /\
-     case bd of Fixed n => n ≤ 32 | _ => T) /\
+    compatible_bound bd (LENGTH bs) /\
   well_typed_literal _ _ = F
 End
 
@@ -106,11 +153,12 @@ Definition well_typed_binop_def:
   well_typed_binop ty XOr t1 t2 =
     (t1 = ty /\ t2 = ty /\
      (is_int_type ty \/ is_bool_type ty \/ is_flag_type ty)) /\
-  (* Comparison: same-typed operands, result is bool *)
+  (* Equality: same comparable type (scalar or flag) on both sides *)
   well_typed_binop ty Eq t1 t2 =
-    (t1 = t2 /\ ty = BaseT BoolT) /\
+    (t1 = t2 /\ ty = BaseT BoolT /\ is_comparable_type t1) /\
   well_typed_binop ty NotEq t1 t2 =
-    (t1 = t2 /\ ty = BaseT BoolT) /\
+    (t1 = t2 /\ ty = BaseT BoolT /\ is_comparable_type t1) /\
+  (* Ordering: numeric only (evaluate_binop accepts IntV/DecimalV) *)
   well_typed_binop ty Lt t1 t2 =
     (t1 = t2 /\ ty = BaseT BoolT /\ is_numeric_type t1) /\
   well_typed_binop ty LtE t1 t2 =
@@ -124,11 +172,17 @@ Definition well_typed_binop_def:
     (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Max t1 t2 =
     (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
-  (* Membership: result is bool, element type matches array element type *)
+  (* Membership: result is bool. evaluate_binop supports two shapes:
+       (a) flag-in-flag: both FlagV of the same flag type
+       (b) value-in-array: t2 is ArrayT t1 _ *)
   well_typed_binop ty In t1 t2 =
-    (ty = BaseT BoolT /\ ?bd. t2 = ArrayT t1 bd) /\
+    (ty = BaseT BoolT /\
+     ((?fid. t1 = FlagT fid /\ t2 = FlagT fid) \/
+      (?bd. t2 = ArrayT t1 bd))) /\
   well_typed_binop ty NotIn t1 t2 =
-    (ty = BaseT BoolT /\ ?bd. t2 = ArrayT t1 bd)
+    (ty = BaseT BoolT /\
+     ((?fid. t1 = FlagT fid /\ t2 = FlagT fid) \/
+      (?bd. t2 = ArrayT t1 bd)))
 End
 
 (* ===== Environment item types ===== *)
@@ -180,13 +234,16 @@ Definition well_typed_builtin_app_def:
     (ts = [ty] /\ is_numeric_type ty) /\
   (* Keccak256: bytes/string -> bytes32 *)
   well_typed_builtin_app ty Keccak256 ts =
-    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_sized_type (HD ts)) /\
+    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\
+     is_bytes_or_string_type (HD ts)) /\
   (* AsWeiValue: numeric -> uint256 *)
   well_typed_builtin_app ty (AsWeiValue _) ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_numeric_type (HD ts)) /\
   (* Concat: 2+ bytes/string args -> bytes/string.
      Argument types must be consistent with result type:
-     all BytesT for bytes result, all StringT for string result. *)
+     all BytesT for bytes result, all StringT for string result.
+     NOTE: bound n is not related to the sum of argument bounds here;
+     runtime bound checking is performed by evaluate_concat. *)
   well_typed_builtin_app ty (Concat n) ts =
     (2 <= LENGTH ts /\
      ((ty = BaseT (BytesT (Dynamic n)) /\
@@ -194,22 +251,32 @@ Definition well_typed_builtin_app_def:
       (ty = BaseT (StringT n) /\
        EVERY (\t. ?m. t = BaseT (StringT m)) ts))) /\
   (* Slice: source, start, length -> bytes/string.
-     First arg type must be consistent with result type. *)
+     First arg type must be consistent with result type.
+     Start and length are uint256 (evaluate_slice uses dest_NumV which
+     rejects negatives; Vyper restricts these to uint256). *)
   well_typed_builtin_app ty (Slice n) ts =
     (LENGTH ts = 3 /\
-     is_int_type (EL 1 ts) /\ is_int_type (EL 2 ts) /\
+     EL 1 ts = BaseT (UintT 256) /\ EL 2 ts = BaseT (UintT 256) /\
      ((ty = BaseT (BytesT (Dynamic n)) /\
        ?bd. HD ts = BaseT (BytesT bd)) \/
       (ty = BaseT (StringT n) /\
        ?m. HD ts = BaseT (StringT m)))) /\
-  (* Uint2Str: uint -> string *)
+  (* Uint2Str: uint -> string. The bound n = ceil(log10(2**256)) = 78
+     digits suffices for uint256; narrower uints need fewer. Argument
+     must be unsigned: evaluate_builtin passes Num i to
+     num_to_dec_string, which silently yields 0 for negative inputs. *)
   well_typed_builtin_app ty (Uint2Str n) ts =
     (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\
-     is_int_type (HD ts) /\ 78 <= n) /\
-  (* MakeArray: disabled — for NONE case, TupleT component types are
-     not connected to argument types in the current typing scheme.
-     For SOME case, all elements must have the same type but
-     well_typed_builtin_app doesn't constrain this. *)
+     (?k. HD ts = BaseT (UintT k)) /\ 78 <= n) /\
+  (* MakeArray: deliberately typed as F in this predicate.
+     Rationale: MakeArray constructs either a TupleV (for tuples) or an
+     ArrayV (for arrays). For the tuple case the constructed type
+     TupleT ts has element types that aren't individually constrained
+     against argument types by this predicate; for the array case all
+     elements must have the same element type, which is also not
+     expressible here without extra structure. Programs using
+     make_array therefore fall outside the well-typed fragment and
+     are not covered by the current soundness statement. *)
   well_typed_builtin_app ty (MakeArray type_opt bd) ts = F /\
   (* Ceil/Floor: decimal -> int256 (Vyper: floor/ceil always return int256) *)
   well_typed_builtin_app ty Ceil ts =
@@ -235,29 +302,40 @@ Definition well_typed_builtin_app_def:
   (* Env: no args, return type depends on item *)
   well_typed_builtin_app ty (Env item) ts =
     (ts = [] /\ ty = env_item_type item) /\
-  (* Acc: disabled — account fields (balance, code length) are unbounded
-     in the HOL model. Proving typing would require threading an
-     accounts_well_typed invariant through all 56 induction cases.
-     See LEARNINGS for details. *)
+  (* Acc: deliberately typed as F in this predicate.
+     Rationale: account fields (balance, codesize, etc.) can take any
+     value up to 2**256 in the HOL model of the state; proving
+     value_has_type for those results would require a global
+     accounts_well_typed invariant threaded through the entire
+     soundness proof. Programs using account builtins therefore fall
+     outside the well-typed fragment covered by this predicate. *)
   well_typed_builtin_app ty (Acc item) ts = F /\
   (* Isqrt: uint256 -> uint256 *)
   well_typed_builtin_app ty Isqrt ts =
     (ts = [BaseT (UintT 256)] /\
      ty = BaseT (UintT 256)) /\
-  (* MethodId: string/bytes -> bytes4 *)
+  (* MethodId: bytes/string -> bytes4 *)
   well_typed_builtin_app ty MethodId ts =
-    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 4))) /\
-  (* EC operations — first arg is bytes32, rest are int or bytes *)
+    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 4)) /\
+     is_bytes_or_string_type (HD ts)) /\
+  (* ecrecover(hash, v, r, s) -> address.
+     evaluate_ecrecover accepts each of v, r, s as either a uint256 or
+     a 32-byte value (see ecrecover_arg_to_num), and the hash must be
+     a 32-byte value. *)
   well_typed_builtin_app ty ECRecover ts =
     (LENGTH ts = 4 /\ ty = BaseT AddressT /\
      HD ts = BaseT (BytesT (Fixed 32)) /\
-     EVERY (\t. is_int_type t \/ ?bd. t = BaseT (BytesT bd)) (TL ts)) /\
+     EVERY (\t. t = BaseT (UintT 256) \/
+                t = BaseT (BytesT (Fixed 32))) (TL ts)) /\
   well_typed_builtin_app ty ECAdd ts =
     (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
      EVERY (\t. t = ArrayT (BaseT (UintT 256)) (Fixed 2)) ts) /\
+  (* ECMul: point * scalar -> point. First arg is a point (2-element array
+     of uint256), second arg is an integer scalar. *)
   well_typed_builtin_app ty ECMul ts =
     (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-     EVERY (\t. t = ArrayT (BaseT (UintT 256)) (Fixed 2)) ts) /\
+     EL 0 ts = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+     is_int_type (EL 1 ts)) /\
   (* PowMod256: 2x uint256 -> uint256 *)
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\
@@ -267,7 +345,8 @@ Definition well_typed_builtin_app_def:
     (ts = [ty] /\ is_numeric_type ty) /\
   (* Sha256: bytes/string -> bytes32 *)
   well_typed_builtin_app ty Sha256 ts =
-    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_sized_type (HD ts))
+    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\
+     is_bytes_or_string_type (HD ts))
 End
 
 (* ===== Type well-formedness ===== *)
@@ -277,18 +356,34 @@ Definition well_formed_type_def:
 End
 
 (* ===== Subscript typing ===== *)
-
+(* Subscripting is defined for:
+   - ArrayT: integer index yields element type
+   - TupleT: integer index; since the index may be a runtime value, we
+             cannot statically determine which element is accessed.
+             Therefore, all tuple elements must have the same type.
+             This is a conservative restriction: programs that subscript
+             heterogeneous tuples with constant indices (where the compiler
+             could determine the exact element type) fall outside the
+             well-typed fragment defined here.
+   Other types (BaseT, StructT, FlagT, NoneT) are not subscriptable;
+   struct field access uses Attribute, not Subscript. *)
 Definition subscript_type_ok_def:
   subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
     (result_ty = elem_ty /\ is_int_type idx_ty) /\
   subscript_type_ok (TupleT ts) idx_ty result_ty =
     (is_int_type idx_ty /\ ts <> [] /\ EVERY ($= result_ty) ts) /\
-  subscript_type_ok _ _ _ = F
+  (* Explicitly list unsupported types for clarity (no catch-all) *)
+  subscript_type_ok (BaseT _) _ _ = F /\
+  subscript_type_ok (StructT _) _ _ = F /\
+  subscript_type_ok (FlagT _) _ _ = F /\
+  subscript_type_ok NoneT _ _ = F
 End
 
 (* ===== Attribute typing ===== *)
-
-(* Check struct has field with expected type *)
+(* Attribute access is defined only for struct types: looks up the field
+   in the struct's declared fields and returns its type.
+   Other types (BaseT, TupleT, ArrayT, FlagT, NoneT) do not support
+   attribute access via this predicate. *)
 Definition attribute_type_ok_def:
   attribute_type_ok tenv (StructT sname) field_id result_ty =
     (case FLOOKUP tenv (string_to_num sname) of
@@ -297,7 +392,11 @@ Definition attribute_type_ok_def:
             SOME field_ty => result_ty = field_ty
           | NONE => F)
      | _ => F) /\
-  attribute_type_ok _ _ _ _ = F
+  attribute_type_ok _ (BaseT _) _ _ = F /\
+  attribute_type_ok _ (TupleT _) _ _ = F /\
+  attribute_type_ok _ (ArrayT _ _) _ _ = F /\
+  attribute_type_ok _ (FlagT _) _ _ = F /\
+  attribute_type_ok _ NoneT _ _ = F
 End
 
 (* ===== Runtime type invariant ===== *)
@@ -329,28 +428,39 @@ Definition state_well_typed_def:
     EVERY (λ(addr, mods). imms_well_typed mods) st.immutables
 End
 
+(* fn_sig: function signature for IntCall typing.
+   param_types: types of all parameters (from MAP SND args)
+   num_defaults: number of parameters with default values
+   ret_ty: declared return type *)
+Datatype:
+  fn_sig = <| param_types : type list;
+              num_defaults : num;
+              ret_ty : type |>
+End
+
 Datatype:
   typing_env = <|
     var_types : (num |-> type);
     global_types : (num |-> type);
     toplevel_types : ((num option # num) |-> type);
     type_defs : (num |-> type_args);
-    fn_sigs : ((num option # string) |-> (type list # type));
+    fn_sigs : ((num option # string) |-> fn_sig);
     flag_members : ((num option # string) |-> string list);
   |>
 End
 
 (* fn_sigs_consistent: for any function signature in fn_sigs,
-   the runtime lookup agrees *)
+   the runtime lookup agrees on param types, default count, and return type *)
 Definition fn_sigs_consistent_def:
   fn_sigs_consistent fn_sigs cx <=>
-    !src_id_opt fn param_types ret_ty.
-      FLOOKUP fn_sigs (src_id_opt, fn) = SOME (param_types, ret_ty) ==>
+    !src_id_opt fn sig.
+      FLOOKUP fn_sigs (src_id_opt, fn) = SOME sig ==>
       ?ts fm nr params dflts body.
         get_module_code cx src_id_opt = SOME ts /\
         lookup_callable_function cx.in_deploy fn ts =
-          SOME (fm, nr, params, dflts, ret_ty, body) /\
-        param_types = MAP SND params
+          SOME (fm, nr, params, dflts, sig.ret_ty, body) /\
+        sig.param_types = MAP SND params /\
+        sig.num_defaults = LENGTH dflts
 End
 
 (* env_consistent: typing env matches runtime state *)
@@ -399,6 +509,36 @@ End
 
 (* ===== well_typed_expr: state-independent AST annotation consistency ===== *)
 
+(* TypeBuiltin argument typing: each type builtin has specific argument
+   requirements. This predicate checks argument count and types.
+   - Empty: no arguments (creates default value of the type)
+   - MaxValue/MinValue: no arguments (returns max/min for numeric types)
+   - Epsilon: no arguments (returns smallest decimal increment)
+   - Convert: one argument (the value to convert)
+   - Extract32: two arguments (bytes source, uint256 index)
+   - AbiDecode: one argument (bytes to decode)
+   Note: AbiEncode is excluded from well_typed_expr entirely. *)
+Definition well_typed_type_builtin_args_def:
+  well_typed_type_builtin_args Empty target_ty ts = (ts = []) /\
+  well_typed_type_builtin_args MaxValue target_ty ts =
+    (ts = [] /\ is_numeric_type target_ty) /\
+  well_typed_type_builtin_args MinValue target_ty ts =
+    (ts = [] /\ is_numeric_type target_ty) /\
+  well_typed_type_builtin_args Epsilon target_ty ts =
+    (ts = [] /\ target_ty = BaseT DecimalT) /\
+  well_typed_type_builtin_args Convert target_ty ts =
+    (LENGTH ts = 1) /\
+  well_typed_type_builtin_args Extract32 target_ty ts =
+    (LENGTH ts = 2 /\
+     (?bd. EL 0 ts = BaseT (BytesT bd)) /\
+     is_int_type (EL 1 ts) /\
+     (?bt. target_ty = BaseT bt)) /\
+  well_typed_type_builtin_args (AbiDecode _) target_ty ts =
+    (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
+  (* AbiEncode should never reach here - excluded at well_typed_expr level *)
+  well_typed_type_builtin_args (AbiEncode _) _ _ = F
+End
+
 (* Return type of raw_call depends on flags *)
 Definition raw_call_return_type_def:
   raw_call_return_type flags =
@@ -433,44 +573,64 @@ Definition well_typed_expr_def:
      well_typed_expr env e1 /\
      well_typed_expr env e2 /\
      expr_type cond = BaseT BoolT /\
-     expr_type e1 = ty /\ expr_type e2 = ty) /\
+     expr_type e1 = ty /\ expr_type e2 = ty /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (Literal ty l) =
     (well_typed_literal ty l /\
      well_formed_type env.type_defs ty) /\
-  well_typed_expr env (StructLit ty _ kes) =
+  (* StructLit: the annotated type must be StructT id, its declaration
+     in type_defs must have fields matching the named expression list
+     (in order), and each value expression has the declared field type. *)
+  well_typed_expr env (StructLit ty nsid kes) =
     (well_typed_named_exprs env kes /\
-     is_struct_type ty /\
      well_formed_type env.type_defs ty /\
-     ?id args. ty = StructT id /\
+     ?id args. ty = StructT id /\ SND nsid = id /\
             FLOOKUP env.type_defs (string_to_num id) = SOME (StructArgs args) /\
             MAP FST kes = MAP FST args /\
             MAP (expr_type o SND) kes = MAP SND args) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e1 /\
      well_typed_expr env e2 /\
-     subscript_type_ok (expr_type e1) (expr_type e2) ty) /\
+     subscript_type_ok (expr_type e1) (expr_type e2) ty /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (Attribute ty e id) =
     (well_typed_expr env e /\
-     attribute_type_ok env.type_defs (expr_type e) id ty) /\
+     attribute_type_ok env.type_defs (expr_type e) id ty /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\
      well_typed_builtin_app ty blt (MAP expr_type es) /\
      well_formed_type env.type_defs ty) /\
+  (* TypeBuiltin: a builtin that takes a type argument.
+     For Empty/MaxValue/MinValue/Convert/Epsilon/Extract32/AbiDecode
+     the result has type target_ty (up to the unwrap special case in
+     AbiDecode, which the frontend avoids when using the expr-level
+     type annotation).
+     AbiEncode always returns bytes, so it doesn't fit the ty = target_ty
+     pattern; it is excluded here and falls outside the covered fragment. *)
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\
      ty = target_ty /\
      (!b. tb <> AbiEncode b) /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\
+     well_formed_type env.type_defs target_ty /\
+     well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
     (?bd. well_typed_target env tgt (ArrayT ty bd)) /\
+  (* IntCall: internal function call. Argument count must be in the range
+     [LENGTH param_types - num_defaults, LENGTH param_types], and the
+     provided argument types must match the first LENGTH args param types.
+     The return type annotation must match the function's declared return. *)
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\
      well_typed_opt env drv /\
      well_formed_type env.type_defs ty /\
-     ?param_types ret_ty.
-       FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME (param_types, ret_ty) /\
-       ty = ret_ty /\
-       MAP expr_type args = TAKE (LENGTH args) param_types) /\
+     ?sig.
+       FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
+       ty = sig.ret_ty /\
+       LENGTH args <= LENGTH sig.param_types /\
+       LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
+       MAP expr_type args = TAKE (LENGTH args) sig.param_types) /\
   well_typed_expr env (Call ty (ExtCall _ (_, arg_types, ret_ty)) args drv) =
     (well_typed_exprs env args /\
      well_typed_opt env drv /\
@@ -478,47 +638,55 @@ Definition well_typed_expr_def:
      ty = ret_ty /\
      MAP expr_type args = arg_types /\
      (!e. drv = SOME e ==> expr_type e = ret_ty)) /\
+  (* send(to, value): transfers ether. drv is unused (send always succeeds
+     or reverts); value must be uint256 (dest_NumV rejects negatives). *)
   well_typed_expr env (Call ty Send args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
+     drv = NONE /\
      LENGTH args = 2 /\ ty = NoneT /\
      HD (MAP expr_type args) = BaseT AddressT /\
-     is_int_type (EL 1 (MAP expr_type args))) /\
-  (* Chain interaction builtins — constrained return types *)
+     EL 1 (MAP expr_type args) = BaseT (UintT 256)) /\
+  (* raw_call(to, data, value): value is uint256. *)
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
+     drv = NONE /\
      ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
      LENGTH args = 3 /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     ?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd) /\
-     is_int_type (EL 2 (MAP expr_type args))) /\
+     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
+     EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
+  (* raw_log(topics, data): topics is array of bytes32, data is bytes. *)
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
+     drv = NONE /\
      ty = NoneT /\
      LENGTH args = 2 /\
-     ?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-     ?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd')) /\
+     (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd) /\
+     (?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd'))) /\
+  (* raw_revert(data): terminates execution, never returns.
+     The type annotation is NoneT for consistency. *)
   well_typed_expr env (Call ty RawRevert args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
+     drv = NONE /\
+     ty = NoneT /\
      LENGTH args = 1 /\
-     ?bd. HD (MAP expr_type args) = BaseT (BytesT bd)) /\
+     (?bd. HD (MAP expr_type args) = BaseT (BytesT bd))) /\
+  (* selfdestruct(to): terminates execution, no drv. *)
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
+     drv = NONE /\
      ty = NoneT /\
      LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
+  (* create_*(target, ...ctor_args, value): value is uint256. *)
   well_typed_expr env (Call ty (CreateTarget kind rof) args drv) =
     (well_typed_exprs env args /\
-     well_typed_opt env drv /\
+     drv = NONE /\
      ty = BaseT AddressT /\
      LENGTH args >= 2 /\
      HD (MAP expr_type args) = BaseT AddressT /\
-     is_int_type (LAST (MAP expr_type args))) /\
+     LAST (MAP expr_type args) = BaseT (UintT 256)) /\
   well_typed_target env (NameTarget id) ty =
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
   well_typed_target env (BareGlobalNameTarget id) ty =
@@ -596,8 +764,10 @@ Definition well_typed_stmt_def:
     (well_typed_expr env e /\ expr_type e = ret_ty) /\
   well_typed_stmt env ret_ty (Raise RaiseBare) = T /\
   well_typed_stmt env ret_ty (Raise RaiseUnreachable) = T /\
+  (* RaiseReason: the reason expression must be a string *)
   well_typed_stmt env ret_ty (Raise (RaiseReason e)) =
-    well_typed_expr env e /\
+    (well_typed_expr env e /\
+     ?n. expr_type e = BaseT (StringT n)) /\
   well_typed_stmt env ret_ty (Assert e AssertBare) =
     (well_typed_expr env e /\
      expr_type e = BaseT BoolT) /\
@@ -653,79 +823,73 @@ Termination
 End
 
 (* ===== functions_well_typed: all callable functions are well-typed ===== *)
-(* functions_well_typed: global invariant about callable functions.
- * For every callable function:
- *   - body is well-typed under some env_body
- *   - defaults are well-typed in a minimal env (no local var refs)
- *   - parameters are tracked in env_body.var_types
- *   - return type evaluates successfully
- * Also: the call site's type annotation must match (safe_cast will
- * only produce a satisfies_type result if types match).
- *)
 (* functions_well_typed cx:
- *   For every callable function in the program:
- *   1. There exists a typing env env_body with matching type_defs
- *   2. The return type evaluates to some ret_tv
- *   3. The function body is well-typed under env_body
- *   4. Default values are well-typed (in a minimal env with no local vars)
- *   5. Each parameter is in env_body.var_types
- *   6. env_body.toplevel_types match storage declarations (type matches decl,
- *      and evaluate_type is defined = immutable type annotations are well-formed)
- *   7. env_body.flag_members match module flag declarations
+ *   There exists a single global fn_sigs map (and supporting toplevel_types,
+ *   flag_members) that is consistent with cx, and under which every callable
+ *   function's body is well-typed.
  *
- *   The call site's type annotation ty must match the function's declared
- *   return type ret — this is ensured by the Vyper compiler frontend.
+ *   For every callable function:
+ *   1. If nonreentrant, cx has a nonreentrant slot
+ *   2. There exists a typing env env_body with matching type_defs
+ *   3. The return type evaluates successfully
+ *   4. The function body is well-typed under env_body
+ *   5. Default values are well-typed (in a minimal env with no local var refs)
+ *   6. Each parameter is tracked in env_body.var_types
+ *   7. env_body.toplevel_types match storage declarations
+ *   8. env_body.flag_members match module flag declarations
  *)
 Definition functions_well_typed_def:
   functions_well_typed cx <=>
-    !src_id_opt fn ts fm nr args dflts ret body fn_sigs.
-      get_module_code cx src_id_opt = SOME ts /\
-      lookup_callable_function cx.in_deploy fn ts =
-        SOME (fm, nr, args, dflts, ret, body) /\
-      fn_sigs_consistent fn_sigs cx ==>
-      (nr ==> cx.nonreentrant_slot <> NONE) /\
-      ?env_body ret_tv.
-        env_body.type_defs = get_tenv cx /\
-        env_body.fn_sigs = fn_sigs /\
-        env_body.global_types = FEMPTY /\
-        (* toplevel_types: match storage decls + immutable type consistency *)
-        (!src id ty ts'.
-           FLOOKUP env_body.toplevel_types (src, id) = SOME ty /\
-           get_module_code cx src = SOME ts' ==>
-           (!is_transient typ id_str.
-              find_var_decl_by_num id ts' =
-                SOME (StorageVarDecl is_transient typ, id_str) ==>
-              typ = ty) /\
-           (!is_transient kt vt id_str.
-              find_var_decl_by_num id ts' =
-                SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
-              ty = NoneT) /\
-           (find_var_decl_by_num id ts' = NONE ==>
-            !tv v imms.
-              FLOOKUP (get_source_immutables src
-                (case ALOOKUP imms cx.txn.target of
-                   NONE => [] | SOME m => m)) id = SOME (tv, v) ==>
-              evaluate_type (get_tenv cx) ty = SOME tv)) /\
-        (* flag_members: match module flag declarations *)
-        (!src fid ls.
-           FLOOKUP env_body.flag_members (src, fid) = SOME ls ==>
-           ?ts'. get_module_code cx src = SOME ts' /\
-                 lookup_flag fid ts' = SOME ls /\
-                 FLOOKUP (get_tenv cx) (string_to_num fid) =
-                   SOME (FlagArgs (LENGTH ls))) /\
-        evaluate_type (get_tenv cx) ret = SOME ret_tv /\
-        well_typed_stmts env_body ret body /\
-        well_typed_exprs
-          <| var_types := FEMPTY;
-             global_types := FEMPTY;
-             toplevel_types := FEMPTY;
-             type_defs := get_tenv cx;
-             fn_sigs := FEMPTY;
-             flag_members := FEMPTY |> dflts /\
-        (!id typ. MEM (id, typ) args ==>
-           FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
-        MAP expr_type dflts =
-          MAP SND (DROP (LENGTH args - LENGTH dflts) args)
+    ?fn_sigs toplevel_types flag_members.
+      fn_sigs_consistent fn_sigs cx /\
+      !src_id_opt fn ts fm nr args dflts ret body.
+        get_module_code cx src_id_opt = SOME ts /\
+        lookup_callable_function cx.in_deploy fn ts =
+          SOME (fm, nr, args, dflts, ret, body) ==>
+        (nr ==> cx.nonreentrant_slot <> NONE) /\
+        ?env_body ret_tv.
+          env_body.type_defs = get_tenv cx /\
+          env_body.fn_sigs = fn_sigs /\
+          env_body.global_types = FEMPTY /\
+          env_body.toplevel_types = toplevel_types /\
+          env_body.flag_members = flag_members /\
+          (* toplevel_types: match storage decls + immutable type consistency *)
+          (!src id ty ts'.
+             FLOOKUP toplevel_types (src, id) = SOME ty /\
+             get_module_code cx src = SOME ts' ==>
+             (!is_transient typ id_str.
+                find_var_decl_by_num id ts' =
+                  SOME (StorageVarDecl is_transient typ, id_str) ==>
+                typ = ty) /\
+             (!is_transient kt vt id_str.
+                find_var_decl_by_num id ts' =
+                  SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
+                ty = NoneT) /\
+             (* Immutable case: note we don't have st here, so we
+                require that evaluate_type is defined for the declared
+                type. The runtime consistency check is in env_consistent. *)
+             (find_var_decl_by_num id ts' = NONE ==>
+              IS_SOME (evaluate_type (get_tenv cx) ty))) /\
+          (* flag_members: match module flag declarations *)
+          (!src fid ls.
+             FLOOKUP flag_members (src, fid) = SOME ls ==>
+             ?ts'. get_module_code cx src = SOME ts' /\
+                   lookup_flag fid ts' = SOME ls /\
+                   FLOOKUP (get_tenv cx) (string_to_num fid) =
+                     SOME (FlagArgs (LENGTH ls))) /\
+          evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+          well_typed_stmts env_body ret body /\
+          well_typed_exprs
+            <| var_types := FEMPTY;
+               global_types := FEMPTY;
+               toplevel_types := FEMPTY;
+               type_defs := get_tenv cx;
+               fn_sigs := FEMPTY;
+               flag_members := FEMPTY |> dflts /\
+          (!id typ. MEM (id, typ) args ==>
+             FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
+          MAP expr_type dflts =
+            MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
 (* ===== context_well_typed: transaction fields fit declared types ===== *)
@@ -754,6 +918,12 @@ End
 
 (* Separate predicate: call site type annotations match function return types *)
 
+(* loc_type: runtime type of a target location.
+   Used to connect well_typed_target to the runtime state.
+   TopLevelVar is explicitly F because top-level storage variables don't
+   have a fixed type_value in the scope — their types come from
+   toplevel_types in the typing env (see eval_base_target_type_connection
+   in vyperTypeSoundnessHelpersScript). *)
 Definition loc_type_def:
   loc_type cx st (ScopedVar s) tv =
     (?entry. lookup_scopes (string_to_num s) st.scopes = SOME entry /\
