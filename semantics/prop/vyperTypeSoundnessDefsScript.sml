@@ -357,18 +357,34 @@ End
 (* ===== Subscript typing ===== *)
 (* Subscripting is defined for:
    - ArrayT: integer index yields element type
-   - TupleT: integer index; since the index may be a runtime value, we
-             cannot statically determine which element is accessed.
-             Therefore, all tuple elements must have the same type.
-             This is a conservative restriction: programs that subscript
-             heterogeneous tuples with constant indices (where the compiler
-             could determine the exact element type) fall outside the
-             well-typed fragment defined here.
+   - TupleT: LIMITATION — currently requires homogeneous tuples (all elements
+             same type). This is overly restrictive.
+
+     In real Vyper, tuples can be heterogeneous (e.g., (uint256, bool, address))
+     but subscripting is only allowed with CONSTANT indices. The Vyper compiler
+     statically resolves t[0], t[1], etc. to the correct element type at compile
+     time. Variable indices like t[i] are rejected by the compiler.
+
+     The Vyper compiler already provides the correct result type in the AST's
+     Subscript node (the first 'type' field). A proper fix would be:
+
+     TODO: Add a new AST node for tuple element access with explicit constant index:
+       | TupleElement type expr num   (* result_type, tuple_expr, constant_index *)
+
+     The frontend (jsonToVyperScript.sml) would generate TupleElement instead of
+     Subscript when the base is a tuple type and index is a literal. The type rule
+     would then check: n < LENGTH ts /\ EL n ts = result_ty.
+
+     For now, programs subscripting heterogeneous tuples fall outside the
+     well-typed fragment. Tuple unpacking (via TupleTarget in assignments)
+     still works for heterogeneous tuples.
+
    Other types (BaseT, StructT, FlagT, NoneT) are not subscriptable;
    struct field access uses Attribute, not Subscript. *)
 Definition subscript_type_ok_def:
   subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
     (result_ty = elem_ty /\ is_int_type idx_ty) /\
+  (* TODO: Support heterogeneous tuples via TupleElement AST node (see above) *)
   subscript_type_ok (TupleT ts) idx_ty result_ty =
     (is_int_type idx_ty /\ ts <> [] /\ EVERY ($= result_ty) ts) /\
   (* Explicitly list unsupported types for clarity (no catch-all) *)
@@ -508,12 +524,74 @@ End
 
 (* ===== well_typed_expr: state-independent AST annotation consistency ===== *)
 
+(* ===== Valid type conversions =====
+   Enumerates all valid (source_type, target_type) pairs for convert().
+   Based on evaluate_convert_def in vyperValueOperationScript.sml.
+
+   Conversions fall into these categories:
+   - To bool: bytes/int → bool (non-zero check)
+   - From bool: bool → int/uint
+   - Bytes resizing: bytes → bytes (fixed or dynamic)
+   - Bytes to numeric: bytes → int/uint
+   - Numeric resizing: int/uint → int/uint (with bounds check at runtime)
+   - Int to address: int → address (160-bit)
+   - Flag conversions: flag ↔ int/uint
+   - Int to bytes: int → bytes (fixed or dynamic)
+   - String/bytes: bytes ↔ string
+   - Decimal: int ↔ decimal
+*)
+Definition valid_conversion_def:
+  (* To bool *)
+  valid_conversion (BaseT (BytesT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (UintT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
+  (* From bool *)
+  valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
+  (* Bytes resizing *)
+  valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
+  (* Bytes to numeric *)
+  valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
+  (* Numeric resizing *)
+  valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT (IntT _)) (BaseT (IntT _)) = T /\
+  (* Int to address *)
+  valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
+  (* Flag to int/uint *)
+  valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
+  valid_conversion (FlagT _) (BaseT (UintT _)) = T /\
+  (* Int/uint to flag *)
+  valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
+  valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
+  (* Int to bytes *)
+  valid_conversion (BaseT (UintT _)) (BaseT (BytesT _)) = T /\
+  valid_conversion (BaseT (IntT _)) (BaseT (BytesT _)) = T /\
+  (* Bytes to string *)
+  valid_conversion (BaseT (BytesT _)) (BaseT (StringT _)) = T /\
+  (* String resizing *)
+  valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
+  (* String to bytes *)
+  valid_conversion (BaseT (StringT _)) (BaseT (BytesT _)) = T /\
+  (* Int to decimal *)
+  valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (IntT _)) (BaseT DecimalT) = T /\
+  (* Decimal to int/uint *)
+  valid_conversion (BaseT DecimalT) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT DecimalT) (BaseT (UintT _)) = T /\
+  (* All other conversions are invalid *)
+  valid_conversion _ _ = F
+End
+
 (* TypeBuiltin argument typing: each type builtin has specific argument
    requirements. This predicate checks argument count and types.
    - Empty: no arguments (creates default value of the type)
    - MaxValue/MinValue: no arguments (returns max/min for numeric types)
    - Epsilon: no arguments (returns smallest decimal increment)
-   - Convert: one argument (the value to convert)
+   - Convert: one argument, must be a valid conversion pair
    - Extract32: two arguments (bytes source, uint256 index)
    - AbiDecode: one argument (bytes to decode)
    - AbiEncode: one or more arguments, target_ty = TupleT of arg types *)
@@ -526,7 +604,7 @@ Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Epsilon target_ty ts =
     (ts = [] /\ target_ty = BaseT DecimalT) /\
   well_typed_type_builtin_args Convert target_ty ts =
-    (LENGTH ts = 1) /\
+    (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
     (LENGTH ts = 2 /\
      (?bd. EL 0 ts = BaseT (BytesT bd)) /\
