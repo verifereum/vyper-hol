@@ -307,7 +307,7 @@ Definition well_typed_builtin_app_def:
      added to the global preconditions. *)
   well_typed_builtin_app ty (Acc item) ts =
     (LENGTH ts = 1 /\
-     (?bd. HD ts = BaseT (BytesT bd)) /\
+     HD ts = BaseT AddressT /\
      ty = account_item_type item) /\
   (* Isqrt: uint256 -> uint256 *)
   well_typed_builtin_app ty Isqrt ts =
