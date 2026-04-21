@@ -1,19 +1,29 @@
 (*
  * Dead Store Elimination — Proofs
  *
- * The corrected theorems (dse_function_space_correct_proof and
- * dse_function_correct_proof) add bp_ptrs_bounded and fix bp
- * to bp_analyze, preventing cross-allocation pointer arithmetic.
+ * Corrected theorems with complete precondition sets:
+ *   - alloca_inv s: alloca regions are non-overlapping (runtime invariant)
+ *   - bp_ptrs_bounded bp fn s: analysis-identified alloca accesses
+ *     stay within their allocation bounds (analysis-to-runtime bridge)
+ *   - bp_ptr_sound bp s: analysis-computed addresses match runtime (Thm2)
+ *
+ * This matches the MCE pattern (alloca_inv + bp_ptrs_bounded +
+ * bp_ptr_sound). The three together ensure that if may_overlap says
+ * two alloca-backed accesses don't alias (different allocations),
+ * they genuinely don't overlap at runtime.
  *
  * The ORIGINAL frozen theorems are FALSE: formal counterexamples
  * (_FALSE theorems below) show that pointer arithmetic (ADD) across
  * adjacent ALLOCA regions can cause bp_analyze to miss aliasing.
- * The original Thm2 also had a vacuously-quantified bp.
+ * The original Thm1 lacked bp_ptrs_bounded entirely; Thm2 had a
+ * vacuously-quantified bp (FEMPTY trivially satisfies bp_ptr_sound/
+ * bp_ptrs_bounded).
  *
- * Fix: Use bp_analyze (cfg_analyze fn) fn for bp, add
- *   bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s.
- *   bp_ptrs_bounded's memloc_within_alloca prevents pointers from
- *   exceeding their allocation bounds, blocking cross-allocation aliasing.
+ * Neither alloca_inv nor alloca_safe_access can replace
+ * bp_ptrs_bounded: the counterexample satisfies both (ptr1_adj=32
+ * falls within Allocation 1's bounds), but bp_ptrs_bounded correctly
+ * fails because the analysis says ptr1_adj is in Allocation 0 (offset
+ * 32 exceeds Allocation 0's size of 32).
  *)
 
 Theory deadStoreElimProofs
@@ -731,11 +741,18 @@ QED
 
 (* Per-space DSE preserves dse_equiv: eliminating dead stores for one address
    space preserves all observable state except possibly the target space's
-   memory/storage/transient, provided bp_ptrs_bounded guarantees that
-   alloca-backed pointers stay within their allocation bounds
-   (preventing cross-allocation aliasing). *)
+   memory/storage/transient.
+
+   Precondition chain:
+   alloca_inv s: alloca regions are non-overlapping → different allocas
+                  don't share bytes at runtime
+   bp_ptrs_bounded: alloca-backed accesses stay within their
+                     analysis-identified allocation → if may_overlap
+                     says two accesses are in different allocations, they
+                     genuinely don't overlap at runtime *)
 Theorem dse_function_space_correct_proof:
   !analysis_fn space fuel ctx fn s.
+    alloca_inv s /\
     bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
     (!fn'. all_dead_stores (analysis_fn space fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
@@ -778,11 +795,18 @@ QED
 
 (* Full DSE (all three spaces) preserves dse_all_equiv: sequentially
    eliminating dead stores for Memory, Storage, and Transient preserves
-   all variables, logs, return data, and control flow. Uses the analysis
-   result bp_analyze for bp, with bp_ptr_sound and bp_ptrs_bounded
-   preconditions to prevent cross-allocation pointer aliasing. *)
+   all variables, logs, return data, and control flow.
+
+   Precondition chain (matches MCE pattern):
+   alloca_inv s: alloca regions are non-overlapping
+   bp_ptr_sound bp s: analysis-computed addresses match runtime
+   bp_ptrs_bounded bp fn s: alloca-backed accesses stay within
+                            their analysis-identified allocation
+   Together: if may_overlap says two accesses in different allocations
+   don't alias, they genuinely don't overlap at runtime. *)
 Theorem dse_function_correct_proof:
   !analysis_fn fuel ctx fn s.
+    alloca_inv s /\
     bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s /\
     bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
     (!space fn'.
