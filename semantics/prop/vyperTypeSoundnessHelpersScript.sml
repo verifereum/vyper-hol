@@ -502,7 +502,11 @@ Theorem functions_well_typed_body:
         MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 Proof
   rw[functions_well_typed_def] >>
-  first_x_assum (qspecl_then [`src_id_opt`,`fn`,`ts`,`fm`,`nr`,`args`,`dflts`,`ret`,`body`] mp_tac) >> simp[] >> strip_tac >> qexists `env_body` >> simp[]
+  first_x_assum (qspecl_then [`FEMPTY`,`FEMPTY`,`FEMPTY`] mp_tac) >>
+  simp[FLOOKUP_EMPTY, fn_sigs_consistent_def] >>
+  disch_then (qspecl_then [`src_id_opt`,`fn`,`ts`,`fm`,`nr`,`args`,`dflts`,`ret`,`body`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists `env_body` >> simp[]
 QED
 
 (* Full version: takes fn_sigs parameter (needed for IntCall where body can
@@ -559,6 +563,7 @@ Theorem functions_well_typed_body_full:
                FLOOKUP (get_tenv cx) (string_to_num fid) =
                  SOME (FlagArgs (LENGTH ls)))
 Proof
+  rw[functions_well_typed_def] >>
   cheat
 QED
 
@@ -3853,71 +3858,6 @@ Proof
   Cases >> simp[is_HashMapRef_def, toplevel_value_typed_def]
 QED
 
-Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
-  !env e cx st tv st'. well_typed_expr env e /\ expr_type e = NoneT /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
-Proof
-  qx_gen_tac `env` >>
-  Induct_on `e` >> rpt strip_tac >>
-  fs[expr_type_def] >>
-  Cases_on `tv` >> gvs[is_HashMapRef_def] >>
-  (* Vacuous cases: well_typed_expr with NoneT is False *)
-  TRY (PairCases_on `p` >> gvs[well_typed_expr_def] >> NO_TAC) >>
-  TRY (Cases_on `s` >> gvs[well_typed_expr_def] >> NO_TAC) >>
-  TRY (gvs[well_typed_expr_def] >> NO_TAC) >>
-  (* Non-vacuous: eval_expr on INL path never returns HashMapRef *)
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >>
-  (* Name, BareGlobalName: direct Value return *)
-  TRY (simp[return_def, bind_def, lift_option_type_def, lookup_scopes_val_def,
-            get_scopes_result, get_immutables_SOME, AllCaseEqs()] >> NO_TAC) >>
-  (* Catch-all for simple cases *)
-  TRY (
-    simp[bind_def, return_def, raise_def, get_Value_def, lift_option_type_def,
-         lift_sum_def, lift_option_def, check_def, type_check_def,
-         ignore_bind_def, AllCaseEqs(), evaluate_literal_def,
-         evaluate_subscript_def, evaluate_attribute_def] >> NO_TAC) >>
-  (* IfExp: switch_BoolV dispatches to sub-expression, use IH *)
-  TRY (
-    simp[bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
-    `well_typed_expr env e' /\ expr_type e' = NoneT` by (
-      fs[well_typed_expr_def]) >>
-    `well_typed_expr env e'' /\ expr_type e'' = NoneT` by (
-      fs[well_typed_expr_def]) >>
-    first_x_assum (irule_at (Pos hd)) >> simp[] >>
-    fs[well_typed_expr_def] >> NO_TAC) >>
-  (* Call: split on call_target *)
-  pop_assum mp_tac >> Cases_on `c` >>
-  simp[Once evaluate_def] >>
-  TRY (gvs[well_typed_expr_def] >> NO_TAC) >>
-  TRY (
-    simp[bind_def, return_def, raise_def, lift_option_type_def,
-         lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
-         ignore_bind_def, AllCaseEqs(), is_HashMapRef_def] >> NO_TAC) >>
-  (* IntCall: expand monad, returns Value crv *)
-  TRY (
-    simp[bind_def, return_def, raise_def, lift_option_type_def,
-         lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
-         ignore_bind_def, AllCaseEqs(), is_HashMapRef_def,
-         evaluate_type_NoneTV_imp_NoneT, evaluate_type_def] >>
-    rpt strip_tac >> gvs[toplevel_value_distinct] >> NO_TAC) >>
-  (* ExtCall: expand monad, return goes through materialise *)
-  TRY (
-    simp[bind_def, return_def, raise_def, lift_option_type_def,
-         lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
-         ignore_bind_def, AllCaseEqs(), is_HashMapRef_def,
-         materialise_def, evaluate_type_NoneTV_imp_NoneT,
-         evaluate_type_def, raw_call_return_type_def] >>
-    rpt strip_tac >> gvs[toplevel_value_distinct] >> NO_TAC) >>
-  (* Remaining: RawCallTarget with nested bind chain *)
-  simp[bind_def, return_def, raise_def, lift_option_type_def,
-       lift_option_def, lift_sum_def, check_def, type_check_def, get_Value_def,
-       ignore_bind_def, AllCaseEqs(), is_HashMapRef_def,
-       evaluate_type_NoneTV_imp_NoneT, evaluate_type_def,
-       raw_call_return_type_def] >>
-  rpt strip_tac >> gvs[toplevel_value_distinct]
-QED
-(* ===== env_consistent toplevel clause extraction ===== *)
-(* Reusable lemmas for TopLevelName, BareGlobalName, etc. *)
 
 Theorem env_consistent_toplevel_storage:
   !env cx st src id ty ts is_transient typ id_str.
@@ -6308,15 +6248,16 @@ QED
    Avoids unification of fresh existentials in Resume blocks. *)
 Theorem fn_sigs_param_types:
   fn_sigs_consistent fn_sigs cx /\
-  FLOOKUP fn_sigs (src_id_opt, fn_name) = SOME (param_types, ret_ty) /\
+  FLOOKUP fn_sigs (src_id_opt, fn_name) = SOME sig /\
   get_module_code cx src_id_opt = SOME ts /\
   lookup_callable_function cx.in_deploy fn_name ts =
     SOME (fm, nr, params, dflts, ret_ty', fn_body) ==>
-  param_types = MAP SND params /\ ret_ty = ret_ty'
+  sig.param_types = MAP SND params /\ sig.ret_ty = ret_ty'
 Proof
   rpt strip_tac >>
   gvs[fn_sigs_consistent_def] >>
-  first_x_assum drule >> strip_tac >> gvs[]
+  first_x_assum (qspecl_then [`src_id_opt`, `fn_name`, `sig`] mp_tac) >>
+  simp[]
 QED
 
 (* Default args types align with param types after explicit args *)
