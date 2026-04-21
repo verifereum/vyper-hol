@@ -290,4 +290,270 @@ Proof
                 all_effects_def, empty_effects_def]
 QED
 
+(* ----------------------------------------------------------------
+   Transient Frame Lemma
+
+   Non-transient instructions produce the same result when
+   vs_transient is replaced.  "Non-transient" means no Eff_TRANSIENT
+   in read_effects or write_effects.
+   ---------------------------------------------------------------- *)
+
+Theorem eval_operand_trans[local,simp]:
+  !op s t. eval_operand op (s with vs_transient := t) = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem eval_operands_trans[local,simp]:
+  !ops s t. eval_operands ops (s with vs_transient := t) =
+            eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rw[] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]
+QED
+
+Theorem update_var_trans[local,simp]:
+  !x v s t. update_var x v (s with vs_transient := t) =
+             (update_var x v s) with vs_transient := t
+Proof
+  simp[update_var_def]
+QED
+
+Theorem sload_trans[local,simp]:
+  !key (s:venom_state) t.
+    sload key (s with vs_transient := t) = sload key s
+Proof
+  simp[sload_def, contract_storage_def]
+QED
+
+Theorem mload_trans[local,simp]:
+  !addr (s:venom_state) t.
+    mload addr (s with vs_transient := t) = mload addr s
+Proof
+  simp[mload_def]
+QED
+
+Theorem sstore_trans[local,simp]:
+  !key val (s:venom_state) t.
+    sstore key val (s with vs_transient := t) =
+    (sstore key val s) with vs_transient := t
+Proof
+  simp[sstore_def, LET_THM, vfmStateTheory.lookup_account_def]
+QED
+
+Theorem mstore_trans[local,simp]:
+  !addr val (s:venom_state) t.
+    mstore addr val (s with vs_transient := t) =
+    (mstore addr val s) with vs_transient := t
+Proof
+  simp[mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem mstore8_trans[local,simp]:
+  !addr val (s:venom_state) t.
+    mstore8 addr val (s with vs_transient := t) =
+    (mstore8 addr val s) with vs_transient := t
+Proof
+  simp[mstore8_def, write_memory_with_expansion_def]
+QED
+
+val trans_frame_tac =
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  fs[update_var_def, vfmStateTheory.lookup_account_def,
+     mstore_def, mstore8_def, sstore_def,
+     write_memory_with_expansion_def, mcopy_def,
+     contract_storage_def];
+
+Theorem step_inst_base_trans_frame:
+  !inst s s' t.
+    step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    Eff_TRANSIENT NOTIN read_effects inst.inst_opcode /\
+    Eff_TRANSIENT NOTIN write_effects inst.inst_opcode
+    ==>
+    step_inst_base inst (s with vs_transient := t) =
+    OK (s' with vs_transient := t)
+Proof
+  trans_frame_tac
+QED
+
+Theorem step_inst_base_trans_error_frame:
+  !inst s e t.
+    step_inst_base inst s = Error e /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    Eff_TRANSIENT NOTIN read_effects inst.inst_opcode /\
+    Eff_TRANSIENT NOTIN write_effects inst.inst_opcode
+    ==>
+    step_inst_base inst (s with vs_transient := t) = Error e
+Proof
+  trans_frame_tac
+QED
+
+(* ----------------------------------------------------------------
+   Account Storage-Only Frame Lemma
+
+   If Eff_STORAGE is NOT in read/write effects, replacing only the
+   .storage field of every account preserves step_inst_base results.
+   Other account fields (nonce, balance, code) are untouched, so
+   BALANCE, SELFBALANCE, EXTCODESIZE, EXTCODECOPY still work.
+   ---------------------------------------------------------------- *)
+
+(* Helper: replace storage in all accounts *)
+Definition replace_account_storage_def:
+  replace_account_storage (new_storage : 160 word -> 256 word -> 256 word) accts =
+    \addr. (accts addr) with storage := new_storage addr
+End
+
+Theorem eval_operand_acct_stor[local,simp]:
+  !op s f. eval_operand op (s with vs_accounts updated_by f) =
+           eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem eval_operands_acct_stor[local,simp]:
+  !ops s f. eval_operands ops (s with vs_accounts updated_by f) =
+            eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rw[] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]
+QED
+
+Theorem update_var_acct_stor[local,simp]:
+  !x v s f. update_var x v (s with vs_accounts updated_by f) =
+             (update_var x v s) with vs_accounts updated_by f
+Proof
+  simp[update_var_def]
+QED
+
+(* balance/code lookups see through storage replacement *)
+Theorem lookup_account_replace_storage_balance:
+  !addr new_st accts.
+    (replace_account_storage new_st accts addr).balance =
+    (accts addr).balance
+Proof
+  simp[replace_account_storage_def]
+QED
+
+Theorem lookup_account_replace_storage_code:
+  !addr new_st accts.
+    (replace_account_storage new_st accts addr).code =
+    (accts addr).code
+Proof
+  simp[replace_account_storage_def]
+QED
+
+Theorem lookup_account_replace_storage_nonce:
+  !addr new_st accts.
+    (replace_account_storage new_st accts addr).nonce =
+    (accts addr).nonce
+Proof
+  simp[replace_account_storage_def]
+QED
+
+(* mload/sload don't depend on vs_accounts at all *)
+Theorem mload_acct[local,simp]:
+  !addr (s:venom_state) f. mload addr (s with vs_accounts updated_by f) = mload addr s
+Proof
+  simp[mload_def]
+QED
+
+(* tload doesn't depend on vs_accounts *)
+Theorem tload_acct[local,simp]:
+  !key (s:venom_state) f. tload key (s with vs_accounts updated_by f) = tload key s
+Proof
+  simp[tload_def, contract_transient_def]
+QED
+
+(* mstore/mstore8 don't change vs_accounts *)
+Theorem mstore_acct[local,simp]:
+  !addr val (s:venom_state) f.
+    mstore addr val (s with vs_accounts updated_by f) =
+    (mstore addr val s) with vs_accounts updated_by f
+Proof
+  simp[mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem mstore8_acct[local,simp]:
+  !addr val (s:venom_state) f.
+    mstore8 addr val (s with vs_accounts updated_by f) =
+    (mstore8 addr val s) with vs_accounts updated_by f
+Proof
+  simp[mstore8_def, write_memory_with_expansion_def]
+QED
+
+(* tstore doesn't change vs_accounts *)
+Theorem tstore_acct[local,simp]:
+  !key val (s:venom_state) f.
+    tstore key val (s with vs_accounts updated_by f) =
+    (tstore key val s) with vs_accounts updated_by f
+Proof
+  simp[tstore_def, LET_THM, contract_transient_def]
+QED
+
+val acct_frame_tac =
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  fs[update_var_def, vfmStateTheory.lookup_account_def,
+     mstore_def, mstore8_def, tstore_def,
+     write_memory_with_expansion_def, mcopy_def,
+     contract_storage_def, contract_transient_def] >>
+  (* EXTCODEHASH: account_empty depends on balance, nonce, code only *)
+  TRY (gvs[vfmStateTheory.account_empty_def] >> NO_TAC);
+
+(* f : (160 word -> account_state) -> (160 word -> account_state)
+   must preserve balance, code, nonce for all addresses.
+   Typical use: f = \accts addr. accts addr with storage := other addr *)
+Theorem step_inst_base_acct_frame:
+  !inst s s' (f : (160 word -> account_state) -> 160 word -> account_state).
+    step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    Eff_STORAGE NOTIN read_effects inst.inst_opcode /\
+    Eff_STORAGE NOTIN write_effects inst.inst_opcode /\
+    (!addr. (f s.vs_accounts addr).balance = (s.vs_accounts addr).balance) /\
+    (!addr. (f s.vs_accounts addr).code = (s.vs_accounts addr).code) /\
+    (!addr. (f s.vs_accounts addr).nonce = (s.vs_accounts addr).nonce)
+    ==>
+    step_inst_base inst (s with vs_accounts := f s.vs_accounts) =
+    OK (s' with vs_accounts := f s'.vs_accounts)
+Proof
+  acct_frame_tac
+QED
+
+Theorem step_inst_base_acct_error_frame:
+  !inst s e (f : (160 word -> account_state) -> 160 word -> account_state).
+    step_inst_base inst s = Error e /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    Eff_STORAGE NOTIN read_effects inst.inst_opcode /\
+    Eff_STORAGE NOTIN write_effects inst.inst_opcode /\
+    (!addr. (f s.vs_accounts addr).balance = (s.vs_accounts addr).balance) /\
+    (!addr. (f s.vs_accounts addr).nonce = (s.vs_accounts addr).nonce) /\
+    (!addr. (f s.vs_accounts addr).code = (s.vs_accounts addr).code)
+    ==>
+    step_inst_base inst (s with vs_accounts := f s.vs_accounts) = Error e
+Proof
+  acct_frame_tac
+QED
+
 val _ = export_theory();

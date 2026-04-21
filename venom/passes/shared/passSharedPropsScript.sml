@@ -859,6 +859,20 @@ Theorem step_base_preserves_tracked =
 Theorem eligible_no_write_balance_extcode =
   passSharedFieldTheory.eligible_no_write_balance_extcode
 
+(* Transient frame *)
+Theorem step_inst_base_trans_frame =
+  passSharedFieldTheory.step_inst_base_trans_frame
+
+Theorem step_inst_base_trans_error_frame =
+  passSharedFieldTheory.step_inst_base_trans_error_frame
+
+(* Account storage-only frame *)
+Theorem step_inst_base_acct_frame =
+  passSharedFieldTheory.step_inst_base_acct_frame
+
+Theorem step_inst_base_acct_error_frame =
+  passSharedFieldTheory.step_inst_base_acct_error_frame
+
 (* Transfer/determinism *)
 Theorem step_inst_base_ok_transfer =
   passSharedTransferTheory.step_inst_base_ok_transfer
