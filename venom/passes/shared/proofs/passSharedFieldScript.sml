@@ -469,16 +469,6 @@ Proof
   simp[mload_def]
 QED
 
-Theorem sload_replace_storage[local]:
-  !key (s:venom_state) new_st.
-    sload key (s with vs_accounts := replace_account_storage new_st s.vs_accounts) =
-    sload key (s with vs_accounts :=
-      \addr. s.vs_accounts addr with storage := new_st addr)
-Proof
-  simp[sload_def, contract_storage_def, vfmStateTheory.lookup_account_def,
-       replace_account_storage_def]
-QED
-
 (* tload doesn't depend on vs_accounts *)
 Theorem tload_acct[local,simp]:
   !key (s:venom_state) f. tload key (s with vs_accounts updated_by f) = tload key s

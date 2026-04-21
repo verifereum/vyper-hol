@@ -168,12 +168,11 @@ Definition effects_in_space_def:
                       AddrSp_Memory => Eff_MEMORY
                     | AddrSp_Storage => Eff_STORAGE
                     | AddrSp_Transient => Eff_TRANSIENT
-                    | _ => Eff_MEMORY in
-    let allowed_effs = case space of
-                         AddrSp_Memory => {space_eff}
-                       | _ => {space_eff} in
+                    | AddrSp_Calldata => Eff_MEMORY
+                    | AddrSp_Code => Eff_MEMORY
+                    | AddrSp_Returndata => Eff_MEMORY in
     (write_effects inst.inst_opcode UNION read_effects inst.inst_opcode)
-      SUBSET allowed_effs
+      SUBSET {space_eff}
 End
 
 (* Precondition: dead_ids only contains IDs of store instructions in fn
@@ -263,7 +262,12 @@ End
    - Variables are unchanged (DSE only NOPs stores)
    - Logs, return data, halt status, immutables etc. unchanged
    - RETURN/REVERT data is unaffected (memSSA marks those reads
-     as live, preventing elimination of stores in the return range) *)
+     as live, preventing elimination of stores in the return range)
+   - vs_inst_idx and vs_current_bb are excluded: clear_nops_function
+     changes instruction count within blocks, so Halt/Abort states may
+     carry different inst_idx. These are purely internal control-flow
+     fields with no semantic meaning after function completion.
+     (execution_equiv also excludes these, enabling the clear_nops bridge.) *)
 Definition dse_equiv_def:
   dse_equiv (space : addr_space) s1 s2 <=>
     (!v. lookup_var v s1 = lookup_var v s2) /\
@@ -282,9 +286,7 @@ Definition dse_equiv_def:
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx
+    s1.vs_allocas = s2.vs_allocas
 End
 
 (* After all 3 spaces: memory, transient, and accounts may differ *)
