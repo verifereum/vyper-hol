@@ -2,7 +2,7 @@
 # From lowering/defs/ relative paths:
 #   ../..    = project root
 INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec \
-           ../../syntax ../../semantics \
+           ../../syntax ../../semantics ../../semantics/prop \
            ../../venom/defs \
            ../../venom/codegen/defs \
            ../../venom/compiler
