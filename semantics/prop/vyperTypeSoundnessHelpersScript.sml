@@ -84,6 +84,13 @@ Proof
   first_x_assum (drule_all_then strip_assume_tac)
 QED
 
+(* Helper: AddressT-typed values have dest_AddressV ≠ NONE *)
+Theorem value_has_type_AddressT_dest_AddressV_NEQ_NONE:
+  !v. value_has_type (BaseTV AddressT) v ==> dest_AddressV v <> NONE
+Proof
+  Cases_on `v` >> gvs[value_has_type_inv, dest_AddressV_def] >> Cases_on `a` >> gvs[value_has_type_inv]
+QED
+
 (* ===== Type soundness roadmap ===== *)
 (*
  * The overall goal is to show that well-typed programs never raise TypeError.
@@ -180,6 +187,32 @@ Theorem evaluate_builtin_bop_add_uint:
 Proof
   rw[evaluate_builtin_def, type_to_int_bound_def, LET_THM] >>
   metis_tac[evaluate_binop_add_uint]
+QED
+
+(* Phase 2: value_has_type (StringT n) v implies dest_StringV v <> NONE *)
+Theorem value_has_type_StringT_dest_StringV_NEQ_NONE:
+  !n v. value_has_type (BaseTV (StringT n)) v ==> dest_StringV v <> NONE
+Proof
+  rpt strip_tac >> Cases_on `v` >> gvs[value_has_type_inv, dest_StringV_def] >>
+  Cases_on `a` >> gvs[value_has_type_inv, dest_StringV_def]
+QED
+
+(* Phase 2: value_has_type (BytesT bd) v implies dest_BytesV v <> NONE *)
+Theorem value_has_type_BytesT_dest_BytesV_NEQ_NONE:
+  !bd v. value_has_type (BaseTV (BytesT bd)) v ==> dest_BytesV v <> NONE
+Proof
+  rpt strip_tac >> Cases_on `v` >> gvs[value_has_type_inv, dest_BytesV_def] >>
+  Cases_on `a` >> gvs[value_has_type_inv, dest_BytesV_def]
+QED
+
+(* Phase 2: value_has_type (UintT k) v implies dest_NumV v <> NONE *)
+Theorem value_has_type_UintT_dest_NumV_NEQ_NONE:
+  !k v. value_has_type (BaseTV (UintT k)) v ==> dest_NumV v <> NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_inv, dest_NumV_def] >>
+  TRY (Cases_on `a` >> gvs[value_has_type_inv, dest_NumV_def]) >>
+  intLib.ARITH_TAC
 QED
 
 (* ===== safe_cast on well-typed values is identity ===== *)
@@ -564,6 +597,7 @@ Theorem functions_well_typed_body_full:
                  SOME (FlagArgs (LENGTH ls)))
 Proof
   rw[functions_well_typed_def] >>
+  gvs[value_has_type_inv] >>
   cheat
 QED
 
@@ -3858,6 +3892,19 @@ Proof
   Cases >> simp[is_HashMapRef_def, toplevel_value_typed_def]
 QED
 
+Theorem toplevel_value_typed_not_ArrayRef:
+  !tv tyv. toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==> ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `tv` >> gvs[toplevel_value_typed_def] >> first_x_assum irule >> simp[]
+QED
+
+Theorem toplevel_value_typed_no_ArrayTV_get_Value:
+  !tv tyv st e s. toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==> get_Value tv st <> (INR e, s)
+Proof
+  rpt strip_tac >>
+  drule toplevel_value_typed_not_ArrayRef >> strip_tac >>
+  gvs[get_Value_def, return_def]
+QED
 
 Theorem env_consistent_toplevel_storage:
   !env cx st src id ty ts is_transient typ id_str.
@@ -6354,6 +6401,14 @@ Proof
   gvs[]
 QED
 
+Theorem materialise_type_error_imp_NoneTV:
+  !cx tv st e s tyv. materialise cx tv st = (INR (Error (TypeError e)), s) /\
+                      toplevel_value_typed tv tyv ==> tyv = NoneTV
+Proof
+  rpt strip_tac >> metis_tac[materialise_type_error_NoneTV]
+QED
+
+
 Theorem materialise_Value_no_type_error:
   !cx v st m s. materialise cx (Value v) st ≠ (INR (Error (TypeError m)), s)
 Proof
@@ -6373,4 +6428,11 @@ Theorem well_typed_expr_TopLevelName_NotNoneT:
     expr_type (TopLevelName ty (src_id_opt, id)) = NoneT ==> F
 Proof
   rpt strip_tac >> fs[well_typed_expr_def, expr_type_def]
+QED
+
+Theorem dest_ArrayV_NEQ_NONE_value_has_type_ArrayTV:
+  !tv bd v. value_has_type (ArrayTV tv bd) v ==> dest_ArrayV v <> NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_inv, dest_ArrayV_def]
 QED

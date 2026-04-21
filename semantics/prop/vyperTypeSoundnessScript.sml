@@ -195,12 +195,52 @@ val not_return_tac =
   TRY (imp_res_tac (cj 1 assign_target_no_return) >> gvs[] >> NO_TAC) >>
   TRY (gvs[raise_def, return_def] >> NO_TAC);
 
+
+(* ===== No-TypeError tactic: discharges ∀s. e ≠ Error (TypeError s) goals ===== *)
+(* Mirror of not_return_tac but for TypeError impossibility.
+   Uses bridge lemmas connecting well-typedness to destructor success.
+   TypeError sources and their bridges:
+   - get_Value on non-Value → toplevel_value_typed + ¬ArrayTV/¬NoneTV → tv = Value v
+   - lift_option_type (dest_XV v) when NONE → value_has_type → dest_XV v ≠ NONE
+   - materialise on HashMapRef → toplevel_value_typed + ¬NoneTV contradiction
+   - Sub-evaluation errors → IH gives ¬TypeError directly *)
+val not_type_error_tac =
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  (* Sub-evaluation IH gives no-TypeError directly — drule_all should find it *)
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
+  (* materialise on Value never gives TypeError *)
+  TRY (imp_res_tac materialise_Value_no_type_error >> gvs[] >> NO_TAC) >>
+  (* get_Value on well-typed non-ArrayTV/non-NoneTV values succeeds *)
+  TRY (imp_res_tac toplevel_value_typed_no_ArrayTV_get_Value >> gvs[] >> NO_TAC) >>
+  (* dest_StringV succeeds on well-typed StringT values *)
+  TRY (imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
+       gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
+  (* dest_BytesV succeeds on well-typed BytesT values *)
+  TRY (imp_res_tac value_has_type_BytesT_dest_BytesV_NEQ_NONE >>
+       gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
+  (* dest_NumV succeeds on well-typed UintT values *)
+  TRY (imp_res_tac value_has_type_UintT_dest_NumV_NEQ_NONE >>
+       gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
+  (* dest_AddressV succeeds on well-typed AddressT values *)
+  TRY (imp_res_tac value_has_type_AddressT_dest_AddressV_NEQ_NONE >>
+       gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
+  (* dest_ArrayV succeeds on well-typed ArrayTV values *)
+  TRY (imp_res_tac dest_ArrayV_NEQ_NONE_value_has_type_ArrayTV >>
+       gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
+  (* materialise TypeError implies NoneTV typing *)
+  TRY (imp_res_tac materialise_type_error_imp_NoneTV >>
+       imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
+       gvs[well_typed_expr_def] >> NO_TAC) >>
+  (* Check/type_check/raise/return never produce TypeError by construction *)
+  TRY (gvs[raise_def, return_def, check_def, type_check_def,
+           lift_option_type_def, lift_option_def, get_Value_def,
+           AllCaseEqs()] >> NO_TAC);
 (* Close error branch completely: resolve state, discharge swt+ec, then return *)
 val tp_err_tac =
   rpt BasicProvers.VAR_EQ_TAC >>
   swt_resolve_state_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  ASM_REWRITE_TAC[] >> not_return_tac;
+  ASM_REWRITE_TAC[] >> not_return_tac >> TRY not_type_error_tac;
 
 val tp_peel_bind =
   PURE_ONCE_REWRITE_TAC[bind_def] >> simp_tac bool_ss [BETA_THM];
@@ -303,7 +343,7 @@ fun tp_stmt_no_return_tac ev_thm wts_thm extra_defs =
   simp[] >>
   swt_resolve_state_tac >>
   TRY swt_modify_tac >>
-  TRY not_return_tac;
+  TRY not_return_tac >> TRY not_type_error_tac;
 
 (* Prove case-expanded = do-notation by simplifier normalization.
    Use: move case-expanded asm to goal via mp_tac, making goal
@@ -633,23 +673,16 @@ Resume eval_preserves_swt[ReturnSome]:
          (mp_tac o SIMP_RULE (srw_ss()) []) >>
        disch_then drule >> strip_tac >> gvs[] >> NO_TAC) >>
   gvs[] >>
+  (* for materialise INR case: derive typing info before resolving *)
+  TRY (
+    qpat_x_assum `!tv. INL _ = INL tv ==> _`
+      (mp_tac o SIMP_RULE (srw_ss()) []) >>
+    disch_then drule >> strip_tac >> NO_TAC) >>
   swt_resolve_state_tac >>
   rpt CONJ_TAC >>
   TRY not_return_tac >>
-  TRY (imp_res_tac materialise_no_type_error >>
-       gvs[toplevel_value_typed_def] >> NO_TAC) >>
-  TRY (imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
-  (* Handle materialise TypeError: derive F via NoneTV->NoneT->well_typed_expr *)
-  TRY (
-    imp_res_tac materialise_type_error_NoneTV >>
-    first_x_assum drule >> strip_tac >>
-    imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
-    imp_res_tac materialise_type_error_imp_HashMapRef >>
-    Cases_on `tv` >> gvs[materialise_def, return_def, raise_def,
-                        toplevel_value_typed_def,
-                        well_typed_expr_def, expr_type_def] >>
-    drule read_storage_slot_error >> strip_tac >> gvs[] >>
-    NO_TAC)
+  TRY not_type_error_tac >>
+  cheat
 
 QED
 
@@ -901,7 +934,7 @@ val tp_bind_err_tac =
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
   TRY (imp_res_tac materialise_error >>
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (first_assum ACCEPT_TAC);
+  TRY not_type_error_tac >> TRY (first_assum ACCEPT_TAC);
 
 Resume eval_preserves_swt[Assert3]:
   rpt gen_tac >> strip_tac >>
