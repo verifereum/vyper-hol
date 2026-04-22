@@ -4527,6 +4527,138 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem rawcalltarget_returns_Value[local]:
+  !cx ty flags es drv st tv st'.
+    eval_expr cx (Call ty (RawCallTarget flags) es drv) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       check_def, type_check_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem builtin_returns_Value[local]:
+  !cx ty bt es st tv st'.
+    eval_expr cx (Builtin ty bt es) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt strip_tac >> gvs[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def, UNCURRY, LET_THM, COND_RATOR, check_def, type_check_def, lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def, AllCaseEqs()]
+QED
+
+Theorem pop_returns_Value[local]:
+  !cx ty bt st tv st'.
+    eval_expr cx (Pop ty bt) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt strip_tac >> fs[Once evaluate_def] >> fs[bind_def, return_def, raise_def, lift_option_type_def, lift_option_def, UNCURRY, LET_THM, COND_RATOR, AllCaseEqs()] >> Cases_on `popped` >> fs[return_def, raise_def] >> gvs[]
+QED
+
+Theorem call_simple_returns_Value[local]:
+  !cx ty es drv st tv st'.
+    eval_expr cx (Call ty Send es drv) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       check_def, type_check_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, lift_sum_runtime_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem rawlog_returns_Value[local]:
+  !cx ty es drv st tv st'.
+    eval_expr cx (Call ty RawLog es drv) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       check_def, type_check_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, lift_sum_runtime_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem selfdestruct_returns_Value[local]:
+  !cx ty es drv st tv st'.
+    eval_expr cx (Call ty SelfDestructTarget es drv) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       check_def, type_check_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, lift_sum_runtime_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem createtarget_returns_Value[local]:
+  !cx c b ty es drv st tv st'.
+    eval_expr cx (Call ty (CreateTarget c b) es drv) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       check_def, type_check_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, lift_sum_runtime_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem bareglobalname_returns_Value[local]:
+  !cx body id st tv st'.
+    eval_expr cx (BareGlobalName body id) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       lift_option_type_def, lift_option_def,
+       AllCaseEqs(),
+       get_immutables_def, get_address_immutables_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem name_returns_Value[local]:
+  !cx ty id st tv st'.
+    eval_expr cx (Name ty id) st = (INL tv, st') ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, UNCURRY, return_def, raise_def,
+       ignore_bind_def, LET_THM, COND_RATOR,
+       lift_option_def, lift_option_type_def,
+       AllCaseEqs(),
+       get_scopes_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem literal_returns_Value[local]:
+  !cx ty v st tv st'.
+    eval_expr cx (Literal ty v) st = (INL tv, st') ==>
+    ?v'. tv = Value v'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, return_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+
+
 (* Uniform tactic for all 20 eval_expr toplevel_wf cases.
    Pre-computes all eval_expr conjuncts (cj 35..54) and tries each.
    Strategy: unfold the right conjunct with gvs-blast (bind_def + AllCaseEqs
@@ -4610,6 +4742,7 @@ fun tv_wf_blast cj_thm (asl, g) =
   in if null sgs then (sgs, vf)
      else raise mk_HOL_ERR "tv_wf_blast" "tv_wf_blast" "subgoals remain"
   end;
+
 
 (* Common tactic for P7 cases that return Value: unfold cj, simplify *)
 fun tv_return_value_tac cj_thm extras =
@@ -6470,79 +6603,266 @@ Proof
 QED
 
 
+Theorem evaluate_subscript_success_not_HashMapRef:
+  !tenv tv_ty tv idx res. evaluate_subscript tenv tv_ty tv idx = INL (INL res) /\ ~is_HashMapRef tv ==> ~is_HashMapRef res
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
+  (Cases_on `v` >> Cases_on `idx` >> gvs[evaluate_subscript_def, AllCaseEqs(), is_HashMapRef_def])
+  >- (Cases_on `idx` >> gvs[evaluate_subscript_def, AllCaseEqs(), is_HashMapRef_def])
+QED
+
+
+
+(* Blast defs for ~is_HashMapRef proofs — same as tv_wf_blast_defs but without toplevel_value_wf_def *)
+val hmr_blast_defs =
+  [bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
+   UNCURRY, lift_option_type_def, lift_option_def, lift_sum_def,
+   lift_sum_runtime_def,
+   get_scopes_def, get_immutables_def, get_address_immutables_def,
+   get_Value_def, get_accounts_def, get_transient_storage_def,
+   lookup_flag_mem_def, check_def, type_check_def, assert_def,
+   switch_BoolV_def, LET_THM, COND_RATOR,
+   update_accounts_def, update_transient_def, push_log_def];
+
+val hmr_case_defs = [return_def, raise_def, is_HashMapRef_def,
+  read_storage_slot_def, bind_def, UNCURRY, lift_option_type_def,
+  lift_option_def, get_storage_backend_def];
+
+Theorem eval_expr_not_HashMapRef_ind[local]:
+  (!cx s st res st'. eval_stmt cx s st = (res, st') ==> T) /\
+  (!cx ss st res st'. eval_stmts cx ss st = (res, st') ==> T) /\
+  (!cx it st res st'. eval_iterator cx it st = (res, st') ==> T) /\
+  (!cx g st res st'. eval_target cx g st = (res, st') ==> T) /\
+  (!cx gs st res st'. eval_targets cx gs st = (res, st') ==> T) /\
+  (!cx bt st res st'. eval_base_target cx bt st = (res, st') ==> T) /\
+  (!cx tv nm body vs st res st'. eval_for cx tv nm body vs st = (res, st') ==> T) /\
+  (!cx e st res st'. eval_expr cx e st = (res, st') ==>
+    !env. well_typed_expr env e ==> !s. env_consistent env cx s ==>
+    !tv. res = INL tv ==> ~is_HashMapRef tv) /\
+  (!cx es st res st'. eval_exprs cx es st = (res, st') ==> T)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >| (
+    List.tabulate(34, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH]) @
+    (* 1:Name *) [suspend "Name"] @
+    (* 2:BareGlobalName *) [suspend "BareGlobalName"] @
+    (* 3:TopLevelName *) [suspend "TopLevelName"] @
+    (* 4:FlagMember *) [suspend "FlagMember"] @
+    (* 5:IfExp *) [suspend "IfExp"] @
+    (* 6:Literal *) [suspend "Literal"] @
+    (* 7:StructLit *) [suspend "StructLit"] @
+    (* 8:Subscript *) [suspend "Subscript"] @
+    (* 9:Attribute *) [suspend "Attribute"] @
+    (* 10:Builtin *) [suspend "Builtin"] @
+    (* 11:TypeBuiltin *) [suspend "TypeBuiltin"] @
+    (* 12:Pop *) [suspend "Pop"] @
+    (* 13:IntCall *) [suspend "IntCall"] @
+    (* 14:ExtCall *) [suspend "ExtCall"] @
+    (* 15:RawCallTarget *) [suspend "RawCallTarget"] @
+    (* 16:RawLog *) [suspend "RawLog"] @
+    (* 17:RawRevert *) [suspend "RawRevert"] @
+    (* 18:SelfDestructTarget *) [suspend "SelfDestructTarget"] @
+    (* 19:CreateTarget *) [suspend "CreateTarget"] @
+    (* 20:exprs_cons *) [suspend "exprs_cons"] @
+    List.tabulate(2, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH])
+  )
+QED
+
+Resume eval_expr_not_HashMapRef_ind[Name]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac name_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[BareGlobalName]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac bareglobalname_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[TopLevelName]:
+  rpt strip_tac >> gvs[] >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
+  (gvs[el 3 ev_expr_cjs] >>
+   imp_res_tac lookup_global_HashMapRef >>
+   gvs[well_typed_expr_def] >>
+   drule_all env_consistent_toplevel_hashmap >> gvs[])
+QED
+
+Resume eval_expr_not_HashMapRef_ind[FlagMember]:
+  rpt strip_tac >> gvs[] >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
+  (qpat_x_assum `lookup_flag_mem _ _ _ _ = _` mp_tac >>
+   simp_tac (srw_ss()) [lookup_flag_mem_def, bind_def, return_def, raise_def,
+     AllCaseEqs(), COND_RATOR] >>
+   rpt strip_tac >> gvs[is_HashMapRef_def])
+QED
+
+Resume eval_expr_not_HashMapRef_ind[IfExp]:
+  rpt strip_tac >>
+  FULL_SIMP_TAC pure_ss [] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac [el 5 ev_expr_cjs] >>
+  simp_tac (srw_ss()) hmr_blast_defs >>
+  rpt strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs (is_HashMapRef_def :: hmr_case_defs)) >>
+  fs[well_typed_expr_def] >>
+  first_x_assum (drule_then (drule_then strip_assume_tac)) >>
+  gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[Literal]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac literal_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[StructLit]:
+  rpt strip_tac >>
+  FULL_SIMP_TAC pure_ss [] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac [el 7 ev_expr_cjs] >>
+  simp_tac (srw_ss()) (hmr_blast_defs @ [is_HashMapRef_def]) >>
+  rpt strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs (is_HashMapRef_def :: hmr_case_defs)) >>
+  gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[Subscript]:
+  rpt strip_tac >> gvs[] >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
+  (FULL_SIMP_TAC pure_ss [] >>
+   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+   rewrite_tac [el 8 ev_expr_cjs] >>
+   simp_tac (srw_ss()) hmr_blast_defs >>
+   rpt strip_tac >>
+   gvs[well_typed_expr_def] >>
+   rpt (BasicProvers.FULL_CASE_TAC >> gvs (is_HashMapRef_def :: hmr_case_defs)) >>
+   qpat_x_assum `!st res st'. eval_expr _ _ st = (res, st') ==> _`
+     (drule_then strip_assume_tac) >>
+   imp_res_tac evaluate_subscript_success_not_HashMapRef >>
+   gvs[is_HashMapRef_def])
+QED
+
+Resume eval_expr_not_HashMapRef_ind[Attribute]:
+  rpt strip_tac >>
+  FULL_SIMP_TAC pure_ss [] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac [el 9 ev_expr_cjs] >>
+  simp_tac (srw_ss()) (hmr_blast_defs @ [is_HashMapRef_def]) >>
+  rpt strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs (is_HashMapRef_def :: hmr_case_defs)) >>
+  gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[Builtin]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac builtin_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[TypeBuiltin]:
+  rpt strip_tac >>
+  FULL_SIMP_TAC pure_ss [] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac [el 12 ev_expr_cjs] >>
+  simp_tac (srw_ss()) (hmr_blast_defs @ [is_HashMapRef_def]) >>
+  rpt strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs (is_HashMapRef_def :: hmr_case_defs)) >>
+  gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[Pop]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac pop_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[IntCall]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac intcall_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[ExtCall]:
+  qpat_x_assum `!s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv
+      s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' x' t'⁶' s'⁹' tStorage t'⁷'
+      txParams caller s'¹⁰' result t'⁸' success returnData accounts'
+      tStorage' s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰' s'¹³' x'⁴' t'¹¹'. _`
+    (assume_tac o SIMP_RULE (srw_ss())
+      [check_def, type_check_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def,
+       return_def, assert_def, AllCaseEqs(), PULL_EXISTS,
+       bind_def, ignore_bind_def, UNCURRY, LET_THM, COND_RATOR]) >>
+  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _) _ _) _ = _` mp_tac >>
+  simp_tac (srw_ss()) [Once evaluate_def, bind_def, ignore_bind_def, UNCURRY,
+    return_def, raise_def, LET_THM, AllCaseEqs(), PULL_EXISTS,
+    lift_option_type_def, lift_option_def, lift_sum_def,
+    lift_sum_runtime_def, check_def, type_check_def,
+    get_accounts_def, get_transient_storage_def,
+    update_accounts_def, update_transient_def, assert_def, COND_RATOR] >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  gvs[is_HashMapRef_def] >>
+  FULL_SIMP_TAC (srw_ss()) [return_def, raise_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  FULL_SIMP_TAC (srw_ss()) [] >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  PairCases_on `result` >> gvs[] >>
+  FULL_SIMP_TAC (srw_ss()) [return_def, raise_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  first_x_assum irule >>
+  rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt (goal_assum (first_assum o mp_then Any mp_tac)) >>
+  simp[]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[RawCallTarget]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac rawcalltarget_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[RawLog]:
+  rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def,
+       lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def,
+       is_HashMapRef_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[RawRevert]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, return_def, raise_def]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[SelfDestructTarget]:
+  rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def,
+       lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def,
+       is_HashMapRef_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[CreateTarget]:
+  rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def,
+       lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def,
+       is_HashMapRef_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_expr_not_HashMapRef_ind[exprs_cons]:
+  rpt strip_tac >> gvs[] >>
+  first_x_assum (drule_then (drule_then strip_assume_tac)) >>
+  gvs[is_HashMapRef_def]
+QED
+
+
 Theorem eval_expr_not_HashMapRef:
   !env e cx st tv st'. well_typed_expr env e /\ env_consistent env cx st /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
 Proof
-  gen_tac >>
-  Induct_on `e` >> rpt strip_tac >|
-  List.tabulate (13, fn i =>
-    let val cj = el (i+1) ev_expr_cjs in
-      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      rewrite_tac[cj] >>
-      TRY (Cases_on `nsid` >> ALL_TAC) >>
-      TRY (Cases_on `p` >> ALL_TAC) >>
-      TRY (PairCases_on `p` >> ALL_TAC) >>
-      simp_tac (srw_ss()) [bind_def, return_def, raise_def, get_scopes_def,
-        get_immutables_def, lift_option_type_def, lift_option_def, lift_sum_def,
-        lookup_flag_mem_def, check_def, type_check_def, assert_def,
-        switch_BoolV_def, ignore_bind_def, AllCaseEqs(), PULL_EXISTS,
-        LET_THM, COND_RATOR, UNCURRY, get_Value_def] >>
-      rpt strip_tac >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def, bind_def,
-        toplevel_value_distinct, toplevel_value_11, is_HashMapRef_def,
-        evaluate_subscript_def]) >>
-      TRY (imp_res_tac lookup_global_HashMapRef >> gvs[well_typed_expr_def] >>
-           drule_all env_consistent_toplevel_hashmap >> strip_tac >> gvs[] >>
-           NO_TAC) >>
-      TRY (imp_res_tac intcall_returns_Value >>
-           gvs[toplevel_value_distinct] >> NO_TAC) >>
-      TRY (first_x_assum irule >> rpt conj_tac >>
-           TRY (fs[well_typed_expr_def] >> first_assum ACCEPT_TAC) >>
-           fs[] >> NO_TAC) >>
-      TRY (first_x_assum drule >> strip_tac >> fs[well_typed_expr_def] >>
-           NO_TAC) >>
-      (* Suspend unsolved cases for later Resume *)
-      TRY (suspend ("Case" ^ Int.toString (i+1)) >> NO_TAC) >>
-      gvs[toplevel_value_distinct, toplevel_value_11, is_HashMapRef_def]
-    end)
+  rpt strip_tac >> drule (cj 8 eval_expr_not_HashMapRef_ind) >> disch_then (qspecl_then [`env`,`st`,`tv`] mp_tac) >> simp[]
 QED
-
-Resume eval_expr_not_HashMapRef[Case3]:
-  gvs[well_typed_expr_def] >>
-  imp_res_tac lookup_global_HashMapRef >> gvs[] >>
-  drule_all env_consistent_toplevel_hashmap >> gvs[]
-Finalise eval_expr_not_HashMapRef;
-
-Resume eval_expr_not_HashMapRef[Case5(2)]:
-  first_x_assum irule >> fs[well_typed_expr_def] >> rpt conj_tac >-
-   first_assum ACCEPT_TAC >> fs[]
-Finalise eval_expr_not_HashMapRef;
-
-Resume eval_expr_not_HashMapRef[Case7]:
-  PairCases_on `p` >> gvs[well_typed_expr_def, FORALL_PROD] >>
-  simp_tac (srw_ss()) [bind_def, return_def, lift_option_type_def, raise_def,
-    AllCaseEqs()] >>
-  rpt strip_tac >> gvs[toplevel_value_distinct, is_HashMapRef_def]
-Finalise eval_expr_not_HashMapRef;
-
-Resume eval_expr_not_HashMapRef[Case8]:
-  cheat
-Finalise eval_expr_not_HashMapRef;
-
-Resume eval_expr_not_HashMapRef[Case11]:
-  cheat
-Finalise eval_expr_not_HashMapRef;
-
-Resume eval_expr_not_HashMapRef[Case12]:
-  cheat
-Finalise eval_expr_not_HashMapRef;
-
-Resume eval_expr_not_HashMapRef[Case13]:
-  cheat
-Finalise eval_expr_not_HashMapRef;
 
 Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
-  !env e cx st tv st'. well_typed_expr env e /\ expr_type e = NoneT /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
+  !env e cx st tv st'. well_typed_expr env e /\ env_consistent env cx st /\ expr_type e = NoneT /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
 Proof
-  cheat
+  metis_tac[eval_expr_not_HashMapRef]
 QED
+
