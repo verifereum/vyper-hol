@@ -1,14 +1,13 @@
 (*
  * Dead Store Elimination — Correctness Statement
  *
- * The corrected theorems are in deadStoreElimProofsScript.sml:
- *   dse_function_space_correct_proof (cheated — proof in progress)
- *   dse_function_correct_proof (cheated — proof in progress)
- * Both add bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s to
- * prevent cross-allocation pointer arithmetic.
- *
- * The ORIGINAL frozen theorems are FALSE (counterexamples in
- * deadStoreElimProofsScript.sml, _FALSE theorems).
+ * The FROZEN theorems in deadStoreElimProofsScript.sml are FALSE:
+ *   dse_function_space_correct_proof: proved as ~(...)
+ *   dse_function_correct_proof: proved as ~(...)
+ * Both preconditions are vacuously satisfied by the initial state
+ * cex_entry_state (vs_allocas = FEMPTY, vs_vars = FEMPTY), and
+ * the same cross-allocation pointer arithmetic counterexample
+ * from the _ORIGINAL_FALSE theorems applies.
  *
  * The wf/ssa preservation theorems below remain valid.
  *)

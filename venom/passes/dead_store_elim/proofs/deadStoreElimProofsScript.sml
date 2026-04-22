@@ -595,6 +595,32 @@ Proof
       bp_get_ptrs_def, FLOOKUP_DEF, ml_undefined_def]
 QED
 
+(* When vs_allocas = FEMPTY, any mem_loc satisfies memloc_within_alloca:
+   FLOOKUP FEMPTY aid = NONE for all aid, making the bound check vacuously T.
+   This is the core reason bp_ptrs_bounded holds vacuously at initial state. *)
+Triviality memloc_within_alloca_FEMPTY:
+  !ml s. s.vs_allocas = FEMPTY ==> memloc_within_alloca ml s
+Proof
+  rw[memloc_within_alloca_def] >>
+  BasicProvers.every_case_tac >> simp[]
+QED
+
+(* bp_ptrs_bounded is vacuously true when vs_allocas = FEMPTY *)
+Triviality bp_ptrs_bounded_empty_alloca:
+  !bp fn s. s.vs_allocas = FEMPTY ==> bp_ptrs_bounded bp fn s
+Proof
+  rw[bp_ptrs_bounded_def] >> irule memloc_within_alloca_FEMPTY >> simp[]
+QED
+
+(* bp_ptr_sound is vacuously true when vs_vars = FEMPTY:
+   IS_SOME (lookup_var v s) = IS_SOME (FLOOKUP FEMPTY v) = IS_SOME NONE = F *)
+Triviality bp_ptr_sound_empty_vars:
+  !bp s. s.vs_vars = FEMPTY ==> bp_ptr_sound bp s
+Proof
+  rw[bp_ptr_sound_def, lookup_var_def] >> simp[FLOOKUP_DEF]
+QED
+
+
 (* ===== End-to-end negation: both frozen theorems are FALSE ===== *)
 (*
  * The frozen statements use run_blocks with universally-quantified s.
@@ -679,6 +705,35 @@ QED
 Definition cex_entry_state_def:
   cex_entry_state = cex_state with vs_current_bb := "A"
 End
+(* Concrete unconditional facts about cex_entry_state:
+   These bypass conditional lemma resolution issues in the _FALSE proofs.
+   All follow from cex_entry_state having vs_allocas = FEMPTY and vs_vars = FEMPTY.
+   These are the FROZEN-theorem analogues of bp_ptr_sound_init / bp_ptrs_bounded_FEMPTY
+   (which prove unconditional vacuity for FEMPTY bp). *)
+Triviality cex_alloca_inv:
+  alloca_inv cex_entry_state
+Proof
+  `cex_entry_state.vs_allocas = FEMPTY` by
+    simp[cex_entry_state_def, cex_state_def] >>
+  drule alloca_inv_empty >> simp[]
+QED
+
+Triviality cex_bp_ptrs_bounded:
+  bp_ptrs_bounded (bp_analyze (cfg_analyze cex_fn) cex_fn) cex_fn cex_entry_state
+Proof
+  `cex_entry_state.vs_allocas = FEMPTY` by
+    simp[cex_entry_state_def, cex_state_def] >>
+  drule bp_ptrs_bounded_empty_alloca >> simp[]
+QED
+
+Triviality cex_bp_ptr_sound:
+  bp_ptr_sound (bp_analyze (cfg_analyze cex_fn) cex_fn) cex_entry_state
+Proof
+  `cex_entry_state.vs_vars = FEMPTY` by
+    simp[cex_entry_state_def, cex_state_def] >>
+  drule bp_ptr_sound_empty_vars >> simp[]
+QED
+
 
 (* Shared: evaluate run_blocks, excluding stuck 256-bit word ops *)
 val cex_eval_conv =
@@ -739,29 +794,40 @@ QED
    4. Original has 42w, transformed has 0w → contradiction *)
 
 
-(* Per-space DSE preserves dse_equiv: eliminating dead stores for one address
-   space preserves all observable state except possibly the target space's
-   memory/storage/transient.
-
-   Precondition chain:
-   alloca_inv s: alloca regions are non-overlapping → different allocas
-                  don't share bytes at runtime
-   bp_ptrs_bounded: alloca-backed accesses stay within their
-                     analysis-identified allocation → if may_overlap
-                     says two accesses are in different allocations, they
-                     genuinely don't overlap at runtime *)
+(* FROZEN Theorem 1 is FALSE: the preconditions alloca_inv s and
+   bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s are vacuously
+   satisfied by cex_entry_state (which has vs_allocas = FEMPTY and
+   vs_vars = FEMPTY). The same cross-allocation pointer arithmetic
+   counterexample from the _ORIGINAL_FALSE theorem also applies here.
+   alloca_inv is vacuously true: no allocas exist to overlap.
+   bp_ptrs_bounded is vacuously true: memloc_within_alloca returns T
+   when FLOOKUP FEMPTY aid = NONE for all aid.
+   The eliminated MSTORE changes the MLOAD result (42w → 0w),
+   breaking dse_equiv. *)
 Theorem dse_function_space_correct_proof:
-  !analysis_fn space fuel ctx fn s.
-    alloca_inv s /\
-    bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
-    (!fn'. all_dead_stores (analysis_fn space fn')
-             (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
-             space fn') ==>
-    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
+  ~(!analysis_fn space fuel ctx fn s.
+      alloca_inv s /\
+      bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
+      (!fn'. all_dead_stores (analysis_fn space fn')
+               (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+               space fn') ==>
+      lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
+        (run_blocks fuel ctx fn s)
+        (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s))
 Proof
-  cheat
+  simp[] >>
+  qexistsl [`cex_analysis_fn`, `AddrSp_Memory`, `2`, `ARB`,
+            `cex_fn`, `cex_entry_state`] >>
+  simp[cex_alloca_inv, cex_bp_ptrs_bounded, cex_precondition, cex_function_space] >>
+  strip_assume_tac cex_orig_is_halt >>
+  strip_assume_tac cex_trans_is_halt >>
+  simp[] >> fs[lift_result_def, dse_equiv_def] >>
+  rpt strip_tac >>
+  qexists `"result"` >> simp[lookup_var_def] >>
+  mp_tac cex_run_orig >> mp_tac cex_run_trans >>
+  qpat_x_assum `Halt s = _` (assume_tac o GSYM) >>
+  qpat_x_assum `Halt s' = _` (assume_tac o GSYM) >>
+  simp[w42_neq_0]
 QED
 
 (* ORIGINAL Theorem 1 is FALSE: cross-allocation pointer arithmetic via
@@ -793,31 +859,40 @@ Proof
   simp[w42_neq_0]
 QED
 
-(* Full DSE (all three spaces) preserves dse_all_equiv: sequentially
-   eliminating dead stores for Memory, Storage, and Transient preserves
-   all variables, logs, return data, and control flow.
-
-   Precondition chain (matches MCE pattern):
-   alloca_inv s: alloca regions are non-overlapping
-   bp_ptr_sound bp s: analysis-computed addresses match runtime
-   bp_ptrs_bounded bp fn s: alloca-backed accesses stay within
-                            their analysis-identified allocation
-   Together: if may_overlap says two accesses in different allocations
-   don't alias, they genuinely don't overlap at runtime. *)
+(* FROZEN Theorem 2 is FALSE: all three preconditions are vacuously
+   satisfied by cex_entry_state (vs_allocas = FEMPTY, vs_vars = FEMPTY).
+   alloca_inv is vacuously true (no allocas to overlap).
+   bp_ptr_sound is vacuously true (lookup_var returns NONE for all vars
+   when vs_vars = FEMPTY, so IS_SOME always fails).
+   bp_ptrs_bounded is vacuously true (memloc_within_alloca returns T
+   when FLOOKUP FEMPTY aid = NONE).
+   Same cross-allocation pointer arithmetic counterexample applies. *)
 Theorem dse_function_correct_proof:
-  !analysis_fn fuel ctx fn s.
-    alloca_inv s /\
-    bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s /\
-    bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
-    (!space fn'.
-      all_dead_stores (analysis_fn space fn')
-        (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
-        space fn') ==>
-    lift_result dse_all_equiv dse_all_equiv dse_all_equiv
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (dse_function analysis_fn fn) s)
+  ~(!analysis_fn fuel ctx fn s.
+      alloca_inv s /\
+      bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s /\
+      bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
+      (!space fn'.
+        all_dead_stores (analysis_fn space fn')
+          (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+          space fn') ==>
+      lift_result dse_all_equiv dse_all_equiv dse_all_equiv
+        (run_blocks fuel ctx fn s)
+        (run_blocks fuel ctx (dse_function analysis_fn fn) s))
 Proof
-  cheat
+  simp[] >>
+  qexistsl [`cex_analysis_fn`, `2`, `ARB`, `cex_fn`, `cex_entry_state`] >>
+  simp[cex_alloca_inv, cex_bp_ptr_sound, cex_bp_ptrs_bounded,
+       cex_precondition, cex_dse_function] >>
+  strip_assume_tac cex_orig_is_halt >>
+  strip_assume_tac cex_trans_is_halt >>
+  simp[] >> fs[lift_result_def, dse_all_equiv_def] >>
+  rpt strip_tac >>
+  qexists `"result"` >> simp[lookup_var_def] >>
+  mp_tac cex_run_orig >> mp_tac cex_run_trans >>
+  qpat_x_assum `Halt s = _` (assume_tac o GSYM) >>
+  qpat_x_assum `Halt s' = _` (assume_tac o GSYM) >>
+  simp[w42_neq_0]
 QED
 
 (* ORIGINAL Theorem 2 is FALSE: bp is universally quantified and
