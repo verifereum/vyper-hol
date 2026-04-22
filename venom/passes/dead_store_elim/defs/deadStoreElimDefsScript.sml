@@ -176,7 +176,24 @@ Definition effects_in_space_def:
 End
 
 (* Precondition: dead_ids only contains IDs of store instructions in fn
-   whose stored values are provably dead. Matches Python's _is_dead_store. *)
+   whose stored values are provably dead. Matches Python's _is_dead_store.
+
+   The inst.inst_outputs = [] condition restricts dead stores to
+   instructions that have no output variables (MSTORE, SSTORE, TSTORE).
+   This is necessary because mk_nop_inst removes the instruction's
+   outputs, and dse_equiv checks ALL variables including unused ones.
+   If a dead store had non-empty outputs (e.g., DLOAD which writes
+   to memory AND produces an output variable), NOP'ing it would
+   change the output variable's value, violating dse_equiv.
+
+   In the Python DSE, DLOAD with unused outputs CAN be eliminated
+   (Python doesn't check variable mappings, only EVM-observable
+   effects). But in HOL4, dse_equiv checks !v. lookup_var v s1 =
+   lookup_var v s2, so we must require empty outputs.
+
+   This is the tightest sufficient fix: it precisely matches the
+   set of instructions DSE eliminates in practice (actual stores)
+   while being formally correct for the dse_equiv relation. *)
 Definition all_dead_stores_def:
   all_dead_stores dead_ids cfg aliases bp (space : addr_space) fn <=>
     !id. id IN dead_ids ==>
@@ -186,6 +203,7 @@ Definition all_dead_stores_def:
         EL inst_idx bb.bb_instructions = inst /\
         inst.inst_id = id /\
         is_memory_def_opcode space inst.inst_opcode /\
+        inst.inst_outputs = [] /\
         ~(bp_get_write_location bp inst space).ml_volatile /\
         ml_is_fixed (bp_get_write_location bp inst space) /\
         outputs_unused inst fn /\
@@ -225,7 +243,7 @@ End
 Definition dse_iterate_def:
   dse_iterate analysis_fn space fn =
     OWHILE (\fn. analysis_fn fn <> {})
-           (\fn. dse_single_pass (analysis_fn fn) space fn) fn
+         (\fn. dse_single_pass (analysis_fn fn) space fn) fn
 End
 
 (* Run DSE for one address space. Python: run_pass(addr_space). *)
@@ -259,7 +277,7 @@ End
    storage (inside vs_accounts) comparison.
 
    This is correct because:
-   - Variables are unchanged (DSE only NOPs stores)
+   - Variables are unchanged (DSE only NOPs stores with empty outputs)
    - Logs, return data, halt status, immutables etc. unchanged
    - RETURN/REVERT data is unaffected (memSSA marks those reads
      as live, preventing elimination of stores in the return range)
