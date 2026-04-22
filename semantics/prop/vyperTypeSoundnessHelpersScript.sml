@@ -143,6 +143,19 @@ Proof
   Cases_on `ty` >> gvs[evaluate_type_def, AllCaseEqs()]
 QED
 
+Theorem evaluate_type_not_NoneT_imp_not_NoneTV:
+  !tenv ty tyv. evaluate_type tenv ty = SOME tyv /\ ty <> NoneT ==> tyv <> NoneTV
+Proof
+  rpt gen_tac >> strip_tac >> CCONTR_TAC >> gvs[] >> drule evaluate_type_NoneTV_imp_NoneT >> simp[]
+QED
+
+Theorem evaluate_type_BaseT_imp_not_ArrayTV:
+  !tenv bt tyv. evaluate_type tenv (BaseT bt) = SOME tyv ==> !t b. tyv <> ArrayTV t b
+Proof
+  Cases_on `bt` >> gvs[evaluate_type_def, AllCaseEqs()] >> rename1 `BytesT bnd` >> rpt strip_tac >> gvs[]
+QED
+
+
 (* Phase 2: bounded_int_op result has the bound's type *)
 Theorem bounded_int_op_unsigned:
   !k r v.
@@ -6422,6 +6435,14 @@ Proof
   rpt gen_tac >> Cases_on `tv` >> gvs[materialise_def, return_def, raise_def, is_HashMapRef_def] >- (strip_tac >> gvs[bind_apply, AllCaseEqs(), return_def] >> drule read_storage_slot_error >> strip_tac >> gvs[is_HashMapRef_def])
 QED
 
+Theorem materialise_not_HashMapRef_no_type_error:
+  !cx tv st m s.
+    ~is_HashMapRef tv ==>
+    materialise cx tv st <> (INR (Error (TypeError m)), s)
+Proof
+  metis_tac[materialise_type_error_imp_HashMapRef]
+QED
+
 Theorem well_typed_expr_TopLevelName_NotNoneT:
   !env ty src_id_opt id.
     well_typed_expr env (TopLevelName ty (src_id_opt, id)) /\
@@ -6436,3 +6457,4 @@ Proof
   rpt strip_tac >>
   Cases_on `v` >> gvs[value_has_type_inv, dest_ArrayV_def]
 QED
+
