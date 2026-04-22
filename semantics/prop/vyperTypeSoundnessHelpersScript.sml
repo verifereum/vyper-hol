@@ -6458,3 +6458,91 @@ Proof
   Cases_on `v` >> gvs[value_has_type_inv, dest_ArrayV_def]
 QED
 
+Theorem eval_expr_subscript_type_noneT_impossible[local]:
+  !tenv ty.
+    subscript_type_ok ty NoneT NoneT ==>
+    evaluate_type tenv ty = NONE
+Proof
+  Cases_on `ty` >> simp[evaluate_type_def, subscript_type_ok_def,
+    type_slot_size_def, is_int_type_def] >>
+  Cases_on `b` >> simp[evaluate_type_def, type_slot_size_def] >>
+  rpt CASE_TAC >> gvs[type_slot_size_def, evaluate_type_def]
+QED
+
+
+Theorem eval_expr_not_HashMapRef:
+  !env e cx st tv st'. well_typed_expr env e /\ env_consistent env cx st /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
+Proof
+  gen_tac >>
+  Induct_on `e` >> rpt strip_tac >|
+  List.tabulate (13, fn i =>
+    let val cj = el (i+1) ev_expr_cjs in
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      rewrite_tac[cj] >>
+      TRY (Cases_on `nsid` >> ALL_TAC) >>
+      TRY (Cases_on `p` >> ALL_TAC) >>
+      TRY (PairCases_on `p` >> ALL_TAC) >>
+      simp_tac (srw_ss()) [bind_def, return_def, raise_def, get_scopes_def,
+        get_immutables_def, lift_option_type_def, lift_option_def, lift_sum_def,
+        lookup_flag_mem_def, check_def, type_check_def, assert_def,
+        switch_BoolV_def, ignore_bind_def, AllCaseEqs(), PULL_EXISTS,
+        LET_THM, COND_RATOR, UNCURRY, get_Value_def] >>
+      rpt strip_tac >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def, bind_def,
+        toplevel_value_distinct, toplevel_value_11, is_HashMapRef_def,
+        evaluate_subscript_def]) >>
+      TRY (imp_res_tac lookup_global_HashMapRef >> gvs[well_typed_expr_def] >>
+           drule_all env_consistent_toplevel_hashmap >> strip_tac >> gvs[] >>
+           NO_TAC) >>
+      TRY (imp_res_tac intcall_returns_Value >>
+           gvs[toplevel_value_distinct] >> NO_TAC) >>
+      TRY (first_x_assum irule >> rpt conj_tac >>
+           TRY (fs[well_typed_expr_def] >> first_assum ACCEPT_TAC) >>
+           fs[] >> NO_TAC) >>
+      TRY (first_x_assum drule >> strip_tac >> fs[well_typed_expr_def] >>
+           NO_TAC) >>
+      (* Suspend unsolved cases for later Resume *)
+      TRY (suspend ("Case" ^ Int.toString (i+1)) >> NO_TAC) >>
+      gvs[toplevel_value_distinct, toplevel_value_11, is_HashMapRef_def]
+    end)
+QED
+
+Resume eval_expr_not_HashMapRef[Case3]:
+  gvs[well_typed_expr_def] >>
+  imp_res_tac lookup_global_HashMapRef >> gvs[] >>
+  drule_all env_consistent_toplevel_hashmap >> gvs[]
+Finalise eval_expr_not_HashMapRef;
+
+Resume eval_expr_not_HashMapRef[Case5(2)]:
+  first_x_assum irule >> fs[well_typed_expr_def] >> rpt conj_tac >-
+   first_assum ACCEPT_TAC >> fs[]
+Finalise eval_expr_not_HashMapRef;
+
+Resume eval_expr_not_HashMapRef[Case7]:
+  PairCases_on `p` >> gvs[well_typed_expr_def, FORALL_PROD] >>
+  simp_tac (srw_ss()) [bind_def, return_def, lift_option_type_def, raise_def,
+    AllCaseEqs()] >>
+  rpt strip_tac >> gvs[toplevel_value_distinct, is_HashMapRef_def]
+Finalise eval_expr_not_HashMapRef;
+
+Resume eval_expr_not_HashMapRef[Case8]:
+  cheat
+Finalise eval_expr_not_HashMapRef;
+
+Resume eval_expr_not_HashMapRef[Case11]:
+  cheat
+Finalise eval_expr_not_HashMapRef;
+
+Resume eval_expr_not_HashMapRef[Case12]:
+  cheat
+Finalise eval_expr_not_HashMapRef;
+
+Resume eval_expr_not_HashMapRef[Case13]:
+  cheat
+Finalise eval_expr_not_HashMapRef;
+
+Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
+  !env e cx st tv st'. well_typed_expr env e /\ expr_type e = NoneT /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
+Proof
+  cheat
+QED
