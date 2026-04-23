@@ -269,8 +269,10 @@ Definition evaluate_binop_def:
      | UDiv => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            if i2 = 0 then INR (RuntimeError "UDiv0") else
-           (* EVM SDIV/DIV: truncation toward zero, not floor division *)
-           wrapped_int_op u (w2i $ word_quot ((i2w i1):bytes32) (i2w i2))
+           wrapped_int_op u $
+             (if is_Unsigned u
+              then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
+              else w2i $ word_quot ((i2w i1):bytes32) (i2w i2))
              | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Mod => (case v1 of
