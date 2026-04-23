@@ -6694,14 +6694,14 @@ Proof
     (* 10:Builtin *) [suspend "Builtin"] @
     (* 11:Pop *) [suspend "Pop"] @
     (* 12:TypeBuiltin *) [suspend "TypeBuiltin"] @
-    (* 13:IntCall *) [suspend "IntCall"] @
+    (* 13:Send *) [suspend "Send"] @
     (* 14:ExtCall *) [suspend "ExtCall"] @
-    (* 15:RawCallTarget *) [suspend "RawCallTarget"] @
-    (* 16:RawLog *) [suspend "RawLog"] @
-    (* 17:RawRevert *) [suspend "RawRevert"] @
-    (* 18:SelfDestructTarget *) [suspend "SelfDestructTarget"] @
-    (* 19:CreateTarget *) [suspend "CreateTarget"] @
-    (* 20:exprs_cons *) [suspend "exprs_cons"] @
+    (* 15:IntCall *) [suspend "IntCall"] @
+    (* 16:RawCallTarget *) [suspend "RawCallTarget"] @
+    (* 17:RawLog *) [suspend "RawLog"] @
+    (* 18:RawRevert *) [suspend "RawRevert"] @
+    (* 19:SelfDestructTarget *) [suspend "SelfDestructTarget"] @
+    (* 20:CreateTarget *) [suspend "CreateTarget"] @
     List.tabulate(2, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH])
   )
 QED
@@ -6806,16 +6806,13 @@ Resume eval_expr_not_HashMapRef_ind[TypeBuiltin]:
   qpat_x_assum `res = INL tv` SUBST_ALL_TAC >>
   drule typebuiltin_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
 QED
-Resume eval_expr_not_HashMapRef_ind[IntCall]:
+Resume eval_expr_not_HashMapRef_ind[Send]:
   rpt strip_tac >> gvs[] >>
-  imp_res_tac intcall_returns_Value >> gvs[is_HashMapRef_def]
+  imp_res_tac call_simple_returns_Value >> gvs[is_HashMapRef_def]
 QED
 
 Resume eval_expr_not_HashMapRef_ind[ExtCall]:
-  qpat_x_assum `!s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv
-      s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' x' t'⁶' s'⁹' tStorage t'⁷'
-      txParams caller s'¹⁰' result t'⁸' success returnData accounts'
-      tStorage' s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰' s'¹³' x'⁴' t'¹¹'. _`
+  qpat_x_assum `!s'' vs t s'3 x t'. _`
     (assume_tac o SIMP_RULE (srw_ss())
       [check_def, type_check_def, lift_option_type_def, lift_option_def,
        lift_sum_def, lift_sum_runtime_def,
@@ -6823,7 +6820,7 @@ Resume eval_expr_not_HashMapRef_ind[ExtCall]:
        update_accounts_def, update_transient_def,
        return_def, assert_def, AllCaseEqs(), PULL_EXISTS,
        bind_def, ignore_bind_def, UNCURRY, LET_THM, COND_RATOR]) >>
-  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _) _ _) _ = _` mp_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, ignore_bind_def, UNCURRY,
     return_def, raise_def, LET_THM, AllCaseEqs(), PULL_EXISTS,
     lift_option_type_def, lift_option_def, lift_sum_def,
@@ -6846,44 +6843,39 @@ Resume eval_expr_not_HashMapRef_ind[ExtCall]:
   simp[]
 QED
 
+Resume eval_expr_not_HashMapRef_ind[IntCall]:
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac intcall_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
 Resume eval_expr_not_HashMapRef_ind[RawCallTarget]:
   rpt strip_tac >> gvs[] >>
   imp_res_tac rawcalltarget_returns_Value >> gvs[is_HashMapRef_def]
 QED
 
 Resume eval_expr_not_HashMapRef_ind[RawLog]:
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def,
-       lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def,
-       is_HashMapRef_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac rawlog_returns_Value >> gvs[is_HashMapRef_def]
 QED
 
 Resume eval_expr_not_HashMapRef_ind[RawRevert]:
   rpt strip_tac >>
-  gvs[Once evaluate_def, return_def, raise_def]
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
+    ignore_bind_def, UNCURRY, lift_option_type_def, lift_option_def,
+    lift_sum_def, lift_sum_runtime_def, check_def, type_check_def,
+    is_HashMapRef_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Resume eval_expr_not_HashMapRef_ind[SelfDestructTarget]:
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def,
-       lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def,
-       is_HashMapRef_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac selfdestruct_returns_Value >> gvs[is_HashMapRef_def]
 QED
 
 Resume eval_expr_not_HashMapRef_ind[CreateTarget]:
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def, ignore_bind_def,
-       lift_option_type_def, lift_option_def, lift_sum_def, lift_sum_runtime_def,
-       is_HashMapRef_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[exprs_cons]:
   rpt strip_tac >> gvs[] >>
-  first_x_assum (drule_then (drule_then strip_assume_tac)) >>
-  gvs[is_HashMapRef_def]
+  imp_res_tac createtarget_returns_Value >> gvs[is_HashMapRef_def]
 QED
 
 
