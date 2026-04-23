@@ -265,9 +265,10 @@ Theorem evaluate_binop_udiv:
   ∀u tv x y.
     y ≠ 0 ⇒
     evaluate_binop u tv UDiv (IntV x) (IntV y) =
-    INL (IntV (let q = w2i (word_quot ((i2w x):bytes32) ((i2w y):bytes32)) in
-               if is_Unsigned u then q % &(2 ** int_bound_bits u)
-               else signed_int_mod (int_bound_bits u) q))
+    INL (IntV (if is_Unsigned u
+               then &(w2n (word_div ((i2w x):bytes32) ((i2w y):bytes32))) % &(2 ** int_bound_bits u)
+               else signed_int_mod (int_bound_bits u)
+                     (w2i (word_quot ((i2w x):bytes32) ((i2w y):bytes32)))))
 Proof
   Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
                 vyperValueOperationTheory.wrapped_int_op_def] >>
