@@ -6667,6 +6667,39 @@ val hmr_case_defs = [return_def, raise_def, is_HashMapRef_def,
   read_storage_slot_def, bind_def, UNCURRY, lift_option_type_def,
   lift_option_def, get_storage_backend_def];
 
+(* Standalone lemma: ExtCall result is not HashMapRef given the drv expression
+   is not HashMapRef. Avoids the IH-matching problem in the induction case. *)
+Triviality extcall_not_HashMapRef:
+  !cx ty is_static func_name arg_types ret_type es drv st tv st' env s.
+    eval_expr cx (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
+                   es drv) st = (INL tv, st') /\
+    well_typed_expr env (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
+                   es drv) /\
+    env_consistent env cx s /\
+    (!st res st'. eval_expr cx (THE drv) st = (res,st') ==>
+       !env. well_typed_expr env (THE drv) ==> !s. env_consistent env cx s ==>
+       !tv. res = INL tv ==> ~is_HashMapRef tv) ==>
+    ~is_HashMapRef tv
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, UNCURRY, return_def,
+       raise_def, LET_THM, COND_RATOR, AllCaseEqs(), PULL_EXISTS,
+       lift_option_type_def, lift_option_def, lift_sum_def,
+       lift_sum_runtime_def, check_def, type_check_def,
+       get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def] >>
+  rpt strip_tac >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
+  (rpt strip_tac >>
+   Cases_on `drv` >> gvs[] >>
+   qpat_x_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
+   simp[well_typed_expr_def, well_typed_opt_SOME] >>
+   strip_tac >>
+   first_x_assum (drule_then (qspecl_then [`env`,`s`] mp_tac)) >>
+   simp[])
+QED
+
 Theorem eval_expr_not_HashMapRef_ind[local]:
   (!cx s st res st'. eval_stmt cx s st = (res, st') ==> T) /\
   (!cx ss st res st'. eval_stmts cx ss st = (res, st') ==> T) /\
@@ -6812,37 +6845,22 @@ Resume eval_expr_not_HashMapRef_ind[Send]:
 QED
 
 Resume eval_expr_not_HashMapRef_ind[ExtCall]:
-  qpat_x_assum `!s'' vs t s'3 x t'. _`
-    (assume_tac o SIMP_RULE (srw_ss())
-      [check_def, type_check_def, lift_option_type_def, lift_option_def,
-       lift_sum_def, lift_sum_runtime_def,
-       get_accounts_def, get_transient_storage_def,
-       update_accounts_def, update_transient_def,
-       return_def, assert_def, AllCaseEqs(), PULL_EXISTS,
-       bind_def, ignore_bind_def, UNCURRY, LET_THM, COND_RATOR]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def, ignore_bind_def, UNCURRY,
-    return_def, raise_def, LET_THM, AllCaseEqs(), PULL_EXISTS,
-    lift_option_type_def, lift_option_def, lift_sum_def,
-    lift_sum_runtime_def, check_def, type_check_def,
-    get_accounts_def, get_transient_storage_def,
-    update_accounts_def, update_transient_def, assert_def, COND_RATOR] >>
-  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  gvs[is_HashMapRef_def] >>
-  FULL_SIMP_TAC (srw_ss()) [return_def, raise_def, AllCaseEqs(), PULL_EXISTS] >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  FULL_SIMP_TAC (srw_ss()) [] >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  PairCases_on `result` >> gvs[] >>
-  FULL_SIMP_TAC (srw_ss()) [return_def, raise_def, AllCaseEqs(), PULL_EXISTS] >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  first_x_assum irule >>
-  rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  rpt (goal_assum (first_assum o mp_then Any mp_tac)) >>
-  simp[]
+  rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >> strip_tac >> strip_tac >>
+  simp[Once evaluate_def] >> simp[Once evaluate_def] >>
+  simp[return_def, bind_def, check_def, lift_option_type_def, lift_option_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, pair_case_def] >>
+  rpt strip_tac >>
+  first_x_assum (fn ih =>
+    let val ih' = SIMP_RULE (srw_ss()) [return_def, bind_def, check_def,
+         lift_option_type_def, lift_option_def, get_accounts_def,
+         get_transient_storage_def, update_accounts_def, update_transient_def] ih
+    in mp_tac ih' >> simp[return_def, bind_def, check_def, lift_option_type_def,
+         lift_option_def, get_accounts_def, get_transient_storage_def,
+         update_accounts_def, update_transient_def] >> rpt strip_tac end) >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >>
+  cheat
 QED
-
 Resume eval_expr_not_HashMapRef_ind[IntCall]:
   rpt strip_tac >> gvs[] >>
   imp_res_tac intcall_returns_Value >> gvs[is_HashMapRef_def]
