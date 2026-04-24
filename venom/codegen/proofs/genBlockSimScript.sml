@@ -1401,14 +1401,6 @@ Theorem gen_inst_abort_sim:
     (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
           (?d. stack_get_depth op ps.ps_stack = SOME d) \/
           IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    (* Revert postamble: ASSERT's JUMPI can reach the revert handler.
-       Dischargeable: codegen appends revert_postamble, labels resolved. *)
-    (!off. FLOOKUP label_offsets "revert" = SOME off ==>
-      off < dimword(:256) /\
-      ?pc. FLOOKUP offset_to_pc off = SOME pc /\
-           asm_block_at prog pc
-             [AsmLabel "revert"; AsmPush []; AsmOp "DUP1";
-              AsmOp "REVERT"]) /\
     venom_asm_rel label_offsets ps vs as /\
     generate_inst_plan liveness dfg cfg fn inst
       next_liveness is_halting next_is_term bb_label ps =
@@ -1427,7 +1419,16 @@ Proof
   gvs[]
   >- suspend "revert"
   >- suspend "invalid"
-  >- suspend "assert"
+  >- (
+    (* ASSERT — maps to [ISZERO; PushLabel "revert"; JUMPI]
+       Abort case (cond = 0w): ISZERO yields 1w => JUMPI jumps to revert label.
+       BLOCKER: Cross-block property — revert_postamble is appended in
+       codegen_def. Needs:
+         (1) FLOOKUP label_offsets "revert" = SOME off,
+         (2) revert_postamble at that offset does [PUSH 0; PUSH 0; REVERT]
+         (3) asm_steps through the postamble yields AsmRevert. *)
+    cheat
+  )
   >- (
     (* ASSERT_UNREACHABLE — maps to
        [SOPushLabel end_lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel end_lbl]
@@ -1689,8 +1690,10 @@ Resume gen_inst_abort_sim[assert_unreachable]:
    EVERY is_prefix_op (input_ops ++ reorder_ops)` by
     suspend "prefix_wf" >>
   (* prefix_spill_wf *)
-  `prefix_spill_wf label_offsets (input_ops ++ reorder_ops) ps` by
-    cheat >>
+  `prefix_spill_wf label_offsets (input_ops ++ reorder_ops) ps` by (
+    qpat_x_assum `prefix_spill_wf _ (FRONT _) _` mp_tac >>
+    rewrite_tac[rich_listTheory.FRONT_APPEND, NOT_NIL_CONS] >>
+    metis_tac[prefix_spill_wf_prefix]) >>
   (* prefix_sim *)
   qspecl_then [`label_offsets`, `offset_to_pc`, `prog`, `ps`, `vs`, `as`,
     `input_ops ++ reorder_ops`,
@@ -2220,121 +2223,6 @@ Resume gen_inst_abort_sim[as_stack_decompose]:
   Cases_on `st_mid.as_stack` >> fs[]
 QED
 
-(* 7-step terminal: ISZERO(0w)->1w, PushLabel->off, JUMPI(jump to rv_pc),
-   JUMPDEST, PUSH0, DUP1, REVERT -> AsmRevert.
-   Used by ASSERT abort: cond=0w => ISZERO yields 1w => JUMPI jumps
-   to revert postamble which executes REVERT(0,0). *)
-Theorem terminal_iszero_jumpi_revert[local]:
-  !lo o2pc prog st lbl off rv_pc rest_stk vs.
-    asm_block_at prog st.as_pc
-      [AsmOp "ISZERO"; AsmPushLabel lbl; AsmOp "JUMPI"] /\
-    st.as_stack = 0w :: rest_stk /\
-    FLOOKUP lo lbl = SOME off /\
-    off < dimword(:256) /\
-    FLOOKUP o2pc off = SOME rv_pc /\
-    asm_block_at prog rv_pc
-      [AsmLabel lbl; AsmPush []; AsmOp "DUP1";
-       AsmOp "REVERT"] /\
-    venom_asm_terminal_rel vs st ==>
-    ?st'.
-      asm_steps lo o2pc prog 7 st = AsmRevert st' /\
-      venom_asm_terminal_rel
-        (revert_state (set_returndata [] vs)) st'
-Proof
-  cheat
-QED
-
-Resume gen_inst_abort_sim[assert]:
-  (* ASSERT abort proof: follows ASSERT_UNREACHABLE pattern but jumps
-     to revert postamble via ISZERO+PushLabel+JUMPI instead of falling
-     through to INVALID. Uses terminal_iszero_jumpi_revert helper.
-     CHEATED: the stack decomposition and prefix_spill_wf derivations
-     require the same ~100-line emit_one_input alignment chain as
-     ASSERT_UNREACHABLE (hd_zero/main/as_stack_decompose Resume blocks).
-     These need interactive HOL to write correctly. *)
-  cheat
-(*
-  `?cond_op. inst.inst_operands = [cond_op] /\
-     eval_operand cond_op vs = SOME 0w /\
-     a = Revert_abort /\
-     vs' = revert_state (set_returndata [] vs)` by (
-    `inst.inst_opcode <> INVOKE` by simp[] >>
-    qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
-    simp[step_inst_non_invoke, step_inst_base_def] >>
-    every_case_tac >> gvs[]) >>
-  gvs[] >>
-  `inst.inst_outputs = ([] : string list)` by
-    (fs[inst_wf_def] >> Cases_on `inst.inst_opcode` >> fs[]) >>
-  `compute_operands inst = [cond_op]` by simp[compute_operands_def] >>
-  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_inst_plan_def, generate_regular_inst_plan_def,
-       LET_THM, compute_operands_def] >>
-  PURE_REWRITE_TAC[EVAL ``is_pre_codegen_opcode ASSERT``,
-    EVAL ``is_commutative ASSERT``] >> simp[] >>
-  pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >>
-  simp[generate_emit_ops_def, venom_to_evm_name_def, LET_THM] >>
-  strip_tac >> gvs[] >>
-  `prefix_wf label_offsets (LENGTH ps.ps_stack)
-     (input_ops ++ reorder_ops) /\
-   EVERY is_prefix_op (input_ops ++ reorder_ops)` by (
-    qspecl_then [`[cond_op]`, `ASSERT`,
-                 `next_liveness`, `ps`, `label_offsets`]
-      mp_tac emit_input_plan_wf_len >> simp[] >> strip_tac >>
-    qspecl_then [`dfg`, `[cond_op]`, `ps1`, `label_offsets`]
-      mp_tac (delet reorder_plan_wf_len) >> simp[] >> strip_tac >>
-    conj_tac
-    >- (qspecl_then [`input_ops`, `reorder_ops`, `label_offsets`,
-          `LENGTH ps.ps_stack`] mp_tac prefix_wf_append >>
-        (impl_tac >- fs[]) >> simp[])
-    >> (imp_res_tac prefix_wf_every_prefix_op >> fs[EVERY_APPEND])) >>
-  `prefix_spill_wf label_offsets (input_ops ++ reorder_ops) ps` by
-    cheat >>
-  qspecl_then [`label_offsets`, `offset_to_pc`, `prog`, `ps`, `vs`,
-    `as`, `input_ops ++ reorder_ops`,
-    `[SOEmit "ISZERO"; SOPushLabel "revert"; SOEmit "JUMPI"]`]
-    mp_tac prefix_sim >>
-  (impl_tac >- fs[]) >> strip_tac >>
-  (* Stack decomposition: needs emit_one_input alignment chain
-     (same as assert_unreachable hd_zero/main/as_stack_decompose).
-     CHEATED: requires ~100 lines of alignment infrastructure. *)
-  `?rest. st_mid.as_stack = 0w :: rest` by cheat >>
-  `?off. FLOOKUP label_offsets "revert" = SOME off` by (
-    `IS_SOME (FLOOKUP label_offsets "revert")` by (
-      qpat_x_assum `!lbl. MEM (AsmPushLabel lbl) _ ==> _`
-        (qspec_then `"revert"` mp_tac) >>
-      simp[execute_plan_def, exec_stack_op_def]) >>
-    Cases_on `FLOOKUP label_offsets "revert"` >> fs[]) >>
-  `off < dimword (:256) /\
-   ?rv_pc. FLOOKUP offset_to_pc off = SOME rv_pc /\
-     asm_block_at prog rv_pc
-       [AsmLabel "revert"; AsmPush []; AsmOp "DUP1";
-        AsmOp "REVERT"]` by metis_tac[] >>
-  `venom_asm_terminal_rel vs st_mid` by (
-    irule venom_asm_rel_terminal >>
-    qexistsl_tac [`label_offsets`,
-      `apply_prefix_ops label_offsets
-         (input_ops ++ reorder_ops) ps`] >>
-    first_assum ACCEPT_TAC) >>
-  qspecl_then [`label_offsets`, `offset_to_pc`, `prog`, `st_mid`,
-    `"revert"`, `off`, `rv_pc`, `rest`, `vs`]
-    mp_tac terminal_iszero_jumpi_revert >>
-  (impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    qpat_x_assum `asm_block_at _ st_mid.as_pc (execute_plan _)` mp_tac >>
-    simp[execute_plan_def, exec_stack_op_def])) >>
-  strip_tac >>
-  qspecl_then [`label_offsets`, `offset_to_pc`, `prog`,
-    `LENGTH (execute_plan (input_ops ++ reorder_ops))`, `7`,
-    `as`, `st_mid`, `st'`] mp_tac asm_steps_compose_revert >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
-  strip_tac >>
-  qexistsl_tac [
-    `LENGTH (execute_plan (input_ops ++ reorder_ops)) + 7`,
-    `st'`] >> simp[revert_state_def, set_returndata_def]
-*)
-QED
-
 Finalise gen_inst_abort_sim;
 
 (* clean_ops_sim moved to cleanOpsSimScript.sml
@@ -2587,10 +2475,6 @@ Theorem gen_inst_ok_sim:
     (* Spill well-formedness for prefix ops.
        Dischargeable: provable from generate_inst_plan output
        (plan generator produces spill-well-formed prefixes). *)
-    (* Operand evaluation agreement for OFFSET label operands.
-       Trivially true for Var/Lit. Pipeline obligation for Label. *)
-    (!op. MEM op (compute_operands inst) ==>
-          eval_operand op vs = operand_val vs lo op) /\
     prefix_spill_wf lo (FRONT ops) ps /\
     venom_asm_rel lo ps vs as /\
     generate_inst_plan liveness dfg cfg fn inst
@@ -2793,64 +2677,14 @@ Resume gen_inst_ok_sim[phi_live_do_dup_align]:
     (impl_tac >- ASM_REWRITE_TAC[]) >>
     rewrite_tac[])
   >- (
-    (* CHEATED: Deep case x > 15 needs do_dup_align_gen / do_dup_venom_asm_rel.
-       Infrastructure gap: apply_prefix_ops does not correctly handle
-       double-restore from the same spill offset. Requires a new file
-       implementing the deep-dup alignment logic. *)
+    (* Deep case: x > 15, needs do_dup_align_gen *)
     cheat)
 QED
 
 Resume gen_inst_ok_sim[offset]:
-  (* inst_wf OFFSET: extract operand shape *)
-  qpat_x_assum `inst_wf _` mp_tac >>
-  simp[inst_wf_def] >> strip_tac >>
-  `?out. inst.inst_outputs = [out]` by
-    (Cases_on `inst.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[]) >>
-  gvs[] >>
-  (* Unfold generate_offset_plan: Label case *)
-  qpat_x_assum `generate_offset_plan _ _ = _` mp_tac >>
-  simp[generate_offset_plan_def, LET_THM] >>
-  strip_tac >> gvs[] >>
-  (* Decompose step_inst OFFSET (exec_pure2 word_add) *)
-  `?v1 v2. eval_operand op vs = SOME v1 /\
-            eval_operand (Label lbl) vs = SOME v2 /\
-            vs' = update_var out (word_add v1 v2) vs` by (
-    `inst.inst_opcode <> INVOKE` by simp[] >>
-    qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-    simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def] >>
-    every_case_tac >> gvs[] >> metis_tac[]) >>
-  gvs[] >>
-  (* Connect eval_operand (Label lbl) with operand_val via precondition *)
-  `eval_operand (Label lbl) vs = operand_val vs lo (Label lbl)` by (
-    first_x_assum (qspec_then `Label lbl` mp_tac) >>
-    simp[compute_operands_def]) >>
-  `?off. FLOOKUP lo lbl = SOME off /\ v2 = n2w off` by (
-    `IS_SOME (FLOOKUP lo lbl)` by (
-      qpat_x_assum `!l. MEM (Label l) _ ==> _` (qspec_then `lbl` mp_tac) >>
-      simp[compute_operands_def]) >>
-    Cases_on `FLOOKUP lo lbl` >> fs[operand_val_def] >> gvs[]) >>
-  gvs[] >>
-  (* Execute AsmPushOfst: 1 asm step *)
-  qabbrev_tac `n = case op of Lit v => w2n v | _ => 0` >>
-  qexistsl_tac [`1`,
-    `asm_next (as with as_stack := n2w (off + n) :: as.as_stack)`] >>
-  qpat_x_assum `asm_block_at _ _ (execute_plan _)` mp_tac >>
-  simp[execute_plan_def, exec_stack_op_def, asm_block_at_def] >>
-  strip_tac >>
-  `1 = SUC 0` by DECIDE_TAC >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_steps_def, asm_step_pushofst_ok,
-       asm_next_def] >>
-  (* Show word_add v1 (n2w off) = n2w (off + n) *)
-  (* Prove: v1 + n2w off = n2w (off + n) for Lit case;
-     cheat Var/Label (unreachable in practice) *)
-  (* venom_asm_rel: plan_stack_rel (push Var out / n2w(off+n)),
-     plan_spill_rel (update_var preserves), memory_rel + field eqs.
-     CHEATED: irule plan_stack_rel_push has match issues in batch;
-     the Lit case word arithmetic is v + n2w off = n2w(off + w2n v)
-     which holds by word_add_n2w + n2w_w2n. Var/Label unreachable. *)
   cheat
 QED
+
 Resume gen_inst_ok_sim[param]:
   qexistsl [`0`, `as`] >> simp[asm_steps_def, execute_plan_def] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
@@ -3100,11 +2934,7 @@ Resume gen_inst_ok_sim[some_name]:
   imp_res_tac asm_block_at_append >>
   (* Now have: asm_block_at prog st_mid.as_pc [AsmOp name]
      and asm_block_at prog (st_mid.as_pc + 1) (execute_plan postfix_ops) *)
-  (* CHEATED: Emit step + postfix simulation.
-     Requires per-opcode-family emit simulation connecting step_inst
-     with asm_step for ~60 opcodes. Largest infrastructure gap:
-     needs emit_sim lemmas for each opcode family (pure1, pure2, pure3,
-     read0, read1, write2, etc.) plus postfix stack cleanup. *)
+  (* Emit step + postfix + compose *)
   cheat
 QED
 

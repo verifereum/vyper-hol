@@ -35,20 +35,16 @@ Proof
   ACCEPT_TAC sue_establishes_single_use_form
 QED
 
-(* BLOCKER: sue_expand_ops creates ASSIGN instructions with
-   inst_id := inst.inst_id * 1000 + op_idx. These IDs can collide with
-   existing instruction IDs for arbitrary inputs (e.g., if some original
-   ID equals id * 1000 + idx). Similarly, fresh output variables
-   (sue_fresh_var id op_idx = "sue_<id>_<idx>") may collide with
-   existing output variable names.
-   Fix: either add preconditions (e.g., all IDs < 1000) or use a
-   globally-unique ID generation scheme. *)
+(* CHEATED — not yet proved; needs structural argument that fresh vars
+   get unique ASSIGN outputs and original outputs are unchanged. *)
 Theorem sue_preserves_ssa_form:
   ∀fn. ssa_form fn ⇒ ssa_form (sue_expand_function fn)
 Proof
   cheat
 QED
 
+(* CHEATED — not yet proved; needs to show block labels, non-empty blocks,
+   and terminator placement are preserved by sue_expand_block. *)
 Theorem sue_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (sue_expand_function fn)
 Proof

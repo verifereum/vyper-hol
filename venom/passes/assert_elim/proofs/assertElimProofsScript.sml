@@ -1343,8 +1343,6 @@ Proof
   >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* ===== Theorem 2 ===== *)
-
 Theorem assert_elim_function_correct_proof:
   !fuel ctx fn s.
     wf_function fn /\
