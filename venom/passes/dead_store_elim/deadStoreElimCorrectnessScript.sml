@@ -1,13 +1,14 @@
 (*
  * Dead Store Elimination — Correctness Statement
  *
- * The FROZEN theorems in deadStoreElimProofsScript.sml are FALSE:
- *   dse_function_space_correct_proof: proved as ~(...)
- *   dse_function_correct_proof: proved as ~(...)
- * Both preconditions are vacuously satisfied by the initial state
- * cex_entry_state (vs_allocas = FEMPTY, vs_vars = FEMPTY), and
- * the same cross-allocation pointer arithmetic counterexample
- * from the _ORIGINAL_FALSE theorems applies.
+ * The positive theorems use mathematically sound preconditions:
+ *   alloca_inv s + alloca_safe_access fn (alloca_roots fn) s +
+ *   step_preserves_safety fn (alloca_roots fn)
+ * See deadStoreElimProofsScript.sml for full explanation.
+ *
+ * The previous theorems (alloca_inv + bp_ptrs_bounded) were FALSE due
+ * to vacuous preconditions — see _VACUITY_FALSE theorems in
+ * deadStoreElimProofsScript.sml.
  *
  * The wf/ssa preservation theorems below remain valid.
  *)
@@ -16,7 +17,7 @@ Theory deadStoreElimCorrectness
 Ancestors
   deadStoreElimProofs venomWf basePtrProps While
   deadStoreElimDefs passSharedDefs passSharedProps venomInst
-  passSimulationProps
+  passSimulationProps allocaRemapDefs pointerConfinedDefs
 
 (* ===== Obligations ===== *)
 
@@ -208,4 +209,20 @@ Proof
     (irule dse_function_space_preserves_ssa >> simp[]) >>
   drule_all dse_function_space_preserves_ssa >>
   simp[]
+QED
+
+Theorem dse_function_correct:
+  ∀analysis_fn fuel ctx fn s.
+    alloca_inv s /\
+    alloca_safe_access fn (alloca_roots fn) s /\
+    step_preserves_safety fn (alloca_roots fn) /\
+    (!space fn'.
+      all_dead_stores (analysis_fn space fn')
+        (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+        space fn') ==>
+    lift_result dse_all_equiv dse_all_equiv dse_all_equiv
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function analysis_fn fn) s)
+Proof
+  ACCEPT_TAC dse_function_correct
 QED

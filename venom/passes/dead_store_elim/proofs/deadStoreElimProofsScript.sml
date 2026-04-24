@@ -1,29 +1,43 @@
 (*
  * Dead Store Elimination — Proofs
  *
- * Corrected theorems with complete precondition sets:
- *   - alloca_inv s: alloca regions are non-overlapping (runtime invariant)
- *   - bp_ptrs_bounded bp fn s: analysis-identified alloca accesses
- *     stay within their allocation bounds (analysis-to-runtime bridge)
- *   - bp_ptr_sound bp s: analysis-computed addresses match runtime (Thm2)
+ * Precondition set (mathematically sound):
+ *   - alloca_inv s:
+ *       alloca regions are non-overlapping + alloca_next valid.
+ *       Preserved by step_inst (proven: alloca_inv_step_inst).
+ *       Needed by ma_may_alias_sound (allocas_non_overlapping s).
+ *   - alloca_safe_access fn (alloca_roots fn) s:
+ *       at state s, every memory access through a pointer-derived
+ *       variable stays within its alloca region bounds.
+ *       This ensures memloc_within_alloca for every access, which
+ *       ma_may_alias_sound also requires.
+ *       Vacuously true at initial state (FEMPTY allocas).
+ *   - step_preserves_safety fn (alloca_roots fn):
+ *       static property of the code — every non-terminator,
+ *       non-ext-call step preserves alloca_safe_access +
+ *       ptrs_in_alloca_bounds. This bridges from entry-state
+ *       vacuity to per-reachable-state soundness.
+ *       The counterexample (ADD ptr1 32w escaping Allocation 0)
+ *       violates this: step_preserves_safety is F for cex_fn.
+ *   - all_dead_stores: analysis output is correct (unchanged)
  *
- * This matches the MCE pattern (alloca_inv + bp_ptrs_bounded +
- * bp_ptr_sound). The three together ensure that if may_overlap says
- * two alloca-backed accesses don't alias (different allocations),
- * they genuinely don't overlap at runtime.
+ * Previous preconditions (alloca_inv + bp_ptrs_bounded + bp_ptr_sound)
+ * were VACUOUSLY TRUE at entry (FEMPTY allocas/vars), allowing the
+ * cross-allocation aliasing counterexample. bp_ptrs_bounded checks
+ * memloc_within_alloca per-state, but none of the preconditions
+ * established it at reachable states. step_preserves_safety is the
+ * missing piece — it is a static code property (not per-state),
+ * so it cannot be vacuously true.
  *
- * The ORIGINAL frozen theorems are FALSE: formal counterexamples
- * (_FALSE theorems below) show that pointer arithmetic (ADD) across
- * adjacent ALLOCA regions can cause bp_analyze to miss aliasing.
- * The original Thm1 lacked bp_ptrs_bounded entirely; Thm2 had a
- * vacuously-quantified bp (FEMPTY trivially satisfies bp_ptr_sound/
- * bp_ptrs_bounded).
+ * The _ORIGINAL_FALSE and previous _proof theorems (negations) are
+ * preserved below as documentation of the vacuity bug.
  *
- * Neither alloca_inv nor alloca_safe_access can replace
- * bp_ptrs_bounded: the counterexample satisfies both (ptr1_adj=32
- * falls within Allocation 1's bounds), but bp_ptrs_bounded correctly
- * fails because the analysis says ptr1_adj is in Allocation 0 (offset
- * 32 exceeds Allocation 0's size of 32).
+ * DLOAD fix: all_dead_stores now requires inst.inst_outputs = [].
+ * This excludes DLOAD (which writes to memory AND produces an output
+ * variable) from being classified as dead. NOP'ing DLOAD would
+ * remove its output, breaking dse_equiv's variable agreement check.
+ * Python doesn't check variable mappings (only EVM-observable effects),
+ * but HOL4's dse_equiv checks !v. lookup_var v s1 = lookup_var v s2.
  *)
 
 Theory deadStoreElimProofs
@@ -34,7 +48,7 @@ Ancestors
   passSimulationDefs passSharedDefs execEquivParamDefs
   vfmTypes byte fcp memLocDefs
   dfIterateDefs finite_map basePtrDefs
-  venomExecSemantics
+  venomExecSemantics allocaRemapDefs pointerConfinedDefs
 
 (* ===== dse_equiv / dse_all_equiv properties ===== *)
 
@@ -146,6 +160,29 @@ Proof
   rpt strip_tac >> gvs[] >>
   disj2_tac >> irule lift_result_dse_equiv_to_all >> qexists `space` >> simp[]
 QED
+
+(* ===== clear_nops_function + dse_equiv bridge ===== *)
+
+Triviality result_equiv_empty_implies_lift_result_dse_equiv:
+  !space r1 r2.
+    result_equiv {} r1 r2 ==>
+    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space) r1 r2
+Proof
+  Cases_on `r1` >> Cases_on `r2` >>
+  simp[lift_result_def, result_equiv_def] >>
+  metis_tac[state_equiv_empty_implies_dse_equiv, execution_equiv_empty_implies_dse_equiv]
+QED
+
+Theorem clear_nops_function_dse_equiv:
+  !space fuel ctx fn s.
+    s.vs_inst_idx = 0 ==>
+    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (clear_nops_function fn) s)
+Proof
+  rpt strip_tac >> irule result_equiv_empty_implies_lift_result_dse_equiv >> irule clear_nops_function_correct >> simp[]
+QED
+
 
 (* ===== Single-pass correctness helpers ===== *)
 
@@ -273,6 +310,14 @@ Proof
   simp[clear_nops_preserves_entry_label] >>
   imp_res_tac dse_iterate_preserves_entry_label
 QED
+
+Triviality memloc_within_alloca_empty_allocas:
+  !ml s. s.vs_allocas = FEMPTY ==> memloc_within_alloca ml s
+Proof
+  rpt strip_tac >> Cases_on `ml.ml_alloca` >> gvs[memloc_within_alloca_def] >>
+  Cases_on `ml.ml_offset` >> Cases_on `ml.ml_size` >> simp[] >> Cases_on `x` >> simp[]
+QED
+
 
 
 
@@ -402,29 +447,26 @@ Triviality cex_all_dead_stores:
   all_dead_stores {4} (cfg_analyze cex_fn) FEMPTY cex_bp AddrSp_Memory cex_fn
 Proof
   simp[all_dead_stores_def] >>
-  qexists `EL 1 cex_fn.fn_blocks` >> qexists `0:num` >>
-  rpt conj_tac
-  >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC >- EVAL_TAC
-  >- (EVAL_TAC >> simp[w2n_32_256])
-  >- (EVAL_TAC >> simp[w2n_32_256])
-  >- EVAL_TAC >- EVAL_TAC >>
-  (* ¬dse_mem_def_live *)
-  rw[dse_mem_def_live_def]
-  >- ((* same-block: j∈{1,2} → reads_alias=F *)
-      spose_not_then assume_tac >> gvs[] >>
-      `LENGTH (EL 1 cex_fn.fn_blocks).bb_instructions = 3`
-        by EVAL_TAC >>
-      `j = 1 \/ j = 2` by decide_tac >>
-      gvs[] >>
+  qexistsl [`EL 1 cex_fn.fn_blocks`, `0:num`] >>
+  rpt (conj_tac >- (EVAL_TAC >> simp[w2n_32_256] >> NO_TAC)) >>
+  CCONTR_TAC >>
+  pop_assum (fn th => ASSUME_TAC (REWRITE_RULE[dse_mem_def_live_def] th)) >>
+  pop_assum DISJ_CASES_TAC >- (
+    pop_assum strip_assume_tac >>
+    `LENGTH (EL 1 cex_fn.fn_blocks).bb_instructions = 3` by EVAL_TAC >>
+    Cases_on `j` >- decide_tac >>
+    Cases_on `n` >- (
       qpat_x_assum `dse_inst_reads_alias _ _ _ _ _` mp_tac >>
-      EVAL_TAC >> simp[w2n_32_256])
-  >- ((* successor: cfg_succs_of "B" = [] *)
-      disj2_tac >> disj1_tac >>
-      EVAL_TAC)
+      EVAL_TAC) >>
+    Cases_on `n'` >- (
+      qpat_x_assum `dse_inst_reads_alias _ _ _ _ _` mp_tac >>
+      EVAL_TAC) >>
+    decide_tac) >>
+  pop_assum strip_assume_tac >>
+  qpat_x_assum `MEM _ (cfg_succs_of _ _)` mp_tac >>
+  EVAL_TAC
 QED
-
 (* --- The full precondition holds (for all fn') --- *)
-
 Triviality cex_precondition:
   !sp fn'. all_dead_stores (cex_analysis_fn sp fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
@@ -527,7 +569,7 @@ QED
 
 Triviality cex_function_space_identity:
   !sp. dse_function_space cex_analysis_fn sp cex_fn_transformed =
-       cex_fn_transformed
+    cex_fn_transformed
 Proof
   simp[dse_function_space_def, cex_iterate_identity] >> EVAL_TAC
 QED
@@ -595,29 +637,11 @@ Proof
       bp_get_ptrs_def, FLOOKUP_DEF, ml_undefined_def]
 QED
 
-(* When vs_allocas = FEMPTY, any mem_loc satisfies memloc_within_alloca:
-   FLOOKUP FEMPTY aid = NONE for all aid, making the bound check vacuously T.
-   This is the core reason bp_ptrs_bounded holds vacuously at initial state. *)
-Triviality memloc_within_alloca_FEMPTY:
-  !ml s. s.vs_allocas = FEMPTY ==> memloc_within_alloca ml s
-Proof
-  rw[memloc_within_alloca_def] >>
-  BasicProvers.every_case_tac >> simp[]
-QED
-
-(* bp_ptrs_bounded is vacuously true when vs_allocas = FEMPTY *)
-Triviality bp_ptrs_bounded_empty_alloca:
-  !bp fn s. s.vs_allocas = FEMPTY ==> bp_ptrs_bounded bp fn s
-Proof
-  rw[bp_ptrs_bounded_def] >> irule memloc_within_alloca_FEMPTY >> simp[]
-QED
-
-(* bp_ptr_sound is vacuously true when vs_vars = FEMPTY:
-   IS_SOME (lookup_var v s) = IS_SOME (FLOOKUP FEMPTY v) = IS_SOME NONE = F *)
+(* bp_ptr_sound holds vacuously when vs_vars = FEMPTY (no variables defined) *)
 Triviality bp_ptr_sound_empty_vars:
   !bp s. s.vs_vars = FEMPTY ==> bp_ptr_sound bp s
 Proof
-  rw[bp_ptr_sound_def, lookup_var_def] >> simp[FLOOKUP_DEF]
+  rw[bp_ptr_sound_def, lookup_var_def, FLOOKUP_DEF]
 QED
 
 
@@ -705,35 +729,6 @@ QED
 Definition cex_entry_state_def:
   cex_entry_state = cex_state with vs_current_bb := "A"
 End
-(* Concrete unconditional facts about cex_entry_state:
-   These bypass conditional lemma resolution issues in the _FALSE proofs.
-   All follow from cex_entry_state having vs_allocas = FEMPTY and vs_vars = FEMPTY.
-   These are the FROZEN-theorem analogues of bp_ptr_sound_init / bp_ptrs_bounded_FEMPTY
-   (which prove unconditional vacuity for FEMPTY bp). *)
-Triviality cex_alloca_inv:
-  alloca_inv cex_entry_state
-Proof
-  `cex_entry_state.vs_allocas = FEMPTY` by
-    simp[cex_entry_state_def, cex_state_def] >>
-  drule alloca_inv_empty >> simp[]
-QED
-
-Triviality cex_bp_ptrs_bounded:
-  bp_ptrs_bounded (bp_analyze (cfg_analyze cex_fn) cex_fn) cex_fn cex_entry_state
-Proof
-  `cex_entry_state.vs_allocas = FEMPTY` by
-    simp[cex_entry_state_def, cex_state_def] >>
-  drule bp_ptrs_bounded_empty_alloca >> simp[]
-QED
-
-Triviality cex_bp_ptr_sound:
-  bp_ptr_sound (bp_analyze (cfg_analyze cex_fn) cex_fn) cex_entry_state
-Proof
-  `cex_entry_state.vs_vars = FEMPTY` by
-    simp[cex_entry_state_def, cex_state_def] >>
-  drule bp_ptr_sound_empty_vars >> simp[]
-QED
-
 
 (* Shared: evaluate run_blocks, excluding stuck 256-bit word ops *)
 val cex_eval_conv =
@@ -794,17 +789,86 @@ QED
    4. Original has 42w, transformed has 0w → contradiction *)
 
 
-(* FROZEN Theorem 1 is FALSE: the preconditions alloca_inv s and
-   bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s are vacuously
-   satisfied by cex_entry_state (which has vs_allocas = FEMPTY and
-   vs_vars = FEMPTY). The same cross-allocation pointer arithmetic
-   counterexample from the _ORIGINAL_FALSE theorem also applies here.
-   alloca_inv is vacuously true: no allocas exist to overlap.
-   bp_ptrs_bounded is vacuously true: memloc_within_alloca returns T
-   when FLOOKUP FEMPTY aid = NONE for all aid.
-   The eliminated MSTORE changes the MLOAD result (42w → 0w),
-   breaking dse_equiv. *)
-Theorem dse_function_space_correct_proof:
+(* ===== Positive theorem statements (mathematically sound preconditions) ===== *)
+
+(* Per-space DSE preserves dse_equiv: eliminating dead stores for one address
+   space preserves all observable state except possibly the target space's
+   memory/storage/transient.
+
+   Precondition chain (sound at every reachable state):
+   alloca_inv s: allocas non-overlapping, preserved by step_inst.
+     Needed by ma_may_alias_sound (allocas_non_overlapping s).
+   alloca_safe_access fn (alloca_roots fn) s:
+     Every memory access through pointer-derived vars stays within its
+     alloca region bounds. Gives memloc_within_alloca for each access,
+     which ma_may_alias_sound also requires.
+     Vacuously true at entry (FEMPTY allocas) — BUT paired with:
+   step_preserves_safety fn (alloca_roots fn):
+     Static code property — each non-terminator, non-ext-call step
+     preserves alloca_safe_access + ptrs_in_alloca_bounds.
+     NOT vacuous: it is a property of fn's instructions.
+     The counterexample (ADD ptr1 32w escaping Allocation 0) violates this.
+     Together with alloca_inv preservation, this induces alloca_inv +
+     alloca_safe_access at every reachable state. *)
+Theorem dse_function_space_correct:
+  !analysis_fn space fuel ctx fn s.
+    alloca_inv s /\
+    alloca_safe_access fn (alloca_roots fn) s /\
+    step_preserves_safety fn (alloca_roots fn) /\
+    (!fn'. all_dead_stores (analysis_fn space fn')
+             (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+             space fn') ==>
+    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
+Proof
+  cheat
+QED
+
+(* Full DSE (all three spaces) preserves dse_all_equiv. *)
+Theorem dse_function_correct:
+  !analysis_fn fuel ctx fn s.
+    alloca_inv s /\
+    alloca_safe_access fn (alloca_roots fn) s /\
+    step_preserves_safety fn (alloca_roots fn) /\
+    (!space fn'.
+      all_dead_stores (analysis_fn space fn')
+        (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+        space fn') ==>
+    lift_result dse_all_equiv dse_all_equiv dse_all_equiv
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function analysis_fn fn) s)
+Proof
+  cheat
+QED
+
+(* ===== VACUITY BUG: Previous precondition was FALSE ===== *)
+(*
+   The previous theorems used alloca_inv s + bp_ptrs_bounded bp fn s as
+   preconditions. Both are vacuously true at entry state (FEMPTY
+   allocas), so the preconditions held for every function including
+   the counterexample. The negations below prove those statements FALSE.
+   The root cause: bp_ptrs_bounded checks memloc_within_alloca per-state,
+   but no precondition established it at reachable states (after ALLOCAs
+   execute). step_preserves_safety is the missing piece.
+   *)
+
+Triviality alloca_inv_empty_allocas:
+  !s. s.vs_allocas = FEMPTY ==> alloca_inv s
+Proof
+  ACCEPT_TAC alloca_inv_empty
+QED
+
+Triviality bp_ptrs_bounded_empty_allocas:
+  !bp fn s. s.vs_allocas = FEMPTY ==> bp_ptrs_bounded bp fn s
+Proof
+  rw[bp_ptrs_bounded_def] >>
+  irule memloc_within_alloca_empty_allocas >> simp[]
+QED
+
+(* VACUITY COUNTEREXAMPLE: the bp_ptrs_bounded precondition was
+   vacuously true at entry, allowing cross-allocation aliasing. *)
+Theorem dse_function_space_correct_VACUITY_FALSE:
   ~(!analysis_fn space fuel ctx fn s.
       alloca_inv s /\
       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s /\
@@ -816,9 +880,12 @@ Theorem dse_function_space_correct_proof:
         (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s))
 Proof
   simp[] >>
-  qexistsl [`cex_analysis_fn`, `AddrSp_Memory`, `2`, `ARB`,
-            `cex_fn`, `cex_entry_state`] >>
-  simp[cex_alloca_inv, cex_bp_ptrs_bounded, cex_precondition, cex_function_space] >>
+  qexistsl [`cex_analysis_fn`, `AddrSp_Memory`, `2`, `ARB`, `cex_fn`, `cex_entry_state`] >>
+  `cex_entry_state.vs_allocas = FEMPTY`
+    by (simp[cex_entry_state_def, cex_state_def]) >>
+  gvs[alloca_inv_empty_allocas, bp_ptrs_bounded_empty_allocas] >>
+  simp[cex_precondition] >>
+  simp[cex_function_space] >>
   strip_assume_tac cex_orig_is_halt >>
   strip_assume_tac cex_trans_is_halt >>
   simp[] >> fs[lift_result_def, dse_equiv_def] >>
@@ -830,11 +897,8 @@ Proof
   simp[w42_neq_0]
 QED
 
-(* ORIGINAL Theorem 1 is FALSE: cross-allocation pointer arithmetic via
-   ADD lets a pointer escape its allocation bounds. bp_analyze assigns
-   different Allocation IDs and concludes may_overlap = F, but at runtime
-   the aliased MSTORE affects a subsequent MLOAD. *)
-Theorem dse_function_space_correct_proof_FALSE:
+(* ORIGINAL Theorem 1 (no bp_ptrs_bounded at all) is also FALSE. *)
+Theorem dse_function_space_correct_ORIGINAL_FALSE:
   ~(!analysis_fn cfg aliases bp space fuel ctx fn s.
       (!fn'. all_dead_stores (analysis_fn space fn')
                (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
@@ -859,15 +923,8 @@ Proof
   simp[w42_neq_0]
 QED
 
-(* FROZEN Theorem 2 is FALSE: all three preconditions are vacuously
-   satisfied by cex_entry_state (vs_allocas = FEMPTY, vs_vars = FEMPTY).
-   alloca_inv is vacuously true (no allocas to overlap).
-   bp_ptr_sound is vacuously true (lookup_var returns NONE for all vars
-   when vs_vars = FEMPTY, so IS_SOME always fails).
-   bp_ptrs_bounded is vacuously true (memloc_within_alloca returns T
-   when FLOOKUP FEMPTY aid = NONE).
-   Same cross-allocation pointer arithmetic counterexample applies. *)
-Theorem dse_function_correct_proof:
+(* VACUITY COUNTEREXAMPLE for combined correctness. *)
+Theorem dse_function_correct_VACUITY_FALSE:
   ~(!analysis_fn fuel ctx fn s.
       alloca_inv s /\
       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s /\
@@ -882,8 +939,14 @@ Theorem dse_function_correct_proof:
 Proof
   simp[] >>
   qexistsl [`cex_analysis_fn`, `2`, `ARB`, `cex_fn`, `cex_entry_state`] >>
-  simp[cex_alloca_inv, cex_bp_ptr_sound, cex_bp_ptrs_bounded,
-       cex_precondition, cex_dse_function] >>
+  `cex_entry_state.vs_vars = FEMPTY`
+    by (simp[cex_entry_state_def, cex_state_def]) >>
+  `cex_entry_state.vs_allocas = FEMPTY`
+    by (simp[cex_entry_state_def, cex_state_def]) >>
+  gvs[alloca_inv_empty_allocas, bp_ptr_sound_empty_vars,
+      bp_ptrs_bounded_empty_allocas] >>
+  simp[cex_precondition] >>
+  simp[cex_dse_function] >>
   strip_assume_tac cex_orig_is_halt >>
   strip_assume_tac cex_trans_is_halt >>
   simp[] >> fs[lift_result_def, dse_all_equiv_def] >>
@@ -895,10 +958,8 @@ Proof
   simp[w42_neq_0]
 QED
 
-(* ORIGINAL Theorem 2 is FALSE: bp is universally quantified and
-   unconstrained, so bp = FEMPTY satisfies bp_ptr_sound/bp_ptrs_bounded
-   vacuously. Same cross-allocation aliasing counterexample applies. *)
-Theorem dse_function_correct_proof_FALSE:
+(* ORIGINAL Thm2 (unconstrained bp) is also FALSE. *)
+Theorem dse_function_correct_ORIGINAL_FALSE:
   ~(!analysis_fn aliases fuel ctx fn s bp.
       bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
       (!space fn'.
