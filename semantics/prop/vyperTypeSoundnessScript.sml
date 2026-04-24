@@ -178,6 +178,7 @@ val swt_modify_solve =
 val swt_modify_tac = swt_modify_solve;
 
 val not_return_tac =
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   TRY (imp_res_tac eval_expr_not_return >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac eval_exprs_not_return >> gvs[] >> NO_TAC) >>
   TRY (imp_res_tac eval_target_not_return >> gvs[] >> NO_TAC) >>
@@ -361,6 +362,7 @@ fun tp_chain_tail_tac value_tac =
     irule tp_preserved_scopes_immutables >>
     qexists_tac `st1` >> gvs[]) >>
   simp[] >>
+  TRY (rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC)) >>
   rpt strip_tac >>
   gvs[bind_apply, ignore_bind_apply, AllCaseEqs(),
       return_def, raise_def, COND_RATOR, LET_THM, UNCURRY,
@@ -392,70 +394,92 @@ fun tp_pure_base_target_tac ev_thm =
 (* type_preservation is derived from this at the end.                *)
 
 Theorem eval_preserves_swt:
-  (* P0: eval_stmt — state + env preserved, return exceptions well-typed *)
+  (* Type soundness: well-typed programs never raise TypeError.
+     Key insight: TypeError in the Vyper interpreter arises from:
+     (1) materialise(HashMapRef) — blocked by ty <> NoneT in well_typed_expr
+     (2) evaluate_binop type mismatches — blocked by well_typed_binop
+     (3) evaluate_builtin type mismatches — blocked by well_typed_builtin_app
+     (4) dest_XV failures after materialise — blocked by well_typed_expr + value_has_type
+     (5) get_Value on non-Value toplevel_value — blocked by TopLevelName ty <> NoneT
+     The no-TypeError conjunct for each case follows from IH + definition constraints.
+     materialise_no_type_error bridges: if tv is well-typed (not NoneTV) then
+     materialise doesn't produce TypeError. *)
+  (* P0: eval_stmt — state + env preserved, no type errors, return well-typed *)
   (!cx s. !env ret_ty st res st'.
     well_typed_stmt env ret_ty s /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_stmt cx s st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
-  (* P1: eval_stmts — state + env preserved, return exceptions well-typed *)
+  (* P1: eval_stmts — state + env preserved, no type errors, return well-typed *)
   (!cx ss. !env ret_ty st res st'.
     well_typed_stmts env ret_ty ss /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_stmts cx ss st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
-  (* P2: eval_iterator — STRENGTHENED with value typing *)
+  (* P2: eval_iterator — no type errors, value typing on success *)
   (!cx it. !env typ st res st'.
     well_typed_iterator env typ it /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_iterator cx it st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!vs tyv. res = INL vs /\
               evaluate_type (get_tenv cx) typ = SOME tyv ==>
               EVERY (value_has_type tyv) vs)) /\
-  (* P3: eval_target *)
+  (* P3: eval_target — no type errors *)
   (!cx g. !env st res st'.
     (?ty. well_typed_atarget env g ty) /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_target cx g st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
-  (* P4: eval_targets *)
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
+  (* P4: eval_targets — no type errors *)
   (!cx gs. !env st res st'.
     EVERY (\g. ?ty. well_typed_atarget env g ty) gs /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_targets cx gs st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
-  (* P5: eval_base_target *)
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
+  (* P5: eval_base_target — no type errors *)
   (!cx bt. !env st res st'.
     (?ty. well_typed_target env bt ty) /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
-  (* P6: eval_for *)
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
+  (* P6: eval_for — no type errors, return well-typed *)
   (!cx tyv nm body vs. !env typ ret_ty st res st'.
     well_typed_stmts (env with var_types updated_by (flip FUPDATE (nm, typ)))
                      ret_ty body /\
@@ -463,39 +487,45 @@ Theorem eval_preserves_swt:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     EVERY (value_has_type tyv) vs /\
     nm NOTIN FDOM env.var_types /\
     eval_for cx tyv nm body vs st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    !v ret_tv. res = INR (ReturnException v) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
+    (!v ret_tv. res = INR (ReturnException v) /\
                evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-               value_has_type ret_tv v) /\
-  (* P7: eval_expr -- covers both success and failure *)
+               value_has_type ret_tv v)) /\
+  (* P7: eval_expr — no type errors, typing on success *)
   (!cx e. !env st res st'.
     well_typed_expr env e /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_expr cx e st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!tv. res = INL tv ==>
        (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               toplevel_value_typed tv tyv) /\
        (!v st''. materialise cx tv st' = (INL v, st'') ==>
-          state_well_typed st'' /\ env_consistent env cx st'' /\
+          state_well_typed st'' /\ env_consistent env cx st'' /\ accounts_well_typed st''.accounts /\
           (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
                  value_has_type tyv v)))) /\
-  (* P8: eval_exprs -- covers both success and failure *)
+  (* P8: eval_exprs — no type errors, typing on success *)
   (!cx es. !env st res st'.
     well_typed_exprs env es /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_exprs cx es st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!vs. res = INL vs ==>
       LIST_REL (\v e. ?tyv.
         evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -597,11 +627,30 @@ Resume eval_preserves_swt[ReturnSome]:
   rewrite_tac[ev_ReturnSome] >>
   simp[bind_def, AllCaseEqs(), raise_def] >> strip_tac >> gvs[] >>
   qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-    drule_all >> strip_tac >> gvs[] >>
-  TRY (qpat_x_assum `!tv. INL _ = INL tv ==> _`
+    drule_all >> strip_tac >>
+  TRY (gvs[] >>
+       qpat_x_assum `!tv. INL _ = INL tv ==> _`
          (mp_tac o SIMP_RULE (srw_ss()) []) >>
        disch_then drule >> strip_tac >> gvs[] >> NO_TAC) >>
-  swt_resolve_state_tac >> not_return_tac
+  gvs[] >>
+  swt_resolve_state_tac >>
+  rpt CONJ_TAC >>
+  TRY not_return_tac >>
+  TRY (imp_res_tac materialise_no_type_error >>
+       gvs[toplevel_value_typed_def] >> NO_TAC) >>
+  TRY (imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+  (* Handle materialise TypeError: derive F via NoneTV->NoneT->well_typed_expr *)
+  TRY (
+    imp_res_tac materialise_type_error_NoneTV >>
+    first_x_assum drule >> strip_tac >>
+    imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
+    imp_res_tac materialise_type_error_imp_HashMapRef >>
+    Cases_on `tv` >> gvs[materialise_def, return_def, raise_def,
+                        toplevel_value_typed_def,
+                        well_typed_expr_def, expr_type_def] >>
+    drule read_storage_slot_error >> strip_tac >> gvs[] >>
+    NO_TAC)
+
 QED
 
 Resume eval_preserves_swt[Raise1]:
@@ -851,7 +900,8 @@ val tp_bind_err_tac =
   TRY (imp_res_tac eval_iterator_not_return >>
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
   TRY (imp_res_tac materialise_error >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []);
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (first_assum ACCEPT_TAC);
 
 Resume eval_preserves_swt[Assert3]:
   rpt gen_tac >> strip_tac >>
@@ -3610,8 +3660,11 @@ Proof
   EVAL_TAC
 QED
 
+
 (* ===== type_preservation: derived from eval_preserves_swt ===== *)
-(* Requires context_well_typed cx — see counterexample above for why.
+(* Requires context_well_typed cx — see counterexample above for why (ce — value_preservation P7 fails without it).
+   Includes no-TypeError (type soundness / progress): well-typed programs
+   never raise TypeError exceptions.
    P2 (eval_iterator) drops well_typed_iterator; swt+ec follow from swt P2
    which is strictly stronger. *)
 
@@ -3623,8 +3676,10 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_stmt cx s st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
@@ -3635,20 +3690,24 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_stmts cx ss st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
                 value_has_type ret_tv v)) /\
-  (* P2: eval_iterator — needs well_typed_iterator (see FOCUS P2 analysis) *)
+  (* P2: eval_iterator *)
   (!cx it. !env typ st res st'.
     well_typed_iterator env typ it /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_iterator cx it st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P3: eval_target *)
   (!cx g. !env st res st'.
     (?ty. well_typed_atarget env g ty) /\
@@ -3656,8 +3715,10 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_target cx g st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P4: eval_targets *)
   (!cx gs. !env st res st'.
     EVERY (\g. ?ty. well_typed_atarget env g ty) gs /\
@@ -3665,8 +3726,10 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_targets cx gs st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P5: eval_base_target *)
   (!cx bt. !env st res st'.
     (?ty. well_typed_target env bt ty) /\
@@ -3674,8 +3737,10 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st') /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s)))) /\
   (* P6: eval_for *)
   (!cx tyv nm body vs. !env typ ret_ty st res st'.
     well_typed_stmts (env with var_types updated_by (flip FUPDATE (nm, typ)))
@@ -3684,14 +3749,16 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     evaluate_type (get_tenv cx) typ = SOME tyv /\
     EVERY (value_has_type tyv) vs /\
     nm NOTIN FDOM env.var_types /\
     eval_for cx tyv nm body vs st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    !v ret_tv. res = INR (ReturnException v) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
+    (!v ret_tv. res = INR (ReturnException v) /\
                evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-               value_has_type ret_tv v) /\
+               value_has_type ret_tv v)) /\
   (* P7: eval_expr *)
   (!cx e. !env st res st'.
     well_typed_expr env e /\
@@ -3699,11 +3766,13 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_expr cx e st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!tv. res = INL tv ==>
        (!v st''. materialise cx tv st' = (INL v, st'') ==>
-          state_well_typed st'' /\ env_consistent env cx st'' /\
+          state_well_typed st'' /\ env_consistent env cx st'' /\ accounts_well_typed st''.accounts /\
           (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
                  value_has_type tyv v)))) /\
   (* P8: eval_exprs *)
@@ -3713,8 +3782,10 @@ Theorem type_preservation:
     state_well_typed st /\
     functions_well_typed cx /\
     context_well_typed cx /\
+    accounts_well_typed st.accounts /\
     eval_exprs cx es st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!s. res <> INR (Error (TypeError s))) /\
     (!vs. res = INL vs ==>
       LIST_REL (\v e. ?tyv.
         evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
