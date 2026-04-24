@@ -6667,127 +6667,6 @@ val hmr_case_defs = [return_def, raise_def, is_HashMapRef_def,
   read_storage_slot_def, bind_def, UNCURRY, lift_option_type_def,
   lift_option_def, get_storage_backend_def];
 
-(* Standalone lemma: ExtCall result is not HashMapRef given the drv expression
-   is not HashMapRef. Avoids the IH-matching problem in the induction case. *)
-Triviality extcall_not_HashMapRef:
-  !cx ty is_static func_name arg_types ret_type es drv st tv st' env s.
-    eval_expr cx (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
-                   es drv) st = (INL tv, st') /\
-    well_typed_expr env (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
-                   es drv) /\
-    env_consistent env cx s /\
-    (!st res st'. eval_expr cx (THE drv) st = (res,st') ==>
-       !env. well_typed_expr env (THE drv) ==> !s. env_consistent env cx s ==>
-       !tv. res = INL tv ==> ~is_HashMapRef tv) ==>
-    ~is_HashMapRef tv
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, UNCURRY, return_def,
-       raise_def, LET_THM, COND_RATOR, AllCaseEqs(), PULL_EXISTS,
-       lift_option_type_def, lift_option_def, lift_sum_def,
-       lift_sum_runtime_def, check_def, type_check_def,
-       get_accounts_def, get_transient_storage_def,
-       update_accounts_def, update_transient_def] >>
-  rpt strip_tac >>
-  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
-  (rpt strip_tac >>
-   Cases_on `drv` >> gvs[] >>
-   qpat_x_assum `well_typed_expr _ (Call _ _ _ _)` mp_tac >>
-   simp[well_typed_expr_def, well_typed_opt_SOME] >>
-   strip_tac >>
-   first_x_assum (drule_then (qspecl_then [`env`,`s`] mp_tac)) >>
-   simp[])
-QED
-
-Theorem eval_expr_not_HashMapRef_ind[local]:
-  (!cx s st res st'. eval_stmt cx s st = (res, st') ==> T) /\
-  (!cx ss st res st'. eval_stmts cx ss st = (res, st') ==> T) /\
-  (!cx it st res st'. eval_iterator cx it st = (res, st') ==> T) /\
-  (!cx g st res st'. eval_target cx g st = (res, st') ==> T) /\
-  (!cx gs st res st'. eval_targets cx gs st = (res, st') ==> T) /\
-  (!cx bt st res st'. eval_base_target cx bt st = (res, st') ==> T) /\
-  (!cx tv nm body vs st res st'. eval_for cx tv nm body vs st = (res, st') ==> T) /\
-  (!cx e st res st'. eval_expr cx e st = (res, st') ==>
-    !env. well_typed_expr env e ==> !s. env_consistent env cx s ==>
-    !tv. res = INL tv ==> ~is_HashMapRef tv) /\
-  (!cx es st res st'. eval_exprs cx es st = (res, st') ==> T)
-Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >| (
-    List.tabulate(34, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH]) @
-    (* 1:Name *) [suspend "Name"] @
-    (* 2:BareGlobalName *) [suspend "BareGlobalName"] @
-    (* 3:TopLevelName *) [suspend "TopLevelName"] @
-    (* 4:FlagMember *) [suspend "FlagMember"] @
-    (* 5:IfExp *) [suspend "IfExp"] @
-    (* 6:Literal *) [suspend "Literal"] @
-    (* 7:StructLit *) [suspend "StructLit"] @
-    (* 8:Subscript *) [suspend "Subscript"] @
-    (* 9:Attribute *) [suspend "Attribute"] @
-    (* 10:Builtin *) [suspend "Builtin"] @
-    (* 11:Pop *) [suspend "Pop"] @
-    (* 12:TypeBuiltin *) [suspend "TypeBuiltin"] @
-    (* 13:Send *) [suspend "Send"] @
-    (* 14:ExtCall *) [suspend "ExtCall"] @
-    (* 15:IntCall *) [suspend "IntCall"] @
-    (* 16:RawCallTarget *) [suspend "RawCallTarget"] @
-    (* 17:RawLog *) [suspend "RawLog"] @
-    (* 18:RawRevert *) [suspend "RawRevert"] @
-    (* 19:SelfDestructTarget *) [suspend "SelfDestructTarget"] @
-    (* 20:CreateTarget *) [suspend "CreateTarget"] @
-    List.tabulate(2, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH])
-  )
-QED
-
-Resume eval_expr_not_HashMapRef_ind[Name]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac name_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[BareGlobalName]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac bareglobalname_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[TopLevelName]:
-  rpt strip_tac >> gvs[] >>
-  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
-  (gvs[el 3 ev_expr_cjs] >>
-   imp_res_tac lookup_global_HashMapRef >>
-   gvs[well_typed_expr_def] >>
-   drule_all env_consistent_toplevel_hashmap >> gvs[])
-QED
-
-Resume eval_expr_not_HashMapRef_ind[FlagMember]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac flagmember_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[IfExp]:
-  rpt strip_tac >>
-  FULL_SIMP_TAC pure_ss [] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  rewrite_tac [el 5 ev_expr_cjs] >>
-  simp_tac (srw_ss()) (is_HashMapRef_def :: hmr_blast_defs) >>
-  rpt strip_tac >>
-  gvs[well_typed_expr_def] >-
-  (* BoolV T case: use e' IH *)
-  metis_tac[] >>
-  (* BoolV F case: use e'' IH *)
-  metis_tac[]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[Literal]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac literal_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[StructLit]:
-  rpt strip_tac >>
-  qpat_x_assum `res = INL tv` SUBST_ALL_TAC >>
-  drule structlit_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
-QED
-
 (* Standalone lemma: Subscript expression never returns HashMapRef,
    given that the base expression doesn't return HashMapRef. *)
 Triviality subscript_not_HashMapRef:
@@ -6814,93 +6693,139 @@ Proof
   gvs[is_HashMapRef_def]
 QED
 
-Resume eval_expr_not_HashMapRef_ind[Subscript]:
-  rpt strip_tac >>
-  gvs[well_typed_expr_def] >>
-  metis_tac[subscript_not_HashMapRef]
-QED
 
-Resume eval_expr_not_HashMapRef_ind[Attribute]:
-  rpt strip_tac >> qpat_x_assum `res = INL tv` (assume_tac o GSYM) >> gvs[] >> drule attribute_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[Builtin]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac builtin_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[Pop]:
-  rpt strip_tac >>
-  qpat_x_assum `res = INL tv` SUBST_ALL_TAC >>
-  drule pop_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
-QED
-Resume eval_expr_not_HashMapRef_ind[TypeBuiltin]:
-  rpt strip_tac >>
-  qpat_x_assum `res = INL tv` SUBST_ALL_TAC >>
-  drule typebuiltin_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
-QED
-Resume eval_expr_not_HashMapRef_ind[Send]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac call_simple_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[ExtCall]:
-  rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >> strip_tac >> strip_tac >>
-  simp[Once evaluate_def] >> simp[Once evaluate_def] >>
-  simp[return_def, bind_def, check_def, lift_option_type_def, lift_option_def,
-       get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, pair_case_def] >>
-  rpt strip_tac >>
-  first_x_assum (fn ih =>
-    let val ih' = SIMP_RULE (srw_ss()) [return_def, bind_def, check_def,
-         lift_option_type_def, lift_option_def, get_accounts_def,
-         get_transient_storage_def, update_accounts_def, update_transient_def] ih
-    in mp_tac ih' >> simp[return_def, bind_def, check_def, lift_option_type_def,
-         lift_option_def, get_accounts_def, get_transient_storage_def,
-         update_accounts_def, update_transient_def] >> rpt strip_tac end) >>
-  Cases_on `tv` >> gvs[is_HashMapRef_def] >>
-  cheat
-QED
-Resume eval_expr_not_HashMapRef_ind[IntCall]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac intcall_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[RawCallTarget]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac rawcalltarget_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[RawLog]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac rawlog_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
-Resume eval_expr_not_HashMapRef_ind[RawRevert]:
+(* Standalone lemma: ExtCall with drv=NONE never returns HashMapRef.
+   When drv=NONE, IS_SOME NONE = F, so the if-branch is never taken,
+   and the else-branch always returns Value (decoded ABI return data). *)
+Triviality extcall_none_not_HashMapRef:
+  !cx ty is_static func_name arg_types ret_type es st tv st'.
+    eval_expr cx (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
+                   es NONE) st = (INL tv, st') ==>
+    ~is_HashMapRef tv
+Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
-    ignore_bind_def, UNCURRY, lift_option_type_def, lift_option_def,
-    lift_sum_def, lift_sum_runtime_def, check_def, type_check_def,
-    is_HashMapRef_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  simp[Once evaluate_def, bind_def, ignore_bind_def, UNCURRY, return_def,
+       raise_def, LET_THM, COND_RATOR, AllCaseEqs(), PULL_EXISTS,
+       lift_option_type_def, lift_option_def, lift_sum_def,
+       lift_sum_runtime_def, check_def, type_check_def,
+       get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def] >>
+  rpt strip_tac >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def]
 QED
 
-Resume eval_expr_not_HashMapRef_ind[SelfDestructTarget]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac selfdestruct_returns_Value >> gvs[is_HashMapRef_def]
+(* Standalone lemma: ExtCall result is not HashMapRef given the drv expression
+   is not HashMapRef. Used for the drv=SOME case. *)
+Triviality extcall_some_not_HashMapRef:
+  !cx ty is_static func_name arg_types ret_type es drv st tv st' env s.
+    eval_expr cx (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
+                   es (SOME drv)) st = (INL tv, st') /\
+    well_typed_expr env (Call ty (ExtCall is_static (func_name,arg_types,ret_type))
+                   es (SOME drv)) /\
+    env_consistent env cx s /\
+    (!st res st'. eval_expr cx drv st = (res,st') ==>
+       !env. well_typed_expr env drv ==> !s. env_consistent env cx s ==>
+       !tv. res = INL tv ==> ~is_HashMapRef tv) ==>
+    ~is_HashMapRef tv
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, UNCURRY, return_def,
+       raise_def, LET_THM, COND_RATOR, AllCaseEqs(), PULL_EXISTS,
+       lift_option_type_def, lift_option_def, lift_sum_def,
+       lift_sum_runtime_def, check_def, type_check_def,
+       get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def] >>
+  rpt strip_tac >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def] >-
+  (rpt strip_tac >>
+   gvs[well_typed_expr_def, well_typed_opt_SOME] >>
+   first_x_assum (drule_then (qspecl_then [`env`,`s`] mp_tac)) >>
+   simp[])
 QED
 
-Resume eval_expr_not_HashMapRef_ind[CreateTarget]:
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac createtarget_returns_Value >> gvs[is_HashMapRef_def]
-QED
-
+(* ===== eval_expr_not_HashMapRef via structural induction on expr ===== *)
 
 Theorem eval_expr_not_HashMapRef:
-  !env e cx st tv st'. well_typed_expr env e /\ env_consistent env cx st /\ eval_expr cx e st = (INL tv, st') ==> ~is_HashMapRef tv
+  !env e cx st tv st'.
+    well_typed_expr env e /\
+    env_consistent env cx st /\
+    eval_expr cx e st = (INL tv, st') ==>
+    ~is_HashMapRef tv
 Proof
-  rpt strip_tac >> drule (cj 8 eval_expr_not_HashMapRef_ind) >> disch_then (qspecl_then [`env`,`st`,`tv`] mp_tac) >> simp[]
+  gen_tac >> Induct_on `e` >> rpt conj_tac >| (
+    (* P0: 13 expr constructor cases *)
+    [suspend "P0_Name", suspend "P0_BareGlobalName",
+     suspend "P0_TopLevelName", suspend "P0_FlagMember",
+     suspend "P0_IfExp", suspend "P0_Literal",
+     suspend "P0_StructLit", suspend "P0_Subscript",
+     suspend "P0_Attribute", suspend "P0_Builtin",
+     suspend "P0_Pop", suspend "P0_TypeBuiltin",
+     suspend "P0_Call"] @
+    (* P1: 5 base_assignment_target cases *)
+    List.tabulate(5, fn _ => simp[]) @
+    (* P2: 2 list cases *)
+    [simp[], simp[]] @
+    (* P3: 1 pair case *)
+    [simp[]] @
+    (* P4: 2 option cases *)
+    [simp[], rpt strip_tac >> simp[]] @
+    (* P5: 2 expr list cases *)
+    [simp[], rpt strip_tac >> simp[]]
+  )
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Name]:
+  rpt strip_tac >> imp_res_tac name_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_BareGlobalName]:
+  rpt strip_tac >> imp_res_tac bareglobalname_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_TopLevelName]:
+  rpt strip_tac >> cheat
+QED
+
+Resume eval_expr_not_HashMapRef[P0_FlagMember]:
+  rpt strip_tac >> imp_res_tac flagmember_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_IfExp]:
+  rpt strip_tac >> cheat
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Literal]:
+  rpt strip_tac >> imp_res_tac literal_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_StructLit]:
+  rpt strip_tac >> imp_res_tac structlit_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Subscript]:
+  rpt strip_tac >> cheat
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Attribute]:
+  rpt strip_tac >> imp_res_tac attribute_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Builtin]:
+  rpt strip_tac >> imp_res_tac builtin_returns_Value >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Pop]:
+  rpt strip_tac >> drule pop_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_TypeBuiltin]:
+  rpt strip_tac >> drule typebuiltin_returns_Value >> strip_tac >> gvs[is_HashMapRef_def]
+QED
+
+Resume eval_expr_not_HashMapRef[P0_Call]:
+  rpt strip_tac >> cheat
 QED
 
 Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
@@ -6908,4 +6833,3 @@ Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
 Proof
   metis_tac[eval_expr_not_HashMapRef]
 QED
-
