@@ -20,7 +20,7 @@ If there are conflicts, resolve them (keep both sides where possible, prefer mai
 Status: planned
 Priority: P0
 Created: 2026-04-19
-Location: semantics/prop
+Location: semantics/prop/
 
 ## Theorem Statement (FROZEN — updated: accounts_well_typed precondition + conclusion added)
 
@@ -156,13 +156,13 @@ The derived theorem `type_preservation` (which drops `well_typed_iterator` from 
  * Especially machinery that can be generalized and shared
  * between proofs — write it in separate helper files
  * (e.g. <project>Lib.sml, <project>Script.sml) and
- * Holmake it first.
+ * holmake tool first.
  ************************************************************
  *)
 
 ## Completion Criteria
 
-1. `Holmake` in `semantics/prop/` passes with zero CHEAT warnings and zero FAILs.
+1. holmake tool with workdir="semantics/prop/", env={"VFMDIR": "/home/ubuntu/vyper-hol/verifereum-ref"} passes with zero CHEAT warnings and zero FAILs.
 2. No new cheats relative to main (the file currently has zero cheats on main, so zero cheats required).
 3. No duplicate or near-duplicate lemmas — each helper should exist once in its most general form.
 
@@ -175,7 +175,7 @@ The derived theorem `type_preservation` (which drops `well_typed_iterator` from 
 
 ```
 cd semantics/prop
-VFMDIR=/home/ubuntu/vyper-hol/verifereum-ref Holmake
+holmake tool: workdir=".", env={"VFMDIR": "/home/ubuntu/vyper-hol/verifereum-ref"}
 ```
 
 ## Background
