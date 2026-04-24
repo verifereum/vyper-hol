@@ -1834,7 +1834,6 @@ Triviality concretize_step_effect_free_non_pv:
     is_effect_free_op inst.inst_opcode /\
     inst.inst_opcode <> NOP /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
     (!v. MEM (Var v) inst.inst_operands ==>
          v NOTIN pointer_derived_vars fn (FDOM amap)) /\
     (!v. MEM v inst.inst_outputs ==>
@@ -1929,7 +1928,6 @@ Triviality concretize_step_pure_non_pv:
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN read_effects inst.inst_opcode /\
     ~is_pointer_preserving_op inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     concretize_pointer_confined fn amap /\
@@ -2283,8 +2281,7 @@ Proof
   `~is_terminator inst.inst_opcode /\ ~is_ext_call_op inst.inst_opcode /\
    ~is_alloca_op inst.inst_opcode` by
     metis_tac[is_effect_free_op_classes] >>
-  `Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
-   Eff_MSIZE NOTIN read_effects inst.inst_opcode` by
+  `Eff_MEMORY NOTIN read_effects inst.inst_opcode` by
     (Cases_on `inst.inst_opcode` >>
      fs[is_pointer_preserving_op_def,
         venomEffectsTheory.read_effects_def,
@@ -2528,7 +2525,6 @@ Triviality concretize_step_non_mem_identity:
     inst.inst_opcode <> NOP /\
     Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    Eff_MSIZE NOTIN write_effects inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     concretize_pointer_confined fn amap /\
     concretize_rel amap fn livesets init s1 s2 ==>
@@ -4961,15 +4957,15 @@ QED
 
 Finalise concretize_step_returndatacopy
 
-(* Full per-instruction simulation for non-alloca, non-INVOKE, non-NOP, non-MSIZE.
+(* Full per-instruction simulation for non-alloca, non-INVOKE, non-NOP, non-MEMTOP.
    Combines pure, pointer-preserving, memory, terminator, and side-effect cases.
-   MSIZE excluded: LENGTH vs_memory may differ between sides after displaced MSTORE. *)
+   MEMTOP excluded: LENGTH vs_memory may differ between sides after displaced MSTORE. *)
 Theorem concretize_step_inst_base_identity:
   !inst bb amap fn livesets init s1 s2.
     ~is_alloca_op inst.inst_opcode /\
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
-    inst.inst_opcode <> MSIZE /\
+    inst.inst_opcode <> MEMTOP /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     fn_inst_wf fn /\
     ssa_form fn /\ amap_from_allocas fn amap /\
@@ -5014,12 +5010,8 @@ Proof
              venomEffectsTheory.empty_effects_def,
              is_effect_free_op_def]) >>
        qexists `init` >> irule concretize_step_sha3 >> metis_tac[]) >>
-    (* Eff_MSIZE NOTIN read_effects: only MSIZE has it, excluded by precondition *)
-    `Eff_MSIZE NOTIN read_effects inst.inst_opcode` by
-      (Cases_on `inst.inst_opcode` >>
-       gvs[venomEffectsTheory.read_effects_def,
-           venomEffectsTheory.all_effects_def,
-           venomEffectsTheory.empty_effects_def]) >>
+    (* Eff_MSIZE no longer exists (MSIZE→MEMTOP, upstream #4909);
+       Eff_MSIZE NOTIN read_effects is vacuously true *)
     fs[] >>
     qexists `init` >>
     irule concretize_step_pure_non_pv >>
@@ -5031,8 +5023,7 @@ Proof
   Cases_on `inst.inst_opcode = REVERT`
   >- (qexists `init` >> irule concretize_step_revert >> metis_tac[]) >>
   Cases_on `Eff_MEMORY IN read_effects inst.inst_opcode \/
-            Eff_MEMORY IN write_effects inst.inst_opcode \/
-            Eff_MSIZE IN write_effects inst.inst_opcode`
+            Eff_MEMORY IN write_effects inst.inst_opcode`
   >- (
     Cases_on `inst.inst_opcode = MSTORE`
     >- (qexists `init` >> irule concretize_step_mstore >> metis_tac[]) >>
@@ -5532,7 +5523,7 @@ Theorem exec_block_bmt_sim:
     alloca_sizes_match fn s1 /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
     concretize_rel amap fn livesets init s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx ==>
     ?init'.
@@ -5574,7 +5565,7 @@ Proof
       simp[] >>
       `inst.inst_opcode <> INVOKE` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `inst.inst_opcode <> NOP` by (fs[EVERY_MEM] >> metis_tac[]) >>
-      `inst.inst_opcode <> MSIZE` by (fs[EVERY_MEM] >> metis_tac[]) >>
+      `inst.inst_opcode <> MEMTOP` by (fs[EVERY_MEM] >> metis_tac[]) >>
       simp[step_inst_non_invoke] >>
       irule concretize_step_inst_base_identity >> simp[] >> metis_tac[])) >>
   (* Case split step results to wire into block *)
@@ -5639,7 +5630,7 @@ Theorem concretize_exec_block_sim:
     alloca_sizes_match fn s1 /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-    EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
     concretize_rel amap fn livesets init s1 s2 /\
     s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 ==>
     ?init'.
@@ -5759,7 +5750,7 @@ Theorem concretize_function_correct_proof:
     live_non_overlapping livesets amap fn /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
                 EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-                EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions)
+                EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions)
       fn.fn_blocks /\
     concretize_rel amap fn livesets init s1 s2 ==>
     ?init'.
@@ -5832,7 +5823,7 @@ Resume concretize_function_correct_proof[step]:
     (irule concretize_exec_block_sim >> simp[] >>
      `EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
       EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-      EVERY (\i. i.inst_opcode <> MSIZE) bb.bb_instructions` by
+      EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions` by
        (fs[EVERY_MEM] >> metis_tac[]) >>
      metis_tac[]) >>
   pop_assum strip_assume_tac >>

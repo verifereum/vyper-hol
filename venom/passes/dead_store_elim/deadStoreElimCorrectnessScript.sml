@@ -1,245 +1,228 @@
 (*
  * Dead Store Elimination — Correctness Statement
+ *
+ * The positive theorems use mathematically sound preconditions:
+ *   alloca_inv s + alloca_safe_access fn (alloca_roots fn) s +
+ *   step_preserves_safety fn (alloca_roots fn)
+ * See deadStoreElimProofsScript.sml for full explanation.
+ *
+ * The previous theorems (alloca_inv + bp_ptrs_bounded) were FALSE due
+ * to vacuous preconditions — see _VACUITY_FALSE theorems in
+ * deadStoreElimProofsScript.sml.
+ *
+ * The wf/ssa preservation theorems below remain valid.
  *)
 
 Theory deadStoreElimCorrectness
 Ancestors
-  deadStoreElimProofs deadStoreElimDefs venomWf basePtrProps
-  venomInst venomEffects
-  passSimulationProps passSimulationDefs passSharedProps passSharedDefs
+  deadStoreElimProofs venomWf basePtrProps While
+  deadStoreElimDefs passSharedDefs passSharedProps venomInst
+  passSimulationProps allocaRemapDefs pointerConfinedDefs
 
-Theorem dse_function_correct:
-  !analysis_fn aliases fuel ctx fn s bp.
-    bp_ptr_sound bp s /\ bp_ptrs_bounded bp fn s /\
-    (!space fn'.
-      all_dead_stores (analysis_fn space fn')
-        (cfg_analyze fn') aliases (bp_analyze (cfg_analyze fn') fn')
-        space fn') ==>
-    lift_result dse_all_equiv dse_all_equiv dse_all_equiv
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (dse_function analysis_fn fn) s)
+(* ===== Obligations ===== *)
+
+(* dse_inst properties *)
+
+
+(* Bridge lemmas: certain opcode classes are disjoint from is_memory_def_opcode.
+   This avoids expanding write_effects_def (91 clauses) in every di_* proof. *)
+
+Triviality terminator_not_memory_def:
+  !space op. is_terminator op ==> ~is_memory_def_opcode space op
 Proof
-  ACCEPT_TAC dse_function_correct_proof
+  Cases_on `op` >> simp[is_terminator_def, is_memory_def_opcode_def] >>
+  Cases_on `space` >> EVAL_TAC
 QED
 
-(* ===== Structural helpers for dse_inst ===== *)
+Triviality phi_not_memory_def:
+  !space. ~is_memory_def_opcode space PHI
+Proof
+  Cases_on `space` >> EVAL_TAC
+QED
 
-Triviality dsei_preserves_id:
-  !dead_ids space inst.
-    (dse_inst dead_ids space inst).inst_id = inst.inst_id
+(* dse_inst either returns inst unchanged (guard false) or mk_nop_inst inst (guard true).
+   All 6 di_* properties follow from this + the bridge lemmas above. *)
+
+Triviality di_preserves_id:
+  !dead_ids space inst. (dse_inst dead_ids space inst).inst_id = inst.inst_id
 Proof
   rw[dse_inst_def] >> rpt CASE_TAC >> simp[mk_nop_inst_def]
 QED
 
-Triviality dsei_terminator_identity:
-  !dead_ids space inst.
-    is_terminator inst.inst_opcode ==>
+Triviality di_terminator_identity:
+  !dead_ids space inst. is_terminator inst.inst_opcode ==>
     dse_inst dead_ids space inst = inst
 Proof
   rpt strip_tac >> simp[dse_inst_def] >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  Cases_on `space` >>
-  simp[is_memory_def_opcode_def, write_effects_def, empty_effects_def]
+  imp_res_tac terminator_not_memory_def >> simp[]
 QED
 
-Triviality dsei_non_term:
-  !dead_ids space inst.
-    ~is_terminator inst.inst_opcode ==>
+Triviality di_non_term:
+  !dead_ids space inst. ~is_terminator inst.inst_opcode ==>
     ~is_terminator (dse_inst dead_ids space inst).inst_opcode
 Proof
-  rw[dse_inst_def] >> rpt CASE_TAC >>
-  gvs[mk_nop_inst_def, is_terminator_def]
+  rw[dse_inst_def] >>
+  rpt CASE_TAC >> gvs[mk_nop_inst_def, is_terminator_def]
 QED
 
-Triviality dsei_phi:
-  !dead_ids space inst.
-    inst.inst_opcode = PHI ==>
+Triviality di_phi:
+  !dead_ids space inst. inst.inst_opcode = PHI ==>
     (dse_inst dead_ids space inst).inst_opcode = PHI
 Proof
-  rpt strip_tac >> simp[dse_inst_def] >>
-  Cases_on `space` >>
-  simp[is_memory_def_opcode_def, write_effects_def, empty_effects_def]
+  rpt strip_tac >> simp[dse_inst_def, phi_not_memory_def]
 QED
 
-Triviality dsei_non_phi:
-  !dead_ids space inst.
-    inst.inst_opcode <> PHI ==>
+Triviality di_non_phi:
+  !dead_ids space inst. inst.inst_opcode <> PHI ==>
     (dse_inst dead_ids space inst).inst_opcode <> PHI
 Proof
-  rw[dse_inst_def] >> rpt CASE_TAC >>
-  gvs[mk_nop_inst_def]
+  rw[dse_inst_def] >>
+  rpt CASE_TAC >> gvs[mk_nop_inst_def]
 QED
 
-Triviality dsei_preserves_outputs:
+Triviality di_outputs:
   !dead_ids space inst.
-    (dse_inst dead_ids space inst).inst_outputs = inst.inst_outputs \/
+    inst.inst_outputs = (dse_inst dead_ids space inst).inst_outputs \/
     (dse_inst dead_ids space inst).inst_outputs = []
 Proof
-  rw[dse_inst_def] >> rpt CASE_TAC >> simp[mk_nop_inst_def]
+  rw[dse_inst_def] >>
+  rpt CASE_TAC >> simp[mk_nop_inst_def]
 QED
 
-Triviality fn_insts_blocks_flat:
-  !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
+(* dse_single_pass preserves wf/ssa *)
 
-(* dse_single_pass preserves wf_function *)
 Triviality dse_single_pass_preserves_wf:
-  !dead_ids space fn.
-    wf_function fn ==> wf_function (dse_single_pass dead_ids space fn)
+  !dead_ids space fn. wf_function fn ==>
+    wf_function (dse_single_pass dead_ids space fn)
 Proof
-  rpt strip_tac >> simp[dse_single_pass_def] >>
+  rw[dse_single_pass_def] >>
   irule map_transform_preserves_wf >>
-  simp[dsei_preserves_id, dsei_terminator_identity,
-       dsei_non_term, dsei_phi, dsei_non_phi]
+  simp[di_preserves_id, di_terminator_identity, di_non_term, di_phi, di_non_phi]
 QED
 
-
-(* dse_inst preserves outputs (subset) *)
-Triviality dsei_block_outputs_subset:
-  !dead_ids space l x.
-    MEM x (FLAT (MAP (\i. i.inst_outputs) (MAP (dse_inst dead_ids space) l))) ==>
-    MEM x (FLAT (MAP (\i. i.inst_outputs) l))
-Proof
-  Induct_on `l` >> simp[] >> rpt gen_tac >>
-  simp[listTheory.MEM_APPEND] >> strip_tac >> gvs[]
-  >- (DISJ1_TAC >>
-      DISJ_CASES_TAC (Q.SPECL [`dead_ids`,`space`,`h`] dsei_preserves_outputs)
-      >> gvs[])
-  >- metis_tac[]
-QED
-
-Triviality dsei_block_all_distinct_outputs:
-  !dead_ids space l.
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) l)) ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (MAP (dse_inst dead_ids space) l)))
-Proof
-  ntac 2 gen_tac >> Induct_on `l` >> simp[] >>
-  rpt gen_tac >> DISCH_TAC >>
-  fs[listTheory.ALL_DISTINCT_APPEND] >>
-  DISJ_CASES_TAC (Q.SPECL [`dead_ids`,`space`,`h`] dsei_preserves_outputs) >>
-  gvs[listTheory.ALL_DISTINCT_APPEND] >>
-  metis_tac[dsei_block_outputs_subset]
-QED
-
-(* Blocks-level subset for DSE *)
-Triviality dsei_blocks_outputs_subset:
-  !bbs dead_ids space x.
-    MEM x (FLAT (MAP (\i. i.inst_outputs)
-      (fn_insts_blocks (MAP (block_map_transform (dse_inst dead_ids space))
-                            bbs)))) ==>
-    MEM x (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)))
-Proof
-  Induct >> simp[fn_insts_blocks_def, block_map_transform_def,
-                  listTheory.MEM_APPEND] >>
-  rpt gen_tac >> strip_tac >> gvs[]
-  >- (DISJ1_TAC >> metis_tac[dsei_block_outputs_subset])
-  >- (DISJ2_TAC >> metis_tac[])
-QED
-
-(* dse_single_pass preserves ssa_form *)
 Triviality dse_single_pass_preserves_ssa:
-  !dead_ids space fn.
-    ssa_form fn ==> ssa_form (dse_single_pass dead_ids space fn)
+  !dead_ids space fn. wf_function fn /\ ssa_form fn ==>
+    wf_function (dse_single_pass dead_ids space fn) /\
+    ssa_form (dse_single_pass dead_ids space fn)
 Proof
-  rpt strip_tac >>
-  fs[ssa_form_def, fn_insts_def, dse_single_pass_def,
-     function_map_transform_def] >>
-  pop_assum mp_tac >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[fn_insts_blocks_def, block_map_transform_def] >>
-  rpt gen_tac >>
-  simp_tac std_ss [listTheory.ALL_DISTINCT_APPEND] >>
-  strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs)
-      (MAP (dse_inst dead_ids space) h.bb_instructions)))`
-    by metis_tac[dsei_block_all_distinct_outputs] >>
-  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs)
-      (fn_insts_blocks (MAP (block_map_transform (dse_inst dead_ids space))
-                            bbs))))`
-    by (first_x_assum match_mp_tac >> simp[]) >>
-  simp[listTheory.ALL_DISTINCT_APPEND] >> rpt strip_tac >>
-  `MEM e (FLAT (MAP (\i. i.inst_outputs) h.bb_instructions))`
-    by metis_tac[dsei_block_outputs_subset] >>
-  `~MEM e (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)))`
-    by res_tac >>
-  metis_tac[dsei_blocks_outputs_subset]
+  rpt strip_tac >> simp[dse_single_pass_def]
+  >- (irule map_transform_preserves_wf >>
+      simp[di_preserves_id, di_terminator_identity,
+           di_non_term, di_phi, di_non_phi])
+  >- (irule map_transform_preserves_ssa >>
+      simp[di_preserves_id, di_outputs] >>
+      irule map_transform_preserves_wf >>
+      simp[di_preserves_id, di_terminator_identity,
+           di_non_term, di_phi, di_non_phi])
 QED
 
-(* Apply OWHILE_INV_IND via mp_tac *)
-Triviality dse_owhile_wf:
+(* OWHILE preserves wf/ssa via WhileTheory.OWHILE_INV_IND *)
+
+val owhile_wf = OWHILE_INV_IND
+  |> INST_TYPE [alpha |-> ``:ir_function``]
+  |> INST [``P:ir_function -> bool`` |-> ``wf_function``];
+
+val owhile_wf_ssa = OWHILE_INV_IND
+  |> INST_TYPE [alpha |-> ``:ir_function``]
+  |> INST [``P:ir_function -> bool`` |->
+     ``\fn'. wf_function fn' /\ ssa_form fn'``]
+  |> SIMP_RULE (srw_ss()) [];
+
+Triviality dse_iterate_preserves_wf:
   !analysis_fn space fn fn'.
-    wf_function fn /\
-    OWHILE (\fn'. analysis_fn fn' <> {})
-            (\fn'. dse_single_pass (analysis_fn fn') space fn')
-            fn = SOME fn' ==>
+    dse_iterate analysis_fn space fn = SOME fn' /\
+    wf_function fn ==>
     wf_function fn'
 Proof
-  rpt strip_tac >>
-  mp_tac (WhileTheory.OWHILE_INV_IND
-    |> INST_TYPE [alpha |-> ``:ir_function``]
-    |> Q.INST [`P` |-> `wf_function`]) >>
-  disch_then irule >>
-  qexistsl [`\fn'. analysis_fn fn' <> {}`,
-            `\fn'. dse_single_pass (analysis_fn fn') space fn'`,
-            `fn`] >>
-  simp[dse_single_pass_preserves_wf]
+  rpt strip_tac >> fs[dse_iterate_def] >>
+  drule_then irule owhile_wf >>
+  first_assum (irule_at Any) >> rpt strip_tac >>
+  BETA_TAC >> irule dse_single_pass_preserves_wf >> simp[]
 QED
 
-Triviality dse_owhile_ssa:
+Triviality dse_iterate_preserves_ssa:
   !analysis_fn space fn fn'.
-    ssa_form fn /\
-    OWHILE (\fn'. analysis_fn fn' <> {})
-            (\fn'. dse_single_pass (analysis_fn fn') space fn')
-            fn = SOME fn' ==>
-    ssa_form fn'
+    dse_iterate analysis_fn space fn = SOME fn' /\
+    wf_function fn /\ ssa_form fn ==>
+    wf_function fn' /\ ssa_form fn'
 Proof
-  rpt strip_tac >>
-  mp_tac (WhileTheory.OWHILE_INV_IND
-    |> INST_TYPE [alpha |-> ``:ir_function``]
-    |> Q.INST [`P` |-> `ssa_form`]) >>
-  disch_then irule >>
-  qexistsl [`\fn'. analysis_fn fn' <> {}`,
-            `\fn'. dse_single_pass (analysis_fn fn') space fn'`,
-            `fn`] >>
-  simp[dse_single_pass_preserves_ssa]
+  rpt gen_tac >> strip_tac >> fs[dse_iterate_def] >>
+  drule_then irule owhile_wf_ssa >>
+  qpat_x_assum `OWHILE _ _ _ = _` (irule_at Any) >>
+  simp[] >> rpt strip_tac >> BETA_TAC >>
+  metis_tac[dse_single_pass_preserves_wf, dse_single_pass_preserves_ssa]
 QED
+
+(* dse_function_space preserves wf/ssa *)
 
 Triviality dse_function_space_preserves_wf:
   !analysis_fn space fn.
     wf_function fn ==> wf_function (dse_function_space analysis_fn space fn)
 Proof
-  rpt strip_tac >> simp[dse_function_space_def, dse_iterate_def] >>
-  CASE_TAC >> simp[clear_nops_function_preserves_wf]
-  >- (irule clear_nops_function_preserves_wf >> metis_tac[dse_owhile_wf])
+  rw[dse_function_space_def] >>
+  CASE_TAC >> simp[] >>
+  irule clear_nops_function_preserves_wf >>
+  TRY (irule dse_iterate_preserves_wf >> metis_tac[]) >>
+  simp[]
 QED
 
 Triviality dse_function_space_preserves_ssa:
   !analysis_fn space fn.
-    ssa_form fn ==> ssa_form (dse_function_space analysis_fn space fn)
+    wf_function fn /\ ssa_form fn ==>
+    wf_function (dse_function_space analysis_fn space fn) /\
+    ssa_form (dse_function_space analysis_fn space fn)
 Proof
-  rpt strip_tac >> simp[dse_function_space_def, dse_iterate_def] >>
-  CASE_TAC >> simp[clear_nops_function_preserves_ssa]
-  >- (irule clear_nops_function_preserves_ssa >> metis_tac[dse_owhile_ssa])
+  rpt gen_tac >> strip_tac >>
+  simp[dse_function_space_def] >>
+  CASE_TAC
+  >- ((* NONE *)
+      metis_tac[clear_nops_function_preserves_wf,
+                clear_nops_function_preserves_ssa])
+  >- ((* SOME x *)
+      drule dse_iterate_preserves_ssa >> simp[] >> strip_tac >>
+      metis_tac[clear_nops_function_preserves_wf,
+                clear_nops_function_preserves_ssa])
 QED
 
 (* ===== Obligations ===== *)
 
-Theorem dse_preserves_ssa_form:
-  ∀analysis_fn fn. ssa_form fn ⇒ ssa_form (dse_function analysis_fn fn)
-Proof
-  rpt strip_tac >> simp[dse_function_def] >>
-  irule dse_function_space_preserves_ssa >>
-  irule dse_function_space_preserves_ssa >>
-  irule dse_function_space_preserves_ssa >> simp[]
-QED
-
 Theorem dse_preserves_wf_function:
   ∀analysis_fn fn. wf_function fn ⇒ wf_function (dse_function analysis_fn fn)
 Proof
-  rpt strip_tac >> simp[dse_function_def] >>
-  irule dse_function_space_preserves_wf >>
-  irule dse_function_space_preserves_wf >>
-  irule dse_function_space_preserves_wf >> simp[]
+  rw[dse_function_def] >>
+  ntac 3 (irule dse_function_space_preserves_wf >> simp[]) >>
+  simp[]
+QED
+
+Theorem dse_preserves_ssa_form:
+  ∀analysis_fn fn. wf_function fn ∧ ssa_form fn ⇒
+    ssa_form (dse_function analysis_fn fn)
+Proof
+  rw[dse_function_def] >>
+  `wf_function (dse_function_space analysis_fn AddrSp_Memory fn) /\
+   ssa_form (dse_function_space analysis_fn AddrSp_Memory fn)` by
+    (irule dse_function_space_preserves_ssa >> simp[]) >>
+  `wf_function (dse_function_space analysis_fn AddrSp_Storage
+     (dse_function_space analysis_fn AddrSp_Memory fn)) /\
+   ssa_form (dse_function_space analysis_fn AddrSp_Storage
+     (dse_function_space analysis_fn AddrSp_Memory fn))` by
+    (irule dse_function_space_preserves_ssa >> simp[]) >>
+  drule_all dse_function_space_preserves_ssa >>
+  simp[]
+QED
+
+Theorem dse_function_correct:
+  ∀analysis_fn fuel ctx fn s.
+    alloca_inv s /\
+    alloca_safe_access fn (alloca_roots fn) s /\
+    step_preserves_safety fn (alloca_roots fn) /\
+    (!space fn'.
+      all_dead_stores (analysis_fn space fn')
+        (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+        space fn') ==>
+    lift_result dse_all_equiv dse_all_equiv dse_all_equiv
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function analysis_fn fn) s)
+Proof
+  ACCEPT_TAC dse_function_correct
 QED

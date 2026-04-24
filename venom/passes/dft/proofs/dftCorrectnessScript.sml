@@ -1344,7 +1344,7 @@ Proof
 QED
 
 (* EDA-level commutativity: either ext_bi_independent (handles effects_independent)
-   or both effect-free with disjoint defs/uses (handles Eff_MSIZE gap).
+   or both effect-free with disjoint defs/uses (handles memory-read-only gap).
    This is the widest predicate under which two non-pseudo body instructions
    can be swapped while preserving the OK result. *)
 Definition eda_commutes_def:
@@ -4124,7 +4124,7 @@ Proof
 QED
 
 (* Like barrier_free_topo_perm_result but uses ef_commutes instead of
-   bi_independent. Needed for FRONT-level proof where Eff_MSIZE prevents
+   bi_independent. Needed for FRONT-level proof where effects_independent prevents
    bi_independent for some effect_free pairs (MLOAD-MLOAD etc). *)
 (* Parameterized: barrier-free topo-sorted perms with custom P, Q predicates
    produce identical OK or both Error. P = swap predicate, Q = element predicate. *)

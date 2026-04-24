@@ -103,7 +103,7 @@ Definition venom_to_evm_name_def:
   venom_to_evm_name MSTORE = SOME "MSTORE" ∧
   venom_to_evm_name MSTORE8 = SOME "MSTORE8" ∧
   venom_to_evm_name MCOPY = SOME "MCOPY" ∧
-  venom_to_evm_name MSIZE = SOME "MSIZE" ∧
+  venom_to_evm_name MEMTOP = SOME "MSIZE" ∧
   venom_to_evm_name SLOAD = SOME "SLOAD" ∧
   venom_to_evm_name SSTORE = SOME "SSTORE" ∧
   venom_to_evm_name TLOAD = SOME "TLOAD" ∧

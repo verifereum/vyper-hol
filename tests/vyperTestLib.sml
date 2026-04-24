@@ -213,8 +213,7 @@ val unsupported_code = [
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
   "msg.data",
-  "gas=",
-  "pragma nonreentrancy"
+  "gas="
 ]
 
 fun has_unsupported_patterns src =
@@ -313,25 +312,18 @@ val excluded_test_names = [
   "test_side_effects_evaluation",
   "test_checkable_raw_call",
   "test_nonreentrant_decorator_for_default",
-  (* raw_call to precompile addresses (e.g. identity at 0x04):
-     make_ext_call_state constructs EVM state directly, bypassing
-     precompile dispatch which normally happens in proceed_call.
-     TODO: add precompile dispatch to run_ext_call *)
-  "test_max_outsize_exceeds_returndatasize",
-  "test_raw_call_non_memory",
-  "test_raw_call_storage_bytes_data",
-  "test_returndatasize_exceeds_max_outsize",
-  "test_returndatasize_matches_max_outsize",
+
   (* raw_create semantics: first arg is bytecode, not address.
      The CreateTarget handler assumes HD args is an address for all
      create kinds, but raw_create passes bytecode as first arg.
      TODO: fix CreateTarget to handle RawCreate differently *)
   "test_raw_create*",
   "test_bubble_revert_data_raw_create",
-  (* create_from_blueprint tests: blueprint deployments have
-     deployment_type="blueprint" but the test runner tries to run
-     the constructor, which fails because the ABI is empty.
-     TODO: handle blueprint deployments in run_trace (skip constructor) *)
+
+  (* create_from_blueprint / create_copy_of / create_minimal_proxy_to tests:
+     opaque create model doesn't run initcode or load sources for created
+     contracts, so calls to created contracts fail.
+     TODO: run initcode for create builtins *)
   "test_create_from_blueprint*",
   "test_blueprint_evals_once_side_effects",
   "test_bubble_revert_data_blueprint",
@@ -381,12 +373,7 @@ val excluded_test_names = [
   "test_abi_decode_head_roundtrip",
   "test_abi_decode_max_size",
   "test_clamper*",
-  "test_returndatasize_check",
-
-  (* Flag conversion tests: convert(int_val, FlagType) requires
-     evaluate_convert to support FlagT target types, which needs
-     type env access. TODO: refactor FlagV representation first. *)
-  "test_flag_conversion*"
+  "test_returndatasize_check"
 ]
 
 fun glob_match pat str =
@@ -476,7 +463,7 @@ end
 
 val deployment : term decoder =
   check_trace_type "deployment" $
-  JSONDecode.map (fn ((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl) =>
+  JSONDecode.map (fn (((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp) =>
              (* translate_annotated_ast returns (sources, exports, import_map) *)
              let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
                  val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
@@ -498,9 +485,10 @@ val deployment : term decoder =
                ("chainId", numSyntax.term_of_int 1),
                ("callData", d),
                ("runtimeBytecode", bc),
-               ("storageLayout", sl)
+               ("storageLayout", sl),
+               ("isBlueprint", bp)
              ]) end)
-          (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
+          (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
                            tuple3 (
                              field "contract_abi" (array abiEntry),
                              field "env" $ field "block" $
@@ -519,7 +507,9 @@ val deployment : term decoder =
                                    field "value" numtm)),
                    field "deployment_succeeded" booltm),
                   field "runtime_bytecode" bytes),
-                 field "storage_layout" storage_layout))
+                 field "storage_layout" storage_layout),
+                JSONDecode.map (fn s => mk_bool (s = "blueprint"))
+                  (field "deployment_type" string)))
 
 val trace : term decoder =
   achoose "trace" [

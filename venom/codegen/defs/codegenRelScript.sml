@@ -18,6 +18,7 @@
  * TOP-LEVEL:
  *   plan_stack_rel          — ps_stack matches concrete stack
  *   plan_spill_rel          — ps_spilled matches memory contents
+ *   spill_mem_covered       — initial memory covers spill high-water mark
  *   venom_asm_rel           — full Venom ↔ asm state relation
  *   venom_asm_terminal_rel  — shared state match (for terminal results)
  *   fn_init_ps              — initial plan state with params pre-loaded
@@ -83,9 +84,9 @@ End
    - at/above sa_next_offset: both zero or user-written
 
    NOTE: lengths may differ (asm memory may be longer due to spill
-   expansion). This means MSIZE returns different values on the Venom
-   and asm sides. MSIZE correspondence is explicitly excluded from
-   the codegen correctness theorem. Vyper never exposes MSIZE to
+   expansion). This means MEMTOP returns different values on the Venom
+   and asm sides. MEMTOP correspondence is explicitly excluded from
+   the codegen correctness theorem. Vyper never exposes MEMTOP to
    user code — it is used internally by the compiler for the free
    memory pointer, which the compiler controls. *)
 Definition memory_rel_def:
@@ -108,6 +109,17 @@ Definition step_mem_safe_def:
       read_byte i vs.vs_memory = read_byte i vs'.vs_memory
 End
 
+(* Memory is pre-expanded to cover the spill high-water mark.
+   Ensures MEMTOP agrees between Venom and asm from the start.
+   Established at context entry by emitting a memory-touching op
+   up to the maximum sa_next_offset across all functions.
+   spill_hwm is the maximum sa_next_offset reached during execution
+   (known from codegen output, since spill allocation is deterministic). *)
+Definition spill_mem_covered_def:
+  spill_mem_covered spill_hwm (mem : byte list) ⇔
+    spill_hwm ≤ LENGTH mem
+End
+
 (* Full Venom ↔ asm state relation.
    This is the LOOP INVARIANT for block-by-block simulation.
    Parameterized by plan_state which tracks stack layout.
@@ -122,7 +134,7 @@ End
    (concretize_mem_loc sets it). step_mem_safe is a precondition
    on the input program / initial state.
 
-   NOTE: MSIZE correspondence is excluded — asm memory may be longer
+   NOTE: MEMTOP correspondence is excluded — asm memory may be longer
    than Venom memory due to spill slots. See memory_rel comment. *)
 Definition venom_asm_rel_def:
   venom_asm_rel label_offsets ps vs as ⇔

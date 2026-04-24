@@ -7,7 +7,7 @@
  * subsequent read before the location is overwritten or the
  * function terminates.
  *
- * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * Framework: analysis_inst_simulates + custom lifting.
  * Uses memory SSA analysis (memSSADefs) to identify dead stores.
@@ -161,24 +161,39 @@ Definition outputs_unused_def:
 End
 
 (* Instruction's effects are confined to the given address space.
-   Memory space also allows MSIZE (Python: NON_MEMORY_EFFECTS
-   excludes MEMORY|MSIZE). Storage/Transient only allow their space. *)
+   Storage/Transient only allow their space. *)
 Definition effects_in_space_def:
   effects_in_space (space : addr_space) inst <=>
     let space_eff = case space of
                       AddrSp_Memory => Eff_MEMORY
                     | AddrSp_Storage => Eff_STORAGE
                     | AddrSp_Transient => Eff_TRANSIENT
-                    | _ => Eff_MEMORY in
-    let allowed_effs = case space of
-                         AddrSp_Memory => {space_eff; Eff_MSIZE}
-                       | _ => {space_eff} in
+                    | AddrSp_Calldata => Eff_MEMORY
+                    | AddrSp_Code => Eff_MEMORY
+                    | AddrSp_Returndata => Eff_MEMORY in
     (write_effects inst.inst_opcode UNION read_effects inst.inst_opcode)
-      SUBSET allowed_effs
+      SUBSET {space_eff}
 End
 
 (* Precondition: dead_ids only contains IDs of store instructions in fn
-   whose stored values are provably dead. Matches Python's _is_dead_store. *)
+   whose stored values are provably dead. Matches Python's _is_dead_store.
+
+   The inst.inst_outputs = [] condition restricts dead stores to
+   instructions that have no output variables (MSTORE, SSTORE, TSTORE).
+   This is necessary because mk_nop_inst removes the instruction's
+   outputs, and dse_equiv checks ALL variables including unused ones.
+   If a dead store had non-empty outputs (e.g., DLOAD which writes
+   to memory AND produces an output variable), NOP'ing it would
+   change the output variable's value, violating dse_equiv.
+
+   In the Python DSE, DLOAD with unused outputs CAN be eliminated
+   (Python doesn't check variable mappings, only EVM-observable
+   effects). But in HOL4, dse_equiv checks !v. lookup_var v s1 =
+   lookup_var v s2, so we must require empty outputs.
+
+   This is the tightest sufficient fix: it precisely matches the
+   set of instructions DSE eliminates in practice (actual stores)
+   while being formally correct for the dse_equiv relation. *)
 Definition all_dead_stores_def:
   all_dead_stores dead_ids cfg aliases bp (space : addr_space) fn <=>
     !id. id IN dead_ids ==>
@@ -188,6 +203,7 @@ Definition all_dead_stores_def:
         EL inst_idx bb.bb_instructions = inst /\
         inst.inst_id = id /\
         is_memory_def_opcode space inst.inst_opcode /\
+        inst.inst_outputs = [] /\
         ~(bp_get_write_location bp inst space).ml_volatile /\
         ml_is_fixed (bp_get_write_location bp inst space) /\
         outputs_unused inst fn /\
@@ -227,7 +243,7 @@ End
 Definition dse_iterate_def:
   dse_iterate analysis_fn space fn =
     OWHILE (\fn. analysis_fn fn <> {})
-           (\fn. dse_single_pass (analysis_fn fn) space fn) fn
+         (\fn. dse_single_pass (analysis_fn fn) space fn) fn
 End
 
 (* Run DSE for one address space. Python: run_pass(addr_space). *)
@@ -261,10 +277,15 @@ End
    storage (inside vs_accounts) comparison.
 
    This is correct because:
-   - Variables are unchanged (DSE only NOPs stores)
+   - Variables are unchanged (DSE only NOPs stores with empty outputs)
    - Logs, return data, halt status, immutables etc. unchanged
    - RETURN/REVERT data is unaffected (memSSA marks those reads
-     as live, preventing elimination of stores in the return range) *)
+     as live, preventing elimination of stores in the return range)
+   - vs_inst_idx and vs_current_bb are excluded: clear_nops_function
+     changes instruction count within blocks, so Halt/Abort states may
+     carry different inst_idx. These are purely internal control-flow
+     fields with no semantic meaning after function completion.
+     (execution_equiv also excludes these, enabling the clear_nops bridge.) *)
 Definition dse_equiv_def:
   dse_equiv (space : addr_space) s1 s2 <=>
     (!v. lookup_var v s1 = lookup_var v s2) /\
@@ -283,9 +304,7 @@ Definition dse_equiv_def:
     s1.vs_code = s2.vs_code /\
     s1.vs_params = s2.vs_params /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx
+    s1.vs_allocas = s2.vs_allocas
 End
 
 (* After all 3 spaces: memory, transient, and accounts may differ *)

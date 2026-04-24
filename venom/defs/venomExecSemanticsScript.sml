@@ -1,7 +1,7 @@
 (*
  * Venom Semantics
  *
- * Upstream: vyperlang/vyper@e1dead045 (sunset GEP, #4895)
+ * Upstream: vyperlang/vyper@b7db6bb9f (sunset MSIZE, add MEMTOP, #4909)
  *
  * This theory defines the operational semantics for Venom IR execution.
  * It includes the effects system and instruction stepping.
@@ -733,8 +733,8 @@ Definition step_inst_base_def:
             | _ => Error "undefined operand")
         | _ => Error "returndatacopy requires 3 operands")
 
-    (* Memory size *)
-    | MSIZE => exec_read0
+    (* Memory top (lowers to EVM MSIZE at assembly) *)
+    | MEMTOP => exec_read0
         (\s. let size = LENGTH s.vs_memory in
              let words = (size + 31) DIV 32 in
              n2w (words * 32)) inst s

@@ -15,8 +15,6 @@ Ancestors
   concretizeMemLoc
   (* lower dload/dloadbytes *)
   lowerDload
-  (* fix free var space memory locations *)
-  fixMemLocations
   (* branch optimization *)
   branchOpt
   (* single use expansion *)
