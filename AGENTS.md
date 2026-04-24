@@ -214,16 +214,22 @@ Re-use existing theorems as much as possible. Before creating a new helper lemma
 
 ## Reference Repos
 
-- `vyper-ref/` - Vyper compiler source (reference for Venom IR semantics)
-- `verifereum-ref/` - Verifereum EVM formalization (provides word256, memory model)
+$SOURCES is where the user keeps reference repos, often $HOME but you may need to ask for clarification.
 
-If these symlinks are missing, ask the operator to provide access.
+- `$HOME/vyper/` - Vyper compiler source (reference for Venom IR semantics)
+- `$HOME/verifereum/` - Verifereum EVM formalization (provides word256, memory model)
+
+If these are missing, ask the user to provide access.
 
 ## Proof Strategy
 
 **When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions. Use `hol_state_at` at different positions to debug. Cheats are temporary scaffolding only.
 
 **Signs you're on wrong track:** Many nested TRY blocks, dozens of subgoals, slow tactics, unpredictable variable names (`h''` etc.) → stop and reconsider.
+
+## HOL4
+
+There is NEVER "disagreement" between batch and interactive mode, they use the same machinery. ANY DIFFERENCE BETWEEN THEM IS A RESULT OF STALE SESSION STATE, USE `hol_restart()`!
 
 ### sg vs by vs suffices_by
 
@@ -246,40 +252,40 @@ When proving properties about `ALOOKUP` on mapped or filtered lists:
 
 1. **Use abbreviations systematically** - Abbreviate complex terms to make proof structure clear:
    ```sml
-   \\ qmatch_goalsub_abbrev_tac`option_CASE alo`
-   \\ `alo = SOME z` suffices_by simp[]
+   >> qmatch_goalsub_abbrev_tac`option_CASE alo`
+   >> `alo = SOME z` suffices_by simp[]
    ```
 
 2. **Show function equality for MAP** - When using `ALOOKUP_MAP_KEY_INJ`:
    ```sml
-   \\ qmatch_goalsub_abbrev_tac`MAP fi`
-   \\ `fi = $, src_id ## I` by simp[Abbr`fi`, FUN_EQ_THM, FORALL_PROD]
-   \\ pop_assum SUBST_ALL_TAC
+   >> qmatch_goalsub_abbrev_tac`MAP fi`
+   >> `fi = $, src_id ## I` by simp[Abbr`fi`, FUN_EQ_THM, FORALL_PROD]
+   >> pop_assum SUBST_ALL_TAC
    ```
 
 3. **Substitute in the right direction** - Use `SUBST1_TAC o SYM` when needed:
    ```sml
-   \\ pop_assum $ SUBST1_TAC o SYM
+   >> pop_assum $ SUBST1_TAC o SYM
    ```
 
 4. **For drule with extra quantifiers** - Use `drule_all_then` with `qspec_then`:
    ```sml
-   \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac) lookup_callable_function_eq_ALOOKUP_module_fns
+   >> drule_all_then(qspec_then`src_id_opt`strip_assume_tac) lookup_callable_function_eq_ALOOKUP_module_fns
    ```
 
 5. **Chain drules properly** - Use `drule_at_then`:
    ```sml
-   \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
+   >> drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
    ```
 
 6. **For filter equality** - Abbreviate predicate, prove equality, substitute:
    ```sml
-   \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
-   \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-   \\ pop_assum SUBST_ALL_TAC
+   >> qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
+   >> `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
+   >> pop_assum SUBST_ALL_TAC
    ```
 
-7. **Avoid `rw[]` too early** - Use `rpt gen_tac \\ simp[]` then `strip_tac` to control when hypotheses are introduced
+7. **Avoid `rw[]` too early** - Use `rpt gen_tac >> simp[]` then `strip_tac` to control when hypotheses are introduced
 
 8. **Use `reverse strip_tac`** - To handle disjunctive cases in the natural order after `CaseEq"option"`
 
@@ -308,7 +314,7 @@ Libs
 
 ## Code Simplification
 
-- **Consolidate similar theorems:** If 12 cases have the same proof, make one theorem with /\
+- **Consolidate similar theorems:** If multiple cases have the same proof, make one theorem with /\
 - **Derive corollaries:** Prove general case, derive specifics via `metis_tac[general_thm]`
 - **Reuse theorems:** `drule_all existing_thm` instead of re-proving inline
 - **Combine case tactics:** If all case branches have identical proofs, apply tactic after case split
