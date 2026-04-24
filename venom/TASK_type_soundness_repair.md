@@ -162,7 +162,7 @@ The derived theorem `type_preservation` (which drops `well_typed_iterator` from 
 
 ## Completion Criteria
 
-1. holmake tool with workdir="semantics/prop/", env={"VFMDIR": "/home/ubuntu/vyper-hol/verifereum-ref"} passes with zero CHEAT warnings and zero FAILs.
+1. holmake tool with holmake(workdir="semantics/prop/") passes with zero CHEAT warnings and zero FAILs.
 2. No new cheats relative to main (the file currently has zero cheats on main, so zero cheats required).
 3. No duplicate or near-duplicate lemmas — each helper should exist once in its most general form.
 
@@ -174,8 +174,7 @@ The derived theorem `type_preservation` (which drops `well_typed_iterator` from 
 ## Build
 
 ```
-cd semantics/prop
-holmake tool: workdir=".", env={"VFMDIR": "/home/ubuntu/vyper-hol/verifereum-ref"}
+holmake tool: holmake(workdir="semantics/prop", timeout=120)
 ```
 
 ## Background
