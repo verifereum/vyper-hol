@@ -1,5 +1,6 @@
 # HOL4 build artifacts
 **/.hol/
+**/.alan/
 
 # Interactive HOL4 session files
 .hol_init.sml
@@ -19,6 +20,8 @@ CLAUDE.local.md
 .sandbox
 .worktrees/
 .local/
+
+worktrees/
 
 .hol-vscode/
 .DS_Store
