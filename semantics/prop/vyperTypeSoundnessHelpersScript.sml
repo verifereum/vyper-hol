@@ -6694,33 +6694,11 @@ Proof
   gvs[is_HashMapRef_def]
 QED
 
-(* Version of subscript_not_HashMapRef with env_consistent precondition —
-   matches structural induction IH form.
-   Key: since Subscript evaluates e at the INITIAL state st (which has env_consistent),
-   we can specialize the IH at that state. *)
-Triviality subscript_not_HashMapRef_ec:
-  !env cx ty e e' st tv st'.
-    eval_expr cx (Subscript ty e e') st = (INL tv, st') /\
-    well_typed_expr env e /\
-    env_consistent env cx st /\
-    (!cx' st'' tv' st'''. well_typed_expr env e /\
-       env_consistent env cx' st'' /\
-       eval_expr cx' e st'' = (INL tv',st''') ==>
-       ~is_HashMapRef tv') ==>
-    ~is_HashMapRef tv
-Proof
-  rpt gen_tac >> strip_tac >>
-  (* Bridge: from the guarded IH, derive the weaker form needed by subscript_not_HashMapRef.
-     irule selects the IH (only assumption with ~is_HashMapRef conclusion),
-     then simp[] discharges the well_typed_expr and env_consistent antecedents. *)
-  `!s res s'. eval_expr cx e s = (res,s') ==>
-    !tv. res = INL tv ==> ~is_HashMapRef tv` by (
-    rpt gen_tac >> strip_tac >>
-    Cases_on `res` >> simp[] >>
-    first_x_assum irule >> simp[]) >>
-  (* Now delegate to the already-proven subscript_not_HashMapRef *)
-  irule subscript_not_HashMapRef >> simp[]
-QED
+(* NOTE: subscript_not_HashMapRef_ec removed — the bridging from guarded IH to
+   unguarded IH is impossible as a standalone lemma. Instead, the P0_Subscript
+   Resume block proves this directly using the structural induction IH. *)
+
+
 
 
 (* Standalone lemma: ExtCall with drv=NONE never returns HashMapRef.
@@ -6844,7 +6822,24 @@ QED
 Resume eval_expr_not_HashMapRef[P0_Subscript]:
   rpt strip_tac >>
   gvs[well_typed_expr_def] >>
-  irule subscript_not_HashMapRef_ec >> simp[]
+  (* Specialize the guarded IH for the base expression at (cx, st) *)
+  first_x_assum (qspecl_then [`cx`, `st`] assume_tac) >>
+  gvs[] >>
+  (* Now expand and finish — use the same approach as subscript_not_HashMapRef *)
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac [el 8 ev_expr_cjs] >>
+  simp_tac (srw_ss()) [bind_def, return_def, raise_def, ignore_bind_def,
+    UNCURRY, lift_option_type_def, lift_option_def, lift_sum_def,
+    lift_sum_runtime_def, AllCaseEqs(), is_HashMapRef_def,
+    get_Value_def, get_tenv_def, check_array_bounds_def,
+    LET_THM, COND_RATOR] >>
+  rpt strip_tac >>
+  (* Apply the specialized IH via drule *)
+  first_x_assum drule >> strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs (AllCaseEqs() :: is_HashMapRef_def :: hmr_case_defs)) >>
+  imp_res_tac evaluate_subscript_success_not_HashMapRef >>
+  gvs[is_HashMapRef_def]
 QED
 
 Resume eval_expr_not_HashMapRef[P0_Attribute]:
