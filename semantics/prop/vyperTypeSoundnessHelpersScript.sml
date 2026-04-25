@@ -956,10 +956,16 @@ Theorem env_consistent_scopes_only:
     env_consistent env cx (st with scopes := scopes) <=>
     env.type_defs = get_tenv cx /\
     fn_sigs_consistent env.fn_sigs cx /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+       IS_SOME (lookup_scopes id scopes)) /\
     (!id ty entry.
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id scopes = SOME entry ==>
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    (!id ty. FLOOKUP env.global_types id = SOME ty ==>
+       IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+         (case ALOOKUP st.immutables cx.txn.target of
+            SOME m => m | NONE => [])) id)) /\
     (!id ty tv v.
        FLOOKUP env.global_types id = SOME ty /\
        FLOOKUP (get_source_immutables (current_module cx)
@@ -1005,32 +1011,47 @@ Proof
 QED
 
 (* Helper: env_consistent survives popping a scope when going from
-   extended env back to outer env *)
+   extended env back to outer env. Requires that the only var_types
+   entry in the current scope is nm (completeness clause requirement). *)
 Theorem env_consistent_pop_scope:
   !env nm typ cx st.
     env_consistent (env with var_types updated_by flip $|+ (nm, typ)) cx st /\
     st.scopes <> [] /\
     nm NOTIN FDOM env.var_types /\
     (!id. id IN FDOM (HD st.scopes) /\ id <> nm ==>
-          lookup_scopes id (TL st.scopes) = NONE)
+          lookup_scopes id (TL st.scopes) = NONE) /\
+    (!id. id IN FDOM (HD st.scopes) /\ id <> nm ==>
+          FLOOKUP env.var_types id = NONE)
     ==>
     env_consistent env cx (st with scopes := TL st.scopes)
 Proof
   rpt strip_tac >>
-  fs[env_consistent_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  (* Reduce goal to RHS conditions of env_consistent_scopes_only *)
+  irule (iffRL env_consistent_scopes_only) >>
+  (* Get conditions from the assumption: st = st with scopes := st.scopes *)
+  `env_consistent (env with var_types updated_by flip $|+ (nm,typ)) cx
+     (st with scopes := st.scopes)` by simp[] >>
+  drule (iffLR env_consistent_scopes_only) >>
+  strip_tac >>
+  fs[finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac
-  (* var_types conjunct *)
+  (* var_types completeness *)
   >- (
-    rpt strip_tac >>
-    `id <> nm` by (strip_tac >> gvs[finite_mapTheory.FLOOKUP_DEF]) >>
     Cases_on `id IN FDOM (HD st.scopes)`
-    >- (first_x_assum drule >> simp[] >> strip_tac >> gvs[]) >>
-    last_x_assum irule >>
-    qexists_tac`id` >> rw[] >>
-    Cases_on`st.scopes` >>
-    gvs[lookup_scopes_def, FLOOKUP_DEF]) >>
-  (* global_types conjunct *)
-  rpt strip_tac >> res_tac
+    >- metis_tac[] >>
+    first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
+    Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
+    metis_tac[IS_SOME_DEF, option_CLAUSES]) >>
+  conj_tac
+  (* var_types soundness *)
+  >- (
+    Cases_on `id IN FDOM (HD st.scopes)`
+    >- metis_tac[] >>
+    first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
+    first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
+    Cases_on `st.scopes` >> gvs[lookup_scopes_def]) >>
+  (* Remaining clauses: global_types, toplevel_types, flag_members *)
+  metis_tac[]
 QED
 
 (* env_consistent is preserved by evaluation steps that preserve tv and

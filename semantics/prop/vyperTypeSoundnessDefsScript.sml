@@ -491,6 +491,11 @@ Definition env_consistent_def:
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id st.scopes = SOME entry ==>
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    (* Completeness: every global_types entry must be in immutables *)
+    (!id ty. FLOOKUP env.global_types id = SOME ty ==>
+       IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+         (case ALOOKUP st.immutables cx.txn.target of
+            SOME m => m | NONE => [])) id)) /\
     (!id ty tv v.
        FLOOKUP env.global_types id = SOME ty /\
        FLOOKUP (get_source_immutables (current_module cx)
