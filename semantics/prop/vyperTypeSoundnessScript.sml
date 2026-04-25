@@ -667,21 +667,21 @@ QED
 (* ===== Resume blocks: proved cases ===== *)
 
 Resume eval_preserves_swt[Pass]:
-  rpt gen_tac >> strip_tac >> gvs[ev_Pass, return_def, raise_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_Pass, return_def, raise_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Continue]:
-  rpt gen_tac >> strip_tac >> gvs[ev_Continue, return_def, raise_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_Continue, return_def, raise_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Break]:
-  rpt gen_tac >> strip_tac >> gvs[ev_Break, return_def, raise_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_Break, return_def, raise_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[ReturnNone]:
   rpt gen_tac >> strip_tac >>
   gvs[ev_ReturnNone, return_def, raise_def,
-      well_typed_stmt_def, Once evaluate_type_def, value_has_type_def]
+      well_typed_stmt_def, Once evaluate_type_def, value_has_type_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[ReturnSome]:
@@ -710,15 +710,22 @@ Resume eval_preserves_swt[ReturnSome]:
 QED
 
 Resume eval_preserves_swt[Raise1]:
-  gvs[ev_Raise1, raise_def]
+  gvs[ev_Raise1, raise_def, bind_apply, AllCaseEqs()] >>
+  rpt (pop_assum mp_tac >> simp[] >> strip_tac) >>
+  gvs[toplevel_value_typed_def, evaluate_type_not_NoneT_imp_not_NoneTV] >>
+  rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Raise2]:
-  gvs[ev_Raise2, raise_def]
+  gvs[ev_Raise2, raise_def, bind_apply, AllCaseEqs()] >>
+  rpt (pop_assum mp_tac >> simp[] >> strip_tac) >>
+  gvs[toplevel_value_typed_def, evaluate_type_not_NoneT_imp_not_NoneTV] >>
+  rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Raise3]:
-  tp_stmt_no_return_tac ev_Raise3 wts_Raise3 []
+  tp_stmt_no_return_tac ev_Raise3 wts_Raise3 [] >>
+  not_type_error_tac
 QED
 
 
@@ -742,7 +749,7 @@ Resume eval_preserves_swt[Expr]:
 QED
 
 Resume eval_preserves_swt[stmts_nil]:
-  rpt gen_tac >> strip_tac >> gvs[ev_stmts_nil, return_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_stmts_nil, return_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[stmts_cons]:
@@ -769,6 +776,7 @@ Resume eval_preserves_swt[stmts_cons]:
     (qspecl_then [`st`, `st_mid`] mp_tac) >> simp[] >>
   disch_then (qspecl_then [`env`, `ret_ty`, `st_mid`] mp_tac) >>
   simp[] >> disch_then drule >> simp[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[BaseTarget]:
@@ -782,6 +790,7 @@ Resume eval_preserves_swt[BaseTarget]:
   first_x_assum (qspecl_then [`env`, `st`] mp_tac) >>
   simp[] >> (impl_tac >- metis_tac[]) >>
   strip_tac >> gvs[PAIR_FST_SND_EQ, return_def, UNCURRY]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[TupleTarget]:
@@ -796,10 +805,11 @@ Resume eval_preserves_swt[TupleTarget]:
   simp[bind_def, AllCaseEqs(), return_def] >>
   strip_tac >> gvs[return_def] >>
   first_x_assum drule_all >> simp[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[targets_nil]:
-  rpt gen_tac >> strip_tac >> gvs[ev_targets_nil, return_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_targets_nil, return_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[targets_cons]:
@@ -817,6 +827,7 @@ Resume eval_preserves_swt[targets_cons]:
   qpat_x_assum `!s gv t. eval_target _ _ s = (INL gv, t) ==> _` drule >>
   strip_tac >>
   first_x_assum drule_all >> strip_tac >> gvs[return_def]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[NameTarget]:
@@ -827,6 +838,7 @@ Resume eval_preserves_swt[NameTarget]:
        get_scopes_def, type_check_def, assert_def,
        ignore_bind_def, LET_THM, AllCaseEqs()] >>
   strip_tac >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[BareGlobalNameTarget]:
@@ -834,6 +846,7 @@ Resume eval_preserves_swt[BareGlobalNameTarget]:
   imp_res_tac lift_option_state >> gvs[] >>
   Cases_on `get_module_code cx (current_module cx)` >>
   gvs[return_def, raise_def]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[TopLevelNameTarget]:
@@ -842,6 +855,7 @@ Resume eval_preserves_swt[TopLevelNameTarget]:
   rewrite_tac[ev_TopLevelNameTarget] >>
   simp[bind_def, return_def, raise_def, AllCaseEqs()] >>
   strip_tac >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[AttributeTarget]:
@@ -854,10 +868,11 @@ Resume eval_preserves_swt[AttributeTarget]:
   strip_tac >> gvs[return_def, PAIR_FST_SND_EQ, UNCURRY] >>
   first_x_assum (qspec_then `env` mp_tac) >>
   simp[] >> disch_then match_mp_tac >> metis_tac[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[for_nil]:
-  rpt gen_tac >> strip_tac >> gvs[ev_for_nil, return_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_for_nil, return_def] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Name]:
@@ -876,6 +891,7 @@ Resume eval_preserves_swt[Name]:
   strip_tac >>
   qexists_tac `entry.type` >> simp[] >>
   fs[env_consistent_def] >> res_tac
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Literal]:
@@ -893,10 +909,11 @@ Resume eval_preserves_swt[Literal]:
   qexists_tac `tv` >> simp[] >>
   irule evaluate_literal_has_type >>
   first_assum (irule_at (Pos last)) >> first_assum (irule_at Any)
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[exprs_nil]:
-  rpt gen_tac >> strip_tac >> gvs[ev_exprs_nil, return_def]
+  rpt gen_tac >> strip_tac >> gvs[ev_exprs_nil, return_def] >> not_type_error_tac
 QED
 
 (* ===== Shared tactics for Resume blocks ===== *)
@@ -1192,6 +1209,7 @@ Resume eval_preserves_swt[Append_atwt]:
   `evaluate_type (get_tenv cx) (ArrayT (expr_type e) bd) = SOME (leaf_type tv (REVERSE sbs))`
     by (first_assum ACCEPT_TAC) >>
   gvs[Once evaluate_type_def, AllCaseEqs()]
+  >> TRY not_type_error_tac
 QED
 
 
@@ -1270,6 +1288,7 @@ Resume eval_preserves_swt[Assign_atwt]:
     (fn th => qpat_assum `value_has_type _ _`
       (fn th2 => EXISTS_TAC (th |> concl |> rhs |> rand) >>
                  CONJ_TAC >| [ACCEPT_TAC th, ACCEPT_TAC th2]))
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[AugAssign]:
@@ -1349,6 +1368,7 @@ Resume eval_preserves_swt[AugAssign_atwt]:
   CONJ_TAC >- (irule (cj 1 evaluate_type_well_formed) >>
                first_assum (irule_at Any)) >>
   strip_tac >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[If]:
@@ -1407,6 +1427,7 @@ Resume eval_preserves_swt[If_True]:
   rpt BasicProvers.VAR_EQ_TAC >> ASM_REWRITE_TAC [] >>
   (* ReturnException typing: forward from IH (INL case trivial) *)
   rpt strip_tac >> Cases_on `q` >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[If_False]:
@@ -1437,6 +1458,7 @@ Resume eval_preserves_swt[If_False]:
   simp_tac (srw_ss()) [] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   ASM_REWRITE_TAC [] >> simp_tac (srw_ss()) []
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[For]:
@@ -1508,6 +1530,7 @@ Resume eval_preserves_swt[For]:
     ASM_REWRITE_TAC [] >>
     disch_then drule_all >>
     simp_tac (srw_ss()) [])
+  >> TRY not_type_error_tac
 QED
 Resume eval_preserves_swt[Array]:
   rpt gen_tac >> strip_tac >>
@@ -1553,6 +1576,7 @@ Resume eval_preserves_swt[Array]:
     simp[evaluate_type_def]) >>
   Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def] >>
   metis_tac[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Range]:
@@ -1665,6 +1689,7 @@ Resume eval_preserves_swt[Range]:
   Q.EXISTS_TAC `i'` >>
   simp_tac (srw_ss()) [get_range_limits_def] >>
   ASM_REWRITE_TAC[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[SubscriptTarget]:
@@ -1809,6 +1834,7 @@ Resume eval_preserves_swt[for_cons]:
   (impl_tac >- ASM_REWRITE_TAC []) >>
   disch_then drule_all >> strip_tac >>
   ASM_REWRITE_TAC []
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[BareGlobalName]:
@@ -1866,6 +1892,7 @@ Resume eval_preserves_swt[TopLevelName]:
       imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
       simp[expr_type_def] >>
       irule lookup_global_materialise_well_typed >> metis_tac[])
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[FlagMember]:
@@ -1894,6 +1921,7 @@ Resume eval_preserves_swt[FlagMember]:
   imp_res_tac env_consistent_type_defs >>
   gvs[INDEX_OF_eq_SOME, well_formed_type_def, evaluate_type_def, LET_THM] >>
   `LENGTH ls <= 256` by (gvs[AllCaseEqs()] >> CCONTR_TAC >> gvs[])
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[IfExp]:
@@ -1941,6 +1969,7 @@ Resume eval_preserves_swt[IfExp_True]:
   disch_then drule_all >> strip_tac >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   tp_ifexp_bridge_tac ()
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[IfExp_False]:
@@ -1958,6 +1987,7 @@ Resume eval_preserves_swt[IfExp_False]:
   disch_then drule_all >> strip_tac >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   tp_ifexp_bridge_tac ()
+  >> TRY not_type_error_tac
 QED
 (* ===== Local helpers for P7 expr cases ===== *)
 
@@ -2114,6 +2144,7 @@ Resume eval_preserves_swt[Subscript_tail]:
   gvs[raise_def, return_def] >> TRY (tp_err_tac >> NO_TAC) >>
   (* Split value vs storage ref *)
   suspend "Subscript_result"
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Subscript_result]:
@@ -2123,6 +2154,7 @@ Resume eval_preserves_swt[Subscript_result]:
   Cases_on `x'` >> gvs[]
   >- suspend "Subscript_INL"
   >> suspend "Subscript_INR"
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Subscript_INL]:
@@ -2139,6 +2171,7 @@ Resume eval_preserves_swt[Subscript_INL]:
   first_assum (irule_at Any) >>
   imp_res_tac (cj 8 eval_expr_toplevel_wf) >>
   gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Subscript_INR]:
@@ -2154,6 +2187,7 @@ Resume eval_preserves_swt[Subscript_INR]:
   qexists_tac `rtv` >> gvs[expr_type_def, toplevel_value_typed_def] >>
   imp_res_tac read_storage_slot_well_typed >>
   imp_res_tac (cj 1 evaluate_type_well_formed) >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Attribute]:
@@ -2240,6 +2274,7 @@ Resume eval_preserves_swt[Builtin]:
   Cases_on `bt = Len`
   >- (pop_assum SUBST_ALL_TAC >> suspend "Builtin_Len")
   >> suspend "Builtin_NonLen"
+  >> TRY not_type_error_tac
 QED
 
 val mult_bound_lemma = prove(
@@ -2460,6 +2495,7 @@ Resume eval_preserves_swt[Builtin_Len]:
   qpat_x_assum `LENGTH es = 1 ==> _` mp_tac >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   suspend "Builtin_Len_main"
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Builtin_Len_main]:
@@ -2512,6 +2548,7 @@ Resume eval_preserves_swt[Builtin_Len_main]:
   irule intv_uint256_well_typed >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [fold_dimword_256]) >>
   first_assum ACCEPT_TAC
+  >> TRY not_type_error_tac
 QED
 
 val map_eq_implies_length = prove(
@@ -2578,6 +2615,7 @@ Resume eval_preserves_swt[Builtin_INL]:
     >- (REWRITE_TAC [LIST_REL_MAP2] >> BETA_TAC >> first_assum ACCEPT_TAC)
     >- gvs[well_formed_type_def]) >>
   metis_tac[evaluate_builtin_well_typed]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Pop]:
@@ -2644,6 +2682,7 @@ Resume eval_preserves_swt[Pop_vht]:
      and well_typed_target env bt (ArrayT v11 bd) *)
   irule assign_target_pop_value_well_typed >>
   metis_tac[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[TypeBuiltin]:
@@ -2693,6 +2732,7 @@ Resume eval_preserves_swt[TypeBuiltin]:
   Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[] >>
   irule evaluate_type_builtin_well_typed >>
   rpt (first_assum (irule_at Any)) >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Send]:
@@ -2729,6 +2769,7 @@ Resume eval_preserves_swt[Send]:
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   gvs[materialise_def, return_def, expr_type_def, toplevel_value_typed_def,
       evaluate_type_def, value_has_type_def]
+  >> TRY not_type_error_tac
 QED
 
 (* Uncurry ONLY the outer guard of an IH (not inner body conjunctions).
@@ -2869,6 +2910,7 @@ Resume eval_preserves_swt[ExtCall]:
   markerLib.LABEL_X_ASSUM "ih_p7" assume_tac >>
   first_x_assum drule_all >> strip_tac >>
   simp[expr_type_def] >> gvs[]
+  >> TRY not_type_error_tac
 QED
 
 val type_check_success = prove(
@@ -2952,6 +2994,7 @@ Resume eval_preserves_swt[IntCall]:
     suspend "intcall_tail"
     ) (asl, g) end)
   end)))
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[intcall_tail]:
@@ -2972,6 +3015,7 @@ Resume eval_preserves_swt[intcall_tail]:
   (* Re-inject ih_p1 before suspend so it survives to intcall_chain *)
   assume_tac ih_p1 >>
   suspend "intcall_chain")
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[dflts_ih]:
@@ -2986,6 +3030,7 @@ Resume eval_preserves_swt[dflts_ih]:
   >- (qpat_x_assum `context_well_typed cx` mp_tac >>
       simp_tac (srw_ss()) [context_well_typed_def])
   >> first_assum ACCEPT_TAC
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[intcall_chain]:
@@ -2998,6 +3043,7 @@ Resume eval_preserves_swt[intcall_chain]:
   (* Re-inject ih_p1 for later use *)
   assume_tac ih_p1 >>
   suspend "intcall_inl")
+  >> TRY not_type_error_tac
 QED
 
 (* Standalone helper: state_well_typed + value typing through
@@ -3369,6 +3415,7 @@ Resume eval_preserves_swt[intcall_inl]:
   rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >>
   suspend "chain_sc"
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[chain_sc]:
@@ -3381,12 +3428,14 @@ Resume eval_preserves_swt[chain_sc]:
   >- suspend "chain_bind"
   >- suspend "chain_ih"
   >> suspend "chain_every_swt"
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[chain_bind]:
   strip_tac >> strip_tac >> conj_tac
   >- suspend "chain_bind_swt"
   >> suspend "chain_bind_ec"
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[chain_bind_swt]:
@@ -3413,6 +3462,7 @@ Resume eval_preserves_swt[chain_bind_swt]:
        TRY (first_assum ACCEPT_TAC)) >>
   irule dflts_drop_types_match >> rpt conj_tac >>
   first_assum ACCEPT_TAC
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[chain_bind_ec]:
@@ -3427,6 +3477,7 @@ Resume eval_preserves_swt[chain_bind_ec]:
   rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >>
   TRY REFL_TAC
+  >> TRY not_type_error_tac
 QED
 Resume eval_preserves_swt[chain_ih]:
   (* ML-level tactic: SPECL the chain-prefix IH with 33 witnesses,
@@ -3544,35 +3595,42 @@ Resume eval_preserves_swt[chain_ih]:
     simp_tac std_ss [return_def]
   ) >>
   disch_then ACCEPT_TAC
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[chain_every_swt]:
   drule (iffLR state_well_typed_def) >> strip_tac
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[RawCallTarget]:
   tp_chain_prefix_tac ev_RawCallTarget wte_RawCallTarget >>
   tp_chain_tail_tac default_chain_value_tac
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[RawLog]:
   tp_chain_prefix_tac ev_RawLog wte_RawLog >>
   tp_chain_tail_tac (TRY DECIDE_TAC)
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[RawRevert]:
   tp_chain_prefix_tac ev_RawRevert wte_RawRevert >>
   tp_chain_tail_tac (TRY DECIDE_TAC)
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[SelfDestructTarget]:
   tp_chain_prefix_tac ev_SelfDestructTarget wte_SelfDestructTarget >>
   tp_chain_tail_tac (TRY DECIDE_TAC)
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[CreateTarget]:
   tp_chain_prefix_tac ev_CreateTarget wte_CreateTarget >>
   tp_chain_tail_tac default_chain_value_tac
+  >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[exprs_cons]:

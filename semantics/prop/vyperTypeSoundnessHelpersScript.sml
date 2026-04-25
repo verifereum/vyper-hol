@@ -6850,10 +6850,13 @@ Proof
   CCONTR_TAC >> fs[] >>
   (* tyv = NoneTV from TypeError materialise result *)
   imp_res_tac materialise_type_error_imp_NoneTV >>
-  fs[evaluate_type_NoneTV_imp_NoneT] >>
-  (* expr_type e = NoneT => eval result not HashMapRef *)
+  gvs[] >>
+  (* expr_type e_expr = NoneT via forward chaining *)
+  imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
+  gvs[] >>
+  (* eval result not HashMapRef for NoneT-typed well_typed exprs *)
   imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >>
-  (* not HashMapRef => materialise can't produce TypeError => contradiction *)
+  (* materialise TypeError implies HashMapRef — contradiction *)
   imp_res_tac materialise_type_error_imp_HashMapRef >>
-  Cases_on `tv` >> gvs[is_HashMapRef_def, toplevel_value_typed_def]
+  metis_tac[]
 QED
