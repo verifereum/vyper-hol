@@ -20,6 +20,11 @@ Libs
 
 val () = (); (* TODO: workaround https://github.com/HOL-Theorem-Prover/HOL/issues/1898, remove when fixed *)
 
+(* Add exception/error distinctness to stateful simpset.
+   This lets gvs[] and simp[] prove no-TypeError conjuncts
+   (e.g. INR(ReturnException v) ≠ INR(Error(TypeError s))) automatically. *)
+val _ = augment_srw_ss[rewrites [exception_distinct, error_distinct]];
+
 (* ===== ML bindings: fast conjunct access ===== *)
 
 (* pure_op_not_return conjuncts *)
@@ -208,14 +213,27 @@ val not_return_tac =
    assumptions so that imp_res_tac on bridge lemmas can find their antecedents.
    Value v => value_has_type tyv v; HashMapRef => tyv = NoneTV; ArrayRef => tyv = ArrayTV *)
 val not_type_error_tac =
+  (* Strategy 1: IH-derived or constructor distinctness may already give the goal *)
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  (* Strategy 2: IH discharge — sub-evaluation IH gives no-TypeError directly *)
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
+  (* Strategy 3: materialise contradiction - if materialise produced TypeError,
+     then tyv = NoneTV, but well_typed_expr excludes NoneT types.
+     Works when goal has `∀s. e' ≠ Error(TypeError s)` and assumptions include
+     a materialise equation with INR e'. *)
+  TRY (spose_not_then strip_assume_tac >>
+       imp_res_tac materialise_type_error_imp_NoneTV >>
+       imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
+       gvs[well_typed_expr_TopLevelName_NotNoneT] >> NO_TAC) >>
   (* Expand toplevel_value_typed in assumptions: Value v → value_has_type tyv v,
      which lets bridge lemmas find their antecedents via imp_res_tac below.
      Also derives tyv ≠ NoneTV and tyv ≠ ArrayTV from evaluate_type typing. *)
   gvs[toplevel_value_typed_def,
       evaluate_type_not_NoneT_imp_not_NoneTV,
       evaluate_type_BaseT_imp_not_ArrayTV] >>
+  (* Retry ACCEPT after gvs may have simplified the goal *)
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  (* Sub-evaluation IH gives no-TypeError directly — drule_all should find it *)
+  (* Retry IH discharge after gvs *)
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
   (* materialise on Value never gives TypeError *)
   TRY (imp_res_tac materialise_Value_no_type_error >> gvs[] >> NO_TAC) >>
@@ -676,34 +694,31 @@ Resume eval_preserves_swt[ReturnSome]:
   gvs[wts_ReturnSome] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_ReturnSome] >>
-  simp[bind_def, AllCaseEqs(), raise_def] >> strip_tac >> gvs[] >>
+  simp[bind_def, AllCaseEqs(), raise_def] >> strip_tac >>
+  (* Apply IH early so no-TypeError fact is available in assumptions *)
   qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
     drule_all >> strip_tac >>
-  TRY (gvs[] >>
-       qpat_x_assum `!tv. INL _ = INL tv ==> _`
-         (mp_tac o SIMP_RULE (srw_ss()) []) >>
-       disch_then drule >> strip_tac >> gvs[] >> NO_TAC) >>
   gvs[] >>
+  TRY (qpat_x_assum `!tv. INL _ = INL tv ==> _`
+         (mp_tac o SIMP_RULE (srw_ss()) []) >>
+       disch_then drule >> strip_tac >> NO_TAC) >>
   (* for materialise INR case: derive typing info before resolving *)
-  TRY (
-    qpat_x_assum `!tv. INL _ = INL tv ==> _`
-      (mp_tac o SIMP_RULE (srw_ss()) []) >>
-    disch_then drule >> strip_tac >> NO_TAC) >>
+  TRY (qpat_x_assum `!tv. INL _ = INL tv ==> _`
+         (mp_tac o SIMP_RULE (srw_ss()) []) >>
+       disch_then drule >> strip_tac >> NO_TAC) >>
   swt_resolve_state_tac >>
   rpt CONJ_TAC >>
   TRY not_return_tac >>
-  TRY not_type_error_tac >>
-  fs[toplevel_value_typed_def] >>
   not_type_error_tac
 
 QED
 
 Resume eval_preserves_swt[Raise1]:
-  gvs[ev_Raise1, raise_def]
+  gvs[ev_Raise1, raise_def] >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Raise2]:
-  gvs[ev_Raise2, raise_def]
+  gvs[ev_Raise2, raise_def] >> TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Raise3]:
