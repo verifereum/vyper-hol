@@ -941,7 +941,7 @@ Resume eval_preserves_swt[targets_cons]:
   qpat_x_assum `eval_targets _ (_::_) _ = _` mp_tac >>
   rewrite_tac[ev_targets_cons] >>
   simp[bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  qpat_x_assum `!env' st' res st''. _ /\ _ /\ _ /\ eval_target _ _ _ = _ ==> _`
+  qpat_x_assum `!env' st' res st''. _ /\ _ /\ _ /\ _ /\ eval_target _ _ _ = _ ==> _`
     (qspecl_then [`env`, `st`] mp_tac) >>
   simp[] >> (impl_tac >- metis_tac[]) >>
   strip_tac >>

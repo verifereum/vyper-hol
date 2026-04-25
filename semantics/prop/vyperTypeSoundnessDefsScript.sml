@@ -483,6 +483,10 @@ Definition env_consistent_def:
   env_consistent env cx st <=>
     env.type_defs = get_tenv cx /\
     fn_sigs_consistent env.fn_sigs cx /\
+    (* Completeness: every var_types entry must be in scope *)
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+       IS_SOME (lookup_scopes id st.scopes)) /\
+    (* Soundness: if var_types entry and scope entry both exist, types match *)
     (!id ty entry.
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id st.scopes = SOME entry ==>
