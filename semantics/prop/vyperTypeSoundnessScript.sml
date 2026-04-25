@@ -768,21 +768,24 @@ Resume eval_preserves_swt[Raise3]:
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
   first_x_assum drule_all >> strip_tac >>
-  (* x must be Value vl: StringT is not NoneT or ArrayTV *)
+  (* Specialize the expr IH with tv = x to get toplevel_value_typed x tyv *)
+  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
+  (* Substitute expr_type e = BaseT (StringT n) in evaluate_type assumption *)
+  gvs[] >>
+  (* x must be Value vl: BaseT type means tyv ≠ NoneTV and tyv ≠ ArrayTV *)
   `?vl. x = Value vl` by (
-    irule toplevel_value_typed_not_ArrayRef >> simp[] >>
     imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >> simp[]) >>
+    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+    Cases_on `x` >> gvs[toplevel_value_typed_def] >>
+    first_x_assum irule >> simp[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* get_Value (Value vl) = return vl *)
-  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  gvs[get_Value_def, return_def, bind_apply, BETA_THM] >>
-  (* dest_StringV succeeds on string-typed values *)
-  imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
-  imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  gvs[dest_StringV_def, lift_option_type_def, raise_def, return_def,
-      AllCaseEqs()] >>
-  rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
+  simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
+  (* lift_option_type (dest_StringV vl) *)
+  simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
+  Cases_on `dest_StringV vl` >>
+  simp_tac (srw_ss()) [raise_def, return_def, bind_apply, BETA_THM] >>
+  tp_bind_err_tac
 QED
 
 Resume eval_preserves_swt[Assert1]:

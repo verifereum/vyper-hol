@@ -3911,6 +3911,18 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `tv` >> gvs[toplevel_value_typed_def] >> first_x_assum irule >> simp[]
 QED
 
+Theorem toplevel_value_typed_for_BaseT:
+  !tenv bt tv tyv.
+    evaluate_type tenv (BaseT bt) = SOME tyv /\
+    toplevel_value_typed tv tyv ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule evaluate_type_not_NoneT_imp_not_NoneTV >> simp[] >> strip_tac >>
+  drule evaluate_type_BaseT_imp_not_ArrayTV >> simp[] >> strip_tac >>
+  metis_tac[toplevel_value_typed_not_ArrayRef]
+QED
+
 Theorem toplevel_value_typed_no_ArrayTV_get_Value:
   !tv tyv st e s. toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==> get_Value tv st <> (INR e, s)
 Proof
