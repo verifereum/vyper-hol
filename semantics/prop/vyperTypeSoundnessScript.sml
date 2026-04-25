@@ -723,6 +723,38 @@ Resume eval_preserves_swt[Raise2]:
   rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 QED
 
+(* tp_bind_err_tac: dispatch error branch after Cases_on a bind step
+   (Moved here before first use in Raise3; also defined later at original location) *)
+val tp_bind_err_tac =
+  strip_tac >>
+  TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac lift_option_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  TRY (first_x_assum drule_all >> strip_tac) >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (imp_res_tac eval_expr_not_return >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (imp_res_tac eval_exprs_not_return >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (imp_res_tac eval_target_not_return >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (imp_res_tac eval_targets_not_return >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (imp_res_tac eval_base_target_not_return >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (imp_res_tac eval_iterator_not_return >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY (imp_res_tac materialise_error >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+  TRY not_type_error_tac >> TRY (first_assum ACCEPT_TAC);
 
 Resume eval_preserves_swt[Raise3]:
   rpt gen_tac >> strip_tac >>
@@ -732,35 +764,24 @@ Resume eval_preserves_swt[Raise3]:
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Raise3] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
-  strip_tac >>
-  (* Case-split on eval_expr result *)
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >-
-    (simp_tac (srw_ss()) [] >>
-     first_x_assum drule_all >> strip_tac >>
-     rpt CONJ_TAC >> TRY not_return_tac >> not_type_error_tac) >>
-  (* eval_expr returns INL tv => apply P7 IH *)
-  rename1 `eval_expr cx e st = (INL tv, s1)` >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  TRY (tp_bind_err_tac >> NO_TAC) >>
   first_x_assum drule_all >> strip_tac >>
-  (* Specialize IH: ∀tv'. INL tv = INL tv' ⇒ P(tv') *)
-  first_x_assum (qspecl_then [`tv`] mp_tac) >> simp[] >> strip_tac >>
-  (* Establish bridge lemma preconditions *)
-  `expr_type e ≠ NoneT` by simp[] >>
-  imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-  imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
-  (* Bridge: gives ∃v. tv = Value v *)
-  imp_res_tac toplevel_value_typed_not_ArrayRef >>
-  gvs[get_Value_def] >>
-  imp_res_tac get_Value_state >>
+  (* x must be Value vl: StringT is not NoneT or ArrayTV *)
+  `?vl. x = Value vl` by (
+    irule toplevel_value_typed_not_ArrayRef >> simp[] >>
+    imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >> simp[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  (* dest_StringV succeeds on StringT *)
+  (* get_Value (Value vl) = return vl *)
+  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  gvs[get_Value_def, return_def, bind_apply, BETA_THM] >>
+  (* dest_StringV succeeds on string-typed values *)
   imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
-  gvs[dest_StringV_def, lift_option_type_def] >>
-  imp_res_tac lift_option_type_state >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  (* raise (AssertException s) *)
-  gvs[raise_def, return_def] >>
-  swt_resolve_state_tac >>
+  imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  gvs[dest_StringV_def, lift_option_type_def, raise_def, return_def,
+      AllCaseEqs()] >>
   rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 QED
 
@@ -980,37 +1001,7 @@ val tp_materialise_bridge_tac =
                           materialise_def]) >>
   first_x_assum drule >> strip_tac;
 
-(* tp_bind_err_tac: dispatch error branch after Cases_on a bind step *)
-val tp_bind_err_tac =
-  strip_tac >>
-  TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac lift_option_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (first_x_assum drule_all >> strip_tac) >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (imp_res_tac eval_expr_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (imp_res_tac eval_exprs_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (imp_res_tac eval_target_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (imp_res_tac eval_targets_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (imp_res_tac eval_base_target_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (imp_res_tac eval_iterator_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY (imp_res_tac materialise_error >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY not_type_error_tac >> TRY (first_assum ACCEPT_TAC);
+(* tp_bind_err_tac moved before Raise3 *)
 
 Resume eval_preserves_swt[Assert3]:
   rpt gen_tac >> strip_tac >>
