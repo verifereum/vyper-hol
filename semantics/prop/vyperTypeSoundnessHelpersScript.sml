@@ -1010,6 +1010,13 @@ Proof
        env_consistent_def] >> metis_tac[]
 QED
 
+(* Record identity: updating scopes to st.scopes is a no-op *)
+Theorem evaluation_state_scopes_id:
+  !st. (st :evaluation_state) with scopes := st.scopes = st
+Proof
+  Cases >> simp[evaluation_state_fn_updates, combinTheory.K_THM]
+QED
+
 (* Helper: env_consistent survives popping a scope when going from
    extended env back to outer env. Requires that the only var_types
    entry in the current scope is nm (completeness clause requirement). *)
@@ -1026,31 +1033,40 @@ Theorem env_consistent_pop_scope:
     env_consistent env cx (st with scopes := TL st.scopes)
 Proof
   rpt strip_tac >>
-  (* Reduce goal to RHS conditions of env_consistent_scopes_only *)
-  irule (iffRL env_consistent_scopes_only) >>
-  (* Get conditions from the assumption: st = st with scopes := st.scopes *)
-  `env_consistent (env with var_types updated_by flip $|+ (nm,typ)) cx
-     (st with scopes := st.scopes)` by simp[] >>
-  drule (iffLR env_consistent_scopes_only) >>
-  strip_tac >>
+  (* Rewrite assumption: st becomes (st with scopes := st.scopes) *)
+  qpat_x_assum `env_consistent _ _ _`
+    (assume_tac o SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
+  Cases_on `st.scopes` >> gvs[] >>
+  drule (iffLR env_consistent_scopes_only) >> strip_tac >>
+  simp[Once env_consistent_scopes_only] >>
   fs[finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac
   (* var_types completeness *)
   >- (
-    Cases_on `id IN FDOM (HD st.scopes)`
-    >- metis_tac[] >>
-    first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
-    Cases_on `st.scopes` >> gvs[lookup_scopes_def] >>
-    metis_tac[IS_SOME_DEF, option_CLAUSES]) >>
+    rpt strip_tac >>
+    Cases_on `id IN FDOM h` >- (
+      `id <> nm` by (
+        CCONTR_TAC >> fs[] >>
+        `nm IN FDOM h` by metis_tac[] >>
+        first_x_assum (qspec_then `nm` mp_tac) >> simp[]) >>
+      first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
+      gvs[lookup_scopes_def]) >>
+    `lookup_scopes id (h::t) = lookup_scopes id t` by simp[lookup_scopes_def] >>
+    metis_tac[]) >>
   conj_tac
   (* var_types soundness *)
   >- (
-    Cases_on `id IN FDOM (HD st.scopes)`
-    >- metis_tac[] >>
-    first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
-    first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
-    Cases_on `st.scopes` >> gvs[lookup_scopes_def]) >>
-  (* Remaining clauses: global_types, toplevel_types, flag_members *)
+    rpt strip_tac >>
+    Cases_on `id IN FDOM h` >- (
+      `id <> nm` by (
+        CCONTR_TAC >> fs[] >>
+        `nm IN FDOM h` by metis_tac[] >>
+        first_x_assum (qspec_then `nm` mp_tac) >> simp[]) >>
+      first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
+      gvs[lookup_scopes_def]) >>
+    `lookup_scopes id (h::t) = lookup_scopes id t` by simp[lookup_scopes_def] >>
+    metis_tac[]) >>
+  (* Remaining clauses *)
   metis_tac[]
 QED
 
