@@ -1017,6 +1017,67 @@ Proof
   simp[finite_mapTheory.FLOOKUP_DEF]
 QED
 
+(* FLOOKUP giving SOME means the key is in the domain *)
+Theorem FLOOKUP_SOME_IN_FDOM:
+  !fm k v. FLOOKUP fm k = SOME v ==> k IN FDOM fm
+Proof
+  simp[finite_mapTheory.FLOOKUP_DEF]
+QED
+
+(* Isolated helper for env_consistent_pop_scope: var_types completeness.
+   Small context so metis_tac/fs can work without blowing up. *)
+Theorem var_types_pop_scope_completeness:
+  !env nm typ h t id ty.
+    nm NOTIN FDOM env.var_types /\
+    (!id. id IN FDOM h /\ id <> nm ==> FLOOKUP env.var_types id = NONE) /\
+    (!id. id IN FDOM h /\ id <> nm ==> lookup_scopes id t = NONE) /\
+    (!id ty. (if nm = id then SOME typ else FLOOKUP env.var_types id) = SOME ty ==>
+             IS_SOME (lookup_scopes id (h::t))) /\
+    FLOOKUP env.var_types id = SOME ty
+    ==>
+    IS_SOME (lookup_scopes id t)
+Proof
+  rpt strip_tac >>
+  `FLOOKUP env.var_types nm = NONE` by simp[FLOOKUP_NOT_IN_FDOM] >>
+  Cases_on `id = nm` >> gvs[] >>
+  Cases_on `id IN FDOM h` >- (
+    (* id in top scope, id<>nm: derivation gives FLOOKUP env.var_types id = NONE,
+       contradicting assumption = SOME ty *)
+    `FLOOKUP env.var_types id = NONE` by (
+      first_x_assum drule >> simp[]) >>
+    gvs[]) >>
+  (* id not in top scope: FLOOKUP h id = NONE so lookup_scopes skips it *)
+  `FLOOKUP h id = NONE` by fs[FLOOKUP_NOT_IN_FDOM] >>
+  simp[lookup_scopes_def] >>
+  first_x_assum irule >> simp[]
+QED
+
+(* Isolated helper for env_consistent_pop_scope: var_types soundness.
+   Small context so metis_tac/fs can work without blowing up. *)
+Theorem var_types_pop_scope_soundness:
+  !env nm typ h t id ty entry.
+    nm NOTIN FDOM env.var_types /\
+    (!id. id IN FDOM h /\ id <> nm ==> FLOOKUP env.var_types id = NONE) /\
+    (!id ty entry. (if nm = id then SOME typ else FLOOKUP env.var_types id) = SOME ty /\
+                   lookup_scopes id (h::t) = SOME entry ==>
+                   evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    FLOOKUP env.var_types id = SOME ty /\
+    lookup_scopes id t = SOME entry
+    ==>
+    evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  rpt strip_tac >>
+  `FLOOKUP env.var_types nm = NONE` by simp[FLOOKUP_NOT_IN_FDOM] >>
+  Cases_on `id = nm` >> gvs[] >>
+  Cases_on `id IN FDOM h` >- (
+    qpat_x_assum `!id. id IN FDOM h /\ id <> nm ==> FLOOKUP env.var_types id = NONE`
+      (qspec_then `id` mp_tac) >>
+    simp[]) >>
+  `FLOOKUP h id = NONE` by fs[FLOOKUP_NOT_IN_FDOM] >>
+  first_x_assum irule >>
+  simp[lookup_scopes_def]
+QED
+
 (* Record identity: updating scopes to st.scopes is a no-op *)
 Theorem evaluation_state_scopes_id:
   !st. (st :evaluation_state) with scopes := st.scopes = st
@@ -1039,7 +1100,7 @@ Theorem env_consistent_pop_scope:
     ==>
     env_consistent env cx (st with scopes := TL st.scopes)
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `env_consistent _ _ _`
     (assume_tac o SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
   Cases_on `st.scopes` >> gvs[] >>
@@ -1047,34 +1108,21 @@ Proof
   simp[Once env_consistent_scopes_only] >>
   gvs[typing_env_accfupds, combinTheory.C_DEF,
       finite_mapTheory.FLOOKUP_UPDATE] >>
-  (* var_types completeness *)
   conj_tac >- (
+    (* var_types completeness *)
     rpt strip_tac >>
-    `id IN FDOM env.var_types` by (
-      CCONTR_TAC >> gvs[FLOOKUP_NOT_IN_FDOM]) >>
-    `id <> nm` by (
-      CCONTR_TAC >> fs[IN_DEF] >> metis_tac[]) >>
-    Cases_on `id IN FDOM h` >- (
-      first_x_assum (qspec_then `id` mp_tac) >> simp[]) >>
-    `lookup_scopes id (h::t) = lookup_scopes id t`
-      by simp[lookup_scopes_def] >>
-    first_x_assum drule >> simp[]) >>
-  (* var_types soundness *)
+    irule var_types_pop_scope_completeness >> simp[]) >>
   conj_tac >- (
+    (* var_types soundness *)
     rpt strip_tac >>
-    `id IN FDOM env.var_types` by (
-      CCONTR_TAC >> gvs[FLOOKUP_NOT_IN_FDOM]) >>
-    `id <> nm` by (
-      CCONTR_TAC >> fs[IN_DEF] >> metis_tac[]) >>
-    Cases_on `id IN FDOM h` >- (
-      first_x_assum (qspec_then `id` mp_tac) >> simp[]) >>
-    `lookup_scopes id (h::t) = lookup_scopes id t`
-      by simp[lookup_scopes_def] >>
-    first_x_assum drule >> simp[]) >>
-  (* global_types *)
+    irule var_types_pop_scope_soundness >> simp[]) >>
   conj_tac >- (
+    (* global_types completeness *)
     rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  (* toplevel_types *)
+  conj_tac >- (
+    (* global_types soundness *)
+    rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  (* toplevel_types + flag_members *)
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
