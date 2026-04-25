@@ -6828,3 +6828,32 @@ Theorem well_typed_expr_NoneT_eval_not_HashMapRef:
 Proof
   metis_tac[eval_expr_not_HashMapRef]
 QED
+
+(* materialise on a well-typed expression result never produces TypeError.
+   This combines: materialise_no_type_error (disjunction on NoneTV),
+   evaluate_type_NoneTV_imp_NoneT (NoneTV → NoneT), and
+   well_typed_expr_NoneT_eval_not_HashMapRef (NoneT eval → not HashMapRef).
+   The result: materialise can't produce TypeError because either tyv ≠ NoneTV
+   (so right disjunct of materialise_no_type_error applies) or we derive
+   ~is_HashMapRef tv which contradicts TypeError-producing materialise. *)
+Theorem materialise_well_typed_no_type_error:
+  !cx tv st1 e s1 env e_expr st0.
+    materialise cx tv st1 = (INR e, s1) /\
+    toplevel_value_typed tv tyv /\
+    evaluate_type (get_tenv cx) (expr_type e_expr) = SOME tyv /\
+    well_typed_expr env e_expr /\
+    env_consistent env cx st0 /\
+    eval_expr cx e_expr st0 = (INL tv, st1) ==>
+    !m. e <> Error (TypeError m)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  CCONTR_TAC >> fs[] >>
+  (* tyv = NoneTV from TypeError materialise result *)
+  imp_res_tac materialise_type_error_imp_NoneTV >>
+  fs[evaluate_type_NoneTV_imp_NoneT] >>
+  (* expr_type e = NoneT => eval result not HashMapRef *)
+  imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >>
+  (* not HashMapRef => materialise can't produce TypeError => contradiction *)
+  imp_res_tac materialise_type_error_imp_HashMapRef >>
+  Cases_on `tv` >> gvs[is_HashMapRef_def, toplevel_value_typed_def]
+QED

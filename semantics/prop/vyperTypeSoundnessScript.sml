@@ -228,6 +228,8 @@ val not_type_error_tac =
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
   (* materialise on Value never gives TypeError *)
   TRY (imp_res_tac materialise_Value_no_type_error >> gvs[] >> NO_TAC) >>
+  (* materialise bridge: well-typed expression eval + materialise never gives TypeError *)
+  TRY (imp_res_tac materialise_well_typed_no_type_error >> gvs[] >> NO_TAC) >>
   (* materialise on non-HashMapRef never gives TypeError *)
   TRY (imp_res_tac materialise_not_HashMapRef_no_type_error >> gvs[] >> NO_TAC) >>
   (* get_Value on well-typed non-ArrayTV/non-NoneTV values succeeds *)
