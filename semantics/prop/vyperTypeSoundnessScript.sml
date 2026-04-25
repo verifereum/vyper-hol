@@ -214,22 +214,6 @@ val not_type_error_tac =
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   (* Strategy 2: IH discharge — sub-evaluation IH gives no-TypeError directly *)
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
-  (* Strategy 3: materialise contradiction - only if materialise in assumptions.
-     spose_not_then adds e' = Error(TypeError s), VAR_EQ substitutes,
-     materialise_type_error_imp_NoneTV gives tyv = NoneTV,
-     evaluate_type_NoneTV_imp_NoneT gives expr_type e = NoneT,
-     well_typed_expr_NoneT_eval_not_HashMapRef gives ~is_HashMapRef tv,
-     materialise_not_HashMapRef_no_type_error derives contradiction. *)
-  TRY (qhdtm_assum `materialise`
-         (fn _ => spose_not_then strip_assume_tac >>
-                  rpt BasicProvers.VAR_EQ_TAC >>
-                  imp_res_tac materialise_type_error_imp_NoneTV >>
-                  gvs[] >>
-                  imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
-                  gvs[] >>
-                  imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >>
-                  imp_res_tac materialise_not_HashMapRef_no_type_error >>
-                  gvs[]) >> NO_TAC) >>
   (* Expand toplevel_value_typed in assumptions for bridge lemma matching *)
   gvs[toplevel_value_typed_def,
       evaluate_type_not_NoneT_imp_not_NoneTV,
@@ -262,14 +246,35 @@ val not_type_error_tac =
   (* Check/type_check/raise/return never produce TypeError by construction *)
   TRY (gvs[raise_def, return_def, check_def, type_check_def,
            lift_option_type_def, lift_option_def, get_Value_def,
-           AllCaseEqs()] >> NO_TAC);
+           AllCaseEqs()] >> NO_TAC) >>
+  (* Strategy 3 (last resort): materialise contradiction.
+     ONLY fires when goal mentions TypeError and materialise is in assumptions.
+     Assumes the negation to get e' = Error(TypeError s'), VAR_EQ substitutes
+     into materialise assumptions. Chain: TypeError → NoneTV → NoneT →
+     well_typed excludes NoneT → ~is_HashMapRef → no TypeError. *)
+  TRY (
+    goal_term (fn tm =>
+      if can (find_term (fn t => same_const ``TypeError`` t)) tm then
+        spose_not_then strip_assume_tac >>
+        rpt BasicProvers.VAR_EQ_TAC >>
+        imp_res_tac materialise_type_error_imp_NoneTV >>
+        gvs[] >>
+        imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
+        gvs[] >>
+        imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >>
+        imp_res_tac materialise_not_HashMapRef_no_type_error >>
+        gvs[] >> NO_TAC
+      else NO_TAC))
 
 (* Close error branch completely: resolve state, discharge swt+ec, then return *)
 val tp_err_tac =
   rpt BasicProvers.VAR_EQ_TAC >>
   swt_resolve_state_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  ASM_REWRITE_TAC[] >> not_return_tac >> TRY not_type_error_tac;
+  ASM_REWRITE_TAC[] >>
+  rpt CONJ_TAC >>
+  TRY not_return_tac >>
+  TRY not_type_error_tac;
 
 val tp_peel_bind =
   PURE_ONCE_REWRITE_TAC[bind_def] >> simp_tac bool_ss [BETA_THM];
@@ -372,7 +377,10 @@ fun tp_stmt_no_return_tac ev_thm wts_thm extra_defs =
   simp[] >>
   swt_resolve_state_tac >>
   TRY swt_modify_tac >>
-  TRY not_return_tac >> TRY not_type_error_tac;
+  rpt CONJ_TAC >>
+  TRY not_return_tac >>
+  TRY not_type_error_tac >>
+  TRY (gvs[]);
 
 (* Prove case-expanded = do-notation by simplifier normalization.
    Use: move case-expanded asm to goal via mp_tac, making goal
@@ -714,16 +722,31 @@ Resume eval_preserves_swt[ReturnSome]:
 QED
 
 Resume eval_preserves_swt[Raise1]:
-  gvs[ev_Raise1, raise_def] >> TRY not_type_error_tac
+  gvs[ev_Raise1, raise_def]
 QED
 
 Resume eval_preserves_swt[Raise2]:
-  gvs[ev_Raise2, raise_def] >> TRY not_type_error_tac
+  gvs[ev_Raise2, raise_def]
 QED
 
 Resume eval_preserves_swt[Raise3]:
-  tp_stmt_no_return_tac ev_Raise3 wts_Raise3 []
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Raise3]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  rewrite_tac[ev_Raise3] >>
+  simp_tac (srw_ss()) [bind_apply, ignore_bind_apply, AllCaseEqs(),
+    return_def, raise_def, BETA_THM] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt (first_x_assum drule_all >> strip_tac) >>
+  simp[] >> swt_resolve_state_tac >>
+  (* Critical: instantiate evaluate_type to resolve tyv variable *)
+  TRY (gvs[Once evaluate_type_def]) >>
+  rpt CONJ_TAC >>
+  TRY not_return_tac >>
+  TRY not_type_error_tac
 QED
+
 
 Resume eval_preserves_swt[Assert1]:
   tp_stmt_no_return_tac ev_Assert1 wts_Assert1
