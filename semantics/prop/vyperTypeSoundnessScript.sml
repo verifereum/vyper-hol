@@ -211,6 +211,17 @@ val not_return_tac =
    Pattern E: materialise passes through Value without TypeError → bridge lemma
    IMPORTANT: Do NOT use spose_not_then here — it corrupts assumptions by
    substituting TypeError equalities into non-TypeError exception variables. *)
+
+(* Helper: evaluate_type for BaseT always gives BaseTV *)
+(* Moved here before first use in not_type_error_tac *)
+val evaluate_type_BaseT_inv = prove(
+  ``!tenv bt tv.
+    evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt``,
+  rpt strip_tac >>
+  qpat_x_assum `_ = SOME _` mp_tac >>
+  simp[evaluate_type_def, LET_THM, AllCaseEqs()] >>
+  strip_tac >> fs[]);
+
 val not_type_error_tac =
   (* Strategy 1: Goal matches an assumption exactly (IH-derived no-TypeError) *)
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
@@ -779,11 +790,17 @@ Resume eval_preserves_swt[Raise3]:
     Cases_on `x` >> gvs[toplevel_value_typed_def] >>
     first_x_assum irule >> simp[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
+  (* Resolve tyv = BaseTV (StringT n) before case-split on dest_StringV *)
+  imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
   (* get_Value (Value vl) = return vl *)
   simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
   (* lift_option_type (dest_StringV vl) *)
   simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
-  Cases_on `dest_StringV vl` >>
+  Cases_on `dest_StringV vl` >-
+  (* NONE case: well-typed StringT value can't have dest_StringV = NONE *)
+  (fs[toplevel_value_typed_def] >>
+   imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >> fs[]) >>
+  (* SOME case: normal raise path *)
   simp_tac (srw_ss()) [raise_def, return_def, bind_apply, BETA_THM] >>
   tp_bind_err_tac
 QED
@@ -2340,15 +2357,6 @@ val evaluate_type_ArrayT_inv = prove(
   simp_tac bool_ss [evaluate_type_def, AllCaseEqs(), LET_THM] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qexists `tv` >> fs[]);
-
-(* Helper: evaluate_type for BaseT always gives BaseTV *)
-val evaluate_type_BaseT_inv = prove(
-  ``!tenv bt tv.
-    evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt``,
-  rpt strip_tac >>
-  qpat_x_assum `_ = SOME _` mp_tac >>
-  simp[evaluate_type_def, LET_THM, AllCaseEqs()] >>
-  strip_tac >> fs[]);
 
 Theorem toplevel_array_length_len_bounded:
   !cx tv st len st'.
