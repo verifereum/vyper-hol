@@ -202,17 +202,21 @@ val not_return_tac =
 
 
 (* ===== No-TypeError tactic: discharges ∀s. e ≠ Error (TypeError s) goals ===== *)
-(* Handles three patterns of no-TypeError goals:
-   Pattern A: Constructor distinctness → handled by augment_srw_ss
+(* Handles patterns of no-TypeError goals:
+   Pattern A: Constructor distinctness (e.g. AssertException ≠ TypeError)
+              → handled by augment_srw_ss via simp[]
    Pattern B: IH propagation → ACCEPT_TAC directly
-   Pattern C: materialise case → spose_not_then + contradiction chain:
-     TypeError from materialise implies HashMapRef (via materialise_type_error_imp_NoneTV),
-     but well_typed_expr excludes HashMapRef results from eval_expr
-     (via well_typed_expr_NoneT_eval_not_HashMapRef). *)
+   Pattern C: Pure operations never produce TypeError → simp with defs
+   Pattern D: get_Value/dest_XV succeed on well-typed values → bridge lemmas
+   Pattern E: materialise passes through Value without TypeError → bridge lemma
+   IMPORTANT: Do NOT use spose_not_then here — it corrupts assumptions by
+   substituting TypeError equalities into non-TypeError exception variables. *)
 val not_type_error_tac =
   (* Strategy 1: Goal matches an assumption exactly (IH-derived no-TypeError) *)
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  (* Strategy 2: IH discharge — sub-evaluation IH gives no-TypeError directly *)
+  (* Strategy 2: Constructor distinctness — simp[] handles this via augmented srw_ss *)
+  TRY (simp[] >> NO_TAC) >>
+  (* Strategy 3: IH discharge — sub-evaluation IH gives no-TypeError directly *)
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
   (* Expand toplevel_value_typed in assumptions for bridge lemma matching *)
   gvs[toplevel_value_typed_def,
@@ -246,25 +250,7 @@ val not_type_error_tac =
   (* Check/type_check/raise/return never produce TypeError by construction *)
   TRY (gvs[raise_def, return_def, check_def, type_check_def,
            lift_option_type_def, lift_option_def, get_Value_def,
-           AllCaseEqs()] >> NO_TAC) >>
-  (* Strategy 3 (last resort): materialise contradiction.
-     ONLY fires when goal mentions TypeError and materialise is in assumptions.
-     Assumes the negation to get e' = Error(TypeError s'), VAR_EQ substitutes
-     into materialise assumptions. Chain: TypeError → NoneTV → NoneT →
-     well_typed excludes NoneT → ~is_HashMapRef → no TypeError. *)
-  TRY (
-    goal_term (fn tm =>
-      if can (find_term (fn t => same_const ``TypeError`` t)) tm then
-        spose_not_then strip_assume_tac >>
-        rpt BasicProvers.VAR_EQ_TAC >>
-        imp_res_tac materialise_type_error_imp_NoneTV >>
-        gvs[] >>
-        imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
-        gvs[] >>
-        imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >>
-        imp_res_tac materialise_not_HashMapRef_no_type_error >>
-        gvs[] >> NO_TAC
-      else NO_TAC))
+           AllCaseEqs()] >> NO_TAC)
 
 (* Close error branch completely: resolve state, discharge swt+ec, then return *)
 val tp_err_tac =
@@ -730,21 +716,7 @@ Resume eval_preserves_swt[Raise2]:
 QED
 
 Resume eval_preserves_swt[Raise3]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `well_typed_stmt _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Raise3]) >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  rewrite_tac[ev_Raise3] >>
-  simp_tac (srw_ss()) [bind_apply, ignore_bind_apply, AllCaseEqs(),
-    return_def, raise_def, BETA_THM] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt (first_x_assum drule_all >> strip_tac) >>
-  simp[] >> swt_resolve_state_tac >>
-  (* Critical: instantiate evaluate_type to resolve tyv variable *)
-  TRY (gvs[Once evaluate_type_def]) >>
-  rpt CONJ_TAC >>
-  TRY not_return_tac >>
-  TRY not_type_error_tac
+  tp_stmt_no_return_tac ev_Raise3 wts_Raise3 []
 QED
 
 
