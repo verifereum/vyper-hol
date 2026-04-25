@@ -726,43 +726,38 @@ QED
 
 Resume eval_preserves_swt[Raise3]:
   rpt gen_tac >> strip_tac >>
-  gvs[wts_Raise3] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Raise3]) >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[ev_Raise3, bind_def] >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (res_e, s1)` >>
-  Cases_on `res_e`
-  >- (* eval_expr returns INR *)
-    (Cases_on `e'` >> gvs[] >>
-     first_x_assum (drule_at Any) >> simp[raise_def] >>
-     rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac)
-  >> (* eval_expr returns INL tv *)
-  rename1 `eval_expr cx e st = (INL tv, s1)` >>
-  first_x_assum (drule_at Any) >> simp[] >>
+  rewrite_tac[ev_Raise3] >>
+  simp_tac std_ss [bind_apply, BETA_THM] >>
   strip_tac >>
+  (* Case-split on eval_expr result *)
+  Cases_on `eval_expr cx e st` >>
+  reverse (Cases_on `q`) >-
+    (simp_tac (srw_ss()) [] >>
+     first_x_assum drule_all >> strip_tac >>
+     rpt CONJ_TAC >> TRY not_return_tac >> not_type_error_tac) >>
+  (* eval_expr returns INL tv => apply P7 IH *)
+  rename1 `eval_expr cx e st = (INL tv, s1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  (* Establish tv is a well-typed Value *)
   gvs[toplevel_value_typed_def, evaluate_type_not_NoneT_imp_not_NoneTV,
       evaluate_type_BaseT_imp_not_ArrayTV] >>
   imp_res_tac toplevel_value_typed_not_ArrayRef >>
-  Cases_on `get_Value tv s1` >>
-  rename1 `get_Value tv s1 = (gv, s2)` >>
-  Cases_on `gv`
-  >- (* get_Value returns INR *)
-    (gvs[get_Value_def] >> imp_res_tac toplevel_value_typed_no_ArrayTV_get_Value >> gvs[] >>
-     rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac)
-  >> (* get_Value returns INL v *)
-  gvs[get_Value_def, return_def] >>
-  imp_res_tac get_Value_state >> gvs[] >>
-  Cases_on `lift_option_type (dest_StringV v') "not StringV" s1` >>
-  rename1 `lift_option_type _ _ _ = (lres, s3)` >>
-  Cases_on `lres`
-  >- (* lift_option_type returns INR *)
-    (gvs[lift_option_type_def] >>
-     imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
-     gvs[dest_StringV_def] >>
-     rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac)
-  >> (* lift_option_type returns INL s *)
-  gvs[lift_option_type_def, return_def] >>
-  imp_res_tac lift_option_type_state >> gvs[raise_def] >>
+  (* get_Value on Value always returns INL — destruct to show that *)
+  imp_res_tac toplevel_value_typed_not_ArrayRef >>
+  gvs[get_Value_def] >>
+  imp_res_tac get_Value_state >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* dest_StringV succeeds on StringT *)
+  imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
+  gvs[dest_StringV_def, lift_option_type_def] >>
+  imp_res_tac lift_option_type_state >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* raise (AssertException s) *)
+  gvs[raise_def, return_def] >>
   swt_resolve_state_tac >>
   rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 QED
