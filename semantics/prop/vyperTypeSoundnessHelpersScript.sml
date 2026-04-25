@@ -1010,6 +1010,13 @@ Proof
        env_consistent_def] >> metis_tac[]
 QED
 
+(* FLOOKUP on a key not in the domain gives NONE *)
+Theorem FLOOKUP_NOT_IN_FDOM:
+  !fm k. k NOTIN FDOM fm ==> FLOOKUP fm k = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_DEF]
+QED
+
 (* Record identity: updating scopes to st.scopes is a no-op *)
 Theorem evaluation_state_scopes_id:
   !st. (st :evaluation_state) with scopes := st.scopes = st
@@ -1033,41 +1040,42 @@ Theorem env_consistent_pop_scope:
     env_consistent env cx (st with scopes := TL st.scopes)
 Proof
   rpt strip_tac >>
-  (* Rewrite assumption: st becomes (st with scopes := st.scopes) *)
   qpat_x_assum `env_consistent _ _ _`
     (assume_tac o SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
   Cases_on `st.scopes` >> gvs[] >>
   drule (iffLR env_consistent_scopes_only) >> strip_tac >>
   simp[Once env_consistent_scopes_only] >>
-  fs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  conj_tac
+  gvs[typing_env_accfupds, combinTheory.C_DEF,
+      finite_mapTheory.FLOOKUP_UPDATE] >>
   (* var_types completeness *)
-  >- (
+  conj_tac >- (
     rpt strip_tac >>
+    `id IN FDOM env.var_types` by (
+      CCONTR_TAC >> gvs[FLOOKUP_NOT_IN_FDOM]) >>
+    `id <> nm` by (
+      CCONTR_TAC >> fs[IN_DEF] >> metis_tac[]) >>
     Cases_on `id IN FDOM h` >- (
-      `id <> nm` by (
-        CCONTR_TAC >> fs[] >>
-        `nm IN FDOM h` by metis_tac[] >>
-        first_x_assum (qspec_then `nm` mp_tac) >> simp[]) >>
-      first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
-      gvs[lookup_scopes_def]) >>
-    `lookup_scopes id (h::t) = lookup_scopes id t` by simp[lookup_scopes_def] >>
-    metis_tac[]) >>
-  conj_tac
+      first_x_assum (qspec_then `id` mp_tac) >> simp[]) >>
+    `lookup_scopes id (h::t) = lookup_scopes id t`
+      by simp[lookup_scopes_def] >>
+    first_x_assum drule >> simp[]) >>
   (* var_types soundness *)
-  >- (
+  conj_tac >- (
     rpt strip_tac >>
+    `id IN FDOM env.var_types` by (
+      CCONTR_TAC >> gvs[FLOOKUP_NOT_IN_FDOM]) >>
+    `id <> nm` by (
+      CCONTR_TAC >> fs[IN_DEF] >> metis_tac[]) >>
     Cases_on `id IN FDOM h` >- (
-      `id <> nm` by (
-        CCONTR_TAC >> fs[] >>
-        `nm IN FDOM h` by metis_tac[] >>
-        first_x_assum (qspec_then `nm` mp_tac) >> simp[]) >>
-      first_x_assum (qspec_then `id` mp_tac) >> simp[] >> strip_tac >>
-      gvs[lookup_scopes_def]) >>
-    `lookup_scopes id (h::t) = lookup_scopes id t` by simp[lookup_scopes_def] >>
-    metis_tac[]) >>
-  (* Remaining clauses *)
-  metis_tac[]
+      first_x_assum (qspec_then `id` mp_tac) >> simp[]) >>
+    `lookup_scopes id (h::t) = lookup_scopes id t`
+      by simp[lookup_scopes_def] >>
+    first_x_assum drule >> simp[]) >>
+  (* global_types *)
+  conj_tac >- (
+    rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  (* toplevel_types *)
+  rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
 (* env_consistent is preserved by evaluation steps that preserve tv and
