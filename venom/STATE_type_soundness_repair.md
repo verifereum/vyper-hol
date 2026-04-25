@@ -1,79 +1,82 @@
 # STATE: Type Soundness Repair
 
-## Overall Status: In-progress — Raise3 still failing, ~48 blocks remaining
+## Overall Status: In-progress — Raise3 proof needs correct step-by-step case splitting with state preservation
 
 ## Build State
-- vyperTypeSoundnessHelpersTheory: BUILDS OK (pre-existing cheat on `eval_expr_not_HashMapRef` Call case)
-- vyperTypeSoundnessTheory: FAILS at Raise3 (first failing Resume block after Raise1/Raise2 fixed)
+- vyperTypeSoundnessHelpersTheory: BUILDS (with 2 existing CHEATs)
+- vyperTypeSoundnessTheory: FAILS at Raise3 block
 
-## Fixes Applied This Session
+## Current Proof Decomposition (Raise3)
+Raise3 = `eval_stmt cx (Raise (RaiseReason e)) st` which does:
+```
+do tv <- eval_expr cx e;
+   v <- get_Value tv;
+   s <- lift_option_type (dest_StringV v) "not StringV";
+   raise (AssertException s)
+od
+```
+Three bind steps, each pure (state unchanged).
 
-### 1. Raise1/Raise2: FIXED ✓
-- Both `Raise RaiseBare` and `Raise RaiseUnreachable` evaluate to `raise (AssertException ...)`.
-- After `gvs[ev_RaiseN, raise_def]`, both TypeError and ReturnException conjuncts are trivially discharged by constructor distinctness (already in augment_srw_ss).
-- Fix: Simplified from `gvs[ev_RaiseN, raise_def] >> TRY not_type_error_tac` to just `gvs[ev_RaiseN, raise_def]`
+## Raise3 Failure Diagnosis (5+ attempts this session)
 
-### 2. `tp_stmt_no_return_tac` and `tp_err_tac`: Restructured
-- Changed end from `TRY not_return_tac >> TRY not_type_error_tac` to `rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac >> TRY (gvs[])`
-- Key insight: `rpt CONJ_TAC` splits ALL conjunctions before tactics see individual goals
-- Without this, tactics received conjunctions they couldn't handle
+### Attempt 1: Manual expansion following ReturnSome pattern
+- `simp[bind_def, AllCaseEqs(), ...] >> strip_tac` then `drule_all` IH
+- Result: `state_well_typed s'⁴'` unsolved — `AllCaseEqs()` creates fresh state vars not equated
+- Diagnosis: `AllCaseEqs()` on `get_Value_def`/`lift_option_type_def` introduces disconnected state variables
 
-### 3. `not_type_error_tac` Strategy 3: Guarded with goal_term
-- Strategy 3 (spose_not_then contradiction chain) now ONLY fires when goal mentions `TypeError`
-- Guard: `goal_term (fn tm => if can (find_term (fn t => same_const ``TypeError`` t)) tm then ... else NO_TAC)`
-- This prevents spose_not_then from corrupting state-well-typedness goals after CONJ_TAC splits
+### Attempt 2: `imp_res_tac` bridge lemmas before expansion
+- Apply IH, then `imp_res_tac toplevel_value_typed_no_ArrayTV_get_Value`, then `drule get_Value_state`
+- Result: `drule get_Value_state` fails — bridge lemma added CONDITIONALLY (antecedents undischarged)
+- Diagnosis: `imp_res_tac` on `toplevel_value_typed_no_ArrayTV_get_Value` can't match against INL assumption; adds conditional fact with undischarged antecedents `tyv ≠ NoneTV` and `∀t b. tyv ≠ ArrayTV t b`
 
-### 4. Raise3: Added `gvs[Once evaluate_type_def]` (CRITICAL FIX from oracle)
-- **Root cause**: `evaluate_type` is opaque, so `tyv` from IH stays uninstantiated
-- Bridge lemma `value_has_type_StringT_dest_StringV_NEQ_NONE` needs `value_has_type (BaseTV (StringT n)) v` but IH gives `value_has_type tyv v`
-- `gvs[Once evaluate_type_def]` instantiates `evaluate_type ... (BaseT (StringT n)) = SOME (BaseTV (StringT n))`, revealing `tyv = BaseTV (StringT n)`
-- This likely fixes MANY future cases too — TODO: add to `tp_stmt_no_return_tac` or `not_type_error_tac`
+### Attempt 3: `gvs` with all defs + `rpt (pop_assum mp_tac >> simp[] >> strip_tac)` (Raise1/Raise2 style)
+- Result: 104s timeout / goal explosion — deeper bind chain (3 binds vs 1 for Raise1/Raise2) creates massive disjunction
+- Diagnosis: `gvs[AllCaseEqs(), get_Value_def, lift_option_type_def]` creates exponential case explosion
 
-## Current not_type_error_tac Structure (order matters!)
-1. Strategy 1: `ACCEPT_TAC` — IH-derived no-TypeError already in assumptions
-2. Strategy 2: `drule_all` — IH discharge for sub-evaluation
-3. `gvs[toplevel_value_typed_def, evaluate_type_not_NoneT_imp_not_NoneTV, evaluate_type_BaseT_imp_not_ArrayTV]`
-4. Retry ACCEPT + drule_all after gvs
-5. Bridge lemmas: materialise_Value_no_type_error, materialise_not_HashMapRef_no_type_error
-6. More bridge lemmas: toplevel_value_typed_no_ArrayTV_get_Value
-7. dest_StringV/BytesV/NumV/AddressV/ArrayV bridge lemmas
-8. Constructor distinctness catch-all: `gvs[raise_def, return_def, check_def, ...]`
-9. Strategy 3 (LAST): `spose_not_then` guarded by `goal_term` TypeError check
+### Attempt 4: Step-by-step `Cases_on` without `AllCaseEqs()`
+- `Cases_on eval_expr`, `Cases_on get_Value`, `Cases_on dest_StringV` etc.
+- Result: `>-` failures — subgoals not fully solved by supplied tactics
+- Diagnosis: Wrong subgoal ordering; `>-` demands full solution; need `>-` only when sure of solution
 
-## BLOCKER: Raise3 May Still Fail
-Last holmake had `Q_TAC0`/`FIRST_ASSUM` error. This could be:
-- The `rpt (first_x_assum drule_all >> strip_tac)` loop applying drule to a no-TypeError IH that introduces constraints
-- OR the `gvs[Once evaluate_type_def]` not being sufficient
+## THE CORRECT APPROACH (not yet implemented)
+Step through the bind chain one `Cases_on` at a time:
+1. `rewrite_tac[ev_Raise3]` then `simp_tac std_ss [bind_apply, BETA_THM]`
+2. `Cases_on 'eval_expr cx e st'` → INR case: simple propagate; INL case: continue
+3. Apply IH on INL case, derive `toplevel_value_typed tv tyv`, `tyv ≠ NoneTV`, `∀t b. tyv ≠ ArrayTV t b`
+4. `Cases_on 'get_Value tv s1'` → INR case: use bridge lemma directly (`irule` or `metis_tac`) ; INL case: `drule get_Value_state >> strip_tac`
+5. `Cases_on 'dest_StringV v'` → NONE: use `value_has_type_StringT_dest_StringV_NEQ_NONE` ; SOME: `drule lift_option_type_state >> strip_tac`
+6. Resolve final state with equalities derived from steps 4-5
 
-**Next step**: Test Raise3 interactively with `hol_state_at` to see exact goal state after each step. If `gvs[Once evaluate_type_def]` works but leaves residual goals, add more specific tactics.
+KEY: Do NOT use `AllCaseEqs()` or `gvs[get_Value_def]` — these cause state variable explosion. Use explicit `Cases_on` and `get_Value_state`/`lift_option_type_state` to derive state equalities.
 
-## Widespread Fix Needed: evaluate_type instantiation
-The `gvs[Once evaluate_type_def]` pattern likely helps MANY cases (any case where the IH gives `evaluate_type ... ty = SOME tyv` but `tyv` needs to be concrete). Consider:
-- Adding to `tp_stmt_no_return_tac` after `swt_resolve_state_tac`
-- Adding to `not_type_error_tac` before bridge lemmas
-- Adding to the ReturnSome block (which already works but might be fragile)
+## Key Lemmas (verified to exist)
+- `toplevel_value_typed_no_ArrayTV_get_Value` — proved in helpers
+- `value_has_type_StringT_dest_StringV_NEQ_NONE` — proved in helpers
+- `get_Value_state` — proved in vyperStatePreservationScript.sml
+- `lift_option_type_state` — proved in vyperStatePreservationScript.sml
+- `evaluate_type_BaseT_imp_not_ArrayTV` — proved in helpers
+- `evaluate_type_not_NoneT_imp_not_NoneTV` — proved in helpers
 
-## Remaining ~48 Resume Blocks
-Most should be extended with the conjunction-splitting pattern (`rpt CONJ_TAC`) and TypeError guard. Check each:
-- **Simple cases** (no IH, direct evaluation): `gvs[...]` suffices
-- **Cases with sub-evaluation IH**: Need `rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac`
-- **Cases with materialise**: Need Strategy 3 (guarded spose_not_then)
-- **Cases with evaluate_type**: Need `gvs[Once evaluate_type_def]`
+## Existing CHEATs (must remove eventually)
+1. `eval_expr_not_HashMapRef` Call case (helpers ~line 6823)
+2. `functions_well_typed_body_full` (helpers ~line 620)
 
-## Key Pre-existing Cheats
-- `eval_expr_not_HashMapRef` Call case: CHEAT (helpers line ~6822)
-- `functions_well_typed_body_full`: CHEAT (helpers line ~620)
+## Remaining Resume Blocks After Raise3
+All 50+ blocks need no-TypeError proofs. Raise3 is the first failing block. The pattern learned here (step-by-step Cases_on + state lemmas) applies to all bind-chain blocks.
 
 ## What NOT to Try
-- DON'T use `spose_not_then` without a TypeError guard in goal — it corrupts goals irreversibly
-- DON'T use `qhdtm_assum 'materialise'` as guard — matches IH-derived materialise assumptions
-- DON'T use `>-` inside Resume blocks (type error with gentactic)
-- DON'T expand `evaluate_def` without `Once` — HANGS
-- DON'T use `simp[Once run_block_def]` — HANGS; use `ONCE_REWRITE_TAC`
-- DON'T forget `rpt BasicProvers.VAR_EQ_TAC` after spose_not_then
-- DON'T assume `evaluate_type` auto-instantiates tyv — it's opaque! Need explicit `gvs[Once evaluate_type_def]`
+- DON'T use `AllCaseEqs()` with `get_Value_def`/`lift_option_type_def` — causes state variable explosion
+- DON'T use `gvs[get_Value_def]` inside bind chains — same explosion
+- DON'T use `tp_stmt_no_return_tac` for bind-chain cases — it does AllCaseEqs before IH
+- DON'T use `imp_res_tac` on `toplevel_value_typed_no_ArrayTV_get_Value` when only INL assumption exists — adds conditional fact
+- DON'T use `simp[Once run_block_def]` — HANGS
+- DON'T use `fs[evaluate_type_NoneTV_imp_NoneT]` — use `imp_res_tac` instead
 
 ## Oracle Feedback
-- **Claude oracle**: Suggested the same proof structure as existing code — correct but doesn't identify the tyv instantiation gap
-- **Gemini oracle**: CRITICAL INSIGHT — identified that `evaluate_type` is opaque, `tyv` stays uninstantiated, and `gvs[Once evaluate_type_def]` is needed to resolve `tyv = BaseTV (StringT n)`. This is the KEY fix. Low risk.
-- Assessment: Gemini's insight about evaluate_type instantiation is the most important finding this session. The evaluate_type opacity affects MANY cases, not just Raise3.
+Not used this session — all attempts were direct proof work based on STATE from previous session.
+
+## Next Priority
+1. Fix Raise3 using step-by-step Cases_on approach (see THE CORRECT APPROACH above)
+2. Rebuild after Raise3 fixed — identify next failing block
+3. Apply pattern to remaining blocks
+4. Eventually: remove existing CHEATs
