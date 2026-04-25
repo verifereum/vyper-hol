@@ -202,32 +202,35 @@ val not_return_tac =
 
 
 (* ===== No-TypeError tactic: discharges ∀s. e ≠ Error (TypeError s) goals ===== *)
-(* Mirror of not_return_tac but for TypeError impossibility.
-   Uses bridge lemmas connecting well-typedness to destructor success.
-   TypeError sources and their bridges:
-   - get_Value on non-Value → toplevel_value_typed + ¬ArrayTV/¬NoneTV → tv = Value v
-   - lift_option_type (dest_XV v) when NONE → value_has_type → dest_XV v ≠ NONE
-   - materialise on HashMapRef → toplevel_value_typed + ¬NoneTV contradiction
-   - Sub-evaluation errors → IH gives ¬TypeError directly
-   Key fix: gvs[toplevel_value_typed_def] expands toplevel_value_typed in
-   assumptions so that imp_res_tac on bridge lemmas can find their antecedents.
-   Value v => value_has_type tyv v; HashMapRef => tyv = NoneTV; ArrayRef => tyv = ArrayTV *)
+(* Handles three patterns of no-TypeError goals:
+   Pattern A: Constructor distinctness → handled by augment_srw_ss
+   Pattern B: IH propagation → ACCEPT_TAC directly
+   Pattern C: materialise case → spose_not_then + contradiction chain:
+     TypeError from materialise implies HashMapRef (via materialise_type_error_imp_NoneTV),
+     but well_typed_expr excludes HashMapRef results from eval_expr
+     (via well_typed_expr_NoneT_eval_not_HashMapRef). *)
 val not_type_error_tac =
-  (* Strategy 1: IH-derived or constructor distinctness may already give the goal *)
+  (* Strategy 1: Goal matches an assumption exactly (IH-derived no-TypeError) *)
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   (* Strategy 2: IH discharge — sub-evaluation IH gives no-TypeError directly *)
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
-  (* Strategy 3: materialise contradiction - if materialise produced TypeError,
-     then tyv = NoneTV, but well_typed_expr excludes NoneT types.
-     Works when goal has `∀s. e' ≠ Error(TypeError s)` and assumptions include
-     a materialise equation with INR e'. *)
-  TRY (spose_not_then strip_assume_tac >>
-       imp_res_tac materialise_type_error_imp_NoneTV >>
-       imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
-       gvs[well_typed_expr_TopLevelName_NotNoneT] >> NO_TAC) >>
-  (* Expand toplevel_value_typed in assumptions: Value v → value_has_type tyv v,
-     which lets bridge lemmas find their antecedents via imp_res_tac below.
-     Also derives tyv ≠ NoneTV and tyv ≠ ArrayTV from evaluate_type typing. *)
+  (* Strategy 3: materialise contradiction - only if materialise in assumptions.
+     spose_not_then adds e' = Error(TypeError s), VAR_EQ substitutes,
+     materialise_type_error_imp_NoneTV gives tyv = NoneTV,
+     evaluate_type_NoneTV_imp_NoneT gives expr_type e = NoneT,
+     well_typed_expr_NoneT_eval_not_HashMapRef gives ~is_HashMapRef tv,
+     materialise_not_HashMapRef_no_type_error derives contradiction. *)
+  TRY (qhdtm_assum `materialise`
+         (fn _ => spose_not_then strip_assume_tac >>
+                  rpt BasicProvers.VAR_EQ_TAC >>
+                  imp_res_tac materialise_type_error_imp_NoneTV >>
+                  gvs[] >>
+                  imp_res_tac evaluate_type_NoneTV_imp_NoneT >>
+                  gvs[] >>
+                  imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >>
+                  imp_res_tac materialise_not_HashMapRef_no_type_error >>
+                  gvs[]) >> NO_TAC) >>
+  (* Expand toplevel_value_typed in assumptions for bridge lemma matching *)
   gvs[toplevel_value_typed_def,
       evaluate_type_not_NoneT_imp_not_NoneTV,
       evaluate_type_BaseT_imp_not_ArrayTV] >>
@@ -256,9 +259,6 @@ val not_type_error_tac =
   (* dest_ArrayV succeeds on well-typed ArrayTV values *)
   TRY (imp_res_tac dest_ArrayV_NEQ_NONE_value_has_type_ArrayTV >>
        gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
-  (* materialise TypeError implies NoneTV typing, which contradicts well_typed constraints *)
-  TRY (imp_res_tac materialise_type_error_imp_NoneTV >>
-       imp_res_tac evaluate_type_NoneTV_imp_NoneT >> gvs[] >> NO_TAC) >>
   (* Check/type_check/raise/return never produce TypeError by construction *)
   TRY (gvs[raise_def, return_def, check_def, type_check_def,
            lift_option_type_def, lift_option_def, get_Value_def,
