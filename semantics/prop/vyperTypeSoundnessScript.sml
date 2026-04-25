@@ -237,6 +237,14 @@ val is_HashMapRef_toplevel_value_typed_NoneTV = prove(
   ``!tv tyv. is_HashMapRef tv /\ toplevel_value_typed tv tyv ==> tyv = NoneTV``,
   metis_tac[toplevel_value_typed_not_HashMapRef]);
 
+(* Helper: value_has_type with BaseTV BoolT forces v = BoolV b.
+   Post-gvs form: after gvs[toplevel_value_typed_def], the assumption
+   toplevel_value_typed tv tyv has been expanded to value_has_type tyv v.
+   This lemma works on the expanded form. *)
+val value_has_type_BoolT_inv = prove(
+  ``!v. value_has_type (BaseTV BoolT) v ==> ?b. v = BoolV b``,
+  Cases_on `v` >> simp[value_has_type_def] >> Cases_on `b` >> simp[]);
+
 val not_type_error_tac =
   (* Strategy 1: Goal matches an assumption exactly (IH-derived no-TypeError) *)
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
@@ -244,26 +252,6 @@ val not_type_error_tac =
   TRY (simp[] >> NO_TAC) >>
   (* Strategy 3: IH discharge — sub-evaluation IH gives no-TypeError directly *)
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
-  (* Close impossible-branch F goals BEFORE expanding toplevel_value_typed.
-     Must come before gvs[toplevel_value_typed_def] which would destroy the
-     toplevel_value_typed assumption these lemmas match against.
-     GUARD: only fire when goal is F, to avoid corrupting non-F goals.
-     Pattern 1: switch_BoolV impossible branch — resolve tyv = BaseTV BoolT, then BoolT_inv. *)
-  TRY (
-    goal_term (fn t => if aconv t ``F:bool`` then ALL_TAC else NO_TAC) >>
-    imp_res_tac evaluate_type_BaseT_inv >>
-    rpt BasicProvers.VAR_EQ_TAC >>
-    imp_res_tac toplevel_value_typed_BoolT_inv >> fs[] >> NO_TAC) >>
-  (* Pattern 2: is_HashMapRef contradicts well_typed_expr — derive tyv = NoneTV,
-     then expr_type = NoneT via evaluate_type, then well_typed_expr contradiction.
-     GUARD: only fire when goal is F. *)
-  TRY (
-    goal_term (fn t => if aconv t ``F:bool`` then ALL_TAC else NO_TAC) >>
-    imp_res_tac is_HashMapRef_toplevel_value_typed_NoneTV >>
-    rpt BasicProvers.VAR_EQ_TAC >>
-    drule evaluate_type_NoneTV_imp_NoneT >>
-    rpt strip_tac >>
-    imp_res_tac well_typed_expr_TopLevelName_NotNoneT >> fs[] >> NO_TAC) >>
   (* Expand toplevel_value_typed in assumptions for bridge lemma matching *)
   gvs[toplevel_value_typed_def,
       evaluate_type_not_NoneT_imp_not_NoneTV,
@@ -300,6 +288,27 @@ val not_type_error_tac =
            lift_option_type_def, lift_option_def, get_Value_def,
            AllCaseEqs()] >> NO_TAC)
 
+(* Close impossible-branch F goals from switch_BoolV/type_check case splits.
+   MUST use is_F_goal guard: without it, imp_res_tac/assume_tac corrupt
+   non-F goals via TRY non-rollback (side effects are permanent even on failure).
+   is_F_goal is a plain function (not goal_term), so it works in holmake.
+   Pattern 1: switch_BoolV — evaluate_type BaseT BoolT + toplevel_value_typed BoolT_inv.
+   Pattern 2: is_HashMapRef — tyv=NoneTV → expr_type=NoneT → not HashMapRef → F. *)
+val is_F_goal: tactic = fn (asl, g) =>
+  if aconv g ``F:bool`` then ALL_TAC (asl, g) else NO_TAC (asl, g);
+
+val close_impossible_branch_tac =
+  TRY (is_F_goal >>
+       first_assum (assume_tac o MATCH_MP evaluate_type_BaseT_inv) >>
+       rpt BasicProvers.VAR_EQ_TAC >>
+       imp_res_tac toplevel_value_typed_BoolT_inv >> fs[] >> NO_TAC) >>
+  TRY (is_F_goal >>
+       imp_res_tac is_HashMapRef_toplevel_value_typed_NoneTV >>
+       rpt BasicProvers.VAR_EQ_TAC >>
+       drule evaluate_type_NoneTV_imp_NoneT >>
+       rpt strip_tac >>
+       imp_res_tac well_typed_expr_NoneT_eval_not_HashMapRef >> fs[] >> NO_TAC)
+
 (* Close error branch completely: resolve state, discharge swt+ec, then return *)
 val tp_err_tac =
   rpt BasicProvers.VAR_EQ_TAC >>
@@ -308,7 +317,8 @@ val tp_err_tac =
   ASM_REWRITE_TAC[] >>
   rpt CONJ_TAC >>
   TRY not_return_tac >>
-  TRY not_type_error_tac;
+  TRY not_type_error_tac >>
+  TRY close_impossible_branch_tac;
 
 val tp_peel_bind =
   PURE_ONCE_REWRITE_TAC[bind_def] >> simp_tac bool_ss [BETA_THM];
@@ -414,6 +424,7 @@ fun tp_stmt_no_return_tac ev_thm wts_thm extra_defs =
   rpt CONJ_TAC >>
   TRY not_return_tac >>
   TRY not_type_error_tac >>
+  TRY close_impossible_branch_tac >>
   TRY (gvs[]);
 
 (* Prove case-expanded = do-notation by simplifier normalization.
