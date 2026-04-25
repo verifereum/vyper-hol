@@ -222,6 +222,21 @@ val evaluate_type_BaseT_inv = prove(
   simp[evaluate_type_def, LET_THM, AllCaseEqs()] >>
   strip_tac >> fs[]);
 
+(* Helper: toplevel_value_typed with BaseTV BoolT forces tv = Value(BoolV b).
+   Used to close impossible switch_BoolV branches where tv ≠ BoolV T/F. *)
+val toplevel_value_typed_BoolT_inv = prove(
+  ``!tv. toplevel_value_typed tv (BaseTV BoolT) ==>
+         ?b. tv = Value (BoolV b)``,
+  Cases >> simp[toplevel_value_typed_def] >>
+  Cases_on `v` >> simp[value_has_type_def]);
+
+(* Helper: is_HashMapRef with toplevel_value_typed forces tyv = NoneTV.
+   Contrapositive of toplevel_value_typed_not_HashMapRef.
+   Used to close impossible branches where well-typed expression produces HashMapRef. *)
+val is_HashMapRef_toplevel_value_typed_NoneTV = prove(
+  ``!tv tyv. is_HashMapRef tv /\ toplevel_value_typed tv tyv ==> tyv = NoneTV``,
+  metis_tac[toplevel_value_typed_not_HashMapRef]);
+
 val not_type_error_tac =
   (* Strategy 1: Goal matches an assumption exactly (IH-derived no-TypeError) *)
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
@@ -229,6 +244,26 @@ val not_type_error_tac =
   TRY (simp[] >> NO_TAC) >>
   (* Strategy 3: IH discharge — sub-evaluation IH gives no-TypeError directly *)
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
+  (* Close impossible-branch F goals BEFORE expanding toplevel_value_typed.
+     Must come before gvs[toplevel_value_typed_def] which would destroy the
+     toplevel_value_typed assumption these lemmas match against.
+     GUARD: only fire when goal is F, to avoid corrupting non-F goals.
+     Pattern 1: switch_BoolV impossible branch — resolve tyv = BaseTV BoolT, then BoolT_inv. *)
+  TRY (
+    goal_term (fn t => if aconv t ``F:bool`` then ALL_TAC else NO_TAC) >>
+    imp_res_tac evaluate_type_BaseT_inv >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    imp_res_tac toplevel_value_typed_BoolT_inv >> fs[] >> NO_TAC) >>
+  (* Pattern 2: is_HashMapRef contradicts well_typed_expr — derive tyv = NoneTV,
+     then expr_type = NoneT via evaluate_type, then well_typed_expr contradiction.
+     GUARD: only fire when goal is F. *)
+  TRY (
+    goal_term (fn t => if aconv t ``F:bool`` then ALL_TAC else NO_TAC) >>
+    imp_res_tac is_HashMapRef_toplevel_value_typed_NoneTV >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    drule evaluate_type_NoneTV_imp_NoneT >>
+    rpt strip_tac >>
+    imp_res_tac well_typed_expr_TopLevelName_NotNoneT >> fs[] >> NO_TAC) >>
   (* Expand toplevel_value_typed in assumptions for bridge lemma matching *)
   gvs[toplevel_value_typed_def,
       evaluate_type_not_NoneT_imp_not_NoneTV,
