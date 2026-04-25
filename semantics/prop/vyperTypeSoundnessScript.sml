@@ -742,11 +742,13 @@ Resume eval_preserves_swt[Raise3]:
   (* eval_expr returns INL tv => apply P7 IH *)
   rename1 `eval_expr cx e st = (INL tv, s1)` >>
   first_x_assum drule_all >> strip_tac >>
-  (* Establish tv is a well-typed Value *)
-  gvs[toplevel_value_typed_def, evaluate_type_not_NoneT_imp_not_NoneTV,
-      evaluate_type_BaseT_imp_not_ArrayTV] >>
-  imp_res_tac toplevel_value_typed_not_ArrayRef >>
-  (* get_Value on Value always returns INL — destruct to show that *)
+  (* Specialize IH: ∀tv'. INL tv = INL tv' ⇒ P(tv') *)
+  first_x_assum (qspecl_then [`tv`] mp_tac) >> simp[] >> strip_tac >>
+  (* Establish bridge lemma preconditions *)
+  `expr_type e ≠ NoneT` by simp[] >>
+  imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+  imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+  (* Bridge: gives ∃v. tv = Value v *)
   imp_res_tac toplevel_value_typed_not_ArrayRef >>
   gvs[get_Value_def] >>
   imp_res_tac get_Value_state >>

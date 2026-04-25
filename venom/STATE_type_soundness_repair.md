@@ -6,98 +6,117 @@
 - vyperTypeSoundnessHelpersTheory: BUILDS (with 2 existing CHEATs)
 - vyperTypeSoundnessTheory: FAILS at Raise3 Resume block
 
-## Raise3 Current State
-The step-by-step approach (modeled on Assert3) is the right decomposition but needs fixing.
+## Raise3 Root Cause Analysis (3 sessions, 6+ attempts)
 
-### The Goal Shape After Initial Steps
-After `rewrite_tac[ev_Raise3] >> simp_tac std_ss [bind_apply, BETA_THM] >> strip_tac`,
-the antecedent contains the FULL nested case expression for the evaluation chain:
+### The Fundamental Problem
+After `mp_tac >> rewrite_tac[ev_Raise3] >> simp_tac std_ss[bind_apply, BETA_THM]`,
+the goal contains a nested case expression `(case eval_expr cx e st of ...) = (res, st') ⇒ conclusion`.
+After `strip_tac`, this goes into assumptions as a single assumption containing the full
+nested case expression. Subsequent `Cases_on \`eval_expr cx e st\`` creates branches,
+but the assumption with the case expression can't be simplified by gvs because
+the case expression is deeply nested — each step (get_Value, lift_option_type) has
+its own INL/INR branches. The variable `st'` remains unresolved because the
+simplifier can't push through all the nested case splits at once.
+
+### Why Assert3 Works But Raise3 Doesn't
+Assert3 uses `tp_bind_err_tac` (defined at line 978) which:
+1. `strip_tac` — pushes the guard into assumptions
+2. `POP_ASSUM STRIP_ASSUME_TAC` — splits conjunctions
+3. `rpt BasicProvers.VAR_EQ_TAC` — resolves `st' = s3` etc.
+4. State preservation lemmas + not_return + not_type_error_tac
+
+**Raise3 can't use tp_bind_err_tac** because it's defined AFTER Raise3's Resume block (line 727).
+
+### Three Approaches Tried
+1. **strip_tac + Cases_on + gvs[bridge lemmas]** (original): After strip_tac, the case expression
+   is in assumptions. Cases_on creates branches, but state variables (st') can't be
+   resolved because gvs can't simplify all nested case levels at once. Fails with
+   `state_well_typed st'` unsolved — st' never gets equated to a concrete state.
+
+2. **strip_tac + Cases_on + specialized IH + bridge lemmas BEFORE gvs[toplevel_value_typed_def]**:
+   Avoids expanding toplevel_value_typed_def (which creates conditional assumptions).
+   Uses explicit `qspecl_then` to get toplevel_value_typed tv tyv, then bridge lemmas.
+   Still fails because st' stays abstract — the case expression in assumptions constrains
+   st' but gvs/Cases_on can't push the equalities through.
+
+3. **No strip_tac, keep case expression in goal** (Assert3 pattern without tp_bind_err_tac):
+   Keeps the nested case expression in the goal where Cases_on can operate.
+   After `reverse (Cases_on q) >> simp_tac (srw_ss()) [] >- (INR handler)`,
+   the `>-` FAILS because the INR handler (drule_all + strip_tac + CONJ_TAC) can't
+   solve all conjuncts: the goal/subgoal shape after Cases_on + simp is different
+   from what the simple handler expects. Error: "first subgoal not solved by second tactic".
+
+### The Fix: Move tp_bind_err_tac BEFORE Raise3
+The simplest fix: move the `tp_bind_err_tac` definition (and `not_return_tac`,
+`not_type_error_tac`, `swt_resolve_state_tac` which it depends on) to BEFORE the
+first Resume block that needs it. Then Raise3 can use the same pattern as Assert3.
+
+**Alternative: Inline tp_bind_err_tac into Raise3.** This is more self-contained
+but duplicates code. Given that 50+ blocks need the same pattern, moving the
+definition is better.
+
+### Raise3 Proof Structure (after fix)
 ```
-case eval_expr cx e st of
-  (INL tv, s1) => case get_Value tv s1 of
-    (INL v, s2) => case lift_option_type (dest_StringV v) ... s2 of
-      (INL s, s3) => raise (AssertException s) s3
-    | (INR e, s3) => (INR e, s3)
-  | (INR e, s2) => (INR e, s2)
-| (INR e, s1) => (INR e, s1)
-```
-
-### Step-by-Step Approach (Assert3 pattern)
-1. `Cases_on \`eval_expr cx e st\`` → INR branch (dispatch with IH), INL branch (continue)
-2. Apply IH for eval_expr → get `toplevel_value_typed tv tyv`, state preservation, no-TypeError
-3. Show `tv = Value v'` using bridge lemmas
-4. Rewrite `get_Value (Value v')` → `return v'` (no INR branch possible)
-5. Show `dest_StringV v'` succeeds using `value_has_type_StringT_dest_StringV_NEQ_NONE`
-6. Rewrite `lift_option_type (SOME s)` → `return s` (no INR branch possible)
-7. Rewrite `raise (AssertException s)` → final conjuncts
-
-### Current Failure: Step 3 — `tv = Value v'` not established
-After `gvs[toplevel_value_typed_def, evaluate_type_not_NoneT_imp_not_NoneTV, evaluate_type_BaseT_imp_not_ArrayTV]`,
-the assumptions become conditional (not simplified), e.g.:
-`(∀t b. tyv ≠ ArrayTV t b) ⇒ tyv ≠ NoneTV ⇒ ∃v. tv = Value v`
-But `imp_res_tac toplevel_value_typed_not_ArrayRef` can't match because the conditions
-aren't established as simple assumptions — they're buried in implications.
-
-### Fix: Apply bridge lemmas BEFORE gvs expansion
-Instead of expanding `toplevel_value_typed_def` which creates conditional assumptions,
-apply `toplevel_value_typed_not_ArrayRef` directly (it already has the conditions built in).
-Then we get `∃v. tv = Value v` as a direct result.
-
-**Correct step ordering for the INL tv branch:**
-```
+rewrite_tac[ev_Raise3] >>
+simp_tac std_ss [bind_apply, BETA_THM] >>
+Cases_on `eval_expr cx e st` >>
+reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+TRY (tp_bind_err_tac >> NO_TAC) >>
+(* INL case: apply P7 IH, bridge lemmas, resolve step-by-step *)
 first_x_assum drule_all >> strip_tac >>
-(* DON'T gvs[toplevel_value_typed_def] here *)
-(* Instead apply the bridge lemma directly *)
-imp_res_tac toplevel_value_typed_not_ArrayRef >>  (* gives ∃v. tv = Value v *)
-gvs[get_Value_def] >>  (* now get_Value (Value v') = return v' *)
-```
-
-But `toplevel_value_typed_not_ArrayRef` requires `tyv ≠ NoneTV` and `∀t b. tyv ≠ ArrayTV t b`.
-These come from: `evaluate_type_not_NoneT_imp_not_NoneT` (needs `expr_type e ≠ NoneT`,
-which follows from `expr_type e = BaseT (StringT n)`) and `evaluate_type_BaseT_imp_not_ArrayTV`
-(needs `evaluate_type (get_tenv cx) (BaseT (StringT n)) = SOME tyv`).
-
-The key is to establish these facts IN ASSUMPTIONS before calling `imp_res_tac`:
-```
-(* Establish tyv ≠ NoneTV and ∀t b. tyv ≠ ArrayTV t b from IH result *)
+first_x_assum (qspecl_then [`tv`] mp_tac) >> simp[] >> strip_tac >>
 `expr_type e ≠ NoneT` by simp[] >>
 imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
 imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
-(* Now conditions are in assumptions, bridge lemma fires *)
 imp_res_tac toplevel_value_typed_not_ArrayRef >>
-gvs[get_Value_def] >>
+simp_tac (srw_ss()) [get_Value_def, return_def] >>
+(* get_Value succeeds on Value v *)
+imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
+simp_tac (srw_ss()) [dest_StringV_def, lift_option_type_def, return_def] >>
+(* raise *)
+simp[raise_def, return_def] >>
+swt_resolve_state_tac >>
+rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 ```
-
-### Alternative: Use `toplevel_value_typed_no_ArrayTV_get_Value` directly
-This lemma says: if `toplevel_value_typed tv tyv ∧ tyv ≠ NoneTV ∧ (∀t b. tyv ≠ ArrayTV t b)`
-then `get_Value tv st = (INL v, st)` for some v AND `state unchanged`. This combines
-steps 3+4 into one.
 
 ## Existing CHEATs (must remove eventually)
 1. `eval_expr_not_HashMapRef` Call case (helpers ~line 6823)
 2. `functions_well_typed_body_full` (helpers ~line 620)
 
 ## What NOT to Try
+- DON'T use `strip_tac` after bind_apply + BETA_THM without also using `tp_bind_err_tac`-style resolution afterwards — leaves `st'` abstract
+- DON'T use `gvs[toplevel_value_typed_def]` to establish bridge lemma conditions — creates conditional assumptions imp_res_tac can't match
+- DON'T use `gvs[ev_Raise3, bind_apply, AllCaseEqs(), get_Value_def, lift_option_type_def]` — 104s timeout
+- DON'T use `Cases_on \`tv\`` for `∃v'. tv = Value v'` — 3 branches, gvs can't close impossible ones
 - DON'T use `tp_stmt_no_return_tac` for Raise3 — leaves disconnected `e'` error variable
-- DON'T expand `toplevel_value_typed_def` in assumptions with `gvs` — creates messy conditional assumptions that bridge lemmas can't match
-- DON'T use `gvs[ev_Raise3, bind_apply, AllCaseEqs(), get_Value_def, lift_option_type_def]` — causes 104s timeout from state variable explosion
-- DON'T use `Cases_on \`tv\`` to prove `∃v'. tv = Value v'` — creates 3 branches including impossible ones that gvs can't close
-- DON'T use `qpat_x_assum` deeply after `mp_tac`/`strip_tac` — assumptions get consumed/renamed
-- DON'T use `tp_bind_err_tac` in Raise3 (defined AFTER Raise3 in the file)
+- DON'T skip `strip_tac` step without adjusting INR handler — subgoal shape changes, handler fails
 
-## Key Lemmas (verified to exist)
-- `toplevel_value_typed_not_ArrayRef` — gives `∃v. tv = Value v` (needs tyv ≠ NoneTV, tyv ≠ ArrayTV)
-- `toplevel_value_typed_no_ArrayTV_get_Value` — get_Value always succeeds, returns INL + state unchanged
+## Key Lemmas (verified to exist in vyperTypeSoundnessHelpersTheory)
+- `toplevel_value_typed_not_ArrayRef` — ∃v. tv = Value v (needs tyv ≠ NoneTV, ∀t b. tyv ≠ ArrayTV t b)
+- `toplevel_value_typed_no_ArrayTV_get_Value` — get_Value succeeds + state unchanged
 - `value_has_type_StringT_dest_StringV_NEQ_NONE` — dest_StringV ≠ NONE
 - `get_Value_state` — state unchanged by get_Value
 - `lift_option_type_state` — state unchanged by lift_option_type
 - `evaluate_type_BaseT_imp_not_ArrayTV` — BaseT ⇒ not ArrayTV
 - `evaluate_type_not_NoneT_imp_not_NoneTV` — not NoneT ⇒ not NoneTV
 
+## Key Tactics (defined in vyperTypeSoundnessScript.sml)
+- `tp_bind_err_tac` (line 978): strip + VAR_EQ + state lemmas + not_return + not_type_error
+- `not_type_error_tac` (line 214): multi-strategy no-TypeError (ACCEPT, simp, IH, bridge lemmas)
+- `not_return_tac` (line ~190): no-return disjunct
+- `swt_resolve_state_tac` (line ~240): state preservation from IH
+
 ## Remaining Resume Blocks After Raise3
 All 50+ blocks need no-TypeError proofs. Raise3 is the first failing block.
 
 ## Next Priority
-1. Fix Raise3: apply bridge lemmas before gvs expansion (see fix above)
-2. Rebuild — identify next failing block
-3. Apply pattern to remaining blocks
+1. **Move tactic definitions** (`tp_bind_err_tac`, `not_return_tac`, `not_type_error_tac`, `swt_resolve_state_tac`) BEFORE Raise3's Resume block in the file
+2. Rewrite Raise3 to use the Assert3 pattern with `tp_bind_err_tac`
+3. Rebuild — identify next failing block
+4. Apply pattern to remaining blocks
+
+## Provability Assessment
+The theorem is TRUE. Raise3 must show: if you raise with a well-typed string expression,
+the result is never a TypeError (it's always an AssertException). This is trivially true
+since the evaluation chain (eval_expr → get_Value → dest_StringV → raise) never produces
+TypeError when the expression is well-typed. The proof failure is purely tactical.
