@@ -1049,6 +1049,52 @@ Proof
   pop_assum mp_tac >> simp[] >> metis_tac[scope_well_typed_def]
 QED
 
+(* If lookup_scopes finds an entry in pre, it finds the same entry in pre++rest.
+   This is because lookup_scopes returns the first match. *)
+Theorem lookup_scopes_pre_found:
+  !pre id x rest.
+    lookup_scopes id pre = SOME x ==>
+    lookup_scopes id (pre ++ rest) = SOME x
+Proof
+  Induct_on `pre` >> simp[lookup_scopes_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[]
+QED
+
+(* If lookup_scopes does NOT find id in pre, then looking up in pre++rest
+   is the same as looking up in rest alone. *)
+Theorem lookup_scopes_pre_miss:
+  !pre id rest.
+    lookup_scopes id pre = NONE ==>
+    lookup_scopes id (pre ++ rest) = lookup_scopes id rest
+Proof
+  Induct_on `pre` >> simp[lookup_scopes_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[]
+QED
+
+(* Updating a scope entry's value preserves the TYPE of all looked-up entries.
+   If we find entry' in the updated scopes, there is a corresponding entry e
+   in the old scopes with the same .type field. *)
+Theorem lookup_scopes_value_update_type_preserved:
+  !pre env n entry a' rest id entry'.
+    FLOOKUP env n = SOME entry /\
+    lookup_scopes id (pre ++ env |+ (n, entry with value := a') :: rest) = SOME entry' ==>
+    ?e. lookup_scopes id (pre ++ env :: rest) = SOME e /\ e.type = entry'.type
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_scopes id pre` >> gvs[]
+  >- (
+    (* id NOT found in pre: lookup_scopes looks in env|+(n,...)::rest and env::rest *)
+    `!r. lookup_scopes id (pre ⧺ r) = lookup_scopes id r` by metis_tac[lookup_scopes_pre_miss] >>
+    fs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `id = n` >> gvs[scope_entry_accfupds] >>
+    qexists `entry` >> simp[scope_entry_accfupds])
+  >- (
+    (* id found in pre: same entry found in both old and new scopes *)
+    rename1 `SOME x` >>
+    `!r. lookup_scopes id (pre ⧺ r) = SOME x` by metis_tac[lookup_scopes_pre_found] >>
+    fs[] >> simp[])
+QED
+
 (* When a scope entry's value is updated, env_consistent is preserved.
    This is the main lemma for assign_target_well_typed[replace] and similar.
    The hypotheses are: env_consistent held before, FLOOKUP shows the entry was there,
@@ -1062,29 +1108,28 @@ Theorem env_consistent_scope_entry_value_update:
       (st with scopes := pre ++ env'⟨n ↦ entry with value := a'⟩::rest)
 Proof
   rpt strip_tac >>
-  once_rewrite_tac[env_consistent_scopes_only] >>
-  qpat_x_assum `env_consistent _ _ _`
+  qpat_assum `env_consistent _ _ _`
     (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only] o
      SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
-  simp[evaluation_state_accfupds, combinTheory.C_DEF] >>
+  irule env_consistent_with_new_scopes >> simp[] >>
   conj_tac
   >- (
-    gen_tac >> strip_tac >>
-    Cases_on `id = n`
-    >- (
-      `FLOOKUP env' id = SOME entry` by simp[] >>
-      drule lookup_scopes_update_preserves >> simp[IS_SOME_EXISTS])
-    >- (
-      drule lookup_scopes_update_other >> simp[])) >>
-  conj_tac
-  >- (
+    (* Soundness: entry.type is preserved through value update *)
     rpt gen_tac >> strip_tac >>
+    `?e. lookup_scopes id (pre ⧺ env'::rest) = SOME e ∧ e.type = entry'.type`
+      by metis_tac[lookup_scopes_value_update_type_preserved] >>
+    first_x_assum (qpat_x_assum `∀id ty entry. _ ⇒ _`) drule >> simp[])
+  >- (
+    (* Completeness: IS_SOME preserved through update *)
+    rpt gen_tac >> strip_tac >>
+    first_x_assum (qpat_x_assum `∀id ty. _ ⇒ IS_SOME _`) drule >>
     Cases_on `id = n`
     >- (
-      `FLOOKUP env' id = SOME entry` by simp[] >>
-      drule lookup_scopes_update >> simp[scope_entry_accfupds])
+      simp[IS_SOME_EXISTS] >>
+      `FLOOKUP env' n = SOME entry` by simp[] >>
+      irule lookup_scopes_update_preserves >> simp[])
     >- (
-      drule lookup_scopes_update_other >> simp[]))
+      irule lookup_scopes_update_other >> simp[]))
 QED
 
 
