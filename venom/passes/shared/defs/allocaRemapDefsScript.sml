@@ -102,11 +102,16 @@ End
 Definition alloca_safe_access_def:
   alloca_safe_access fn (roots : string set) s <=>
     let pv = pointer_derived_vars fn roots in
-    (* All alloca regions fit within memory (no expansion on access) *)
-    (!aid off asz.
-      FLOOKUP s.vs_allocas aid = SOME (off, asz) ==>
-      off + asz <= LENGTH s.vs_memory) /\
-    (* Memory accesses through pointer-derived vars stay within alloca *)
+    (* Memory accesses through pointer-derived vars stay within alloca
+       bounds. For MLOAD/MSTORE: addr + 32 <= off + asz.
+       For MSTORE8: addr + 1 <= off + asz.
+       For MCOPY/CODECOPY/etc.: addr + size <= off + asz.
+       True for Vyper: allocas are 32-byte aligned, all accesses fit.
+
+       Previous clause 1 (off + asz <= LENGTH vs_memory) removed:
+       it was not inductively preserved (ALLOCA registers the region
+       before memory expands on MSTORE), and unnecessary because
+       mem_byte_at/read_memory/mstore handle OOB gracefully. *)
     (!bb inst ops v w sz_op sz_val aid off asz.
       MEM bb fn.fn_blocks /\
       MEM inst bb.bb_instructions /\
@@ -121,14 +126,13 @@ Definition alloca_safe_access_def:
 End
 
 (* Step-preservation oracle for alloca_safe_access and ptrs_in_alloca_bounds.
-   alloca_safe_access clause 2 quantifies over ALL memory-accessing
-   instructions in fn — including those with variable-sized operands
-   (MCOPY, CALLDATACOPY, CALL/STATICCALL/DELEGATECALL etc.).
-   When stepping instruction inst', if inst' outputs a variable sz_var
-   that appears as a size operand of some other mem-accessing instruction
-   inst, the new value of sz_var is unrelated to the old value, so the
-   clause-2 bound cannot be transferred from pre-state to post-state
-   without program-specific reasoning.
+   alloca_safe_access quantifies over ALL memory-accessing instructions in fn
+   — including those with variable-sized operands (MCOPY, CALLDATACOPY,
+   CALL/STATICCALL/DELEGATECALL etc.). When stepping instruction inst', if
+   inst' outputs a variable sz_var that appears as a size operand of some
+   other mem-accessing instruction inst, the new value of sz_var is
+   unrelated to the old value, so the access bound cannot be transferred
+   from pre-state to post-state without program-specific reasoning.
    True for Vyper: the compiler ensures all accesses through pointer-
    derived vars stay within alloca regions at every step.
    Not derivable from pointer_arith_in_region alone. *)

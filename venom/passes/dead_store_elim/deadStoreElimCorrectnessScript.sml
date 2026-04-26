@@ -1,16 +1,14 @@
 (*
  * Dead Store Elimination — Correctness Statement
  *
- * The positive theorems use mathematically sound preconditions:
- *   alloca_inv s + alloca_safe_access fn (alloca_roots fn) s +
+ * Preconditions: alloca_inv s + alloca_safe_access fn (alloca_roots fn) s +
  *   step_preserves_safety fn (alloca_roots fn)
- * See deadStoreElimProofsScript.sml for full explanation.
+ * Conclusion includes Error disjunct: original execution may error while
+ *   DSE-transformed succeeds (e.g. undefined operand in dead store).
+ * See deadStoreElimProofsScript.sml for counterexamples and explanation.
  *
- * The previous theorems (alloca_inv + bp_ptrs_bounded) were FALSE due
- * to vacuous preconditions — see _VACUITY_FALSE theorems in
- * deadStoreElimProofsScript.sml.
- *
- * The wf/ssa preservation theorems below remain valid.
+ * Previous theorems (alloca_inv + bp_ptrs_bounded) were FALSE — see
+ *   FALSE1-5 theorems in deadStoreElimProofsScript.sml.
  *)
 
 Theory deadStoreElimCorrectness
@@ -211,8 +209,24 @@ Proof
   simp[]
 QED
 
+Theorem dse_function_space_correct:
+  !analysis_fn space fuel ctx fn s.
+    alloca_inv s /\
+    alloca_safe_access fn (alloca_roots fn) s /\
+    step_preserves_safety fn (alloca_roots fn) /\
+    (!fn'. all_dead_stores (analysis_fn space fn')
+             (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
+             space fn') ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
+    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
+Proof
+  ACCEPT_TAC dse_function_space_correct
+QED
+
 Theorem dse_function_correct:
-  ∀analysis_fn fuel ctx fn s.
+  !analysis_fn fuel ctx fn s.
     alloca_inv s /\
     alloca_safe_access fn (alloca_roots fn) s /\
     step_preserves_safety fn (alloca_roots fn) /\
@@ -220,6 +234,7 @@ Theorem dse_function_correct:
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
         space fn') ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result dse_all_equiv dse_all_equiv dse_all_equiv
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function analysis_fn fn) s)

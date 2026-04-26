@@ -1342,10 +1342,14 @@ QED
 (* Bridging: when mem_read_ops = NONE and step_inst_base succeeds,
    the opcode doesn't read memory. Needed to discharge the memory
    conditional in step_inst_base_scalar_agree for no-pointer-ops. *)
+(* MEMTOP reads memory but mem_read_ops doesn't cover it.
+   Exclude MEMTOP from the bridge.
+   TODO: add MEMTOP to mem_read_ops? *)
 Theorem no_mem_read_effect_from_no_mem_read_ops[local]:
   !inst s v.
     step_inst_base inst s = OK v /\
     mem_read_ops inst = NONE /\
+    inst.inst_opcode <> MEMTOP /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_terminator inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
