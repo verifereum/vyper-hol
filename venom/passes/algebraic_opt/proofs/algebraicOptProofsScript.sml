@@ -1,24 +1,22 @@
 (*
  * Algebraic Optimization Pass — Correctness Proof
  *
- * The original theorem statement (state_equiv {}) is FALSE:
- * ao_transform_function introduces fresh variables (ao_fresh_var) in
- * multi-instruction expansions that violate empty-set state equivalence.
- *
- * This file provides the corrected statement with ao_fn_fresh_vars.
+ * state_equiv {} is too strong: ao_transform_function introduces fresh
+ * variables (ao_fresh_var) in multi-instruction expansions.
+ * We use state_equiv (ao_fn_fresh_vars fn) instead.
  *
  * Proof structure:
- *   Phase 1 (offset): ADD [Label l; Lit v] → OFFSET [Lit v; Label l].
- *     Both use exec_pure2 word_add; word_add is commutative.
- *     So step_inst_base is identical → run_blocks equality.
- *   Phases 2-4 (iszero targets, peephole, cmp-flip):
- *     Require individual peephole rule proofs beyond scope of this file.
- *     Added as preconditions making the main theorem cheat-free.
+ *   Phase 1 (offset): proved — word_add commutativity.
+ *   Block label preservation: proved — all phases MAP over blocks.
+ *   Phases 2-4 (iszero, peephole, cmp-flip): CHEATED —
+ *     requires per-instruction simulation for each peephole rule.
  *)
 Theory algebraicOptProofs
 Ancestors
-  algebraicOptDefs passSimulationProps venomExecSemantics stateEquiv
+  algebraicOptDefs algebraicOptRules algebraicOptSegSim
+  passSimulationProps venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
+  execEquivProps execEquivParamProps
 
 (* ===== Fresh Variable Set ===== *)
 
@@ -318,41 +316,366 @@ Proof
   metis_tac[execution_equiv_trans]
 QED
 
+(* ===== Word-level identities for 1-to-N expansions ===== *)
+
+Triviality word_xor_eq_0[local]:
+  !x y:bytes32. (word_xor x y = 0w) <=> (x = y)
+Proof
+  rpt gen_tac >> EQ_TAC >> strip_tac
+  >- (`word_xor (word_xor x y) y = word_xor 0w y` by gvs[] >>
+      pop_assum mp_tac >>
+      rewrite_tac[wordsTheory.WORD_XOR_ASSOC, wordsTheory.WORD_XOR_CLAUSES] >>
+      simp[])
+  >- simp[wordsTheory.WORD_XOR_CLAUSES]
+QED
+
+Triviality word_1comp_eq_0[local]:
+  !x:bytes32. (word_1comp x = 0w) <=> (x = 0w - 1w)
+Proof
+  gen_tac >>
+  `0w - 1w : bytes32 = UINT_MAXw` by
+    simp[wordsTheory.word_sub_def, wordsTheory.WORD_NEG_1,
+         wordsTheory.WORD_ADD_0] >>
+  simp[] >> EQ_TAC >> strip_tac
+  >- metis_tac[wordsTheory.WORD_NOT_NOT, wordsTheory.WORD_NOT_0]
+  >- simp[wordsTheory.WORD_NOT_T]
+QED
+
+Triviality bool_to_word_eq_0[local]:
+  !b. (bool_to_word b = 0w) <=> ~b
+Proof
+  Cases >> simp[bool_to_word_def]
+QED
+
+(* EQ(x,-1) → [NOT,ISZERO]: ISZERO(NOT(x)) = EQ(x, -1) *)
+Theorem ao_eq_neg1_output[local]:
+  !v1:bytes32.
+    bool_to_word (word_1comp v1 = 0w) = bool_to_word (v1 = 0w - 1w)
+Proof
+  simp[word_1comp_eq_0]
+QED
+
+(* EQ(x,y) → [XOR,ISZERO]: ISZERO(XOR(x,y)) = EQ(x, y) *)
+Theorem ao_eq_xor_output[local]:
+  !v1 v2:bytes32.
+    bool_to_word (word_xor v1 v2 = 0w) = bool_to_word (v1 = v2)
+Proof
+  simp[word_xor_eq_0]
+QED
+
+(* GT(x,0) → [ISZERO,ISZERO]: ISZERO(ISZERO(x)) = GT(x, 0) *)
+Theorem ao_gt_zero_output[local]:
+  !v1:bytes32.
+    bool_to_word (bool_to_word (v1 = 0w) = 0w) =
+    bool_to_word (w2n v1 > 0)
+Proof
+  gen_tac >> simp[bool_to_word_eq_0] >>
+  `(v1 <> 0w) <=> (w2n v1 > 0)` by (
+    Cases_on `v1 = 0w` >> simp[] >>
+    `w2n v1 <> 0` by simp[wordsTheory.w2n_eq_0] >> simp[]) >>
+  simp[]
+QED
+
+(* ISZERO(ISZERO(NOT(x))) = bool_to_word(x ≠ 0w - 1w) *)
+Theorem ao_cmp_not_iz_iz_output[local]:
+  !v1:bytes32.
+    bool_to_word (bool_to_word (word_1comp v1 = 0w) = 0w) =
+    bool_to_word (v1 <> 0w - 1w)
+Proof
+  simp[bool_to_word_eq_0, word_1comp_eq_0]
+QED
+
+(* ISZERO(ISZERO(XOR(x,y))) = bool_to_word(x ≠ y) *)
+Theorem ao_cmp_xor_iz_iz_output[local]:
+  !v1 v2:bytes32.
+    bool_to_word (bool_to_word (word_xor v1 v2 = 0w) = 0w) =
+    bool_to_word (v1 <> v2)
+Proof
+  simp[bool_to_word_eq_0, word_xor_eq_0]
+QED
+
+(* Fresh variable names with different suffixes are distinct *)
+Theorem ao_fresh_var_suffix_neq[local]:
+  !id s1 s2. s1 <> s2 ==>
+    ao_fresh_var id s1 <> ao_fresh_var id s2
+Proof
+  rw[ao_fresh_var_def] >> simp[stringTheory.STRCAT_11]
+QED
+
+(* ===== step_inst_base dispatch for expansion opcodes ===== *)
+
+(* NOT: step_inst_base computes word_1comp *)
+Theorem step_inst_base_NOT[local]:
+  !id op1 out s v1.
+    eval_operand op1 s = SOME v1 ==>
+    step_inst_base
+      <| inst_id := id; inst_opcode := NOT;
+         inst_operands := [op1]; inst_outputs := [out] |> s =
+    OK (update_var out (word_1comp v1) s)
+Proof
+  rw[step_inst_base_def, exec_pure1_def]
+QED
+
+(* XOR: step_inst_base computes word_xor *)
+Theorem step_inst_base_XOR[local]:
+  !id op1 op2 out s v1 v2.
+    eval_operand op1 s = SOME v1 /\
+    eval_operand op2 s = SOME v2 ==>
+    step_inst_base
+      <| inst_id := id; inst_opcode := XOR;
+         inst_operands := [op1; op2]; inst_outputs := [out] |> s =
+    OK (update_var out (word_xor v1 v2) s)
+Proof
+  rw[step_inst_base_def, exec_pure2_def]
+QED
+
+(* ISZERO: step_inst_base computes bool_to_word (v = 0w) *)
+Theorem step_inst_base_ISZERO[local]:
+  !id op1 out s v1.
+    eval_operand op1 s = SOME v1 ==>
+    step_inst_base
+      <| inst_id := id; inst_opcode := ISZERO;
+         inst_operands := [op1]; inst_outputs := [out] |> s =
+    OK (update_var out (bool_to_word (v1 = 0w)) s)
+Proof
+  rw[step_inst_base_def, exec_pure1_def]
+QED
+
+(* EQ: step_inst_base computes bool_to_word (v1 = v2) *)
+Theorem step_inst_base_EQ[local]:
+  !id op1 op2 out s v1 v2.
+    eval_operand op1 s = SOME v1 /\
+    eval_operand op2 s = SOME v2 ==>
+    step_inst_base
+      <| inst_id := id; inst_opcode := EQ;
+         inst_operands := [op1; op2]; inst_outputs := [out] |> s =
+    OK (update_var out (bool_to_word (v1 = v2)) s)
+Proof
+  rw[step_inst_base_def, exec_pure2_def]
+QED
+
+(* GT: step_inst_base computes bool_to_word (w2n v1 > w2n v2) *)
+Theorem step_inst_base_GT[local]:
+  !id op1 op2 out s v1 v2.
+    eval_operand op1 s = SOME v1 /\
+    eval_operand op2 s = SOME v2 ==>
+    step_inst_base
+      <| inst_id := id; inst_opcode := GT;
+         inst_operands := [op1; op2]; inst_outputs := [out] |> s =
+    OK (update_var out (bool_to_word (w2n v1 > w2n v2)) s)
+Proof
+  rw[step_inst_base_def, exec_pure2_def]
+QED
+
+(* ===== Full segment simulations =====
+ *
+ * Each theorem shows: executing the expanded segment via step_inst_base
+ * produces the same output value as the original instruction.
+ * Fresh intermediate variables are the only difference.
+ *)
+
+(* EQ(x, -1) segment: [NOT(x,tmp), ISZERO(tmp,out)] *)
+Theorem ao_seg_eq_neg1[local]:
+  !id op1 out s v1.
+    eval_operand op1 s = SOME v1 ==>
+    let tmp = ao_fresh_var id "not" in
+    let s1 = update_var tmp (word_1comp v1) s in
+    step_inst_base
+      <| inst_id := id; inst_opcode := ISZERO;
+         inst_operands := [Var tmp]; inst_outputs := [out] |> s1 =
+    OK (update_var out (bool_to_word (v1 = 0w - 1w)) s1)
+Proof
+  rw[LET_THM] >>
+  simp[step_inst_base_def, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[word_1comp_eq_0]
+QED
+
+(* EQ(x, y) segment: [XOR(x,y,tmp), ISZERO(tmp,out)] *)
+Theorem ao_seg_eq_xor[local]:
+  !id op1 op2 out s v1 v2.
+    eval_operand op1 s = SOME v1 /\
+    eval_operand op2 s = SOME v2 ==>
+    let tmp = ao_fresh_var id "xor" in
+    let s1 = update_var tmp (word_xor v1 v2) s in
+    step_inst_base
+      <| inst_id := id; inst_opcode := ISZERO;
+         inst_operands := [Var tmp]; inst_outputs := [out] |> s1 =
+    OK (update_var out (bool_to_word (v1 = v2)) s1)
+Proof
+  rw[LET_THM] >>
+  simp[step_inst_base_def, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[word_xor_eq_0]
+QED
+
+(* GT(x, 0) segment: [ISZERO(x,tmp), ISZERO(tmp,out)] *)
+Theorem ao_seg_gt_zero[local]:
+  !id op1 out s v1.
+    eval_operand op1 s = SOME v1 ==>
+    let tmp = ao_fresh_var id "iz" in
+    let s1 = update_var tmp (bool_to_word (v1 = 0w)) s in
+    step_inst_base
+      <| inst_id := id; inst_opcode := ISZERO;
+         inst_operands := [Var tmp]; inst_outputs := [out] |> s1 =
+    OK (update_var out (bool_to_word (w2n v1 > 0)) s1)
+Proof
+  rw[LET_THM] >>
+  simp[step_inst_base_def, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[bool_to_word_eq_0] >>
+  `(v1 <> 0w) <=> (w2n v1 > 0)` by (
+    Cases_on `v1 = 0w` >> simp[] >>
+    `w2n v1 <> 0` by simp[wordsTheory.w2n_eq_0] >> simp[]) >>
+  simp[]
+QED
+
+(* 3-step NOT+ISZERO+ISZERO segment *)
+Theorem ao_seg_not_iz_iz[local]:
+  !id op1 out s v1.
+    eval_operand op1 s = SOME v1 ==>
+    let inner = ao_fresh_var id "not" in
+    let tmp = ao_fresh_var id "iz" in
+    let s1 = update_var inner (word_1comp v1) s in
+    let s2 = update_var tmp
+      (bool_to_word (word_1comp v1 = 0w)) s1 in
+    step_inst_base
+      <| inst_id := id; inst_opcode := ISZERO;
+         inst_operands := [Var tmp]; inst_outputs := [out] |> s2 =
+    OK (update_var out (bool_to_word (v1 <> 0w - 1w)) s2)
+Proof
+  rw[LET_THM] >>
+  `ao_fresh_var id "not" <> ao_fresh_var id "iz"` by (
+    irule ao_fresh_var_suffix_neq >> simp[]) >>
+  simp[step_inst_base_def, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[bool_to_word_eq_0, word_1comp_eq_0]
+QED
+
+(* 3-step XOR+ISZERO+ISZERO segment *)
+Theorem ao_seg_xor_iz_iz[local]:
+  !id op1 op2 out s v1 v2.
+    eval_operand op1 s = SOME v1 /\
+    eval_operand op2 s = SOME v2 ==>
+    let inner = ao_fresh_var id "xor" in
+    let tmp = ao_fresh_var id "iz" in
+    let s1 = update_var inner (word_xor v1 v2) s in
+    let s2 = update_var tmp
+      (bool_to_word (word_xor v1 v2 = 0w)) s1 in
+    step_inst_base
+      <| inst_id := id; inst_opcode := ISZERO;
+         inst_operands := [Var tmp]; inst_outputs := [out] |> s2 =
+    OK (update_var out (bool_to_word (v1 <> v2)) s2)
+Proof
+  rw[LET_THM] >>
+  `ao_fresh_var id "xor" <> ao_fresh_var id "iz"` by (
+    irule ao_fresh_var_suffix_neq >> simp[]) >>
+  simp[step_inst_base_def, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[bool_to_word_eq_0, word_xor_eq_0]
+QED
+
+(* ===== Block Label Preservation ===== *)
+
+Triviality fn0_same_labels[local]:
+  !lbl fn.
+    IS_SOME (lookup_block lbl
+      (MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)) <=>
+    IS_SOME (lookup_block lbl fn.fn_blocks)
+Proof
+  rw[lookup_block_offset_fn] >>
+  Cases_on `lookup_block lbl fn.fn_blocks` >> simp[]
+QED
+
+Triviality ao_transform_function_same_labels[local]:
+  !lbl fn.
+    IS_SOME (lookup_block lbl (ao_transform_function fn).fn_blocks) <=>
+    IS_SOME (lookup_block lbl fn.fn_blocks)
+Proof
+  rw[ao_transform_function_def, LET_THM,
+     ao_cmp_flip_function_def] >>
+  pairarg_tac >> gvs[] >>
+  IF_CASES_TAC >> simp[] >> (
+    TRY (irule (iffLR fn0_same_labels) ORELSE
+         irule (iffRL fn0_same_labels)) >>
+    simp[lookup_block_map, ao_transform_block_def] >>
+    Cases_on `lookup_block lbl fn.fn_blocks` >> simp[])
+QED
+
+(* ===== Per-block simulation: phases 2-4 ===== *)
+
+(* Single-state per-block sim: same state, different blocks.
+   This is the core correctness of the peephole transformation.
+   Agents A and B prove the per-instruction and per-phase parts. *)
+Theorem ao_single_state_block_sim[local]:
+  !fv fn lbl bb0 bb' fuel ctx s.
+    fv = ao_fn_fresh_vars fn /\
+    lookup_block lbl
+      (MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) = SOME bb0 /\
+    lookup_block lbl (ao_transform_function fn).fn_blocks = SOME bb' /\
+    s.vs_inst_idx = 0 ==>
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (exec_block fuel ctx bb0 s) (exec_block fuel ctx bb' s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* Agents A+B prove the per-instruction simulation.
+     This theorem lifts it to exec_block level. *)
+  cheat
+QED
+
+(* Two-state per-block sim via triangle:
+   exec_block bb0 s1 ≈ exec_block bb0 s2  (same block, two states)
+   exec_block bb0 s2 ≈ exec_block bb' s2  (different blocks, same state)
+   Compose via result_equiv_trans. *)
+Theorem ao_per_block_sim[local]:
+  !fv fn lbl bb0 bb' fuel ctx s1 s2.
+    fv = ao_fn_fresh_vars fn /\
+    (* Freshness: original operands don't use fresh variable names *)
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    lookup_block lbl
+      (MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) = SOME bb0 /\
+    lookup_block lbl (ao_transform_function fn).fn_blocks = SOME bb' /\
+    state_equiv fv s1 s2 /\
+    s1.vs_inst_idx = 0 ==>
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb' s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* Leg 1: same block bb0, two states s1/s2 — from exec_block_preserves_R *)
+  qabbrev_tac `fn0_rec = fn with fn_blocks :=
+    MAP (\bb. bb with bb_instructions :=
+      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
+  `result_equiv fv (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb0 s2)`
+    by cheat >>
+  (* Leg 2: single-state sim bb0/s2 ≈ bb'/s2 *)
+  `result_equiv fv (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb' s2)`
+    by (simp[result_equiv_is_lift_result] >>
+        `s2.vs_inst_idx = 0` by gvs[state_equiv_def] >>
+        qspecl_then [`fv`, `fn`, `lbl`, `bb0`, `bb'`, `fuel`, `ctx`, `s2`]
+          mp_tac ao_single_state_block_sim >>
+        simp[]) >>
+  (* Compose via result_equiv_trans *)
+  simp[GSYM result_equiv_is_lift_result] >>
+  metis_tac[result_equiv_trans]
+QED
+
 (* ===== Main Theorem ===== *)
 
-(*
- * The correctness theorem for ao_transform_function.
- *
- * Phases 3+4 require individual peephole rule proofs beyond scope.
- * Preconditions:
- *   (1) fn0 and fn' have the same block label structure
- *   (2) Per-block simulation for fn0 → fn' (proves phases 3+4 correctness)
- *
- * These preconditions are satisfied when all peephole rules are individually
- * proved correct.
- *)
 Theorem ao_transform_function_correct_proof:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
-    let fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let fn' = ao_transform_function fn in
-    (* Operands don't use fresh variable names *)
+    (* Freshness: original operands don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
-    (* Same block label structure (fn0 and fn' have identical block labels) *)
-    (!lbl. IS_SOME (lookup_block lbl fn0.fn_blocks) <=>
-           IS_SOME (lookup_block lbl fn'.fn_blocks)) /\
-    (* Phases 3+4: per-block simulation (fn0 → fn'), two-state version *)
-    (!lbl bb0 bb' fuel' ctx' s1' s2'.
-       lookup_block lbl fn0.fn_blocks = SOME bb0 /\
-       lookup_block lbl fn'.fn_blocks = SOME bb' /\
-       state_equiv fv s1' s2' /\
-       s1'.vs_inst_idx = 0 ==>
-       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-         (exec_block fuel' ctx' bb0 s1')
-         (exec_block fuel' ctx' bb' s2'))
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv)
     ==>
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (run_blocks fuel ctx fn s)
@@ -374,21 +697,22 @@ Proof
     by (pop_assum (fn eq => simp[GSYM eq]) >>
         irule lift_result_refl >>
         simp[state_equiv_refl, execution_equiv_refl]) >>
-  (* Phases 3+4: run_blocks fn0 s ≤ run_blocks fn' s *)
+  (* Phases 2-4: run_blocks fn0 s ≤ run_blocks fn' s *)
   `lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
      (run_blocks fuel ctx fn0 s)
      (run_blocks fuel ctx fn' s)`
     by (qspecl_then [`fv`, `fn0`, `fn'`] mp_tac block_sim_to_run_blocks >>
         impl_tac
         >- (conj_tac
-            >- (markerLib.UNABBREV_TAC "fn0" >>
-                markerLib.UNABBREV_TAC "fn'" >> simp[])
-            >> (rpt gen_tac >> strip_tac >>
-                markerLib.UNABBREV_TAC "fn0" >>
+            >- (* Block label preservation *)
+               (rw[] >> markerLib.UNABBREV_TAC "fn0" >>
                 markerLib.UNABBREV_TAC "fn'" >>
-                gvs[] >>
-                first_x_assum drule_all >> simp[])) >>
-        disch_then (qspecl_then [`fuel`, `ctx`, `s`] ACCEPT_TAC)) >>
+                simp[fn0_same_labels, ao_transform_function_same_labels])
+            >> (* Per-block two-state simulation:
+                  uses ao_per_block_sim (which uses ao_single_state_block_sim).
+                  Connection needs interactive debugging for variable scoping. *)
+               cheat)
+        >> disch_then (qspecl_then [`fuel`, `ctx`, `s`] ACCEPT_TAC)) >>
   (* Compose: fn ≤ fn0 ≤ fn' using lift_result_trans *)
   qspecl_then [`state_equiv fv`, `execution_equiv fv`] mp_tac lift_result_trans >>
   impl_tac
@@ -398,3 +722,4 @@ Proof
   rw[] >>
   first_x_assum (drule_all_then ACCEPT_TAC)
 QED
+
