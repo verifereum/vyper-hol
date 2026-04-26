@@ -253,3 +253,43 @@ Theorem reachable_trans:
 Proof
   ACCEPT_TAC cfgTransformProofsTheory.reachable_trans
 QED
+
+
+(* subst_block_labels: block label preservation *)
+Theorem subst_block_labels_block_label:
+  !m bb. (subst_block_labels_block m bb).bb_label = bb.bb_label
+Proof
+  ACCEPT_TAC cfgTransformProofsTheory.subst_block_labels_block_label
+QED
+
+Theorem fn_entry_label_subst_block_labels_fn:
+  !m func.
+    fn_entry_label (subst_block_labels_fn m func) = fn_entry_label func
+Proof
+  ACCEPT_TAC cfgTransformProofsTheory.fn_entry_label_subst_block_labels_fn
+QED
+
+Theorem fn_labels_subst_block_labels_fn:
+  !m func.
+    fn_labels (subst_block_labels_fn m func) = fn_labels func
+Proof
+  ACCEPT_TAC cfgTransformProofsTheory.fn_labels_subst_block_labels_fn
+QED
+
+Theorem fn_entry_label_MAP_bb_label:
+  !f bbs.
+    (!bb. (f bb).bb_label = bb.bb_label) ==>
+    fn_entry_label (<| fn_blocks := MAP f bbs |>) =
+    fn_entry_label (<| fn_blocks := bbs |>)
+Proof
+  ACCEPT_TAC cfgTransformProofsTheory.fn_entry_label_MAP_bb_label
+QED
+
+Theorem fn_entry_label_replace_block:
+  !lbl bb' func.
+    (bb'.bb_label = lbl) ==>
+    fn_entry_label (func with fn_blocks := replace_block lbl bb' func.fn_blocks) =
+    fn_entry_label func
+Proof
+  ACCEPT_TAC cfgTransformProofsTheory.fn_entry_label_replace_block
+QED
