@@ -3716,7 +3716,7 @@ Theorem env_consistent_weaken_var_types:
              FLOOKUP env'.var_types id = SOME ty) ==>
     env_consistent env cx st
 Proof
-  rw[env_consistent_def] >> res_tac
+  rw[env_consistent_def] >> metis_tac[]
 QED
 
 (* Common special case: removing one FUPDATE from var_types *)
