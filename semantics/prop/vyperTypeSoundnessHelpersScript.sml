@@ -1033,19 +1033,22 @@ Proof
   metis_tac[]
 QED
 
-(* When a scope entry's value is updated (type unchanged), lookup_scopes
-   still finds the entry with the same type. The key is that
-   scope_entry_accfupds gives (s with value := a').type = s.type. *)
-Theorem lookup_scopes_update_type_unchanged:
-  !n pre env entry a' rest id entry'.
+(* Updating a scope entry's value preserves scope_well_typed, given the
+   new value has the same type. *)
+Theorem scope_well_typed_value_update:
+  !env n entry v.
+    scope_well_typed env /\
     FLOOKUP env n = SOME entry /\
-    lookup_scopes id (pre ++ env::rest) = SOME entry' ==>
-    lookup_scopes id (pre ++ env⟨n ↦ entry with value := a'⟩::rest) = SOME entry' \/
-    (id = n /\ lookup_scopes id pre = NONE /\
-     entry' = scope_entry entry.assignable entry.type a')
+    value_has_type entry.type v ==>
+    scope_well_typed (env |+ (n, entry with value := v))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[scope_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> gen_tac >> strip_tac >>
+  Cases_on `id = n` >> gvs[scope_entry_accfupds] >>
+  pop_assum mp_tac >> simp[] >> metis_tac[scope_well_typed_def]
 QED
+
 (* When a scope entry's value is updated, env_consistent is preserved.
    This is the main lemma for assign_target_well_typed[replace] and similar.
    The hypotheses are: env_consistent held before, FLOOKUP shows the entry was there,
@@ -1059,8 +1062,11 @@ Theorem env_consistent_scope_entry_value_update:
       (st with scopes := pre ++ env'⟨n ↦ entry with value := a'⟩::rest)
 Proof
   rpt strip_tac >>
-  irule env_consistent_with_new_scopes >>
-  simp[] >>
+  once_rewrite_tac[env_consistent_scopes_only] >>
+  qpat_x_assum `env_consistent _ _ _`
+    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only] o
+     SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
+  simp[evaluation_state_accfupds, combinTheory.C_DEF] >>
   conj_tac
   >- (
     gen_tac >> strip_tac >>
@@ -1069,9 +1075,10 @@ Proof
       `FLOOKUP env' id = SOME entry` by simp[] >>
       drule lookup_scopes_update_preserves >> simp[IS_SOME_EXISTS])
     >- (
-      drule lookup_scopes_update_other >> simp[]))
+      drule lookup_scopes_update_other >> simp[])) >>
+  conj_tac
   >- (
-    gen_tac >> gen_tac >> gen_tac >> strip_tac >>
+    rpt gen_tac >> strip_tac >>
     Cases_on `id = n`
     >- (
       `FLOOKUP env' id = SOME entry` by simp[] >>
@@ -2155,15 +2162,23 @@ Resume assign_target_well_typed[replace]:
   \\ simp[] \\ strip_tac
   \\ gvs[lift_option_def, option_CASE_rator, AllCaseEqs(),
          return_def, raise_def]
+  \\ drule find_containing_scope_structure \\ strip_tac \\ gvs[]
   \\ conj_tac
   >- (
     irule state_well_typed_with_scopes
-    \\ drule find_containing_scope_structure \\ strip_tac
-    \\ gvs[state_well_typed_def, scope_well_typed_def,
-           FLOOKUP_UPDATE, CaseEq"bool"]
-    \\ rw[] \\ gvs[] \\ res_tac )
+    \\ gvs[state_well_typed_def]
+    \\ conj_tac
+    >- (
+      gvs[EVERY_APPEND]
+      \\ conj_tac >- res_tac
+      \\ conj_tac
+      >- (
+        irule scope_well_typed_value_update
+        \\ goal_assum drule \\ simp[])
+      \\ res_tac)
+    \\ gvs[])
   \\ irule env_consistent_scope_entry_value_update
-  \\ drule find_containing_scope_structure \\ strip_tac \\ gvs[]
+  \\ goal_assum drule \\ simp[]
 QED
 
 Resume assign_target_well_typed[set_immutable]:
