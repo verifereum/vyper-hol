@@ -998,6 +998,89 @@ Proof
   simp[env_consistent_def]
 QED
 
+(* Record identity: updating scopes to st.scopes is a no-op *)
+Theorem evaluation_state_scopes_id:
+  !st. (st :evaluation_state) with scopes := st.scopes = st
+Proof
+  Cases >> simp[evaluation_state_fn_updates, combinTheory.K_THM]
+QED
+
+(* ===== env_consistent preservation helpers ===== *)
+(* These generalize the pattern: env_consistent is preserved when scopes change,
+   as long as the var_types completeness and soundness clauses are preserved.
+   This avoids FIRST_ASSUM errors from variable-shadowing in the
+   universally-quantified var_types clauses of env_consistent_def. *)
+
+(* If env_consistent holds and only the scopes change, we can reconstruct
+   env_consistent for the new scopes by preserving the var_types clauses.
+   Non-scope clauses are inherited from the env_consistent assumption. *)
+Theorem env_consistent_with_new_scopes:
+  !env cx st new_scopes.
+    env_consistent env cx st /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+       IS_SOME (lookup_scopes id new_scopes)) /\
+    (!id ty entry. FLOOKUP env.var_types id = SOME ty /\
+       lookup_scopes id new_scopes = SOME entry ==>
+       evaluate_type (get_tenv cx) ty = SOME entry.type) ==>
+    env_consistent env cx (st with scopes := new_scopes)
+Proof
+  rpt strip_tac >>
+  once_rewrite_tac[env_consistent_scopes_only] >>
+  qpat_x_assum `env_consistent _ _ _`
+    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only] o
+     SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
+  simp[evaluation_state_accfupds, combinTheory.C_DEF] >>
+  metis_tac[]
+QED
+
+(* When a scope entry's value is updated (type unchanged), lookup_scopes
+   still finds the entry with the same type. The key is that
+   scope_entry_accfupds gives (s with value := a').type = s.type. *)
+Theorem lookup_scopes_update_type_unchanged:
+  !n pre env entry a' rest id entry'.
+    FLOOKUP env n = SOME entry /\
+    lookup_scopes id (pre ++ env::rest) = SOME entry' ==>
+    lookup_scopes id (pre ++ env⟨n ↦ entry with value := a'⟩::rest) = SOME entry' \/
+    (id = n /\ lookup_scopes id pre = NONE /\
+     entry' = scope_entry entry.assignable entry.type a')
+Proof
+  cheat
+QED
+(* When a scope entry's value is updated, env_consistent is preserved.
+   This is the main lemma for assign_target_well_typed[replace] and similar.
+   The hypotheses are: env_consistent held before, FLOOKUP shows the entry was there,
+   and the state's scopes are being changed by updating that entry's value. *)
+Theorem env_consistent_scope_entry_value_update:
+  !env cx st pre env' n entry a' rest.
+    env_consistent env cx st /\
+    FLOOKUP env' n = SOME entry /\
+    st.scopes = pre ++ env'::rest ==>
+    env_consistent env cx
+      (st with scopes := pre ++ env'⟨n ↦ entry with value := a'⟩::rest)
+Proof
+  rpt strip_tac >>
+  irule env_consistent_with_new_scopes >>
+  simp[] >>
+  conj_tac
+  >- (
+    gen_tac >> strip_tac >>
+    Cases_on `id = n`
+    >- (
+      `FLOOKUP env' id = SOME entry` by simp[] >>
+      drule lookup_scopes_update_preserves >> simp[IS_SOME_EXISTS])
+    >- (
+      drule lookup_scopes_update_other >> simp[]))
+  >- (
+    gen_tac >> gen_tac >> gen_tac >> strip_tac >>
+    Cases_on `id = n`
+    >- (
+      `FLOOKUP env' id = SOME entry` by simp[] >>
+      drule lookup_scopes_update >> simp[scope_entry_accfupds])
+    >- (
+      drule lookup_scopes_update_other >> simp[]))
+QED
+
+
 (* After pop_function prev restores caller scopes, env_consistent is restored
    (assuming immutables unchanged and caller env was consistent with prev) *)
 Theorem env_consistent_pop_function:
@@ -1057,6 +1140,21 @@ Proof
   simp[lookup_scopes_def]
 QED
 
+(* Small helper: specializing a universal with if-then-else away.
+   When id <> nm, the if-then-else simplifies, and we can extract
+   the conclusion with just the FLOOKUP antecedent. *)
+Theorem if_neq_specialize:
+  !(P : 'a -> 'b -> bool) nm id typ f y.
+    id <> nm /\
+    (!id' y'. (if nm = id' then SOME typ else f id') = SOME y' ==> P id' y') /\
+    f id = SOME y ==>
+    P id y
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`id`, `y`] mp_tac) >>
+  simp[]
+QED
+
 (* Isolated helper for env_consistent_pop_scope: var_types completeness.
    Uses helper lemmas to avoid variable-shadowing issues. *)
 Theorem var_types_pop_scope_completeness:
@@ -1076,13 +1174,13 @@ Proof
     metis_tac[FLOOKUP_SOME_IN_FDOM, FLOOKUP_NOT_IN_FDOM]) >>
   `~(id IN FDOM h)` by metis_tac[not_in_h_from_var_types_none] >>
   `FLOOKUP h id = NONE` by simp[FLOOKUP_NOT_IN_FDOM] >>
-  `IS_SOME (lookup_scopes id (h::t))` by (
-    (* Instantiate the two-variable completeness assumption.
-       It's the only one with IS_SOME in conclusion. *)
-    qpat_x_assum `!x y. _ = SOME y ==> IS_SOME _`
-      (qspecl_then [`id`, `ty`] mp_tac) >>
-    simp[]) >>
-  gvs[lookup_scopes_cons_miss]
+  (* It suffices to show IS_SOME (lookup_scopes id (h::t)) since
+     lookup_scopes_cons_miss gives us lookup_scopes id (h::t) = lookup_scopes id t *)
+  `IS_SOME (lookup_scopes id (h::t))` suffices_by metis_tac[lookup_scopes_cons_miss] >>
+  (* Specialize the completeness assumption (only 2-var universal in context)
+     with id and ty; simp closes using id<>nm and FLOOKUP env.var_types id = SOME ty *)
+  first_x_assum (qspecl_then [`id`, `ty`] mp_tac) >>
+  simp[]
 QED
 
 (* Isolated helper for env_consistent_pop_scope: var_types soundness.
@@ -1108,12 +1206,7 @@ Proof
   cheat
 QED
 
-(* Record identity: updating scopes to st.scopes is a no-op *)
-Theorem evaluation_state_scopes_id:
-  !st. (st :evaluation_state) with scopes := st.scopes = st
-Proof
-  Cases >> simp[evaluation_state_fn_updates, combinTheory.K_THM]
-QED
+
 
 (* Helper: env_consistent survives popping a scope when going from
    extended env back to outer env. Requires that the only var_types
@@ -2065,36 +2158,12 @@ Resume assign_target_well_typed[replace]:
   \\ conj_tac
   >- (
     irule state_well_typed_with_scopes
-    \\ drule find_containing_scope_structure
-    \\ strip_tac
-    \\ gvs[state_well_typed_def]
-    \\ gvs[scope_well_typed_def, FLOOKUP_UPDATE, CaseEq"bool"]
-    \\ rw[] \\ gvs[]
-    \\ res_tac >> gvs[]  >>
-    first_x_assum irule >>
-    drule find_containing_scope_lookup >> rw[]
-    >> gvs[])
-  \\ irule (iffRL $ cj 1 env_consistent_scopes_only)
-  \\ gvs[env_consistent_def]
-  \\ rw[]
-  \\ TRY (
-       first_x_assum irule
-       \\ goal_assum drule \\ rw[])
-  \\ TRY (res_tac \\ NO_TAC)
-  \\ drule find_containing_scope_structure
-  \\ strip_tac \\ gvs[]
-  \\ drule find_containing_scope_lookup >> rw[]
-  \\ Cases_on`string_to_num s = id`
-  >- (
-    drule find_containing_scope_pre_none \\ strip_tac
-    \\ drule lookup_scopes_update
-    \\ strip_tac \\ gvs[]
-    \\ first_x_assum (drule_then irule)
-    \\ goal_assum drule )
-  \\ drule lookup_scopes_update_other
-  \\ strip_tac
-  \\ first_x_assum(drule_then irule)
-  \\ gvs[]
+    \\ drule find_containing_scope_structure \\ strip_tac
+    \\ gvs[state_well_typed_def, scope_well_typed_def,
+           FLOOKUP_UPDATE, CaseEq"bool"]
+    \\ rw[] \\ gvs[] \\ res_tac )
+  \\ irule env_consistent_scope_entry_value_update
+  \\ drule find_containing_scope_structure \\ strip_tac \\ gvs[]
 QED
 
 Resume assign_target_well_typed[set_immutable]:
@@ -2208,19 +2277,8 @@ Resume assign_target_well_typed_ao[ScopedVar]:
     \\ gvs[state_well_typed_def, scope_well_typed_def,
            FLOOKUP_UPDATE, CaseEq"bool"]
     \\ rw[] \\ gvs[] \\ res_tac )
-  \\ irule (iffRL $ cj 1 env_consistent_scopes_only)
-  \\ gvs[env_consistent_def]
-  \\ rw[]
-  \\ TRY (first_x_assum irule \\ goal_assum drule \\ rw[])
-  \\ TRY (res_tac \\ NO_TAC)
+  \\ irule env_consistent_scope_entry_value_update
   \\ drule find_containing_scope_structure \\ strip_tac \\ gvs[]
-  \\ Cases_on `string_to_num s = id`
-  >- (
-    drule find_containing_scope_pre_none \\ strip_tac
-    \\ drule lookup_scopes_update \\ strip_tac \\ gvs[]
-    \\ first_x_assum (drule_then irule) \\ goal_assum drule )
-  \\ drule lookup_scopes_update_other \\ strip_tac
-  \\ first_x_assum(drule_then irule) \\ gvs[]
 QED
 
 Resume assign_target_well_typed_ao[ImmutableVar]:
