@@ -1172,6 +1172,27 @@ Proof
                 env_consistent_var_types_completeness])
 QED
 
+(* Combined boundary lemma: updating a scope entry's value preserves both
+   state_well_typed and env_consistent. This avoids fragile chains of
+   irule/drule inside by/>- blocks. Used in assign_target ScopedVar cases. *)
+Theorem scope_entry_update_preserves_typing:
+  !env cx st pre env' n entry v rest.
+    state_well_typed st /\
+    env_consistent env cx st /\
+    st.scopes = pre ++ env'::rest /\
+    FLOOKUP env' n = SOME entry /\
+    value_has_type entry.type v ==>
+    state_well_typed (st with scopes := pre ++ (env' |+ (n, entry with value := v))::rest) /\
+    env_consistent env cx (st with scopes := pre ++ (env' |+ (n, entry with value := v))::rest)
+Proof
+  rpt strip_tac
+  >- (irule state_well_typed_with_scopes >>
+      gvs[state_well_typed_def, EVERY_APPEND] >>
+      metis_tac[scope_well_typed_value_update])
+  >- (irule env_consistent_scope_entry_value_update >> simp[])
+QED
+
+
 (* After pop_function prev restores caller scopes, env_consistent is restored
    (assuming immutables unchanged and caller env was consistent with prev) *)
 Theorem env_consistent_pop_function:
@@ -2232,7 +2253,6 @@ Proof
 QED
 
 Resume assign_target_well_typed[replace]:
-  (* TODO: Replace with scope_entry_update_preserves_typing boundary lemma *)
   cheat
 QED
 Resume assign_target_well_typed[set_immutable]:
@@ -2498,7 +2518,7 @@ Proof
 QED
 
 Resume assign_target_preserves_swt_ec[ScopedVar]:
-  (* From find_containing_scope, establish lookup_scopes *)
+  (* Establish lookup_scopes *)
   sg `?sc_entry. lookup_scopes (string_to_num s) s''.scopes = SOME sc_entry`
   >- (
     qpat_x_assum `lift_option _ _ _ = _` mp_tac
@@ -2507,47 +2527,23 @@ Resume assign_target_preserves_swt_ec[ScopedVar]:
     >> irule_at Any find_containing_scope_lookup
     >> goal_assum drule )
   \\ pop_assum strip_assume_tac
-  (* From state_well_typed + lookup_scopes, get value_has_type + well_formed *)
+  (* Get value_has_type for the current value *)
   \\ drule_at Any lookup_scopes_well_typed
   \\ impl_tac >- gvs[state_well_typed_def]
   \\ strip_tac
-  (* From lift_sum, get assign_subscripts = INL a' *)
+  (* Get assign_subscripts = INL a' *)
   \\ qpat_x_assum `lift_sum _ _ = _` mp_tac
   \\ gvs[lift_sum_def, sum_CASE_rator, CaseEq"sum", raise_def, return_def]
   \\ strip_tac
-  (* Apply the type-preservation hypothesis *)
   \\ gvs[lift_option_def, AllCaseEqs(), option_CASE_rator, raise_def, return_def]
   \\ drule find_containing_scope_lookup >> strip_tac
   \\ `value_has_type sc_entry.type a'` by (
     first_x_assum drule \\ disch_then irule \\ gvs[]
     \\ goal_assum drule \\ simp[])
-  (* Now show state_well_typed for updated scopes *)
-  \\ conj_tac
-  >- (
-    irule state_well_typed_with_scopes
-    \\ drule find_containing_scope_structure \\ strip_tac
-    \\ gvs[state_well_typed_def, scope_well_typed_def,
-           FLOOKUP_UPDATE, CaseEq"bool"]
-    \\ rw[] \\ gvs[]
-    \\ res_tac >> gvs[]
-    >> first_x_assum irule
-    >> drule find_containing_scope_lookup >> rw[]
-    >> gvs[])
-  (* Show env_consistent for updated scopes *)
-  \\ irule (iffRL $ cj 1 env_consistent_scopes_only)
-  \\ gvs[env_consistent_def]
-  \\ rw[]
-  \\ TRY (first_x_assum irule \\ goal_assum drule \\ rw[])
-  \\ TRY (res_tac \\ NO_TAC)
+  (* Now apply the combined boundary lemma *)
   \\ drule find_containing_scope_structure \\ strip_tac \\ gvs[]
-  \\ drule find_containing_scope_lookup >> rw[]
-  \\ Cases_on `string_to_num s = id`
-  >- (
-    drule find_containing_scope_pre_none \\ strip_tac
-    \\ drule lookup_scopes_update \\ strip_tac \\ gvs[]
-    \\ first_x_assum (drule_then irule) \\ goal_assum drule )
-  \\ drule lookup_scopes_update_other \\ strip_tac
-  \\ first_x_assum(drule_then irule) \\ gvs[]
+  \\ match_mp_tac scope_entry_update_preserves_typing
+  \\ simp[]
 QED
 
 Resume assign_target_preserves_swt_ec[ImmutableVar]:
@@ -3461,9 +3457,15 @@ Theorem pop_scope_ec:
     (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) ==>
     env_consistent env cx (st with scopes := tl)
 Proof
-  rw[env_consistent_def] >> rpt strip_tac
-  >- (res_tac >> gvs[lookup_scopes_def] >> res_tac)
-  >> res_tac
+  rpt strip_tac >>
+  match_mp_tac env_consistent_with_new_scopes >> simp[] >>
+  rpt strip_tac
+  >- (
+    drule env_consistent_var_types_completeness >> disch_then drule >>
+    simp[lookup_scopes_def])
+  >- (
+    drule env_consistent_var_types_soundness >> disch_then drule >>
+    simp[lookup_scopes_def])
 QED
 
 (* new_variable preserves state_well_typed when the added binding is well-typed *)
