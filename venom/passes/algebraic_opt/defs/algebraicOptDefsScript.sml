@@ -268,18 +268,9 @@ Definition ao_opt_signextend_def:
              if w >= 31w then
                [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
              else
-               let n = w2n w in
-               if n < 31 then
-                 let x_range = range_get_range ra lbl idx x in
-                 if ~vr_is_top x_range then
-                   let bits = 8 * (n + 1) in
-                   let signed_min = ~(&(2 ** (bits - 1))) in
-                   let signed_max = &(2 ** (bits - 1)) - 1 in
-                   if vr_lo x_range >= signed_min /\ vr_hi x_range <= signed_max then
-                     [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
-                   else [inst]
-                 else [inst]
-               else [inst]
+               (* NOTE: range-based signextend elimination disabled —
+                  requires range_analysis_sound precondition *)
+               [inst]
          | _ => [inst])
     | _ => [inst]
 End
@@ -391,11 +382,8 @@ Definition ao_opt_or_def:
         if lit_eq op2 (0w - 1w) then
           [inst with <| inst_opcode := ASSIGN;
                         inst_operands := [Lit (0w - 1w)] |>]
-        (* x | nonzero_lit → 1 when all uses are truthy *)
-        else if ao_all_truthy dfg inst /\
-                is_lit_op op2 /\ ~lit_eq op2 0w then
-          [inst with <| inst_opcode := ASSIGN;
-                        inst_operands := [Lit 1w] |>]
+        (* NOTE: truthy case (x | nonzero → 1) disabled — value-changing
+           optimization requires usage-level proof, not per-instruction sim *)
         else if lit_eq op2 0w then
           [inst with <| inst_opcode := ASSIGN; inst_operands := [op1] |>]
         else [inst]
@@ -574,13 +562,8 @@ Definition ao_opt_comparator_def:
         else
           let is_gt = (opc = GT \/ opc = SGT) in
           let signed = (opc = SGT \/ opc = SLT) in
-          (* Range-based optimization *)
-          let range_result = ao_opt_cmp_range ra lbl idx inst is_gt signed in
-          case range_result of
-            SOME replacement =>
-              [inst with <| inst_opcode := ASSIGN;
-                            inst_operands := [replacement] |>]
-          | NONE =>
+          (* NOTE: range-based comparator replacement disabled —
+             requires range_analysis_sound precondition *)
           let (almost_always, never, almost_never) =
             if signed then ao_signed_boundaries is_gt
             else ao_unsigned_boundaries is_gt in

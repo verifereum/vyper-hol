@@ -497,6 +497,146 @@ Proof
   DISJ1_TAC >> metis_tac[]
 QED
 
+(* When an operand evaluates to NONE in a binary op, step_inst_base errors *)
+Triviality exec_pure2_none_error[local]:
+  !f inst s op1 op2.
+    inst.inst_operands = [op1; op2] /\
+    (eval_operand op1 s = NONE \/ eval_operand op2 s = NONE) ==>
+    ?e. exec_pure2 f inst s = Error e
+Proof
+  rw[exec_pure2_def] >>
+  Cases_on `eval_operand op1 s` >> Cases_on `eval_operand op2 s` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[]
+QED
+
+(* For binary opcodes, step_inst_base = exec_pure2 of appropriate function.
+   Rather than unfold step_inst_base_def, we prove specific opcode lemmas. *)
+Triviality step_inst_base_sub[local]:
+  !inst s. inst.inst_opcode = SUB ==>
+    step_inst_base inst s = exec_pure2 $- inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_xor[local]:
+  !inst s. inst.inst_opcode = XOR ==>
+    step_inst_base inst s = exec_pure2 word_xor inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_and[local]:
+  !inst s. inst.inst_opcode = AND ==>
+    step_inst_base inst s = exec_pure2 word_and inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_or[local]:
+  !inst s. inst.inst_opcode = OR ==>
+    step_inst_base inst s = exec_pure2 word_or inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_mul[local]:
+  !inst s. inst.inst_opcode = MUL ==>
+    step_inst_base inst s = exec_pure2 $* inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_eq[local]:
+  !inst s. inst.inst_opcode = EQ ==>
+    step_inst_base inst s = exec_pure2 (\a b. bool_to_word (a = b)) inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_gt[local]:
+  !inst s. inst.inst_opcode = GT ==>
+    step_inst_base inst s =
+    exec_pure2 (\x y. bool_to_word (w2n x > w2n y)) inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_lt[local]:
+  !inst s. inst.inst_opcode = LT ==>
+    step_inst_base inst s =
+    exec_pure2 (\x y. bool_to_word (w2n x < w2n y)) inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_sgt[local]:
+  !inst s. inst.inst_opcode = SGT ==>
+    step_inst_base inst s =
+    exec_pure2 (\x y. bool_to_word (word_gt x y)) inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_slt[local]:
+  !inst s. inst.inst_opcode = SLT ==>
+    step_inst_base inst s =
+    exec_pure2 (\x y. bool_to_word (word_lt x y)) inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_div[local]:
+  !inst s. inst.inst_opcode = Div ==>
+    step_inst_base inst s = exec_pure2 safe_div inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_mod[local]:
+  !inst s. inst.inst_opcode = Mod ==>
+    step_inst_base inst s = exec_pure2 safe_mod inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_sdiv[local]:
+  !inst s. inst.inst_opcode = SDIV ==>
+    step_inst_base inst s = exec_pure2 safe_sdiv inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_inst_base_smod[local]:
+  !inst s. inst.inst_opcode = SMOD ==>
+    step_inst_base inst s = exec_pure2 safe_smod inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+(* Combining: for binary opcodes with a NONE operand, step_inst_base errors *)
+Triviality binary_none_step_error[local]:
+  !inst s op1 op2.
+    inst.inst_operands = [op1; op2] /\
+    (eval_operand op1 s = NONE \/ eval_operand op2 s = NONE) /\
+    (inst.inst_opcode = SUB \/ inst.inst_opcode = XOR \/
+     inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
+     inst.inst_opcode = MUL \/ inst.inst_opcode = EQ \/
+     inst.inst_opcode = GT \/ inst.inst_opcode = LT \/
+     inst.inst_opcode = SGT \/ inst.inst_opcode = SLT \/
+     inst.inst_opcode = Div \/ inst.inst_opcode = Mod \/
+     inst.inst_opcode = SDIV \/ inst.inst_opcode = SMOD) ==>
+    ?e. step_inst_base inst s = Error e
+Proof
+  rpt strip_tac >> gvs[] >>
+  simp[step_inst_base_sub, step_inst_base_xor, step_inst_base_and,
+       step_inst_base_or, step_inst_base_mul, step_inst_base_eq,
+       step_inst_base_gt, step_inst_base_lt, step_inst_base_sgt,
+       step_inst_base_slt, step_inst_base_div, step_inst_base_mod,
+       step_inst_base_sdiv, step_inst_base_smod] >>
+  irule exec_pure2_none_error >> simp[] >> metis_tac[]
+QED
+
 (* ===== Main single-state peephole sim ===== *)
 
 (* For the full peephole pipeline (pre-flip → peephole → post-flip),
@@ -573,7 +713,58 @@ Proof
         (MUL→SHL, Div→SHR, Mod→AND), signextend identity, safe_smod/safe_sdiv.
 
      All 20 goals are cheated pending resolution of these issues. *)
-  >> cheat
+  (* Get inst0.inst_outputs from inst_wf *)
+  >> `?out. inst0.inst_outputs = [out]` by (
+    `LENGTH inst.inst_outputs = 1` by gvs[inst_wf_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[])
+  (* ---- Helper: lit_eq h v = T implies h = Lit v ---- *)
+  >> `!h v. lit_eq h v ==> h = Lit v` by
+    (rpt gen_tac >> Cases_on `h` >> simp[lit_eq_def])
+  (* NOTE: binary NONE error helper removed — not provable for
+     non-binary opcodes like SHL. Handle inline where needed. *)
+  (* ---- Shift: SHL, SHR, SAR (all have same structure) ---- *)
+  >- ( (* SHL *)
+    DISJ2_TAC >> simp[ao_opt_shift_def] >>
+    every_case_tac >> gvs[] >>
+    irule singleton_post_flip_sim >> simp[] >>
+    gvs[lit_eq_def] >> metis_tac[ao_rule_shl_zero])
+  >- ( (* SHR *)
+    DISJ2_TAC >> simp[ao_opt_shift_def] >>
+    every_case_tac >> gvs[] >>
+    irule singleton_post_flip_sim >> simp[] >>
+    gvs[lit_eq_def] >> metis_tac[ao_rule_shr_zero])
+  >- ( (* SAR *)
+    DISJ2_TAC >> simp[ao_opt_shift_def] >>
+    every_case_tac >> gvs[] >>
+    irule singleton_post_flip_sim >> simp[] >>
+    gvs[lit_eq_def] >> metis_tac[ao_rule_sar_zero])
+  (* ---- Uniform tactic for 1-to-1 cases ----
+     Pattern: unfold def, case split, for each resulting singleton
+     use singleton_post_flip_sim with the rule theorem chain:
+       step_inst_base inst' s = step_inst_base inst0 s  (rule theorem)
+       step_inst_base inst0 s = step_inst_base inst s   (assumption)   *)
+  >- cheat (* SIGNEXTEND — needs signextend w>=31 identity rule *)
+  >- cheat (* Exp — needs exp rules: x**0=1, x**1=x, 1**x=1, 0**x=iszero *)
+  >- ( (* ADD *)
+    DISJ2_TAC >> simp[ao_opt_addsub_def] >>
+    every_case_tac >> gvs[lit_eq_def] >>
+    irule singleton_post_flip_sim >> simp[] >>
+    metis_tac[ao_rule_add_zero])
+  >- cheat (* SUB — op1=op2 causes every_case_tac explosion, needs helper lemma *)
+  >- cheat (* XOR *)
+  >- cheat (* AND *)
+  >- cheat (* MUL — needs power-of-two rules *)
+  >- cheat (* Div — needs power-of-two rules *)
+  >- cheat (* SDIV — needs safe_sdiv rules *)
+  >- cheat (* Mod — needs power-of-two rules *)
+  >- cheat (* SMOD — needs safe_smod rules *)
+  >- cheat (* OR *)
+  >- cheat (* EQ — 1-to-N expansion *)
+  >- cheat (* GT — comparator *)
+  >- cheat (* LT — comparator *)
+  >- cheat (* SGT — comparator *)
+  >- cheat (* SLT — comparator *)
 QED
 
 val _ = export_theory();
