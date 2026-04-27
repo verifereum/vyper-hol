@@ -8,6 +8,9 @@
  * TOP-LEVEL:
  *   value_within_alloca_size — value's runtime structure fits ALLOCA size
  *   cenv_matches_fn          — compile_env ALLOCA sizes match function
+ *   alloca_sizes_match       — runtime ALLOCA sizes match function
+ *   alloca_outputs_match     — ALLOCA outputs hold runtime base addresses
+ *   state_matches_fn         — ALLOCA sizes and outputs match function
  *   well_typed_lowering      — source well-typed (enables type soundness)
  *   bp_result_is             — base_ptr analysis result validity
  *   reachable_by_execution   — RTC of non-terminating, non-ext-call steps
@@ -65,6 +68,34 @@ Definition cenv_matches_fn_def:
       cenv.ce_var_type out = SOME ty ∧
       evaluate_type tenv ty = SOME tv
       ⇒ type_memory_bytes cenv ty = w2n n
+End
+
+(* Runtime alloca entries have the sizes declared by fn's ALLOCA instructions. *)
+Definition alloca_sizes_match_def:
+  alloca_sizes_match fn s ⇔
+    ∀inst n.
+      MEM inst (fn_insts fn) ∧
+      inst.inst_opcode = ALLOCA ∧
+      inst.inst_operands = [Lit n]
+      ⇒ ∃off. FLOOKUP s.vs_allocas inst.inst_id = SOME (off, w2n n)
+End
+
+(* ALLOCA output variables hold the base address of their runtime entries. *)
+Definition alloca_outputs_match_def:
+  alloca_outputs_match fn s ⇔
+    ∀inst n out off sz.
+      MEM inst (fn_insts fn) ∧
+      inst.inst_opcode = ALLOCA ∧
+      inst.inst_operands = [Lit n] ∧
+      inst_output inst = SOME out ∧
+      FLOOKUP s.vs_allocas inst.inst_id = SOME (off, sz)
+      ⇒ lookup_var out s = SOME (n2w off)
+End
+
+(* Runtime ALLOCA sizes and output values match fn's ALLOCA instructions. *)
+Definition state_matches_fn_def:
+  state_matches_fn fn s ⇔
+    alloca_sizes_match fn s ∧ alloca_outputs_match fn s
 End
 
 (* well_typed_lowering cenv: the Vyper source from which cenv was
