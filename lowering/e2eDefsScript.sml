@@ -11,8 +11,7 @@
  *   log_entry_corresponds  -- single Vyper log ~ EVM event
  *   logs_correspond        -- Vyper logs ~ EVM events (LIST_REL)
  *   state_effects_match    -- Vyper side effects ~ EVM post-state
- *   state_unchanged        -- rollback state unchanged (for reverts)
- *   vyper_evm_correspondence -- full Vyper-EVM case split
+ *   transaction_result_rel  -- relates call_external to run_transaction output
  *   initial_evm_rel        -- EVM state initialized with bytecode
  *   valid_function_call    -- source function callable with given args
  *)
@@ -123,38 +122,59 @@ Definition state_effects_match_def:
       logs_correspond event_info tenv addr am'.logs ctxt.logs
 End
 
-(* Rollback state unchanged: accounts and transient storage
-   are the same before and after execution (used for reverts). *)
-Definition state_unchanged_def:
-  state_unchanged es es' <=>
-    ~NULL es.contexts /\ ~NULL es'.contexts /\
-    (let (ctxt, rb) = HD es.contexts in
-     let (ctxt', rb') = HD es'.contexts in
-       rb'.accounts = rb.accounts /\
-       rb'.tStorage = rb.tStorage)
+(* ===== Transaction Layer ===== *)
+
+(* Accounts match modulo gas adjustments.
+   post_transaction_accounting applies:
+   - Gas refund to sender (evm_tx.from)
+   - Transaction fee to block coinbase (blk.coinBase)
+   
+   This predicate says: baseAccounts and newAccounts agree except
+   for the balance changes at sender and coinbase due to gas.
+   
+   Note: evm_tx is the EVM transaction type, blk is the EVM block type. *)
+Definition accounts_match_modulo_gas_def:
+  accounts_match_modulo_gas baseAccounts newAccounts
+                            (sender : address) (coinbase : address) <=>
+    (* For all addresses except sender and coinbase, accounts unchanged *)
+    (!addr. addr <> sender /\ addr <> coinbase ==>
+            newAccounts addr = baseAccounts addr) /\
+    (* Sender and coinbase: only balance differs (by gas refund/fee) *)
+    (* We don't specify exact amounts - just that other fields match *)
+    ((newAccounts sender) with balance := 0 =
+     (baseAccounts sender) with balance := 0) /\
+    ((newAccounts coinbase) with balance := 0 =
+     (baseAccounts coinbase) with balance := 0)
 End
 
-(* Full Vyper-EVM correspondence for a single external call.
-   Packages the case split on call_external result:
-   - Success: EVM halts, returndata + state effects match
-   - Assert/revert: EVM reverts, rollback state unchanged
-   - Error: T (could be F under well-formedness)
-   - Break/Continue/Return: F (never escape call_external) *)
-Definition vyper_evm_correspondence_def:
-  vyper_evm_correspondence tenv event_info ret am tx es <=>
-    (case call_external am tx of
-       (INL v, am') =>
-         ?es'.
-           run es = SOME (INR NONE, es') /\
-           return_data_encodes tenv ret v es' /\
-           state_effects_match event_info tx.target tenv am' es'
-     | (INR (AssertException _), _) =>
-         ?es'. run es = SOME (INR (SOME Reverted), es') /\
-               state_unchanged es es'
-     | (INR (Error _), _) => T
-     | (INR BreakException, _) => F
-     | (INR ContinueException, _) => F
-     | (INR (ReturnException _), _) => F)
+(* Relates Vyper call_external result to EVM run_transaction output.
+   This is the top-level correctness statement that includes
+   proper rollback on revert (handled by post_transaction_accounting).
+   
+   Parameters:
+   - vyper_tx : call_txn (Vyper transaction)
+   - am : abstract_machine (Vyper state)
+   - sender, coinbase : addresses for gas accounting
+   - tr, newAccounts : EVM run_transaction output
+   
+   On success: final accounts based on am'.accounts + gas adjustments
+   On revert: final accounts based on am.accounts (original) + gas adjustments *)
+Definition transaction_result_rel_def:
+  transaction_result_rel tenv ret am (vyper_tx : call_txn)
+                         (sender : address) (coinbase : address)
+                         tr newAccounts <=>
+    case call_external am vyper_tx of
+      (INL v, am') =>
+        tr.result = NONE /\
+        accounts_match_modulo_gas am'.accounts newAccounts sender coinbase
+    | (INR (AssertException _), _) =>
+        tr.result = SOME Reverted /\
+        (* Rollback: newAccounts based on original am.accounts *)
+        accounts_match_modulo_gas am.accounts newAccounts sender coinbase
+    | (INR (Error _), _) => T
+    | (INR BreakException, _) => F
+    | (INR ContinueException, _) => F
+    | (INR (ReturnException _), _) => F
 End
 
 (* ===== EVM State Predicates ===== *)

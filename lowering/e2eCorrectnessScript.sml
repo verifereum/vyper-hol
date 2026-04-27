@@ -133,7 +133,7 @@ End
    Key uniformities across both cases:
    - Returndata: always in (FST (HD es_f.contexts)).returnData
      (callee's context for outermost; caller's after set_return_data
-     for inner — handle_exception copies it before popping)
+     for inner - handle_exception copies it before popping)
    - Accounts on success: es_f.rollback.accounts = am'.accounts
      (update_accounts modifies rollback; pop doesn't change it
      on success)
@@ -196,10 +196,10 @@ Definition call_result_matches_def:
     | (INR (ReturnException _), _) => F
 End
 
-(* ===== Adapter Lemmas for vyper_call_correct ===== *)
+(* ===== Adapter Lemma for vyper_call_correct ===== *)
 
 (* Compilation + call_state_rel + valid_vyper_call together imply
-   vyper_evm_correspondence.
+   run_call produces call_result_matches.
 
    This bridges three gaps:
    1. compile_vyper → compile_vyper_raw (via compile_vyper_runtime_bytecode)
@@ -209,8 +209,13 @@ End
    3. Pipeline assumption: compile_vyper always uses a pipeline that
       satisfies ctx_pass_correct with observable_equiv
 
+   For outermost calls (LENGTH es.contexts = 1): run_call = run.
+   For inner calls (LENGTH es.contexts > 1): run_call stops when
+   handle_exception pops the callee frame; call_result_matches describes
+   the frame-popping effects (stack push, account rollback on revert).
+
    Each gap is at the same level as the existing cheated Props theorems. *)
-Theorem compile_vyper_evm_correspondence[local]:
+Theorem compile_vyper_call_result[local]:
   !program pipeline dispatch_strategy deploy_bc runtime_bc
    am tx tenv ret ctxt rb rest es event_info.
     compile_vyper program pipeline dispatch_strategy
@@ -221,33 +226,9 @@ Theorem compile_vyper_evm_correspondence[local]:
     ==>
     ?gas_needed.
       ctxt.msgParams.gasLimit >= gas_needed ==>
-      vyper_evm_correspondence tenv event_info ret am tx es
-Proof
-  cheat
-QED
-
-(* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
-
-   vyper_evm_correspondence is defined in terms of VFM's `run` which
-   executes all frames to completion. call_result_matches uses `run_call`
-   which stops when the current call frame completes.
-
-   For outermost calls (LENGTH es.contexts = 1): run_call = run because
-   step never empties the context stack (step_preserves_nonempty_contexts).
-   For inner calls (LENGTH es.contexts > 1): run_call stops when
-   handle_exception pops the callee frame; the postcondition includes
-   the frame-popping effects (stack push, account rollback on revert).
-
-   This encapsulates the EVM execution semantics reasoning about
-   context stack management, handle_exception, and the OWHILE loop. *)
-Theorem evm_correspondence_to_call_result[local]:
-  !tenv event_info am tx ret es.
-    vyper_evm_correspondence tenv event_info ret am tx es /\
-    ~NULL es.contexts
-    ==>
-    ?r es_final.
-      run_call es = SOME (r, es_final) /\
-      call_result_matches tenv event_info am tx ret r es es_final
+      ?r es_final.
+        run_call es = SOME (r, es_final) /\
+        call_result_matches tenv event_info am tx ret r es es_final
 Proof
   cheat
 QED
@@ -256,6 +237,17 @@ QED
 
 (* Compiler correctness for a single external call.
 
+   When EVM execution enters compiled Vyper bytecode (at any point
+   in the call stack), the result corresponds to the Vyper source
+   semantics (call_external am tx).
+
+   Covers both outermost calls (rest = [], as in a transaction) and
+   inner calls (rest ≠ [], as in a CALL from another contract).
+   The pipeline and all Venom-internal details are hidden in the proof.
+
+   Gas is existential: there exists a gas bound such that with enough
+   gas, EVM execution produces the correct result. *)
+(* Main call-level correctness theorem.
    When EVM execution enters compiled Vyper bytecode (at any point
    in the call stack), the result corresponds to the Vyper source
    semantics (call_external am tx).
@@ -284,17 +276,290 @@ Theorem vyper_call_correct:
         call_result_matches tenv event_info am tx ret r es es_final
 Proof
   rpt strip_tac
-  (* Step 1: compile_vyper gives vyper_evm_correspondence with gas bound *)
-  \\ drule_all compile_vyper_evm_correspondence
+  \\ drule_all compile_vyper_call_result
   \\ disch_then (qspec_then `event_info` strip_assume_tac)
   \\ qexists `gas_needed`
   \\ strip_tac
-  (* Step 2: Apply gas condition to get vyper_evm_correspondence *)
-  \\ `vyper_evm_correspondence tenv event_info ret am tx es` by
-       metis_tac[]
-  (* Step 3: Bridge to run_call + call_result_matches *)
-  \\ drule evm_correspondence_to_call_result
+  \\ first_x_assum drule
   \\ simp[]
+QED
+
+(* ===== Transaction Layer Correctness ===== *)
+
+(* Transaction-level correctness: relates call_external to run_transaction.
+   This is the top-level theorem that includes proper rollback on revert.
+
+   For success: final accounts based on am'.accounts + gas adjustments
+   For revert: final accounts based on am.accounts (original) + gas adjustments
+
+   The rollback is handled by post_transaction_accounting, which uses
+   the saved pre-call accounts (acc) when result ≠ NONE.
+
+   Parameters:
+   - vyper_tx : Vyper's call_txn (used by call_external)
+   - evm_tx : EVM's transaction (used by run_transaction)
+   - The two must be consistent (same sender, target, value, calldata, etc.)
+
+   Preconditions:
+   - Compilation succeeds
+   - Initial EVM accounts match Vyper abstract machine accounts
+   - Vyper and EVM transaction parameters are consistent
+   - Block parameters match between Vyper tx and EVM blk *)
+
+(* Helper: post_transaction_accounting with non-NONE result uses the
+   saved accounts (acc), not the dirty execution state accounts.
+   This is the key lemma for revert correctness. *)
+Theorem post_transaction_accounting_revert_uses_saved_acc:
+  !blk tx result acc t tr newAccounts.
+    result <> NONE /\
+    (tr, newAccounts) = post_transaction_accounting blk tx result acc t
+    ==>
+    accounts_match_modulo_gas acc newAccounts tx.from blk.coinBase
+Proof
+  rpt strip_tac
+  \\ gvs[post_transaction_accounting_def, LET_THM]
+  (* When result <> NONE:
+     let accounts = if result = NONE then ... else acc
+     so accounts = acc *)
+  \\ simp[accounts_match_modulo_gas_def]
+  (* All three goals are about update_account structure *)
+  >> conj_tac >- ((* addresses other than sender/coinbase unchanged *)
+      rpt strip_tac
+      \\ pairarg_tac \\ gvs[]
+      \\ simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM])
+  >> conj_tac >- ((* sender: only balance changed *)
+      pairarg_tac \\ gvs[]
+      >> simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM,
+              vfmStateTheory.lookup_account_def])
+  >- ((* coinbase: only balance changed *)
+      pairarg_tac \\ gvs[] >>
+      simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM,
+           vfmStateTheory.lookup_account_def]
+      \\ rw[])
+QED
+
+(* ===== Helper Lemmas for Transaction Correctness ===== *)
+
+(* When tx.to = SOME target, run_create returns precomp based on whether
+   target is a precompile address. *)
+Theorem run_create_precomp_from_target:
+  !dom static chainId prevHashes blk accounts tx target acc s precomp.
+    tx.to = SOME target /\
+    run_create dom static chainId prevHashes blk accounts tx =
+      SOME (INR (acc, s, precomp))
+    ==>
+    precomp = if fIN target precompile_addresses then SOME target else NONE
+Proof
+  rpt strip_tac
+  \\ qpat_x_assum `run_create _ _ _ _ _ _ _ = _` mp_tac
+  \\ simp[run_create_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[]
+  (* Now we have:
+     - initial_state ... = SOME s''
+     - precomp = if fIN calleeAddress precompile_addresses then SOME calleeAddress else NONE
+     - calleeAddress = (FST (HD s''.contexts)).msgParams.callee
+     Need to show calleeAddress = target *)
+  \\ qpat_x_assum `initial_state _ _ _ _ _ _ _ = SOME _` mp_tac
+  \\ simp[vfmContextTheory.initial_state_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[]
+  (* initial_state builds context with callee = callee_from_tx_to tx.from tx.nonce tx.to
+     When tx.to = SOME target, callee_from_tx_to returns target *)
+  \\ gvs[vfmContextTheory.callee_from_tx_to_def]
+  (* Now need to trace through the lambdas to show msgParams.callee = target.
+     The key insight is that initial_context sets msgParams.callee to its first arg (target).
+
+     The structure is:
+     (\(pAA,pAC,aR). (\(code,acc). case apply_intrinsic_cost ... (initial_context target code ...) of
+                                     SOME ctxt => SOME <| contexts := [(ctxt, ...)] ... |>)
+                     (code_from_tx pAA pAC tx))
+     (process_authorizations ...)
+     = SOME s''
+
+     So s''.contexts = [(ctxt, ...)] where ctxt comes from apply_intrinsic_cost applied to
+     initial_context target code ..., which preserves msgParams.callee = target. *)
+  \\ `(FST (HD s''.contexts)).msgParams.callee = target` by (
+       qpat_x_assum `_ = SOME s''` mp_tac
+       \\ simp[AllCaseEqs(), PULL_EXISTS, pairTheory.UNCURRY]
+       \\ rpt strip_tac \\ gvs[]
+       \\ gvs[vfmContextTheory.initial_context_def,
+              vfmContextTheory.initial_msg_params_def,
+              vfmContextTheory.apply_intrinsic_cost_def])
+  \\ gvs[]
+QED
+
+(* Lemma: run_create with tx.to = SOME target produces a single-context state
+   where the context has the target's code. *)
+Theorem run_create_single_context:
+  ∀dom static chainId prevHashes blk accounts tx target saved_acc s precomp.
+    tx.to = SOME target ∧
+    run_create dom static chainId prevHashes blk accounts tx =
+      SOME (INR (saved_acc, s, precomp))
+    ⇒
+    ∃ctxt rb.
+      s.contexts = [(ctxt, rb)] ∧
+      ctxt.msgParams.code = (lookup_account target accounts).code ∧
+      ctxt.msgParams.data = tx.data ∧
+      ctxt.pc = 0 ∧
+      ctxt.stack = []
+Proof
+  rpt strip_tac
+  \\ qpat_x_assum `run_create _ _ _ _ _ _ _ = _` mp_tac
+  \\ simp[run_create_def, AllCaseEqs()]
+  \\ strip_tac \\ gvs[]
+  \\ qpat_x_assum `initial_state _ _ _ _ _ _ _ = SOME _` mp_tac
+  \\ simp[vfmContextTheory.initial_state_def, AllCaseEqs(), PULL_EXISTS]
+  \\ rpt strip_tac \\ gvs[]
+  (* initial_state creates contexts = [(ctxt, rb)] where ctxt has:
+     - code from code_from_tx (which for tx.to = SOME target is target's code)
+     - data from tx.data
+     - pc = 0, stack = [] (from initial_context) *)
+  \\ simp[vfmContextTheory.callee_from_tx_to_def]
+  (* The goal now has the complex lambda structure. Simplify to extract contexts. *)
+  \\ qpat_x_assum `_ = SOME s''` mp_tac
+  \\ simp[AllCaseEqs(), PULL_EXISTS]
+  \\ rpt strip_tac \\ gvs[]
+  (* Now s''.contexts = [(ctxt, initial_rollback ...)] where ctxt from apply_intrinsic_cost *)
+  \\ qexists_tac `ctxt`
+  \\ qexists_tac `initial_rollback postAuthAccounts accesses`
+  \\ simp[]
+  (* Need: ctxt.msgParams.code, data, pc, stack from initial_context / apply_intrinsic_cost *)
+  \\ gvs[vfmContextTheory.initial_context_def,
+         vfmContextTheory.initial_msg_params_def,
+         vfmContextTheory.apply_intrinsic_cost_def,
+         vfmContextTheory.code_from_tx_def]
+  \\ cheat (* delegate case in code_from_tx *)
+QED
+
+(* Lemma: Compilation + valid call + EVM execution determines result from Vyper.
+
+   This is the key bridge between Vyper semantics (call_external) and
+   EVM execution (run). It uses vyper_lowering_logs_correct + e2e_venom_to_evm. *)
+Theorem vyper_determines_evm_result:
+  ∀program pipeline dispatch_strategy deploy_bc runtime_bc
+   am (tx : call_txn) tenv args ret selectors calldata es result es_final.
+    compile_vyper program pipeline dispatch_strategy = SOME (deploy_bc, runtime_bc) ∧
+    valid_function_call tenv am tx selectors calldata args ret ∧
+    (∃ctxt rb. es.contexts = [(ctxt, rb)] ∧
+               ctxt.msgParams.code = runtime_bc ∧
+               ctxt.msgParams.data = calldata) ∧
+    run es = SOME (INR result, es_final)
+    ⇒
+    case call_external am tx of
+      (INL v, am') => result = NONE ∧ es_final.rollback.accounts = am'.accounts
+    | (INR (AssertException _), _) => result = SOME Reverted
+    | (INR (Error _), _) => T
+    | _ => F
+Proof
+  rpt strip_tac
+  (* Use the cheated e2e chain. The full proof would:
+     1. Extract lowering parameters from compile_vyper
+     2. Build initial Venom state from tx
+     3. Apply vyper_lowering_logs_correct to get external_call_result_rel
+     4. Apply e2e_venom_to_evm to connect run_context to run
+     5. Case split on call_external result *)
+  \\ cheat
+QED
+
+(* Transaction-level correctness. *)
+Theorem vyper_transaction_correct:
+  !program pipeline dispatch_strategy runtime_bc
+   am (vyper_tx : call_txn) (evm_tx : transaction)
+   tenv ret args selectors blk acc dom chainId prevHashes tr newAccounts.
+    (* Compilation succeeds *)
+    (∃deploy_bc.
+       compile_vyper program pipeline dispatch_strategy
+         = SOME (deploy_bc, runtime_bc)) ∧
+    (* Initial accounts match *)
+    acc = am.accounts ∧
+    (* Contract is deployed with compiled runtime bytecode *)
+    (∃target_acct.
+       evm_tx.to = SOME vyper_tx.target ∧
+       acc vyper_tx.target = target_acct ∧
+       target_acct.code = runtime_bc) ∧
+    (* Target is not a precompile address *)
+    ~fIN vyper_tx.target precompile_addresses ∧
+    (* Vyper tx and EVM tx are consistent *)
+    evm_tx.from = vyper_tx.sender ∧
+    evm_tx.value = vyper_tx.value ∧
+    (* EVM calldata encodes the function call *)
+    valid_function_call tenv am vyper_tx selectors evm_tx.data args ret ∧
+    (* Block/tx parameters consistent *)
+    blk.coinBase = vyper_tx.coinbase ∧
+    blk.baseFeePerGas = vyper_tx.base_fee ∧
+    (* Transaction executes (not invalid) *)
+    run_transaction dom F chainId prevHashes blk acc evm_tx = SOME (tr, newAccounts)
+    ⇒
+    transaction_result_rel tenv ret am vyper_tx evm_tx.from blk.coinBase tr newAccounts
+Proof
+  rpt strip_tac
+  (* Unfold run_transaction in the assumption *)
+  \\ qpat_x_assum `run_transaction _ _ _ _ _ _ _ = SOME _` mp_tac
+  \\ simp[run_transaction_def]
+  \\ strip_tac
+  (* Now we have the case-split result as an assumption *)
+  (* Case split on run_create result *)
+  \\ Cases_on `run_create dom F chainId prevHashes blk acc evm_tx` \\ gvs[]
+  \\ rename1 `run_create _ _ _ _ _ _ _ = SOME create_result`
+  \\ Cases_on `create_result` \\ gvs[]
+  >- ((* INL: impossible when tx.to = SOME _ *)
+      (* run_create returns INR when IS_SOME tx.to (vfmExecutionScript.sml:1827) *)
+      qpat_x_assum `run_create _ _ _ _ _ _ _ = _` mp_tac
+      \\ simp[run_create_def, AllCaseEqs()]
+      \\ rw[])
+  \\ rename1 `SOME (INR ppp)` >> PairCases_on`ppp`
+  \\ rename1 `SOME (INR (saved_acc, s1, precomp))`
+  \\ simp[]
+  (* Now we have: run s1 or dispatch_precompiles, then post_transaction_accounting *)
+  \\ Cases_on `precomp`
+  >- ((* NONE: normal execution via run *)
+      Cases_on `run s1`
+      >- gvs[] (* NONE - contradicts SOME *)
+      \\ rename1 `run s1 = SOME xxx` >> PairCases_on`xxx`
+      \\ rename1 `run s1 = SOME (r, s2)`
+      \\ Cases_on `r`
+      >- gvs[] (* INL - contradicts pattern match *)
+      \\ rename1 `SOME (INR result, s2)`
+      \\ gvs[AllCaseEqs()]
+      (* Now: (tr, newAccounts) = post_transaction_accounting blk evm_tx result saved_acc s2 *)
+      \\ simp[transaction_result_rel_def]
+      \\ Cases_on `call_external am vyper_tx`
+      \\ rename1 `call_external am vyper_tx = (vyper_result, am')`
+      \\ Cases_on `vyper_result` \\ gvs[]
+      >- ((* INL: Vyper success *)
+          (* Use vyper_determines_evm_result: Vyper success => EVM success.
+
+             We have run s1 = SOME (INR result, s2) and call_external returns INL.
+             vyper_determines_evm_result says: given the e2e chain,
+               call_external = INL => result = NONE and accounts match.
+
+             Remaining work:
+             1. Show s1.contexts = [(ctxt, rb)] with correct code/calldata
+                (follows from run_create / initial_state structure)
+             2. Apply vyper_determines_evm_result to get result = NONE
+             3. Use post_transaction_accounting to get tr.result = NONE
+             4. Show accounts_match_modulo_gas *)
+          cheat)
+      (* Vyper exception cases: INR exc *)
+      (* Need: for AssertException, result = SOME Reverted;
+               for Error, T (anything ok);
+               Break/Continue/ReturnException don't occur in external calls.
+
+         Proof would use e2e_vyper_to_evm which shows:
+         - Vyper AssertException implies Venom Abort Revert_abort
+         - EVM reverts (run returns SOME (INR (SOME Reverted), ...))
+
+         Then tr.result = SOME Reverted from post_transaction_accounting.
+         accounts_match_modulo_gas am.accounts follows from:
+         - post_transaction_accounting uses saved_acc when result <> NONE
+         - saved_acc relates to am.accounts (pre-tx-updates)
+         Note: may need to adjust accounts_match_modulo_gas to account for
+         nonce increment in pre_transaction_updates. *)
+      \\ cheat)
+  (* SOME precomp: precompile dispatch *)
+  (* This case is impossible: precomp = SOME x only when fIN target precompile_addresses,
+     but we have ~fIN vyper_tx.target precompile_addresses. *)
+  \\ drule_all run_create_precomp_from_target
+  \\ gvs[]
 QED
 
 (* ===================================================================== *)
@@ -446,6 +711,15 @@ Proof
   cheat
 QED
 
+(* Entry function has no RET instructions.
+   The entry function is the dispatcher generated by lowering.
+   It ends with STOP/REVERT, never RET (which is for internal returns).
+
+   Proof approach:
+   1. ctx.ctx_entry is set to "__entry" by run_lowering
+   2. The entry function is built by mk_entry_fn or similar
+   3. Trace through lowering to show entry block ends with STOP/REVERT
+   4. Alternatively: codegen checks this (if it does) *)
 Theorem codegen_implies_entry_fn_no_ret[local]:
   !ctx fn_eom_map data_seg bytecode.
     codegen ctx fn_eom_map data_seg = SOME bytecode ==>
@@ -453,7 +727,21 @@ Theorem codegen_implies_entry_fn_no_ret[local]:
                 lookup_function name ctx.ctx_functions = SOME efn ==>
                 entry_fn_no_ret efn)
 Proof
-  cheat
+  rpt strip_tac
+  \\ gvs[entry_fn_no_ret_def]
+  (* Need to show: every instruction in entry function has opcode ≠ RET
+
+     The entry function is the dispatcher. It:
+     - Reads selector from calldata
+     - Dispatches to the appropriate function
+     - Ends with STOP (success) or REVERT (no match)
+
+     Key insight: RET is only generated for internal function returns,
+     never in the entry dispatcher.
+
+     TODO: Trace through run_lowering / mk_entry_fn to establish this.
+     May need a lemma about the structure of lowered entry functions. *)
+  \\ cheat
 QED
 
 Theorem compile_vyper_raw_well_formed:
@@ -561,35 +849,18 @@ fun expand_pair_let thm =
  *   Vyper success (INL v)       => EVM normal halt, returndata =
  *                                  ABI encoding of v, accounts,
  *                                  transient storage, and logs match
- *   Vyper revert (AssertExc)    => EVM REVERT, state_unchanged
+ *   Vyper revert (AssertExc)    => EVM REVERT (for outermost calls)
+ *                                  or stack 0w + rollback (inner calls)
  *   Vyper error                 => T (indicates source-level error;
  *                                  could be strengthened to F under
  *                                  well-formedness of am/tx)
  *   Break/Continue/Return       => F -- internal control flow,
  *                                  never escapes call_external
+ *
+ * Note: For outermost reverts, the EVM signals Reverted but leaves
+ * dirty state. The transaction layer (run_transaction) handles
+ * rollback using the saved pre-call accounts. See vyper_transaction_correct.
  *)
-
-(* EVM REVERT preserves the rollback state.
-   This is a basic EVM semantic property: the REVERT opcode
-   causes execution to halt with Reverted status, and the
-   rollback mechanism restores accounts and transient storage
-   to their pre-call values.
-
-   CAVEAT: set_original (used in proceed_create/CREATE opcode)
-   modifies SND(LAST s.contexts).accounts for EIP-2200 gas metering.
-   For single-frame execution, this means SND(HD s.contexts) can
-   change during CREATE. This lemma is correct when no CREATE
-   opcodes are executed, or when state_unchanged is weakened to
-   compare s.rollback instead of SND(HD s.contexts).
-   TODO: Verify state_unchanged definition is appropriate. *)
-Theorem evm_revert_state_unchanged[local]:
-  !es es'. run es = SOME (INR (SOME Reverted), es') /\
-           ~NULL es.contexts
-           ==>
-           state_unchanged es es'
-Proof
-  cheat
-QED
 
 (* Main E2E theorem: Vyper source semantics ~ EVM execution.
 
@@ -605,6 +876,10 @@ QED
    (via FOLDL rel_seq); the caller must show they imply
    observable_equiv (via foldl_rel_seq_preserves_observable).
    See e2e_vyper_to_evm_O2 for a concrete instance. *)
+(* e2e_vyper_to_evm: the detailed composition theorem.
+   Relates compile_vyper_raw output to call_result_matches via
+   run_call. This is the internal workhorse; vyper_call_correct
+   wraps it with the compile_vyper API. *)
 Theorem e2e_vyper_to_evm:
   !tenv event_info pipeline selectors ext_fns int_fns fb_fn
     dispatch bucket_count fn_meta_bytes dense_buckets entry_info
@@ -634,104 +909,118 @@ Theorem e2e_vyper_to_evm:
            (let (ctxt, rb) = HD es.contexts in
               ctxt.msgParams.gasLimit >= gas_needed)
       ==>
-      vyper_evm_correspondence tenv event_info ret am tx es
+      ?r es_final.
+        run_call es = SOME (r, es_final) /\
+        call_result_matches tenv event_info am tx ret r es es_final
 Proof
-  rpt gen_tac
-  \\ simp[pairTheory.UNCURRY]
-  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
-  \\ strip_tac
-  \\ gvs[valid_function_call_def]
-  (* Step 1: Apply lowering correctness *)
-  \\ drule_all (expand_pair_let vyper_lowering_logs_correct)
-  \\ disch_then (qspecl_then [`event_info`, `ext_fns`, `int_fns`, `fb_fn`,
-       `dispatch`, `bucket_count`, `fn_meta_bytes`, `dense_buckets`,
-       `entry_info`, `entry_label`] strip_assume_tac)
-  (* Step 2: Apply codegen well-formedness *)
-  \\ drule (expand_pair_let compile_vyper_raw_well_formed)
-  \\ strip_tac
-  (* Abbreviate ctx for readability *)
-  \\ qmatch_asmsub_abbrev_tac `ctx_pass_correct pipeline _ _ ctx vs`
-  (* Extract codegen from compile_vyper_raw *)
-  \\ `codegen (pipeline ctx) fn_eom_map
-       (SND (run_lowering selectors ext_fns int_fns fb_fn dispatch bucket_count
-              fn_meta_bytes dense_buckets entry_info entry_label))
-     = SOME bytecode` by (
-      gvs[compile_vyper_raw_def, pairTheory.UNCURRY, Abbr `ctx`] >>
-      CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> gvs[])
-  (* Step 3: Unfold correspondence, case split on Vyper result *)
-  \\ simp[vyper_evm_correspondence_def]
-  \\ Cases_on `call_external am tx`
-  \\ rename1 `call_external am tx = (vyp_res, am')`
-  \\ Cases_on `vyp_res` \\ gvs[external_call_result_rel_def]
-  >- ((* INL: success case *)
-   Cases_on `run_context fuel ctx vs`
-   \\ gvs[external_call_result_rel_def]
-   (* Now: Halt ss', with returndata/accounts/transient from ss' *)
-   \\ `terminates (run_context fuel ctx vs)` by simp[terminates_def]
-   \\ drule_all e2e_venom_pipeline \\ strip_tac
-   \\ Cases_on `run_context fuel' (pipeline ctx) vs`
-   \\ gvs[observable_result_equiv_def]
-   (* Now: Halt ss2' with observable_equiv ss' ss2' *)
-   \\ drule_all (SRULE [] e2e_venom_to_evm)
-   \\ disch_then $ qspecl_then [`vs`, `fuel'`] strip_assume_tac
-   \\ qexists `gas_needed` \\ rpt strip_tac
-   \\ first_x_assum (qspec_then `es` mp_tac)
-   \\ simp[pairTheory.UNCURRY]
-   \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
-   \\ gvs[] \\ strip_tac
-   (* Now: run es = SOME (INR NONE, es'), final_state_rel ss2' es' *)
-   \\ qexists `es'` \\ rpt conj_tac
-   >- simp[]
-   >- ((* return_data_encodes *)
-     simp[return_data_encodes_def]
-     \\ gvs[final_state_rel_def, observable_equiv_def]
-     \\ Cases_on `es'.contexts` \\ gvs[]
-     \\ PairCases_on `h` \\ gvs[]
-     \\ qexists `abi_val` \\ simp[])
-   \\ (* state_effects_match *)
-   simp[state_effects_match_def]
-   \\ gvs[final_state_rel_def, observable_equiv_def]
-   \\ Cases_on `es'.contexts` \\ gvs[]
-   \\ PairCases_on `h` \\ gvs[])
-  (* INR: exception cases *)
-  \\ rename1 `call_external am tx = (INR exc, am')`
-  \\ Cases_on `exc` \\ gvs[external_call_result_rel_def]
-  \\ TRY (Cases_on `run_context fuel ctx vs` >>
-          gvs[external_call_result_rel_def] >> NO_TAC)
-  (* AssertException => Revert *)
-  \\ Cases_on `run_context fuel ctx vs`
-  \\ gvs[external_call_result_rel_def]
-  \\ Cases_on `a` \\ gvs[external_call_result_rel_def]
-  \\ `terminates (run_context fuel ctx vs)` by simp[terminates_def]
-  \\ drule_all e2e_venom_pipeline \\ strip_tac
-  \\ Cases_on `run_context fuel' (pipeline ctx) vs`
-  \\ gvs[observable_result_equiv_def]
-  \\ drule_all (SRULE [] e2e_venom_to_evm)
-  \\ disch_then $ qspecl_then [`vs`, `fuel'`] strip_assume_tac
-  \\ qexists `gas_needed` \\ rpt strip_tac
-  \\ first_x_assum (qspec_then `es` mp_tac)
-  \\ simp[pairTheory.UNCURRY]
-  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
-  \\ gvs[] \\ strip_tac
-  \\ qexists `es'` \\ conj_tac >- simp[]
-  \\ irule evm_revert_state_unchanged \\ simp[]
+  (*
+   * HIGH-LEVEL PROOF STRUCTURE
+   * ==========================
+   * This theorem composes three correctness results:
+   *
+   * 1. LOWERING (vyper_lowering_logs_correct):
+   *    call_external am tx ~ run_context fuel ctx vs
+   *    via external_call_result_rel
+   *
+   * 2. PIPELINE (ctx_pass_correct):
+   *    run_context fuel ctx vs ~ run_context fuel' (pipeline ctx) vs
+   *    via lift_result R_ok R_term, where R_ok/R_term imply observable_equiv
+   *
+   * 3. CODEGEN (e2e_venom_to_evm):
+   *    run_context fuel' (pipeline ctx) vs ~ run es
+   *    via final_state_rel
+   *
+   * The key is that observable_equiv preserves exactly the fields
+   * that final_state_rel and call_result_matches care about:
+   * - vs_returndata, vs_accounts, vs_transient, vs_logs
+   *
+   * Additionally, we need:
+   * - run_call relates to run for this call depth (they differ only
+   *   in how nested CALL/CREATE are handled)
+   * - codegen preconditions (codegen_ready, ctx_wf, entry_fn_no_ret,
+   *   step_mem_safe) hold for (pipeline ctx)
+   *
+   * DEPENDENCIES (cheated lemmas needed):
+   * - vyper_lowering_logs_correct: lowering correctness + logs
+   * - codegen_implies_wf, codegen_implies_mem_safe, codegen_implies_entry_fn_no_ret:
+   *   codegen preconditions from compilation
+   *)
+  cheat
 QED
 
 (* ===== Concrete Pipeline Instances ===== *)
 
+(* Note: For identity pipeline (I), ctx_pass_correct is trivially satisfied
+   because run_context fuel ctx vs = run_context fuel (I ctx) vs.
+   However, pass_correct requires showing the relation holds for ALL pairs
+   of fuels where both terminate, which requires fuel monotonicity lemmas.
+
+   For now, we note that with identity pipeline:
+   - The precondition ctx_pass_correct I R_ok R_term ctx vs is provable
+   - But the proof requires fuel_mono theorems from venomPipelineCorrect
+
+   The O2 pipeline proof below uses the full venom_pipeline_correct. *)
+
 (* The O2 pipeline preserves observable semantics.
    Combines individual O2 pass correctness theorems into
    a single ctx_pass_correct statement. Analysis functions
-   (make_ssa, ircf, ricf, dse, amap, live_at) are parameters. *)
+   (make_ssa, ircf, ricf, dse, amap, live_at) are parameters.
+
+   Proof approach:
+   1. Use venom_pipeline_correct from venomPipelineCorrectTheory
+   2. Instantiate each phase's R_ok/R_term with observable_equiv
+   3. Show FOLDL rel_seq (=) [...observable_equiv...] implies observable_equiv
+   4. Need: each phase (simplify_cfg, ircf, ricf, inliner, o2_fn_passes)
+      satisfies ctx_pass_correct with observable_equiv *)
 Theorem o2_pipeline_ctx_pass_correct[local]:
   !ircf_global ricf_global threshold
     make_ssa ircf ricf dse_analysis amap live_at ctx vs.
+    (* Precondition: alloca pointers confined (required by pipeline) *)
+    EVERY alloca_pointer_confined ctx.ctx_functions
+    ==>
     ctx_pass_correct
       (venom_pipeline ircf_global ricf_global threshold
         (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at))
       observable_equiv observable_equiv ctx vs
 Proof
-  cheat
+  rpt strip_tac
+  (* Use venom_pipeline_correct, instantiating all R_ok/R_term with observable_equiv *)
+  \\ `observable_equiv = FOLDL rel_seq $= [
+        observable_equiv; observable_equiv; observable_equiv;
+        observable_equiv; observable_equiv]` by (
+       rewrite_tac[FUN_EQ_THM]
+       \\ rpt gen_tac
+       \\ irule (iffRL EQ_IMP_THM)
+       \\ reverse conj_tac
+       >- (
+         strip_tac
+         \\ irule foldl_rel_seq_preserves_observable
+         \\ goal_assum $ drule_at Any
+         \\ simp[] ) >>
+       simp[rel_seq_def, PULL_EXISTS] >>
+       metis_tac[observable_equiv_refl, observable_equiv_trans] ) >>
+  pop_assum SUBST_ALL_TAC
+  \\ irule venom_pipeline_correct
+  \\ conj_tac
+  (* 1. alloca_pointer_confined precondition *)
+  >- gvs[]
+  (* 2-6. Each phase satisfies ctx_pass_correct with observable_equiv.
+   TODO: These need individual pass correctness theorems instantiated
+   with observable_equiv. The existing pass proofs use state_equiv or
+   similar; need to show these imply observable_equiv. *)
+  >> conj_tac >- (
+    BasicProvers.LET_ELIM_TAC
+    >> cheat )
+  >> conj_tac >- (
+    BasicProvers.LET_ELIM_TAC
+    >> cheat )
+  >> conj_tac >- (
+    BasicProvers.LET_ELIM_TAC
+    >> cheat )
+  >> conj_tac >- (
+    BasicProvers.LET_ELIM_TAC
+    >> cheat )
+  \\ cheat
 QED
 
 Theorem e2e_vyper_to_evm_O2:
@@ -758,22 +1047,26 @@ Theorem e2e_vyper_to_evm_O2:
            (let (ctxt, rb) = HD es.contexts in
               ctxt.msgParams.gasLimit >= gas_needed)
       ==>
-      vyper_evm_correspondence tenv event_info ret am tx es
+      ?r es_final.
+        run_call es = SOME (r, es_final) /\
+        call_result_matches tenv event_info am tx ret r es es_final
 Proof
   rpt gen_tac
-  \\ simp[pairTheory.UNCURRY]
-  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
-  \\ strip_tac
-  \\ qsuff_tac `?gas_needed. !es.
-       initial_evm_rel bytecode vs es /\ ~NULL es.contexts /\
-       (FST (HD es.contexts)).msgParams.gasLimit >= gas_needed ==>
-       vyper_evm_correspondence tenv event_info ret am tx es`
-  >- simp[]
-  \\ drule (expand_pair_let e2e_vyper_to_evm |> SRULE [])
-  \\ disch_then (qspecl_then [`tenv`, `event_info`,
-       `observable_equiv`, `observable_equiv`,
-       `am`, `tx`, `vs`, `args`, `ret`] mp_tac)
-  \\ simp[o2_pipeline_ctx_pass_correct]
+  \\ BasicProvers.LET_ELIM_TAC
+  \\ qho_match_abbrev_tac`∃gas_needed. ∀es ctxt rb.
+       HD es.contexts = (ctxt,rb) ⇒ P gas_needed es ctxt`
+  \\ `∃gas_needed. ∀es. P gas_needed es (FST (HD (es.contexts)))`
+     suffices_by metis_tac[pairTheory.PAIR, pairTheory.PAIR_EQ]
+  \\ simp[Abbr`P`]
+  \\ irule (expand_pair_let e2e_vyper_to_evm)
+  \\ goal_assum $ drule_at Any
+  \\ goal_assum $ drule_at Any
+  \\ goal_assum $ drule_at Any
+  \\ rpt (qexists_tac`observable_equiv`)
+  \\ simp[]
+  \\ qunabbrev_tac`pipeline`
+  \\ irule o2_pipeline_ctx_pass_correct
+  \\ cheat (* alloca_pointer_confined run_lowering *)
 QED
 
 (* ===== Deploy Phase ===== *)
@@ -831,5 +1124,3 @@ Proof
   \\ MAP_EVERY qexists_tac [`bc`, `fmb`, `db`, `ei`]
   \\ gvs[]
 QED
-
-
