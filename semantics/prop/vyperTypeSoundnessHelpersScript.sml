@@ -3468,6 +3468,19 @@ Proof
     simp[lookup_scopes_def])
 QED
 
+(* Adding a binding to the head scope doesn't change lookup_scopes for any
+   id not equal to the new key. Specializes lookup_scopes_update_other
+   to the common case where pre = []. *)
+Theorem lookup_scopes_head_fupdate_other:
+  !n1 n2 h entry rest.
+    n1 ≠ n2 ⇒
+    lookup_scopes n2 (h |+ (n1, entry) :: rest) =
+    lookup_scopes n2 (h :: rest)
+Proof
+  rpt strip_tac >>
+  simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* new_variable preserves state_well_typed when the added binding is well-typed *)
 Theorem new_variable_swt:
   !id tv v st res st'.
