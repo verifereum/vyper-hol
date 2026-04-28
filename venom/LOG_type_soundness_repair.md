@@ -1,0 +1,5 @@
+L001: [env_consistent_preserves_tv] Initial attempt: drule env_consistent_var_types_soundness fails after env_consistent destructured → FAILED[wrong_decomposition]
+L002: [env_consistent_preserves_tv] Fix: first_x_assum drule instead → var_types soundness works. But metis_tac[IS_SOME_DEF] times out on global_types completeness → FAILED[wrong_statement]
+L003: [env_consistent_preserves_tv] IS_SONE iff hypothesis: still fails. IS_SOME gives existence but not value equality for soundness → FAILED[wrong_statement]
+L004: [KEY][env_consistent_preserves_tv] Root cause: hypothesis was IS_SOME backward implication (st'→st), which is too weak. Need FLOOKUP EQUALITY (st↔st') to carry values through for soundness/toplevel_types. Call sites already prove ALOOKUP equality which gives FLOOKUP equality for free.
+L005: [env_consistent_preserves_tv] FLOOKUP equality hypothesis → first 3 conjuncts prove, INCOMPLETE at toplevel_types. Added `rpt strip_tac >> res_tac >> gvs[]` handler. NEEDS VERIFICATION NEXT SESSION.
