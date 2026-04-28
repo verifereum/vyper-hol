@@ -6618,6 +6618,28 @@ QED
    preserved (every entry in st'.immutables has a matching tv entry in
    st.immutables). Useful after function calls where the body may modify
    immutable values but preserves their type_values and domain. *)
+
+(* Bridge lemma: preserves_immutables_dom gives IS_SOME iff for immutable lookups.
+   Proved separately so env_consistent_immutables_ptv can use it cleanly. *)
+Theorem preserves_immutables_dom_is_some_bridge:
+  !cx st st' src id.
+    preserves_immutables_dom cx st st' ==>
+    IS_SOME (FLOOKUP (get_source_immutables src
+      (case ALOOKUP st.immutables cx.txn.target of
+         SOME m => m | NONE => [])) id) <=>
+    IS_SOME (FLOOKUP (get_source_immutables src
+      (case ALOOKUP st'.immutables cx.txn.target of
+         SOME m => m | NONE => [])) id)
+Proof
+  strip_tac >>
+  drule (cj 1 preserves_immutables_dom_def) >>
+  disch_tac >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
+  simp[get_source_immutables_def] >>
+  metis_tac[cj 2 preserves_immutables_dom_def]
+QED
+
 Theorem env_consistent_immutables_ptv:
   !env cx st st'.
     env_consistent env cx st /\
@@ -6633,19 +6655,31 @@ Theorem env_consistent_immutables_ptv:
     env_consistent env cx st'
 Proof
   rpt strip_tac >>
-  SUBST_ALL_TAC (SYM (Q.SPEC `st'` evaluation_state_scopes_id)) >>
-  SUBST_ALL_TAC (SYM (Q.SPEC `st` evaluation_state_scopes_id)) >>
-  once_rewrite_tac[env_consistent_scopes_only] >>
+  (* Step 1: Expand old env_consistent hypothesis using proven recipe *)
   qpat_x_assum `env_consistent _ _ _`
-    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only]) >>
-  simp[evaluation_state_accfupds, combinTheory.C_DEF, PULL_EXISTS] >>
-  rpt conj_tac >> rpt strip_tac >> res_tac >> TRY (
-    qpat_x_assum `preserves_immutables_dom _ _ _` mp_tac >>
-    simp[preserves_immutables_dom_def] >>
-    Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[]) >>
-  first_x_assum (qspecl_then [`current_module cx`, `id`, `tv`, `v`] mp_tac) >>
-  simp[] >> strip_tac >> res_tac
+    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only] o
+     SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
+  (* Step 2: Introduce IS_SOME bridge from standalone lemma *)
+  `!src id.
+     IS_SOME (FLOOKUP (get_source_immutables src
+       (case ALOOKUP st.immutables cx.txn.target of
+          SOME m => m | NONE => [])) id) <=>
+     IS_SOME (FLOOKUP (get_source_immutables src
+       (case ALOOKUP st'.immutables cx.txn.target of
+          SOME m => m | NONE => [])) id)`
+    by metis_tac[preserves_immutables_dom_is_some_bridge] >>
+  (* Step 3: Expand the goal via env_consistent_scopes_only *)
+  once_rewrite_tac[GSYM evaluation_state_scopes_id] >>
+  simp[env_consistent_scopes_only] >>
+  (* Step 4: Solve each conjunct *)
+  rpt conj_tac >> rpt strip_tac >> res_tac >> gvs[] >>
+  (* Remaining: type-value preservation clauses using Hptv *)
+  TRY (
+    first_x_assum (qspecl_then [`current_module cx`, `id`, `tv`, `v`] mp_tac) >>
+    impl_tac >- (res_tac >> gvs[]) >> strip_tac >> res_tac >> gvs[]) >>
+  TRY (
+    first_x_assum (qspecl_then [`src_id_opt`, `id`, `tv`, `v`] mp_tac) >>
+    impl_tac >- (res_tac >> gvs[]) >> strip_tac >> res_tac >> gvs[])
 QED
 
 (* safe_cast on NoneV can only produce NoneV with NoneTV *)
