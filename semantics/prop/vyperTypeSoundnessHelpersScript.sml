@@ -1445,12 +1445,12 @@ Theorem env_consistent_preserves_tv:
     env_consistent env cx st /\
     preserves_tv cx st st' /\
     MAP FDOM st'.scopes = MAP FDOM st.scopes /\
-    (!src n. IS_SOME (FLOOKUP (get_source_immutables src
+    (!src n. FLOOKUP (get_source_immutables src
         (case ALOOKUP st'.immutables cx.txn.target of
-           SOME m => m | NONE => [])) n) ==>
-             IS_SOME (FLOOKUP (get_source_immutables src
+           SOME m => m | NONE => [])) n =
+             FLOOKUP (get_source_immutables src
         (case ALOOKUP st.immutables cx.txn.target of
-           SOME m => m | NONE => [])) n)) ==>
+           SOME m => m | NONE => [])) n) ==>
     env_consistent env cx st'
 Proof
   rpt strip_tac >>
@@ -1467,21 +1467,17 @@ Proof
     rpt strip_tac >>
     drule_all lookup_scopes_type_preserved_under_preserves_tv >>
     strip_tac >>
-    drule env_consistent_var_types_soundness >>
-    disch_then drule >> simp[]
+    first_x_assum drule >> simp[]
   ) >- (
-    (* global_types completeness - use IS_SOME bridge *)
-    metis_tac[IS_SOME_DEF]
-  ) >- (
-    (* global_types soundness *)
+    (* global_types completeness: FLOOKUP equality gives IS_SOME *)
     rpt strip_tac >>
-    first_x_assum drule >> simp[] >>
-    disch_then (qspecl_then [`tv`,`v`] assume_tac) >> simp[]
-  ) >>
-    (* toplevel_types - use IS_SOME bridge for immutables *)
-    rpt strip_tac >> first_x_assum drule >> simp[] >>
-    disch_then assume_tac >> simp[] >>
-    rpt strip_tac >> res_tac >> gvs[]
+    first_x_assum (qspec_then `current_module cx` assume_tac) >>
+    first_x_assum (qspecl_then [`id`] assume_tac) >>
+    gvs[IS_SOME_DEF]
+  )
+  (* toplevel_types: res_tac connects old assumption to goal.
+     flag_members: already solved by simp from FLOOKUP equality. *)
+  rpt strip_tac >> res_tac >> gvs[]
 QED
 
 (* bind_arguments stores evaluate_type results *)
@@ -3926,12 +3922,9 @@ val ec_unconditional_tac =
   TRY (imp_res_tac eval_exprs_preserves_immutables_dom) >>
   simp[] >>
   rpt strip_tac >>
-  `(IS_SOME (ALOOKUP st.immutables cx.txn.target) <=>
-    IS_SOME (ALOOKUP st'.immutables cx.txn.target))` by simp[] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
-  gvs[] >>
-  res_tac >> gvs[];
+  `(ALOOKUP st.immutables cx.txn.target) =
+   (ALOOKUP st'.immutables cx.txn.target)` by simp[] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[];
 
 Theorem eval_expr_preserves_ec:
   !cx e st res st' env.
@@ -3971,11 +3964,9 @@ local
     rpt strip_tac >>
     imp_res_tac imms_addr_thm >>
     imp_res_tac imms_dom_thm >>
-    `(IS_SOME (ALOOKUP st.immutables cx.txn.target) <=>
-      IS_SOME (ALOOKUP st'.immutables cx.txn.target))` by simp[] >>
-    Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-    Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
-    gvs[] >> res_tac >> gvs[]
+    `(ALOOKUP st.immutables cx.txn.target) =
+     (ALOOKUP st'.immutables cx.txn.target)` by simp[] >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[]
 in
 
 Theorem eval_expr_preserves_ec_stk:
