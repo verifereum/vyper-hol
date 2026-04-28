@@ -232,7 +232,7 @@ End
  * Matches Python segment_from_ops. *)
 Definition bp_segment_from_ops_def:
   bp_segment_from_ops result (ops : inst_access_ops) =
-    let size = case ops.iao_size of
+    let size = case ops.iao_max_size of
                  SOME (Lit n) => SOME (w2n n)
                | _ => NONE
     in

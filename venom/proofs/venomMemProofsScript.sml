@@ -197,16 +197,16 @@ Proof
   `LENGTH (word_to_bytes val T) = 32` by rw[len_word_to_bytes_256] >>
   `off1 + 32 <= LENGTH expanded` by
     (rw[Abbr `expanded`] >> rw[LENGTH_APPEND, LENGTH_REPLICATE] >> fs[]) >>
-  (* Step 1: splice lemma on the inner TAKE/DROP *)
+  (* Splice lemma on the inner TAKE/DROP. *)
   `TAKE 32 (DROP off2 (TAKE off1 expanded ++ word_to_bytes val T ++
      DROP (off1 + 32) expanded)) = TAKE 32 (DROP off2 expanded)` by
     (irule take_drop_splice_disjoint >> rw[]) >>
-  (* Step 2: lift to padded version via take_cong_append *)
+  (* Lift to the padded version via take_cong_append. *)
   `TAKE 32 (DROP off2 (TAKE off1 expanded ++ word_to_bytes val T ++
      DROP (off1 + 32) expanded) ++ REPLICATE 32 0w) =
    TAKE 32 (DROP off2 expanded ++ REPLICATE 32 0w)` by
     (irule take_cong_append >> rw[]) >>
-  (* Step 3: padding irrelevance *)
+  (* Padding irrelevance. *)
   `TAKE 32 (DROP off2 expanded ++ REPLICATE 32 0w) =
    TAKE 32 (DROP off2 mem ++ REPLICATE 32 0w)` by
     (rw[Abbr `expanded`] >> rw[take_drop_pad_combined]) >>
@@ -467,7 +467,7 @@ Theorem alloca_inv_joint[local]:
 Proof
   ho_match_mp_tac run_defs_ind >> rpt conj_tac >> rpt strip_tac
   >- (
-    (* P0: step_inst *)
+    (* step_inst case *)
     Cases_on `inst.inst_opcode = INVOKE`
     >- (
       ONCE_REWRITE_TAC[step_inst_def] >> simp[] >>
@@ -496,7 +496,7 @@ Proof
     )
   )
   >- (
-    (* P1: exec_block *)
+    (* exec_block case *)
     ONCE_REWRITE_TAC[exec_block_def] >> simp[] >>
     rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
     (* Remaining: recursive case, ¬is_terminator *)
@@ -507,7 +507,7 @@ Proof
     qexists_tac `v.vs_alloca_next` >> gvs[]
   )
   >- (
-    (* P2: run_blocks *)
+    (* run_blocks case *)
     ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
     rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
     (* Recursive case: exec_block returned OK, not halted *)
