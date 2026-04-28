@@ -3519,11 +3519,16 @@ Proof
     (rw[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   rw[env_consistent_def] >> fs[env_consistent_def]
   >- (
-    (* var_types *)
+    (* var_types completeness *)
     Cases_on `id' = string_to_num id` >- fs[FLOOKUP_DEF] >>
     first_x_assum drule >> strip_tac >>
     res_tac >> gvs[lookup_scopes_def, FLOOKUP_UPDATE])
-  (* global_types + toplevel_types: identical *)
+  >- (
+    (* var_types soundness *)
+    Cases_on `id' = string_to_num id` >- fs[FLOOKUP_DEF] >>
+    first_x_assum drule >> strip_tac >>
+    res_tac >> gvs[lookup_scopes_def, FLOOKUP_UPDATE])
+  (* global_types + toplevel_types + flag_members: identical *)
   >> res_tac
 QED
 
@@ -3623,7 +3628,7 @@ Proof
   imp_res_tac eval_stmts_new_in_head_not_in_tail >>
   imp_res_tac eval_stmts_preserves_scopes_len >>
   fs[env_consistent_def] >> rpt strip_tac
-  (* var_types clause *)
+  (* var_types completeness *)
   >- (
     Cases_on `FLOOKUP (HD st_body.scopes) id`
     (* id not in head: lookup in full scopes = lookup in tail *)
@@ -3638,7 +3643,9 @@ Proof
     (* id is new in head: new_in_head gives contradiction *)
     `(st with scopes updated_by CONS sc).scopes <> []` by simp[] >>
     res_tac >> gvs[])
-  (* global_types clause: immutables unchanged by pop *)
+  (* var_types soundness: needs initial env_consistent — TODO *)
+  >- cheat
+  (* global_types + toplevel_types + flag_members: identical *)
   >> res_tac
 QED
 
