@@ -1378,10 +1378,30 @@ Proof
   first_x_assum(qspec_then`SUC j`mp_tac) >> rw[]
 QED
 
+(* Helper: MAP FDOM equality gives FDOM equality at each index *)
+Theorem MAP_FDOM_EL_FDOM:
+  !l1 l2 i. MAP FDOM l1 = MAP FDOM l2 /\ i < LENGTH l1 ==>
+            FDOM (EL i l1) = FDOM (EL i l2)
+Proof
+  rpt strip_tac >>
+  `LENGTH l1 = LENGTH l2` by metis_tac[LENGTH_MAP] >>
+  `EL i (MAP FDOM l1) = FDOM (EL i l1)` by simp[rich_listTheory.EL_MAP] >>
+  `EL i (MAP FDOM l2) = FDOM (EL i l2)` by simp[rich_listTheory.EL_MAP] >>
+  metis_tac[]
+QED
+
+(* Helper: FLOOKUP NONE iff not in FDOM (IFF version) *)
+Theorem FLOOKUP_NONE_NOTIN_FDOM:
+  !fm k. (FLOOKUP fm k = NONE <=> k NOTIN FDOM fm) /\
+         (FLOOKUP fm k = SOME v ==> k IN FDOM fm)
+Proof
+  metis_tac[finite_mapTheory.flookup_thm]
+QED
+
 (* Bridge lemma: preserves_tv + MAP FDOM equality gives reverse lookup_scopes
    type preservation. preserves_tv goes st→st', but env_consistent_preserves_tv
-   needs st'→st. MAP FDOM equality ensures the entry exists in st at the same
-   position, and preserves_tv gives the type match. *)
+   needs st'→st. Key: use EL-based boundary lemmas + SIMP_RULE (NOT fs) on
+   preserves_tv_def to avoid polluting the assumption context. *)
 Theorem lookup_scopes_type_preserved_under_preserves_tv:
   !cx st st' id entry.
     preserves_tv cx st st' /\
@@ -1391,31 +1411,34 @@ Theorem lookup_scopes_type_preserved_under_preserves_tv:
 Proof
   rpt strip_tac >>
   drule lookup_scopes_EL >> strip_tac >>
-  `i < LENGTH st.scopes` by fs[preserves_tv_def] >>
-  `FDOM (EL i st.scopes) = FDOM (EL i st'.scopes)` by
-    simp[rich_listTheory.EL_MAP] >>
+  `i < LENGTH st.scopes` by (
+    qpat_x_assum `preserves_tv _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [preserves_tv_def]) >>
+    first_x_assum (qspec_then `i` assume_tac) >> fs[]) >>
+  `FDOM (EL i st.scopes) = FDOM (EL i st'.scopes)` by (
+    drule MAP_FDOM_EL_FDOM >> simp[]) >>
   `id IN FDOM (EL i st.scopes)` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
   `?entry'. FLOOKUP (EL i st.scopes) id = SOME entry'` by
     metis_tac[finite_mapTheory.flookup_thm] >>
   `?entry''. FLOOKUP (EL i st'.scopes) id = SOME entry'' /\
              entry''.type = entry'.type` by (
-    qpat_x_assum `preserves_tv _ _ _` mp_tac >>
-    simp[preserves_tv_def] >> strip_tac >>
-    first_x_assum drule >> simp[]
-  ) >>
-  `entry''.type = entry.type` by
-    metis_tac[finite_mapTheory.flookup_thm, optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+    qpat_x_assum `preserves_tv _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [preserves_tv_def]) >>
+    first_x_assum (qspecl_then [`i`, `id`, `entry'`] mp_tac) >> simp[]) >>
+  `entry'' = entry` by
+    metis_tac[finite_mapTheory.flookup_thm, optionTheory.SOME_11] >>
   `entry.type = entry'.type` by fs[] >>
   qexists_tac `entry'` >> simp[] >>
   irule lookup_scopes_from_EL >>
-  qexists_tac `i` >> simp[rich_listTheory.EL_MAP] >>
-  simp[preserves_tv_def] >>
-  rw[] >>
-  first_x_assum (qspec_then `j` assume_tac) >> fs[] >>
-  metis_tac[finite_mapTheory.flookup_thm, rich_listTheory.EL_MAP]
+  qexists_tac `i` >> simp[] >>
+  rpt strip_tac >>
+  `FLOOKUP (EL j st.scopes) id = NONE` suffices_by simp[] >>
+  `id NOTIN FDOM (EL j st.scopes)` suffices_by
+    metis_tac[finite_mapTheory.flookup_thm] >>
+  `FDOM (EL j st.scopes) = FDOM (EL j st'.scopes)` by (
+    drule MAP_FDOM_EL_FDOM >> simp[]) >>
+  metis_tac[finite_mapTheory.flookup_thm]
 QED
-
-
 
 Theorem env_consistent_preserves_tv:
   !env cx st st'.
