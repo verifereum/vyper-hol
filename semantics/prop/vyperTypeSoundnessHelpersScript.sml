@@ -1445,39 +1445,46 @@ Theorem env_consistent_preserves_tv:
     env_consistent env cx st /\
     preserves_tv cx st st' /\
     MAP FDOM st'.scopes = MAP FDOM st.scopes /\
-    (!src n. FLOOKUP (get_source_immutables src
+    (!src n. IS_SOME (FLOOKUP (get_source_immutables src
         (case ALOOKUP st'.immutables cx.txn.target of
-           SOME m => m | NONE => [])) n =
-             FLOOKUP (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of
            SOME m => m | NONE => [])) n) ==>
+             IS_SOME (FLOOKUP (get_source_immutables src
+        (case ALOOKUP st.immutables cx.txn.target of
+           SOME m => m | NONE => [])) n)) ==>
     env_consistent env cx st'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `env_consistent _ _ _`
-    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only] o
-     SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
-  once_rewrite_tac[GSYM evaluation_state_scopes_id] >>
-  simp[env_consistent_scopes_only] >>
-  rpt conj_tac >- (
-    (* var_types completeness *)
-    metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]
-  ) >- (
-    (* var_types soundness: use bridge lemma to go from st' to st *)
-    rpt strip_tac >>
+  rw[env_consistent_scopes_only, GSYM evaluation_state_scopes_id]
+  >- ((* var_types completeness *)
+    first_x_assum drule >> strip_tac >>
+    metis_tac[lookup_scopes_is_some_same_fdoms])
+  >- ((* var_types soundness *)
     drule_all lookup_scopes_type_preserved_under_preserves_tv >>
-    strip_tac >>
-    first_x_assum drule >> simp[]
-  ) >- (
-    (* global_types completeness: FLOOKUP equality gives IS_SOME *)
-    rpt strip_tac >>
-    first_x_assum (qspec_then `current_module cx` assume_tac) >>
-    first_x_assum (qspecl_then [`id`] assume_tac) >>
-    gvs[IS_SOME_DEF]
-  )
-  (* toplevel_types: res_tac connects old assumption to goal.
-     flag_members: already solved by simp from FLOOKUP equality. *)
-  rpt strip_tac >> res_tac >> gvs[]
+    strip_tac >> first_x_assum drule >> simp[])
+  >- ((* global_types completeness *)
+    first_x_assum drule >> strip_tac >>
+    qpat_x_assum `preserves_tv _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [preserves_tv_def]) >>
+    first_x_assum drule >> simp[])
+  >- ((* global_types soundness *)
+    first_x_assum drule >> strip_tac >>
+    Cases_on `tv0'` >> rename1 `FLOOKUP _ id = SOME (tv0, v0)` >>
+    `evaluate_type (get_tenv cx) ty = SOME tv0` by res_tac >>
+    qpat_x_assum `preserves_tv _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [preserves_tv_def]) >>
+    first_x_assum drule >> simp[] >>
+    metis_tac[optionTheory.SOME_11, pair_case_eq])
+  >- ((* toplevel_types StorageVarDecl *)
+    res_tac)
+  >- ((* toplevel_types HashMapVarDecl *)
+    res_tac)
+  >- ((* toplevel_types Immutable *)
+    first_x_assum (qspecl_then [`src_id_opt`, `id`] strip_assume_tac) >>
+    Cases_on `tv0'` >> rename1 `FLOOKUP _ id = SOME (tv0, v0)` >>
+    `evaluate_type (get_tenv cx) ty = SOME tv0` by res_tac >>
+    qpat_x_assum `preserves_tv _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [preserves_tv_def]) >>
+    first_x_assum drule >> simp[] >>
+    metis_tac[optionTheory.SOME_11, pair_case_eq])
 QED
 
 (* bind_arguments stores evaluate_type results *)
@@ -3922,9 +3929,12 @@ val ec_unconditional_tac =
   TRY (imp_res_tac eval_exprs_preserves_immutables_dom) >>
   simp[] >>
   rpt strip_tac >>
-  `(ALOOKUP st.immutables cx.txn.target) =
-   (ALOOKUP st'.immutables cx.txn.target)` by simp[] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[];
+  `(IS_SOME (ALOOKUP st.immutables cx.txn.target) <=>
+    IS_SOME (ALOOKUP st'.immutables cx.txn.target))` by simp[] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
+  gvs[] >>
+  res_tac >> gvs[];
 
 Theorem eval_expr_preserves_ec:
   !cx e st res st' env.
@@ -3964,9 +3974,11 @@ local
     rpt strip_tac >>
     imp_res_tac imms_addr_thm >>
     imp_res_tac imms_dom_thm >>
-    `(ALOOKUP st.immutables cx.txn.target) =
-     (ALOOKUP st'.immutables cx.txn.target)` by simp[] >>
-    Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[]
+    `(IS_SOME (ALOOKUP st.immutables cx.txn.target) <=>
+      IS_SOME (ALOOKUP st'.immutables cx.txn.target))` by simp[] >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+    Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
+    gvs[] >> res_tac >> gvs[]
 in
 
 Theorem eval_expr_preserves_ec_stk:
