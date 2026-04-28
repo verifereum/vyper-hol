@@ -2,6 +2,8 @@
 **/.hol/
 **/.alan/
 
+.holbuild
+
 # Interactive HOL4 session files
 .hol_init.sml
 .hol_cmd.sml
