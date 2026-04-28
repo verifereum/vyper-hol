@@ -3657,6 +3657,29 @@ Proof
   metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]
 QED
 
+(* Boundary lemma: var_types entries are not in the head scope after bracket evaluation.
+   Proved as standalone to avoid by-block matching issues with duplicate env_consistent assumptions. *)
+Theorem var_types_not_in_head_scope:
+  !env cx st sc t h id ty.
+    env_consistent env cx st /\
+    MAP FDOM st.scopes = MAP FDOM t /\
+    (!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc) /\
+    (!id. id NOTIN FDOM sc ==> id IN FDOM h ==> lookup_scopes id t = NONE) /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    FLOOKUP h id = NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `id IN FDOM h`
+  >- ( (* id IN FDOM h: contradiction *)
+    `id IN FDOM env.var_types` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+    `id NOTIN FDOM sc` by metis_tac[] >>
+    `lookup_scopes id t = NONE` by metis_tac[] >>
+    drule env_consistent_var_types_completeness >> simp[] >>
+    metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF])
+  >- ( (* id NOTIN FDOM h: FLOOKUP returns NONE directly *)
+    simp[FLOOKUP_DEF])
+QED
+
 Theorem scope_bracket_preserves_ec:
   !env cx st sc ss res st_body.
     env_consistent env cx st /\
@@ -3670,17 +3693,17 @@ Proof
   imp_res_tac eval_stmts_preserves_scopes_len >>
   imp_res_tac eval_stmts_preserves_scopes_dom >>
   Cases_on `st_body.scopes` >> gvs[] >>
-  (* Extract MAP FDOM st.scopes = MAP FDOM t from preserves_scopes_dom *)
   fs[preserves_scopes_dom_def] >>
-  (* Key: no var_types entries are in the head scope h *)
   `!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE` by (
-    rpt strip_tac >> SPOSE_NOT_THEN assume_tac >> gvs[FLOOKUP_DEF] >>
-    `id IN FDOM env.var_types` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
-    `id NOTIN FDOM sc` by metis_tac[] >>
-    `lookup_scopes id t = NONE` by metis_tac[] >>
-    `IS_SOME (lookup_scopes id st.scopes)` by
-      metis_tac[env_consistent_var_types_completeness] >>
-    metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]) >>
+    rpt strip_tac >>
+    Cases_on `id IN FDOM h`
+    >- (
+      `id IN FDOM env.var_types` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+      `id NOTIN FDOM sc` by metis_tac[] >>
+      `lookup_scopes id t = NONE` by metis_tac[] >>
+      rev_drule env_consistent_var_types_completeness >> simp[] >>
+      metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF])
+    >- simp[FLOOKUP_DEF]) >>
   drule_all pop_scope_ec >> simp[]
 QED
 
@@ -5248,7 +5271,8 @@ Theorem scope_bracket_preserves:
   !cx ss st q st_body env.
     eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
     state_well_typed st_body /\
-    env_consistent env cx st_body ==>
+    env_consistent env cx st_body /\
+    env_consistent env cx st ==>
     state_well_typed (st_body with scopes := TL st_body.scopes) /\
     env_consistent env cx (st_body with scopes := TL st_body.scopes)
 Proof
@@ -6606,22 +6630,27 @@ Theorem env_consistent_immutables_ptv:
             SOME m => m | NONE => [])) id = SOME (tv, v')) ==>
     env_consistent env cx st'
 Proof
-  rw[env_consistent_def]
-  (* var_types: depends only on scopes, which are the same *)
-  >- metis_tac[]
-  (* global_types: uses current_module immutables *)
-  >- (rename1 `FLOOKUP env.global_types id = SOME ty` >>
-      first_x_assum (qspecl_then [`current_module cx`, `id`, `tv`, `v`] mp_tac) >>
-      simp[] >> strip_tac >> res_tac)
-  (* toplevel_types: StorageVarDecl *)
+  rpt strip_tac >>
+  simp[env_consistent_scopes_only, PULL_EXISTS] >>
+  rpt conj_tac
+  >- ( (* var_types completeness *)
+    first_x_assum (irule_at (Pat `IS_SOME _`)) >> simp[])
+  >- ( (* var_types soundness *)
+    first_x_assum (irule_at (Pat `evaluate_type _ _ = SOME _`)) >> simp[])
+  >- ( (* global_types completeness *)
+    first_x_assum (qspecl_then [`current_module cx`, `id`] mp_tac) >>
+    simp[IS_SOME_EXISTS])
+  >- ( (* global_types soundness *)
+    first_x_assum (qspecl_then [`current_module cx`, `id`, `tv`, `v`] mp_tac) >>
+    simp[] >> strip_tac >> first_x_assum (irule_at (Pat `evaluate_type _ _ = SOME _`)) >>
+    simp[])
   >- res_tac
-  (* toplevel_types: HashMapVarDecl *)
   >- res_tac
-  (* toplevel_types: immutable *)
-  >- (first_x_assum (qspecl_then [`src_id_opt`, `id`, `tv`, `v`] mp_tac) >>
-      simp[] >> strip_tac >> res_tac)
-  (* flag_members: no immutables dependency *)
-  >> res_tac >> metis_tac[]
+  >- ( (* toplevel_types immutable *)
+    first_x_assum (qspecl_then [`src_id_opt`, `id`, `tv`, `v`] mp_tac) >>
+    simp[] >> strip_tac >> res_tac)
+  >- ( (* flag_members *)
+    res_tac >> metis_tac[])
 QED
 
 (* ===== IntCall tail helpers ===== *)
