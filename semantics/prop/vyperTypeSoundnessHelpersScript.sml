@@ -572,6 +572,8 @@ Theorem functions_well_typed_body_full:
       env_body.type_defs = get_tenv cx /\
       env_body.fn_sigs = fn_sigs /\
       env_body.global_types = FEMPTY /\
+      env_body.toplevel_types = FEMPTY /\
+      env_body.flag_members = FEMPTY /\
       evaluate_type (get_tenv cx) ret = SOME ret_tv /\
       well_typed_stmts env_body ret body /\
       well_typed_exprs
@@ -584,32 +586,18 @@ Theorem functions_well_typed_body_full:
       (!id typ. MEM (id, typ) args ==>
          FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
       MAP expr_type dflts =
-        MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
-      (!src id ty ts'.
-         FLOOKUP env_body.toplevel_types (src, id) = SOME ty /\
-         get_module_code cx src = SOME ts' ==>
-         (!is_transient typ id_str.
-            find_var_decl_by_num id ts' =
-              SOME (StorageVarDecl is_transient typ, id_str) ==>
-            typ = ty) /\
-         (!is_transient kt vt id_str.
-            find_var_decl_by_num id ts' =
-              SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
-            ty = NoneT) /\
-         (find_var_decl_by_num id ts' = NONE ==>
-          !tv v imms.
-            FLOOKUP (get_source_immutables src
-              (case ALOOKUP imms cx.txn.target of
-                 NONE => [] | SOME m => m)) id = SOME (tv, v) ==>
-            evaluate_type (get_tenv cx) ty = SOME tv)) /\
-      (!src fid ls.
-         FLOOKUP env_body.flag_members (src, fid) = SOME ls ==>
-         ?ts'. get_module_code cx src = SOME ts' /\
-               lookup_flag fid ts' = SOME ls /\
-               FLOOKUP (get_tenv cx) (string_to_num fid) =
-                 SOME (FlagArgs (LENGTH ls)))
+        MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 Proof
-  rw[functions_well_typed_def] >> simp[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `functions_well_typed cx` (fn th =>
+    let
+      val body = REWRITE_RULE[functions_well_typed_def] th
+      val fempty_tt = inst [alpha |-> ``:num option # num``, beta |-> ``:type``] ``FEMPTY``
+      val fempty_fm = inst [alpha |-> ``:num option # string``, beta |-> ``:string list``] ``FEMPTY``
+      val spec = SPECL [``fn_sigs:num option # string |-> fn_sig``, fempty_tt, fempty_fm] body
+      val simplified = SIMP_RULE (srw_ss()) [FLOOKUP_EMPTY] spec
+    in STRIP_ASSUME_TAC simplified end) >>
+  metis_tac[]
 QED
 
 (* state_well_typed depends only on scopes and immutables *)
