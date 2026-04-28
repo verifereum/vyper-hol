@@ -1252,6 +1252,20 @@ Proof
   simp[lookup_scopes_def]
 QED
 
+(* If two scope lists have the same FDOMs position-by-position, then
+   lookup_scopes finds the same ids (IS_SOME agrees). *)
+Theorem lookup_scopes_is_some_same_fdoms:
+  !scopes1 scopes2 id.
+    MAP FDOM scopes1 = MAP FDOM scopes2 ==>
+    (IS_SOME (lookup_scopes id scopes1) <=> IS_SOME (lookup_scopes id scopes2))
+Proof
+  Induct >> simp[lookup_scopes_def] >> Cases_on `scopes2` >> gvs[] >>
+  rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[lookup_scopes_def] >>
+  Cases_on `FLOOKUP h' id` >> gvs[lookup_scopes_def] >>
+  Cases_on `id ∈ FDOM h` >> gvs[FLOOKUP_DEF] >>
+  Cases_on `id ∈ FDOM h'` >> gvs[FLOOKUP_DEF]
+QED
+
 (* Small helper: specializing a universal with if-then-else away.
    When id <> nm, the if-then-else simplifies, and we can extract
    the conclusion with just the FLOOKUP antecedent. *)
@@ -3617,8 +3631,35 @@ QED
    - var_types: variables in tail are found by lookup_scopes in both
      st_body.scopes and TL st_body.scopes (new head entries aren't in tail)
    - global_types/type_defs/fn_sigs: unchanged by pop_scope *)
+
+(* Key fact used by scope_bracket_preserves_ec:
+   If a variable id is in env.var_types, and evaluation added new entries
+   to the head scope (not in the original pushed scope sc), and the tail
+   domains are preserved, then the id cannot be in the head scope.
+   Contradiction: id would be visible in tail (from env_consistent + domain match)
+   but new_in_head says it's not. *)
+Theorem new_in_head_contradicts_var_types:
+  !env cx st sc t h id ty.
+    env_consistent env cx st /\
+    MAP FDOM st.scopes = MAP FDOM t /\
+    (!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc) /\
+    (!id. id NOTIN FDOM sc ==> id IN FDOM h ==> lookup_scopes id t = NONE) /\
+    FLOOKUP env.var_types id = SOME ty /\
+    id IN FDOM h ==>
+    F
+Proof
+  rpt strip_tac >>
+  `id IN FDOM env.var_types` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+  `id NOTIN FDOM sc` by metis_tac[] >>
+  `lookup_scopes id t = NONE` by metis_tac[] >>
+  `IS_SOME (lookup_scopes id st.scopes)` by
+    metis_tac[env_consistent_var_types_completeness] >>
+  metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]
+QED
+
 Theorem scope_bracket_preserves_ec:
   !env cx st sc ss res st_body.
+    env_consistent env cx st /\
     env_consistent env cx st_body /\
     eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st_body) /\
     (!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc) ==>
@@ -3627,26 +3668,20 @@ Proof
   rpt strip_tac >>
   imp_res_tac eval_stmts_new_in_head_not_in_tail >>
   imp_res_tac eval_stmts_preserves_scopes_len >>
-  fs[env_consistent_def] >> rpt strip_tac
-  (* var_types completeness *)
-  >- (
-    Cases_on `FLOOKUP (HD st_body.scopes) id`
-    (* id not in head: lookup in full scopes = lookup in tail *)
-    >- (res_tac >> Cases_on `st_body.scopes` >> gvs[lookup_scopes_def] >> res_tac)
-    (* id in head of st_body *)
-    >> `id IN FDOM (HD st_body.scopes)` by gvs[FLOOKUP_DEF] >>
-    (* id not in pushed head sc (by disjointness with env.var_types) *)
-    `id NOTIN FDOM sc` by
-      (first_x_assum irule >> gvs[FLOOKUP_DEF]) >>
-    `id NOTIN FDOM (HD ((st with scopes updated_by CONS sc).scopes))` by
-      simp[] >>
-    (* id is new in head: new_in_head gives contradiction *)
-    `(st with scopes updated_by CONS sc).scopes <> []` by simp[] >>
-    res_tac >> gvs[])
-  (* var_types soundness: needs initial env_consistent — TODO *)
-  >- cheat
-  (* global_types + toplevel_types + flag_members: identical *)
-  >> res_tac
+  imp_res_tac eval_stmts_preserves_scopes_dom >>
+  Cases_on `st_body.scopes` >> gvs[] >>
+  (* Extract MAP FDOM st.scopes = MAP FDOM t from preserves_scopes_dom *)
+  fs[preserves_scopes_dom_def] >>
+  (* Key: no var_types entries are in the head scope h *)
+  `!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE` by (
+    rpt strip_tac >> SPOSE_NOT_THEN assume_tac >> gvs[FLOOKUP_DEF] >>
+    `id IN FDOM env.var_types` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+    `id NOTIN FDOM sc` by metis_tac[] >>
+    `lookup_scopes id t = NONE` by metis_tac[] >>
+    `IS_SOME (lookup_scopes id st.scopes)` by
+      metis_tac[env_consistent_var_types_completeness] >>
+    metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]) >>
+  drule_all pop_scope_ec >> simp[]
 QED
 
 (* After pushing a scope and running eval_stmts, popping preserves
