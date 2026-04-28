@@ -1378,6 +1378,45 @@ Proof
   first_x_assum(qspec_then`SUC j`mp_tac) >> rw[]
 QED
 
+(* Bridge lemma: preserves_tv + MAP FDOM equality gives reverse lookup_scopes
+   type preservation. preserves_tv goes st→st', but env_consistent_preserves_tv
+   needs st'→st. MAP FDOM equality ensures the entry exists in st at the same
+   position, and preserves_tv gives the type match. *)
+Theorem lookup_scopes_type_preserved_under_preserves_tv:
+  !cx st st' id entry.
+    preserves_tv cx st st' /\
+    MAP FDOM st'.scopes = MAP FDOM st.scopes /\
+    lookup_scopes id st'.scopes = SOME entry ==>
+    ?entry'. lookup_scopes id st.scopes = SOME entry' /\ entry.type = entry'.type
+Proof
+  rpt strip_tac >>
+  drule lookup_scopes_EL >> strip_tac >>
+  `i < LENGTH st.scopes` by fs[preserves_tv_def] >>
+  `FDOM (EL i st.scopes) = FDOM (EL i st'.scopes)` by
+    simp[rich_listTheory.EL_MAP] >>
+  `id IN FDOM (EL i st.scopes)` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+  `?entry'. FLOOKUP (EL i st.scopes) id = SOME entry'` by
+    metis_tac[finite_mapTheory.flookup_thm] >>
+  `?entry''. FLOOKUP (EL i st'.scopes) id = SOME entry'' /\
+             entry''.type = entry'.type` by (
+    qpat_x_assum `preserves_tv _ _ _` mp_tac >>
+    simp[preserves_tv_def] >> strip_tac >>
+    first_x_assum drule >> simp[]
+  ) >>
+  `entry''.type = entry.type` by
+    metis_tac[finite_mapTheory.flookup_thm, optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  `entry.type = entry'.type` by fs[] >>
+  qexists_tac `entry'` >> simp[] >>
+  irule lookup_scopes_from_EL >>
+  qexists_tac `i` >> simp[rich_listTheory.EL_MAP] >>
+  simp[preserves_tv_def] >>
+  rw[] >>
+  first_x_assum (qspec_then `j` assume_tac) >> fs[] >>
+  metis_tac[finite_mapTheory.flookup_thm, rich_listTheory.EL_MAP]
+QED
+
+
+
 Theorem env_consistent_preserves_tv:
   !env cx st st'.
     env_consistent env cx st /\
@@ -1401,15 +1440,12 @@ Proof
     (* var_types completeness *)
     metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]
   ) >- (
-    (* var_types soundness *)
+    (* var_types soundness: use bridge lemma to go from st' to st *)
     rpt strip_tac >>
-    `IS_SOME (lookup_scopes id st.scopes)` by
-      metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF] >>
-    drule env_consistent_var_types_soundness >> simp[] >>
-    simp[preserves_tv_def, env_consistent_var_types_soundness] >>
-    first_x_assum (qspecl_then [`id`,`ty`] mp_tac) >> simp[] >>
-    strip_tac >> first_x_assum drule >> simp[] >>
-    rpt strip_tac >> first_x_assum drule >> simp[]
+    drule_all lookup_scopes_type_preserved_under_preserves_tv >>
+    strip_tac >>
+    drule env_consistent_var_types_soundness >>
+    disch_then drule >> simp[]
   ) >- (
     (* global_types completeness - use IS_SOME bridge *)
     metis_tac[IS_SOME_DEF]
