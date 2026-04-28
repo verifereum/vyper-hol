@@ -6613,14 +6613,16 @@ Proof
   imp_res_tac release_nonreentrant_lock_immutables >> gvs[]
 QED
 
-(* env_consistent preserved when scopes are the same and immutables
-   type_values are monotonically preserved (weaker than scopes_immutables
-   which requires exact immutables equality). Useful after function calls
-   where the body may modify immutables but preserves their type_values. *)
+(* env_consistent preserved when scopes are the same, immutables domain
+   is preserved (IS_SOME equivalence), and immutables type_values are
+   preserved (every entry in st'.immutables has a matching tv entry in
+   st.immutables). Useful after function calls where the body may modify
+   immutable values but preserves their type_values and domain. *)
 Theorem env_consistent_immutables_ptv:
   !env cx st st'.
     env_consistent env cx st /\
     st'.scopes = st.scopes /\
+    preserves_immutables_dom cx st st' /\
     (!src id tv v.
        FLOOKUP (get_source_immutables src
          (case ALOOKUP st'.immutables cx.txn.target of
@@ -6631,29 +6633,20 @@ Theorem env_consistent_immutables_ptv:
     env_consistent env cx st'
 Proof
   rpt strip_tac >>
-  simp[env_consistent_scopes_only, PULL_EXISTS] >>
-  rpt conj_tac
-  >- ( (* var_types completeness *)
-    first_x_assum (irule_at (Pat `IS_SOME _`)) >> simp[])
-  >- ( (* var_types soundness *)
-    first_x_assum (irule_at (Pat `evaluate_type _ _ = SOME _`)) >> simp[])
-  >- ( (* global_types completeness *)
-    first_x_assum (qspecl_then [`current_module cx`, `id`] mp_tac) >>
-    simp[IS_SOME_EXISTS])
-  >- ( (* global_types soundness *)
-    first_x_assum (qspecl_then [`current_module cx`, `id`, `tv`, `v`] mp_tac) >>
-    simp[] >> strip_tac >> first_x_assum (irule_at (Pat `evaluate_type _ _ = SOME _`)) >>
-    simp[])
-  >- res_tac
-  >- res_tac
-  >- ( (* toplevel_types immutable *)
-    first_x_assum (qspecl_then [`src_id_opt`, `id`, `tv`, `v`] mp_tac) >>
-    simp[] >> strip_tac >> res_tac)
-  >- ( (* flag_members *)
-    res_tac >> metis_tac[])
+  SUBST_ALL_TAC (SYM (Q.SPEC `st'` evaluation_state_scopes_id)) >>
+  SUBST_ALL_TAC (SYM (Q.SPEC `st` evaluation_state_scopes_id)) >>
+  once_rewrite_tac[env_consistent_scopes_only] >>
+  qpat_x_assum `env_consistent _ _ _`
+    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only]) >>
+  simp[evaluation_state_accfupds, combinTheory.C_DEF, PULL_EXISTS] >>
+  rpt conj_tac >> rpt strip_tac >> res_tac >> TRY (
+    qpat_x_assum `preserves_immutables_dom _ _ _` mp_tac >>
+    simp[preserves_immutables_dom_def] >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+    Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[]) >>
+  first_x_assum (qspecl_then [`current_module cx`, `id`, `tv`, `v`] mp_tac) >>
+  simp[] >> strip_tac >> res_tac
 QED
-
-(* ===== IntCall tail helpers ===== *)
 
 (* safe_cast on NoneV can only produce NoneV with NoneTV *)
 Theorem safe_cast_NoneV:
