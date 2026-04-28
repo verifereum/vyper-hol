@@ -609,9 +609,7 @@ Theorem functions_well_typed_body_full:
                FLOOKUP (get_tenv cx) (string_to_num fid) =
                  SOME (FlagArgs (LENGTH ls)))
 Proof
-  rw[functions_well_typed_def] >>
-  gvs[value_has_type_inv] >>
-  cheat
+  rw[functions_well_typed_def] >> simp[]
 QED
 
 (* state_well_typed depends only on scopes and immutables *)
@@ -1405,7 +1403,38 @@ Theorem env_consistent_preserves_tv:
            SOME m => m | NONE => [])) n)) ==>
     env_consistent env cx st'
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `env_consistent _ _ _`
+    (strip_assume_tac o REWRITE_RULE[env_consistent_scopes_only] o
+     SUBS [SYM (Q.SPEC `st` evaluation_state_scopes_id)]) >>
+  once_rewrite_tac[GSYM evaluation_state_scopes_id] >>
+  simp[env_consistent_scopes_only] >>
+  rpt conj_tac >- (
+    (* var_types completeness *)
+    metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF]
+  ) >- (
+    (* var_types soundness *)
+    rpt strip_tac >>
+    `IS_SOME (lookup_scopes id st.scopes)` by
+      metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF] >>
+    drule env_consistent_var_types_soundness >> simp[] >>
+    simp[preserves_tv_def, env_consistent_var_types_soundness] >>
+    first_x_assum (qspecl_then [`id`,`ty`] mp_tac) >> simp[] >>
+    strip_tac >> first_x_assum drule >> simp[] >>
+    rpt strip_tac >> first_x_assum drule >> simp[]
+  ) >- (
+    (* global_types completeness - use IS_SOME bridge *)
+    metis_tac[IS_SOME_DEF]
+  ) >- (
+    (* global_types soundness *)
+    rpt strip_tac >>
+    first_x_assum drule >> simp[] >>
+    disch_then (qspecl_then [`tv`,`v`] assume_tac) >> simp[]
+  ) >>
+    (* toplevel_types - use IS_SOME bridge for immutables *)
+    rpt strip_tac >> first_x_assum drule >> simp[] >>
+    disch_then assume_tac >> simp[] >>
+    rpt strip_tac >> res_tac >> gvs[]
 QED
 
 (* bind_arguments stores evaluate_type results *)
@@ -6624,20 +6653,26 @@ QED
 Theorem preserves_immutables_dom_is_some_bridge:
   !cx st st' src id.
     preserves_immutables_dom cx st st' ==>
-    IS_SOME (FLOOKUP (get_source_immutables src
+    (IS_SOME (FLOOKUP (get_source_immutables src
       (case ALOOKUP st.immutables cx.txn.target of
          SOME m => m | NONE => [])) id) <=>
-    IS_SOME (FLOOKUP (get_source_immutables src
+     IS_SOME (FLOOKUP (get_source_immutables src
       (case ALOOKUP st'.immutables cx.txn.target of
-         SOME m => m | NONE => [])) id)
+         SOME m => m | NONE => [])) id))
 Proof
-  strip_tac >>
-  drule (cj 1 preserves_immutables_dom_def) >>
-  disch_tac >>
+  rpt strip_tac >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
-  simp[get_source_immutables_def] >>
-  metis_tac[cj 2 preserves_immutables_dom_def]
+  Cases_on `ALOOKUP st'.immutables cx.txn.target`
+  >- simp[get_source_immutables_def]
+  >- (qpat_x_assum `preserves_immutables_dom _ _ _` mp_tac >>
+      simp[preserves_immutables_dom_def, get_source_immutables_def] >>
+      metis_tac[optionTheory.IS_SOME_DEF])
+  >- (qpat_x_assum `preserves_immutables_dom _ _ _` mp_tac >>
+      simp[preserves_immutables_dom_def, get_source_immutables_def] >>
+      metis_tac[optionTheory.IS_SOME_DEF])
+  >- (qpat_x_assum `preserves_immutables_dom _ _ _` mp_tac >>
+      simp[preserves_immutables_dom_def, get_source_immutables_def] >>
+      metis_tac[])
 QED
 
 Theorem env_consistent_immutables_ptv:
