@@ -75,6 +75,38 @@ Proof
        ignore_bind_def]
 QED
 
+(* No-TypeError boundary lemma for BareGlobalNameTarget.
+   Uses the SAME precondition shape as well_typed_target_BareGlobalNameTarget_IS_SOME
+   and well_typed_target_BareGlobalNameTarget_is_immutable, so imp_res_tac can match.
+   The env_consistent global_types clause gives exactly these preconditions. *)
+Theorem eval_base_target_BareGlobalNameTarget_no_type_error:
+  ∀cx st id res st'.
+    IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+        (case ALOOKUP st.immutables cx.txn.target of
+           SOME m => m | NONE => [])) (string_to_num id)) ∧
+    (∃ts. get_module_code cx (current_module cx) = SOME ts ∧
+          is_immutable_decl (string_to_num id) ts) ∧
+    eval_base_target cx (BareGlobalNameTarget id) st = (res, st') ⇒
+    ∀s. res ≠ INR (Error (TypeError s))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, return_def,
+       lift_option_type_def, type_check_def, assert_def,
+       check_def, ignore_bind_def, LET_THM] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[] >-
+    (rpt strip_tac >> gvs[] >>
+     qpat_x_assum `IS_SOME _` mp_tac >>
+     simp[get_source_immutables_def]) >>
+  simp[lift_option_type_def, return_def, raise_def, LET_THM] >>
+  Cases_on `get_module_code cx (current_module cx)` >> simp[] >-
+    (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  simp[type_check_def, assert_def, check_def, ignore_bind_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* ===== Binop Helper Lemmas ===== *)
 
 (* Unsigned subtraction when y ≤ x *)
