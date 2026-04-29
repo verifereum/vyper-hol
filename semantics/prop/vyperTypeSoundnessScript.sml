@@ -794,6 +794,9 @@ val tp_bind_err_tac =
   TRY (imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
+  (* Try IH application first (works for INL success cases and INR error cases
+     where all IH preconditions are in scope). Uses gvs[] which is safe here
+     because drule_all >> strip_tac only fires on matching goals. *)
   TRY (first_x_assum drule_all >> strip_tac >>
        imp_res_tac eval_expr_not_return >>
        imp_res_tac eval_exprs_not_return >>
@@ -803,20 +806,23 @@ val tp_bind_err_tac =
        imp_res_tac eval_iterator_not_return >>
        imp_res_tac materialise_error >>
        gvs[]) >>
+  (* Fallback: not-return facts for INR error propagation cases.
+     IMPORTANT: use simp_tac not gvs[] to avoid variable elimination
+     that would destroy variables needed by later Cases_on in the caller. *)
   TRY (imp_res_tac eval_expr_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac eval_exprs_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac eval_target_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac eval_targets_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac eval_base_target_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac eval_iterator_not_return >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac materialise_error >>
-       pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
+       pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY not_type_error_tac >>
   TRY (first_assum ACCEPT_TAC);
 
@@ -1099,40 +1105,60 @@ Resume eval_preserves_swt[Assert3]:
   simp_tac std_ss [bind_apply, BETA_THM] >>
   (* Step 1: eval_expr cx e *)
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (tp_bind_err_tac >> NO_TAC) >>
-  (* Apply P7 IH for e *)
+  reverse (Cases_on `q`) >-
+    (* INR case: error propagation, no state change.
+       Use IH for e which gives not-TypeError + state preservation. *)
+    (simp_tac (srw_ss()) [] >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  (* INL case: Apply P7 IH for e *)
   first_x_assum drule_all >> strip_tac >>
-  (* Step 2: switch_BoolV — True returns, False continues *)
+  (* From IH: toplevel_value_typed x tyv where evaluate_type gives BoolTV.
+     BaseT implies x is a Value (not HashMapRef/ArrayRef) *)
+  `?v. x = Value v` by (
+    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+    imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+    metis_tac[toplevel_value_typed_not_ArrayRef]) >>
+  (* Step 2: switch_BoolV — expands to if-then-else *)
   simp_tac (srw_ss()) [switch_BoolV_def, COND_RATOR, bind_apply, BETA_THM,
                         return_def] >>
-  Cases_on `x = Value (BoolV T)` >> asm_simp_tac (srw_ss()) [return_def] >>
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       simp_tac (srw_ss()) [] >> NO_TAC) >>
-  (* False branch: need to case-split on BoolV F vs other *)
-  Cases_on `x = Value (BoolV F)` >>
-  asm_simp_tac (srw_ss()) [raise_def] >>
-  TRY (tp_bind_err_tac >> NO_TAC) >>
+  Cases_on `v = BoolV T` >> asm_simp_tac (srw_ss()) [return_def] >-
+    (* BoolV T case: trivially returns () *)
+    (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+     rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+     simp_tac (srw_ss()) []) >>
+  Cases_on `v = BoolV F` >> asm_simp_tac (srw_ss()) [raise_def] >-
+    (* not BoolV T and not BoolV F: impossible from well-typedness.
+       The result would be INR(Error(TypeError)), making the no-TypeError
+       conjunct false. Contradiction: well_typed BaseT implies BoolV. *)
+    (Cases_on `v` >> gvs[]) >>
   (* BoolV F: eval_expr cx e' for reason string *)
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e' r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >>
-  TRY (tp_bind_err_tac >> NO_TAC) >>
+  reverse (Cases_on `q`) >-
+    (* INR case: error propagation.
+       Use IH for e' (guarded): to get not-TypeError. *)
+    (simp_tac (srw_ss()) [raise_def] >>
+     qpat_x_assum `!s'' tv t. eval_expr _ _ s'' = (INL tv, t) ==> _`
+       (qspecl_then [`st`, `x`, `r`] mp_tac) >>
+     disch_then drule_all >> strip_tac >> gvs[]) >>
+  simp_tac (srw_ss()) [raise_def] >>
   (* Apply guarded IH for e' *)
   qpat_x_assum `!s'' tv t. eval_expr _ _ s'' = (INL tv, t) ==> _`
     (qspecl_then [`st`, `x`, `r`] mp_tac) >>
   disch_then drule_all >> strip_tac >>
-  (* get_Value *)
-  simp_tac (srw_ss()) [get_Value_def, bind_apply, BETA_THM] >>
-  Cases_on `x'` >> simp_tac (srw_ss()) [return_def, raise_def] >>
-  TRY (tp_bind_err_tac >> NO_TAC) >>
+  (* From IH for e': toplevel_value_typed x' tyv' where BaseT (StringT n) *)
+  `?sv. x' = Value sv` by (
+    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+    imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+    metis_tac[toplevel_value_typed_not_ArrayRef]) >>
+  (* get_Value: since x' = Value sv, this simply returns sv *)
+  simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
   (* lift_option_type (dest_StringV) + raise *)
   simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
-  Cases_on `dest_StringV v` >>
+  Cases_on `dest_StringV sv` >>
   simp_tac (srw_ss()) [raise_def, return_def, bind_apply, BETA_THM] >>
-  tp_bind_err_tac
+  gvs[]
 QED
 
 Resume eval_preserves_swt[AnnAssign]:
