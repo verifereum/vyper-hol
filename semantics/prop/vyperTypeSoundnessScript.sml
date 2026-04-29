@@ -1106,53 +1106,48 @@ Resume eval_preserves_swt[Assert3]:
   Cases_on `eval_expr cx e st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
-  (* INL case: apply IH for e — same pattern as Raise3 *)
+  (* INL case: apply IH for e *)
   first_x_assum drule_all >> strip_tac >>
-  (* Specialize the expr IH with tv = x to get toplevel_value_typed x tyv *)
-  first_x_assum (qspec_then `x` assume_tac) >>
-  (* Rewrite expr_type e in all assumptions so imp_res_tac can match *)
+  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
+  (* Substitute expr_type e = BaseT BoolT in all assumptions so
+     evaluate_type_BaseT_inv can match evaluate_type (get_tenv cx) (BaseT BoolT) *)
   qpat_x_assum `expr_type e = BaseT BoolT` (fn th =>
-    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th])) >>
-  (* x must be Value vl: BaseT type means tyv ≠ NoneTV and tyv ≠ ArrayTV *)
-  `?vl. x = Value vl` by (
-    imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
-    Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-    first_x_assum irule >> simp[]) >>
-  rpt BasicProvers.VAR_EQ_TAC >>
+    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
+  (* Classify tyv: BaseT BoolT → tyv = BaseTV BoolT *)
   imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* switch_BoolV case split *)
+  (* BaseTV BoolT → x = Value (BoolV b) — boundary lemma *)
+  imp_res_tac toplevel_value_typed_BoolT_inv >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* switch_BoolV (Value (BoolV b)) ... *)
   simp_tac (srw_ss()) [switch_BoolV_def, COND_RATOR, return_def, bind_apply, BETA_THM] >>
-  Cases_on `vl = BoolV T` >> asm_simp_tac (srw_ss()) [return_def] >-
+  Cases_on `b` >> gvs[] >-
     (* BoolV T: return () *)
     (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
      rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac >>
      TRY close_impossible_branch_tac >> TRY (gvs[])) >>
-  Cases_on `vl = BoolV F` >> asm_simp_tac (srw_ss()) [raise_def] >-
-    (* not BoolV T/F: impossible from well-typedness *)
-    (Cases_on `vl` >> gvs[]) >>
-  (* BoolV F: eval_expr for e' (reason string) — same as Raise3 body *)
+  (* BoolV F: eval_expr for e' (reason string) *)
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e' r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
   (* INL case: apply guarded IH for e' *)
-  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
-  qpat_x_assum `!s'' tv t. eval_expr _ _ s'' = (INL tv, t) ==> _`
-    (qspecl_then [`r`, `x'`, `r'`] mp_tac) >>
-  disch_then drule_all >> strip_tac >>
-  (* x' must be Value sv: BaseT StringT → toplevel_value_typed x' (BaseTV (StringT n)) *)
-  `?sv. x' = Value sv` by (
-    imp_res_tac evaluate_type_BaseT_inv >>
-    Cases_on `x'` >> gvs[toplevel_value_typed_def] >>
-    first_x_assum irule >> simp[]) >>
-  rpt BasicProvers.VAR_EQ_TAC >>
+  first_x_assum (qspec_then `x` strip_assume_tac) >>
+  fs[] >>
+  (* Substitute expr_type e' = BaseT (StringT n) in all assumptions *)
+  qpat_x_assum `expr_type e' = BaseT (StringT n)` (fn th =>
+    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
+  (* Classify: BaseT (StringT n) → tyv = BaseTV (StringT n), then x = Value v *)
   imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* get_Value (Value sv) = return sv *)
+  imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+  imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+  Cases_on `x` >> gvs[toplevel_value_typed_def] >>
+  first_x_assum irule >> simp[] >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* get_Value (Value v) = return v *)
   simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
-  (* lift_option_type (dest_StringV sv) *)
+  (* lift_option_type (dest_StringV v) *)
   simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
-  Cases_on `dest_StringV sv` >-
+  Cases_on `dest_StringV v` >-
     (* NONE: well-typed StringT value can't have dest_StringV = NONE *)
     (fs[toplevel_value_typed_def] >>
      imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >> fs[]) >>
