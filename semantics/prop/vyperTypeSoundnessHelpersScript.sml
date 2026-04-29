@@ -4238,6 +4238,23 @@ Proof
   metis_tac[toplevel_value_typed_not_ArrayRef]
 QED
 
+(* Variant with expr_type: matches IH output shape where evaluate_type uses expr_type e
+   rather than BaseT bt directly. Avoids rewriting in consumer proofs. *)
+Theorem toplevel_value_typed_for_BaseT_expr_type:
+  !tenv e bt tv tyv.
+    evaluate_type tenv (expr_type e) = SOME tyv /\
+    expr_type e = BaseT bt /\
+    toplevel_value_typed tv tyv ==>
+    ?v. tv = Value v
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[] >>
+  drule evaluate_type_not_NoneT_imp_not_NoneTV >> simp[] >> strip_tac >>
+  drule evaluate_type_BaseT_imp_not_ArrayTV >> simp[] >> strip_tac >>
+  metis_tac[toplevel_value_typed_not_ArrayRef]
+QED
+
+
 Theorem toplevel_value_typed_no_ArrayTV_get_Value:
   !tv tyv st e s. toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==> get_Value tv st <> (INR e, s)
 Proof

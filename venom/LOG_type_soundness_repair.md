@@ -1,5 +1,11 @@
-L001: [env_consistent_preserves_tv] Initial attempt: drule env_consistent_var_types_soundness fails after env_consistent destructured → FAILED[wrong_decomposition]
-L002: [env_consistent_preserves_tv] Fix: first_x_assum drule instead → var_types soundness works. But metis_tac[IS_SOME_DEF] times out on global_types completeness → FAILED[wrong_statement]
-L003: [env_consistent_preserves_tv] IS_SONE iff hypothesis: still fails. IS_SOME gives existence but not value equality for soundness → FAILED[wrong_statement]
-L004: [KEY][env_consistent_preserves_tv] Root cause: hypothesis was IS_SOME backward implication (st'→st), which is too weak. Need FLOOKUP EQUALITY (st↔st') to carry values through for soundness/toplevel_types. Call sites already prove ALOOKUP equality which gives FLOOKUP equality for free.
-L005: [env_consistent_preserves_tv] FLOOKUP equality hypothesis → first 3 conjuncts prove, INCOMPLETE at toplevel_types. Added `rpt strip_tac >> res_tac >> gvs[]` handler. NEEDS VERIFICATION NEXT SESSION.
+# LOG: Type Soundness Repair
+
+L001: [Assert3] imp_res_tac toplevel_value_typed_for_BaseT in `by` block → FAILED (silent match failure: assumptions have `expr_type e` not `BaseT bt`)
+L002: [Assert3] gvs[] before `by` block → TIMEOUT (Assert3 context with guarded IH too rich for gvs)
+L003: [Assert3] fs[] to cross-rewrite → doesn't substitute `expr_type e` in `evaluate_type` assumption
+L004: [Assert3] ML trick: nested qpat_x_assum → TIMEOUT (nested ML quotations break)
+L005: [Assert3] metis_tac[toplevel_value_typed_for_BaseT] → TIMEOUT (too many assumptions)
+L006: [Assert3] irule toplevel_value_typed_for_BaseT_expr_type >> simp[] → FAILED (simp can't discharge antecedent subgoals in `by` block)
+L007: [Assert3] RULE_ASSUM_TAC(ONCE_REWRITE_RULE[th]) → WORKS for rewriting, but `by` block still fails at line 1117
+L008: [helpers] toplevel_value_typed_for_BaseT_expr_type → COMPILED (3-antecedent variant matching IH output shape)
+L009: [Assert3] KEY INSIGHT: `by` block is wrong decomposition. Need to inline derivation after RULE_ASSUM_TAC.

@@ -1108,9 +1108,12 @@ Resume eval_preserves_swt[Assert3]:
   TRY (tp_bind_err_tac >> NO_TAC) >>
   (* INL case: apply IH for e — same pattern as Raise3 *)
   first_x_assum drule_all >> strip_tac >>
-  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  (* x must be Value vl: BaseT BoolT means tyv ≠ NoneTV and tyv ≠ ArrayTV *)
+  (* Specialize the expr IH with tv = x to get toplevel_value_typed x tyv *)
+  first_x_assum (qspec_then `x` assume_tac) >>
+  (* Rewrite expr_type e in all assumptions so imp_res_tac can match *)
+  qpat_x_assum `expr_type e = BaseT BoolT` (fn th =>
+    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th])) >>
+  (* x must be Value vl: BaseT type means tyv ≠ NoneTV and tyv ≠ ArrayTV *)
   `?vl. x = Value vl` by (
     imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
     imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
