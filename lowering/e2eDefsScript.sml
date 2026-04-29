@@ -8,13 +8,16 @@
  *   return_data_encodes    -- Vyper return value ~ EVM returndata
  *   non_indexed_values     -- extract non-indexed event args
  *   non_indexed_types      -- extract non-indexed event arg types
+ *   make_event_info        -- derive event_info from program
  *   log_entry_corresponds  -- single Vyper log ~ EVM event
  *   logs_correspond        -- Vyper logs ~ EVM events (LIST_REL)
  *   state_effects_match    -- Vyper side effects ~ EVM post-state
  *   state_unchanged        -- rollback state unchanged (for reverts)
  *   vyper_evm_correspondence -- full Vyper-EVM case split
  *   initial_evm_rel        -- EVM state initialized with bytecode
- *   valid_function_call    -- source function callable with given args
+ *   call_lookup_ok         -- base predicate: function lookup + calldata
+ *   valid_vyper_call       -- high-level: call_lookup_ok (no selectors)
+ *   valid_function_call    -- low-level: call_lookup_ok + selector routing
  *)
 
 Theory e2eDefs
@@ -23,6 +26,7 @@ Ancestors
   vyperABI
   vyperInterpreter
   compileEnv
+  compileVyper
   selectorDispatch
   codegenRel
   venomState
@@ -63,6 +67,26 @@ Definition non_indexed_types_def:
   non_indexed_types _ _ = []
 End
 
+(* Build event_info from program toplevel declarations.
+   Returns a function: event_name -> SOME (hash, arg_types, indexed_flags)
+   for each EventDecl in the program, NONE otherwise.
+
+   This is the "correct" event_info derived from the source program,
+   used to state the correspondence between Vyper logs and EVM events. *)
+Definition make_event_info_def:
+  make_event_info tenv ([] : toplevel list) = (K NONE) /\
+  make_event_info tenv (top :: rest) =
+    let rest_info = make_event_info tenv rest in
+    case top of
+      EventDecl ename args_indexed =>
+        let arg_types = MAP (SND o FST) args_indexed in
+        let ehash = event_hash tenv ename arg_types in
+        let indexed_flags = MAP SND args_indexed in
+        (\n. if n = ename then SOME (ehash, arg_types, indexed_flags)
+             else rest_info n)
+    | _ => rest_info
+End
+
 (* Single log entry correspondence. Relates a Vyper log (nsid, values)
    to an EVM event, given:
    - event_info: maps event name to (hash, indexed_flags, arg_types)
@@ -85,7 +109,7 @@ Definition log_entry_corresponds_def:
     let event_name = nsid_to_string eid in
     case event_info event_name of
       NONE => F
-    | SOME (event_hash, arg_types, indexed_flags) =>
+    | SOME (ehash, arg_types, indexed_flags) =>
         let idx_vals = indexed_values indexed_flags vals in
         let nidx_vals = non_indexed_values indexed_flags vals in
         let nidx_types = non_indexed_types indexed_flags arg_types in
@@ -93,7 +117,7 @@ Definition log_entry_corresponds_def:
           LENGTH arg_types = LENGTH vals /\
           ev.logger = addr /\
           (* Topics: event selector hash + indexed values as bytes32 *)
-          ev.topics = n2w event_hash :: MAP val_to_w256 idx_vals /\
+          ev.topics = n2w ehash :: MAP val_to_w256 idx_vals /\
           (* Data: ABI-encoded non-indexed values as tuple *)
           (?abi_vals.
              vyper_to_abi_list tenv nidx_types nidx_vals = SOME abi_vals /\
@@ -182,9 +206,28 @@ End
 
 (* ===== Source Predicates ===== *)
 
-(* Valid function call: source function exists in the abstract machine,
-   calldata correctly ABI-encodes the arguments, and the selector
-   table routes to the right function.
+(* Base predicate: function lookup succeeds and calldata is valid.
+   Used by both valid_vyper_call and valid_function_call. *)
+Definition call_lookup_ok_def:
+  call_lookup_ok am tx tenv calldata args ret ⇔
+    (∃mut nr dflts body.
+       lookup_exported_function
+         (initial_evaluation_context am.sources am.layouts tx) am
+         tx.function_name = SOME (mut, nr, args, dflts, ret, body)) ∧
+    calldata_encodes tenv tx.function_name (MAP SND args) tx.args
+      calldata
+End
+
+(* Valid Vyper call: function exists with matching args/ret, calldata valid.
+   This is the high-level predicate for vyper_frame_correct etc. *)
+Definition valid_vyper_call_def:
+  valid_vyper_call am tx tenv calldata args ret ⇔
+    call_lookup_ok am tx tenv calldata args ret
+End
+
+(* Valid function call with selector routing: extends valid_vyper_call
+   with the requirement that the selector table routes to the function.
+   Used by the lower-level e2e_vyper_to_evm theorems.
 
    Calldata is constrained via the tx (source args) and the EVM
    calldata bytes (in initial_evm_rel). The relation between
@@ -194,15 +237,10 @@ End
    No vs parameter needed -- calldata_encodes takes the byte list
    directly, and initial_evm_rel ensures EVM and Venom agree. *)
 Definition valid_function_call_def:
-  valid_function_call tenv am tx selectors calldata args ret <=>
-    (?mut nr dflts body.
-       lookup_exported_function
-         (initial_evaluation_context am.sources am.layouts tx) am
-         tx.function_name = SOME (mut, nr, args, dflts, ret, body)) /\
-    calldata_encodes tenv tx.function_name (MAP SND args) tx.args
-      calldata /\
-    (?sel fn_lbl htz.
-       MEM (sel, fn_lbl, htz) selectors /\
+  valid_function_call tenv am tx selectors calldata args ret ⇔
+    call_lookup_ok am tx tenv calldata args ret ∧
+    (∃sel fn_lbl htz.
+       MEM (sel, fn_lbl, htz) selectors ∧
        selector_matches sel tx.function_name
          (vyper_to_abi_types tenv (MAP SND args)))
 End
