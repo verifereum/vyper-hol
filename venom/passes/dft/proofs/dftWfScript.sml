@@ -1308,7 +1308,7 @@ Proof
     (rewrite_tac[add_abort_deps_def] >>
      mp_tac (SRULE [LET_THM] add_chain_deps_backward) >>
      disch_then (qspecl_then
-       [`\i. opcode_fail_class i.inst_opcode <> NoFail`, `bi`, `build_eda bi`] mp_tac) >>
+       [`is_fallible`, `bi`, `build_eda bi`] mp_tac) >>
      simp[Abbr `nps`]) >>
   (* Step 3: add_barrier_deps preserves backward *)
   `!j deps dep. j < LENGTH nps /\
@@ -1325,7 +1325,7 @@ Proof
     (rewrite_tac[build_full_eda_def, add_alloca_deps_def] >>
      mp_tac (SRULE [LET_THM] add_chain_deps_backward) >>
      disch_then (qspecl_then
-       [`\i. is_alloca_op i.inst_opcode`, `bi`,
+       [`is_alloca_inst`, `bi`,
         `add_barrier_deps bi (add_abort_deps bi (build_eda bi))`] mp_tac) >>
      simp[Abbr `nps`]) >>
   metis_tac[]
