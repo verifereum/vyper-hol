@@ -116,77 +116,102 @@ End
 
 (* ===== Post-call result correspondence ===== *)
 
-(* Relates the result of call_external to the EVM state after
-   run_call completes. Takes both the starting state es and final
-   state es_f, making preserved/changed fields explicit.
+(* EVM execution has two different behaviors depending on context depth:
 
-   Handles both outermost (r = INR exc_opt) and inner
-   (r = INL (), frame popped) calls.
+   OUTERMOST (LENGTH es.contexts = 1):
+   - handle_exception with n ≤ 1 reraises the exception
+   - Result: INR exc_opt (NONE for success, SOME Reverted for revert)
+   - Context stack unchanged (still 1 context)
+   - run_call es = run es (by run_call_eq_run_single_context)
 
-   Key uniformities across both cases:
-   - Returndata: always in (FST (HD es_f.contexts)).returnData
-     (callee's context for outermost; caller's after set_return_data
-     for inner — handle_exception copies it before popping)
-   - Accounts on success: es_f.rollback.accounts = am'.accounts
-     (update_accounts modifies rollback; pop doesn't change it
-     on success)
-   - Accounts on revert: outermost leaves dirty accounts (caller
-     handles rollback via r = INR (SOME Reverted)); inner has
-     pop_and_incorporate_context restore pre-call rollback
-   - Logs: callee's new EVM logs appended to the caller's pre-call
-     logs. For outermost, pre-call logs are [] (callee's context
-     started empty). For inner, they come from HD (TL es.contexts).
-   - txParams: unchanged *)
+   INNER CALL (LENGTH es.contexts > 1):
+   - handle_exception with n > 1 pops and incorporates
+   - Result: INL () (execution continues in caller)
+   - Context stack shrinks by 1 (callee frame popped)
+   - Caller's context modified: stack pushed, returndata set, etc.
 
-(* Helper: the caller's logs before the call.
-   Outermost (no caller): [].
-   Inner: logs from the caller's context in the original state. *)
-Definition caller_pre_logs_def:
-  caller_pre_logs [] = ([] : event list) ∧
-  caller_pre_logs (((ctxt : context), rb) :: _) = ctxt.logs
-End
+   We define separate predicates for clarity, then unify them. *)
 
-Definition frame_result_matches_def:
-  frame_result_matches tenv event_info am tx ret r es es_f ⇔
-    ∃ctxt_hd rb_hd accts tstor accs tdel md.
-    (* es_f is es with contexts, rollback, msdomain updated.
-       txParams preserved. Deeper contexts preserved. *)
-    es_f = es with <|
-      contexts := (ctxt_hd, rb_hd) :: TL (TL es.contexts);
-      rollback := es.rollback with <|
-        accounts := accts; tStorage := tstor;
-        accesses := accs; toDelete := tdel
-      |>;
-      msdomain := md
-    |> ∧
+(* ----- Outermost call result (single context, transaction entry) ----- *)
+
+(* For outermost calls, we case-split on call_external FIRST, then
+   specify what EVM result (r) is required. This enforces the
+   correspondence:
+   - call_external success ↔ EVM INR NONE
+   - call_external AssertException ↔ EVM INR (SOME Reverted)
+   - call_external Error ↔ any EVM result (T)
+   - Break/Continue/Return ↔ impossible (F)
+
+   The r parameter is the FULL first component of run_call/run result,
+   i.e., (unit + exception option). This ensures the proof retains
+   the connection between r and the final state es_f. *)
+Definition outermost_result_matches_def:
+  outermost_result_matches tenv event_info am tx ret r es es_f ⇔
     case call_external am tx of
       (INL v, am') =>
-        (* EVM indicates success *)
-        (r = INR NONE ∨
-         (r = INL () ∧
-          ¬NULL ctxt_hd.stack ∧ HD ctxt_hd.stack = 1w)) ∧
-        (* Returndata encodes the return value *)
+        (* Vyper success requires EVM success *)
+        r = INR NONE ∧
         return_data_encodes tenv ret v es_f ∧
-        (* Accounts and transient storage committed *)
-        accts = am'.accounts ∧ tstor = am'.tStorage ∧
-        (* Callee's new logs correspond to Vyper's logs *)
-        (∃evm_logs.
-           ctxt_hd.logs =
-             caller_pre_logs (TL es.contexts) ++ evm_logs ∧
-           logs_correspond event_info tenv tx.target
-             am'.logs evm_logs)
+        state_effects_match event_info tx.target tenv am' es_f
     | (INR (AssertException _), _) =>
-        (* Outermost: r signals revert, caller handles rollback.
-           Inner: frame popped, caller sees 0w on stack,
-           accounts rolled back by pop_and_incorporate_context. *)
-        r = INR (SOME Reverted) ∨
-        (r = INL () ∧
-         ¬NULL ctxt_hd.stack ∧ HD ctxt_hd.stack = 0w ∧
-         accts = am.accounts ∧ tstor = am.tStorage)
+        (* Vyper revert requires EVM revert *)
+        r = INR (SOME Reverted) ∧
+        state_unchanged es es_f
     | (INR (Error _), _) => T
     | (INR BreakException, _) => F
     | (INR ContinueException, _) => F
     | (INR (ReturnException _), _) => F
+End
+
+(* ----- Inner call result (depth > 1, called from another contract) ----- *)
+
+(* For inner calls, the callee frame is popped and the caller's context
+   is modified with the call result. We case-split on call_external
+   to specify the expected stack value (1w for success, 0w for revert). *)
+Definition inner_call_result_matches_def:
+  inner_call_result_matches tenv event_info am tx ret es es_f ⇔
+    (* Callee was popped, caller is now on top *)
+    LENGTH es_f.contexts = LENGTH es.contexts - 1 ∧
+    LENGTH es.contexts > 1 ∧
+    (∃caller_ctxt caller_rb rest.
+       es_f.contexts = (caller_ctxt, caller_rb) :: rest ∧
+       case call_external am tx of
+         (INL v, am') =>
+           (* Success: stack has 1w, returndata set, state committed *)
+           ¬NULL caller_ctxt.stack ∧
+           HD caller_ctxt.stack = 1w ∧
+           return_data_encodes tenv ret v es_f ∧
+           es_f.rollback.accounts = am'.accounts ∧
+           es_f.rollback.tStorage = am'.tStorage
+           (* Note: logs are pushed to caller by push_logs in
+              pop_and_incorporate_context on success *)
+       | (INR (AssertException _), _) =>
+           (* Revert: stack has 0w, state rolled back *)
+           ¬NULL caller_ctxt.stack ∧
+           HD caller_ctxt.stack = 0w
+           (* Note: rollback restored by set_rollback in
+              pop_and_incorporate_context on failure *)
+       | (INR (Error _), _) => T
+       | (INR BreakException, _) => F
+       | (INR ContinueException, _) => F
+       | (INR (ReturnException _), _) => F)
+End
+
+(* ----- Unified frame result predicate ----- *)
+
+(* Unifies outermost and inner call results based on context depth.
+   Case-splits on call_external to determine what EVM result is expected.
+   - Outermost: r = INR exc_opt, with exc_opt determined by call_external
+   - Inner: r = INL (), with stack flag determined by call_external *)
+Definition frame_result_matches_def:
+  frame_result_matches tenv event_info am tx ret r es es_f ⇔
+    if LENGTH es.contexts = 1 then
+      (* Outermost call: r passed directly to outermost_result_matches *)
+      outermost_result_matches tenv event_info am tx ret r es es_f
+    else
+      (* Inner call: r = INL () *)
+      r = INL () ∧
+      inner_call_result_matches tenv event_info am tx ret es es_f
 End
 
 (* ===== Main Frame-Level Correctness Theorem ===== *)
@@ -228,14 +253,75 @@ QED
 
 (* ===== Transaction-Level Correctness (Corollary) ===== *)
 
+(* Bridge lemma: outermost_result_matches with INR NONE implies the success case of
+   vyper_evm_correspondence. This is essentially definitional since
+   outermost_result_matches was designed to match. *)
+Theorem outermost_success_imp_correspondence:
+  ∀tenv event_info am tx ret es es_f v am'.
+    call_external am tx = (INL v, am') ∧
+    outermost_result_matches tenv event_info am tx ret (INR NONE) es es_f
+    ⇒
+    return_data_encodes tenv ret v es_f ∧
+    state_effects_match event_info tx.target tenv am' es_f
+Proof
+  rw[outermost_result_matches_def] >> gvs[]
+QED
+
+(* Bridge lemma: outermost_result_matches with INR (SOME Reverted) implies the revert case. *)
+Theorem outermost_revert_imp_correspondence:
+  ∀tenv event_info am tx ret es es_f.
+    (∃msg am'. call_external am tx = (INR (AssertException msg), am')) ∧
+    outermost_result_matches tenv event_info am tx ret (INR (SOME Reverted)) es es_f
+    ⇒
+    state_unchanged es es_f
+Proof
+  rw[outermost_result_matches_def] >>
+  Cases_on `call_external am tx` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `e` >> gvs[]
+QED
+
+(* Bridge lemma: frame_result_matches for single context with INR NONE
+   implies the success case of vyper_evm_correspondence. *)
+Theorem frame_result_single_success_imp_correspondence:
+  ∀tenv event_info am tx ret es es_f.
+    LENGTH es.contexts = 1 ∧
+    run es = SOME (INR NONE, es_f) ∧
+    frame_result_matches tenv event_info am tx ret (INR NONE) es es_f
+    ⇒
+    vyper_evm_correspondence tenv event_info ret am tx es
+Proof
+  rw[frame_result_matches_def, vyper_evm_correspondence_def,
+     outermost_result_matches_def] >>
+  Cases_on `call_external am tx` >> gvs[] >>
+  Cases_on `q` >> gvs[]
+QED
+
+(* Bridge lemma: frame_result_matches for single context with INR (SOME Reverted)
+   implies the revert case of vyper_evm_correspondence. *)
+Theorem frame_result_single_revert_imp_correspondence:
+  ∀tenv event_info am tx ret es es_f.
+    LENGTH es.contexts = 1 ∧
+    run es = SOME (INR (SOME Reverted), es_f) ∧
+    frame_result_matches tenv event_info am tx ret (INR (SOME Reverted)) es es_f
+    ⇒
+    vyper_evm_correspondence tenv event_info ret am tx es
+Proof
+  rw[frame_result_matches_def, vyper_evm_correspondence_def,
+     outermost_result_matches_def] >>
+  Cases_on `call_external am tx` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `e` >> gvs[] >>
+  qexists_tac `es_f` >> simp[]
+QED
+
 (* For outermost calls (single context), run_call = run.
    This specializes vyper_frame_correct to transaction entry. *)
 Theorem vyper_transaction_correct:
   ∀program pipeline dispatch_strategy runtime_bc
-   am tx tenv ret ctxt rb es event_info.
-    (∃deploy_bc.
-       compile_vyper program pipeline dispatch_strategy
-         = SOME (deploy_bc, runtime_bc)) ∧
+   am tx tenv ret ctxt rb es event_info deploy_bc.
+    compile_vyper program pipeline dispatch_strategy
+      = SOME (deploy_bc, runtime_bc) ∧
     es.contexts = [(ctxt, rb)] ∧
     call_state_rel program runtime_bc am tx tenv
       ctxt rb es.txParams ∧
@@ -249,17 +335,18 @@ Proof
   (* Apply frame-level theorem *)
   \\ drule_all vyper_frame_correct
   \\ disch_then (qspec_then `event_info` strip_assume_tac)
-  \\ qexists `gas_needed`
+  \\ qexists_tac `gas_needed`
   \\ strip_tac
   \\ first_x_assum drule
   \\ strip_tac
   (* For single context: run_call = run *)
   \\ `run_call es = run es` by
        (irule run_call_eq_run_single_context \\ simp[])
-  (* Bridge frame_result_matches to vyper_evm_correspondence *)
-  \\ gvs[frame_result_matches_def, vyper_evm_correspondence_def]
-  \\ cheat (* TODO: show frame_result_matches implies vyper_evm_correspondence
-              for single-context case *)
+  (* frame_result_matches with LENGTH = 1 gives us INR result *)
+  \\ gvs[frame_result_matches_def]
+  >> gvs[vyper_evm_correspondence_def]
+  >> BasicProvers.TOP_CASE_TAC
+  >> gvs[outermost_result_matches_def]
 QED
 
 (* ===================================================================== *)
@@ -796,5 +883,3 @@ Proof
   \\ MAP_EVERY qexists_tac [`bc`, `fmb`, `db`, `ei`]
   \\ gvs[]
 QED
-
-
