@@ -787,13 +787,13 @@ val tp_bind_err_tac =
   TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* Strategy 1: IH application.
-     Uses drule (NOT drule_all) to match only the LAST antecedent of the
-     IH (typically the eval call). drule_all matches ALL antecedents against
-     the full assumption list, causing combinatorial explosion with 7+
-     antecedents and 10+ complex IH assumptions. After drule + strip_tac,
-     the remaining IH antecedents become subgoals that gvs[] closes
-     from assumptions. *)
-  TRY (first_x_assum drule >> strip_tac >>
+     Uses drule_at (Pos last) to match the LAST antecedent of the IH
+     (typically the eval equality), which is unique per IH. This avoids
+     the combinatorial explosion of plain 'drule' which matches the FIRST
+     antecedent (generic well_typed_X) against many assumptions.
+     After drule_at + strip_tac, the remaining IH antecedents become
+     subgoals that gvs[] closes from assumptions. *)
+  TRY (first_x_assum (drule_at (Pos last)) >> strip_tac >>
        rpt BasicProvers.VAR_EQ_TAC >> gvs[]) >>
   (* Strategy 2: State lemma resolution for complex INL success cases.
      These resolve monadic state variables needed before IH can match. *)
@@ -806,7 +806,7 @@ val tp_bind_err_tac =
   TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   (* Retry IH application after state lemmas resolved variables *)
-  TRY (first_x_assum drule >> strip_tac >>
+  TRY (first_x_assum (drule_at (Pos last)) >> strip_tac >>
        rpt BasicProvers.VAR_EQ_TAC >> gvs[]) >>
   (* Strategy 3: Fallback for INR error propagation cases where drule
      didn't match (e.g. guarded IH). Use simp_tac not gvs[] to avoid
