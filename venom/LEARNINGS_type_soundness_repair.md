@@ -1,5 +1,41 @@
 # LEARNINGS: Type Soundness Repair
 
+## drule_at (Pos last) vs drule — CRITICAL FIX (Session 3)
+`first_x_assum drule` matches the FIRST antecedent of an implication.
+For IHs like `∀env st res st'. well_typed_X ∧ ... ∧ eval_X ... = (res,st') ⇒ Q`,
+drule matches `well_typed_X` which has many matches → combinatorial explosion.
+`first_x_assum (drule_at (Pos last))` matches the LAST antecedent (`eval_X`),
+which is unique per IH → O(1) matching. Build goes from 1800s timeout to 155s.
+**CAVEAT:** Cannot blindly replace drule→drule_at(Pos last) inside multipurpose
+tactics like tp_bind_err_tac because it changes which IHs succeed in which cases,
+altering the assumption context for subsequent proof steps. Must split into
+separate INR and INL tactics.
+
+## drule_all/drule in rich contexts: HANGS (confirmed Sessions 2-3)
+`first_x_assum drule_all` or `first_x_assum drule` on goals with 10+ IH assumptions
+(each with 7+ antecedents) causes combinatorial explosion. Root cause: `first_x_assum`
+iterates ALL assumptions trying to match, and `drule` matches FIRST antecedent.
+
+## tp_bind_err_tac design flaw: conflation of INR and INL (Session 3)
+tp_bind_err_tac tries to handle both INR error propagation and INL success
+continuation in one tactic with fallthrough strategies. This means:
+- `drule` matching changes break fallthrough behavior
+- `TRY (tp_bind_err_tac >> NO_TAC)` silently fails when INR isn't fully closed
+- Context from partial IH matches in INR case pollutes INL case
+**Fix:** Split into `close_inr_err_tac` (complete INR closing) and `tp_inl_tac`
+(IH + state resolution for INL continuation).
+
+## Build -j8 parallelism masks individual block failures (Sessions 2-3)
+With Holmake parallelism, simple blocks prove on other workers while blocks
+using tp_bind_err_tac hang. "26 blocks proved" doesn't mean those proofs are
+correct — just means they avoid the hanging tactic. Assert3 was listed as proved
+but fails in -j1 build.
+
+## TRY + NO_TAC silently fails on INR cases (Sessions 1-3)
+`TRY (tp_bind_err_tac >> NO_TAC)` after a case split: if tp_bind_err_tac can't solve
+the INR subgoal, TRY silently swallows the failure. The INR subgoal remains for
+the NEXT tactic (designed for INL success case), which fails confusingly.
+
 ## CRITICAL: gvs[]/fs[] Do NOT Substitute Function Application Equalities
 `gvs[]`/`fs[]` only substitute variable equalities (`v = t`), NOT function applications
 like `expr_type e = BaseT BoolT`. Use RULE_ASSUM_TAC:
@@ -9,51 +45,10 @@ qpat_x_assum `expr_type e = BaseT bt` (fn th =>
 ```
 
 ## CRITICAL: imp_res_tac Silently Fails on Syntactic Mismatches
-Fix: boundary lemmas with EXACT same term shape, or RULE_ASSUM_TAC to rewrite before imp_res_tac.
-
-## CRITICAL: `by` Blocks Are Fragile in Rich Contexts
-Use only for trivial subgoals (1-2 simp-closeable steps). For complex derivations, inline or extract.
-
-## CRITICAL: Guarded IH Discharge Pattern
-For guarded IHs `∀s'' tv t. guard ==> body`:
-```sml
-qpat_x_assum `!s'' tv t. eval_expr _ e _ = _ ==> _`
-  (fn ih => mp_tac (ih |> Q.SPECL [`st`, `Value (BoolV F)`, `r`])) >>
-(impl_tac >- first_assum ACCEPT_TAC) >>
-disch_then drule_all >> strip_tac
-```
-CAUTION: Only works when specializing to a DIFFERENT expression's IH.
-
-## CRITICAL: `>> TRY (.. >> NO_TAC)` is a BUG PATTERN (21+ instances)
-After case splits, `>> TRY (tp_bind_err_tac >> NO_TAC)` silently fails if tp_bind_err_tac
-can't solve the INR subgoal completely, leaving it for later tactics not designed for it.
-FIX: Either (a) fix tp_bind_err_tac to handle new 4-conjunct IH conclusions, or
-(b) replace with explicit `>- (INR handler)` blocks.
+Fix: boundary lemmas with EXACT same term shape, or RULE_ASSUM_TAC to rewrite.
 
 ## CRITICAL: >> and >- have SAME precedence, left-associative
 Always parenthesize after `>-`: `>- (tactic) >> rest`, NOT `>- tactic >> rest`
-Same with `>-` on next line — the `>>` after closing paren needs care.
-
-## CRITICAL: tp_bind_err_tac Doesn't Close Goals with New 4-Conjunct IH
-After `drule_all >> strip_tac`, tp_bind_err_tac uses `gvs[]` to close the goal,
-but gvs[] alone doesn't handle accounts_well_typed and no-TypeError conjuncts.
-FIX: Add `rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac >>
-TRY (first_assum ACCEPT_TAC) >> TRY (gvs[])` after the drule_all+strip_tac in tp_bind_err_tac.
-
-## INR Error Branch Pattern (confirmed via interactive HOL session)
-After `reverse (Cases_on q) >> simp_tac (srw_ss()) []`, there are 2 subgoals:
-- Subgoal 1 (INR first due to reverse): error propagation case
-- Subgoal 2 (INL): success path continuation
-INR subgoal shape after strip_tac:
-```
-INR y = res ∧ st_bt = st' ⇒
-  state_well_typed st' ∧ env_consistent env cx st' ∧
-  accounts_well_typed st'.accounts ∧
-  (∀s. res ≠ INR (Error (TypeError s))) ∧
-  ∀v ret_tv. res = INR (ReturnException v) ∧ ... ⇒ value_has_type ...
-```
-Fix: drule_all the IH, strip_tac, then CONJ_TAC + ACCEPT for each conjunct.
-Last conjunct (return-type) is vacuously true via `eval_*_not_return` + qspec_then.
 
 ## materialise chain (7 lemmas, used in 3+ blocks)
 - materialise_no_type_error, materialise_type_error_NoneTV
@@ -73,6 +68,13 @@ Key: materialise TypeError → is_HashMapRef → tyv = NoneTV → NoneT → well
 In vyperBuiltinTypingScript.sml. Takes `accounts_well_typed acc` precondition.
 Covers ALL builtin cases including MakeArray, Acc, Convert, AbiEncode.
 
+## drule_at (Pos last) usage pattern (HOL4)
+- `drule_at : match_position -> thm_tactic` (from Tactic.sig)
+- `match_position = Any | Pat of quotation | Pos of (term list -> term) | Concl`
+- `Pos last` matches the LAST antecedent of an implication
+- `dxrule_at (Pos last)` also REMOVES the matched assumption (useful for INR closing)
+- Use for any IH application where the LAST antecedent is unique (e.g., eval equality)
+
 ## Tactic Anti-Patterns
 - `simp[AllCaseEqs()]` on monadic bind chains → unsolvable nested existentials
 - `gvs[PAIR_FST_SND_EQ]` on bind results → DESTROYS IH structure
@@ -80,15 +82,34 @@ Covers ALL builtin cases including MakeArray, Acc, Convert, AbiEncode.
 - `simp[evaluate_def]` without `Once` — HANGS
 - `gvs[]` in rich contexts with guarded IH — TIMEOUT
 - `metis_tac` with many assumptions — TIMES OUT
-- `>- (tp_bind_err_tac)` when IHs have new 4-conjunct conclusions — tp_bind_err_tac incomplete
 - `disch_then drule` on guarded IHs after SIMP_RULE — DISCH_THEN failure
+- `imp_res_tac` before IH application — ADDS CLUTTER
 
-## HOL4 Gotchas
-- `optionTheory.SOME_11` (NOT `option_11`)
-- `a ==> b <=> c` parses as `(a ==> b) <=> c`
-- `well_typed_target_def` does NOT exist — part of `well_typed_expr_def`
-- Implication theorems CANNOT be used as simp rewrites
-- `imp_res_tac` silently fails on syntactic mismatches
-- `>>` and `>-` have same precedence, left-associative — always parenthesize
-- `gvs[]` only substitutes variable equalities, NOT function application equalities
-- `>- (tactic) >>` vs `>- tactic >>` — same precedence matters in both cases
+
+## close_inr_err_tac: IH variable capture (Session 4)
+After `dxrule_at (Pos last)`, the IH's universally quantified variables
+(`env`, `st`) get renamed by HOL4 to avoid capture (e.g., `env'`, `st'`).
+These renamed variables don't match the original assumptions (`env`, `st`).
+`ACCEPT_TAC` fails because `well_typed_expr env' e` ≠ `well_typed_expr env e`.
+FIX: Use `gvs[]` which does variable elimination, or use `drule_all` which
+resolves all antecedents at once.
+
+## close_inr_err_tac: Missing no-return resolution (Session 4)
+The P7 (eval_expr) IH conclusion includes `∀s. res ≠ INR (Error (TypeError s))`
+but NOT the `∀v ret_tv. res = INR (ReturnException v) ⇒ ...` conjunct.
+That conjunct requires `eval_X_not_return` + constructor distinctness.
+FIX: After IH application, add `not_return_tac` or `imp_res_tac eval_expr_not_return >> simp_tac`.
+
+## SML operator precedence: >> and >- (Session 4)
+`>>` and `>-` have the SAME precedence and are LEFT-ASSOCIATIVE.
+So `simp_tac [] >- (close_inr_err_tac) >> rest` parses as
+`((simp_tac [] >- close_inr_err_tac) >> rest)` but the type of `>-` result
+is `gentactic` not `tactic`, causing type mismatch with `>>`.
+FIX: Use `TRY (close_inr_err_tac >> NO_TAC) >>` instead of `>- (close_inr_err_tac) >>`.
+Or parenthesize: `(simp_tac [] >> (>- close_inr_err_tac)) >> rest` (less readable).
+
+## dxrule_at vs drule_at for INR closing (Session 4)
+`dxrule_at (Pos last)` removes the matched assumption, which is desirable
+for INR closing (removes the eval_equality to prevent re-matching). But
+the resulting IH antecedents may have renamed variables. `drule_at (Pos last)`
+keeps the assumption but has the same variable capture issue.

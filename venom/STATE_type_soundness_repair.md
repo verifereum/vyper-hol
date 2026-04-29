@@ -2,131 +2,164 @@
 
 ## CRITICAL CONTEXT (read first)
 
-Build fails at Append block. Root cause: `tp_bind_err_tac` doesn't close INR
-error-propagation subgoals after IH conclusion was strengthened to 4 conjuncts
-(+accounts_well_typed, +no-TypeError). The tactic uses `drule_all >> strip_tac >>
-gvs[]` but gvs[] alone can't handle the new conjuncts. This affects 21+
-`TRY (tp_bind_err_tac >> NO_TAC)` instances across all 29 remaining blocks.
+**Build fails at Raise3 (line 870)** because `close_inr_err_tac` doesn't close INR subgoals. Leaves 5 residual subgoals.
 
-## STRATEGIC PLAN (next session)
+**Root cause (two parts):**
+1. **Variable capture after dxrule_at**: IH's `∀env st` become `env'`, `st'` after instantiation, not matching assumptions `env`, `st`. `ACCEPT_TAC` fails.
+2. **Missing no-return resolution**: IH (P7 eval_expr) conclusion has `∀s. res ≠ INR (Error (TypeError s))` but NOT `∀v ret_tv. res = INR (ReturnException v) ⇒ ...`. That needs `eval_X_not_return` + constructor distinctness.
 
-### Step 1: Fix tp_bind_err_tac (HIGH PRIORITY, 15 min)
-File: `semantics/prop/vyperTypeSoundnessScript.sml`, line 785
+**Historical note**: The old `tp_bind_err_tac` (with plain `drule`) NEVER handled INR cases — those 29 blocks all hung. With `drule_at (Pos last)`, it partially handles INR but doesn't finish. Both versions are broken; the fix needs to work from scratch.
 
-The tactic (line 800) has:
+## FIX PLAN (next session)
+
+### Step 1: Examine the 5 residual goals (5 min)
+
+In interactive HOL, apply close_inr_err_tac to the INR goal and inspect the 5 remaining goals. This tells us exactly what's missing.
+
+### Step 2: Fix close_inr_err_tac (20 min)
+
+Two options, ranked by likelihood of success:
+
+**Option A: Use gvs[] instead of simp_tac + ACCEPT_TAC**
 ```sml
-TRY (first_x_assum drule_all >> strip_tac >>
-     imp_res_tac eval_expr_not_return >>
-     ... [more not_return] ...
-     imp_res_tac materialise_error >>
-     gvs[]) >>
+val close_inr_err_tac : tactic =
+  strip_tac >>
+  TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  first_x_assum (dxrule_at (Pos last)) >>
+  rpt strip_tac >>
+  gvs[] >>
+  TRY not_return_tac >>
+  TRY not_type_error_tac >>
+  simp_tac (srw_ss()) [];
+```
+`gvs[]` does variable elimination which might unify `env'` with `env`. Then `not_return_tac` handles the no-return conjunct.
+
+**Option B: Use drule_all instead of drule_at (Pos last)**
+```sml
+val close_inr_err_tac : tactic =
+  strip_tac >>
+  TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* Try ALL IH antecedents at once *)
+  first_x_assum drule_all >>
+  rpt strip_tac >>
+  TRY not_return_tac >>
+  TRY not_type_error_tac >>
+  simp_tac (srw_ss()) [];
+```
+`drule_all` resolves ALL antecedents from assumptions but was reported slow in general contexts. For INR cases (where all antecedents ARE present), it should be fast because there's a unique match.
+
+**Option C: Completely different — reorder tp_bind_err_tac strategies**
+Put eval_X_not_return constructors FIRST in tp_bind_err_tac (with NO_TAC), so INR cases close before IH application is attempted. BUT: must also handle state preservation, which needs IH. So this alone isn't sufficient.
+
+**Most likely fix**: Option A (gvs[] + not_return_tac + not_type_error_tac). Try this first.
+
+### Step 3: Test on a simple block (5 min)
+
+Test close_inr_err_tac on the INR subgoal in Raise3. If it closes, proceed to full build.
+
+### Step 4: Full build (5 min)
+
+If close_inr_err_tac works for Raise3, build full theory. Expect some blocks may need individual fixes for unusual INR shapes.
+
+### Step 5: Prove the 6 cheat lemmas in helpers file
+
+After all INR fixes are stable:
+- env_consistent_pop_scope
+- env_consistent_preserves_tv
+- bind_arguments_env_consistent
+- set_immutable_well_typed
+- assign_target_well_typed
+- eval_expr_not_HashMapRef
+
+## CURRENT FILE STATE
+
+The file has `close_inr_err_tac` and `close_pure_inr_err_tac` defined (lines ~793-809), and 23 call sites using them via `TRY (... >> NO_TAC)`. The old `tp_bind_err_tac` is still present for the 4 remaining uses (Raise3/Assert3 end-of-block, evaluate_attribute, exprs_cons).
+
+Current definitions:
+```sml
+val close_inr_err_tac : tactic =
+  strip_tac >>
+  TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (first_x_assum (dxrule_at (Pos last))) >>
+  rpt strip_tac >>
+  TRY (rpt (first_assum ACCEPT_TAC)) >>
+  simp_tac (srw_ss()) [];
+
+val close_pure_inr_err_tac : tactic =
+  strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> simp_tac (srw_ss()) [];
 ```
 
-After `drule_all >> strip_tac`, the IH gives us the 4 conjuncts as assumptions.
-The `gvs[]` may not close the goal because:
-1. The no-TypeError conjunct `∀s. res ≠ INR (Error (TypeError s))` might not
-   simplify directly from the IH (it's there as an assumption but the goal
-   might need ACCEPT_TAC or a different form).
-2. The accounts_well_typed conjunct may need explicit handling.
+These are BROKEN — must be fixed before build succeeds.
 
-**PROPOSED FIX**: After the `gvs[]` in the first TRY branch, add:
-```sml
-rpt CONJ_TAC >>
-TRY not_return_tac >>
-TRY not_type_error_tac >>
-TRY (first_assum ACCEPT_TAC) >>
-TRY (gvs[])
-```
+## EXISTING TACTICS IN FILE
 
-If this doesn't work, try adding it BEFORE gvs[] since gvs might change the goal shape.
-
-ALTERNATIVE: The issue might be simpler — after `drule_all >> strip_tac`,
-the conclusions from the IH are added as assumptions, and the GOAL still has
-conjuncts. So we need `rpt CONJ_TAC` to split them, then each subgoal should
-be solvable by ACCEPT_TAC (matching the assumption from IH) or not_return_tac
-(for the "not a ReturnException" subgoal via eval_*_not_return lemmas).
-
-### Step 2: Build and iterate (30 min)
-After fixing tp_bind_err_tac, run holmake. If it passes Append, continue to
-next failures. Each remaining block should compile if tp_bind_err_tac works.
-
-### Step 3: If tp_bind_err_tac fix doesn't work for specific blocks
-Some blocks use guarded IHs that require `qspecl_then` + `impl_tac` instead
-of simple `drule_all`. For these, the `>-` approach is needed:
-```sml
-reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
-  (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-   qpat_x_assum `!env st res st'. ... eval_X _ _ _ = _ ==> _`
-     (qspecl_then [`env`, `st`, `INR y`, `st_bt`] mp_tac) >>
-   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >>
-   strip_tac >>
-   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-   rpt strip_tac >> gvs[] >>
-   imp_res_tac eval_X_not_return >>
-   first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) [])
-```
-
-### Step 4: Prove cheat lemmas when blocking (6 cheats in helpers file)
+| Tactic | Line | Purpose | Status |
+|--------|------|---------|--------|
+| not_return_tac | ~185 | Discharge "not ReturnException" | Works |
+| not_type_error_tac | ~248 | Discharge "not TypeError" | Works |
+| close_impossible_branch_tac | ~300 | Close F goals | Works |
+| tp_err_tac | ~313 | Full error branch: state resolve + CONJ | Works (Subscript) |
+| tp_pure_err_tac | ~334 | Pure error branch | UNUSED |
+| tp_materialise_conclusion_tac | ~339 | Simplify materialise IH conclusion | Works |
+| discharge_ih_tac | ~380 | Targeted MATCH_MP IH application | UNUSED |
+| tp_stmt_no_return_tac | ~409 | Simple stmt cases | Works |
+| tp_bind_err_tac | ~815 | Generic error+success handler | **Still broken for INR** |
+| close_inr_err_tac | ~793 | Close INR error branch | **BROKEN — needs fix** |
+| close_pure_inr_err_tac | ~805 | Close pure INR branch | Untested |
 
 ## BLOCK STATUS
 
-### PROVED (26 blocks):
-Pass, Continue, Break, ReturnNone, ReturnSome, Raise1, Raise2, Raise3,
-Assert1, Assert2, Assert3, Log, Expr, stmts_nil, stmts_cons, BaseTarget,
-TupleTarget, targets_nil, targets_cons, NameTarget, BareGlobalNameTarget,
+### PROVED (26+ blocks):
+Pass, Continue, Break, ReturnNone, ReturnSome, Raise1, Raise2, Assert1, Assert2,
+Assert3**, Log, Expr, stmts_nil, stmts_cons, BaseTarget, TupleTarget,
+targets_nil, targets_cons, NameTarget, BareGlobalNameTarget,
 TopLevelNameTarget, AttributeTarget, for_nil, Name, Literal, exprs_nil
 
-### FAILING (29 blocks — first failure stops build):
-AnnAssign, Append (FIRST), Array, Assign, Attribute, AugAssign, BareGlobalName,
-Builtin, CreateTarget, ExtCall, FlagMember, For, If, IfExp, IntCall, Pop,
-Range, RawCallTarget, RawLog, RawRevert, SelfDestructTarget, Send, StructLit,
-Subscript, SubscriptTarget, TopLevelName, TypeBuiltin, exprs_cons, for_cons
+** Assert3: might need fixing after close_inr_err_tac repaired
 
-## tp_bind_err_tac Instances (21+ in file)
-All `TRY (tp_bind_err_tac >> NO_TAC)` need the underlying tactic to work.
-Lines: 839, 1012, 1108, 1132, 1185, 1318, 1396, 1420, 1471, 1797, 1805,
-2023, 2714, 3723, 3729, 3734
-Plus `tp_bind_err_tac >> not_return_tac >> NO_TAC` at: 1930, 1936, 2159, 2283, 2287, 2292
-Plus bare `tp_bind_err_tac` at: 864, 1161, 2656, 3742
+### FAILING (blocks using close_inr_err_tac that currently fail):
+AnnAssign, Append, Array, Assign, Attribute, AugAssign,
+BareGlobalName, Builtin, CreateTarget, ExtCall, FlagMember, For, If, IfExp,
+IntCall, Pop, Range, RawCallTarget, RawLog, RawRevert, SelfDestructTarget,
+Send, StructLit, Subscript, SubscriptTarget, TopLevelName, TypeBuiltin,
+exprs_cons, for_cons
 
-## CHEAT INVENTORY (6 in helpers file)
+### CHEATS (6 in helpers file):
+env_consistent_pop_scope, env_consistent_preserves_tv, bind_arguments_env_consistent,
+set_immutable_well_typed, assign_target_well_typed, eval_expr_not_HashMapRef
 
-| # | Theorem | What it does | Needed by |
-|---|---------|-------------|-----------|
-| 1 | env_consistent_pop_scope | Pop scope preserves env_consistent | AugAssign, For, IntCall |
-| 2 | env_consistent_preserves_tv | Eval preserves tv+env_consistent | Many stmt blocks |
-| 3 | bind_arguments_env_consistent | Call arg binding preserves env | IntCall, ExtCall |
-| 4 | set_immutable_well_typed | set_immutable preserves typing | Assign, AnnAssign |
-| 5 | assign_target_well_typed | Assignment replace preserves typing | Assign, AugAssign, Append |
-| 6 | eval_expr_not_HashMapRef | Well-typed eval not HashMapRef | Subscript, Name |
+## CALL SITE CATEGORIZATION
 
-## INR Error Subgoal Anatomy (from interactive HOL)
-After `reverse (Cases_on q) >> simp_tac (srw_ss()) []`, the INR subgoal is:
-```
-INR y = res ∧ st_bt = st' ⇒
-  state_well_typed st' ∧ env_consistent env cx st' ∧
-  accounts_well_typed st'.accounts ∧
-  (∀s. res ≠ INR (Error (TypeError s))) ∧
-  ∀v ret_tv. res = INR (ReturnException v) ∧ ... ⇒ value_has_type ...
-```
-Solution: strip_tac (introduces equalities), then drule_all from IH.
-The IH gives: state_well_typed st_bt, env_consistent env cx st_bt,
-accounts_well_typed st_bt.accounts, ∀s. INR y ≠ INR (Error (TypeError s)).
-With st_bt = st' from strip, most conjuncts follow by gvs[] or ACCEPT_TAC.
-Last conjunct follows from eval_*_not_return (INR y never matches INR (ReturnException v)).
+### Standard eval_X INR → close_inr_err_tac (NEEDS FIX):
+Lines ~863, 1036, 1132, 1156, 1209, 1342, 1420, 1495, 1821, 1829, 2047, 2183, 2307, 2680, 2738, 3747, 3758
+
+### Pure op INR → close_pure_inr_err_tac (UNTESTED):
+Lines ~1444 (Cases_on x/toplevel_value), 1954 (get_immutables), 1960 (FLOOKUP), 2311 (get_Value), 3753 (materialise)
+
+### End-of-block tp_bind_err_tac (keep as-is):
+Lines ~887 (Raise3), ~1185 (Assert3), ~2316 (evaluate_attribute), ~3766 (exprs_cons return)
+
+## SML SYNTAX WARNING
+
+**`>- (close_inr_err_tac) >>` causes TYPE ERROR!** `>>` and `>-` have same precedence, left-associative. Must use `TRY (close_inr_err_tac >> NO_TAC) >>` instead.
 
 ## WHAT NOT TO TRY
-- `>> TRY (.. >> NO_TAC)` after case splits — silently fails
-- `>- (tp_bind_err_tac)` currently — tp_bind_err_tac incomplete for new IH
+- `>- (close_inr_err_tac) >>` — SML type error (precedence)
+- `first_x_assum drule_all` or `first_x_assum drule` in tp_bind_err_tac — HANGS
+- `>> TRY (.. >> NO_TAC)` for INR when close doesn't close fully — silently fails
 - `simp[evaluate_def]` without `Once` — HANGS
 - `gvs[]` to substitute `expr_type e = BaseT bt` — DOESN'T WORK
 - `metis_tac` with many assumptions — TIMES OUT
-- `>- (cheat)` when you're not sure which subgoal is targeted — confusing errors
+- Any approach that doesn't handle BOTH IH application AND not_return in INR cases
 
 ## KEY FILES
-- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~3998 LOC)
+- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~4021 LOC)
 - Helpers: semantics/prop/vyperTypeSoundnessHelpersScript.sml (~7307 LOC, 6 cheats)
-- tp_bind_err_tac: line 785 of main theorem file
-- not_return_tac: line 185 of main theorem file
-- not_type_error_tac: line 248 of main theorem file
 - Workdir: semantics/prop/
+- Build command: holmake(workdir="semantics/prop", target="vyperTypeSoundnessTheory", timeout=600)

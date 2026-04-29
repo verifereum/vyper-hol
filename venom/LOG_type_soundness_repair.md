@@ -56,3 +56,36 @@ L055: [Append] Replace with >- (INR handler) → FAILED: type error (gentactic v
 L056: [Append] >- (cheat)  → FAILED: same "first subgoal not solved" — wrong subgoal targeted or precedence issue
 L057: [KEY][Append] Interactive HOL session confirmed: after reverse(Cases_on res_bt)>>simp_tac, 2 subgoals exist (INR first, INL second). tp_bind_err_tac's drule_all >> strip_tac works but gvs[] doesn't close all new conjuncts
 L058: [KEY] Fix should be in tp_bind_err_tac itself (add CONJ_TAC + not_return_tac + not_type_error_tac after drule_all+strip_tac+gvs[]), not per-block. This would fix all 21+ TRY instances at once.
+
+L002: [tp_bind_err_tac fix] 3 attempts all fail — drule_all, drule_all+conj, drule all hang on rich IH contexts
+  - Root cause: first_x_assum + drule/drule_all iterates ALL 10+ IH assumptions
+  - Each IH has 7+ antecedents → combinatorial explosion
+  - imp_res_tac before gvs[] adds clutter making it worse
+  - Next: try asm_simp_tac (srw_ss()) or per-block explicit qpat_x_assum IH selection
+  - Build times out at 1800s, 26+ blocks prove (simple ones), 29 blocks hang
+
+L002: [tp_bind_err_tac] FAILED[need_helper]: 3 approaches all hang on rich IH contexts
+  - drule_all: combinatorial explosion (7 antecedents × 10+ IHs)
+  - drule_all+conj_cleanup: same explosion, ordering irrelevant  
+  - drule_only: first_x_assum picks wrong IH, partial match expensive
+  - Root cause: first_x_assum + drule/drule_all on rich assumption contexts
+  - Next: try gvs[] directly (srw_ss auto-instantiates IHs), or tp_pure_err_tac
+L003: [KEY][existing tactics] Discovered tp_pure_err_tac (line 334) and discharge_ih_tac
+  (line 380) already in file but UNUSED. tp_pure_err_tac is designed exactly for
+  pure error propagation (INR cases). discharge_ih_tac does targeted MATCH_MP
+  IH application. Either could fix tp_bind_err_tac without new code.
+
+## Session 4: drule_at (Pos last) fix
+
+L060: [KEY][tp_bind_err_tac] `drule_at (Pos last)` confirmed fast: build goes from 1800s timeout to 155s
+  - Verified `drule_at : match_position -> thm_tactic` exists in HOL4's Tactic.sig
+  - `Pos last` matches LAST antecedent (unique eval equality) vs FIRST (generic well_typed_X)
+  - dxrule_at also removes the matched assumption (useful for clean context)
+L061: [tp_bind_err_tac] FAILED[wrong_decomposition]: direct drule→drule_at(Pos last) substitution breaks Assert3 (line 1147). Because tp_bind_err_tac conflates INR error and INL success, changing which IH matches succeed in INR case pollutes context for subsequent INL proof steps.
+L062: [KEY][tp_bind_err_tac] ROOT CAUSE: tp_bind_err_tac is wrong decomposition. Must split into:
+  - `close_inr_err_tac`: strip + VAR_EQ + dxrule_at(Pos last) + rpt strip_tac + ACCEPT_TAC + gvs[] — closes INR branches completely
+  - `tp_inl_tac`: drule_at(Pos last) + state lemmas + IH retry — for INL continuation
+L063: [Assert3]** Was never actually proved. Listed as proved in -j8 build but fails in -j1. Other "proved" blocks may have same issue.
+L064: [not_type_error_tac] Contains `first_x_assum drule_all` (lines 254, 262) that could also hang, but these run in post-IH contexts where fewer IHs remain. Kept as-is for now.
+
+L004: [close_inr_err_tac] Defined close_inr_err_tac + close_pure_inr_err_tac, replaced 23 call sites → BUILD FAILS at Raise3 line 870: close_inr_err_tac leaves 5 residual subgoals. Two issues: (1) IH variable capture after dxrule_at, (2) missing no-return resolution. Fix: add gvs[] for variable elimination + not_return_tac for no-return.
