@@ -155,13 +155,22 @@ Definition add_chain_deps_def:
     (eda, NONE) matching)
 End
 
-(* Chain all non-NoFail instructions so abort-incompatible pairs can never
+(* Instruction whose execution can fail (abort). *)
+Definition is_fallible_def:
+  is_fallible inst <=> opcode_fail_class inst.inst_opcode <> NoFail
+End
+
+(* Chain all fallible instructions so abort-incompatible pairs can never
    be reordered. Ensures abort_compatible for every reorderable pair.
    (Diverges from Python DFT which lacks this — upstream bug.) *)
 Definition add_abort_deps_def:
   add_abort_deps block_insts eda =
-    add_chain_deps (\i. opcode_fail_class i.inst_opcode <> NoFail)
-                   block_insts eda
+    add_chain_deps is_fallible block_insts eda
+End
+
+(* Instruction whose opcode is ALLOCA. *)
+Definition is_alloca_inst_def:
+  is_alloca_inst inst <=> is_alloca_op inst.inst_opcode
 End
 
 (* Chain all ALLOCA instructions. exec_alloca uses vs_alloca_next as a
@@ -169,7 +178,7 @@ End
    system does not model this implicit state dependency. *)
 Definition add_alloca_deps_def:
   add_alloca_deps block_insts eda =
-    add_chain_deps (\i. is_alloca_op i.inst_opcode) block_insts eda
+    add_chain_deps is_alloca_inst block_insts eda
 End
 
 (* Barrier predicate: instructions that bi_independent cannot handle.

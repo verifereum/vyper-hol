@@ -14,7 +14,8 @@ Ancestors
   vfmState venomWf
 
 (* ================================================================
-   1. step_inst preserves vs_allocas for non-alloca ops
+   1. step_inst preserves vs_allocas for non-terminator, non-alloca,
+      non-ext_call instructions (including INVOKE)
    ================================================================ *)
 
 Theorem step_inst_preserves_allocas:
@@ -76,6 +77,8 @@ QED
    2. commute_equiv + allocas + alloca_next + vars → full equality
    ================================================================ *)
 
+(* Two states that are commute_equiv on a defs set and also agree on
+   vs_allocas, vs_alloca_next, and all variables in defs are equal. *)
 Theorem commute_equiv_allocas_vars_eq:
   !defs s1 s2.
     commute_equiv defs s1 s2 /\
@@ -93,6 +96,7 @@ QED
    3. Operand variables membership
    ================================================================ *)
 
+(* If Var x appears in an operand list, then x is in operand_vars of that list. *)
 Theorem mem_var_operand_vars:
   !x ops. MEM (Var x) ops ==> MEM x (operand_vars ops)
 Proof
@@ -133,10 +137,13 @@ Proof
 QED
 
 (* ================================================================
-   6. Context + effect field agreement wrapper
+   6. Eligible step_inst preserves structural and effect-conditional fields
    ================================================================ *)
 
-Theorem step_pres_all_applied:
+(* A non-terminator, non-alloca, non-ext_call, non-INVOKE step preserves all
+   structural state fields; effect-conditional fields (memory, transient,
+   accounts, etc.) are preserved when the corresponding effect is not written. *)
+Theorem step_inst_preserves_eligible_fields:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode /\ ~is_alloca_op inst.inst_opcode /\
@@ -216,7 +223,7 @@ Proof
     (* No STORAGE write: full vs_accounts preserved *)
     `Eff_BALANCE NOTIN write_effects inst.inst_opcode` by
       metis_tac[eligible_write_constraints] >>
-    imp_res_tac step_pres_all_applied >> gvs[])
+    imp_res_tac step_inst_preserves_eligible_fields >> gvs[])
 QED
 
 (* Effect-free account-reading ops: exactly BALANCE/SELFBALANCE/EXTCODESIZE/EXTCODEHASH *)
@@ -339,7 +346,7 @@ Proof
     metis_tac[step_preserves_non_output_vars]) >>
   (* Get field preservation for inst_b step specifically *)
   mp_tac (Q.SPECL [`fuel`, `ctx`, `inst_b`, `ss`, `vb`]
-            step_pres_all_applied) >>
+            step_inst_preserves_eligible_fields) >>
   simp[] >> strip_tac >>
   imp_res_tac effects_independent_write_read_disjoint >>
   `!e. e IN read_effects inst_a.inst_opcode ==>
@@ -490,8 +497,9 @@ Proof
   Induct >> rw[] >> Cases_on `h` >> simp[update_var_def]
 QED
 
-(* Pure, effect-free, non-INVOKE step_inst_base either leaves state
-   unchanged with no outputs, or adds exactly one update_var *)
+(* A pure (empty read/write effects), eligible step_inst_base either
+   produces no outputs (NOP) and returns the state unchanged, or produces
+   exactly one output via update_var. *)
 Theorem pure_step_structure:
   !inst ss v2.
     step_inst_base inst ss = OK v2 /\
@@ -761,6 +769,9 @@ Proof
       simp[] >> metis_tac[])
 QED
 
+(* Extended commutativity: two data-independent, abort-compatible,
+   non-terminator, non-alloca, non-ext_call instructions produce identical
+   states in either execution order, including the case where one is INVOKE. *)
 Theorem independent_commute_eq_ext:
   !fuel ctx inst1 inst2 ss v1 v2 s12 s21.
     step_inst fuel ctx inst1 ss = OK v1 /\
@@ -854,7 +865,8 @@ Proof
   simp[]
 QED
 
-(* Strengthen state_equiv by filling in the excluded variables *)
+(* If two states are state_equiv on some variable set and also agree on all
+   variables in that set, then they are fully equivalent (state_equiv {}). *)
 Theorem state_equiv_fill_vars:
   !vars s1 s2.
     state_equiv vars s1 s2 /\

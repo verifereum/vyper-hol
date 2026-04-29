@@ -1413,12 +1413,7 @@ Proof
       irule eda_deps_backward >> metis_tac[])
 QED
 
-(* Weaker: defs_before_uses only for non-pseudo users.
-   Sufficient for eda_topo_compatible because it only quantifies
-   over non-pseudo instructions. *)
 (* non_pseudo_defs_before_uses = np_defs_before_uses from dftTopoSort *)
-(* TODO: pure alias for np_defs_before_uses — consider using
-   np_defs_before_uses directly and removing this indirection *)
 Definition non_pseudo_defs_before_uses_def:
   non_pseudo_defs_before_uses = np_defs_before_uses
 End
@@ -1432,7 +1427,7 @@ QED
 
 Triviality operand_dep_backward_weak:
   !bi inst dep v.
-    non_pseudo_defs_before_uses bi /\
+    np_defs_before_uses bi /\
     MEM inst bi /\ ~is_pseudo inst.inst_opcode /\
     MEM (Var v) inst.inst_operands /\
     producing_inst bi v = SOME dep ==>
@@ -1441,13 +1436,13 @@ Triviality operand_dep_backward_weak:
 Proof
   rpt strip_tac >>
   `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
-  gvs[non_pseudo_defs_before_uses_def, np_defs_before_uses_def] >>
+  gvs[np_defs_before_uses_def] >>
   first_x_assum (qspecl_then [`j`, `v`, `dep`] mp_tac) >>
   simp[] >> strip_tac >>
   qexistsl [`i`, `j`] >> simp[]
 QED
 
-(* eda_topo_compatible from non_pseudo_defs_before_uses
+(* eda_topo_compatible from np_defs_before_uses
    — identical proof to eda_topo_compatible_gen but weaker hypothesis *)
 Theorem eda_topo_compatible_gen_weak:
   !bi order.
@@ -1456,7 +1451,7 @@ Theorem eda_topo_compatible_gen_weak:
     (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
          k = PRE (LENGTH bi)) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
-    non_pseudo_defs_before_uses bi ==>
+    np_defs_before_uses bi ==>
     eda_topo_compatible bi (build_full_eda bi) order
 Proof
   rpt strip_tac >>
