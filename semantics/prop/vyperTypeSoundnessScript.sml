@@ -786,6 +786,17 @@ val tp_bind_err_tac =
   strip_tac >>
   TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
   rpt BasicProvers.VAR_EQ_TAC >>
+  (* Strategy 1: IH application.
+     Uses drule (NOT drule_all) to match only the LAST antecedent of the
+     IH (typically the eval call). drule_all matches ALL antecedents against
+     the full assumption list, causing combinatorial explosion with 7+
+     antecedents and 10+ complex IH assumptions. After drule + strip_tac,
+     the remaining IH antecedents become subgoals that gvs[] closes
+     from assumptions. *)
+  TRY (first_x_assum drule >> strip_tac >>
+       rpt BasicProvers.VAR_EQ_TAC >> gvs[]) >>
+  (* Strategy 2: State lemma resolution for complex INL success cases.
+     These resolve monadic state variables needed before IH can match. *)
   TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC) >>
@@ -794,21 +805,12 @@ val tp_bind_err_tac =
   TRY (imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  (* Try IH application first (works for INL success cases and INR error cases
-     where all IH preconditions are in scope). Uses gvs[] which is safe here
-     because drule_all >> strip_tac only fires on matching goals. *)
-  TRY (first_x_assum drule_all >> strip_tac >>
-       imp_res_tac eval_expr_not_return >>
-       imp_res_tac eval_exprs_not_return >>
-       imp_res_tac eval_target_not_return >>
-       imp_res_tac eval_targets_not_return >>
-       imp_res_tac eval_base_target_not_return >>
-       imp_res_tac eval_iterator_not_return >>
-       imp_res_tac materialise_error >>
-       gvs[]) >>
-  (* Fallback: not-return facts for INR error propagation cases.
-     IMPORTANT: use simp_tac not gvs[] to avoid variable elimination
-     that would destroy variables needed by later Cases_on in the caller. *)
+  (* Retry IH application after state lemmas resolved variables *)
+  TRY (first_x_assum drule >> strip_tac >>
+       rpt BasicProvers.VAR_EQ_TAC >> gvs[]) >>
+  (* Strategy 3: Fallback for INR error propagation cases where drule
+     didn't match (e.g. guarded IH). Use simp_tac not gvs[] to avoid
+     variable elimination that would destroy variables for later Cases_on. *)
   TRY (imp_res_tac eval_expr_not_return >>
        pop_assum mp_tac >> simp_tac (srw_ss()) [exception_distinct, error_distinct]) >>
   TRY (imp_res_tac eval_exprs_not_return >>
