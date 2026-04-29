@@ -339,12 +339,6 @@ val excluded_test_names = [
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* msg.data tests now excluded by unsupported_patterns *)
-
-  (* Crowdfund tests: senders transfer ETH without set_balance traces,
-     so accounts have 0 balance and transfer_value fails.
-     TODO: either give accounts default balance or fix test export *)
-  "test_crowdfund",
-  "test_crowdfund2",
   (* skip_contract_check=True keyword not yet supported in ExtCall.
      TODO: add skip_contract_check flag to ExtCall AST *)
   "test_skip_contract_check",
@@ -523,26 +517,72 @@ val trace : term decoder =
       field "value" numtm)
   ]
 
-val test_decoder =
-  (check_field "item_type" "test" $
-   field "traces" (array trace))
+(* ===== Fixture / dependency support ===== *)
+(* Fixtures are shared setup items (item_type = "fixture") that tests depend
+   on via their "deps" field. We resolve deps by prepending fixture traces
+   to the test's own traces, so each test runs from a clean state with
+   the fixture setup applied first. All current deps are same-file. *)
 
-fun trydecode ((name,json),(s,f)) =
+val fixture_decoder =
+  check_field "item_type" "fixture" $
+  field "traces" (array trace)
+
+(* Decoder for test items with deps: reads both "deps" and "traces" fields. *)
+val test_with_deps_decoder =
+  check_field "item_type" "test" $
+  tuple2 (field "deps" (array string),
+          field "traces" (array trace))
+
+(* Extract fixture name from a dep string.
+   Dep format: "tests/export/functional/.../test_file.json/fixture_name"
+   We take the part after the last '/' as the fixture name. *)
+fun fixture_name_of_dep dep =
+  case String.fields (fn c => c = #"/") dep of
+    [] => ""
+  | parts => List.last parts
+
+(* Pass 1: collect fixtures from JSON items into a lookup dictionary.
+   Returns (name, trace list) list. *)
+fun collect_fixture ((name, json), acc) =
+  if decode (field "item_type" string) json = "fixture"
+  then let
+    val traces = decode fixture_decoder json
+  in
+    (name, traces) :: acc
+  end
+  else acc
+
+(* Pass 2: decode test items, resolving deps by prepending fixture traces. *)
+fun trydecode_with_fixtures fixtures ((name,json),(s,f)) =
   if decode (field "item_type" string) json <> "test"
-  then (s,f)  (* skip fixtures and other non-test entries *)
+  then (s,f)  (* skip non-test entries *)
   else if List.exists (fn pat => glob_match pat name) excluded_test_names
   then (s,f)
   else if List.exists (equal name) allowed_test_names
      orelse not (has_unsupported_source_json json)
-  then ((name, decode test_decoder json)::s, f)
-       handle JSONError e => (s, (name, JSONError e)::f)
-            | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
+  then let
+    val (dep_names, test_traces) = decode test_with_deps_decoder json
+    val fixture_traces = List.concat (
+      List.map (fn dn =>
+        case List.find (fn (fn_, _) => fn_ = fixture_name_of_dep dn) fixtures of
+          NONE => []
+        | SOME (_, trs) => trs)
+        dep_names)
+    val all_traces = fixture_traces @ test_traces
+  in
+    ((name, all_traces) :: s, f)
+  end
+  handle JSONError e => (s, (name, JSONError e)::f)
+       | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
   else (s,f)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
+  (* Pass 1: collect fixtures *)
+  val fixtures = List.foldl collect_fixture [] test_jsons
+  (* Pass 2: decode tests with deps resolved *)
 in
-  List.foldl trydecode ([],[]) test_jsons
+  List.foldl (trydecode_with_fixtures fixtures) ([],[]) test_jsons
 end
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
