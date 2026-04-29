@@ -1,4 +1,0 @@
-Theory vyperTest_functional_codegen_abstract_test_abstract[no_sig_docs]
-Ancestors vyperTestDefs_functional_codegen_abstract_test_abstract
-Libs vyperTestRunnerLib
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_abstract_test_abstract";

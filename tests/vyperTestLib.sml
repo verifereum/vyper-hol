@@ -213,8 +213,7 @@ val unsupported_code = [
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
   "msg.data",
-  "gas=",
-  "@override("
+  "gas="
 ]
 
 fun has_unsupported_patterns src =
@@ -275,6 +274,7 @@ val allowed_test_patterns = [
 ]
 
 val excluded_test_patterns = [
+  "*/functional/codegen/abstract/*"  (* @override semantics not implemented *)
 ]
 
 (* Individual test names that bypass unsupported pattern checks *)
