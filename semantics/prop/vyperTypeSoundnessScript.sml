@@ -1130,18 +1130,23 @@ Resume eval_preserves_swt[Assert3]:
   Cases_on `eval_expr cx e' r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
-  (* INL case: apply guarded IH for e' *)
-  first_x_assum (qspec_then `x` strip_assume_tac) >>
-  fs[] >>
+  (* INL case: apply guarded IH for e' — same pattern as IfExp_True *)
+  qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv, t) ==> _`
+    (fn ih => mp_tac (ih |> Q.SPECL [`st`, `Value (BoolV F)`, `r`])) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  disch_then drule_all >> strip_tac >>
+  (* Specialize the ∀tv' assumption from IH result with x itself *)
+  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
   (* Substitute expr_type e' = BaseT (StringT n) in all assumptions *)
   qpat_x_assum `expr_type e' = BaseT (StringT n)` (fn th =>
     RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
-  (* Classify: BaseT (StringT n) → tyv = BaseTV (StringT n), then x = Value v *)
+  (* Classify: BaseT (StringT n) → x = Value v *)
   imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-  imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-  first_x_assum irule >> simp[] >>
+  `?v. x = Value v` by (
+    imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+    Cases_on `x` >> gvs[toplevel_value_typed_def] >>
+    first_x_assum irule >> simp[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* get_Value (Value v) = return v *)
   simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
@@ -1180,7 +1185,8 @@ Resume eval_preserves_swt[AnnAssign]:
   simp_tac (srw_ss()) [] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
   (* Discharge guarded IH now (before case splits) *)
-  first_x_assum (qspecl_then [`get_tenv cx`, `st`, `tyv`, `st`] mp_tac) >>
+  qpat_x_assum `!tenv s'' tyv t. _ ==> _`
+    (qspecl_then [`get_tenv cx`, `st`, `tyv`, `st`] mp_tac) >>
   simp_tac std_ss [lift_option_type_def, return_def] >>
   PURE_ONCE_ASM_REWRITE_TAC [] >>
   simp_tac std_ss [return_def] >> strip_tac >>
@@ -1191,12 +1197,14 @@ Resume eval_preserves_swt[AnnAssign]:
   first_x_assum drule_all >> strip_tac >>
   (* materialise: case split *)
   Cases_on `materialise cx x r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
+    (* INR case: error propagation *)
+    (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+     rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+     imp_res_tac materialise_error >> gvs[]) >>
+  (* INL case *)
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   tp_materialise_conclusion_tac >>
   `value_has_type tyv x'` by
