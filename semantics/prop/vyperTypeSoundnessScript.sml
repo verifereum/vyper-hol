@@ -794,7 +794,15 @@ val tp_bind_err_tac =
   TRY (imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  TRY (first_x_assum drule_all >> strip_tac >>
+       imp_res_tac eval_expr_not_return >>
+       imp_res_tac eval_exprs_not_return >>
+       imp_res_tac eval_target_not_return >>
+       imp_res_tac eval_targets_not_return >>
+       imp_res_tac eval_base_target_not_return >>
+       imp_res_tac eval_iterator_not_return >>
+       imp_res_tac materialise_error >>
+       gvs[]) >>
   TRY (imp_res_tac eval_expr_not_return >>
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
   TRY (imp_res_tac eval_exprs_not_return >>
@@ -998,8 +1006,7 @@ Resume eval_preserves_swt[AttributeTarget]:
   TRY (tp_bind_err_tac >> NO_TAC) >>
   (* P5 IH for bt *)
   first_x_assum drule_all >> strip_tac >>
-  Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM, return_def] >>
-  gvs[]
+  gvs[return_def] >> strip_tac >> gvs[]
 QED
 
 Resume eval_preserves_swt[for_nil]:
@@ -1843,7 +1850,7 @@ Resume eval_preserves_swt[SubscriptTarget]:
   imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
   simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt CONJ_TAC >> first_assum ACCEPT_TAC
+  gvs[]
 QED
 
 Theorem for_loop_scope_bracket_ec[local]:
