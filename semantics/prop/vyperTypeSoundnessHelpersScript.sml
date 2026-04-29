@@ -7264,3 +7264,27 @@ Proof
     fs[well_typed_expr_def] >>
   fs[env_consistent_def]
 QED
+
+(* Simple-conclusion corollaries for imp_res_tac (avoids subgoal splitting) *)
+Theorem well_typed_target_BareGlobalNameTarget_IS_SOME:
+  !env cx st id ty.
+    well_typed_target env (BareGlobalNameTarget id) ty /\
+    env_consistent env cx st ==>
+    IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+      (case ALOOKUP st.immutables cx.txn.target of
+         SOME m => m | NONE => [])) (string_to_num id))
+Proof
+  rpt strip_tac >> imp_res_tac well_typed_target_BareGlobalNameTarget_in_immutables >>
+  fs[]
+QED
+
+Theorem well_typed_target_BareGlobalNameTarget_is_immutable:
+  !env cx st id ty.
+    well_typed_target env (BareGlobalNameTarget id) ty /\
+    env_consistent env cx st ==>
+    ?ts. get_module_code cx (current_module cx) = SOME ts /\
+         is_immutable_decl (string_to_num id) ts
+Proof
+  rpt strip_tac >> imp_res_tac well_typed_target_BareGlobalNameTarget_in_immutables >>
+  fs[]
+QED

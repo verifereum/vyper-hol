@@ -13,7 +13,7 @@ Ancestors
   vyperAST vyperMisc vyperStatePreservation vyperScopePreservation
   vyperLookup vyperImmutablesPreservation vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
-  vyperTyping vyperEncodeDecode vyperAssignPreservesType
+  vyperEvalMisc vyperTyping vyperEncodeDecode vyperAssignPreservesType
   vyperTypeSoundnessDefs vyperTypeSoundnessHelpers vyperBuiltinTyping
 Libs
   wordsLib
@@ -967,15 +967,26 @@ Resume eval_preserves_swt[NameTarget]:
 QED
 
 Resume eval_preserves_swt[BareGlobalNameTarget]:
-  tp_pure_base_target_tac ev_BareGlobalNameTarget >>
-  (* well_typed_target + env_consistent give IS_SOME (FLOOKUP immutables n),
-     ?ts. get_module_code ... = SOME ts /\ is_immutable_decl n ts.
-     These discharge type_check/lift_option_type TypeError guards. *)
-  drule well_typed_target_BareGlobalNameTarget_in_immutables >> 
-  strip_tac >> gvs[] >>
-  imp_res_tac lift_option_state >> gvs[] >>
-  Cases_on `get_module_code cx (current_module cx)` >>
-  gvs[return_def, raise_def]
+  rpt strip_tac >>
+  (* st' = st since this is a pure operation *)
+  imp_res_tac eval_base_target_BareGlobalNameTarget_preserves_state >> gvs[] >>
+  (* No TypeError: boundary facts discharge the type_check/lift_option guards.
+     We must show res <> INR (Error (TypeError s)) for any s.
+     Expand the definition step-by-step with targeted case splits. *)
+  imp_res_tac well_typed_target_BareGlobalNameTarget_IS_SOME >>
+  imp_res_tac well_typed_target_BareGlobalNameTarget_is_immutable >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  rewrite_tac[ev_BareGlobalNameTarget] >>
+  simp[bind_def, get_immutables_def, get_address_immutables_def,
+       lift_option_def, return_def, raise_def, LET_THM] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[] >>
+  TRY (rpt strip_tac >> gvs[] >> not_type_error_tac) >>
+  simp[lift_option_type_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx (current_module cx)` >> simp[] >>
+  TRY (rpt strip_tac >> gvs[] >> not_type_error_tac) >>
+  simp[type_check_def, assert_def, check_def, ignore_bind_def] >>
+  simp[return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
   >> TRY not_type_error_tac
 QED
 

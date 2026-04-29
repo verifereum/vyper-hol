@@ -39,6 +39,25 @@ Proof
   gvs[return_def, raise_def]
 QED
 
+Theorem eval_base_target_BareGlobalNameTarget_preserves_state:
+  ∀cx id st res st'.
+    eval_base_target cx (BareGlobalNameTarget id) st = (res, st') ==> st' = st
+Proof
+  simp[Once evaluate_def, bind_def, return_def, raise_def,
+       get_immutables_def, get_address_immutables_def, get_scopes_def,
+       lift_option_def, lift_option_type_def, type_check_def,
+       assert_def, check_def, ignore_bind_def, LET_THM] >>
+  rpt strip_tac >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `get_module_code cx (current_module cx)` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num id) x'` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `IS_SOME (FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id))` >>
+  gvs[return_def, raise_def]
+QED
+
 Theorem eval_base_target_BareGlobalNameTarget:
   ∀cx st n.
     IS_SOME (lookup_bare_global_name cx st n) ∧
