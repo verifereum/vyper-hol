@@ -740,7 +740,7 @@ Definition run_ext_call_def:
       extract_call_result accounts tStorage
         (vfmExecution$dispatch_precompiles callee s0)
     else
-      case vfmExecution$run s0 of
+      case vfmExecution$run_call s0 of
       | SOME (result, final_state) =>
           extract_call_result accounts tStorage (result, final_state)
       | NONE => NONE
