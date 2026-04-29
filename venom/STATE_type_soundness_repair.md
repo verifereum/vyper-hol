@@ -1,134 +1,132 @@
 # STATE: Type Soundness Repair
 
-## IMMEDIATE NEXT ACTION
+## CRITICAL CONTEXT (read first)
 
-### Step 1: Fix Assert3 — remove `by` block, inline derivation after RULE_ASSUM_TAC
-Current code (lines 1109-1121) has a `by` block that fails because after RULE_ASSUM_TAC
-rewrites `expr_type e → BaseT BoolT` in assumptions, the `by` block's internal tactics
-(`imp_res_tac >> Cases_on >> gvs >> irule >> simp`) still fail for unknown reasons.
+Build fails at Append block. Root cause: `tp_bind_err_tac` doesn't close INR
+error-propagation subgoals after IH conclusion was strengthened to 4 conjuncts
+(+accounts_well_typed, +no-TypeError). The tactic uses `drule_all >> strip_tac >>
+gvs[]` but gvs[] alone can't handle the new conjuncts. This affects 21+
+`TRY (tp_bind_err_tac >> NO_TAC)` instances across all 29 remaining blocks.
 
-**Fix**: Remove the `by` block entirely. Inline:
+## STRATEGIC PLAN (next session)
+
+### Step 1: Fix tp_bind_err_tac (HIGH PRIORITY, 15 min)
+File: `semantics/prop/vyperTypeSoundnessScript.sml`, line 785
+
+The tactic (line 800) has:
 ```sml
-  (* INL case: apply IH for e *)
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum (qspec_then `x` assume_tac) >>
-  (* Rewrite expr_type e in all assumptions so imp_res_tac can match *)
-  qpat_x_assum `expr_type e = BaseT BoolT` (fn th =>
-    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th])) >>
-  (* x must be Value vl: BaseT type means tyv ≠ NoneTV and tyv ≠ ArrayTV *)
-  imp_res_tac toplevel_value_typed_for_BaseT >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-  first_x_assum irule >> simp[] >>
+TRY (first_x_assum drule_all >> strip_tac >>
+     imp_res_tac eval_expr_not_return >>
+     ... [more not_return] ...
+     imp_res_tac materialise_error >>
+     gvs[]) >>
 ```
 
-**KEY DEBUG STEP**: Before building, use `hol_state_at` interactively to inspect
-the goal state after RULE_ASSUM_TAC. Verify assumptions contain
-`evaluate_type (get_tenv cx) (BaseT BoolT) = SOME tyv` literally.
+After `drule_all >> strip_tac`, the IH gives us the 4 conjuncts as assumptions.
+The `gvs[]` may not close the goal because:
+1. The no-TypeError conjunct `∀s. res ≠ INR (Error (TypeError s))` might not
+   simplify directly from the IH (it's there as an assumption but the goal
+   might need ACCEPT_TAC or a different form).
+2. The accounts_well_typed conjunct may need explicit handling.
 
-If `toplevel_value_typed_for_BaseT` with `imp_res_tac` doesn't work (adds ∃ as
-assumption instead of solving goal), try instead:
+**PROPOSED FIX**: After the `gvs[]` in the first TRY branch, add:
 ```sml
-  drule toplevel_value_typed_for_BaseT >> strip_tac >> gvs[]
-```
-Or use `toplevel_value_typed_for_BaseT_expr_type` with `irule`:
-```sml
-  irule toplevel_value_typed_for_BaseT_expr_type >> rpt (first_assum ACCEPT_TAC)
+rpt CONJ_TAC >>
+TRY not_return_tac >>
+TRY not_type_error_tac >>
+TRY (first_assum ACCEPT_TAC) >>
+TRY (gvs[])
 ```
 
-### Step 2: Fix second `by` block in Assert3 (line ~1145)
-After the switch_BoolV case, the e' evaluation produces same pattern:
-`?sv. x' = Value sv` by (`imp_res_tac evaluate_type_BaseT_inv >> Cases_on >> gvs >> irule >> simp[]`)
-This may need the same RULE_ASSUM_TAC fix for `expr_type e' = BaseT (StringT n)`.
+If this doesn't work, try adding it BEFORE gvs[] since gvs might change the goal shape.
 
-### Step 3: Prove Category A blocks (Name, BareGlobalName, TopLevelName, etc.)
-All expression evaluation blocks will need the same RULE_ASSUM_TAC pattern.
-Consider extracting a reusable tactic:
+ALTERNATIVE: The issue might be simpler — after `drule_all >> strip_tac`,
+the conclusions from the IH are added as assumptions, and the GOAL still has
+conjuncts. So we need `rpt CONJ_TAC` to split them, then each subgoal should
+be solvable by ACCEPT_TAC (matching the assumption from IH) or not_return_tac
+(for the "not a ReturnException" subgoal via eval_*_not_return lemmas).
+
+### Step 2: Build and iterate (30 min)
+After fixing tp_bind_err_tac, run holmake. If it passes Append, continue to
+next failures. Each remaining block should compile if tp_bind_err_tac works.
+
+### Step 3: If tp_bind_err_tac fix doesn't work for specific blocks
+Some blocks use guarded IHs that require `qspecl_then` + `impl_tac` instead
+of simple `drule_all`. For these, the `>-` approach is needed:
 ```sml
-val rewrite_expr_types_tac =
-  TRY (qpat_x_assum `expr_type e = BaseT bt` (fn th =>
-    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]))) >>
-  TRY (qpat_x_assum `expr_type e' = BaseT bt` (fn th =>
-    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th])))
+reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
+  (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+   qpat_x_assum `!env st res st'. ... eval_X _ _ _ = _ ==> _`
+     (qspecl_then [`env`, `st`, `INR y`, `st_bt`] mp_tac) >>
+   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >>
+   strip_tac >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   rpt strip_tac >> gvs[] >>
+   imp_res_tac eval_X_not_return >>
+   first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) [])
 ```
+
+### Step 4: Prove cheat lemmas when blocking (6 cheats in helpers file)
 
 ## BLOCK STATUS
 
-### PROVED (22 blocks):
-Assert1, Assert2, AttributeTarget, BareGlobalNameTarget, BaseTarget, Break, Continue, Expr,
-Log, NameTarget, Pass, Raise1, Raise2, Raise3, ReturnNone, ReturnSome,
-TopLevelNameTarget, TupleTarget, stmts_cons, stmts_nil, targets_cons, targets_nil
+### PROVED (26 blocks):
+Pass, Continue, Break, ReturnNone, ReturnSome, Raise1, Raise2, Raise3,
+Assert1, Assert2, Assert3, Log, Expr, stmts_nil, stmts_cons, BaseTarget,
+TupleTarget, targets_nil, targets_cons, NameTarget, BareGlobalNameTarget,
+TopLevelNameTarget, AttributeTarget, for_nil, Name, Literal, exprs_nil
 
-### IN PROGRESS (1 block):
-Assert3 — `by` block decomposition wrong, need to inline derivation
+### FAILING (29 blocks — first failure stops build):
+AnnAssign, Append (FIRST), Array, Assign, Attribute, AugAssign, BareGlobalName,
+Builtin, CreateTarget, ExtCall, FlagMember, For, If, IfExp, IntCall, Pop,
+Range, RawCallTarget, RawLog, RawRevert, SelfDestructTarget, Send, StructLit,
+Subscript, SubscriptTarget, TopLevelName, TypeBuiltin, exprs_cons, for_cons
 
-### UNATTEMPTED (33 blocks):
-Category A (LOW): Name, BareGlobalName, TopLevelName, FlagMember, Literal,
-  IfExp, StructLit, Subscript, Attribute, Builtin, Pop, TypeBuiltin
-Category B (MEDIUM): If, AugAssign, AnnAssign, Assign, Append, Array, Range
-Category C (MEDIUM): For, for_cons, for_nil
-Category D (HIGH): ExtCall, IntCall, Send, RawCallTarget, RawLog, RawRevert,
-  SelfDestructTarget, CreateTarget
-Category E (LOW): exprs_cons, exprs_nil
+## tp_bind_err_tac Instances (21+ in file)
+All `TRY (tp_bind_err_tac >> NO_TAC)` need the underlying tactic to work.
+Lines: 839, 1012, 1108, 1132, 1185, 1318, 1396, 1420, 1471, 1797, 1805,
+2023, 2714, 3723, 3729, 3734
+Plus `tp_bind_err_tac >> not_return_tac >> NO_TAC` at: 1930, 1936, 2159, 2283, 2287, 2292
+Plus bare `tp_bind_err_tac` at: 864, 1161, 2656, 3742
 
-## KEY DISCOVERY THIS SESSION
+## CHEAT INVENTORY (6 in helpers file)
 
-### RULE_ASSUM_TAC works for expr_type substitution
-`qpat_x_assum `expr_type e = BaseT BoolT` (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]))`
-successfully rewrites `expr_type e → BaseT BoolT` across ALL assumptions without
-causing timeout. This is THE fix for the `imp_res_tac` silent matching failure.
+| # | Theorem | What it does | Needed by |
+|---|---------|-------------|-----------|
+| 1 | env_consistent_pop_scope | Pop scope preserves env_consistent | AugAssign, For, IntCall |
+| 2 | env_consistent_preserves_tv | Eval preserves tv+env_consistent | Many stmt blocks |
+| 3 | bind_arguments_env_consistent | Call arg binding preserves env | IntCall, ExtCall |
+| 4 | set_immutable_well_typed | set_immutable preserves typing | Assign, AnnAssign |
+| 5 | assign_target_well_typed | Assignment replace preserves typing | Assign, AugAssign, Append |
+| 6 | eval_expr_not_HashMapRef | Well-typed eval not HashMapRef | Subscript, Name |
 
-### BUT: `by` blocks still fail after RULE_ASSUM_TAC
-Even with correct assumptions, the `by` block containing
-`imp_res_tac >> Cases_on >> gvs >> irule >> simp` fails at line 1117.
-Root cause unknown — need interactive `hol_state_at` to inspect post-RULE_ASSUM_TAC goal.
-
-### `by` block is the wrong decomposition
-The `by` block creates a sealed subproof. For Assert3's rich context, this causes
-silent failures. Fix: inline the derivation without `by`.
-
-## NEW LEMMA (compiled, proved)
-`toplevel_value_typed_for_BaseT_expr_type` in helpers file at line ~4243:
-  `!tenv e bt tv tyv.
-    evaluate_type tenv (expr_type e) = SOME tyv /\
-    expr_type e = BaseT bt /\
-    toplevel_value_typed tv tyv ==>
-    ?v. tv = Value v`
-Takes the EXACT assumption shape from IH output. May not need RULE_ASSUM_TAC at all
-if used with `irule` in main flow.
-
-## CHEAT INVENTORY (6 in vyperTypeSoundnessHelpersScript.sml)
-
-| # | Theorem | Line | What it does | Needed by |
-|---|---------|------|-------------|-----------|
-| 1 | env_consistent_pop_scope | ~1347 | Pop scope preserves env_consistent | AugAssign?, For?, IntCall? |
-| 2 | env_consistent_preserves_tv | ~1503 | Evaluation preserves tv+env_consistent | Multiple stmt blocks |
-| 3 | bind_arguments_env_consistent | ~1560 | Call argument binding preserves env | IntCall?, ExtCall? |
-| 4 | set_immutable_well_typed | ~1982 | set_immutable preserves typing | Assign?, AnnAssign? |
-| 5 | assign_target_well_typed | ~2364 | Assignment preserves typing (set_immutable case) | Assign, AugAssign |
-| 6 | eval_expr_not_HashMapRef | ~7189 | well_typed NoneT eval never HashMapRef | Subscript?, Name? |
+## INR Error Subgoal Anatomy (from interactive HOL)
+After `reverse (Cases_on q) >> simp_tac (srw_ss()) []`, the INR subgoal is:
+```
+INR y = res ∧ st_bt = st' ⇒
+  state_well_typed st' ∧ env_consistent env cx st' ∧
+  accounts_well_typed st'.accounts ∧
+  (∀s. res ≠ INR (Error (TypeError s))) ∧
+  ∀v ret_tv. res = INR (ReturnException v) ∧ ... ⇒ value_has_type ...
+```
+Solution: strip_tac (introduces equalities), then drule_all from IH.
+The IH gives: state_well_typed st_bt, env_consistent env cx st_bt,
+accounts_well_typed st_bt.accounts, ∀s. INR y ≠ INR (Error (TypeError s)).
+With st_bt = st' from strip, most conjuncts follow by gvs[] or ACCEPT_TAC.
+Last conjunct follows from eval_*_not_return (INR y never matches INR (ReturnException v)).
 
 ## WHAT NOT TO TRY
-- `by` blocks with `imp_res_tac` chains in rich proof contexts (silently fails)
-- `gvs[]` in Assert3 context (causes timeout, likely due to guarded IH for e')
-- Nested ML `qpat_x_assum` with `fn th1 => qpat_x_assum ... (fn th2 => ...)` (causes timeout)
-- `metis_tac` with many assumptions in Assert3 context (diverges)
-- `fs[]` to cross-rewrite `expr_type e` in assumptions (doesn't work reliably)
-
-## REUSABLE TACTIC PATTERN
-For ALL expression evaluation Resume blocks, after IH application produces
-`evaluate_type (get_tenv cx) (expr_type e) = SOME tyv` + `expr_type e = BaseT bt`:
-1. `qpat_x_assum `expr_type e = BaseT bt` (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]))`
-2. Then `imp_res_tac toplevel_value_typed_for_BaseT` matches
-3. Derive `?v. x = Value v` inline (not in `by` block)
+- `>> TRY (.. >> NO_TAC)` after case splits — silently fails
+- `>- (tp_bind_err_tac)` currently — tp_bind_err_tac incomplete for new IH
+- `simp[evaluate_def]` without `Once` — HANGS
+- `gvs[]` to substitute `expr_type e = BaseT bt` — DOESN'T WORK
+- `metis_tac` with many assumptions — TIMES OUT
+- `>- (cheat)` when you're not sure which subgoal is targeted — confusing errors
 
 ## KEY FILES
-- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~4048 lines)
-- Helpers: semantics/prop/vyperTypeSoundnessHelpersScript.sml (~7305 lines)
-- Definitions: semantics/prop/vyperTypeSoundnessDefsScript.sml
-- Builtin typing: semantics/prop/vyperBuiltinTypingScript.sml
+- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~3998 LOC)
+- Helpers: semantics/prop/vyperTypeSoundnessHelpersScript.sml (~7307 LOC, 6 cheats)
+- tp_bind_err_tac: line 785 of main theorem file
+- not_return_tac: line 185 of main theorem file
+- not_type_error_tac: line 248 of main theorem file
 - Workdir: semantics/prop/
-
-## ORACLE FEEDBACK
-No oracle calls this session. All attempts were manual tactic search.
-For Assert3, an oracle call is NOT needed — the fix is known (inline derivation),
-just needs interactive verification.
