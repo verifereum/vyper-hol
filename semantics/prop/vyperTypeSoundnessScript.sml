@@ -51,20 +51,20 @@ val wte_StructLit = cj 7 well_typed_expr_def;
 val wte_Subscript = cj 8 well_typed_expr_def;
 val wte_Attribute = cj 9 well_typed_expr_def;
 val wte_Builtin = cj 10 well_typed_expr_def;
-val wte_TypeBuiltin = cj 11 well_typed_expr_def;
-val wte_Pop = cj 12 well_typed_expr_def;
-val wte_IntCall = cj 13 well_typed_expr_def;
-val wte_ExtCall = cj 14 well_typed_expr_def;
-val wte_Send = cj 15 well_typed_expr_def;
-val wte_RawCallTarget = cj 16 well_typed_expr_def;
-val wte_RawLog = cj 17 well_typed_expr_def;
-val wte_RawRevert = cj 18 well_typed_expr_def;
-val wte_SelfDestructTarget = cj 19 well_typed_expr_def;
-val wte_CreateTarget = cj 20 well_typed_expr_def;
-val wte_SubscriptTarget = cj 24 well_typed_expr_def;
-val wte_AttributeTarget = cj 25 well_typed_expr_def;
-val wte_exprs_cons = cj 27 well_typed_expr_def;
-val wte_named_exprs_cons = cj 31 well_typed_expr_def;
+val wte_TypeBuiltin = LIST_CONJ (map (fn i => cj i well_typed_expr_def) [11,12,13,14,15,16,17,18]);
+val wte_Pop = cj 19 well_typed_expr_def;
+val wte_IntCall = cj 20 well_typed_expr_def;
+val wte_ExtCall = cj 21 well_typed_expr_def;
+val wte_Send = cj 22 well_typed_expr_def;
+val wte_RawCallTarget = cj 23 well_typed_expr_def;
+val wte_RawLog = cj 24 well_typed_expr_def;
+val wte_RawRevert = cj 25 well_typed_expr_def;
+val wte_SelfDestructTarget = cj 26 well_typed_expr_def;
+val wte_CreateTarget = cj 27 well_typed_expr_def;
+val wte_SubscriptTarget = cj 31 well_typed_expr_def;
+val wte_AttributeTarget = cj 32 well_typed_expr_def;
+val wte_exprs_cons = cj 34 well_typed_expr_def;
+val wte_named_exprs_cons = cj 38 well_typed_expr_def;
 
 (* evaluate_def conjuncts *)
 val ev_Pass          = cj 1 evaluate_def;
@@ -987,12 +987,20 @@ Resume eval_preserves_swt[AttributeTarget]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   gvs[wte_AttributeTarget] >>
+  (* Wrap bt typing as existential for P5 IH matching *)
+  qpat_assum `well_typed_target env bt tgt_ty`
+    (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
+                                    `tgt_ty`) th)) >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   rewrite_tac[ev_AttributeTarget] >>
-  simp[bind_def, AllCaseEqs(), return_def] >>
-  strip_tac >> gvs[return_def, PAIR_FST_SND_EQ, UNCURRY] >>
-  last_x_assum (qspec_then `env` mp_tac) >>
-  disch_then drule >> strip_tac >> gvs[]
+  simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
+  Cases_on `eval_base_target cx bt st` >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  TRY (tp_bind_err_tac >> NO_TAC) >>
+  (* P5 IH for bt *)
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM, return_def] >>
+  rpt CONJ_TAC >> first_assum ACCEPT_TAC
 QED
 
 Resume eval_preserves_swt[for_nil]:
@@ -1002,10 +1010,17 @@ QED
 Resume eval_preserves_swt[Name]:
   rpt gen_tac >> strip_tac >>
   fs[wte_Name] >>
+  (* Variable MUST be in scope — eliminates the TypeError branch *)
+  drule_all env_consistent_var_types_completeness >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Name] >>
   simp[bind_def, return_def, get_scopes_def, lift_option_type_def, LET_THM] >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
+  Cases_on `lookup_scopes_val (string_to_num id) st.scopes`
+  >- (* NONE case: impossible — env_consistent guarantees variable is in scope *)
+     (simp[raise_def] >> strip_tac >> gvs[] >>
+      rpt strip_tac >>
+      fs[IS_SOME_EQ_NOT_NONE, lookup_scopes_val_NONE]) >>
+  (* SOME case: exactly like the main-branch proof *)
   simp[raise_def] >>
   strip_tac >> gvs[] >>
   rpt strip_tac >>
@@ -1014,10 +1029,9 @@ Resume eval_preserves_swt[Name]:
   drule lookup_scopes_val_well_typed >> disch_then drule >>
   strip_tac >>
   qexists_tac `entry.type` >> simp[] >>
-  fs[env_consistent_def] >> res_tac
-  >> TRY not_type_error_tac
+  fs[env_consistent_def] >> res_tac >>
+  TRY not_type_error_tac
 QED
-
 Resume eval_preserves_swt[Literal]:
   rpt gen_tac >> strip_tac >>
   fs[wte_Literal] >>
