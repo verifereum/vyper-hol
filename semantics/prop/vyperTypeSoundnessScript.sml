@@ -1162,63 +1162,7 @@ Resume eval_preserves_swt[Assert3]:
 QED
 
 Resume eval_preserves_swt[AnnAssign]:
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `well_typed_stmt _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_AnnAssign]) >>
-  `env.type_defs = get_tenv cx` by
-    (qpat_x_assum `env_consistent _ _ _` mp_tac >>
-     simp_tac (srw_ss()) [env_consistent_def]) >>
-  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
-    (qpat_x_assum `well_formed_type _ _`
-       (mp_tac o SIMP_RULE (srw_ss()) [well_formed_type_def]) >>
-     ASM_REWRITE_TAC [] >> simp_tac (srw_ss()) [IS_SOME_EXISTS]) >>
-  `well_formed_type_value tyv` by
-    (qpat_assum `evaluate_type _ _ = SOME _`
-       (ACCEPT_TAC o MATCH_MP (cj 1 evaluate_type_well_formed))) >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp_tac std_ss [ev_AnnAssign, LET_THM, bind_apply, BETA_THM,
-                    lift_option_type_def, return_def] >>
-  PURE_ONCE_ASM_REWRITE_TAC [] >>
-  simp_tac std_ss [return_def, BETA_THM, bind_apply] >>
-  (* Reduce the case (INL tyv, st) and re-bind *)
-  simp_tac (srw_ss()) [] >>
-  simp_tac std_ss [bind_apply, BETA_THM] >>
-  (* Discharge guarded IH now (before case splits) *)
-  qpat_x_assum `!tenv s'' tyv t. _ ==> _`
-    (qspecl_then [`get_tenv cx`, `st`, `tyv`, `st`] mp_tac) >>
-  simp_tac std_ss [lift_option_type_def, return_def] >>
-  PURE_ONCE_ASM_REWRITE_TAC [] >>
-  simp_tac std_ss [return_def] >> strip_tac >>
-  (* eval_expr: case split *)
-  Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (tp_bind_err_tac >> not_return_tac >> NO_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
-  (* materialise: case split *)
-  Cases_on `materialise cx x r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
-    (* INR case: error propagation *)
-    (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-     rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-     imp_res_tac materialise_error >> gvs[]) >>
-  (* INL case *)
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  tp_materialise_conclusion_tac >>
-  `value_has_type tyv x'` by
-    (qpat_x_assum `evaluate_type _ (expr_type e) = SOME _` mp_tac >>
-     ASM_REWRITE_TAC [] >> strip_tac >> gvs[]) >>
-  (* new_variable *)
-  Cases_on `new_variable id tyv x' r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt CONJ_TAC >>
-  TRY (irule new_variable_swt >> metis_tac[] >> NO_TAC) >>
-  TRY (irule new_variable_ec >> metis_tac[] >> NO_TAC) >>
-  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac new_variable_not_return >> gvs[]
+  suspend "AnnAssign"
 QED
 
 Resume eval_preserves_swt[Append]:
