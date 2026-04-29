@@ -1,21 +1,31 @@
 (*
  * End-to-End Vyper-to-EVM Correctness
  *
- * TOP-LEVEL theorem: vyper_call_correct
- *   When EVM execution enters compiled Vyper bytecode (via CALL at
- *   any point in the call stack), the result corresponds to the
- *   Vyper source semantics (call_external).
+ * Two main theorems:
  *
- * Internal proof structure (not visible in the top-level statement):
+ * 1. vyper_frame_correct (frame-level, primary)
+ *    When EVM execution enters compiled Vyper bytecode (via CALL at
+ *    any point in the call stack), the call frame's result corresponds
+ *    to the Vyper source semantics (call_external).
+ *    Uses VFM's run_call (stops when frame completes).
+ *
+ * 2. vyper_transaction_correct (transaction-level, corollary)
+ *    For outermost calls (single context, transaction entry), the
+ *    full EVM execution corresponds to Vyper semantics.
+ *    Uses VFM's run (runs to completion).
+ *    Derived from vyper_frame_correct via run_call_eq_run_single_context.
+ *
+ * Internal proof structure:
  *   1. vyper_to_venom_correct: call_external ~ run_context
  *   2. venom_pipeline_correct: run_context ~ run_context o pipeline
- *   3. codegen_correct: run_context ~ EVM run
+ *   3. codegen_correct: run_context ~ EVM run_call
  *
  * TOP-LEVEL:
- *   run_call                -- EVM execution of a single call frame
- *   call_state_rel          -- pre-call Vyper/EVM state correspondence
- *   vyper_call_correct      -- main correctness theorem
- *   compile_vyper_raw       -- full compilation chain (exploded args)
+ *   call_state_rel            -- pre-call Vyper/EVM state correspondence
+ *   frame_result_matches      -- frame-level postcondition
+ *   vyper_frame_correct       -- frame-level correctness (any depth)
+ *   vyper_transaction_correct -- transaction-level correctness (single context)
+ *   compile_vyper_raw         -- full compilation chain (exploded args)
  *
  * Definitions (return_data_encodes, log_entry_corresponds,
  * state_effects_match, etc.) are in e2eDefsTheory.
@@ -24,7 +34,7 @@
 Theory e2eCorrectness
 Ancestors
   e2eDefs
-  vyperLoweringCorrect vfmExecution
+  vyperLoweringCorrect vfmExecution vfmRunCall
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -35,33 +45,16 @@ Ancestors
   venomInst
 
 (* =====================================================================
-   Call-Level Correctness (Main Theorem)
+   Frame-Level Correctness (Primary Theorem)
    ===================================================================== *)
 
-(* ===== run_call: EVM execution of a single call frame ===== *)
+(* Note: run_call is from vfmExecutionTheory / vfmRunCallTheory.
+   It executes until the current call frame completes:
+     run_call es = OWHILE (λ(r,s). ISL r ∧ LENGTH s.contexts ≥ LENGTH es.contexts)
+                          (step o SND) (INL (), es)
 
-(* Execute the current call frame until it completes.
-   Keeps stepping while: execution hasn't aborted (ISL r) AND the
-   context stack is at least as deep as when we started (our frame
-   hasn't been popped yet).
-
-   Returns SOME es' when the frame completes:
-   - Normal case (depth > 1): our frame was popped by handle_exception,
-     result incorporated into the caller's context. es' has the
-     caller's context on top with returndata set, success flag pushed
-     on stack, accounts updated or rolled back.
-   - Outermost frame (depth = 1): handle_exception reraises, result
-     is (INR exc_opt, es').
-   - vfm_abort: hard abort, returns (INR exc_opt, es') with our
-     frame still on the stack.
-   Returns NONE only for non-termination (impossible with finite gas). *)
-Definition run_call_def:
-  run_call es =
-    let depth = LENGTH es.contexts in
-    OWHILE (λ(r, s). ISL r ∧ LENGTH s.contexts ≥ depth)
-           (step o SND)
-           (INL (), es)
-End
+   For single-context execution, run_call es = run es
+   (proved as run_call_eq_run_single_context in vfmRunCallTheory). *)
 
 (* ===== Pre-call state correspondence ===== *)
 
@@ -153,8 +146,8 @@ Definition caller_pre_logs_def:
   caller_pre_logs (((ctxt : context), rb) :: _) = ctxt.logs
 End
 
-Definition call_result_matches_def:
-  call_result_matches tenv event_info am tx ret r es es_f ⇔
+Definition frame_result_matches_def:
+  frame_result_matches tenv event_info am tx ret r es es_f ⇔
     ∃ctxt_hd rb_hd accts tstor accs tdel md.
     (* es_f is es with contexts, rollback, msdomain updated.
        txParams preserved. Deeper contexts preserved. *)
@@ -196,82 +189,25 @@ Definition call_result_matches_def:
     | (INR (ReturnException _), _) => F
 End
 
-(* ===== Adapter Lemmas for vyper_call_correct ===== *)
+(* ===== Main Frame-Level Correctness Theorem ===== *)
 
-(* Compilation + call_state_rel + valid_vyper_call together imply
-   vyper_evm_correspondence.
-
-   This bridges three gaps:
-   1. compile_vyper → compile_vyper_raw (via compile_vyper_runtime_bytecode)
-      with internally-computed selectors satisfying valid_function_call
-   2. call_state_rel → initial_evm_rel (constructing Venom initial state
-      from EVM context: accounts, storage, empty memory/logs/stack)
-   3. Pipeline assumption: compile_vyper always uses a pipeline that
-      satisfies ctx_pass_correct with observable_equiv
-
-   Each gap is at the same level as the existing cheated Props theorems. *)
-Theorem compile_vyper_evm_correspondence[local]:
-  !program pipeline dispatch_strategy deploy_bc runtime_bc
-   am tx tenv ret ctxt rb rest es event_info.
-    compile_vyper program pipeline dispatch_strategy
-      = SOME (deploy_bc, runtime_bc) /\
-    es.contexts = (ctxt, rb) :: rest /\
-    call_state_rel program runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call am tx tenv ctxt.msgParams.data ret
-    ==>
-    ?gas_needed.
-      ctxt.msgParams.gasLimit >= gas_needed ==>
-      vyper_evm_correspondence tenv event_info ret am tx es
-Proof
-  cheat
-QED
-
-(* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
-
-   vyper_evm_correspondence is defined in terms of VFM's `run` which
-   executes all frames to completion. call_result_matches uses `run_call`
-   which stops when the current call frame completes.
-
-   For outermost calls (LENGTH es.contexts = 1): run_call = run because
-   step never empties the context stack (step_preserves_nonempty_contexts).
-   For inner calls (LENGTH es.contexts > 1): run_call stops when
-   handle_exception pops the callee frame; the postcondition includes
-   the frame-popping effects (stack push, account rollback on revert).
-
-   This encapsulates the EVM execution semantics reasoning about
-   context stack management, handle_exception, and the OWHILE loop. *)
-Theorem evm_correspondence_to_call_result[local]:
-  !tenv event_info am tx ret es.
-    vyper_evm_correspondence tenv event_info ret am tx es /\
-    ~NULL es.contexts
-    ==>
-    ?r es_final.
-      run_call es = SOME (r, es_final) /\
-      call_result_matches tenv event_info am tx ret r es es_final
-Proof
-  cheat
-QED
-
-(* ===== Main Correctness Theorem ===== *)
-
-(* Compiler correctness for a single external call.
+(* Compiler correctness for a single external call (frame-level).
 
    When EVM execution enters compiled Vyper bytecode (at any point
-   in the call stack), the result corresponds to the Vyper source
-   semantics (call_external am tx).
+   in the call stack), the call frame's result corresponds to the
+   Vyper source semantics (call_external am tx).
 
    Covers both outermost calls (rest = [], as in a transaction) and
    inner calls (rest ≠ [], as in a CALL from another contract).
-   The pipeline and all Venom-internal details are hidden in the proof.
+   Uses VFM's run_call which stops when the current frame completes.
 
    Gas is existential: there exists a gas bound such that with enough
    gas, EVM execution produces the correct result. *)
-Theorem vyper_call_correct:
+Theorem vyper_frame_correct:
   ∀program pipeline dispatch_strategy runtime_bc
-   am tx tenv ret ctxt rb rest es event_info.
-    (∃deploy_bc.
-       compile_vyper program pipeline dispatch_strategy
-         = SOME (deploy_bc, runtime_bc)) ∧
+   am tx tenv ret ctxt rb rest es event_info deploy_bc.
+    compile_vyper program pipeline dispatch_strategy
+     = SOME (deploy_bc, runtime_bc) ∧
     es.contexts = (ctxt, rb) :: rest ∧
     call_state_rel program runtime_bc am tx tenv
       ctxt rb es.txParams ∧
@@ -281,20 +217,49 @@ Theorem vyper_call_correct:
       ctxt.msgParams.gasLimit ≥ gas_needed ⇒
       ∃r es_final.
         run_call es = SOME (r, es_final) ∧
-        call_result_matches tenv event_info am tx ret r es es_final
+        frame_result_matches tenv event_info am tx ret r es es_final
+Proof
+  (* Direct proof through:
+     1. Lowering: vyper_to_venom_correct
+     2. Pipeline: venom_pipeline_correct
+     3. Codegen: codegen_correct *)
+  cheat
+QED
+
+(* ===== Transaction-Level Correctness (Corollary) ===== *)
+
+(* For outermost calls (single context), run_call = run.
+   This specializes vyper_frame_correct to transaction entry. *)
+Theorem vyper_transaction_correct:
+  ∀program pipeline dispatch_strategy runtime_bc
+   am tx tenv ret ctxt rb es event_info.
+    (∃deploy_bc.
+       compile_vyper program pipeline dispatch_strategy
+         = SOME (deploy_bc, runtime_bc)) ∧
+    es.contexts = [(ctxt, rb)] ∧
+    call_state_rel program runtime_bc am tx tenv
+      ctxt rb es.txParams ∧
+    valid_vyper_call am tx tenv ctxt.msgParams.data ret
+    ⇒
+    ∃gas_needed.
+      ctxt.msgParams.gasLimit ≥ gas_needed ⇒
+      vyper_evm_correspondence tenv event_info ret am tx es
 Proof
   rpt strip_tac
-  (* Step 1: compile_vyper gives vyper_evm_correspondence with gas bound *)
-  \\ drule_all compile_vyper_evm_correspondence
+  (* Apply frame-level theorem *)
+  \\ drule_all vyper_frame_correct
   \\ disch_then (qspec_then `event_info` strip_assume_tac)
   \\ qexists `gas_needed`
   \\ strip_tac
-  (* Step 2: Apply gas condition to get vyper_evm_correspondence *)
-  \\ `vyper_evm_correspondence tenv event_info ret am tx es` by
-       metis_tac[]
-  (* Step 3: Bridge to run_call + call_result_matches *)
-  \\ drule evm_correspondence_to_call_result
-  \\ simp[]
+  \\ first_x_assum drule
+  \\ strip_tac
+  (* For single context: run_call = run *)
+  \\ `run_call es = run es` by
+       (irule run_call_eq_run_single_context \\ simp[])
+  (* Bridge frame_result_matches to vyper_evm_correspondence *)
+  \\ gvs[frame_result_matches_def, vyper_evm_correspondence_def]
+  \\ cheat (* TODO: show frame_result_matches implies vyper_evm_correspondence
+              for single-context case *)
 QED
 
 (* ===================================================================== *)
