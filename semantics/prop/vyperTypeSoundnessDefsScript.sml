@@ -502,6 +502,10 @@ Definition env_consistent_def:
          (case ALOOKUP st.immutables cx.txn.target of
             SOME m => m | NONE => [])) id = SOME (tv, v) ==>
        evaluate_type (get_tenv cx) ty = SOME tv) /\
+    (* global_types entries correspond to immutable declarations in module code *)
+    (!id ty. FLOOKUP env.global_types id = SOME ty ==>
+       ?ts. get_module_code cx (current_module cx) = SOME ts /\
+            is_immutable_decl id ts) /\
     (* toplevel_types: declared type in module code matches typing env *)
     (!src_id_opt id ty ts.
        FLOOKUP env.toplevel_types (src_id_opt, id) = SOME ty /\

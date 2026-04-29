@@ -954,6 +954,9 @@ QED
 
 Resume eval_preserves_swt[NameTarget]:
   rpt strip_tac >>
+  (* type_check (IS_SOME (lookup_scopes ...)) must succeed because
+     well_typed_target + env_consistent guarantee the variable is in scope *)
+  imp_res_tac well_typed_target_NameTarget_in_scope >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   rewrite_tac[ev_NameTarget] >>
   simp[bind_def, return_def, raise_def,
@@ -965,6 +968,11 @@ QED
 
 Resume eval_preserves_swt[BareGlobalNameTarget]:
   tp_pure_base_target_tac ev_BareGlobalNameTarget >>
+  (* well_typed_target + env_consistent give IS_SOME (FLOOKUP immutables n),
+     ?ts. get_module_code ... = SOME ts /\ is_immutable_decl n ts.
+     These discharge type_check/lift_option_type TypeError guards. *)
+  drule well_typed_target_BareGlobalNameTarget_in_immutables >> 
+  strip_tac >> gvs[] >>
   imp_res_tac lift_option_state >> gvs[] >>
   Cases_on `get_module_code cx (current_module cx)` >>
   gvs[return_def, raise_def]

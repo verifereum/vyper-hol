@@ -958,6 +958,9 @@ Theorem env_consistent_scopes_only:
          (case ALOOKUP st.immutables cx.txn.target of
             SOME m => m | NONE => [])) id = SOME (tv, v) ==>
        evaluate_type (get_tenv cx) ty = SOME tv) /\
+    (!id ty. FLOOKUP env.global_types id = SOME ty ==>
+       ?ts. get_module_code cx (current_module cx) = SOME ts /\
+            is_immutable_decl id ts) /\
     (!src_id_opt id ty ts.
        FLOOKUP env.toplevel_types (src_id_opt, id) = SOME ty /\
        get_module_code cx src_id_opt = SOME ts ==>
@@ -7222,4 +7225,42 @@ Proof
   (* materialise TypeError implies HashMapRef — contradiction *)
   imp_res_tac materialise_type_error_imp_HashMapRef >>
   metis_tac[]
+QED
+
+
+(* ===== Boundary lemmas: well_typed_target → runtime lookup ===== *)
+(* These bridge static typing (well_typed_target) to runtime state
+   (lookup_scopes / FLOOKUP immutables), used to discharge type_check
+   guards in eval_base_target proofs. *)
+
+(* NameTarget: well_typed + env_consistent implies variable is in scope,
+   so type_check (IS_SOME (lookup_scopes ...)) succeeds. *)
+Theorem well_typed_target_NameTarget_in_scope:
+  !env cx st id ty.
+    well_typed_target env (NameTarget id) ty /\
+    env_consistent env cx st ==>
+    IS_SOME (lookup_scopes (string_to_num id) st.scopes)
+Proof
+  rpt strip_tac >>
+  `FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    fs[well_typed_expr_def] >>
+  fs[env_consistent_def]
+QED
+
+(* BareGlobalNameTarget: well_typed + env_consistent implies variable is
+   in immutables, module code exists, and is declared as immutable. *)
+Theorem well_typed_target_BareGlobalNameTarget_in_immutables:
+  !env cx st id ty.
+    well_typed_target env (BareGlobalNameTarget id) ty /\
+    env_consistent env cx st ==>
+    IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+      (case ALOOKUP st.immutables cx.txn.target of
+         SOME m => m | NONE => [])) (string_to_num id)) /\
+    (?ts. get_module_code cx (current_module cx) = SOME ts /\
+          is_immutable_decl (string_to_num id) ts)
+Proof
+  rpt strip_tac >>
+  `FLOOKUP env.global_types (string_to_num id) = SOME ty` by
+    fs[well_typed_expr_def] >>
+  fs[env_consistent_def]
 QED
