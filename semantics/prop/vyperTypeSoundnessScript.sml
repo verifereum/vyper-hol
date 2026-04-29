@@ -794,9 +794,7 @@ val tp_bind_err_tac =
   TRY (imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac type_check_state >> rpt BasicProvers.VAR_EQ_TAC) >>
   TRY (imp_res_tac switch_BoolV_state >> rpt BasicProvers.VAR_EQ_TAC) >>
-  TRY (first_x_assum drule_all >> strip_tac) >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >>
   TRY (imp_res_tac eval_expr_not_return >>
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
   TRY (imp_res_tac eval_exprs_not_return >>
@@ -811,7 +809,8 @@ val tp_bind_err_tac =
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
   TRY (imp_res_tac materialise_error >>
        pop_assum mp_tac >> simp_tac (srw_ss()) []) >>
-  TRY not_type_error_tac >> TRY (first_assum ACCEPT_TAC);
+  TRY not_type_error_tac >>
+  TRY (first_assum ACCEPT_TAC);
 
 Resume eval_preserves_swt[Raise3]:
   rpt gen_tac >> strip_tac >>
@@ -1000,7 +999,7 @@ Resume eval_preserves_swt[AttributeTarget]:
   (* P5 IH for bt *)
   first_x_assum drule_all >> strip_tac >>
   Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM, return_def] >>
-  rpt CONJ_TAC >> first_assum ACCEPT_TAC
+  gvs[]
 QED
 
 Resume eval_preserves_swt[for_nil]:
@@ -1016,10 +1015,8 @@ Resume eval_preserves_swt[Name]:
   rewrite_tac[ev_Name] >>
   simp[bind_def, return_def, get_scopes_def, lift_option_type_def, LET_THM] >>
   Cases_on `lookup_scopes_val (string_to_num id) st.scopes`
-  >- (* NONE case: impossible — env_consistent guarantees variable is in scope *)
-     (simp[raise_def] >> strip_tac >> gvs[] >>
-      rpt strip_tac >>
-      fs[IS_SOME_EQ_NOT_NONE, lookup_scopes_val_NONE]) >>
+  >- (* NONE case: impossible — lookup_scopes_val=NONE contradicts IS_SOME from env_consistent *)
+     (fs[lookup_scopes_val_NONE, IS_SOME_EQ_NOT_NONE]) >>
   (* SOME case: exactly like the main-branch proof *)
   simp[raise_def] >>
   strip_tac >> gvs[] >>
@@ -1114,11 +1111,11 @@ Resume eval_preserves_swt[Assert3]:
   (* BoolV F: eval_expr cx e' for reason string *)
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e' r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
   (* Apply guarded IH for e' *)
   qpat_x_assum `!s'' tv t. eval_expr _ _ s'' = (INL tv, t) ==> _`
-    (qspecl_then [`st`, `x`, `r`] mp_tac) >> simp_tac (srw_ss()) [] >>
+    (qspecl_then [`st`, `x`, `r`] mp_tac) >>
   disch_then drule_all >> strip_tac >>
   (* get_Value *)
   simp_tac (srw_ss()) [get_Value_def, bind_apply, BETA_THM] >>
