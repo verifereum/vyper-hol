@@ -6001,7 +6001,7 @@ Proof
     (simp[Abbr `eda`] >>
      qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
      simp[] >> disch_then irule >>
-     fs[bb_well_formed_def, Abbr `bi`]) >>
+     fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
   `np_defs_before_uses bi` by
     gvs[non_pseudo_defs_before_uses_def, Abbr `bi`] >>
@@ -6263,8 +6263,8 @@ Proof
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
      qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
-     simp[] >> disch_then irule >>
-     fs[bb_well_formed_def, Abbr `bi`]) >>
+     simp[non_pseudo_defs_before_uses_def] >> disch_then irule >>
+     fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by (fs[bb_well_formed_def, Abbr `bi`]) >>
   `is_terminator (LAST bi).inst_opcode` by
     fs[bb_well_formed_def, Abbr `bi`] >>
@@ -8826,7 +8826,7 @@ Proof
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
      qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
-     simp[Abbr `bi`] >> disch_then irule >> fs[dft_inv_def, bb_well_formed_def]) >>
+     simp[Abbr `bi`, non_pseudo_defs_before_uses_def] >> disch_then irule >> fs[dft_inv_def, bb_well_formed_def, non_pseudo_defs_before_uses_def]) >>
   `EVERY (\i. MEM i bi) entries`
     by simp[Abbr `entries`, Abbr `bi`, entry_instructions_mem] >>
   `bi <> []` by fs[dft_inv_def, bb_well_formed_def, Abbr `bi`] >>
