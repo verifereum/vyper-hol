@@ -1262,20 +1262,34 @@ QED
 Resume eval_preserves_swt[Assign_tgt]:
   (* Apply P3 IH for eval_target *)
   first_x_assum drule_all >> strip_tac >>
-  (* Apply guarded P7 IH for eval_expr BEFORE case split,
-     so both INL and INR cases have the unguarded inner IH *)
+  (* Apply guarded P7 IH for eval_expr BEFORE case split *)
   qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
     (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   (* Case split eval_expr *)
   Cases_on `eval_expr cx e st_tgt` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  (* INR case: error propagation from eval_expr *)
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-         drule_all >> strip_tac >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> gvs[] >> NO_TAC) >>
+  suspend "Assign_tgt_inr" >>
+  suspend "Assign_tgt_inl"
+QED
+
+Resume eval_preserves_swt[Assign_tgt_inr]:
+  (* eval_expr returned INR error — propagate *)
+  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+    (qspecl_then [`env`, `st_tgt`, `INR y`, `r`] mp_tac) >>
+  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac eval_expr_not_return >>
+  first_x_assum (qspec_then `v` mp_tac) >>
+  simp_tac (srw_ss()) []
+QED
+
+Resume eval_preserves_swt[Assign_tgt_inl]:
+  (* eval_expr returned INL — apply P7 IH for toplevel_value_typed *)
+  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+    (qspecl_then [`env`, `st_tgt`, `INL tv`, `r`] mp_tac) >>
+  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
   (* Case split materialise *)
   Cases_on `materialise cx tv r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
@@ -1285,12 +1299,10 @@ Resume eval_preserves_swt[Assign_tgt]:
    rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
    rpt strip_tac >> gvs[] >>
    TRY not_type_error_tac) >>
-  (* INL case: assign_target *)
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   Cases_on `assign_target cx x (Replace v) r` >>
   `state_well_typed r' /\ env_consistent env cx r'` by
     suspend "Assign_atwt" >>
-  (* Case split assign_target result: success vs error *)
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
