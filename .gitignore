@@ -1,6 +1,8 @@
 # HOL4 build artifacts
 **/.hol/
 **/.alan/
+*Theory.sig
+*Theory.sml
 
 .holbuild
 

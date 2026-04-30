@@ -1,11 +1,17 @@
 (*
  * DFT Permutation Simulation
  *
- * Key lemma: if all instructions are pairwise bilaterally independent
- * and all succeed (OK), then any permutation produces the same final state.
- *
+ * If all instructions are pairwise bilaterally independent and all
+ * succeed (OK), then any permutation produces the same final state.
  * Uses independent_commute_eq (from dftBlockSimTheory) for adjacent swaps,
  * then extends to arbitrary permutations via PERM induction.
+ *
+ * TOP-LEVEL: run_insts_perm_ok, run_insts_perm_ok_ext,
+ *   run_insts_topo_equiv, run_insts_append, run_insts_bubble_to_front,
+ *   run_insts_bubble_to_front_ext, flip_operands_step_inst,
+ *   flip_operands_step_inst_base, step_inst_nofail_not_halt_abort
+ * Helper: bi_independent, ext_bi_independent, pairwise_bi_independent,
+ *   pairwise_ext_bi_independent, topo_sorted
  *)
 
 Theory dftPermSim
@@ -29,6 +35,8 @@ QED
 
 (* ===== run_insts append decomposition ===== *)
 
+(* run_insts distributes over append: run the first list to get an
+   intermediate state, then continue with the second list. *)
 Theorem run_insts_append:
   !fuel ctx l1 l2 s.
     run_insts fuel ctx (l1 ++ l2) s =
@@ -79,7 +87,7 @@ QED
 
 (* ===== Extended bilateral independence (allows INVOKE) ===== *)
 
-(* Like bi_independent but without abort_compatible and ~INVOKE.
+(* Like bi_independent but without the ~INVOKE restriction.
    INVOKE can be reordered past pure ops because effects_independent INVOKE ADD = T.
    The swap proof for ext uses step_inst_ok_frame (all opcodes) instead of
    step_inst_base. *)
@@ -786,6 +794,9 @@ Proof
       qexists `sb` >> simp[] >> res_tac)
 QED
 
+(* Extended pairwise independence version: pairwise ext-bi-independent
+   and well-formed instructions produce the same OK result under any
+   permutation (allows INVOKE). *)
 Theorem run_insts_perm_ok_ext:
   !l1 l2.
     PERM l1 l2 ==>
@@ -865,6 +876,8 @@ Proof
   drule_all step_swap_ok >> strip_tac >> simp[]
 QED
 
+(* Pairwise bi-independent instructions produce the same OK result
+   under any permutation. *)
 Theorem run_insts_perm_ok:
   !l1 l2.
     PERM l1 l2 ==>
@@ -893,7 +906,9 @@ Definition topo_sorted_def:
     !i j. i < j /\ j < LENGTH l ==> ~dep (EL i l) (EL j l)
 End
 
-(* Main theorem *)
+(* Two topologically sorted permutations of the same instruction list
+   (w.r.t. dep, where incomparable elements are bi_independent)
+   produce the same run_insts OK result, provided all elements are distinct. *)
 (* Helper: EL in (prefix ++ suffix) relates to (prefix ++ [x] ++ suffix) *)
 Theorem el_delete_map:
   !n prefix x suffix.
@@ -1133,6 +1148,8 @@ Proof
   irule exec_pure2_swap >> rw comm_lemmas
 QED
 
+(* Flipping operand order (and comparison opcode) preserves step_inst_base
+   for flippable (commutative arithmetic and comparison) opcodes. *)
 Theorem flip_operands_step_inst_base:
   !i st. is_flippable i.inst_opcode ==>
     step_inst_base (flip_operands i) st = step_inst_base i st
@@ -1167,6 +1184,7 @@ Proof
   gvs[is_comparator_def, flip_comparison_opcode_def]
 QED
 
+(* flip_operands preserves step_inst semantics for flippable opcodes. *)
 Theorem flip_operands_step_inst:
   !fuel ctx i st. is_flippable i.inst_opcode ==>
     step_inst fuel ctx (flip_operands i) st = step_inst fuel ctx i st
@@ -1216,6 +1234,8 @@ val per_op_no_halt_abort = map (fn (op_tm, clause) =>
 
 val per_op_combined = LIST_CONJ per_op_no_halt_abort;
 
+(* A NoFail non-terminator step_inst_base never produces Halt or Abort
+   — only OK or Error outcomes remain. *)
 Theorem step_inst_nofail_not_halt_abort:
   !inst s.
     opcode_fail_class inst.inst_opcode = NoFail /\

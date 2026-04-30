@@ -20,7 +20,7 @@
 
 Theory dftCorrectness
 Ancestors
-  dftTopoSort dftWf dftDefs stateEquiv stateEquivProps passSimulationDefs
+  dftFrontEquiv dftTopoSort dftWf dftDefs dftHelpers stateEquiv stateEquivProps passSimulationDefs
   venomExecSemantics venomWf venomState finite_map venomInst
   analysisSimDefs analysisSimProofsBase dftPermSim dftCompleteness dftPipelineInvar
   dftStructural dftIdempotent venomEffects sorting
@@ -28,7 +28,7 @@ Ancestors
   venomExecProps passSimulationProofs crossBlockSimProps
   dftBlockSim passSharedProps venomInstProps
   passSharedFrame passSharedDefs relation
-  allocaRemapSSA
+  dftCanonicalDep allocaRemapSSA dftContraHelpers
   pred_set pair
 Libs
   wordsLib BasicProvers dep_rewrite
@@ -338,7 +338,7 @@ QED
    Specifically: if y aborts on s, y also aborts on sx with the same type;
    if y doesn't error on s, y doesn't error on sx. *)
 (* Helper: MEM (Var v) ops ==> MEM v (operand_vars ops) *)
-Triviality MEM_operand_vars_iff:
+Theorem MEM_operand_vars_iff:
   !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
 Proof
   Induct >> simp[operand_vars_def] >>
@@ -1207,7 +1207,7 @@ Proof
 QED
 
 (* from_block gives step_inst equivalence (uses strengthened from_block) *)
-Triviality all_distinct_map_mem_inj:
+Theorem all_distinct_map_mem_inj:
   !f l a b. ALL_DISTINCT (MAP f l) /\ MEM a l /\ MEM b l /\
             f a = f b ==> a = b
 Proof
@@ -1313,7 +1313,7 @@ QED
 
 (* If two instruction lists have the same step_inst for all states
    (pointwise), then run_insts produces the same result. *)
-Triviality run_insts_pointwise_equiv:
+Theorem run_insts_pointwise_equiv:
   !l1 l2 fuel ctx s.
     LENGTH l1 = LENGTH l2 /\
     (!k s'. k < LENGTH l1 ==>
@@ -1709,7 +1709,7 @@ Proof
      fs[topo_sorted_def]
 QED
 
-Triviality topo_sorted_tc_closed:
+Theorem topo_sorted_tc_closed:
   !dep l.
     topo_sorted dep l /\ ALL_DISTINCT l /\
     (!x y. dep x y ==> MEM x l /\ MEM y l) ==>
@@ -1729,7 +1729,7 @@ Proof
 QED
 
 (* Every non-pseudo, non-terminator opcode is either effect_free or a barrier *)
-Triviality effect_free_or_barrier:
+Theorem effect_free_or_barrier:
   !i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode ==>
       is_effect_free_op i.inst_opcode \/ is_barrier i
 Proof
@@ -1758,7 +1758,7 @@ QED
    only add entries, never remove existing deps. *)
 
 (* FOLDL (\ds p. if MEM p ds then ds else p :: ds) preserves existing members *)
-Triviality foldl_add_preserves_mem:
+Theorem foldl_add_preserves_mem:
   !ps ds x. MEM x ds ==>
     MEM x (FOLDL (\ds p. if MEM p ds then ds else p :: ds) ds ps)
 Proof
@@ -1768,7 +1768,7 @@ Proof
 QED
 
 (* add_deps_from_barrier preserves existing deps — let-expanded FOLDL body *)
-Triviality add_deps_from_barrier_foldl_mono:
+Theorem add_deps_from_barrier_foldl_mono:
   !non_phis acc prev_insts id d.
     MEM d (case FLOOKUP acc id of NONE => [] | SOME ds => ds) ==>
     MEM d (case FLOOKUP (FST (FOLDL (\(acc, prev_insts) inst.
@@ -1789,7 +1789,7 @@ Proof
   Cases_on `FLOOKUP acc id` >> gvs[]
 QED
 
-Triviality add_deps_from_barrier_mono:
+Theorem add_deps_from_barrier_mono:
   !bi eda id d.
     MEM d (case FLOOKUP eda id of NONE => [] | SOME ds => ds) ==>
     MEM d (case FLOOKUP (add_deps_from_barrier bi eda) id of
@@ -1800,7 +1800,7 @@ Proof
 QED
 
 (* add_deps_on_barrier: let-expanded FOLDL mono *)
-Triviality add_deps_on_barrier_foldl_mono:
+Theorem add_deps_on_barrier_foldl_mono:
   !non_phis acc last_bar id d.
     MEM d (case FLOOKUP acc id of NONE => [] | SOME ds => ds) ==>
     MEM d (case FLOOKUP (FST (FOLDL (\(acc, last_bar) inst.
@@ -1826,7 +1826,7 @@ Proof
   Cases_on `FLOOKUP acc id` >> gvs[]
 QED
 
-Triviality add_deps_on_barrier_mono:
+Theorem add_deps_on_barrier_mono:
   !bi eda id d.
     MEM d (case FLOOKUP eda id of NONE => [] | SOME ds => ds) ==>
     MEM d (case FLOOKUP (add_deps_on_barrier bi eda) id of
@@ -1837,7 +1837,7 @@ Proof
 QED
 
 (* add_chain_deps: let-expanded FOLDL mono *)
-Triviality add_chain_deps_foldl_mono:
+Theorem add_chain_deps_foldl_mono:
   !matching acc prev id d.
     MEM d (case FLOOKUP acc id of NONE => [] | SOME ds => ds) ==>
     MEM d (case FLOOKUP (FST (FOLDL (\(acc, prev) inst.
@@ -1859,7 +1859,7 @@ Proof
   Cases_on `FLOOKUP acc id` >> gvs[]
 QED
 
-Triviality add_chain_deps_mono:
+Theorem add_chain_deps_mono:
   !P bi eda id d.
     MEM d (case FLOOKUP eda id of NONE => [] | SOME ds => ds) ==>
     MEM d (case FLOOKUP (add_chain_deps P bi eda) id of
@@ -1881,7 +1881,7 @@ Proof
 QED
 
 (* Combined: add_deps_from_barrier result survives to build_full_eda *)
-Triviality build_full_eda_mono_from_barrier:
+Theorem build_full_eda_mono_from_barrier:
   !bi id d.
     MEM d (case FLOOKUP
       (add_deps_from_barrier bi
@@ -1895,7 +1895,7 @@ Proof
 QED
 
 (* add_deps_on_barrier result survives through add_deps_from_barrier to build_full_eda *)
-Triviality build_full_eda_mono_on_barrier:
+Theorem build_full_eda_mono_on_barrier:
   !bi id d.
     MEM d (case FLOOKUP
       (add_deps_on_barrier bi
@@ -1936,7 +1936,7 @@ Proof
 QED
 
 (* Helper: barrier x gets all prev_insts when processed *)
-Triviality from_barrier_at_barrier:
+Theorem from_barrier_at_barrier:
   !non_phis acc prev_insts x suffix.
     non_phis = x :: suffix /\ is_barrier x ==>
     !y. MEM y prev_insts ==>
@@ -2024,7 +2024,7 @@ QED
 
 (* Helper: when processing non-barrier x with last_bar = SOME b,
    b ends up in x's deps in the result acc *)
-Triviality on_barrier_at_inst:
+Theorem on_barrier_at_inst:
   !x suffix acc b.
     ~is_barrier x ==>
     MEM b (case FLOOKUP (FST (FOLDL (\(acc, last_bar) inst.
@@ -2049,7 +2049,7 @@ QED
 (* Main spec: if prefix contains a barrier and x is non-barrier,
    then the last barrier in prefix is in x's deps.
    FOLDL processes prefix ++ [x] ++ suffix starting with (acc, last_bar_init). *)
-Triviality add_deps_on_barrier_foldl_spec:
+Theorem add_deps_on_barrier_foldl_spec:
   !prefix x suffix acc last_bar_init b.
     ALL_DISTINCT (MAP (\i. i.inst_id) (prefix ++ [x] ++ suffix)) /\
     ~is_barrier x /\
@@ -2143,7 +2143,7 @@ QED
 Finalise map_choose_original_perm
 
 (* MAP choose_original gives pointwise step_inst equivalence *)
-Triviality map_choose_original_step_equiv:
+Theorem map_choose_original_step_equiv:
   !l1 l2 fuel ctx.
     ALL_DISTINCT (MAP (\i. i.inst_id) l1) /\
     (!i. MEM i l2 ==>
@@ -2185,7 +2185,7 @@ Proof
 QED
 
 (* eda_dep only depends on inst_id *)
-Triviality eda_dep_inst_id_only:
+Theorem eda_dep_inst_id_only:
   !eda x y x' y'.
     x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id ==>
     (eda_dep eda x y <=> eda_dep eda x' y')
@@ -2195,7 +2195,7 @@ QED
 
 (* Effect-free swap: no inst_wf needed. If both effect-free with disjoint
    defs/uses, step a→b OK implies step b→a OK with same result. *)
-Triviality step_swap_ok_effect_free:
+Theorem step_swap_ok_effect_free:
   !fuel ctx a b s sa sab.
     is_effect_free_op a.inst_opcode /\ is_effect_free_op b.inst_opcode /\
     ~is_terminator a.inst_opcode /\ ~is_terminator b.inst_opcode /\
@@ -2306,7 +2306,7 @@ Proof
   metis_tac[MEM_SPLIT_APPEND_first]
 QED
 
-(* H1: block body instructions have ALL_DISTINCT inst_ids *)
+(* block body instructions have ALL_DISTINCT inst_ids *)
 Triviality all_distinct_flat_mem:
   !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
 Proof
@@ -2325,7 +2325,7 @@ Proof
   >> metis_tac[MEM_FLAT, MEM_MAP]
 QED
 
-Triviality block_body_all_distinct:
+Theorem block_body_all_distinct:
   !fn bb.
     wf_function fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (MAP (\i. i.inst_id) (block_body bb))
@@ -2360,7 +2360,7 @@ Proof
 QED
 
 (* Eliminate block_perm_of: replace bb_orig with bb *)
-Triviality block_perm_of_elim:
+Theorem block_perm_of_elim:
   !fn bb bb'.
     wf_function fn /\ MEM bb fn.fn_blocks /\
     block_perm_of fn bb' /\ bb.bb_label = bb'.bb_label ==>
@@ -2390,8 +2390,8 @@ Proof
                 is_terminator_def]
 QED
 
-(* H2: block_body bb' instructions have from_block equivalents *)
-Triviality block_body_from_block:
+(* block_body bb' instructions have from_block equivalents *)
+Theorem block_body_from_block:
   !fn bb bb' i.
     wf_function fn /\ MEM bb fn.fn_blocks /\
     block_perm_of fn bb' /\ bb.bb_label = bb'.bb_label /\
@@ -2415,7 +2415,7 @@ Proof
 QED
 
 (* Per-block ALL_DISTINCT inst_ids from wf_function *)
-Triviality bb_inst_ids_distinct:
+Theorem bb_inst_ids_distinct:
   !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
 Proof
@@ -2522,8 +2522,8 @@ Proof
   metis_tac[block_body_all_distinct, block_body_all_distinct_perm]
 QED
 
-(* H3: PERM (block_body bb) (MAP (choose_original ...) (block_body bb')) *)
-Triviality block_body_choose_perm:
+(* PERM (block_body bb) (MAP (choose_original ...) (block_body bb')) *)
+Theorem block_body_choose_perm:
   !fn bb bb'.
     wf_function fn /\ MEM bb fn.fn_blocks /\
     block_perm_of fn bb' /\ bb.bb_label = bb'.bb_label /\
@@ -2539,7 +2539,7 @@ Proof
   >> metis_tac[block_body_perm_inst_ids]
 QED
 
-(* H4: topo_sorted for original block under full_dep eda (no TC needed).
+(* topo_sorted for original block under full_dep eda (no TC needed).
    full_dep = eda_dep ∨ uses/defs overlap ∨ defs/defs overlap.
    Part 1 (eda_dep): from eda_topo_compatible_topo_sorted.
    Part 2 (uses/defs): from def_dominates_uses — user at i, definer at j>i impossible.
@@ -2774,7 +2774,7 @@ QED
 
 (* Variant of map_choose_original_topo_sorted where condition 4
    is restricted to elements of l1 and l2 *)
-Triviality map_choose_original_topo_sorted_restricted:
+Theorem map_choose_original_topo_sorted_restricted:
   !l1 l2 dep.
     ALL_DISTINCT (MAP (\i. i.inst_id) l1) /\
     topo_sorted dep l2 /\
@@ -2799,7 +2799,7 @@ Proof
   metis_tac[]
 QED
 
-(* NOTE: block_body_topo_sorted_co (H5) was FALSE as stated — block_perm_of
+(* NOTE: block_body_topo_sorted_co was FALSE as stated — block_perm_of
    does not carry ordering info. topo_sorted must come from the DFT pipeline
    (schedule_output_eda_before + schedule_output_producer_before).
    Now passed as hypothesis to block_body_ok_equiv. *)
@@ -2911,7 +2911,7 @@ QED
 
 Finalise schedule_topo_sorted_full_dep;
 
-(* H6: uncomparable under TC(full_dep eda) → ef_commutes *)
+(* uncomparable under TC(full_dep eda) → ef_commutes *)
 (* Key lemma for H6: barriers are TC-connected to all other block_body elements.
    If b is a barrier in block_body and y ≠ b is also in block_body,
    then TC(full_dep(build_full_eda insts)) connects them. *)
@@ -2926,7 +2926,7 @@ QED
 (* Helper: from_barrier result lifts to eda_dep of build_full_eda.
    If b is barrier at position after prefix in non_phis, and y is in prefix,
    then eda_dep(build_full_eda bi) b y. *)
-Triviality from_barrier_to_eda_dep:
+Theorem from_barrier_to_eda_dep:
   !bi prefix b suffix y.
     FILTER (\i. ~is_pseudo i.inst_opcode) bi = prefix ++ [b] ++ suffix /\
     is_barrier b /\ MEM y prefix /\
@@ -2953,7 +2953,7 @@ QED
 (* Helper: on_barrier result lifts to eda_dep of build_full_eda.
    If y is non-barrier, and last barrier before y in non_phis is b',
    then eda_dep(build_full_eda bi) y b'. *)
-Triviality on_barrier_to_eda_dep:
+Theorem on_barrier_to_eda_dep:
   !bi prefix y suffix b.
     FILTER (\i. ~is_pseudo i.inst_opcode) bi = prefix ++ [y] ++ suffix /\
     ~is_barrier y /\
@@ -3175,9 +3175,74 @@ QED
 
 Finalise barrier_tc_connected
 
+Theorem canonical_tc_incomp_ef_commutes_body_restricted:
+  !bi x y.
+    ALL_DISTINCT bi /\ bi <> [] /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
+         k = PRE (LENGTH bi)) /\
+    MEM x (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) /\
+    MEM y (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) /\
+    x <> y /\
+    ~TC (\a c. canonical_dep bi a c /\
+               MEM a (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) /\
+               MEM c (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi)) x y /\
+    ~TC (\a c. canonical_dep bi a c /\
+               MEM a (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) /\
+               MEM c (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi)) y x /\
+    DISJOINT (set (inst_defs x)) (set (inst_defs y)) ==>
+    ef_commutes x y
+Proof
+  rpt strip_tac >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+   ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode`
+    by (qpat_x_assum `MEM x (FILTER _ bi)` mp_tac >>
+        qpat_x_assum `MEM y (FILTER _ bi)` mp_tac >>
+        simp[MEM_FILTER]) >>
+  `~is_barrier x /\ ~is_barrier y` by (
+    conj_tac >| [
+      strip_tac >>
+      qspecl_then [`bi`,`x`,`y`] mp_tac
+        dftCanonicalDepTheory.canonical_dep_barrier_tc_connected_restricted >>
+      impl_tac >- simp[MEM_FILTER] >>
+      metis_tac[],
+      strip_tac >>
+      qspecl_then [`bi`,`y`,`x`] mp_tac
+        dftCanonicalDepTheory.canonical_dep_barrier_tc_connected_restricted >>
+      impl_tac >- simp[MEM_FILTER] >>
+      metis_tac[]
+    ]) >>
+  `is_effect_free_op x.inst_opcode /\ is_effect_free_op y.inst_opcode`
+    by metis_tac[effect_free_or_barrier] >>
+  `MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) bi) /\
+   MEM y (FILTER (\i. ~is_pseudo i.inst_opcode) bi)`
+    by (imp_res_tac MEM_FILTER >> imp_res_tac MEM_FILTER >> simp[MEM_FILTER]) >>
+  `~data_dep_body bi x y` by (
+    CCONTR_TAC >>
+    `canonical_dep bi x y` by metis_tac[data_dep_body_imp_canonical_dep] >>
+    `TC (\a c. canonical_dep bi a c /\
+       MEM a (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) /\
+       MEM c (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi)) x y`
+      by (irule TC_SUBSET >> BETA_TAC >> simp[]) >>
+    metis_tac[]) >>
+  `~data_dep_body bi y x` by (
+    CCONTR_TAC >>
+    `canonical_dep bi y x` by metis_tac[data_dep_body_imp_canonical_dep] >>
+    `TC (\a c. canonical_dep bi a c /\
+       MEM a (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) /\
+       MEM c (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi)) y x`
+      by (irule TC_SUBSET >> BETA_TAC >> simp[]) >>
+    metis_tac[]) >>
+  simp[ef_commutes_def] >>
+  fs[data_dep_body_def, MEM_FILTER] >>
+  simp[DISJOINT_DEF, EXTENSION, inst_uses_def, inst_defs_def,
+       MEM_operand_vars_iff] >>
+  `in_np_body bi x` by (simp[in_np_body_def, MEM_FILTER, MEM_MAP] >> qexists `x` >> simp[]) >> `in_np_body bi y` by (simp[in_np_body_def, MEM_FILTER, MEM_MAP] >> qexists `y` >> simp[]) >> metis_tac[]
+QED
+
+
 (* TC-uncomparable body elements (under restricted dep) commute.
    Uses barrier_tc_connected for the barrier contradiction. *)
-Triviality block_body_uncomp_ef:
+Theorem block_body_uncomp_ef:
   !fn bb x y dep.
     wf_function fn /\ MEM bb fn.fn_blocks /\ bb_well_formed bb /\
     MEM x (block_body bb) /\ MEM y (block_body bb) /\ x <> y /\
@@ -4180,7 +4245,7 @@ Proof
 QED
 
 (* ef_commutes instantiation *)
-Triviality ef_commutes_swap:
+Theorem ef_commutes_swap:
   !fuel ctx a b s sa sab.
     ef_commutes a b /\
     step_inst fuel ctx a s = OK sa /\
@@ -4466,7 +4531,7 @@ Proof
 QED
 
 (* Consequence: distinct same-block instructions have disjoint defs *)
-Triviality ssa_disjoint_defs:
+Theorem ssa_disjoint_defs:
   !fn bb i1 i2.
     ssa_form fn /\ MEM bb fn.fn_blocks /\
     MEM i1 bb.bb_instructions /\ MEM i2 bb.bb_instructions /\ i1 <> i2 ==>
@@ -4888,7 +4953,7 @@ Proof
 QED
 
 (* Helper: same terminator for block_perm_of blocks *)
-Triviality block_perm_of_same_last:
+Theorem block_perm_of_same_last:
   !fn bb bb'.
     wf_function fn /\ MEM bb fn.fn_blocks /\
     block_perm_of fn bb' /\ bb.bb_label = bb'.bb_label /\
@@ -5239,7 +5304,7 @@ Proof
 QED
 
 (* ef_commutes instantiation *)
-Triviality run_insts_topo_full_lift_ef:
+Theorem run_insts_topo_full_lift_ef:
   !l1 l2 dep fuel ctx s.
     PERM l1 l2 /\ ALL_DISTINCT l1 /\
     topo_sorted (TC dep) l1 /\ topo_sorted (TC dep) l2 /\
@@ -5360,7 +5425,7 @@ Proof
 QED
 
 (* block_perm_of implies same instruction count *)
-Triviality block_perm_of_same_length:
+Theorem block_perm_of_same_length:
   !fn bb bb'.
     block_perm_of fn bb' /\ wf_function fn /\
     MEM bb fn.fn_blocks /\
@@ -5705,7 +5770,7 @@ Proof
   first_x_assum irule >> fs[EVERY_MEM]
 QED
 
-Triviality lift_result_refl:
+Theorem lift_result_refl:
   !x. lift_result (state_equiv {}) (execution_equiv {}) revert_equiv x x
 Proof
   Cases >> simp[lift_result_def, state_equiv_refl, execution_equiv_refl,
@@ -5788,42 +5853,6 @@ Proof
   MATCH_ACCEPT_TAC lift_result_refl
 QED
 
-(* Push a non-pseudo past a list of pseudos. Induction on ps. *)
-(* OBSOLETE: push_nonpseudo_past_pseudos — approach doesn't work without
-   pseudos_prefix fix. Kept as cheat for now. *)
-Triviality push_nonpseudo_past_pseudos:
-  !ps fuel ctx h rest s.
-    ~is_terminator h.inst_opcode /\ ~is_pseudo h.inst_opcode /\
-    EVERY (\p. is_pseudo p.inst_opcode) ps /\
-    EVERY (\p. DISJOINT (set (inst_defs h)) (set (inst_defs p)) /\
-               DISJOINT (set (inst_defs h)) (set (inst_uses p)) /\
-               DISJOINT (set (inst_defs p)) (set (inst_uses h))) ps ==>
-    lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-      (run_insts fuel ctx (h :: (ps ++ rest)) s)
-      (run_insts fuel ctx (ps ++ (h :: rest)) s)
-Proof
-  cheat
-QED
-
-(* Partition a mixed list into pseudos ++ non-pseudos.
-   Under SSA data-independence, this preserves run_insts up to lift_result. *)
-Triviality run_insts_partition_pseudo:
-  !l fuel ctx s.
-    EVERY (\h. ~is_pseudo h.inst_opcode ==>
-              ~is_terminator h.inst_opcode /\
-              EVERY (\p. MEM p l /\ is_pseudo p.inst_opcode ==>
-                DISJOINT (set (inst_defs h)) (set (inst_defs p)) /\
-                DISJOINT (set (inst_defs h)) (set (inst_uses p)) /\
-                DISJOINT (set (inst_defs p)) (set (inst_uses h))) l) l ==>
-    lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-      (run_insts fuel ctx l s)
-      (run_insts fuel ctx
-        (FILTER (\i. is_pseudo i.inst_opcode) l ++
-         FILTER (\i. ~is_pseudo i.inst_opcode) l) s)
-Proof
-  cheat
-QED
-
 (* FRONT full equivalence: lift_result on FRONTs.
    Strategy: partition both FRONTs as phis ++ body, show bodies equiv
    via block_body_full_equiv, compose via run_insts_append.
@@ -5845,14 +5874,24 @@ Triviality front_full_equiv:
       (run_insts fuel ctx (FRONT bb.bb_instructions) s)
       (run_insts fuel ctx (FRONT bb'.bb_instructions) s)
 Proof
-  cheat
+  rpt strip_tac >>
+  imp_res_tac block_perm_of_elim >>
+  simp[pseudos_prefix_front_decomposition, GSYM block_body_def, run_insts_append] >>
+  qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  Cases_on `run_insts fuel ctx phis s` >> simp[lift_result_def]
+  >- (drule_all block_body_full_equiv >>
+      disch_then (qspecl_then [`fuel`,`ctx`,`v`] strip_assume_tac) >>
+      gvs[lift_result_def] >> irule lift_result_refl)
+  >- simp[execution_equiv_refl]
+  >- simp[revert_equiv_def]
+  >- simp[execution_equiv_refl]
 QED
 
 (* When FRONTs are lift_result-related (not necessarily equal),
    exec_blocks are also lift_result-related.
    OK case: state_equiv {} = equality → same terminator from same state.
    Non-OK case: chain FRONT1↔EXEC1, FRONT1↔FRONT2, FRONT2↔EXEC2. *)
-Triviality exec_block_front_lr_lift:
+Theorem exec_block_front_lr_lift:
   !bb bb' fuel ctx s.
     bb_well_formed bb /\ bb_well_formed bb' /\
     LAST bb'.bb_instructions = LAST bb.bb_instructions /\
@@ -5921,7 +5960,7 @@ Proof
 QED
 
 (* Original blocks satisfy block_perm_of *)
-Triviality original_block_perm_of:
+Theorem original_block_perm_of:
   !fn bb. MEM bb fn.fn_blocks ==> block_perm_of fn bb
 Proof
   rpt strip_tac >> simp[block_perm_of_def] >>
@@ -5938,7 +5977,7 @@ Proof
 QED
 
 (* dft_block produces a PERM of inst_ids of non-pseudo instructions *)
-Triviality dft_block_perm_ids:
+Theorem dft_block_perm_ids:
   !order bb.
     bb_well_formed bb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
@@ -5962,7 +6001,7 @@ Proof
     (simp[Abbr `eda`] >>
      qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
      simp[] >> disch_then irule >>
-     fs[bb_well_formed_def, Abbr `bi`]) >>
+     fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
   `np_defs_before_uses bi` by
     gvs[non_pseudo_defs_before_uses_def, Abbr `bi`] >>
@@ -6012,7 +6051,7 @@ Proof
 QED
 
 (* dft_block preserves block_perm_of, given dft_inv conditions *)
-Triviality dft_block_preserves_perm_of:
+Theorem dft_block_preserves_perm_of:
   !order fn bb.
     block_perm_of fn bb /\
     bb_well_formed bb /\
@@ -6115,7 +6154,7 @@ Proof
 QED
 
 (* Helper: ALL_DISTINCT preserved by MAP over FILTER *)
-Triviality all_distinct_map_filter:
+Theorem all_distinct_map_filter:
   !f P l. ALL_DISTINCT (MAP f l) ==> ALL_DISTINCT (MAP f (FILTER P l))
 Proof
   gen_tac >> gen_tac >> Induct >> simp[] >> rpt strip_tac >>
@@ -6224,8 +6263,8 @@ Proof
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
      qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
-     simp[] >> disch_then irule >>
-     fs[bb_well_formed_def, Abbr `bi`]) >>
+     simp[non_pseudo_defs_before_uses_def] >> disch_then irule >>
+     fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by (fs[bb_well_formed_def, Abbr `bi`]) >>
   `is_terminator (LAST bi).inst_opcode` by
     fs[bb_well_formed_def, Abbr `bi`] >>
@@ -6550,7 +6589,7 @@ Proof
 QED
 
 (* Helper: MAP with conditional replacement preserves EVERY *)
-Triviality every_map_replace:
+Theorem every_map_replace:
   !P bbs lbl bb'.
     EVERY P bbs /\ P bb' ==>
     EVERY P (MAP (\b. if b.bb_label = lbl then bb' else b) bbs)
@@ -6567,7 +6606,7 @@ Definition dft_inv_def:
 End
 
 (* dft_process_one preserves dft_inv *)
-Triviality dft_process_one_preserves_inv:
+Theorem dft_process_one_preserves_inv:
   !cfg lr fn st lbl.
     dft_inv st.dls_blocks ==>
     dft_inv (FST (dft_process_one cfg lr fn st lbl)).dls_blocks
@@ -6587,7 +6626,7 @@ Proof
 QED
 
 (* dft_loop_step preserves dft_inv *)
-Triviality dft_loop_step_preserves_inv:
+Theorem dft_loop_step_preserves_inv:
   !cfg lr fn trip.
     dft_inv (FST trip).dls_blocks ==>
     dft_inv (FST (dft_loop_step cfg lr fn trip)).dls_blocks
@@ -6605,7 +6644,7 @@ Proof
 QED
 
 (* FUNPOW preserves dft_inv *)
-Triviality funpow_dft_loop_preserves_inv:
+Theorem funpow_dft_loop_preserves_inv:
   !n cfg lr fn trip.
     dft_inv (FST trip).dls_blocks ==>
     dft_inv (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks
@@ -6617,7 +6656,7 @@ QED
 
 (* Core: dft_fn preserves dft_inv *)
 (* Original blocks satisfy dft_inv *)
-Triviality wf_fn_initial_dft_inv:
+Theorem wf_fn_initial_dft_inv:
   !fn. wf_ssa fn /\ wf_function fn ==> dft_inv fn.fn_blocks
 Proof
   rpt strip_tac >> simp[dft_inv_def, EVERY_MEM] >> rpt strip_tac
@@ -6629,7 +6668,7 @@ Proof
 QED
 
 (* dft_fn output satisfies dft_inv *)
-Triviality dft_fn_dft_inv:
+Theorem dft_fn_dft_inv:
   !fn. wf_ssa fn /\ wf_function fn ==> dft_inv (dft_fn fn).fn_blocks
 Proof
   rpt strip_tac >>
@@ -6649,7 +6688,7 @@ Definition all_blocks_perm_of_def:
 End
 
 (* dft_process_one preserves all_blocks_perm_of, given dft_inv *)
-Triviality dft_process_one_preserves_perm:
+Theorem dft_process_one_preserves_perm:
   !cfg lr fn st lbl.
     all_blocks_perm_of fn st.dls_blocks /\ dft_inv st.dls_blocks ==>
     all_blocks_perm_of fn (FST (dft_process_one cfg lr fn st lbl)).dls_blocks
@@ -6668,7 +6707,7 @@ Proof
 QED
 
 (* FUNPOW lifting: dft_loop_step preserves all_blocks_perm_of *)
-Triviality dft_loop_step_preserves_perm:
+Theorem dft_loop_step_preserves_perm:
   !cfg lr fn trip.
     all_blocks_perm_of fn (FST trip).dls_blocks /\
     dft_inv (FST trip).dls_blocks ==>
@@ -6686,7 +6725,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Triviality funpow_dft_loop_preserves_perm:
+Theorem funpow_dft_loop_preserves_perm:
   !n cfg lr fn trip.
     all_blocks_perm_of fn (FST trip).dls_blocks /\
     dft_inv (FST trip).dls_blocks ==>
@@ -6702,7 +6741,7 @@ Proof
 QED
 
 (* Core: dft_fn blocks are all block_perm_of fn *)
-Triviality dft_fn_all_perm_of:
+Theorem dft_fn_all_perm_of:
   !fn.
     wf_ssa fn /\ wf_function fn ==>
     all_blocks_perm_of fn (dft_fn fn).fn_blocks
@@ -6717,7 +6756,7 @@ Proof
 QED
 
 (* Key bridge: lookup in dft_fn blocks gives a block_perm_of fn *)
-Triviality dft_fn_lookup_perm_of:
+Theorem dft_fn_lookup_perm_of:
   !fn lbl bb'.
     wf_ssa fn /\ wf_function fn /\
     lookup_block lbl (dft_fn fn).fn_blocks = SOME bb' ==>
@@ -6734,7 +6773,7 @@ QED
 
 
 (* All blocks in dft_fn are well-formed *)
-Triviality dft_fn_blocks_well_formed:
+Theorem dft_fn_blocks_well_formed:
   !fn bb'.
     wf_ssa fn /\ wf_function fn /\ MEM bb' (dft_fn fn).fn_blocks ==>
     bb_well_formed bb'
@@ -6745,7 +6784,7 @@ Proof
 QED
 
 (* lookup_block NONE is preserved by dft_fn *)
-Triviality dft_fn_lookup_block_none:
+Theorem dft_fn_lookup_block_none:
   !fn lbl.
     lookup_block lbl fn.fn_blocks = NONE ==>
     lookup_block lbl (dft_fn fn).fn_blocks = NONE
@@ -6804,177 +6843,2167 @@ QED
       their relative order (chained transitively through the EDA).
    4. build_full_eda_pseudo_strip removes pseudo prefix.
 *)
-Triviality dft_fn_output_topo_sorted:
-  !fn bb bb'.
+Theorem all_distinct_map_f_eq:
+  !f L a b. ALL_DISTINCT (MAP f L) /\ MEM a L /\ MEM b L /\ f a = f b ==> a = b
+Proof
+  Induct_on `L` >> simp[] >> rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Triviality dft_bb_unique_definer[local]:
+  !fn bb bb' v y.
     wf_ssa fn /\ wf_function fn /\
     MEM bb fn.fn_blocks /\
     MEM bb' (dft_fn fn).fn_blocks /\
-    bb.bb_label = bb'.bb_label ==>
-    topo_sorted (full_dep (build_full_eda bb.bb_instructions))
-      (MAP (choose_original (block_body bb)) (block_body bb'))
-Proof
-  cheat
-QED
-
-(* ===== Function-level: run_blocks lift_result ===== *)
-
-(* Specialized rewrite for run_blocks (SUC fuel) — avoids hanging issues
-   with simp/ONCE_REWRITE_TAC on the recursive definition *)
-val run_blocks_SUC = let
-  val rb = run_blocks_def
-  val (vars, _) = strip_forall (concl rb)
-  val [sv,fv,fnv,cv] = vars
-  val inst = SPECL [sv, mk_comb(``SUC``, fv), fnv, cv] rb
-in SIMP_RULE (srw_ss()) [] inst |> GENL [sv, fv, fnv, cv] end;
-
-(* DFT preserves fn_pseudos_prefix: dft_block outputs phis ++ scheduled,
-   so pseudos remain at the front. Cheated pending proof of
-   schedule_from_entries producing only non-pseudo instructions. *)
-Triviality dft_fn_pseudos_prefix:
-  !fn. fn_pseudos_prefix fn ==> fn_pseudos_prefix (dft_fn fn)
-Proof
-  cheat
-QED
-
-(* run_blocks with DFT-transformed blocks produces lift_result-equivalent
-   results. Fuel induction on run_blocks. *)
-Theorem dft_fn_run_blocks_lift:
-  !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
-    lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (dft_fn fn) s)
-Proof
-  Induct_on `fuel`
-  >- simp[Ntimes run_blocks_def 2, lift_result_def]
-  >> rpt strip_tac >>
-     CONV_TAC (RATOR_CONV (RAND_CONV (REWR_CONV run_blocks_SUC))) >>
-     CONV_TAC (RAND_CONV (REWR_CONV run_blocks_SUC)) >>
-     Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[]
-  (* NONE case: block not found in fn *)
-  >- (`lookup_block s.vs_current_bb (dft_fn fn).fn_blocks = NONE` by
-        (irule dft_fn_lookup_block_none >> simp[]) >>
-      simp[lift_result_def])
-  (* SOME x case: block found in fn *)
-  >> rename1 `SOME bb` >>
-     `?bb'. lookup_block s.vs_current_bb (dft_fn fn).fn_blocks = SOME bb'` by
-       (irule dft_fn_lookup_block >> metis_tac[]) >>
-     simp[] >>
-     (* Get MEM bb, block_perm_of bb', bb_well_formed bb' *)
-     `MEM bb fn.fn_blocks` by
-       (fs[lookup_block_def] >> imp_res_tac venomExecPropsTheory.FIND_MEM) >>
-     `bb.bb_label = bb'.bb_label` by
-       (fs[lookup_block_def] >>
-        imp_res_tac venomExecPropsTheory.FIND_P >> gvs[]) >>
-     `block_perm_of fn bb'` by
-       (irule dft_fn_lookup_perm_of >> metis_tac[]) >>
-     `MEM bb' (dft_fn fn).fn_blocks` by
-       (fs[lookup_block_def] >> imp_res_tac venomExecPropsTheory.FIND_MEM) >>
-     `bb_well_formed bb'` by
-       (irule dft_fn_blocks_well_formed >> metis_tac[]) >>
-     `pseudos_prefix bb` by
-       (gvs[fn_pseudos_prefix_def]) >>
-     `pseudos_prefix bb'` by
-       (`fn_pseudos_prefix (dft_fn fn)` by
-          (irule dft_fn_pseudos_prefix >> simp[]) >>
-        gvs[fn_pseudos_prefix_def]) >>
-     (* DFT output is topo_sorted under full_dep *)
-     `topo_sorted (full_dep (build_full_eda bb.bb_instructions))
-        (MAP (choose_original (block_body bb)) (block_body bb'))` by
-       (qspecl_then [`fn`, `bb`, `bb'`] mp_tac dft_fn_output_topo_sorted >>
-        simp[]) >>
-     (* Use block_perm_of_exec_block_lift *)
-     drule_all block_perm_of_exec_block_lift >>
-     disch_then (qspecl_then [`fuel`, `ctx`, `s`] assume_tac) >>
-     (* Two cases: both Error, or lift_result *)
-     gvs[]
-     (* Both Error case: Error propagates through run_blocks case-split *)
-     >- simp[lift_result_def]
-     (* lift_result case *)
-     >> Cases_on `exec_block fuel ctx bb (s with vs_inst_idx := 0)` >>
-        Cases_on `exec_block fuel ctx bb' (s with vs_inst_idx := 0)` >>
-        gvs[lift_result_def, execution_equiv_def, revert_equiv_def]
-        (* OK-OK case: states equal, use IH *)
-        >- (imp_res_tac state_equiv_empty_eq >> gvs[] >>
-            IF_CASES_TAC >> gvs[lift_result_def, execution_equiv_def] >>
-            qpat_x_assum `!ctx fn' s'. wf_ssa fn' /\ _ ==> _`
-              (qspecl_then [`ctx`, `fn`, `v`] mp_tac) >>
-            simp[])
-QED
-
-(* ===== Function-level: run_function lift_result ===== *)
-
-Triviality dft_fn_run_function_lift:
-  !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
-    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-    lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
-      (run_function fuel ctx fn s)
-      (run_function fuel ctx (dft_fn fn) s)
+    bb.bb_label = bb'.bb_label /\
+    MEM y bb'.bb_instructions /\ ~is_pseudo y.inst_opcode /\
+    MEM v y.inst_outputs ==>
+    !j'. MEM j' bb'.bb_instructions /\ j' <> y ==> ~MEM v j'.inst_outputs
 Proof
   rpt strip_tac >>
-  simp[run_function_def] >>
-  `fn_entry_label (dft_fn fn) = fn_entry_label fn` by (
-    simp[fn_entry_label_def, entry_block_def] >>
-    `~NULL (dft_fn fn).fn_blocks = ~NULL fn.fn_blocks` by (
-      `MAP (\b. b.bb_label) (dft_fn fn).fn_blocks =
-       MAP (\b. b.bb_label) fn.fn_blocks` by simp[dft_fn_labels_map] >>
-      Cases_on `fn.fn_blocks` >> Cases_on `(dft_fn fn).fn_blocks` >>
-      gvs[]) >>
-    Cases_on `NULL fn.fn_blocks` >> simp[] >>
-    `MAP (\b. b.bb_label) (dft_fn fn).fn_blocks =
-     MAP (\b. b.bb_label) fn.fn_blocks` by simp[dft_fn_labels_map] >>
-    Cases_on `fn.fn_blocks` >> Cases_on `(dft_fn fn).fn_blocks` >>
-    gvs[]) >>
+  imp_res_tac dft_fn_all_perm_of >>
+  fs[all_blocks_perm_of_def, EVERY_MEM] >>
+  first_x_assum (qspec_then `bb'` mp_tac) >> simp[] >> strip_tac >>
+  drule_all block_perm_of_resolves >> strip_tac >>
+  `from_block bb.bb_instructions y` by fs[EVERY_MEM, MEM_FILTER] >>
+  drule_all from_block_inst_outputs >> strip_tac >>
+  rename1 `MEM y_orig bb.bb_instructions` >>
+  `ssa_form fn` by fs[wf_ssa_def] >>
+  `MEM y_orig (fn_insts fn)` by (
+    irule mem_fn_insts_intro >> qexists `bb` >> simp[]) >>
+  `MEM v y_orig.inst_outputs` by metis_tac[] >>
+  `ALL_DISTINCT (MAP (\i:instruction. i.inst_id) bb'.bb_instructions)` by (
+    imp_res_tac dft_fn_dft_inv >> fs[dft_inv_def, EVERY_MEM]) >>
+  Cases_on `is_pseudo j'.inst_opcode`
+  >- (
+    `MEM j' bb.bb_instructions` by (
+      `MEM j' (FILTER (\i. is_pseudo i.inst_opcode) bb'.bb_instructions)` by simp[MEM_FILTER] >>
+      metis_tac[MEM_FILTER]) >>
+    `MEM j' (fn_insts fn)` by (
+      irule mem_fn_insts_intro >> qexists `bb` >> simp[]) >>
+    `j' = y_orig` by metis_tac[ssa_unique_output] >>
+    `j'.inst_id = y.inst_id` by simp[] >>
+    `j' = y` by metis_tac[all_distinct_map_f_eq] >>
+    fs[])
+  >- (
+    `from_block bb.bb_instructions j'` by fs[EVERY_MEM, MEM_FILTER] >>
+    drule_all from_block_inst_outputs >> strip_tac >>
+    rename1 `MEM j'_orig bb.bb_instructions` >>
+    `MEM j'_orig (fn_insts fn)` by (
+      irule mem_fn_insts_intro >> qexists `bb` >> simp[]) >>
+    `MEM v j'_orig.inst_outputs` by (
+      metis_tac[from_block_inst_outputs]) >>
+    `j'_orig = y_orig` by metis_tac[ssa_unique_output] >>
+    `j'.inst_id = y.inst_id` by simp[] >>
+    `j' = y` by metis_tac[all_distinct_map_f_eq] >>
+    fs[])
+QED
+
+
+Triviality np_defs_gives_earlier_index[local]:
+  !l x y v jx iy.
+    EL jx l = x /\ jx < LENGTH l /\
+    EL iy l = y /\ iy < LENGTH l /\
+    x <> y /\
+    producing_inst l v = SOME y /\
+    non_pseudo_defs_before_uses l /\
+    MEM v y.inst_outputs /\
+    MEM (Var v) x.inst_operands /\
+    ~is_pseudo x.inst_opcode /\
+    ALL_DISTINCT (MAP (\i:instruction. i.inst_id) l) ==>
+    iy < jx
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT l` by metis_tac[ALL_DISTINCT_MAP] >>
+  `?i. i < jx /\ EL i l = y` by (
+    qpat_assum `non_pseudo_defs_before_uses l`
+      (mp_tac o REWRITE_RULE[non_pseudo_defs_before_uses_def, np_defs_before_uses_def]) >>
+    simp[] >> metis_tac[]) >>
+  `i < LENGTH l` by decide_tac >>
+  `i = iy` by metis_tac[EL_ALL_DISTINCT_EL_EQ] >>
+  simp[]
+QED
+
+Theorem data_dep_preserved_dft_fn:
+  !fn bb bb' x y.
+    wf_ssa fn /\ wf_function fn /\
+    MEM bb fn.fn_blocks /\
+    MEM bb' (dft_fn fn).fn_blocks /\
+    bb.bb_label = bb'.bb_label /\
+    MEM x (block_body bb') /\ MEM y (block_body bb') /\
+    x <> y /\
+    (?v. MEM (Var v) x.inst_operands /\ MEM v y.inst_outputs) ==>
+    ?i j. i < j /\ j < LENGTH (block_body bb') /\
+          EL i (block_body bb') = y /\ EL j (block_body bb') = x
+Proof
+  rpt strip_tac >>
+  imp_res_tac dft_fn_dft_inv >>
+  fs[dft_inv_def, EVERY_MEM] >>
+  first_x_assum (qspec_then `bb'` mp_tac) >> simp[] >> strip_tac >>
+  fs[block_body_def, MEM_FILTER] >>
+  `producing_inst bb'.bb_instructions v = SOME y` by (
+    qspecl_then [`bb'.bb_instructions`, `v`, `y`] mp_tac
+      (INST_TYPE [alpha|-> ``:instruction``] producing_inst_unique_definer) >>
+    simp[] >> metis_tac[dft_bb_unique_definer]) >>
+  `?jx. jx < LENGTH bb'.bb_instructions /\ EL jx bb'.bb_instructions = x` by
+    metis_tac[MEM_EL] >>
+  `?iy. iy < LENGTH bb'.bb_instructions /\ EL iy bb'.bb_instructions = y` by
+    metis_tac[MEM_EL] >>
+  `iy < jx` by metis_tac[np_defs_gives_earlier_index] >>
+  `ALL_DISTINCT bb'.bb_instructions` by metis_tac[ALL_DISTINCT_MAP] >>
+  qspecl_then
+    [`\i:instruction. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode`,
+     `bb'.bb_instructions`, `iy`, `jx`]
+    mp_tac filter_el_mono_rev >>
+  simp[GSYM block_body_def]
+QED
+
+(* ===== Canonical dependency chain ===== *)
+
+(* MAP_INST_ID_APPEND_SPLIT_exists: if MAP f l = pfx ++ [x] ++ sfx,
+   then l = prefix ++ [b] ++ suffix with matching. *)
+Triviality MAP_INST_ID_APPEND_SPLIT_exists_local[local]:
+  !fl pfx xid sfx.
+    MAP (\i. i.inst_id) fl = pfx ++ [xid] ++ sfx ==>
+    ?prefix b suffix.
+      fl = prefix ++ [b] ++ suffix /\
+      MAP (\i. i.inst_id) prefix = pfx /\ b.inst_id = xid /\
+      MAP (\i. i.inst_id) suffix = sfx
+Proof
+  Induct_on `pfx` >> rpt strip_tac
+  >- (Cases_on `fl` >> gvs[MAP_EQ_CONS] >>
+      qexistsl_tac [`[]`,`h`,`t`] >> simp[])
+  >> (Cases_on `fl` >> gvs[MAP_EQ_CONS] >>
+      last_x_assum $ qspecl_then [`t`,`xid`,`sfx`] mp_tac >> simp[] >>
+      strip_tac >>
+      qexistsl_tac [`h'::prefix`,`b`,`suffix`] >> simp[])
+QED
+
+(* Replaces the FALSE full_dep version. canonical_dep is WEAKER than full_dep,
+   so topo_sorted(canonical_dep) is a WEAKER (easier to prove) property.
+   The simulation theorems work with canonical_dep. *)
+
+(* from_block implies in_np_body *)
+Theorem from_block_imp_in_np_body_local:
+  !bi x. from_block bi x ==> in_np_body bi x
+Proof
+  simp[from_block_def, in_np_body_def, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
+  metis_tac[flip_operands_inst_id]
+QED
+
+(* Bridge: same inst_id in FILTER ~is_pseudo => same is_barrier *)
+Triviality is_barrier_from_inst_id_local[local]:
+  !bi b x.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    MEM b (FILTER (\i. ~is_pseudo i.inst_opcode) bi) /\
+    from_block bi x /\ b.inst_id = x.inst_id ==>
+    is_barrier b = is_barrier x
+Proof
+  rpt strip_tac >>
+  `MEM b bi` by fs[MEM_FILTER] >>
+  fs[from_block_def] >>
+  metis_tac[all_distinct_map_mem_inj, flip_operands_is_barrier,
+            flip_operands_inst_id]
+QED
+
+(* canonical_dep ⊆ full_dep for from_block elements.
+   Each disjunct of canonical_dep implies full_dep. *)
+Triviality data_dep_body_imp_full_dep_local[local]:
+  !bi x y.
+    data_dep_body bi x y ==> full_dep (build_full_eda bi) x y
+Proof
+  rpt strip_tac >> fs[full_dep_def] >> disj2_tac >> disj1_tac >>
+  fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
+  qexists `v` >> fs[MEM_operand_vars_iff]
+QED
+
+(* Bridge: from_barrier_dep → eda_dep → full_dep *)
+Triviality from_barrier_dep_imp_full_dep_local[local]:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    from_barrier_dep bi x y /\ from_block bi x /\ from_block bi y ==>
+    full_dep (build_full_eda bi) x y
+Proof
+  rpt strip_tac >> fs[from_barrier_dep_def] >>
+  simp[full_dep_def] >> disj1_tac >>
+  qabbrev_tac `fl = FILTER (\i. ~is_pseudo i.inst_opcode) bi` >>
+  `?prefix b suffix. fl = prefix ++ [b] ++ suffix /\
+                      MAP (\i. i.inst_id) prefix = pfx /\
+                      b.inst_id = x.inst_id /\
+                      MAP (\i. i.inst_id) suffix = sfx` by
+    (drule MAP_INST_ID_APPEND_SPLIT_exists_local >> simp[]) >>
+  `?yb. MEM yb prefix /\ yb.inst_id = y.inst_id` by
+    (`MEM y.inst_id (MAP (\i. i.inst_id) prefix)` by simp[] >>
+     imp_res_tac MEM_MAP >> metis_tac[]) >>
+  `is_barrier b` by
+    (`MEM b (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by
+       (fs[Abbr `fl`, MEM_APPEND] >> metis_tac[]) >>
+     metis_tac[is_barrier_from_inst_id_local]) >>
+  `eda_dep (build_full_eda bi) b yb` by
+    (qunabbrev_tac `fl` >>
+     match_mp_tac from_barrier_to_eda_dep >>
+     qexistsl_tac [`prefix`, `suffix`] >> simp[]) >>
+  metis_tac[eda_dep_inst_id_only]
+QED
+
+(* Bridge: on_barrier_dep → eda_dep → full_dep *)
+Triviality on_barrier_dep_imp_full_dep_local[local]:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    on_barrier_dep bi x y /\ from_block bi x /\ from_block bi y ==>
+    full_dep (build_full_eda bi) x y
+Proof
+  rpt strip_tac >> fs[on_barrier_dep_def] >>
+  simp[full_dep_def] >> disj1_tac >>
+  qabbrev_tac `b_last = LAST (FILTER is_barrier pfx)` >>
+  `MEM mid (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by
+    (qpat_x_assum `FILTER _ _ = _` (fn th => rewrite_tac[th]) >>
+     simp[MEM_APPEND]) >>
+  `is_barrier mid = is_barrier x` by
+    metis_tac[is_barrier_from_inst_id_local] >>
+  `~is_barrier mid` by metis_tac[] >>
+  `b_last.inst_id = y.inst_id` by fs[Abbr `b_last`] >>
+  `eda_dep (build_full_eda bi) mid b_last` by
+    (match_mp_tac on_barrier_to_eda_dep >>
+     qexistsl_tac [`pfx`, `sfx`] >> simp[] >>
+     Cases_on `FILTER is_barrier pfx` >> fs[Abbr `b_last`]) >>
+  metis_tac[eda_dep_inst_id_only]
+QED
+
+(* Main bridge: canonical_dep ⊆ full_dep for from_block elements *)
+Theorem canonical_dep_imp_full_dep_local:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    canonical_dep bi x y /\
+    from_block bi x /\ from_block bi y ==>
+    full_dep (build_full_eda bi) x y
+Proof
+  rpt strip_tac >> fs[canonical_dep_def, in_np_body_def] >-
+  metis_tac[data_dep_body_imp_full_dep_local] >-
+  metis_tac[from_barrier_dep_imp_full_dep_local] >>
+  metis_tac[on_barrier_dep_imp_full_dep_local]
+QED
+
+(* topo_sorted weakens when deps shrink *)
+Triviality topo_sorted_mono_restricted_local[local]:
+  !dep1 dep2 l.
+    (!x y. MEM x l /\ MEM y l /\ dep2 x y ==> dep1 x y) /\
+    topo_sorted dep1 l ==>
+    topo_sorted dep2 l
+Proof
+  rw[topo_sorted_def] >> rpt strip_tac >>
+  `i < LENGTH l` by decide_tac >> imp_res_tac EL_MEM >> metis_tac[]
+QED
+
+(* fn_insts_blocks distributes over APPEND *)
+Triviality fn_insts_blocks_APPEND_local[local]:
+  !l1 l2. fn_insts_blocks (l1 ++ l2) = fn_insts_blocks l1 ++ fn_insts_blocks l2
+Proof
+  Induct >> simp[fn_insts_blocks_def]
+QED
+
+(* SSA: per-block outputs are distinct.
+   Proof by induction on blocks: ALL_DISTINCT(FLAT(MAP outputs blocks))
+   means each block's output list is a component of a distinct append. *)
+Triviality ssa_block_outputs_distinct_local[local]:
+  !bbs bb.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))) /\
+    MEM bb bbs ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bb = h` >> gvs[] >>
+  fs[ALL_DISTINCT_APPEND]
+QED
+
+(* MEM in FILTER implies in_np_body *)
+Triviality mem_filter_in_np_body_local[local]:
+  !bi x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==> in_np_body bi x
+Proof
+  simp[in_np_body_def, MEM_MAP, MEM_FILTER, PULL_EXISTS] >> metis_tac[]
+QED
+
+(* Original block's non-pseudo filter is topo_sorted(canonical_dep).
+   Direct proof: in program order, no earlier instruction can depend on
+   a later one via canonical_dep (data deps need def before use,
+   barrier deps need barrier first). Contrapositive of topo_sorted. *)
+Triviality orig_filter_canonical_topo_sorted_local[local]:
+  !fn bb. wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\ bb_well_formed bb ==>
+    topo_sorted (canonical_dep bb.bb_instructions)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)
+Proof
+  simp[topo_sorted_def] >> rpt strip_tac >>
+  qabbrev_tac `bi = bb.bb_instructions` >>
+  qabbrev_tac `fl = FILTER (\i. ~is_pseudo i.inst_opcode) bi` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by metis_tac[wf_fn_block_inst_ids_distinct] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) fl)` by metis_tac[all_distinct_map_filter] >>
+  `defs_before_uses bi` by metis_tac[wf_ssa_defs_before_uses] >>
+  `MEM (EL i fl) fl` by (irule EL_MEM >> decide_tac) >>
+  `MEM (EL j fl) fl` by metis_tac[EL_MEM] >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi))` by
+    metis_tac[ssa_block_outputs_distinct_local, fn_insts_def, ssa_form_def, wf_ssa_def] >>
+  `in_np_body bi (EL i fl) /\ in_np_body bi (EL j fl)` by
+    metis_tac[mem_filter_in_np_body_local] >>
+  Cases_on `data_dep_body bi (EL i fl) (EL j fl)`
+  >- (fs[data_dep_body_def] >> metis_tac[orig_data_dep_contra_filtered]) >>
+  Cases_on `from_barrier_dep bi (EL i fl) (EL j fl)`
+  >- (`is_barrier (EL i fl)` by metis_tac[from_barrier_dep_def] >>
+      metis_tac[orig_from_barrier_contra]) >>
+  `on_barrier_dep bi (EL i fl) (EL j fl)` by metis_tac[canonical_dep_def] >>
+  `~is_barrier (EL i fl) /\ is_barrier (EL j fl)` by metis_tac[on_barrier_dep_def] >>
+  metis_tac[orig_on_barrier_contra]
+QED
+
+(* ===== canonical_topo_inv for dft_fn loop ===== *)
+
+Definition canonical_topo_inv_def:
+  canonical_topo_inv fn blocks <=>
+    !bb. MEM bb blocks ==>
+      ?bb_orig. MEM bb_orig fn.fn_blocks /\
+        bb.bb_label = bb_orig.bb_label /\
+        topo_sorted (canonical_dep bb_orig.bb_instructions)
+          (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)
+End
+
+Triviality wf_fn_initial_canonical_topo_local[local]:
+  !fn. wf_ssa fn /\ wf_function fn ==> canonical_topo_inv fn fn.fn_blocks
+Proof
+  simp[canonical_topo_inv_def] >> rpt strip_tac >>
+  qexists_tac `bb` >> simp[] >>
+  irule orig_filter_canonical_topo_sorted_local >>
+  fs[wf_function_def] >> metis_tac[]
+QED
+
+(* dft_block output satisfies canonical_topo_inv for a single block *)
+(* ===== block_perm_of_inst_outputs_distinct helpers ===== *)
+
+(* Two from_block elements with same inst_id have same inst_outputs *)
+Triviality from_block_same_inst_id_outputs_early[local]:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    from_block bi x /\ from_block bi y /\ x.inst_id = y.inst_id ==>
+    x.inst_outputs = y.inst_outputs
+Proof
+  rw[from_block_def] >>
+  metis_tac[all_distinct_map_mem_inj, flip_operands_inst_outputs,
+            flip_operands_inst_id]
+QED
+
+(* Two from_block elements with same inst_id have same operand_vars set *)
+Triviality from_block_same_inst_id_operand_vars_local[local]:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    from_block bi x /\ from_block bi y /\ x.inst_id = y.inst_id ==>
+    set (operand_vars x.inst_operands) = set (operand_vars y.inst_operands)
+Proof
+  rw[from_block_def] >>
+  metis_tac[all_distinct_map_mem_inj, flip_operands_operand_vars_set,
+            flip_operands_inst_id]
+QED
+
+(* Two from_block elements with same inst_id have same is_barrier *)
+Triviality from_block_same_inst_id_barrier_local[local]:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    from_block bi x /\ from_block bi y /\ x.inst_id = y.inst_id ==>
+    (is_barrier x <=> is_barrier y)
+Proof
+  rw[from_block_def] >>
+  metis_tac[all_distinct_map_mem_inj, flip_operands_is_barrier,
+            flip_operands_inst_id]
+QED
+
+(* PERM on inst_id + from_block gives PERM on inst_outputs *)
+Triviality PERM_inst_id_inst_outputs_perm_local[local]:
+  !np_cur np_orig orig_bi.
+    EVERY (\i. from_block orig_bi i) np_cur /\
+    EVERY (\i. from_block orig_bi i) np_orig /\
+    PERM (MAP (\i. i.inst_id) np_cur) (MAP (\i. i.inst_id) np_orig) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) np_cur) ==>
+    PERM (MAP (\i. i.inst_outputs) np_cur) (MAP (\i. i.inst_outputs) np_orig)
+Proof
+  rpt strip_tac >>
+  `∀x y:instruction.
+      MEM x np_cur ∧ MEM y np_orig ∧ x.inst_id = y.inst_id ⇒
+      x.inst_outputs = y.inst_outputs` by (
+    rpt strip_tac >>
+    qspecl_then [`orig_bi`, `x`, `y`] mp_tac from_block_same_inst_id_outputs_early >>
+    fs[EVERY_MEM]) >>
+  irule PERM_TRANSFER_inst_id_inst_outputs >>
+  simp[]
+QED
+
+(* block_perm_of preserves ALL_DISTINCT of FLAT (MAP inst_outputs) *)
+Triviality block_perm_of_inst_outputs_distinct_local[local]:
+  !fn bb_orig bb_cur.
+    wf_ssa fn /\ wf_function fn /\
+    MEM bb_orig fn.fn_blocks /\
+    block_perm_of fn bb_cur /\
+    bb_cur.bb_label = bb_orig.bb_label ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb_cur.bb_instructions))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `block_perm_of fn bb_cur` (mp_tac o REWRITE_RULE [block_perm_of_def]) >>
+  strip_tac >>
+  `bb_orig' = bb_orig` by
+    metis_tac[all_distinct_map_mem_inj, fn_labels_def, wf_function_def] >>
+  fs[] >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb_orig.bb_instructions))` by
+    metis_tac[ssa_block_outputs_distinct_local, fn_insts_def, ssa_form_def, wf_ssa_def] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb_orig.bb_instructions)` by
+    metis_tac[wf_fn_block_inst_ids_distinct] >>
+  (* Key: PERM of MAP inst_outputs for non-pseudos *)
+  qspecl_then [`FILTER (\i. ~is_pseudo i.inst_opcode) bb_cur.bb_instructions`,
+                `FILTER (\i. ~is_pseudo i.inst_opcode) bb_orig.bb_instructions`,
+                `bb_orig.bb_instructions`] mp_tac
+    PERM_inst_id_inst_outputs_perm_local >>
+  impl_keep_tac >- (
+    conj_tac >- fs[EVERY_MEM, MEM_FILTER] >>
+    conj_tac >- (simp[EVERY_MEM, MEM_FILTER, from_block_def] >> metis_tac[]) >>
+    conj_tac >- fs[] >>
+    conj_tac >- metis_tac[wf_fn_block_inst_ids_distinct] >>
+    metis_tac[all_distinct_map_filter, ALL_DISTINCT_PERM]) >>
+  strip_tac >>
+  (* Full list PERM via PERM_SPLIT + PERM_MAP + PERM_CONG *)
+  `PERM (MAP (\i. i.inst_outputs) bb_cur.bb_instructions)
+        (MAP (\i. i.inst_outputs)
+          (FILTER (\i. is_pseudo i.inst_opcode) bb_cur.bb_instructions ++
+           FILTER (\i. ~is_pseudo i.inst_opcode) bb_cur.bb_instructions))` by
+    metis_tac[PERM_MAP, PERM_SPLIT] >>
+  `PERM (MAP (\i. i.inst_outputs) bb_orig.bb_instructions)
+        (MAP (\i. i.inst_outputs)
+          (FILTER (\i. is_pseudo i.inst_opcode) bb_orig.bb_instructions ++
+           FILTER (\i. ~is_pseudo i.inst_opcode) bb_orig.bb_instructions))` by
+    metis_tac[PERM_MAP, PERM_SPLIT] >>
+  `MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_cur.bb_instructions ++
+       FILTER (\i. ~is_pseudo i.inst_opcode) bb_cur.bb_instructions) =
+   MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_cur.bb_instructions) ++
+   MAP (\i. i.inst_outputs)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb_cur.bb_instructions)` by
+    simp[MAP_APPEND] >>
+  `MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_orig.bb_instructions ++
+       FILTER (\i. ~is_pseudo i.inst_opcode) bb_orig.bb_instructions) =
+   MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_orig.bb_instructions) ++
+   MAP (\i. i.inst_outputs)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb_orig.bb_instructions)` by
+    simp[MAP_APPEND] >>
+  `PERM (MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_cur.bb_instructions))
+   (MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_orig.bb_instructions))` by
+    simp[PERM_REFL] >>
+  `PERM (MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_cur.bb_instructions) ++
+   MAP (\i. i.inst_outputs)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb_cur.bb_instructions))
+   (MAP (\i. i.inst_outputs)
+      (FILTER (\i. is_pseudo i.inst_opcode) bb_orig.bb_instructions) ++
+   MAP (\i. i.inst_outputs)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb_orig.bb_instructions))` by
+    metis_tac[PERM_CONG] >>
+  `PERM (MAP (\i. i.inst_outputs) bb_cur.bb_instructions)
+        (MAP (\i. i.inst_outputs) bb_orig.bb_instructions)` by
+    metis_tac[PERM_TRANS, PERM_SYM] >>
+  `PERM (FLAT (MAP (\i. i.inst_outputs) bb_cur.bb_instructions))
+        (FLAT (MAP (\i. i.inst_outputs) bb_orig.bb_instructions))` by
+    metis_tac[PERM_FLAT] >>
+  metis_tac[ALL_DISTINCT_PERM]
+QED
+
+(* dft_block output satisfies canonical_topo_inv for a single block *)
+(* Helper: from_block transfers from cur_bi to orig_bi via block_perm_of *)
+Triviality from_block_sched_via_perm_of[local]:
+  !fn bb_orig bb_cur x.
+    wf_function fn /\
+    MEM bb_orig fn.fn_blocks /\
+    block_perm_of fn bb_cur /\
+    bb_cur.bb_label = bb_orig.bb_label /\
+    from_block bb_cur.bb_instructions x ==>
+    from_block bb_orig.bb_instructions x
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `block_perm_of fn bb_cur` mp_tac >>
+  simp[block_perm_of_def] >> strip_tac >>
+  `bb_orig' = bb_orig` by
+    metis_tac[all_distinct_map_mem_inj, fn_labels_def, wf_function_def] >>
+  fs[] >>
+  match_mp_tac from_block_trans >>
+  qexists_tac `bb_cur.bb_instructions` >> simp[] >>
+  rpt strip_tac >>
+  fs[EVERY_MEM, MEM_FILTER] >>
+  metis_tac[]
+QED
+
+(* FILTER: non-pseudo filter of (pseudos ++ non-pseudos) = non-pseudos *)
+Triviality filter_nonpseudo_pseudo_append[local]:
+  !P l1 l2.
+    FILTER P l1 = [] /\ FILTER P l2 = l2 ==>
+    FILTER P (l1 ++ l2) = l2
+Proof
+  once_rewrite_tac[FILTER_APPEND_DISTRIB] >> simp[]
+QED
+
+(* Bridge: canonical_dep orig_bi ⊆ TC (full_dep cur_eda) for elements in cur.
+   This is the key lemma enabling the topo-sorted proof.
+   For data_dep_body: uses/defs overlap → full_dep directly (structural).
+   For from_barrier_dep: barrier x after y in orig. By IH topo_sorted, y
+     before x in cur's non-pseudo ordering. from_barrier_to_eda_dep on cur_bi
+     gives eda_dep → full_dep → TC full_dep.
+   For on_barrier_dep: last barrier y before x in orig. In cur, y is before
+     x (by IH). Let b_last = last barrier before x in cur. on_barrier_to_eda_dep
+     gives full_dep x b_last. If b_last = y, done. If not, y is a barrier
+     before b_last in cur (since b_last is LAST barrier, y ∈ barriers, y≠b_last).
+     from_barrier_to_eda_dep gives full_dep b_last y. TC chains: x→b_last→y. *)
+
+(* Helper: topo_sorted D l ⟹ if D a b and a ≠ b, then a appears after b in l.
+   Because: if a at position i, b at position j, and i < j, then D (EL i l) (EL j l) = D a b
+   contradicts ~D (EL i l) (EL j l). If i = j then a = b (same position), contradicting a ≠ b.
+   So i > j, meaning a appears after b. *)
+Triviality topo_sorted_dep_after_local[local]:
+  !dep l a b i j.
+    topo_sorted dep l /\ dep a b /\ a <> b /\
+    i < LENGTH l /\ EL i l = a /\
+    j < LENGTH l /\ EL j l = b ==>
+    j < i
+Proof
+  rpt strip_tac >> CCONTR_TAC >> `i <= j` by decide_tac >>
+  Cases_on `i = j` >- fs[] >>
+  `i < j` by decide_tac >>
+  fs[topo_sorted_def] >> metis_tac[]
+QED
+
+(* from_barrier_dep is irreflexive: if ALL_DISTINCT inst_ids in orig_bi's
+   non-pseudo filter, from_barrier_dep bi x x is impossible because
+   x.inst_id would appear both in pfx and at the [x.inst_id] position,
+   contradicting ALL_DISTINCT. *)
+Triviality from_barrier_dep_irrefl_local[local]:
+  !bi x pfx sfx.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+    MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi) = pfx ++ [x.inst_id] ++ sfx /\
+    MEM x.inst_id pfx ==> F
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  simp[ALL_DISTINCT_APPEND_3, ALL_DISTINCT, MEM_APPEND] >>
+  metis_tac[]
+QED
+
+(* from_barrier_dep case: barrier x depends on y in orig_bi.
+   Since topo_sorted preserves ordering, y appears before x in cur_bi's
+   non-pseudo filter. Split at x's position; y in prefix.
+   from_barrier_to_eda_dep gives eda_dep. *)
+Triviality from_barrier_dep_imp_canonical_dep_local[local]:
+  !bi x y. from_barrier_dep bi x y ==> canonical_dep bi x y
+Proof
+  rw[canonical_dep_def] >>
+  imp_res_tac from_barrier_dep_def >>
+  simp[] >> disj2_tac >> disj1_tac >>
+  simp[from_barrier_dep_def]
+QED
+
+Triviality on_barrier_dep_imp_canonical_dep_local[local]:
+  !bi x y. on_barrier_dep bi x y ==> canonical_dep bi x y
+Proof
+  rw[canonical_dep_def] >>
+  imp_res_tac on_barrier_dep_def >>
+  simp[] >> disj2_tac >> disj2_tac >>
+  simp[on_barrier_dep_def]
+QED
+
+Triviality from_barrier_dep_neq_local[local]:
+  !orig_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    from_barrier_dep orig_bi x y ==> x <> y
+Proof
+  rpt strip_tac >> CCONTR_TAC >> fs[] >>
+  `?pfx sfx. MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) =
+              pfx ++ [x.inst_id] ++ sfx /\ MEM y.inst_id pfx` by (
+    pop_assum (fn th =>
+      qspecl_then [`orig_bi`, `x`, `y`] mp_tac (iffLR from_barrier_dep_def) >>
+      simp[th])) >>
+  `MEM x.inst_id pfx` by metis_tac[] >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  simp[ALL_DISTINCT_APPEND_3, MEM_APPEND] >>
+  metis_tac[]
+QED
+
+(* If dep x y and x,y are in a topo-sorted list, y comes before x.
+   Extracted as standalone to avoid nested by-blocks. *)
+Triviality topo_sorted_MEM_impEl_local[local]:
+  !dep l x y.
+    topo_sorted dep l /\ dep x y /\ MEM x l /\ MEM y l /\ x <> y ==>
+    ?yi. yi < LENGTH l /\ EL yi l = y
+Proof
+  metis_tac[topo_sorted_dep_after_local, MEM_EL]
+QED
+
+Triviality topo_sorted_MEM_x_impEl_local[local]:
+  !dep l x.
+    topo_sorted dep l /\ MEM x l ==>
+    ?xi. xi < LENGTH l /\ EL xi l = x
+Proof
+  metis_tac[MEM_EL]
+QED
+
+(* If dep x y and topo_sorted, y must come before x. But ~MEM y pfx
+   means y is in sfx (after x) — contradiction.
+   Key insight: construct indices directly instead of using MEM_EL existentials.
+   x is at index LENGTH pfx; y is at index LENGTH pfx + SUC k in sfx.
+   Then topo_sorted gives LENGTH pfx + SUC k < LENGTH pfx → F. *)
+Triviality mem_y_in_sfx_contra_local[local]:
+  !dep fl x y pfx sfx.
+    ALL_DISTINCT (MAP (\i. i.inst_id) fl) /\
+    topo_sorted dep fl /\
+    dep x y /\
+    MEM x fl /\ MEM y fl /\
+    fl = pfx ++ [x] ++ sfx /\
+    ~MEM x pfx /\
+    x <> y /\
+    ~MEM y pfx ==> F
+Proof
+  rpt strip_tac >>
+  `MEM y sfx` by metis_tac[MEM_APPEND, MEM] >>
+  `?k. k < LENGTH sfx /\ EL k sfx = y` by metis_tac[MEM_EL] >>
+  `EL (LENGTH pfx) fl = x` by simp[EL_APPEND_EQN] >>
+  `EL (LENGTH pfx + SUC k) fl = y` by simp[EL_APPEND_EQN] >>
+  `LENGTH pfx < LENGTH fl` by simp[] >>
+  `LENGTH pfx + SUC k < LENGTH fl` by simp[] >>
+  imp_res_tac topo_sorted_dep_after_local >>
+  decide_tac
+QED
+
+(* Positive version: if dep x y and topo_sorted, then y comes before x.
+   So splitting at y, x must be in the suffix. *)
+Triviality dep_imp_mem_sfx_local[local]:
+  !dep fl x y pfx sfx.
+    topo_sorted dep fl /\
+    dep x y /\
+    MEM x fl /\ MEM y fl /\
+    fl = pfx ++ [y] ++ sfx /\
+    ~MEM y pfx /\
+    x <> y ==> MEM x sfx
+Proof
+  rpt strip_tac >>
+  CCONTR_TAC >>
+  `MEM x pfx` by metis_tac[MEM_APPEND, MEM] >>
+  `?ix. ix < LENGTH pfx /\ EL ix pfx = x` by metis_tac[MEM_EL] >>
+  `EL ix fl = x` by simp[EL_APPEND_EQN] >>
+  `ix < LENGTH fl` by simp[] >>
+  `EL (LENGTH pfx) fl = y` by simp[EL_APPEND_EQN] >>
+  `LENGTH pfx < LENGTH fl` by simp[] >>
+  imp_res_tac topo_sorted_dep_after_local >>
+  decide_tac
+QED
+
+(* from_barrier_dep case: barrier x depends on y in orig_bi.
+   Since topo_sorted preserves ordering, y appears before x in cur_bi's
+   non-pseudo filter. Split at x's position; y in prefix.
+   from_barrier_to_eda_dep gives eda_dep. *)
+Triviality from_barrier_dep_tc_case_local[local]:
+  !cur_bi orig_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    from_barrier_dep orig_bi x y /\
+    MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    MEM y (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==>
+    eda_dep (build_full_eda cur_bi) x y
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `fl = FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi` >>
+  `canonical_dep orig_bi x y` by
+    metis_tac[from_barrier_dep_imp_canonical_dep_local] >>
+  `is_barrier x` by fs[from_barrier_dep_def] >>
+  `x <> y` by metis_tac[from_barrier_dep_neq_local] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) fl)` by metis_tac[all_distinct_map_filter] >>
+  `?pfx sfx. fl = pfx ++ [x] ++ sfx /\ ~MEM x pfx`
+    by metis_tac[MEM_SPLIT_APPEND_first, MEM_FILTER] >>
+  Cases_on `MEM y pfx` >- (
+    irule from_barrier_to_eda_dep >>
+    simp[Abbr `fl`] >>
+    CONV_TAC SWAP_EXISTS_CONV >> CONV_TAC SWAP_EXISTS_CONV >>
+    qexistsl_tac [`pfx`, `sfx`] >>
+    simp[]) >>
+  metis_tac[mem_y_in_sfx_contra_local]
+QED
+
+(* on_barrier_dep case: non-barrier x depends on last-barrier y in orig_bi.
+   In cur_bi, find last barrier b_last before x. Two sub-cases:
+   (a) b_last has y's inst_id: on_barrier_to_eda_dep gives eda_dep x b_last,
+       then inst_id bridge to y.
+   (b) b_last has different inst_id: TC chain x -> b_last -> y via
+       on_barrier_to_eda_dep and from_barrier_to_eda_dep. *)
+(* Helper A: on_barrier_to_eda_dep wrapper for x -> b_last chain *)
+Triviality on_barrier_eda_dep_x_blast[local]:
+  !cur_bi pfx x sfx b_last bar_pfx.
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = pfx ++ [x] ++ sfx /\
+    ~is_barrier x /\
+    bar_pfx = FILTER is_barrier pfx /\
+    bar_pfx <> [] /\ b_last = LAST bar_pfx /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) ==>
+    eda_dep (build_full_eda cur_bi) x b_last
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`cur_bi`, `pfx`, `x`, `sfx`, `b_last`]
+            on_barrier_to_eda_dep) >>
+  simp[] >> Cases_on `FILTER is_barrier pfx` >> gvs[]
+QED
+
+(* Helper B: from_barrier_to_eda_dep wrapper for b_last -> y chain *)
+Triviality on_barrier_eda_dep_blast_y[local]:
+  !cur_bi bpfx b_last bsfx_x_sfx y.
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = bpfx ++ [b_last] ++ bsfx_x_sfx /\
+    is_barrier b_last /\ MEM y bpfx /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) ==>
+    eda_dep (build_full_eda cur_bi) b_last y
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`cur_bi`, `bpfx`, `b_last`, `bsfx_x_sfx`, `y`]
+            from_barrier_to_eda_dep) >>
+  simp[]
+QED
+
+(* Helper C: y (a barrier) in FILTER is_barrier pfx must appear before b_last
+   in bpfx when b_last ≠ y by inst_id and b_last = LAST(FILTER is_barrier pfx) *)
+(* ALL_DISTINCT on MAP f (l1 ++ l2) gives ALL_DISTINCT on MAP f l1 *)
+Triviality all_distinct_map_append_left[local]:
+  !f l1 l2. ALL_DISTINCT (MAP f (l1 ++ l2)) ==> ALL_DISTINCT (MAP f l1)
+Proof
+  simp[MAP_APPEND, ALL_DISTINCT_APPEND]
+QED
+
+(* Key sub-lemma: if LAST (FILTER is_barrier pfx) = b_last where
+   pfx = bpfx ++ [b_last] ++ bsfx, ~MEM b_last bpfx, ALL_DISTINCT inst_ids,
+   then FILTER is_barrier bsfx = []. Otherwise LAST would come from bsfx,
+   contradicting ALL_DISTINCT since b_last already appears earlier. *)
+Triviality last_barrier_no_suffix_barrier[local]:
+  !pfx bpfx b_last bsfx.
+    pfx = bpfx ++ [b_last] ++ bsfx /\
+    is_barrier b_last /\ ~MEM b_last bpfx /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) pfx) /\
+    LAST (FILTER is_barrier pfx) = b_last /\
+    FILTER is_barrier pfx <> [] ==>
+    FILTER is_barrier bsfx = []
+Proof
+  rpt strip_tac >>
+  `FILTER is_barrier pfx =
+    FILTER is_barrier bpfx ++ [b_last] ++ FILTER is_barrier bsfx`
+    by (simp[FILTER_APPEND_DISTRIB] >> metis_tac[]) >>
+  spose_not_then assume_tac >>
+  `FILTER is_barrier bpfx ++ [b_last] ≠ []` by simp[] >>
+  `LAST (FILTER is_barrier pfx) = LAST (FILTER is_barrier bsfx)`
+    by metis_tac[rich_listTheory.LAST_APPEND_NOT_NIL] >>
+  `LAST (FILTER is_barrier bsfx) = b_last` by metis_tac[] >>
+  `MEM b_last (FILTER is_barrier bsfx)`
+    by metis_tac[rich_listTheory.LAST_MEM] >>
+  `MEM b_last bsfx` by metis_tac[MEM_FILTER] >>
+  (* b_last in both [b_last] and bsfx parts of pfx, contradicts ALL_DISTINCT *)
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  simp[MAP_APPEND, ALL_DISTINCT_APPEND, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Triviality on_barrier_mem_y_before_blast[local]:
+  !pfx b_last bpfx bsfx y.
+    pfx = bpfx ++ [b_last] ++ bsfx /\
+    is_barrier b_last /\ ~MEM b_last bpfx /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) pfx) /\
+    LAST (FILTER is_barrier pfx) = b_last /\
+    FILTER is_barrier pfx <> [] /\
+    MEM y (FILTER is_barrier pfx) /\
+    b_last.inst_id <> y.inst_id ==>
+    MEM y bpfx
+Proof
+  rpt strip_tac >>
+  `FILTER is_barrier bsfx = []` by metis_tac[last_barrier_no_suffix_barrier] >>
+  `FILTER is_barrier pfx = FILTER is_barrier bpfx ++ [b_last]`
+    by (simp[FILTER_APPEND_DISTRIB] >> metis_tac[]) >>
+  `MEM y (FILTER is_barrier bpfx ++ [b_last])` by metis_tac[] >>
+  Cases_on `MEM y [b_last]` >- (
+    fs[] >> metis_tac[]) >>
+  metis_tac[MEM_APPEND, MEM_FILTER]
+QED
+
+Triviality tc_chain[local]:
+  !(R:'a->'a->bool) x y z. TC R x y /\ TC R y z ==> TC R x z
+Proof
+  metis_tac[TC_RULES]
+QED
+
+Triviality eda_dep_imp_full_dep_local[local]:
+  !eda x y. eda_dep eda x y ==> full_dep eda x y
+Proof
+  simp[full_dep_def] >> metis_tac[eda_dep_inst_id_only]
+QED
+
+Triviality on_barrier_dep_tc_case_local[local]:
+  !cur_bi orig_bi x y fl.
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    on_barrier_dep orig_bi x y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    fl = FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi /\
+    MEM x fl /\ MEM y fl /\
+    topo_sorted (canonical_dep orig_bi) fl ==>
+    TC (\a b. full_dep (build_full_eda cur_bi) a b) x y
+Proof
+  rpt strip_tac >>
+  `is_barrier y /\ ~is_barrier x` by fs[on_barrier_dep_def] >>
+  `x <> y` by metis_tac[] >>
+  `canonical_dep orig_bi x y` by metis_tac[on_barrier_dep_imp_canonical_dep_local] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) fl)` by metis_tac[all_distinct_map_filter] >>
+  `?pfx_y sfx_y. fl = pfx_y ++ [y] ++ sfx_y /\ ~MEM y pfx_y`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  `MEM x sfx_y` by metis_tac[dep_imp_mem_sfx_local] >>
+  `?pfx_x sfx_x. sfx_y = pfx_x ++ [x] ++ sfx_x /\ ~MEM x pfx_x`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  qabbrev_tac `pfx = pfx_y ++ [y] ++ pfx_x` >>
+  qabbrev_tac `sfx = sfx_x` >>
+  `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = pfx ++ [x] ++ sfx` by
+    fs[Abbr `pfx`, Abbr `sfx`, APPEND_ASSOC] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (pfx ++ [x] ++ sfx))`
+    by metis_tac[all_distinct_map_filter] >>
+  qabbrev_tac `bar_pfx = FILTER is_barrier pfx` >>
+  `MEM y bar_pfx` by (
+    simp[Abbr `bar_pfx`, Abbr `pfx`, MEM_FILTER, MEM_APPEND] >> metis_tac[]) >>
+  Cases_on `bar_pfx = []` >- gvs[] >>
+  qabbrev_tac `b_last = LAST bar_pfx` >>
+  `MEM b_last bar_pfx` by metis_tac[rich_listTheory.LAST_MEM] >>
+  `is_barrier b_last` by fs[Abbr `bar_pfx`, MEM_FILTER] >>
+  `MEM b_last pfx` by fs[Abbr `bar_pfx`, MEM_FILTER] >>
+  `eda_dep (build_full_eda cur_bi) x b_last` by (
+    mp_tac (Q.SPECL [`cur_bi`, `pfx`, `x`, `sfx`, `b_last`]
+              on_barrier_to_eda_dep) >>
+    simp[Abbr `bar_pfx`] >>
+    Cases_on `FILTER is_barrier pfx` >> gvs[]) >>
+  `full_dep (build_full_eda cur_bi) x b_last` by
+    metis_tac[eda_dep_imp_full_dep_local] >>
+  Cases_on `b_last.inst_id = y.inst_id` >- (
+    `full_dep (build_full_eda cur_bi) x y` by
+      metis_tac[eda_dep_inst_id_only, eda_dep_imp_full_dep_local] >>
+    irule TC_SUBSET >> simp[]) >>
+  `?bpfx bsfx. pfx = bpfx ++ [b_last] ++ bsfx /\ ~MEM b_last bpfx`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) pfx)` by metis_tac[all_distinct_map_append_left] >>
+  `FILTER is_barrier bsfx = []` by (
+    mp_tac (Q.SPECL [`pfx`, `bpfx`, `b_last`, `bsfx`]
+              last_barrier_no_suffix_barrier) >>
+    simp[]) >>
+  `FILTER is_barrier pfx = FILTER is_barrier bpfx ++ [b_last]` by (
+    fs[FILTER_APPEND_DISTRIB]) >>
+  `MEM y (FILTER is_barrier bpfx ++ [b_last])` by metis_tac[] >>
+  `MEM y bpfx` by (
+    Cases_on `MEM y [b_last]` >- (
+      fs[] >> metis_tac[]) >>
+    metis_tac[MEM_APPEND, MEM_FILTER]) >>
+  `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = bpfx ++ [b_last] ++ (bsfx ++ [x] ++ sfx)`
+    by (simp[] >> metis_tac[APPEND_ASSOC]) >>
+  `eda_dep (build_full_eda cur_bi) b_last y` by (
+    mp_tac (Q.SPECL [`cur_bi`, `bpfx`, `b_last`, `bsfx ++ [x] ++ sfx`, `y`]
+              from_barrier_to_eda_dep) >>
+    simp[]) >>
+  `full_dep (build_full_eda cur_bi) b_last y` by
+    metis_tac[eda_dep_imp_full_dep_local] >>
+  `(λa b. full_dep (build_full_eda cur_bi) a b)⁺ b_last y`
+    by (irule TC_SUBSET >> simp[]) >>
+  `full_dep (build_full_eda cur_bi) x b_last` by
+    metis_tac[eda_dep_imp_full_dep_local] >>
+  `(λa b. full_dep (build_full_eda cur_bi) a b)⁺ x b_last`
+    by (irule TC_SUBSET >> simp[]) >>
+  match_mp_tac tc_chain >> qexists_tac `b_last` >> simp[]
+QED
+
+Triviality canonical_dep_tc_full_dep_local[local]:
+  !cur_bi orig_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    canonical_dep orig_bi x y /\ from_block orig_bi x /\ from_block orig_bi y /\
+    MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    MEM y (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==>
+    TC (\a b. full_dep (build_full_eda cur_bi) a b) x y
+Proof
+  rpt strip_tac >> fs[canonical_dep_def] >-
+  (* data_dep_body: structural via uses/defs overlap *)
+  (irule TC_SUBSET >> simp[full_dep_def] >> disj2_tac >> disj1_tac >>
+   fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
+   qexists `v` >> fs[MEM_operand_vars_iff]) >-
+  (* from_barrier_dep: eda_dep from lemma, then lift to full_dep, then TC *)
+  (`eda_dep (build_full_eda cur_bi) x y` by metis_tac[from_barrier_dep_tc_case_local] >>
+   irule TC_SUBSET >> metis_tac[eda_dep_imp_full_dep_local]) >>
+  (* on_barrier_dep: use standalone lemma *)
+  mp_tac (Q.SPECL [`cur_bi`, `orig_bi`, `x`, `y`,
+                    `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi`]
+            on_barrier_dep_tc_case_local) >>
+  simp[]
+QED
+Triviality sched_output_nonpseudo[local]:
+  !block_insts order eda om entries i.
+    eda_wf eda block_insts /\
+    EVERY (\i. MEM i block_insts) entries /\
+    MEM i (schedule_from_entries block_insts order eda om entries) ==>
+    ~is_pseudo i.inst_opcode
+Proof
+  rpt strip_tac >> imp_res_tac schedule_output_from_block >> simp[]
+QED
+
+(* If MAP f l is ALL_DISTINCT and f is injective on l, then l is ALL_DISTINCT *)
+Triviality map_inj_all_distinct[local]:
+  !f l. ALL_DISTINCT (MAP f l) /\
+        (!a b. MEM a l /\ MEM b l /\ f a = f b ==> a = b) ==>
+        ALL_DISTINCT l
+Proof
+  Induct_on `l` >> simp[] >> rpt strip_tac >> CCONTR_TAC >> fs[] >>
+  `MEM (f h) (MAP f l)` by metis_tac[MEM_MAP] >>
+  fs[ALL_DISTINCT] >> first_x_assum irule >> simp[]
+QED
+
+(* STANDALONE HELPERS: extracted from the proofs below to avoid by-block issues *)
+
+(* from_block via MEM + inst_id: ALL_DISTINCT inst_ids + from_block bi y + MEM x bi +
+   same inst_id ⟹ from_block bi x. *)
+Triviality from_block_MEM_inst_id[local]:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    from_block bi y /\ MEM x bi /\ x.inst_id = y.inst_id ==>
+    from_block bi x
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `from_block bi y` mp_tac >> simp[from_block_def] >>
+  rpt strip_tac >> rename1 `MEM j bi` >>
+  `y.inst_id = j.inst_id` by
+    (Cases_on `y = j` >- simp[] >> metis_tac[flip_operands_inst_id]) >>
+  `j = x` by metis_tac[all_distinct_map_mem_inj] >>
+  fs[] >>
+  simp[from_block_def] >> qexists_tac `x` >> simp[]
+QED
+
+(* full_dep is preserved under from_block equivalence:
+   from_block elements with same inst_id have same full_dep behavior *)
+Triviality full_dep_from_block_equiv_local[local]:
+  !cur_bi x y x' y'.
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    from_block cur_bi x /\ from_block cur_bi y /\
+    MEM x' cur_bi /\ x'.inst_id = x.inst_id /\
+    MEM y' cur_bi /\ y'.inst_id = y.inst_id ==>
+    (full_dep (build_full_eda cur_bi) x y <=> full_dep (build_full_eda cur_bi) x' y')
+Proof
+  rpt strip_tac >>
+  `from_block cur_bi x'` by metis_tac[from_block_MEM_inst_id] >>
+  `from_block cur_bi y'` by metis_tac[from_block_MEM_inst_id] >>
+  `x.inst_outputs = x'.inst_outputs` by metis_tac[from_block_same_inst_id_outputs_early] >>
+  `y.inst_outputs = y'.inst_outputs` by metis_tac[from_block_same_inst_id_outputs_early] >>
+  `set (operand_vars x.inst_operands) = set (operand_vars x'.inst_operands)`
+    by metis_tac[from_block_same_inst_id_operand_vars_local] >>
+  `set (operand_vars y.inst_operands) = set (operand_vars y'.inst_operands)`
+    by metis_tac[from_block_same_inst_id_operand_vars_local] >>
+  simp[full_dep_def] >>
+  `eda_dep (build_full_eda cur_bi) x y = eda_dep (build_full_eda cur_bi) x' y'`
+    by (simp[GSYM eda_dep_inst_id_only] >>
+        metis_tac[flip_operands_inst_id, from_block_def]) >>
+  simp[inst_uses_def, inst_defs_def]
+QED
+
+(* One-sided congruence: full_dep with same inst_id/outputs/operand_vars
+   on the FIRST argument agrees for any second argument. *)
+Triviality full_dep_left_cong_local[local]:
+  !eda x x' a.
+    x.inst_id = x'.inst_id /\
+    x.inst_outputs = x'.inst_outputs /\
+    set (operand_vars x.inst_operands) = set (operand_vars x'.inst_operands) ==>
+    (full_dep eda x a <=> full_dep eda x' a)
+Proof
+  rpt strip_tac >> simp[full_dep_def] >>
+  `eda_dep eda x a = eda_dep eda x' a`
+    by metis_tac[eda_dep_inst_id_only] >>
+  simp[inst_uses_def, inst_defs_def]
+QED
+
+(* One-sided congruence: full_dep with same inst_id/outputs/operand_vars
+   on the SECOND argument agrees for any first argument. *)
+Triviality full_dep_right_cong_local[local]:
+  !eda y y' a.
+    y.inst_id = y'.inst_id /\
+    y.inst_outputs = y'.inst_outputs /\
+    set (operand_vars y.inst_operands) = set (operand_vars y'.inst_operands) ==>
+    (full_dep eda a y <=> full_dep eda a y')
+Proof
+  rpt strip_tac >> simp[full_dep_def] >>
+  `eda_dep eda a y = eda_dep eda a y'`
+    by metis_tac[eda_dep_inst_id_only] >>
+  simp[inst_uses_def, inst_defs_def]
+QED
+
+(* from_block gives a literal MEM witness with same inst_id and ~is_pseudo *)
+Triviality from_block_MEM_witness[local]:
+  !bi i. from_block bi i ==> ?j. MEM j bi /\ j.inst_id = i.inst_id /\ ~is_pseudo j.inst_opcode
+Proof
+  simp[from_block_def] >> metis_tac[flip_operands_inst_id]
+QED
+
+(* TC endpoint replacement: if TC R x' y' and we can replace x'→x and y'→y
+   at the endpoints of one-step relations, then TC R x y.
+   Proof: by TC induction. Base: R x' y' → R x y'. 
+   Step: TC R x' y' ∧ R y' z → TC R x' z, plus R y' z → R y z. *)
+(* TC left endpoint replacement: if ∀a. R x' a ⇒ R x a, then
+   TC R x' y ⇒ TC R x y.
+   Proof: by TC_CASES1_E, either R x' y (base, use left_cong + TC_SUBSET)
+   or ∃z. R x' z ∧ TC R z y (step, use left_cong to get R x z → TC x z,
+   then tc_chain with TC R z y). *)
+Triviality tc_left_replace[local]:
+  !R x x' y.
+    (!a. R x' a ==> R x a) ==>
+    TC R x' y ==> TC R x y
+Proof
+  rpt gen_tac >> disch_tac >> disch_tac >>
+  qhdtm_x_assum `TC` mp_tac >>
+  simp[Once TC_CASES1] >>
+  rpt strip_tac
+  >- (irule TC_SUBSET >> pop_assum mp_tac >> metis_tac[])
+  >- (rename1 `R x' z` >> rename1 `TC R z y` >>
+      metis_tac[tc_chain, TC_SUBSET])
+QED
+
+(* TC right endpoint replacement: if ∀b. R b y' ⇒ R b y, then
+   TC R x y' ⇒ TC R x y. *)
+Triviality tc_right_replace[local]:
+  !R y y' x.
+    (!b. R b y' ==> R b y) ==>
+    TC R x y' ==> TC R x y
+Proof
+  rpt gen_tac >> disch_tac >> disch_tac >>
+  qhdtm_x_assum `TC` mp_tac >>
+  simp[Once TC_CASES2] >>
+  rpt strip_tac
+  >- (irule TC_SUBSET >> pop_assum mp_tac >> metis_tac[])
+  >- (rename1 `R z y'` >> rename1 `TC R x z` >>
+      metis_tac[TC_RIGHT1_I, TC_SUBSET])
+QED
+
+(* TC endpoint replacement: combination of left and right replace *)
+Triviality tc_endpoint_replace[local]:
+  !R x y x' y'.
+    TC R x' y' /\
+    (!a. R x' a ==> R x a) /\
+    (!b. R b y' ==> R b y) ==>
+    TC R x y
+Proof
+  metis_tac[tc_left_replace, tc_right_replace]
+QED
+
+(* Bridge: EVERY from_block orig (FILTER ~is_pseudo cur) + from_block cur x' + MEM + ~is_pseudo
+   implies from_block orig x'. Uses from_block_trans with universal antecedent. *)
+Triviality from_block_cur_to_orig_local[local]:
+  !cur_bi orig_bi x'.
+    EVERY (\i. from_block orig_bi i) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    from_block cur_bi x' /\ MEM x' cur_bi /\ ~is_pseudo x'.inst_opcode ==>
+    from_block orig_bi x'
+Proof
+  rpt strip_tac >>
+  match_mp_tac from_block_trans >>
+  qexists_tac `cur_bi` >> simp[] >>
+  qpat_x_assum `EVERY _ _` mp_tac >>
+  simp[EVERY_FILTER, EVERY_MEM, PULL_FORALL] >>
+  metis_tac[]
+QED
+
+(* Filtered-ALL_DISTINCT variant: when ALL_DISTINCT is only on FILTER ~is_pseudo bi,
+   from_block same inst_id still gives same outputs *)
+Theorem from_block_same_inst_id_outputs_filtered_local:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+    from_block bi x /\ from_block bi y /\ x.inst_id = y.inst_id ==>
+    x.inst_outputs = y.inst_outputs
+Proof
+  rw[from_block_def] >>
+  `MEM j (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by simp[MEM_FILTER] >>
+  `MEM j' (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by simp[MEM_FILTER] >>
+  `j = j'` by metis_tac[flip_operands_inst_id, all_distinct_map_mem_inj, MEM_FILTER] >>
+  metis_tac[flip_operands_inst_outputs]
+QED
+
+Theorem from_block_same_inst_id_operand_vars_filtered_local:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+    from_block bi x /\ from_block bi y /\ x.inst_id = y.inst_id ==>
+    set (operand_vars x.inst_operands) = set (operand_vars y.inst_operands)
+Proof
+  rw[from_block_def] >>
+  `MEM j (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by simp[MEM_FILTER] >>
+  `MEM j' (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by simp[MEM_FILTER] >>
+  `j = j'` by metis_tac[flip_operands_inst_id, all_distinct_map_mem_inj, MEM_FILTER] >>
+  metis_tac[flip_operands_operand_vars_set]
+QED
+
+Theorem from_block_same_inst_id_barrier_filtered_local:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+    from_block bi x /\ from_block bi y /\ x.inst_id = y.inst_id ==>
+    (is_barrier x <=> is_barrier y)
+Proof
+  rw[from_block_def] >>
+  `MEM j (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by simp[MEM_FILTER] >>
+  `MEM j' (FILTER (\i. ~is_pseudo i.inst_opcode) bi)` by simp[MEM_FILTER] >>
+  `j = j'` by metis_tac[flip_operands_inst_id, all_distinct_map_mem_inj, MEM_FILTER] >>
+  metis_tac[flip_operands_is_barrier]
+QED
+
+(* canonical_dep transfers across inst_id-equivalent from_block pairs
+   with FILTER-level ALL_DISTINCT (the version we actually have in hypotheses) *)
+Theorem canonical_dep_inst_id_equiv_filtered:
+  !bi x y x' y'.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+    canonical_dep bi x y /\
+    from_block bi x /\ from_block bi y /\
+    from_block bi x' /\ from_block bi y' /\
+    x'.inst_id = x.inst_id /\ y'.inst_id = y.inst_id ==>
+    canonical_dep bi x' y'
+Proof
+  rpt strip_tac >>
+  `in_np_body bi x` by metis_tac[from_block_imp_in_np_body_local] >>
+  `in_np_body bi y` by metis_tac[from_block_imp_in_np_body_local] >>
+  `in_np_body bi x'` by metis_tac[from_block_imp_in_np_body_local] >>
+  `in_np_body bi y'` by metis_tac[from_block_imp_in_np_body_local] >>
+  `x.inst_outputs = x'.inst_outputs` by metis_tac[from_block_same_inst_id_outputs_filtered_local] >>
+  `y.inst_outputs = y'.inst_outputs` by metis_tac[from_block_same_inst_id_outputs_filtered_local] >>
+  `set (operand_vars x.inst_operands) = set (operand_vars x'.inst_operands)`
+    by metis_tac[from_block_same_inst_id_operand_vars_filtered_local] >>
+  `set (operand_vars y.inst_operands) = set (operand_vars y'.inst_operands)`
+    by metis_tac[from_block_same_inst_id_operand_vars_filtered_local] >>
+  `(is_barrier x <=> is_barrier x')` by metis_tac[from_block_same_inst_id_barrier_filtered_local] >>
+  `(is_barrier y <=> is_barrier y')` by metis_tac[from_block_same_inst_id_barrier_filtered_local] >>
+  assume_tac canonical_dep_inst_id_equiv >>
+  pop_assum (fn th => mp_tac (SPECL [``bi:instruction list``, ``x:instruction``,
+    ``y:instruction``, ``x':instruction``, ``y':instruction``] th)) >>
+  simp[]
+QED
+
+(* Bridge: canonical_dep orig → TC full_dep cur for from_block elements.
+   Uses the already-proved canonical_dep_tc_full_dep_local for literal MEM
+   representatives x', y' in cur_bi, then transfers the TC result to x, y
+   via full_dep_from_block_equiv_local + tc_endpoint_replace.
+   full_dep is a congruence for inst_id-equivalent pairs, so we can replace
+   the endpoints of the TC chain without affecting intermediate steps. *)
+Triviality canonical_dep_tc_full_dep_from_block_local[local]:
+  !cur_bi orig_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    EVERY (\i. from_block orig_bi i) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    canonical_dep orig_bi x y /\ from_block orig_bi x /\ from_block orig_bi y /\
+    from_block cur_bi x /\ from_block cur_bi y /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==>
+    TC (\a b. full_dep (build_full_eda cur_bi) a b) x y
+Proof
+  rpt strip_tac >>
+  (* Step 1: Find literal counterparts x', y' in cur_bi with same inst_id *)
+  `?x'. MEM x' cur_bi /\ x'.inst_id = x.inst_id /\ ~is_pseudo x'.inst_opcode`
+    by metis_tac[from_block_MEM_witness] >>
+  `?y'. MEM y' cur_bi /\ y'.inst_id = y.inst_id /\ ~is_pseudo y'.inst_opcode`
+    by metis_tac[from_block_MEM_witness] >>
+  (* Step 2: x', y' are from_block cur_bi and orig_bi *)
+  `from_block cur_bi x'` by metis_tac[from_block_MEM_inst_id] >>
+  `from_block cur_bi y'` by metis_tac[from_block_MEM_inst_id] >>
+  `from_block orig_bi x'` by metis_tac[from_block_cur_to_orig_local] >>
+  `from_block orig_bi y'` by metis_tac[from_block_cur_to_orig_local] >>
+  (* Step 3: Transfer canonical_dep to x', y' via inst_id equivalence *)
+  `canonical_dep orig_bi x' y'`
+    by metis_tac[canonical_dep_inst_id_equiv_filtered] >>
+  (* Step 4: x', y' are literal non-pseudo members of cur_bi *)
+  `MEM x' (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by simp[MEM_FILTER] >>
+  `MEM y' (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by simp[MEM_FILTER] >>
+  (* Step 5: Apply the already-proved literal-MEM version *)
+  `TC (\a b. full_dep (build_full_eda cur_bi) a b) x' y'`
+    by metis_tac[canonical_dep_tc_full_dep_local] >>
+  (* Step 6: Transfer TC endpoints via inst_id congruence *)
+  `x.inst_outputs = x'.inst_outputs`
+    by metis_tac[from_block_same_inst_id_outputs_filtered_local] >>
+  `y.inst_outputs = y'.inst_outputs`
+    by metis_tac[from_block_same_inst_id_outputs_filtered_local] >>
+  `set (operand_vars x.inst_operands) = set (operand_vars x'.inst_operands)`
+    by metis_tac[from_block_same_inst_id_operand_vars_filtered_local] >>
+  `set (operand_vars y.inst_operands) = set (operand_vars y'.inst_operands)`
+    by metis_tac[from_block_same_inst_id_operand_vars_filtered_local] >>
+  match_mp_tac tc_endpoint_replace >>
+  qexists_tac `x'` >> qexists_tac `y'` >> simp[] >>
+  rpt strip_tac >-
+  metis_tac[full_dep_left_cong_local] >>
+  metis_tac[full_dep_right_cong_local]
+QED
+
+(* FILTER decomposition: dft_block non-pseudo instructions = schedule output *)
+Triviality dft_block_filter_nonpseudo[local]:
+  !order bb.
+    FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions =
+    schedule_from_entries bb.bb_instructions order (build_full_eda bb.bb_instructions)
+      (build_offspring_map bb.bb_instructions order)
+      (entry_instructions bb.bb_instructions order (build_full_eda bb.bb_instructions))
+Proof
+  simp[dft_block_def, LET_THM, FILTER_APPEND_DISTRIB, FILTER_FILTER,
+       FILTER_EQ_NIL, FILTER_EQ_ID, EVERY_MEM] >>
+  rpt strip_tac >>
+  metis_tac[sched_output_nonpseudo, build_full_eda_wf, entry_instructions_mem]
+QED
+
+
+(* Extracted by-block: ALL_DISTINCT inst_outputs for perm-of block *)
+Triviality block_perm_inst_outputs_local[local]:
+  !fn bb_orig bb_cur.
+    wf_ssa fn /\ wf_function fn /\
+    MEM bb_orig fn.fn_blocks /\
+    block_perm_of fn bb_cur /\ bb_cur.bb_label = bb_orig.bb_label ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb_cur.bb_instructions))
+Proof
+  metis_tac[block_perm_of_inst_outputs_distinct_local]
+QED
+
+(* Schedule output lemma pack — avoid irule on multi-antecedent theorems in by-blocks *)
+Triviality sched_output_distinct_local[local]:
+  !bi order eda om entries.
+    eda_wf eda bi /\ eda_topo_compatible bi eda order /\
+    np_defs_before_uses bi /\ ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    bi <> [] /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==> k = PRE (LENGTH bi)) /\
+    EVERY (\i. MEM i bi) entries ==>
+    ALL_DISTINCT (MAP (\i. i.inst_id) (schedule_from_entries bi order eda om entries))
+Proof
+  rpt strip_tac >>
+  irule schedule_output_all_distinct >> simp[]
+QED
+
+Triviality sched_output_producer_local[local]:
+  !bi order eda om entries.
+    eda_wf eda bi /\ eda_topo_compatible bi eda order /\
+    np_defs_before_uses bi /\ ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    bi <> [] /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==> k = PRE (LENGTH bi)) /\
+    EVERY (\i. MEM i bi) entries ==>
+    output_producer_before bi (schedule_from_entries bi order eda om entries)
+Proof
+  rpt strip_tac >>
+  irule schedule_output_producer_before >> simp[]
+QED
+
+Triviality sched_output_eda_local[local]:
+  !bi order eda om entries.
+    eda_wf eda bi /\ eda_topo_compatible bi eda order /\
+    np_defs_before_uses bi /\ ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    bi <> [] /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==> k = PRE (LENGTH bi)) /\
+    EVERY (\i. MEM i bi) entries ==>
+    output_eda_before eda (schedule_from_entries bi order eda om entries)
+Proof
+  rpt strip_tac >>
+  irule schedule_output_eda_before >> simp[]
+QED
+
+Triviality sched_topo_sorted_local[local]:
+  !bi eda om entries sched.
+    eda = build_full_eda bi /\
+    output_eda_before eda sched /\ output_producer_before bi sched /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) sched) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    (!i. MEM i sched ==> from_block bi i /\ ~is_pseudo i.inst_opcode) /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi)) ==>
+    topo_sorted (full_dep eda) sched
+Proof
+  rpt strip_tac >>
+  qspecl_then [`bi`,`eda`,`sched`] mp_tac schedule_topo_sorted_full_dep >>
+  simp[]
+QED
+
+(* Helper: schedule elements originate from cur block *)
+Triviality sched_mem_from_block_cur_local[local]:
+  !bi order eda om entries i.
+    eda_wf eda bi /\ EVERY (\i. MEM i bi) entries /\
+    MEM i (schedule_from_entries bi order eda om entries) ==>
+    from_block bi i /\ ~is_pseudo i.inst_opcode
+Proof
+  metis_tac[schedule_output_from_block]
+QED
+
+(* Helper: schedule elements originate from orig block *)
+Triviality sched_mem_from_block_orig_local[local]:
+  !fn bb_orig bb_cur order eda om entries i.
+    wf_function fn /\ MEM bb_orig fn.fn_blocks /\
+    block_perm_of fn bb_cur /\ bb_cur.bb_label = bb_orig.bb_label /\
+    eda_wf eda bb_cur.bb_instructions /\
+    EVERY (\i. MEM i bb_cur.bb_instructions) entries /\
+    MEM i (schedule_from_entries bb_cur.bb_instructions order eda om entries) ==>
+    from_block bb_orig.bb_instructions i
+Proof
+  metis_tac[schedule_output_from_block, from_block_sched_via_perm_of]
+QED
+
+
+(* ===== Cross-bi bridge helpers (ported from dftCanonicalSimScript) ===== *)
+
+(* Cross-bi version: from_block on both sides, with ALL_DISTINCT inst_ids *)
+Triviality is_barrier_from_inst_id_cross_bi[local]:
+  !orig_bi b x.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    from_block orig_bi b /\ from_block orig_bi x /\ b.inst_id = x.inst_id ==>
+    is_barrier b = is_barrier x
+Proof
+  rpt strip_tac >> fs[from_block_def] >>
+  metis_tac[all_distinct_map_mem_inj, flip_operands_is_barrier, flip_operands_inst_id]
+QED
+
+(* MEM in FILTER implies from_block *)
+Triviality from_block_MEM_filter[local]:
+  !bi x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==> from_block bi x
+Proof
+  rpt strip_tac >>
+  fs[MEM_FILTER] >>
+  simp[from_block_def] >>
+  qexists_tac `x` >> simp[]
+QED
+
+(* MEM in FILTER split: if b is in the filtered list and its inst_id <> mid.inst_id,
+   then b is in pfx or sfx (not in [mid]) *)
+Triviality mem_orig_filter_split[local]:
+  !orig_bi pfx mid sfx b.
+    ALL_DISTINCT (MAP (\i:instruction. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi = pfx ++ [mid] ++ sfx /\
+    MEM b (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) /\
+    b.inst_id <> mid.inst_id ==>
+    MEM b pfx \/ MEM b sfx
+Proof
+  rpt strip_tac >> qpat_x_assum `MEM b (FILTER _ _)` mp_tac >>
+  qpat_x_assum `FILTER _ _ = _` (fn th => REWRITE_TAC [th]) >>
+  simp[MEM_APPEND] >> metis_tac[]
+QED
+
+(* ===== Single-step bridge: canonical_dep ⊆ full_dep (cross-bi) ===== *)
+(* Ported and adapted from dftCanonicalSimScript lines 272-900. *)
+
+(* If dep(a,b) and a is at split point and b in suffix, topo_sorted is violated *)
+Triviality topo_sorted_suffix_dep[local]:
+  !dep l pfx a sfx b.
+    topo_sorted dep l /\ l = pfx ++ [a] ++ sfx /\ dep a b /\ MEM b sfx ==> F
+Proof
+  rpt strip_tac >> qpat_x_assum `MEM b sfx` (mp_tac o REWRITE_RULE[MEM_EL]) >> strip_tac >>
+  `EL (LENGTH pfx) l = a` by (simp[el_append3] >> metis_tac[]) >>
+  `EL (LENGTH pfx + 1 + n) l = b` by (
+    simp[EL_APPEND2] >>
+    simp[LENGTH_APPEND] >>
+    decide_tac) >>
+  qpat_x_assum `topo_sorted dep l` (fn th =>
+    mp_tac (REWRITE_RULE [topo_sorted_def] th) >>
+    disch_then (qspecl_then [`LENGTH pfx`, `LENGTH pfx + 1 + n`] mp_tac)) >> simp[] >>
+  qpat_x_assum `dep a b` mp_tac >> simp[]
+QED
+
+Triviality data_dep_body_imp_full_dep_any_eda[local]:
+  !orig_bi cur_bi x y.
+    data_dep_body orig_bi x y /\
+    from_block orig_bi x /\ from_block orig_bi y ==>
+    full_dep (build_full_eda cur_bi) x y
+Proof
+  rpt strip_tac >> simp[full_dep_def] >> disj2_tac >> disj1_tac >>
+  fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
+  qexists `v` >> fs[MEM_operand_vars_iff]
+QED
+
+(* If MAP inst_id of FILTER ~pseudo bi = pfx++[xid]++sfx with ALL_DISTINCT, and MEM yid pfx, then xid <> yid *)
+Triviality all_distinct_split_inst_id_neq[local]:
+  !bi xid yid pfx sfx.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
+    MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi) = pfx ++ [xid] ++ sfx /\
+    MEM yid pfx ==> xid <> yid
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (pfx ++ [xid] ++ sfx)` by metis_tac[] >>
+  gvs[ALL_DISTINCT_APPEND_3, MEM_APPEND]
+QED
+
+(* Helper: yb_c exists in px_c with y.inst_id, via topo_sorted contradiction if in sfx_x *)
+Triviality yb_c_in_px_c[local]:
+  !orig_bi fl px_c px_b sfx_x x y.
+  ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+  fl = px_c ++ [px_b] ++ sfx_x /\
+  px_b.inst_id = x.inst_id /\
+  MEM y.inst_id (MAP (\i. i.inst_id) fl) /\
+  x.inst_id <> y.inst_id /\
+  topo_sorted (canonical_dep orig_bi) fl /\
+  canonical_dep orig_bi x y /\
+  from_block orig_bi x /\ from_block orig_bi y /\
+  (!z. MEM z fl ==> from_block orig_bi z) ==>
+  ?yb_c. MEM yb_c px_c /\ yb_c.inst_id = y.inst_id
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `MEM y.inst_id (MAP (λi. i.inst_id) fl)` (mp_tac o REWRITE_RULE [MEM_MAP]) >> strip_tac >>
+  Cases_on `MEM y' px_c` >- (qexists `y'` >> simp[]) >>
+  `MEM y' sfx_x` by (
+    qpat_x_assum `MEM y' fl` mp_tac >>
+    qpat_x_assum `fl = px_c ++ [px_b] ++ sfx_x` (fn th => REWRITE_TAC[th]) >>
+    simp[MEM_APPEND] >>
+    Cases_on `MEM y' [px_b]` >- (
+      fs[] >> pop_assum mp_tac >> simp[MEM] >>
+      metis_tac[]) >>
+    metis_tac[]) >>
+  `from_block orig_bi px_b` by (
+    first_x_assum (qspec_then `px_b` mp_tac) >>
+    simp[MEM_APPEND] >> metis_tac[]) >>
+  `from_block orig_bi y'` by metis_tac[] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `canonical_dep orig_bi px_b y'` by (
+    irule canonical_dep_inst_id_equiv_filtered >>
+    simp[] >> metis_tac[]) >>
+  metis_tac[topo_sorted_suffix_dep]
+QED
+
+(* Case 2: from_barrier_dep under PERM + topo_sorted *)
+Triviality from_barrier_dep_imp_full_dep_current[local]:
+  !orig_bi cur_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    from_barrier_dep orig_bi x y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    (!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==> from_block orig_bi z) ==>
+    full_dep (build_full_eda cur_bi) x y
+Proof
+  rpt strip_tac >>
+  `canonical_dep orig_bi x y` by metis_tac[from_barrier_dep_imp_canonical_dep_local] >>
+  simp[full_dep_def] >> disj1_tac >>
+  fs[from_barrier_dep_def] >>
+  qabbrev_tac `fl = FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `MEM x.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (fs[in_np_body_def, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  `MEM y.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (fs[in_np_body_def, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  `MEM x.inst_id (MAP (\i. i.inst_id) fl)`
+    by metis_tac[PERM_MEM_EQ, Abbr `fl`] >>
+  `MEM y.inst_id (MAP (\i. i.inst_id) fl)`
+    by metis_tac[PERM_MEM_EQ, Abbr `fl`] >>
+  `?pfx_fl sfx_fl. MAP (\i. i.inst_id) fl = pfx_fl ++ [x.inst_id] ++ sfx_fl`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  `?px_c px_b sfx_x. fl = px_c ++ [px_b] ++ sfx_x /\
+                       MAP (\i. i.inst_id) px_c = pfx_fl /\
+                       px_b.inst_id = x.inst_id /\
+                       MAP (\i. i.inst_id) sfx_x = sfx_fl`
+    by metis_tac[MAP_INST_ID_APPEND_SPLIT_exists_local] >>
+  `x.inst_id <> y.inst_id` by metis_tac[all_distinct_split_inst_id_neq] >>
+  `?yb_c. MEM yb_c px_c /\ yb_c.inst_id = y.inst_id`
+    by metis_tac[yb_c_in_px_c] >>
+  `is_barrier px_b` by (
+    `from_block orig_bi px_b` by (
+      first_x_assum $ qspecl_then [`px_b`] mp_tac >>
+      simp[Abbr `fl`, MEM_APPEND] >> metis_tac[]) >>
+    metis_tac[is_barrier_from_inst_id_cross_bi]
+  ) >>
+  `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+    by (simp[Abbr `fl`]) >>
+  `eda_dep (build_full_eda cur_bi) px_b yb_c` by (
+    mp_tac (from_barrier_to_eda_dep |> Q.SPECL [`cur_bi`, `px_c`, `px_b`, `sfx_x`, `yb_c`]) >>
+    simp[]
+  ) >>
+  metis_tac[eda_dep_inst_id_only]
+QED
+
+(* Apply on_barrier_to_eda_dep: specialize and discharge case expression *)
+Triviality on_barrier_to_eda_dep_apply[local]:
+  !cur_bi px_c px_b sfx_x yb_c.
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x /\
+    ~is_barrier px_b /\
+    FILTER is_barrier px_c <> [] /\
+    LAST (FILTER is_barrier px_c) = yb_c /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) ==>
+    eda_dep (build_full_eda cur_bi) px_b yb_c
+Proof
+  rpt strip_tac >>
+  irule on_barrier_to_eda_dep >> simp[] >>
+  qexistsl_tac [`px_c`,`sfx_x`] >> simp[] >>
+  Cases_on `FILTER is_barrier px_c` >> gvs[LAST_CONS]
+QED
+
+(* If l = pfx++[a]++sfx and b MEM sfx, ALL_DISTINCT (MAP f l), then for any
+   split of MAP f l at f b, f a is in the prefix before f b *)
+Triviality map_split_mem_before[local]:
+  !f pfx a sfx b l1 l2.
+    ALL_DISTINCT (MAP f l) /\ l = pfx ++ [a] ++ sfx /\ MEM b sfx /\
+    MAP f l = l1 ++ [f b] ++ l2 ==>
+    MEM (f a) l1
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `MEM b sfx` (fn th => mp_tac (MATCH_MP (iffLR MEM_EL) th)) >>
+  strip_tac >>
+  `EL (LENGTH pfx) l = a` by (fs[el_append3]) >>
+  `EL (LENGTH pfx + 1 + n) l = b` by (
+    simp[EL_APPEND2, ADD1] >>
+    qpat_x_assum `l = pfx ++ [a] ++ sfx` (assume_tac o GSYM) >>
+    simp[Once EL_APPEND2, ADD1] >>
+    simp[EL_APPEND1, ADD1] >>
+    simp[EL_CONS, ADD1] >> simp[]) >>
+  `EL (LENGTH pfx) (MAP f l) = f a` by simp[EL_MAP] >>
+  `EL (LENGTH pfx + 1 + n) (MAP f l) = f b` by simp[EL_MAP] >>
+  `LENGTH pfx + 1 + n < LENGTH l` by (simp[LENGTH_APPEND] >> decide_tac) >>
+  `LENGTH l = LENGTH (l1 ++ [f b] ++ l2)` by metis_tac[LENGTH_MAP] >>
+  qpat_x_assum `MAP f l = l1 ++ [f b] ++ l2` (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE [th])) >>
+  `EL (LENGTH l1) (l1 ++ [f b] ++ l2) = f b` by simp[APPEND_ASSOC, el_append3] >>
+  `LENGTH l1 < LENGTH (l1 ++ [f b] ++ l2)` by simp[LENGTH_APPEND] >>
+  `LENGTH l1 = LENGTH pfx + 1 + n` by metis_tac[ALL_DISTINCT_EL_IMP] >>
+  `LENGTH pfx < LENGTH l1` by decide_tac >>
+  `EL (LENGTH pfx) (l1 ++ [f b] ++ l2) = f a` by fs[EL_APPEND1] >>
+  `EL (LENGTH pfx) l1 = f a` by fs[EL_APPEND1] >>
+  metis_tac[EL_MEM]
+QED
+
+(* If dep b a and b is in pfx (before a in l = pfx++[a]++sfx), topo_sorted is violated *)
+Triviality topo_sorted_prefix_dep[local]:
+  !dep l pfx a sfx b.
+    topo_sorted dep l /\ l = pfx ++ [a] ++ sfx /\ dep b a /\ MEM b pfx ==> F
+Proof
+  rpt strip_tac >> qpat_x_assum `MEM b pfx` (mp_tac o REWRITE_RULE[MEM_EL]) >> strip_tac >>
+  `EL (LENGTH pfx) l = a` by (simp[el_append3] >> metis_tac[]) >>
+  `EL n l = b` by simp[EL_APPEND1, EL_APPEND2] >>
+  `n < LENGTH pfx` by (simp[LENGTH_APPEND] >> decide_tac) >>
+  qpat_x_assum `topo_sorted dep l` (fn th =>
+    mp_tac (REWRITE_RULE [topo_sorted_def] th) >>
+    disch_then (qspecl_then [`n`, `LENGTH pfx`] mp_tac)) >> simp[] >>
+  qpat_x_assum `dep b a` mp_tac >> simp[]
+QED
+
+(* If LAST(FILTER P l) = b and a is in FILTER P l with a <> b,
+   then FILTER P l = front ++ [b] with MEM a front *)
+Triviality last_filter_mem_front[local]:
+  !P l a b.
+    FILTER P l <> [] /\ LAST (FILTER P l) = b /\
+    MEM a (FILTER P l) /\ a <> b ==>
+    ?front. FILTER P l = front ++ [b] /\ MEM a front
+Proof
+  rpt strip_tac >>
+  `FILTER P l = FRONT (FILTER P l) ++ [LAST (FILTER P l)]` by (
+    drule SNOC_LAST_FRONT >> simp[SNOC_APPEND]) >>
+  qexists_tac `FRONT (FILTER P l)` >>
+  simp[] >> CCONTR_TAC >> fs[MEM_APPEND] >> rfs[MEM_APPEND] >>
+  fs[LAST_APPEND, LAST_CONS] >> Cases_on `FRONT (FILTER P l)` >> fs[LAST_CONS]
+QED
+
+(* Helper: FILTER is_barrier post = [] when last barrier not in post *)
+Triviality filter_barrier_post_nil[local]:
+  !l pre post front.
+    l = pre ++ [LAST (FILTER is_barrier l)] ++ post /\
+    FILTER is_barrier l = front ++ [LAST (FILTER is_barrier l)] /\
+    ~MEM (LAST (FILTER is_barrier l)) post ==>
+    FILTER is_barrier post = []
+Proof
+  rpt strip_tac >> CCONTR_TAC >>
+  qabbrev_tac `x = LAST (FILTER is_barrier l)` >>
+  `MEM x (FILTER is_barrier l)` by simp[MEM_APPEND, MEM] >>
+  `is_barrier x` by metis_tac[iffLR MEM_FILTER] >>
+  `FILTER is_barrier l = FILTER is_barrier pre ++ [x] ++ FILTER is_barrier post` by (
+    qpat_x_assum `l = pre ++ [x] ++ post` (fn th =>
+      once_rewrite_tac[th] >>
+      simp[FILTER_APPEND_DISTRIB, FILTER_EQ_ID, EVERY_MEM, MEM])) >>
+  qpat_x_assum `FILTER is_barrier l = front ++ [x]` (fn th1 =>
+  qpat_x_assum `FILTER is_barrier l = FILTER is_barrier pre ++ [x] ++ FILTER is_barrier post` (fn th2 =>
+    `FILTER is_barrier pre ++ [x] ++ FILTER is_barrier post = front ++ [x]` by
+      metis_tac[th2, SYM th1])) >>
+  `LAST (front ++ [x]) = x` by metis_tac[LAST_APPEND_NOT_NIL, LAST_CONS] >>
+  `LAST ((FILTER is_barrier pre ++ [x]) ++ FILTER is_barrier post) =
+    LAST (FILTER is_barrier post)` by metis_tac[LAST_APPEND_NOT_NIL] >>
+  pop_assum mp_tac >>
+  once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  metis_tac[LAST_MEM, MEM_FILTER]
+QED
+
+(* If b is a barrier in l and b is not the LAST barrier, then b appears before LAST barrier in l *)
+Triviality barrier_before_last_barrier[local]:
+  !l b.
+    MEM b l /\ is_barrier b /\
+    FILTER is_barrier l <> [] /\
+    LAST (FILTER is_barrier l) <> b ==>
+    ?pre post. l = pre ++ [LAST (FILTER is_barrier l)] ++ post /\ MEM b pre
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `x = LAST (FILTER is_barrier l)` >>
+  `MEM b (FILTER is_barrier l)` by metis_tac[MEM_FILTER] >>
+  `is_barrier x` by metis_tac[iffLR MEM_FILTER, LAST_MEM] >>
+  `?front. FILTER is_barrier l = front ++ [x] /\
+           MEM b front`
+    by (irule last_filter_mem_front >> simp[]) >>
+  `MEM x l` by metis_tac[iffLR MEM_FILTER, LAST_MEM] >>
+  `?pre post. l = pre ++ [x] ++ post /\
+              ~MEM x post`
+    by metis_tac[iffLR MEM_SPLIT_APPEND_last] >>
+  `FILTER is_barrier post = []` by metis_tac[filter_barrier_post_nil] >>
+  `MEM b pre` by metis_tac[MEM_APPEND, MEM, MEM_FILTER, NOT_CONS_NIL] >>
+  qexistsl_tac [`pre`, `post`] >> simp[Abbr `x`]
+QED
+
+(* Reverse of map_split_mem_before: if b is in element-level prefix before a,
+   then f b is in MAP-level prefix before f a *)
+Triviality map_split_mem_before_rev[local]:
+  !f pfx a sfx b l1 l2.
+    ALL_DISTINCT (MAP f l) /\ l = pfx ++ [a] ++ sfx /\ MEM b pfx /\
+    MAP f l = l1 ++ [f a] ++ l2 ==>
+    MEM (f b) l1
+Proof
+  rpt strip_tac >>
+  `?pfx1 sfx1. pfx = pfx1 ++ [b] ++ sfx1 /\
+               ~MEM b pfx1`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  `l = pfx1 ++ [b] ++ (sfx1 ++ [a] ++ sfx)`
+    by simp[] >>
+  `MEM a (sfx1 ++ [a] ++ sfx)`
+    by simp[MEM_APPEND] >>
+  metis_tac[map_split_mem_before]
+QED
+
+(* Case A: b_orig in pfx -- y depends on b_orig (barrier dep),
+   transfer to yb_c->b', but yb_c before b' in cur_bi (since b' = LAST barrier) -> topo_sorted violation *)
+Triviality contra_b_orig_in_pfx[local]:
+  !orig_bi cur_bi x y pfx sfx mid px_c px_b sfx_x yb_c b' b_orig.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi = pfx ++ [mid] ++ sfx /\
+    mid.inst_id = x.inst_id /\
+    FILTER is_barrier pfx <> [] /\
+    (LAST (FILTER is_barrier pfx)).inst_id = y.inst_id /\
+    ~is_barrier x /\ is_barrier y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x /\
+    MEM yb_c px_c /\ yb_c.inst_id = y.inst_id /\
+    is_barrier b' /\ from_block orig_bi b' /\ MEM b' px_c /\
+    b'.inst_id <> y.inst_id /\
+    MEM b_orig (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) /\
+    b_orig.inst_id = b'.inst_id /\
+    is_barrier b_orig /\ from_block orig_bi b_orig /\
+    MEM b_orig pfx /\
+    ALL_DISTINCT (MAP (\i:instruction. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)) /\
+    from_block orig_bi yb_c /\ from_block orig_bi px_b /\
+    FILTER is_barrier px_c <> [] /\
+    LAST (FILTER is_barrier px_c) = b' ==>
+    F
+Proof
+  rpt gen_tac >> strip_tac >>
+  `b_orig.inst_id <> y.inst_id` by fs[] >>
+  `in_np_body orig_bi y` by metis_tac[from_block_imp_in_np_body_local] >>
+  `in_np_body orig_bi b_orig` by metis_tac[from_block_imp_in_np_body_local] >>
+  `ALL_DISTINCT (MAP (\i:instruction. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `MEM (LAST (FILTER is_barrier pfx)) pfx`
+    by metis_tac[LAST_MEM, MEM_FILTER] >>
+  `MEM b_orig (FILTER is_barrier pfx)` by metis_tac[MEM_FILTER] >>
+  `b_orig <> LAST (FILTER is_barrier pfx)` by (
+    CCONTR_TAC >> fs[] >> metis_tac[]) >>
+  `?pfx_pre pfx_post. pfx = pfx_pre ++ [LAST (FILTER is_barrier pfx)] ++ pfx_post /\
+                      MEM b_orig pfx_pre`
+    by (irule barrier_before_last_barrier >> simp[]) >>
+  `MEM y.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (fs[in_np_body_def] >> metis_tac[]) >>
+  `MEM b_orig.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (simp[MEM_MAP] >> qexists_tac `b_orig` >> simp[MEM_FILTER]) >>
+  `?pre post. MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) =
+              pre ++ [y.inst_id] ++ post /\ MEM b_orig.inst_id pre`
+    by (
+      `FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi =
+       pfx_pre ++ [LAST (FILTER is_barrier pfx)] ++ (pfx_post ++ [mid] ++ sfx)`
+        by simp[] >>
+      qexistsl_tac [`MAP (\i:instruction. i.inst_id) pfx_pre`,
+                    `MAP (\i:instruction. i.inst_id) (pfx_post ++ [mid] ++ sfx)`] >>
+      conj_tac >- (
+        once_rewrite_tac[MAP_APPEND] >> simp[MAP_APPEND]) >>
+      simp[MEM_MAP] >> qexists_tac `b_orig` >> simp[]) >>
+  `from_barrier_dep orig_bi y b_orig` by (
+    metis_tac[iffRL from_barrier_dep_def]) >>
+  `canonical_dep orig_bi y b_orig` by metis_tac[from_barrier_dep_imp_canonical_dep_local] >>
+  `canonical_dep orig_bi yb_c b'` by (
+    irule canonical_dep_inst_id_equiv_filtered >> simp[] >>
+    qexistsl_tac [`y`, `b_orig`] >> simp[]) >>
+  `is_barrier yb_c` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `b' <> yb_c` by (
+    CCONTR_TAC >> fs[] >>
+    `b'.inst_id = yb_c.inst_id` by fs[] >>
+    `MEM b' (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+      qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+        (fn th => simp[th, MEM_APPEND])) >>
+    `MEM yb_c (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+      qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+        (fn th => simp[th, MEM_APPEND])) >>
+    metis_tac[all_distinct_map_mem_inj]) >>
+  `LAST (FILTER is_barrier px_c) <> yb_c` by simp[] >>
+  `?px_c_pre px_c_post. px_c = px_c_pre ++ [b'] ++ px_c_post /\ MEM yb_c px_c_pre`
+    by metis_tac[barrier_before_last_barrier] >>
+  `?cpfx csfx. FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = cpfx ++ [b'] ++ csfx /\
+               MEM yb_c cpfx`
+    by (qexistsl_tac [`px_c_pre`, `px_c_post ++ [px_b] ++ sfx_x`] >> simp[]) >>
+  metis_tac[topo_sorted_prefix_dep]
+QED
+
+(* Helper: barrier in sfx implies from_barrier_dep to x *)
+Triviality barrier_in_sfx_from_barrier_dep[local]:
+  !orig_bi pfx mid sfx b_orig x l1 l2.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi = pfx ++ [mid] ++ sfx /\
+    mid.inst_id = x.inst_id /\
+    in_np_body orig_bi b_orig /\ in_np_body orig_bi x /\
+    is_barrier b_orig /\
+    MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) = l1 ++ [b_orig.inst_id] ++ l2 /\
+    MEM b_orig sfx /\
+    b_orig.inst_id <> x.inst_id ==>
+    MEM x.inst_id l1
+Proof
+  rpt gen_tac >> strip_tac >>
+  metis_tac[map_split_mem_before]
+QED
+
+(* Case B: b_orig in sfx -- b_orig depends on mid (barrier dep),
+   transfer to b'->px_b, but b' before px_b in cur_bi -> topo_sorted violation *)
+Triviality contra_b_orig_in_sfx[local]:
+  !orig_bi cur_bi x y pfx sfx mid px_c px_b sfx_x yb_c b' b_orig.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi = pfx ++ [mid] ++ sfx /\
+    mid.inst_id = x.inst_id /\
+    ~is_barrier x /\ is_barrier y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x /\
+    px_b.inst_id = x.inst_id /\
+    is_barrier b' /\ from_block orig_bi b' /\ MEM b' px_c /\
+    b'.inst_id <> y.inst_id /\
+    MEM b_orig (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) /\
+    b_orig.inst_id = b'.inst_id /\
+    is_barrier b_orig /\ from_block orig_bi b_orig /\
+    MEM b_orig sfx /\
+    from_block orig_bi px_b ==>
+    F
+Proof
+  rpt gen_tac >> strip_tac >>
+  `b_orig.inst_id <> x.inst_id` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `in_np_body orig_bi b_orig` by metis_tac[from_block_imp_in_np_body_local] >>
+  `in_np_body orig_bi x` by metis_tac[from_block_imp_in_np_body_local] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `MEM b_orig.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (simp[MEM_MAP] >> qexists_tac `b_orig` >> simp[]) >>
+  `canonical_dep orig_bi b_orig x` by
+    metis_tac[from_barrier_dep_imp_canonical_dep_local, from_barrier_dep_def,
+              iffLR MEM_SPLIT_APPEND_first, map_split_mem_before, MAP_APPEND] >>
+  `canonical_dep orig_bi b' px_b` by (
+    irule canonical_dep_inst_id_equiv_filtered >> simp[] >>
+    qexistsl_tac [`b_orig`,`x`] >> simp[]) >>
+  metis_tac[topo_sorted_prefix_dep]
+QED
+
+Triviality last_barrier_not_y_contra[local]:
+  !orig_bi cur_bi x y pfx sfx mid px_c px_b sfx_x yb_c b'.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi = pfx ++ [mid] ++ sfx /\
+    mid.inst_id = x.inst_id /\
+    FILTER is_barrier pfx <> [] /\
+    (LAST (FILTER is_barrier pfx)).inst_id = y.inst_id /\
+    ~is_barrier x /\ is_barrier y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    (!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==> from_block orig_bi z) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x /\
+    px_b.inst_id = x.inst_id /\
+    MEM yb_c px_c /\ yb_c.inst_id = y.inst_id /\
+    is_barrier b' /\ from_block orig_bi b' /\ MEM b' px_c /\
+    b'.inst_id <> y.inst_id /\
+    FILTER is_barrier px_c <> [] /\
+    LAST (FILTER is_barrier px_c) = b' ==>
+    F
+Proof
+  rpt gen_tac >> strip_tac >>
+  `b'.inst_id <> x.inst_id` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `MEM b' (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+    qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+      (fn th => simp[th, MEM_APPEND])) >>
+  `MEM yb_c (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+    qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+      (fn th => simp[th, MEM_APPEND])) >>
+  `MEM px_b (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+    qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+      (fn th => simp[th, MEM_APPEND])) >>
+  `from_block orig_bi yb_c` by metis_tac[] >>
+  `from_block orig_bi px_b` by metis_tac[] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `MEM b'.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))` by (
+    qpat_x_assum `PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+      (fn th => mp_tac (MATCH_MP PERM_MEM_EQ th)) >>
+    simp[MEM_MAP, PULL_EXISTS] >> metis_tac[MEM_FILTER]) >>
+  `?b_orig. MEM b_orig (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) /\ b_orig.inst_id = b'.inst_id`
+    by metis_tac[MEM_MAP, PULL_EXISTS] >>
+  `from_block orig_bi b_orig` by metis_tac[from_block_MEM_filter] >>
+  `is_barrier b_orig` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `MEM b_orig pfx \/ MEM b_orig sfx` by metis_tac[mem_orig_filter_split] >>
+  Cases_on `MEM b_orig pfx` >- metis_tac[contra_b_orig_in_pfx] >>
+  metis_tac[contra_b_orig_in_sfx]
+QED
+
+Triviality last_barrier_in_prefix_eq_y[local]:
+  !orig_bi cur_bi x y pfx sfx mid px_c px_b sfx_x yb_c.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi = pfx ++ [mid] ++ sfx /\
+    mid.inst_id = x.inst_id /\
+    FILTER is_barrier pfx <> [] /\
+    (LAST (FILTER is_barrier pfx)).inst_id = y.inst_id /\
+    ~is_barrier x /\ is_barrier y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    (!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==> from_block orig_bi z) /\
+    FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x /\
+    px_b.inst_id = x.inst_id /\
+    MEM yb_c px_c /\ yb_c.inst_id = y.inst_id /\
+    FILTER is_barrier px_c <> [] ==>
+    LAST (FILTER is_barrier px_c) = yb_c
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `b' = LAST (FILTER is_barrier px_c)` >>
+  `MEM b' (FILTER is_barrier px_c)` by metis_tac[LAST_MEM] >>
+  `MEM b' px_c` by fs[MEM_FILTER] >>
+  `MEM b' (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+    qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+      (fn th => simp[th, MEM_APPEND])) >>
+  `from_block orig_bi b'` by metis_tac[] >>
+  `is_barrier b'` by fs[MEM_FILTER] >>
+  `b'.inst_id <> x.inst_id` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `FILTER is_barrier px_c <> []` by (Cases_on `FILTER is_barrier px_c` >> fs[]) >>
+  `LAST (FILTER is_barrier px_c) = b'` by simp[Abbr `b'`] >>
+  Cases_on `b'.inst_id = y.inst_id` >- (
+    `ALL_DISTINCT (MAP (\i:instruction. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))`
+      by metis_tac[all_distinct_map_filter] >>
+    `MEM yb_c (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi)` by (
+      qpat_assum `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+        (fn th => simp[th, MEM_APPEND])) >>
+    `b'.inst_id = yb_c.inst_id` by metis_tac[] >>
+    `b' = yb_c` by (
+      qspecl_then [`\i:instruction. i.inst_id`,
+        `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi`,`b'`,`yb_c`]
+        mp_tac all_distinct_map_mem_inj >> simp[]) >>
+    simp[Abbr `b'`]
+  ) >>
+  metis_tac[last_barrier_not_y_contra]
+QED
+
+(* Case 3: on_barrier_dep under PERM + topo_sorted *)
+Triviality on_barrier_dep_imp_full_dep_current[local]:
+  !orig_bi cur_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    on_barrier_dep orig_bi x y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    topo_sorted (canonical_dep orig_bi)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) /\
+    (!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==>
+       from_block orig_bi z) ==>
+    full_dep (build_full_eda cur_bi) x y
+Proof
+  rpt strip_tac >>
+  `canonical_dep orig_bi x y` by metis_tac[on_barrier_dep_imp_canonical_dep_local] >>
+  simp[full_dep_def] >> disj1_tac >>
+  fs[on_barrier_dep_def] >>
+  qabbrev_tac `fl = FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by metis_tac[all_distinct_map_filter] >>
+  `MEM x.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (fs[in_np_body_def, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  `MEM y.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (fs[in_np_body_def, MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  `MEM x.inst_id (MAP (\i. i.inst_id) fl)`
+    by metis_tac[PERM_MEM_EQ, Abbr `fl`] >>
+  `MEM y.inst_id (MAP (\i. i.inst_id) fl)`
+    by metis_tac[PERM_MEM_EQ, Abbr `fl`] >>
+  `?pfx_fl sfx_fl. MAP (\i. i.inst_id) fl = pfx_fl ++ [x.inst_id] ++ sfx_fl`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  `?px_c px_b sfx_x. fl = px_c ++ [px_b] ++ sfx_x /\
+                       MAP (\i. i.inst_id) px_c = pfx_fl /\
+                       px_b.inst_id = x.inst_id /\
+                       MAP (\i. i.inst_id) sfx_x = sfx_fl`
+    by metis_tac[MAP_INST_ID_APPEND_SPLIT_exists_local] >>
+  `from_block orig_bi px_b` by (
+    first_x_assum $ qspecl_then [`px_b`] mp_tac >>
+    simp[Abbr `fl`, MEM_APPEND] >> metis_tac[]) >>
+  `~is_barrier px_b` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `x.inst_id <> y.inst_id` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `?yb_c. MEM yb_c px_c /\ yb_c.inst_id = y.inst_id`
+    by metis_tac[yb_c_in_px_c] >>
+  `from_block orig_bi yb_c` by (
+    first_x_assum $ qspecl_then [`yb_c`] mp_tac >>
+    simp[Abbr `fl`, MEM_APPEND] >> metis_tac[]) >>
+  `is_barrier yb_c` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
+  `FILTER is_barrier px_c <> []` by (
+    `MEM yb_c (FILTER is_barrier px_c)` by simp[MEM_FILTER] >>
+    Cases_on `FILTER is_barrier px_c` >> fs[]) >>
+  `LAST (FILTER is_barrier px_c) = yb_c` by (
+    irule last_barrier_in_prefix_eq_y >> simp[] >> metis_tac[]) >>
+  `FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi = px_c ++ [px_b] ++ sfx_x`
+    by (simp[Abbr `fl`]) >>
+  `eda_dep (build_full_eda cur_bi) px_b yb_c` by metis_tac[on_barrier_to_eda_dep_apply] >>
+  metis_tac[eda_dep_inst_id_only]
+QED
+
+(* THE MASTER BRIDGE: canonical_dep ⊆ full_dep (cross-bi) *)
+Triviality canonical_dep_imp_full_dep_current[local]:
+  !orig_bi cur_bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) cur_bi) /\
+    canonical_dep orig_bi x y /\
+    from_block orig_bi x /\ from_block orig_bi y /\
+    (!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==> from_block orig_bi z) /\
+    PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi)) /\
+    topo_sorted (canonical_dep orig_bi) (FILTER (\i. ~is_pseudo i.inst_opcode) cur_bi) ==>
+    full_dep (build_full_eda cur_bi) x y
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `canonical_dep _ _ _` mp_tac >>
+  simp[canonical_dep_def] >> rpt strip_tac
+  (* Case 1: data_dep_body -- order-independent *)
+  >- (simp[full_dep_def] >> disj2_tac >> disj1_tac >>
+      fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
+      qexists `v` >> fs[MEM_operand_vars_iff])
+  (* Case 2: from_barrier_dep -- extracted helper *)
+  >- metis_tac[from_barrier_dep_imp_full_dep_current]
+  (* Case 3: on_barrier_dep -- extracted helper *)
+  >- metis_tac[on_barrier_dep_imp_full_dep_current]
+QED
+
+
+
+(* dft_block output satisfies canonical_topo_inv for a single block *)
+Triviality dft_block_preserves_canonical_topo_local[local]:
+  !fn bb_orig bb_cur order.
+    wf_ssa fn /\ wf_function fn /\
+    MEM bb_orig fn.fn_blocks /\
+    block_perm_of fn bb_cur /\
+    bb_cur.bb_label = bb_orig.bb_label /\
+    dft_inv [bb_cur] /\
+    topo_sorted (canonical_dep bb_orig.bb_instructions)
+      (FILTER (\i. ~is_pseudo i.inst_opcode) bb_cur.bb_instructions) ==>
+    topo_sorted (canonical_dep bb_orig.bb_instructions)
+      (FILTER (\i. ~is_pseudo i.inst_opcode)
+         (dft_block order bb_cur).bb_instructions)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `bi = bb_cur.bb_instructions` >>
+  qabbrev_tac `orig_bi = bb_orig.bb_instructions` >>
+  qabbrev_tac `eda = build_full_eda bi` >>
+  qabbrev_tac `om = build_offspring_map bi order` >>
+  qabbrev_tac `entries = entry_instructions bi order eda` >>
+  qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
+  (* Step 1: dft_block filter decomposition *)
+  `FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb_cur).bb_instructions = sched`
+    by (simp[Abbr `bi`, Abbr `sched`, Abbr `eda`, Abbr `om`,
+             Abbr `entries`, dft_block_filter_nonpseudo]) >>
+  (* Step 2: Pre-conditions for scheduler lemmas *)
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by fs[dft_inv_def, Abbr `bi`] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, Abbr `bi`, build_full_eda_wf] >>
+  `eda_topo_compatible bi eda order` by
+    (simp[Abbr `eda`] >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
+     simp[Abbr `bi`, non_pseudo_defs_before_uses_def] >> disch_then irule >> fs[dft_inv_def, bb_well_formed_def, non_pseudo_defs_before_uses_def]) >>
+  `EVERY (\i. MEM i bi) entries`
+    by simp[Abbr `entries`, Abbr `bi`, entry_instructions_mem] >>
+  `bi <> []` by fs[dft_inv_def, bb_well_formed_def, Abbr `bi`] >>
+  `!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
+       k = PRE (LENGTH bi)`
+    by fs[dft_inv_def, bb_well_formed_def, Abbr `bi`] >>
+  `np_defs_before_uses bi`
+    by gvs[dft_inv_def, non_pseudo_defs_before_uses_def, Abbr `bi`] >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi))`
+    by metis_tac[block_perm_inst_outputs_local] >>
+  (* Step 3: Schedule output properties — all via extracted Trivialities *)
+  `ALL_DISTINCT (MAP (\j. j.inst_id) sched)`
+    by metis_tac[sched_output_distinct_local] >>
+  `output_producer_before bi sched`
+    by metis_tac[sched_output_producer_local] >>
+  `output_eda_before eda sched`
+    by metis_tac[sched_output_eda_local] >>
+  `!i. MEM i sched ==> from_block bi i /\ ~is_pseudo i.inst_opcode`
+    by metis_tac[sched_mem_from_block_cur_local] >>
+  (* Step 4: Topo-sorted from scheduler — already have this *)
+  `topo_sorted (full_dep eda) sched`
+    by metis_tac[sched_topo_sorted_local] >>
+  (* Step 5: Single-step bridge: canonical_dep < full_dep, no TC *)
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (simp[Abbr `orig_bi`] >>
+        `ALL_DISTINCT (MAP (\i. i.inst_id) bb_orig.bb_instructions)`
+          by metis_tac[wf_fn_block_inst_ids_distinct] >>
+        metis_tac[all_distinct_map_filter]) >>
+  `EVERY (\i. from_block orig_bi i) (FILTER (\i. ~is_pseudo i.inst_opcode) bi) /\
+    PERM (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi))
+         (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
+    by (unabbrev_all_tac >>
+        metis_tac[block_perm_of_elim]) >>
+  `!i. MEM i sched ==> from_block orig_bi i`
+    by metis_tac[sched_mem_from_block_orig_local] >>
+  `!i. MEM i sched ==> from_block bi i`
+    by metis_tac[sched_mem_from_block_cur_local] >>
+  `!i. MEM i sched ==> ~is_pseudo i.inst_opcode`
+    by metis_tac[sched_mem_from_block_cur_local] >>
+  (* Final: monotonicity with single-step bridge *)
+  `ALL_DISTINCT (MAP (\i. i.inst_id) orig_bi)`
+    by (simp[Abbr `orig_bi`] >>
+        metis_tac[wf_fn_block_inst_ids_distinct]) >>
+  irule topo_sorted_mono_restricted_local >>
+  qexists_tac `full_dep eda` >> simp[] >>
+  rpt strip_tac >>
+  `from_block orig_bi x` by metis_tac[sched_mem_from_block_orig_local] >>
+  `from_block orig_bi y` by metis_tac[sched_mem_from_block_orig_local] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by fs[dft_inv_def, Abbr `bi`] >>
+  `!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==> from_block orig_bi z`
+    by metis_tac[EVERY_MEM] >>
+  simp[Abbr `eda`] >>
+  drule_all canonical_dep_imp_full_dep_current >> simp[]
+QED
+(* dft_process_one preserves canonical_topo_inv *)
+Triviality every_map_replace_canonical[local]:
+  !fn bbs lbl bb'.
+    wf_ssa fn /\ wf_function fn /\
+    canonical_topo_inv fn bbs /\ all_blocks_perm_of fn bbs /\
+    dft_inv bbs /\ MEM bb' bbs /\ bb'.bb_label = lbl ==>
+    canonical_topo_inv fn
+      (MAP (\b. if b.bb_label = lbl then dft_block order bb' else b) bbs)
+Proof
+  simp[canonical_topo_inv_def] >> rpt strip_tac >>
+  qpat_x_assum `MEM b (MAP _ bbs)` mp_tac >>
+  simp[MEM_MAP, PULL_EXISTS] >> qx_gen_tac `a` >> strip_tac >>
+  Cases_on `a.bb_label = bb'.bb_label` >> simp[]
+  >- ((* changed block: b = dft_block order bb' *)
+      qpat_x_assum `!bb. MEM bb bbs ==> _` (qspec_then `bb'` mp_tac) >>
+      simp[] >> strip_tac >>
+      qexists_tac `bb_orig` >> simp[dft_block_label] >>
+      `block_perm_of fn bb'` by metis_tac[all_blocks_perm_of_def, EVERY_MEM] >>
+      `bb_well_formed bb'` by fs[dft_inv_def, EVERY_MEM] >>
+      `ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions)`
+        by fs[dft_inv_def, EVERY_MEM] >>
+      `non_pseudo_defs_before_uses bb'.bb_instructions`
+        by fs[dft_inv_def, EVERY_MEM] >>
+      suspend "changed_block")
+  >> ((* unchanged block: b = a *)
+      qpat_x_assum `!bb. MEM bb bbs ==> _` (qspec_then `a` assume_tac) >>
+      fs[] >> qexists_tac `bb_orig` >> simp[])
+QED
+
+Resume every_map_replace_canonical[changed_block]:
+  simp[dft_inv_def] >>
+  match_mp_tac dft_block_preserves_canonical_topo_local >>
+  qexists_tac `fn` >> simp[dft_inv_def]
+QED
+
+Finalise every_map_replace_canonical
+
+Triviality dft_process_one_preserves_canonical_topo[local]:
+  !cfg lr fn st lbl.
+    wf_ssa fn /\ wf_function fn /\
+    canonical_topo_inv fn st.dls_blocks /\ all_blocks_perm_of fn st.dls_blocks /\
+    dft_inv st.dls_blocks ==>
+    canonical_topo_inv fn (FST (dft_process_one cfg lr fn st lbl)).dls_blocks
+Proof
+  rw[dft_process_one_def, LET_THM] >>
+  Cases_on `lookup_block lbl st.dls_blocks` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  ho_match_mp_tac every_map_replace_canonical >>
   simp[] >>
-  Cases_on `fn_entry_label fn` >> simp[lift_result_def] >>
-  irule dft_fn_run_blocks_lift >> simp[]
+  imp_res_tac lookup_block_label >> simp[] >>
+  fs[lookup_block_def] >>
+  imp_res_tac venomExecPropsTheory.FIND_MEM >> simp[]
 QED
 
-(* ===== Fuel determinism helpers ===== *)
+Triviality dft_loop_step_preserves_canonical_topo[local]:
+  !cfg lr fn trip.
+    wf_ssa fn /\ wf_function fn /\
+    canonical_topo_inv fn (FST trip).dls_blocks /\
+    all_blocks_perm_of fn (FST trip).dls_blocks /\
+    dft_inv (FST trip).dls_blocks ==>
+    canonical_topo_inv fn (FST (dft_loop_step cfg lr fn trip)).dls_blocks
+Proof
+  rpt gen_tac >> PairCases_on `trip` >>
+  simp[dft_loop_step_def, LET_THM] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `trip1` >> simp[] >> strip_tac >>
+  Cases_on `dft_process_one cfg lr fn trip0 h` >>
+  Cases_on `r` >> simp[] >>
+  qspecl_then [`cfg`,`lr`,`fn`,`trip0`,`h`]
+    mp_tac dft_process_one_preserves_canonical_topo >>
+  simp[] >> strip_tac >>
+  IF_CASES_TAC >> simp[]
+QED
 
-Triviality run_function_fuel_determ:
-  !fuel fuel' ctx fn s.
-    terminates (run_function fuel ctx fn s) /\
-    terminates (run_function fuel' ctx fn s) ==>
-    run_function fuel ctx fn s = run_function fuel' ctx fn s
+Triviality funpow_dft_loop_preserves_canonical_topo[local]:
+  !n cfg lr fn trip.
+    wf_ssa fn /\ wf_function fn /\
+    canonical_topo_inv fn (FST trip).dls_blocks /\
+    all_blocks_perm_of fn (FST trip).dls_blocks /\
+    dft_inv (FST trip).dls_blocks ==>
+    canonical_topo_inv fn
+      (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks
+Proof
+  Induct >> simp[FUNPOW_SUC] >> rpt strip_tac >>
+  MATCH_MP_TAC dft_loop_step_preserves_canonical_topo >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (first_x_assum MATCH_MP_TAC >> simp[] >>
+      MATCH_MP_TAC funpow_dft_loop_preserves_perm >> simp[]) >>
+  conj_tac >- (MATCH_MP_TAC funpow_dft_loop_preserves_perm >> simp[]) >>
+  MATCH_MP_TAC funpow_dft_loop_preserves_inv >> simp[]
+QED
+
+Theorem dft_fn_canonical_topo_inv:
+  !fn. wf_ssa fn /\ wf_function fn ==>
+    canonical_topo_inv fn (dft_fn fn).fn_blocks
 Proof
   rpt strip_tac >>
-  simp[run_function_def] >>
-  Cases_on `fn_entry_label fn` >> gvs[run_function_def, terminates_def] >>
-  `!e. run_blocks fuel ctx fn
-       (s with <| vs_current_bb := x; vs_inst_idx := 0 |>) <> Error e` by
-    (gvs[run_function_def] >>
-     Cases_on `run_blocks fuel ctx fn
-       (s with <| vs_current_bb := x; vs_inst_idx := 0 |>)` >>
-     gvs[terminates_def]) >>
-  `!e. run_blocks fuel' ctx fn
-       (s with <| vs_current_bb := x; vs_inst_idx := 0 |>) <> Error e` by
-    (gvs[run_function_def] >>
-     Cases_on `run_blocks fuel' ctx fn
-       (s with <| vs_current_bb := x; vs_inst_idx := 0 |>)` >>
-     gvs[terminates_def]) >>
-  Cases_on `fuel <= fuel'`
-  >- metis_tac[fuel_mono |> CONJUNCTS |> last]
-  >> (`fuel' <= fuel` by simp[] >> metis_tac[fuel_mono |> CONJUNCTS |> last])
+  simp[dft_fn_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  simp[] >>
+  MATCH_MP_TAC funpow_dft_loop_preserves_canonical_topo >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- (simp[canonical_topo_inv_def, EVERY_MEM] >>
+      rpt strip_tac >> qexists_tac `bb` >> simp[] >>
+      irule orig_filter_canonical_topo_sorted_local >>
+      fs[wf_function_def] >> metis_tac[]) >>
+  conj_tac >- simp[all_blocks_perm_of_def, EVERY_MEM, original_block_perm_of] >>
+  simp[] >> irule wf_fn_initial_dft_inv >> simp[]
 QED
 
-(* ===== Pass-level correctness ===== *)
-
-(* dft_pass_correct requires fn_pseudos_prefix: without it, the theorem is
- * false. Counterexample: Block [ASSERT(Lit 0w), PARAM(0)->x, STOP] with
- * s.vs_params = []. Original aborts at ASSERT; DFT moves PARAM before
- * ASSERT, hitting Error instead (PARAM with empty params list).
- * pseudos_prefix is a separate predicate (not added to bb_well_formed)
- * to avoid 30+ min rebuild of execEquivProofs. *)
-Theorem dft_pass_correct:
-  !fn ctx s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
-    s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-    pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv
-      (\fuel. run_function fuel ctx fn s)
-      (\fuel. run_function fuel ctx (dft_fn fn) s)
+(* Filtering a topologically sorted list preserves topo_sorted.
+   FILTER preserves relative order, so for i < j in the filtered list,
+   there exist i' < j' in the original list with the same elements. *)
+Theorem topo_sorted_FILTER:
+  !dep P l. topo_sorted dep l ==> topo_sorted dep (FILTER P l)
 Proof
-  cheat
+  rw[topo_sorted_def] >>
+  qspecl_then [`P`, `l`, `i`, `j`] mp_tac filter_el_mono >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`i'`, `j'`] mp_tac) >>
+  simp[]
 QED
-
