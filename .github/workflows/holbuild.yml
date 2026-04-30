@@ -66,7 +66,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --holdir "$HOLDIR" -j"$HOLBUILD_JOBS" build --skip-checkpoints --tactic-timeout 0
+          holbuild --holdir "$HOLDIR" -j"$HOLBUILD_JOBS" build --skip-checkpoints --skip-goalfrag
 
       - name: Verify no successful-build checkpoints remain
         run: |
