@@ -534,10 +534,11 @@ Proof
     strip_tac >>
     Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
     gvs[return_def, raise_def] >>
-    PairCases_on `x'` >>
+    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
+    PairCases_on `fcs_result` >>
     gvs[bind_def, type_check_def, assert_def, sum_CASE_rator, AllCaseEqs(),
         return_def, raise_def, set_scopes_def] >>
-    Cases_on `assign_subscripts x'2.type x'2.value (REVERSE is) ao` >>
+    Cases_on `assign_subscripts fcs_result2.type fcs_result2.value (REVERSE is) ao` >>
     gvs[return_def, raise_def] >>
     imp_res_tac assign_result_state >> gvs[])
   >- (* TopLevelVar: storage ops preserve accounts_well_typed *)
@@ -546,7 +547,8 @@ Proof
         bind_def, lift_option_def, lift_option_type_def, lift_sum_def,
         ignore_bind_def,
         option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-    qpat_x_assum `_ = (res, st')` mp_tac >>
+    drule lookup_global_state >> strip_tac >>
+    qpat_x_assum `_ = (INL res, st')` mp_tac >>
     simp[bind_def, return_def, raise_def, ignore_bind_def,
          lift_option_def, lift_option_type_def, lift_sum_def,
          check_def, assert_def,
@@ -569,8 +571,8 @@ Proof
        read_storage_slot_state,
        resolve_array_element_state,
        lookup_global_state,
-       vyperStorageBackendTheory.get_storage_backend_state])
-  >- (* ImmutableVar: set_immutable doesn't touch accounts *)
+       vyperStorageBackendTheory.get_storage_backend_state] >>
+    drule write_storage_slot_preserves_accounts >> simp[])
    (strip_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
          lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
@@ -582,8 +584,9 @@ Proof
          lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
     Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
     simp[return_def, raise_def] >>
-    PairCases_on `x'` >> simp[] >>
-    Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
+    rename1 `FLOOKUP _ _ = SOME fli_result` >>
+    PairCases_on `fli_result` >> simp[] >>
+    Cases_on `assign_subscripts fli_result0 fli_result1 (REVERSE is) ao` >>
     simp[lift_sum_def, return_def, raise_def] >>
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
          set_address_immutables_def, lift_option_def, lift_option_type_def, return_def, LET_THM] >>
