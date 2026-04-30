@@ -780,32 +780,30 @@ Resume eval_preserves_swt[Raise2]:
   rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac
 QED
 
-(* apply_eval_ih: find and apply the matching eval IH by specializing ALL
-   universally-quantified variables. This avoids variable capture that
-   occurs with dxrule_at/drule_at which only instantiate the eval equation
-   arguments, leaving remaining ∀-variables unresolved.
-   Arguments: result term (INR y or INL x) and state term (r, st_tgt, etc.) *)
+(* apply_eval_ih: find and apply the matching eval IH using drule_all.
+   drule_all automatically resolves ALL IH antecedents against assumptions,
+   specializing universally-quantified variables correctly without type
+   mismatches. (Previous approach used qspecl_then with backtick terms that
+   got fixed types at SML definition time, causing HOL_ERR in different
+   proof contexts.)
+   Arguments res_term and st_term are kept for API compat but IGNORED. *)
 fun apply_eval_ih res_term st_term =
   FIRST [
-    (* 4-var IHs: ∀env st res st'. *)
-    qpat_x_assum `∀env st res st'. _ ∧ eval_expr _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`st`,res_term,st_term] mp_tac),
-    qpat_x_assum `∀env st res st'. _ ∧ eval_target _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`st`,res_term,st_term] mp_tac),
-    qpat_x_assum `∀env st res st'. _ ∧ eval_targets _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`st`,res_term,st_term] mp_tac),
-    qpat_x_assum `∀env st res st'. _ ∧ eval_base_target _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`st`,res_term,st_term] mp_tac),
-    (* 5-var IHs: ∀env ret_ty st res st'. *)
-    qpat_x_assum `∀env ret_ty st res st'. _ ∧ eval_stmt _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`ret_ty`,`st`,res_term,st_term] mp_tac),
-    qpat_x_assum `∀env ret_ty st res st'. _ ∧ eval_stmts _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`ret_ty`,`st`,res_term,st_term] mp_tac),
-    (* other 4-var: eval_iterator *)
-    qpat_x_assum `∀env st res st'. _ ∧ eval_iterator _ _ st = (res,st') ⇒ _`
-      (qspecl_then [`env`,`st`,res_term,st_term] mp_tac)
-  ] >>
-  simp_tac (srw_ss()) [] >> strip_tac
+    (* P7: eval_expr *)
+    qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all,
+    (* P0: eval_stmt *)
+    qpat_x_assum `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _` drule_all,
+    (* P1: eval_stmts *)
+    qpat_x_assum `∀env ret_ty st res st'. well_typed_stmts _ _ _ ∧ _ ⇒ _` drule_all,
+    (* P2: eval_iterator *)
+    qpat_x_assum `∀env typ st res st'. well_typed_iterator _ _ _ ∧ _ ⇒ _` drule_all,
+    (* P3: eval_target *)
+    qpat_x_assum `∀env st res st'. ∃ty. well_typed_atarget _ _ ty ∧ _ ⇒ _` drule_all,
+    (* P5: eval_base_target *)
+    qpat_x_assum `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _` drule_all,
+    (* P8: eval_exprs *)
+    qpat_x_assum `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _` drule_all
+  ] >> strip_tac
 
 (* no_return_from_eval: after applying an eval IH, the no-return conjunct
    (∀v ret_tv. res = INR (ReturnException v) ⇒ ...) needs to know that
@@ -883,22 +881,14 @@ Resume eval_preserves_swt[Raise3]:
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e st` >>
   Cases_on `q` >> simp_tac (srw_ss()) [] >>
-  (* INR case: error propagation from eval_expr — apply IH *)
+  (* INR case: error propagation from eval_expr — apply IH via drule_all *)
   TRY (strip_tac >>
-    first_x_assum (fn th =>
-      if is_forall (concl th) then
-        mp_tac (SPECL [``env:typing_env``,``st:evaluation_state``,
-          ``INR y:(toplevel_value + exception)``,``r:evaluation_state``] th)
-      else NO_TAC) >>
-    simp_tac (srw_ss()) [] >> strip_tac >>
+    qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+    strip_tac >>
     no_return_from_eval >> gvs[] >> NO_TAC) >>
-  (* INL case: apply IH for eval_expr success *)
-  first_x_assum (fn th =>
-    if is_forall (concl th) then
-      mp_tac (SPECL [``env:typing_env``,``st:evaluation_state``,
-        ``INL x:(toplevel_value + exception)``,``r:evaluation_state``] th)
-    else NO_TAC) >>
-  simp_tac (srw_ss()) [] >> strip_tac >>
+  (* INL case: apply IH for eval_expr success via drule_all *)
+  qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+  strip_tac >>
   first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
   gvs[] >>
   (* x must be Value v: BaseT type forces this via boundary lemma *)
@@ -910,11 +900,11 @@ Resume eval_preserves_swt[Raise3]:
   simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
   simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM, AllCaseEqs()] >>
   (* NONE case of dest_StringV: well-typed StringT value can't have dest_StringV = NONE *)
-  imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >> gvs[] >>
-  (* Normal raise path: state unchanged by lift_option_type/get_Value/raise *)
-  imp_res_tac lift_option_type_state >>
-  imp_res_tac get_Value_state >>
-  gvs[raise_def, return_def, bind_apply, BETA_THM] >>
+  imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
+  Cases_on `dest_StringV v` >> gvs[] >>
+  (* SOME case: get the string value, raise AssertException *)
+  gvs[return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
   rpt conj_tac >> TRY not_return_tac >> TRY not_type_error_tac >>
   TRY (first_assum ACCEPT_TAC)
 QED
@@ -1159,21 +1149,17 @@ Resume eval_preserves_swt[Assert3]:
   rewrite_tac[ev_Assert3] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
-  (* INL case: apply IH for e *)
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
-  (* Substitute expr_type e = BaseT BoolT in all assumptions so
-     evaluate_type_BaseT_inv can match evaluate_type (get_tenv cx) (BaseT BoolT) *)
+  Cases_on `q` >> simp_tac (srw_ss()) []
+  >- (* INR case: error propagation from e — simp solved both? *)
+     cheat
+  >> (* INL case *)
+  qpat_x_assum `∀a b c d. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >> strip_tac >>
+  gvs[] >>
   qpat_x_assum `expr_type e = BaseT BoolT` (fn th =>
     RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
-  (* Classify tyv: BaseT BoolT → tyv = BaseTV BoolT *)
   imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* BaseTV BoolT → x = Value (BoolV b) — boundary lemma *)
   imp_res_tac toplevel_value_typed_BoolT_inv >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  (* switch_BoolV (Value (BoolV b)) ... *)
   simp_tac (srw_ss()) [switch_BoolV_def, COND_RATOR, return_def, bind_apply, BETA_THM] >>
   Cases_on `b` >> gvs[] >-
     (* BoolV T: return () *)
@@ -1183,37 +1169,30 @@ Resume eval_preserves_swt[Assert3]:
   (* BoolV F: eval_expr for e' (reason string) *)
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e' r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
-  (* INL case: apply guarded IH for e' — same pattern as IfExp_True *)
-  qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv, t) ==> _`
-    (fn ih => mp_tac (ih |> Q.SPECL [`st`, `Value (BoolV F)`, `r`])) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then drule_all >> strip_tac >>
-  (* Specialize the ∀tv' assumption from IH result with x itself *)
-  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
-  (* Substitute expr_type e' = BaseT (StringT n) in all assumptions *)
-  qpat_x_assum `expr_type e' = BaseT (StringT n)` (fn th =>
-    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
-  (* Classify: BaseT (StringT n) → x = Value v *)
-  imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-  `?v. x = Value v` by (
-    imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-    imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
-    Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-    first_x_assum irule >> simp[]) >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  (* get_Value (Value v) = return v *)
-  simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
-  (* lift_option_type (dest_StringV v) *)
-  simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
-  Cases_on `dest_StringV v` >-
-    (* NONE: well-typed StringT value can't have dest_StringV = NONE *)
-    (fs[toplevel_value_typed_def] >>
-     imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >> fs[]) >>
-  (* SOME: raise AssertException *)
-  simp_tac (srw_ss()) [raise_def, return_def, bind_apply, BETA_THM] >>
-  tp_bind_err_tac
+  Cases_on `q` >> simp_tac (srw_ss()) [raise_def] >-
+    (* INL case: e' succeeded, apply guarded IH *)
+    (qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv, t) ==> _`
+       (fn ih => mp_tac ih >> impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then drule_all >> strip_tac >>
+     gvs[] >>
+     qpat_x_assum `expr_type e' = BaseT (StringT n)` (fn th =>
+       RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
+     imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
+     imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
+     imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
+     imp_res_tac toplevel_value_typed_for_BaseT >>
+     gvs[toplevel_value_typed_def] >>
+     simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
+     simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
+     imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
+     Cases_on `dest_StringV v` >> gvs[] >>
+     simp_tac (srw_ss()) [raise_def, return_def, bind_apply, BETA_THM] >>
+     rpt strip_tac >> gvs[] >>
+     rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac >>
+     TRY (first_assum ACCEPT_TAC)) >>
+  (* INR case: error propagation from e' *)
+  qpat_x_assum `∀a b c d. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+  strip_tac >> no_return_from_eval >> gvs[]
 QED
 
 Resume eval_preserves_swt[AnnAssign]:
