@@ -83,13 +83,13 @@ Definition well_typed_binop_def:
   well_typed_binop ty ExpMod t1 t2 =
     (t1 = ty /\ t2 = ty /\ ty = BaseT (UintT 256)) /\
   (* Wrapping arithmetic: int types only *)
-  well_typed_binop ty UAdd t1 t2 =
+  well_typed_binop ty UnsafeAdd t1 t2 =
     (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty USub t1 t2 =
+  well_typed_binop ty UnsafeSub t1 t2 =
     (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty UMul t1 t2 =
+  well_typed_binop ty UnsafeMul t1 t2 =
     (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty UDiv t1 t2 =
+  well_typed_binop ty UnsafeDiv t1 t2 =
     (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
   (* Shifts: result same as first operand, both int *)
   well_typed_binop ty ShL t1 t2 =

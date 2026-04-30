@@ -412,10 +412,10 @@ Definition make_builtin_call_def:
     else if name = "convert" then
       (case args of (arg::_) => TypeBuiltin ty Convert ty [arg]
                   | _ => TypeBuiltin ty Convert ty [])
-    else if name = "unsafe_add" then Builtin ty (Bop UAdd) args
-    else if name = "unsafe_sub" then Builtin ty (Bop USub) args
-    else if name = "unsafe_mul" then Builtin ty (Bop UMul) args
-    else if name = "unsafe_div" then Builtin ty (Bop UDiv) args
+    else if name = "unsafe_add" then Builtin ty (Bop UnsafeAdd) args
+    else if name = "unsafe_sub" then Builtin ty (Bop UnsafeSub) args
+    else if name = "unsafe_mul" then Builtin ty (Bop UnsafeMul) args
+    else if name = "unsafe_div" then Builtin ty (Bop UnsafeDiv) args
     else if name = "uint256_addmod" then Builtin ty AddMod args
     else if name = "uint256_mulmod" then Builtin ty MulMod args
     else if name = "pow_mod256" then Builtin ty PowMod256 args
@@ -743,7 +743,7 @@ Definition translate_expr_def:
     boolop_or (translate_expr_list ctx es)) /\
 
   (* UnaryOp *)
-  (translate_expr ctx (JE_UnaryOp JUop_USub e ret_ty) =
+  (translate_expr ctx (JE_UnaryOp JnsafeUop_USub e ret_ty) =
     Builtin (translate_type ret_ty) Neg [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
     Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
@@ -887,7 +887,7 @@ End
 
 Definition json_expr_int_opt_def:
   (json_expr_int_opt (JE_Int v _) = SOME v) /\
-  (json_expr_int_opt (JE_UnaryOp JUop_USub e _) =
+  (json_expr_int_opt (JE_UnaryOp JnsafeUop_USub e _) =
      case json_expr_int_opt e of
        SOME n => SOME (0 - n)
      | NONE => NONE) /\

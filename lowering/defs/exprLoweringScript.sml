@@ -15,7 +15,7 @@
  *   compile_mul_overflow_check   — MUL overflow check (extracted from safe_mul)
  *   clamp_and_return             — compile_clamp + return (shared by safe_add/sub/mul/div)
  *   compile_clamp                — range check for sub-256-bit types
- *   wrap_truncate                — wrapping truncation for UAdd/USub/UMul/UDiv
+ *   wrap_truncate                — wrapping truncation for UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv
  *   compile_binop                — dispatch binop to appropriate helper
  *   compile_compare              — signed/unsigned comparison dispatch
  *
@@ -334,7 +334,7 @@ End
 (* Wrapping truncation for sub-256-bit types.
    Signed → SIGNEXTEND to sign-extend from byte boundary.
    Unsigned → AND with bit mask.
-   Used by UAdd/USub/UMul/UDiv (wrapping arithmetic).
+   Used by UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv (wrapping arithmetic).
    Mirrors Python: builtins/math.py _lower_unsafe_binop truncation *)
 Definition wrap_truncate_def:
   wrap_truncate res ty =
@@ -360,12 +360,12 @@ Definition compile_binop_def:
     | Mod => compile_safe_mod x y ty
     (* Wrapping arithmetic (no overflow checks).
        For bits < 256: signed → SIGNEXTEND, unsigned → AND mask.
-       UDiv is unchecked (no zero-divisor ASSERT), dispatches SDIV for signed.
+       UnsafeDiv is unchecked (no zero-divisor ASSERT), dispatches SDIV for signed.
        Mirrors Python: builtins/math.py _lower_unsafe_binop *)
-    | UAdd => do res <- emit_op ADD [x; y]; wrap_truncate res ty od
-    | USub => do res <- emit_op SUB [x; y]; wrap_truncate res ty od
-    | UMul => do res <- emit_op MUL [x; y]; wrap_truncate res ty od
-    | UDiv =>
+    | UnsafeAdd => do res <- emit_op ADD [x; y]; wrap_truncate res ty od
+    | UnsafeSub => do res <- emit_op SUB [x; y]; wrap_truncate res ty od
+    | UnsafeMul => do res <- emit_op MUL [x; y]; wrap_truncate res ty od
+    | UnsafeDiv =>
         let opc = if is_signed_type ty then SDIV else Div in
         do res <- emit_op opc [x; y]; wrap_truncate res ty od
     (* Bitwise *)
@@ -1592,7 +1592,7 @@ End
 (* ===== Unary Negation ===== *)
 
 (* Negate value with overflow check (operand > MIN_INT).
-   Mirrors Python: expr.py lower_UnaryOp USub case *)
+   Mirrors Python: expr.py lower_UnaryOp UnsafeSub case *)
 Definition compile_neg_def:
   compile_neg v ty =
     let (lo, _) = type_bounds ty in

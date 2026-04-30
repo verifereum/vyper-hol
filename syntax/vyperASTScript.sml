@@ -57,10 +57,10 @@ Datatype:
   | Sub
   | Mul
   | Div
-  | UAdd
-  | USub
-  | UMul
-  | UDiv
+  | UnsafeAdd
+  | UnsafeSub
+  | UnsafeMul
+  | UnsafeDiv
   | ExpMod
   | Mod
   | Exp
