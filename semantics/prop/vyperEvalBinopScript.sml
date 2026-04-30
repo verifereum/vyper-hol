@@ -61,20 +61,11 @@ Proof
   ntac 2 (pop_assum SUBST_ALL_TAC) >>
   strip_tac >>
   fs[integerTheory.NUM_OF_INT] >>
-  `Num y ≠ 0` by simp[] >>
-  `Num x < dimword (:256)` by (irule lt_dimword_256 >> qexists_tac `n` >> simp[]) >>
-  `Num y < dimword (:256)` by (irule lt_dimword_256 >> qexists_tac `n` >> simp[]) >>
-  simp[wordsTheory.word_mod_def, integer_wordTheory.i2w_pos,
-       wordsTheory.w2n_n2w] >>
   `Num x MOD Num y < Num y` by simp[] >>
   `Num x MOD Num y < 2 ** n` by (
     irule arithmeticTheory.LESS_TRANS >> qexists_tac `Num y` >> simp[]) >>
-  conj_tac >- (
-    irule arithmeticTheory.LESS_TRANS >> qexists_tac `Num y` >> fs[integerTheory.NUM_OF_INT]
-  ) >>
-  simp[integerTheory.INT_REM] >>
-  once_rewrite_tac[GSYM (EVAL ``dimword(:256)``)] >>
-  irule lt_dimword_256 >> qexists_tac `n` >> simp[]
+  `Num x MOD Num y < 2 ** n` by simp[] >>
+  simp[integerTheory.INT_REM, integerTheory.INT_MOD]
 QED
 
 Theorem evaluate_binop_div_unsigned:
@@ -94,21 +85,12 @@ Proof
   ntac 2 (pop_assum SUBST_ALL_TAC) >>
   strip_tac >>
   fs[integerTheory.NUM_OF_INT] >>
-  `Num y ≠ 0` by simp[] >>
-  `Num x < dimword (:256)` by (irule lt_dimword_256 >> qexists_tac `n` >> simp[]) >>
-  `Num y < dimword (:256)` by (irule lt_dimword_256 >> qexists_tac `n` >> simp[]) >>
   `Num x DIV Num y ≤ Num x` by simp[arithmeticTheory.DIV_LESS_EQ] >>
   `Num x DIV Num y < 2 ** n` by (
     irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
     qexists_tac `Num x` >> simp[]) >>
-  simp[wordsTheory.word_div_def, integer_wordTheory.i2w_pos,
-       wordsTheory.w2n_n2w, integerTheory.INT_DIV] >>
-  conj_tac >- (
-    irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
-    qexists_tac `Num x` >> fs[integerTheory.NUM_OF_INT]
-  ) >>
-  once_rewrite_tac[GSYM (EVAL ``dimword(:256)``)] >>
-  irule lt_dimword_256 >> qexists_tac `n` >> simp[]
+  `Num x DIV Num y < 2 ** n` by simp[] >>
+  simp[integerTheory.INT_DIV]
 QED
 
 (* ========= Div / Mod (Signed) ========== *)
@@ -266,13 +248,14 @@ Theorem evaluate_binop_udiv:
     y ≠ 0 ⇒
     evaluate_binop u tv UDiv (IntV x) (IntV y) =
     INL (IntV (if is_Unsigned u
-               then &(w2n (word_div ((i2w x):bytes32) ((i2w y):bytes32))) % &(2 ** int_bound_bits u)
+               then &(Num x DIV Num y) % &(2 ** int_bound_bits u)
                else signed_int_mod (int_bound_bits u)
                      (w2i (word_quot ((i2w x):bytes32) ((i2w y):bytes32)))))
 Proof
   Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
                 vyperValueOperationTheory.wrapped_int_op_def] >>
   rpt strip_tac >>
+  `Num y ≠ 0` by simp[] >>
   `(i2w y):bytes32 ≠ 0w` by (
     CCONTR_TAC >> fs[] >> fs[integer_wordTheory.word_0_w2i]) >>
   simp[]
