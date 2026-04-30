@@ -2437,10 +2437,6 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
           let (vb, st2) = lower_value compile_expr cenv ty b st1 in
           let (vc, st3) = lower_value compile_expr cenv ty c st2 in
           as_stack_val ret_ty (compile_mulmod va vb vc st3))
-     | Isqrt =>
-         (let e1 = HD args in
-          let (v, st1) = lower_value compile_expr cenv ty e1 st in
-          as_stack_val ret_ty (compile_isqrt v st1))
      | Ceil =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in

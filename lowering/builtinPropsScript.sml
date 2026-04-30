@@ -11,7 +11,6 @@
  *   compile_builtin_max_correct    — compiled max outputs larger value via cmp+branchless select
  *   compile_builtin_abs_correct    — compiled abs outputs |v| via neg+select; reverts on MIN_INT
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
- *   compile_isqrt_correct          — compiled isqrt outputs floor(sqrt(w2n x)) [CHEATED]
  *   compile_raw_call_correct       — compiled raw_call: OK or revert [CHEATED]
  *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
  *   lower_abi_encode_correct       — compiled abi.encode produces buffer [BLOCKED/CHEATED]
@@ -1645,26 +1644,6 @@ val check_chain_simp_thms = [check_chain_def, pure_opc_arity_def, mk_inst_def,
 
 
 
-(* isqrt: integer square root.
-   87 pure instructions — proved via check_chain framework.
-   Cases_on x_op determines the known list (Var needs [s], Lit/Label need []).
-   Build time: ~30s (3 cases × ~10s each). *)
-(* isqrt: integer square root via Newton's method.
-   87 pure instructions. The result = SQRT(x) (floor of square root).
-   SQRT is ROOT 2 from logrootTheory. *)
-Theorem compile_isqrt_correct:
-  ∀ x_op x ss st op st'.
-    compile_isqrt x_op st = (op, st') ∧
-    eval_operand x_op ss = SOME x
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (n2w (SQRT (w2n x)))
-Proof
-  (* Newton's method convergence over word256 — needs
-     showing 7 iterations suffice for all 256-bit inputs. *)
-  cheat
-QED
 (* floor: rounds toward negative infinity.
    floor(x, d) = sdiv(if x < 0 then x - (d-1) else x, d) *)
 Theorem compile_floor_correct:

@@ -83,7 +83,6 @@ signature vyperASTSyntax = sig
   val Acc_tm          : term
   val BlockHash_tm    : term
   val BlobHash_tm     : term
-  val Isqrt_tm        : term
   val ECRecover_tm    : term
   val ECAdd_tm        : term
   val ECMul_tm        : term
@@ -217,7 +216,6 @@ signature vyperASTSyntax = sig
   val mk_Keccak256 : term * term -> term
   val mk_AsWeiValue : term * term * term -> term
   val mk_Floor     : term * term -> term
-  val mk_Isqrt     : term * term -> term
   val mk_ECRecover : term * term * term * term * term -> term
   val mk_ECAdd     : term * term * term -> term
   val mk_ECMul     : term * term * term -> term

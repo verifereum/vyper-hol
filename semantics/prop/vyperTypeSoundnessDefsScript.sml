@@ -239,10 +239,6 @@ Definition well_typed_builtin_app_def:
      accounts_well_typed invariant through all 56 induction cases.
      See LEARNINGS for details. *)
   well_typed_builtin_app ty (Acc item) ts = F /\
-  (* Isqrt: uint256 -> uint256 *)
-  well_typed_builtin_app ty Isqrt ts =
-    (ts = [BaseT (UintT 256)] /\
-     ty = BaseT (UintT 256)) /\
   (* MethodId: string/bytes -> bytes4 *)
   well_typed_builtin_app ty MethodId ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 4))) /\
