@@ -1097,8 +1097,8 @@ Resume eval_preserves_swt[AttributeTarget]:
   Cases_on `eval_base_target cx bt st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY close_inr_err_tac >>
-  (* P5 IH applied by simp_tac; just clean up *)
-  gvs[return_def]
+  (* P5 IH applied by simp_tac; strip remaining implications then resolve *)
+  rpt strip_tac >> gvs[return_def]
 QED
 
 Resume eval_preserves_swt[for_nil]:
@@ -1260,7 +1260,38 @@ Resume eval_preserves_swt[Assign_inr]:
 QED
 
 Resume eval_preserves_swt[Assign_tgt]:
-  cheat
+  (* Apply P3 IH for eval_target *)
+  first_x_assum drule_all >> strip_tac >>
+  (* Case split eval_expr *)
+  Cases_on `eval_expr cx e st_tgt` >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
+  (* INR case: error propagation *)
+  close_inr_err_tac >>
+  (* INL case: apply guarded P7 IH for eval_expr *)
+  qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
+    (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (* Case split materialise *)
+  Cases_on `materialise cx tv r` >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
+  (* INR case: materialise error propagation *)
+  (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   rpt strip_tac >> gvs[] >>
+   TRY not_type_error_tac) >>
+  (* INL case: assign_target *)
+  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  Cases_on `assign_target cx x (Replace v) r` >>
+  `state_well_typed r' /\ env_consistent env cx r'` by
+    suspend "Assign_atwt" >>
+  (* Case split assign_target result: success vs error *)
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac (cj 1 assign_target_no_return) >>
+  first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []
 QED
 
 Resume eval_preserves_swt[Assign_atwt]:
