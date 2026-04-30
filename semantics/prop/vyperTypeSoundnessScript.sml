@@ -883,32 +883,33 @@ Resume eval_preserves_swt[Raise3]:
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  (* INR case: error propagation from eval_expr — apply IH *)
+  first_x_assum (fn th =>
+    if is_forall (concl th) then
+      qspecl_then [`env`,`st`,`INR y`,`r`] mp_tac th
+    else NO_TAC) >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  no_return_from_eval >> gvs[] >>
   (* INL case: apply IH for eval_expr success *)
-      first_x_assum drule_all >> strip_tac >>
-      (* Specialize the expr IH with tv = x to get toplevel_value_typed x tyv *)
-      first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
-      (* Substitute expr_type e = BaseT (StringT n) in evaluate_type assumption *)
-      gvs[] >>
-      (* x must be Value vl: BaseT type means tyv ≠ NoneTV and tyv ≠ ArrayTV *)
-      `?vl. x = Value vl` by (
-        imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-        imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
-        Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-        first_x_assum irule >> simp[]) >>
-      rpt BasicProvers.VAR_EQ_TAC >>
-      (* Resolve tyv = BaseTV (StringT n) before case-split on dest_StringV *)
-      imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-      (* get_Value (Value vl) = return vl *)
-      simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
-      (* lift_option_type (dest_StringV vl) *)
-      simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
-      Cases_on `dest_StringV vl` >-
-      (* NONE case: well-typed StringT value can't have dest_StringV = NONE *)
-      (fs[toplevel_value_typed_def] >>
-       imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >> fs[]) >>
-      (* SOME case: normal raise path *)
-      simp_tac (srw_ss()) [raise_def, return_def, bind_apply, BETA_THM] >>
-      tp_bind_err_tac]
+  first_x_assum drule_all >> strip_tac >>
+  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
+  gvs[] >>
+  (* x must be Value v: BaseT type forces this via boundary lemma *)
+  imp_res_tac toplevel_value_typed_for_BaseT >>
+  gvs[toplevel_value_typed_def] >>
+  (* Resolve tyv = BaseTV (StringT n) *)
+  imp_res_tac evaluate_type_BaseT_inv >> gvs[] >>
+  (* Expand get_Value, lift_option_type, and case-split on dest_StringV *)
+  simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
+  simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM, AllCaseEqs()] >>
+  (* NONE case of dest_StringV: well-typed StringT value can't have dest_StringV = NONE *)
+  imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >> gvs[] >>
+  (* Normal raise path: state unchanged by lift_option_type/get_Value/raise *)
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac get_Value_state >>
+  gvs[raise_def, return_def, bind_apply, BETA_THM] >>
+  rpt conj_tac >> TRY not_return_tac >> TRY not_type_error_tac >>
+  TRY (first_assum ACCEPT_TAC)
 QED
 
 Resume eval_preserves_swt[Assert1]:
