@@ -547,8 +547,10 @@ Proof
         bind_def, lift_option_def, lift_option_type_def, lift_sum_def,
         ignore_bind_def,
         option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-    drule lookup_global_state >> strip_tac >>
-    qpat_x_assum `_ = (INL res, st')` mp_tac >>
+    (* 3 goals: 2 trivial (lookup_global gives s''=st) + 1 complex storage case *)
+    IMP_RES_TAC lookup_global_state >> gvs[] >>
+    (* Remaining: complex storage case. Push equation into goal and expand. *)
+    qpat_x_assum `_ = (res, st')` mp_tac >>
     simp[bind_def, return_def, raise_def, ignore_bind_def,
          lift_option_def, lift_option_type_def, lift_sum_def,
          check_def, assert_def,
@@ -570,9 +572,32 @@ Proof
        resolve_array_element_preserves_accounts,
        read_storage_slot_state,
        resolve_array_element_state,
-       lookup_global_state,
        vyperStorageBackendTheory.get_storage_backend_state] >>
-    drule write_storage_slot_preserves_accounts >> simp[])
+    (* HashMap/lambda case: need bind_apply + BETA_THM to expand *)
+    TRY (qpat_x_assum `_ = (res, st')` mp_tac >>
+    simp[bind_apply, BETA_THM, return_def, raise_def, ignore_bind_def,
+         lift_option_def, lift_option_type_def, lift_sum_def,
+         check_def, assert_def,
+         option_CASE_rator, prod_CASE_rator, sum_CASE_rator,
+         type_value_CASE_rator, toplevel_value_CASE_rator,
+         assign_operation_CASE_rator, bound_CASE_rator,
+         AllCaseEqs(), PULL_EXISTS] >>
+    rpt strip_tac >>
+    TRY (pairarg_tac >> gvs[bind_def, return_def, raise_def,
+        AllCaseEqs(), option_CASE_rator, prod_CASE_rator, sum_CASE_rator,
+        type_value_CASE_rator, assign_operation_CASE_rator, bound_CASE_rator,
+        check_def, assert_def, ignore_bind_def,
+        lift_option_def, lift_option_type_def, lift_sum_def, PULL_EXISTS] >>
+      rpt strip_tac) >>
+    MAP_EVERY (fn th => TRY (imp_res_tac th >> gvs[]))
+      [assign_result_state,
+       write_storage_slot_preserves_accounts,
+       set_global_preserves_accounts,
+       resolve_array_element_preserves_accounts,
+       read_storage_slot_state,
+       resolve_array_element_state,
+       vyperStorageBackendTheory.get_storage_backend_state]))
+  >- (* ImmutableVar: set_immutable doesn't touch accounts *)
    (strip_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
          lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
@@ -599,32 +624,31 @@ Proof
     simp[bind_def, ignore_bind_def, assert_def, return_def, AllCaseEqs()] >>
     strip_tac >> gvs[] >>
     first_x_assum drule >> simp[])
-  >- (* 13 catch-all raise cases *)
-    simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- simp[Once assign_target_def, raise_def]
-  >- (* assign_targets [] []: trivial *)
-   simp[Once assign_target_def, return_def]
+  >- (* TupleTargetV + Replace NoneV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace BoolV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace DynArrayV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace SArrayV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace IntV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace FlagV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace DecimalV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace StringV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace BytesV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Replace StructV: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + Update: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + AppendOp: raise *) simp[Once assign_target_def, raise_def]
+  >- (* TupleTargetV + PopOp: raise *) simp[Once assign_target_def, raise_def]
+  >- (* assign_targets [] []: trivial *) simp[Once assign_target_def, return_def]
   >- (* assign_targets cons: recursive via IH *)
    (rpt gen_tac >> strip_tac >> rpt gen_tac >>
     simp[Once assign_target_def, bind_def, ignore_bind_def, AllCaseEqs(),
          return_def, raise_def] >>
     strip_tac >> gvs[] >>
-    rename1 `assign_target _ _ _ st = (_, s_mid)` >>
-    rename1 `assign_targets _ _ _ s_mid = (_, st')` >>
+    (* IH for assign_target gives accounts_well_typed s''.accounts *)
     last_x_assum (qspec_then `st` mp_tac) >> disch_then drule >> strip_tac >>
-    first_x_assum (qspec_then `s_mid` mp_tac) >> disch_then drule >> simp[])
-  >- (* assign_targets mismatch: raise *)
-   simp[Once assign_target_def, raise_def]
+    (* IH for assign_targets gives accounts_well_typed st'.accounts *)
+    first_x_assum (qspec_then `s''` mp_tac) >> disch_then drule >> simp[])
+  >- (* assign_targets [] (v::vs): raise *) simp[Once assign_target_def, raise_def]
+  >- (* assign_targets (v::vs) []: raise *) simp[Once assign_target_def, raise_def]
 QED
 
 (* ===== eval_preserves_swt — master theorem ===== *)
@@ -1422,8 +1446,7 @@ Resume eval_preserves_swt[Assign_tgt_inl]:
    rename1 `assign_target cx x (Replace x'') r = (ao_res, st_asgn)` >>
    (* accounts_well_typed is preserved through assign_target *)
    `accounts_well_typed st_asgn.accounts` by
-     (drule (cj 1 assign_target_preserves_accounts) >>
-      disch_then drule >> first_assum ACCEPT_TAC) >>
+     (drule_all (cj 1 assign_target_preserves_accounts) >> simp[]) >>
    `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
      suspend "Assign_atwt" >>
    (* Case split assign_target result *)
