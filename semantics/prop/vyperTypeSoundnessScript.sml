@@ -802,7 +802,11 @@ fun apply_eval_ih res_term st_term =
     (* P5: eval_base_target *)
     qpat_x_assum `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _` drule_all,
     (* P8: eval_exprs *)
-    qpat_x_assum `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _` drule_all
+    qpat_x_assum `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _` drule_all,
+    (* Fallback: try any ∀-assumption containing well_typed *)
+    PRED_ASSUM (fn t => is_forall t andalso
+      can (find_term (fn u => is_const u andalso
+        String.isPrefix "well_typed" (fst (dest_const u)))) t) drule_all
   ] >> strip_tac
 
 (* no_return_from_eval: after applying an eval IH, the no-return conjunct
@@ -1149,39 +1153,38 @@ Resume eval_preserves_swt[Assert3]:
   rewrite_tac[ev_Assert3] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e st` >>
-  Cases_on `q` >> simp_tac (srw_ss()) []
-  >- (* INR case: error propagation from e — simp solved both? *)
-     cheat
-  >> (* INL case *)
-  qpat_x_assum `∀a b c d. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >> strip_tac >>
+  Cases_on `q` >> simp_tac (srw_ss()) [] >-
+    (* INR case: error propagation from e *)
+    (strip_tac >>
+     qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+     strip_tac >> no_return_from_eval >> gvs[]) >>
+  (* INL case: e evaluated successfully *)
+  qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+  strip_tac >>
+  first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
   gvs[] >>
-  qpat_x_assum `expr_type e = BaseT BoolT` (fn th =>
-    RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
-  imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac toplevel_value_typed_BoolT_inv >>
-  rpt BasicProvers.VAR_EQ_TAC >>
+  (* x must be Value (BoolV b): BaseT BoolT forces this *)
+  imp_res_tac toplevel_value_typed_for_BaseT >>
+  gvs[toplevel_value_typed_def] >>
+  imp_res_tac evaluate_type_BaseT_inv >> gvs[] >>
   simp_tac (srw_ss()) [switch_BoolV_def, COND_RATOR, return_def, bind_apply, BETA_THM] >>
-  Cases_on `b` >> gvs[] >-
+  Cases_on `b'` >> gvs[] >-
     (* BoolV T: return () *)
-    (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    (rpt strip_tac >> gvs[] >>
      rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac >>
-     TRY close_impossible_branch_tac >> TRY (gvs[])) >>
-  (* BoolV F: eval_expr for e' (reason string) *)
+     TRY (gvs[])) >>
+  (* BoolV F: eval the reason expression e' *)
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e' r` >>
   Cases_on `q` >> simp_tac (srw_ss()) [raise_def] >-
-    (* INL case: e' succeeded, apply guarded IH *)
-    (qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv, t) ==> _`
+    (* INL case: e' evaluated successfully — use guarded IH *)
+    (qpat_x_assum `∀s'' tv t. eval_expr cx e s'' = (INL tv, t) ⇒ _`
        (fn ih => mp_tac ih >> impl_tac >- first_assum ACCEPT_TAC) >>
      disch_then drule_all >> strip_tac >>
      gvs[] >>
-     qpat_x_assum `expr_type e' = BaseT (StringT n)` (fn th =>
-       RULE_ASSUM_TAC (ONCE_REWRITE_RULE[th]) >> assume_tac th) >>
-     imp_res_tac evaluate_type_BaseT_inv >> rpt BasicProvers.VAR_EQ_TAC >>
-     imp_res_tac evaluate_type_not_NoneT_imp_not_NoneTV >>
-     imp_res_tac evaluate_type_BaseT_imp_not_ArrayTV >>
      imp_res_tac toplevel_value_typed_for_BaseT >>
      gvs[toplevel_value_typed_def] >>
+     imp_res_tac evaluate_type_BaseT_inv >> gvs[] >>
      simp_tac (srw_ss()) [get_Value_def, return_def, bind_apply, BETA_THM] >>
      simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM] >>
      imp_res_tac value_has_type_StringT_dest_StringV_NEQ_NONE >>
@@ -1191,7 +1194,8 @@ Resume eval_preserves_swt[Assert3]:
      rpt CONJ_TAC >> TRY not_return_tac >> TRY not_type_error_tac >>
      TRY (first_assum ACCEPT_TAC)) >>
   (* INR case: error propagation from e' *)
-  qpat_x_assum `∀a b c d. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+  strip_tac >>
+  qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
   strip_tac >> no_return_from_eval >> gvs[]
 QED
 
