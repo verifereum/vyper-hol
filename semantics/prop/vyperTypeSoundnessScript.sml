@@ -792,7 +792,7 @@ QED
    by monadic bind compositions (e.g. eval_base_target result guards
    eval_expr IH). Applying drule_all to a guarded IH fails when the
    guard's result doesn't match, and consumes the wrong assumption. *)
-fun apply_eval_ih res_term st_term =
+fun apply_eval_ih res_term st_term : tactic =
   FIRST [
     (* P7: eval_expr *)
     qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _` drule_all,
@@ -825,7 +825,7 @@ fun apply_eval_ih res_term st_term =
    antecedent contains eval_X = INL(...) but NOT well_typed_X. These arise
    from monadic bind compositions where eval_base_target's result guards
    the eval_expr IH. Uses drule_all to match the guard against assumptions. *)
-val apply_guarded_ih =
+val apply_guarded_ih : tactic =
   PRED_ASSUM (fn t => is_forall t andalso
     let val body_t = snd (strip_forall t)
         val (ant, _) = dest_imp body_t
@@ -838,7 +838,7 @@ val apply_guarded_ih =
 (* no_return_from_eval: after applying an eval IH, the no-return conjunct
    (∀v ret_tv. res = INR (ReturnException v) ⇒ ...) needs to know that
    eval_X never produces ReturnException. This resolves it. *)
-val no_return_from_eval =
+val no_return_from_eval : tactic =
   TRY (imp_res_tac eval_expr_not_return) >>
   TRY (imp_res_tac eval_exprs_not_return) >>
   TRY (imp_res_tac eval_target_not_return) >>
@@ -850,19 +850,22 @@ val no_return_from_eval =
    After reverse(Cases_on q)>>simp_tac, the INR subgoal has
    INR y = res and <state_var> = st' as assumptions.
    st_term is the result state term (e.g., `r` or `st_tgt`).
-   Applies the matching IH, then uses no_return_from_eval + gvs to close. *)
+   Uses PRED_ASSUM with drule_all (a proper tactic, not gentactic)
+   to find and apply the well_typed IH. *)
 fun close_inr_err_tac_for st_term =
   strip_tac >>
   TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  apply_eval_ih `INR y` st_term >>
+  (* Find ∀-assumption with well_typed in antecedent (the IH), apply via drule_all *)
+  PRED_ASSUM (fn t => is_forall t andalso
+    let val body_t = snd (strip_forall t)
+        val (ant, _) = dest_imp body_t
+    in can (find_term (fn u => is_const u andalso
+           String.isPrefix "well_typed" (fst (dest_const u)))) ant
+    end) drule_all >>
+  strip_tac >>
   no_return_from_eval >>
-  gvs[]
-  (* NOTE: Callers should use TRY (close_inr_err_tac_for ...) >>
-     without >> NO_TAC. The augmented simpset (with exception_distinct +
-     error_distinct) may auto-solve INR error cases, leaving only the INL
-     subgoal. close_inr_err_tac_for will fail on INL goals (no matching
-     INR assumption), so TRY makes it a no-op in that case. *)
+  simp_tac (srw_ss()) []
 
 (* Default: uses `r` as state variable (common after Cases_on naming) *)
 val close_inr_err_tac = close_inr_err_tac_for `r`
@@ -880,7 +883,7 @@ val close_pure_inr_err_tac : tactic =
    Used for Cases_on a bind step after the INR branch has been handled
    by close_inr_err_tac or close_pure_inr_err_tac (via TRY >> NO_TAC).
    For the remaining INL case, applies the IH and resolves state lemmas. *)
-val tp_bind_err_tac =
+val tp_bind_err_tac : tactic =
   TRY strip_tac >>
   TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
   rpt BasicProvers.VAR_EQ_TAC >>
@@ -1225,9 +1228,7 @@ Proof
   Cases_on `ALOOKUP l s` >> gvs[]
 QED
 
-Resume eval_preserves_swt[Append_atwt]:
-  cheat
-QED
+(* Append_atwt: orphaned since Append is cheated; will be recreated when Append is proved properly *)
 
 
 Resume eval_preserves_swt[Assign]:
@@ -1255,16 +1256,11 @@ Resume eval_preserves_swt[Assign]:
   qpat_x_assum `!s'' gv t. eval_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `tgt_v`, `st_tgt`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (* After P3 IH: tgt_v is now in assumptions *)
   (* Step 2: eval_expr cx e st_tgt *)
   Cases_on `eval_expr cx e st_tgt` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       first_x_assum drule_all >> strip_tac >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> gvs[] >>
-       imp_res_tac eval_expr_not_return >>
-       first_x_assum (qspec_then `v` mp_tac) >>
-       simp_tac (srw_ss()) [] >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* Apply P7 IH for eval_expr success *)
   qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
     (qspecl_then [`env`, `st_tgt`, `INL x`, `r`] mp_tac) >>
@@ -1272,11 +1268,7 @@ Resume eval_preserves_swt[Assign]:
   (* Step 3: materialise cx x r *)
   Cases_on `materialise cx x r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   tp_materialise_conclusion_tac >>
   (* Step 4: assign_target cx tgt_v (Replace x') r; return () *)
