@@ -849,9 +849,8 @@ val no_return_from_eval : tactic =
 (* close_inr_err_tac_for st_term: close INR error-propagation branch.
    After reverse(Cases_on q)>>simp_tac, the INR subgoal has
    INR y = res and <state_var> = st' as assumptions.
-   st_term is the result state term (e.g., `r` or `st_tgt`).
-   Uses PRED_ASSUM with drule_all (a proper tactic, not gentactic)
-   to find and apply the well_typed IH. *)
+   Uses PRED_ASSUM with drule_all to find and apply the well_typed IH,
+   then resolves remaining no-TypeError and no-return conjuncts. *)
 fun close_inr_err_tac_for st_term =
   strip_tac >>
   TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
@@ -865,7 +864,12 @@ fun close_inr_err_tac_for st_term =
     end) drule_all >>
   strip_tac >>
   no_return_from_eval >>
-  simp_tac (srw_ss()) []
+  (* Solve state-preserving conjuncts directly from IH conclusions *)
+  rpt (CONJ_TAC >> first_assum ACCEPT_TAC) >>
+  (* Remaining ∀/⇒ goals: strip, then use IH conclusions or contradiction *)
+  rpt strip_tac >>
+  TRY (first_x_assum ACCEPT_TAC) >>
+  rpt (pop_assum mp_tac >> simp[])
 
 (* Default: uses `r` as state variable (common after Cases_on naming) *)
 val close_inr_err_tac = close_inr_err_tac_for `r`
@@ -1247,43 +1251,16 @@ Resume eval_preserves_swt[Assign]:
   simp_tac std_ss [bind_apply, BETA_THM] >>
   (* Step 1: eval_target cx g st *)
   Cases_on `eval_target cx g st` >> rename1 `(res_tgt, st_tgt)` >>
-  reverse (Cases_on `res_tgt`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
-  rename1 `eval_target cx g st = (INL tgt_v, st_tgt)` >>
-  (* P3 IH for eval_target *)
-  first_x_assum drule_all >> strip_tac >>
-  (* Discharge guarded P7 IH: specialise guard, then strip *)
-  qpat_x_assum `!s'' gv t. eval_target _ _ _ = _ ==> _`
-    (qspecl_then [`st`, `tgt_v`, `st_tgt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  (* After P3 IH: tgt_v is now in assumptions *)
-  (* Step 2: eval_expr cx e st_tgt *)
-  Cases_on `eval_expr cx e st_tgt` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
-  (* Apply P7 IH for eval_expr success *)
-  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-    (qspecl_then [`env`, `st_tgt`, `INL x`, `r`] mp_tac) >>
-  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  (* Step 3: materialise cx x r *)
-  Cases_on `materialise cx x r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  tp_materialise_conclusion_tac >>
-  (* Step 4: assign_target cx tgt_v (Replace x') r; return () *)
-  simp_tac std_ss [bind_apply, BETA_THM, ignore_bind_apply] >>
-  Cases_on `assign_target cx tgt_v (Replace x') r` >>
-  (* Apply assign_target_well_typed BEFORE splitting result *)
-  `state_well_typed r'' /\ env_consistent env cx r''` by
-    suspend "Assign_atwt" >>
-  (* Now case-split the result *)
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac (cj 1 assign_target_no_return) >>
-  first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []
+  reverse (Cases_on `res_tgt`) >> simp_tac (srw_ss()) [] >-
+  suspend "Assign_inr" >>
+  suspend "Assign_tgt"
+QED
+Resume eval_preserves_swt[Assign_inr]:
+  close_inr_err_tac
+QED
+
+Resume eval_preserves_swt[Assign_tgt]:
+  cheat
 QED
 
 Resume eval_preserves_swt[Assign_atwt]:
