@@ -36,7 +36,7 @@ Ancestors
   e2eDefs
   vyperLoweringCorrect vfmExecution vfmRunCall
   venomPipelineCorrect
-  passSimulationDefs
+  passSimulationDefs passSimulationProofs
   codegenCorrectness
   stateEquiv stateEquivProps
   venomExecSemantics
@@ -768,23 +768,131 @@ Proof
   \\ irule evm_revert_state_unchanged \\ simp[]
 QED
 
+(* ===== Pipeline Bridge Lemmas ===== *)
+
+(* FOLDL rel_seq with observable_equiv-implying relations
+   implies observable_equiv. *)
+Theorem FOLDL_observable_equiv_imp_observable[local]:
+  !Rs v v'.
+    EVERY (\R. !s1 s2. R s1 s2 ==> observable_equiv s1 s2) Rs /\
+    FOLDL rel_seq $= Rs v v'
+    ==> observable_equiv v v'
+Proof
+  metis_tac[foldl_rel_seq_preserves_observable]
+QED
+
+Theorem observable_imp_revert_equiv[local]:
+  !s1 s2. observable_equiv s1 s2 ==> revert_equiv s1 s2
+Proof
+  rw[observable_equiv_def, revert_equiv_def]
+QED
+
+(* Monotonicity: weakening the relations preserves lift_result. *)
+Theorem lift_result_FOLDL_imp_observable[local]:
+  !Rs_ok Rs_term r1 r2.
+    EVERY (\R. !s1 s2. R s1 s2 ==> observable_equiv s1 s2) Rs_ok /\
+    EVERY (\R. !s1 s2. R s1 s2 ==> observable_equiv s1 s2) Rs_term /\
+    lift_result (FOLDL rel_seq $= Rs_ok) (FOLDL rel_seq $= Rs_term)
+      (FOLDL rel_seq $= Rs_term) r1 r2
+    ==> lift_result observable_equiv observable_equiv observable_equiv r1 r2
+Proof
+  rpt strip_tac >>
+  irule lift_result_weaken_proof >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  TRY (metis_tac[FOLDL_observable_equiv_imp_observable]) >>
+  metis_tac[observable_imp_revert_equiv, FOLDL_observable_equiv_imp_observable]
+QED
+
+(* Bridge: ctx_pass_correct with FOLDL rel_seq relations implies
+   ctx_pass_correct with stronger observable_equiv relation. *)
+Theorem ctx_correct_rel_seq_imp_observable[local]:
+  !(p : venom_context -> venom_context) Rs_ok Rs_term ctx vs.
+    EVERY (\R. !s1 s2. R s1 s2 ==> observable_equiv s1 s2) Rs_ok /\
+    EVERY (\R. !s1 s2. R s1 s2 ==> observable_equiv s1 s2) Rs_term /\
+    ctx_pass_correct p (FOLDL rel_seq $= Rs_ok) (FOLDL rel_seq $= Rs_term) ctx vs
+    ==> ctx_pass_correct p observable_equiv observable_equiv ctx vs
+Proof
+  rw[ctx_pass_correct_def, pass_correct_def] >>
+  rpt strip_tac >>
+  `?fuel'. terminates (run_context fuel' (p ctx) vs)` by metis_tac[] >>
+  first_x_assum (qspecl_then [`fuel`, `fuel'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `run_context fuel ctx vs` >> Cases_on `run_context fuel' (p ctx) vs` >>
+  fs[lift_result_def] >>
+  rpt conj_tac >> rpt strip_tac >>
+  drule_all FOLDL_observable_equiv_imp_observable >> simp[] >>
+  irule observable_imp_revert_equiv >>
+  drule_all FOLDL_observable_equiv_imp_observable >> simp[]
+QED
+
+(* ===== Per-Pass Correctness (CHEATED) ===== *)
+
+(* Each pass is assumed to preserve observable_equiv.
+   These need individual pass correctness proofs. *)
+Theorem simplify_cfg_observable[local]:
+  !ctx vs.
+    ctx_pass_correct (apply_ctx_fn_transform simplify_cfg_fn)
+      observable_equiv observable_equiv ctx vs
+Proof
+  cheat
+QED
+
+Theorem ircf_global_observable[local]:
+  !ircf_global ctx vs.
+    ctx_pass_correct (apply_ctx_fn_transform ircf_global)
+      observable_equiv observable_equiv ctx vs
+Proof
+  cheat
+QED
+
+Theorem ricf_global_observable[local]:
+  !ricf_global ctx vs.
+    ctx_pass_correct (apply_ctx_fn_transform ricf_global)
+      observable_equiv observable_equiv ctx vs
+Proof
+  cheat
+QED
+
+Theorem function_inliner_observable[local]:
+  !ctx vs.
+    EVERY alloca_pointer_confined ctx.ctx_functions ==>
+    ctx_pass_correct (apply_ctx_fn_transform function_inliner)
+      observable_equiv observable_equiv ctx vs
+Proof
+  cheat
+QED
+
+Theorem o2_fn_passes_observable[local]:
+  !make_ssa ircf ricf dse_analysis amap live_at ctx vs.
+    EVERY alloca_pointer_confined ctx.ctx_functions ==>
+    ctx_pass_correct (apply_ctx_fn_transform
+      (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at))
+      observable_equiv observable_equiv ctx vs
+Proof
+  cheat
+QED
+
+Theorem lowering_alloca_pointer_confined[local]:
+  !selectors ext_fns int_fns fb_fn dispatch bucket_count
+    fn_meta_bytes dense_buckets entry_info entry_label.
+    EVERY alloca_pointer_confined
+      (FST (run_lowering selectors ext_fns int_fns fb_fn
+        dispatch bucket_count fn_meta_bytes dense_buckets entry_info
+        entry_label)).ctx_functions
+Proof
+  cheat
+QED
+
 (* ===== Concrete Pipeline Instances ===== *)
 
 (* The O2 pipeline preserves observable semantics.
-   Combines individual O2 pass correctness theorems into
-   a single ctx_pass_correct statement. Analysis functions
-   (make_ssa, ircf, ricf, dse, amap, live_at) are parameters. *)
-(* The O2 pipeline preserves observable semantics.
-   PROOF REQUIRES: Apply venom_pipeline_correct with:
-   - simplify_cfg_fn preserves observable_equiv
-   - ircf_global preserves observable_equiv
-   - ricf_global preserves observable_equiv
-   - function_inliner preserves observable_equiv
-   - o2_fn_passes preserves observable_equiv
-   Each of these requires individual pass correctness proofs. *)
+   Uses venom_pipeline_correct to get FOLDL rel_seq relations,
+   then ctx_correct_rel_seq_imp_observable to convert to observable_equiv.
+   Precondition: EVERY alloca_pointer_confined (needed by function_inliner). *)
 Theorem o2_pipeline_ctx_pass_correct[local]:
   !ircf_global ricf_global threshold
     make_ssa ircf ricf dse_analysis amap live_at ctx vs.
+    EVERY alloca_pointer_confined ctx.ctx_functions ==>
     ctx_pass_correct
       (venom_pipeline ircf_global ricf_global threshold
         (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at))
@@ -819,13 +927,13 @@ Theorem e2e_vyper_to_evm_O2:
       ==>
       vyper_evm_correspondence tenv event_info ret am tx es
 Proof
-  rpt gen_tac \\ strip_tac
-  \\ qpat_x_assum `compile_vyper_raw _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac
-  \\ simp[compile_vyper_raw_def, pairTheory.UNCURRY]
-  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
-  \\ strip_tac
-  \\ mp_tac e2e_vyper_to_evm
-  \\ disch_then (qspecl_then [
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_vyper_raw _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_vyper_raw_def, pairTheory.UNCURRY] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  strip_tac >>
+  mp_tac e2e_vyper_to_evm >>
+  disch_then (qspecl_then [
        `tenv`, `event_info`, `pipeline`, `selectors`, `ext_fns`, `int_fns`,
        `fb_fn`, `dispatch`, `bucket_count`, `fn_meta_bytes`, `dense_buckets`,
        `entry_info`, `entry_label`, `fn_eom_map`, `bytecode`,
@@ -835,10 +943,10 @@ Proof
           entry_label)`,
        `SND (run_lowering selectors ext_fns int_fns fb_fn
           dispatch bucket_count fn_meta_bytes dense_buckets entry_info
-          entry_label)`] mp_tac)
-  \\ simp[compile_vyper_raw_def, pairTheory.UNCURRY]
-  \\ CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV)
-  \\ simp[o2_pipeline_ctx_pass_correct]
+          entry_label)`] mp_tac) >>
+  simp[compile_vyper_raw_def, pairTheory.UNCURRY] >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  simp[o2_pipeline_ctx_pass_correct, lowering_alloca_pointer_confined]
 QED
 
 (* ===== Deploy Phase ===== *)
@@ -886,22 +994,20 @@ Theorem compile_vyper_runtime_bytecode:
         dense_buckets entry_info "__entry" pipeline FEMPTY
         = SOME runtime_bc
 Proof
-  rpt gen_tac \\ strip_tac
-  (* Substitute the equality constraints *)
-  \\ `ext_fns = FST (classify_functions tops) /\
+  rpt gen_tac >> strip_tac >>
+  `ext_fns = FST (classify_functions tops) /\
       int_fns = FST (SND (classify_functions tops)) /\
       fb_fn = FST (SND (SND (classify_functions tops))) /\
       ctor_fn = SND (SND (SND (classify_functions tops)))` by (
         Cases_on `classify_functions tops` >> gvs[] >>
         Cases_on `r` >> gvs[] >>
-        Cases_on `r'` >> gvs[])
-  \\ gvs[compile_vyper_def, compile_vyper_raw_def, pairTheory.UNCURRY]
-  \\ rpt (pairarg_tac \\ gvs[])
-  \\ gvs[AllCaseEqs()]
-  \\ rpt (FIRST [pairarg_tac \\ gvs[AllCaseEqs()],
-                CASE_TAC \\ gvs[AllCaseEqs()]])
-  (* Extract the bucket_count etc. from the existing run_lowering result *)
-  \\ qmatch_asmsub_abbrev_tac `codegen (pipeline (FST (run_lowering _ _ _ _ _ bc fmb db ei _))) _ _ = _`
-  \\ MAP_EVERY qexists_tac [`bc`, `fmb`, `db`, `ei`]
-  \\ gvs[]
+        Cases_on `r'` >> gvs[]) >>
+  gvs[compile_vyper_def, compile_vyper_raw_def, pairTheory.UNCURRY] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs()] >>
+  rpt (FIRST [pairarg_tac >> gvs[AllCaseEqs()],
+                CASE_TAC >> gvs[AllCaseEqs()]]) >>
+  qmatch_asmsub_abbrev_tac `codegen (pipeline (FST (run_lowering _ _ _ _ _ bc fmb db ei _))) _ _ = _` >>
+  MAP_EVERY qexists_tac [`bc`, `fmb`, `db`, `ei`] >>
+  gvs[]
 QED
