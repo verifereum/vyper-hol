@@ -1439,36 +1439,37 @@ Resume eval_preserves_swt[Assign_tgt_inl]:
   (* Materialise *)
   Cases_on `materialise cx x' r` >>
   Cases_on `q` >-
-  (* materialise INL: state unchanged — suspend for independent proof *)
-  suspend "Assign_tgt_inl_ok" >>
+  (* materialise INL: state unchanged *)
+  (imp_res_tac materialise_state >> gvs[] >>
+   Cases_on `assign_target cx x (Replace x'') r` >>
+   rename1 `assign_target cx x (Replace x'') r = (ao_res, st_asgn)` >>
+   `accounts_well_typed st_asgn.accounts` by
+     metis_tac [cj 1 assign_target_preserves_accounts] >>
+   `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
+     suspend "Assign_atwt" >>
+   Cases_on `ao_res` >-
+   (* INL branch: assign_target succeeded, res = INL () *)
+   suspend "Assign_tgt_inl_ok" >>
+   (* INR branch: assign_target error *)
+   suspend "Assign_tgt_inr_err") >>
   (* materialise INR: error case *)
-  suspend "Assign_tgt_mat_err"
-QED
-
-Resume eval_preserves_swt[Assign_tgt_mat_err]:
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> gvs[] >>
-  TRY not_type_error_tac
+  (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   rpt strip_tac >> gvs[] >>
+   TRY not_type_error_tac)
 QED
 
 Resume eval_preserves_swt[Assign_tgt_inl_ok]:
-  (* materialise INL: state unchanged *)
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* Simplify nested case: (case (INL x'',r) of ...) = (res,st') *)
-  qpat_x_assum `(case _ of (INL v,s'') => _ | (INR e,s'') => _) = (res,st')` mp_tac >>
-  simp[] >> strip_tac >>
-  (* assign_target *)
-  Cases_on `assign_target cx x (Replace x'') r` >>
-  rename1 `assign_target cx x (Replace x'') r = (ao_res, st_asgn)` >>
-  (* accounts_well_typed is preserved through assign_target *)
-  `accounts_well_typed st_asgn.accounts` by
-    metis_tac [cj 1 assign_target_preserves_accounts] >>
-  `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
-    suspend "Assign_atwt" >>
-  (* Case split assign_target result *)
-  reverse (Cases_on `ao_res`) >> gvs[return_def] >>
+  (* assign_target INL: res = INL (), st' = st_asgn *)
+  gvs[pair_case_thm, return_def] >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_preserves_swt[Assign_tgt_inr_err]:
+  (* assign_target INR: assign_target never returns ReturnException *)
+  gvs[pair_case_thm, return_def] >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac (cj 1 assign_target_no_return) >>
