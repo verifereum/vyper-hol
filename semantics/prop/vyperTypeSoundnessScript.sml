@@ -1262,22 +1262,22 @@ QED
 Resume eval_preserves_swt[Assign_tgt]:
   (* Apply P3 IH for eval_target *)
   first_x_assum drule_all >> strip_tac >>
-  (* Apply guarded P7 IH for eval_expr BEFORE case split *)
-  qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
-    (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  (* Case split eval_expr *)
+  (* Case split eval_expr — use >- to separate INR/INL for suspend *)
   Cases_on `eval_expr cx e st_tgt` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  suspend "Assign_tgt_inr" >>
-  suspend "Assign_tgt_inl"
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
+    suspend "Assign_tgt_inr" >>
+    suspend "Assign_tgt_inl"
 QED
 
 Resume eval_preserves_swt[Assign_tgt_inr]:
   (* eval_expr returned INR error — propagate *)
-  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-    (qspecl_then [`env`, `st_tgt`, `INR y`, `r`] mp_tac) >>
-  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  (* Apply guarded P7 IH for eval_expr (same pattern as AugAssign) *)
+  qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
+    (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (* Apply unguarded P7 IH via drule_all *)
+  first_x_assum drule_all >> strip_tac >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac eval_expr_not_return >>
@@ -1286,29 +1286,41 @@ Resume eval_preserves_swt[Assign_tgt_inr]:
 QED
 
 Resume eval_preserves_swt[Assign_tgt_inl]:
-  (* eval_expr returned INL — apply P7 IH for toplevel_value_typed *)
-  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-    (qspecl_then [`env`, `st_tgt`, `INL tv`, `r`] mp_tac) >>
+  (* eval_expr returned INL — apply guarded P7 IH then P7 IH *)
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  (* Apply guarded P7 IH for eval_expr *)
+  qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
+    (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (* Apply unguarded P7 IH *)
+  qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
+    (qspecl_then [`env`, `st_tgt`, `INL x'`, `r`] mp_tac) >>
   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  (* Case split materialise *)
-  Cases_on `materialise cx tv r` >>
+  (* Materialise *)
+  Cases_on `materialise cx x' r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
-  (* INR case: materialise error propagation *)
-  (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-   rpt strip_tac >> gvs[] >>
-   TRY not_type_error_tac) >>
+    suspend "Assign_tgt_mat_err" >>
+  (* materialise INL: state unchanged *)
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  Cases_on `assign_target cx x (Replace v) r` >>
-  `state_well_typed r' /\ env_consistent env cx r'` by
+  (* assign_target — use rename1 to lock variable names *)
+  Cases_on `assign_target cx x (Replace x'') r` >>
+  rename1 `assign_target cx x (Replace x'') r = (ao_res, st_asgn)` >>
+  `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
     suspend "Assign_atwt" >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
+  reverse (Cases_on `ao_res`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac (cj 1 assign_target_no_return) >>
   first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []
+QED
+
+Resume eval_preserves_swt[Assign_tgt_mat_err]:
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> gvs[] >>
+  TRY not_type_error_tac
 QED
 
 Resume eval_preserves_swt[Assign_atwt]:
