@@ -1188,47 +1188,43 @@ Resume eval_preserves_swt[Append]:
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Append] >>
   simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
+  (* Step 1: eval_base_target *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
-  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >- (
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    qpat_x_assum `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _`
-      drule_all >> strip_tac >>
-    rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-    rpt strip_tac >> gvs[] >>
-    imp_res_tac eval_base_target_not_return >>
-    first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []) >>
-  Cases_on `x` >> simp_tac (srw_ss()) [] >>
+  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
+  TRY (close_inr_err_tac_for `st_bt` >> NO_TAC) >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   first_x_assum drule_all >> strip_tac >>
-  Cases_on `eval_expr cx e st_bt` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >- (
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
-      (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-    qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
-      (qspecl_then [`env`, `st_bt`, `INR y`, `r`] mp_tac) >>
-    (impl_tac >- (rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC))) >> strip_tac >>
-    rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-    rpt strip_tac >> gvs[] >>
-    imp_res_tac eval_expr_not_return >>
-    first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []) >>
+  (* Discharge guarded P7 IH before eval_expr branching *)
   qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (* Step 2: eval_expr *)
+  Cases_on `eval_expr cx e st_bt` >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+       first_x_assum drule_all >> strip_tac >>
+       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+       rpt strip_tac >> gvs[] >>
+       imp_res_tac eval_expr_not_return >>
+       first_x_assum (qspec_then `v` mp_tac) >>
+       simp_tac (srw_ss()) [] >> NO_TAC) >>
+  rename1 `eval_expr cx e st_bt = (INL tv, r)` >>
   qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
-    (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
-  (impl_tac >- (rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC))) >> strip_tac >>
-  Cases_on `materialise cx x r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >- (
-    imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-    rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    imp_res_tac materialise_error >> gvs[]) >>
+    (qspecl_then [`env`, `st_bt`, `INL tv`, `r`] mp_tac) >>
+  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (* Step 3: materialise *)
+  Cases_on `materialise cx tv r` >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+       rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+       imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+  rename1 `materialise cx tv r = (INL v', r')` >>
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   tp_materialise_conclusion_tac >>
-  Cases_on `assign_target cx (BaseTargetV loc sbs) (AppendOp x') r` >>
+  (* Step 4: assign_target *)
+  Cases_on `assign_target cx (BaseTargetV loc sbs) (AppendOp v') r` >>
   `state_well_typed r' /\ env_consistent env cx r'` by
     suspend "Append_atwt" >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
