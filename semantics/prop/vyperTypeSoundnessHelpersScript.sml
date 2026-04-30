@@ -7305,3 +7305,73 @@ Proof
   rpt strip_tac >> imp_res_tac well_typed_target_BareGlobalNameTarget_in_immutables >>
   fs[]
 QED
+
+(* ===== accounts_well_typed preservation for state operations ===== *)
+
+Theorem update_account_preserves_accounts_well_typed:
+  !acc target storage'.
+    account_well_typed (lookup_account target acc) ==>
+    accounts_well_typed acc ==>
+    accounts_well_typed (update_account target ((lookup_account target acc) with storage := storage') acc)
+Proof
+  simp[accounts_well_typed_def, account_well_typed_def,
+       vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
+       APPLY_UPDATE_THM] >>
+  rpt strip_tac >> Cases_on `addr = target` >> simp[]
+QED
+
+Theorem set_storage_preserves_accounts:
+  !cx st is_t storage'.
+    accounts_well_typed st.accounts ==>
+    accounts_well_typed (set_storage cx st is_t storage').accounts
+Proof
+  Cases_on `is_t` >>
+  simp[set_storage_def, accounts_well_typed_def, account_well_typed_def,
+       vfmStateTheory.lookup_account_def,
+       combinTheory.APPLY_UPDATE_THM, EQ_SYM_EQ] >>
+  rpt strip_tac >> Cases_on `addr = cx.txn.target` >> simp[]
+QED
+
+Theorem write_storage_slot_preserves_accounts:
+  !cx is_trans slot tv v st res st'.
+    write_storage_slot cx is_trans slot tv v st = (res, st') ==>
+    accounts_well_typed st.accounts ==>
+    accounts_well_typed st'.accounts
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `encode_value tv v` >-
+   (* Encode failure: state unchanged *)
+   (imp_res_tac write_storage_slot_error >> gvs[]) >>
+  (* Encode success: use write_storage_slot_eq to get st' = set_storage ... *)
+  `st' = set_storage cx st is_trans
+     (apply_writes slot x (get_storage cx st is_trans))`
+    by (fs[write_storage_slot_eq] >> metis_tac[pairTheory.PAIR_EQ]) >>
+  simp[set_storage_preserves_accounts]
+QED
+
+Theorem set_global_preserves_accounts:
+  !cx src n v st res st'.
+    set_global cx src n v st = (res, st') ==>
+    accounts_well_typed st.accounts ==>
+    accounts_well_typed st'.accounts
+Proof
+  rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
+  Cases_on `lookup_var_slot_from_layout cx b src x'1` >>
+  gvs[return_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
+  drule write_storage_slot_preserves_accounts >> simp[]
+QED
+
+Theorem resolve_array_element_preserves_accounts:
+  !cx b base tv subs st res st'.
+    resolve_array_element cx b base tv subs st = (res, st') ==>
+    accounts_well_typed st.accounts ==>
+    accounts_well_typed st'.accounts
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  imp_res_tac resolve_array_element_state >> gvs[]
+QED
