@@ -1,150 +1,153 @@
 # STATE: Type Soundness Repair
 
-## Session 18: ZERO theorems proved. Root cause of Append failure identified.
+## Session 31: Fix gen tactic bug + prove Append incrementally
 
-## ROOT CAUSE (high confidence, needs HOL verification)
+## PRIORITY 1: Fix close_inr_err_tac / apply_eval_ih
 
-**`first_x_assum drule_all` at line 1176 consumes the WRONG IH.** 
+`apply_eval_ih` (line 795) returns a gentactic, which cannot compose with `>>`
+in Resume blocks. This breaks `close_inr_err_tac` (line 868) and
+`close_inr_err_tac_for` (line 854). Affects: Assign, AugAssign, and any block
+using `TRY close_inr_err_tac` or `reverse (Cases_on q) >> simp_tac >> TRY close_inr_err_tac`.
 
-In the Append proof, after `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` is
-established, there are TWO ∀-assumptions:
-1. **P5 IH**: `∀env st res st'. (∃ty. well_typed_target env bt ty) ∧ ... ⇒ ...`
-2. **Guarded P7 IH**: `∀s'' loc sbs t'. eval_base_target cx bt s'' = (INL (loc,sbs),t') ⇒ ∀env st ...`
-
-`first_x_assum drule_all` picks the NEWEST (∴ guarded P7), matches its antecedent
-`eval_base_target cx bt s'' = (INL (loc,sbs),t')` against the assumption, and
-consumes it. The guarded P7 IH is then GONE.
-
-When lines 1188-1193 try to find the guarded P7 IH again, it doesn't exist → FIRST_ASSAM error.
-
-**Evidence:** `first_x_assum (fn th => if ... same_const u ``eval_base_target`` ... then ...)`
-at line 1188 also fails with FIRST_ASSAM — confirming no ∀-assumption containing
-`eval_base_target` remains.
-
-## FIX PLAN (next session MUST do this first)
-
-### Step 1: Verify (30 seconds)
+**Fix**: Replace `apply_eval_ih` with explicit IH application:
 ```sml
-hol_state_at(line=1177, file="semantics/prop/vyperTypeSoundnessScript.sml")
-```
-After `first_x_assum drule_all >> strip_tac`, check if guarded P7 IH is still in assumptions.
-
-### Step 2: Fix line 1176 — targeted P5 selection
-Replace `first_x_assum drule_all >> strip_tac` with something that ONLY matches P5.
-Option A (if qpat_x_assum parses it):
-```sml
-qpat_x_assum `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _` drule_all >> strip_tac
-```
-Option B (robust, uses let-bound predicate defined BEFORE the proof):
-```sml
-(* Define outside proof: *)
-val is_well_typed_target_ih = fn th => is_forall (concl th) andalso
-  can (find_term (fn u => same_const u ``well_typed_target``)) (concl th) andalso
-  not (can (find_term (fn u => same_const u ``eval_base_target``)) (concl th));
-(* Then in proof: *)
-first_x_assum (fn th => if is_well_typed_target_ih th then drule_all th else NO_TAC) >> strip_tac
+(* Instead of: *)
+reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+TRY close_inr_err_tac >>
+(* Use: *)
+Cases_on `q` >> simp_tac (srw_ss()) [] >-
+(* INR case - explicit IH *)
+(first_x_assum drule >> strip_tac >>
+ rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+ rpt strip_tac >> not_type_error_tac) >>
+(* INL case continues... *)
 ```
 
-### Step 3: Fix lines 1188-1193 — guarded P7 IH application
-After Step 2, the guarded P7 IH should still be in scope. Replace:
+Consider rewriting `close_inr_err_tac_for` to be a proper tactic:
 ```sml
-qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
-  (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-(impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
-  (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
-(impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-```
-With (using same let-bound predicate approach):
-```sml
-first_x_assum (fn th => if is_forall (concl th) andalso
-  can (find_term (fn u => same_const u ``eval_base_target``)) (concl th)
-  then drule_all th else NO_TAC) >> strip_tac >>
-qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >> strip_tac >>
-```
-NOTE: The `same_const` inside `fn th => ...` may not work inside proof context
-(Session 18 finding). If so, define the predicate OUTSIDE the proof as a val binding.
-
-### Step 4: Define `apply_guarded_ih` tactic (generalize)
-After validating on Append, extract a general tactic:
-```sml
-(* Apply a guarded IH by finding it via head constant, then drule_all *)
-fun apply_guarded_ih head_const =
-  first_x_assum (fn th => if is_forall (concl th) andalso
-    can (find_term (fn u => same_const u head_const)) (concl th)
-    then drule_all th else NO_TAC) >> strip_tac
+fun close_inr_err_tac_for st_term =
+  strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> not_type_error_tac
 ```
 
-### Step 5: Apply fix to ALL 14 `impl_tac >- ACCEPT_TAC` occurrences
+## PRIORITY 2: Prove Append incrementally
 
-### Step 6: Also fix ALL ~30 `first_x_assum drule_all` in untested blocks
-Some of these may also have the same wrong-IH problem. Use targeted selection.
+CRITICAL: Build ONE tactic at a time, verify with hol_state_at after EACH.
 
-### Step 7: Full failure inventory
-After fixing Append, cheat remaining untested blocks, build, count cheats.
+```sml
+Resume eval_preserves_swt[Append]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Append]) >>
+  (* VERIFY: check assumptions have well_typed_target env bt (ArrayT (expr_type e) bd) *)
+  qpat_assum `well_typed_target env bt _`
+    (fn th => ASSUME_TAC (Q.EXISTS (`?ty'. well_typed_target env bt ty'`,
+                                    `ArrayT (expr_type e) bd`) th)) >>
+  (* VERIFY: check witness added *)
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  rewrite_tac[ev_Append] >>
+  simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
+  (* VERIFY: check goal has case expr *)
+  Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
+  (* VERIFY: check goal + assumptions *)
+  Cases_on `res_bt` >> simp_tac (srw_ss()) [] >-
+  (* INR case for eval_base_target - TERMINAL, safe to use gvs *)
+  (strip_tac >> gvs[] >>
+   first_x_assum drule >> strip_tac >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   rpt strip_tac >> not_type_error_tac) >>
+  (* VERIFY INR solved, check INL state *)
+  rename1 `eval_base_target cx bt st = (INL tgt_v, st_bt)` >>
+  (* APPLY P5 IH - verify which assumption matches *)
+  first_x_assum drule_all >> strip_tac >>
+  (* VERIFY: P5 conclusions added *)
+  (* Discharge guarded P7 IH *)
+  qpat_x_assum `!s'' gv t. eval_base_target _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `tgt_v`, `st_bt`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (* VERIFY: P7 conclusions added, check variable names *)
+  Cases_on `eval_expr cx e st_bt` >> rename1 `(res_e, st_e)` >>
+  Cases_on `res_e` >> simp_tac (srw_ss()) [] >-
+  (* INR case for eval_expr - TERMINAL *)
+  (strip_tac >> gvs[] >>
+   first_x_assum drule >> strip_tac >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   rpt strip_tac >> not_type_error_tac) >>
+  (* VERIFY INR solved, check INL state *)
+  rename1 `eval_expr cx e st_bt = (INL tv, st_e)` >>
+  (* Apply P7 IH: use the unguarded IH already in assumptions from guarded IH discharge *)
+  (* IMPORTANT: after guarded P7 IH discharge, the eval_expr IH is a plain
+     assumption like: !env st res st'. well_typed_expr env e /\ ... ==>
+     ... Not a forall with eval_base_target guard. *)
+  (* VERIFY: check exact assumption pattern before writing qspecl_then *)
+  (* Then Cases_on materialise, assign_target, etc. step by step *)
+  ...
+```
 
-## BLOCK STATUS (82 total)
+NOTE: After guarded P7 IH discharge + strip_tac, the eval_expr IH assumption
+has variables renamed (env' → env, etc). Use hol_state_at to see the EXACT
+pattern before writing qspecl_then.
 
-### VERIFIED WORKING in holmake (27):
-Pass, Continue, Break, ReturnNone, ReturnSome, Raise1, Raise2, Raise3, Assert1,
-Assert2, Log, Expr, stmts_nil, stmts_cons, BaseTarget, TupleTarget,
-targets_nil, targets_cons, NameTarget, BareGlobalNameTarget,
+## PRIORITY 3: holmake to test untested blocks
+
+After fixing Append and Assign (the known-broken ones), run holmake to see
+which of the 28 untested blocks pass. Many may already work. Then fix only
+the ones that fail.
+
+## PRIORITY 4: Prove cheated helpers
+
+| Theorem | What | Priority |
+|---------|------|----------|
+| assign_target_well_typed | Assignment preserves typing | HIGH - blocks Assign, AugAssign, Append |
+| env_consistent_pop_scope | Pop scope preserves env_consistent | MEDIUM - For, IntCall |
+| bind_arguments_env_consistent | Call arg binding preserves env | MEDIUM - IntCall, ExtCall |
+| set_immutable_well_typed | set_immutable preserves typing | MEDIUM - IntCall |
+| env_consistent_preserves_tv | Eval preserves tv+env_consistent | LOW - already have partial lemmas |
+| eval_expr_not_HashMapRef | Well-typed eval not HashMapRef | LOW - existing lemmas may cover this |
+
+## BLOCK STATUS (55 total, from holmake output with Append cheated)
+
+### PASSING (27): Pass, Continue, Break, ReturnNone, ReturnSome, Raise1, Raise2,
+Raise3, Assert1, Assert2, Expr, Log, stmts_nil, stmts_cons, BaseTarget,
+TupleTarget, targets_nil, targets_cons, NameTarget, BareGlobalNameTarget,
 TopLevelNameTarget, AttributeTarget, for_nil, Name, Literal, exprs_nil
 
-### CHEATED — needs proof (1):
-Assert3 (cheated in session 16)
+### CHEATED (2): Assert3, Append
+NOTE: Append_atwt suspend is orphaned (Append cheated past the suspend call).
+Need to also cheat or remove the Append_atwt Resume block.
 
-### UNTESTED — build fails at Append before reaching these (~54):
-AnnAssign, Append_atwt, Assign, Assign_atwt, AugAssign, AugAssign_atwt,
-If, If_True, If_False, For, Array, Range, SubscriptTarget, for_cons,
-BareGlobalName, TopLevelName, FlagMember, IfExp, IfExp_True, IfExp_False,
-StructLit, Subscript, Subscript_tail, Subscript_result, Subscript_INL,
-Subscript_INR, Attribute, Builtin, Builtin_Len, Builtin_Len_main,
-Builtin_NonLen, Builtin_INL, Pop, Pop_vht, TypeBuiltin, Send, ExtCall,
-IntCall, intcall_tail, dflts_ih, intcall_chain, intcall_inl,
-chain_sc, chain_bind, chain_bind_swt, chain_bind_ec, chain_ih,
-chain_every_swt, RawCallTarget, RawLog, RawRevert,
-SelfDestructTarget, CreateTarget, exprs_cons
+### KNOWN BROKEN by gen tactic: Assign, AugAssign (use close_inr_err_tac)
 
-### CHEATS in helpers file (6):
-| Line | Theorem | What |
-|------|---------|------|
-| 1347 | env_consistent_pop_scope | Pop scope preserves env_consistent |
-| 1503 | env_consistent_preserves_tv | Eval preserves tv+env_consistent |
-| 1560 | bind_arguments_env_consistent | Call arg binding preserves env |
-| 1982 | set_immutable_well_typed | set_immutable preserves typing |
-| 2364 | assign_target_well_typed | Assignment replace preserves typing |
-| 7206 | eval_expr_not_HashMapRef | Well-typed eval not HashMapRef |
+### UNTESTED (26): AnnAssign, Array, Attribute, BareGlobalName, Builtin,
+CreateTarget, ExtCall, FlagMember, For, If, IfExp, IntCall, Pop, Range,
+RawCallTarget, RawLog, RawRevert, SelfDestructTarget, Send, StructLit,
+Subscript, SubscriptTarget, TopLevelName, TypeBuiltin, exprs_cons, for_cons
 
-## PRIORITY ORDER (next session)
+## QPAT_X_ASSUM RULES
+- NO wildcards `_` in patterns → Q_TAC0 parse error
+- NO Unicode (∃∧⇒∀) → Q_TAC0 parse error, use ASCII (? /\ ==> !)
+- Parenthesize existentials: `(?ty. P ty) /\ _` not `?ty. P ty /\ _`
 
-1. **Verify root cause** at line 1176 via hol_state_at (1 min)
-2. **Fix line 1176** — targeted P5 selection (5 min)
-3. **Fix lines 1188-1193** — guarded P7 drule_all (5 min)
-4. **Validate Append** via holmake (2 min)
-5. **Define apply_guarded_ih** and replace all 14 impl_tac>ACCEPT_TAC (30 min)
-6. **Fix Assert3** — use switch_BoolV_cases boundary lemma (15 min)
-7. **Full inventory** — cheat remaining untested blocks, build, count (10 min)
-8. **Systematic repair** — fix blocks by category
-
-## WHAT NOT TO TRY
-- `qpat_x_assum` with primed variables (`s''`, `loc'`) → Q_TAC0 error
-- `first_x_assum drule_all` when multiple ∀-IHs exist → consumes wrong IH
-- `same_const u ``const_name``` inside fn th => ... within proof quotations
-- `Cases_on v` where `v : value` → TIMEOUT
-- `>- (* INR case *)` after `Cases_on q` → targets wrong subgoal
-- `qspecl_then` with backtick terms → TYPE ERRORS
-- `simp[AllCaseEqs()]` on monadic bind chains → TIMEOUT
+## gvs[] USAGE RULES
+- SAFE: terminal cases (after `>-`), final cleanup
+- UNSAFE: after case splits when later steps need forall-quantified IHs
+- Use `simp_tac (srw_ss()) []` instead for non-terminal case splits
+- After gvs[], NEVER use `first_x_assum drule_all` (IH may be consumed)
 
 ## KEY FILES
-- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~3985 LOC)
+- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~3930 LOC)
+  - close_inr_err_tac definition: line 854-868
+  - apply_eval_ih definition: line 795
+  - tp_materialise_conclusion_tac: line 339
 - Helpers: semantics/prop/vyperTypeSoundnessHelpersScript.sml (~7307 LOC)
 - Workdir: semantics/prop/
 
-## ORACLE FEEDBACK
-Session 18 oracle (anthropic/claude-opus-4.6): Identified `drule_all` as replacement
-for `qspecl_then + impl_tac`, which was directionally correct. But missed that
-`first_x_assum drule_all` at line 1176 was the actual root cause — oracle focused
-on the explicit failure point rather than the earlier silent IH consumption.
-When using oracle for debugging, always ask it to examine ALL `first_x_assum`
-calls in the preceding proof steps, not just the failing line.
+## WHAT NOT TO TRY
+- Writing 5+ tactic lines without verifying with hol_state_at (FAILED 6x in S29)
+- gvs[] after case splits when later steps need IHs
+- close_inr_err_tac / apply_eval_ih in Resume blocks (gentactic bug)
+- qpat_x_assum with _ wildcards (Q_TAC0)
+- first_x_assum drule_all after gvs[] (IH already consumed)
+- apply_guarded_ih (uses drule_all internally, may consume wrong IH)

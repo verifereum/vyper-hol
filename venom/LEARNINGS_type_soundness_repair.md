@@ -1,111 +1,125 @@
 # LEARNINGS: Type Soundness Repair
 
-## IH Application: The Critical Pattern (Sessions 9-13, 18)
+## gvs[] Auto-Applies IHs (Session 28 KEY discovery)
 
-### BROKEN: `qspecl_then` with backtick terms
-Backtick terms get FIXED types at SML definition time. Type mismatches → SPECL HOL_ERR
-→ FIRST_ASSAM error. ROOT CAUSE of 57 block failures in sessions 9-11.
+### `Cases_on q >> gvs[]` handles everything
+After `Cases_on `q` >> gvs[]` (no extra rewrites), the augmented simpset:
+1. **Auto-solves INR error cases** via exception_distinct + error_distinct
+2. **Auto-applies IHs** for the INL case via assumption resolution (if ∃-witness exists)
+3. **Adds IH conclusions** as assumptions: state_well_typed, env_consistent, accounts_well_typed
 
-### WORKING: `qpat_x_assum + drule_all`
+### NEVER use `first_x_assum drule_all` after gvs[] — the IH is ALREADY consumed
+This is the #1 failure pattern across sessions 26-28. Symptoms: FIRST_ASSAM error,
+"no suitable assumption", or wrong IH consumed.
+
+### CORRECT monadic case split pattern (replaces ALL previous):
 ```sml
-qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >> strip_tac
-```
-Auto-matches ALL antecedents, no explicit term construction needed.
-
-### CRITICAL: `first_x_assum drule_all` consumes WRONG IH (Session 18)
-When multiple ∀-IHs exist, `first_x_assum` picks the NEWEST. In Append block line 1176,
-it consumed the guarded P7 IH (containing `eval_base_target`) instead of P5 IH,
-leaving no `eval_base_target` ∀-assumption for later steps. This was misdiagnosed
-as a `qspecl_then` failure for 3 sessions.
-
-**Fix: Use `qpat_x_assum` with a pattern that ONLY matches the target IH.**
-For P5: `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _`
-For guarded P7: use `first_x_assum (fn th => if is_forall (concl th) andalso can (find_term ...) (concl th) then ...)`
-
-### AVOID: `first_assum ACCEPT_TAC` for guard discharge (Session 16)
-Definition changes altered assumption ordering. Use `qpat_x_assum` with specific pattern.
-
-### AVOID: `qpat_x_assum` with primed variables (Session 18)
-`` `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _` ``
-produces `Q_TAC0` parsing error. Use `first_x_assum (fn th => ...)` with `same_const` test instead.
-
-### CANNOT use `same_const` inside `fn th => ...` in proof quotations (Session 18)
-`` same_const u ``eval_base_target`` `` inside a `fn th => if ...`
-continuation in a proof sequence may not resolve correctly — `FIRST_ASSAM` error.
-The constant reference works in top-level SML but may fail inside proof context.
-**Alternative:** Use a let-bound predicate function defined OUTSIDE the proof.
-
-## SUBGOAL ORDERING (Sessions 14-15)
-
-### After `Cases_on 'q'`, INL is FIRST, INR is SECOND
-```sml
-Cases_on `q` >> simp_tac (srw_ss()) [] >>
-TRY (strip_tac >> ... >> NO_TAC) >>
-(* Now only the INL case remains *)
+Cases_on `eval_X cx arg st` >>
+Cases_on `q` >> gvs[] >>
+(* gvs[] auto-solves INR + applies IH for INL case *)
+(* Add ONLY what gvs[] can't handle *)
 ```
 
-## VARIABLE NAMING AFTER SIMPLIFICATION (Session 16)
-
-### gvs[] changes variable structure
-After gvs, variable naming differs from old expectations.
-NEVER assume variable names — check with `hol_state_at`.
-
-### `Cases_on v` where `v : value` → TIMEOUT
-Use boundary lemmas (`switch_BoolV_cases`, `toplevel_value_typed_BoolT_inv`) instead.
-
-## ABSTRACTION: Use boundary lemmas, not definition unfolding
-
-### switch_BoolV: use `switch_BoolV_cases`, not `switch_BoolV_def`
-Also available: `switch_BoolV_preserves`, `switch_BoolV_error`
-
-## SML SYNTAX PITFALLS (Session 15)
-- `&&` = simpset conjunction, NOT boolean. Use `andalso`.
-- `PRED_ASSUM` takes `term -> bool`, not `thm -> bool`.
-
-## hol_check_proof vs holmake (Session 15)
-`hol_check_proof` does NOT verify Resume blocks. Only `holmake` does.
-
-## KEY INSIGHT: simp_tac can SOLVE entire blocks (Session 13)
-After augmented simpset (exception_distinct, error_distinct at line 26),
-try `rewrite_tac[ev_X] >> simp_tac (srw_ss()) [bind_apply, BETA_THM] >> gvs[]`
-BEFORE adding manual IH application.
-
-## Guarded IH discharge (14+ blocks)
-OLD (fragile): `qpat_x_assum ... (qspecl_then [...] mp_tac) >> impl_tac >- ACCEPT_TAC`
-NEW (robust): Define `apply_guarded_ih` tactic that uses `first_x_assum (fn th => ...)`
-with a let-bound predicate.
-
-## INR error propagation pattern (30+ instances)
+### GUARDED IH: needs explicit qspecl_then (2+ blocks)
+gvs[] can't match guarded IH antecedents with pair destructuring:
 ```sml
-strip_tac >>
-qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
-strip_tac >> no_return_from_eval >> gvs[]
+qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
+  (qspecl_then [`st`, `FST x'`, `SND x'`, `st_bt`] mp_tac) >>
+(impl_tac >- first_assum ACCEPT_TAC) >> strip_tac
 ```
 
-## Constructor distinctness (no-TypeError/no-return conjuncts)
-`augment_srw_ss[rewrites [exception_distinct, error_distinct]]` at line 26.
+### Q.EXISTS for ∃-witness (3 blocks: Assign, AugAssign, Append)
+```sml
+qpat_assum `well_typed_target env bt _`
+  (fn th => ASSUME_TAC (Q.EXISTS (`?ty'. well_typed_target env bt ty'`,
+                                  `ArrayT (expr_type e) bd`) th))
+```
 
-## State lemmas for pure operations (10+ uses)
-materialise_state, get_Value_state, lift_option_type_state, etc.
-All: `st' = st`. Use: `imp_res_tac X_state >> gvs[]`
+## Quotation Syntax
 
-## materialise TypeError chain (7 lemmas in helpers)
-materialise TypeError → is_HashMapRef → tyv = NoneTV → NoneT → well_typed excludes NoneT
+### NO Unicode in qpat_x_assum quotations
+`∃`, `∧`, `⇒`, `∀` cause Q_TAC0 parse errors. Use ASCII: `?`, `/\`, `==>`, `!`
 
-## IH function-specific patterns for qpat_x_assum
-- P7 (eval_expr): `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _`
-- P0 (eval_stmt): `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _`
-- P1 (eval_stmts): `∀env ret_ty st res st'. well_typed_stmts _ _ _ ∧ _ ⇒ _`
-- P2 (eval_iterator): `∀env typ st res st'. well_typed_iterator _ _ _ ∧ _ ⇒ _`
-- P3 (eval_target): `∀env st res st'. ∃ty. well_typed_atarget _ _ ty ∧ _ ⇒ _`
-- P5 (eval_base_target): `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _`
-- P5 (alt for target): `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _`
-- P8 (eval_exprs): `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _`
-- P6 (eval_for): 7 ∀-vars → needs separate pattern
+### Parenthesize existentials
+`?ty. P ty /\ _` parses as `?ty. (P ty /\ _)`. Need `(?ty. P ty) /\ _`.
 
-## evaluate_builtin_well_typed (FULLY PROVED, in vyperBuiltinTyping)
-Takes `accounts_well_typed acc` precondition. Covers ALL builtin cases.
+## SML Type System in Resume Blocks
 
-## Key boundary lemmas (defined in main file, lines 217-233)
+- `>- tac1 >- tac2` → SML type error (gentactic mismatch)
+- `>- suspend` → type error (suspend creates subgoal)
+- `apply_eval_ih` returns gentactic → cannot compose with `>>`
+- Use `>>` between steps, `>-` only when solving exactly one subgoal
+
+## State Preservation Lemmas (10+ uses)
+All pure ops: `st' = st`. Use: `imp_res_tac X_state >> gvs[]`
+- materialise_state, get_Value_state, lift_option_type_state
+- lift_option_state, lift_sum_state, check_state
+- type_check_state, switch_BoolV_state
+
+## Key Boundary Lemmas
+
+### In vyperTypeSoundnessHelpersScript.sml (308 theorems):
+- append_chain_decompose, assign_target_well_typed_ao
+- assign_subscripts_append_dynamic, materialise_no_type_error
+- evaluate_type_NoneTV_imp_NoneT
+
+### In main file (lines 217-233):
 - evaluate_type_BaseT_inv, toplevel_value_typed_for_BaseT
 - toplevel_value_typed_BoolT_inv, value_has_type_BoolT_inv
+
+### In vyperBuiltinTyping:
+- evaluate_builtin_well_typed: all builtin operations preserve typing
+
+## Variable Naming
+gvs[] changes variable structure. NEVER assume names.
+Always use `rename1` after gvs/cases to re-establish expected names.
+
+## Testing Discipline
+- Test after EACH rewrite, not after 3
+- hol_check_proof does NOT verify Resume blocks; only holmake does
+- Call plan_oracle after 2-3 failed attempts, not 15+
+
+## AVOID
+- `first_x_assum drule_all` after gvs[] — IH already consumed
+- `apply_eval_ih` in Resume blocks — type error (gentactic)
+- Unicode in qpat_x_assum quotations — Q_TAC0
+- `>- (close_inr_err_tac ...)` when augmented ss may solve INR
+- `Cases_on v` where `v : value` → TIMEOUT
+- `simp[AllCaseEqs()]` on monadic bind chains → TIMEOUT
+- `>- suspend` — suspend creates a subgoal, doesn't solve one
+- Making 5+ edits without testing after each
+
+## Gentactic Bug: close_inr_err_tac / apply_eval_ih (Session 29)
+
+### `apply_eval_ih` returns gentactic → CANNOT compose with >> in Resume blocks
+This breaks `close_inr_err_tac` and `close_inr_err_tac_for`.
+Affects: Assign, AugAssign, any block using `TRY close_inr_err_tac`.
+Fix: Replace with explicit drule + qspecl_then IH application.
+
+### Pattern for INR case in monadic bind proofs (replaces close_inr_err_tac):
+```sml
+Cases_on `res` >> simp_tac (srw_ss()) [] >-
+(* INR case - terminal, can use gvs *)
+(strip_tac >> gvs[] >>
+ first_x_assum drule >> strip_tac >>
+ rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+ rpt strip_tac >> not_type_error_tac) >>
+(* INL case continues *)
+```
+
+## qpat_x_assum Constraints
+
+### NO wildcards `_` in qpat_x_assum patterns
+`\`!env st res st'. (?ty. _) /\ _ ==> _\`` → Q_TAC0 ERROR
+Use concrete patterns matching your assumption, or use drule/drule_all.
+
+### NO Unicode (∃∧⇒∀) in qpat_x_assum → Q_TAC0 ERROR
+Use ASCII: ?, /\, ==>, !
+
+## Incremental Construction (CRITICAL)
+
+Writing 5+ tactic lines without verifying is the #1 failure pattern.
+After EACH tactic, use hol_state_at to verify the goal state matches
+expectations. If variables don't match, rename/fix BEFORE continuing.
+This is NOT optional - it's the difference between 1-pass success and
+6-attempt failure.
