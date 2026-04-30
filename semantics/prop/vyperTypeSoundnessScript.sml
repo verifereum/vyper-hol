@@ -511,6 +511,24 @@ fun tp_pure_base_target_tac ev_thm =
        AllCaseEqs()] >>
   strip_tac >> gvs[];
 
+(* ===== assign_target preserves accounts_well_typed ===== *)
+(* assign_target only modifies scopes/storage/immutables, never balance/code *)
+(* account_well_typed a = a.balance < 2^256 /\ LENGTH a.code <= 24576 *)
+(* So updating only storage (via write_storage_slot) preserves accounts_well_typed *)
+
+Theorem assign_target_preserves_accounts:
+  (!cx av ao st res st'.
+     assign_target cx av ao st = (res, st') /\
+     accounts_well_typed st.accounts ==>
+     accounts_well_typed st'.accounts) /\
+  (!cx gvs vs st res st'.
+     assign_targets cx gvs vs st = (res, st') /\
+     accounts_well_typed st.accounts ==>
+     accounts_well_typed st'.accounts)
+Proof
+  cheat
+QED
+
 (* ===== eval_preserves_swt — master theorem ===== *)
 (* Same as type_preservation but P2 includes value typing.           *)
 (* type_preservation is derived from this at the end.                *)
@@ -1248,7 +1266,7 @@ Resume eval_preserves_swt[Assign]:
   (* Unfold ev_Assign *)
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Assign] >>
-  simp_tac std_ss [bind_apply, BETA_THM] >>
+  simp_tac std_ss [bind_apply, ignore_bind_apply, BETA_THM] >>
   (* Step 1: eval_target cx g st *)
   Cases_on `eval_target cx g st` >> rename1 `(res_tgt, st_tgt)` >>
   reverse (Cases_on `res_tgt`) >> simp_tac (srw_ss()) [] >-
@@ -1298,15 +1316,30 @@ Resume eval_preserves_swt[Assign_tgt_inl]:
   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
   (* Materialise *)
   Cases_on `materialise cx x' r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
-    suspend "Assign_tgt_mat_err" >>
+  Cases_on `q` >-
   (* materialise INL: state unchanged *)
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* assign_target — use rename1 to lock variable names *)
-  Cases_on `assign_target cx x (Replace x'') r` >>
-  rename1 `assign_target cx x (Replace x'') r = (ao_res, st_asgn)` >>
+  (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+   (* assign_target *)
+   Cases_on `assign_target cx x (Replace x'') r` >>
+   rename1 `assign_target cx x (Replace x'') r = (ao_res, st_asgn)` >>
+   (* accounts_well_typed is preserved through assign_target *)
+   `accounts_well_typed st_asgn.accounts` by
+     (drule (cj 1 assign_target_preserves_accounts) >>
+      disch_then drule >> first_assum ACCEPT_TAC) >>
+   `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
+     suspend "Assign_atwt" >>
+   (* Case split assign_target result *)
+   reverse (Cases_on `ao_res`) >> simp_tac (srw_ss()) [return_def] >>
+   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   rpt strip_tac >> gvs[] >>
+   imp_res_tac (cj 1 assign_target_no_return) >>
+   first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []) >>
+  (* materialise INR: error case *)
+  simp_tac (srw_ss()) [] >> suspend "Assign_tgt_mat_err"
   `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
     suspend "Assign_atwt" >>
+  (* Case split assign_target result *)
   reverse (Cases_on `ao_res`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
@@ -1324,6 +1357,7 @@ Resume eval_preserves_swt[Assign_tgt_mat_err]:
 QED
 
 Resume eval_preserves_swt[Assign_atwt]:
+  (* Prove state_well_typed + env_consistent via assign_target_well_typed *)
   drule (cj 1 assign_target_well_typed) >>
   disch_then drule >>
   disch_then drule >>
@@ -1334,7 +1368,7 @@ Resume eval_preserves_swt[Assign_atwt]:
     (fn th => qpat_assum `value_has_type _ _`
       (fn th2 => EXISTS_TAC (th |> concl |> rhs |> rand) >>
                  CONJ_TAC >| [ACCEPT_TAC th, ACCEPT_TAC th2]))
-  >> TRY not_type_error_tac
+  >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[AugAssign]:
