@@ -526,7 +526,102 @@ Theorem assign_target_preserves_accounts:
      accounts_well_typed st.accounts ==>
      accounts_well_typed st'.accounts)
 Proof
-  cheat
+  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac
+  >- (* ScopedVar: set_scopes doesn't touch accounts *)
+   (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+         lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(),
+         raise_def, LET_THM, ignore_bind_def, set_scopes_def] >>
+    strip_tac >>
+    Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+    gvs[return_def, raise_def] >>
+    PairCases_on `x'` >>
+    gvs[bind_def, type_check_def, assert_def, sum_CASE_rator, AllCaseEqs(),
+        return_def, raise_def, set_scopes_def] >>
+    Cases_on `assign_subscripts x'2.type x'2.value (REVERSE is) ao` >>
+    gvs[return_def, raise_def] >>
+    imp_res_tac assign_result_state >> gvs[])
+  >- (* TopLevelVar: storage ops preserve accounts_well_typed *)
+   (strip_tac >>
+    gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
+        bind_def, lift_option_def, lift_option_type_def, lift_sum_def,
+        ignore_bind_def,
+        option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+    qpat_x_assum `_ = (res, st')` mp_tac >>
+    simp[bind_def, return_def, raise_def, ignore_bind_def,
+         lift_option_def, lift_option_type_def, lift_sum_def,
+         check_def, assert_def,
+         option_CASE_rator, prod_CASE_rator, sum_CASE_rator,
+         type_value_CASE_rator, toplevel_value_CASE_rator,
+         assign_operation_CASE_rator, bound_CASE_rator,
+         AllCaseEqs(), PULL_EXISTS] >>
+    rpt strip_tac >>
+    TRY (pairarg_tac >> gvs[bind_def, return_def, raise_def,
+        AllCaseEqs(), option_CASE_rator, prod_CASE_rator, sum_CASE_rator,
+        type_value_CASE_rator, assign_operation_CASE_rator, bound_CASE_rator,
+        check_def, assert_def, ignore_bind_def,
+        lift_option_def, lift_option_type_def, lift_sum_def, PULL_EXISTS] >>
+      rpt strip_tac) >>
+    MAP_EVERY (fn th => TRY (imp_res_tac th >> gvs[]))
+      [assign_result_state,
+       write_storage_slot_preserves_accounts,
+       set_global_preserves_accounts,
+       resolve_array_element_preserves_accounts,
+       read_storage_slot_state,
+       resolve_array_element_state,
+       lookup_global_state,
+       vyperStorageBackendTheory.get_storage_backend_state])
+  >- (* ImmutableVar: set_immutable doesn't touch accounts *)
+   (strip_tac >>
+    simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+         lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >-
+    gvs[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+        lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
+    qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+    simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
+         lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
+    Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
+    simp[return_def, raise_def] >>
+    PairCases_on `x'` >> simp[] >>
+    Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
+    simp[lift_sum_def, return_def, raise_def] >>
+    simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
+         set_address_immutables_def, lift_option_def, lift_option_type_def, return_def, LET_THM] >>
+    strip_tac >> gvs[] >>
+    imp_res_tac assign_result_state >> gvs[])
+  >- (* TupleTargetV + TupleV: recursive via assign_targets IH *)
+   (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    simp[Once assign_target_def, check_def, type_check_def, AllCaseEqs(),
+         return_def, raise_def] >>
+    simp[bind_def, ignore_bind_def, assert_def, return_def, AllCaseEqs()] >>
+    strip_tac >> gvs[] >>
+    first_x_assum drule >> simp[])
+  >- (* 13 catch-all raise cases *)
+    simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- simp[Once assign_target_def, raise_def]
+  >- (* assign_targets [] []: trivial *)
+   simp[Once assign_target_def, return_def]
+  >- (* assign_targets cons: recursive via IH *)
+   (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    simp[Once assign_target_def, bind_def, ignore_bind_def, AllCaseEqs(),
+         return_def, raise_def] >>
+    strip_tac >> gvs[] >>
+    rename1 `assign_target _ _ _ st = (_, s_mid)` >>
+    rename1 `assign_targets _ _ _ s_mid = (_, st')` >>
+    last_x_assum (qspec_then `st` mp_tac) >> disch_then drule >> strip_tac >>
+    first_x_assum (qspec_then `s_mid` mp_tac) >> disch_then drule >> simp[])
+  >- (* assign_targets mismatch: raise *)
+   simp[Once assign_target_def, raise_def]
 QED
 
 (* ===== eval_preserves_swt — master theorem ===== *)

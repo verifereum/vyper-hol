@@ -7339,14 +7339,8 @@ Theorem write_storage_slot_preserves_accounts:
     accounts_well_typed st'.accounts
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
-  Cases_on `encode_value tv v` >-
-   (* Encode failure: state unchanged *)
-   (imp_res_tac write_storage_slot_error >> gvs[]) >>
-  (* Encode success: use write_storage_slot_eq to get st' = set_storage ... *)
-  `st' = set_storage cx st is_trans
-     (apply_writes slot x (get_storage cx st is_trans))`
-    by (fs[write_storage_slot_eq] >> metis_tac[pairTheory.PAIR_EQ]) >>
-  simp[set_storage_preserves_accounts]
+  Cases_on `encode_value tv v` >> gvs[write_storage_slot_eq] >>
+  irule set_storage_preserves_accounts >> simp[]
 QED
 
 Theorem set_global_preserves_accounts:
@@ -7357,10 +7351,12 @@ Theorem set_global_preserves_accounts:
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
-  PairCases_on `x'` >> gvs[] >>
-  Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
-  Cases_on `lookup_var_slot_from_layout cx b src x'1` >>
+  rename1 `SOME ts` >>
+  Cases_on `find_var_decl_by_num n ts` >> gvs[return_def, raise_def] >>
+  rename1 `SOME decl_id` >> PairCases_on `decl_id` >> gvs[] >>
+  Cases_on `decl_id0` >> gvs[return_def, raise_def, bind_def] >>
+  rename1 `StorageVarDecl is_tr typ` >>
+  Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
   gvs[return_def, raise_def] >>
   Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
   drule write_storage_slot_preserves_accounts >> simp[]
