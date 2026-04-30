@@ -245,7 +245,7 @@ Definition evaluate_binop_def:
             then INR (RuntimeError "Div overflow")
             else bounded_int_op u $
               (if is_Unsigned u
-               then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
+               then &(Num i1 DIV Num i2)
                else w2i $ word_quot ((i2w i1):bytes32) (i2w i2)))
                 | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
@@ -271,7 +271,7 @@ Definition evaluate_binop_def:
            if i2 = 0 then INR (RuntimeError "UDiv0") else
            wrapped_int_op u $
              (if is_Unsigned u
-              then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
+              then &(Num i1 DIV Num i2)
               else w2i $ word_quot ((i2w i1):bytes32) (i2w i2))
              | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
@@ -280,7 +280,7 @@ Definition evaluate_binop_def:
            (if i2 = 0 then INR (RuntimeError "Mod0") else
             bounded_int_op u $
               (if is_Unsigned u
-               then &(w2n $ word_mod ((i2w i1):bytes32) (i2w i2))
+               then &(Num i1 MOD Num i2)
                else w2i $ word_rem ((i2w i1):bytes32) (i2w i2)))
                 | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
