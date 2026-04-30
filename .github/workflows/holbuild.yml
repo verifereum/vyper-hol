@@ -17,7 +17,6 @@ concurrency:
 env:
   HOLBUILD_REPO: https://github.com/charles-cooper/holbuild.git
   HOLBUILD_REF: ${{ inputs.holbuild-ref || 'master' }}
-  HOLBUILD_JOBS: "2"
 
 jobs:
   build:
@@ -66,7 +65,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --holdir "$HOLDIR" -j"$HOLBUILD_JOBS" build --skip-checkpoints --skip-goalfrag
+          holbuild --holdir "$HOLDIR" -j"$(nproc)" build --skip-checkpoints --skip-goalfrag
 
       - name: Verify no successful-build checkpoints remain
         run: |
