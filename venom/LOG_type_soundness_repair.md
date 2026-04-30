@@ -30,3 +30,14 @@ L024: [Raise3] RESTRUCTURED to use new apply_eval_ih. Still fails at FIRST_ASSUM
 L025: [Assert3] After cheating Raise3, Assert3 fails at `Cases_on 'b'` — "No var with name b free in goal". Root cause: `drule_all` at line 1141 doesn't properly apply IH — new `accounts_well_typed` antecedent may not resolve from assumptions
 L026: [KEY][debugging] HOLMAKE-ONLY debugging is TOO SLOW (16-45s/cycle). Should use `hol_state_at` for interactive proof state inspection. Cheating all failing blocks first then inspecting each with hol_state_at is the right workflow
 L027: [KEY][SPECL vars] IH bound variable NAMES from strip_forall may not be usable directly as SPECL terms — the types might differ after theorem instantiation. Need to test this interactively with hol_state_at
+
+## Session 12
+
+L028: [KEY][apply_eval_ih] CONFIRMED: SPECL specializes POSITIONALLY (not by name). Type of specializing terms must match ∀-variable types. Backtick terms get fixed types at SML definition time → type mismatch in different proof contexts → HOL_ERR → FIRST_ASSUM
+L029: [drule_all] ReturnSome (line 752) proves `qpat_x_assum + drule_all` pattern works for IH application. No explicit term specialization needed. THIS IS THE FIX.
+L030: [Raise3] ATTEMPTED fix with drule_all pattern. Written to file but NOT VERIFIED through build.
+L031: [apply_eval_ih] ATTEMPTED rewrite to use drule_all with function-specific qpat_x_assum patterns. NOT VERIFIED through build.
+L032: [cheat-all] Python script to cheat 55 complex blocks — DESTROYED nested suspend structure (Append_atwt lost). Must not cheat outer blocks containing inner suspends.
+L033: [Assert3] Failure diagnosis: `first_x_assum drule_all` picks WRONG IH when multiple ∀-assumptions exist. Fix: use `qpat_x_assum` with function-specific pattern instead of `first_x_assum`.
+L034: [Append] After cheating Assert3, fails at `Cases_on x` — "No var with name x". Root cause: `drule_all` applied wrong IH, assumptions don't contain expected typing info.
+L035: [BLOCK COUNT] 25 working blocks, 55+ failing blocks, 6 cheats in helpers. All failures share same root cause: IH application mechanism.

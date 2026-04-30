@@ -1,105 +1,120 @@
 # STATE: Type Soundness Repair
 
-## STRATEGIC PLAN (Session 12)
+## STRATEGIC PLAN (Session 13)
 
-### PRIORITY 1: Fix `apply_eval_ih` SPECL exception handling
+### PRIORITY 1: Fix IH application infrastructure (HIGH RISK)
 
-**Root cause:** `SPECL` raises `HOL_ERR` when types don't match. `first_x_assum`
-treats exceptions as failure and skips to next assumption. If ALL ∀-assumptions'
-SPECL calls fail, `first_x_assum` raises `FIRST_ASSUM` error — even though a
-∀-assumption with a matching IH exists.
+**Root cause confirmed:** `apply_eval_ih` uses `qpat_x_assum + qspecl_then` with backtick terms.
+The backtick terms get FIXED types at SML definition time. When applied in different proof
+contexts, SPECL raises HOL_ERR on type mismatch. `FIRST` doesn't handle these exceptions
+from sub-tactics, so all alternatives fail → FIRST_ASSUM error.
 
-**Fix:** Wrap SPECL in exception handler so failed specializations are skipped:
+**Working pattern (verified in ReturnSome, line 752):**
+```sml
+qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+  drule_all >> strip_tac
+```
+This works because `drule_all` automatically matches ALL IH antecedents against
+assumptions, specializing `res` and `st'` correctly without explicit terms.
+
+**Fix plan:**
+1. Replace `apply_eval_ih` with `drule_all`-based version
+2. Test on Raise3 first (simplest failing block)
+3. If `drule_all` is too slow, fall back to `drule` (matches only first antecedent)
+
+**New `apply_eval_ih`:**
 ```sml
 fun apply_eval_ih res_term st_term =
-  first_x_assum (fn th =>
-    if is_forall (concl th) then
-      let val vars = fst (strip_forall (concl th))
-          val n = length vars
-      in if n >= 2 then
-           let val front = List.take (vars, n-2)
-               val spec_th = SPECL (front @ [res_term, st_term]) th
-                    handle HOL_ERR _ => raise UNCHANGED
-           in mp_tac spec_th end
-         else NO_TAC
-      end handle UNCHANGED => NO_TAC
-    else NO_TAC) >>
-  simp_tac (srw_ss()) [] >> strip_tac
+  FIRST [
+    qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env ret_ty st res st'. well_typed_stmts _ _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env typ st res st'. well_typed_iterator _ _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env st res st'. ∃ty. well_typed_atarget _ _ ty ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env st res st'. EVERY _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _` drule_all
+  ] >> strip_tac
 ```
 
-**IMPORTANT:** If `handle UNCHANGED => NO_TAC` doesn't work with `first_x_assum`
-(because UNCHANGED has special semantics in HOL4), use a different approach:
+NOTE: `res_term` and `st_term` are kept for API compat but IGNORED. `drule_all`
+handles specialization automatically.
+
+### PRIORITY 2: Fix `close_inr_err_tac` and `tp_bind_err_tac`
+
+Both call `apply_eval_ih` with explicit result/state terms. After the `drule_all` fix,
+these arguments are ignored. The tactics should still work since `drule_all` handles
+specialization.
+
+### PRIORITY 3: Fix guarded IH blocks (MEDIUM RISK)
+
+Blocks like Append, Assign, AugAssign use:
 ```sml
-fun apply_eval_ih res_term st_term =
-  ASSUM_LIST (fn ths =>
-    let val ih_th = List.find (fn th =>
-          is_forall (concl th) AndAlso
-          length (fst (strip_forall (concl th))) >= 2) ths
-    in case ih_th of
-         SOME th => let val vars = fst (strip_forall (concl th))
-                        val n = length vars
-                        val front = List.take (vars, n-2)
-                    in mp_tac (SPECL (front @ [res_term, st_term]) th) end
-       | NONE => NO_TAC
-    end) >>
-  simp_tac (srw_ss()) [] >> strip_tac
+qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv, t) ==> _`
+  (fn ih => mp_tac (ih |> Q.SPECL [`st`, `Value (BoolV F)`, `r`]))
 ```
+This also uses explicit terms. Replace with:
+```sml
+qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv, t) ==> _`
+  (fn ih => mp_tac ih >> impl_tac >- first_assum ACCEPT_TAC) >> strip_tac
+```
+Or use `discharge_ih_tac` (already defined, lines 380-405).
 
-**Verification:** After fixing, test on Raise3 first (simplest failing block with IH application).
+### PRIORITY 4: Fix remaining ~55 blocks
 
-### PRIORITY 2: Cheat all failing blocks, then inspect each with hol_state_at
+After infrastructure fixes, rebuild and fix any remaining failures one by one.
 
-After Priority 1, if some blocks still fail:
-1. Temporarily `cheat` all blocks that use `apply_eval_ih` / `close_inr_err_tac` / `tp_bind_err_tac`
-2. Build to verify the skeleton compiles with all cheats
-3. Replace one cheat at a time, use `hol_state_at` to inspect REAL proof state
-4. Fix the tactic based on what's actually in the assumptions
+### PRIORITY 5: Prove 6 cheats in helpers file
 
-### PRIORITY 3: Fix `drule_all` calls in blocks like Assert3
+## BLOCK STATUS (Session 12)
 
-Assert3 at line 1141 uses `first_x_assum drule_all` which may not resolve
-`accounts_well_typed st.accounts` from assumptions. Fix: replace with
-`apply_eval_ih` or use `qpat_x_assum 'accounts_well_typed _' assume_tac`
-before `drule_all`.
-
-### PRIORITY 4: Prove 6 cheats in helpers file
-
-## EVAL RETURN TYPES (VERIFIED Session 11)
-- eval_stmt: `(unit + exception) # evaluation_state`
-- eval_expr: `(toplevel_value + exception) # evaluation_state`
-- eval_stmts: `(unit + exception) # evaluation_state`
-- eval_iterator: `(value list + exception) # evaluation_state`
-- eval_target: `(assignment_value + exception) # evaluation_state`
-- eval_targets: `(assignment_value list + exception) # evaluation_state`
-- eval_base_target: `((location # subscript list) + exception) # evaluation_state`
-
-## IH VARIABLE COUNTS
-- eval_expr (P7): 4 vars ∀env st res st'
-- eval_stmt (P0): 5 vars ∀env ret_ty st res st'
-- eval_stmts (P1): 5 vars ∀env ret_ty st res st'
-- eval_iterator (P2): 4 vars ∀env typ st res st' (2nd var is `typ`)
-- eval_target (P3): 4 vars ∀env st res st'
-- eval_targets (P4): 4 vars ∀env st res st'
-- eval_base_target (P5): 4 vars ∀env st res st'
-- eval_for (P6): 7 vars ∀env typ ret_ty st res st'
-- eval_exprs (P8): 4 vars ∀env st res st'
-
-## BLOCK STATUS (from holmake output, Session 11)
-
-### PROVED (26 blocks — need re-verification after tactic changes):
+### WORKING (25 blocks):
 Pass, Continue, Break, ReturnNone, ReturnSome, Raise1, Raise2, Assert1, Assert2,
-Assert3, Log, Expr, stmts_nil, stmts_cons, BaseTarget, TupleTarget,
+Log, Expr, stmts_nil, stmts_cons, BaseTarget, TupleTarget,
 targets_nil, targets_cons, NameTarget, BareGlobalNameTarget,
 TopLevelNameTarget, AttributeTarget, for_nil, Name, Literal, exprs_nil
 
-### FAILING (Raise3 first, then cascading):
-Raise3: FIRST_ASSUM error in apply_eval_ih (SPECL exception bug)
-Assert3: Cases_on `b` fails (after cheating Raise3) - drule_all doesn't resolve
-accounts_well_typed; the IH application produces no ∃b assumption so b is undefined
-All other blocks described as "failing" in previous STATEs: untested since
-they're blocked by earlier block failures in the holmake process
+### FAILING (55+ blocks — all due to `apply_eval_ih` SPECL bug):
+Raise3: FIRST_ASSUM error (confirmed: SPECL type mismatch in apply_eval_ih)
+Assert3: `Cases_on b` fails after wrong IH application; also `by` tactic fails
+Append: `Cases_on x` fails — "No var with name x" after wrong IH drule_all
+All others: Untested individually but same root cause (IH application)
 
-### CHEATS (6 in helpers file):
+## KEY INSIGHT: `qpat_x_assum + drule_all` IS the fix
+
+ReturnSome (line 752) proves this pattern works:
+```
+qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _` drule_all >> strip_tac
+```
+- `drule_all` automatically matches `eval_expr cx e st = (res,st')` against assumptions
+- This correctly specializes `res` and `st'` to the values in the current proof context
+- No explicit term construction needed → no type mismatch possible
+- This is the ONLY working IH application pattern in the entire file
+
+## WHAT NOT TO TRY
+- `qspecl_then` with backtick terms — TYPE ERRORS at SML definition time
+- `first_x_assum drule_all` — picks wrong IH when multiple ∀-assumptions exist
+- `first_x_assum + SPECL` — same type error issue, plus FIRST_ASSUM when all fail
+- Python scripts that cheat outer blocks containing nested suspends — DESTROYS inner labels
+- `simp[evaluate_def]` without `Once` — HANGS
+- `metis_tac` with many assumptions — TIMES OUT
+- `>-` / `>|` in Resume blocks — produces gentactic, not tactic
+- `first_x_assum drule_all` in rich IH contexts — HANGS or picks wrong IH
+
+## IH PATTERNS (for drule_all matching)
+- P7 (eval_expr): `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _`
+- P0 (eval_stmt): `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _`
+- P1 (eval_stmts): `∀env ret_ty st res st'. well_typed_stmts _ _ _ ∧ _ ⇒ _`
+- P2 (eval_iterator): `∀env typ st res st'. well_typed_iterator _ _ _ ∧ _ ⇒ _`
+- P3 (eval_target): `∀env st res st'. ∃ty. well_typed_atarget _ _ ty ∧ _ ⇒ _`
+- P4 (eval_targets): `∀env st res st'. EVERY _ _ ∧ _ ⇒ _`
+- P5 (eval_base_target): `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _`
+- P8 (eval_exprs): `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _`
+- P6 (eval_for): `∀env typ ret_ty st res st'. ... ∧ eval_for _ _ _ _ _ st = (res,st') ⇒ _`
+
+NOTE: P6 (eval_for) has 7 ∀-variables, not 4 or 5. It needs a separate pattern.
+
+## CHEATS (6 in helpers file)
 | Theorem | What |
 |---------|------|
 | env_consistent_pop_scope | Pop scope preserves env_consistent |
@@ -109,26 +124,7 @@ they're blocked by earlier block failures in the holmake process
 | assign_target_well_typed | Assignment replace preserves typing |
 | eval_expr_not_HashMapRef | Well-typed eval not HashMapRef |
 
-## WHAT NOT TO TRY
-- `qpat_x_assum` with complex ∀-variable patterns — FAILS after IH instantiation
-- `qspecl_then` with untyped backtick terms — FAILS (wrong types at SML load time)
-- `>|` (THENL) in Resume blocks — returns gentactic, not tactic
-- `>-` / THEN1 in Resume blocks — SML type error (gentactic vs tactic)
-- `first_x_assum drule_all` — HANGS in rich IH contexts
-- `simp[evaluate_def]` without `Once` — HANGS
-- `metis_tac` with many assumptions — TIMES OUT
-- Missing `>>` between consecutive tactic lines — SML type error
-- Guessing at proof state instead of using hol_state_at — WASTES TIME
-- Holmake-only debugging (16-45s per cycle) — TOO SLOW for iteration
-- SPECL without exception handling in first_x_assum — SPECL failure kills search
-
-## RISK ASSESSMENT
-- HIGH: apply_eval_ih SPECL exception handling — ALL blocks using IH depend on this
-- MEDIUM: drule_all in blocks like Assert3 — may need switch to apply_eval_ih
-- MEDIUM: Different state variable names across blocks (r, st_tgt, st1, etc.)
-- LOW: Individual block logic after IH application works
-
 ## KEY FILES
-- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~4029 LOC on disk, original)
+- Main theorem: semantics/prop/vyperTypeSoundnessScript.sml (~4053 LOC)
 - Helpers: semantics/prop/vyperTypeSoundnessHelpersScript.sml (~7307 LOC, 6 cheats)
 - Workdir: semantics/prop/
