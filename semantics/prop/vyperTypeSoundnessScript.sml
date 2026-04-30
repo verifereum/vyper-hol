@@ -795,21 +795,21 @@ QED
 fun apply_eval_ih res_term st_term =
   FIRST [
     (* P7: eval_expr *)
-    qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _` drule_all,
     (* P0: eval_stmt *)
-    qpat_x_assum `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env ret_ty st res st'. well_typed_stmt _ _ _ /\ _ ==> _` drule_all,
     (* P1: eval_stmts *)
-    qpat_x_assum `∀env ret_ty st res st'. well_typed_stmts _ _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ _ /\ _ ==> _` drule_all,
     (* P2: eval_iterator *)
-    qpat_x_assum `∀env typ st res st'. well_typed_iterator _ _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env typ st res st'. well_typed_iterator _ _ _ /\ _ ==> _` drule_all,
     (* P3: eval_target *)
-    qpat_x_assum `∀env st res st'. ∃ty. well_typed_atarget _ _ ty ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env st res st'. (?ty. well_typed_atarget _ _ ty) /\ _ ==> _` drule_all,
     (* P5: eval_base_target (well_typed_target variant) *)
-    qpat_x_assum `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env st res st'. (?ty. well_typed_target _ _ ty) /\ _ ==> _` drule_all,
     (* P5: eval_base_target (well_typed_base_target variant) *)
-    qpat_x_assum `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env st res st'. (?ty. well_typed_base_target _ _ ty) /\ _ ==> _` drule_all,
     (* P8: eval_exprs *)
-    qpat_x_assum `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _` drule_all,
+    qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all,
     (* Fallback: try any ∀-assumption where the antecedent contains well_typed.
        This excludes "guarded IHs" whose antecedent only has eval_X = INL(...)
        while the well_typed constraint is buried in the nested consequent. *)
@@ -858,6 +858,11 @@ fun close_inr_err_tac_for st_term =
   apply_eval_ih `INR y` st_term >>
   no_return_from_eval >>
   gvs[]
+  (* NOTE: Callers should use TRY (close_inr_err_tac_for ...) >>
+     without >> NO_TAC. The augmented simpset (with exception_distinct +
+     error_distinct) may auto-solve INR error cases, leaving only the INL
+     subgoal. close_inr_err_tac_for will fail on INL goals (no matching
+     INR assumption), so TRY makes it a no-op in that case. *)
 
 (* Default: uses `r` as state variable (common after Cases_on naming) *)
 val close_inr_err_tac = close_inr_err_tac_for `r`
@@ -913,11 +918,11 @@ Resume eval_preserves_swt[Raise3]:
   Cases_on `q` >> simp_tac (srw_ss()) [] >>
   (* INR case: error propagation from eval_expr — apply IH via drule_all *)
   TRY (strip_tac >>
-    qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+    qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _` drule_all >>
     strip_tac >>
     no_return_from_eval >> gvs[] >> NO_TAC) >>
   (* INL case: apply IH for eval_expr success via drule_all *)
-  qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _` drule_all >>
   strip_tac >>
   first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
   gvs[] >>
@@ -1084,10 +1089,9 @@ Resume eval_preserves_swt[AttributeTarget]:
   simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
   Cases_on `eval_base_target cx bt st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
-  (* P5 IH for bt *)
-  first_x_assum drule_all >> strip_tac >>
-  gvs[return_def] >> strip_tac >> gvs[]
+  TRY close_inr_err_tac >>
+  (* P5 IH applied by simp_tac; just clean up *)
+  gvs[return_def]
 QED
 
 Resume eval_preserves_swt[for_nil]:
@@ -1190,36 +1194,19 @@ Resume eval_preserves_swt[Append]:
   simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
   (* Step 1: eval_base_target *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
-  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac_for `st_bt` >> NO_TAC) >>
+  Cases_on `res_bt` >> gvs[] >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
-  first_x_assum drule_all >> strip_tac >>
+  (* P5 IH already applied by simp_tac; no explicit IH step needed *)
   (* Discharge guarded P7 IH before eval_expr branching *)
-  qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
-    (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  TRY apply_guarded_ih >>
   (* Step 2: eval_expr *)
   Cases_on `eval_expr cx e st_bt` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       first_x_assum drule_all >> strip_tac >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> gvs[] >>
-       imp_res_tac eval_expr_not_return >>
-       first_x_assum (qspec_then `v` mp_tac) >>
-       simp_tac (srw_ss()) [] >> NO_TAC) >>
+  Cases_on `q` >> gvs[] >>
   rename1 `eval_expr cx e st_bt = (INL tv, r)` >>
-  qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
-    (qspecl_then [`env`, `st_bt`, `INL tv`, `r`] mp_tac) >>
-  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
   (* Step 3: materialise *)
   Cases_on `materialise cx tv r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+  Cases_on `q` >> gvs[] >>
   rename1 `materialise cx tv r = (INL v', r')` >>
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   tp_materialise_conclusion_tac >>
@@ -1227,8 +1214,7 @@ Resume eval_preserves_swt[Append]:
   Cases_on `assign_target cx (BaseTargetV loc sbs) (AppendOp v') r` >>
   `state_well_typed r' /\ env_consistent env cx r'` by
     suspend "Append_atwt" >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  Cases_on `q` >> gvs[return_def] >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac (cj 1 assign_target_no_return) >>
@@ -1296,7 +1282,7 @@ Resume eval_preserves_swt[Assign]:
   (* Step 1: eval_target cx g st *)
   Cases_on `eval_target cx g st` >> rename1 `(res_tgt, st_tgt)` >>
   reverse (Cases_on `res_tgt`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   rename1 `eval_target cx g st = (INL tgt_v, st_tgt)` >>
   (* P3 IH for eval_target *)
   first_x_assum drule_all >> strip_tac >>
@@ -1374,7 +1360,7 @@ Resume eval_preserves_swt[AugAssign]:
   (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
   reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   Cases_on `x` >> simp_tac (srw_ss()) [] >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* P5 IH for eval_base_target *)
@@ -1398,7 +1384,7 @@ Resume eval_preserves_swt[AugAssign]:
   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
   (* Step 3: get_Value x r — state unchanged *)
   Cases_on `x` >> simp_tac (srw_ss()) [get_Value_def, return_def, raise_def] >>
-  TRY (close_pure_inr_err_tac >> NO_TAC) >>
+  TRY close_pure_inr_err_tac >>
   rename1 `eval_expr cx e st_bt = (INL (Value v_expr), r)` >>
   (* Step 4: assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r *)
   Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r` >>
@@ -1449,7 +1435,7 @@ Resume eval_preserves_swt[If]:
   (* Step 1: eval_expr cx e st *)
   Cases_on `eval_expr cx e st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* P7 IH for eval_expr *)
   first_x_assum drule_all >> strip_tac >>
   (* push_scope *)
@@ -1775,7 +1761,7 @@ Resume eval_preserves_swt[SubscriptTarget]:
   (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* P5 IH for bt *)
   first_x_assum drule_all >> strip_tac >>
   (* Decompose pair result *)
@@ -1783,7 +1769,7 @@ Resume eval_preserves_swt[SubscriptTarget]:
   (* Step 2: eval_expr cx e *)
   Cases_on `eval_expr cx e r` >>
   reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* P7 IH for e (guarded by eval_base_target success) *)
   qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>
@@ -1908,13 +1894,13 @@ Resume eval_preserves_swt[BareGlobalName]:
   (* Step 1: get_immutables *)
   Cases_on `get_immutables cx (current_module cx) st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_pure_inr_err_tac >> NO_TAC) >>
+  TRY close_pure_inr_err_tac >>
   imp_res_tac get_immutables_state >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 2: lift_option_type (FLOOKUP imms n) *)
   simp_tac (srw_ss()) [lift_option_type_def, bind_apply, BETA_THM, return_def] >>
   Cases_on `FLOOKUP x (string_to_num id)` >>
   simp_tac (srw_ss()) [raise_def, return_def] >>
-  TRY (close_pure_inr_err_tac >> NO_TAC) >>
+  TRY close_pure_inr_err_tac >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (* State preserved, env_consistent preserved *)
   ASM_REWRITE_TAC [] >>
@@ -2001,7 +1987,7 @@ Resume eval_preserves_swt[IfExp]:
   (* Step 1: eval_expr cx e (cond) *)
   Cases_on `eval_expr cx e st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* Apply P7 IH for e *)
   qpat_x_assum `!env st res st'. well_typed_expr _ e /\ _ ==> _`
     drule_all >> strip_tac >>
@@ -2137,7 +2123,7 @@ Resume eval_preserves_swt[StructLit]:
   (* eval: vs <- eval_exprs cx (MAP SND kes); return (Value (StructV ...)) *)
   Cases_on `eval_exprs cx (MAP SND kes) st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Apply P8 IH — guarded by ks = MAP FST kes (trivially true) *)
@@ -2261,11 +2247,11 @@ Resume eval_preserves_swt[Attribute]:
   (* Step 1: eval_expr cx e *)
   Cases_on `eval_expr cx e st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* Step 2: get_Value *)
   Cases_on `get_Value x r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_pure_inr_err_tac >> NO_TAC) >>
+  TRY close_pure_inr_err_tac >>
   imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 3: lift_sum (evaluate_attribute) *)
   Cases_on `evaluate_attribute x' id` >> simp_tac (srw_ss()) [lift_sum_def] >>
@@ -2634,7 +2620,7 @@ Resume eval_preserves_swt[Builtin_NonLen]:
   (* Step 1: eval_exprs cx es st *)
   Cases_on `eval_exprs cx es st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) []
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   rename1 `eval_exprs cx es st = (INL vs_e, st_e)` >>
   (* Apply P8 IH *)
   first_x_assum drule_all >> strip_tac >>
@@ -2692,7 +2678,7 @@ Resume eval_preserves_swt[Pop]:
   (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
   reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   Cases_on `x` >> simp_tac (srw_ss()) [] >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* P5 IH *)
@@ -3701,18 +3687,18 @@ Resume eval_preserves_swt[exprs_cons]:
   (* Step 1: eval_expr cx e *)
   Cases_on `eval_expr cx e st` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* Apply P7 IH for e *)
   first_x_assum drule_all >> strip_tac >>
   (* Step 2: materialise *)
   Cases_on `materialise cx x r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_pure_inr_err_tac >> NO_TAC) >>
+  TRY close_pure_inr_err_tac >>
   (* Step 3: eval_exprs cx es (guarded IH) *)
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   Cases_on `eval_exprs cx es r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (close_inr_err_tac >> NO_TAC) >>
+  TRY close_inr_err_tac >>
   (* Apply guarded P8 IH: guard is eval_expr + materialise *)
   first_x_assum
     (qspecl_then [`st`, `x`, `r`, `r`, `x'`, `r`] mp_tac) >>
