@@ -1,100 +1,111 @@
 # LEARNINGS: Type Soundness Repair
 
-## `qspecl_then` with backtick terms FAILS across proof contexts (Sessions 9-12)
+## IH Application: The Critical Pattern (Sessions 9-13, 18)
 
-**Root cause:** Backtick terms like `` `env:typing_env` `` get FIXED types at SML
-definition time. When `qpat_x_assum` finds a theorem with ∀-variables of matching
-structure but the specializing terms' types don't match the theorem's ∀-variable types,
-SPECL raises HOL_ERR. This causes `first_x_assum`/`FIRST` to skip the assumption
-or fail entirely.
+### BROKEN: `qspecl_then` with backtick terms
+Backtick terms get FIXED types at SML definition time. Type mismatches → SPECL HOL_ERR
+→ FIRST_ASSAM error. ROOT CAUSE of 57 block failures in sessions 9-11.
 
-**Fix:** Use `drule_all` instead, which automatically matches IH antecedents against
-assumptions. No explicit term specialization needed:
+### WORKING: `qpat_x_assum + drule_all`
 ```sml
 qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >> strip_tac
 ```
+Auto-matches ALL antecedents, no explicit term construction needed.
 
-## `drule_all` is the proven IH application pattern (Session 12)
+### CRITICAL: `first_x_assum drule_all` consumes WRONG IH (Session 18)
+When multiple ∀-IHs exist, `first_x_assum` picks the NEWEST. In Append block line 1176,
+it consumed the guarded P7 IH (containing `eval_base_target`) instead of P5 IH,
+leaving no `eval_base_target` ∀-assumption for later steps. This was misdiagnosed
+as a `qspecl_then` failure for 3 sessions.
 
-ReturnSome (line 752) uses this successfully. Key properties:
-- Automatically specializes ALL IH antecedents by matching against assumptions
-- Correctly handles `eval_expr cx e st = (res,st')` → specializes `res ↦ INL tv`, `st' ↦ r`
-- No type mismatch possible (no explicit term construction)
-- MAY be slow in very rich contexts with many ∀-assumptions (untested)
+**Fix: Use `qpat_x_assum` with a pattern that ONLY matches the target IH.**
+For P5: `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _`
+For guarded P7: use `first_x_assum (fn th => if is_forall (concl th) andalso can (find_term ...) (concl th) then ...)`
 
-## `first_x_assum drule_all` picks WRONG IH (Sessions 2-3, 11-12)
+### AVOID: `first_assum ACCEPT_TAC` for guard discharge (Session 16)
+Definition changes altered assumption ordering. Use `qpat_x_assum` with specific pattern.
 
-When multiple ∀-IHs exist (P0-P8), `first_x_assum` picks the newest, which may not
-be the one we want. Fix: use `qpat_x_assum` with a function-specific pattern:
-- P7: `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _`
-- P0: `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _`
-etc.
+### AVOID: `qpat_x_assum` with primed variables (Session 18)
+`` `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _` ``
+produces `Q_TAC0` parsing error. Use `first_x_assum (fn th => ...)` with `same_const` test instead.
 
-## Nested suspend structure in Resume blocks (Session 12)
+### CANNOT use `same_const` inside `fn th => ...` in proof quotations (Session 18)
+`` same_const u ``eval_base_target`` `` inside a `fn th => if ...`
+continuation in a proof sequence may not resolve correctly — `FIRST_ASSAM` error.
+The constant reference works in top-level SML but may fail inside proof context.
+**Alternative:** Use a let-bound predicate function defined OUTSIDE the proof.
 
-Cannot blindly `cheat` outer blocks that contain inner `suspend` calls.
-Example: Append block has `suspend "Append_atwt"` inside it. If you replace the
-entire Append Resume with `cheat`, the inner suspend label is lost, and
-`Resume eval_preserves_swt[Append_atwt]` fails with "No such label in theorem".
+## SUBGOAL ORDERING (Sessions 14-15)
 
-**Fix:** When cheating, preserve the inner `suspend` structure. Or better: don't
-cheat — fix the actual IH application mechanism.
+### After `Cases_on 'q'`, INL is FIRST, INR is SECOND
+```sml
+Cases_on `q` >> simp_tac (srw_ss()) [] >>
+TRY (strip_tac >> ... >> NO_TAC) >>
+(* Now only the INL case remains *)
+```
 
-## SPECL specializes POSITIONALLY, not by name (Session 12)
+## VARIABLE NAMING AFTER SIMPLIFICATION (Session 16)
 
-`SPECL [a, b, c] th` specializes the 1st, 2nd, 3rd ∀-variables of th, regardless
-of their names. The terms' TYPES must match the ∀-variables' types, or HOL_ERR.
+### gvs[] changes variable structure
+After gvs, variable naming differs from old expectations.
+NEVER assume variable names — check with `hol_state_at`.
 
-## Cases_on pair destructuring: q = result, r = state (Sessions 9-11)
-After `Cases_on \`eval_expr cx e st\``, HOL4 names:
-- `q` = result component
-- `r` = new state
-Then `Cases_on \`q\`` gives INL `x` (success) / INR `y` (error)
+### `Cases_on v` where `v : value` → TIMEOUT
+Use boundary lemmas (`switch_BoolV_cases`, `toplevel_value_typed_BoolT_inv`) instead.
 
-## INR/INL subgoal management in Resume blocks (Sessions 9-11)
-`>-` and `>|` produce gentactic, NOT tactic — cannot use in Resume blocks.
-Working pattern: `TRY (close_inr_err_tac >> NO_TAC) >> ...`
+## ABSTRACTION: Use boundary lemmas, not definition unfolding
 
-## toplevel_value_typed_for_BaseT: KEY boundary lemma
-`∀tenv bt tv. evaluate_type tenv (BaseT bt) = SOME tyv ∧ toplevel_value_typed tv tyv ⇒ ∃v. tv = Value v`
+### switch_BoolV: use `switch_BoolV_cases`, not `switch_BoolV_def`
+Also available: `switch_BoolV_preserves`, `switch_BoolV_error`
 
-## State lemmas for pure operations (used 10+ times)
-- materialise_state, get_Value_state, lift_option_type_state, lift_option_state
-- lift_sum_state, check_state, type_check_state, return_state, raise_state
-- switch_BoolV_state, handle_loop_exception_state
-All prove `st' = st` (state unchanged). Use: `imp_res_tac X_state >> gvs[]`
+## SML SYNTAX PITFALLS (Session 15)
+- `&&` = simpset conjunction, NOT boolean. Use `andalso`.
+- `PRED_ASSUM` takes `term -> bool`, not `thm -> bool`.
 
-## drule_all vs drule (Sessions 2-3, 11-12)
-- `drule_all`: matches ALL antecedents against ALL assumptions. More powerful but
-  potentially slower. Preferrable when antecedents are specific enough to avoid
-  ambiguity.
-- `drule`: matches only FIRST antecedent. Faster but may leave remaining
-  antecedents as implications.
-- Both are safer than `first_x_assum drule_all` which can pick wrong ∀-assumption.
+## hol_check_proof vs holmake (Session 15)
+`hol_check_proof` does NOT verify Resume blocks. Only `holmake` does.
 
-## Tactic Anti-Patterns
-- `simp[AllCaseEqs()]` on monadic bind chains → unsolvable nested existentials
-- `gvs[PAIR_FST_SND_EQ]` on bind results → DESTROYS IH structure
-- `rw[env_consistent_def]` → TIMEOUT (use env_consistent_scopes_only)
-- `simp[evaluate_def]` without `Once` — HANGS
-- `metis_tac` with many assumptions — TIMES OUT
-- `imp_res_tac` before IH application — ADDS CLUTTER
-- `>>` after case split — use `>-` to focus one subgoal
-- Python scripts that cheat blocks with nested suspends — DESTROYS inner labels
+## KEY INSIGHT: simp_tac can SOLVE entire blocks (Session 13)
+After augmented simpset (exception_distinct, error_distinct at line 26),
+try `rewrite_tac[ev_X] >> simp_tac (srw_ss()) [bind_apply, BETA_THM] >> gvs[]`
+BEFORE adding manual IH application.
 
-## materialise chain (7 lemmas, used in 3+ blocks)
-Key: materialise TypeError → is_HashMapRef → tyv = NoneTV → NoneT → well_typed excludes NoneT
+## Guarded IH discharge (14+ blocks)
+OLD (fragile): `qpat_x_assum ... (qspecl_then [...] mp_tac) >> impl_tac >- ACCEPT_TAC`
+NEW (robust): Define `apply_guarded_ih` tactic that uses `first_x_assum (fn th => ...)`
+with a let-bound predicate.
 
-## evaluate_builtin_well_typed (1 lemma, FULLY PROVED)
+## INR error propagation pattern (30+ instances)
+```sml
+strip_tac >>
+qpat_x_assum `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _` drule_all >>
+strip_tac >> no_return_from_eval >> gvs[]
+```
+
+## Constructor distinctness (no-TypeError/no-return conjuncts)
+`augment_srw_ss[rewrites [exception_distinct, error_distinct]]` at line 26.
+
+## State lemmas for pure operations (10+ uses)
+materialise_state, get_Value_state, lift_option_type_state, etc.
+All: `st' = st`. Use: `imp_res_tac X_state >> gvs[]`
+
+## materialise TypeError chain (7 lemmas in helpers)
+materialise TypeError → is_HashMapRef → tyv = NoneTV → NoneT → well_typed excludes NoneT
+
+## IH function-specific patterns for qpat_x_assum
+- P7 (eval_expr): `∀env st res st'. well_typed_expr _ _ ∧ _ ⇒ _`
+- P0 (eval_stmt): `∀env ret_ty st res st'. well_typed_stmt _ _ _ ∧ _ ⇒ _`
+- P1 (eval_stmts): `∀env ret_ty st res st'. well_typed_stmts _ _ _ ∧ _ ⇒ _`
+- P2 (eval_iterator): `∀env typ st res st'. well_typed_iterator _ _ _ ∧ _ ⇒ _`
+- P3 (eval_target): `∀env st res st'. ∃ty. well_typed_atarget _ _ ty ∧ _ ⇒ _`
+- P5 (eval_base_target): `∀env st res st'. ∃ty. well_typed_base_target _ _ ty ∧ _ ⇒ _`
+- P5 (alt for target): `∀env st res st'. (∃ty. well_typed_target _ _ ty) ∧ _ ⇒ _`
+- P8 (eval_exprs): `∀env st res st'. well_typed_exprs _ _ ∧ _ ⇒ _`
+- P6 (eval_for): 7 ∀-vars → needs separate pattern
+
+## evaluate_builtin_well_typed (FULLY PROVED, in vyperBuiltinTyping)
 Takes `accounts_well_typed acc` precondition. Covers ALL builtin cases.
 
-## augment_srw_ss makes constructor distinctness trivial
-`augment_srw_ss[rewrites [exception_distinct, error_distinct]]` proves
-`INR y ≠ INR (Error (TypeError s))` etc. automatically via simp[].
-
-## Debugging workflow (Session 11-12)
-NEVER rely solely on holmake for debugging (16-45s/cycle). USE hol_state_at:
-1. Cheat failing blocks to get build past them
-2. Use hol_state_at on each failing block to inspect REAL proof state
-3. Design fix based on REAL assumptions, not guessing
-4. One holmake to verify
+## Key boundary lemmas (defined in main file, lines 217-233)
+- evaluate_type_BaseT_inv, toplevel_value_typed_for_BaseT
+- toplevel_value_typed_BoolT_inv, value_has_type_BoolT_inv
