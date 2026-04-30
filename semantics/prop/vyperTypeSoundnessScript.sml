@@ -518,11 +518,11 @@ fun tp_pure_base_target_tac ev_thm =
 
 Theorem assign_target_preserves_accounts:
   (!cx av ao st res st'.
-     assign_target cx av ao st = (res, st') /\
+     assign_target cx av ao st = (res, st') ==>
      accounts_well_typed st.accounts ==>
      accounts_well_typed st'.accounts) /\
   (!cx gvs vs st res st'.
-     assign_targets cx gvs vs st = (res, st') /\
+     assign_targets cx gvs vs st = (res, st') ==>
      accounts_well_typed st.accounts ==>
      accounts_well_typed st'.accounts)
 Proof
@@ -1336,16 +1336,7 @@ Resume eval_preserves_swt[Assign_tgt_inl]:
    imp_res_tac (cj 1 assign_target_no_return) >>
    first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []) >>
   (* materialise INR: error case *)
-  simp_tac (srw_ss()) [] >> suspend "Assign_tgt_mat_err"
-  `state_well_typed st_asgn /\ env_consistent env cx st_asgn` by
-    suspend "Assign_atwt" >>
-  (* Case split assign_target result *)
-  reverse (Cases_on `ao_res`) >> simp_tac (srw_ss()) [return_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac (cj 1 assign_target_no_return) >>
-  first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []
+  suspend "Assign_tgt_mat_err"
 QED
 
 Resume eval_preserves_swt[Assign_tgt_mat_err]:
