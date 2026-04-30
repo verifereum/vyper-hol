@@ -1182,30 +1182,22 @@ Resume eval_preserves_swt[Append]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `well_typed_stmt _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Append]) >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  rewrite_tac[ev_Append] >>
-  simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
-  (* Step 1: eval_base_target cx bt st *)
-  Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, r')` >>
-  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
-  TRY (strip_tac >>
-       qpat_assum `well_typed_target env bt _`
-         (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
-                                         `ArrayT (expr_type e) bd`) th)) >>
-       first_x_assum drule_all >> strip_tac >>
-       imp_res_tac eval_base_target_not_return >> gvs[] >> NO_TAC) >>
-  Cases_on `x` >> simp_tac (srw_ss()) [] >>
-  rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* Wrap well_typed_target as existential for P5 IH *)
   qpat_assum `well_typed_target env bt _`
-    (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
+    (fn th => ASSUME_TAC (Q.EXISTS (`?ty'. well_typed_target env bt ty'`,
                                     `ArrayT (expr_type e) bd`) th)) >>
+  (* Unfold ev_Append *)
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  rewrite_tac[ev_Append] >>
+  simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
+  (* Step 1: eval_base_target cx bt st *)
+  Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
+  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
+  TRY (close_inr_err_tac >> NO_TAC) >>
+  Cases_on `x` >> simp_tac (srw_ss()) [] >>
+  rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* P5 IH for eval_base_target *)
   first_x_assum drule_all >> strip_tac >>
-  (* Apply guarded P7 IH *)
-  qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
-    (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   (* Step 2: eval_expr cx e st_bt *)
   Cases_on `eval_expr cx e st_bt` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
@@ -1216,12 +1208,15 @@ Resume eval_preserves_swt[Append]:
        imp_res_tac eval_expr_not_return >>
        first_x_assum (qspec_then `v` mp_tac) >>
        simp_tac (srw_ss()) [] >> NO_TAC) >>
-  (* Apply P7 IH for eval_expr success *)
+  (* Apply guarded P7 IH for eval_expr *)
+  qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
-    (qspecl_then [`env`, `st_bt`, `INL x`, `r'`] mp_tac) >>
+    (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  (* Step 3: materialise cx x r' *)
-  Cases_on `materialise cx x r'` >>
+  (* Step 3: materialise cx x r *)
+  Cases_on `materialise cx x r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
        strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -1230,8 +1225,7 @@ Resume eval_preserves_swt[Append]:
        imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
   tp_materialise_conclusion_tac >>
-  (* Step 4: assign_target *)
-  simp_tac std_ss [bind_apply, BETA_THM, ignore_bind_apply] >>
+  (* Step 4: assign_target cx (BaseTargetV loc sbs) (AppendOp x') r *)
   Cases_on `assign_target cx (BaseTargetV loc sbs) (AppendOp x') r` >>
   `state_well_typed r' /\ env_consistent env cx r'` by
     suspend "Append_atwt" >>
