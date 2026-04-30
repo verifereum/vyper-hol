@@ -743,7 +743,7 @@ Definition translate_expr_def:
     boolop_or (translate_expr_list ctx es)) /\
 
   (* UnaryOp *)
-  (translate_expr ctx (JE_UnaryOp JnsafeUop_USub e ret_ty) =
+  (translate_expr ctx (JE_UnaryOp JUop_USub e ret_ty) =
     Builtin (translate_type ret_ty) Neg [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
     Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
@@ -887,7 +887,7 @@ End
 
 Definition json_expr_int_opt_def:
   (json_expr_int_opt (JE_Int v _) = SOME v) /\
-  (json_expr_int_opt (JE_UnaryOp JnsafeUop_USub e _) =
+  (json_expr_int_opt (JE_UnaryOp JUop_USub e _) =
      case json_expr_int_opt e of
        SOME n => SOME (0 - n)
      | NONE => NONE) /\
