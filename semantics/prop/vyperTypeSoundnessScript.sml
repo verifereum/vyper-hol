@@ -882,16 +882,23 @@ Resume eval_preserves_swt[Raise3]:
   rewrite_tac[ev_Raise3] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+  Cases_on `q` >> simp_tac (srw_ss()) [] >>
   (* INR case: error propagation from eval_expr — apply IH *)
+  TRY (strip_tac >>
+    first_x_assum (fn th =>
+      if is_forall (concl th) then
+        mp_tac (SPECL [``env:typing_env``,``st:evaluation_state``,
+          ``INR y:(toplevel_value + exception)``,``r:evaluation_state``] th)
+      else NO_TAC) >>
+    simp_tac (srw_ss()) [] >> strip_tac >>
+    no_return_from_eval >> gvs[] >> NO_TAC) >>
+  (* INL case: apply IH for eval_expr success *)
   first_x_assum (fn th =>
     if is_forall (concl th) then
-      qspecl_then [`env`,`st`,`INR y`,`r`] mp_tac th
+      mp_tac (SPECL [``env:typing_env``,``st:evaluation_state``,
+        ``INL x:(toplevel_value + exception)``,``r:evaluation_state``] th)
     else NO_TAC) >>
   simp_tac (srw_ss()) [] >> strip_tac >>
-  no_return_from_eval >> gvs[] >>
-  (* INL case: apply IH for eval_expr success *)
-  first_x_assum drule_all >> strip_tac >>
   first_x_assum (qspec_then `x` assume_tac) >> fs[] >>
   gvs[] >>
   (* x must be Value v: BaseT type forces this via boundary lemma *)
