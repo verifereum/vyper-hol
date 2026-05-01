@@ -1568,13 +1568,11 @@ Resume eval_preserves_swt[AugAssign_gv_inr]:
   strip_tac >>
   imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
   gvs[AllCaseEqs()] >>
-  (* Instantiate the guarded eval_expr IH to get toplevel_value_typed x tyv *)
-  qpat_x_assum `!tv. INL x = INL tv ==> _` (qspecl_then [`x`] mp_tac) >>
-  simp[] >> strip_tac >>
-  (* From well_typed_binop with bop <> In / bop <> NotIn, expr_type e is
-     never NoneT or ArrayT, so evaluate_type gives non-NoneTV/non-ArrayTV tyv.
-     This contradicts get_Value returning INR. *)
-  `tyv' <> NoneTV /\ !t b. tyv' <> ArrayTV t b` by (
+  (* gvs[AllCaseEqs()] already resolved the guarded eval_expr IH,
+     giving toplevel_value_typed x tyv and evaluate_type ... = SOME tyv.
+     Show tyv is not NoneTV/ArrayTV from well_typed_binop constraints,
+     then toplevel_value_typed_no_ArrayTV_get_Value contradicts get_Value returning INR. *)
+  `tyv <> NoneTV /\ !t b. tyv <> ArrayTV t b` by (
     imp_res_tac well_typed_binop_not_In_second_type >>
     gvs[evaluate_type_not_NoneT_imp_not_NoneTV] >>
     Cases_on `expr_type e` >> gvs[evaluate_type_BaseT_imp_not_ArrayTV,
@@ -1592,13 +1590,9 @@ QED
 
 Resume eval_preserves_swt[AugAssign_at_inr]:
   gvs[pair_case_thm, return_def] >>
-  rpt CONJ_TAC >- (
-    first_x_assum ACCEPT_TAC ORELSE irule (cj 1 assign_target_well_typed_ao)) >>
-  rpt CONJ_TAC >- (
-    first_x_assum ACCEPT_TAC ORELSE irule (cj 2 assign_target_well_typed_ao)) >>
-  rpt CONJ_TAC >- (
-    metis_tac [cj 1 assign_target_preserves_accounts]) >>
-  rpt CONJ_TAC >- (
+  (* After gvs, state_well_typed/env_consistent/accounts_well_typed are already
+     discharged from assumptions (st' = r''). Remaining: no-TypeError + no-return. *)
+  CONJ_TAC >- (
     drule (cj 1 assign_target_no_type_error) >> simp[]) >>
   rpt strip_tac >>
   drule (cj 1 assign_target_no_return) >> simp[]
