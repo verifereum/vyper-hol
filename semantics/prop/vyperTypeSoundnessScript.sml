@@ -1236,7 +1236,7 @@ Resume eval_preserves_swt[AttributeTarget]:
   rpt gen_tac >> strip_tac >>
   gvs[wte_AttributeTarget] >>
   (* Wrap bt typing as existential for P5 IH matching *)
-  qpat_assum `well_typed_target env bt tgt_ty`
+  qpat_x_assum `well_typed_target env bt tgt_ty`
     (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
                                     `tgt_ty`) th)) >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
@@ -1497,7 +1497,7 @@ Resume eval_preserves_swt[AugAssign]:
   qpat_x_assum `well_typed_stmt _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_AugAssign]) >>
   (* Wrap well_typed_target as existential for P5 IH *)
-  qpat_assum `well_typed_target env bt ty`
+  qpat_x_assum `well_typed_target env bt ty`
     (fn th => ASSUME_TAC (Q.EXISTS (`?ty'. well_typed_target env bt ty'`,
                                     `ty`) th)) >>
   (* Unfold ev_AugAssign *)
@@ -1610,10 +1610,20 @@ Resume eval_preserves_swt[If]:
   simp_tac std_ss [bind_apply, BETA_THM] >>
   (* Step 1: eval_expr cx e st *)
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
-  (* P7 IH for eval_expr *)
-  first_x_assum drule_all >> strip_tac >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >- (
+    (* INR case: apply P7 IH for error propagation *)
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+      drule_all >> strip_tac >>
+    no_return_from_eval >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    rpt (CONJ_TAC >> TRY (first_assum ACCEPT_TAC)) >>
+    TRY not_type_error_tac >> TRY not_return_tac >>
+    rpt strip_tac >> TRY (first_x_assum ACCEPT_TAC) >>
+    rpt (pop_assum mp_tac >> simp[])) >>
+  (* INL case: P7 IH for eval_expr success *)
+  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+    drule_all >> strip_tac >>
   (* push_scope *)
   simp_tac (srw_ss()) [push_scope_def, return_def, bind_apply, BETA_THM] >>
   (* Discharge guarded P1 IHs (for ss and ss') *)
@@ -1646,6 +1656,8 @@ Resume eval_preserves_swt[If_True]:
     irule push_scope_swt >> first_assum ACCEPT_TAC) >>
   `env_consistent env cx (r with scopes updated_by CONS FEMPTY)` by (
     irule push_scope_ec >> first_assum ACCEPT_TAC) >>
+  `accounts_well_typed (r with scopes updated_by CONS FEMPTY).accounts` by (
+    simp[evaluation_state_component_equality]) >>
   (* Apply P1 IH for ss *)
   qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
     drule_all >> strip_tac >>
@@ -1670,6 +1682,8 @@ Resume eval_preserves_swt[If_False]:
       irule push_scope_swt >> first_assum ACCEPT_TAC) >>
     `env_consistent env cx (r with scopes updated_by CONS FEMPTY)` by (
       irule push_scope_ec >> first_assum ACCEPT_TAC) >>
+    `accounts_well_typed (r with scopes updated_by CONS FEMPTY).accounts` by (
+      simp[evaluation_state_component_equality]) >>
     qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss' /\ _ ==> _`
       drule_all >> strip_tac >>
     drule_all scope_bracket_preserves >> strip_tac >>
@@ -1927,7 +1941,7 @@ Resume eval_preserves_swt[SubscriptTarget]:
   qpat_x_assum `well_typed_target _ (SubscriptTarget _ _) _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_SubscriptTarget]) >>
   (* Wrap bt typing as existential for P5 IH matching — keep existential *)
-  qpat_assum `well_typed_target env bt tgt_ty`
+  qpat_x_assum `well_typed_target env bt tgt_ty`
     (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
                                     `tgt_ty`) th)) >>
   (* Unfold eval_base_target *)
@@ -1996,7 +2010,7 @@ Resume eval_preserves_swt[for_cons]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `EVERY _ (v::vs)` (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   `well_formed_type_value tyv` by (
-    qpat_assum `evaluate_type _ _ = SOME tyv`
+    qpat_x_assum `evaluate_type _ _ = SOME tyv`
       (ACCEPT_TAC o MATCH_MP (cj 1 evaluate_type_well_formed))) >>
   (* Split the conjoined IHs *)
   qpat_x_assum `_ /\ _`
@@ -2453,7 +2467,7 @@ Resume eval_preserves_swt[Attribute]:
   qpat_x_assum `attribute_type_ok _ (expr_type _) _ _` mp_tac >>
   ASM_REWRITE_TAC [] >> rpt strip_tac >>
   (* evaluate_type (StructT sname) = SOME tyv ==> tyv = StructTV ftypes *)
-  qpat_assum `evaluate_type _ (StructT _) = SOME _`
+  qpat_x_assum `evaluate_type _ (StructT _) = SOME _`
     (strip_assume_tac o MATCH_MP evaluate_type_StructT_is_StructTV) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* Now use attribute_type_ok_evaluate — evaluate_type assumption still available *)
@@ -2844,7 +2858,7 @@ Resume eval_preserves_swt[Pop]:
   qpat_x_assum `well_typed_expr _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_Pop]) >>
   (* Wrap well_typed_target for P5 IH *)
-  qpat_assum `well_typed_target env bt _`
+  qpat_x_assum `well_typed_target env bt _`
     (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
                                     `ArrayT v11 bd`) th)) >>
   (* Unfold ev_Pop *)
@@ -3320,7 +3334,7 @@ Proof
          else return () od)
      pushed_st = (fres, fst)` by metis_tac[pairTheory.PAIR] >>
   (* Step 2: Prove state_well_typed fst *)
-  qpat_assum `finally _ _ pushed_st = _`
+  qpat_x_assum `finally _ _ pushed_st = _`
     (mp_tac o MATCH_MP
       (REWRITE_RULE [GSYM AND_IMP_INTRO] state_well_typed_finally)) >>
   impl_tac >- suspend "body_swt" >>
