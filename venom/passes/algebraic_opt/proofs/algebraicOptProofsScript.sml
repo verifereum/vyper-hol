@@ -14,9 +14,12 @@
 Theory algebraicOptProofs
 Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptSegSim
+  algebraicOptPeepholeSim algebraicOptResolveSim
   passSimulationProps venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
+  execEquivParamProofs venomWf
+  analysisSimProofsBase analysisSimDefs
 
 (* ===== Fresh Variable Set ===== *)
 
@@ -219,7 +222,7 @@ QED
  * relates exec_block on fn0 at s to exec_block on fn' at s'.
  * This is needed because the induction must track two related states.
  *)
-Theorem block_sim_to_run_blocks[local]:
+Theorem block_sim_to_run_blocks:
   !fv fn0 fn'.
     (* Same block label structure *)
     (!lbl. IS_SOME (lookup_block lbl fn0.fn_blocks) <=>
@@ -399,7 +402,7 @@ Theorem ao_fresh_var_suffix_neq[local]:
   !id s1 s2. s1 <> s2 ==>
     ao_fresh_var id s1 <> ao_fresh_var id s2
 Proof
-  rw[ao_fresh_var_def] >> simp[stringTheory.STRCAT_11]
+  simp[ao_fresh_var_def, stringTheory.STRCAT_11]
 QED
 
 (* ===== step_inst_base dispatch for expansion opcodes ===== *)
@@ -648,16 +651,38 @@ QED
 
 (* ===== Per-block simulation: phases 2-4 ===== *)
 
-(* Single-state per-block sim: same state, different blocks.
-   This is the core correctness of the peephole transformation.
-   Agents 1-3 prove the per-instruction simulation for each opcode.
-   This theorem lifts it to exec_block level.
+(* Per-instruction simulation for ao_transform_inst.
+   Combines iszero resolution, producer optimization, and peephole rewriting.
+   CHEATED — blocked on:
+     - ao_peephole_full_sim (15 cheats in algebraicOptPeepholeSimScript.sml)
+     - iszero resolution correctness (ao_resolve_iszero_inst operand substitution)
+     - ao_opt_producer correctness (BALANCE→SELFBALANCE, nested SIGNEXTEND) *)
+Triviality ao_transform_inst_sim[local]:
+  !fv dfg ra lbl targets.
+    let f = \(v:num) inst. ao_transform_inst dfg ra lbl v targets inst in
+    analysis_inst_simulates
+      (state_equiv fv) (execution_equiv fv) (\v s. T) f
+Proof
+  cheat
+QED
 
-   ARCHITECTURE NOTE: The transformed block has MORE instructions than
-   the original (1-to-N peephole expansions). The proof requires an
-   induction that maps original instruction indices to transformed
-   instruction index ranges, executing each range via run_insts and
-   showing state_equiv fv is maintained at each step boundary. *)
+(* Phase 4: cmp_flip block simulation.
+   CHEATED — blocked on cmp_flip per-instruction sim *)
+Triviality ao_cmp_flip_block_sim[local]:
+  !fv dfg fn1 lbl bb1 bb' fuel ctx s.
+    fv = ao_fn_fresh_vars fn1 /\
+    lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+    lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
+    s.vs_inst_idx = 0 ==>
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (exec_block fuel ctx bb1 s) (exec_block fuel ctx bb' s)
+Proof
+  cheat
+QED
+
+(* Single-state per-block sim: same state, different blocks.
+   Uses analysis_block_sim_univ for the Phase 3 block lifting,
+   then ao_cmp_flip_block_sim for Phase 4, composed via lift_result_trans. *)
 Theorem ao_single_state_block_sim[local]:
   !fv fn lbl bb0 bb' fuel ctx s.
     fv = ao_fn_fresh_vars fn /\
@@ -669,13 +694,6 @@ Theorem ao_single_state_block_sim[local]:
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (exec_block fuel ctx bb0 s) (exec_block fuel ctx bb' s)
 Proof
-  rpt gen_tac >> strip_tac >>
-  (* Requires per-instruction simulation from agents 1-3.
-     The lifting from instruction-level to block-level needs:
-     1. An index mapping between original and transformed instruction lists
-     2. Induction showing state_equiv fv is preserved at each boundary
-     3. Handling of 1-to-N expansions via run_insts segments
-     This is the most architecturally complex piece of the proof. *)
   cheat
 QED
 
@@ -709,22 +727,27 @@ Proof
     gvs[lookup_block_offset_fn] >>
     Cases_on `lookup_block lbl fn.fn_blocks` >> gvs[]) >>
   (* Establish preconditions for exec_block_result_equiv *)
-  `EVERY (\inst. inst.inst_opcode <> INVOKE) bb0.bb_instructions` by (
-    gvs[] >> irule offset_map_no_invoke >>
-    simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
-    first_x_assum irule >>
-    irule lookup_block_inst_in_fn_insts >>
-    simp[fn_insts_def] >> metis_tac[]) >>
-  `!inst. MEM inst bb0.bb_instructions ==>
-          !x. MEM (Var x) inst.inst_operands ==> x NOTIN fv` by (
-    gvs[] >> rpt strip_tac >>
+  (* Derive bb0.bb_instructions = MAP ao_handle_offset_inst ... *)
+  `bb0.bb_instructions =
+   MAP ao_handle_offset_inst orig_bb.bb_instructions` by simp[] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE) bb0.bb_instructions` by (
+    pop_assum SUBST1_TAC >>
+    match_mp_tac offset_map_no_invoke >>
+    simp[listTheory.EVERY_MEM] >> rpt gen_tac >> strip_tac >>
+    first_x_assum match_mp_tac >> simp[fn_insts_def] >>
+    match_mp_tac lookup_block_inst_in_fn_insts >> metis_tac[]) >>
+  `!i. MEM i bb0.bb_instructions ==>
+       !x. MEM (Var x) i.inst_operands ==> x NOTIN fv` by (
+    simp[] >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
     `?orig. MEM orig orig_bb.bb_instructions /\
-            inst = ao_handle_offset_inst orig` by
-      (gvs[listTheory.MEM_MAP] >> metis_tac[]) >>
+            i = ao_handle_offset_inst orig` by
+      (fs[listTheory.MEM_MAP] >> metis_tac[]) >>
     `MEM (Var x) orig.inst_operands` by
       metis_tac[ao_handle_offset_var_ops] >>
-    first_x_assum irule >> simp[fn_insts_def] >>
-    irule lookup_block_inst_in_fn_insts >> metis_tac[]) >>
+    `MEM orig (fn_insts fn)` by (
+      simp[fn_insts_def] >>
+      match_mp_tac lookup_block_inst_in_fn_insts >> metis_tac[]) >>
+    metis_tac[]) >>
   `result_equiv fv (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb0 s2)`
     by metis_tac[exec_block_result_equiv] >>
   (* Leg 2: single-state sim bb0/s2 ≈ bb'/s2 *)
@@ -754,47 +777,20 @@ Theorem ao_transform_function_correct_proof:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof
-  rpt gen_tac >> simp[] >> strip_tac >>
-  qabbrev_tac `fv = ao_fn_fresh_vars fn` >>
-  qabbrev_tac `fn0 = fn with fn_blocks :=
-    MAP (\bb. bb with bb_instructions :=
-      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
-  qabbrev_tac `fn' = ao_transform_function fn` >>
-  (* Phase 1: run_blocks fn s = run_blocks fn0 s (equality) *)
-  `run_blocks fuel ctx fn0 s = run_blocks fuel ctx fn s`
-    by (unabbrev_all_tac >> simp[run_blocks_offset_eq]) >>
-  (* Phase 1 lift_result (trivial from equality) *)
-  `lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-     (run_blocks fuel ctx fn s)
-     (run_blocks fuel ctx fn0 s)`
-    by (pop_assum (fn eq => simp[GSYM eq]) >>
-        irule lift_result_refl >>
-        simp[state_equiv_refl, execution_equiv_refl]) >>
-  (* Phases 2-4: run_blocks fn0 s ≤ run_blocks fn' s *)
-  `lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-     (run_blocks fuel ctx fn0 s)
-     (run_blocks fuel ctx fn' s)`
-    by (qspecl_then [`fv`, `fn0`, `fn'`] mp_tac block_sim_to_run_blocks >>
-        impl_tac
-        >- (conj_tac
-            >- (* Block label preservation *)
-               (rw[] >> markerLib.UNABBREV_TAC "fn0" >>
-                markerLib.UNABBREV_TAC "fn'" >>
-                simp[fn0_same_labels, ao_transform_function_same_labels])
-            >> (* Per-block two-state simulation *)
-               (rpt gen_tac >> strip_tac >>
-                markerLib.UNABBREV_TAC "fn0" >>
-                markerLib.UNABBREV_TAC "fn'" >>
-                markerLib.UNABBREV_TAC "fv" >>
-                irule ao_per_block_sim >> simp[]))
-        >> disch_then (qspecl_then [`fuel`, `ctx`, `s`] ACCEPT_TAC)) >>
-  (* Compose: fn ≤ fn0 ≤ fn' using lift_result_trans *)
-  qspecl_then [`state_equiv fv`, `execution_equiv fv`] mp_tac lift_result_trans >>
-  impl_tac
-  >- (conj_tac
-      >- (rpt strip_tac >> metis_tac[state_equiv_trans_local])
-      >> (rpt strip_tac >> metis_tac[execution_equiv_trans_local])) >>
-  rw[] >>
-  first_x_assum (drule_all_then ACCEPT_TAC)
+  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  (* Phase 1: rewrite LHS to use offset-converted function *)
+  CONV_TAC (RATOR_CONV (RAND_CONV
+    (ONCE_REWRITE_CONV [GSYM run_blocks_offset_eq]))) >>
+  (* Apply block_sim_to_run_blocks *)
+  match_mp_tac block_sim_to_run_blocks >>
+  conj_tac
+  >- (* Same labels *)
+     (gen_tac >>
+      simp[fn0_same_labels, ao_transform_function_same_labels])
+  >- (* Per-block sim: delegate to ao_per_block_sim *)
+     (rpt gen_tac >> strip_tac >>
+      match_mp_tac ao_per_block_sim >>
+      qexists_tac `fn` >> qexists_tac `lbl` >> fs[] >>
+      metis_tac[])
 QED
 

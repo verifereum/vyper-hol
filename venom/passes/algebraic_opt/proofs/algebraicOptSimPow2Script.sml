@@ -1,10 +1,6 @@
 (*
  * Algebraic Optimization — Power-of-Two & OR Simulation Helpers
  *
- * Proves that ao_opt_muldiv (MUL, Div, Mod cases) and ao_opt_or
- * produce replacement instructions with equivalent step_inst_base,
- * or the original instruction errors.
- *
  * TOP-LEVEL:
  *   ao_mul_sim  — MUL case of ao_opt_muldiv
  *   ao_div_sim  — Div case of ao_opt_muldiv
@@ -16,32 +12,43 @@ Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptRules2
   venomExecSemantics venomState passSharedDefs
 Libs
-  pairLib wordsLib
+  pairLib BasicProvers
 
-(* ===== Local helpers ===== *)
+(* ===== Per-opcode step_inst_base dispatch ===== *)
 
-(* safe_div with zero first operand always returns 0w *)
-Triviality safe_div_zero_l[local]:
-  !v : bytes32. safe_div 0w v = 0w
+Triviality step_mul[local]:
+  !inst s. inst.inst_opcode = MUL ==>
+    step_inst_base inst s = exec_pure2 $* inst s
 Proof
-  gen_tac >> simp[safe_div_def] >>
-  Cases_on `v = 0w` >> simp[wordsTheory.word_div_def]
+  rpt strip_tac >> gvs[step_inst_base_def]
 QED
 
-(* safe_mod with zero first operand always returns 0w *)
-Triviality safe_mod_zero_l[local]:
-  !v : bytes32. safe_mod 0w v = 0w
+Triviality step_div[local]:
+  !inst s. inst.inst_opcode = Div ==>
+    step_inst_base inst s = exec_pure2 safe_div inst s
 Proof
-  gen_tac >> simp[safe_mod_def] >>
-  Cases_on `v = 0w` >> simp[wordsTheory.word_mod_def]
+  rpt strip_tac >> gvs[step_inst_base_def]
 QED
 
-(* 0w - 1w = UINT_MAXw *)
+Triviality step_mod[local]:
+  !inst s. inst.inst_opcode = Mod ==>
+    step_inst_base inst s = exec_pure2 safe_mod inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
+Triviality step_or[local]:
+  !inst s. inst.inst_opcode = OR ==>
+    step_inst_base inst s = exec_pure2 word_or inst s
+Proof
+  rpt strip_tac >> gvs[step_inst_base_def]
+QED
+
 Triviality neg1_is_max[local]:
   (0w : 'a word) - 1w = UINT_MAXw
 Proof
-  simp[wordsTheory.word_sub_def, wordsTheory.WORD_NEG_1,
-       wordsTheory.WORD_ADD_0]
+  rewrite_tac[GSYM wordsTheory.WORD_NOT_0] >>
+  simp[wordsTheory.WORD_NOT, wordsTheory.word_sub_def, wordsTheory.WORD_NEG_0]
 QED
 
 (* ===== MUL simulation ===== *)
@@ -59,20 +66,19 @@ Proof
     (Cases_on `inst0.inst_operands` >> gvs[] >>
      Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
   `?out. inst0.inst_outputs = [out]` by
-    (Cases_on `inst0.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[]) >>
+    (Cases_on `inst0.inst_outputs` >> gvs[]) >>
   Cases_on `op1` >> Cases_on `op2` >>
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  (* Power-of-two case: use bridge + rule *)
   TRY (
     DISJ1_TAC >>
     drule is_power_of_two_exp >> strip_tac >>
     irule ao_rule_mul_pow2 >> simp[] >>
     qexists_tac `k` >> simp[] >> NO_TAC) >>
-  (* Zero/one cases: direct computation *)
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+  simp[step_mul, exec_pure2_def, eval_operand_def,
+       wordsTheory.WORD_MULT_CLAUSES] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
   every_case_tac >> gvs[wordsTheory.WORD_MULT_CLAUSES]
 QED
 
@@ -91,22 +97,23 @@ Proof
     (Cases_on `inst0.inst_operands` >> gvs[] >>
      Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
   `?out. inst0.inst_outputs = [out]` by
-    (Cases_on `inst0.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[]) >>
+    (Cases_on `inst0.inst_outputs` >> gvs[]) >>
   Cases_on `op1` >> Cases_on `op2` >>
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  (* Power-of-two case *)
   TRY (
     DISJ1_TAC >>
     drule is_power_of_two_exp >> strip_tac >>
     irule ao_rule_div_pow2 >> simp[] >>
     qexists_tac `k` >> simp[] >> NO_TAC) >>
-  (* Zero/one cases *)
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+  simp[step_div, exec_pure2_def, eval_operand_def,
+       safe_div_def, wordsTheory.word_div_1,
+       wordsTheory.word_div_def, arithmeticTheory.ZERO_DIV] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
   every_case_tac >>
-  gvs[safe_div_def, safe_div_zero_l, wordsTheory.word_div_1]
+  gvs[safe_div_def, wordsTheory.word_div_1,
+      wordsTheory.word_div_def, arithmeticTheory.ZERO_DIV]
 QED
 
 (* ===== Mod simulation ===== *)
@@ -124,22 +131,23 @@ Proof
     (Cases_on `inst0.inst_operands` >> gvs[] >>
      Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
   `?out. inst0.inst_outputs = [out]` by
-    (Cases_on `inst0.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[]) >>
+    (Cases_on `inst0.inst_outputs` >> gvs[]) >>
   Cases_on `op1` >> Cases_on `op2` >>
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  (* Power-of-two case *)
   TRY (
     DISJ1_TAC >>
     drule is_power_of_two_exp >> strip_tac >>
     irule ao_rule_mod_pow2 >> simp[] >>
     qexists_tac `k` >> simp[] >> NO_TAC) >>
-  (* Zero/one cases *)
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+  simp[step_mod, exec_pure2_def, eval_operand_def,
+       safe_mod_def, wordsTheory.WORD_MOD_1,
+       wordsTheory.word_mod_def, arithmeticTheory.ZERO_MOD] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
   every_case_tac >>
-  gvs[safe_mod_def, safe_mod_zero_l, wordsTheory.WORD_MOD_1]
+  gvs[safe_mod_def, wordsTheory.WORD_MOD_1,
+      wordsTheory.word_mod_def, arithmeticTheory.ZERO_MOD]
 QED
 
 (* ===== OR simulation ===== *)
@@ -157,15 +165,15 @@ Proof
     (Cases_on `inst0.inst_operands` >> gvs[] >>
      Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
   `?out. inst0.inst_outputs = [out]` by
-    (Cases_on `inst0.inst_outputs` >> gvs[] >>
-     Cases_on `t` >> gvs[]) >>
+    (Cases_on `inst0.inst_outputs` >> gvs[]) >>
   Cases_on `op1` >> Cases_on `op2` >>
   gvs[ao_opt_or_def, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-  every_case_tac >>
-  gvs[neg1_is_max, wordsTheory.WORD_OR_CLAUSES]
+  simp[step_or, exec_pure2_def, eval_operand_def,
+       neg1_is_max, wordsTheory.WORD_OR_CLAUSES] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
+  every_case_tac >> gvs[neg1_is_max, wordsTheory.WORD_OR_CLAUSES]
 QED
 
 val _ = export_theory();

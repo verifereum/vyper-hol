@@ -12,7 +12,69 @@ Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptRules2
   venomExecSemantics venomState venomInst passSharedDefs
 Libs
-  pairLib
+  pairLib BasicProvers
+
+(* ===== Word division zero helpers ===== *)
+
+(* 0w / c = 0w (signed word division, for c ≠ 0w) *)
+Triviality word_quot_zero_l[local]:
+  !c : 'a word. c <> 0w ==> 0w / c = 0w
+Proof
+  rpt strip_tac >>
+  simp[integer_wordTheory.word_quot, integer_wordTheory.word_0_w2i,
+       integerTheory.INT_QUOT_0] >>
+  `w2i c <> 0` by (
+    strip_tac >> gvs[integer_wordTheory.w2i_eq_0]) >>
+  simp[integerTheory.INT_QUOT_0, integer_wordTheory.i2w_def]
+QED
+
+(* 0w rem c = 0w (signed word remainder, for c ≠ 0w) *)
+Triviality word_rem_zero_l[local]:
+  !c : 'a word. c <> 0w ==> word_rem 0w c = 0w
+Proof
+  rpt strip_tac >>
+  simp[integer_wordTheory.word_rem, integer_wordTheory.word_0_w2i] >>
+  `w2i c <> 0` by (
+    strip_tac >> gvs[integer_wordTheory.w2i_eq_0]) >>
+  simp[integerTheory.INT_REM0, integer_wordTheory.i2w_def]
+QED
+
+(* x / 1w = x (signed word division by 1) *)
+Triviality w2i_1w_256[local]:
+  w2i (1w : bytes32) = 1
+Proof
+  `~word_msb (1w : bytes32)` by wordsLib.WORD_DECIDE_TAC >>
+  simp[integer_wordTheory.w2i_eq_w2n]
+QED
+
+Triviality word_quot_one[local]:
+  !x : bytes32. x / 1w = x
+Proof
+  gen_tac >>
+  `1w <> (0w : bytes32)` by simp[] >>
+  simp[integer_wordTheory.word_quot, w2i_1w_256,
+       integerTheory.INT_QUOT_1, integer_wordTheory.i2w_w2i]
+QED
+
+(* word_rem x 1w = 0w *)
+Triviality int_rem_1[local]:
+  !p:int. p rem 1 = 0
+Proof
+  gen_tac >>
+  mp_tac (Q.SPEC `1` integerTheory.INT_REMQUOT) >>
+  impl_tac >- simp[] >>
+  disch_then (qspec_then `p` strip_assume_tac) >>
+  intLib.ARITH_TAC
+QED
+
+Triviality word_rem_one[local]:
+  !x : bytes32. word_rem x 1w = 0w
+Proof
+  gen_tac >>
+  `1w <> (0w : bytes32)` by simp[] >>
+  simp[integer_wordTheory.word_rem, w2i_1w_256, int_rem_1,
+       integer_wordTheory.i2w_def]
+QED
 
 (* ===== step_inst_base dispatch helpers ===== *)
 
@@ -44,10 +106,13 @@ Triviality decomp_2_1[local]:
     LENGTH ops = 2 /\ LENGTH outs = 1 ==>
     ?op1 op2 out. ops = [op1; op2] /\ outs = [out]
 Proof
-  rpt strip_tac >>
-  Cases_on `ops` >> gvs[] >>
-  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  Cases_on `outs` >> gvs[] >> Cases_on `t` >> gvs[]
+  rpt gen_tac >> strip_tac >>
+  `?a1 rest. ops = a1 :: rest` by (Cases_on `ops` >> gvs[]) >>
+  `?a2 rest2. rest = a2 :: rest2` by (Cases_on `rest` >> gvs[]) >>
+  `rest2 = []` by gvs[] >>
+  `?o1 rest3. outs = o1 :: rest3` by (Cases_on `outs` >> gvs[]) >>
+  `rest3 = []` by gvs[] >>
+  gvs[]
 QED
 
 (* ===== SIGNEXTEND ===== *)
@@ -67,22 +132,15 @@ Theorem ao_signextend_sim:
 Proof
   rpt strip_tac >>
   imp_res_tac decomp_2_1 >> gvs[] >>
-  Cases_on `op1`
-  (* Var, Label: returns [inst0], identity *)
-  >- simp[ao_opt_signextend_def]
-  >- simp[ao_opt_signextend_def]
-  (* Lit w *)
-  >> rename1 `Lit w` >>
-  simp[ao_opt_signextend_def] >>
-  IF_CASES_TAC
-  >- ( (* w >= 31w: ASSIGN x *)
-    DISJ1_TAC >>
-    irule ao_rule_signextend_ge31 >> simp[])
-  >> simp[LET_THM] >>
-  (* Range-based or identity branches *)
-  rpt IF_CASES_TAC >> simp[]
-  (* Range-based case: ASSIGN x — needs range_analysis_sound *)
-  >- cheat
+  Cases_on `op1` >> Cases_on `op2` >>
+  simp[ao_opt_signextend_def, lit_eq_def] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  TRY (simp[LET_THM] >> rpt IF_CASES_TAC >> gvs[] >>
+       TRY (simp[] >> NO_TAC) >>
+       (* Range-based case: ASSIGN x — needs range_analysis_sound *)
+       cheat >> NO_TAC) >>
+  TRY (DISJ1_TAC >> metis_tac[ao_rule_signextend_ge31])
 QED
 
 (* ===== Exp ===== *)
@@ -97,22 +155,16 @@ Theorem ao_exp_sim:
 Proof
   rpt strip_tac >>
   imp_res_tac decomp_2_1 >> gvs[] >>
-  simp[ao_opt_exp_def] >>
-  rpt IF_CASES_TAC >> gvs[lit_eq_def]
-  (* Identity: [inst0] *)
-  >- simp[]
-  (* exp = 0w: x^0 = 1 *)
-  >- (Cases_on `eval_operand op1 s`
-      >- (DISJ2_TAC >> simp[step_base_exp, exec_pure2_def, eval_operand_def])
-      >- (DISJ1_TAC >> metis_tac[ao_rule_exp_zero, optionTheory.IS_SOME_DEF]))
-  (* exp = 1w: x^1 = x *)
-  >- (DISJ1_TAC >> metis_tac[ao_rule_exp_one])
-  (* base = 1w: 1^x = 1 *)
-  >- (Cases_on `eval_operand op2 s`
-      >- (DISJ2_TAC >> simp[step_base_exp, exec_pure2_def, eval_operand_def])
-      >- (DISJ1_TAC >> metis_tac[ao_rule_exp_base_one, optionTheory.IS_SOME_DEF]))
-  (* base = 0w: 0^x = iszero(x) *)
-  >- (DISJ1_TAC >> metis_tac[ao_rule_exp_base_zero])
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[ao_opt_exp_def, lit_eq_def] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  (* Brute force: unfold step_inst_base for both sides *)
+  simp[step_inst_base_def, exec_pure2_def, exec_pure1_def,
+       eval_operand_def] >>
+  every_case_tac >> gvs[wordsTheory.word_exp_def,
+    arithmeticTheory.EXP_1, arithmeticTheory.ZERO_EXP] >>
+  rpt IF_CASES_TAC >> gvs[bool_to_word_def]
 QED
 
 (* ===== SDIV ===== *)
@@ -132,16 +184,13 @@ Proof
   imp_res_tac decomp_2_1 >> gvs[] >>
   Cases_on `op1` >> Cases_on `op2` >>
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
-  rpt IF_CASES_TAC >> gvs[]
-  (* Identity cases *)
-  >> TRY (simp[] >> NO_TAC)
-  (* Zero cases: ASSIGN 0w *)
-  >> TRY (
-    simp[step_base_sdiv, exec_pure2_def, eval_operand_def, safe_sdiv_def] >>
-    simp[Once step_inst_base_def, eval_operand_def] >>
-    every_case_tac >> gvs[safe_sdiv_def] >> NO_TAC)
-  (* One case: ASSIGN op1, use ao_rule_sdiv_one *)
-  >> TRY (DISJ1_TAC >> metis_tac[ao_rule_sdiv_one] >> NO_TAC)
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  (* Brute force: unfold step_inst_base for both sides *)
+  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+       safe_sdiv_def] >>
+  every_case_tac >>
+  gvs[safe_sdiv_def, word_quot_zero_l, word_quot_one]
 QED
 
 (* ===== SMOD ===== *)
@@ -158,20 +207,13 @@ Proof
   imp_res_tac decomp_2_1 >> gvs[] >>
   Cases_on `op1` >> Cases_on `op2` >>
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
-  rpt IF_CASES_TAC >> gvs[]
-  (* Identity cases *)
-  >> TRY (simp[] >> NO_TAC)
-  (* Zero cases: ASSIGN 0w *)
-  >> TRY (
-    simp[step_base_smod, exec_pure2_def, eval_operand_def, safe_smod_def] >>
-    simp[Once step_inst_base_def, eval_operand_def] >>
-    every_case_tac >> gvs[safe_smod_def] >> NO_TAC)
-  (* One case: ASSIGN 0w, use ao_rule_smod_one *)
-  >> TRY (
-    Cases_on `eval_operand op1 s`
-    >- (DISJ2_TAC >> simp[step_base_smod, exec_pure2_def, eval_operand_def])
-    >- (DISJ1_TAC >> metis_tac[ao_rule_smod_one, optionTheory.IS_SOME_DEF])
-    >> NO_TAC)
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  (* Brute force: unfold step_inst_base for both sides *)
+  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+       safe_smod_def] >>
+  every_case_tac >>
+  gvs[safe_smod_def, word_rem_zero_l, word_rem_one]
 QED
 
 val _ = export_theory();

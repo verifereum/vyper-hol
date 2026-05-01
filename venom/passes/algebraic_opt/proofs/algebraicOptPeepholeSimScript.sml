@@ -14,7 +14,8 @@
  *)
 Theory algebraicOptPeepholeSim
 Ancestors
-  algebraicOptDefs algebraicOptRules algebraicOptSegSim
+  algebraicOptDefs algebraicOptRules algebraicOptRules2
+  algebraicOptSegSim algebraicOptSimArith algebraicOptSimPow2 algebraicOptSimCmp
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
 Libs
@@ -931,8 +932,46 @@ Proof
      use singleton_post_flip_sim with the rule theorem chain:
        step_inst_base inst' s = step_inst_base inst0 s  (rule theorem)
        step_inst_base inst0 s = step_inst_base inst s   (assumption)   *)
-  >- cheat (* SIGNEXTEND — needs signextend w>=31 identity rule *)
-  >- cheat (* Exp — needs exp rules: x**0=1, x**1=x, 1**x=1, 0**x=iszero *)
+  >- ( (* SIGNEXTEND *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_signextend ra lbl idx inst0 = [inst']`
+      by (simp[ao_opt_signextend_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE)
+             (ao_opt_signextend ra lbl idx inst0)` by (
+        irule opt_signextend_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_signextend ra lbl idx inst0)) s =
+       step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_signextend_sim >> simp[]) >>
+    `HD (ao_opt_signextend ra lbl idx inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* Exp *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_exp inst0 = [inst']`
+      by (simp[ao_opt_exp_def] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_exp inst0)` by (
+        irule opt_exp_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_exp inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_exp_sim >> simp[]) >>
+    `HD (ao_opt_exp inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
   >- ( (* ADD *)
     DISJ2_TAC >> simp[ao_opt_addsub_def] >>
     every_case_tac >> gvs[lit_eq_def] >>
@@ -995,12 +1034,102 @@ Proof
     fs[] >- (
       DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
     DISJ1_TAC >> metis_tac[])
-  >- cheat (* MUL — needs power-of-two rules *)
-  >- cheat (* Div — needs power-of-two rules *)
-  >- cheat (* SDIV — needs safe_sdiv rules *)
-  >- cheat (* Mod — needs power-of-two rules *)
-  >- cheat (* SMOD — needs safe_smod rules *)
-  >- ( (* OR — truthy case cheated, others proved *)
+  >- ( (* MUL *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_muldiv inst0 = [inst']`
+      by (simp[ao_opt_muldiv_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_muldiv inst0)` by (
+        irule opt_muldiv_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_muldiv inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_mul_sim >> simp[]) >>
+    `HD (ao_opt_muldiv inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* Div *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_muldiv inst0 = [inst']`
+      by (simp[ao_opt_muldiv_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_muldiv inst0)` by (
+        irule opt_muldiv_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_muldiv inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_div_sim >> simp[]) >>
+    `HD (ao_opt_muldiv inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* SDIV *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_muldiv inst0 = [inst']`
+      by (simp[ao_opt_muldiv_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_muldiv inst0)` by (
+        irule opt_muldiv_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_muldiv inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_sdiv_sim >> simp[]) >>
+    `HD (ao_opt_muldiv inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* Mod *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_muldiv inst0 = [inst']`
+      by (simp[ao_opt_muldiv_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_muldiv inst0)` by (
+        irule opt_muldiv_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_muldiv inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_mod_sim >> simp[]) >>
+    `HD (ao_opt_muldiv inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* SMOD *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_muldiv inst0 = [inst']`
+      by (simp[ao_opt_muldiv_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_muldiv inst0)` by (
+        irule opt_muldiv_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_muldiv inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_smod_sim >> simp[]) >>
+    `HD (ao_opt_muldiv inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* OR *)
     `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
       by gvs[inst_wf_def] >>
     `LENGTH inst0.inst_operands = 2`
@@ -1014,18 +1143,16 @@ Proof
       gvs[listTheory.EVERY_DEF]) >>
     `step_inst_base (HD (ao_opt_or dfg inst0)) s = step_inst_base inst0 s \/
      ?e. step_inst_base inst0 s = Error e` by (
-      irule ao_or_sim >> simp[] >>
-      (* Discharge non-truthy precondition *)
-      cheat) >>
+      irule ao_or_sim >> simp[]) >>
     `HD (ao_opt_or dfg inst0) = inst'` by gvs[] >>
     fs[] >- (
       DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
     DISJ1_TAC >> metis_tac[])
-  >- cheat (* EQ — 1-to-N expansion *)
-  >- cheat (* GT — comparator *)
-  >- cheat (* LT — comparator *)
-  >- cheat (* SGT — comparator *)
-  >- cheat (* SLT — comparator *)
+  >- cheat (* EQ — 1-to-N: ao_eq_sim exists but needs post-flip connection *)
+  >- cheat (* GT — ao_cmp_sim exists but needs post-flip + range-case connection *)
+  >- cheat (* LT — ao_cmp_sim exists but needs post-flip + range-case connection *)
+  >- cheat (* SGT — ao_cmp_sim exists but needs post-flip + range-case connection *)
+  >- cheat (* SLT — ao_cmp_sim exists but needs post-flip + range-case connection *)
 QED
 
 val _ = export_theory();
