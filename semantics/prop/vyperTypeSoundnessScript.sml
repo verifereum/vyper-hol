@@ -283,6 +283,8 @@ val not_type_error_tac =
   (* dest_ArrayV succeeds on well-typed ArrayTV values *)
   TRY (imp_res_tac dest_ArrayV_NEQ_NONE_value_has_type_ArrayTV >>
        gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
+  (* assign_target never produces TypeError *)
+  TRY (drule (cj 1 assign_target_no_type_error) >> simp[] >> NO_TAC) >>
   (* Check/type_check/raise/return never produce TypeError by construction *)
   TRY (gvs[raise_def, return_def, check_def, type_check_def,
            lift_option_type_def, lift_option_def, get_Value_def,
@@ -1498,8 +1500,13 @@ Resume eval_preserves_swt[AugAssign]:
   simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
   (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
-  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
+  reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >-
+  (* eval_base_target INR branch: apply P5 IH directly *)
+  (first_x_assum drule_all >> strip_tac >>
+   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+   TRY not_type_error_tac >>
+   rpt strip_tac >> gvs[] >>
+   TRY not_return_tac >> TRY not_type_error_tac) >>
   Cases_on `x` >> simp_tac (srw_ss()) [] >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* P5 IH for eval_base_target *)
@@ -1534,6 +1541,7 @@ Resume eval_preserves_swt[AugAssign]:
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (drule (cj 1 assign_target_no_type_error) >> simp[]) >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac (cj 1 assign_target_no_return) >>
   first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []
@@ -2839,6 +2847,7 @@ Resume eval_preserves_swt[Pop]:
   reverse (Cases_on `res_at`) >> simp_tac (srw_ss()) [] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
        rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+       TRY (drule (cj 1 assign_target_no_type_error) >> simp[]) >>
        rpt strip_tac >> gvs[] >>
        imp_res_tac (cj 1 assign_target_no_return) >>
        first_x_assum (qspec_then `v` mp_tac) >>
