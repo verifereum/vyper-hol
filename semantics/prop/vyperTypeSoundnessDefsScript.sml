@@ -891,11 +891,16 @@ Definition well_typed_stmt_def:
   well_typed_stmt env ret_ty (Assign tgt e) =
     (well_typed_atarget env tgt (expr_type e) /\
      well_typed_expr env e) /\
+  (* In/NotIn are excluded: they are comparison operators whose right operand
+     can be ArrayT, producing an ArrayRef from eval_expr. get_Value on ArrayRef
+     raises TypeError, violating the no-TypeError guarantee. Semantically,
+     augmented assignment with In/NotIn is meaningless (x In= arr). *)
   well_typed_stmt env ret_ty (AugAssign ty bt bop e) =
     (well_typed_target env bt ty /\
      well_typed_expr env e /\
      well_formed_type env.type_defs ty /\
-     well_typed_binop ty bop ty (expr_type e)) /\
+     well_typed_binop ty bop ty (expr_type e) /\
+     bop <> In /\ bop <> NotIn) /\
   well_typed_stmt env ret_ty (If e ss1 ss2) =
     (well_typed_expr env e /\
      expr_type e = BaseT BoolT /\
