@@ -1596,9 +1596,8 @@ Resume eval_preserves_swt[AugAssign_atwt]:
   irule update_base_preserves_vht >>
   rpt (first_assum (irule_at Any)) >>
   CONJ_TAC >- (irule (cj 1 evaluate_type_well_formed) >>
-               first_assum (irule_at Any)) >>
-  strip_tac >> gvs[]
-  >> TRY not_type_error_tac
+               qexistsl [`get_tenv cx`, `ty`] >> simp[]) >>
+  rpt strip_tac >> gvs[toplevel_value_typed_def]
 QED
 
 Resume eval_preserves_swt[If]:
