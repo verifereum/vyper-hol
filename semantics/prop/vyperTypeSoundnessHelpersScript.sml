@@ -5464,6 +5464,29 @@ Proof
   >> simp[evaluation_state_component_equality]
 QED
 
+(* Boundary lemma: scope bracket transfers exceptional postconditions from q to res.
+   If q's INR exceptions are forwarded unchanged to res (which is what
+   scope_bracket does), then no-TypeError and return-typing properties
+   about q also hold for res. Avoids fragile Cases_on `q` >> gvs[PULL_FORALL]
+   in consumer proofs. *)
+Theorem scope_bracket_result_post:
+  !q res tenv ret_ty.
+  (!e. q = INR e ==> res = INR e) ==>
+  ((?x. q = INL x) ==> res = INL ()) ==>
+  (!s. q <> INR (Error (TypeError s))) ==>
+  (!v ret_tv. q = INR (ReturnException v) /\
+              evaluate_type tenv ret_ty = SOME ret_tv ==>
+              value_has_type ret_tv v) ==>
+  (!s. res <> INR (Error (TypeError s))) /\
+  !v ret_tv. res = INR (ReturnException v) /\
+             evaluate_type tenv ret_ty = SOME ret_tv ==>
+             value_has_type ret_tv v
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >> strip_tac >>
+  Cases_on `q` >> fs[sumTheory.INR_11]
+QED
+
+
 
 (* Decomposition of for-loop body:
    finally (try do eval_stmts cx body; return F od handle_loop_exception)
