@@ -1684,9 +1684,8 @@ Resume eval_preserves_swt[If_True]:
   drule_all scope_bracket_preserves >> strip_tac >>
   (* Substitute st' = st_body with scopes := TL ... *)
   rpt BasicProvers.VAR_EQ_TAC >> ASM_REWRITE_TAC [] >>
-  (* ReturnException typing: forward from IH (INL case trivial) *)
-  rpt strip_tac >> Cases_on `q` >> gvs[PULL_FORALL] >>
-  TRY (first_x_assum ACCEPT_TAC) >> simp[]
+  (* Exceptional postcondition: forwarded from IH via scope bracket *)
+  drule_all scope_bracket_result_post >> simp[]
 QED
 
 Resume eval_preserves_swt[If_False]:
@@ -1707,13 +1706,15 @@ Resume eval_preserves_swt[If_False]:
       drule_all >> strip_tac >>
     drule_all scope_bracket_preserves >> strip_tac >>
     rpt BasicProvers.VAR_EQ_TAC >> ASM_REWRITE_TAC [] >>
-    (* Kill irrelevant IHs before case split to avoid gvs issues *)
+    (* Kill irrelevant IHs that confuse drule_all matching *)
     qpat_x_assum `!tv. INL _ = INL tv ==> _` kall_tac >>
     qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
       kall_tac >>
-    rpt strip_tac >> Cases_on `q` >> gvs[PULL_FORALL] >>
-    TRY (first_x_assum ACCEPT_TAC) >> simp[]) >>
-  (* Error case: push+raise+pop gives (INR Error, r) *)
+    (* Exceptional postcondition: forwarded from IH via scope bracket *)
+    drule_all scope_bracket_result_post >> simp[]) >>
+  (* Error case: x is neither BoolV T nor BoolV F. Contradiction from typing. *)
+  qpat_x_assum `!tv. INL x = INL tv ==> _` (mp_tac o Q.SPEC `x`) >>
+  simp[evaluate_type_def] >> strip_tac >>
   qpat_x_assum `do _ od _ = _`
     (mp_tac o
      REWRITE_RULE [prove(``(r : evaluation_state) with scopes := r.scopes = r``,
@@ -1723,9 +1724,7 @@ Resume eval_preserves_swt[If_False]:
         finally_def, ignore_bind_apply, raise_def, pop_scope_def]))) >>
   simp_tac (srw_ss()) [] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  ASM_REWRITE_TAC [] >> simp_tac (srw_ss()) []
-  >> TRY not_type_error_tac
-QED
+  imp_res_tac toplevel_value_typed_BoolT_inv >> fs[]
 
 Resume eval_preserves_swt[For]:
   rpt gen_tac >> strip_tac >>
