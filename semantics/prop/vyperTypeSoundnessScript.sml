@@ -1007,7 +1007,9 @@ fun close_inr_err_tac_for st_term =
   strip_tac >>
   no_return_from_eval >>
   (* Solve state-preserving conjuncts directly from IH conclusions *)
-  rpt (CONJ_TAC >> first_assum ACCEPT_TAC) >>
+  rpt (CONJ_TAC >> TRY (first_assum ACCEPT_TAC)) >>
+  TRY not_type_error_tac >>
+  TRY not_return_tac >>
   (* Remaining ∀/⇒ goals: strip, then use IH conclusions or contradiction *)
   rpt strip_tac >>
   TRY (first_x_assum ACCEPT_TAC) >>
@@ -1501,43 +1503,53 @@ Resume eval_preserves_swt[AugAssign]:
   (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
   reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >-
-  (* eval_base_target INR branch: apply P5 IH directly *)
-  (first_x_assum drule_all >> strip_tac >>
-   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-   TRY not_type_error_tac >>
-   rpt strip_tac >> gvs[] >>
-   TRY not_return_tac >> TRY not_type_error_tac) >>
+  suspend "AugAssign_inr" >>
+  suspend "AugAssign_tgt"
+QED
+
+Resume eval_preserves_swt[AugAssign_inr]:
+  close_inr_err_tac
+QED
+
+Resume eval_preserves_swt[AugAssign_tgt]:
   Cases_on `x` >> simp_tac (srw_ss()) [] >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
-  (* P5 IH for eval_base_target *)
+  (* P6 IH for eval_base_target *)
   first_x_assum drule_all >> strip_tac >>
   (* Step 2: eval_expr cx e st_bt *)
   Cases_on `eval_expr cx e st_bt` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       first_x_assum drule_all >> strip_tac >>
-       rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-       rpt strip_tac >> gvs[] >>
-       imp_res_tac eval_expr_not_return >>
-       first_x_assum (qspec_then `v` mp_tac) >>
-       simp_tac (srw_ss()) [] >> NO_TAC) >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >-
+  suspend "AugAssign_expr_inr" >>
+  suspend "AugAssign_cont"
+QED
+
+Resume eval_preserves_swt[AugAssign_expr_inr]:
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  (* Apply guarded P7 IH first *)
+  qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  close_inr_err_tac
+QED
+
+Resume eval_preserves_swt[AugAssign_cont]:
   (* Apply guarded P7 IH for eval_expr *)
   qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
     (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
-  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  (* Step 3: get_Value x r — state unchanged *)
+  (impl_tac >- simp[]) >> strip_tac >>
+  (* Step 3: get_Value x r *)
   Cases_on `x` >> simp_tac (srw_ss()) [get_Value_def, return_def, raise_def] >>
   TRY close_pure_inr_err_tac >>
   rename1 `eval_expr cx e st_bt = (INL (Value v_expr), r)` >>
-  (* Step 4: assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r *)
+  (* Step 4: assign_target *)
   Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r` >>
-  (* Apply assign_target_well_typed_ao BEFORE splitting result *)
   `state_well_typed r'' /\ env_consistent env cx r''` by
     suspend "AugAssign_atwt" >>
-  (* Now case-split the result *)
+  `accounts_well_typed r''.accounts` by
+    metis_tac [cj 1 assign_target_preserves_accounts] >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
