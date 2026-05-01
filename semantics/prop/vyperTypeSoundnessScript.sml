@@ -1537,13 +1537,50 @@ Resume eval_preserves_swt[AugAssign_expr_inr]:
 QED
 
 Resume eval_preserves_swt[AugAssign_cont]:
-  cheat
+  strip_tac >>
+  (* Apply guarded P6 IH for eval_base_target *)
+  qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
+  (* Apply guarded P7 IH for eval_expr: input state is st_bt, output is (INL x, r) *)
+  qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
+    (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
+  (* Case split on get_Value: use Cases_on on the pair, then on the sum *)
+  Cases_on `get_Value x r` >>
+  Cases_on `q` >-
+  (* INL branch: get_Value succeeded *)
+  (imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+   Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop x') r` >>
+   rename1 `assign_target _ _ _ r = (at_res,r'')` >>
+   `state_well_typed r'' /\ env_consistent env cx r''` by
+     suspend "AugAssign_atwt" >>
+   `accounts_well_typed r''.accounts` by
+     metis_tac [cj 1 assign_target_preserves_accounts] >>
+   Cases_on `at_res` >-
+     suspend "AugAssign_at_inl" >>
+   suspend "AugAssign_at_inr") >>
+  (* INR branch: get_Value error *)
+  suspend "AugAssign_gv_inr"
 QED
 
 Resume eval_preserves_swt[AugAssign_gv_inr]:
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  strip_tac >>
   imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  gvs[] >> not_type_error_tac
+  (* Simplify the case expression with get_Value result *)
+  gvs[AllCaseEqs()] >>
+  (* Instantiate the guarded eval_expr IH to get toplevel_value_typed x tyv *)
+  qpat_x_assum `!tv. INL x = INL tv ==> _` (qspecl_then [`x`] mp_tac) >>
+  simp[] >> strip_tac >>
+  (* well_typed_binop forces expr_type e = ty (a BaseT), so evaluate_type gives a non-NoneTV/non-ArrayTV tyv *)
+  `?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+         tyv <> NoneTV /\ !t b. tyv <> ArrayTV t b` by (
+    qexists_tac `tyv'` >> simp[] >>
+    `expr_type e = ty` by metis_tac [well_typed_binop_same_type] >>
+    gvs[evaluate_type_not_NoneT_imp_not_NoneTV,
+        evaluate_type_BaseT_imp_not_ArrayTV] ) >>
+  (* This contradicts get_Value returning INR *)
+  imp_res_tac toplevel_value_typed_no_ArrayTV_get_Value >> gvs[]
 QED
 
 Resume eval_preserves_swt[AugAssign_atwt]:
