@@ -15,7 +15,7 @@
 Theory algebraicOptPeepholeSim
 Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptRules2
-  algebraicOptSegSim algebraicOptSimArith algebraicOptSimPow2 algebraicOptSimCmp
+  algebraicOptSegSim algebraicOptSimArith algebraicOptSimPow2
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
 Libs
@@ -777,34 +777,7 @@ QED
    The truthy branch (ao_all_truthy) is NOT semantics-preserving
    at the peephole level — it changes x|nonzero to 1w.
    This needs a higher-level proof with usage context. *)
-Triviality ao_or_sim[local]:
-  !dfg inst0 s.
-    inst0.inst_opcode = OR /\
-    LENGTH inst0.inst_operands = 2 /\
-    LENGTH inst0.inst_outputs = 1 /\
-    ~(ao_all_truthy dfg inst0 /\
-      is_lit_op (EL 1 inst0.inst_operands) /\
-      ~lit_eq (EL 1 inst0.inst_operands) 0w) ==>
-    step_inst_base (HD (ao_opt_or dfg inst0)) s = step_inst_base inst0 s \/
-    ?e. step_inst_base inst0 s = Error e
-Proof
-  rpt strip_tac >>
-  `?op1 op2. inst0.inst_operands = [op1; op2]` by (
-    Cases_on `inst0.inst_operands` >> gvs[] >>
-    Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
-  `?out. inst0.inst_outputs = [out]` by (
-    Cases_on `inst0.inst_outputs` >> gvs[] >>
-    Cases_on `t` >> gvs[]) >>
-  Cases_on `op1` >> Cases_on `op2` >>
-  gvs[ao_opt_or_def, lit_eq_def, is_lit_op_def] >>
-  rpt IF_CASES_TAC >> gvs[neg1_is_max, zero_ne_max] >>
-  TRY (simp[] >> NO_TAC) >>
-  simp[step_inst_base_or, exec_pure2_def, eval_operand_def,
-       wordsTheory.WORD_OR_CLAUSES, neg1_is_max] >>
-  simp[Once step_inst_base_def, eval_operand_def] >>
-  every_case_tac >>
-  gvs[wordsTheory.WORD_OR_CLAUSES, neg1_is_max]
-QED
+(* ao_or_sim imported from algebraicOptSimPow2Theory *)
 
 (* Singleton helpers: each ao_opt_* returns a singleton list *)
 Triviality ao_opt_and_singleton[local]:
