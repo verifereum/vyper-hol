@@ -14,7 +14,7 @@
  *)
 Theory algebraicOptPeepholeSim
 Ancestors
-  algebraicOptDefs algebraicOptRules
+  algebraicOptDefs algebraicOptRules algebraicOptSegSim
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
 Libs
@@ -97,15 +97,7 @@ QED
 
 (* ===== run_insts helpers ===== *)
 
-(* Local copy of run_insts to avoid heavy dependency chain.
-   Same definition as in analysisSimDefs / algebraicOptSegSim. *)
-Definition run_insts_def:
-  run_insts fuel ctx [] s = OK s /\
-  run_insts fuel ctx (inst :: rest) s =
-    case step_inst fuel ctx inst s of
-      OK s' => run_insts fuel ctx rest s'
-    | err => err
-End
+(* run_insts_def imported from algebraicOptSegSim *)
 
 Theorem run_insts_singleton:
   !fuel ctx inst s.
@@ -461,6 +453,18 @@ Proof
   rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
 QED
 
+Triviality ao_pre_flip_preserves_operands_length[local]:
+  !inst. LENGTH (ao_pre_flip_inst inst).inst_operands = LENGTH inst.inst_operands
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
+QED
+
+Triviality ao_pre_flip_preserves_outputs[local]:
+  !inst. (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
+QED
+
 (* General singleton simulation: if a replacement singleton has equivalent
    step_inst_base and is non-INVOKE, the pipeline simulation holds. *)
 Triviality singleton_post_flip_sim[local]:
@@ -637,6 +641,189 @@ Proof
   irule exec_pure2_none_error >> simp[] >> metis_tac[]
 QED
 
+(* 1-to-1 replacement sim via sim_or_error: if the rule theorem gives
+   equality conditional on IS_SOME, the binary op errors when NONE.
+   Works for binary opcodes (ADD,SUB,MUL,AND,OR,XOR,EQ,GT,LT,...).
+   Usage: irule binary_1to1_sim >> simp[] >> conj_tac
+          >- (rule proof or error proof)  *)
+Triviality binary_1to1_sim[local]:
+  !fv fuel ctx inst inst' inst0 s.
+    inst'.inst_opcode <> INVOKE /\
+    step_inst_base inst0 s = step_inst_base inst s /\
+    (step_inst_base inst' s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e) ==>
+    (?e. step_inst_base inst s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst_base inst s)
+      (run_insts fuel ctx [ao_post_flip_inst inst'] s)
+Proof
+  rpt gen_tac >> strip_tac >> fs[]
+  >- (DISJ2_TAC >> irule singleton_post_flip_sim >> fs[])
+  >- metis_tac[]
+QED
+
+(* ===== Per-opcode simulation helpers ===== *)
+
+Triviality neg1_is_max[local]:
+  (0w : 'a word) - 1w = UINT_MAXw
+Proof
+  simp[wordsTheory.word_sub_def, wordsTheory.WORD_NEG_1,
+       wordsTheory.WORD_ADD_0]
+QED
+
+(* UINT_MAXw - w = NOT w: subtraction from all-1s = bitwise complement *)
+Triviality neg1_sub_is_not[local]:
+  !w : 'a word. (0w - 1w) - w = word_1comp w
+Proof
+  rw[wordsTheory.WORD_NOT] >>
+  simp[wordsTheory.word_sub_def, wordsTheory.WORD_NEG_ADD,
+       wordsTheory.WORD_ADD_COMM]
+QED
+
+(* 0w ≠ UINT_MAXw: needed to close contradictory branches *)
+Triviality zero_ne_max[local]:
+  (0w : 'a word) <> UINT_MAXw
+Proof
+  simp[wordsTheory.word_T_def,
+       wordsTheory.UINT_MAX_def, wordsTheory.dimword_def] >>
+  `1 <= dimindex (:'a)` by simp[fcpTheory.DIMINDEX_GE_1] >>
+  simp[]
+QED
+
+(* AND: all branches produce equivalent or error *)
+Triviality ao_and_sim[local]:
+  !inst0 s.
+    inst0.inst_opcode = AND /\
+    LENGTH inst0.inst_operands = 2 /\
+    LENGTH inst0.inst_outputs = 1 ==>
+    step_inst_base (HD (ao_opt_and inst0)) s = step_inst_base inst0 s \/
+    ?e. step_inst_base inst0 s = Error e
+Proof
+  rpt strip_tac >>
+  `?op1 op2. inst0.inst_operands = [op1; op2]` by (
+    Cases_on `inst0.inst_operands` >> gvs[] >>
+    Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  `?out. inst0.inst_outputs = [out]` by (
+    Cases_on `inst0.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[ao_opt_and_def, lit_eq_def] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  simp[step_inst_base_and, exec_pure2_def, eval_operand_def,
+       wordsTheory.WORD_AND_CLAUSES, neg1_is_max] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
+  every_case_tac >> gvs[wordsTheory.WORD_AND_CLAUSES, neg1_is_max]
+QED
+
+(* SUB: all branches of ao_opt_addsub produce equivalent or error *)
+Triviality ao_sub_sim[local]:
+  !inst0 s.
+    inst0.inst_opcode = SUB /\
+    LENGTH inst0.inst_operands = 2 /\
+    LENGTH inst0.inst_outputs = 1 ==>
+    step_inst_base (HD (ao_opt_addsub inst0)) s = step_inst_base inst0 s \/
+    ?e. step_inst_base inst0 s = Error e
+Proof
+  rpt strip_tac >>
+  `?op1 op2. inst0.inst_operands = [op1; op2]` by (
+    Cases_on `inst0.inst_operands` >> gvs[] >>
+    Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  `?out. inst0.inst_outputs = [out]` by (
+    Cases_on `inst0.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[ao_opt_addsub_def, LET_THM, lit_eq_def] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  simp[step_inst_base_sub, exec_pure2_def, eval_operand_def,
+       wordsTheory.WORD_SUB_REFL, neg1_sub_is_not] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
+  simp[exec_pure1_def, eval_operand_def] >>
+  every_case_tac >>
+  gvs[wordsTheory.WORD_SUB_REFL, neg1_sub_is_not]
+QED
+
+(* XOR: all branches of ao_opt_addsub produce equivalent or error *)
+Triviality ao_xor_sim[local]:
+  !inst0 s.
+    inst0.inst_opcode = XOR /\
+    LENGTH inst0.inst_operands = 2 /\
+    LENGTH inst0.inst_outputs = 1 ==>
+    step_inst_base (HD (ao_opt_addsub inst0)) s = step_inst_base inst0 s \/
+    ?e. step_inst_base inst0 s = Error e
+Proof
+  rpt strip_tac >>
+  `?op1 op2. inst0.inst_operands = [op1; op2]` by (
+    Cases_on `inst0.inst_operands` >> gvs[] >>
+    Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  `?out. inst0.inst_outputs = [out]` by (
+    Cases_on `inst0.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[ao_opt_addsub_def, LET_THM, lit_eq_def] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (simp[] >> NO_TAC) >>
+  simp[step_inst_base_xor, exec_pure2_def, eval_operand_def,
+       wordsTheory.WORD_XOR_CLAUSES, neg1_is_max] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
+  simp[exec_pure1_def, eval_operand_def] >>
+  every_case_tac >>
+  gvs[wordsTheory.WORD_XOR_CLAUSES, neg1_is_max]
+QED
+
+(* OR: max and zero branches produce equivalent or error.
+   The truthy branch (ao_all_truthy) is NOT semantics-preserving
+   at the peephole level — it changes x|nonzero to 1w.
+   This needs a higher-level proof with usage context. *)
+Triviality ao_or_sim[local]:
+  !dfg inst0 s.
+    inst0.inst_opcode = OR /\
+    LENGTH inst0.inst_operands = 2 /\
+    LENGTH inst0.inst_outputs = 1 /\
+    ~(ao_all_truthy dfg inst0 /\
+      is_lit_op (EL 1 inst0.inst_operands) /\
+      ~lit_eq (EL 1 inst0.inst_operands) 0w) ==>
+    step_inst_base (HD (ao_opt_or dfg inst0)) s = step_inst_base inst0 s \/
+    ?e. step_inst_base inst0 s = Error e
+Proof
+  rpt strip_tac >>
+  `?op1 op2. inst0.inst_operands = [op1; op2]` by (
+    Cases_on `inst0.inst_operands` >> gvs[] >>
+    Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  `?out. inst0.inst_outputs = [out]` by (
+    Cases_on `inst0.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[ao_opt_or_def, lit_eq_def, is_lit_op_def] >>
+  rpt IF_CASES_TAC >> gvs[neg1_is_max, zero_ne_max] >>
+  TRY (simp[] >> NO_TAC) >>
+  simp[step_inst_base_or, exec_pure2_def, eval_operand_def,
+       wordsTheory.WORD_OR_CLAUSES, neg1_is_max] >>
+  simp[Once step_inst_base_def, eval_operand_def] >>
+  every_case_tac >>
+  gvs[wordsTheory.WORD_OR_CLAUSES, neg1_is_max]
+QED
+
+(* Singleton helpers: each ao_opt_* returns a singleton list *)
+Triviality ao_opt_and_singleton[local]:
+  !inst0. ?inst'. ao_opt_and inst0 = [inst']
+Proof
+  rw[ao_opt_and_def] >> every_case_tac >> simp[]
+QED
+
+Triviality ao_opt_addsub_singleton[local]:
+  !inst0. ?inst'. ao_opt_addsub inst0 = [inst']
+Proof
+  rw[ao_opt_addsub_def, LET_THM] >> every_case_tac >> simp[]
+QED
+
+Triviality ao_opt_or_singleton[local]:
+  !dfg inst0. ?inst'. ao_opt_or dfg inst0 = [inst']
+Proof
+  rw[ao_opt_or_def] >> every_case_tac >> simp[]
+QED
+
 (* ===== Main single-state peephole sim ===== *)
 
 (* For the full peephole pipeline (pre-flip → peephole → post-flip),
@@ -751,15 +938,89 @@ Proof
     every_case_tac >> gvs[lit_eq_def] >>
     irule singleton_post_flip_sim >> simp[] >>
     metis_tac[ao_rule_add_zero])
-  >- cheat (* SUB — op1=op2 causes every_case_tac explosion, needs helper lemma *)
-  >- cheat (* XOR *)
-  >- cheat (* AND *)
+  >- ( (* SUB *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_addsub inst0 = [inst']`
+      by (simp[ao_opt_addsub_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_addsub inst0)` by (
+        irule opt_addsub_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_addsub inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_sub_sim >> simp[]) >>
+    `HD (ao_opt_addsub inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* XOR *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_addsub inst0 = [inst']`
+      by (simp[ao_opt_addsub_def, LET_THM] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_addsub inst0)` by (
+        irule opt_addsub_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_addsub inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_xor_sim >> simp[]) >>
+    `HD (ao_opt_addsub inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
+  >- ( (* AND *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_and inst0 = [inst']`
+      by (simp[ao_opt_and_def] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_and inst0)` by (
+        irule opt_and_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_and inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_and_sim >> simp[]) >>
+    `HD (ao_opt_and inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
   >- cheat (* MUL — needs power-of-two rules *)
   >- cheat (* Div — needs power-of-two rules *)
   >- cheat (* SDIV — needs safe_sdiv rules *)
   >- cheat (* Mod — needs power-of-two rules *)
   >- cheat (* SMOD — needs safe_smod rules *)
-  >- cheat (* OR *)
+  >- ( (* OR — truthy case cheated, others proved *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by gvs[inst_wf_def] >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `?inst'. ao_opt_or dfg inst0 = [inst']`
+      by (simp[ao_opt_or_def] >> every_case_tac >> simp[]) >>
+    simp[] >>
+    `inst'.inst_opcode <> INVOKE` by (
+      `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_or dfg inst0)` by (
+        irule opt_or_not_invoke >> simp[]) >>
+      gvs[listTheory.EVERY_DEF]) >>
+    `step_inst_base (HD (ao_opt_or dfg inst0)) s = step_inst_base inst0 s \/
+     ?e. step_inst_base inst0 s = Error e` by (
+      irule ao_or_sim >> simp[] >>
+      (* Discharge non-truthy precondition *)
+      cheat) >>
+    `HD (ao_opt_or dfg inst0) = inst'` by gvs[] >>
+    fs[] >- (
+      DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
+    DISJ1_TAC >> metis_tac[])
   >- cheat (* EQ — 1-to-N expansion *)
   >- cheat (* GT — comparator *)
   >- cheat (* LT — comparator *)

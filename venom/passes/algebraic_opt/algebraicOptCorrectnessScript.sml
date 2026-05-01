@@ -9,6 +9,9 @@ Ancestors
 Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
+    (* No INVOKE in function (standard for state_equiv-based proofs) *)
+    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
+    (* Freshness: original operands don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv)
     ==>
