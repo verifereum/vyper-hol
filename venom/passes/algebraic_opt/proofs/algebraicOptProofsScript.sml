@@ -683,6 +683,12 @@ QED
 (* Single-state per-block sim: same state, different blocks.
    Uses analysis_block_sim_univ for the Phase 3 block lifting,
    then ao_cmp_flip_block_sim for Phase 4, composed via lift_result_trans. *)
+(* Single-state per-block sim: compose Phase 3 (transform_block via
+   analysis_block_sim_univ) with Phase 4 (cmp_flip_block_sim).
+   Structure:
+     exec_block bb0 s ≈ exec_block bb1 s  (Phase 3: peephole transform)
+     exec_block bb1 s ≈ exec_block bb' s  (Phase 4: cmp flip)
+   Composed via lift_result_trans. *)
 Theorem ao_single_state_block_sim[local]:
   !fv fn lbl bb0 bb' fuel ctx s.
     fv = ao_fn_fresh_vars fn /\
@@ -694,6 +700,20 @@ Theorem ao_single_state_block_sim[local]:
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (exec_block fuel ctx bb0 s) (exec_block fuel ctx bb' s)
 Proof
+  rpt gen_tac >> strip_tac >>
+  (* Unfold ao_transform_function to get fn1 (Phase 3 result) *)
+  qabbrev_tac `fn0 = fn with fn_blocks :=
+    MAP (\bb. bb with bb_instructions :=
+      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
+  qabbrev_tac `targets = ao_compute_fn_iszero_targets fn0` >>
+  qabbrev_tac `dfg = dfg_build_function fn0` >>
+  qabbrev_tac `ra = range_analyze fn0` >>
+  qabbrev_tac `fn1 = fn0 with fn_blocks :=
+    MAP (ao_transform_block dfg ra targets) fn0.fn_blocks` >>
+  qabbrev_tac `dfg1 = dfg_build_function fn1` >>
+  (* Phase 3: bb0 → bb1 (peephole transform) *)
+  (* Phase 4: bb1 → bb' (cmp flip) *)
+  (* Both phases are cheated pending per-instruction sim proofs *)
   cheat
 QED
 
