@@ -1,0 +1,14 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "vyper-hol"
+version = "0.1.0"
+
+[build]
+members = ["."]
+roots = ["vyperHolScript.sml"]
+exclude = ["tests/generated/*"]
+
+[dependencies.verifereum]
+manifest = "verifereum.manifest.toml"
