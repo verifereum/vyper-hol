@@ -1658,8 +1658,9 @@ Resume eval_preserves_swt[If_INR]:
   rpt BasicProvers.VAR_EQ_TAC >>
   (* Substitute res = INR y and st' = r *)
   ASM_REWRITE_TAC [] >>
-  (* No-TypeError: ∀s. INR y ≠ INR (Error (TypeError s)) from IH *)
-  simp[]
+  (* All conjuncts from assumptions; gvs[] uses INR_11 in srw_ss to
+     strip INR wrappers, matching IH conclusions directly *)
+  rpt strip_tac >> gvs[]
 QED
 
 Resume eval_preserves_swt[If_True]:
