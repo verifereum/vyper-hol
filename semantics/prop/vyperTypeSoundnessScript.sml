@@ -997,13 +997,17 @@ fun close_inr_err_tac_for st_term =
   strip_tac >>
   TRY (POP_ASSUM STRIP_ASSUME_TAC) >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  (* Find ∀-assumption with well_typed in antecedent (the IH), apply via drule_all *)
-  PRED_ASSUM (fn t => is_forall t andalso
-    let val body_t = snd (strip_forall t)
-        val (ant, _) = dest_imp body_t
-    in can (find_term (fn u => is_const u andalso
-           String.isPrefix "well_typed" (fst (dest_const u)))) ant
-    end) drule_all >>
+  (* Find ∀-IH: try well_typed first, then eval_ for guarded IHs,
+     finally fall back to any ∀-assumption *)
+  (PRED_ASSUM (fn t => is_forall t andalso
+     let val body_t = snd (strip_forall t)
+         val (ant, _) = dest_imp body_t
+     in can (find_term (fn u => is_const u andalso
+            String.isPrefix "well_typed" (fst (dest_const u)))) ant
+        orelse can (find_term (fn u => is_const u andalso
+            String.isPrefix "eval_" (fst (dest_const u)))) ant
+     end) drule_all
+   ORELSE PRED_ASSUM is_forall drule_all) >>
   strip_tac >>
   no_return_from_eval >>
   (* Solve state-preserving conjuncts directly from IH conclusions *)
@@ -1419,7 +1423,7 @@ Resume eval_preserves_swt[Assign_tgt_inr]:
   (* Apply guarded P7 IH for eval_expr (same pattern as AugAssign) *)
   qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
     (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   (* Apply unguarded P7 IH via drule_all *)
   first_x_assum drule_all >> strip_tac >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
@@ -1435,11 +1439,11 @@ Resume eval_preserves_swt[Assign_tgt_inl]:
   (* Apply guarded P7 IH for eval_expr *)
   qpat_x_assum `!s'' gv t. eval_target _ _ s'' = (INL gv,t) ==> _`
     (qspecl_then [`st`, `x`, `st_tgt`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   (* Apply unguarded P7 IH *)
   qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
     (qspecl_then [`env`, `st_tgt`, `INL x'`, `r`] mp_tac) >>
-  (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   (* Materialise *)
   Cases_on `materialise cx x' r` >>
   Cases_on `q` >-
@@ -1528,7 +1532,7 @@ Resume eval_preserves_swt[AugAssign_expr_inr]:
   (* Apply guarded P7 IH first *)
   qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   close_inr_err_tac
 QED
 
@@ -1536,16 +1540,23 @@ Resume eval_preserves_swt[AugAssign_cont]:
   (* Apply guarded P7 IH for eval_expr *)
   qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
     (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  (* Step 3: get_Value x r *)
-  Cases_on `x` >> simp_tac (srw_ss()) [get_Value_def, return_def, raise_def] >>
-  TRY close_pure_inr_err_tac >>
-  rename1 `eval_expr cx e st_bt = (INL (Value v_expr), r)` >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
+  (* Step 3: get_Value x r — case split on result, not on toplevel_value *)
+  Cases_on `get_Value x r` >>
+  reverse (Cases_on `q`)
+  >- (
+    (* get_Value INR: impossible — well-typed toplevel_value means get_Value succeeds *)
+    simp_tac (srw_ss()) [raise_def] >>
+    suspend "AugAssign_gv_inr") >>
+  simp_tac (srw_ss()) [raise_def] >>
+  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  (* get_Value (Value v) = (INL v, r), so x = Value x' in the eval_expr assumption *)
+  rename1 `assign_target cx (BaseTargetV loc sbs) (Update ty bop x') r` >>
   (* Step 4: assign_target *)
-  Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r` >>
+  Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop x') r` >>
   `state_well_typed r'' /\ env_consistent env cx r''` by
     suspend "AugAssign_atwt" >>
   `accounts_well_typed r''.accounts` by
@@ -1557,6 +1568,14 @@ Resume eval_preserves_swt[AugAssign_cont]:
   rpt strip_tac >> gvs[] >>
   imp_res_tac (cj 1 assign_target_no_return) >>
   first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) []
+QED
+
+Resume eval_preserves_swt[AugAssign_gv_inr]:
+  (* get_Value INR: impossible — well-typed expr result means get_Value succeeds.
+     not_type_error_tac handles this via toplevel_value_typed_no_ArrayTV_get_Value *)
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  gvs[] >> not_type_error_tac
 QED
 
 Resume eval_preserves_swt[AugAssign_atwt]:
@@ -1605,13 +1624,13 @@ Resume eval_preserves_swt[If]:
     (qspecl_then [`st`, `x`, `r`, `r`, `()`, `r with scopes updated_by CONS FEMPTY`]
        mp_tac) >>
   simp_tac std_ss [push_scope_def, return_def] >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   qpat_x_assum `!s'' tv t s3 x0 t'. eval_expr _ _ s'' = _ /\ push_scope _ = _ ==>
     !env ret_ty st res st'. well_typed_stmts _ _ ss' /\ _ ==> _`
     (qspecl_then [`st`, `x`, `r`, `r`, `()`, `r with scopes updated_by CONS FEMPTY`]
        mp_tac) >>
   simp_tac std_ss [push_scope_def, return_def] >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   (* finally (switch_BoolV x (eval_stmts cx ss) (eval_stmts cx ss')) pop_scope *)
   simp_tac std_ss [finally_def, BETA_THM, bind_apply] >>
   simp_tac (srw_ss()) [switch_BoolV_def, COND_RATOR, bind_apply, BETA_THM] >>
@@ -1932,7 +1951,7 @@ Resume eval_preserves_swt[SubscriptTarget]:
   (* P7 IH for e (guarded by eval_base_target success) *)
   qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >>
   disch_then drule_all >> strip_tac >>
   (* Steps 3-5: get_Value + lift_option_type + return — state-preserving *)
   Cases_on `get_Value x r''` >>
@@ -2067,7 +2086,7 @@ Resume eval_preserves_swt[BareGlobalName]:
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   gvs[materialise_Value, expr_type_def, toplevel_value_typed_def] >>
   (* Get value typing from get_immutables_well_typed *)
-  drule get_immutables_well_typed >> (impl_tac >- first_assum ACCEPT_TAC) >>
+  drule get_immutables_well_typed >> (impl_tac >- (rpt strip_tac >> simp[])) >>
   strip_tac >>
   rename1 `FLOOKUP imms _ = SOME tvv` >>
   Cases_on `tvv` >>
@@ -2176,7 +2195,7 @@ Resume eval_preserves_swt[IfExp_True]:
   qpat_x_assum `!s'' tv t. eval_expr _ e _ = _ ==>
     !env st res st'. well_typed_expr _ e' /\ _ ==> _`
     (fn ih => mp_tac (ih |> Q.SPECL [`st`, `Value (BoolV T)`, `r`])) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >>
   disch_then drule_all >> strip_tac >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   tp_ifexp_bridge_tac ()
@@ -2194,7 +2213,7 @@ Resume eval_preserves_swt[IfExp_False]:
   qpat_x_assum `!s'' tv t. eval_expr _ e _ = _ ==>
     !env st res st'. well_typed_expr _ e'' /\ _ ==> _`
     (fn ih => mp_tac (ih |> Q.SPECL [`st`, `Value (BoolV F)`, `r`])) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >>
   disch_then drule_all >> strip_tac >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
   tp_ifexp_bridge_tac ()
@@ -2319,7 +2338,7 @@ Resume eval_preserves_swt[Subscript]:
   (* Discharge guarded IH for e': specialize guard with (st, x, st_e) *)
   qpat_x_assum `!s'' tv1 t. eval_expr _ e _ = _ ==> _`
     (fn ih => mp_tac (ih |> Q.SPECL [`st`, `x`, `st_e`])) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   (* Step 2: eval_expr cx e' st_e *)
   Cases_on `eval_expr cx e' st_e` >> rename1 `(res_e', st_e')` >>
   reverse (Cases_on `res_e'`) >> simp_tac (srw_ss()) []
@@ -2695,7 +2714,7 @@ Resume eval_preserves_swt[Builtin_Len]:
   drule_all wte_singleton_hd >> strip_tac >>
   (* Discharge IH guard: LENGTH es = 1 ==> ... becomes ... *)
   qpat_x_assum `LENGTH es = 1 ==> _` mp_tac >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >> strip_tac >>
   suspend "Builtin_Len_main"
   >> TRY not_type_error_tac
 QED
@@ -2704,7 +2723,7 @@ Resume eval_preserves_swt[Builtin_Len_main]:
   Cases_on `eval_expr cx (HD es) st` >>
   rename1 `eval_expr cx (HD es) st = (res_e, st_e)` >>
   first_x_assum (qspecl_then [`env`, `st`, `res_e`, `st_e`] mp_tac) >>
-  (impl_tac >- simp[]) >>
+  (impl_tac >- (rpt strip_tac >> simp[])) >>
   strip_tac >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
   reverse (Cases_on `res_e`)
