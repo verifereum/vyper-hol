@@ -27,10 +27,10 @@ signature vyperASTSyntax = sig
   val Sub_tm          : term
   val Mul_tm          : term
   val Div_tm          : term
-  val UAdd_tm         : term
-  val USub_tm         : term
-  val UMul_tm         : term
-  val UDiv_tm         : term
+  val UnsafeAdd_tm    : term
+  val UnsafeSub_tm    : term
+  val UnsafeMul_tm    : term
+  val UnsafeDiv_tm    : term
   val Mod_tm          : term
   val ExpMod_tm       : term
   val Exp_tm          : term
