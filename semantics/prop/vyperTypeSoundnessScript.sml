@@ -1710,8 +1710,11 @@ Resume eval_preserves_swt[If_False]:
     qpat_x_assum `!tv. INL _ = INL tv ==> _` kall_tac >>
     qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
       kall_tac >>
+    (* Prove everything except the scope bracket exceptional postcondition *)
+    simp[] >>
     (* Exceptional postcondition: forwarded from IH via scope bracket *)
-    drule_all scope_bracket_result_post >> simp[]) >>
+    irule scope_bracket_result_post >>
+    qexists `q` >> rpt (first_x_assum ACCEPT_TAC)) >>
   (* Error case: x is neither BoolV T nor BoolV F. Contradiction from typing. *)
   qpat_x_assum `!tv. INL x = INL tv ==> _` (mp_tac o Q.SPEC `x`) >>
   simp[evaluate_type_def] >> strip_tac >>
@@ -1742,7 +1745,7 @@ Resume eval_preserves_swt[For]:
     imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
     ASM_REWRITE_TAC [] >>
     rpt strip_tac >> imp_res_tac lift_option_type_not_return >>
-    FULL_SIMP_TAC std_ss []) >>
+    gvs[]) >>
   imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
   (* derive evaluate_type (get_tenv cx) typ = SOME x *)
   qpat_x_assum `lift_option_type _ _ _ = _` mp_tac >>
@@ -1760,7 +1763,7 @@ Resume eval_preserves_swt[For]:
     ASM_REWRITE_TAC [] >>
     rpt strip_tac >>
     imp_res_tac (cj 3 evaluate_no_return) >>
-    FULL_SIMP_TAC std_ss []) >>
+    gvs[]) >>
   (* Apply P2 IH for success *)
   first_x_assum drule_all >> strip_tac >>
   (* Extract EVERY from P2 IH conclusion *)
@@ -1778,7 +1781,7 @@ Resume eval_preserves_swt[For]:
     imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC >>
     ASM_REWRITE_TAC [] >>
     rpt strip_tac >> imp_res_tac check_not_return >>
-    FULL_SIMP_TAC std_ss [])
+    gvs[])
   >- (
     imp_res_tac check_state >>
     rpt BasicProvers.VAR_EQ_TAC >>
@@ -1794,8 +1797,8 @@ Resume eval_preserves_swt[For]:
                 `r`, `x'`, `r'`, `r'`, `x''`, `r'`]) >>
     ASM_REWRITE_TAC [] >>
     disch_then drule_all >>
-    simp_tac (srw_ss()) [])
-  >> TRY not_type_error_tac
+    rpt strip_tac >> gvs[] >>
+    TRY not_type_error_tac)
 QED
 Resume eval_preserves_swt[Array]:
   rpt gen_tac >> strip_tac >>
