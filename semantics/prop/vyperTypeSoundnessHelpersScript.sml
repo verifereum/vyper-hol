@@ -5451,15 +5451,17 @@ Theorem scope_bracket_preserves:
     eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
     state_well_typed st_body /\
     env_consistent env cx st_body /\
-    env_consistent env cx st ==>
+    env_consistent env cx st /\
+    accounts_well_typed st_body.accounts ==>
     state_well_typed (st_body with scopes := TL st_body.scopes) /\
-    env_consistent env cx (st_body with scopes := TL st_body.scopes)
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts
 Proof
   rpt strip_tac
   >- (drule scope_bracket_preserves_swt >> simp[])
-  >> mp_tac (Q.SPECL [`env`, `cx`, `st`, `FEMPTY`, `ss`, `q`, `st_body`]
-               scope_bracket_preserves_ec) >>
-  simp[]
+  >- (mp_tac (Q.SPECL [`env`, `cx`, `st`, `FEMPTY`, `ss`, `q`, `st_body`]
+               scope_bracket_preserves_ec) >> simp[])
+  >> simp[evaluation_state_component_equality]
 QED
 
 
