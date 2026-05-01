@@ -1610,17 +1610,9 @@ Resume eval_preserves_swt[If]:
   simp_tac std_ss [bind_apply, BETA_THM] >>
   (* Step 1: eval_expr cx e st *)
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >- (
-    (* INR case: apply P7 IH for error propagation *)
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
-      drule_all >> strip_tac >>
-    no_return_from_eval >>
-    rpt BasicProvers.VAR_EQ_TAC >>
-    rpt (CONJ_TAC >> TRY (first_assum ACCEPT_TAC)) >>
-    TRY not_type_error_tac >> TRY not_return_tac >>
-    rpt strip_tac >> TRY (first_x_assum ACCEPT_TAC) >>
-    rpt (pop_assum mp_tac >> simp[])) >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) []
+  >- suspend "If_INR"
+  >- (
   (* INL case: P7 IH for eval_expr success *)
   qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
     drule_all >> strip_tac >>
@@ -1645,7 +1637,29 @@ Resume eval_preserves_swt[If]:
   Cases_on `x = Value (BoolV T)` >> ASM_REWRITE_TAC [] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC
   >- suspend "If_True"
-  >- suspend "If_False"
+  >- suspend "If_False")
+QED
+
+Resume eval_preserves_swt[If_INR]:
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  (* Kill irrelevant IHs before they cause gvs/simp to produce F *)
+  qpat_x_assum `!s'' tv t s3 x0 t'. eval_expr _ _ s'' = _ /\ push_scope _ = _ ==>
+    !env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
+    kall_tac >>
+  qpat_x_assum `!s'' tv t s3 x0 t'. eval_expr _ _ s'' = _ /\ push_scope _ = _ ==>
+    !env ret_ty st res st'. well_typed_stmts _ _ ss' /\ _ ==> _`
+    kall_tac >>
+  (* Apply P7 IH for eval_expr *)
+  qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+    drule_all >> strip_tac >>
+  no_return_from_eval >>
+  (* Kill remaining guarded P7 IH pieces (INL tv case, materialise) *)
+  qpat_x_assum `!tv. INR y = INL tv ==> _` kall_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* Substitute res = INR y and st' = r *)
+  ASM_REWRITE_TAC [] >>
+  (* No-TypeError: ∀s. INR y ≠ INR (Error (TypeError s)) from IH *)
+  simp[]
 QED
 
 Resume eval_preserves_swt[If_True]:
@@ -1661,13 +1675,17 @@ Resume eval_preserves_swt[If_True]:
   (* Apply P1 IH for ss *)
   qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
     drule_all >> strip_tac >>
+  (* Kill irrelevant guarded IHs before gvs[] to avoid F goals *)
+  qpat_x_assum `!tv. INL _ = INL tv ==> _` kall_tac >>
+  qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss' /\ _ ==> _`
+    kall_tac >>
   (* Scope bracket preservation *)
   drule_all scope_bracket_preserves >> strip_tac >>
   (* Substitute st' = st_body with scopes := TL ... *)
   rpt BasicProvers.VAR_EQ_TAC >> ASM_REWRITE_TAC [] >>
   (* ReturnException typing: forward from IH (INL case trivial) *)
-  rpt strip_tac >> Cases_on `q` >> gvs[]
-  >> TRY not_type_error_tac
+  rpt strip_tac >> Cases_on `q` >> gvs[PULL_FORALL] >>
+  TRY (first_x_assum ACCEPT_TAC) >> simp[]
 QED
 
 Resume eval_preserves_swt[If_False]:
@@ -1688,7 +1706,12 @@ Resume eval_preserves_swt[If_False]:
       drule_all >> strip_tac >>
     drule_all scope_bracket_preserves >> strip_tac >>
     rpt BasicProvers.VAR_EQ_TAC >> ASM_REWRITE_TAC [] >>
-    rpt strip_tac >> Cases_on `q` >> gvs[]) >>
+    (* Kill irrelevant IHs before case split to avoid gvs issues *)
+    qpat_x_assum `!tv. INL _ = INL tv ==> _` kall_tac >>
+    qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
+      kall_tac >>
+    rpt strip_tac >> Cases_on `q` >> gvs[PULL_FORALL] >>
+    TRY (first_x_assum ACCEPT_TAC) >> simp[]) >>
   (* Error case: push+raise+pop gives (INR Error, r) *)
   qpat_x_assum `do _ od _ = _`
     (mp_tac o
