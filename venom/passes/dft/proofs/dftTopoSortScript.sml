@@ -1168,8 +1168,9 @@ Proof
   simp[init_topo_inv, init_dfs_state_good]
 QED
 
-(* Every non-pseudo producing instruction appears before its user in
-   the DFS schedule output. *)
+(* In the DFS schedule output, every instruction's data-dep producer
+   (via producing_inst in the original block) appears at an earlier
+   position by inst_id match, provided the producer is non-pseudo. *)
 Theorem schedule_output_producer_before:
   !bi order eda offspring_map entries.
     eda_wf eda bi ==>

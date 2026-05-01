@@ -1,0 +1,10 @@
+[overrides.verifereum]
+path = "/path/to/verifereum"
+
+[overrides.HOLDIR]
+path = "/path/to/HOL"
+
+[build]
+exclude = [
+  "worktrees/*",
+]

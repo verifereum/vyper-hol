@@ -14,7 +14,7 @@ Theory dftCompleteness
 Ancestors
   dftTopoSort dftScheduleFixed dftStructural dftDefs
   venomInst
-  list rich_list sorting
+  list rich_list sorting indexedLists
   finite_map pred_set pair arithmetic
   combin option
 Libs
@@ -167,9 +167,9 @@ Proof
   rw[sort_children_def] >>
   `PERM (MAPi (\i c. (i,c)) children)
         (QSORT _ (MAPi (\i c. (i,c)) children))` by
-    simp[sortingTheory.QSORT_PERM] >>
-  imp_res_tac sortingTheory.PERM_LENGTH >>
-  simp[LENGTH_MAP, indexedListsTheory.LENGTH_MAPi]
+    simp[QSORT_PERM] >>
+  imp_res_tac PERM_LENGTH >>
+  simp[LENGTH_MAP, LENGTH_MAPi]
 QED
 
 (* ===== deps count bounded by block length ===== *)
