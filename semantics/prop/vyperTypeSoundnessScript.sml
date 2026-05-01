@@ -1567,19 +1567,18 @@ QED
 Resume eval_preserves_swt[AugAssign_gv_inr]:
   strip_tac >>
   imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* Simplify the case expression with get_Value result *)
   gvs[AllCaseEqs()] >>
   (* Instantiate the guarded eval_expr IH to get toplevel_value_typed x tyv *)
   qpat_x_assum `!tv. INL x = INL tv ==> _` (qspecl_then [`x`] mp_tac) >>
   simp[] >> strip_tac >>
-  (* well_typed_binop forces expr_type e = ty (a BaseT), so evaluate_type gives a non-NoneTV/non-ArrayTV tyv *)
-  `?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-         tyv <> NoneTV /\ !t b. tyv <> ArrayTV t b` by (
-    qexists_tac `tyv'` >> simp[] >>
-    `expr_type e = ty` by metis_tac [well_typed_binop_same_type] >>
-    gvs[evaluate_type_not_NoneT_imp_not_NoneTV,
-        evaluate_type_BaseT_imp_not_ArrayTV] ) >>
-  (* This contradicts get_Value returning INR *)
+  (* From well_typed_binop with bop <> In / bop <> NotIn, expr_type e is
+     never NoneT or ArrayT, so evaluate_type gives non-NoneTV/non-ArrayTV tyv.
+     This contradicts get_Value returning INR. *)
+  `tyv' <> NoneTV /\ !t b. tyv' <> ArrayTV t b` by (
+    imp_res_tac well_typed_binop_not_In_second_type >>
+    gvs[evaluate_type_not_NoneT_imp_not_NoneTV] >>
+    Cases_on `expr_type e` >> gvs[evaluate_type_BaseT_imp_not_ArrayTV,
+      evaluate_type_FlagT_imp_not_ArrayTV, evaluate_type_def, AllCaseEqs()] ) >>
   imp_res_tac toplevel_value_typed_no_ArrayTV_get_Value >> gvs[]
 QED
 
@@ -1594,11 +1593,11 @@ QED
 Resume eval_preserves_swt[AugAssign_at_inr]:
   gvs[pair_case_thm, return_def] >>
   rpt CONJ_TAC >- (
-    first_assum ACCEPT_TAC) >>
+    first_x_assum ACCEPT_TAC ORELSE irule (cj 1 assign_target_well_typed_ao)) >>
   rpt CONJ_TAC >- (
-    first_assum ACCEPT_TAC) >>
+    first_x_assum ACCEPT_TAC ORELSE irule (cj 2 assign_target_well_typed_ao)) >>
   rpt CONJ_TAC >- (
-    first_assum ACCEPT_TAC) >>
+    metis_tac [cj 1 assign_target_preserves_accounts]) >>
   rpt CONJ_TAC >- (
     drule (cj 1 assign_target_no_type_error) >> simp[]) >>
   rpt strip_tac >>

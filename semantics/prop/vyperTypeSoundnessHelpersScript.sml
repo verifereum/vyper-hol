@@ -155,6 +155,39 @@ Proof
   Cases_on `bt` >> gvs[evaluate_type_def, AllCaseEqs()] >> rename1 `BytesT bnd` >> rpt strip_tac >> gvs[]
 QED
 
+Theorem evaluate_type_FlagT_imp_not_ArrayTV:
+  !tenv fid tyv. evaluate_type tenv (FlagT fid) = SOME tyv ==> !t b. tyv <> ArrayTV t b
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[evaluate_type_def, AllCaseEqs()]
+QED
+
+(* is_numeric_type / is_int_type / is_bool_type / is_flag_type / is_comparable_type
+   types are never NoneT or ArrayT. Boundary lemma for well_typed_binop reasoning. *)
+Theorem not_NoneT_not_ArrayT[simp]:
+  (!ty. is_int_type ty ==> ty <> NoneT /\ !t bd. ty <> ArrayT t bd) /\
+  (!ty. is_numeric_type ty ==> ty <> NoneT /\ !t bd. ty <> ArrayT t bd) /\
+  (!ty. is_bool_type ty ==> ty <> NoneT /\ !t bd. ty <> ArrayT t bd) /\
+  (!ty. is_flag_type ty ==> ty <> NoneT /\ !t bd. ty <> ArrayT t bd) /\
+  (!ty. is_comparable_type ty ==> ty <> NoneT /\ !t bd. ty <> ArrayT t bd)
+Proof
+  conj_tac >- (Cases >> simp[is_int_type_def]) >>
+  conj_tac >- (Cases >> simp[is_numeric_type_def, is_int_type_def]) >>
+  conj_tac >- (Cases >> simp[is_bool_type_def]) >>
+  conj_tac >- (Cases >> simp[is_flag_type_def]) >>
+  Cases >> simp[is_comparable_type_def]
+QED
+
+(* well_typed_binop for non-In/NotIn binops constrains the second operand type
+   to be non-ArrayT and non-NoneT. Used in AugAssign no-TypeError proof. *)
+Theorem well_typed_binop_not_In_second_type:
+  !ty bop t2. well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
+    t2 <> NoneT /\ (!t bd. t2 <> ArrayT t bd)
+Proof
+  rpt gen_tac >> Cases_on `bop` >>
+  simp[well_typed_binop_def, not_NoneT_not_ArrayT] >>
+  rpt strip_tac >> gvs[not_NoneT_not_ArrayT]
+QED
+
 
 (* Phase 2: bounded_int_op result has the bound's type *)
 Theorem bounded_int_op_unsigned:
