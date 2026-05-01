@@ -2361,7 +2361,29 @@ Proof
 QED
 
 Resume assign_target_well_typed[replace]:
-  cheat
+  sg `?sc_entry. lookup_scopes (string_to_num s) s'³'.scopes = SOME sc_entry`
+  >- (
+    gvs[lift_option_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]
+    >> irule_at Any find_containing_scope_lookup
+    >> goal_assum drule) >>
+  pop_assum strip_assume_tac >>
+  `loc_type cx s'³' (ScopedVar s) sc_entry.type` by (
+    rw[loc_type_def] >> qexists_tac `sc_entry` >> simp[]) >>
+  gvs[well_typed_atarget_def] >>
+  drule_all eval_base_target_type_connection >> strip_tac >> gvs[] >>
+  drule_at Any lookup_scopes_well_typed >>
+  impl_tac >- gvs[state_well_typed_def] >>
+  gvs[lift_sum_def, sum_CASE_rator, CaseEq"sum", raise_def, return_def] >>
+  strip_tac >>
+  gvs[lift_option_def, AllCaseEqs(), option_CASE_rator, raise_def, return_def] >>
+  drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
+  drule find_containing_scope_structure >> strip_tac >> gvs[] >>
+  (* Forward reasoning: drule matches assign_subscripts ... = INL a' assumption directly *)
+  drule assign_subscripts_preserves_type >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  (* Now have value_has_type entry.type a' in assumptions *)
+  irule scope_entry_update_preserves_typing >> simp[]
 QED
 Resume assign_target_well_typed[set_immutable]:
   (* Extract FLOOKUP from lift_option_type *)

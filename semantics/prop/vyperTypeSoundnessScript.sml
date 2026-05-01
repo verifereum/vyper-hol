@@ -1454,7 +1454,8 @@ Resume eval_preserves_swt[Assign_tgt_inl]:
    suspend "Assign_tgt_inr_err") >>
   (* materialise INR: error case *)
   (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+   imp_res_tac materialise_state >> imp_res_tac materialise_error >>
+   rpt BasicProvers.VAR_EQ_TAC >>
    rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
    rpt strip_tac >> gvs[] >>
    TRY not_type_error_tac)
@@ -1478,17 +1479,9 @@ QED
 
 Resume eval_preserves_swt[Assign_atwt]:
   (* Prove state_well_typed + env_consistent via assign_target_well_typed *)
-  drule (cj 1 assign_target_well_typed) >>
-  disch_then drule >>
-  disch_then drule >>
-  strip_tac >>
-  first_x_assum match_mp_tac >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  qpat_assum `evaluate_type _ _ = SOME _`
-    (fn th => qpat_assum `value_has_type _ _`
-      (fn th2 => EXISTS_TAC (th |> concl |> rhs |> rand) >>
-                 CONJ_TAC >| [ACCEPT_TAC th, ACCEPT_TAC th2]))
-  >> not_type_error_tac
+  irule (cj 1 assign_target_well_typed) >>
+  rpt (first_assum (irule_at Any)) >>
+  simp[]
 QED
 
 Resume eval_preserves_swt[AugAssign]:
