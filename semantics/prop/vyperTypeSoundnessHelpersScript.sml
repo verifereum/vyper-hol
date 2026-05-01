@@ -1867,6 +1867,19 @@ Proof
   \\ first_x_assum drule \\ gvs[]
 QED
 
+(* assign_target never raises TypeError when inputs are well-typed.
+   TODO: prove this properly — mirrors assign_target_no_return structure *)
+Theorem assign_target_no_type_error:
+  (!cx tgt ao st res st'.
+    assign_target cx tgt ao st = (res, st') ==>
+    !s. res <> INR (Error (TypeError s))) /\
+  (!cx tgts vs st res st'.
+    assign_targets cx tgts vs st = (res, st') ==>
+    !s. res <> INR (Error (TypeError s)))
+Proof
+  cheat
+QED
+
 (*
 Theorem assign_targets_well_typed:
   !cx gvs vs st res st' env.

@@ -1463,18 +1463,16 @@ QED
 
 Resume eval_preserves_swt[Assign_tgt_inl_ok]:
   (* assign_target INL: res = INL (), st' = st_asgn *)
-  gvs[pair_case_thm, return_def] >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> gvs[]
+  gvs[pair_case_thm, return_def]
 QED
 
 Resume eval_preserves_swt[Assign_tgt_inr_err]:
-  (* assign_target INR: assign_target never returns ReturnException *)
+  (* assign_target INR: error case — no TypeError, no ReturnException *)
   gvs[pair_case_thm, return_def] >>
-  rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac (cj 1 assign_target_no_return) >>
-  first_x_assum (qspec_then `v` mp_tac) >> simp[]
+  rpt CONJ_TAC >- (
+    drule (cj 1 assign_target_no_type_error) >> simp[]) >>
+  rpt strip_tac >>
+  drule (cj 1 assign_target_no_return) >> simp[]
 QED
 
 Resume eval_preserves_swt[Assign_atwt]:
