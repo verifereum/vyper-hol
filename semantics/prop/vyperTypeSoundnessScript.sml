@@ -283,8 +283,7 @@ val not_type_error_tac =
   (* dest_ArrayV succeeds on well-typed ArrayTV values *)
   TRY (imp_res_tac dest_ArrayV_NEQ_NONE_value_has_type_ArrayTV >>
        gvs[lift_option_type_def, raise_def, return_def, AllCaseEqs()] >> NO_TAC) >>
-  (* assign_target never produces TypeError *)
-  TRY (drule (cj 1 assign_target_no_type_error) >> simp[] >> NO_TAC) >>
+  (* assign_target no-TypeError requires typed target + assignability; handle at call sites. *)
   (* Check/type_check/raise/return never produce TypeError by construction *)
   TRY (gvs[raise_def, return_def, check_def, type_check_def,
            lift_option_type_def, lift_option_def, get_Value_def,
@@ -1710,11 +1709,8 @@ Resume eval_preserves_swt[If_False]:
     qpat_x_assum `!tv. INL _ = INL tv ==> _` kall_tac >>
     qpat_x_assum `!env ret_ty st res st'. well_typed_stmts _ _ ss /\ _ ==> _`
       kall_tac >>
-    (* Prove everything except the scope bracket exceptional postcondition *)
-    simp[] >>
     (* Exceptional postcondition: forwarded from IH via scope bracket *)
-    irule scope_bracket_result_post >>
-    qexists `q` >> rpt (first_x_assum ACCEPT_TAC)) >>
+    drule_all scope_bracket_result_post >> simp[]) >>
   (* Error case: x is neither BoolV T nor BoolV F. Contradiction from typing. *)
   qpat_x_assum `!tv. INL x = INL tv ==> _` (mp_tac o Q.SPEC `x`) >>
   simp[evaluate_type_def] >> strip_tac >>
@@ -1728,6 +1724,7 @@ Resume eval_preserves_swt[If_False]:
   simp_tac (srw_ss()) [] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   imp_res_tac toplevel_value_typed_BoolT_inv >> fs[]
+QED
 
 Resume eval_preserves_swt[For]:
   rpt gen_tac >> strip_tac >>
@@ -1740,65 +1737,73 @@ Resume eval_preserves_swt[For]:
   (* Step 1: lift_option_type *)
   Cases_on `lift_option_type (evaluate_type (get_tenv cx) typ)
               "For evaluate_type" st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >- (
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  Cases_on `q` >> simp_tac (srw_ss()) [raise_def]
+  >- (
     imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-    ASM_REWRITE_TAC [] >>
-    rpt strip_tac >> imp_res_tac lift_option_type_not_return >>
-    gvs[]) >>
-  imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  (* derive evaluate_type (get_tenv cx) typ = SOME x *)
-  qpat_x_assum `lift_option_type _ _ _ = _` mp_tac >>
-  PURE_REWRITE_TAC[lift_option_type_INL] >> strip_tac >>
-  (* Discharge P2 IH guard *)
-  first_x_assum (fn ih =>
-    assume_tac (SIMP_RULE (srw_ss()) [lift_option_type_INL]
-      (Q.SPECL [`get_tenv cx`, `r`, `x`, `r`] ih))) >>
-  (* Step 2: eval_iterator *)
-  simp_tac std_ss [bind_apply, BETA_THM] >>
-  Cases_on `eval_iterator cx it r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >- (
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    first_x_assum drule_all >> strip_tac >>
-    ASM_REWRITE_TAC [] >>
-    rpt strip_tac >>
-    imp_res_tac (cj 3 evaluate_no_return) >>
-    gvs[]) >>
-  (* Apply P2 IH for success *)
-  first_x_assum drule_all >> strip_tac >>
-  (* Extract EVERY from P2 IH conclusion *)
-  qpat_x_assum `!vs tyv. INL _ = INL vs /\ _ ==> _`
-    (mp_tac o Q.SPECL [`x'`, `x`]) >>
-  ASM_REWRITE_TAC [] >> strip_tac >>
-  (* Step 3: unfold do-chain for check + eval_for *)
-  simp_tac std_ss [bind_apply, ignore_bind_apply, BETA_THM] >>
-  Cases_on `check (compatible_bound (Dynamic n) (LENGTH x'))
-              "For too long" r''` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def]
+    (* derive evaluate_type (get_tenv cx) typ = SOME x *)
+    qpat_x_assum `lift_option_type _ _ _ = _` mp_tac >>
+    PURE_REWRITE_TAC[lift_option_type_INL] >> strip_tac >>
+    (* Discharge P2 IH guard *)
+    qpat_assum `!tenv s'' tyv t. tenv = get_tenv cx /\
+          lift_option_type (evaluate_type tenv typ) _ s'' = (INL tyv,t) ==> _`
+      (fn ih => assume_tac (SIMP_RULE (srw_ss()) [lift_option_type_INL]
+        (Q.SPECL [`get_tenv cx`, `r`, `x`, `r`] ih))) >>
+    qpat_x_assum `evaluate_type (get_tenv cx) typ = SOME x ==> _` mp_tac >>
+    ASM_REWRITE_TAC [] >> strip_tac >>
+    (* Step 2: eval_iterator *)
+    simp_tac std_ss [bind_apply, BETA_THM] >>
+    Cases_on `eval_iterator cx it r` >>
+    Cases_on `q` >> simp_tac (srw_ss()) [raise_def]
+    >- (
+      (* eval_iterator success *)
+      qpat_x_assum `!env typ st res st'. well_typed_iterator _ _ it /\ _ ==> _`
+        drule_all >> strip_tac >>
+      (* Extract EVERY from P2 IH conclusion *)
+      qpat_x_assum `!vs tyv. INL _ = INL vs /\ _ ==> _`
+        (mp_tac o Q.SPECL [`x'`, `x`]) >>
+      ASM_REWRITE_TAC [] >> strip_tac >>
+      (* Step 3: unfold do-chain for check + eval_for *)
+      simp_tac std_ss [bind_apply, ignore_bind_apply, BETA_THM] >>
+      Cases_on `check (compatible_bound (Dynamic n) (LENGTH x'))
+                  "For too long" r''` >>
+      Cases_on `q` >> simp_tac (srw_ss()) [raise_def]
+      >- (
+        imp_res_tac check_state >>
+        rpt BasicProvers.VAR_EQ_TAC >>
+        strip_tac >>
+        (* Derive compatible_bound from check *)
+        qpat_x_assum `check _ _ _ = (INL _, _)` (fn th =>
+          assume_tac (SIMP_RULE (srw_ss()) [check_INL] th)) >>
+        (* Apply P6 IH *)
+        last_x_assum mp_tac >>
+        disch_then (mp_tac o
+          SIMP_RULE (srw_ss()) [lift_option_type_INL, check_INL] o
+          Q.SPECL [`get_tenv cx`, `r`, `x`, `r`,
+                    `r`, `x'`, `r'`, `r'`, `x''`, `r'`]) >>
+        ASM_REWRITE_TAC [] >>
+        disch_then drule_all >>
+        rpt strip_tac >> gvs[] >>
+        TRY not_type_error_tac)
+      >- (
+        (* check error branch *)
+        strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+        imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC >>
+        ASM_REWRITE_TAC [] >>
+        rpt strip_tac >> imp_res_tac check_not_return >>
+        gvs[check_def, assert_def]))
+    >- (
+      (* eval_iterator error *)
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!env typ st res st'. well_typed_iterator _ _ it /\ _ ==> _`
+        drule_all >> strip_tac >>
+      ASM_REWRITE_TAC [] >>
+      rpt strip_tac >>
+      imp_res_tac (cj 3 evaluate_no_return) >>
+      gvs[]))
   >- (
-    (* check error branch *)
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC >>
-    ASM_REWRITE_TAC [] >>
-    rpt strip_tac >> imp_res_tac check_not_return >>
-    gvs[])
-  >- (
-    imp_res_tac check_state >>
-    rpt BasicProvers.VAR_EQ_TAC >>
     strip_tac >>
-    (* Derive compatible_bound from check *)
-    qpat_x_assum `check _ _ _ = (INL _, _)` (fn th =>
-      assume_tac (SIMP_RULE (srw_ss()) [check_INL] th)) >>
-    (* Apply P6 IH *)
-    last_x_assum mp_tac >>
-    disch_then (mp_tac o
-      SIMP_RULE (srw_ss()) [lift_option_type_INL, check_INL] o
-      Q.SPECL [`get_tenv cx`, `r`, `x`, `r`,
-                `r`, `x'`, `r'`, `r'`, `x''`, `r'`]) >>
-    ASM_REWRITE_TAC [] >>
-    disch_then drule_all >>
-    rpt strip_tac >> gvs[] >>
-    TRY not_type_error_tac)
+    gvs[lift_option_type_def, well_formed_type_def, env_consistent_def,
+        AllCaseEqs()])
 QED
 Resume eval_preserves_swt[Array]:
   rpt gen_tac >> strip_tac >>
@@ -1809,42 +1814,53 @@ Resume eval_preserves_swt[Array]:
   rewrite_tac[ev_Array] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
   Cases_on `eval_expr cx e st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >- (
+  Cases_on `q` >> simp_tac (srw_ss()) [raise_def]
+  >- (
+    (* eval_expr succeeded — apply P7 IH *)
+    qpat_x_assum `!env st res st'. well_typed_expr _ e /\ _ ==> _`
+      drule_all >> strip_tac >>
+    qpat_x_assum `!tv. INL x = INL tv ==> _`
+      (mp_tac o Q.SPEC `x`) >> simp[] >> strip_tac >>
+    simp_tac std_ss [bind_apply, BETA_THM] >>
+    Cases_on `materialise cx x r` >>
+    Cases_on `q` >> simp_tac (srw_ss()) [raise_def]
+    >- (
+      (* materialise succeeded — get value typing from IH *)
+      imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!v st''. materialise cx x r = (INL v,st'') ==> _`
+        (mp_tac o Q.SPECL [`x'`, `r'`]) >> simp[] >>
+      strip_tac >>
+      (* Remaining chain: lift_option_type x2, lift_option_type (extract_elements), return *)
+      (* All pure — resolve directly *)
+      (* The pure chain: lift_option_type resolves evaluate_type (known SOME),
+         then case on extract_elements, then return. State unchanged = r. *)
+      strip_tac >>
+      gvs[lift_option_type_def, return_def, raise_def,
+          pairTheory.pair_case_eq, CaseEq"sum", CaseEq"option"] >>
+      (* Decompose evaluate_type (ArrayT typ bd) *)
+      qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+      simp_tac (srw_ss()) [evaluate_type_def, AllCaseEqs()] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> gvs[] >>
+      (* Case split on extract_elements *)
+      Cases_on `extract_elements (ArrayTV tv bd) x'` >>
+      gvs[return_def, raise_def] >>
+      irule extract_elements_well_typed >>
+      `well_formed_type_value (ArrayTV tv bd)` by (
+        irule (cj 1 evaluate_type_well_formed) >>
+        qexists_tac `get_tenv cx` >> qexists_tac `ArrayT typ bd` >>
+        simp[evaluate_type_def]) >>
+      Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def])
+    >- (
+      (* materialise error: P7 no-TypeError bridge rules out TypeError *)
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      imp_res_tac materialise_state >> gvs[] >>
+      imp_res_tac materialise_well_typed_no_type_error >> gvs[]))
+  >- (
+    (* eval_expr error *)
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    first_x_assum drule_all >> simp[]) >>
-  (* eval_expr succeeded — apply P7 IH *)
-  first_x_assum drule_all >> strip_tac >>
-  simp_tac std_ss [bind_apply, BETA_THM] >>
-  Cases_on `materialise cx x r` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [raise_def] >- (
-    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    imp_res_tac materialise_state >> gvs[]) >>
-  (* materialise succeeded — get value typing from IH *)
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
-  strip_tac >>
-  (* Remaining chain: lift_option_type x2, lift_option_type (extract_elements), return *)
-  (* All pure — resolve directly *)
-  (* The pure chain: lift_option_type resolves evaluate_type (known SOME),
-     then case on extract_elements, then return. State unchanged = r. *)
-  strip_tac >>
-  gvs[lift_option_type_def, return_def, raise_def,
-      pairTheory.pair_case_eq, CaseEq"sum", CaseEq"option"] >>
-  (* Decompose evaluate_type (ArrayT typ bd) *)
-  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
-  simp_tac (srw_ss()) [evaluate_type_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> gvs[] >>
-  (* Case split on extract_elements *)
-  Cases_on `extract_elements (ArrayTV tv bd) x'` >>
-  gvs[return_def, raise_def] >>
-  irule extract_elements_well_typed >>
-  `well_formed_type_value (ArrayTV tv bd)` by (
-    irule (cj 1 evaluate_type_well_formed) >>
-    qexists_tac `get_tenv cx` >> qexists_tac `ArrayT typ bd` >>
-    simp[evaluate_type_def]) >>
-  Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def] >>
-  metis_tac[]
-  >> TRY not_type_error_tac
+    qpat_x_assum `!env st res st'. well_typed_expr _ e /\ _ ==> _`
+      drule_all >> strip_tac >>
+    gvs[])
 QED
 
 Resume eval_preserves_swt[Range]:
