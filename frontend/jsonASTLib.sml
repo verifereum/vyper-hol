@@ -972,6 +972,14 @@ val json_func_type : term decoder =
   tuple2 (field "argument_types" (array json_type),
           field "return_type" json_type)
 
+(* Decorator name decoder: handles both Name nodes (e.g., @external)
+   and Call nodes (e.g., @override(module_name)).
+   Name: {"ast_type": "Name", "id": "external"}
+   Call: {"ast_type": "Call", "func": {"id": "override"}, ...} *)
+val decorator_name : string decoder =
+  orElse (field "id" string,
+          field "func" $ field "id" string)
+
 (* Interface function signature parser
  * Parses FunctionDef nodes within InterfaceDef body.
  * Mutability comes from either decorator_list or body (as Expr > Name > id).
@@ -988,7 +996,7 @@ val json_interface_func : term decoder =
     orElse(field "returns" ast_type, succeed JT_None_tm),
     (* decorators from decorator_list and/or body *)
     tuple2 (
-      orElse(field "decorator_list" (array (field "id" string)), succeed []),
+      orElse(field "decorator_list" (array decorator_name), succeed []),
       (* body may contain mutability as Expr > Name > id (e.g., "view", "payable") *)
       orElse(field "body" (array (
         check_ast_type "Expr" $
@@ -1026,7 +1034,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
       mk_JTL_FunctionDef(n, d, a, df, f, b)) $
     tuple3 (
       tuple2 (field "name" string,
-              field "decorator_list" (array (field "id" string))),
+              field "decorator_list" (array decorator_name)),
       tuple2 (field "args" $ check_ast_type "arguments" $
                 tuple2 (field "args" (array json_arg),
                         orElse(field "defaults" (array json_expr), succeed [])),
