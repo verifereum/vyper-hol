@@ -1,8 +1,11 @@
 # HOL4 build artifacts
 **/.hol/
 **/.alan/
+*Theory.sig
+*Theory.sml
 
 .holbuild
+.holconfig.toml
 
 # Interactive HOL4 session files
 .hol_init.sml

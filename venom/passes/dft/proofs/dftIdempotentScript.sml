@@ -1,23 +1,19 @@
 (*
- * DFT Idempotent — Input-Order-Independence of dft_block
+ * DFT Idempotent — Effect-equivalence infrastructure and negative result
  *
- * Key result: dft_block order (dft_block order' bb) = dft_block order bb
+ * Key result: dft_block_idempotent is FALSE without unique_defs.
+ *   Counterexample: two ADD instructions with the same output "x" get
+ *   reordered by dft_block, and reordering changes producing_inst,
+ *   breaking the fixed-point property.
  *
- * This means applying dft_block to an already-dft'd block gives the same
- * result as applying it to the original. The second dft_block "sees through"
- * the first transformation.
+ * Infrastructure (may support conditional idempotency with unique_defs):
+ *   - producing_inst order-independence under unique defs
+ *   - et_equiv_via: effect-tracking equivalence under instruction injection
+ *   - compute_effect_deps_via: deps map through injection f
+ *   - flip_operands effect-equivalence (same write/read effects, same inst_id)
  *
- * Proof strategy: Show that the schedule pipeline only depends on:
- *   (1) The set of non-pseudo inst_ids (with their opcodes and outputs)
- *   (2) The phi instructions (same in both cases)
- *   (3) The order parameter (same in both cases)
- * NOT on the order of non-pseudo instructions in bb.bb_instructions.
- *
- * Key sub-lemmas:
- *   - producing_inst is order-independent under unique defs
- *   - build_eda is order-independent when same-effect-type pairs
- *     maintain relative order (which dft_block guarantees)
- *   - DFS is deterministic given same deps and order
+ * Obstruction: build_eda's "last writer clears readers" mechanism makes
+ *   effect tracking order-dependent, preventing an unconditional fixed-point.
  *)
 
 Theory dftIdempotent
@@ -145,7 +141,7 @@ QED
 
 (* ===== dft_block structural decomposition ===== *)
 
-(* The non-pseudos of dft_block output are exactly the scheduled part *)
+(* dft_block output decomposes into pseudo instructions ++ scheduled part *)
 Triviality dft_block_instructions:
   !order bb.
     (dft_block order bb).bb_instructions =
@@ -494,9 +490,7 @@ QED
 
 (* ===== Main Idempotency Result ===== *)
 
-(* Key structural lemma: dft_block expands into phis ++ schedule,
-   and the schedule only depends on bb.bb_instructions.
-   Two blocks with the same bb_instructions and bb_label produce
+(* Two blocks with the same bb_instructions and bb_label produce
    the same dft_block output. *)
 Triviality dft_block_only_depends_on_insts:
   !order bb1 bb2.

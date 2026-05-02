@@ -20,6 +20,8 @@ Theory dftCommutation
 Ancestors
   venomState venomExecSemantics venomExecProps venomEffects venomInst
   venomInstProofs finite_map list pair
+Libs
+  BasicProvers
 
 (* ================================================================
    Basic variable infrastructure
@@ -496,7 +498,7 @@ val custom_defs = [
   make_venom_call_state_def, make_venom_delegatecall_state_def,
   make_venom_create_state_def,
   venom_to_tx_params_def, eval_operands_def,
-  next_alloca_offset_def, read_memory_def
+  read_memory_def
 ];
 
 val all_rwts = helper_frames @ update_var_rwts @ helper_hyp_rwts @ core_rwts;

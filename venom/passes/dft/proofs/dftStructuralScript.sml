@@ -31,6 +31,7 @@ Proof
   Cases_on `is_comparator i.inst_opcode` >> simp[]
 QED
 
+(* Flipping operands does not change pseudo-ness of the opcode *)
 Theorem flip_operands_is_pseudo:
   !i. is_pseudo (flip_operands i).inst_opcode = is_pseudo i.inst_opcode
 Proof
@@ -41,6 +42,20 @@ Proof
   Cases_on `is_comparator i.inst_opcode` >> simp[] >>
   Cases_on `i.inst_opcode` >>
   fs[is_comparator_def, flip_comparison_opcode_def, is_pseudo_def]
+QED
+
+(* Flipping operands does not change barrier-ness *)
+Theorem flip_operands_is_barrier:
+  !i. is_barrier (flip_operands i) = is_barrier i
+Proof
+  rw[flip_operands_def] >>
+  Cases_on `i.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[LET_THM] >>
+  Cases_on `is_comparator i.inst_opcode` >> simp[] >>
+  Cases_on `i.inst_opcode` >>
+  fs[is_comparator_def, flip_comparison_opcode_def, is_barrier_def,
+     is_volatile_def, is_alloca_op_def]
 QED
 
 (* ===== Helper lemmas ===== *)
@@ -80,6 +95,7 @@ Proof
   metis_tac[]
 QED
 
+(* Every dependency of an instruction lies in block_insts ( precondition: eda_wf) *)
 Theorem inst_all_deps_mem:
   !block_insts order eda inst dep.
     eda_wf eda block_insts ==>
@@ -105,6 +121,7 @@ Proof
   metis_tac[sortingTheory.PERM_MEM_EQ]
 QED
 
+(* sort_children is a permutation of its input children *)
 Theorem sort_children_mem:
   !block_insts order eda offspring_map parent children x.
     MEM x (sort_children block_insts order eda offspring_map parent children)
@@ -158,13 +175,10 @@ QED
 
 (* ===== DFS output subset property ===== *)
 
-(* Key insight: every DfsEmit on the stack comes from a non-pseudo instruction
-   in block_insts (possibly flipped). The DFS only emits instructions that
-   are non-pseudo members of block_insts. *)
+(* Key insight: every instruction emitted by the DFS is a non-pseudo
+   instruction from block_insts (possibly with flipped operands). *)
 
-(* We prove this via a FUNPOW invariant on the DFS state.
-   Rather than decomposing into separate stack/output predicates,
-   we prove the output property directly: every element of ds_output
+(* Proven via a FUNPOW invariant: every stack item and output element
    satisfies from_block and ~is_pseudo. *)
 
 (* Invariant for DFS FUNPOW proof *)
@@ -226,6 +240,9 @@ Proof
   rpt strip_tac >> gvs[listTheory.MEM_MAP]
 QED
 
+(* Every instruction output by schedule_from_entries is a non-pseudo instruction
+   from block_insts (possibly with flipped operands), given well-formed EDA
+   and entries all drawn from block_insts *)
 Theorem schedule_output_from_block:
   !block_insts order eda offspring_map entries i.
     eda_wf eda block_insts ==>
@@ -380,6 +397,8 @@ Proof
   >> simp[]
 QED
 
+(* build_eda produces a well-formed EDA: every dependency is a non-pseudo
+   instruction from block_insts *)
 Theorem build_eda_wf:
   !block_insts. eda_wf (build_eda block_insts) block_insts
 Proof
@@ -535,6 +554,7 @@ Proof
        listTheory.MEM_FILTER]
 QED
 
+(* Adding barrier dependencies preserves EDA well-formedness *)
 Theorem add_barrier_deps_wf:
   !block_insts eda.
     eda_wf eda block_insts ==>
@@ -545,6 +565,7 @@ Proof
   irule add_deps_on_barrier_wf >> simp[]
 QED
 
+(* The full EDA (effect deps + barrier deps + chain deps) is well-formed *)
 Theorem build_full_eda_wf:
   !block_insts. eda_wf (build_full_eda block_insts) block_insts
 Proof
@@ -557,6 +578,7 @@ QED
 
 (* ===== entry_instructions are from block_insts ===== *)
 
+(* Entry instructions are all members of block_insts *)
 Theorem entry_instructions_mem:
   !block_insts order eda.
     EVERY (\i. MEM i block_insts) (entry_instructions block_insts order eda)
@@ -567,6 +589,8 @@ QED
 
 (* ===== dft_block output non-pseudos are from original block ===== *)
 
+(* Every non-pseudo instruction in dft_block's output is either identical to
+   or a flipped version of a non-pseudo instruction from the input block *)
 Theorem dft_block_from_orig:
   !order bb i.
     MEM i (FILTER (\i. ~is_pseudo i.inst_opcode)
@@ -583,6 +607,7 @@ QED
 
 (* ===== Phis are preserved by dft_block ===== *)
 
+(* Pseudo-instructions (PHIs) are unchanged by dft_block *)
 Theorem dft_block_phis:
   !order bb.
     FILTER (\i. is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions =
