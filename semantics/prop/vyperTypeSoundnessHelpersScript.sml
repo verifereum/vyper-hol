@@ -444,6 +444,7 @@ Theorem env_consistent_empty:
   !cx st.
     env_consistent
       <| var_types := FEMPTY;
+         var_assignable := FEMPTY;
          global_types := FEMPTY;
          toplevel_types := FEMPTY;
          type_defs := get_tenv cx;
@@ -570,13 +571,15 @@ Theorem functions_well_typed_body:
       well_typed_stmts env_body ret body /\
       well_typed_exprs
         <| var_types := FEMPTY;
+           var_assignable := FEMPTY;
            global_types := FEMPTY;
            toplevel_types := FEMPTY;
            type_defs := get_tenv cx;
            fn_sigs := FEMPTY;
            flag_members := FEMPTY |> dflts /\
       (!id typ. MEM (id, typ) args ==>
-         FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
+         FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+         FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
       MAP expr_type dflts =
         MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 Proof
@@ -585,7 +588,7 @@ Proof
   simp[FLOOKUP_EMPTY, fn_sigs_consistent_def] >>
   disch_then (qspecl_then [`src_id_opt`,`fn`,`ts`,`fm`,`nr`,`args`,`dflts`,`ret`,`body`] mp_tac) >>
   simp[] >> strip_tac >>
-  qexists `env_body` >> simp[]
+  qexists `env_body` >> metis_tac[]
 QED
 
 (* Full version: takes fn_sigs parameter (needed for IntCall where body can
@@ -611,13 +614,15 @@ Theorem functions_well_typed_body_full:
       well_typed_stmts env_body ret body /\
       well_typed_exprs
         <| var_types := FEMPTY;
+           var_assignable := FEMPTY;
            global_types := FEMPTY;
            toplevel_types := FEMPTY;
            type_defs := get_tenv cx;
            fn_sigs := FEMPTY;
            flag_members := FEMPTY |> dflts /\
       (!id typ. MEM (id, typ) args ==>
-         FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
+         FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+         FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
       MAP expr_type dflts =
         MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 Proof
@@ -1904,13 +1909,15 @@ QED
    The old unconditional assign_target_no_type_error was false: the fallback
    and non-assignable ScopedVar branches intentionally raise TypeError. *)
 Definition assign_target_assignable_def:
-  assign_target_assignable (BaseTargetV (ScopedVar id) sbs) st <=>
-    (?pre env entry rest.
-       find_containing_scope (string_to_num id) st.scopes =
-         SOME (pre, env, entry, rest) /\
-       entry.assignable) /\
-  assign_target_assignable (BaseTargetV loc sbs) st <=> T /\
-  assign_target_assignable (TupleTargetV tgts) st <=>
+  assign_target_assignable (BaseTargetV loc sbs) st =
+    (case loc of
+     | ScopedVar id =>
+         ?pre env entry rest.
+           find_containing_scope (string_to_num id) st.scopes =
+             SOME (pre, env, entry, rest) /\
+           entry.assignable
+     | _ => T) /\
+  assign_target_assignable (TupleTargetV tgts) st =
     EVERY (\tgt. assign_target_assignable tgt st) tgts
 End
 

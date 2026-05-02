@@ -456,6 +456,7 @@ End
 Datatype:
   typing_env = <|
     var_types : (num |-> type);
+    var_assignable : (num |-> bool);
     global_types : (num |-> type);
     toplevel_types : ((num option # num) |-> type);
     type_defs : (num |-> type_args);
@@ -491,6 +492,10 @@ Definition env_consistent_def:
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id st.scopes = SOME entry ==>
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    (* Assignability: statically assignable variables must be writable at runtime *)
+    (!id.
+       FLOOKUP env.var_assignable id = SOME T ==>
+       ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable) /\
     (* Completeness: every global_types entry must be in immutables *)
     (!id ty. FLOOKUP env.global_types id = SOME ty ==>
        IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
@@ -784,7 +789,8 @@ Definition well_typed_expr_def:
      HD (MAP expr_type args) = BaseT AddressT /\
      LAST (MAP expr_type args) = BaseT (UintT 256)) /\
   well_typed_target env (NameTarget id) ty =
-    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
+    (FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+     FLOOKUP env.var_assignable (string_to_num id) = SOME T) /\
   well_typed_target env (BareGlobalNameTarget id) ty =
     (FLOOKUP env.global_types (string_to_num id) = SOME ty) /\
   well_typed_target env (TopLevelNameTarget (src_id_opt, id)) ty =
@@ -980,13 +986,15 @@ Definition functions_well_typed_def:
           well_typed_stmts env_body ret body /\
           well_typed_exprs
             <| var_types := FEMPTY;
+               var_assignable := FEMPTY;
                global_types := FEMPTY;
                toplevel_types := FEMPTY;
                type_defs := get_tenv cx;
                fn_sigs := FEMPTY;
                flag_members := FEMPTY |> dflts /\
           (!id typ. MEM (id, typ) args ==>
-             FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
+             FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+             FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
           MAP expr_type dflts =
             MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End

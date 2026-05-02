@@ -3279,8 +3279,8 @@ Resume eval_preserves_swt[intcall_tail]:
   (* Step 6b: discharge defaults IH body via manual SPECL *)
   qpat_x_assum `!env st res st'. well_typed_exprs env (DROP _ _) /\ _ ==> _`
     (mp_tac o
-     Q.SPECL [`<|var_types := FEMPTY; global_types := FEMPTY;
-                toplevel_types := FEMPTY;
+     Q.SPECL [`<|var_types := FEMPTY; var_assignable := FEMPTY;
+                global_types := FEMPTY; toplevel_types := FEMPTY;
                 type_defs := get_tenv (cx with stk updated_by
                                CONS (src_id_opt, fn));
                 fn_sigs := FEMPTY; flag_members := FEMPTY|>`,
@@ -3963,9 +3963,10 @@ Finalise eval_preserves_swt
 
 (* Concrete witness values *)
 val ce_env_def = Define `
-  ce_env = <| var_types := FEMPTY; global_types := FEMPTY;
-              toplevel_types := FEMPTY; type_defs := FEMPTY;
-              fn_sigs := FEMPTY; flag_members := FEMPTY |>`;
+  ce_env = <| var_types := FEMPTY; var_assignable := FEMPTY;
+              global_types := FEMPTY; toplevel_types := FEMPTY;
+              type_defs := FEMPTY; fn_sigs := FEMPTY;
+              flag_members := FEMPTY |>`;
 
 val ce_acct_def = Define `
   ce_acct = <| nonce := 0; balance := 0; storage := K 0w; code := [] |>`;
