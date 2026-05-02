@@ -10,7 +10,7 @@
  *)
 Theory algebraicOptRules2
 Ancestors
-  algebraicOptDefs venomExecSemantics venomState passSharedDefs valueRangeDefs
+  algebraicOptDefs venomExecSemantics venomState passSharedDefs passSharedPow2 valueRangeDefs
 Libs
   pairLib wordsLib
 
@@ -187,23 +187,8 @@ QED
 val log2_w2n_lt_256 = SIMP_RULE (srw_ss()) []
   (INST_TYPE [alpha |-> ``:256``] wordsTheory.LOG2_w2n_lt);
 
-(* SML-level helper: LOG2_PROPERTY specialized to bytes32,
-   avoiding ** overloading issues in backtick quotations *)
-val log2_property_w2n = logrootTheory.LOG2_PROPERTY
-  |> Q.SPEC `w2n (w:bytes32)`
-  |> SIMP_RULE (srw_ss()) [wordsTheory.w2n_eq_0];
-
-(* CHEATED — proof works interactively but ** overloading from
-   integerTheory (via algebraicOptDefs → valueRangeDefs) causes
-   backtick assertions involving ** to resolve as int$** in batch.
-   Fix: move to a separate file without integerTheory ancestors,
-   e.g., passSharedProofsScript.sml alongside is_power_of_two_def. *)
-Theorem is_power_of_two_exp:
-  !w : bytes32. is_power_of_two w ==>
-    ?k. w2n w = (2:num) ** k /\ k < dimindex(:256)
-Proof
-  cheat
-QED
+(* is_power_of_two_exp imported from passSharedPow2Theory — proved there
+   to avoid ** overloading issues from integerTheory ancestors. *)
 
 (* Power-of-two reductions using explicit k. The bridge above
    connects is_power_of_two w to the k precondition. *)
