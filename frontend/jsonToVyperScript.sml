@@ -402,7 +402,6 @@ Definition make_builtin_call_def:
     else if name = "ceil" then Builtin ty Ceil args
     else if name = "blockhash" then Builtin ty BlockHash args
     else if name = "blobhash" then Builtin ty BlobHash args
-    else if name = "isqrt" then Builtin ty Isqrt args
     else if name = "ecrecover" then Builtin ty ECRecover args
     else if name = "ecadd" then Builtin ty ECAdd args
     else if name = "ecmul" then Builtin ty ECMul args

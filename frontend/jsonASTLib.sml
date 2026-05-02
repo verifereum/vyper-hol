@@ -707,7 +707,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (tuple3 (field "func" (delay d_json_expr),
                     field "args" (array (delay d_json_expr)),
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
-            tuple2 (field "type" json_type,
+            tuple2 ((* type field may be missing or null *)
+                    orElse (field "type" json_type, succeed JT_None_tm),
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
@@ -908,7 +909,9 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
       mk_JS_For(var, varty, iter_parse_to_term iter_parsed, body)) $
     tuple3 (field "target" $ check_ast_type "AnnAssign" $
               tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
-                      field "target" $ field "type" json_type),
+                      (* Type can be in target.type or in annotation field *)
+                      orElse (field "target" $ field "type" json_type,
+                              field "annotation" ast_type)),
             field "iter" json_iter_internal,
             field "body" (array (delay d_json_stmt))),
 
@@ -923,7 +926,9 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
   check_ast_type "AnnAssign" $
     JSONDecode.map (fn (var, ty, v) => mk_JS_AnnAssign(var, ty, v)) $
     tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
-            field "target" $ field "type" json_type,
+            (* Type can be in target.type or in annotation field *)
+            orElse (field "target" $ field "type" json_type,
+                    field "annotation" ast_type),
             field "value" json_expr),
 
   (* Assign *)
