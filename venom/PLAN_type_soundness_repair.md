@@ -82,7 +82,7 @@ Useful boundaries:
 
 ```text
 materialise_well_typed_no_type_error
-assign_target_no_type_error       (currently cheated; must prove)
+assign_target_no_type_error       (now typed + assignable; prove/use only at call sites)
 pure_op_not_return / evaluate_no_return conjuncts
 ```
 
@@ -97,22 +97,24 @@ EVAL ``assign_target empty_evaluation_context (TupleTargetV []) PopOp empty_stat
 = (INR (Error (TypeError "assign_target")), empty_state)
 ```
 
-So the current unconditional helper is false:
+So the old unconditional helper was false:
 
 ```sml
 assign_target_no_type_error:
   assign_target cx tgt ao st = (res, st') ==> !s. res <> INR (Error (TypeError s))
 ```
 
-Do **not** try to prove it. Replace it with typed/local boundary lemmas matching call sites:
+Fixed helper statement: `assign_target_no_type_error` is now only for `Replace`, with the same typing hypotheses as `assign_target_well_typed` plus a dynamic `assign_target_assignable` side condition. This excludes the validated fallback counterexample and non-assignable `ScopedVar` branch.
 
 ```text
-A. Replace assign_target_no_type_error
-   Required shape: no-TypeError under evaluated well-typed target + operation-specific value typing.
-   Likely split by operation/caller:
-     - Assign Replace v: well_typed_atarget env g ty + value_has_type ty v + target loc typing
-     - AugAssign Replace nv: leaf_type/evaluate_type witnesses from AugAssign_atwt
-     - Append/Pop: dynamic array target/value constraints
+A. Prove/use fixed assign_target_no_type_error
+   Shape: eval_target + well_typed_atarget + assign_target_assignable + value_has_type.
+   Remaining call-site work:
+     - Assign Replace v: establish assign_target_assignable for evaluated target.
+     - Tuple targets: propagate assignability elementwise.
+     - AugAssign/Append/Pop: need separate operation-specific no-TypeError lemma,
+       likely mirroring assign_target_well_typed_ao with Update/Append/Pop-specific
+       assign_subscripts/assign_result side conditions.
    Keep impossible fallback cases out via well_typed_atarget / eval_target invariants.
 
 B. env_consistent_preserves_tv

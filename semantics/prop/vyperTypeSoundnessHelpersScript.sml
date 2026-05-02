@@ -1900,14 +1900,42 @@ Proof
   \\ first_x_assum drule \\ gvs[]
 QED
 
-(* assign_target never raises TypeError when inputs are well-typed.
-   TODO: prove this properly — mirrors assign_target_no_return structure *)
+(* Dynamic side condition excluding assignment targets that are not writable.
+   The old unconditional assign_target_no_type_error was false: the fallback
+   and non-assignable ScopedVar branches intentionally raise TypeError. *)
+Definition assign_target_assignable_def:
+  assign_target_assignable (BaseTargetV (ScopedVar id) sbs) st <=>
+    (?pre env entry rest.
+       find_containing_scope (string_to_num id) st.scopes =
+         SOME (pre, env, entry, rest) /\
+       entry.assignable) /\
+  assign_target_assignable (BaseTargetV loc sbs) st <=> T /\
+  assign_target_assignable (TupleTargetV tgts) st <=>
+    EVERY (\tgt. assign_target_assignable tgt st) tgts
+End
+
+(* Replace-assignment no-TypeError under the same typing hypotheses as
+   assign_target_well_typed, plus the dynamic assignability side condition. *)
 Theorem assign_target_no_type_error:
-  (!cx tgt ao st res st'.
-    assign_target cx tgt ao st = (res, st') ==>
+  (!g. !cx tgt st0 st1 v st res st' env ty.
+    eval_target cx g st0 = (INL tgt, st1) /\
+    well_typed_atarget env g ty /\
+    assign_target_assignable tgt st /\
+    assign_target cx tgt (Replace v) st = (res, st') /\
+    state_well_typed st /\
+    env_consistent env cx st /\
+    (?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
+           value_has_type tyv v) ==>
     !s. res <> INR (Error (TypeError s))) /\
-  (!cx tgts vs st res st'.
-    assign_targets cx tgts vs st = (res, st') ==>
+  (!gs. !cx gvs st0 st1 vs st res st' env tys.
+    eval_targets cx gs st0 = (INL gvs, st1) /\
+    LIST_REL (well_typed_atarget env) gs tys /\
+    EVERY (\tgt. assign_target_assignable tgt st) gvs /\
+    assign_targets cx gvs vs st = (res, st') /\
+    state_well_typed st /\
+    env_consistent env cx st /\
+    LIST_REL (\ty v. ?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
+              value_has_type tyv v) tys vs ==>
     !s. res <> INR (Error (TypeError s)))
 Proof
   cheat
