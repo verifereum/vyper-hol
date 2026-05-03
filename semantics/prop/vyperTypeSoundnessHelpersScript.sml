@@ -988,6 +988,9 @@ Theorem env_consistent_scopes_only:
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
     (!id.
        FLOOKUP env.var_assignable id = SOME T ==>
+       IS_SOME (FLOOKUP env.var_types id)) /\
+    (!id.
+       FLOOKUP env.var_assignable id = SOME T ==>
        ?entry. lookup_scopes id scopes = SOME entry /\ entry.assignable) /\
     (!id ty. FLOOKUP env.global_types id = SOME ty ==>
        IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
@@ -1478,7 +1481,8 @@ Proof
     first_x_assum (qspec_then `i` assume_tac) >> fs[]) >>
   `FDOM (EL i st.scopes) = FDOM (EL i st'.scopes)` by (
     drule MAP_FDOM_EL_FDOM >> simp[]) >>
-  `id IN FDOM (EL i st.scopes)` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+  `id IN FDOM (EL i st'.scopes)` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+  `id IN FDOM (EL i st.scopes)` by metis_tac[] >>
   `?entry'. FLOOKUP (EL i st.scopes) id = SOME entry'` by
     metis_tac[finite_mapTheory.flookup_thm] >>
   `?entry''. FLOOKUP (EL i st'.scopes) id = SOME entry'' /\
@@ -3928,6 +3932,19 @@ Proof
       rev_drule env_consistent_var_types_completeness >> simp[] >>
       metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_DEF])
     >- simp[FLOOKUP_DEF]) >>
+  `!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE` by (
+    rpt strip_tac >>
+    Cases_on `id IN FDOM h`
+    >- (
+      fs[env_consistent_def] >>
+      qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> IS_SOME (FLOOKUP env.var_types id)` drule >>
+      simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+      `id IN FDOM env.var_types` by metis_tac[FLOOKUP_SOME_IN_FDOM] >>
+      `id NOTIN FDOM sc` by metis_tac[] >>
+      `lookup_scopes id t = NONE` by metis_tac[] >>
+      first_x_assum drule >> strip_tac >> gvs[] >>
+      metis_tac[lookup_scopes_is_some_same_fdoms, optionTheory.NOT_SOME_NONE])
+    >- simp[FLOOKUP_DEF]) >>
   drule_all pop_scope_ec >> simp[]
 QED
 
@@ -3966,40 +3983,61 @@ Theorem push_scope_with_var_ec:
 Proof
   rw[env_consistent_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
   Cases_on `id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
-  res_tac
+  res_tac >> gvs[optionTheory.IS_SOME_EXISTS, FLOOKUP_DEF]
 QED
 
 
+(* Helper: var_types completeness is inherited by a smaller var_types map. *)
+Theorem env_consistent_weaken_var_types_completeness:
+  !env env' cx st id ty.
+    env_consistent env' cx st /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             FLOOKUP env'.var_types id = SOME ty) /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    IS_SOME (lookup_scopes id st.scopes)
+Proof
+  metis_tac[env_consistent_var_types_completeness]
+QED
+
+(* Helper: var_types soundness is inherited by a smaller var_types map. *)
+Theorem env_consistent_weaken_var_types_soundness:
+  !env env' cx st id ty entry.
+    env_consistent env' cx st /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             FLOOKUP env'.var_types id = SOME ty) /\
+    FLOOKUP env.var_types id = SOME ty /\
+    lookup_scopes id st.scopes = SOME entry ==>
+    evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  metis_tac[env_consistent_var_types_soundness]
+QED
+
 (* env_consistent weakening: if it holds for an env with more var_types,
-   it holds for one with fewer (since the implication has a weaker antecedent) *)
+   it holds for one with fewer (since the implication has a weaker antecedent).
+   Because env_consistent also requires assignable variables to be typed, the
+   smaller environment must still type every assignable variable. *)
 Theorem env_consistent_weaken_var_types:
   !env env' cx st.
     env_consistent env' cx st /\
     env.type_defs = env'.type_defs /\
     env.fn_sigs = env'.fn_sigs /\
+    env.var_assignable = env'.var_assignable /\
     env.global_types = env'.global_types /\
     env.toplevel_types = env'.toplevel_types /\
     env.flag_members = env'.flag_members /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-             FLOOKUP env'.var_types id = SOME ty) ==>
+             FLOOKUP env'.var_types id = SOME ty) /\
+    (!id. FLOOKUP env.var_assignable id = SOME T ==>
+          IS_SOME (FLOOKUP env.var_types id)) ==>
     env_consistent env cx st
 Proof
-  rw[env_consistent_def] >> metis_tac[]
+  rpt strip_tac >>
+  fs[env_consistent_def] >>
+  rw[] >>
+  metis_tac[env_consistent_weaken_var_types_completeness,
+            env_consistent_weaken_var_types_soundness,
+            env_consistent_def]
 QED
-
-(* Common special case: removing one FUPDATE from var_types *)
-Theorem env_consistent_drop_var:
-  !env nm typ cx st.
-    env_consistent (env with var_types updated_by flip FUPDATE (nm, typ)) cx st /\
-    nm NOTIN FDOM env.var_types ==>
-    env_consistent env cx st
-Proof
-  rpt strip_tac >> irule env_consistent_weaken_var_types >>
-  qexists_tac `env with var_types updated_by flip FUPDATE (nm, typ)` >>
-  simp[FLOOKUP_UPDATE] >> rw[] >>
-  gvs[FLOOKUP_DEF]
-QED
-
 
 (* struct_has_type lookup: if a field is in the struct, its type is in ftypes *)
 Theorem struct_has_type_lookup:

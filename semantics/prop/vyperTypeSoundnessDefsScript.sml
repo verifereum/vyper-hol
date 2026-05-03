@@ -492,7 +492,10 @@ Definition env_consistent_def:
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id st.scopes = SOME entry ==>
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
-    (* Assignability: statically assignable variables must be writable at runtime *)
+    (* Assignability: statically assignable variables must be typed and writable at runtime *)
+    (!id.
+       FLOOKUP env.var_assignable id = SOME T ==>
+       IS_SOME (FLOOKUP env.var_types id)) /\
     (!id.
        FLOOKUP env.var_assignable id = SOME T ==>
        ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable) /\
