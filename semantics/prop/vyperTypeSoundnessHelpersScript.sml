@@ -986,6 +986,9 @@ Theorem env_consistent_scopes_only:
        FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id scopes = SOME entry ==>
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    (!id.
+       FLOOKUP env.var_assignable id = SOME T ==>
+       ?entry. lookup_scopes id scopes = SOME entry /\ entry.assignable) /\
     (!id ty. FLOOKUP env.global_types id = SOME ty ==>
        IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
          (case ALOOKUP st.immutables cx.txn.target of
@@ -1048,7 +1051,10 @@ Theorem env_consistent_with_new_scopes:
        IS_SOME (lookup_scopes id new_scopes)) /\
     (!id ty entry. FLOOKUP env.var_types id = SOME ty /\
        lookup_scopes id new_scopes = SOME entry ==>
-       evaluate_type (get_tenv cx) ty = SOME entry.type) ==>
+       evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    (!id.
+       FLOOKUP env.var_assignable id = SOME T ==>
+       ?entry. lookup_scopes id new_scopes = SOME entry /\ entry.assignable) ==>
     env_consistent env cx (st with scopes := new_scopes)
 Proof
   rpt strip_tac >>
@@ -1176,11 +1182,25 @@ Proof
       metis_tac[lookup_scopes_pre_found])
 QED
 
+Theorem lookup_scopes_value_update_assignable_preserved:
+  !pre env n entry a' rest id e.
+    FLOOKUP env n = SOME entry /\
+    lookup_scopes id (pre ++ env::rest) = SOME e /\
+    e.assignable ==>
+    ?e'. lookup_scopes id (pre ++ (env |+ (n, entry with value := a'))::rest) = SOME e' /\
+         e'.assignable
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_scopes id pre` >> gvs[]
+  >- (imp_res_tac lookup_scopes_pre_miss >>
+      Cases_on `id = n` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE, scope_entry_accfupds] >>
+      metis_tac[]) >>
+  metis_tac[lookup_scopes_pre_found]
+QED
+
 (* When a scope entry's value is updated, env_consistent is preserved.
-   Proved via env_consistent_with_new_scopes: we need soundness
-   (evaluate_type ... = SOME entry.type) and completeness (IS_SOME).
-   NOTE: after irule env_consistent_with_new_scopes >> simp[] >> conj_tac,
-   first conjunct = SOUNDNESS, second = COMPLETENESS. *)
+   Proved via env_consistent_with_new_scopes: preserve var_types soundness,
+   var_types completeness, and var_assignable witnesses. *)
 Theorem env_consistent_scope_entry_value_update:
   !env cx st pre env' n entry a' rest.
     env_consistent env cx st /\
@@ -1191,12 +1211,12 @@ Theorem env_consistent_scope_entry_value_update:
 Proof
   rpt strip_tac >>
   irule env_consistent_with_new_scopes >> simp[] >>
-  conj_tac
-  >- ((* soundness: evaluate_type - first conjunct *)
-      metis_tac[lookup_scopes_value_update_preserves_type])
-  >- ((* completeness: IS_SOME - second conjunct *)
-      metis_tac[lookup_scopes_value_update_is_some_preserved,
-                env_consistent_var_types_completeness])
+  rpt conj_tac
+  >- metis_tac[lookup_scopes_value_update_preserves_type]
+  >- metis_tac[lookup_scopes_value_update_is_some_preserved,
+               env_consistent_var_types_completeness]
+  >- metis_tac[lookup_scopes_value_update_assignable_preserved,
+               env_consistent_def]
 QED
 
 (* Combined boundary lemma: updating a scope entry's value preserves both
@@ -2146,10 +2166,8 @@ Proof
       gvs[Once evaluate_def, bind_apply, AllCaseEqs(), ignore_bind_apply,
           get_scopes_def, return_def, type_check_def, assert_def,
           well_typed_expr_def, loc_type_def, leaf_type_def] >>
-      gvs[env_consistent_def] >>
-      first_x_assum drule >>
-      disch_then drule >> simp[] >>
-      MATCH_ACCEPT_TAC (cj 1 evaluate_type_well_formed))
+      drule_all env_consistent_var_types_soundness >> strip_tac >> simp[] >>
+      metis_tac[cj 1 evaluate_type_well_formed])
   (* BareGlobalNameTarget *)
   >- (
     simp[Once evaluate_def, bind_apply, AllCaseEqs(), ignore_bind_apply,
@@ -2636,8 +2654,7 @@ val state_identity_preserves_tac =
   >> TRY (imp_res_tac return_state >> gvs[])
   >> TRY (imp_res_tac raise_state >> gvs[])
   >> TRY (imp_res_tac write_storage_slot_well_typed >> gvs[])
-  >> TRY (imp_res_tac set_global_well_typed >> gvs[])
-  >> TRY (res_tac >> gvs[]);
+  >> TRY (imp_res_tac set_global_well_typed >> gvs[]);
 
 (* Simpset for full monadic chain decomposition including pair-pattern binds.
    bind_def (not bind_apply) + UNCURRY + EXISTS_PROD handles \(a,b) <- f patterns.
@@ -3665,7 +3682,8 @@ QED
 Theorem pop_scope_ec:
   !env cx st h tl.
     env_consistent env cx st /\ st.scopes = h::tl /\
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) ==>
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
+    (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE) ==>
     env_consistent env cx (st with scopes := tl)
 Proof
   rpt strip_tac >>
@@ -3677,6 +3695,8 @@ Proof
   >- (
     drule env_consistent_var_types_soundness >> disch_then drule >>
     simp[lookup_scopes_def])
+  >- (
+    fs[env_consistent_def, lookup_scopes_def] >> metis_tac[])
 QED
 
 (* Adding a binding to the head scope doesn't change lookup_scopes for any
@@ -3739,6 +3759,13 @@ Proof
     Cases_on `id' = string_to_num id` >- fs[FLOOKUP_DEF] >>
     first_x_assum drule >> strip_tac >>
     res_tac >> gvs[lookup_scopes_def, FLOOKUP_UPDATE])
+  >- (
+    (* var_assignable *)
+    Cases_on `id' = string_to_num id`
+    >- (qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> _` drule >>
+        strip_tac >> gvs[]) >>
+    qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> _` drule >>
+    simp[])
   (* global_types + toplevel_types + flag_members: identical *)
   >> res_tac
 QED
