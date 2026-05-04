@@ -2083,6 +2083,23 @@ Proof
   cheat
 QED
 
+(* Update-assignment no-TypeError for AugAssign.  This is the Update analogue
+   of the first conjunct of assign_target_no_type_error. *)
+Theorem assign_target_update_no_type_error:
+  !cx bt loc sbs st0 st1 target_ty ty bop v st res st' env et.
+    eval_base_target cx bt st0 = (INL (loc,sbs), st1) /\
+    well_typed_target env bt target_ty /\
+    assign_target_assignable (BaseTargetV loc sbs) st /\
+    assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st = (res, st') /\
+    state_well_typed st /\
+    env_consistent env cx st /\
+    well_typed_binop ty bop ty et /\
+    bop <> In /\ bop <> NotIn ==>
+    !s. res <> INR (Error (TypeError s))
+Proof
+  cheat
+QED
+
 (*
 Theorem assign_targets_well_typed:
   !cx gvs vs st res st' env.

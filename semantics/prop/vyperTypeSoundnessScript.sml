@@ -1477,7 +1477,12 @@ Resume eval_preserves_swt[Assign_tgt_inr_err]:
   (* assign_target INR: error case — no TypeError, no ReturnException *)
   gvs[pair_case_thm, return_def] >>
   rpt CONJ_TAC >- (
-    drule (cj 1 assign_target_no_type_error) >> simp[]) >>
+    rpt strip_tac >> gvs[] >>
+    `assign_target_assignable x r` by metis_tac[eval_target_assignable] >>
+    qspecl_then [`g`, `cx`, `x`, `st`, `st_tgt`, `x''`, `r`, `INR (Error (TypeError s))`, `st'`, `env`, `expr_type e`]
+      mp_tac (cj 1 assign_target_no_type_error) >>
+    simp[] >>
+    qexists_tac `tyv` >> simp[]) >>
   rpt strip_tac >>
   drule (cj 1 assign_target_no_return) >> simp[]
 QED
@@ -1592,7 +1597,12 @@ Resume eval_preserves_swt[AugAssign_at_inr]:
   (* After gvs, state_well_typed/env_consistent/accounts_well_typed are already
      discharged from assumptions (st' = r''). Remaining: no-TypeError + no-return. *)
   CONJ_TAC >- (
-    drule (cj 1 assign_target_no_type_error) >> simp[]) >>
+    `assign_target_assignable (BaseTargetV loc sbs) r` by (
+      Cases_on `loc`
+      >- metis_tac[eval_base_target_scoped_assignable]
+      >- simp[assign_target_assignable_def]
+      >- simp[assign_target_assignable_def]) >>
+    drule_all assign_target_update_no_type_error >> simp[]) >>
   rpt strip_tac >>
   drule (cj 1 assign_target_no_return) >> simp[]
 QED
@@ -1782,7 +1792,7 @@ Resume eval_preserves_swt[For]:
                     `r`, `x'`, `r'`, `r'`, `x''`, `r'`]) >>
         ASM_REWRITE_TAC [] >>
         disch_then drule_all >>
-        rpt strip_tac >> gvs[] >>
+        rpt strip_tac >> ASM_REWRITE_TAC [] >>
         TRY not_type_error_tac)
       >- (
         (* check error branch *)
@@ -1790,21 +1800,38 @@ Resume eval_preserves_swt[For]:
         imp_res_tac check_state >> rpt BasicProvers.VAR_EQ_TAC >>
         ASM_REWRITE_TAC [] >>
         rpt strip_tac >> imp_res_tac check_not_return >>
-        gvs[check_def, assert_def]))
+        qpat_x_assum `check _ _ _ = _` mp_tac >>
+        simp[check_def, assert_def, raise_def]))
     >- (
       (* eval_iterator error *)
       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
       qpat_x_assum `!env typ st res st'. well_typed_iterator _ _ it /\ _ ==> _`
         drule_all >> strip_tac >>
       ASM_REWRITE_TAC [] >>
+      simp_tac(srw_ss())[] >>
+      CONJ_TAC >- (qx_gen_tac`s` >> first_x_assum(qspec_then`s`mp_tac)
+                   >> simp_tac(srw_ss())[]) >>
       rpt strip_tac >>
       imp_res_tac (cj 3 evaluate_no_return) >>
-      gvs[]))
+      qpat_x_assum `!v. INR y <> INR (ReturnException v)`
+        (qspec_then `v` mp_tac) >>
+      simp[]))
   >- (
     strip_tac >>
-    gvs[lift_option_type_def, well_formed_type_def, env_consistent_def,
-        AllCaseEqs()])
+    rpt BasicProvers.VAR_EQ_TAC >>
+    simp_tac(srw_ss())[] >>
+    `env.type_defs = get_tenv cx` by (
+      qhdtm_x_assum`env_consistent`mp_tac >>
+      simp_tac(srw_ss())[env_consistent_def] ) >>
+    rpt strip_tac >>
+    first_x_assum(qspec_then`ARB`kall_tac) >>
+    first_x_assum(qspec_then`ARB`kall_tac) >>
+    gvs[lift_option_type_def,AllCaseEqs(),
+        raise_def,return_def,option_CASE_rator] >>
+    gvs[well_formed_type_def]
+  )
 QED
+
 Resume eval_preserves_swt[Array]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
