@@ -1945,6 +1945,117 @@ Definition assign_target_assignable_def:
     EVERY (\tgt. assign_target_assignable tgt st) tgts
 End
 
+Theorem lookup_scopes_find_containing_scope:
+  !scopes id entry.
+    lookup_scopes id scopes = SOME entry ==>
+    ?pre env rest.
+      find_containing_scope id scopes = SOME (pre, env, entry, rest)
+Proof
+  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >>
+  simp[]
+QED
+
+Theorem well_typed_target_NameTarget_assignable:
+  !env cx st id ty.
+    well_typed_target env (NameTarget id) ty /\
+    env_consistent env cx st ==>
+    assign_target_assignable (BaseTargetV (ScopedVar id) []) st
+Proof
+  rw[well_typed_expr_def, assign_target_assignable_def] >>
+  fs[env_consistent_def] >>
+  first_x_assum drule >> strip_tac >>
+  drule lookup_scopes_find_containing_scope >> strip_tac >>
+  rpt (goal_assum drule) >> simp[]
+QED
+
+Theorem eval_base_target_scoped_assignable:
+  !bt cx st0 s sbs st1 env ty st.
+    eval_base_target cx bt st0 = (INL (ScopedVar s, sbs), st1) /\
+    well_typed_target env bt ty /\
+    env_consistent env cx st ==>
+    assign_target_assignable (BaseTargetV (ScopedVar s) sbs) st
+Proof
+  Induct >> rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_def, bind_apply, AllCaseEqs(), return_def, raise_def,
+      well_typed_expr_def, bind_def, bind_apply, ignore_bind_def,
+      ignore_bind_apply, option_CASE_rator,
+      lift_option_type_def, assign_target_assignable_def,
+      type_check_def, assert_def]
+  >- (fs[env_consistent_def] >>
+      first_x_assum drule >> strip_tac >>
+      drule lookup_scopes_find_containing_scope >> strip_tac >>
+      rpt (goal_assum drule) >> simp[])
+  >- (Cases_on `p` >> gvs[Once evaluate_def, return_def])
+  >- (pairarg_tac >> gvs[return_def, assign_target_assignable_def] >>
+      qpat_x_assum `do _ od _ = _` mp_tac >>
+      simp[bind_apply, AllCaseEqs(), return_def, raise_def] >> strip_tac >> gvs[] >>
+      first_x_assum drule_all >> simp[assign_target_assignable_def])
+  >- (pairarg_tac >> gvs[return_def, assign_target_assignable_def] >>
+      qpat_x_assum `do _ od _ = _` mp_tac >>
+      simp[bind_apply, AllCaseEqs(), return_def, raise_def] >> strip_tac >> gvs[] >>
+      first_x_assum drule_all >> simp[assign_target_assignable_def] )
+QED
+
+Theorem eval_target_assignable_base:
+  !g cx s sbs st0 st1 env ty st.
+    eval_target cx g st0 = (INL (BaseTargetV (ScopedVar s) sbs), st1) /\
+    well_typed_atarget env g ty /\
+    env_consistent env cx st ==>
+    assign_target_assignable (BaseTargetV (ScopedVar s) sbs) st
+Proof
+  Cases >> gvs[Once evaluate_def, well_typed_atarget_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp[bind_def, UNCURRY, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  metis_tac[eval_base_target_scoped_assignable]
+QED
+
+Theorem eval_target_assignable:
+  !g cx tgt st0 st1 env ty st.
+    eval_target cx g st0 = (INL tgt, st1) /\
+    well_typed_atarget env g ty /\
+    env_consistent env cx st ==>
+    assign_target_assignable tgt st
+Proof
+  completeInduct_on `assignment_target_size g` >> rpt strip_tac >>
+  Cases_on `g` >> gvs[Once evaluate_def, well_typed_atarget_def]
+  >- (qpat_x_assum `do _ od _ = _` mp_tac >>
+      simp[bind_def, UNCURRY, AllCaseEqs(), return_def, raise_def] >>
+      rpt strip_tac >> gvs[] >> Cases_on `x` >> gvs[] >>
+      Cases_on `q` >> gvs[assign_target_assignable_def] >>
+      drule_all eval_base_target_scoped_assignable >>
+      simp[assign_target_assignable_def]) >>
+  qpat_x_assum `do _ od _ = _` mp_tac >>
+  simp[bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[assign_target_assignable_def] >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
+  qid_spec_tac `tys` >> qid_spec_tac `gvs` >> qid_spec_tac `st1` >> qid_spec_tac `st0` >>
+  Induct_on `l` >> gvs[Once evaluate_def, return_def] >>
+  rpt strip_tac >> Cases_on `tys` >> gvs[] >>
+  gvs[bind_apply, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  `assign_target_assignable gv st` by (
+    qpat_x_assum `!m. m < assignment_target_size h + _ ==> _`
+      (qspec_then `assignment_target_size h` mp_tac) >>
+    simp[] >> metis_tac[]) >>
+  simp[] >>
+  qpat_x_assum `(∀m. m < list_size assignment_target_size l + 1 ==> _) ==> _` mp_tac >>
+  impl_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!m. m < assignment_target_size h + _ ==> _`
+        (qspec_then `m` mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      first_x_assum (qspec_then `g` mp_tac) >>
+      simp[] >> strip_tac >> metis_tac[]) >>
+  strip_tac >> first_x_assum drule_all >> simp[]
+QED
+
 (* Replace-assignment no-TypeError under the same typing hypotheses as
    assign_target_well_typed, plus the dynamic assignability side condition. *)
 Theorem assign_target_no_type_error:
