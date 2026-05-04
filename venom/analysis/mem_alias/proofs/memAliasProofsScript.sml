@@ -1088,7 +1088,7 @@ Proof
       memloc_runtime_region_def]
   >- ((* Lit c *)
       qexists_tac `w2n c` >> simp[] >>
-      Cases_on `ops.iao_size` >> gvs[] >>
+      Cases_on `ops.iao_max_size` >> gvs[] >>
       Cases_on `x` >> gvs[])
   >> (* Var s' *)
   Cases_on `bp_ptr_from_op bp (Var s')` >> gvs[] >>
@@ -1098,6 +1098,6 @@ Proof
   rename1 `Ptr (Allocation aid) (SOME off)` >>
   drule_all bp_ptr_from_op_sound_local >> strip_tac >>
   gvs[] >> qexists_tac `base' + off` >> simp[] >>
-  Cases_on `ops.iao_size` >> gvs[] >>
+  Cases_on `ops.iao_max_size` >> gvs[] >>
   Cases_on `x` >> gvs[]
 QED
