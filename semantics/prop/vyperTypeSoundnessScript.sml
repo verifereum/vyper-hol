@@ -1854,14 +1854,6 @@ Resume eval_preserves_swt[Array]:
     >- (
       (* materialise succeeded — get value typing from IH *)
       imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-      qpat_x_assum `!v st''. materialise cx x r = (INL v,st'') ==> _`
-        (mp_tac o Q.SPECL [`x'`, `r'`]) >> simp[] >>
-      strip_tac >>
-      (* Remaining chain: lift_option_type x2, lift_option_type (extract_elements), return *)
-      (* All pure — resolve directly *)
-      (* The pure chain: lift_option_type resolves evaluate_type (known SOME),
-         then case on extract_elements, then return. State unchanged = r. *)
-      strip_tac >>
       gvs[lift_option_type_def, return_def, raise_def,
           pairTheory.pair_case_eq, CaseEq"sum", CaseEq"option"] >>
       (* Decompose evaluate_type (ArrayT typ bd) *)
@@ -1871,12 +1863,25 @@ Resume eval_preserves_swt[Array]:
       (* Case split on extract_elements *)
       Cases_on `extract_elements (ArrayTV tv bd) x'` >>
       gvs[return_def, raise_def] >>
-      irule extract_elements_well_typed >>
+      rpt strip_tac >> gvs[] >>
       `well_formed_type_value (ArrayTV tv bd)` by (
         irule (cj 1 evaluate_type_well_formed) >>
         qexists_tac `get_tenv cx` >> qexists_tac `ArrayT typ bd` >>
         simp[evaluate_type_def]) >>
-      Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def])
+      Cases_on `x'` >> gvs[value_has_type_def, extract_elements_def] >>
+      Cases_on`a` >> Cases_on`bd` >> gvs[value_has_type_def] >>
+      simp[array_elements_def] >>
+      gvs[all_have_type_EVERY] >>
+      drule sparse_has_type_all_have_type >>
+      simp[all_have_type_EVERY] >>
+      simp[EVERY_MEM, EVERY_GENLIST, PULL_EXISTS] >>
+      ntac 3 strip_tac >> CASE_TAC >> gvs[] >>
+      drule default_value_has_type_thm >> simp[] >>
+      strip_tac >> first_x_assum irule >>
+      drule alistTheory.ALOOKUP_MEM >>
+      simp[MEM_MAP,PULL_EXISTS,EXISTS_PROD] >>
+      strip_tac >> goal_assum drule
+    )
     >- (
       (* materialise error: P7 no-TypeError bridge rules out TypeError *)
       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -1903,7 +1908,10 @@ Resume eval_preserves_swt[Range]:
   >- (
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     last_x_assum drule_all >> strip_tac >>
-    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [])
+    ASM_REWRITE_TAC[] >> simp_tac(srw_ss()) [] >>
+    qx_gen_tac `s` >>
+    first_x_assum(qspec_then`s`mp_tac) >>
+    simp_tac (srw_ss()) [])
   >>
   last_x_assum drule_all >> strip_tac >>
   (* Step 2: get_Value tv1 *)
@@ -1912,7 +1920,21 @@ Resume eval_preserves_swt[Range]:
   >- (
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [])
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [] >>
+    last_x_assum(qspec_then`ARB`kall_tac) >>
+    (* x is HashMapRef but is_int_type (expr_type e) implies tyv <> NoneTV,
+       contradicting toplevel_value_typed (HashMapRef ...) tyv *)
+    `is_int_type (expr_type e)` by simp[] >>
+    `expr_type e <> NoneT` by (Cases_on `expr_type e` >> gvs[is_int_type_def]) >>
+    first_x_assum (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
+    `tyv <> NoneTV` by metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV] >>
+    `!t bd. tyv <> ArrayTV t bd` by (
+      Cases_on `expr_type e` >> fs[is_int_type_def] >>
+      qpat_x_assum `BaseT _ = expr_type e'` (SUBST_ALL_TAC o SYM) >>
+      fs[evaluate_type_def] >> Cases_on `b` >> gvs[]) >>
+    `?v. x = Value v` by metis_tac[toplevel_value_typed_not_ArrayRef] >>
+    gvs[return_def]
+  )
   >>
   imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 3: eval_expr cx e' r — instantiate guarded IH *)
@@ -1923,7 +1945,8 @@ Resume eval_preserves_swt[Range]:
   >- (
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     first_x_assum drule_all >> strip_tac >>
-    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [])
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [] >>
+    qx_gen_tac `s` >> first_x_assum (qspec_then `s` mp_tac) >> simp[])
   >>
   first_x_assum drule_all >> strip_tac >>
   (* Step 4: get_Value tv2 *)
@@ -1932,7 +1955,17 @@ Resume eval_preserves_swt[Range]:
   >- (
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [])
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [] >>
+    (* Same pattern as first get_Value error: rule out HashMapRef/ArrayRef *)
+    first_x_assum (qspec_then `x''` mp_tac) >> simp[] >> strip_tac >>
+    `is_int_type (expr_type e')` by simp[] >>
+    `expr_type e' <> NoneT` by (Cases_on `expr_type e'` >> gvs[is_int_type_def]) >>
+    `tyv <> NoneTV` by metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV] >>
+    `!t bd. tyv <> ArrayTV t bd` by (
+      Cases_on `expr_type e'` >> fs[is_int_type_def] >>
+      fs[evaluate_type_def] >> Cases_on `b` >> gvs[]) >>
+    `?v. x'' = Value v` by metis_tac[toplevel_value_typed_not_ArrayRef] >>
+    gvs[return_def])
   >>
   imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 5: lift_sum (get_range_limits x' x'3') *)
@@ -1941,7 +1974,37 @@ Resume eval_preserves_swt[Range]:
   >- (
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC >>
-    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [])
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [] >>
+    (* get_range_limits only fails with TypeError if not IntV.
+       We need to show x' and x'³' are IntV from is_int_type typing. *)
+    qpat_x_assum `lift_sum (get_range_limits _ _) _ = (INR _, _)` mp_tac >>
+    simp_tac (srw_ss()) [AllCaseEqs(), return_def, raise_def] >>
+    strip_tac >> gvs[] >>
+    (* We need value_has_type for x' and x'³' to show they're IntV.
+       First establish x = Value x' from get_Value success, then use materialise. *)
+    `x = Value x'` by (
+      qpat_x_assum `get_Value x r = _` mp_tac >>
+      Cases_on `x` >> simp[return_def, raise_def]) >>
+    `x'' = Value x'³'` by (
+      qpat_x_assum `get_Value x'' r' = _` mp_tac >>
+      Cases_on `x''` >> simp[return_def, raise_def]) >>
+    `value_has_type tyv x'` by (
+      first_x_assum (qspec_then `x'` mp_tac) >>
+      gvs[materialise_Value, return_def]) >>
+    `value_has_type tyv x'³'` by (
+      first_x_assum (qspec_then `x'³'` mp_tac) >>
+      gvs[materialise_Value, return_def]) >>
+    (* Now show x' and x'³' are IntV from value_has_type + is_int_type *)
+    `?i. x' = IntV i` by (
+      Cases_on `expr_type e'` >> gvs[is_int_type_def] >>
+      Cases_on `b` >> gvs[evaluate_type_def, value_has_type_def] >>
+      Cases_on `x'` >> gvs[value_has_type_def]) >>
+    `?j. x'³' = IntV j` by (
+      Cases_on `expr_type e'` >> gvs[is_int_type_def] >>
+      Cases_on `b` >> gvs[evaluate_type_def, value_has_type_def] >>
+      Cases_on `x'³'` >> gvs[value_has_type_def]) >>
+    gvs[lift_sum_def, get_range_limits_def, return_def, raise_def] >>
+    Cases_on `i <= j` >> gvs[return_def, raise_def])
   >>
   imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Step 6: return — just LET + return, state = r' *)
@@ -2019,16 +2082,24 @@ Resume eval_preserves_swt[SubscriptTarget]:
   simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
   (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) []
+  >- (
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    first_x_assum drule_all >> strip_tac >>
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) []) >>
   (* P5 IH for bt *)
   first_x_assum drule_all >> strip_tac >>
   (* Decompose pair result *)
   Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM] >>
   (* Step 2: eval_expr cx e *)
   Cases_on `eval_expr cx e r` >>
-  reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
-  TRY close_inr_err_tac >>
+  reverse (Cases_on `q'`) >> simp_tac (srw_ss()) []
+  >- (
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    first_x_assum (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>
+    impl_tac >- simp[] >> strip_tac >>
+    first_x_assum drule_all >> strip_tac >>
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) []) >>
   (* P7 IH for e (guarded by eval_base_target success) *)
   qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>

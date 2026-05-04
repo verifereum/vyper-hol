@@ -6542,7 +6542,7 @@ Proof
       first_x_assum drule >> simp[])
 QED
 
-val default_value_has_type_thm = cj 1 default_value_has_type;
+Theorem default_value_has_type_thm = cj 1 default_value_has_type;
 
 (* ---- evaluate_max_value / evaluate_min_value typing ---- *)
 
