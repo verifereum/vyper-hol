@@ -10,9 +10,8 @@
  *   compile_floor       — floor(x) for decimal → int (round toward -∞)
  *   compile_ceil        — ceil(x) for decimal → int (round toward +∞)
  *   compile_as_wei_value — multiply by denomination scale factor
- *   compile_min_value   — minimum value for a type
- *   compile_max_value   — maximum value for a type
- *   compile_epsilon     — smallest positive decimal (1 / DECIMAL_DIVISOR)
+ *   compile_as_wei_value_int     — integer case of as_wei_value
+ *   compile_as_wei_value_decimal  — decimal case of as_wei_value
  *
  * Mirrors Python: ~/vyper/vyper/codegen_venom/builtins/misc.py
  *)
@@ -106,7 +105,7 @@ Definition compile_blockhash_def:
   compile_blockhash n_op =
     do current_block <- emit_op NUMBER [];
        lower_bound <- emit_op SUB [current_block; Lit 256w];
-       (* Assert n >= lower_bound (signed comparison) *)
+       (* Assert n >= lower bound (signed comparison) *)
        too_old <- emit_op SLT [n_op; lower_bound];
        ok1 <- emit_op ISZERO [too_old];
        emit_void ASSERT [ok1];
@@ -147,6 +146,88 @@ Definition compile_ceil_def:
        (* select: is_pos ? adjusted : val_op *)
        input <- compile_select is_pos adjusted val_op;
        emit_op SDIV [input; Lit (n2w divisor)]
+    od
+End
+
+(* ===== isqrt ===== *)
+(* Integer square root via Babylonian method (branchless, unrolled).
+   Mirrors Python: misc.py lower_isqrt — port of legacy IRnode.
+   Uses select() for conditional updates, no loops.
+   Steps:
+   1. Initialize y=x, z=181
+   2. Scale based on magnitude (4 conditional right-shifts on y, left-shifts on z)
+   3. z = z * (y + 2^16) / 2^18
+   4. 7 iterations of Newton refinement: z = (z + x/z) / 2
+   5. Final: select(lt(z, x/z), z, x/z)
+
+   Factored into recursive helpers for proof by induction:
+   - compile_isqrt_scale: one scale step per threshold, induct over threshold list
+   - compile_isqrt_newton: one Newton step per iteration, induct over count *)
+
+(* One Newton iteration step: z = (x/z + z) / 2, assign to z_var.
+   Recurses for remaining iterations. *)
+Definition compile_isqrt_newton_def:
+  compile_isqrt_newton 0 val_op z_var = return () ∧
+  compile_isqrt_newton (SUC n) val_op z_var =
+    do xdz <- emit_op Div [val_op; Var z_var];
+       s <- emit_op ADD [xdz; Var z_var];
+       nz <- emit_op Div [s; Lit 2w];
+       emit_inst ASSIGN [nz] [z_var];
+       compile_isqrt_newton n val_op z_var
+    od
+End
+
+(* One scale step: if y >= threshold, shift y right and z left.
+   Takes a list of (threshold, shift_y_amount, shift_z_amount) triples.
+   For each triple:
+     cond = LT [y; threshold]  (true when y is smaller, i.e., y < threshold)
+     cond_n = ISZERO cond       (true when y >= threshold)
+     new_y = SHR [shift_y_amt; y]
+     new_z = SHL [shift_z_amt; z]
+     sel_y = select(cond_n, new_y, y)
+     sel_z = select(cond_n, new_z, z)
+     ASSIGN sel_y to y_var, sel_z to z_var
+   Then recurse for remaining thresholds. *)
+Definition compile_isqrt_scale_def:
+  compile_isqrt_scale [] val_op y_var z_var = return () ∧
+  compile_isqrt_scale ((threshold,shift_y_amt,shift_z_amt)::rest) val_op y_var z_var =
+    do cond <- emit_op LT [Var y_var; Lit threshold];
+       cond_n <- emit_op ISZERO [cond];
+       new_y <- emit_op SHR [Lit shift_y_amt; Var y_var];
+       new_z <- emit_op SHL [Lit shift_z_amt; Var z_var];
+       sel_y <- compile_select cond_n new_y (Var y_var);
+       sel_z <- compile_select cond_n new_z (Var z_var);
+       emit_inst ASSIGN [sel_y] [y_var];
+       emit_inst ASSIGN [sel_z] [z_var];
+       compile_isqrt_scale rest val_op y_var z_var
+    od
+End
+
+Definition compile_isqrt_def:
+  compile_isqrt val_op =
+    do (* Create mutable variables y and z *)
+       y_var <- fresh_var;
+       z_var <- fresh_var;
+       emit_inst ASSIGN [val_op] [y_var];
+       emit_inst ASSIGN [Lit 181w] [z_var];
+       (* 4 scale blocks: shrink y and grow z based on magnitude of y *)
+       compile_isqrt_scale
+         [(n2w (2 ** 136), 128w, 64w);
+          (n2w (2 ** 72), 64w, 32w);
+          (n2w (2 ** 40), 32w, 16w);
+          (n2w (2 ** 24), 16w, 8w)]
+         val_op y_var z_var;
+       (* z = z * (y + 2^16) / 2^18 *)
+       y_plus <- emit_op ADD [Var y_var; Lit (n2w (2 ** 16))];
+       z_mul <- emit_op MUL [Var z_var; y_plus];
+       z_scaled <- emit_op Div [z_mul; Lit (n2w (2 ** 18))];
+       emit_inst ASSIGN [z_scaled] [z_var];
+       (* 7 Newton iterations: z = (z + x/z) / 2 *)
+       compile_isqrt_newton 7 val_op z_var;
+       (* Final: t = x/z; return select(lt(z, t), z, t) *)
+       t_op <- emit_op Div [val_op; Var z_var];
+       lt_cond <- emit_op LT [Var z_var; t_op];
+       compile_select lt_cond (Var z_var) t_op
     od
 End
 
