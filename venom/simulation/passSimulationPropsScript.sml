@@ -1,5 +1,5 @@
 (*
- * Pass Simulation Framework — Correctness (Statements Only)
+ * Pass Simulation Framework - Correctness (Statements Only)
  *
  * Re-exports from proofs/passSimulationProofsScript.sml via ACCEPT_TAC.
  *)
@@ -795,6 +795,26 @@ Proof
   first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[]
 QED
 
+Triviality mapi_bb_pseudos_prefix[local]:
+  !(f:num -> instruction -> instruction) l.
+    (!i j. i < j /\ j < LENGTH l /\ is_pseudo (EL j l).inst_opcode ==>
+           is_pseudo (EL i l).inst_opcode) /\
+    (!i. i < LENGTH l /\ is_pseudo (EL i l).inst_opcode ==>
+         is_pseudo (f i (EL i l)).inst_opcode) /\
+    (!i. i < LENGTH l /\ ~is_pseudo (EL i l).inst_opcode ==>
+         ~is_pseudo (f i (EL i l)).inst_opcode)
+    ==>
+    pseudos_prefix (bb with bb_instructions := MAPi f l)
+Proof
+  simp[pseudos_prefix_def, LENGTH_MAPi] >> rpt strip_tac >>
+  gvs[EL_MAPi] >>
+  `is_pseudo (EL j l).inst_opcode`
+    by (CCONTR_TAC >> first_x_assum (qspecl_then [`j`] mp_tac) >> simp[]) >>
+  `is_pseudo (EL i l).inst_opcode`
+    by (first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`i`] mp_tac) >> simp[]
+QED
+
 (* bb_well_formed preservation for MAPi instruction transforms *)
 Theorem mapi_transform_bb_well_formed:
   !f bb.
@@ -810,16 +830,27 @@ Theorem mapi_transform_bb_well_formed:
          (f i (EL i bb.bb_instructions)).inst_opcode = PHI) /\
     (!i. i < LENGTH bb.bb_instructions /\
          (EL i bb.bb_instructions).inst_opcode <> PHI ==>
-         (f i (EL i bb.bb_instructions)).inst_opcode <> PHI)
+         (f i (EL i bb.bb_instructions)).inst_opcode <> PHI) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         is_pseudo (EL i bb.bb_instructions).inst_opcode ==>
+         is_pseudo (f i (EL i bb.bb_instructions)).inst_opcode) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         ~is_pseudo (EL i bb.bb_instructions).inst_opcode ==>
+         ~is_pseudo (f i (EL i bb.bb_instructions)).inst_opcode)
     ==>
     bb_well_formed (bb with bb_instructions := MAPi f bb.bb_instructions)
 Proof
-  rpt strip_tac >> fs[bb_well_formed_def, LENGTH_MAPi] >>
+  rpt strip_tac >>
+  `!i' j'. i' < j' /\ j' < LENGTH bb.bb_instructions /\ is_pseudo (EL j' bb.bb_instructions).inst_opcode
+           ==> is_pseudo (EL i' bb.bb_instructions).inst_opcode`
+    by metis_tac[bb_well_formed_imp_pseudos_prefix, pseudos_prefix_def] >>
+  fs[bb_well_formed_def, LENGTH_MAPi] >>
   rpt conj_tac
   >- (Cases_on `bb.bb_instructions` >> fs[MAPi_def])
   >- (irule mapi_bb_last_term >> metis_tac[])
   >- (match_mp_tac (SPEC_ALL mapi_bb_only_last_term) >> metis_tac[])
   >- (match_mp_tac (SPEC_ALL mapi_bb_phi_prefix) >> metis_tac[])
+  >- (match_mp_tac (SPEC_ALL mapi_bb_pseudos_prefix) >> metis_tac[])
 QED
 
 (* bb_succs preserved when terminators are unchanged and
@@ -1118,7 +1149,7 @@ Proof
   simp[analysis_block_transform_def]
 QED
 
-(* wf_function implies non-terminator prefix — useful across all passes *)
+(* wf_function implies non-terminator prefix - useful across all passes *)
 Theorem wf_non_terminator_prefix:
   !fn. wf_function fn ==>
     !bb. MEM bb fn.fn_blocks ==>
