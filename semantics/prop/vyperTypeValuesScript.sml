@@ -16,7 +16,7 @@ Libs
 Theorem evaluate_type_well_formed_type_value:
   evaluate_type tenv ty = SOME tv ==> well_formed_type_value tv
 Proof
-  cheat
+  metis_tac[evaluate_type_well_formed]
 QED
 
 Theorem well_formed_type_evaluate_type_well_formed:
@@ -35,34 +35,38 @@ QED
 Theorem value_has_type_NoneTV[simp]:
   value_has_type NoneTV v <=> v = NoneV
 Proof
-  cheat
+  Cases_on `v` >> simp[value_has_type_def]
 QED
 
 Theorem evaluate_type_NoneT[simp]:
   evaluate_type tenv NoneT = SOME NoneTV
 Proof
-  cheat
+  simp[evaluate_type_def]
 QED
 
 Theorem evaluate_type_BaseT_cases:
   evaluate_type tenv (BaseT bt) = SOME tv ==>
   ?btv. tv = BaseTV btv
 Proof
-  cheat
+  Cases_on `bt` >> rw[evaluate_type_def, AllCaseEqs(), LET_THM]
 QED
 
 Theorem evaluate_type_ArrayT_cases:
   evaluate_type tenv (ArrayT elem bd) = SOME tv ==>
   ?elem_tv. tv = ArrayTV elem_tv bd /\ evaluate_type tenv elem = SOME elem_tv
 Proof
-  cheat
+  rw[evaluate_type_def, AllCaseEqs(), LET_THM]
 QED
 
 Theorem evaluate_type_TupleT_cases:
   evaluate_type tenv (TupleT tys) = SOME tv ==>
   ?tvs. tv = TupleTV tvs /\ LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs
 Proof
-  cheat
+  rw[evaluate_type_def, AllCaseEqs(), LET_THM]
+  >> gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF]
+  >> gvs[LIST_REL_EL_EQN, EVERY_EL, EL_MAP, IS_SOME_EXISTS]
+  >> rw[] >> first_x_assum drule >> rw[]
+  >> rw[]
 QED
 
 Theorem value_has_type_evaluate_type_well_formed:
@@ -78,7 +82,10 @@ Theorem well_typed_literal_sound:
   well_typed_literal ty lit /\ evaluate_type tenv ty = SOME tv ==>
   value_has_type tv (evaluate_literal lit)
 Proof
-  cheat
+  Cases_on `ty` >> Cases_on `lit` >> rw[] >>
+  gvs[well_typed_literal_def, evaluate_type_def, evaluate_literal_def,
+      value_has_type_def, AllCaseEqs(), LET_THM, within_int_bound_def] >>
+  gvs[evaluate_type_def, value_has_type_def, compatible_bound_def]
 QED
 
 Theorem literal_toplevel_value_typed:
@@ -101,7 +108,8 @@ Theorem evaluate_type_MAP_well_formed:
   LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs ==>
   EVERY well_formed_type_value tvs
 Proof
-  cheat
+  qid_spec_tac`tvs` >> Induct_on `tys` >> Cases_on `tvs` >> rw[] >>
+  drule evaluate_type_well_formed_type_value >> simp[]
 QED
 
 (* ===== Top-level values ===== *)
@@ -117,4 +125,3 @@ Theorem toplevel_value_typed_not_hashmap_material:
 Proof
   Cases_on `tv` >> simp[toplevel_value_typed_def]
 QED
-
