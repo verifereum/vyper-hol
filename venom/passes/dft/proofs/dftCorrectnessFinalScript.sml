@@ -505,7 +505,7 @@ in SIMP_RULE (srw_ss()) [] inst |> GENL [sv, fv, fnv, cv] end;
 
 Theorem dft_fn_run_blocks_lift:
   !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
+    wf_ssa fn /\ wf_function fn ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dft_fn fn) s)
@@ -535,11 +535,8 @@ Proof
        (strip_assume_tac o REWRITE_RULE[wf_function_def]) >>
      res_tac) >>
   `bb_well_formed bb'` by metis_tac[dft_fn_blocks_well_formed] >>
-  `pseudos_prefix bb` by
-    (fs[fn_pseudos_prefix_def] >> metis_tac[EVERY_MEM]) >>
-  `pseudos_prefix bb'` by
-    (`fn_pseudos_prefix (dft_fn fn)` by metis_tac[dft_fn_pseudos_prefix] >>
-     fs[fn_pseudos_prefix_def] >> metis_tac[EVERY_MEM]) >>
+  `pseudos_prefix bb` by metis_tac[bb_well_formed_imp_pseudos_prefix] >>
+  `pseudos_prefix bb'` by metis_tac[bb_well_formed_imp_pseudos_prefix] >>
   `topo_sorted (canonical_dep bb.bb_instructions)
     (MAP (choose_original (block_body bb)) (block_body bb'))` by
     metis_tac[dft_fn_output_topo_sorted] >>
@@ -577,7 +574,7 @@ QED
 
 Theorem dft_fn_run_function_lift:
   !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
+    wf_ssa fn /\ wf_function fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_function fuel ctx fn s)
@@ -624,7 +621,7 @@ QED
 
 Theorem dft_pass_correct:
   !fn ctx s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
+    wf_ssa fn /\ wf_function fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv
       (\fuel. run_function fuel ctx fn s)
