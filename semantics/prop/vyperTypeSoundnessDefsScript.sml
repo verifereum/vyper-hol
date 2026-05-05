@@ -330,11 +330,11 @@ Definition well_typed_builtin_app_def:
     (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
      EVERY (\t. t = ArrayT (BaseT (UintT 256)) (Fixed 2)) ts) /\
   (* ECMul: point * scalar -> point. First arg is a point (2-element array
-     of uint256), second arg is an integer scalar. *)
+     of uint256), second arg is a uint256 scalar. *)
   well_typed_builtin_app ty ECMul ts =
     (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
      EL 0 ts = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-     is_int_type (EL 1 ts)) /\
+     EL 1 ts = BaseT (UintT 256)) /\
   (* PowMod256: 2x uint256 -> uint256 *)
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\
@@ -706,19 +706,15 @@ Definition well_typed_expr_def:
        result type = target_ty (the type argument)
      For AbiEncode:
        result type = bytes (dynamic), target_ty = TupleT of argument types *)
-  well_typed_expr env (TypeBuiltin ty (AbiEncode ensure) target_ty es) =
-    (well_typed_exprs env es /\
-     (?n. ty = BaseT (BytesT (Dynamic n))) /\
-     target_ty = TupleT (MAP expr_type es) /\
-     well_formed_type env.type_defs ty /\
-     well_typed_type_builtin_args (AbiEncode ensure) target_ty (MAP expr_type es)) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\
-     ty = target_ty /\
-     (!b. tb <> AbiEncode b) /\
      well_formed_type env.type_defs ty /\
-     well_formed_type env.type_defs target_ty /\
-     well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
+     (if ?ensure. tb = AbiEncode ensure then
+      (?n. ty = BaseT (BytesT (Dynamic n))) /\
+      target_ty = TupleT (MAP expr_type es)
+      else ty = target_ty) /\
+     well_typed_type_builtin_args tb target_ty (MAP expr_type es)
+    ) /\
   well_typed_expr env (Pop ty tgt) =
     (?bd. well_typed_target env tgt (ArrayT ty bd)) /\
   (* IntCall: internal function call. Argument count must be in the range

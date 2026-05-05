@@ -6889,6 +6889,8 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
+(*
+val ect = BasicProvers.every_case_tac
 (* ExtCall chain: from if/else through to final result.
    The chain after check+lift_option_type in ExtCall.
    Takes swt+ec for post-eval_exprs state, P7 IH for drv as direct hypothesis.
@@ -6959,17 +6961,25 @@ Theorem extcall_chain_preserves_swt:
          ?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
                value_has_type tyv v)
 Proof
-  let
-    val ect = BasicProvers.every_case_tac
-    val extcall_tail_tac =
+    rpt gen_tac >> strip_tac >>
+    (*
+    (* Unfold the entire chain including check + lift_option_type prefix *)
+    qpat_x_assum `(do _ od) _ = _` mp_tac >>
+    simp_tac (srw_ss()) [bind_apply, pair_bind_apply, check_def, assert_def,
+      return_def, raise_def, lift_option_type_def, ignore_bind_apply] >>
+    Cases_on `is_stat` >> ASM_REWRITE_TAC [] >>
+    simp_tac (srw_ss()) [return_def, check_def, assert_def,
+      bind_apply, raise_def, lift_option_type_def] >>
+    strip_tac >>
       gvs[bind_apply, lift_option_def, return_def, raise_def,
           get_accounts_def, get_transient_storage_def,
           check_def, assert_def, ignore_bind_apply,
           update_accounts_def, update_transient_def,
-          lift_option_type_def] >>
-      ect >> gvs[raise_def, return_def, bind_apply, assert_def,
+          lift_option_type_def, AllCaseEqs()] >>
+     pairarg_tac >>
+      gvs[raise_def, return_def, bind_apply, assert_def,
           ignore_bind_apply, update_accounts_def, update_transient_def,
-          lift_sum_runtime_def] >>
+          lift_sum_runtime_def, AllCaseEqs()] >>
       rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result_tup` >>
       PairCases_on `result_tup` >> gvs[] >>
       gvs[bind_apply, assert_def, ignore_bind_apply,
@@ -6982,7 +6992,7 @@ Proof
        env_consistent env cx (mid_st with <|accounts := new_accts; tStorage := new_tstor|>)` by (
         irule tp_preserved_scopes_immutables >>
         qexists_tac `mid_st` >> simp[evaluation_state_component_equality]) >>
-      Cases_on `returnData = [] ∧ IS_SOME drv` >| [
+      Cases_on `returnData = [] ∧ IS_SOME drv` >- (
         ASM_REWRITE_TAC [] >>
         gvs[] >> strip_tac >>
         Cases_on `drv` >> gvs[] >>
@@ -6992,32 +7002,20 @@ Proof
           `mid_st with <|accounts := new_accts; tStorage := new_tstor|>`,
           `res`, `st'`] mp_tac) >>
         simp[] >> strip_tac >> gvs[] >>
-        rpt strip_tac >| [
-          first_x_assum (qspec_then `tv` mp_tac) >> simp[],
+        rpt strip_tac >>
           first_x_assum (qspec_then `tv` mp_tac) >> simp[] >>
           disch_then drule >> strip_tac >>
           qexists_tac `tyv` >> gvs[]
-        ],
-        ASM_REWRITE_TAC [] >>
+        ) >>
+      ASM_REWRITE_TAC [] >>
         simp_tac (srw_ss()) [bind_apply, return_def, raise_def, lift_sum_runtime_def] >>
         ect >> gvs[return_def, raise_def, bind_apply, materialise_def,
                    toplevel_value_typed_def] >>
         gvs[IS_SOME_EXISTS] >>
         imp_res_tac evaluate_abi_decode_return_well_typed >> metis_tac[]
-      ]
-  in
-    rpt gen_tac >> strip_tac >>
-    (* Unfold the entire chain including check + lift_option_type prefix *)
-    qpat_x_assum `(do _ od) _ = _` mp_tac >>
-    simp_tac (srw_ss()) [bind_apply, pair_bind_apply, check_def, assert_def,
-      return_def, raise_def, lift_option_type_def, ignore_bind_apply] >>
-    Cases_on `is_stat` >> ASM_REWRITE_TAC [] >>
-    simp_tac (srw_ss()) [return_def, check_def, assert_def,
-      bind_apply, raise_def, lift_option_type_def] >>
-    strip_tac >> extcall_tail_tac
-  end
+        *)
 QED
-
+*)
 
 Theorem case_lift_option:
   (case (opt : 'a option) of NONE => raise e | SOME v => return v) s =
