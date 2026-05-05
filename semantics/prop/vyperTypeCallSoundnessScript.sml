@@ -74,7 +74,9 @@ Theorem functions_well_typed_body:
        FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
        FLOOKUP env_body.var_assignable (string_to_num id) = SOME T)
 Proof
-  rw[functions_well_typed_def] >> first_x_assum drule_all >> rw[] >> metis_tac[]
+  rw[functions_well_typed_def] >> first_x_assum drule_all >>
+  rw[] >> qexists_tac`env_body` >> gvs[] >> rw[] >>
+  first_x_assum drule >> rw[]
 QED
 
 (* ===== Call soundness theorem shapes ===== *)
