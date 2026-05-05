@@ -2,16 +2,20 @@
  * ABI Encoder/Decoder Properties
  *
  * TOP-LEVEL:
- *   compile_abi_int_clamp_correct       — int clamping either accepts or reverts on out-of-range
- *   compile_abi_bytes_clamp_correct   — bytes clamping either accepts or reverts on dirty high bits
- *   compile_abi_encode_static_correct — static type writes word to dst
- *   compile_abi_decode_static_correct — static type reads + clamps
- *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
- *   compile_get_element_ptr_zero       — get_element_ptr at offset 0 is identity
- *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
- *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
- *   val_in_memory_flag_enc            — flag val_in_memory matches ABI encoding
- *   compile_abi_zero_pad_correct      — zero-pad bytestring to 32-byte boundary
+ *   compile_abi_int_clamp_correct         — int clamp either accepts or reverts on out-of-range
+ *   compile_abi_bytes_clamp_correct       — bytes clamp either accepts or reverts on dirty high bits
+ *   compile_abi_clamp_basetype_correct    — basetype clamp either accepts or reverts
+ *   compile_abi_encode_static_correct     — static encode copies src to dst memory, returns 32, preserves operands
+ *   compile_abi_decode_static_correct     — static decode (MLOAD + clamp) either succeeds or reverts
+ *   compile_abi_encode_to_buf_correct     — recursive ABI encode correctness (single-block)
+ *   compile_get_element_ptr_zero          — get_element_ptr at offset 0 is identity
+ *   compile_get_element_ptr_correct      — get_element_ptr adds offset to parent pointer
+ *   val_in_memory_prim_enc                — primitive val_in_memory matches ABI encoding
+ *   val_in_memory_flag_enc                — flag val_in_memory matches ABI encoding
+ *   compile_abi_zero_pad_correct          — zero-pad bytestring to 32-byte boundary
+ *   mem_bytes_at_from_EL                 — singleton list from mem_bytes_at at single index
+ *   venom_memory_bound_def                — memory length fits in a word
+ *   single_block_enc_info_def             — identifies enc_info values producing only single-block code
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
  * Lowering: abiEncoderScript.sml
@@ -166,6 +170,21 @@ QED
 
 (* ===== Static Encode/Decode ===== *)
 
+(* Basetype clamping: for any basetype, clamp either accepts (OK) or reverts *)
+Theorem compile_abi_clamp_basetype_correct:
+  ∀ val_op clamp_info ss st st' w.
+    compile_abi_clamp_basetype val_op clamp_info st = ((), st') ∧
+    eval_operand val_op ss = SOME w ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
+      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  cheat
+QED
+
+
 (* TODO: move *)
 Theorem mem_bytes_at_from_EL:
   n < LENGTH ls ==>
@@ -174,7 +193,8 @@ Proof
   rw[mem_bytes_at_def, TAKE_APPEND]
 QED
 
-(* Static ABI encoding: MLOAD src, MSTORE to dst, return Lit 32w *)
+(* Static ABI encoding: copies source word to dst memory, returns Lit 32w,
+   preserves all operands and memory frame outside [dst, dst+32) *)
 Theorem compile_abi_encode_static_correct:
   ∀ dst src ss st op st' src_v dst_w.
     compile_abi_encode_static dst src st = (op, st') ∧
@@ -259,7 +279,7 @@ Proof
   gvs[Abbr`rng`]
 QED
 
-(* Static ABI decoding: MLOAD + clamp *)
+(* Static ABI decoding: loads from src and clamps; either succeeds or reverts *)
 Theorem compile_abi_decode_static_correct:
   ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
     compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
