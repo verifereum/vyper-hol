@@ -15,7 +15,7 @@ Prefer using dedicated tools instead of bash operation:
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
 - **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
-- **mcp tools** for hol operations - `hol_send`, `holmake` etc.
+- **holbuild** for HOL4 build/proof feedback when authorized. The old HOL4 MCP tools (`hol_send`, `hol_file_init`, `hol_state_at`, MCP `holmake`, etc.) are deprecated and should not be used.
 
 ## Completion Standard
 
@@ -81,19 +81,16 @@ venom/passes/  # directory for each pass
 
 ## Interactive HOL Sessions
 
-Use the hol4 MCP tools for proof development.
+Use **holbuild** for HOL4 build/proof feedback when authorized by the user.
 
-**Workflow: hol_state_at + Edit**
-1. `hol_file_init` - parse file, list theorems with line numbers and cheat status
-2. `hol_state_at(line, col)` - navigate to position, auto-replay tactics, show goals
-3. Edit file directly with Edit tool to add/modify tactics
-4. `hol_state_at` again to verify the change worked
+The old HOL4 MCP workflow is deprecated. Do **not** use `hol_send`, `hol_file_init`,
+`hol_state_at`, or MCP `holmake` for proof development.
 
-**CRITICAL**: The user requests not to use `g()`, `e()`, `p()` - the tool manages proof state
-
-**Key points:**
-- `hol_state_at` handles file changes, checkpoints, and tactic replay automatically
-- Use `hol_send` only for queries (DB.match, type_of) not proof navigation
+When proof-tool use is authorized, prefer a holbuild-centered workflow:
+1. Edit the relevant theory file.
+2. Run holbuild/build feedback on the file or target theory.
+3. Use the reported goal/error context to refine the proof.
+4. Keep changes small and re-check frequently.
 
 ### File Conventions (repo-specific)
 
