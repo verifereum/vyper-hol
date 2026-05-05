@@ -217,6 +217,11 @@ Definition value_type_as_type_def:
   value_type_as_type (HashMapT _ _) = NONE
 End
 
+Definition vtype_annotation_ok_def:
+  vtype_annotation_ok (Type t) ann_ty = (ann_ty = t) /\
+  vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)
+End
+
 Definition subscript_type_ok_def:
   subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
     (result_ty = elem_ty /\ is_int_type idx_ty) /\
@@ -240,17 +245,21 @@ Definition subscript_vtype_def:
   subscript_vtype _ _ = NONE
 End
 
-Definition attribute_type_ok_def:
-  attribute_type_ok tenv (StructT sname) field_id result_ty =
+Definition attribute_type_def:
+  attribute_type tenv (StructT sname) field_id =
     (case FLOOKUP tenv (string_to_num sname) of
-       SOME (StructArgs fields) =>
-         (case ALOOKUP fields field_id of SOME field_ty => result_ty = field_ty | NONE => F)
-     | _ => F) /\
-  attribute_type_ok _ (BaseT _) _ _ = F /\
-  attribute_type_ok _ (TupleT _) _ _ = F /\
-  attribute_type_ok _ (ArrayT _ _) _ _ = F /\
-  attribute_type_ok _ (FlagT _) _ _ = F /\
-  attribute_type_ok _ NoneT _ _ = F
+       SOME (StructArgs fields) => ALOOKUP fields field_id
+     | _ => NONE) /\
+  attribute_type _ (BaseT _) _ = NONE /\
+  attribute_type _ (TupleT _) _ = NONE /\
+  attribute_type _ (ArrayT _ _) _ = NONE /\
+  attribute_type _ (FlagT _) _ = NONE /\
+  attribute_type _ NoneT _ = NONE
+End
+
+Definition attribute_type_ok_def:
+  attribute_type_ok tenv ty field_id result_ty =
+    (attribute_type tenv ty field_id = SOME result_ty)
 End
 
 (* ===== Runtime invariants ===== *)
@@ -365,7 +374,7 @@ Definition well_typed_expr_def:
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
   well_typed_expr env (BareGlobalName ty id) =
     (FLOOKUP env.bare_globals (env.current_src, string_to_num id) = SOME ty /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\ ty <> NoneT) /\
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
     (FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) /\
      well_formed_type env.type_defs ty /\ ty <> NoneT) /\
@@ -438,17 +447,25 @@ Definition well_typed_expr_def:
      HD (MAP expr_type args) = BaseT AddressT /\ LAST (MAP expr_type args) = BaseT (UintT 256)) /\
 
   type_place_expr env (TopLevelName ty (src_id_opt, id)) =
-    FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) /\
+    (case FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) of
+     | SOME vt => if vtype_annotation_ok vt ty then SOME vt else NONE
+     | NONE => NONE) /\
   type_place_expr env (Subscript ty e1 e2) =
     (if well_typed_expr env e2 then
        case type_place_expr env e1 of
-       | SOME vt => subscript_vtype vt (expr_type e2)
+       | SOME vt =>
+           (case subscript_vtype vt (expr_type e2) of
+            | SOME vt' => if vtype_annotation_ok vt' ty then SOME vt' else NONE
+            | NONE => NONE)
        | NONE => NONE
      else NONE) /\
   type_place_expr env _ = NONE /\
 
   type_place_target env (NameTarget id) =
-    (case FLOOKUP env.var_types (string_to_num id) of SOME ty => SOME (Type ty) | NONE => NONE) /\
+    (let n = string_to_num id in
+     case (FLOOKUP env.var_types n, FLOOKUP env.var_assignable n) of
+     | (SOME ty, SOME T) => SOME (Type ty)
+     | _ => NONE) /\
   type_place_target env (BareGlobalNameTarget id) =
     (case FLOOKUP env.bare_globals (env.current_src, string_to_num id) of
      | SOME ty => SOME (Type ty) | NONE => NONE) /\
@@ -463,9 +480,9 @@ Definition well_typed_expr_def:
   type_place_target env (AttributeTarget tgt id) =
     (case type_place_target env tgt of
      | SOME (Type tgt_ty) =>
-         if ?ty. attribute_type_ok env.type_defs tgt_ty id ty then
-           SOME (Type (@ty. attribute_type_ok env.type_defs tgt_ty id ty))
-         else NONE
+         (case attribute_type env.type_defs tgt_ty id of
+          | SOME ty => SOME (Type ty)
+          | NONE => NONE)
      | _ => NONE) /\
 
   well_typed_exprs env [] = T /\
@@ -610,8 +627,9 @@ Definition env_consistent_def:
     (!id. FLOOKUP env.var_assignable id = SOME T ==> IS_SOME (FLOOKUP env.var_types id)) /\
     (!id. FLOOKUP env.var_assignable id = SOME T ==>
        ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable) /\
-    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
-       FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty)) /\
+    (!src id ty ts. FLOOKUP env.bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
+       FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+       is_immutable_decl id ts /\ ty <> NoneT) /\
     (!id ty. FLOOKUP env.bare_globals (env.current_src,id) = SOME ty ==>
        IS_SOME (FLOOKUP (get_source_immutables env.current_src
          (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)) /\
@@ -648,8 +666,9 @@ Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !fn_sigs bare_globals toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
-      (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
-         FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty)) /\
+      (!src id ty ts. FLOOKUP bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
+         FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+         is_immutable_decl id ts /\ ty <> NoneT) /\
       (!src id vt ts.
          FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
          ((?ty. vt = Type ty /\
@@ -682,6 +701,10 @@ Definition functions_well_typed_def:
           (!id typ. MEM (id,typ) args ==>
              FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
              FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+          (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+             ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+          (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+             ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
           MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
