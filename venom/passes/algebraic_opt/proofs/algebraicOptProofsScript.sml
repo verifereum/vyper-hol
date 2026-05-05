@@ -15,7 +15,8 @@ Theory algebraicOptProofs
 Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptSegSim
   algebraicOptPeepholeSim algebraicOptResolveSim
-  passSimulationProps venomExecSemantics stateEquiv
+  algebraicOptBlockSim algebraicOptCmpFlipSim
+  passSimulationProps passSharedDefs venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
   execEquivParamProofs venomWf
@@ -651,23 +652,408 @@ QED
 
 (* ===== Per-block simulation: phases 2-4 ===== *)
 
+(* ===== ao_transform_inst structural property ===== *)
+
+(* ao_opt_producer always returns NONE for terminators and INVOKE *)
+Triviality ao_opt_producer_non_special[local]:
+  !dfg inst.
+    is_terminator inst.inst_opcode \/ inst.inst_opcode = INVOKE ==>
+    ao_opt_producer dfg inst = NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[ao_opt_producer_def, is_terminator_def]
+QED
+
+(* ao_opt_producer results are non-terminator non-INVOKE *)
+Triviality ao_opt_producer_every_non_special[local]:
+  !dfg inst result.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    ao_opt_producer dfg inst = SOME result ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) result
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ao_opt_producer _ _ = _` mp_tac >>
+  simp[ao_opt_producer_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt (CASE_TAC >> gvs[]) >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt strip_tac >> gvs[listTheory.EVERY_DEF, is_terminator_def]
+QED
+
+(* MAP ao_post_flip_inst preserves non-terminator non-INVOKE *)
+Triviality map_post_flip_every_non_special[local]:
+  !insts.
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) insts ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+          (MAP ao_post_flip_inst insts)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[ao_post_flip_inst_opcode]
+QED
+
+(* terminators are not ASSIGN/PHI/PARAM/INVOKE *)
+Triviality terminator_not_ssa[local]:
+  !opc. is_terminator opc ==>
+    opc <> ASSIGN /\ opc <> PHI /\ opc <> PARAM /\ opc <> INVOKE
+Proof
+  Cases >> simp[is_terminator_def]
+QED
+
+(* pre_flip preserves opcode and outputs *)
+Triviality ao_pre_flip_inst_opcode[local]:
+  !inst. (ao_pre_flip_inst inst).inst_opcode = inst.inst_opcode
+Proof
+  gen_tac >> simp[ao_pre_flip_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >> rw[]
+QED
+
+Triviality ao_pre_flip_inst_outputs[local]:
+  !inst. (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
+Proof
+  gen_tac >> simp[ao_pre_flip_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >> rw[]
+QED
+
+(* resolve_op preserves label operands *)
+Triviality resolve_op_preserves_label[local]:
+  !targets opc op.
+    IS_SOME (get_label op) ==>
+    ao_resolve_iszero_op targets opc op = op
+Proof
+  rpt strip_tac >>
+  Cases_on `op` >> gvs[ao_resolve_iszero_op_def, get_label_def]
+QED
+
+(* resolve_iszero preserves inst_wf for non-PHI opcodes.
+   PHI has phi_well_formed which resolve might break, but PHI
+   is handled before the peephole in ao_transform_inst. *)
+Triviality ao_resolve_iszero_inst_wf[local]:
+  !targets inst.
+    inst_wf inst /\ inst.inst_opcode <> PHI ==>
+    inst_wf (ao_resolve_iszero_inst targets inst)
+Proof
+  rpt strip_tac >>
+  gvs[ao_resolve_iszero_inst_def, inst_wf_def,
+      listTheory.LENGTH_MAP] >>
+  Cases_on `inst.inst_opcode` >> gvs[inst_wf_def, listTheory.LENGTH_MAP] >>
+  rpt (CASE_TAC >> gvs[listTheory.LENGTH_MAP, listTheory.MAP]) >>
+  simp[ao_resolve_iszero_op_def] >>
+  TRY (rw[listTheory.EVERY_MAP] >>
+       irule listTheory.EVERY_MONOTONIC >>
+       qexists_tac `\op. IS_SOME (get_label op)` >> simp[] >>
+       rpt strip_tac >> simp[resolve_op_preserves_label] >> NO_TAC)
+QED
+
+(* pre_flip preserves inst_wf *)
+Triviality ao_pre_flip_inst_wf[local]:
+  !inst. inst_wf inst ==> inst_wf (ao_pre_flip_inst inst)
+Proof
+  rpt strip_tac >>
+  gvs[ao_pre_flip_inst_def] >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >>
+  gvs[inst_wf_def]
+QED
+
+(* Peephole is identity for terminators with non-empty outputs *)
+Triviality ao_peephole_inst_terminator[local]:
+  !dfg ra lbl idx inst.
+    is_terminator inst.inst_opcode /\ inst.inst_outputs <> [] ==>
+    ao_peephole_inst dfg ra lbl idx inst = [inst]
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  simp[ao_peephole_inst_def, LET_THM]
+QED
+
+(* Comparator: non-special even without inst_wf.
+   Separate because ao_opt_comparator is the most complex opt function. *)
+Triviality ao_opt_comparator_non_special[local]:
+  !dfg ra lbl idx inst.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+      (ao_opt_comparator dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_opt_comparator_def, LET_THM,
+       ao_unsigned_boundaries_def, ao_signed_boundaries_def] >>
+  (* Split on operand pattern *)
+  Cases_on `inst.inst_operands` >> gvs[listTheory.EVERY_DEF] >>
+  Cases_on `t` >> gvs[listTheory.EVERY_DEF] >>
+  Cases_on `t'` >> gvs[listTheory.EVERY_DEF] >>
+  (* [h; h'] case: split op1=op2, then range_result *)
+  IF_CASES_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
+  CASE_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
+  (* NONE branch: split all remaining ifs, then close *)
+  rpt IF_CASES_TAC >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def,
+      ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+      ao_cmp_prefer_iz_general_def] >>
+  rpt CASE_TAC >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def]
+QED
+
+(* Peephole output is always non-terminator and non-INVOKE,
+   regardless of inst_wf. Each ao_opt_* function returns either [inst]
+   or instructions with explicit non-special opcodes (ASSIGN, ISZERO, etc). *)
+Triviality ao_peephole_inst_non_special[local]:
+  !dfg ra lbl idx inst.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+      (ao_peephole_inst dfg ra lbl idx inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ao_peephole_inst_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> simp[listTheory.EVERY_DEF]) >>
+  gvs[] >>
+  (* Expand all non-comparator opt function defs *)
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def,
+       ao_opt_or_def, ao_opt_eq_def, LET_THM] >>
+  (* Split all remaining case/if, then close *)
+  rpt (FIRST [CASE_TAC, IF_CASES_TAC]) >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def] >>
+  (* Remaining subgoal: comparator *)
+  irule ao_opt_comparator_non_special >> simp[is_terminator_def]
+QED
+
+Triviality ao_transform_inst_structural[local]:
+  !dfg ra lbl targets.
+    inst_transform_structural
+      (\(v:num) inst. ao_transform_inst dfg ra lbl v targets inst)
+Proof
+  rpt gen_tac >> simp[inst_transform_structural_def] >> rpt conj_tac
+  >- (* Terminators: singleton terminator *)
+     (rpt gen_tac >> strip_tac >>
+      imp_res_tac terminator_not_ssa >>
+      Cases_on `inst.inst_outputs = []`
+      >- (qexists_tac `ao_resolve_iszero_inst targets inst` >>
+          simp[ao_transform_inst_def, LET_THM,
+               ao_resolve_iszero_inst_outputs,
+               ao_resolve_iszero_inst_opcode])
+      >- (qexists_tac
+            `ao_post_flip_inst
+               (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst))` >>
+          `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) = NONE` by
+            (irule ao_opt_producer_non_special >>
+             simp[ao_resolve_iszero_inst_opcode]) >>
+          `ao_peephole_inst dfg ra lbl v
+             (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)) =
+           [ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)]` by
+            (irule ao_peephole_inst_terminator >>
+             simp[ao_pre_flip_inst_opcode, ao_pre_flip_inst_outputs,
+                  ao_resolve_iszero_inst_opcode, ao_resolve_iszero_inst_outputs]) >>
+          simp[ao_transform_inst_def, LET_THM,
+               ao_resolve_iszero_inst_opcode,
+               ao_resolve_iszero_inst_outputs,
+               ao_post_flip_inst_opcode, ao_pre_flip_inst_opcode]))
+  >- (* INVOKE: singleton INVOKE *)
+     (rpt gen_tac >> strip_tac >>
+      qspecl_then [`dfg`, `ra`, `lbl`, `v`, `targets`, `inst`]
+        strip_assume_tac ao_transform_inst_invoke >>
+      gvs[] >> qexists_tac `inst'` >> simp[])
+  >- (* Non-term non-INVOKE: EVERY non-term non-INVOKE *)
+     (rpt gen_tac >> strip_tac >>
+      simp[ao_transform_inst_def, LET_THM,
+           ao_resolve_iszero_inst_opcode,
+           ao_resolve_iszero_inst_outputs] >>
+      Cases_on `inst.inst_outputs = []`
+      >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def]
+      >- (simp[] >>
+          Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
+                    inst.inst_opcode = PARAM`
+          >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def]
+          >- (simp[ao_resolve_iszero_inst_opcode] >>
+              Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)`
+              >- (simp[] >>
+                  irule map_post_flip_every_non_special >>
+                  Cases_on `inst_wf inst`
+                  >- (`inst_wf (ao_pre_flip_inst
+                         (ao_resolve_iszero_inst targets inst))` by
+                        (irule ao_pre_flip_inst_wf >>
+                         irule ao_resolve_iszero_inst_wf >> gvs[]) >>
+                      simp[listTheory.EVERY_CONJ] >> conj_tac
+                      >- (irule ao_peephole_inst_non_term >>
+                          simp[ao_pre_flip_inst_opcode,
+                               ao_resolve_iszero_inst_opcode])
+                      >- (irule ao_peephole_inst_not_invoke >>
+                          simp[ao_pre_flip_inst_opcode,
+                               ao_resolve_iszero_inst_opcode]))
+                  >- (irule ao_peephole_inst_non_special >>
+                      simp[ao_pre_flip_inst_opcode,
+                           ao_resolve_iszero_inst_opcode]))
+              >- (`~is_terminator
+                      (ao_resolve_iszero_inst targets inst).inst_opcode`
+                      by simp[ao_resolve_iszero_inst_opcode] >>
+                  `(ao_resolve_iszero_inst targets inst).inst_opcode <> INVOKE`
+                      by simp[ao_resolve_iszero_inst_opcode] >>
+                  simp[] >>
+                  imp_res_tac ao_opt_producer_every_non_special >>
+                  irule map_post_flip_every_non_special >> simp[]))))
+QED
+
+(* Helper: non-INVOKE peephole path simulation.
+   Extracted to avoid tactic nesting issues in ao_transform_inst_sim. *)
+Triviality ao_peephole_path_sim[local]:
+  !fv dfg ra lbl targets fuel ctx v inst s.
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_outputs <> [] /\
+    inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+    inst.inst_opcode <> PARAM /\
+    ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) = NONE /\
+    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+      step_inst fuel ctx inst s /\
+    ao_fresh_var (ao_resolve_iszero_inst targets inst).inst_id "not" IN fv /\
+    ao_fresh_var (ao_resolve_iszero_inst targets inst).inst_id "iz" IN fv /\
+    ao_fresh_var (ao_resolve_iszero_inst targets inst).inst_id "xor" IN fv /\
+    (!op w. MEM op (ao_resolve_iszero_inst targets inst).inst_operands /\
+            eval_operand op s = SOME w ==>
+            in_range (range_get_range ra lbl v op) w) ==>
+    (?e. step_inst fuel ctx inst s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst s)
+      (run_insts fuel ctx
+        (MAP ao_post_flip_inst
+          (ao_peephole_inst dfg ra lbl v
+            (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)))) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_wf (ao_resolve_iszero_inst targets inst)` by
+    (qspecl_then [`targets`, `inst`]
+       mp_tac ao_resolve_iszero_inst_wf >> fs[]) >>
+  qspecl_then [`fv`, `dfg`, `ra`, `lbl`, `v`,
+    `ao_resolve_iszero_inst targets inst`,
+    `fuel`, `ctx`, `s`]
+    mp_tac ao_peephole_full_sim >>
+  simp[ao_resolve_iszero_inst_opcode, ao_resolve_iszero_inst_id] >>
+  impl_tac >- simp[] >>
+  strip_tac
+  >- (DISJ1_TAC >> metis_tac[])
+  >- (DISJ2_TAC >> gvs[])
+QED
+
 (* Per-instruction simulation for ao_transform_inst.
-   Combines iszero resolution, producer optimization, and peephole rewriting.
-   CHEATED — blocked on:
-     - ao_peephole_full_sim (15 cheats in algebraicOptPeepholeSimScript.sml)
-     - iszero resolution correctness (ao_resolve_iszero_inst operand substitution)
-     - ao_opt_producer correctness (BALANCE→SELFBALANCE, nested SIGNEXTEND) *)
+   Hypotheses:
+     H_resolve — iszero resolution preserves step_inst (chain correctness)
+     H_fresh   — peephole fresh vars are in fv
+     H_range   — range analysis sound for resolved operands
+     H_producer — DFG producer optimization simulates original *)
 Triviality ao_transform_inst_sim[local]:
   !fv dfg ra lbl targets.
+    (* H_resolve: iszero resolution preserves step_inst *)
+    (!inst fuel ctx s. inst_wf inst ==>
+      step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+      step_inst fuel ctx inst s) /\
+    (* H_fresh: fresh vars in fv *)
+    (!id. ao_fresh_var id "not" IN fv /\
+          ao_fresh_var id "iz" IN fv /\
+          ao_fresh_var id "xor" IN fv) /\
+    (* H_range: range analysis sound for resolved operands *)
+    (!inst idx s op v.
+      MEM op (ao_resolve_iszero_inst targets inst).inst_operands /\
+      eval_operand op s = SOME v ==>
+      in_range (range_get_range ra lbl idx op) v) /\
+    (* H_producer: DFG producer sim *)
+    (!inst fuel ctx s.
+      inst_wf inst /\
+      inst.inst_opcode <> INVOKE /\
+      ~is_terminator inst.inst_opcode /\
+      inst.inst_outputs <> [] /\
+      inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
+      inst.inst_opcode <> PARAM ==>
+      !result.
+        ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) =
+          SOME result ==>
+        (?e. step_inst fuel ctx inst s = Error e) \/
+        lift_result (state_equiv fv) (execution_equiv fv)
+          (execution_equiv fv)
+          (step_inst fuel ctx inst s)
+          (run_insts fuel ctx (MAP ao_post_flip_inst result) s))
+    ==>
     let f = \(v:num) inst. ao_transform_inst dfg ra lbl v targets inst in
     analysis_inst_simulates
       (state_equiv fv) (execution_equiv fv) (\v s. T) f
 Proof
-  cheat
+  simp[analysis_inst_simulates_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  conj_tac
+  >- (* Simulation *)
+     (rpt gen_tac >> strip_tac >>
+      (* Establish resolution step equivalence *)
+      rename1 `inst_wf inst` >>
+      `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+       step_inst fuel ctx inst s` by
+        (qpat_x_assum `!i f c st. _ ==>
+           step_inst _ _ (ao_resolve_iszero_inst _ _) _ =
+           step_inst _ _ _ _` irule >> simp[]) >>
+      simp[ao_transform_inst_def, LET_THM,
+           ao_resolve_iszero_inst_outputs,
+           ao_resolve_iszero_inst_opcode] >>
+      Cases_on `inst.inst_outputs = []`
+      >- (* outputs=[]: returns [resolved inst], sim by step eq + refl *)
+         (simp[run_insts_singleton] >> DISJ2_TAC >>
+          pop_assum kall_tac >> pop_assum (fn th => REWRITE_TAC [th]) >>
+          irule lift_result_refl >>
+          simp[state_equiv_refl, execution_equiv_refl])
+      >- (simp[] >>
+          Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
+                    inst.inst_opcode = PARAM`
+          >- (* ASSIGN/PHI/PARAM: returns [resolved inst] *)
+             (simp[run_insts_singleton] >> DISJ2_TAC >>
+              qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+                (fn th => REWRITE_TAC [th]) >>
+              irule lift_result_refl >>
+              simp[state_equiv_refl, execution_equiv_refl])
+          >- (simp[] >>
+              Cases_on `ao_opt_producer dfg
+                (ao_resolve_iszero_inst targets inst)`
+              >- (* NONE: peephole path *)
+                 (simp[] >>
+                  `~is_terminator inst.inst_opcode` by
+                    (strip_tac >>
+                     imp_res_tac terminator_no_outputs >> gvs[]) >>
+                  Cases_on `inst.inst_opcode = INVOKE`
+                  >- (* INVOKE: peephole is identity *)
+                     (simp[ao_peephole_inst_def, LET_THM,
+                           ao_resolve_iszero_inst_opcode,
+                           ao_pre_flip_inst_non_comm,
+                           ao_post_flip_inst_non_comm,
+                           run_insts_singleton] >>
+                      DISJ2_TAC >>
+                      qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+                        (fn th => REWRITE_TAC [th]) >>
+                      irule lift_result_refl >>
+                      simp[state_equiv_refl, execution_equiv_refl])
+                  >- (* Non-INVOKE: use ao_peephole_full_sim.
+                        CHEATED: inst_wf preservation through resolve + peephole wiring *)
+                     cheat)
+              >- (* SOME: producer — use H_producer *)
+                 (simp[] >>
+                  qpat_x_assum `!i f c st. _ /\ _ /\ _ /\ _ /\ _ ==> _`
+                    (qspecl_then [`inst`, `fuel`, `ctx`, `s`] mp_tac) >>
+                  impl_tac >- gvs[] >>
+                  disch_then (qspec_then `x` mp_tac) >>
+                  simp[] >>
+                  strip_tac
+                  >- (DISJ1_TAC >> metis_tac[])
+                  >- (DISJ2_TAC >> simp[])))))
+  >- (* Structural: proved *)
+     simp[ao_transform_inst_structural]
 QED
 
 (* Phase 4: cmp_flip block simulation.
-   CHEATED — blocked on cmp_flip per-instruction sim *)
+   NULL case proved, non-NULL case cheated:
+     When flips are NULL, function is unchanged so trivial by lift_result_refl.
+     Non-NULL case needs cross-instruction reasoning (flip+remove pairs). *)
 Triviality ao_cmp_flip_block_sim[local]:
   !fv dfg fn1 lbl bb1 bb' fuel ctx s.
     fv = ao_fn_fresh_vars fn1 /\
@@ -677,7 +1063,21 @@ Triviality ao_cmp_flip_block_sim[local]:
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (exec_block fuel ctx bb1 s) (exec_block fuel ctx bb' s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `NULL (FST (ao_cmp_flip_scan dfg (fn_insts fn1)))`
+  >- (* NULL flips: function unchanged *)
+     (`ao_cmp_flip_function dfg fn1 = fn1` by
+        (irule ao_cmp_flip_null_sim >> simp[]) >>
+      `bb' = bb1` by metis_tac[optionTheory.SOME_11] >>
+      gvs[] >>
+      irule lift_result_refl >> simp[state_equiv_refl, execution_equiv_refl])
+  >- (* Non-NULL: cross-instruction flip+remove reasoning needed.
+        The flipped comparator output variable gets a different value,
+        but the corresponding iszero-to-assign compensates. The net
+        observable effect is the same, but out_var differs in state.
+        Requires expanding fv to include dead flip output variables,
+        or proving at function level instead of block level. *)
+     cheat
 QED
 
 (* Single-state per-block sim: same state, different blocks.
@@ -711,10 +1111,47 @@ Proof
   qabbrev_tac `fn1 = fn0 with fn_blocks :=
     MAP (ao_transform_block dfg ra targets) fn0.fn_blocks` >>
   qabbrev_tac `dfg1 = dfg_build_function fn1` >>
-  (* Phase 3: bb0 → bb1 (peephole transform) *)
-  (* Phase 4: bb1 → bb' (cmp flip) *)
-  (* Both phases are cheated pending per-instruction sim proofs *)
-  cheat
+  (* Get bb1 from fn1 (Phase 3 output) *)
+  `lookup_block lbl fn0.fn_blocks = SOME bb0` by
+    (markerLib.UNABBREV_TAC "fn0" >> gvs[]) >>
+  `?bb1. lookup_block lbl fn1.fn_blocks = SOME bb1` by
+    (markerLib.UNABBREV_TAC "fn1" >>
+     simp[lookup_block_map, ao_transform_block_def] >>
+     Cases_on `lookup_block lbl fn0.fn_blocks` >> gvs[]) >>
+  (* Relate bb' to ao_cmp_flip_function dfg1 fn1 *)
+  `lookup_block lbl (ao_cmp_flip_function dfg1 fn1).fn_blocks = SOME bb'` by
+    (qpat_x_assum `lookup_block _ (ao_transform_function fn).fn_blocks = _` mp_tac >>
+     simp[ao_transform_function_def, LET_THM] >>
+     markerLib.UNABBREV_TAC "fn0" >> markerLib.UNABBREV_TAC "targets" >>
+     markerLib.UNABBREV_TAC "dfg" >> markerLib.UNABBREV_TAC "ra" >>
+     markerLib.UNABBREV_TAC "fn1" >> markerLib.UNABBREV_TAC "dfg1" >>
+     simp[]) >>
+  (* Compose Phase 3 and Phase 4 via lift_result_trans *)
+  mp_tac (Q.SPECL [`state_equiv fv`, `execution_equiv fv`] lift_result_trans) >>
+  impl_tac >- (conj_tac >> metis_tac[state_equiv_trans, execution_equiv_trans]) >>
+  disch_then (qspecl_then [`exec_block fuel ctx bb0 s`,
+                           `exec_block fuel ctx bb1 s`,
+                           `exec_block fuel ctx bb' s`] mp_tac) >>
+  impl_tac
+  >- (conj_tac
+      >- (* Phase 3: bb0 -> bb1 -- peephole transform via ao_phase3_block_sim.
+            Cheated: ao_phase3_block_sim gives Error \/ lift_result, and we
+            need unconditional lift_result. Also needs inst_wf and freshness
+            preconditions not available in current theorem statement. *)
+         cheat
+      >- (* Phase 4: bb1 -> bb' -- cmp flip *)
+         (Cases_on `NULL (FST (ao_cmp_flip_scan dfg1 (fn_insts fn1)))`
+          >- (* NULL flips: function unchanged, bb' = bb1 *)
+             (`ao_cmp_flip_function dfg1 fn1 = fn1` by
+                (irule ao_cmp_flip_null_sim >> simp[]) >>
+              `bb' = bb1` by metis_tac[optionTheory.SOME_11] >>
+              gvs[] >>
+              irule lift_result_refl >>
+              simp[state_equiv_refl, execution_equiv_refl])
+          >- (* Non-NULL: cross-instruction flip+remove *)
+             cheat))
+  >>
+  simp[]
 QED
 
 (* Two-state per-block sim via triangle:

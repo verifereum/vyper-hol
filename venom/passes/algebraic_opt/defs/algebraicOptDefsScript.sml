@@ -573,7 +573,7 @@ Definition ao_opt_comparator_def:
           let signed = (opc = SGT \/ opc = SLT) in
           (* Range-based optimization *)
           let range_result = ao_opt_cmp_range ra lbl idx inst is_gt signed in
-          case range_result of
+          (case range_result of
             SOME replacement =>
               [inst with <| inst_opcode := ASSIGN;
                             inst_operands := [replacement] |>]
@@ -629,7 +629,7 @@ Definition ao_opt_comparator_def:
                           inst_operands := [Var tmp] |>]
           (* Remaining comparators: iszero insertion/removal handled by
              ao_cmp_flip_function (separate mini-pass after peephole). *)
-          else [inst]
+          else [inst])
     | _ => [inst]
 End
 

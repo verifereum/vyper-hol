@@ -16,6 +16,7 @@ Theory algebraicOptPeepholeSim
 Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptRules2
   algebraicOptSegSim algebraicOptSimArith algebraicOptSimPow2
+  algebraicOptSimCmp valueRangeDefs
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
 Libs
@@ -123,6 +124,21 @@ Theorem run_insts_non_invoke_singleton:
     run_insts fuel ctx [inst] s = step_inst_base inst s
 Proof
   rw[run_insts_singleton, step_inst_non_invoke]
+QED
+
+(* MAP ao_post_flip_inst preserves run_insts when all non-INVOKE *)
+Triviality run_insts_map_post_flip[local]:
+  !insts fuel ctx s.
+    EVERY (\i. i.inst_opcode <> INVOKE) insts ==>
+    run_insts fuel ctx (MAP ao_post_flip_inst insts) s =
+    run_insts fuel ctx insts s
+Proof
+  Induct >> simp[run_insts_def] >>
+  rpt gen_tac >> strip_tac >>
+  `(ao_post_flip_inst h).inst_opcode <> INVOKE`
+    by (simp[ao_post_flip_inst_def] >> every_case_tac >> simp[]) >>
+  simp[step_inst_non_invoke, ao_post_flip_step_equiv] >>
+  Cases_on `step_inst_base h s` >> simp[]
 QED
 
 (* ===== Single-state lift_result from equality ===== *)
@@ -821,7 +837,11 @@ Theorem ao_peephole_full_sim:
     inst_wf inst /\
     ao_fresh_var inst.inst_id "not" IN fv /\
     ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv ==>
+    ao_fresh_var inst.inst_id "xor" IN fv /\
+    (* Range analysis soundness for variable operands *)
+    (!op v. MEM op inst.inst_operands /\
+            eval_operand op s = SOME v ==>
+            in_range (range_get_range ra lbl idx op) v) ==>
     (?e. step_inst fuel ctx inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst fuel ctx inst s)
@@ -873,7 +893,7 @@ Proof
      4. Missing rule theorems for: exp power laws, muldiv power-of-two
         (MUL→SHL, Div→SHR, Mod→AND), signextend identity, safe_smod/safe_sdiv.
 
-     All 20 goals are cheated pending resolution of these issues. *)
+     Most cases now proved; remaining: signextend range (SimArith). *)
   (* Get inst0.inst_outputs from inst_wf *)
   >> `?out. inst0.inst_outputs = [out]` by (
     `LENGTH inst.inst_outputs = 1` by gvs[inst_wf_def] >>
@@ -921,7 +941,14 @@ Proof
     `step_inst_base (HD (ao_opt_signextend ra lbl idx inst0)) s =
        step_inst_base inst0 s \/
      ?e. step_inst_base inst0 s = Error e` by (
-      irule ao_signextend_sim >> simp[]) >>
+      irule ao_signextend_sim >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >>
+      `set inst0.inst_operands = set inst.inst_operands` by (
+        markerLib.UNABBREV_TAC "inst0" >>
+        simp[ao_pre_flip_inst_def] >>
+        every_case_tac >>
+        simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+      fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
     `HD (ao_opt_signextend ra lbl idx inst0) = inst'` by gvs[] >>
     fs[] >- (
       DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
@@ -1121,11 +1148,50 @@ Proof
     fs[] >- (
       DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]) >>
     DISJ1_TAC >> metis_tac[])
-  >- cheat (* EQ — 1-to-N: ao_eq_sim exists but needs post-flip connection *)
-  >- cheat (* GT — ao_cmp_sim exists but needs post-flip + range-case connection *)
-  >- cheat (* LT — ao_cmp_sim exists but needs post-flip + range-case connection *)
-  >- cheat (* SGT — ao_cmp_sim exists but needs post-flip + range-case connection *)
-  >- cheat (* SLT — ao_cmp_sim exists but needs post-flip + range-case connection *)
+  >- ( (* EQ — 1-to-N: use ao_eq_sim *)
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by (Cases_on `inst.inst_opcode` >> fs[inst_wf_def]) >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `inst0.inst_id = inst.inst_id` by
+      (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+       every_case_tac >> simp[]) >>
+    `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_eq dfg inst0)` by (
+      irule opt_eq_not_invoke >> simp[]) >>
+    simp[run_insts_map_post_flip] >>
+    mp_tac (Q.SPECL [`fv`, `dfg`, `inst0`, `s`, `fuel`, `ctx`] ao_eq_sim) >>
+    impl_tac >- simp[] >>
+    strip_tac >- metis_tac[] >>
+    DISJ2_TAC >> metis_tac[])
+  (* GT/LT/SGT/SLT — 1-to-N: use ao_cmp_sim_full *)
+  >> (
+    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+      by (Cases_on `inst.inst_opcode` >> fs[inst_wf_def]) >>
+    `LENGTH inst0.inst_operands = 2`
+      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+    `inst0.inst_id = inst.inst_id` by
+      (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+       every_case_tac >> simp[]) >>
+    `EVERY (\i. i.inst_opcode <> INVOKE)
+           (ao_opt_comparator dfg ra lbl idx inst0)` by (
+      irule opt_comparator_not_invoke >> simp[]) >>
+    simp[run_insts_map_post_flip] >>
+    `!op v. MEM op inst0.inst_operands /\
+            eval_operand op s = SOME v ==>
+            in_range (range_get_range ra lbl idx op) v` by (
+      rpt strip_tac >>
+      first_x_assum irule >>
+      `set inst0.inst_operands = set inst.inst_operands` by (
+        markerLib.UNABBREV_TAC "inst0" >>
+        simp[ao_pre_flip_inst_def] >>
+        every_case_tac >>
+        simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+      fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+    mp_tac (Q.SPECL [`fv`, `dfg`, `ra`, `lbl`, `idx`, `inst0`,
+                      `s`, `fuel`, `ctx`] ao_cmp_sim_full) >>
+    impl_tac >- simp[] >>
+    strip_tac >- metis_tac[] >>
+    DISJ2_TAC >> metis_tac[])
 QED
 
 val _ = export_theory();

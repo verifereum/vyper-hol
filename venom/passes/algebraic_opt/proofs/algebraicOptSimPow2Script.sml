@@ -10,7 +10,7 @@
 Theory algebraicOptSimPow2
 Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptRules2
-  venomExecSemantics venomState passSharedDefs
+  venomExecSemantics venomState passSharedDefs passSharedPow2
 Libs
   pairLib BasicProvers
 
