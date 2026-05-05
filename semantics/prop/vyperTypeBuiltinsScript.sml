@@ -48,7 +48,9 @@ QED
 Theorem well_typed_builtin_app_length:
   well_typed_builtin_app ty blt ts ==> builtin_args_length_ok blt (LENGTH ts)
 Proof
-  cheat
+  simp[oneline well_typed_builtin_app_def] >>
+  CASE_TAC >> rw[builtin_args_length_ok_def] >>
+  pop_assum mp_tac >> CASE_TAC >> rw[]
 QED
 
 Theorem well_typed_builtin_app_sound:
@@ -75,7 +77,9 @@ QED
 Theorem well_typed_type_builtin_args_length:
   well_typed_type_builtin_args tb target_ty ts ==> type_builtin_args_length_ok tb (LENGTH ts)
 Proof
-  cheat
+  simp[oneline well_typed_type_builtin_args_def] >>
+  CASE_TAC >> rw[type_builtin_args_length_ok_def] >>
+  Cases_on`ts` >> gvs[]
 QED
 
 Theorem valid_conversion_sound:
@@ -99,11 +103,36 @@ QED
 
 (* ===== Calls / special targets ===== *)
 
+(* TODO: move *)
+Theorem word_size_le:
+  0 < n ⇒ word_size n ≤ n
+Proof
+  strip_tac >>
+  simp[vfmConstantsTheory.word_size_def] >>
+  `n + 31 ≤ 32 * n` by simp[] >>
+  `(n + 31) DIV 32 ≤ (32 * n) DIV 32` by
+    (irule DIV_LE_MONOTONE >> simp[]) >>
+  `(32 * n) DIV 32 = n` by simp[MULT_TO_DIV] >>
+  gvs[]
+QED
+
 Theorem raw_call_return_type_well_formed:
   flags.rcf_max_outsize < dimword(:256) ==>
   well_formed_type tenv (raw_call_return_type flags)
 Proof
-  cheat
+  Cases_on `flags` >>
+  rw[raw_call_return_type_def, well_formed_type_def, evaluate_type_def,
+     type_slot_size_def] >> rw[] >>
+  `word_size n ≤ n` by (irule word_size_le >> rw[]) >>
+  Cases_on`word_size n < n` >> gvs[type_slot_size_def] >>
+  rw[] >>
+  `word_size n = n` by gvs[] >>
+  gvs[NOT_LESS_EQUAL] >>
+  qmatch_assum_abbrev_tac`n + 1 <= bn` >>
+  `n + 1 = bn` by gvs[] >>
+  `n = bn - 1` by gvs[Abbr`bn`] >>
+  gvs[Abbr`bn`] >>
+  gvs[vfmConstantsTheory.word_size_def]
 QED
 
 Theorem internal_call_signature_sound:
