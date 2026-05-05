@@ -1412,75 +1412,7 @@ fun assert_one_goal (gs as [g]) = ALLGOALS ALL_TAC gs
   | assert_one_goal [] = ([], I)
   | assert_one_goal gs = ALLGOALS (FAIL_TAC "multiple subgoals") gs
 
-Resume eval_preserves_swt[Append]:
-  rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum`(!) _`(markerLib.ASSUME_NAMED_TAC"IH0") >>
-  qpat_x_assum`(!) _`(markerLib.ASSUME_NAMED_TAC"IH1") >>
-  reverse $ gvs[wts_Append, ev_Append, bind_apply, AllCaseEqs()]
-  >- (
-    (* eval_base_target returned INR (error) *)
-    markerLib.LABEL_X_ASSUM"IH0" $ drule_at Any >>
-    simp[PULL_EXISTS] >>
-    disch_then drule >> simp[] >>
-    strip_tac >> gvs[] >>
-    drule (cj 6 evaluate_no_return) >> simp[]
-  ) >>
-  (* eval_base_target returned INL (loc, sbs) *)
-  PairCases_on `x` >> gvs[bind_apply] >>
-  pop_assum mp_tac >> BasicProvers.TOP_CASE_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >> gvs[] >- (
-    (* eval_expr returned INR (error) *)
-    strip_tac >> gvs[] >>
-    markerLib.LABEL_X_ASSUM"IH0" $ drule_at Any >>
-    simp[PULL_EXISTS] >> disch_then drule >> simp[] >> strip_tac >>
-    markerLib.LABEL_X_ASSUM"IH1" $ drule_then drule >>
-    disch_then(drule_at(Pat`eval_expr`)) >>
-    rpt strip_tac >> gvs[] >>
-    drule (cj 8 evaluate_no_return) >> simp[]
-  ) >>
-  (* eval_expr returned INL tv *)
-  BasicProvers.TOP_CASE_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >> gvs[] >- (
-    (* materialise returned INR (error) *)
-    strip_tac >> gvs[] >>
-    markerLib.LABEL_X_ASSUM"IH0" $ drule_at Any >>
-    simp[PULL_EXISTS] >> disch_then drule >> simp[] >> strip_tac >>
-    markerLib.LABEL_X_ASSUM"IH1" $ drule_then drule >>
-    disch_then(drule_at(Pat`eval_expr`)) >>
-    simp[] >> strip_tac >>
-    imp_res_tac materialise_state >>
-    gvs[] >>
-    conj_asm1_tac >- (
-      rpt strip_tac >> gvs[] >>
-      (* TypeError case: contradiction from typing *)
-      drule materialise_type_error_imp_HashMapRef >>
-      strip_tac >> Cases_on`x` >> gvs[toplevel_value_typed_def] >>
-      drule evaluate_type_NoneTV_imp_NoneT >> strip_tac >>
-      drule_all well_typed_expr_NoneT_eval_not_HashMapRef >>
-      gvs[is_HashMapRef_def] ) >>
-    rpt strip_tac >> gvs[] >>
-    drule materialise_error >> simp[]
-  ) >>
-  (* materialise returned INL v *)
-  simp[bind_apply, ignore_bind_apply] >>
-  BasicProvers.TOP_CASE_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >> gvs[] >- (
-    (* assign_target returned INR (error) - need assign_target_preserves_swt_ec *)
-    NO_TAC
-  ) >>
-  (* assign_target returned INL () - success case *)
-  gvs[return_def, ignore_bind_apply] >> strip_tac >> gvs[] >>
-  markerLib.LABEL_X_ASSUM"IH0" $ drule_at Any >>
-  simp[PULL_EXISTS] >> disch_then drule >> simp[] >> strip_tac >>
-  markerLib.LABEL_X_ASSUM"IH1" $ drule_then drule >>
-  disch_then(drule_at(Pat`eval_expr`)) >>
-  simp[] >> rpt strip_tac >>
-  imp_res_tac materialise_state >> gvs[] >>
-  (* Need assign_target preserves state + env_consistent + accounts_well_typed *)
-  cheat
-QED
-
+(* Helper theorems for Append proof *)
 Theorem append_element_dynamic[local]:
   !tv a nv v.
     append_element tv a nv = INL v ==>
@@ -1520,8 +1452,94 @@ Proof
   Cases_on `ALOOKUP l s` >> gvs[]
 QED
 
-(* Append_atwt: orphaned since Append is cheated; will be recreated when Append is proved properly *)
-
+Resume eval_preserves_swt[Append]:
+  rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum`(!) _`(markerLib.ASSUME_NAMED_TAC"IH0") >>
+  qpat_x_assum`(!) _`(markerLib.ASSUME_NAMED_TAC"IH1") >>
+  gvs[wts_Append, ev_Append, bind_apply] >>
+  Cases_on `eval_base_target cx bt st` >> reverse (Cases_on `q`) >> gvs[] >- (
+    (* eval_base_target returned INR (error) *)
+    markerLib.LABEL_X_ASSUM"IH0" $ drule_at Any >>
+    simp[PULL_EXISTS] >>
+    disch_then drule >> simp[] >>
+    strip_tac >> gvs[] >>
+    drule (cj 6 evaluate_no_return) >> simp[]
+  ) >>
+  (* eval_base_target returned INL (loc, sbs) *)
+  `state_well_typed r /\ env_consistent env cx r /\ accounts_well_typed r.accounts` by (
+    markerLib.LABEL_X_ASSUM"IH0" $ drule_at Any >>
+    simp[PULL_EXISTS] >> disch_then drule >> simp[]) >>
+  qpat_x_assum `(_ _) _ = _` mp_tac >>
+  `?loc sbs. x = (loc, sbs)` by metis_tac[pairTheory.PAIR] >> gvs[] >>
+  simp[bind_apply] >> strip_tac >>
+  qpat_x_assum `_ = (res, st')` mp_tac >>
+  simp[bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >> gvs[] >- (
+    (* eval_expr returned INR (error) *)
+    strip_tac >> gvs[] >>
+    markerLib.LABEL_X_ASSUM"IH1" $ drule_then drule >>
+    disch_then(drule_at(Pat`eval_expr`)) >>
+    rpt strip_tac >> gvs[] >>
+    drule (cj 8 evaluate_no_return) >> simp[]
+  ) >>
+  (* eval_expr returned INL tv *)
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >> gvs[] >- (
+    (* materialise returned INR (error) *)
+    strip_tac >> gvs[] >>
+    markerLib.LABEL_X_ASSUM"IH1" $ drule_then drule >>
+    disch_then(drule_at(Pat`eval_expr`)) >>
+    simp[] >> strip_tac >>
+    imp_res_tac materialise_state >>
+    gvs[] >>
+    conj_asm1_tac >- (
+      rpt strip_tac >> gvs[] >>
+      (* TypeError case: contradiction from typing *)
+      drule materialise_type_error_imp_HashMapRef >>
+      strip_tac >> Cases_on`x` >> gvs[toplevel_value_typed_def] >>
+      drule evaluate_type_NoneTV_imp_NoneT >> strip_tac >>
+      drule_all well_typed_expr_NoneT_eval_not_HashMapRef >>
+      gvs[is_HashMapRef_def] ) >>
+    rpt strip_tac >> gvs[] >>
+    drule materialise_error >> simp[]
+  ) >>
+  (* materialise returned INL v *)
+  simp[bind_apply, ignore_bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac materialise_state >> gvs[] >>
+  markerLib.LABEL_X_ASSUM"IH1" $ drule_then drule >>
+  disch_then(drule_at(Pat`eval_expr`)) >>
+  simp[] >> strip_tac >>
+  drule assign_target_well_typed_ao >>
+  disch_then $ drule_at (Pat`assign_target`) >>
+  disch_then drule >>
+  impl_keep_tac >- (
+    simp[] >> rpt strip_tac >>
+    drule assign_subscripts_preserves_type >>
+    simp[] >> disch_then irule >>
+    goal_assum $ drule_at Any >>
+    drule assign_subscripts_append_dynamic >>
+    drule_all eval_base_target_type_connection >>
+    simp[evaluate_type_def] >>
+    ntac 2 strip_tac >> gvs[]  ) >>
+  strip_tac >>
+  drule (cj 1 assign_target_preserves_accounts) >> simp[] >>
+  strip_tac >>
+  reverse BasicProvers.TOP_CASE_TAC >> gvs[] >- (
+    (* assign_target returned INR (error) *)
+    strip_tac >> gvs[] >>
+    drule (cj 1 assign_target_no_return) >> simp[] >>
+    rpt strip_tac >> gvs[] >>
+    drule (cj 1 assign_target_append_no_type_error) >> simp[] >>
+    goal_assum $ drule_at (Pat`assign_target`) >>
+    goal_assum drule >> simp[] ) >>
+  (* assign_target returned INL () - success case *)
+  gvs[return_def, ignore_bind_apply] >> strip_tac >> gvs[] >>
+  imp_res_tac materialise_state >> gvs[] >>
+  drule (cj 1 assign_target_preserves_accounts) >> simp[]
+QED
 
 Resume eval_preserves_swt[Assign]:
   rpt gen_tac >> strip_tac >>

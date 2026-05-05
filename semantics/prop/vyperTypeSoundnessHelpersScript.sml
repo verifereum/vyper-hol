@@ -2100,6 +2100,22 @@ Proof
   cheat
 QED
 
+(* Append-assignment no-TypeError: appending a well-typed element to a
+   well-typed dynamic array target cannot produce TypeError. *)
+Theorem assign_target_append_no_type_error:
+  !cx bt loc sbs st0 st1 v st res st' env elem_ty bd.
+    eval_base_target cx bt st0 = (INL (loc,sbs), st1) /\
+    well_typed_target env bt (ArrayT elem_ty bd) /\
+    assign_target cx (BaseTargetV loc sbs) (AppendOp v) st = (res, st') /\
+    state_well_typed st /\
+    env_consistent env cx st /\
+    (?tyv. evaluate_type (get_tenv cx) elem_ty = SOME tyv /\
+           value_has_type tyv v) ==>
+    !s. res <> INR (Error (TypeError s))
+Proof
+  cheat
+QED
+
 (*
 Theorem assign_targets_well_typed:
   !cx gvs vs st res st' env.
