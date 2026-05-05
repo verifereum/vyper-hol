@@ -6,29 +6,33 @@
  *
  * TOP-LEVEL:
  *   exec_pure1_ok / exec_pure2_ok   — generic pure opcode execution
- *   exec_read1_ok / exec_write2_ok  — memory/storage read/write execution
+ *   step_{opcode}                   — specific opcode step lemmas (ADD, SUB, ...)
  *   assert_ok / assert_revert       — ASSERT instruction outcomes
  *   eval_operand_update_var         — variable lookup after update
  *   eval_operand_update_other       — unrelated variable preserves lookup
  *   eval_operand_lit                — literal always evaluates
  *   run_inst_seq_cons_ok            — step through instruction list
- *   run_inst_seq_snoc_ok_or_abort   — common pattern: pure prefix + assert
+ *   run_pure2_assert_ok_or_revert   — common pattern: pure prefix + assert
  *   emitted_insts_emit_op           — what emit_op produces
  *   emitted_insts_emit_void         — what emit_void produces
- *   emitted_insts_chain             — composing emitted_insts through do-blocks
+ *   emitted_insts_seq2              — composing emitted_insts through do-blocks
  *   fresh_label_output_inj          — fresh_label_output is injective
  *   compile_state_ok_*              — label-space invariant through monad ops
  *   fresh_label_produces_external    — fresh_label returns an external label
  *   label_external_mono             — external labels survive extension
+ *   emit_op_*_correct               — per-opcode emit+step+eval correctness
+ *   emit_void_*_correct             — per-opcode void emit correctness
+ *   inst_extends_*                  — instruction extension tracking
+ *   run_inst_seq_compose_*          — sequential composition lemmas
  *
  * Helper:
- *   fresh_var_name    — characterize fresh_var output
- *   fresh_id_val      — characterize fresh_id output
+ *   fresh_var_distinct / fresh_var_neq  — fresh variable distinctness
+ *   lookup_var_update_var               — lookup after update
  *)
 
 Theory emitHelperProps
 Ancestors
-  exprLoweringProps emitHelper compileEnv
+  exprLoweringProps emitHelper compileEnv vyperCompiler
   venomExecSemantics venomState venomInst
   instIdxIndep vfmState
 Libs
@@ -936,8 +940,6 @@ Proof
   irule step_MUL >> rw[]
 QED
 
-(* Old emit_op_read0_correct (w version) removed — subsumed by the
-   more general version (f ss version) later in this file. *)
 
 Theorem emit_op_SUB_correct:
   ∀ op1 op2 v1 v2 st v st' ss.
@@ -1718,8 +1720,6 @@ QED
 (* ===== Instruction sequence composition ===== *)
 
 (* Two-step composition: if two sequential emit phases each succeed,
-   the combined emitted instructions also succeed. *)
-(* Two-step composition: if two sequential emit phases each succeed,
    the combined emitted instructions also succeed.
    The cs_current_insts preconditions come from emit_op_extends/emit_void_extends. *)
 Theorem run_emitted_compose2:
@@ -2062,9 +2062,6 @@ Proof
   rw[step_inst_base_def, mk_inst_def]
 QED
 
-(* ALLOCA lemmas removed — ALLOCA now takes 1 literal operand,
-   see step_inst_base_def. Revisit when ctor epilogue proof needs them. *)
-
 (* ===== RETURN → Halt ===== *)
 
 Theorem step_RETURN:
@@ -2268,6 +2265,18 @@ Proof
   rw[inst_extends_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_NIL]
 QED
 
+(* fresh_label only changes cs_next_label, so no instructions are emitted *)
+Theorem inst_extends_fresh_label:
+  ∀suffix st lbl st'.
+    fresh_label suffix st = (lbl,st') ∧ compile_state_ok st
+    ⇒ inst_extends st st'
+Proof
+  rpt strip_tac >>
+  gvs[inst_extends_def, emitted_insts_def] >>
+  imp_res_tac fresh_label_props >> gvs[]
+QED
+
+
 
 Theorem inst_extends_comp_return:
   ∀ x st. inst_extends st (SND (comp_return x st))
@@ -2387,12 +2396,130 @@ QED
    compilation proofs. *)
 
 (* fresh_label_output is injective in its arguments. *)
+Theorem EVERY_STRCAT_local[local]:
+  ∀P s1 s2. EVERY P (STRCAT s1 s2) ⇔ EVERY P s1 ∧ EVERY P s2
+Proof
+  gen_tac >> Induct_on `s1` >> simp[stringTheory.STRCAT_EXPLODE]
+QED
+
+Theorem EVERY_isDigit_underscore_F[local]:
+  EVERY isDigit "_" ⇔ F
+Proof
+  EVAL_TAC
+QED
+
+Theorem toString_not_contains_underscore[local]:
+  ∀n:num s t. toString n ≠ STRCAT s (STRCAT "_" t)
+Proof
+  rpt strip_tac >>
+  `EVERY isDigit (STRCAT s (STRCAT "_" t))`
+    by metis_tac[ASCIInumbersTheory.EVERY_isDigit_num_to_dec_string] >>
+  gvs[EVERY_STRCAT_local, EVERY_isDigit_underscore_F]
+QED
+
+
+Theorem EXPLODE_STRCAT_local[local]:
+  ∀s1 s2. EXPLODE (STRCAT s1 s2) = EXPLODE s1 ++ EXPLODE s2
+Proof
+  Induct_on `s1` >> simp[stringTheory.STRCAT_EXPLODE]
+QED
+
+Theorem string_ends_with_underscore_decompose:
+  ∀s. s ≠ "" ∧ LAST (EXPLODE s) = #"_" ⇒ ∃mid. s = STRCAT mid "_"
+Proof
+  rpt strip_tac >>
+  qexists_tac `IMPLODE (FRONT (EXPLODE s))` >>
+  `EXPLODE s = FRONT (EXPLODE s) ++ [#"_"]` by (
+    qspec_then `EXPLODE s` mp_tac listTheory.APPEND_FRONT_LAST >>
+    simp[stringTheory.EXPLODE_EQ_NIL]) >>
+  `EXPLODE (STRCAT (IMPLODE (FRONT (EXPLODE s))) "_") = FRONT (EXPLODE s) ++ [#"_"]` by
+    simp[EXPLODE_STRCAT_local, stringTheory.EXPLODE_IMPLODE, stringTheory.EXPLODE_EQNS] >>
+  metis_tac[stringTheory.EXPLODE_11]
+QED
+(* If STRCAT s1 "_" = STRCAT (STRCAT s2 "_") l with l ≠ "",
+   then l must end with "_" *)
+Theorem STRCAT_underscore_eq_ends_with_underscore[local]:
+  ∀s1 s2 l. STRCAT s1 "_" = STRCAT (STRCAT s2 "_") l ∧ l ≠ "" ⇒ ∃mid. l = STRCAT mid "_"
+Proof
+  rpt gen_tac >> disch_tac >>
+  pop_assum mp_tac >>
+  simp[EXPLODE_STRCAT_local, stringTheory.EXPLODE_EQNS] >>
+  simp[Once listTheory.APPEND_EQ_APPEND_MID] >>
+  strip_tac
+  >- (qexists_tac `l'` >> simp[])
+  >- (CCONTR_TAC >> Cases_on `l'` >> Cases_on `l` >> gvs[stringTheory.STRCAT_EQNS])
+QED
+(* No string consisting entirely of digits can contain "_" *)
+Theorem EVERY_isDigit_no_underscore_in_middle[local]:
+  ∀s mid rest. EVERY isDigit s ⇒ s ≠ STRCAT (STRCAT mid "_") rest
+Proof
+  rpt strip_tac >>
+  fs[EVERY_STRCAT_local, EVERY_isDigit_underscore_F]
+QED
+
+(* toString output never contains "_" in the middle *)
+Theorem toString_no_underscore_in_middle[local]:
+  ∀n:num mid rest. toString n ≠ STRCAT (STRCAT mid "_") rest
+Proof
+  metis_tac[EVERY_isDigit_no_underscore_in_middle,
+            ASCIInumbersTheory.EVERY_isDigit_num_to_dec_string]
+QED
+
+(* String-level APPEND_EQ_APPEND: avoids EXPLODE/IMPLODE type corruption *)
+Theorem STRCAT_EQ_STRCAT[local]:
+  ∀l1 l2 m1 m2:string.
+    STRCAT l1 l2 = STRCAT m1 m2 ⇔
+    (∃l. l1 = STRCAT m1 l ∧ m2 = STRCAT l l2) ∨ ∃l. m1 = STRCAT l1 l ∧ l2 = STRCAT l m2
+Proof
+  rpt strip_tac >>
+  simp[EXPLODE_STRCAT_local, GSYM stringTheory.IMPLODE_EXPLODE] >>
+  metis_tac[listTheory.APPEND_EQ_APPEND, stringTheory.IMPLODE_11,
+            stringTheory.IMPLODE_EXPLODE, stringTheory.EXPLODE_IMPLODE]
+QED
+
+(* Digit-only suffixes with underscore separator cannot overlap differently *)
+Theorem STRCAT_underscore_digit_suffix_F[local]:
+  ∀pfx1 pfx2 sfx1 sfx2:string.
+    EVERY isDigit sfx1 ∧ EVERY isDigit sfx2 ∧
+    STRCAT (STRCAT pfx1 "_") sfx1 = STRCAT (STRCAT pfx2 "_") sfx2 ∧ pfx1 ≠ pfx2 ⇒ F
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `STRCAT _ _ = STRCAT _ _` mp_tac >>
+  simp[Once STRCAT_EQ_STRCAT] >>
+  rpt strip_tac >>
+  `l ≠ ""` by (CCONTR_TAC >> gvs[stringTheory.STRCAT_11]) >>
+  drule_all STRCAT_underscore_eq_ends_with_underscore >> strip_tac >>
+  qpat_x_assum `l = STRCAT _ _` SUBST_ALL_TAC >>
+  fs[EVERY_STRCAT_local, EVERY_isDigit_underscore_F]
+QED
+
+(* If two "@p_k" strings are equal with different prefixes, the overflow
+   must go into a toString, which then contains "_" — contradiction. *)
+Theorem STRCAT_underscore_in_toString_F[local]:
+  ∀s1 s2 k1:num k2:num.
+    STRCAT (STRCAT s1 "_") (toString k1) = STRCAT (STRCAT s2 "_") (toString k2) ∧ s1 ≠ s2 ⇒ F
+Proof
+  rpt strip_tac >>
+  metis_tac[STRCAT_underscore_digit_suffix_F,
+            ASCIInumbersTheory.EVERY_isDigit_num_to_dec_string]
+QED
+
 Theorem fresh_label_output_inj:
   ∀ s1 k1 s2 k2.
     fresh_label_output s1 k1 = fresh_label_output s2 k2
     ⇒ s1 = s2 ∧ k1 = k2
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >>
+  fs[fresh_label_output_def, stringTheory.STRCAT_ASSOC] >>
+  pop_assum mp_tac >>
+  simp[Once (CONJUNCT1 stringTheory.STRCAT_11)] >>
+  strip_tac >>
+  pop_assum mp_tac >>
+  simp[stringTheory.STRCAT_ASSOC] >>
+  disch_tac >>
+  Cases_on `s1 = s2`
+  >- gvs[stringTheory.STRCAT_11, ASCIInumbersTheory.toString_11] >>
+  metis_tac[STRCAT_underscore_in_toString_F]
 QED
 
 (* Initial compile_state is well-formed for any entry label that is not
@@ -2403,7 +2530,8 @@ Theorem compile_state_ok_initial:
     entry_lbl ∉ compiler_labels_future 0
     ⇒ compile_state_ok (initial_compile_state entry_lbl)
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[compile_state_ok_def, initial_compile_state_def, bound_labels_def]
 QED
 
 (* emit_op preserves compile_state_ok, bound_labels, and label-space fields
@@ -2417,7 +2545,9 @@ Theorem compile_state_ok_emit_op:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> fs[emit_op_def, comp_bind_def, comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def, mk_inst_def] >>
+  simp[compile_state_ok_def, bound_labels_def] >> gvs[] >>
+  gvs[compile_state_ok_def,bound_labels_def]
 QED
 
 (* emit_void preserves compile_state_ok, bound_labels, and label-space fields
@@ -2431,7 +2561,7 @@ Theorem compile_state_ok_emit_void:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def, mk_inst_def] >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* emit_inst preserves compile_state_ok, bound_labels, and label-space fields
@@ -2445,16 +2575,59 @@ Theorem compile_state_ok_emit_inst:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def, mk_inst_def] >>
+  gvs[compile_state_ok_def, bound_labels_def]
+QED
+
+(* compiler_labels_future is monotone: larger counter => smaller set *)
+Theorem compiler_labels_future_mono_local[local]:
+  ∀m n. n ≤ m ⇒ compiler_labels_future m ⊆ compiler_labels_future n
+Proof
+  rpt gen_tac >> disch_tac >>
+  simp[compiler_labels_future_def, pred_setTheory.SUBSET_DEF,
+       pred_setTheory.IN_GSPEC] >>
+  rpt gen_tac >> strip_tac >>
+  qexistsl [`s''`, `k`] >> simp[]
+QED
+
+(* fresh_label_output with counter k IS in compiler_labels_future k *)
+Theorem fresh_label_output_in_compiler_labels_future_local[local]:
+  ∀suffix k. fresh_label_output suffix k ∈ compiler_labels_future k
+Proof
+  rpt gen_tac >>
+  simp[compiler_labels_future_def, pred_setTheory.IN_GSPEC] >>
+  qexistsl [`suffix`, `k`] >> simp[]
+QED
+
+(* fresh_label_output with counter k is NOT in compiler_labels_future (k+1):
+   if it were, fresh_label_output suffix k = fresh_label_output s' k'
+   with k+1 <= k', but injectivity forces k'=k < k+1, contradiction. *)
+Theorem fresh_label_output_notin_compiler_labels_future_succ[local]:
+  ∀suffix k. fresh_label_output suffix k ∉ compiler_labels_future (k + 1)
+Proof
+  rpt gen_tac >>
+  CCONTR_TAC >>
+  fs[compiler_labels_future_def, pred_setTheory.IN_GSPEC] >>
+  imp_res_tac fresh_label_output_inj >>
+  decide_tac
 QED
 
 (* fresh_label: advances counter, returns a label that is external to
-   the pre-state (provable because counter equals old cs_next_label,
-   and compile_state_ok rules out prior binding). *)
+   the POST-state st' (the fix: label_external st lbl is FALSE because
+   lbl ∈ compiler_labels_future st.cs_next_label; it's st' where
+   cs_next_label = cs_next_label + 1 that makes lbl external). *)
+
+Theorem DISJOINT_SUBSET_local[local]:
+  ∀s t u. DISJOINT s t ∧ u ⊆ t ⇒ DISJOINT s u
+Proof
+  rw[pred_setTheory.DISJOINT_DEF, pred_setTheory.SUBSET_DEF,
+     pred_setTheory.IN_INTER, pred_setTheory.EXTENSION] >>
+  metis_tac[]
+QED
 Theorem fresh_label_produces_external:
   ∀ suffix st lbl st'.
     fresh_label suffix st = (lbl, st') ∧ compile_state_ok st
-    ⇒ label_external st lbl ∧
+    ⇒ label_external st' lbl ∧
       lbl = fresh_label_output suffix st.cs_next_label ∧
       st'.cs_next_label = st.cs_next_label + 1 ∧
       st'.cs_blocks = st.cs_blocks ∧
@@ -2462,10 +2635,19 @@ Theorem fresh_label_produces_external:
       bound_labels st' = bound_labels st ∧
       compile_state_ok st'
 Proof
-  cheat
+  rpt strip_tac >> imp_res_tac fresh_label_props >>
+  fs[fresh_label_def] >>
+  `bound_labels st' = bound_labels st` by (fs[bound_labels_def] >> simp[]) >>
+  `label_external st' lbl` by (
+    rw[label_external_def] >> gvs[compile_state_ok_def] >>
+    metis_tac[pred_setTheory.IN_DISJOINT,
+             fresh_label_output_in_compiler_labels_future_local,
+             fresh_label_output_notin_compiler_labels_future_succ]) >>
+  fs[compile_state_ok_def] >>
+  `compiler_labels_future (st.cs_next_label + 1) ⊆ compiler_labels_future st.cs_next_label`
+    by simp[compiler_labels_future_mono_local] >>
+  metis_tac[DISJOINT_SUBSET_local]
 QED
-
-(* fresh_var / fresh_id don't touch label-space. *)
 Theorem compile_state_ok_fresh_var:
   ∀ st v st'.
     fresh_var st = (v, st') ∧ compile_state_ok st
@@ -2473,7 +2655,8 @@ Theorem compile_state_ok_fresh_var:
       bound_labels st' = bound_labels st ∧
       st'.cs_next_label = st.cs_next_label
 Proof
-  cheat
+  rpt strip_tac >> fs[fresh_var_def] >>
+  gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 Theorem compile_state_ok_fresh_id:
@@ -2483,7 +2666,8 @@ Theorem compile_state_ok_fresh_id:
       bound_labels st' = bound_labels st ∧
       st'.cs_next_label = st.cs_next_label
 Proof
-  cheat
+  rpt strip_tac >> fs[fresh_id_def] >>
+  gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* new_block: seals the current block into cs_blocks and switches to
@@ -2501,13 +2685,12 @@ Theorem compile_state_ok_new_block:
       st'.cs_current_bb = new_lbl ∧
       old = st.cs_current_bb
 Proof
-  cheat
+  rpt strip_tac >> imp_res_tac new_block_props >>
+  simp[bound_labels_def] >>
+  gvs[compile_state_ok_def, bound_labels_def, label_external_def]
 QED
-
-(* Monotonicity: label_external carries through monad extensions whose
-   new bound labels are known. Useful for threading an external-label
-   hypothesis across a do-block of emit_* / fresh_* / new_block calls. *)
 Theorem label_external_mono:
+
   ∀ lbl st st'.
     label_external st lbl ∧
     bound_labels st ⊆ bound_labels st' ∧
@@ -2515,5 +2698,9 @@ Theorem label_external_mono:
     lbl ∉ bound_labels st'
     ⇒ label_external st' lbl
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[label_external_def] >>
+  `compiler_labels_future st'.cs_next_label ⊆ compiler_labels_future st.cs_next_label`
+    by simp[compiler_labels_future_mono_local] >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
 QED
