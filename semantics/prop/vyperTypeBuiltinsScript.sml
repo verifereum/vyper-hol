@@ -166,13 +166,25 @@ QED
 
 (* ===== Binary operations ===== *)
 
-Theorem well_typed_binop_sound:
+Theorem well_typed_binop_no_type_error:
   well_typed_binop ty bop t1 t2 /\
   evaluate_type tenv ty = SOME result_tv /\
   evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
   value_has_type tv1 v1 /\ value_has_type tv2 v2 /\
   u = (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u) ==>
-  ?v. evaluate_binop u result_tv bop v1 v2 = INL v /\ value_has_type result_tv v
+  !msg. evaluate_binop u result_tv bop v1 v2 <> INR (TypeError msg)
+Proof
+  cheat
+QED
+
+Theorem well_typed_binop_success_type:
+  well_typed_binop ty bop t1 t2 /\
+  evaluate_type tenv ty = SOME result_tv /\
+  evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
+  value_has_type tv1 v1 /\ value_has_type tv2 v2 /\
+  u = (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u) /\
+  evaluate_binop u result_tv bop v1 v2 = INL v ==>
+  value_has_type result_tv v
 Proof
   cheat
 QED
@@ -187,12 +199,24 @@ Proof
   pop_assum mp_tac >> CASE_TAC >> rw[]
 QED
 
-Theorem well_typed_builtin_app_sound:
-  well_typed_builtin_app ty blt ts /\
+Theorem well_typed_builtin_app_no_type_error:
+  well_typed_builtin_app ty blt ts /\ blt <> Len /\
   MAP (evaluate_type tenv) ts = MAP SOME tvs /\
   evaluate_type tenv ty = SOME tv /\
-  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\ accounts_well_typed acc ==>
-  ?v. evaluate_builtin cx acc ty blt vs = INL v /\ value_has_type tv v
+  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\ accounts_well_typed acc /\
+  (!item. blt = Env item ==> item <> MsgGas) ==>
+  !msg. evaluate_builtin cx acc ty blt vs <> INR (TypeError msg)
+Proof
+  cheat
+QED
+
+Theorem well_typed_builtin_app_success_type:
+  well_typed_builtin_app ty blt ts /\ blt <> Len /\
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\ accounts_well_typed acc /\
+  evaluate_builtin cx acc ty blt vs = INL v ==>
+  value_has_type tv v
 Proof
   cheat
 QED
@@ -273,21 +297,61 @@ Proof
   Cases_on`ts` >> gvs[]
 QED
 
-Theorem valid_conversion_sound:
+Theorem valid_conversion_no_type_error:
   valid_conversion from_ty to_ty /\
-  evaluate_type tenv from_ty = SOME from_tv /\ evaluate_type tenv to_ty = SOME to_tv /\
+  evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
+  evaluate_type (get_tenv cx) to_ty = SOME to_tv /\
   value_has_type from_tv v ==>
-  ?v'. evaluate_type_builtin cx Convert to_ty [v] = INL v' /\ value_has_type to_tv v'
+  !msg. evaluate_type_builtin cx Convert to_ty [v] <> INR (TypeError msg)
 Proof
   cheat
 QED
 
-Theorem well_typed_type_builtin_sound:
+Theorem evaluate_convert_well_typed:
+  !tenv v typ v' tv.
+    evaluate_convert tenv v typ = INL v' /\
+    evaluate_type tenv typ = SOME tv ==>
+    value_has_type tv v'
+Proof
+  ho_match_mp_tac evaluate_convert_ind >>
+  rpt strip_tac >>
+  gvs[evaluate_convert_def, AllCaseEqs(), evaluate_type_def,
+      value_has_type_def, bounded_decimal_op_def,
+      within_int_bound_def, compatible_bound_def] >>
+  gvs[LENGTH_TAKE, listTheory.PAD_RIGHT,
+      LENGTH_word_to_bytes, word_to_bytes_be_def] >>
+  TRY (Cases_on `b` >> gvs[ONE_LT_EXP])
+QED
+
+Theorem valid_conversion_success_type:
+  valid_conversion from_ty to_ty /\
+  evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
+  evaluate_type (get_tenv cx) to_ty = SOME to_tv /\
+  value_has_type from_tv v /\
+  evaluate_type_builtin cx Convert to_ty [v] = INL v' ==>
+  value_has_type to_tv v'
+Proof
+  rw[evaluate_type_builtin_def] >>
+  drule_all evaluate_convert_well_typed >> simp[]
+QED
+
+Theorem well_typed_type_builtin_no_type_error:
   well_typed_type_builtin_args tb target_ty ts /\
-  MAP (evaluate_type tenv) ts = MAP SOME tvs /\
-  evaluate_type tenv result_ty = SOME result_tv /\
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
+  evaluate_type (get_tenv cx) result_ty = SOME result_tv /\
   LIST_REL value_has_type tvs vs /\ context_well_typed cx ==>
-  ?v. evaluate_type_builtin cx tb target_ty vs = INL v /\ value_has_type result_tv v
+  !msg. evaluate_type_builtin cx tb target_ty vs <> INR (TypeError msg)
+Proof
+  cheat
+QED
+
+Theorem well_typed_type_builtin_success_type:
+  well_typed_type_builtin_args tb target_ty ts /\
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
+  evaluate_type (get_tenv cx) result_ty = SOME result_tv /\
+  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\
+  evaluate_type_builtin cx tb target_ty vs = INL v ==>
+  value_has_type result_tv v
 Proof
   cheat
 QED
