@@ -9,7 +9,7 @@ Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
-  vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
+  vyperTypeEnv vyperTypeEnvPreservation vyperTypeBuiltins vyperTypeExprSoundness
   vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib
@@ -113,7 +113,7 @@ Proof
     disch_then irule >> simp[] >>
     drule materialise_state >>
     rw[] >>
-    cheat (* env_consistent preservation through eval_expr *)) >>
+    drule_all eval_expr_preserves_ec >> simp[]) >>
   strip_tac >>
   irule new_variable_preserves_state_well_typed >>
   goal_assum(drule_at(Pat`new_variable`)) >>
