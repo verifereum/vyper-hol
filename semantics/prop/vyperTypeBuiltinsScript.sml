@@ -5,12 +5,13 @@
 Theory vyperTypeBuiltins
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
-  words byte keccak vyperAST vyperValue vyperValueOperation vyperMisc
+  words byte integer keccak vyperAST vyperValue vyperValueOperation vyperMisc
   vyperABI vyperInterpreter vyperState vyperContext vyperStorage
   vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeBytesCrypto vyperTypeDefaults vyperTypeConversions vyperTypeABI
 Libs
   wordsLib
+  intLib
 
 (* ===== Environment/account items ===== *)
 
@@ -88,6 +89,111 @@ Proof
 QED
 
 (* ===== Builtins ===== *)
+
+Theorem modexp_lt:
+  !b e m a. 0 < m ==> vfmExecution$modexp b e m a < m
+Proof
+  simp[vfmExecutionTheory.modexp_exp]
+QED
+
+Theorem int_type_Num_bound:
+  !tyv i. value_has_type tyv (IntV i) /\ well_formed_type_value tyv ==>
+          Num i < 2 ** 256
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `_ < bound` >>
+  qpat_x_assum `value_has_type _ _` mp_tac >>
+  simp[value_has_type_inv] >> strip_tac >> gvs[well_formed_type_value_def]
+  >- (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
+      unabbrev_all_tac >> simp[] >>
+      irule (iffRL EXP_BASE_LE_MONO) >> simp[]) >>
+  Cases_on `n = 0` >- (unabbrev_all_tac >> gvs[within_int_bound_def]) >>
+  gvs[within_int_bound_def, LET_THM, Num_neg] >>
+  Cases_on `i < 0` >> gvs[] >>
+  irule LESS_EQ_LESS_TRANS >>
+  qexists_tac `2 ** (n - 1)` >>
+  unabbrev_all_tac >> simp[]
+QED
+
+Theorem uint2str_strlen_bound:
+  !tyv i. value_has_type tyv (IntV i) /\ well_formed_type_value tyv ==>
+          STRLEN (toString (Num i)) <= 78
+Proof
+  rpt strip_tac >>
+  imp_res_tac int_type_Num_bound >>
+  qmatch_asmsub_abbrev_tac `Num i < bound` >>
+  simp[ASCIInumbersTheory.LENGTH_num_to_dec_string] >>
+  Cases_on `i = 0` >> gvs[] >>
+  `0 < Num i` by intLib.ARITH_TAC >>
+  `Num i <= bound - 1` by decide_tac >>
+  `LOG 10 (Num i) <= LOG 10 (bound - 1)` by
+    (irule logrootTheory.LOG_LE_MONO >> simp[]) >>
+  `LOG 10 (bound - 1) = 77` by
+    (unabbrev_all_tac >> EVAL_TAC) >>
+  decide_tac
+QED
+
+Theorem floor_decimal_in_int256_bounds:
+  within_int_bound (Signed 168) i ==>
+  -(&(2 ** 255)) <= i / 10000000000 /\
+  i / 10000000000 < &(2 ** 255)
+Proof
+  rw[within_int_bound_def] >>
+  `10000000000:int <> 0` by intLib.ARITH_TAC >>
+  drule INT_DIVISION >>
+  disch_then (qspec_then `i` strip_assume_tac) >>
+  intLib.ARITH_TAC
+QED
+
+Theorem ceil_decimal_in_int256_bounds:
+  within_int_bound (Signed 168) i ==>
+  -(&(2 ** 255)) <= (i + 9999999999) / 10000000000 /\
+  (i + 9999999999) / 10000000000 < &(2 ** 255)
+Proof
+  rw[within_int_bound_def] >>
+  `10000000000:int <> 0` by intLib.ARITH_TAC >>
+  drule INT_DIVISION >>
+  disch_then (qspec_then `i + 9999999999` strip_assume_tac) >>
+  intLib.ARITH_TAC
+QED
+
+Theorem low_mask_eq:
+  !m. m <= 256 ==>
+    ~(~(0w:bytes32) << m) = n2w (2 ** m - 1)
+Proof
+  rpt strip_tac >>
+  rewrite_tac[wordsTheory.WORD_NOT_0, wordsTheory.LSL_UINT_MAX,
+              wordsTheory.word_1comp_n2w] >>
+  AP_TERM_TAC >>
+  rewrite_tac[wordsTheory.dimword_def] >>
+  `dimindex(:256) = 256` by EVAL_TAC >>
+  asm_rewrite_tac[] >>
+  `2 ** m <= 2 ** 256` by (irule (iffRL EXP_BASE_LE_MONO) >> simp[]) >>
+  `(2 ** 256 - 2 ** m) MOD 2 ** 256 = 2 ** 256 - 2 ** m` by simp[LESS_MOD] >>
+  asm_rewrite_tac[] >> decide_tac
+QED
+
+Theorem w2n_and_mask_mod:
+  !m (w:bytes32). w2n (w && n2w (2 ** m - 1)) = w2n w MOD 2 ** m
+Proof
+  rpt strip_tac >>
+  CONV_TAC (LHS_CONV (RAND_CONV (RATOR_CONV (RAND_CONV
+    (REWR_CONV (GSYM wordsTheory.n2w_w2n)))))) >>
+  rewrite_tac[wordsTheory.WORD_AND_EXP_SUB1, wordsTheory.w2n_n2w] >>
+  irule LESS_MOD >>
+  irule LESS_EQ_LESS_TRANS >>
+  qexists `w2n w` >>
+  simp[MOD_LESS_EQ, wordsTheory.w2n_lt]
+QED
+
+Theorem w2n_and_low_mask_lt:
+  !m (w:bytes32). m <= 256 ==>
+    w2n (w && ~(~0w << m)) < 2 ** m
+Proof
+  rpt strip_tac >>
+  imp_res_tac low_mask_eq >> pop_assum (fn th => rewrite_tac[th]) >>
+  simp[w2n_and_mask_mod, MOD_LESS]
+QED
 
 Theorem well_typed_builtin_app_length:
   well_typed_builtin_app ty blt ts ==> builtin_args_length_ok blt (LENGTH ts)
@@ -180,7 +286,17 @@ Resume well_typed_builtin_app_success_type[Not_int]:
   Cases_on`v1` >>
   gvs[evaluate_builtin_def, evaluate_type_def,
       value_has_type_def, AllCaseEqs(), type_to_int_bound_def] >>
-  cheat (* int arith bound *)
+  qmatch_goalsub_abbrev_tac `Num rr < NN` >>
+  `0 < NN` by simp[Abbr`NN`] >>
+  `Num i <= NN - 1` by simp[] >>
+  `i = &Num i` by simp[integerTheory.INT_OF_NUM] >>
+  `&(NN - 1) = &NN - 1i` by simp[integerTheory.INT_SUB] >>
+  gvs[Abbr`rr`] >>
+  conj_tac >- intLib.ARITH_TAC >>
+  `0 <= &(NN - 1) - &Num i` by intLib.ARITH_TAC >>
+  `Num (&(NN - 1) - i) <= NN - 1` by
+    (simp[integerTheory.INT_OF_NUM] >> intLib.ARITH_TAC) >>
+  gvs[]
 QED
 
 Resume well_typed_builtin_app_success_type[Not_flag]:
@@ -189,7 +305,9 @@ Resume well_typed_builtin_app_success_type[Not_flag]:
   Cases_on`v1` >>
   gvs[evaluate_builtin_def, value_has_type_def, AllCaseEqs(),
       evaluate_type_def] >>
-  cheat (* word arith *)
+ rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
+ qspec_then `m` (qspec_then `~(n2w n:bytes32)` mp_tac) w2n_and_low_mask_lt >>
+ simp[]
 QED
 
 Resume well_typed_builtin_app_success_type[Neg_int]:
@@ -197,8 +315,8 @@ Resume well_typed_builtin_app_success_type[Neg_int]:
   rename1`is_int_type bt` >> Cases_on`bt` >>
   Cases_on`v1` >>
   gvs[evaluate_builtin_def, value_has_type_def, AllCaseEqs(),
-      evaluate_type_def, bounded_int_op_def, type_to_int_bound_def]
-  >> cheat (* int arith *)
+      evaluate_type_def, bounded_int_op_def, type_to_int_bound_def,
+      within_int_bound_def ]
 QED
 
 Resume well_typed_builtin_app_success_type[Neg_decimal]:
@@ -247,7 +365,14 @@ Resume well_typed_builtin_app_success_type[Uint2Str]:
   rename1`evaluate_builtin _ _ _ _ [v1]` >>
   Cases_on`v1` >>
   gvs[evaluate_builtin_def, value_has_type_def, type_slot_size_def] >>
-  cheat (* 78 is enough for decimal digits *)
+  irule LESS_EQ_TRANS >> qexists`78` >> simp[] >>
+  irule uint2str_strlen_bound >>
+  qexists_tac`BaseTV (UintT 256)` >>
+  simp[value_has_type_def, well_formed_type_value_def] >>
+  irule LESS_LESS_EQ_TRANS >>
+  goal_assum $ drule_at Any >>
+  qspecl_then[`k`,`256`]mp_tac bitTheory.TWOEXP_MONO2 >>
+  simp[]
 QED
 
 Resume well_typed_builtin_app_success_type[MakeArray_tuple]:
@@ -261,15 +386,18 @@ QED
 Resume well_typed_builtin_app_success_type[Ceil]:
   rename1`evaluate_builtin _ _ _ _ [v1]` >>
   Cases_on`v1` >>
-  gvs[evaluate_builtin_def, value_has_type_def, within_int_bound_def] >>
-  cheat (* integer arith *)
+  gvs[evaluate_builtin_def, value_has_type_def] >>
+  drule ceil_decimal_in_int256_bounds >>
+  gvs[within_int_bound_def] >> rw[] >> gvs[Num_neg] >>
+  intLib.ARITH_TAC
 QED
 
 Resume well_typed_builtin_app_success_type[Floor]:
   rename1`evaluate_builtin _ _ _ _ [v1]` >>
   Cases_on`v1` >>
-  gvs[evaluate_builtin_def, value_has_type_def, within_int_bound_def] >>
-  cheat (* integer arith *)
+  gvs[evaluate_builtin_def, value_has_type_def] >>
+  drule floor_decimal_in_int256_bounds >>
+  gvs[within_int_bound_def] >> intLib.ARITH_TAC
 QED
 
 Resume well_typed_builtin_app_success_type[AddMod]:
@@ -280,16 +408,32 @@ Resume well_typed_builtin_app_success_type[AddMod]:
   Cases_on`v2` >> gvs[value_has_type_def] >>
   Cases_on`v3` >> gvs[value_has_type_def] >>
   gvs[evaluate_builtin_def,value_has_type_def] >>
-  cheat (* integer arith *)
+     irule LESS_TRANS >>
+     qexists `Num i''` >>
+     conj_tac >- (
+       irule MOD_LESS >>
+       imp_res_tac ratTheory.NUM_NZERO >>
+       simp[]
+     ) >>
+  simp[]
 QED
 
 Resume well_typed_builtin_app_success_type[MulMod]:
   Cases_on `tvs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   rename1`evaluate_builtin _ _ _ _ [v1;v2;v3]` >>
-  Cases_on`v1` >> Cases_on`v2` >> Cases_on`v3` >>
+  Cases_on`v1` >> gvs[value_has_type_def] >>
+  Cases_on`v2` >> gvs[value_has_type_def] >>
+  Cases_on`v3` >>
   gvs[evaluate_builtin_def,value_has_type_def] >>
-  cheat (* integer arith *)
+     irule LESS_TRANS >>
+     qexists `Num i''` >>
+     conj_tac >- (
+       irule MOD_LESS >>
+       imp_res_tac ratTheory.NUM_NZERO >>
+       simp[]
+     ) >>
+  simp[]
 QED
 
 Resume well_typed_builtin_app_success_type[Env]:
@@ -344,7 +488,9 @@ Resume well_typed_builtin_app_success_type[PowMod256]:
   rename1`evaluate_builtin _ _ _ _ [v1; v2]` >>
   Cases_on`v1` >> Cases_on`v2` >>
   gvs[evaluate_builtin_def, value_has_type_def, within_int_bound_def] >>
-  cheat (* modexp bound *)
+  irule modexp_lt >>
+  rewrite_tac[bitTheory.ZERO_LT_TWOEXP] >>
+  simp[]
 QED
 
 Finalise well_typed_builtin_app_success_type
