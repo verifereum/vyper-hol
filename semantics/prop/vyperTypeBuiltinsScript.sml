@@ -116,8 +116,238 @@ Theorem well_typed_builtin_app_success_type:
   evaluate_builtin cx acc ty blt vs = INL v ==>
   value_has_type tv v
 Proof
+  strip_tac >> Cases_on `blt` >>
+  gvs[well_typed_builtin_app_def, evaluate_builtin_def, AllCaseEqs(), LET_THM,
+      LENGTH_EQ_NUM_compute, evaluate_type_def]
+  >- (rename1`Not` >> suspend "Not_bool")
+  >- (rename1`Not` >> suspend "Not_int")
+  >- (rename1`Not` >> suspend "Not_flag")
+  >- (rename1`Neg` >> suspend "Neg_int")
+  >- (rename1`Neg` >> suspend "Neg_decimal")
+  >- suspend "Keccak256"
+  >- suspend "Sha256"
+  >- suspend "AsWeiValue_int"
+  >- suspend "AsWeiValue_decimal"
+  >- suspend "Concat_bytes"
+  >- suspend "Concat_string"
+  >- suspend "Slice_bytes"
+  >- suspend "Slice_string"
+  >- suspend "Uint2Str"
+  >- suspend "MakeArray_tuple"
+  >- suspend "MakeArray"
+  >- suspend "Ceil"
+  >- suspend "Floor"
+  >- suspend "AddMod"
+  >- suspend "MulMod"
+  >- (rename1`Bop` >> suspend "Bop")
+  >- suspend "BlockHash"
+  >- suspend "BlobHash"
+  >- suspend "Env"
+  >- suspend "Acc"
+  >- suspend "Isqrt"
+  >- suspend "MethodId"
+  >> TRY (
+    rename1`evaluate_ecrecover` >>
+    Cases_on`tvs` >> gvs[] >>
+    cheat )
+  >- suspend "ECAdd"
+  >- suspend "ECMul"
+  >- suspend "PowMod256"
+QED
+
+Resume well_typed_builtin_app_success_type[Bop]:
+  TRY(Cases_on`tvs` >> gvs[]) >>
+  rename1`evaluate_builtin _ _ _ _ [v1; v2]` >>
+  gvs[evaluate_builtin_def] >>
+  irule well_typed_binop_success_type >>
+  goal_assum (drule_at(Pat`well_typed_binop`)) >>
+  goal_assum (drule_at(Pat`evaluate_binop`)) >>
+  simp[] >>
+  goal_assum drule >> simp[]
+QED
+
+Resume well_typed_builtin_app_success_type[Not_bool]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  rename1`is_bool_type bt` >> Cases_on`bt` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def,
+      evaluate_type_def, is_bool_type_def, AllCaseEqs()]
+QED
+
+Resume well_typed_builtin_app_success_type[Not_int]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  rename1`is_int_type bt` >> Cases_on`bt` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, evaluate_type_def,
+      value_has_type_def, AllCaseEqs(), type_to_int_bound_def] >>
+  cheat (* int arith bound *)
+QED
+
+Resume well_typed_builtin_app_success_type[Not_flag]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  rename1`is_flag_type bt` >> Cases_on`bt` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, AllCaseEqs(),
+      evaluate_type_def] >>
+  cheat (* word arith *)
+QED
+
+Resume well_typed_builtin_app_success_type[Neg_int]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  rename1`is_int_type bt` >> Cases_on`bt` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, AllCaseEqs(),
+      evaluate_type_def, bounded_int_op_def, type_to_int_bound_def]
+  >> cheat (* int arith *)
+QED
+
+Resume well_typed_builtin_app_success_type[Neg_decimal]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, bounded_decimal_op_def]
+QED
+
+Resume well_typed_builtin_app_success_type[Keccak256]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, LENGTH_Keccak_256_w64]
+QED
+
+Resume well_typed_builtin_app_success_type[Sha256]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, LENGTH_word_to_bytes]
+QED
+
+Resume well_typed_builtin_app_success_type[AsWeiValue_int]:
   cheat
 QED
+
+Resume well_typed_builtin_app_success_type[AsWeiValue_decimal]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[Concat_bytes]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[Concat_string]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[Slice_bytes]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[Slice_string]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[Uint2Str]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, type_slot_size_def] >>
+  cheat (* 78 is enough for decimal digits *)
+QED
+
+Resume well_typed_builtin_app_success_type[MakeArray_tuple]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[MakeArray]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[Ceil]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, within_int_bound_def] >>
+  cheat (* integer arith *)
+QED
+
+Resume well_typed_builtin_app_success_type[Floor]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, within_int_bound_def] >>
+  cheat (* integer arith *)
+QED
+
+Resume well_typed_builtin_app_success_type[AddMod]:
+  Cases_on `tvs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  rename1`evaluate_builtin _ _ _ _ [v1;v2;v3]` >>
+  Cases_on`v1` >> gvs[value_has_type_def] >>
+  Cases_on`v2` >> gvs[value_has_type_def] >>
+  Cases_on`v3` >> gvs[value_has_type_def] >>
+  gvs[evaluate_builtin_def,value_has_type_def] >>
+  cheat (* integer arith *)
+QED
+
+Resume well_typed_builtin_app_success_type[MulMod]:
+  Cases_on `tvs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  rename1`evaluate_builtin _ _ _ _ [v1;v2;v3]` >>
+  Cases_on`v1` >> Cases_on`v2` >> Cases_on`v3` >>
+  gvs[evaluate_builtin_def,value_has_type_def] >>
+  cheat (* integer arith *)
+QED
+
+Resume well_typed_builtin_app_success_type[Env]:
+  drule_at(Pat`evaluate_builtin`)Env_builtin_success_type >>
+  disch_then irule >> simp[] >>
+  goal_assum drule
+QED
+
+Resume well_typed_builtin_app_success_type[BlockHash]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, evaluate_block_hash_def] >>
+  gvs[LENGTH_word_to_bytes, word_to_bytes_be_def]
+QED
+
+Resume well_typed_builtin_app_success_type[BlobHash]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, evaluate_blob_hash_def] >>
+  gvs[LENGTH_word_to_bytes, word_to_bytes_be_def]
+QED
+
+Resume well_typed_builtin_app_success_type[Acc]:
+  drule_all Acc_builtin_sound >> simp[] >>
+  disch_then(qspec_then`cx`strip_assume_tac) >> gvs[]
+QED
+
+Resume well_typed_builtin_app_success_type[Isqrt]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def, AllCaseEqs()] >>
+  cheat (* num_sqrt bound (but also isn't Isqrt supposed to be gone on main?) *)
+QED
+
+Resume well_typed_builtin_app_success_type[MethodId]:
+  rename1`evaluate_builtin _ _ _ _ [v1]` >>
+  Cases_on`v1` >>
+  gvs[evaluate_builtin_def, value_has_type_def,
+      LENGTH_TAKE, LENGTH_Keccak_256_w64]
+QED
+
+Resume well_typed_builtin_app_success_type[ECAdd]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[ECMul]:
+  cheat
+QED
+
+Resume well_typed_builtin_app_success_type[PowMod256]:
+  Cases_on`tvs` >> gvs[] >>
+  rename1`evaluate_builtin _ _ _ _ [v1; v2]` >>
+  Cases_on`v1` >> Cases_on`v2` >>
+  gvs[evaluate_builtin_def, value_has_type_def, within_int_bound_def] >>
+  cheat (* modexp bound *)
+QED
+
+Finalise well_typed_builtin_app_success_type
 
 Theorem Len_result_fits_uint256:
   well_typed_builtin_app ty Len [arg_ty] /\
