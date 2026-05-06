@@ -18,14 +18,17 @@ Theorem push_scope_preserves_state_well_typed:
   state_well_typed st /\ push_scope st = (INL u, st') ==>
   state_well_typed st'
 Proof
-  cheat
+  rw[push_scope_def, return_def, state_well_typed_def, scope_well_typed_def] >>
+  rw[] >> rw[scope_well_typed_def]
 QED
 
 Theorem pop_scope_preserves_state_well_typed:
   state_well_typed st /\ pop_scope st = (INL u, st') ==>
   state_well_typed st'
 Proof
-  cheat
+  Cases_on `st.scopes` >>
+  rw[pop_scope_def, return_def, raise_def, state_well_typed_def] >>
+  rw[]
 QED
 
 Theorem push_scope_with_var_preserves_state_well_typed:
@@ -33,7 +36,10 @@ Theorem push_scope_with_var_preserves_state_well_typed:
   value_has_type tv v /\ push_scope_with_var id tv v st = (INL u, st') ==>
   state_well_typed st'
 Proof
-  cheat
+  rw[push_scope_with_var_def, return_def, state_well_typed_def,
+     scope_well_typed_def] >> rw[] >>
+  rw[scope_well_typed_def] >> gvs[FLOOKUP_UPDATE] >>
+  metis_tac[evaluate_type_well_formed_type_value]
 QED
 
 Theorem new_variable_preserves_state_well_typed:
@@ -41,7 +47,12 @@ Theorem new_variable_preserves_state_well_typed:
   value_has_type tv v /\ new_variable id tv v st = (INL u, st') ==>
   state_well_typed st'
 Proof
-  cheat
+  rw[new_variable_def, bind_def, ignore_bind_def, return_def, raise_def,
+     get_scopes_def, set_scopes_def, type_check_def, AllCaseEqs(), LET_THM,
+     state_well_typed_def, scope_well_typed_def, list_CASE_rator,
+     assert_def] >> gvs[scope_well_typed_def, FLOOKUP_UPDATE] >>
+  rw[] >> rw[] >>
+  metis_tac[evaluate_type_well_formed_type_value]
 QED
 
 (* ===== Storage/account/immutable operations ===== *)
