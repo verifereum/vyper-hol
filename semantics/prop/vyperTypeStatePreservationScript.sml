@@ -4,11 +4,11 @@
 
 Theory vyperTypeStatePreservation
 Ancestors
-  list rich_list pred_set prim_rec arithmetic finite_map option pair
+  list rich_list pred_set prim_rec arithmetic finite_map option pair byte
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
-  vyperTypeEnv vyperTypeExprSoundness
+  vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeExprSoundness
 Libs
   wordsLib
 
@@ -67,12 +67,223 @@ Proof
      AllCaseEqs(), option_CASE_rator] >> gvs[]
 QED
 
+(* ===== Leaf helpers needed by assignment/materialisation preservation ===== *)
+
+Theorem decode_base_from_slot_well_typed:
+  !slot tv. well_formed_type_value tv /\
+    (!n. tv <> BaseTV (StringT n)) /\
+    (!n. tv <> BaseTV (BytesT (Dynamic n))) /\
+    (!tvs. tv <> TupleTV tvs) /\
+    (!tv0 b. tv <> ArrayTV tv0 b) /\
+    (!fs. tv <> StructTV fs) ==>
+    value_has_type tv (decode_base_from_slot slot tv)
+Proof
+  ho_match_mp_tac decode_base_from_slot_ind >>
+  simp[decode_base_from_slot_def, value_has_type_inv,
+       well_formed_type_value_def,
+       truncate_unsigned_range,
+       word_to_bytes_be_def, LENGTH_word_to_bytes,
+       LENGTH_TAKE_EQ, MIN_DEF] >>
+  rw[] >> TRY (irule truncate_signed_range >> simp[])
+QED
+
+Theorem slots_to_bytes_length:
+  !n slots. LENGTH (slots_to_bytes n slots) <= n
+Proof
+  ho_match_mp_tac slots_to_bytes_ind >>
+  rw[slots_to_bytes_def, word_to_bytes_be_def, LENGTH_word_to_bytes,
+     LET_THM, LENGTH_TAKE_EQ, MIN_DEF, LENGTH_APPEND]
+QED
+
+Theorem decode_dyn_bytes_length:
+  !storage offset max bs.
+    decode_dyn_bytes storage offset max = SOME bs ==> LENGTH bs <= max
+Proof
+  simp[decode_dyn_bytes_def, LET_THM] >> rpt strip_tac >>
+  irule LESS_EQ_TRANS >> qexists_tac `w2n (lookup_storage (n2w offset) storage)` >>
+  simp[slots_to_bytes_length]
+QED
+
+Theorem enumerate_static_array_sparse_has_type:
+  !tv vs n.
+    all_have_type tv vs ==>
+    sparse_has_type tv (n + LENGTH vs)
+      (enumerate_static_array (default_value tv) n vs)
+Proof
+  Induct_on `vs` >>
+  simp[enumerate_static_array_def, value_has_type_def, LET_THM] >>
+  rpt strip_tac >>
+  IF_CASES_TAC >> gvs[value_has_type_def, ADD1]
+  >- (first_x_assum $ qspecl_then [`tv`, `SUC n`] mp_tac >> simp[ADD1]) >>
+  simp[] >>
+  first_x_assum $ qspecl_then [`tv`, `SUC n`] mp_tac >> simp[ADD1]
+QED
+
+Theorem decode_static_array_length:
+  !storage offset tv n vs.
+    decode_static_array storage offset tv n = SOME vs ==>
+    LENGTH vs = n
+Proof
+  Induct_on `n` >>
+  simp[Once decode_value_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> res_tac
+QED
+
+Theorem decode_dyn_array_length:
+  !storage offset tv n vs.
+    decode_dyn_array storage offset tv n = SOME vs ==>
+    LENGTH vs = n
+Proof
+  Induct_on `n` >>
+  simp[Once decode_value_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> res_tac
+QED
+
+Theorem decode_value_well_typed:
+  (!storage offset tv v.
+     decode_value storage offset tv = SOME v /\
+     well_formed_type_value tv ==> value_has_type tv v) /\
+  (!storage offset tvs vs.
+     decode_tuple storage offset tvs = SOME vs /\
+     EVERY well_formed_type_value tvs ==> values_have_types tvs vs) /\
+  (!storage offset tv n vs.
+     decode_static_array storage offset tv n = SOME vs /\
+     well_formed_type_value tv ==> all_have_type tv vs) /\
+  (!storage offset tv n vs.
+     decode_dyn_array storage offset tv n = SOME vs /\
+     well_formed_type_value tv ==> all_have_type tv vs) /\
+  (!storage offset ftypes fields.
+     decode_struct storage offset ftypes = SOME fields /\
+     EVERY (well_formed_type_value o SND) ftypes ==>
+     struct_has_type ftypes fields)
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac >>
+  simp[decode_value_def, AllCaseEqs(), value_has_type_inv,
+       well_formed_type_value_def, value_has_type_def, PULL_EXISTS,
+       decode_base_from_slot_well_typed] >>
+  rpt strip_tac >> gvs[]
+  >- (metis_tac[decode_dyn_bytes_length])
+  >- (metis_tac[decode_dyn_bytes_length])
+  >- (first_x_assum irule >> gvs[EVERY_MEM])
+  >- simp[enumerate_static_array_sorted]
+  >- (qpat_x_assum `decode_static_array _ _ _ _ = _`
+        (ASSUME_TAC o MATCH_MP decode_static_array_length) >>
+      gvs[] >>
+      irule (enumerate_static_array_sparse_has_type
+             |> Q.SPECL [`tv`,`vs`,`0`]
+             |> SIMP_RULE (srw_ss()) []) >>
+      simp[])
+  >- (qpat_x_assum `decode_dyn_array _ _ _ _ = _`
+        (ASSUME_TAC o MATCH_MP decode_dyn_array_length) >>
+      gvs[MIN_DEF])
+  >- (first_x_assum irule >> gvs[EVERY_MEM])
+QED
+
+Theorem read_storage_slot_success_type:
+  well_formed_type_value tv /\
+  read_storage_slot cx is_transient slot tv st = (INL v, st') ==>
+  value_has_type tv v
+Proof
+  simp[read_storage_slot_def, bind_def, AllCaseEqs(), get_storage_backend_def,
+       return_def, lift_option_def, option_CASE_rator, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all (cj 1 decode_value_well_typed) >> simp[]
+QED
+
+Theorem update_name_preserves_state_well_typed:
+  state_well_typed st /\ lookup_scopes (string_to_num id) st.scopes = SOME entry /\
+  value_has_type entry.type v ==>
+  state_well_typed (update_name st id v)
+Proof
+  (* Local-variable write helper for assign_target.  update_name only changes
+     entry.value in the containing scope; all other scope entries are unchanged. *)
+  cheat
+QED
+
+Theorem replace_operation_runtime_typed_value:
+  assign_operation_runtime_typed env ty (Replace v) /\
+  evaluate_type env.type_defs ty = SOME tv ==>
+  value_has_type tv v
+Proof
+  rw[assign_operation_runtime_typed_def, value_runtime_typed_def] >> gvs[]
+QED
+
+Theorem append_operation_runtime_typed_value:
+  assign_operation_runtime_typed env ty (AppendOp v) /\ ty = ArrayT elem_ty bd /\
+  evaluate_type env.type_defs elem_ty = SOME elem_tv ==>
+  value_has_type elem_tv v
+Proof
+  rw[assign_operation_runtime_typed_def] >> gvs[]
+QED
+
+Theorem write_storage_preserves_state_well_typed:
+  state_well_typed st /\ accounts_well_typed st.accounts /\ value_has_type tv v /\
+  write_storage_slot cx is_transient slot tv v st = (INL res, st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  (* Storage-write counterpart to read_storage_slot_success_type.  Intended to
+     use encode/decode preservation and account/storage update frame lemmas. *)
+  cheat
+QED
+
+Theorem assign_targets_preserves_state_well_typed:
+  state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  target_values_shape tgts gvs /\
+  LIST_REL (\gv v. ?ty tv tgt. target_runtime_typed env tgt ty gv /\
+                       evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v) gvs vs /\
+  assign_targets cx gvs vs st = (INL res, st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  (* Tuple-assignment helper.  Induct on gvs/vs with target_values_shape_LIST_REL
+     and chain assign_target_preserves_state_well_typed for each element.  The
+     target_runtime_typed premise shape may need strengthening once the tuple
+     target typing theorem is finalized. *)
+  cheat
+QED
+
 Theorem assign_target_preserves_state_well_typed:
   state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
   target_runtime_typed env tgt ty gv /\ assign_operation_runtime_typed env ty op /\
   assign_target cx gv op st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
+  (* Proof draft / intended decomposition.
+
+     Use the mutual induction theorem for assign_target / assign_targets, with
+     strengthened predicates carrying:
+       state_well_typed st /\ accounts_well_typed st.accounts /\
+       target_runtime_typed env tgt ty gv /\
+       assign_operation_runtime_typed env ty op
+       ==> state_well_typed st' /\ accounts_well_typed st'.accounts
+
+     Key case split:
+     - TupleTargetV + Replace (ArrayV (TupleV vs)):
+         use target_values_shape_LIST_REL to align gvs/vs/types, then chain the
+         assign_targets IH through the list.
+     - BaseTargetV (LocalVar n) [] + Replace/Update/Append/Pop:
+         unfold assign_target_def/update_name_def; use state_well_typed_def and
+         scope_well_typed_def.  Replace/Update must use
+         assign_operation_runtime_typed_def to prove the new value has the old
+         entry.type.  update_name preserves entry.type and assignable.
+     - BaseTargetV storage/toplevel locations:
+         use the storage/hashmap preservation lemmas already proved in
+         vyperAssignTarget/vyperHashMap/vyperLookupStorage where possible; the
+         remaining obligation should be accounts_well_typed preservation for a
+         write of a value whose runtime type matches the target slot type.
+     - Subscript targets:
+         use target_value_shape/target_values_shape to recover element type or
+         hashmap value type, then reduce to the corresponding write/update case.
+     - Error/impossible cases:
+         simp[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
+              bind_def, check_def, type_check_def] closes because the theorem
+         assumes an INL result.
+
+     Likely helper lemmas to add before replacing this cheat:
+       update_name_preserves_state_well_typed
+       assign_targets_preserves_state_well_typed
+       storage_write_preserves_accounts_well_typed
+       assign_operation_runtime_typed_value_has_type
+  *)
   cheat
 QED
 
@@ -81,7 +292,12 @@ Theorem materialise_preserves_type:
   materialise cx tvl st = (INL v, st') ==>
   state_well_typed st' /\ value_has_type tv v
 Proof
-  cheat
+  rpt strip_tac >>
+  drule materialise_state >> strip_tac >> gvs[] >>
+  Cases_on `tvl` >>
+  gvs[materialise_def, bind_def, return_def, raise_def,
+      toplevel_value_typed_def, AllCaseEqs()] >>
+  metis_tac[read_storage_slot_success_type, well_formed_type_value_def]
 QED
 
 Theorem get_Value_preserves_type:

@@ -292,6 +292,22 @@ QED
 (* Helper: expression base-target evaluation preserves assignability of any
    previously visible assignable local.  This is separated because expression
    evaluation invokes base-target evaluation in several cases. *)
+Theorem materialise_preserves_assignable_lookup:
+  materialise cx tvl st = (res, st') /\
+  lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
+  ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
+Proof
+  rpt strip_tac >> imp_res_tac materialise_state >> gvs[] >> metis_tac[]
+QED
+
+Theorem get_Value_preserves_assignable_lookup:
+  get_Value tvl st = (res, st') /\
+  lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
+  ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
+Proof
+  Cases_on `tvl` >> gvs[get_Value_def, return_def, raise_def] >> metis_tac[]
+QED
+
 Theorem eval_base_target_preserves_assignable_lookup:
   eval_base_target cx bt st = (res, st') /\
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
@@ -308,9 +324,35 @@ Theorem eval_expr_preserves_assignable_lookup:
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
   ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
 Proof
-  (* Draft proof shape: mutual induction over expression evaluation using
-     evaluate_ind.  Most cases are state-preserving for scopes or chain IHs;
-     base-target cases use eval_base_target_preserves_assignable_lookup. *)
+  (* Proof draft.
+
+     This should be a mutual induction over evaluate_ind with only the P7/P8
+     expression predicates non-trivial, analogous to
+     vyperEvalExprPreservesScopesDomScript.sml.
+
+     Suggested predicates:
+       P5 cx bt = !st res st' id entry.
+         eval_base_target cx bt st = (res,st') /\
+         lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
+         ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
+       P7 cx e = same for eval_expr
+       P8 cx es = same for eval_exprs
+
+     Case strategy:
+     - Pure/read-only expression cases: unfold Once evaluate_def and close with
+       return/get/lift/materialise_state facts.
+     - Chained bind cases: apply the IH to the first evaluation to get an
+       assignable entry in the intermediate state, then apply the next IH.
+     - Any materialise in between: use materialise_state to rewrite the state.
+     - Any base-target evaluation: use eval_base_target_preserves_assignable_lookup.
+     - Any update_name path introduced by assignment-like expression cases:
+       use update_name_preserves_assignable_lookup.
+
+     The already-proved eval_exprs_preserves_assignable_lookup should be kept
+     as the public list corollary; during mutual induction it may be easier to
+     prove P8 directly and then derive that theorem, but the statement below is
+     the required P7 public theorem.
+  *)
   cheat
 QED
 
