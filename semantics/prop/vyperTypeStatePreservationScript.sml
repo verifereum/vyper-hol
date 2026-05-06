@@ -7,7 +7,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair byte
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperLookup vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeExprSoundness
 Libs
   wordsLib
@@ -190,14 +190,31 @@ Proof
   drule_all (cj 1 decode_value_well_typed) >> simp[]
 QED
 
+Theorem scope_well_typed_update_value:
+  scope_well_typed sc /\ FLOOKUP sc n = SOME entry /\ value_has_type entry.type v ==>
+  scope_well_typed (sc |+ (n, entry with value := v))
+Proof
+  rw[scope_well_typed_def, FLOOKUP_UPDATE] >>
+  Cases_on `n = id` >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
 Theorem update_name_preserves_state_well_typed:
   state_well_typed st /\ lookup_scopes (string_to_num id) st.scopes = SOME entry /\
   value_has_type entry.type v ==>
   state_well_typed (update_name st id v)
 Proof
-  (* Local-variable write helper for assign_target.  update_name only changes
-     entry.value in the containing scope; all other scope entries are unchanged. *)
-  cheat
+  rw[update_name_def] >>
+  Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[]
+  >- (drule find_containing_scope_none_lookup_scopes_none >> gvs[]) >>
+  PairCases_on `x` >>
+  drule find_containing_scope_structure >> strip_tac >> gvs[] >>
+  drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
+  gvs[state_well_typed_def] >>
+  `EVERY scope_well_typed x0 /\ scope_well_typed x1 /\ EVERY scope_well_typed x3` by
+    gvs[EVERY_APPEND] >>
+  simp[EVERY_APPEND] >>
+  irule scope_well_typed_update_value >> simp[]
 QED
 
 Theorem replace_operation_runtime_typed_value:
