@@ -357,6 +357,18 @@ Definition well_typed_type_builtin_args_def:
     (ts <> [] /\ target_ty = TupleT ts)
 End
 
+Definition type_builtin_result_ok_def:
+  type_builtin_result_ok (AbiEncode _) result_ty target_ty arg_tys =
+    ((?n. result_ty = BaseT (BytesT (Dynamic n))) /\ target_ty = TupleT arg_tys) /\
+  type_builtin_result_ok Empty result_ty target_ty arg_tys = (result_ty = target_ty) /\
+  type_builtin_result_ok MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) /\
+  type_builtin_result_ok MinValue result_ty target_ty arg_tys = (result_ty = target_ty) /\
+  type_builtin_result_ok Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) /\
+  type_builtin_result_ok Convert result_ty target_ty arg_tys = (result_ty = target_ty) /\
+  type_builtin_result_ok Extract32 result_ty target_ty arg_tys = (result_ty = target_ty) /\
+  type_builtin_result_ok (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
+End
+
 Definition raw_call_return_type_def:
   raw_call_return_type flags =
     if flags.rcf_revert_on_failure then
@@ -405,9 +417,7 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
-     (if ?ensure. tb = AbiEncode ensure then
-        (?n. ty = BaseT (BytesT (Dynamic n))) /\ target_ty = TupleT (MAP expr_type es)
-      else ty = target_ty) /\
+     type_builtin_result_ok tb ty target_ty (MAP expr_type es) /\
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
     (?bd. type_place_target env tgt = SOME (Type (ArrayT ty bd))) /\
