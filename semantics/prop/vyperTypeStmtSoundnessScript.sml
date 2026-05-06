@@ -10,6 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
+  vyperTypeStatePreservation
 Libs
   wordsLib
 
@@ -30,13 +31,49 @@ End
 
 (* ===== Environment threading facts for executable statement typing ===== *)
 
+Theorem extend_local_preserves_static:
+  (extend_local env id ty assignable).type_defs = env.type_defs /\
+  (extend_local env id ty assignable).current_src = env.current_src /\
+  (extend_local env id ty assignable).fn_sigs = env.fn_sigs /\
+  (extend_local env id ty assignable).bare_globals = env.bare_globals /\
+  (extend_local env id ty assignable).toplevel_vtypes = env.toplevel_vtypes /\
+  (extend_local env id ty assignable).flag_members = env.flag_members
+Proof
+  simp[extend_local_def]
+QED
+
+Theorem type_stmt_env_preserved_static:
+  type_stmt env ret_ty s = SOME env' ==>
+  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
+  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
+Proof
+  Cases_on `s` >>
+  rw[type_stmt_def, AllCaseEqs(), extend_local_def] >>
+  gvs[oneline type_stmt_def, AllCaseEqs()]
+QED
+
+Theorem type_stmts_env_preserved_static:
+  type_stmts env ret_ty ss = SOME env' ==>
+  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
+  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
+Proof
+  qid_spec_tac `env` >> Induct_on `ss` >>
+  rw[type_stmt_def] >>
+  gvs[type_stmt_def, AllCaseEqs()] >>
+  drule type_stmt_env_preserved_static >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[]
+QED
+
 Theorem type_stmt_env_consistent_preserved_static:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st ==>
   env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
   env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
 Proof
-  cheat
+  metis_tac[type_stmt_env_preserved_static]
 QED
 
 Theorem type_stmts_env_consistent_preserved_static:
@@ -45,7 +82,7 @@ Theorem type_stmts_env_consistent_preserved_static:
   env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
 Proof
-  cheat
+  metis_tac[type_stmts_env_preserved_static]
 QED
 
 Theorem AnnAssign_env_consistent_after_new_variable:
@@ -115,6 +152,19 @@ Theorem eval_stmts_type_preservation_exception:
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
   eval_stmts cx ss st = (INR exn, st') ==>
   state_well_typed st' /\ stmt_error_ok env ret_ty (INR exn)
+Proof
+  cheat
+QED
+
+(* ===== Loop preservation ===== *)
+
+Theorem eval_for_preserves_state_well_typed:
+  state_well_typed st /\ env_consistent env cx st /\
+  evaluate_type env.type_defs ty = SOME tv /\ EVERY (value_has_type tv) vs /\
+  type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  eval_for cx tv id body vs st = (INL u, st') ==>
+  state_well_typed st'
 Proof
   cheat
 QED

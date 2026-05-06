@@ -61,12 +61,15 @@ Theorem read_storage_slot_preserves_state_well_typed:
   state_well_typed st /\ read_storage_slot cx is_transient slot tv st = (INL v, st') ==>
   state_well_typed st'
 Proof
-  cheat
+  Cases_on `is_transient` >>
+  rw[read_storage_slot_def, get_storage_backend_def, get_transient_storage_def,
+     get_accounts_def, bind_def, return_def, raise_def, lift_option_def,
+     AllCaseEqs(), option_CASE_rator] >> gvs[]
 QED
 
 Theorem assign_target_preserves_state_well_typed:
   state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
-  target_runtime_typed env tgt gv /\ value_runtime_typed env ty v /\
+  target_runtime_typed env tgt ty gv /\ assign_operation_runtime_typed env ty op /\
   assign_target cx gv op st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
@@ -74,7 +77,7 @@ Proof
 QED
 
 Theorem materialise_preserves_type:
-  state_well_typed st /\ toplevel_value_typed tvl tv /\
+  state_well_typed st /\ toplevel_value_typed tvl tv /\ well_formed_type_value tv /\
   materialise cx tvl st = (INL v, st') ==>
   state_well_typed st' /\ value_has_type tv v
 Proof
@@ -87,13 +90,6 @@ Proof
   simp[toplevel_value_typed_def]
 QED
 
-Theorem eval_for_preserves_state_well_typed:
-  state_well_typed st /\ env_consistent env cx st /\
-  evaluate_type env.type_defs ty = SOME tv /\ EVERY (value_has_type tv) vs /\
-  type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  eval_for cx tv id body vs st = (INL u, st') ==>
-  state_well_typed st'
-Proof
-  cheat
-QED
+(* eval_for preservation depends on statement-list soundness and therefore lives
+   in vyperTypeStmtSoundnessScript.sml to avoid a StatePreservation ->
+   StmtSoundness -> StatePreservation cycle. *)

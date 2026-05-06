@@ -40,9 +40,43 @@ Definition exprs_runtime_typed_def:
           LIST_REL value_has_type tvs vs
 End
 
+Definition target_value_shape_def:
+  target_value_shape (BaseTarget bt) (BaseTargetV loc sbs) = T /\
+  target_value_shape (BaseTarget bt) (TupleTargetV gvs) = F /\
+  target_value_shape (TupleTarget tgts) (BaseTargetV loc sbs) = F /\
+  target_value_shape (TupleTarget tgts) (TupleTargetV gvs) =
+    target_values_shape tgts gvs /\
+  target_values_shape [] [] = T /\
+  target_values_shape [] (gv::gvs) = F /\
+  target_values_shape (tgt::tgts) [] = F /\
+  target_values_shape (tgt::tgts) (gv::gvs) =
+    (target_value_shape tgt gv /\ target_values_shape tgts gvs)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (tgt, gv) => assignment_target_size tgt
+    | INR (tgts, gvs) => list_size assignment_target_size tgts)` >>
+  rw[]
+End
+
 Definition target_runtime_typed_def:
-  target_runtime_typed env tgt gv <=> T
-  (* TODO refine by relating gv locations/subscripts to type_place_target/well_typed_atarget. *)
+  target_runtime_typed env tgt ty gv <=>
+    well_typed_atarget env tgt ty /\ target_value_shape tgt gv
+End
+
+Theorem target_values_shape_LIST_REL:
+  !tgts gvs. target_values_shape tgts gvs <=> LIST_REL target_value_shape tgts gvs
+Proof
+  Induct >> Cases_on `gvs` >> simp[target_value_shape_def]
+QED
+
+Definition assign_operation_runtime_typed_def:
+  (assign_operation_runtime_typed env ty (Replace v) <=> value_runtime_typed env ty v) /\
+  (assign_operation_runtime_typed env ty (Update upd_ty bop v) <=>
+     value_runtime_typed env upd_ty v /\ well_typed_binop ty bop ty upd_ty) /\
+  (assign_operation_runtime_typed env ty (AppendOp v) <=>
+     ?elem_tv elem_ty bd. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
+       ty = ArrayT elem_ty bd /\ value_has_type elem_tv v) /\
+  (assign_operation_runtime_typed env ty PopOp <=> T)
 End
 
 (* ===== Expression soundness ===== *)
