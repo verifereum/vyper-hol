@@ -297,6 +297,12 @@ Proof
   Cases_on`ts` >> gvs[]
 QED
 
+Theorem bounded_decimal_op_no_type_error[simp]:
+  bounded_decimal_op x <> INR (TypeError s)
+Proof
+  rw[bounded_decimal_op_def]
+QED
+
 Theorem valid_conversion_no_type_error:
   valid_conversion from_ty to_ty /\
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
@@ -304,7 +310,12 @@ Theorem valid_conversion_no_type_error:
   value_has_type from_tv v ==>
   !msg. evaluate_type_builtin cx Convert to_ty [v] <> INR (TypeError msg)
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[evaluate_type_builtin_def] >>
+  Cases_on`from_ty` >> Cases_on`to_ty` >>
+  gvs[valid_conversion_def, evaluate_type_def, AllCaseEqs()] >>
+  gvs[oneline value_has_type_def, evaluate_convert_def] >>
+  Cases_on`v` >> gvs[evaluate_convert_def]
 QED
 
 Theorem evaluate_convert_well_typed:
