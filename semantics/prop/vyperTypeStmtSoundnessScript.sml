@@ -10,7 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
-  vyperTypeStatePreservation
+  vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib
 
@@ -88,10 +88,36 @@ QED
 Theorem AnnAssign_env_consistent_after_new_variable:
   type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
   env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
   eval_stmt cx (AnnAssign id typ e) st = (INL u, st') ==>
   env_consistent env' cx st' /\ state_well_typed st'
 Proof
-  cheat
+  rw[type_stmt_def] >> gvs[AllCaseEqs(), extend_local_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[evaluate_def, bind_def, lift_option_type_def, return_def, raise_def,
+       AllCaseEqs(), LET_THM, option_CASE_rator] >>
+  strip_tac >> gvs[] >>
+  rename1 `eval_expr cx e st = (INL tvl, st1)` >>
+  rename1 `materialise cx tvl st1 = (INL v, st2)` >>
+  rename1 `new_variable id tv v st2 = (INL u, st')` >>
+  drule_all eval_expr_type_preservation >> strip_tac >>
+  drule evaluate_type_well_formed_type_value >> strip_tac >>
+  drule_at(Pat`materialise`) materialise_preserves_type >>
+  `env.type_defs = get_tenv cx` by gvs[env_consistent_def] >>
+  gvs[expr_runtime_typed_def] >>
+  disch_then drule_all >> strip_tac >>
+  drule_at(Pat`new_variable`) extend_local_env_consistent_after_new_variable >>
+  simp[extend_local_def] >>
+  disch_then (drule_at Any)
+  >- (
+    disch_then irule >> simp[] >>
+    drule materialise_state >>
+    rw[] >>
+    cheat (* env_consistent preservation through eval_expr *)) >>
+  strip_tac >>
+  irule new_variable_preserves_state_well_typed >>
+  goal_assum(drule_at(Pat`new_variable`)) >>
+  simp[] >> goal_assum drule
 QED
 
 Theorem non_decl_stmt_env_consistent_after_success:

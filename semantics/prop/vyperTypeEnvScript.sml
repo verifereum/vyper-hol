@@ -72,6 +72,82 @@ Proof
   >> gvs[well_typed_expr_def, AllCaseEqs(), LET_THM]
 QED
 
+Theorem lookup_scopes_head_fupdate_other:
+  n1 <> n2 ==>
+  lookup_scopes n2 ((h |+ (n1, entry))::rest) = lookup_scopes n2 (h::rest)
+Proof
+  rw[lookup_scopes_def, FLOOKUP_UPDATE]
+QED
+
+Theorem new_variable_env_consistent_fresh:
+  new_variable id tv v st = (INL u, st') /\
+  env_consistent env cx st /\ string_to_num id NOTIN FDOM env.var_types ==>
+  env_consistent env cx st'
+Proof
+  rw[new_variable_def, LET_THM] >>
+  gvs[bind_def, ignore_bind_def, get_scopes_def, type_check_def,
+      assert_def, set_scopes_def, return_def, raise_def, AllCaseEqs(),
+      list_CASE_rator, option_CASE_rator] >>
+  rw[env_consistent_def] >> gvs[env_consistent_def]
+  >- (
+    Cases_on `id' = string_to_num id` >- gvs[FLOOKUP_DEF] >>
+    first_x_assum drule >> strip_tac >>
+    gvs[lookup_scopes_def, FLOOKUP_UPDATE])
+  >- (
+    Cases_on `id' = string_to_num id` >- gvs[FLOOKUP_DEF] >>
+    last_x_assum irule >>
+    gvs[lookup_scopes_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
+    goal_assum $ drule_at Any >> simp[])
+  >- (
+    Cases_on `id' = string_to_num id` >- (
+      first_x_assum drule >> gvs[]) >>
+    first_x_assum drule >> strip_tac >>
+    gvs[lookup_scopes_def, FLOOKUP_UPDATE])
+  >- (
+    Cases_on `id' = string_to_num id` >- (
+      first_x_assum drule >> gvs[]) >>
+    first_x_assum drule >> strip_tac >>
+    gvs[lookup_scopes_def, FLOOKUP_UPDATE]) >>
+  res_tac >> gvs[]
+QED
+
+Theorem extend_local_env_consistent_after_new_variable:
+  env_consistent env cx st /\ state_well_typed st /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
+  string_to_num id NOTIN FDOM env.var_types /\
+  new_variable id tv v st = (INL u, st') ==>
+  env_consistent (extend_local env (string_to_num id) typ T) cx st'
+Proof
+  strip_tac >>
+  drule_all new_variable_env_consistent_fresh >>
+  simp[env_consistent_def, extend_local_def] >>
+  strip_tac >> gvs[FLOOKUP_UPDATE] >>
+  gvs[new_variable_def, bind_def, AllCaseEqs(), ignore_bind_def,
+      type_check_def, list_CASE_rator, raise_def, assert_def,
+      set_scopes_def, return_def, get_scopes_def] >>
+  gvs[lookup_scopes_def, FLOOKUP_UPDATE,AllCaseEqs()] >>
+  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs[] ) >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> gvs[] >>
+    last_x_assum irule >> gvs[] >>
+    goal_assum drule >> simp[]
+  ) >>
+  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] ) >>
+  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] ) >>
+  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] >>
+    last_x_assum drule_all >> simp[]
+  ) >>
+  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] >>
+    last_x_assum irule >> gvs[] >>
+    goal_assum drule >> gvs[]
+  ) >>
+  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] >>
+    last_x_assum drule_all >> gvs[]
+  ) >>
+  rpt gen_tac >> strip_tac >>
+  last_x_assum drule_all >> gvs[]
+QED
+
 (* ===== Immutables / bare globals ===== *)
 
 Theorem imms_well_typed_lookup:
