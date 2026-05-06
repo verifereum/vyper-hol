@@ -15,7 +15,7 @@ Prefer using dedicated tools instead of bash operation:
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
 - **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
-- **mcp tools** for hol operations - `hol_send`, `holmake` etc.
+- **`holbuild`** for HOL operations/builds.
 
 ## Completion Standard
 
@@ -35,7 +35,7 @@ If you need to temporarily cheat a proof for debugging:
 3. Add a comment explaining why it's cheated
 
 ```sml
-(* TEMPORARILY CHEATED - investigating batch/interactive discrepancy
+(* TEMPORARILY CHEATED - investigating proof/build issue
 Proof
   Induct_on `fuel` >- rw[...] >>
   ...original proof...
@@ -74,26 +74,15 @@ venom/passes/  # directory for each pass
 
 ## Building
 
+Use direct script edits plus `holbuild` for HOL proof development and build validation.
 
 **Build time:** Keep under 30s. If longer, refactor the proof.
 
-**Theory files:** `.sig` and `.uo` files are generated in the `.hol/` subdir, never in the source directory. Don't try to load theories (`load "fooTheory"`) that haven't been built yet - run `Holmake` first.
+**Theory files:** `.sig` and `.uo` files are generated in the `.hol/` subdir, never in the source directory. Don't try to load theories (`load "fooTheory"`) that haven't been built yet - run `holbuild` first.
 
-## Interactive HOL Sessions
+**No interactive mode:** Do not use interactive proof-state workflows, including `g()`, `e()`, or `p()`.
 
-Use the hol4 MCP tools for proof development.
-
-**Workflow: hol_state_at + Edit**
-1. `hol_file_init` - parse file, list theorems with line numbers and cheat status
-2. `hol_state_at(line, col)` - navigate to position, auto-replay tactics, show goals
-3. Edit file directly with Edit tool to add/modify tactics
-4. `hol_state_at` again to verify the change worked
-
-**CRITICAL**: The user requests not to use `g()`, `e()`, `p()` - the tool manages proof state
-
-**Key points:**
-- `hol_state_at` handles file changes, checkpoints, and tactic replay automatically
-- Use `hol_send` only for queries (DB.match, type_of) not proof navigation
+**Never use `--skip-goalfrag`:** It is not allowed.
 
 ### File Conventions (repo-specific)
 
@@ -223,13 +212,11 @@ If these are missing, ask the user to provide access.
 
 ## Proof Strategy
 
-**When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions. Use `hol_state_at` at different positions to debug. Cheats are temporary scaffolding only.
+**When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions, and validate incrementally with `holbuild`. Cheats are temporary scaffolding only.
 
 **Signs you're on wrong track:** Many nested TRY blocks, dozens of subgoals, slow tactics, unpredictable variable names (`h''` etc.) → stop and reconsider.
 
 ## HOL4
-
-There is NEVER "disagreement" between batch and interactive mode, they use the same machinery. ANY DIFFERENCE BETWEEN THEM IS A RESULT OF STALE SESSION STATE, USE `hol_restart()`!
 
 ### sg vs by vs suffices_by
 
