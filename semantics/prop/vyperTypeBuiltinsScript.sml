@@ -318,6 +318,104 @@ Proof
   Cases_on`v` >> gvs[evaluate_convert_def]
 QED
 
+Theorem evaluate_types_length:
+  !tenv ts acc tvs. evaluate_types tenv ts acc = SOME tvs ==>
+    LENGTH tvs = LENGTH acc + LENGTH ts
+Proof
+  Induct_on `ts` >>
+  simp[evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> res_tac >> gvs[ADD1]
+QED
+
+Theorem values_have_types_default:
+  !tvs. EVERY (\tv. value_has_type tv (default_value tv)) tvs ==>
+        values_have_types tvs (MAP default_value tvs)
+Proof
+  Induct >> simp[value_has_type_def]
+QED
+
+Theorem struct_has_type_default:
+  !args. EVERY (\(id,tv). value_has_type tv (default_value tv)) args ==>
+         struct_has_type args (MAP (\(id,tv). (id, default_value tv)) args)
+Proof
+  Induct >> simp[value_has_type_def] >>
+  Cases >> simp[value_has_type_def]
+QED
+
+Theorem default_value_has_type:
+  (!tenv typ tv.
+    evaluate_type tenv typ = SOME tv ==>
+    value_has_type tv (default_value tv)) /\
+  (!tenv ts acc tvs.
+    evaluate_types tenv ts acc = SOME tvs ==>
+    EVERY (\tv. value_has_type tv (default_value tv)) acc ==>
+    EVERY (\tv. value_has_type tv (default_value tv)) tvs)
+Proof
+  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac
+  >- (Cases_on `bt` >>
+      simp[evaluate_type_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[default_value_def, value_has_type_def,
+           within_int_bound_def] >>
+      TRY (Cases_on `b`) >>
+      gvs[evaluate_type_def, AllCaseEqs(), default_value_def,
+           value_has_type_def, within_int_bound_def])
+  >- (strip_tac >> simp[evaluate_type_def, AllCaseEqs(), PULL_EXISTS] >>
+      rpt strip_tac >> gvs[default_value_def, default_value_tuple_MAP,
+        value_has_type_def] >>
+      irule values_have_types_default >> first_x_assum irule >> simp[])
+  >- (strip_tac >> simp[evaluate_type_def, AllCaseEqs(), PULL_EXISTS] >>
+      rpt strip_tac >> gvs[] >>
+      Cases_on `bd` >> gvs[default_value_def, value_has_type_def])
+  >- (strip_tac >> rpt gen_tac >>
+      simp[evaluate_type_def, AllCaseEqs(), PULL_EXISTS] >>
+      rpt strip_tac >> gvs[default_value_def, default_value_struct_MAP,
+        value_has_type_def] >>
+      irule struct_has_type_default >>
+      `LENGTH args = LENGTH tvs` by
+        (imp_res_tac evaluate_types_length >> gvs[]) >>
+      gvs[EVERY_MEM, FORALL_PROD, MEM_ZIP, PULL_EXISTS, MEM_EL,
+          EL_ZIP, EL_MAP, LENGTH_MAP])
+  >- (simp[evaluate_type_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[default_value_def, value_has_type_def])
+  >- (simp[evaluate_type_def] >> rpt strip_tac >>
+      gvs[default_value_def, value_has_type_def])
+  >- (simp[evaluate_type_def] >> rpt strip_tac >> gvs[])
+  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
+      first_x_assum drule >> disch_then irule >>
+      first_x_assum drule >> simp[])
+QED
+
+Theorem default_value_has_type_thm:
+  evaluate_type tenv typ = SOME tv ==> value_has_type tv (default_value tv)
+Proof
+  metis_tac[default_value_has_type]
+QED
+
+Theorem evaluate_max_value_well_typed:
+  !typ tv. evaluate_type tenv typ = SOME tv /\
+           evaluate_max_value typ = INL v ==>
+           value_has_type tv v
+Proof
+  Cases >> simp[evaluate_max_value_def, evaluate_type_def] >>
+  Cases_on `b` >> simp[evaluate_max_value_def, evaluate_type_def,
+                        AllCaseEqs(), value_has_type_def,
+                        within_int_bound_def] >>
+  rpt strip_tac >> gvs[value_has_type_def, within_int_bound_def] >>
+  `1 <= 2 ** n /\ 1 <= 2 ** (n - 1)` by simp[ONE_LE_EXP] >>
+  simp[integerTheory.INT_SUB, integerTheory.NUM_OF_INT]
+QED
+
+Theorem evaluate_min_value_well_typed:
+  !typ tv. evaluate_type tenv typ = SOME tv /\
+           evaluate_min_value typ = INL v ==>
+           value_has_type tv v
+Proof
+  Cases >> simp[evaluate_min_value_def, evaluate_type_def] >>
+  Cases_on `b` >> simp[evaluate_min_value_def, evaluate_type_def,
+                        AllCaseEqs(), value_has_type_def,
+                        within_int_bound_def]
+QED
+
 Theorem evaluate_convert_well_typed:
   !tenv v typ v' tv.
     evaluate_convert tenv v typ = INL v' /\
@@ -334,6 +432,21 @@ Proof
   TRY (Cases_on `b` >> gvs[ONE_LT_EXP])
 QED
 
+Theorem evaluate_extract32_well_typed:
+  !bs n bt v tenv tv.
+    evaluate_extract32 bs n bt = INL v /\
+    evaluate_type tenv (BaseT bt) = SOME tv ==>
+    value_has_type tv v
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_extract32_def, AllCaseEqs()] >>
+  TRY (drule evaluate_convert_well_typed >>
+       disch_then irule >>
+       gvs[evaluate_type_def, AllCaseEqs()] >> NO_TAC) >>
+  gvs[value_has_type_def, evaluate_type_def, AllCaseEqs(),
+      LENGTH_TAKE, LENGTH_DROP]
+QED
+
 Theorem valid_conversion_success_type:
   valid_conversion from_ty to_ty /\
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
@@ -347,6 +460,7 @@ Proof
 QED
 
 Theorem well_typed_type_builtin_no_type_error:
+  type_builtin_result_ok tb result_ty target_ty ts /\
   well_typed_type_builtin_args tb target_ty ts /\
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
   evaluate_type (get_tenv cx) result_ty = SOME result_tv /\
@@ -357,6 +471,7 @@ Proof
 QED
 
 Theorem well_typed_type_builtin_success_type:
+  type_builtin_result_ok tb result_ty target_ty ts /\
   well_typed_type_builtin_args tb target_ty ts /\
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
   evaluate_type (get_tenv cx) result_ty = SOME result_tv /\
@@ -364,8 +479,54 @@ Theorem well_typed_type_builtin_success_type:
   evaluate_type_builtin cx tb target_ty vs = INL v ==>
   value_has_type result_tv v
 Proof
+  Cases_on `tb` >>
+  rw[type_builtin_result_ok_def, well_typed_type_builtin_args_def,
+     evaluate_type_builtin_def, AllCaseEqs(), LET_THM] >>
+  gvs[]
+  >- (drule default_value_has_type_thm >> simp[])
+  >- metis_tac[evaluate_max_value_well_typed]
+  >- metis_tac[evaluate_max_value_well_typed]
+  >- metis_tac[evaluate_min_value_well_typed]
+  >- metis_tac[evaluate_min_value_well_typed]
+  >- gvs[evaluate_type_def, evaluate_type_builtin_def,
+         within_int_bound_def, value_has_type_def]
+  >- (gvs[LENGTH_EQ_NUM_compute] >>
+      drule_all valid_conversion_success_type >> simp[])
+  >- suspend"extract32"
+  >- suspend"abi_decode"
+  >- suspend"abi_encode"
+  >- suspend"encode_tuple"
+  >- suspend"encode_tuple_nowrap"
+QED
+
+Resume well_typed_type_builtin_success_type[extract32]:
+  gvs[LENGTH_EQ_NUM_compute, evaluate_type_builtin_def] >>
+  Cases_on`tvs` >>
+  gvs[] >>
+  qmatch_asmsub_rename_tac`evaluate_type_builtin _ _ _ [v1; v2]` >>
+  Cases_on`v1` >> Cases_on`v2` >> gvs[evaluate_type_builtin_def] >>
+  drule_at Any evaluate_extract32_well_typed >>
+  disch_then drule >>
+  simp[]
+QED
+
+Resume well_typed_type_builtin_success_type[abi_decode]:
   cheat
 QED
+
+Resume well_typed_type_builtin_success_type[abi_encode]:
+  cheat
+QED
+
+Resume well_typed_type_builtin_success_type[encode_tuple]:
+  cheat
+QED
+
+Resume well_typed_type_builtin_success_type[encode_tuple_nowrap]:
+  cheat
+QED
+
+Finalise well_typed_binop_success_type
 
 (* ===== Calls / special targets ===== *)
 
