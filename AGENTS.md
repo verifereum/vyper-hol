@@ -76,9 +76,14 @@ venom/passes/  # directory for each pass
 
 Use direct script edits plus `holbuild` for HOL proof development and build validation.
 
+**Workflow: Edit / holbuild / loop**
+1. Edit the `.sml` file directly
+2. Run `holbuild` — on proof failure it prints the goal state (via goalfrag)
+3. Read the goal state, edit tactics, re-run `holbuild` until it passes
+
 **Build time:** Keep under 30s. If longer, refactor the proof.
 
-**Theory files:** `.sig` and `.uo` files are generated in the `.hol/` subdir, never in the source directory. Don't try to load theories (`load "fooTheory"`) that haven't been built yet - run `holbuild` first.
+**Theory files:** `.sig` and `.uo` files are generated in the `.holbuild/` subdir, never in the source directory. Don't try to load theories (`load "fooTheory"`) that haven't been built yet - run `holbuild` first.
 
 **No interactive mode:** Do not use interactive proof-state workflows, including `g()`, `e()`, or `p()`.
 
