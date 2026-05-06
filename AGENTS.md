@@ -79,7 +79,7 @@ Use direct script edits plus `holbuild` for HOL proof development and build vali
 **Workflow: Edit / holbuild / loop**
 1. Edit the `.sml` file directly
 2. Run `holbuild` — on proof failure it prints the goal state (via goalfrag)
-3. Read the goal state, edit tactics, re-run `holbuild` until it passes
+3. Read the goal state, edit proof, re-run `holbuild` until it passes
 
 **Build time:** Keep under 30s. If longer, refactor the proof.
 
