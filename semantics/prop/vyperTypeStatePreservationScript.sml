@@ -7,7 +7,8 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair byte
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperLookup vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperStorageBackend vyperLookup vyperEncodeDecode vyperArith vyperAssignPreservesType
+  vyperTypeSystem vyperTypeValues
   vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeExprSoundness
 Libs
   wordsLib
@@ -233,28 +234,79 @@ Proof
   rw[assign_operation_runtime_typed_def] >> gvs[]
 QED
 
+Theorem set_storage_preserves_state_well_typed:
+  state_well_typed st ==> state_well_typed (set_storage cx st is_trans storage')
+Proof
+  rw[state_well_typed_def]
+QED
+
+Theorem set_storage_preserves_accounts_well_typed:
+  accounts_well_typed st.accounts ==>
+  accounts_well_typed (set_storage cx st is_trans storage').accounts
+Proof
+  Cases_on `is_trans` >>
+  simp[set_storage_def, accounts_well_typed_def, account_well_typed_def,
+       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM,
+       EQ_SYM_EQ] >>
+  rpt strip_tac >> Cases_on `addr = cx.txn.target` >> simp[]
+QED
+
 Theorem write_storage_preserves_state_well_typed:
   state_well_typed st /\ accounts_well_typed st.accounts /\ value_has_type tv v /\
   write_storage_slot cx is_transient slot tv v st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
-  (* Storage-write counterpart to read_storage_slot_success_type.  Intended to
-     use encode/decode preservation and account/storage update frame lemmas. *)
-  cheat
+  rpt strip_tac >>
+  Cases_on `encode_value tv v` >> gvs[write_storage_slot_eq]
+  >- (irule set_storage_preserves_state_well_typed >> simp[]) >>
+  irule set_storage_preserves_accounts_well_typed >> simp[]
+QED
+
+Definition LIST_REL3_def:
+  LIST_REL3 R [] [] [] = T /\
+  LIST_REL3 R (x::xs) (y::ys) (z::zs) = (R x y z /\ LIST_REL3 R xs ys zs) /\
+  LIST_REL3 R _ _ _ = F
+End
+
+Theorem LIST_REL3_LENGTHS:
+  !R xs ys zs. LIST_REL3 R xs ys zs ==> LENGTH xs = LENGTH ys /\ LENGTH ys = LENGTH zs
+Proof
+  Induct_on `xs` >> Cases_on `ys` >> Cases_on `zs` >>
+  simp[LIST_REL3_def] >> metis_tac[]
+QED
+
+Definition target_assignment_values_typed_def:
+  target_assignment_values_typed env tgts gvs vs <=>
+    LIST_REL3 (\tgt gv v. ?ty tv.
+      target_runtime_typed env tgt ty gv /\
+      evaluate_type env.type_defs ty = SOME tv /\
+      value_has_type tv v) tgts gvs vs
+End
+
+Theorem target_assignment_values_typed_shapes:
+  target_assignment_values_typed env tgts gvs vs ==>
+  target_values_shape env tgts gvs
+Proof
+  rw[target_assignment_values_typed_def, target_values_shape_LIST_REL] >>
+  pop_assum mp_tac >>
+  MAP_EVERY qid_spec_tac [`vs`, `gvs`] >>
+  Induct_on `tgts` >> Cases_on `gvs` >> Cases_on `vs` >>
+  simp[LIST_REL3_def, target_runtime_typed_def] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`t`, `t'`] mp_tac) >>
+  simp[target_runtime_typed_def]
 QED
 
 Theorem assign_targets_preserves_state_well_typed:
   state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
-  target_values_shape tgts gvs /\
-  LIST_REL (\gv v. ?ty tv tgt. target_runtime_typed env tgt ty gv /\
-                       evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v) gvs vs /\
+  target_assignment_values_typed env tgts gvs vs /\
   assign_targets cx gvs vs st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
-  (* Tuple-assignment helper.  Induct on gvs/vs with target_values_shape_LIST_REL
-     and chain assign_target_preserves_state_well_typed for each element.  The
-     target_runtime_typed premise shape may need strengthening once the tuple
-     target typing theorem is finalized. *)
+  (* Tuple-assignment helper.  Induct on tgts/gvs/vs via
+     target_assignment_values_typed_def.  In the cons case, use
+     assign_target_preserves_state_well_typed for the head and recurse on the
+     tail with the updated state/account invariant. *)
   cheat
 QED
 

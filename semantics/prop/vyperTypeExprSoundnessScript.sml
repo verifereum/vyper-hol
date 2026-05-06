@@ -40,33 +40,55 @@ Definition exprs_runtime_typed_def:
           LIST_REL value_has_type tvs vs
 End
 
+Definition base_target_value_shape_def:
+  base_target_value_shape env (NameTarget id) (ScopedVar id') sbs =
+    (id = id' /\ sbs = []) /\
+  base_target_value_shape env (NameTarget id) _ _ = F /\
+  base_target_value_shape env (BareGlobalNameTarget id) (ImmutableVar id') sbs =
+    (id = id' /\ sbs = []) /\
+  base_target_value_shape env (BareGlobalNameTarget id) _ _ = F /\
+  base_target_value_shape env (TopLevelNameTarget nsid) (TopLevelVar src id) sbs =
+    (nsid = (src,id) /\ sbs = []) /\
+  base_target_value_shape env (TopLevelNameTarget nsid) _ _ = F /\
+  base_target_value_shape env (AttributeTarget tgt id) loc sbs =
+    (?rest. sbs = AttrSubscript id :: rest /\
+            base_target_value_shape env tgt loc rest) /\
+  base_target_value_shape env (SubscriptTarget tgt e) loc sbs =
+    (well_typed_expr env e /\
+     ?sb rest. sbs = sb :: rest /\ base_target_value_shape env tgt loc rest)
+Termination
+  WF_REL_TAC `measure (\(env, bt, loc, sbs). base_assignment_target_size bt)` >>
+  rw[]
+End
+
 Definition target_value_shape_def:
-  target_value_shape (BaseTarget bt) (BaseTargetV loc sbs) = T /\
-  target_value_shape (BaseTarget bt) (TupleTargetV gvs) = F /\
-  target_value_shape (TupleTarget tgts) (BaseTargetV loc sbs) = F /\
-  target_value_shape (TupleTarget tgts) (TupleTargetV gvs) =
-    target_values_shape tgts gvs /\
-  target_values_shape [] [] = T /\
-  target_values_shape [] (gv::gvs) = F /\
-  target_values_shape (tgt::tgts) [] = F /\
-  target_values_shape (tgt::tgts) (gv::gvs) =
-    (target_value_shape tgt gv /\ target_values_shape tgts gvs)
+  target_value_shape env (BaseTarget bt) (BaseTargetV loc sbs) =
+    base_target_value_shape env bt loc sbs /\
+  target_value_shape env (BaseTarget bt) (TupleTargetV gvs) = F /\
+  target_value_shape env (TupleTarget tgts) (BaseTargetV loc sbs) = F /\
+  target_value_shape env (TupleTarget tgts) (TupleTargetV gvs) =
+    target_values_shape env tgts gvs /\
+  target_values_shape env [] [] = T /\
+  target_values_shape env [] (gv::gvs) = F /\
+  target_values_shape env (tgt::tgts) [] = F /\
+  target_values_shape env (tgt::tgts) (gv::gvs) =
+    (target_value_shape env tgt gv /\ target_values_shape env tgts gvs)
 Termination
   WF_REL_TAC `measure (\x. case x of
-    | INL (tgt, gv) => assignment_target_size tgt
-    | INR (tgts, gvs) => list_size assignment_target_size tgts)` >>
+    | INL (env, tgt, gv) => assignment_target_size tgt
+    | INR (env, tgts, gvs) => list_size assignment_target_size tgts)` >>
   rw[]
 End
 
 Definition target_runtime_typed_def:
   target_runtime_typed env tgt ty gv <=>
-    well_typed_atarget env tgt ty /\ target_value_shape tgt gv
+    well_typed_atarget env tgt ty /\ target_value_shape env tgt gv
 End
 
 Theorem target_values_shape_LIST_REL:
-  !tgts gvs. target_values_shape tgts gvs <=> LIST_REL target_value_shape tgts gvs
+  !env tgts gvs. target_values_shape env tgts gvs <=> LIST_REL (target_value_shape env) tgts gvs
 Proof
-  Induct >> Cases_on `gvs` >> simp[target_value_shape_def]
+  Induct_on `tgts` >> Cases_on `gvs` >> simp[target_value_shape_def]
 QED
 
 Definition assign_operation_runtime_typed_def:
