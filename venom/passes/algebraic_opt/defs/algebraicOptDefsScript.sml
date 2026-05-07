@@ -214,7 +214,7 @@ Definition ao_opt_producer_def:
                     if producer.inst_opcode = SIGNEXTEND then
                       (case producer.inst_operands of
                          [Lit inner_w; _] =>
-                           if w >= inner_w then
+                           if w >=+ inner_w then
                              SOME [inst with <| inst_opcode := ASSIGN;
                                                 inst_operands := [x] |>]
                            else NONE

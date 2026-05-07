@@ -7,13 +7,13 @@
  *   step_inst_exec_equiv        — step_inst preserves execution_equiv (non-INVOKE)
  *   jump_to_exec_to_state_equiv — jump_to restores state_equiv
  *   halt_state_exec_equiv       — halt_state preserves execution_equiv
- *   run_insts_def               — sequential instruction runner
- *   run_insts_exec_equiv        — run_insts preserves execution_equiv
+ *   run_insts (from analysisSimDefs) — sequential instruction runner
  *)
 
 Theory algebraicOptSegSim
 Ancestors
   stateEquiv stateEquivProps execEquivProps
+  analysisSimDefs
   venomExecSemantics venomState venomInst finite_map
 Libs
   pairLib BasicProvers
@@ -334,18 +334,7 @@ Proof
   fs[execution_equiv_def, halt_state_def, lookup_var_def]
 QED
 
-(* ===== Sequential instruction runner ===== *)
-
-(* Run a list of non-terminator instructions sequentially.
-   Unlike exec_block, does not require a terminator at the end. *)
-Definition run_insts_def:
-  run_insts fuel ctx [] s = OK s /\
-  run_insts fuel ctx (inst :: rest) s =
-    case step_inst fuel ctx inst s of
-      OK s' => run_insts fuel ctx rest s'
-    | err => err
-End
-
+(* run_insts is imported from analysisSimDefs *)
 
 (* Helper: execution_equiv is preserved by setting inst_idx *)
 Theorem exec_equiv_set_idx:

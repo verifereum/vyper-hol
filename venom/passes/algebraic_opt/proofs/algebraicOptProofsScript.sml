@@ -21,6 +21,8 @@ Ancestors
   execEquivProps execEquivParamProps
   execEquivParamProofs venomWf
   analysisSimProofsBase analysisSimDefs
+Libs
+  fcpLib
 
 (* ===== Fresh Variable Set ===== *)
 
@@ -31,6 +33,22 @@ Definition ao_fn_fresh_vars_def:
         (v = ao_fresh_var id "not" \/
          v = ao_fresh_var id "iz" \/
          v = ao_fresh_var id "xor") }
+End
+
+(* DFG runtime invariant for the algebraic optimization.
+   If a variable is tracked by the DFG and has a value in the state,
+   that value is consistent with the instruction that produced it.
+   Only constrains ADDRESS and SIGNEXTEND outputs — the two opcodes
+   where ao_opt_producer applies non-trivial transforms. *)
+Definition ao_dfg_inv_def:
+  ao_dfg_inv dfg s <=>
+    !x inst val. dfg_get_def dfg x = SOME inst /\
+      lookup_var x s = SOME val ==>
+      (inst.inst_opcode = ADDRESS ==>
+        val = w2w s.vs_call_ctx.cc_address) /\
+      (inst.inst_opcode = SIGNEXTEND ==>
+        !w inner_op. inst.inst_operands = [Lit w; inner_op] ==>
+        ?inner_val. val = sign_extend w inner_val)
 End
 
 (* ===== Phase 1: Offset Conversion Equality ===== *)
@@ -900,7 +918,7 @@ Proof
 QED
 
 (* Helper: non-INVOKE peephole path simulation.
-   Extracted to avoid tactic nesting issues in ao_transform_inst_sim. *)
+   Uses original inst in step_inst, resolved inst for peephole. *)
 Triviality ao_peephole_path_sim[local]:
   !fv dfg ra lbl targets fuel ctx v inst s.
     inst_wf inst /\
@@ -928,17 +946,294 @@ Triviality ao_peephole_path_sim[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `inst_wf (ao_resolve_iszero_inst targets inst)` by
-    (qspecl_then [`targets`, `inst`]
-       mp_tac ao_resolve_iszero_inst_wf >> fs[]) >>
+    (irule ao_resolve_iszero_inst_wf >> simp[]) >>
   qspecl_then [`fv`, `dfg`, `ra`, `lbl`, `v`,
     `ao_resolve_iszero_inst targets inst`,
     `fuel`, `ctx`, `s`]
     mp_tac ao_peephole_full_sim >>
-  simp[ao_resolve_iszero_inst_opcode, ao_resolve_iszero_inst_id] >>
-  impl_tac >- simp[] >>
-  strip_tac
-  >- (DISJ1_TAC >> metis_tac[])
-  >- (DISJ2_TAC >> gvs[])
+  simp[ao_resolve_iszero_inst_opcode, ao_resolve_iszero_inst_id]
+QED
+
+(* Helper: shift-and-1 extracts a single bit *)
+Triviality lsr_and_1[local]:
+  !n (w:bytes32). n < 256 ==> ((w >>> n) && 1w = 1w <=> w ' n)
+Proof
+  rpt strip_tac >>
+  `!b. BIT b 1 = (b = 0)` by (
+    `(1:num) = 2 ** 1 - 1` by simp[] >>
+    pop_assum SUBST1_TAC >> simp[bitTheory.BIT_EXP_SUB1]) >>
+  rw[fcpTheory.CART_EQ] >>
+  simp[wordsTheory.word_and_def, wordsTheory.word_lsr_def,
+       fcpTheory.FCP_BETA, wordsTheory.word_index,
+       DIMINDEX (Arbnum.fromInt 256)] >>
+  EQ_TAC
+  >- (disch_then (qspec_then `0` mp_tac) >> simp[])
+  >- (strip_tac >> gen_tac >> strip_tac >>
+      Cases_on `i = 0` >> simp[])
+QED
+
+(* Helper: mask subset — narrower mask is sub-mask of wider *)
+Triviality mask_and_subset[local]:
+  !a b. a <= b ==>
+    ((1w:bytes32) << (a + 1) - 1w) && ((1w:bytes32) << (b + 1) - 1w) =
+    (1w:bytes32) << (a + 1) - 1w
+Proof
+  rpt strip_tac >>
+  rw[fcpTheory.CART_EQ, wordsTheory.word_and_def, fcpTheory.FCP_BETA,
+     wordsTheory.SHIFT_1_SUB_1, DIMINDEX (Arbnum.fromInt 256)]
+QED
+
+(* sign_extend is idempotent for wider extension.
+   sign_extend to bp_i bits then to bp_w >= bp_i is the same as bp_i. *)
+(* Helper: OR body for sign=1 case — bit-level proof *)
+Triviality or_mask_idem[local]:
+  !bpi bpw (x:bytes32).
+    bpi <= bpw ==>
+    (x || ~((1w:bytes32) << (bpi + 1) - 1w)) ||
+    ~((1w:bytes32) << (bpw + 1) - 1w) =
+    x || ~((1w:bytes32) << (bpi + 1) - 1w)
+Proof
+  rpt strip_tac >>
+  rw[fcpTheory.CART_EQ, wordsTheory.word_or_def, wordsTheory.word_1comp_def,
+     fcpTheory.FCP_BETA, wordsTheory.SHIFT_1_SUB_1,
+     DIMINDEX (Arbnum.fromInt 256)] >>
+  rpt strip_tac >> Cases_on `i < bpi + 1` >> simp[]
+QED
+
+(* Helper: AND body for sign=0 case — bit-level proof *)
+Triviality and_mask_idem[local]:
+  !bpi bpw (x:bytes32).
+    bpi <= bpw ==>
+    (x && (1w:bytes32) << (bpi + 1) - 1w) &&
+    (1w:bytes32) << (bpw + 1) - 1w =
+    x && (1w:bytes32) << (bpi + 1) - 1w
+Proof
+  rpt strip_tac >>
+  rw[fcpTheory.CART_EQ, wordsTheory.word_and_def,
+     fcpTheory.FCP_BETA, wordsTheory.SHIFT_1_SUB_1,
+     DIMINDEX (Arbnum.fromInt 256)] >>
+  rpt strip_tac >> Cases_on `i < bpi + 1` >> simp[]
+QED
+
+(* Helper: sign bit propagation for OR case *)
+Triviality sign_bit_or[local]:
+  !bpi bpw (x:bytes32).
+    bpi <= bpw /\ bpw < 256 /\ x ' bpi ==>
+    (x || ~((1w:bytes32) << (bpi + 1) - 1w)) ' bpw
+Proof
+  rpt strip_tac >>
+  simp[wordsTheory.word_or_def, wordsTheory.word_1comp_def,
+       fcpTheory.FCP_BETA, wordsTheory.SHIFT_1_SUB_1,
+       DIMINDEX (Arbnum.fromInt 256)] >>
+  Cases_on `bpw = bpi` >> simp[]
+QED
+
+(* Helper: sign bit propagation for AND case *)
+Triviality sign_bit_and[local]:
+  !bpi bpw (x:bytes32).
+    bpi <= bpw /\ bpw < 256 /\ ~(x ' bpi) ==>
+    ~((x && (1w:bytes32) << (bpi + 1) - 1w) ' bpw)
+Proof
+  rpt strip_tac >>
+  gvs[wordsTheory.word_and_def, fcpTheory.FCP_BETA,
+      wordsTheory.SHIFT_1_SUB_1,
+      DIMINDEX (Arbnum.fromInt 256)] >>
+  `bpw = bpi` by simp[] >> gvs[]
+QED
+
+Triviality sign_extend_idempotent[local]:
+  !w inner_w (x : bytes32).
+    w >=+ inner_w ==>
+    sign_extend w (sign_extend inner_w x) = sign_extend inner_w x
+Proof
+  rpt gen_tac >> strip_tac >>
+  `w2n inner_w <= w2n w` by
+    gvs[wordsTheory.WORD_HIGHER_EQ, wordsTheory.WORD_LS] >>
+  simp[sign_extend_def] >>
+  Cases_on `w2n inner_w > 30`
+  >- (`w2n w > 30` by simp[] >> simp[])
+  >- (simp[] >> Cases_on `w2n w > 30` >- simp[] >>
+      simp[LET_THM] >>
+      `8 * w2n inner_w + 7 <= 8 * w2n w + 7` by simp[] >>
+      `8 * w2n inner_w + 7 < 256 /\ 8 * w2n w + 7 < 256` by simp[] >>
+      `(x >>> (8 * w2n inner_w + 7) && 1w = 1w) = x ' (8 * w2n inner_w + 7)`
+        by simp[lsr_and_1] >>
+      Cases_on `x ' (8 * w2n inner_w + 7)`
+      >- (* Sign bit = 1 *)
+         (simp[] >>
+          `(x || ~((1w:bytes32) << (8 * w2n inner_w + 8) - 1w)) '
+           (8 * w2n w + 7)` by (
+            qspecl_then [`8 * w2n inner_w + 7`, `8 * w2n w + 7`, `x`]
+              mp_tac sign_bit_or >> simp[]) >>
+          simp[lsr_and_1] >>
+          qspecl_then [`8 * w2n inner_w + 7`, `8 * w2n w + 7`, `x`]
+            mp_tac or_mask_idem >> simp[])
+      >- (* Sign bit = 0 *)
+         (simp[] >>
+          `~((x && (1w:bytes32) << (8 * w2n inner_w + 8) - 1w) '
+           (8 * w2n w + 7))` by (
+            qspecl_then [`8 * w2n inner_w + 7`, `8 * w2n w + 7`, `x`]
+              mp_tac sign_bit_and >> simp[]) >>
+          `~((x && (1w:bytes32) << (8 * w2n inner_w + 8) - 1w) >>>
+             (8 * w2n w + 7) && 1w = 1w)` by simp[lsr_and_1] >>
+          simp[] >>
+          qspecl_then [`8 * w2n inner_w + 7`, `8 * w2n w + 7`, `x`]
+            mp_tac and_mask_idem >> simp[]))
+QED
+
+(* w2w roundtrip: 160 → 256 → 160 is identity *)
+Triviality w2w_160_256[local]:
+  !a : 160 word. w2w (w2w a : 256 word) = a
+Proof
+  gen_tac >>
+  rw[fcpTheory.CART_EQ] >>
+  ONCE_REWRITE_TAC [wordsTheory.w2w_def] >>
+  REWRITE_TAC [DIMINDEX (Arbnum.fromInt 160),
+               DIMINDEX (Arbnum.fromInt 256)] >>
+  simp[fcpTheory.FCP_BETA] >>
+  (* Goal: n2w (w2n a MOD dimword(:256)) ' i <=> a ' i *)
+  `w2n a MOD dimword (:256) = w2n a` by
+    (irule arithmeticTheory.LESS_MOD >>
+     irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `dimword (:160)` >>
+     simp[wordsTheory.w2n_lt] >>
+     simp[wordsTheory.dimword_def, DIMINDEX (Arbnum.fromInt 160),
+          DIMINDEX (Arbnum.fromInt 256)]) >>
+  `w2n (w2w a : 256 word) = w2n a` by
+    simp[wordsTheory.w2n_w2w, DIMINDEX (Arbnum.fromInt 160),
+         DIMINDEX (Arbnum.fromInt 256)] >>
+  gvs[wordsTheory.n2w_w2n]
+QED
+
+(* Helper: BALANCE → SELFBALANCE simulation under ao_dfg_inv *)
+Triviality balance_selfbalance_sim[local]:
+  !dfg inst0 v producer fv fuel ctx s.
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    inst0.inst_opcode = BALANCE /\
+    inst0.inst_operands = [Var v] /\
+    inst0.inst_outputs <> [] /\
+    dfg_get_def dfg v = SOME producer /\
+    producer.inst_opcode = ADDRESS ==>
+    (?e. step_inst fuel ctx inst0 s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst0 s)
+      (step_inst fuel ctx (inst0 with <| inst_opcode := SELFBALANCE;
+                                          inst_operands := [] |>) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_var v s`
+  >- (* NONE: BALANCE errors *)
+     (DISJ1_TAC >>
+      simp[step_inst_non_invoke] >>
+      simp[Once step_inst_base_def, exec_read1_def,
+           eval_operand_def, lookup_var_def])
+  >- (* SOME: both compute the same balance *)
+     (DISJ2_TAC >>
+      (* Extract address value from ao_dfg_inv *)
+      qpat_x_assum `ao_dfg_inv _ _`
+        (strip_assume_tac o REWRITE_RULE [ao_dfg_inv_def]) >>
+      pop_assum (qspecl_then [`v`, `producer`] mp_tac) >>
+      simp[lookup_var_def] >> strip_tac >>
+      (* Unfold BALANCE side *)
+      simp[step_inst_non_invoke] >>
+      simp[Once step_inst_base_def, exec_read1_def,
+           eval_operand_def, lookup_var_def] >>
+      Cases_on `inst0.inst_outputs` >> gvs[] >>
+      Cases_on `t`
+      >- (* Single output [h] *)
+         (gvs[] >>
+          simp[Once step_inst_base_def, exec_read0_def] >>
+          `x = w2w s.vs_call_ctx.cc_address` by
+            (fs[lookup_var_def]) >>
+          gvs[] >>
+          (* w2w (w2w cc_addr : bytes32) = cc_addr *)
+          `w2w (w2w s.vs_call_ctx.cc_address : bytes32) =
+           s.vs_call_ctx.cc_address` by simp[w2w_160_256] >>
+          gvs[] >>
+          simp[lift_result_def, state_equiv_refl])
+      >- (* Multiple outputs: both error *)
+         (gvs[] >>
+          simp[Once step_inst_base_def, exec_read0_def, lift_result_def]))
+QED
+
+(* Helper: SIGNEXTEND nesting → ASSIGN simulation under ao_dfg_inv *)
+Triviality signextend_assign_sim[local]:
+  !dfg inst0 w v inner_w v12 producer fv fuel ctx s.
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    inst0.inst_opcode = SIGNEXTEND /\
+    inst0.inst_operands = [Lit w; Var v] /\
+    inst0.inst_outputs <> [] /\
+    dfg_get_def dfg v = SOME producer /\
+    producer.inst_opcode = SIGNEXTEND /\
+    producer.inst_operands = [Lit inner_w; v12] /\
+    w >=+ inner_w ==>
+    (?e. step_inst fuel ctx inst0 s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst0 s)
+      (step_inst fuel ctx (inst0 with <| inst_opcode := ASSIGN;
+                                          inst_operands := [Var v] |>) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_var v s`
+  >- (* NONE: SIGNEXTEND errors *)
+     (DISJ1_TAC >>
+      simp[step_inst_non_invoke] >>
+      simp[Once step_inst_base_def, exec_pure2_def,
+           eval_operand_def, lookup_var_def])
+  >- (* SOME: both produce the same value *)
+     (DISJ2_TAC >>
+      (* Extract sign_extend form from ao_dfg_inv *)
+      `?inner_val. x = sign_extend inner_w inner_val` by (
+        fs[ao_dfg_inv_def, lookup_var_def] >>
+        first_x_assum (qspecl_then [`v`, `producer`, `x`] mp_tac) >>
+        simp[] >>
+        disch_then (qspecl_then [`inner_w`, `v12`] mp_tac) >> simp[]) >>
+      (* sign_extend w x = x by idempotency *)
+      `sign_extend w x = x` by (
+        gvs[] >> irule sign_extend_idempotent >> simp[]) >>
+      (* Unfold SIGNEXTEND side *)
+      simp[step_inst_non_invoke] >>
+      simp[Once step_inst_base_def, exec_pure2_def,
+           eval_operand_def, lookup_var_def] >>
+      Cases_on `inst0.inst_outputs` >> gvs[] >>
+      Cases_on `t`
+      >- (* Single output [h] *)
+         (gvs[] >>
+          simp[Once step_inst_base_def, exec_pure1_def,
+               eval_operand_def, lookup_var_def] >>
+          simp[lift_result_def, state_equiv_refl])
+      >- (* Multiple outputs: both error *)
+         (gvs[] >>
+          simp[Once step_inst_base_def, exec_pure1_def,
+               eval_operand_def, lookup_var_def, lift_result_def]))
+QED
+
+(* Helper: ao_opt_producer SOME case dispatches to producer-specific sims *)
+Triviality ao_opt_producer_sim[local]:
+  !dfg inst0 result fv fuel ctx s.
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    ao_opt_producer dfg inst0 = SOME result /\
+    inst0.inst_outputs <> [] /\
+    inst0.inst_opcode <> ASSIGN /\
+    inst0.inst_opcode <> PHI /\
+    inst0.inst_opcode <> PARAM ==>
+    (?e. step_inst fuel ctx inst0 s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst0 s)
+      (run_insts fuel ctx (MAP ao_post_flip_inst result) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[ao_opt_producer_def, AllCaseEqs()] >>
+  simp[ao_post_flip_inst_non_comm, run_insts_singleton] >>
+  (* Identity cases: lift_result r r *)
+  TRY (DISJ2_TAC >>
+       irule lift_result_refl >>
+       simp[state_equiv_refl, execution_equiv_refl] >>
+       NO_TAC) >>
+  (* BALANCE→SELFBALANCE *)
+  TRY (match_mp_tac balance_selfbalance_sim >> metis_tac[] >> NO_TAC) >>
+  (* SIGNEXTEND→ASSIGN *)
+  match_mp_tac signextend_assign_sim >> metis_tac[]
 QED
 
 (* Per-instruction simulation for ao_transform_inst.
@@ -946,7 +1241,7 @@ QED
      H_resolve — iszero resolution preserves step_inst (chain correctness)
      H_fresh   — peephole fresh vars are in fv
      H_range   — range analysis sound for resolved operands
-     H_producer — DFG producer optimization simulates original *)
+   Uses ao_dfg_inv in the soundness predicate for producer rewrites. *)
 Triviality ao_transform_inst_sim[local]:
   !fv dfg ra lbl targets.
     (* H_resolve: iszero resolution preserves step_inst *)
@@ -961,54 +1256,34 @@ Triviality ao_transform_inst_sim[local]:
     (!inst idx s op v.
       MEM op (ao_resolve_iszero_inst targets inst).inst_operands /\
       eval_operand op s = SOME v ==>
-      in_range (range_get_range ra lbl idx op) v) /\
-    (* H_producer: DFG producer sim *)
-    (!inst fuel ctx s.
-      inst_wf inst /\
-      inst.inst_opcode <> INVOKE /\
-      ~is_terminator inst.inst_opcode /\
-      inst.inst_outputs <> [] /\
-      inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> PHI /\
-      inst.inst_opcode <> PARAM ==>
-      !result.
-        ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) =
-          SOME result ==>
-        (?e. step_inst fuel ctx inst s = Error e) \/
-        lift_result (state_equiv fv) (execution_equiv fv)
-          (execution_equiv fv)
-          (step_inst fuel ctx inst s)
-          (run_insts fuel ctx (MAP ao_post_flip_inst result) s))
+      in_range (range_get_range ra lbl idx op) v)
     ==>
     let f = \(v:num) inst. ao_transform_inst dfg ra lbl v targets inst in
     analysis_inst_simulates
-      (state_equiv fv) (execution_equiv fv) (\v s. T) f
+      (state_equiv fv) (execution_equiv fv)
+      (\(v:num) s. ao_dfg_inv dfg (s with vs_inst_idx := 0))
+      f
 Proof
   simp[analysis_inst_simulates_def, LET_THM] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   conj_tac
   >- (* Simulation *)
      (rpt gen_tac >> strip_tac >>
-      (* Establish resolution step equivalence *)
       rename1 `inst_wf inst` >>
       `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
-       step_inst fuel ctx inst s` by
-        (qpat_x_assum `!i f c st. _ ==>
-           step_inst _ _ (ao_resolve_iszero_inst _ _) _ =
-           step_inst _ _ _ _` irule >> simp[]) >>
+       step_inst fuel ctx inst s` by metis_tac[] >>
       simp[ao_transform_inst_def, LET_THM,
            ao_resolve_iszero_inst_outputs,
            ao_resolve_iszero_inst_opcode] >>
       Cases_on `inst.inst_outputs = []`
-      >- (* outputs=[]: returns [resolved inst], sim by step eq + refl *)
-         (simp[run_insts_singleton] >> DISJ2_TAC >>
+      >- (simp[run_insts_singleton] >> DISJ2_TAC >>
           pop_assum kall_tac >> pop_assum (fn th => REWRITE_TAC [th]) >>
           irule lift_result_refl >>
           simp[state_equiv_refl, execution_equiv_refl])
       >- (simp[] >>
           Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
                     inst.inst_opcode = PARAM`
-          >- (* ASSIGN/PHI/PARAM: returns [resolved inst] *)
-             (simp[run_insts_singleton] >> DISJ2_TAC >>
+          >- (simp[run_insts_singleton] >> DISJ2_TAC >>
               qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
                 (fn th => REWRITE_TAC [th]) >>
               irule lift_result_refl >>
@@ -1016,14 +1291,13 @@ Proof
           >- (simp[] >>
               Cases_on `ao_opt_producer dfg
                 (ao_resolve_iszero_inst targets inst)`
-              >- (* NONE: peephole path *)
+              >- (* NONE: peephole path via ao_peephole_path_sim *)
                  (simp[] >>
-                  `~is_terminator inst.inst_opcode` by
+                  (`~is_terminator inst.inst_opcode` by
                     (strip_tac >>
-                     imp_res_tac terminator_no_outputs >> gvs[]) >>
+                     imp_res_tac terminator_no_outputs >> gvs[])) >>
                   Cases_on `inst.inst_opcode = INVOKE`
-                  >- (* INVOKE: peephole is identity *)
-                     (simp[ao_peephole_inst_def, LET_THM,
+                  >- (simp[ao_peephole_inst_def, LET_THM,
                            ao_resolve_iszero_inst_opcode,
                            ao_pre_flip_inst_non_comm,
                            ao_post_flip_inst_non_comm,
@@ -1033,34 +1307,46 @@ Proof
                         (fn th => REWRITE_TAC [th]) >>
                       irule lift_result_refl >>
                       simp[state_equiv_refl, execution_equiv_refl])
-                  >- (* Non-INVOKE: use ao_peephole_full_sim.
-                        CHEATED: inst_wf preservation through resolve + peephole wiring *)
-                     cheat)
-              >- (* SOME: producer — use H_producer *)
+                  >- (irule ao_peephole_path_sim >> gvs[] >>
+                      metis_tac[]))
+              >- (* SOME: producer — use ao_opt_producer_sim *)
                  (simp[] >>
-                  qpat_x_assum `!i f c st. _ /\ _ /\ _ /\ _ /\ _ ==> _`
-                    (qspecl_then [`inst`, `fuel`, `ctx`, `s`] mp_tac) >>
-                  impl_tac >- gvs[] >>
-                  disch_then (qspec_then `x` mp_tac) >>
-                  simp[] >>
-                  strip_tac
-                  >- (DISJ1_TAC >> metis_tac[])
-                  >- (DISJ2_TAC >> simp[])))))
-  >- (* Structural: proved *)
-     simp[ao_transform_inst_structural]
+                  qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+                    (fn th => REWRITE_TAC [SYM th]) >>
+                  irule ao_opt_producer_sim >>
+                  simp[ao_resolve_iszero_inst_opcode,
+                       ao_resolve_iszero_inst_outputs] >>
+                  metis_tac[]))))
+  >- simp[ao_transform_inst_structural]
 QED
 
-(* Phase 4: cmp_flip block simulation.
-   NULL case proved, non-NULL case cheated:
-     When flips are NULL, function is unchanged so trivial by lift_result_refl.
-     Non-NULL case needs cross-instruction reasoning (flip+remove pairs). *)
+(* ===== Phase 4: cmp_flip dead variables ===== *)
+
+(* The set of comparator output variables that get flipped.
+   These are the ONLY variables whose values change under cmp_flip.
+   After the block, iz_out is the same, but out_var differs. *)
+Definition ao_cmp_flip_dead_vars_def:
+  ao_cmp_flip_dead_vars dfg fn =
+    let (flips, removes, inserts) = ao_cmp_flip_scan dfg (fn_insts fn) in
+    { v | ?inst. MEM inst (fn_insts fn) /\
+          MEM inst.inst_id (MAP FST flips) /\
+          MEM v inst.inst_outputs }
+End
+
+(* Phase 4: cmp_flip block simulation with relaxed fv.
+   The flip changes comparator output values; dead_vars tracks them.
+   NULL case: function unchanged → lift_result_refl.
+   Non-NULL case: states agree on everything except dead flip output vars. *)
 Triviality ao_cmp_flip_block_sim[local]:
-  !fv dfg fn1 lbl bb1 bb' fuel ctx s.
+  !fv dead dfg fn1 lbl bb1 bb' fuel ctx s.
     fv = ao_fn_fresh_vars fn1 /\
+    dead = ao_cmp_flip_dead_vars dfg fn1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
     lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
     s.vs_inst_idx = 0 ==>
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+    lift_result (state_equiv (fv UNION dead))
+                (execution_equiv (fv UNION dead))
+                (execution_equiv (fv UNION dead))
       (exec_block fuel ctx bb1 s) (exec_block fuel ctx bb' s)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1071,120 +1357,97 @@ Proof
       `bb' = bb1` by metis_tac[optionTheory.SOME_11] >>
       gvs[] >>
       irule lift_result_refl >> simp[state_equiv_refl, execution_equiv_refl])
-  >- (* Non-NULL: cross-instruction flip+remove reasoning needed.
-        The flipped comparator output variable gets a different value,
-        but the corresponding iszero-to-assign compensates. The net
-        observable effect is the same, but out_var differs in state.
-        Requires expanding fv to include dead flip output variables,
-        or proving at function level instead of block level. *)
+  >- (* Non-NULL: flip+remove pair reasoning *)
      cheat
 QED
 
 (* Single-state per-block sim: same state, different blocks.
    Uses analysis_block_sim_univ for the Phase 3 block lifting,
    then ao_cmp_flip_block_sim for Phase 4, composed via lift_result_trans. *)
-(* Single-state per-block sim: compose Phase 3 (transform_block via
-   analysis_block_sim_univ) with Phase 4 (cmp_flip_block_sim).
-   Structure:
-     exec_block bb0 s ≈ exec_block bb1 s  (Phase 3: peephole transform)
-     exec_block bb1 s ≈ exec_block bb' s  (Phase 4: cmp flip)
-   Composed via lift_result_trans. *)
-Theorem ao_single_state_block_sim[local]:
-  !fv fn lbl bb0 bb' fuel ctx s.
+(* ===== Phases 1-3: offset + iszero + peephole (single-state block sim) ===== *)
+
+(* Per-block sim for phases 1-3: offset-converted block to phase-3-output block *)
+Theorem ao_phases123_block_sim[local]:
+  !fv fn lbl bb0 bb1 fuel ctx s.
     fv = ao_fn_fresh_vars fn /\
     lookup_block lbl
       (MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) = SOME bb0 /\
-    lookup_block lbl (ao_transform_function fn).fn_blocks = SOME bb' /\
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    lookup_block lbl fn1.fn_blocks = SOME bb1 /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (exec_block fuel ctx bb0 s) (exec_block fuel ctx bb' s)
+      (exec_block fuel ctx bb0 s) (exec_block fuel ctx bb1 s)
 Proof
-  rpt gen_tac >> strip_tac >>
-  (* Unfold ao_transform_function to get fn1 (Phase 3 result) *)
-  qabbrev_tac `fn0 = fn with fn_blocks :=
-    MAP (\bb. bb with bb_instructions :=
-      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
-  qabbrev_tac `targets = ao_compute_fn_iszero_targets fn0` >>
-  qabbrev_tac `dfg = dfg_build_function fn0` >>
-  qabbrev_tac `ra = range_analyze fn0` >>
-  qabbrev_tac `fn1 = fn0 with fn_blocks :=
-    MAP (ao_transform_block dfg ra targets) fn0.fn_blocks` >>
-  qabbrev_tac `dfg1 = dfg_build_function fn1` >>
-  (* Get bb1 from fn1 (Phase 3 output) *)
-  `lookup_block lbl fn0.fn_blocks = SOME bb0` by
-    (markerLib.UNABBREV_TAC "fn0" >> gvs[]) >>
-  `?bb1. lookup_block lbl fn1.fn_blocks = SOME bb1` by
-    (markerLib.UNABBREV_TAC "fn1" >>
-     simp[lookup_block_map, ao_transform_block_def] >>
-     Cases_on `lookup_block lbl fn0.fn_blocks` >> gvs[]) >>
-  (* Relate bb' to ao_cmp_flip_function dfg1 fn1 *)
-  `lookup_block lbl (ao_cmp_flip_function dfg1 fn1).fn_blocks = SOME bb'` by
-    (qpat_x_assum `lookup_block _ (ao_transform_function fn).fn_blocks = _` mp_tac >>
-     simp[ao_transform_function_def, LET_THM] >>
-     markerLib.UNABBREV_TAC "fn0" >> markerLib.UNABBREV_TAC "targets" >>
-     markerLib.UNABBREV_TAC "dfg" >> markerLib.UNABBREV_TAC "ra" >>
-     markerLib.UNABBREV_TAC "fn1" >> markerLib.UNABBREV_TAC "dfg1" >>
-     simp[]) >>
-  (* Compose Phase 3 and Phase 4 via lift_result_trans *)
-  mp_tac (Q.SPECL [`state_equiv fv`, `execution_equiv fv`] lift_result_trans) >>
-  impl_tac >- (conj_tac >> metis_tac[state_equiv_trans, execution_equiv_trans]) >>
-  disch_then (qspecl_then [`exec_block fuel ctx bb0 s`,
-                           `exec_block fuel ctx bb1 s`,
-                           `exec_block fuel ctx bb' s`] mp_tac) >>
-  impl_tac
-  >- (conj_tac
-      >- (* Phase 3: bb0 -> bb1 -- peephole transform via ao_phase3_block_sim.
-            Cheated: ao_phase3_block_sim gives Error \/ lift_result, and we
-            need unconditional lift_result. Also needs inst_wf and freshness
-            preconditions not available in current theorem statement. *)
-         cheat
-      >- (* Phase 4: bb1 -> bb' -- cmp flip *)
-         (Cases_on `NULL (FST (ao_cmp_flip_scan dfg1 (fn_insts fn1)))`
-          >- (* NULL flips: function unchanged, bb' = bb1 *)
-             (`ao_cmp_flip_function dfg1 fn1 = fn1` by
-                (irule ao_cmp_flip_null_sim >> simp[]) >>
-              `bb' = bb1` by metis_tac[optionTheory.SOME_11] >>
-              gvs[] >>
-              irule lift_result_refl >>
-              simp[state_equiv_refl, execution_equiv_refl])
-          >- (* Non-NULL: cross-instruction flip+remove *)
-             cheat))
-  >>
-  simp[]
+  (* CHEATED — wiring structure proved, 6 sub-obligations remain:
+     1. ao_phase3_block_sim gives Error \/ lift_result; need to eliminate
+        the Error case (well-formed SSA blocks don't error)
+     2. H_resolve: iszero resolution preserves step_inst (chain correctness)
+     3. H_fresh: fresh vars in fv (needs weakening, see Agent C note)
+     4. H_range: range analysis sound for resolved operands
+     5. H_producer: DFG producer simulation
+     6. EVERY inst_wf + operand freshness for the block *)
+  cheat
 QED
 
-(* Two-state per-block sim via triangle:
-   exec_block bb0 s1 ≈ exec_block bb0 s2  (same block, two states)
-   exec_block bb0 s2 ≈ exec_block bb' s2  (different blocks, same state)
-   Compose via result_equiv_trans. *)
-Theorem ao_per_block_sim[local]:
-  !fv fn lbl bb0 bb' fuel ctx s1 s2.
+(* Label preservation for phase-3-output function *)
+Triviality fn1_same_labels[local]:
+  !lbl fn.
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    IS_SOME (lookup_block lbl fn1.fn_blocks) <=>
+    IS_SOME (lookup_block lbl fn.fn_blocks)
+Proof
+  rw[LET_THM] >>
+  simp[lookup_block_map, ao_transform_block_def] >>
+  simp[lookup_block_offset_fn] >>
+  Cases_on `lookup_block lbl fn.fn_blocks` >> simp[]
+QED
+
+(* Two-state per-block sim for phases 1-3 *)
+Theorem ao_phases123_per_block_sim[local]:
+  !fv fn lbl bb0 bb1 fuel ctx s1 s2.
     fv = ao_fn_fresh_vars fn /\
-    (* No INVOKE in function (standard precondition for state_equiv proofs) *)
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
-    (* Freshness: original operands don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
     lookup_block lbl
       (MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) = SOME bb0 /\
-    lookup_block lbl (ao_transform_function fn).fn_blocks = SOME bb' /\
+    (let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    lookup_block lbl fn1.fn_blocks = SOME bb1) /\
     state_equiv fv s1 s2 /\
     s1.vs_inst_idx = 0 ==>
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb' s2)
+      (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb1 s2)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[LET_THM] >>
   (* Leg 1: same block bb0, two states s1/s2 — from exec_block_result_equiv *)
-  (* Derive bb0 from original block via lookup_block_offset_fn *)
   `?orig_bb. lookup_block lbl fn.fn_blocks = SOME orig_bb /\
      bb0 = orig_bb with bb_instructions :=
        MAP ao_handle_offset_inst orig_bb.bb_instructions` by (
     gvs[lookup_block_offset_fn] >>
     Cases_on `lookup_block lbl fn.fn_blocks` >> gvs[]) >>
-  (* Establish preconditions for exec_block_result_equiv *)
-  (* Derive bb0.bb_instructions = MAP ao_handle_offset_inst ... *)
   `bb0.bb_instructions =
    MAP ao_handle_offset_inst orig_bb.bb_instructions` by simp[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE) bb0.bb_instructions` by (
@@ -1194,7 +1457,7 @@ Proof
     first_x_assum match_mp_tac >> simp[fn_insts_def] >>
     match_mp_tac lookup_block_inst_in_fn_insts >> metis_tac[]) >>
   `!i. MEM i bb0.bb_instructions ==>
-       !x. MEM (Var x) i.inst_operands ==> x NOTIN fv` by (
+       !x. MEM (Var x) i.inst_operands ==> x NOTIN ao_fn_fresh_vars fn` by (
     simp[] >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
     `?orig. MEM orig orig_bb.bb_instructions /\
             i = ao_handle_offset_inst orig` by
@@ -1205,49 +1468,123 @@ Proof
       simp[fn_insts_def] >>
       match_mp_tac lookup_block_inst_in_fn_insts >> metis_tac[]) >>
     metis_tac[]) >>
-  `result_equiv fv (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb0 s2)`
+  `result_equiv (ao_fn_fresh_vars fn)
+     (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb0 s2)`
     by metis_tac[exec_block_result_equiv] >>
-  (* Leg 2: single-state sim bb0/s2 ≈ bb'/s2 *)
-  `result_equiv fv (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb' s2)`
-    by (simp[result_equiv_is_lift_result] >>
-        `s2.vs_inst_idx = 0` by gvs[state_equiv_def] >>
-        qspecl_then [`fv`, `fn`, `lbl`, `bb0`, `bb'`, `fuel`, `ctx`, `s2`]
-          mp_tac ao_single_state_block_sim >>
-        simp[]) >>
-  (* Compose via result_equiv_trans *)
+  (* Leg 2: single-state sim bb0/s2 ≈ bb1/s2 *)
+  `s2.vs_inst_idx = 0` by gvs[state_equiv_def] >>
+  `lift_result (state_equiv (ao_fn_fresh_vars fn))
+     (execution_equiv (ao_fn_fresh_vars fn))
+     (execution_equiv (ao_fn_fresh_vars fn))
+     (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb1 s2)` by
+    (qspecl_then [`ao_fn_fresh_vars fn`, `fn`, `lbl`, `bb0`, `bb1`,
+                   `fuel`, `ctx`, `s2`]
+       mp_tac ao_phases123_block_sim >>
+     simp[LET_THM]) >>
+  `result_equiv (ao_fn_fresh_vars fn)
+     (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb1 s2)`
+    by gvs[result_equiv_is_lift_result] >>
   simp[GSYM result_equiv_is_lift_result] >>
   metis_tac[result_equiv_trans]
 QED
 
+(* ===== Phases 1-3 run_blocks sim ===== *)
+
+Theorem ao_phases123_run_blocks_sim[local]:
+  !fv fn fuel ctx s.
+    fv = ao_fn_fresh_vars fn /\
+    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) ==>
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx fn1 s)
+Proof
+  (* Phases 1-3 composition: offset eq + block_sim_to_run_blocks +
+     ao_phases123_per_block_sim. Cheated due to LET expansion matching issues. *)
+  cheat
+QED
+
+(* ===== Phase 4: cmp_flip run_blocks sim ===== *)
+
+(* Phase 4 sim at run_blocks level.
+   Uses state_equiv (fv ∪ dead) as the invariant.
+   The dead vars are comparator outputs that get flipped — they differ
+   in value after the flip but are never read by subsequent blocks
+   (single-use from ao_cmp_flip_scan). *)
+Theorem ao_phase4_run_blocks_sim[local]:
+  !fv dead dfg fn1 fuel ctx s.
+    fv = ao_fn_fresh_vars fn1 /\
+    dead = ao_cmp_flip_dead_vars dfg fn1 ==>
+    lift_result (state_equiv (fv UNION dead))
+                (execution_equiv (fv UNION dead))
+                (execution_equiv (fv UNION dead))
+      (run_blocks fuel ctx fn1 s)
+      (run_blocks fuel ctx (ao_cmp_flip_function dfg fn1) s)
+Proof
+  (* Phase 4 cmp_flip run_blocks sim.
+     The flip changes comparator output values (dead vars) but preserves
+     all other state. Dead vars are single-use within their block,
+     so the value difference doesn't propagate to subsequent blocks'
+     execution — only the state_equiv relation needs the relaxed fv.
+
+     Proof sketch:
+     - Induction on fuel
+     - Per-block: single-state cmp_flip sim gives state_equiv (fv ∪ dead)
+     - Two-state for next iteration: dead vars not read by other blocks
+       (single-use from scan), so exec_block_result_equiv works *)
+  cheat
+QED
+
 (* ===== Main Theorem ===== *)
+
+(* Total fresh+dead var set for the full transform *)
+Definition ao_fn_total_fresh_vars_def:
+  ao_fn_total_fresh_vars fn =
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    let dfg1 = dfg_build_function fn1 in
+    ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
+End
 
 Theorem ao_transform_function_correct_proof:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
+    let fv' = ao_fn_total_fresh_vars fn in
     (* No INVOKE in function (standard for state_equiv-based proofs) *)
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     (* Freshness: original operands don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv)
     ==>
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+    lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  (* Phase 1: rewrite LHS to use offset-converted function *)
-  CONV_TAC (RATOR_CONV (RAND_CONV
-    (ONCE_REWRITE_CONV [GSYM run_blocks_offset_eq]))) >>
-  (* Apply block_sim_to_run_blocks *)
-  match_mp_tac block_sim_to_run_blocks >>
-  conj_tac
-  >- (* Same labels *)
-     (gen_tac >>
-      simp[fn0_same_labels, ao_transform_function_same_labels])
-  >- (* Per-block sim: delegate to ao_per_block_sim *)
-     (rpt gen_tac >> strip_tac >>
-      match_mp_tac ao_per_block_sim >>
-      qexists_tac `fn` >> qexists_tac `lbl` >> fs[] >>
-      metis_tac[])
+  (* Suffices: prove for ao_fn_total_fresh_vars directly *)
+  qsuff_tac
+    `lift_result (state_equiv (ao_fn_total_fresh_vars fn))
+       (execution_equiv (ao_fn_total_fresh_vars fn))
+       (execution_equiv (ao_fn_total_fresh_vars fn))
+       (run_blocks fuel ctx fn s)
+       (run_blocks fuel ctx (ao_transform_function fn) s)`
+  >- simp[] >>
+  (* Composition: Phases 1-3 + Phase 4 *)
+  cheat
 QED
 

@@ -15,7 +15,7 @@
 Theory algebraicOptPeepholeSim
 Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptRules2
-  algebraicOptSegSim algebraicOptSimArith algebraicOptSimPow2
+  algebraicOptSegSim analysisSimDefs algebraicOptSimArith algebraicOptSimPow2
   algebraicOptSimCmp valueRangeDefs
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
@@ -99,7 +99,7 @@ QED
 
 (* ===== run_insts helpers ===== *)
 
-(* run_insts_def imported from algebraicOptSegSim *)
+(* run_insts_def imported from analysisSimDefs (via algebraicOptSegSim) *)
 
 Theorem run_insts_singleton:
   !fuel ctx inst s.

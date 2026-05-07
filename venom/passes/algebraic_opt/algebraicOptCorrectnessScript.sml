@@ -5,17 +5,21 @@ Ancestors
 (* Algebraic optimization preserves function execution semantics:
    running a function before and after the transform produces
    equivalent results under state_equiv and execution_equiv,
-   modulo fresh variables introduced by multi-instruction expansions. *)
+   modulo fresh variables and cmp_flip dead variables.
+   ao_fn_total_fresh_vars includes both ao_fn_fresh_vars (peephole expansion
+   intermediates) and ao_cmp_flip_dead_vars (comparator outputs whose values
+   change under the flip but are dead after their block). *)
 Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
+    let fv' = ao_fn_total_fresh_vars fn in
     (* No INVOKE in function (standard for state_equiv-based proofs) *)
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     (* Freshness: original operands don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv)
     ==>
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+    lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof

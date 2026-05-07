@@ -12,7 +12,7 @@
 Theory algebraicOptSimCmp
 Ancestors
   algebraicOptDefs algebraicOptRules
-  algebraicOptSegSim valueRangeDefs rangeAnalysisDefs
+  algebraicOptSegSim analysisSimDefs valueRangeDefs rangeAnalysisDefs
   venomExecSemantics venomState venomInst venomWf
   stateEquiv stateEquivProps passSharedDefs
   passSimulationDefs
