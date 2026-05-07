@@ -250,7 +250,6 @@ Proof
   >- suspend "BlobHash"
   >- suspend "Env"
   >- suspend "Acc"
-  >- suspend "Isqrt"
   >- suspend "MethodId"
   >> TRY (
     rename1`evaluate_ecrecover` >>
@@ -459,13 +458,6 @@ QED
 Resume well_typed_builtin_app_success_type[Acc]:
   drule_all Acc_builtin_sound >> simp[] >>
   disch_then(qspec_then`cx`strip_assume_tac) >> gvs[]
-QED
-
-Resume well_typed_builtin_app_success_type[Isqrt]:
-  rename1`evaluate_builtin _ _ _ _ [v1]` >>
-  Cases_on`v1` >>
-  gvs[evaluate_builtin_def, value_has_type_def, AllCaseEqs()] >>
-  cheat (* num_sqrt bound (but also isn't Isqrt supposed to be gone on main?) *)
 QED
 
 Resume well_typed_builtin_app_success_type[MethodId]:

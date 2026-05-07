@@ -188,7 +188,6 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Env item) ts = (ts = [] /\ ty = env_item_type item) /\
   well_typed_builtin_app ty (Acc item) ts =
     (LENGTH ts = 1 /\ HD ts = BaseT AddressT /\ ty = account_item_type item) /\
-  well_typed_builtin_app ty Isqrt ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (UintT 256)) /\
   well_typed_builtin_app ty MethodId ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 4)) /\ is_bytes_or_string_type (HD ts)) /\
   well_typed_builtin_app ty ECRecover ts =
