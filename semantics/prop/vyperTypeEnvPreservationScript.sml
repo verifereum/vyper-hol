@@ -157,6 +157,40 @@ Proof
   goal_assum drule
 QED
 
+(* ===== Scope push/pop env_consistent lemmas ===== *)
+
+Theorem push_scope_env_consistent:
+  env_consistent env cx st ==>
+  env_consistent env cx (st with scopes updated_by CONS FEMPTY)
+Proof
+  rw[env_consistent_def, lookup_scopes_def, FLOOKUP_DEF] >>
+  metis_tac[]
+QED
+
+Theorem pop_scope_env_consistent:
+  env_consistent env cx st /\ st.scopes = h::tl /\
+  (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
+  (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE) ==>
+  env_consistent env cx (st with scopes := tl)
+Proof
+  strip_tac >>
+  fs[env_consistent_def, lookup_scopes_def] >>
+  rpt strip_tac >> res_tac >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem push_scope_with_var_env_consistent:
+  env_consistent env cx st /\
+  evaluate_type (get_tenv cx) typ = SOME tyv /\
+  nm NOTIN FDOM env.var_types ==>
+  env_consistent (extend_local env nm typ F) cx
+    (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)))
+Proof
+  rw[env_consistent_def, extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  Cases_on `id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
+  res_tac >> gvs[optionTheory.IS_SOME_EXISTS, FLOOKUP_DEF]
+QED
+
 (* ===== Main frame lemma ===== *)
 
 Theorem env_consistent_preserved_by_frame:
