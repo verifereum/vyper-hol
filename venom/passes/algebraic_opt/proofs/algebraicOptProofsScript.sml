@@ -1484,38 +1484,41 @@ Proof
 QED
 
 Theorem ao_phases123_run_blocks_sim[local]:
-  !fv fn fuel ctx s.
+  !fv fn fn0 dfg ra targets fn1 fuel ctx s.
     fv = ao_fn_fresh_vars fn /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    dfg = dfg_build_function fn0 /\
+    ra = range_analyze fn0 /\
+    fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks /\
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv) ==>
-    let fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let targets = ao_compute_fn_iszero_targets fn0 in
-    let dfg = dfg_build_function fn0 in
-    let ra = range_analyze fn0 in
-    let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn1 s)
 Proof
-  rpt gen_tac >> strip_tac >> BasicProvers.LET_ELIM_TAC >>
-  `run_blocks fuel ctx fn s = run_blocks fuel ctx fn0 s`
-    by simp[GSYM run_blocks_offset_eq, Abbr `fn0`] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `fn0 = _` (fn th =>
+    `run_blocks fuel ctx fn s = run_blocks fuel ctx fn0 s` by
+      (SUBST1_TAC (SYM th) >> simp[run_blocks_offset_eq]) >>
+    ASSUME_TAC th) >>
+  pop_assum (K ALL_TAC) >> (* drop fn0 = ... (no longer needed) *)
   pop_assum (fn th => REWRITE_TAC [th]) >>
   irule block_sim_to_run_blocks_err >>
   conj_tac
-  >- (gen_tac >> simp[lookup_block_map, ao_transform_block_def] >>
+  >- (gen_tac >> fs[lookup_block_map, ao_transform_block_def] >>
       Cases_on `lookup_block lbl fn0.fn_blocks` >> simp[])
   >- (rpt strip_tac >>
       irule ao_phases123_per_block_sim >>
       conj_tac
       >- (irule exec_block_result_equiv >> fs[])
-      >- (simp[lookup_block_map, ao_transform_block_def] >>
-          fs[] >> irule ao_phases123_block_sim >> simp[]))
+      >- (fs[lookup_block_map, ao_transform_block_def] >>
+          irule ao_phases123_block_sim >> fs[]))
 QED
 
 (* ===== Phase 4: cmp_flip run_blocks sim ===== *)
@@ -1630,18 +1633,30 @@ Theorem ao_transform_function_correct_proof:
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  (* Abbreviate intermediate functions to avoid term explosion *)
+  qabbrev_tac `fn0 = fn with fn_blocks :=
+    MAP (\bb. bb with bb_instructions :=
+      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
+  qabbrev_tac `targets = ao_compute_fn_iszero_targets fn0` >>
+  qabbrev_tac `dfg = dfg_build_function fn0` >>
+  qabbrev_tac `ra = range_analyze fn0` >>
+  qabbrev_tac `fn1 = fn0 with fn_blocks :=
+    MAP (ao_transform_block dfg ra targets) fn0.fn_blocks` >>
   (* Get phases 1-3 simulation: Error \/ lift_result *)
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
-    (Q.SPECL [`ao_fn_fresh_vars fn`, `fn`, `fuel`, `ctx`, `s`]
-       ao_phases123_run_blocks_sim)) >>
-  simp[] >> strip_tac
+  `(?e. run_blocks fuel ctx fn s = Error e) \/
+   lift_result (state_equiv (ao_fn_fresh_vars fn))
+     (execution_equiv (ao_fn_fresh_vars fn))
+     (execution_equiv (ao_fn_fresh_vars fn))
+     (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
+    (irule ao_phases123_run_blocks_sim >> rpt conj_tac >>
+     TRY (first_assum ACCEPT_TAC) >>
+     first_assum (ACCEPT_TAC o
+       REWRITE_RULE [markerTheory.Abbrev_def])) >>
+  gvs[]
   >- (* Error case from phases 1-3: original errors *)
      (DISJ1_TAC >> gvs[exec_result_11])
   >- (* lift_result from phases 1-3: compose with phase 4 *)
      (DISJ2_TAC >>
-      (* Abbreviate fn1 = the intermediate from the theorem *)
-      qmatch_asmsub_abbrev_tac
-        `lift_result _ _ _ _ (run_blocks _ _ fn1 _)` >>
       (* Show ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 *)
       `ao_transform_function fn = ao_cmp_flip_function
          (dfg_build_function fn1) fn1` by
