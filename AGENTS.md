@@ -108,6 +108,8 @@ When generalizing a definition (adding parameters), the general version gets the
 
 ## HOL4 Tactics Reference
 
+For monadic/list preservation proofs and other branch-heavy HOL4 scripts, also read `docs/HOL4_PROOF_CONTROL_LESSONS.md`. It records project-specific lessons about controlling parallel subgoals, preserving specialized facts, and using `drule_all` safely.
+
 ### Fast tactics (prefer these)
 - `simp[thm]` - simplification
 - `gvs[AllCaseEqs()]` - case analysis with simplification, clears assumptions
