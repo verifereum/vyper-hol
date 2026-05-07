@@ -1433,7 +1433,54 @@ Theorem block_sim_to_run_blocks_err[local]:
       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
         (run_blocks fuel ctx fn0 s) (run_blocks fuel ctx fn' s)
 Proof
-  cheat (* WIP: fuel-induction proof with Error disjunct *)
+  rpt gen_tac >> strip_tac >>
+  qsuff_tac
+    `!fuel ctx s s'.
+       state_equiv fv s s' ==>
+       (?e. run_blocks fuel ctx fn0 s = Error e) \/
+       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+         (run_blocks fuel ctx fn0 s) (run_blocks fuel ctx fn' s')`
+  >- (rpt strip_tac >>
+      first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
+      simp[state_equiv_refl])
+  >>
+  Induct_on `fuel`
+  >- (rpt strip_tac >> DISJ1_TAC >> simp[run_blocks_def, exec_result_11])
+  >> rpt gen_tac >> strip_tac >>
+  `s.vs_current_bb = s'.vs_current_bb` by gvs[state_equiv_def] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn0.fn_blocks`
+  >- (* NONE in fn0: run_blocks errors *)
+     (DISJ1_TAC >> simp[exec_result_11])
+  >- (* SOME bb0 in fn0: find matching bb' in fn' - part A: setup *)
+     (rename1 `lookup_block _ fn0.fn_blocks = SOME bb0` >>
+      Cases_on `lookup_block s'.vs_current_bb fn'.fn_blocks` >>
+      gvs[]
+      >- (* NONE in fn': contradiction *)
+         (qpat_x_assum `!lbl. IS_SOME _ <=> IS_SOME _`
+            (qspec_then `s.vs_current_bb` mp_tac) >>
+          simp[])
+      >- (* SOME bb' in fn' - part B: per-block sim *)
+         (rename1 `lookup_block _ fn'.fn_blocks = SOME bb'` >>
+          `state_equiv fv (s with vs_inst_idx := 0) (s' with vs_inst_idx := 0)`
+            by (drule state_equiv_set_inst_idx >> simp[]) >>
+          qpat_x_assum `!lbl b0 b1 f c st1 st2. _`
+            (qspecl_then
+              [`s'.vs_current_bb`, `bb0`, `bb'`, `fuel`, `ctx`,
+               `s with vs_inst_idx := 0`, `s' with vs_inst_idx := 0`] mp_tac) >>
+          impl_tac >- fs[] >>
+          strip_tac
+          >- (* Per-block Error *)
+             (DISJ1_TAC >> gvs[exec_result_11])
+          >- (* Per-block lift_result *)
+             (Cases_on `exec_block fuel ctx bb0 (s with vs_inst_idx := 0)` >>
+              Cases_on `exec_block fuel ctx bb' (s' with vs_inst_idx := 0)` >>
+              gvs[lift_result_def] >>
+              imp_res_tac state_equiv_halted >>
+              Cases_on `v.vs_halted` >> gvs[lift_result_def]
+              >- fs[state_equiv_def]
+              >> (first_x_assum (qspecl_then [`ctx`, `v`, `v'`] mp_tac) >>
+                  simp[]))))
 QED
 
 Theorem ao_phases123_run_blocks_sim[local]:
