@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperStorageBackend vyperLookup vyperEncodeDecode vyperArith vyperAssignPreservesType
   vyperTypeSystem vyperTypeValues
-  vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeExprSoundness
+  vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeBuiltins vyperTypeExprSoundness
 Libs
   wordsLib
 
@@ -232,6 +232,50 @@ Theorem append_operation_runtime_typed_value:
   value_has_type elem_tv v
 Proof
   rw[assign_operation_runtime_typed_def] >> gvs[]
+QED
+
+Theorem place_leaf_typed_evaluate_type:
+  place_leaf_typed env vt sbs ty final_tv ==> evaluate_type env.type_defs ty = SOME final_tv
+Proof
+  MAP_EVERY qid_spec_tac [`vt`, `sbs`] >>
+  Induct_on `sbs` >> Cases_on `vt` >> rw[place_leaf_typed_def] >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem assign_operation_leaf_replace:
+  place_leaf_typed env vt sbs ty final_tv /\
+  assign_operation_runtime_typed env ty (Replace v) ==>
+  value_has_type final_tv v
+Proof
+  rw[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
+  drule place_leaf_typed_evaluate_type >> strip_tac >> gvs[]
+QED
+
+Theorem assign_operation_leaf_append:
+  place_leaf_typed env vt sbs ty final_tv /\
+  assign_operation_runtime_typed env ty (AppendOp v) ==>
+  ?elem_tv n. final_tv = ArrayTV elem_tv (Dynamic n) /\ value_has_type elem_tv v
+Proof
+  rw[assign_operation_runtime_typed_def] >>
+  drule place_leaf_typed_evaluate_type >> strip_tac >> gvs[evaluate_type_def]
+QED
+
+Theorem assign_operation_leaf_update:
+  place_leaf_typed env vt sbs ty final_tv /\
+  assign_operation_runtime_typed env ty (Update upd_ty bop nv) /\
+  value_has_type final_tv la /\
+  assign_subscripts final_tv la [] (Update upd_ty bop nv) = INL lv ==>
+  value_has_type final_tv lv
+Proof
+  rw[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
+  drule place_leaf_typed_evaluate_type >> strip_tac >> gvs[] >>
+  gvs[Once assign_subscripts_def, LET_THM] >>
+  irule well_typed_binop_success_type >>
+  qexists_tac `bop` >> qexists_tac `ty` >> qexists_tac `rhs_ty` >>
+  qexists_tac `env.type_defs` >> qexists_tac `final_tv` >> qexists_tac `tv` >>
+  qexists_tac `ty` >> qexists_tac `case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u` >>
+  qexists_tac `la` >> qexists_tac `nv` >>
+  simp[]
 QED
 
 Theorem set_storage_preserves_state_well_typed:

@@ -774,7 +774,7 @@ Definition assign_subscripts_def:
   assign_subscripts tv a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
   assign_subscripts tv a [] (Update ty bop v) =
     (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
-       evaluate_binop u NoneTV bop a v) ∧
+       evaluate_binop u tv bop a v) ∧
   assign_subscripts tv a [] (AppendOp v) = append_element tv a v ∧
   assign_subscripts tv a [] PopOp = pop_element a ∧
   assign_subscripts tv a ((IntSubscript i)::is) ao =

@@ -109,10 +109,7 @@ Definition place_leaf_typed_def:
                evaluate_type env.type_defs ty = SOME final_tv)) /\
   (place_leaf_typed env (HashMapT kt vt) [] ty final_tv <=> F) /\
   (place_leaf_typed env (HashMapT kt vt) (sb::sbs) ty final_tv <=>
-    (?hash_sbs rest. sbs = hash_sbs ++ rest /\
-       case vt of
-       | Type leaf_ty => place_leaf_typed env (Type leaf_ty) rest ty final_tv
-       | HashMapT kt' vt' => place_leaf_typed env (HashMapT kt' vt') rest ty final_tv))
+    place_leaf_typed env vt sbs ty final_tv)
 End
 
 Definition target_runtime_typed_def:
@@ -133,11 +130,11 @@ QED
 
 Definition assign_operation_runtime_typed_def:
   (assign_operation_runtime_typed env ty (Replace v) <=> value_runtime_typed env ty v) /\
-  (assign_operation_runtime_typed env ty (Update upd_ty bop v) <=>
-     value_runtime_typed env upd_ty v /\ well_typed_binop ty bop ty upd_ty) /\
+  (assign_operation_runtime_typed env ty (Update target_ty bop v) <=>
+     target_ty = ty /\ ?rhs_ty. value_runtime_typed env rhs_ty v /\ well_typed_binop ty bop ty rhs_ty) /\
   (assign_operation_runtime_typed env ty (AppendOp v) <=>
-     ?elem_tv elem_ty bd. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
-       ty = ArrayT elem_ty bd /\ value_has_type elem_tv v) /\
+     ?elem_tv elem_ty n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
+       ty = ArrayT elem_ty (Dynamic n) /\ value_has_type elem_tv v) /\
   (assign_operation_runtime_typed env ty PopOp <=> T)
 End
 

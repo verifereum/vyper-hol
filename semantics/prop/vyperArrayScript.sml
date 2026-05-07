@@ -427,11 +427,13 @@ Theorem assign_subscripts_update_INL:
   ∀tv a k ty bop v.
     array_is_mutable a ∧ valid_index tv a k ∧
     IS_SOME (type_to_int_bound ty) ∧
-    ISL (evaluate_binop (THE (type_to_int_bound ty)) NoneTV bop
+    ISL (evaluate_binop (THE (type_to_int_bound ty))
+           (case tv of ArrayTV t _ => t | _ => NoneTV) bop
            (THE (array_index tv a k)) v) ⇒
     assign_subscripts tv (ArrayV a) [IntSubscript k] (Update ty bop v) =
     INL (ArrayV (array_set tv a k
-           (OUTL (evaluate_binop (THE (type_to_int_bound ty)) NoneTV bop
+           (OUTL (evaluate_binop (THE (type_to_int_bound ty))
+                    (case tv of ArrayTV t _ => t | _ => NoneTV) bop
                     (THE (array_index tv a k)) v))))
 Proof
   rpt strip_tac >>
@@ -444,7 +446,7 @@ Proof
     simp[LET_THM, array_set_index_INL] >>
     Cases_on `array_index tv a k` >> fs[] >>
     Cases_on `type_to_int_bound ty` >> fs[] >>
-    Cases_on `evaluate_binop x' NoneTV bop x v` >> fs[]
+    CASE_TAC >> fs[] >> CASE_TAC >> fs[]
   end
 QED
 

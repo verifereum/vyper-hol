@@ -353,11 +353,12 @@ Proof
 QED
 
 Theorem assign_target_toplevel_update:
-  ∀cx st src_id_opt n ty bop v1 v2 v.
+  ∀cx st src_id_opt n ty bop v1 v2 v tv.
     lookup_toplevel_name cx st src_id_opt n = SOME (Value v1) ∧
+    storage_type_of cx src_id_opt n = SOME tv ∧
     evaluate_binop
       (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
-      NoneTV bop v1 v2 = INL v ∧
+      tv bop v1 v2 = INL v ∧
     var_in_storage cx src_id_opt n ∧
     storable_value cx src_id_opt n v ⇒
     assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) []) (Update ty bop v2) st =
@@ -366,8 +367,7 @@ Proof
   rw[var_in_storage_def] >>
   gvs[lookup_toplevel_name_def, AllCaseEqs()] >>
   `st' = st` by metis_tac[lookup_global_state] >> gvs[] >>
-  `storage_type_of cx src_id_opt n = SOME tv` by
-    simp[storage_type_of_def, storage_var_info_def] >>
+  `tv' = tv` by gvs[storage_type_of_def, storage_var_info_def] >> gvs[] >>
   `value_has_type tv v` by
     (gvs[storable_value_def] >> first_x_assum drule >> simp[]) >>
   `IS_SOME (encode_value tv v)` by
@@ -470,18 +470,23 @@ QED
 
 (* Depth-1: assign_target for leaf HashMap with Update *)
 Theorem assign_target_leaf_update:
-  ∀cx st src_id_opt n key kv v v_old v_new ty bop.
-    is_leaf_hashmap cx src_id_opt n ∧
+  ∀cx st src_id_opt n key kv v v_old v_new ty bop code is_transient kt t id offset tv.
+    get_module_code cx src_id_opt = SOME code ∧
+    find_var_decl_by_num (string_to_num n) code = SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
+    lookup_var_slot_from_layout cx is_transient src_id_opt id = SOME offset ∧
+    offset < dimword(:256) ∧
+    evaluate_type (get_tenv cx) t = SOME tv ∧
+    well_formed_type_value tv ∧
     value_to_key kv = SOME key ∧
     lookup_hashmap cx st src_id_opt n kv = SOME v_old ∧
     evaluate_binop
       (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
-      NoneTV bop v_old v = INL v_new ∧
+      tv bop v_old v = INL v_new ∧
     hashmap_ref_storable cx (THE (lookup_toplevel_name cx st src_id_opt n)) v_new ⇒
     assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) [key]) (Update ty bop v) st =
     (INL NONE, update_hashmap cx st src_id_opt n kv v_new)
 Proof
-  rw[is_leaf_hashmap_def] >>
+  rpt strip_tac >>
   `lookup_global cx src_id_opt (string_to_num n) st =
    (INL (HashMapRef is_transient (n2w offset) kt (Type t)), st)` by
     (simp[Once lookup_global_def, bind_def, return_def, LET_THM,
@@ -566,9 +571,10 @@ Theorem assign_target_hashmap_update:
     hashmap_index_chain href0 keys = SOME href_leaf ∧
     is_leaf_hashmap_ref cx href_leaf ∧
     read_hashmap cx st href_leaf last_kv = SOME v_old ∧
+    hashmap_ref_value_tv cx href_leaf = SOME tv_leaf ∧
     evaluate_binop
       (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
-      NoneTV bop v_old v = INL v_new ∧
+      tv_leaf bop v_old v = INL v_new ∧
     hashmap_ref_storable cx href_leaf v_new ⇒
     ∃r. assign_target cx
       (BaseTargetV (TopLevelVar src_id_opt n) sbs) (Update ty bop v) st =
@@ -590,7 +596,7 @@ Proof
   disch_then (qspecl_then [`vt`, `is_t`, `base_slot`, `kt`, `cx`,
     `href_leaf`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
-  gvs[read_hashmap_def, hashmap_read_def] >>
+  gvs[read_hashmap_def, hashmap_read_def, hashmap_ref_value_tv_def] >>
   gvs[hashmap_ref_storable_def] >>
   rename1 `value_has_type tv_leaf v_new` >>
   imp_res_tac hashmap_write_some >>
