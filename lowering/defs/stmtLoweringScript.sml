@@ -875,35 +875,36 @@ Definition compile_stmt_def:
      5. Emit LOG *)
   compile_stmt cenv lctx ty (Log event_id args) =
     (let event_name = nsid_to_string event_id in
-     let (event_hash, indexed_flags, topic_bs_flags) =
-       cenv.ce_event_info event_name in
-     do eval_ops <- compile_log_eval_all cenv args;
-        log_split <- return (split_log_ops eval_ops indexed_flags);
-        raw_topics <- return (FST log_split);
-        data_ops <- return (SND log_split);
-        topic_ops <- compile_log_topic_ops raw_topics;
-        all_topics <- return (Lit (n2w event_hash) :: topic_ops);
-        n_topics <- return (LENGTH all_topics);
-        if NULL data_ops then
-          emit_inst (LOG : opcode)
-            (Lit (n2w n_topics) :: Lit 0w :: Lit 0w :: all_topics) []
-        else
-          let data_types = MAP SND data_ops in
-          let data_tuple_t = TupleT data_types in
-          let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
-          do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
-             data_buf <- return data_buf_alloc.buf_operand;
-             compile_log_store_data cenv data_ops data_buf 0;
-             abi_size <- return (abi_size_bound (cenv_sft cenv) data_tuple_t);
-             data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
-             abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
-             abi_buf <- return abi_buf_alloc.buf_operand;
-             encoded_len <-
-               compile_abi_encode_to_buf abi_buf data_buf data_enc_info;
-             emit_inst (LOG : opcode)
-               (Lit (n2w n_topics) :: abi_buf :: encoded_len :: all_topics) []
-          od
-     od) ∧
+     case cenv.ce_event_info event_name of
+       NONE => emit_inst INVALID [] []
+     | SOME (event_hash, arg_types, indexed_flags) =>
+         do eval_ops <- compile_log_eval_all cenv args;
+            log_split <- return (split_log_ops eval_ops indexed_flags);
+            raw_topics <- return (FST log_split);
+            data_ops <- return (SND log_split);
+            topic_ops <- compile_log_topic_ops raw_topics;
+            all_topics <- return (Lit (n2w event_hash) :: topic_ops);
+            n_topics <- return (LENGTH all_topics);
+            if NULL data_ops then
+              emit_inst (LOG : opcode)
+                (Lit (n2w n_topics) :: Lit 0w :: Lit 0w :: all_topics) []
+            else
+              let data_types = MAP SND data_ops in
+              let data_tuple_t = TupleT data_types in
+              let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
+              do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
+                 data_buf <- return data_buf_alloc.buf_operand;
+                 compile_log_store_data cenv data_ops data_buf 0;
+                 abi_size <- return (abi_size_bound (cenv_sft cenv) data_tuple_t);
+                 data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
+                 abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
+                 abi_buf <- return abi_buf_alloc.buf_operand;
+                 encoded_len <-
+                   compile_abi_encode_to_buf abi_buf data_buf data_enc_info;
+                 emit_inst (LOG : opcode)
+                   (Lit (n2w n_topics) :: abi_buf :: encoded_len :: all_topics) []
+              od
+         od) ∧
 
 
   (* Raise: revert with optional reason.

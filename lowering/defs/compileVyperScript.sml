@@ -138,12 +138,6 @@ End
 
 (* is_bytestring_type is in compileEnvTheory *)
 
-Definition event_topic_bs_def:
-  event_topic_bs [] = ([] : bool list) ∧
-  event_topic_bs (((_,ty),is_idx) :: rest) =
-    (if is_idx then is_bytestring_type ty else F) :: event_topic_bs rest
-End
-
 Definition build_event_info_def:
   build_event_info tenv ([] : toplevel list) eim = eim ∧
   build_event_info tenv (top :: rest) eim =
@@ -152,9 +146,8 @@ Definition build_event_info_def:
         let arg_types = MAP (SND o FST) args_indexed in
         let ehash = event_hash tenv ename arg_types in
         let indexed_flags = MAP SND args_indexed in
-        let topic_bs = event_topic_bs args_indexed in
         build_event_info tenv rest
-          (λn. if n = ename then (ehash, indexed_flags, topic_bs) else eim n)
+          (λn. if n = ename then SOME (ehash, arg_types, indexed_flags) else eim n)
     | _ => build_event_info tenv rest eim
 End
 
@@ -354,7 +347,9 @@ Definition build_compile_env_def:
     let var_type_map = build_var_type_map tops in
     let is_hashmap = build_is_hashmap tops in
     let tenv = type_env tops in
-    let event_info = build_event_info tenv tops (K (0, [], [])) in
+    let event_info =
+          build_event_info tenv tops
+            ((K NONE) : string -> (num # type list # bool list) option) in
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
@@ -386,6 +381,7 @@ Definition build_compile_env_def:
        ce_var_type := local_var_type;
        ce_is_hashmap := is_hashmap;
        ce_event_info := event_info;
+       ce_type_env := tenv;
        ce_returns_count := rc;
        ce_return_buf := ret_buf;
        ce_is_external := is_external;

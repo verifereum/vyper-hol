@@ -29,7 +29,8 @@ Definition ce6_cenv_def:
     ce_struct_fields := FEMPTY; ce_dynarray_capacity := K 0;
     ce_method_id := K 42; ce_flag_member_id := (λ_ _. 0);
     ce_flag_n_members := K 0; ce_var_type := K NONE;
-    ce_is_hashmap := K F; ce_event_info := (λ_ . (0, [], []));
+    ce_is_hashmap := K F; ce_event_info := (λ_ . NONE);
+    ce_type_env := FEMPTY;
     ce_returns_count := 1; ce_return_buf := NONE;
     ce_is_external := T;
     ce_ret_enc_info := AbiPrimWord;
