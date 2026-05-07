@@ -80,9 +80,49 @@ Termination
   rw[]
 End
 
+Definition runtime_consistent_def:
+  runtime_consistent env cx st <=>
+    env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts
+End
+
+Definition location_runtime_typed_def:
+  (location_runtime_typed env cx st (ScopedVar id) vt <=>
+    (?entry ty. vt = Type ty /\
+                lookup_scopes (string_to_num id) st.scopes = SOME entry /\
+                FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+                evaluate_type env.type_defs ty = SOME entry.type)) /\
+  (location_runtime_typed env cx st (ImmutableVar id) vt <=>
+    (?imms v ty tv. vt = Type ty /\
+                    get_immutables cx (current_module cx) st = (INL imms, st) /\
+                    FLOOKUP imms (string_to_num id) = SOME (tv, v) /\
+                    FLOOKUP env.bare_globals (env.current_src, string_to_num id) = SOME ty /\
+                    evaluate_type env.type_defs ty = SOME tv)) /\
+  (location_runtime_typed env cx st (TopLevelVar src_id_opt id) vt <=>
+    FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt)
+End
+
+Definition place_leaf_typed_def:
+  (place_leaf_typed env (Type base_ty) sbs ty final_tv <=>
+    (?base_tv. evaluate_type env.type_defs base_ty = SOME base_tv /\
+               final_tv = leaf_type base_tv (REVERSE sbs) /\
+               evaluate_type env.type_defs ty = SOME final_tv)) /\
+  (place_leaf_typed env (HashMapT kt vt) [] ty final_tv <=> F) /\
+  (place_leaf_typed env (HashMapT kt vt) (sb::sbs) ty final_tv <=>
+    (?hash_sbs rest. sbs = hash_sbs ++ rest /\
+       case vt of
+       | Type leaf_ty => place_leaf_typed env (Type leaf_ty) rest ty final_tv
+       | HashMapT kt' vt' => place_leaf_typed env (HashMapT kt' vt') rest ty final_tv))
+End
+
 Definition target_runtime_typed_def:
-  target_runtime_typed env tgt ty gv <=>
-    well_typed_atarget env tgt ty /\ target_value_shape env tgt gv
+  target_runtime_typed env cx st tgt ty gv <=>
+    well_typed_atarget env tgt ty /\ target_value_shape env tgt gv /\
+    case gv of
+    | BaseTargetV loc sbs =>
+        ?vt final_tv. location_runtime_typed env cx st loc vt /\
+          place_leaf_typed env vt sbs ty final_tv
+    | TupleTargetV gvs => T
 End
 
 Theorem target_values_shape_LIST_REL:

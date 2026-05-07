@@ -276,15 +276,15 @@ Proof
 QED
 
 Definition target_assignment_values_typed_def:
-  target_assignment_values_typed env tgts gvs vs <=>
+  target_assignment_values_typed env cx st tgts gvs vs <=>
     LIST_REL3 (\tgt gv v. ?ty tv.
-      target_runtime_typed env tgt ty gv /\
+      target_runtime_typed env cx st tgt ty gv /\
       evaluate_type env.type_defs ty = SOME tv /\
       value_has_type tv v) tgts gvs vs
 End
 
 Theorem target_assignment_values_typed_shapes:
-  target_assignment_values_typed env tgts gvs vs ==>
+  target_assignment_values_typed env cx st tgts gvs vs ==>
   target_values_shape env tgts gvs
 Proof
   rw[target_assignment_values_typed_def, target_values_shape_LIST_REL] >>
@@ -297,63 +297,178 @@ Proof
   simp[target_runtime_typed_def]
 QED
 
-Theorem assign_targets_preserves_state_well_typed:
-  state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
-  target_assignment_values_typed env tgts gvs vs /\
-  assign_targets cx gvs vs st = (INL res, st') ==>
-  state_well_typed st' /\ accounts_well_typed st'.accounts
+Theorem target_runtime_typed_rebuild:
+  runtime_consistent env cx st' /\ target_runtime_typed env cx st tgt ty gv ==>
+  target_runtime_typed env cx st' tgt ty gv
 Proof
-  (* Tuple-assignment helper.  Induct on tgts/gvs/vs via
-     target_assignment_values_typed_def.  In the cons case, use
-     assign_target_preserves_state_well_typed for the head and recurse on the
-     tail with the updated state/account invariant. *)
+  Cases_on `gv` >> simp[target_runtime_typed_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `l` >> gvs[location_runtime_typed_def, runtime_consistent_def, env_consistent_def]
+  >- (
+    rename1 `FLOOKUP env.var_types (string_to_num s) = SOME var_ty` >>
+    `?entry'. lookup_scopes (string_to_num s) st'.scopes = SOME entry'` by metis_tac[IS_SOME_EXISTS] >>
+    `entry'.type = entry.type` by metis_tac[optionTheory.SOME_11] >>
+    qexists_tac `Type var_ty` >> simp[] >>
+    qexists_tac `final_tv` >> simp[])
+  >- (
+    rename1 `FLOOKUP env.bare_globals (current_module cx,string_to_num s) = SOME imm_ty` >>
+    `?pair. FLOOKUP (get_source_immutables (current_module cx)
+        (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
+        (string_to_num s) = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
+    PairCases_on `pair` >>
+    `pair0 = tv` by metis_tac[optionTheory.SOME_11] >>
+    qexists_tac `Type imm_ty` >> simp[] >>
+    qexists_tac `final_tv` >> simp[] >>
+    qexists_tac `get_source_immutables (current_module cx)
+        (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m)` >>
+    qexists_tac `pair1` >>
+    Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
+    Cases_on `ALOOKUP x (current_module cx)` >>
+    gvs[get_immutables_def, get_address_immutables_def, bind_def, return_def,
+        lift_option_def, get_source_immutables_def, AllCaseEqs()]) >>
+  metis_tac[]
+QED
+
+Theorem target_assignment_values_typed_rebuild:
+  runtime_consistent env cx st' /\
+  target_assignment_values_typed env cx st tgts gvs vs ==>
+  target_assignment_values_typed env cx st' tgts gvs vs
+Proof
+  rw[target_assignment_values_typed_def] >>
+  pop_assum mp_tac >>
+  MAP_EVERY qid_spec_tac [`vs`, `gvs`] >>
+  Induct_on `tgts` >> Cases_on `gvs` >> Cases_on `vs` >>
+  simp[LIST_REL3_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[target_runtime_typed_rebuild]
+QED
+
+Theorem assign_target_preserves_state_well_typed_mutual:
+  (!cx gv op st res st'.
+    assign_target cx gv op st = (INL res, st') ==>
+    !env tgt ty.
+      runtime_consistent env cx st /\
+      target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op ==>
+      runtime_consistent env cx st') /\
+  (!cx gvs vs st res st'.
+    assign_targets cx gvs vs st = (INL res, st') ==>
+    !env tgts.
+      runtime_consistent env cx st /\
+      target_assignment_values_typed env cx st tgts gvs vs ==>
+      runtime_consistent env cx st')
+Proof
+  ho_match_mp_tac assign_target_ind >>
+  conj_tac >- suspend "ScopedVar" >>
+  conj_tac >- suspend "TopLevelVar" >>
+  conj_tac >- suspend "ImmutableVar" >>
+  conj_tac >- suspend "TupleTargetV" >>
+  (* Repeated assign_target fallback TypeError clauses generated from the
+     catch-all equation.  These are all impossible under the INL-result
+     hypothesis; keep them separate from the substantive cases above. *)
+  rpt (conj_tac >- (rpt strip_tac >> gvs[Once assign_target_def, raise_def])) >>
+  conj_tac >- (
+    (* assign_targets [] [] *)
+    rpt strip_tac >>
+    gvs[Once assign_target_def, return_def]) >>
+  conj_tac >- suspend "assign_targets_cons" >>
+  (* assign_targets fallback TypeError; impossible under INL result *)
+  rpt strip_tac >>
+  gvs[Once assign_target_def, raise_def]
+QED
+
+Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
+  rpt strip_tac >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs()] >>
   cheat
 QED
 
+Resume assign_target_preserves_state_well_typed_mutual[TopLevelVar]:
+  rpt strip_tac >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs()] >>
+  cheat
+QED
+
+Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
+  rpt strip_tac >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs()] >>
+  cheat
+QED
+
+Resume assign_target_preserves_state_well_typed_mutual[TupleTargetV]:
+  rpt strip_tac >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs()] >>
+  cheat
+QED
+
+Resume assign_target_preserves_state_well_typed_mutual[assign_targets_cons]:
+  rpt strip_tac >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs(), target_assignment_values_typed_def] >>
+  Cases_on `tgts` >> gvs[LIST_REL3_def] >>
+  rename1 `assign_target cx gv (Replace v) st = (INL head_res, s_mid)` >>
+  rename1 `assign_targets cx gvs vs s_mid = (INL _, st')` >>
+  `runtime_consistent env cx s_mid` by (
+    qpat_x_assum `!st0 res0 st1. assign_target cx gv (Replace v) st0 = (INL res0,st1) ==> _`
+      (qspecl_then [`st`, `head_res`, `s_mid`] mp_tac) >>
+    simp[] >>
+    disch_then (qspecl_then [`env`, `h`, `ty`] mp_tac) >>
+    simp[assign_operation_runtime_typed_def, value_runtime_typed_def]) >>
+  qpat_x_assum `!st0 st1. assign_targets cx gvs vs st0 = (INL (),st1) ==> _`
+    (qspecl_then [`s_mid`, `st'`] mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`env`, `t`] mp_tac) >>
+  simp[target_assignment_values_typed_def] >>
+  strip_tac >>
+  first_x_assum irule >>
+  `target_assignment_values_typed env cx st t gvs vs` by
+    simp[target_assignment_values_typed_def] >>
+  drule_all target_assignment_values_typed_rebuild >>
+  simp[target_assignment_values_typed_def]
+QED
+
+Finalise assign_target_preserves_state_well_typed_mutual
+
+Theorem assign_targets_preserves_runtime_consistent:
+  runtime_consistent env cx st /\
+  target_assignment_values_typed env cx st tgts gvs vs /\
+  assign_targets cx gvs vs st = (INL res, st') ==>
+  runtime_consistent env cx st'
+Proof
+  metis_tac[assign_target_preserves_state_well_typed_mutual]
+QED
+
+Theorem assign_target_preserves_runtime_consistent:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_target cx gv op st = (INL res, st') ==>
+  runtime_consistent env cx st'
+Proof
+  metis_tac[assign_target_preserves_state_well_typed_mutual]
+QED
+
+Theorem assign_targets_preserves_state_well_typed:
+  runtime_consistent env cx st /\
+  target_assignment_values_typed env cx st tgts gvs vs /\
+  assign_targets cx gvs vs st = (INL res, st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  metis_tac[assign_targets_preserves_runtime_consistent, runtime_consistent_def]
+QED
+
 Theorem assign_target_preserves_state_well_typed:
-  state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
-  target_runtime_typed env tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
   assign_target cx gv op st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
-  (* Proof draft / intended decomposition.
-
-     Use the mutual induction theorem for assign_target / assign_targets, with
-     strengthened predicates carrying:
-       state_well_typed st /\ accounts_well_typed st.accounts /\
-       target_runtime_typed env tgt ty gv /\
-       assign_operation_runtime_typed env ty op
-       ==> state_well_typed st' /\ accounts_well_typed st'.accounts
-
-     Key case split:
-     - TupleTargetV + Replace (ArrayV (TupleV vs)):
-         use target_values_shape_LIST_REL to align gvs/vs/types, then chain the
-         assign_targets IH through the list.
-     - BaseTargetV (LocalVar n) [] + Replace/Update/Append/Pop:
-         unfold assign_target_def/update_name_def; use state_well_typed_def and
-         scope_well_typed_def.  Replace/Update must use
-         assign_operation_runtime_typed_def to prove the new value has the old
-         entry.type.  update_name preserves entry.type and assignable.
-     - BaseTargetV storage/toplevel locations:
-         use the storage/hashmap preservation lemmas already proved in
-         vyperAssignTarget/vyperHashMap/vyperLookupStorage where possible; the
-         remaining obligation should be accounts_well_typed preservation for a
-         write of a value whose runtime type matches the target slot type.
-     - Subscript targets:
-         use target_value_shape/target_values_shape to recover element type or
-         hashmap value type, then reduce to the corresponding write/update case.
-     - Error/impossible cases:
-         simp[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
-              bind_def, check_def, type_check_def] closes because the theorem
-         assumes an INL result.
-
-     Likely helper lemmas to add before replacing this cheat:
-       update_name_preserves_state_well_typed
-       assign_targets_preserves_state_well_typed
-       storage_write_preserves_accounts_well_typed
-       assign_operation_runtime_typed_value_has_type
-  *)
-  cheat
+  metis_tac[assign_target_preserves_runtime_consistent, runtime_consistent_def]
 QED
 
 Theorem materialise_preserves_type:
