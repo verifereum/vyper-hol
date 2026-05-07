@@ -25,9 +25,7 @@
  * BRIDGE OBLIGATIONS (drafts):
  *   lowering_state_rel          — Vyper abstract state ~ Venom state
  *   lowering_preserves_calls    — call_external ~ run_context after lowering
- *   codegen_implies_wf          — codegen success implies ctx_wf (CHEATED in e2e)
- *   codegen_implies_mem_safe    — codegen success implies step_mem_safe (CHEATED)
- *   codegen_implies_entry_fn_no_ret — codegen success implies entry_fn_no_ret (CHEATED)
+ *   codegen_context_obligations — lowering/pipeline preconditions required by codegen
  *)
 
 Theory compilerCorrectnessDraft
@@ -37,6 +35,7 @@ Ancestors
   stateEquiv stateEquivProps
   venomExecSemantics
   e2eDefs
+  codegenCorrectness
 
 (* =====================================================================
    Leg 2: Pipeline Correctness (ALREADY PROVED)
@@ -62,8 +61,8 @@ Ancestors
    then run_context produces Abort Revert_abort ss' where accounts/storage
    are unchanged.
 
-   Draft statement follows the pattern of vyper_lowering_logs_correct
-   but strengthens it to cover all observable effects. *)
+   Draft statement follows the top-level lowering theorem and keeps logs
+   inside the external-call result relation. *)
 
 (* Lowering state relation: maps Vyper abstract machine state to
    Venom state fields. Key mappings:
@@ -74,10 +73,9 @@ Ancestors
    - Environment values (caller, value, etc.) ↔ s.vs_call_ctx fields *)
 
 (* Draft: The main lowering correctness theorem.
-   This bridges Vyper source semantics to Venom IR execution.
-   Currently cheated as e2eCorrectnessScript.vyper_lowering_logs_correct. *)
+   This bridges Vyper source semantics to Venom IR execution. *)
 Theorem vyper_lowering_correct_draft:
-  !tenv event_info selectors ext_fns int_fns fb_fn dispatch
+  !tenv cenv selectors ext_fns int_fns fb_fn dispatch
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     am tx vs args ret.
   let (ctx, _) = run_lowering selectors ext_fns int_fns fb_fn
@@ -88,14 +86,9 @@ Theorem vyper_lowering_correct_draft:
     vs.vs_inst_idx = 0
     ==>
     !fuel.
-      external_call_result_rel tenv ret
-        (call_external am tx)
-        (run_context fuel ctx vs) /\
-      (* Log correspondence for Vyper events *)
-      (case (call_external am tx, run_context fuel ctx vs) of
-         ((INL v, am'), Halt ss') =>
-           logs_correspond event_info tenv tx.target am'.logs ss'.vs_logs
-       | _ => T)
+      external_call_result_rel tenv cenv
+        (initial_evaluation_context am.sources am.layouts tx)
+        ret (call_external am tx) (run_context fuel ctx vs)
 Proof
   cheat (* Bridge: requires proving lowering translation correct.
            Key subgoals:
@@ -115,64 +108,41 @@ QED
    ===================================================================== *)
 
 (* codegen_correct requires ctx_wf, codegen_ready, entry_fn_no_ret,
-   and step_mem_safe. When codegen succeeds (returns SOME bytecode),
-   these should follow from the code generation algorithm.
+   and step_mem_safe. Codegen success alone cannot establish these
+   source-context facts; lowering/pipeline correctness must supply them
+   as explicit obligations. *)
 
-   Currently cheated in e2eCorrectnessScript as codegen_implies_wf,
-   codegen_implies_mem_safe, codegen_implies_entry_fn_no_ret. *)
+(* Draft: explicit obligations required before applying codegen_correct. *)
+Definition draft_codegen_context_obligations_def:
+  draft_codegen_context_obligations ctx spill_hwm ⇔
+    codegen_ready ctx ∧
+    ctx_wf ctx ∧
+    (!name efn. ctx.ctx_entry = SOME name ∧
+                lookup_function name ctx.ctx_functions = SOME efn ⇒
+                entry_fn_no_ret efn) ∧
+    (!fn inst vs1 vs2 fuel'.
+       MEM fn ctx.ctx_functions ∧
+       step_inst fuel' ctx inst vs1 = OK vs2 ⇒
+       step_mem_safe <| sa_fn_eom := 0;
+                        sa_next_offset := spill_hwm;
+                        sa_free_slots := [] |> vs1 vs2)
+End
 
-(* Draft: codegen success implies the context is well-formed.
-   codegen calls generate_context_plan which checks:
-   - All function labels are unique
-   - Entry function exists
-   - Each function has at least one block
-   - Last instruction in each block is a terminator
-   - All referenced labels exist in the function
-   So success implies these structural properties hold. *)
-Theorem codegen_implies_wf_draft:
-  !ctx fn_eom_map data_seg bytecode.
-    codegen ctx fn_eom_map data_seg = SOME bytecode ==>
-    codegen_ready ctx /\ ctx_wf ctx
-Proof
-  cheat (* Structural: unwind codegen_def, show plan generation
-           checks these properties before producing bytecode *)
-QED
-
-(* Draft: codegen success implies step_mem_safe.
-   The codegen plan allocates spill slots with monotonic offsets.
-   Every compiled instruction accesses memory within the allocated
-   spill region + function-local memory. step_mem_safe holds because
-   the plan ensures no overlap between spill region and data segment. *)
-Theorem codegen_implies_mem_safe_draft:
-  !ctx fn_eom_map data_seg bytecode.
-    codegen ctx fn_eom_map data_seg = SOME bytecode ==>
-    ?spill_hwm.
-      (!fn inst vs1 vs2 fuel'.
-         MEM fn ctx.ctx_functions /\
-         step_inst fuel' ctx inst vs1 = OK vs2 ==>
-         step_mem_safe <| sa_fn_eom := 0;
-                          sa_next_offset := spill_hwm;
-                          sa_free_slots := [] |> vs1 vs2)
-Proof
-  cheat (* Key insight: codegen's spill allocation is deterministic
-           and monotonic. The spill_hwm is the maximum allocated offset.
-           Prove by showing compiled EVM instructions only access
-           [spill_base, spill_base + spill_hwm). *)
-QED
-
-(* Draft: codegen success implies the entry function has no internal return.
-   The codegen checks that the entry function ends with STOP (not RET).
-   This is required for correct EVM execution (the entry function
-   should not return a value to the caller; external calls use RETURNDATACOPY). *)
-Theorem codegen_implies_entry_fn_no_ret_draft:
-  !ctx fn_eom_map data_seg bytecode.
-    codegen ctx fn_eom_map data_seg = SOME bytecode ==>
+Theorem draft_codegen_context_obligations_elim:
+  !ctx spill_hwm.
+    draft_codegen_context_obligations ctx spill_hwm ==>
+    codegen_ready ctx /\ ctx_wf ctx /\
     (!name efn. ctx.ctx_entry = SOME name /\
                 lookup_function name ctx.ctx_functions = SOME efn ==>
-                entry_fn_no_ret efn)
+                entry_fn_no_ret efn) /\
+    (!fn inst vs1 vs2 fuel'.
+       MEM fn ctx.ctx_functions /\
+       step_inst fuel' ctx inst vs1 = OK vs2 ==>
+       step_mem_safe <| sa_fn_eom := 0;
+                        sa_next_offset := spill_hwm;
+                        sa_free_slots := [] |> vs1 vs2)
 Proof
-  cheat (* Structural: codegen verifies entry function format
-           before emitting bytecode *)
+  rw[draft_codegen_context_obligations_def]
 QED
 
 (* =====================================================================
