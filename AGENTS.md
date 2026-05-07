@@ -15,7 +15,7 @@ Prefer using dedicated tools instead of bash operation:
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
 - **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
-- **holbuild** for HOL4 build/proof feedback when authorized. The old HOL4 MCP tools (`hol_send`, `hol_file_init`, `hol_state_at`, MCP `holmake`, etc.) are deprecated and should not be used.
+- **`holbuild`** for HOL operations/builds and proof feedback when authorized. The old HOL4 MCP tools (`hol_send`, `hol_file_init`, `hol_state_at`, MCP `holmake`, etc.) are deprecated and should not be used.
 
 ## Completion Standard
 
@@ -35,7 +35,7 @@ If you need to temporarily cheat a proof for debugging:
 3. Add a comment explaining why it's cheated
 
 ```sml
-(* TEMPORARILY CHEATED - investigating batch/interactive discrepancy
+(* TEMPORARILY CHEATED - investigating proof/build issue
 Proof
   Induct_on `fuel` >- rw[...] >>
   ...original proof...
@@ -74,12 +74,18 @@ venom/passes/  # directory for each pass
 
 ## Building
 
+Use direct script edits plus `holbuild` for HOL proof development and build validation.
+
+**Workflow: Edit / holbuild / loop**
+1. Edit the `.sml` file directly
+2. Run `holbuild` — on proof failure it prints the goal state (via goalfrag)
+3. Read the goal state, edit proof, re-run `holbuild` until it passes
 
 **Build time:** Keep under 30s. If longer, refactor the proof.
 
-**Theory files:** `.sig` and `.uo` files are generated in the `.hol/` subdir, never in the source directory. Don't try to load theories (`load "fooTheory"`) that haven't been built yet - run `Holmake` first.
+**Theory files:** `.sig` and `.uo` files are generated in the `.holbuild/` subdir, never in the source directory. Don't try to load theories (`load "fooTheory"`) that haven't been built yet - run `holbuild` first.
 
-## Interactive HOL Sessions
+**No interactive mode:** Do not use interactive proof-state workflows, including `g()`, `e()`, or `p()`.
 
 Use **holbuild** for HOL4 build/proof feedback when authorized by the user.
 
@@ -91,6 +97,8 @@ When proof-tool use is authorized, prefer a holbuild-centered workflow:
 2. Run holbuild/build feedback on the file or target theory.
 3. Use the reported goal/error context to refine the proof.
 4. Keep changes small and re-check frequently.
+
+**Never use `--skip-goalfrag`:** It is not allowed.
 
 ### File Conventions (repo-specific)
 
@@ -220,9 +228,11 @@ If these symlinks are missing, ask the operator to provide access.
 
 ## Proof Strategy
 
-**When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions. Use `hol_state_at` at different positions to debug. Cheats are temporary scaffolding only.
+**When proofs get complex:** Step back, look for helper lemmas, consider refactoring definitions, and validate incrementally with `holbuild`. Cheats are temporary scaffolding only.
 
 **Signs you're on wrong track:** Many nested TRY blocks, dozens of subgoals, slow tactics, unpredictable variable names (`h''` etc.) → stop and reconsider.
+
+## HOL4
 
 ### sg vs by vs suffices_by
 
