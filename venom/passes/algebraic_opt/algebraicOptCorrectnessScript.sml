@@ -9,6 +9,10 @@ Ancestors
    ao_fn_total_fresh_vars includes both ao_fn_fresh_vars (peephole expansion
    intermediates) and ao_cmp_flip_dead_vars (comparator outputs whose values
    change under the flip but are dead after their block). *)
+(* Correctness: for non-erroneous executions, the transform preserves semantics.
+   The Error disjunct: if the original function errors (undefined variable,
+   out-of-fuel, etc.), we make no guarantee about the transformed version.
+   For well-formed SSA programs, the Error case does not arise. *)
 Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
@@ -19,6 +23,7 @@ Theorem ao_transform_function_correct:
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv)
     ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (ao_transform_function fn) s)

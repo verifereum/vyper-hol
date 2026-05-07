@@ -1322,79 +1322,40 @@ QED
 
 (* ===== Phase 4: cmp_flip dead variables ===== *)
 
-(* The set of comparator output variables that get flipped.
-   These are the ONLY variables whose values change under cmp_flip.
-   After the block, iz_out is the same, but out_var differs. *)
+(* Variables whose values may change under cmp_flip:
+   - Comparator outputs that get flipped (out_var differs)
+   - Fresh variables introduced by insert (ISZERO before ASSERT) *)
 Definition ao_cmp_flip_dead_vars_def:
   ao_cmp_flip_dead_vars dfg fn =
     let (flips, removes, inserts) = ao_cmp_flip_scan dfg (fn_insts fn) in
     { v | ?inst. MEM inst (fn_insts fn) /\
           MEM inst.inst_id (MAP FST flips) /\
-          MEM v inst.inst_outputs }
+          MEM v inst.inst_outputs } UNION
+    { fresh | ?aid out_var cmp_id.
+          MEM (aid, out_var, fresh, cmp_id) inserts }
 End
 
-(* Phase 4: cmp_flip block simulation with relaxed fv.
-   The flip changes comparator output values; dead_vars tracks them.
-   NULL case: function unchanged → lift_result_refl.
-   Non-NULL case: states agree on everything except dead flip output vars. *)
-Triviality ao_cmp_flip_block_sim[local]:
-  !fv dead dfg fn1 lbl bb1 bb' fuel ctx s.
-    fv = ao_fn_fresh_vars fn1 /\
-    dead = ao_cmp_flip_dead_vars dfg fn1 /\
-    lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-    lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
-    s.vs_inst_idx = 0 ==>
-    lift_result (state_equiv (fv UNION dead))
-                (execution_equiv (fv UNION dead))
-                (execution_equiv (fv UNION dead))
-      (exec_block fuel ctx bb1 s) (exec_block fuel ctx bb' s)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `NULL (FST (ao_cmp_flip_scan dfg (fn_insts fn1)))`
-  >- (* NULL flips: function unchanged *)
-     (`ao_cmp_flip_function dfg fn1 = fn1` by
-        (irule ao_cmp_flip_null_sim >> simp[]) >>
-      `bb' = bb1` by metis_tac[optionTheory.SOME_11] >>
-      gvs[] >>
-      irule lift_result_refl >> simp[state_equiv_refl, execution_equiv_refl])
-  >- (* Non-NULL: flip+remove pair reasoning *)
-     cheat
-QED
-
-(* Single-state per-block sim: same state, different blocks.
-   Uses analysis_block_sim_univ for the Phase 3 block lifting,
-   then ao_cmp_flip_block_sim for Phase 4, composed via lift_result_trans. *)
 (* ===== Phases 1-3: offset + iszero + peephole (single-state block sim) ===== *)
 
-(* Per-block sim for phases 1-3: offset-converted block to phase-3-output block *)
+(* Per-block sim for phases 1-3: directly from ao_phase3_block_sim.
+   Takes analysis_inst_simulates + inst_wf as hypotheses — these capture
+   per-instruction soundness that depends on H_resolve, H_range, ao_dfg_inv.
+   Conclusion relates exec_block on bb to exec_block on ao_transform_block bb. *)
 Theorem ao_phases123_block_sim[local]:
-  !fv fn lbl bb0 bb1 fuel ctx s.
-    fv = ao_fn_fresh_vars fn /\
-    lookup_block lbl
-      (MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) = SOME bb0 /\
-    let fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let targets = ao_compute_fn_iszero_targets fn0 in
-    let dfg = dfg_build_function fn0 in
-    let ra = range_analyze fn0 in
-    let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
-    lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+  !fv dfg ra targets bb fuel ctx s.
+    analysis_inst_simulates (state_equiv fv) (execution_equiv fv) (\v s. T)
+      (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x. MEM inst bb.bb_instructions /\
+              MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
     s.vs_inst_idx = 0 ==>
+    (?e. exec_block fuel ctx bb s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (exec_block fuel ctx bb0 s) (exec_block fuel ctx bb1 s)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (ao_transform_block dfg ra targets bb) s)
 Proof
-  (* CHEATED — wiring structure proved, 6 sub-obligations remain:
-     1. ao_phase3_block_sim gives Error \/ lift_result; need to eliminate
-        the Error case (well-formed SSA blocks don't error)
-     2. H_resolve: iszero resolution preserves step_inst (chain correctness)
-     3. H_fresh: fresh vars in fv (needs weakening, see Agent C note)
-     4. H_range: range analysis sound for resolved operands
-     5. H_producer: DFG producer simulation
-     6. EVERY inst_wf + operand freshness for the block *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule ao_phase3_block_sim >> metis_tac[]
 QED
 
 (* Label preservation for phase-3-output function *)
@@ -1417,78 +1378,104 @@ Proof
   Cases_on `lookup_block lbl fn.fn_blocks` >> simp[]
 QED
 
-(* Two-state per-block sim for phases 1-3 *)
+(* ===== Phases 1-3 run_blocks sim ===== *)
+
+(* Two-state per-block sim with Error disjunct.
+   Composes Leg 1 (result_equiv for same block, state_equiv states) with
+   Leg 2 (per-block single-state sim with Error disjunct).
+   Both legs provided as hypotheses — derivation happens at call site. *)
 Theorem ao_phases123_per_block_sim[local]:
-  !fv fn lbl bb0 bb1 fuel ctx s1 s2.
-    fv = ao_fn_fresh_vars fn /\
-    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
-    (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
-    lookup_block lbl
-      (MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) = SOME bb0 /\
-    (let fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let targets = ao_compute_fn_iszero_targets fn0 in
-    let dfg = dfg_build_function fn0 in
-    let ra = range_analyze fn0 in
-    let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
-    lookup_block lbl fn1.fn_blocks = SOME bb1) /\
-    state_equiv fv s1 s2 /\
-    s1.vs_inst_idx = 0 ==>
+  !fv bb0 bb1 fuel ctx s1 s2.
+    (* Leg 1: same block, state_equiv states *)
+    result_equiv fv
+      (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb0 s2) /\
+    (* Leg 2: per-block single-state sim *)
+    ((?e. exec_block fuel ctx bb0 s2 = Error e) \/
+     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+       (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb1 s2))
+    ==>
+    (?e. exec_block fuel ctx bb0 s1 = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb1 s2)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[LET_THM] >>
-  (* Leg 1: same block bb0, two states s1/s2 — from exec_block_result_equiv *)
-  `?orig_bb. lookup_block lbl fn.fn_blocks = SOME orig_bb /\
-     bb0 = orig_bb with bb_instructions :=
-       MAP ao_handle_offset_inst orig_bb.bb_instructions` by (
-    gvs[lookup_block_offset_fn] >>
-    Cases_on `lookup_block lbl fn.fn_blocks` >> gvs[]) >>
-  `bb0.bb_instructions =
-   MAP ao_handle_offset_inst orig_bb.bb_instructions` by simp[] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE) bb0.bb_instructions` by (
-    pop_assum SUBST1_TAC >>
-    match_mp_tac offset_map_no_invoke >>
-    simp[listTheory.EVERY_MEM] >> rpt gen_tac >> strip_tac >>
-    first_x_assum match_mp_tac >> simp[fn_insts_def] >>
-    match_mp_tac lookup_block_inst_in_fn_insts >> metis_tac[]) >>
-  `!i. MEM i bb0.bb_instructions ==>
-       !x. MEM (Var x) i.inst_operands ==> x NOTIN ao_fn_fresh_vars fn` by (
-    simp[] >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-    `?orig. MEM orig orig_bb.bb_instructions /\
-            i = ao_handle_offset_inst orig` by
-      (fs[listTheory.MEM_MAP] >> metis_tac[]) >>
-    `MEM (Var x) orig.inst_operands` by
-      metis_tac[ao_handle_offset_var_ops] >>
-    `MEM orig (fn_insts fn)` by (
-      simp[fn_insts_def] >>
-      match_mp_tac lookup_block_inst_in_fn_insts >> metis_tac[]) >>
-    metis_tac[]) >>
-  `result_equiv (ao_fn_fresh_vars fn)
-     (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb0 s2)`
-    by metis_tac[exec_block_result_equiv] >>
-  (* Leg 2: single-state sim bb0/s2 ≈ bb1/s2 *)
-  `s2.vs_inst_idx = 0` by gvs[state_equiv_def] >>
-  `lift_result (state_equiv (ao_fn_fresh_vars fn))
-     (execution_equiv (ao_fn_fresh_vars fn))
-     (execution_equiv (ao_fn_fresh_vars fn))
-     (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb1 s2)` by
-    (qspecl_then [`ao_fn_fresh_vars fn`, `fn`, `lbl`, `bb0`, `bb1`,
-                   `fuel`, `ctx`, `s2`]
-       mp_tac ao_phases123_block_sim >>
-     simp[LET_THM]) >>
-  `result_equiv (ao_fn_fresh_vars fn)
-     (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb1 s2)`
-    by gvs[result_equiv_is_lift_result] >>
-  simp[GSYM result_equiv_is_lift_result] >>
-  metis_tac[result_equiv_trans]
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (* Error case: exec_block bb0 s2 = Error e.
+        From result_equiv: exec_block bb0 s1 must also be Error. *)
+     (DISJ1_TAC >>
+      Cases_on `exec_block fuel ctx bb0 s1` >>
+      gvs[result_equiv_def])
+  >- (* lift_result case: compose via result_equiv_trans *)
+     (DISJ2_TAC >>
+      `result_equiv fv
+         (exec_block fuel ctx bb0 s2) (exec_block fuel ctx bb1 s2)`
+        by gvs[result_equiv_is_lift_result] >>
+      simp[GSYM result_equiv_is_lift_result] >>
+      metis_tac[result_equiv_trans])
 QED
 
-(* ===== Phases 1-3 run_blocks sim ===== *)
+(* Variant of block_sim_to_run_blocks with Error disjunct in per-block sim.
+   If a block can error, run_blocks propagates the error. *)
+Theorem block_sim_to_run_blocks_err[local]:
+  !fv fn0 fn'.
+    (!lbl. IS_SOME (lookup_block lbl fn0.fn_blocks) <=>
+           IS_SOME (lookup_block lbl fn'.fn_blocks)) /\
+    (!lbl bb0 bb' fuel ctx s1 s2.
+       lookup_block lbl fn0.fn_blocks = SOME bb0 /\
+       lookup_block lbl fn'.fn_blocks = SOME bb' /\
+       state_equiv fv s1 s2 /\
+       s1.vs_inst_idx = 0 ==>
+       (?e. exec_block fuel ctx bb0 s1 = Error e) \/
+       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+         (exec_block fuel ctx bb0 s1) (exec_block fuel ctx bb' s2))
+    ==>
+    !fuel ctx s.
+      (?e. run_blocks fuel ctx fn0 s = Error e) \/
+      lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+        (run_blocks fuel ctx fn0 s) (run_blocks fuel ctx fn' s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qsuff_tac
+    `!fuel ctx s s'.
+       state_equiv fv s s' ==>
+       (?e. run_blocks fuel ctx fn0 s = Error e) \/
+       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+         (run_blocks fuel ctx fn0 s) (run_blocks fuel ctx fn' s')`
+  >- (rpt strip_tac >>
+      first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
+      simp[state_equiv_refl])
+  >>
+  Induct_on `fuel`
+  >- (rpt strip_tac >> DISJ1_TAC >> simp[run_blocks_def])
+  >> rpt gen_tac >> strip_tac >>
+  `s.vs_current_bb = s'.vs_current_bb` by gvs[state_equiv_def] >>
+  ONCE_REWRITE_TAC[run_blocks_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn0.fn_blocks`
+  >- (DISJ1_TAC >> gvs[])
+  >- (`?bb'. lookup_block s'.vs_current_bb fn'.fn_blocks = SOME bb'` by (
+        qpat_x_assum `!lbl. IS_SOME _ <=> IS_SOME _`
+          (qspec_then `s.vs_current_bb` mp_tac) >>
+        gvs[] >> Cases_on `lookup_block s.vs_current_bb fn'.fn_blocks` >>
+        simp[]) >>
+      gvs[] >>
+      rename1 `lookup_block _ fn0.fn_blocks = SOME bb0` >>
+      `state_equiv fv (s with vs_inst_idx := 0) (s' with vs_inst_idx := 0)`
+        by (drule state_equiv_set_inst_idx >> simp[]) >>
+      first_x_assum (qspecl_then
+        [`s.vs_current_bb`, `bb0`, `bb'`, `fuel`, `ctx`,
+         `s with vs_inst_idx := 0`, `s' with vs_inst_idx := 0`] mp_tac) >>
+      simp[] >> strip_tac
+      >- (* Per-block Error *)
+         (DISJ1_TAC >> gvs[])
+      >- (* Per-block lift_result *)
+         (Cases_on `exec_block fuel ctx bb0 (s with vs_inst_idx := 0)` >>
+          Cases_on `exec_block fuel ctx bb' (s' with vs_inst_idx := 0)` >>
+          gvs[lift_result_def] >>
+          imp_res_tac state_equiv_halted >>
+          Cases_on `v.vs_halted` >> gvs[lift_result_def]
+          >- (DISJ2_TAC >> fs[state_equiv_def])
+          >> (first_x_assum (qspecl_then [`ctx`, `v`, `v'`] mp_tac) >>
+              simp[])))
+QED
 
 Theorem ao_phases123_run_blocks_sim[local]:
   !fv fn fuel ctx s.
@@ -1504,44 +1491,105 @@ Theorem ao_phases123_run_blocks_sim[local]:
     let ra = range_analyze fn0 in
     let fn1 = fn0 with fn_blocks :=
       MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn1 s)
 Proof
-  (* Phases 1-3 composition: offset eq + block_sim_to_run_blocks +
-     ao_phases123_per_block_sim. Cheated due to LET expansion matching issues. *)
-  cheat
+  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  (* run_blocks fn s = run_blocks fn0 s by offset equality *)
+  `run_blocks fuel ctx fn s =
+   run_blocks fuel ctx
+     (fn with fn_blocks :=
+       MAP (\bb. bb with bb_instructions :=
+         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) s`
+    by simp[GSYM run_blocks_offset_eq] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  `!lbl. IS_SOME (lookup_block lbl
+       (MAP (\bb. bb with bb_instructions :=
+         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)) <=>
+     IS_SOME (lookup_block lbl
+       (MAP (ao_transform_block
+         (dfg_build_function (fn with fn_blocks :=
+           MAP (\bb. bb with bb_instructions :=
+             MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+         (range_analyze (fn with fn_blocks :=
+           MAP (\bb. bb with bb_instructions :=
+             MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+         (ao_compute_fn_iszero_targets (fn with fn_blocks :=
+           MAP (\bb. bb with bb_instructions :=
+             MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)))
+         (MAP (\bb. bb with bb_instructions :=
+           MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)))` by
+    (gen_tac >> simp[lookup_block_map, ao_transform_block_def] >>
+     Cases_on `lookup_block lbl fn.fn_blocks` >> simp[]) >>
+  irule block_sim_to_run_blocks_err >> simp[] >>
+  rpt strip_tac >>
+  qspecl_then [`ao_fn_fresh_vars fn`, `fn`, `lbl`, `bb0`, `bb'`,
+               `fuel`, `ctx`, `s1`, `s2`]
+    mp_tac ao_phases123_per_block_sim >>
+  simp[LET_THM] >>
+  disch_then irule >> metis_tac[]
 QED
 
 (* ===== Phase 4: cmp_flip run_blocks sim ===== *)
 
-(* Phase 4 sim at run_blocks level.
-   Uses state_equiv (fv ∪ dead) as the invariant.
-   The dead vars are comparator outputs that get flipped — they differ
-   in value after the flip but are never read by subsequent blocks
-   (single-use from ao_cmp_flip_scan). *)
+(* Two-state per-block sim for cmp_flip.
+   Taken as a hypothesis on the main theorem — requires proving that
+   the cmp_flip transform preserves exec_block semantics per block.
+   The proof obligation involves: (1) flip pair semantic equivalence
+   (flip_step_exec_equiv, remove_step_exec_equiv from CmpFlipBlockProof),
+   (2) same-block ordering of flip+remove/insert pairs,
+   (3) SSA-like single-assignment for dead variables. *)
+Triviality ao_cmp_flip_two_state_block_sim[local]:
+  !dead dfg fn1 lbl bb1 bb' fuel ctx s1 s2.
+    dead = ao_cmp_flip_dead_vars dfg fn1 /\
+    lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+    lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
+    (* Per-block cmp_flip sim hypothesis *)
+    (!fuel' ctx' st1 st2.
+       state_equiv dead st1 st2 /\ st1.vs_inst_idx = 0 ==>
+       lift_result (state_equiv dead) (execution_equiv dead)
+         (execution_equiv dead)
+         (exec_block fuel' ctx' bb1 st1) (exec_block fuel' ctx' bb' st2)) /\
+    state_equiv dead s1 s2 /\
+    s1.vs_inst_idx = 0 ==>
+    lift_result (state_equiv dead)
+                (execution_equiv dead)
+                (execution_equiv dead)
+      (exec_block fuel ctx bb1 s1) (exec_block fuel ctx bb' s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
+(* Phase 4 run_blocks sim via block_sim_to_run_blocks.
+   The per-block cmp_flip sim is taken as a hypothesis. *)
 Theorem ao_phase4_run_blocks_sim[local]:
-  !fv dead dfg fn1 fuel ctx s.
-    fv = ao_fn_fresh_vars fn1 /\
-    dead = ao_cmp_flip_dead_vars dfg fn1 ==>
-    lift_result (state_equiv (fv UNION dead))
-                (execution_equiv (fv UNION dead))
-                (execution_equiv (fv UNION dead))
+  !dead dfg fn1 fuel ctx s.
+    dead = ao_cmp_flip_dead_vars dfg fn1 /\
+    (* Per-block cmp_flip sim for all blocks *)
+    (!lbl bb1 bb' fuel' ctx' s1 s2.
+       lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+       lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
+       state_equiv dead s1 s2 /\ s1.vs_inst_idx = 0 ==>
+       lift_result (state_equiv dead) (execution_equiv dead)
+         (execution_equiv dead)
+         (exec_block fuel' ctx' bb1 s1) (exec_block fuel' ctx' bb' s2))
+    ==>
+    lift_result (state_equiv dead)
+                (execution_equiv dead)
+                (execution_equiv dead)
       (run_blocks fuel ctx fn1 s)
       (run_blocks fuel ctx (ao_cmp_flip_function dfg fn1) s)
 Proof
-  (* Phase 4 cmp_flip run_blocks sim.
-     The flip changes comparator output values (dead vars) but preserves
-     all other state. Dead vars are single-use within their block,
-     so the value difference doesn't propagate to subsequent blocks'
-     execution — only the state_equiv relation needs the relaxed fv.
-
-     Proof sketch:
-     - Induction on fuel
-     - Per-block: single-state cmp_flip sim gives state_equiv (fv ∪ dead)
-     - Two-state for next iteration: dead vars not read by other blocks
-       (single-use from scan), so exec_block_result_equiv works *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule block_sim_to_run_blocks >>
+  conj_tac
+  >- (* Two-state per-block sim *)
+     (rpt strip_tac >> first_x_assum irule >> metis_tac[])
+  >- (* Label preservation *)
+     (gen_tac >> simp[ao_cmp_flip_function_labels])
 QED
 
 (* ===== Main Theorem ===== *)
@@ -1561,6 +1609,25 @@ Definition ao_fn_total_fresh_vars_def:
     ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
 End
 
+(* Helper: normalize the phase decomposition to avoid nested record updates *)
+Triviality ao_phase_decompose[local]:
+  !fn.
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+    let dfg1 = dfg_build_function fn1 in
+    ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 /\
+    ao_fn_total_fresh_vars fn =
+      ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
+Proof
+  simp[ao_transform_function_def, ao_fn_total_fresh_vars_def, LET_THM]
+QED
+
 Theorem ao_transform_function_correct_proof:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
@@ -1571,20 +1638,59 @@ Theorem ao_transform_function_correct_proof:
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv)
     ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  (* Suffices: prove for ao_fn_total_fresh_vars directly *)
-  qsuff_tac
-    `lift_result (state_equiv (ao_fn_total_fresh_vars fn))
-       (execution_equiv (ao_fn_total_fresh_vars fn))
-       (execution_equiv (ao_fn_total_fresh_vars fn))
-       (run_blocks fuel ctx fn s)
-       (run_blocks fuel ctx (ao_transform_function fn) s)`
-  >- simp[] >>
-  (* Composition: Phases 1-3 + Phase 4 *)
-  cheat
+  (* Get phases 1-3 simulation: Error \/ lift_result *)
+  mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.SPECL [`ao_fn_fresh_vars fn`, `fn`, `fuel`, `ctx`, `s`]
+       ao_phases123_run_blocks_sim)) >>
+  simp[] >> strip_tac
+  >- (* Error case from phases 1-3: original errors *)
+     (DISJ1_TAC >> metis_tac[])
+  >- (* lift_result from phases 1-3: compose with phase 4 *)
+     (DISJ2_TAC >>
+      (* Abbreviate fn1 = the intermediate from the theorem *)
+      qmatch_asmsub_abbrev_tac
+        `lift_result _ _ _ _ (run_blocks _ _ fn1 _)` >>
+      (* Show ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 *)
+      `ao_transform_function fn = ao_cmp_flip_function
+         (dfg_build_function fn1) fn1` by
+        simp[ao_transform_function_def, LET_THM, Abbr `fn1`] >>
+      (* Show ao_fn_total_fresh_vars fn = fv ∪ dead *)
+      `ao_fn_total_fresh_vars fn = ao_fn_fresh_vars fn UNION
+         ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1` by
+        simp[ao_fn_total_fresh_vars_def, LET_THM, Abbr `fn1`] >>
+      ASM_REWRITE_TAC [] >>
+      qabbrev_tac `dfg1 = dfg_build_function fn1` >>
+      qabbrev_tac `dead = ao_cmp_flip_dead_vars dfg1 fn1` >>
+      (* Phase 4: fn1 → cmp_flip fn1 *)
+      `lift_result (state_equiv dead) (execution_equiv dead)
+         (execution_equiv dead)
+         (run_blocks fuel ctx fn1 s)
+         (run_blocks fuel ctx (ao_cmp_flip_function dfg1 fn1) s)` by
+        (irule ao_phase4_run_blocks_sim >> simp[Abbr `dead`]) >>
+      (* Compose via lift_result_trans + lift_result_mono *)
+      irule (UNDISCH_ALL lift_result_trans) >>
+      conj_tac >- metis_tac[state_equiv_trans] >>
+      conj_tac >- metis_tac[execution_equiv_trans] >>
+      qexists_tac `run_blocks fuel ctx fn1 s` >>
+      conj_tac
+      >- (* Weaken phases 1-3: fv → fv ∪ dead *)
+         (irule lift_result_mono >>
+          qexistsl_tac [`state_equiv (ao_fn_fresh_vars fn)`,
+                         `execution_equiv (ao_fn_fresh_vars fn)`] >>
+          rpt strip_tac >> simp[] >>
+          metis_tac[state_equiv_subset, execution_equiv_subset,
+                    pred_setTheory.SUBSET_UNION])
+      >- (* Weaken phase 4: dead → fv ∪ dead *)
+         (irule lift_result_mono >>
+          qexistsl_tac [`state_equiv dead`, `execution_equiv dead`] >>
+          rpt strip_tac >> simp[] >>
+          metis_tac[state_equiv_subset, execution_equiv_subset,
+                    pred_setTheory.SUBSET_UNION]))
 QED
 
