@@ -1503,16 +1503,13 @@ Theorem ao_phases123_run_blocks_sim[local]:
       (run_blocks fuel ctx fn1 s)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `fn0 = _` (fn th =>
-    `run_blocks fuel ctx fn s = run_blocks fuel ctx fn0 s` by
-      (SUBST1_TAC (SYM th) >> simp[run_blocks_offset_eq]) >>
-    ASSUME_TAC th) >>
-  pop_assum (K ALL_TAC) >> (* drop fn0 = ... (no longer needed) *)
+  `run_blocks fuel ctx fn s = run_blocks fuel ctx fn0 s` by
+    fs[run_blocks_offset_eq] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   irule block_sim_to_run_blocks_err >>
   conj_tac
   >- (gen_tac >> fs[lookup_block_map, ao_transform_block_def] >>
-      Cases_on `lookup_block lbl fn0.fn_blocks` >> simp[])
+      Cases_on `lookup_block lbl fn0.fn_blocks` >> fs[])
   >- (rpt strip_tac >>
       irule ao_phases123_per_block_sim >>
       conj_tac
