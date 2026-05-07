@@ -57,10 +57,10 @@ Datatype:
   | Sub
   | Mul
   | Div
-  | UAdd
-  | USub
-  | UMul
-  | UDiv
+  | UnsafeAdd
+  | UnsafeSub
+  | UnsafeMul
+  | UnsafeDiv
   | ExpMod
   | Mod
   | Exp
@@ -147,7 +147,6 @@ Datatype:
   | BlobHash
   | Env env_item
   | Acc account_item
-  | Isqrt
   | MethodId (* compute 4-byte function selector from signature string *)
   (* Elliptic curve cryptography - precompile builtins *)
   | ECRecover    (* ecrecover(hash, v, r, s) -> address *)

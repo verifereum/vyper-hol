@@ -229,11 +229,11 @@ Proof
   simp[vyperValueOperationTheory.evaluate_binop_def]
 QED
 
-(* ========= Wrapped arithmetic (UAdd, USub, UMul, UDiv) ========== *)
+(* ========= Wrapped arithmetic (UnsafeAdd, UnsafeSub, UnsafeMul, UnsafeDiv) ========== *)
 
 Theorem evaluate_binop_uadd:
   ∀u tv x y.
-    evaluate_binop u tv UAdd (IntV x) (IntV y) =
+    evaluate_binop u tv UnsafeAdd (IntV x) (IntV y) =
     INL (IntV (if is_Unsigned u then (x + y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x + y)))
 Proof
@@ -243,7 +243,7 @@ QED
 
 Theorem evaluate_binop_usub:
   ∀u tv x y.
-    evaluate_binop u tv USub (IntV x) (IntV y) =
+    evaluate_binop u tv UnsafeSub (IntV x) (IntV y) =
     INL (IntV (if is_Unsigned u then (x − y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x − y)))
 Proof
@@ -253,7 +253,7 @@ QED
 
 Theorem evaluate_binop_umul:
   ∀u tv x y.
-    evaluate_binop u tv UMul (IntV x) (IntV y) =
+    evaluate_binop u tv UnsafeMul (IntV x) (IntV y) =
     INL (IntV (if is_Unsigned u then (x * y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x * y)))
 Proof
@@ -264,7 +264,7 @@ QED
 Theorem evaluate_binop_udiv:
   ∀u tv x y.
     y ≠ 0 ⇒
-    evaluate_binop u tv UDiv (IntV x) (IntV y) =
+    evaluate_binop u tv UnsafeDiv (IntV x) (IntV y) =
     INL (IntV (if is_Unsigned u
                then &(w2n (word_div ((i2w x):bytes32) ((i2w y):bytes32))) % &(2 ** int_bound_bits u)
                else signed_int_mod (int_bound_bits u)
@@ -397,7 +397,7 @@ QED
 
 Theorem evaluate_binop_div_mod_success_nonzero:
   ∀u tv bop v1 v2 result.
-    (bop = Div ∨ bop = UDiv ∨ bop = Mod) ∧
+    (bop = Div ∨ bop = UnsafeDiv ∨ bop = Mod) ∧
     evaluate_binop u tv bop v1 v2 = INL result ⇒
     (∃i1 i2. v1 = IntV i1 ∧ v2 = IntV i2 ∧ i2 ≠ 0) ∨
     (∃i1 i2. v1 = DecimalV i1 ∧ v2 = DecimalV i2 ∧ i2 ≠ 0)

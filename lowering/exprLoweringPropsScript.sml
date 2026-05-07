@@ -1635,18 +1635,6 @@ Proof
   simp[builtinMathTheory.compile_pow_mod256_def, ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_isqrt[local]:
-  ∀ v sa. ci_mono sa (SND (compile_isqrt v sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinMiscTheory.compile_isqrt_def, LET_THM] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-                          ci_mono_fresh_var, ci_mono_comp_return, ci_mono_compile_select]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-       ci_mono_fresh_var, ci_mono_comp_return, ci_mono_compile_select]
-QED
 
 Theorem ci_mono_compile_ceil[local]:
   ∀ v d sa. ci_mono sa (SND (compile_ceil v d sa))

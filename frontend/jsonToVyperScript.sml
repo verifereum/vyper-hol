@@ -402,7 +402,6 @@ Definition make_builtin_call_def:
     else if name = "ceil" then Builtin ty Ceil args
     else if name = "blockhash" then Builtin ty BlockHash args
     else if name = "blobhash" then Builtin ty BlobHash args
-    else if name = "isqrt" then Builtin ty Isqrt args
     else if name = "ecrecover" then Builtin ty ECRecover args
     else if name = "ecadd" then Builtin ty ECAdd args
     else if name = "ecmul" then Builtin ty ECMul args
@@ -412,10 +411,10 @@ Definition make_builtin_call_def:
     else if name = "convert" then
       (case args of (arg::_) => TypeBuiltin ty Convert ty [arg]
                   | _ => TypeBuiltin ty Convert ty [])
-    else if name = "unsafe_add" then Builtin ty (Bop UAdd) args
-    else if name = "unsafe_sub" then Builtin ty (Bop USub) args
-    else if name = "unsafe_mul" then Builtin ty (Bop UMul) args
-    else if name = "unsafe_div" then Builtin ty (Bop UDiv) args
+    else if name = "unsafe_add" then Builtin ty (Bop UnsafeAdd) args
+    else if name = "unsafe_sub" then Builtin ty (Bop UnsafeSub) args
+    else if name = "unsafe_mul" then Builtin ty (Bop UnsafeMul) args
+    else if name = "unsafe_div" then Builtin ty (Bop UnsafeDiv) args
     else if name = "uint256_addmod" then Builtin ty AddMod args
     else if name = "uint256_mulmod" then Builtin ty MulMod args
     else if name = "pow_mod256" then Builtin ty PowMod256 args

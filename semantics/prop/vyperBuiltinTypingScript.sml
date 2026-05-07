@@ -854,7 +854,6 @@ Proof
   >- suspend "BlobHash"
   >- suspend "Env"
   >- suspend "Acc"
-  >- suspend "Isqrt"
   >- suspend "MethodId"
   >- suspend "ECRecover"
   >- suspend "ECAdd"
@@ -1209,17 +1208,6 @@ Resume evaluate_builtin_well_typed[Acc]:
   fs[accounts_well_typed_def] >>
   first_x_assum (qspec_then `word_of_bytes_be l` mp_tac) >>
   simp[account_well_typed_def]
-QED
-
-Resume evaluate_builtin_well_typed[Isqrt]:
-  gvs[well_typed_builtin_app_def, LIST_REL_CONS1, evaluate_type_def] >>
-  rename1 `evaluate_builtin _ _ _ _ [av]` >>
-  Cases_on `av` >> gvs[evaluate_builtin_def, AllCaseEqs()] >>
-  irule vht_uint_bound >>
-  (conj_tac >- (irule LESS_EQ_LESS_TRANS >> qexists `Num i` >>
-    (conj_tac >- (irule vht_uint_Num_bound >> first_assum ACCEPT_TAC)) >>
-    simp[num_sqrt_le])) >>
-  DECIDE_TAC
 QED
 
 Resume evaluate_builtin_well_typed[MethodId]:
