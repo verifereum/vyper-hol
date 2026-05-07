@@ -1502,40 +1502,20 @@ Theorem ao_phases123_run_blocks_sim[local]:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn1 s)
 Proof
-  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  (* run_blocks fn s = run_blocks fn0 s by offset equality *)
-  `run_blocks fuel ctx fn s =
-   run_blocks fuel ctx
-     (fn with fn_blocks :=
-       MAP (\bb. bb with bb_instructions :=
-         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) s`
-    by simp[GSYM run_blocks_offset_eq] >>
+  rpt gen_tac >> strip_tac >> BasicProvers.LET_ELIM_TAC >>
+  `run_blocks fuel ctx fn s = run_blocks fuel ctx fn0 s`
+    by simp[GSYM run_blocks_offset_eq, Abbr `fn0`] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
-  `!lbl. IS_SOME (lookup_block lbl
-       (MAP (\bb. bb with bb_instructions :=
-         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)) <=>
-     IS_SOME (lookup_block lbl
-       (MAP (ao_transform_block
-         (dfg_build_function (fn with fn_blocks :=
-           MAP (\bb. bb with bb_instructions :=
-             MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
-         (range_analyze (fn with fn_blocks :=
-           MAP (\bb. bb with bb_instructions :=
-             MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
-         (ao_compute_fn_iszero_targets (fn with fn_blocks :=
-           MAP (\bb. bb with bb_instructions :=
-             MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)))
-         (MAP (\bb. bb with bb_instructions :=
-           MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)))` by
-    (gen_tac >> simp[lookup_block_map, ao_transform_block_def] >>
-     Cases_on `lookup_block lbl fn.fn_blocks` >> simp[]) >>
-  irule block_sim_to_run_blocks_err >> simp[] >>
-  rpt strip_tac >>
-  qspecl_then [`ao_fn_fresh_vars fn`, `fn`, `lbl`, `bb0`, `bb'`,
-               `fuel`, `ctx`, `s1`, `s2`]
-    mp_tac ao_phases123_per_block_sim >>
-  simp[LET_THM] >>
-  disch_then irule >> metis_tac[]
+  irule block_sim_to_run_blocks_err >>
+  conj_tac
+  >- (gen_tac >> simp[lookup_block_map, ao_transform_block_def] >>
+      Cases_on `lookup_block lbl fn0.fn_blocks` >> simp[])
+  >- (rpt strip_tac >>
+      irule ao_phases123_per_block_sim >>
+      conj_tac
+      >- (irule exec_block_result_equiv >> fs[])
+      >- (simp[lookup_block_map, ao_transform_block_def] >>
+          fs[] >> irule ao_phases123_block_sim >> simp[]))
 QED
 
 (* ===== Phase 4: cmp_flip run_blocks sim ===== *)
@@ -1656,7 +1636,7 @@ Proof
        ao_phases123_run_blocks_sim)) >>
   simp[] >> strip_tac
   >- (* Error case from phases 1-3: original errors *)
-     (DISJ1_TAC >> metis_tac[])
+     (DISJ1_TAC >> gvs[exec_result_11])
   >- (* lift_result from phases 1-3: compose with phase 4 *)
      (DISJ2_TAC >>
       (* Abbreviate fn1 = the intermediate from the theorem *)
