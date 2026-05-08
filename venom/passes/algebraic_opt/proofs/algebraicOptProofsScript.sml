@@ -20,7 +20,7 @@ Ancestors
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
   execEquivParamProofs venomWf
-  analysisSimProofsBase analysisSimDefs
+  analysisSimProofsBase analysisSimDefs dfAnalyzeDefs indexedLists
 Libs
   fcpLib
 
@@ -1681,6 +1681,168 @@ Proof
   res_tac >> gvs[] >> metis_tac[]
 QED
 
+(* ao_handle_offset_inst preserves inst_id *)
+Triviality ao_handle_offset_inst_id_eq[local]:
+  !inst. (ao_handle_offset_inst inst).inst_id = inst.inst_id
+Proof
+  gen_tac >>
+  Cases_on `inst.inst_opcode = ADD /\ ?l v. inst.inst_operands = [Label l; Lit v]`
+  >- (fs[] >> simp[ao_handle_offset_inst_def])
+  >- (imp_res_tac ao_handle_offset_inst_id >> simp[])
+QED
+
+(* Instructions in fn0 blocks have IDs from fn, so fresh vars are in fv *)
+Triviality fn0_inst_fresh_in_fv[local]:
+  !fn fn0 bb inst.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    MEM bb fn0.fn_blocks /\
+    MEM inst bb.bb_instructions ==>
+    ao_fresh_var inst.inst_id "not" IN ao_fn_fresh_vars fn /\
+    ao_fresh_var inst.inst_id "iz" IN ao_fn_fresh_vars fn /\
+    ao_fresh_var inst.inst_id "xor" IN ao_fn_fresh_vars fn
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  fs[listTheory.MEM_MAP] >> rename1 `MEM bb0 fn.fn_blocks` >>
+  gvs[] >>
+  fs[listTheory.MEM_MAP] >> rename1 `inst = ao_handle_offset_inst inst'` >>
+  `inst.inst_id = inst'.inst_id` by simp[ao_handle_offset_inst_id_eq] >>
+  `MEM inst' (fn_insts fn)` by
+    (simp[fn_insts_def] >> irule mem_block_mem_fn_insts_blocks >>
+     metis_tac[]) >>
+  `MEM inst'.inst_id (MAP (\i. i.inst_id) (fn_insts fn))` by
+    (simp[listTheory.MEM_MAP] >> qexists_tac `inst'` >> simp[]) >>
+  rpt conj_tac >>
+  simp[ao_fn_fresh_vars_def] >>
+  qexists_tac `inst'.inst_id` >> simp[ao_handle_offset_inst_id_eq]
+QED
+
+(* df_at on idx_df_state gives index (local reproof) *)
+Triviality idx_df_state_at2[local]:
+  !lbl n i. i < n ==>
+    df_at 0 (idx_df_state lbl n) lbl i = i
+Proof
+  rw[df_at_def, idx_df_state_def] >>
+  `FINITE (IMAGE (\i. (lbl, i)) (count n))` by simp[] >>
+  `(lbl, i) IN IMAGE (\i. (lbl, i)) (count n)` by
+    (simp[] >> qexists_tac `i` >> simp[]) >>
+  simp[finite_mapTheory.FLOOKUP_FUN_FMAP]
+QED
+
+(* Per-block sim for fn0 blocks with invariant, using f_safe wrapper.
+   Key: only requires per-instruction sim for block instructions (MEM). *)
+Triviality ao_block_sim_fn0[local]:
+  !fv dfg ra targets bb (state_inv : venom_state -> bool).
+    (!fuel ctx v inst s.
+       MEM inst bb.bb_instructions /\
+       state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
+       (?e. step_inst fuel ctx inst s = Error e) \/
+       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+         (step_inst fuel ctx inst s)
+         (run_insts fuel ctx
+           (ao_transform_inst dfg ra bb.bb_label v targets inst) s)) /\
+    inst_transform_structural
+      (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x. MEM inst bb.bb_instructions /\
+              MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
+    (!fuel ctx inst s s'.
+       MEM inst bb.bb_instructions /\ inst_wf inst /\
+       state_inv (s with vs_inst_idx := 0) /\
+       step_inst fuel ctx inst s = OK s' ==>
+       state_inv (s' with vs_inst_idx := 0)) /\
+    (!s1 s2. state_equiv fv s1 s2 /\ state_inv s1 ==> state_inv s2)
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\ state_inv s ==>
+      (?e. exec_block fuel ctx bb s = Error e) \/
+      lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx (ao_transform_block dfg ra targets bb) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* Define safe wrapper: identity for non-block instructions *)
+  qabbrev_tac `f_safe = \(v:num) inst.
+    if MEM inst bb.bb_instructions
+    then ao_transform_inst dfg ra bb.bb_label v targets inst
+    else [inst]` >>
+  (* Rewrite ao_transform_block to analysis_block_transform with f_safe *)
+  `ao_transform_block dfg ra targets bb =
+   analysis_block_transform 0
+     (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+     f_safe bb` by
+    (simp[analysis_block_transform_def, ao_transform_block_def] >>
+     `MAPi (\idx inst.
+        ao_transform_inst dfg ra bb.bb_label idx targets inst)
+        bb.bb_instructions =
+      MAPi (\idx inst.
+        f_safe (df_at 0
+          (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+          bb.bb_label idx) inst) bb.bb_instructions`
+       suffices_by simp[] >>
+     irule MAPi_CONG' >> simp[] >> rpt strip_tac >>
+     `n < SUC (LENGTH bb.bb_instructions)` by simp[] >>
+     simp[idx_df_state_at2, Abbr `f_safe`] >>
+     `MEM (EL n bb.bb_instructions) bb.bb_instructions` by
+       metis_tac[listTheory.EL_MEM] >> simp[]) >>
+  ASM_REWRITE_TAC [] >>
+  (* Pre-prove per-inst sim for f_safe *)
+  `!fuel ctx v inst s.
+    (\(v:num) (s:venom_state). T) v s /\
+    state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
+    (?e. step_inst fuel ctx inst s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst s)
+      (run_insts fuel ctx (f_safe v inst) s)` by
+    (rpt gen_tac >> simp[] >> strip_tac >>
+     gvs[Abbr `f_safe`] >>
+     Cases_on `MEM inst bb.bb_instructions` >>
+     gvs[run_insts_singleton] >>
+     DISJ2_TAC >> irule lift_result_refl >>
+     simp[state_equiv_refl, execution_equiv_refl]) >>
+  (* Pre-prove inst_transform_structural for f_safe *)
+  `inst_transform_structural f_safe` by
+    (simp[Abbr `f_safe`, inst_transform_structural_def] >>
+     qpat_x_assum `inst_transform_structural _`
+       (strip_assume_tac o REWRITE_RULE[inst_transform_structural_def]) >>
+     rpt conj_tac
+     >- (rpt gen_tac >> strip_tac >>
+         Cases_on `MEM inst bb.bb_instructions` >> gvs[] >>
+         qexists_tac `inst` >> simp[])
+     >- (rpt gen_tac >> strip_tac >>
+         Cases_on `MEM inst bb.bb_instructions` >> gvs[] >>
+         qexists_tac `inst` >> simp[])
+     >- (rpt gen_tac >> strip_tac >>
+         Cases_on `MEM inst bb.bb_instructions` >> gvs[])) >>
+  (* Apply analysis_block_sim_inv with f_safe *)
+  qspecl_then
+    [`state_equiv fv`, `execution_equiv fv`,
+     `\(v:num) (s:venom_state). T`, `state_inv`,
+     `f_safe`, `bb`, `0`,
+     `idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions))`,
+     `\(ctx:'b) (inst:instruction) v. SUC v`, `ARB`]
+    mp_tac analysis_block_sim_inv >>
+  impl_tac >- (
+    rpt conj_tac
+    >- simp[state_equiv_execution_equiv_valid_state_rel]
+    >- metis_tac[state_equiv_trans]
+    >- metis_tac[execution_equiv_trans]
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- (rpt strip_tac >>
+        `x NOTIN fv` by res_tac >>
+        fs[state_equiv_def, execution_equiv_def])
+    >- simp[transfer_sound_wf_def]
+    >- simp[]
+    >- (rpt strip_tac >> simp[idx_df_state_at2])
+    >- (rpt strip_tac >> res_tac)
+    >- (rpt strip_tac >> res_tac)) >>
+  simp[]
+QED
+
 (* run_blocks is independent of vs_inst_idx *)
 Triviality run_blocks_inst_idx_irrel[local]:
   !fuel ctx fn s.
@@ -1692,6 +1854,78 @@ Proof
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
   CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
   simp_tac (srw_ss()) []
+QED
+
+(* Per-instruction sim with per-instruction H_fresh.
+   Unlike ao_transform_inst_sim, only needs fresh vars for THIS inst. *)
+Triviality ao_transform_inst_sim_inst[local]:
+  !fv dfg ra lbl targets fuel ctx v inst s.
+    inst_wf inst /\
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    ao_fresh_var inst.inst_id "not" IN fv /\
+    ao_fresh_var inst.inst_id "iz" IN fv /\
+    ao_fresh_var inst.inst_id "xor" IN fv /\
+    (inst_wf inst ==>
+      step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+      step_inst fuel ctx inst s) /\
+    (!op w.
+      MEM op (ao_resolve_iszero_inst targets inst).inst_operands /\
+      eval_operand op s = SOME w ==>
+      in_range (range_get_range ra lbl v op) w)
+    ==>
+    (?e. step_inst fuel ctx inst s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst s)
+      (run_insts fuel ctx
+        (ao_transform_inst dfg ra lbl v targets inst) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+   step_inst fuel ctx inst s` by res_tac >>
+  simp[ao_transform_inst_def, LET_THM,
+       ao_resolve_iszero_inst_outputs,
+       ao_resolve_iszero_inst_opcode] >>
+  (* Trivial cases: outputs=[] or ASSIGN/PHI/PARAM *)
+  Cases_on `inst.inst_outputs = []`
+  >- (simp[run_insts_singleton] >> DISJ2_TAC >>
+      pop_assum kall_tac >> pop_assum (fn th => REWRITE_TAC [th]) >>
+      irule lift_result_refl >>
+      simp[state_equiv_refl, execution_equiv_refl]) >>
+  simp[] >>
+  Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
+            inst.inst_opcode = PARAM`
+  >- (simp[run_insts_singleton] >> DISJ2_TAC >>
+      qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+        (fn th => REWRITE_TAC [th]) >>
+      irule lift_result_refl >>
+      simp[state_equiv_refl, execution_equiv_refl]) >>
+  simp[] >>
+  Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)`
+  >- (* NONE: peephole path *)
+     (simp[] >>
+      `~is_terminator inst.inst_opcode` by
+        (strip_tac >> imp_res_tac terminator_no_outputs >> gvs[]) >>
+      Cases_on `inst.inst_opcode = INVOKE`
+      >- (simp[ao_peephole_inst_def, LET_THM,
+               ao_resolve_iszero_inst_opcode,
+               ao_pre_flip_inst_non_comm,
+               ao_post_flip_inst_non_comm,
+               run_insts_singleton] >>
+          DISJ2_TAC >>
+          qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+            (fn th => REWRITE_TAC [th]) >>
+          irule lift_result_refl >>
+          simp[state_equiv_refl, execution_equiv_refl])
+      >- (irule ao_peephole_path_sim >> gvs[] >>
+          metis_tac[ao_resolve_iszero_inst_id]))
+  >- (* SOME: producer path *)
+     (simp[] >>
+      qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+        (fn th => REWRITE_TAC [SYM th]) >>
+      irule ao_opt_producer_sim >>
+      simp[ao_resolve_iszero_inst_opcode,
+           ao_resolve_iszero_inst_outputs] >>
+      metis_tac[])
 QED
 
 Theorem ao_phases123_run_blocks_sim[local]:
@@ -1710,6 +1944,16 @@ Theorem ao_phases123_run_blocks_sim[local]:
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==>
               v NOTIN ao_fn_fresh_vars fn) /\
+    (* H_resolve: iszero resolution preserves step_inst *)
+    (!inst fuel ctx s. inst_wf inst ==>
+      step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+      step_inst fuel ctx inst s) /\
+    (* H_range: range analysis sound for resolved operands *)
+    (!bb inst idx s op v.
+      MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
+      eval_operand op s = SOME v /\
+      MEM op (ao_resolve_iszero_inst targets inst).inst_operands ==>
+      in_range (range_get_range ra bb.bb_label idx op) v) /\
     ao_dfg_inv dfg s ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv (ao_fn_fresh_vars fn))
@@ -1734,7 +1978,78 @@ Proof
   pop_assum SUBST1_TAC >>
   qspecl_then [`state_equiv fv`, `execution_equiv fv`,
     `sinv`, `bt`, `fn0`] mp_tac block_sim_function_error >>
-  impl_tac >- cheat
+  impl_tac >- (
+    rpt conj_tac
+    >- simp[state_equiv_execution_equiv_valid_state_rel]
+    >- metis_tac[state_equiv_trans]
+    >- metis_tac[execution_equiv_trans]
+    >- simp[Abbr `bt`]
+    >- (* Per-block sim: use ao_block_sim_fn0 *)
+       (rpt gen_tac >> rpt strip_tac >>
+        simp[Abbr `bt`, Abbr `sinv`] >>
+        qspecl_then [`fv`, `dfg`, `ra`, `targets`, `bb`,
+          `\s'. ao_dfg_inv dfg (s' with vs_inst_idx := 0)`]
+          mp_tac ao_block_sim_fn0 >>
+        impl_tac >- (
+          rpt conj_tac
+          >- (* Per-inst sim *)
+             (rpt strip_tac >>
+              irule ao_transform_inst_sim_inst >> simp[] >>
+              drule_all fn0_inst_fresh_in_fv >>
+              simp[Abbr `fv`] >> strip_tac >> simp[] >>
+              rpt strip_tac >>
+              TRY res_tac >>
+              first_x_assum irule >> metis_tac[])
+          >- simp[ao_transform_inst_structural]
+          >- (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+              res_tac >> metis_tac[mem_block_mem_fn_insts])
+          >- (rpt strip_tac >>
+              `x NOTIN fv` suffices_by
+                fs[state_equiv_def, execution_equiv_def] >>
+              simp[Abbr `fv`, ao_fn_fresh_vars_def] >>
+              drule ao_handle_offset_var_ops >> strip_tac >>
+              metis_tac[])
+          >- (rpt strip_tac >> irule ao_dfg_inv_step_any >>
+              qexistsl_tac [`fn0`, `bb`] >> simp[] >>
+              metis_tac[mem_block_mem_fn_insts,
+                        ao_handle_offset_not_invoke])
+          >- (rpt strip_tac >> irule ao_dfg_inv_state_equiv_compat >>
+              qexists_tac `s''` >> simp[Abbr `fv`] >>
+              rpt strip_tac >>
+              simp[ao_fn_fresh_vars_def] >>
+              metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct])) >>
+        disch_then irule >> simp[])
+    >- (* sinv preserved by exec_block *)
+       (rpt strip_tac >> simp[Abbr `sinv`] >>
+        irule ao_dfg_inv_exec_block_preserved >>
+        qexists_tac `fn0` >> simp[] >>
+        fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+        TRY (drule ao_handle_offset_not_invoke >> simp[] >> NO_TAC) >>
+        res_tac >> metis_tac[mem_block_mem_fn_insts])
+    >- (* sinv compat with state_equiv *)
+       (rpt strip_tac >> simp[Abbr `sinv`] >>
+        irule ao_dfg_inv_state_equiv_compat >>
+        qexists_tac `s'` >> simp[Abbr `fv`] >>
+        rpt strip_tac >>
+        `MEM inst (fn_insts fn0)` by
+          metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+        gvs[] >> fs[fn_insts_def] >>
+        fs[fn_insts_blocks_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+        gvs[] >>
+        simp[ao_fn_fresh_vars_def] >>
+        CCONTR_TAC >> fs[] >>
+        metis_tac[])
+    >- (* operand lookup under state_equiv *)
+       (rpt strip_tac >>
+        `MEM inst (fn_insts fn0)` by
+          metis_tac[mem_block_mem_fn_insts] >>
+        gvs[] >> fs[fn_insts_def, listTheory.MEM_MAP] >>
+        fs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+        gvs[] >>
+        drule ao_handle_offset_var_ops >> strip_tac >>
+        `x NOTIN ao_fn_fresh_vars fn` by metis_tac[] >>
+        `x NOTIN fv` by simp[Abbr `fv`] >>
+        fs[state_equiv_def, execution_equiv_def]))
   >>
   disch_then (qspecl_then [`fuel`, `ctx`,
     `s with vs_inst_idx := 0`] mp_tac) >>
