@@ -53,6 +53,16 @@ Proof
   rpt gen_tac >> rpt (PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
 QED
 
+Theorem af_rewrite_inst_not_pseudo[local]:
+  !dfg vi inst result.
+    af_rewrite_inst dfg vi inst = SOME result ==>
+    ~is_pseudo result.inst_opcode
+Proof
+  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
+       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
+  rpt gen_tac >> rpt (PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[is_pseudo_def]
+QED
+
 (* ===== Per-instruction structural properties ===== *)
 
 Theorem af_transform_inst_id[local]:
@@ -112,6 +122,25 @@ Proof
   imp_res_tac af_rewrite_inst_not_phi >> rw[]
 QED
 
+Theorem af_transform_inst_pseudo[local]:
+  !dfg vi inst.
+    is_pseudo inst.inst_opcode ==>
+    is_pseudo (af_transform_inst dfg vi inst).inst_opcode
+Proof
+  rw[af_transform_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_pseudo_def]
+QED
+
+Theorem af_transform_inst_not_pseudo[local]:
+  !dfg vi inst.
+    ~is_pseudo inst.inst_opcode ==>
+    ~is_pseudo (af_transform_inst dfg vi inst).inst_opcode
+Proof
+  rw[af_transform_inst_def] >>
+  EVERY_CASE_TAC >> rw[] >>
+  imp_res_tac af_rewrite_inst_not_pseudo >> rw[]
+QED
+
 (* ===== Transform equals function_map_transform ===== *)
 
 Theorem af_transform_eq_fmt[local]:
@@ -145,7 +174,8 @@ Proof
   irule map_transform_preserves_wf >>
   rw[af_transform_inst_id, af_transform_inst_terminator,
      af_transform_inst_not_terminator,
-     af_transform_inst_phi, af_transform_inst_not_phi]
+     af_transform_inst_phi, af_transform_inst_not_phi,
+     af_transform_inst_pseudo, af_transform_inst_not_pseudo]
 QED
 
 (* Affine folding preserves function execution semantics.

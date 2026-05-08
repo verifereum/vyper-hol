@@ -94,6 +94,24 @@ Proof
   rpt CASE_TAC >> gvs[mk_nop_inst_def, mk_assign_inst_def]
 QED
 
+Triviality ci_pseudo:
+  !amap inst. is_pseudo inst.inst_opcode ==>
+              is_pseudo (concretize_inst amap inst).inst_opcode
+Proof
+  rw[concretize_inst_def] >>
+  rpt CASE_TAC >> gvs[mk_nop_inst_def, mk_assign_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_pseudo_def, is_alloca_op_def]
+QED
+
+Triviality ci_non_pseudo:
+  !amap inst. ~is_pseudo inst.inst_opcode ==>
+              ~is_pseudo (concretize_inst amap inst).inst_opcode
+Proof
+  rw[concretize_inst_def] >>
+  rpt CASE_TAC >> gvs[mk_nop_inst_def, mk_assign_inst_def,
+                      is_pseudo_def]
+QED
+
 Triviality ci_outputs:
   !amap inst. inst.inst_outputs = (concretize_inst amap inst).inst_outputs \/
               (concretize_inst amap inst).inst_outputs = []
@@ -110,7 +128,8 @@ Proof
   rpt strip_tac >> simp[concretize_function_def] >>
   irule clear_nops_function_preserves_wf >>
   irule map_transform_preserves_wf >>
-  simp[ci_preserves_id, ci_terminator_identity, ci_non_term, ci_phi, ci_non_phi]
+  simp[ci_preserves_id, ci_terminator_identity, ci_non_term, ci_phi, ci_non_phi,
+       ci_pseudo, ci_non_pseudo]
 QED
 
 Theorem concretize_preserves_ssa_form:
@@ -121,5 +140,6 @@ Proof
   irule map_transform_preserves_ssa >>
   simp[ci_preserves_id, ci_outputs] >>
   irule map_transform_preserves_wf >>
-  simp[ci_preserves_id, ci_terminator_identity, ci_non_term, ci_phi, ci_non_phi]
+  simp[ci_preserves_id, ci_terminator_identity, ci_non_term, ci_phi, ci_non_phi,
+       ci_pseudo, ci_non_pseudo]
 QED

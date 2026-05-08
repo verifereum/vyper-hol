@@ -946,7 +946,11 @@ Theorem mapi_transform_preserves_wf_bb:
     (!bb i inst. ~is_terminator inst.inst_opcode ==>
                  ~is_terminator (g bb i inst).inst_opcode) /\
     (!bb i inst. inst.inst_opcode = PHI ==> (g bb i inst).inst_opcode = PHI) /\
-    (!bb i inst. inst.inst_opcode <> PHI ==> (g bb i inst).inst_opcode <> PHI)
+    (!bb i inst. inst.inst_opcode <> PHI ==> (g bb i inst).inst_opcode <> PHI) /\
+    (!bb i inst. is_pseudo inst.inst_opcode ==>
+                 is_pseudo (g bb i inst).inst_opcode) /\
+    (!bb i inst. ~is_pseudo inst.inst_opcode ==>
+                 ~is_pseudo (g bb i inst).inst_opcode)
     ==>
     wf_function fn ==>
     wf_function (function_map_transform
@@ -954,13 +958,16 @@ Theorem mapi_transform_preserves_wf_bb:
 Proof
   rpt strip_tac >>
   irule fmt_preserves_wf_function >> simp[] >>
-  metis_tac[mapi_transform_bb_succs, mapi_transform_bb_well_formed,
-            mapi_transform_fn_inst_ids_bb, wf_function_def]
+  rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
+      metis_tac[wf_function_def])
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[])
+  >- (irule mapi_transform_fn_inst_ids_bb >> metis_tac[wf_function_def])
 QED
 
 (* Combined: MAPi transform preserves wf_function.
    Conditions: inst_id preserved, terminators unchanged (identity),
-   non-terminators stay non-terminators, PHI/non-PHI preserved. *)
+   non-terminators stay non-terminators, PHI/non-PHI and pseudo/non-pseudo preserved. *)
 Theorem mapi_transform_preserves_wf:
   !f fn.
     (!i inst. (f i inst).inst_id = inst.inst_id) /\
@@ -968,7 +975,11 @@ Theorem mapi_transform_preserves_wf:
     (!i inst. ~is_terminator inst.inst_opcode ==>
               ~is_terminator (f i inst).inst_opcode) /\
     (!i inst. inst.inst_opcode = PHI ==> (f i inst).inst_opcode = PHI) /\
-    (!i inst. inst.inst_opcode <> PHI ==> (f i inst).inst_opcode <> PHI)
+    (!i inst. inst.inst_opcode <> PHI ==> (f i inst).inst_opcode <> PHI) /\
+    (!i inst. is_pseudo inst.inst_opcode ==>
+              is_pseudo (f i inst).inst_opcode) /\
+    (!i inst. ~is_pseudo inst.inst_opcode ==>
+              ~is_pseudo (f i inst).inst_opcode)
     ==>
     wf_function fn ==>
     wf_function (function_map_transform
@@ -976,8 +987,11 @@ Theorem mapi_transform_preserves_wf:
 Proof
   rpt strip_tac >>
   irule fmt_preserves_wf_function >> simp[] >>
-  metis_tac[mapi_transform_bb_succs, mapi_transform_bb_well_formed,
-            mapi_transform_fn_inst_ids, wf_function_def]
+  rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
+      metis_tac[wf_function_def])
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[])
+  >- (irule mapi_transform_fn_inst_ids >> metis_tac[wf_function_def])
 QED
 
 (* SSA preservation for block-dependent MAPi transform *)
@@ -1059,6 +1073,8 @@ Theorem aft_singleton_preserves_wf:
               ~is_terminator (f v inst).inst_opcode) /\
     (!v inst. inst.inst_opcode = PHI ==> (f v inst).inst_opcode = PHI) /\
     (!v inst. inst.inst_opcode <> PHI ==> (f v inst).inst_opcode <> PHI) /\
+    (!v inst. is_pseudo inst.inst_opcode ==> is_pseudo (f v inst).inst_opcode) /\
+    (!v inst. ~is_pseudo inst.inst_opcode ==> ~is_pseudo (f v inst).inst_opcode) /\
     wf_function fn ==>
     wf_function (analysis_function_transform bottom result
                    (\v inst. [f v inst]) fn)
@@ -1092,6 +1108,8 @@ Theorem aft_singleton_preserves_wf_weak:
               ~is_terminator (f v inst).inst_opcode) /\
     (!v inst. inst.inst_opcode = PHI ==> (f v inst).inst_opcode = PHI) /\
     (!v inst. inst.inst_opcode <> PHI ==> (f v inst).inst_opcode <> PHI) /\
+    (!v inst. is_pseudo inst.inst_opcode ==> is_pseudo (f v inst).inst_opcode) /\
+    (!v inst. ~is_pseudo inst.inst_opcode ==> ~is_pseudo (f v inst).inst_opcode) /\
     wf_function fn ==>
     wf_function (analysis_function_transform bottom result
                    (\v inst. [f v inst]) fn)
@@ -1181,6 +1199,8 @@ Theorem map_transform_preserves_wf:
             ~is_terminator (f inst).inst_opcode) /\
     (!inst. inst.inst_opcode = PHI ==> (f inst).inst_opcode = PHI) /\
     (!inst. inst.inst_opcode <> PHI ==> (f inst).inst_opcode <> PHI) /\
+    (!inst. is_pseudo inst.inst_opcode ==> is_pseudo (f inst).inst_opcode) /\
+    (!inst. ~is_pseudo inst.inst_opcode ==> ~is_pseudo (f inst).inst_opcode) /\
     wf_function fn ==>
     wf_function (function_map_transform (block_map_transform f) fn)
 Proof

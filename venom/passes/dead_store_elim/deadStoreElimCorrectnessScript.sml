@@ -38,6 +38,13 @@ Proof
   Cases_on `space` >> EVAL_TAC
 QED
 
+Triviality pseudo_not_memory_def:
+  !space op. is_pseudo op ==> ~is_memory_def_opcode space op
+Proof
+  Cases_on `op` >> simp[is_pseudo_def] >>
+  Cases_on `space` >> EVAL_TAC
+QED
+
 (* dse_inst either returns inst unchanged (guard false) or mk_nop_inst inst (guard true).
    All 6 di_* properties follow from this + the bridge lemmas above. *)
 
@@ -78,6 +85,22 @@ Proof
   rpt CASE_TAC >> gvs[mk_nop_inst_def]
 QED
 
+Triviality di_pseudo:
+  !dead_ids space inst. is_pseudo inst.inst_opcode ==>
+    is_pseudo (dse_inst dead_ids space inst).inst_opcode
+Proof
+  rpt strip_tac >> simp[dse_inst_def] >>
+  imp_res_tac pseudo_not_memory_def >> simp[]
+QED
+
+Triviality di_non_pseudo:
+  !dead_ids space inst. ~is_pseudo inst.inst_opcode ==>
+    ~is_pseudo (dse_inst dead_ids space inst).inst_opcode
+Proof
+  rw[dse_inst_def] >>
+  rpt CASE_TAC >> gvs[mk_nop_inst_def, is_pseudo_def]
+QED
+
 Triviality di_outputs:
   !dead_ids space inst.
     inst.inst_outputs = (dse_inst dead_ids space inst).inst_outputs \/
@@ -95,7 +118,8 @@ Triviality dse_single_pass_preserves_wf:
 Proof
   rw[dse_single_pass_def] >>
   irule map_transform_preserves_wf >>
-  simp[di_preserves_id, di_terminator_identity, di_non_term, di_phi, di_non_phi]
+  simp[di_preserves_id, di_terminator_identity, di_non_term, di_phi, di_non_phi,
+       di_pseudo, di_non_pseudo]
 QED
 
 Triviality dse_single_pass_preserves_ssa:
@@ -106,12 +130,14 @@ Proof
   rpt strip_tac >> simp[dse_single_pass_def]
   >- (irule map_transform_preserves_wf >>
       simp[di_preserves_id, di_terminator_identity,
-           di_non_term, di_phi, di_non_phi])
+           di_non_term, di_phi, di_non_phi,
+           di_pseudo, di_non_pseudo])
   >- (irule map_transform_preserves_ssa >>
       simp[di_preserves_id, di_outputs] >>
       irule map_transform_preserves_wf >>
       simp[di_preserves_id, di_terminator_identity,
-           di_non_term, di_phi, di_non_phi])
+           di_non_term, di_phi, di_non_phi,
+           di_pseudo, di_non_pseudo])
 QED
 
 (* OWHILE preserves wf/ssa via WhileTheory.OWHILE_INV_IND *)
