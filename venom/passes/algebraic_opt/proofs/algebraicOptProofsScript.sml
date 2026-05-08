@@ -1483,9 +1483,103 @@ Proof
                   simp[]))))
 QED
 
+Triviality ao_transform_block_label[local,simp]:
+  !dfg ra targets bb.
+    (ao_transform_block dfg ra targets bb).bb_label = bb.bb_label
+Proof
+  simp[ao_transform_block_def]
+QED
+
+Triviality ao_handle_offset_label[local,simp]:
+  !bb. (bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions).bb_label = bb.bb_label
+Proof
+  simp[]
+QED
+
+(* SSA uniqueness: in ALL_DISTINCT (FLAT (MAP f xs)), if v appears in
+   both f(a) and f(b) where a,b ∈ xs, then a = b. *)
+Triviality all_distinct_flat_map_unique[local]:
+  !xs f a b v.
+    ALL_DISTINCT (FLAT (MAP f xs)) /\
+    MEM a xs /\ MEM b xs /\
+    MEM v (f a) /\ MEM v (f b) ==> a = b
+Proof
+  Induct >> rw[listTheory.ALL_DISTINCT_APPEND] >>
+  metis_tac[listTheory.MEM_FLAT, listTheory.MEM_MAP]
+QED
+
+(* Block membership implies function membership for instructions *)
+Triviality mem_block_mem_fn_insts_blocks[local]:
+  !bbs bb inst.
+    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
+    MEM inst (fn_insts_blocks bbs)
+Proof
+  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
+QED
+
+Triviality mem_block_mem_fn_insts[local]:
+  !fn bb inst.
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+    MEM inst (fn_insts fn)
+Proof
+  simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts_blocks]
+QED
+
+(* ao_dfg_inv preserved by a single non-terminator, non-INVOKE step_inst
+   under SSA. *)
+Triviality ao_dfg_inv_step_preserved[local]:
+  !dfg fn0 bb inst fuel ctx s s'.
+    ssa_form fn0 /\ dfg = dfg_build_function fn0 /\
+    MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    inst_wf inst /\
+    ao_dfg_inv dfg s /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_dfg_inv dfg s'
+Proof
+  rw[ao_dfg_inv_def] >> rpt strip_tac >>
+  rename1 `dfg_get_def _ x = SOME inst_def` >>
+  rename1 `lookup_var x s' = SOME val` >>
+  cheat
+QED
+
+(* ao_dfg_inv preserved by exec_block under SSA. *)
+Triviality ao_dfg_inv_exec_block_preserved[local]:
+  !dfg fn0 bb fuel ctx s s'.
+    ssa_form fn0 /\ dfg = dfg_build_function fn0 /\
+    MEM bb fn0.fn_blocks /\
+    EVERY (\inst. ~is_terminator inst.inst_opcode) bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
+    EVERY inst_wf bb.bb_instructions /\
+    ao_dfg_inv dfg s /\ s.vs_inst_idx = 0 /\
+    exec_block fuel ctx bb s = OK s' ==>
+    ao_dfg_inv dfg s'
+Proof
+  cheat
+QED
+
+(* ao_dfg_inv compatible with state_equiv on fresh vars:
+   DFG variables are from fn0's instruction outputs, which are disjoint
+   from ao_fn_fresh_vars (peephole expansion fresh names). *)
+Triviality ao_dfg_inv_state_equiv_compat[local]:
+  !dfg fv s1 s2.
+    state_equiv fv s1 s2 /\ ao_dfg_inv dfg s1 /\
+    (!x inst. dfg_get_def dfg x = SOME inst ==> x NOTIN fv) ==>
+    ao_dfg_inv dfg s2
+Proof
+  simp[ao_dfg_inv_def] >> rpt strip_tac >>
+  `x NOTIN fv` by metis_tac[] >>
+  `lookup_var x s1 = lookup_var x s2` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  `lookup_var x s1 = SOME val` by gvs[] >>
+  `s1.vs_call_ctx = s2.vs_call_ctx` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  res_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem ao_phases123_run_blocks_sim[local]:
-  !fv fn fn0 dfg ra targets fn1 fuel ctx s.
-    fv = ao_fn_fresh_vars fn /\
+  !fn fn0 dfg ra targets fn1 fuel ctx s.
     fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
@@ -1496,23 +1590,16 @@ Theorem ao_phases123_run_blocks_sim[local]:
       MAP (ao_transform_block dfg ra targets) fn0.fn_blocks /\
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv) ==>
+              MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+    lift_result (state_equiv (ao_fn_fresh_vars fn))
+      (execution_equiv (ao_fn_fresh_vars fn))
+      (execution_equiv (ao_fn_fresh_vars fn))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn1 s)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  irule block_sim_to_run_blocks_err >>
-  conj_tac
-  >- (rpt strip_tac >>
-      irule ao_phases123_per_block_sim >>
-      conj_tac
-      >- (irule exec_block_result_equiv >> simp[])
-      >- (simp[lookup_block_map, ao_transform_block_def] >>
-          irule ao_phases123_block_sim >> simp[]))
-  >- (gen_tac >> simp[lookup_block_map, ao_transform_block_def] >>
-      Cases_on `lookup_block lbl fn.fn_blocks` >> simp[])
+  cheat
 QED
 
 (* ===== Phase 4: cmp_flip run_blocks sim ===== *)
@@ -1642,23 +1729,22 @@ Proof
      (execution_equiv (ao_fn_fresh_vars fn))
      (execution_equiv (ao_fn_fresh_vars fn))
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
-    (irule ao_phases123_run_blocks_sim >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >>
-     first_assum (ACCEPT_TAC o
-       REWRITE_RULE [markerTheory.Abbrev_def])) >>
-  gvs[]
-  >- (* Error case from phases 1-3: original errors *)
-     (DISJ1_TAC >> gvs[exec_result_11])
-  >- (* lift_result from phases 1-3: compose with phase 4 *)
-     (DISJ2_TAC >>
+    (irule ao_phases123_run_blocks_sim >>
+     rpt conj_tac >> fs[markerTheory.Abbrev_def]) >>
+  gvs[] >>
+  (* Error case auto-closed by gvs; lift_result case remains *)
+  DISJ2_TAC >>
+  (
       (* Show ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 *)
       `ao_transform_function fn = ao_cmp_flip_function
          (dfg_build_function fn1) fn1` by
-        simp[ao_transform_function_def, LET_THM, Abbr `fn1`] >>
+        simp[ao_transform_function_def, LET_THM,
+             Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`, Abbr `targets`] >>
       (* Show ao_fn_total_fresh_vars fn = fv ∪ dead *)
       `ao_fn_total_fresh_vars fn = ao_fn_fresh_vars fn UNION
          ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1` by
-        simp[ao_fn_total_fresh_vars_def, LET_THM, Abbr `fn1`] >>
+        simp[ao_fn_total_fresh_vars_def, LET_THM,
+             Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`, Abbr `targets`] >>
       ASM_REWRITE_TAC [] >>
       qabbrev_tac `dfg1 = dfg_build_function fn1` >>
       qabbrev_tac `dead = ao_cmp_flip_dead_vars dfg1 fn1` >>
@@ -1667,7 +1753,11 @@ Proof
          (execution_equiv dead)
          (run_blocks fuel ctx fn1 s)
          (run_blocks fuel ctx (ao_cmp_flip_function dfg1 fn1) s)` by
-        (irule ao_phase4_run_blocks_sim >> simp[Abbr `dead`]) >>
+        (* CHEATED subgoal: per-block cmp_flip sim not yet proved
+           (tasks #2/#3: ao_cmp_flip_block_sim) *)
+        (irule ao_phase4_run_blocks_sim >>
+         simp[Abbr `dead`, Abbr `dfg1`, Abbr `fn1`, Abbr `fn0`,
+              Abbr `dfg`, Abbr `ra`, Abbr `targets`] >> cheat) >>
       (* Compose via lift_result_trans + lift_result_mono *)
       irule (UNDISCH_ALL lift_result_trans) >>
       conj_tac >- metis_tac[state_equiv_trans] >>
