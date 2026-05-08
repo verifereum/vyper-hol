@@ -191,6 +191,108 @@ Proof
   res_tac >> gvs[optionTheory.IS_SOME_EXISTS, FLOOKUP_DEF]
 QED
 
+Definition env_maps_wf_def:
+  env_maps_wf env <=>
+    !id. FLOOKUP env.var_assignable id = SOME T ==>
+         IS_SOME (FLOOKUP env.var_types id)
+End
+
+Theorem env_consistent_env_maps_wf:
+  env_consistent env cx st ==> env_maps_wf env
+Proof
+  rw[env_consistent_def, env_maps_wf_def]
+QED
+
+Theorem env_maps_wf_no_stale_assignable_T:
+  env_maps_wf env /\ id NOTIN FDOM env.var_types ==>
+  FLOOKUP env.var_assignable id <> SOME T
+Proof
+  rw[env_maps_wf_def, TO_FLOOKUP] >>
+  first_x_assum (qspec_then `id` mp_tac) >> simp[]
+QED
+
+Theorem extend_local_env_consistent_weaken:
+  env_maps_wf env /\
+  id NOTIN FDOM env.var_types /\
+  env_consistent (extend_local env id ty assignable) cx st ==>
+  env_consistent env cx st
+Proof
+  rw[] >>
+  qpat_x_assum `env_consistent (extend_local _ _ _ _) _ _` mp_tac >>
+  simp[env_consistent_def, extend_local_def, FLOOKUP_UPDATE, TO_FLOOKUP] >>
+  strip_tac >> gvs[] >>
+  conj_tac >- (
+    rpt strip_tac >> Cases_on `id = id'` >> gvs[]) >>
+  conj_tac >- (
+    rpt strip_tac >> Cases_on `id = id'` >> gvs[TO_FLOOKUP] >>
+    ntac 2 (last_x_assum(qspec_then`id'`mp_tac)) >> rw[]) >>
+  conj_tac >- (
+    rpt strip_tac >> Cases_on `id = id'` >> gvs[]
+    >- metis_tac[env_maps_wf_no_stale_assignable_T] >>
+    ntac 3 (last_x_assum(qspec_then`id'`mp_tac)) >> rw[]) >>
+  conj_tac >- (
+    rpt strip_tac >> Cases_on `id = id'` >> gvs[]
+    >- metis_tac[env_maps_wf_no_stale_assignable_T] >>
+    metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem extend_local_env_maps_wf:
+  env_maps_wf env ==> env_maps_wf (extend_local env id ty assignable)
+Proof
+  rw[env_maps_wf_def, extend_local_def, FLOOKUP_UPDATE] >>
+  Cases_on `id = id'` >> gvs[]
+QED
+
+Theorem type_stmt_env_maps_wf:
+  env_maps_wf env /\ type_stmt env ret_ty s = SOME env' ==>
+  env_maps_wf env'
+Proof
+  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs()] >>
+  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  TRY (rw[env_maps_wf_def, extend_local_def, FLOOKUP_UPDATE] >>
+       Cases_on `string_to_num s'' = id` >> gvs[FLOOKUP_UPDATE]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem type_stmts_env_maps_wf:
+  env_maps_wf env /\ type_stmts env ret_ty ss = SOME env' ==>
+  env_maps_wf env'
+Proof
+  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
+  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
+  metis_tac[type_stmt_env_maps_wf]
+QED
+
+Theorem type_stmt_env_consistent_weaken:
+  env_maps_wf env /\
+  type_stmt env ret_ty s = SOME env' /\ env_consistent env' cx st ==>
+  env_consistent env cx st
+Proof
+  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs()] >>
+  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  rpt strip_tac >> gvs[] >>
+  drule_then irule extend_local_env_consistent_weaken >>
+  goal_assum $ drule_at Any >> gvs[]
+QED
+
+Theorem type_stmts_env_consistent_weaken:
+  env_maps_wf env /\
+  type_stmts env ret_ty ss = SOME env' /\ env_consistent env' cx st ==>
+  env_consistent env cx st
+Proof
+  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
+  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >>
+  `env_maps_wf env''` by metis_tac[type_stmt_env_maps_wf] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all type_stmt_env_consistent_weaken >> gvs[]
+QED
+
 (* ===== Main frame lemma ===== *)
 
 Theorem env_consistent_preserved_by_frame:
