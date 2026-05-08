@@ -10,7 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeEnvPreservation vyperTypeBuiltins vyperTypeExprSoundness
-  vyperExprNoControl vyperStatePreservation vyperTypeStatePreservation
+  vyperExprNoControl vyperScopePreservation vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib markerLib
 
@@ -416,7 +416,34 @@ Resume eval_all_type_sound_mutual[AugAssign]:
 QED
 
 Resume eval_all_type_sound_mutual[If]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e st` >>
+  first_x_assum drule_all >> strip_tac >>
+  simp_tac (srw_ss()) [] >>
+  rename1 `eval_expr cx e st = (cond_res, st1)` >>
+  reverse(Cases_on `cond_res`)
+  >- (
+    strip_tac >>
+    gvs[no_type_error_result_def] >>
+    drule_all eval_expr_exception_return_typed >> simp[]
+  ) >>
+  simp_tac(srw_ss())[ignore_bind_def, bind_def] >>
+  CASE_TAC >>
+  reverse CASE_TAC >- (
+    strip_tac >> gvs[] >>
+    pop_assum mp_tac >>
+    simp_tac(srw_ss())[push_scope_def,return_def]
+  ) >>
+  rename1 `eval_expr cx e st = (INL tv, st1)` >>
+  gvs[expr_runtime_typed_def, evaluate_type_def] >>
+  drule toplevel_value_typed_BoolTV >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  NO_TAC
 QED
 
 Resume eval_all_type_sound_mutual[For]:

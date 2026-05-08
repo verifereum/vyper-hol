@@ -293,6 +293,17 @@ Proof
   drule_all type_stmt_env_consistent_weaken >> gvs[]
 QED
 
+Theorem scope_bracket_preserves_ec:
+  env_maps_wf env /\
+  type_stmts env ret_ty ss = SOME env_after /\
+  env_consistent env_after cx st_body /\
+  eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st_body) /\
+  (!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc) ==>
+  env_consistent env cx (st_body with scopes := TL st_body.scopes)
+Proof
+  cheat
+QED
+
 (* ===== Main frame lemma ===== *)
 
 Theorem env_consistent_preserved_by_frame:
