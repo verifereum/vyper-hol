@@ -10,7 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeEnvPreservation vyperTypeBuiltins vyperTypeExprSoundness
-  vyperStatePreservation vyperTypeStatePreservation
+  vyperExprNoControl vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib markerLib
 
@@ -28,6 +28,28 @@ Definition stmt_error_ok_def:
     no_type_error_result r /\
     (case r of INR exn => return_exception_typed env ret_ty exn | _ => T)
 End
+
+Theorem no_control_exc_return_exception_typed:
+  no_control_exc exn ==> return_exception_typed env ret_ty exn
+Proof
+  Cases_on `exn` >> rw[no_control_exc_def, return_exception_typed_def]
+QED
+
+Theorem eval_expr_exception_return_typed:
+  eval_expr cx e st = (INR exn, st') ==> return_exception_typed env ret_ty exn
+Proof
+  strip_tac >>
+  drule (cj 1 eval_expr_no_control) >>
+  rw[no_control_exc_return_exception_typed]
+QED
+
+Theorem eval_exprs_exception_return_typed:
+  eval_exprs cx es st = (INR exn, st') ==> return_exception_typed env ret_ty exn
+Proof
+  strip_tac >>
+  drule (cj 2 eval_expr_no_control) >>
+  rw[no_control_exc_return_exception_typed]
+QED
 
 (* ===== Environment threading facts for executable statement typing ===== *)
 
@@ -147,38 +169,60 @@ QED
 (* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
  * lists, and for-loops.  This follows the evaluator recursion and is the
  * intended final shape for removing the no-TypeError cheats. *)
-Theorem eval_all_no_type_error_mutual:
+Theorem eval_all_type_sound_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_stmt cx s st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL _ => env_consistent env' cx st'
+    | INR exn => env_consistent env cx st' /\ return_exception_typed env ret_ty exn) /\
   (!cx ss. !env ret_ty env' st res st'.
     type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_stmts cx ss st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL _ => env_consistent env' cx st'
+    | INR exn => env_consistent env cx st' /\ return_exception_typed env ret_ty exn) /\
   (!cx it. !env ty st res st'.
     well_typed_iterator env ty it /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_iterator cx it st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL vs => ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs
+    | INR _ => T) /\
   (!cx tgt. !env ty st res st'.
     well_typed_atarget env tgt ty /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_target cx tgt st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL gv => target_runtime_typed env cx st' tgt ty gv
+    | INR _ => T) /\
   (!cx tgts. !env tys st res st'.
     LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_targets cx tgts st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL gvs => LIST_REL3 (\t ty gv. target_runtime_typed env cx st' t ty gv) tgts tys gvs
+    | INR _ => T) /\
   (!cx bt. !env vt st res st'.
     type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_base_target cx bt st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL (loc,sbs) => base_target_value_shape env bt loc sbs
+    | INR _ => T) /\
   (!cx tyv id body vs. !env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
     id NOTIN FDOM env.var_types /\
@@ -186,17 +230,29 @@ Theorem eval_all_no_type_error_mutual:
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_for cx tyv id body vs st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ accounts_well_typed st'.accounts /\ env_consistent env cx st' /\
+    no_type_error_result res /\
+    case res of
+    | INR exn => return_exception_typed env ret_ty exn
+    | INL _ => T) /\
   (!cx e. !env st res st'.
     well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_expr cx e st = (res, st') ==>
-    no_type_error_result res) /\
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL tv => expr_runtime_typed env e tv
+    | INR _ => T) /\
   (!cx es. !env st res st'.
     well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     eval_exprs cx es st = (res, st') ==>
-    no_type_error_result res)
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL vs => exprs_runtime_typed env es vs
+    | INR _ => T)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >>
@@ -258,284 +314,268 @@ Proof
   TRY(rename1 `eval_exprs _ (_::_)` >> suspend "Exprs_cons")
 QED
 
-Resume eval_all_no_type_error_mutual[Pass]:
-  gvs[Once evaluate_def, return_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[Continue]:
-  gvs[Once evaluate_def, raise_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[Break]:
-  gvs[Once evaluate_def, raise_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[Stmts_nil]:
-  gvs[Once evaluate_def, return_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[Return_NONE]:
-  gvs[type_stmt_def, Once evaluate_def, raise_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[Return_SOME]:
-  rpt gen_tac >> strip_tac >>
-  gvs[type_stmt_def, Once evaluate_def, bind_def, raise_def, AllCaseEqs(),
-      no_type_error_result_def] >>
-  first_x_assum drule_all >> rw[no_type_error_result_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[no_type_error_result_def]) >>
-  drule_all eval_expr_type_preservation >> strip_tac >>
-  gvs[expr_runtime_typed_def] >>
-  drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
-  drule_all materialise_typed_non_none_no_type_error >> simp[]
-QED
-
-Resume eval_all_no_type_error_mutual[RaiseBare]:
-  gvs[type_stmt_def, Once evaluate_def, raise_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[RaiseUnreachable]:
-  gvs[type_stmt_def, Once evaluate_def, raise_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[RaiseReason]:
+Resume eval_all_type_sound_mutual[Pass]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[AssertBare]:
+Resume eval_all_type_sound_mutual[Continue]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Break]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Return_NONE]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Return_SOME]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[RaiseBare]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[RaiseUnreachable]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[RaiseReason]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[AssertBare]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[AssertUnreachable]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[AssertReason]:
   rpt gen_tac >> strip_tac >>
-  reverse (
-  gvs[type_stmt_def, Once evaluate_def, bind_def, return_def, raise_def,
-      no_type_error_result_def, AllCaseEqs()] ) >- (
-    first_x_assum drule_all >> simp[]
+  qhdtm_x_assum`eval_stmt`mp_tac >>
+  simp_tac(srw_ss())[evaluate_def, bind_def, return_def, raise_def,
+       AllCaseEqs(), PULL_EXISTS] >>
+  qhdtm_x_assum`type_stmt`mp_tac >>
+  simp_tac(srw_ss())[type_stmt_def] >>
+  strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  rpt gen_tac >> reverse strip_tac >- (
+    rpt BasicProvers.VAR_EQ_TAC >>
+    first_x_assum drule_all >> simp[] >>
+    drule_all eval_expr_exception_return_typed >>
+    rw[] >> gvs[no_type_error_result_def]
   ) >>
-  drule_all eval_expr_type_preservation >>
-  rpt strip_tac >>
-  `no_type_error_result res` suffices_by gvs[no_type_error_result_def] >>
-  irule switch_BoolV_assert_no_type_error >> gvs[] >>
-  goal_assum $ drule_at Any >>
-  gvs[expr_runtime_typed_def, evaluate_type_def]
+  BasicProvers.VAR_EQ_TAC >>
+  first_x_assum drule_all >> simp[] >> strip_tac >>
+  first_x_assum (funpow 3 drule_then drule) >> simp[] >> strip_tac >>
+  qhdtm_x_assum`expr_runtime_typed`mp_tac >>
+  asm_rewrite_tac[expr_runtime_typed_def] >>
+  simp[evaluate_type_def] >> strip_tac >>
+  qho_match_abbrev_tac`P res st'` >>
+  drule_then (drule_then irule) switch_BoolV_post >>
+  conj_tac >- (rw[return_def,Abbr`P`] >> rw[no_type_error_result_def]) >>
+  qhdtm_x_assum`switch_BoolV`kall_tac >>
+  simp[bind_def,AllCaseEqs(),PULL_EXISTS,raise_def] >>
+  rpt gen_tac >>
+  strip_tac >> gvs[Abbr`P`] >>
+  imp_res_tac get_Value_state >>
+  imp_res_tac lift_option_type_state >>
+  gvs[expr_runtime_typed_def,evaluate_type_def] >>
+  TRY(Cases_on`stv` >> gvs[toplevel_value_typed_def, return_def] >>
+      TRY (
+      Cases_on`sv` >>
+      gvs[value_has_type_def,dest_StringV_def,
+          lift_option_type_def]))
+   >> gvs[no_type_error_result_def]
+   >- gvs[return_exception_typed_def]
+   >> drule eval_expr_exception_return_typed
+   >> rw[]
 QED
 
-Resume eval_all_no_type_error_mutual[AssertUnreachable]:
-  rpt gen_tac >> strip_tac >>
-  reverse (
-  gvs[type_stmt_def, Once evaluate_def, bind_def, return_def, raise_def,
-      no_type_error_result_def, AllCaseEqs()] ) >- (
-    first_x_assum drule_all >> simp[]
-  ) >>
-  drule_all eval_expr_type_preservation >>
-  rpt strip_tac >>
-  `no_type_error_result res` suffices_by gvs[no_type_error_result_def] >>
-  irule switch_BoolV_assert_no_type_error >> gvs[] >>
-  goal_assum $ drule_at Any >>
-  gvs[expr_runtime_typed_def, evaluate_type_def]
-QED
-
-Resume eval_all_no_type_error_mutual[AssertReason]:
+Resume eval_all_type_sound_mutual[Log]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Log]:
+Resume eval_all_type_sound_mutual[AnnAssign]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[AnnAssign]:
+Resume eval_all_type_sound_mutual[Append]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Append]:
+Resume eval_all_type_sound_mutual[Assign]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Assign]:
+Resume eval_all_type_sound_mutual[AugAssign]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[AugAssign]:
+Resume eval_all_type_sound_mutual[If]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[If]:
+Resume eval_all_type_sound_mutual[For]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[For]:
+Resume eval_all_type_sound_mutual[Expr]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr]:
+Resume eval_all_type_sound_mutual[Stmts_nil]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Stmts_cons]:
+Resume eval_all_type_sound_mutual[Stmts_cons]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Iterator_Array]:
+Resume eval_all_type_sound_mutual[For_nil]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Iterator_Range]:
+Resume eval_all_type_sound_mutual[For_cons]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Target_Base]:
+Resume eval_all_type_sound_mutual[Iterator_Array]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Target_Tuple]:
+Resume eval_all_type_sound_mutual[Iterator_Range]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Targets_nil]:
+Resume eval_all_type_sound_mutual[Target_Base]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Targets_cons]:
+Resume eval_all_type_sound_mutual[Target_Tuple]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[BaseTarget_Name]:
+Resume eval_all_type_sound_mutual[Targets_nil]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[BaseTarget_BareGlobal]:
+Resume eval_all_type_sound_mutual[Targets_cons]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[BaseTarget_TopLevel]:
+Resume eval_all_type_sound_mutual[BaseTarget_Name]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[BaseTarget_Subscript]:
+Resume eval_all_type_sound_mutual[BaseTarget_BareGlobal]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[BaseTarget_Attribute]:
+Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Name]:
+Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_BareGlobalName]:
+Resume eval_all_type_sound_mutual[BaseTarget_Attribute]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_TopLevelName]:
+Resume eval_all_type_sound_mutual[Expr_Name]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_FlagMember]:
+Resume eval_all_type_sound_mutual[Expr_BareGlobalName]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_IfExp]:
+Resume eval_all_type_sound_mutual[Expr_TopLevelName]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Literal]:
+Resume eval_all_type_sound_mutual[Expr_FlagMember]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_StructLit]:
+Resume eval_all_type_sound_mutual[Expr_IfExp]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Subscript]:
+Resume eval_all_type_sound_mutual[Expr_Literal]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Attribute]:
+Resume eval_all_type_sound_mutual[Expr_StructLit]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Builtin]:
+Resume eval_all_type_sound_mutual[Expr_Subscript]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_TypeBuiltin]:
+Resume eval_all_type_sound_mutual[Expr_Attribute]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Pop]:
+Resume eval_all_type_sound_mutual[Expr_Builtin]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_IntCall]:
+Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_ExtCall]:
+Resume eval_all_type_sound_mutual[Expr_Pop]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_Send]:
+Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_RawCallTarget]:
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_RawLog]:
+Resume eval_all_type_sound_mutual[Expr_Call_Send]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_RawRevert]:
+Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_SelfDestructTarget]:
+Resume eval_all_type_sound_mutual[Expr_Call_RawLog]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Expr_Call_CreateTarget]:
+Resume eval_all_type_sound_mutual[Expr_Call_RawRevert]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Exprs_nil]:
+Resume eval_all_type_sound_mutual[Expr_Call_SelfDestructTarget]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[Exprs_cons]:
+Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
   cheat
 QED
 
-Resume eval_all_no_type_error_mutual[For_nil]:
-  gvs[Once evaluate_def, return_def, no_type_error_result_def]
-QED
-
-Resume eval_all_no_type_error_mutual[For_cons]:
+Resume eval_all_type_sound_mutual[Exprs_nil]:
   cheat
 QED
 
-Finalise eval_all_no_type_error_mutual
-
-Theorem eval_stmt_stmts_for_no_type_error_mutual:
-  (!cx s st res st' env ret_ty env'.
-    type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    eval_stmt cx s st = (res, st') ==>
-    no_type_error_result res) /\
-  (!cx ss st res st' env ret_ty env'.
-    type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    eval_stmts cx ss st = (res, st') ==>
-    no_type_error_result res) /\
-  (!cx tyv id body vs st res st' env ret_ty ty env_after.
-    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
-    id NOTIN FDOM env.var_types /\
-    type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    eval_for cx tyv id body vs st = (res, st') ==>
-    no_type_error_result res)
-Proof
-  metis_tac[eval_all_no_type_error_mutual]
+Resume eval_all_type_sound_mutual[Exprs_cons]:
+  cheat
 QED
+
+Finalise eval_all_type_sound_mutual
 
 Theorem eval_stmt_no_type_error:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
@@ -545,8 +585,7 @@ Proof
   strip_tac >>
   Cases_on `eval_stmt cx s st` >>
   simp[no_type_error_eval_def] >>
-  irule (cj 1 eval_stmt_stmts_for_no_type_error_mutual) >>
-  metis_tac[]
+  drule_all (cj 1 eval_all_type_sound_mutual) >> rw[]
 QED
 
 Theorem eval_stmt_type_preservation_success:

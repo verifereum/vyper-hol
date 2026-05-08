@@ -64,6 +64,18 @@ Proof
   Cases_on `b` >> gvs[switch_BoolV_def, no_type_error_result_def]
 QED
 
+Theorem switch_BoolV_post:
+  toplevel_value_typed tv (BaseTV BoolT) /\
+  switch_BoolV tv kt kf st = (res, st') /\
+  (!res1 st1. kt st = (res1, st1) ==> P res1 st1) /\
+  (!res1 st1. kf st = (res1, st1) ==> P res1 st1) ==>
+  P res st'
+Proof
+  rw[] >>
+  drule toplevel_value_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def]
+QED
+
 Theorem get_Value_String_no_type_error:
   toplevel_value_typed tv (BaseTV (StringT n)) /\
   get_Value tv st = (res, st') ==>
