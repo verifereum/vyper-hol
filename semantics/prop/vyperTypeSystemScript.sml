@@ -554,7 +554,7 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Return NONE) =
     (if ret_ty = NoneT then SOME env else NONE) /\
   type_stmt env ret_ty (Return (SOME e)) =
-    (if well_typed_expr env e /\ expr_type e = ret_ty then SOME env else NONE) /\
+    (if well_typed_expr env e /\ expr_type e = ret_ty /\ ret_ty <> NoneT then SOME env else NONE) /\
   type_stmt env ret_ty (Raise RaiseBare) = SOME env /\
   type_stmt env ret_ty (Raise RaiseUnreachable) = SOME env /\
   type_stmt env ret_ty (Raise (RaiseReason e)) =
