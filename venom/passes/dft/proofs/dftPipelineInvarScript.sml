@@ -15,7 +15,9 @@
 Theory dftPipelineInvar
 Ancestors
   dftStructural dftIdempotent dftDefs venomExecSemantics venomEffects
-  passSharedDefs venomInst list rich_list sorting finite_map pred_set
+  passSharedDefs venomInst list rich_list sorting finite_map pred_set combin
+Libs
+  BasicProvers
 
 (* ================================================================
    Helpers
@@ -979,5 +981,3 @@ Proof
     simp[add_alloca_deps_def, add_chain_deps_def, LET_THM] >>
   simp[build_full_eda_def, LET_THM]
 QED
-
-val _ = export_theory();
