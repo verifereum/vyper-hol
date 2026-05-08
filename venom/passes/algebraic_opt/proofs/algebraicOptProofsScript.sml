@@ -1541,7 +1541,36 @@ Proof
   rw[ao_dfg_inv_def] >> rpt strip_tac >>
   rename1 `dfg_get_def _ x = SOME inst_def` >>
   rename1 `lookup_var x s' = SOME val` >>
-  cheat
+  `s'.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
+  Cases_on `MEM x inst.inst_outputs` >>
+  (* Non-output case: value unchanged, use ao_dfg_inv from old state *)
+  TRY (`lookup_var x s' = lookup_var x s` by
+         metis_tac[venomInstPropsTheory.step_preserves_non_output_vars] >>
+       `lookup_var x s = SOME val` by gvs[] >>
+       first_x_assum (qspecl_then [`x`, `inst_def`, `val`] mp_tac) >>
+       simp[] >> strip_tac >> gvs[] >> metis_tac[] >> NO_TAC) >>
+  (* Output case: SSA uniqueness gives inst = inst_def *)
+  `inst = inst_def` by
+    (`MEM inst (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
+     `MEM inst_def (fn_insts fn0) /\ MEM x inst_def.inst_outputs` by
+       metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+     qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
+                  `inst`, `inst_def`, `x`]
+       mp_tac all_distinct_flat_map_unique >>
+     impl_tac >- (fs[ssa_form_def]) >>
+     simp[]) >>
+  gvs[] >>
+  (* inst = inst_def. We know inst.inst_opcode is ADDRESS or SIGNEXTEND.
+     Analyze step_inst_base for these specific opcodes. *)
+  fs[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[Once step_inst_base_def] >>
+  gvs[exec_read0_def, exec_pure2_def, eval_operand_def,
+      AllCaseEqs(), inst_wf_def] >>
+  strip_tac >> gvs[update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
 
 (* ao_dfg_inv preserved by exec_block under SSA. *)
