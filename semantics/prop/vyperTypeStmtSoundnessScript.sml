@@ -144,13 +144,44 @@ QED
 
 (* ===== Statement soundness ===== *)
 
+(* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
+ * lists, and for-loops.  This follows the evaluator recursion and is the
+ * intended final shape for removing the no-TypeError cheats. *)
+Theorem eval_stmt_stmts_for_no_type_error_mutual:
+  (!cx s st res st' env ret_ty env'.
+    type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    eval_stmt cx s st = (res, st') ==>
+    no_type_error_result res) /\
+  (!cx ss st res st' env ret_ty env'.
+    type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    eval_stmts cx ss st = (res, st') ==>
+    no_type_error_result res) /\
+  (!cx tyv id body vs st res st' env ret_ty ty env_after.
+    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+    id NOTIN FDOM env.var_types /\
+    type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
+    env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    eval_for cx tyv id body vs st = (res, st') ==>
+    no_type_error_result res)
+Proof
+  cheat
+QED
+
 Theorem eval_stmt_no_type_error:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
   no_type_error_eval (eval_stmt cx s st)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `eval_stmt cx s st` >>
+  simp[no_type_error_eval_def] >>
+  irule (cj 1 eval_stmt_stmts_for_no_type_error_mutual) >>
+  metis_tac[]
 QED
+
 
 Theorem eval_stmt_type_preservation_success:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\

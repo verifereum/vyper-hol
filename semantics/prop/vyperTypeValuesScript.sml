@@ -44,6 +44,18 @@ Proof
   simp[evaluate_type_def]
 QED
 
+Theorem evaluate_type_NoneTV_imp_NoneT:
+  evaluate_type tenv ty = SOME NoneTV ==> ty = NoneT
+Proof
+  Cases_on `ty` >> gvs[evaluate_type_def, AllCaseEqs()]
+QED
+
+Theorem evaluate_type_not_NoneT_imp_not_NoneTV:
+  evaluate_type tenv ty = SOME tyv /\ ty <> NoneT ==> tyv <> NoneTV
+Proof
+  metis_tac[evaluate_type_NoneTV_imp_NoneT]
+QED
+
 Theorem evaluate_type_BaseT_cases:
   evaluate_type tenv (BaseT bt) = SOME tv ==>
   ?btv. tv = BaseTV btv

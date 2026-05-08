@@ -23,11 +23,99 @@ Definition no_type_error_eval_def:
   no_type_error_eval res <=> no_type_error_result (FST res)
 End
 
+Theorem lift_option_type_some_no_type_error:
+  opt = SOME v ==> no_type_error_eval (lift_option_type opt msg st)
+Proof
+  rw[lift_option_type_def, no_type_error_eval_def, no_type_error_result_def, return_def]
+QED
+
+Theorem lift_option_type_no_type_error_result:
+  opt = SOME v ==> FST (lift_option_type opt msg st) <> INR (Error (TypeError m))
+Proof
+  rw[lift_option_type_def, return_def]
+QED
+
+Theorem type_check_true_no_type_error:
+  b ==> no_type_error_eval (type_check b msg st)
+Proof
+  rw[type_check_def, assert_def, no_type_error_eval_def, no_type_error_result_def, return_def]
+QED
+
+Theorem lift_option_error:
+  lift_option x y z = (INR e, s) ==> e = Error (RuntimeError y)
+Proof
+  Cases_on `x` >> rw[lift_option_def, return_def, raise_def]
+QED
+
+Theorem get_storage_backend_no_error:
+  get_storage_backend cx is_trans st <> (INR e, s)
+Proof
+  Cases_on `is_trans` >>
+  rw[get_storage_backend_def, bind_def, get_transient_storage_def, get_accounts_def, return_def]
+QED
+
+Theorem read_storage_slot_error:
+  read_storage_slot x y z w a = (INR e, s) ==>
+  ?m. e = Error (RuntimeError m)
+Proof
+  rw[read_storage_slot_def, bind_def, AllCaseEqs()] >>
+  TRY (drule lift_option_error >> rw[]) >>
+  gvs[get_storage_backend_no_error]
+QED
+
+Theorem materialise_no_type_error:
+  materialise cx tv st = (INR e, st') ==>
+  (!tyv. toplevel_value_typed tv tyv ==> tyv = NoneTV) \/
+  (!m. e <> Error (TypeError m))
+Proof
+  Cases_on `tv` >>
+  simp[materialise_def, return_def, raise_def]
+  >- (rw[toplevel_value_typed_def]) >>
+  strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
+  drule read_storage_slot_error >> strip_tac >> gvs[]
+QED
+
+Theorem materialise_Value_no_type_error:
+  materialise cx (Value v) st <> (INR (Error (TypeError m)), st')
+Proof
+  simp[materialise_def, return_def]
+QED
+
+Theorem materialise_type_error_imp_HashMapRef:
+  materialise cx tv st = (INR (Error (TypeError m)), st') ==>
+  is_HashMapRef tv
+Proof
+  Cases_on `tv` >> gvs[materialise_def, return_def, raise_def, is_HashMapRef_def] >>
+  strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
+  drule read_storage_slot_error >> strip_tac >> gvs[is_HashMapRef_def]
+QED
+
+Theorem materialise_not_HashMapRef_no_type_error:
+  ~is_HashMapRef tv ==> materialise cx tv st <> (INR (Error (TypeError m)), st')
+Proof
+  metis_tac[materialise_type_error_imp_HashMapRef]
+QED
+
+Theorem materialise_typed_non_none_no_type_error:
+  materialise cx tv st = (INR e, st') /\ toplevel_value_typed tv tyv /\ tyv <> NoneTV ==>
+  !m. e <> Error (TypeError m)
+Proof
+  metis_tac[materialise_no_type_error]
+QED
+
 Definition expr_runtime_typed_def:
   expr_runtime_typed env e tvl <=>
     ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
          toplevel_value_typed tvl tv
 End
+
+Theorem materialise_runtime_typed_no_type_error:
+  expr_runtime_typed env e tv /\ evaluate_type env.type_defs (expr_type e) = SOME tyv /\ tyv <> NoneTV /\
+  materialise cx tv st = (INR err, st') ==>
+  !m. err <> Error (TypeError m)
+Proof
+  rw[expr_runtime_typed_def] >> gvs[] >> metis_tac[materialise_no_type_error]
+QED
 
 Definition value_runtime_typed_def:
   value_runtime_typed env ty v <=>
