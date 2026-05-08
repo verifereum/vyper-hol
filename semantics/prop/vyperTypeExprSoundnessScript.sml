@@ -41,6 +41,29 @@ Proof
   rw[type_check_def, assert_def, no_type_error_eval_def, no_type_error_result_def, return_def]
 QED
 
+Theorem switch_BoolV_assert_no_type_error:
+  toplevel_value_typed tv (BaseTV BoolT) /\
+  (!msg. exn <> Error (TypeError msg)) /\
+  switch_BoolV tv (return ()) (raise exn) st = (res, st') ==>
+  no_type_error_result res
+Proof
+  rw[] >>
+  drule toplevel_value_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def, no_type_error_result_def]
+QED
+
+Theorem switch_BoolV_no_type_error:
+  toplevel_value_typed tv (BaseTV BoolT) /\
+  switch_BoolV tv k1 k2 st = (res, st') /\
+  (!msg. FST (k1 st) <> INR (Error (TypeError msg))) /\
+  (!msg. FST (k2 st) <> INR (Error (TypeError msg))) ==>
+  no_type_error_result res
+Proof
+  rw[] >>
+  drule toplevel_value_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def, no_type_error_result_def]
+QED
+
 Theorem lift_option_error:
   lift_option x y z = (INR e, s) ==> e = Error (RuntimeError y)
 Proof

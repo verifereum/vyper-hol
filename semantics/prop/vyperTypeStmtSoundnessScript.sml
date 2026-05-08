@@ -303,11 +303,33 @@ Resume eval_all_no_type_error_mutual[RaiseReason]:
 QED
 
 Resume eval_all_no_type_error_mutual[AssertBare]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  reverse (
+  gvs[type_stmt_def, Once evaluate_def, bind_def, return_def, raise_def,
+      no_type_error_result_def, AllCaseEqs()] ) >- (
+    first_x_assum drule_all >> simp[]
+  ) >>
+  drule_all eval_expr_type_preservation >>
+  rpt strip_tac >>
+  `no_type_error_result res` suffices_by gvs[no_type_error_result_def] >>
+  irule switch_BoolV_assert_no_type_error >> gvs[] >>
+  goal_assum $ drule_at Any >>
+  gvs[expr_runtime_typed_def, evaluate_type_def]
 QED
 
 Resume eval_all_no_type_error_mutual[AssertUnreachable]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  reverse (
+  gvs[type_stmt_def, Once evaluate_def, bind_def, return_def, raise_def,
+      no_type_error_result_def, AllCaseEqs()] ) >- (
+    first_x_assum drule_all >> simp[]
+  ) >>
+  drule_all eval_expr_type_preservation >>
+  rpt strip_tac >>
+  `no_type_error_result res` suffices_by gvs[no_type_error_result_def] >>
+  irule switch_BoolV_assert_no_type_error >> gvs[] >>
+  goal_assum $ drule_at Any >>
+  gvs[expr_runtime_typed_def, evaluate_type_def]
 QED
 
 Resume eval_all_no_type_error_mutual[AssertReason]:

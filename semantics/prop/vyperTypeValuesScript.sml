@@ -38,6 +38,19 @@ Proof
   Cases_on `v` >> simp[value_has_type_def]
 QED
 
+Theorem value_has_type_BoolTV:
+  value_has_type (BaseTV BoolT) v ==> ?b. v = BoolV b
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Theorem toplevel_value_typed_BoolTV:
+  toplevel_value_typed tv (BaseTV BoolT) ==> ?b. tv = Value (BoolV b)
+Proof
+  Cases_on `tv` >> simp[toplevel_value_typed_def] >>
+  metis_tac[value_has_type_BoolTV]
+QED
+
 Theorem evaluate_type_NoneT[simp]:
   evaluate_type tenv NoneT = SOME NoneTV
 Proof
