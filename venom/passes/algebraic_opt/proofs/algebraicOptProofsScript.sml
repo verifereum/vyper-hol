@@ -1573,23 +1573,93 @@ Proof
   metis_tac[]
 QED
 
+(* Terminator step_inst OK preserves call_ctx.
+   Terminators returning OK are JMP/JNZ/DJMP which use jump_to. *)
+Triviality step_inst_ok_preserves_call_ctx[local]:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  reverse (Cases_on `is_terminator inst.inst_opcode`)
+  >- (drule_all venomInstProofsTheory.step_preserves_call_ctx >> simp[])
+  >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
+  simp[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* ao_dfg_inv preserved by a single step_inst OK (any opcode).
+   Terminators: vars and call_ctx preserved, so ao_dfg_inv holds.
+   Non-terminators: use ao_dfg_inv_step_preserved. *)
+Triviality ao_dfg_inv_step_any[local]:
+  !dfg fn0 bb inst fuel ctx s s'.
+    ssa_form fn0 /\ dfg = dfg_build_function fn0 /\
+    MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode <> INVOKE /\ inst_wf inst /\
+    ao_dfg_inv dfg s /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_dfg_inv dfg s'
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- ((* Terminator: all vars preserved, call_ctx preserved *)
+      simp[ao_dfg_inv_def] >> rpt strip_tac >>
+      `lookup_var x s' = lookup_var x s` by
+        metis_tac[step_terminator_preserves_vars] >>
+      `s'.vs_call_ctx = s.vs_call_ctx` by
+        metis_tac[step_inst_ok_preserves_call_ctx] >>
+      `lookup_var x s = SOME val` by gvs[] >>
+      fs[ao_dfg_inv_def] >> res_tac >> gvs[] >> metis_tac[])
+  >- metis_tac[ao_dfg_inv_step_preserved]
+QED
+
 (* ao_dfg_inv preserved by exec_block under SSA. *)
 Triviality ao_dfg_inv_exec_block_preserved[local]:
   !dfg fn0 bb fuel ctx s s'.
     ssa_form fn0 /\ dfg = dfg_build_function fn0 /\
     MEM bb fn0.fn_blocks /\
-    EVERY (\inst. ~is_terminator inst.inst_opcode) bb.bb_instructions /\
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY inst_wf bb.bb_instructions /\
     ao_dfg_inv dfg s /\
     exec_block fuel ctx bb s = OK s' ==>
     ao_dfg_inv dfg s'
 Proof
-  cheat (* TODO: remove EVERY non-terminator hypothesis (vacuous).
-     Needs ao_dfg_inv_step_preserved extended to terminators (trivial since
-     terminators have empty inst_outputs, but step_preserves_non_output_vars
-     requires ~is_terminator). Then induction on remaining instructions
-     via the suffices_by/Induct pattern. *)
+  rpt gen_tac >> strip_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> simp[] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+  `MEM inst bb.bb_instructions` by
+    (simp[Abbr `inst`] >> irule listTheory.EL_MEM >> simp[]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (fs[listTheory.EVERY_MEM] >> res_tac) >>
+  `inst_wf inst` by
+    (fs[listTheory.EVERY_MEM] >> res_tac) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_mid` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- ((* Terminator *)
+      Cases_on `s_mid.vs_halted` >> simp[] >>
+      strip_tac >> gvs[] >>
+      metis_tac[ao_dfg_inv_step_any])
+  >- ((* Non-terminator: recurse *)
+      strip_tac >>
+      `ao_dfg_inv dfg s_mid` by metis_tac[ao_dfg_inv_step_any] >>
+      `s_mid.vs_inst_idx = s.vs_inst_idx` by
+        metis_tac[step_inst_preserves_inst_idx] >>
+      first_x_assum (qspec_then
+        `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`bb`,
+        `s_mid with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      simp[] >> disch_then irule >>
+      qpat_x_assum `ao_dfg_inv _ s_mid` mp_tac >>
+      simp[ao_dfg_inv_def, lookup_var_def])
 QED
 
 (* ao_dfg_inv compatible with state_equiv on fresh vars:
@@ -1611,6 +1681,19 @@ Proof
   res_tac >> gvs[] >> metis_tac[]
 QED
 
+(* run_blocks is independent of vs_inst_idx *)
+Triviality run_blocks_inst_idx_irrel[local]:
+  !fuel ctx fn s.
+    run_blocks fuel ctx fn s =
+    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  Induct_on `fuel` >> rpt gen_tac
+  >- (ONCE_REWRITE_TAC[run_blocks_def] >> simp[]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
+  simp_tac (srw_ss()) []
+QED
+
 Theorem ao_phases123_run_blocks_sim[local]:
   !fn fn0 dfg ra targets fn1 fuel ctx s.
     fn0 = fn with fn_blocks :=
@@ -1621,10 +1704,13 @@ Theorem ao_phases123_run_blocks_sim[local]:
     ra = range_analyze fn0 /\
     fn1 = fn0 with fn_blocks :=
       MAP (ao_transform_block dfg ra targets) fn0.fn_blocks /\
+    ssa_form fn0 /\
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
+    EVERY inst_wf (fn_insts fn0) /\
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==>
-              v NOTIN ao_fn_fresh_vars fn) ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    ao_dfg_inv dfg s ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv (ao_fn_fresh_vars fn))
       (execution_equiv (ao_fn_fresh_vars fn))
