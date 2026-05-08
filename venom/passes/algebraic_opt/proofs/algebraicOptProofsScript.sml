@@ -1825,7 +1825,9 @@ Theorem ao_transform_function_correct_proof:
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     (* Freshness: original operands don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv)
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    (* Well-formedness *)
+    ssa_form fn /\ EVERY inst_wf (fn_insts fn)
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -1849,7 +1851,8 @@ Proof
      (execution_equiv (ao_fn_fresh_vars fn))
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
     (irule ao_phases123_run_blocks_sim >>
-     rpt conj_tac >> fs[markerTheory.Abbrev_def]) >>
+     rpt conj_tac >> fs[markerTheory.Abbrev_def] >>
+     TRY (cheat (* ssa_form fn0, EVERY inst_wf fn0, ao_dfg_inv *))) >>
   gvs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
