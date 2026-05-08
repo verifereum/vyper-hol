@@ -16,7 +16,7 @@ Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptSegSim
   algebraicOptPeepholeSim algebraicOptResolveSim
   algebraicOptBlockSim algebraicOptCmpFlipSim
-  passSimulationProps passSharedDefs venomExecSemantics stateEquiv
+  passSimulationProps passSimulationDefs passSharedDefs venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
   execEquivParamProofs venomWf
@@ -1718,7 +1718,30 @@ Theorem ao_phases123_run_blocks_sim[local]:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn1 s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (* Phase 1: run_blocks fn = run_blocks fn0 *)
+  `run_blocks fuel ctx fn0 s = run_blocks fuel ctx fn s` by
+    (fs[markerTheory.Abbrev_def] >>
+     ONCE_REWRITE_TAC[run_blocks_offset_eq] >> simp[]) >>
+  pop_assum (fn th => REWRITE_TAC [GSYM th]) >>
+  ONCE_REWRITE_TAC[run_blocks_inst_idx_irrel] >>
+  qabbrev_tac `fv = ao_fn_fresh_vars fn` >>
+  qabbrev_tac `bt = ao_transform_block dfg ra targets` >>
+  qabbrev_tac `sinv = \s:venom_state.
+    ao_dfg_inv dfg (s with vs_inst_idx := 0)` >>
+  `fn1 = function_map_transform bt fn0` by
+    simp[function_map_transform_def, Abbr `bt`] >>
+  pop_assum SUBST1_TAC >>
+  qspecl_then [`state_equiv fv`, `execution_equiv fv`,
+    `sinv`, `bt`, `fn0`] mp_tac block_sim_function_error >>
+  impl_tac >- cheat
+  >>
+  disch_then (qspecl_then [`fuel`, `ctx`,
+    `s with vs_inst_idx := 0`] mp_tac) >>
+  simp[Abbr `sinv`] >>
+  strip_tac >> first_x_assum irule >> simp[] >>
+  qpat_x_assum `ao_dfg_inv _ _` mp_tac >>
+  simp[ao_dfg_inv_def, lookup_var_def]
 QED
 
 (* ===== Phase 4: cmp_flip run_blocks sim ===== *)
