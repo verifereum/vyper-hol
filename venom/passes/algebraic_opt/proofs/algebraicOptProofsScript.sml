@@ -1585,9 +1585,11 @@ Triviality ao_dfg_inv_exec_block_preserved[local]:
     exec_block fuel ctx bb s = OK s' ==>
     ao_dfg_inv dfg s'
 Proof
-  cheat (* TODO: induction on remaining instructions via exec_block def.
-           EVERY non-terminator makes this vacuously true (exec_block never OK).
-           Real proof: remove EVERY non-terminator, handle terminator separately *)
+  cheat (* TODO: remove EVERY non-terminator hypothesis (vacuous).
+     Needs ao_dfg_inv_step_preserved extended to terminators (trivial since
+     terminators have empty inst_outputs, but step_preserves_non_output_vars
+     requires ~is_terminator). Then induction on remaining instructions
+     via the suffices_by/Induct pattern. *)
 QED
 
 (* ao_dfg_inv compatible with state_equiv on fresh vars:
