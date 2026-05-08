@@ -439,9 +439,6 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx acc _ (Acc aop) [BytesV bs] =
     (let a = lookup_account (word_of_bytes_be bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
-  evaluate_builtin cx _ _ Isqrt [IntV i] =
-    (if 0 ≤ i then INL $ IntV &(num_sqrt (Num i))
-     else INR (TypeError "Isqrt type")) ∧
   (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
   evaluate_builtin cx _ _ MethodId [StringV sig] =
     INL $ BytesV (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
@@ -496,7 +493,6 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok BlockHash n = (n = 1) ∧
   builtin_args_length_ok BlobHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1) ∧
-  builtin_args_length_ok Isqrt n = (n = 1) ∧
   builtin_args_length_ok MethodId n = (n = 1) ∧
   builtin_args_length_ok ECRecover n = (n = 4) ∧
   builtin_args_length_ok ECAdd n = (n = 2) ∧
