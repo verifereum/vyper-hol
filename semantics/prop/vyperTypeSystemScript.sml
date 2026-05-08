@@ -550,7 +550,7 @@ Definition type_stmt_def:
   type_stmt env ret_ty Continue = SOME env /\
   type_stmt env ret_ty Break = SOME env /\
   type_stmt env ret_ty (Expr e) =
-    (if well_typed_expr env e then SOME env else NONE) /\
+    (if well_typed_expr env e /\ ~(?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) then SOME env else NONE) /\
   type_stmt env ret_ty (Return NONE) =
     (if ret_ty = NoneT then SOME env else NONE) /\
   type_stmt env ret_ty (Return (SOME e)) =
@@ -569,19 +569,20 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Log id es) =
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
-    (if well_typed_expr env e /\ well_formed_type env.type_defs typ /\ expr_type e = typ /\
-        string_to_num id NOTIN FDOM env.var_types
+    (if well_typed_expr env e /\ well_formed_type env.type_defs typ /\ typ <> NoneT /\
+        expr_type e = typ /\ string_to_num id NOTIN FDOM env.var_types
      then SOME (extend_local env (string_to_num id) typ T)
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty bd)) =>
-         if well_typed_expr env e /\ expr_type e = elem_ty then SOME env else NONE
+         if well_typed_expr env e /\ expr_type e = elem_ty /\ elem_ty <> NoneT then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
-    (if well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e then SOME env else NONE) /\
+    (if well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e /\ expr_type e <> NoneT then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
     (if well_typed_target env bt ty /\ well_typed_expr env e /\ well_formed_type env.type_defs ty /\
+        ty <> NoneT /\ expr_type e <> NoneT /\
         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
@@ -589,7 +590,7 @@ Definition type_stmt_def:
         IS_SOME (type_stmts env ret_ty ss1) /\ IS_SOME (type_stmts env ret_ty ss2)
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
-    (if well_formed_type env.type_defs typ /\ well_typed_iterator env typ it /\
+    (if well_formed_type env.type_defs typ /\ typ <> NoneT /\ well_typed_iterator env typ it /\
         string_to_num id NOTIN FDOM env.var_types /\
         IS_SOME (type_stmts (extend_local env (string_to_num id) typ F) ret_ty body)
      then SOME env else NONE) /\

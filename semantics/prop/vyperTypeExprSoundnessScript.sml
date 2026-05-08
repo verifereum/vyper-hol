@@ -64,6 +64,30 @@ Proof
   Cases_on `b` >> gvs[switch_BoolV_def, no_type_error_result_def]
 QED
 
+Theorem get_Value_String_no_type_error:
+  toplevel_value_typed tv (BaseTV (StringT n)) /\
+  get_Value tv st = (res, st') ==>
+  no_type_error_result res
+Proof
+  rw[] >>
+  drule toplevel_value_typed_StringTV >> strip_tac >>
+  gvs[get_Value_def, return_def, no_type_error_result_def]
+QED
+
+Theorem get_Value_String_success:
+  toplevel_value_typed tv (BaseTV (StringT n)) /\
+  get_Value tv st = (INL v, st') ==>
+  ?s. v = StringV s
+Proof
+  rw[] >> drule toplevel_value_typed_StringTV >> strip_tac >> gvs[get_Value_def, return_def]
+QED
+
+Theorem dest_StringV_String_no_type_error:
+  dest_StringV v = SOME s ==> no_type_error_eval (lift_option_type (dest_StringV v) msg st)
+Proof
+  rw[lift_option_type_def, return_def, no_type_error_eval_def, no_type_error_result_def]
+QED
+
 Theorem lift_option_error:
   lift_option x y z = (INR e, s) ==> e = Error (RuntimeError y)
 Proof

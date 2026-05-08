@@ -51,6 +51,19 @@ Proof
   metis_tac[value_has_type_BoolTV]
 QED
 
+Theorem value_has_type_StringTV:
+  value_has_type (BaseTV (StringT n)) v ==> ?s. v = StringV s
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Theorem toplevel_value_typed_StringTV:
+  toplevel_value_typed tv (BaseTV (StringT n)) ==> ?s. tv = Value (StringV s)
+Proof
+  Cases_on `tv` >> simp[toplevel_value_typed_def] >>
+  metis_tac[value_has_type_StringTV]
+QED
+
 Theorem evaluate_type_NoneT[simp]:
   evaluate_type tenv NoneT = SOME NoneTV
 Proof
