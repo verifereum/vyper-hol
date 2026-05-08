@@ -1581,11 +1581,13 @@ Triviality ao_dfg_inv_exec_block_preserved[local]:
     EVERY (\inst. ~is_terminator inst.inst_opcode) bb.bb_instructions /\
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY inst_wf bb.bb_instructions /\
-    ao_dfg_inv dfg s /\ s.vs_inst_idx = 0 /\
+    ao_dfg_inv dfg s /\
     exec_block fuel ctx bb s = OK s' ==>
     ao_dfg_inv dfg s'
 Proof
-  cheat
+  cheat (* TODO: induction on remaining instructions via exec_block def.
+           EVERY non-terminator makes this vacuously true (exec_block never OK).
+           Real proof: remove EVERY non-terminator, handle terminator separately *)
 QED
 
 (* ao_dfg_inv compatible with state_equiv on fresh vars:
