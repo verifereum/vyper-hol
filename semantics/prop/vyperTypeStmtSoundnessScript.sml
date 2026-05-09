@@ -74,6 +74,14 @@ Proof
   metis_tac[value_runtime_typed_env_static]
 QED
 
+Theorem materialise_preserves_value_type:
+  state_well_typed st /\ toplevel_value_typed tvl tv /\ well_formed_type_value tv /\
+  materialise cx tvl st = (INL v, st') ==>
+  value_has_type tv v
+Proof
+  metis_tac[materialise_preserves_type]
+QED
+
 (* ===== Environment threading facts for executable statement typing ===== *)
 
 Theorem extend_local_preserves_static:
@@ -484,7 +492,39 @@ Resume eval_all_type_sound_mutual[Return_NONE]:
 QED
 
 Resume eval_all_type_sound_mutual[Return_SOME]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (er,s1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `er` >> gvs[no_type_error_result_def]
+  >- (
+    rename1 `eval_expr cx e st = (INL tv,s1)` >>
+    Cases_on `materialise cx tv s1` >>
+    rename1 `materialise cx tv s1 = (mr,s2)` >>
+    Cases_on `mr` >> gvs[raise_def, no_type_error_result_def]
+    >- (
+      drule materialise_state >> strip_tac >> gvs[] >>
+      strip_tac >> gvs[] >>
+      gvs[expr_runtime_typed_def, return_exception_typed_def,
+          value_runtime_typed_def] >>
+      irule materialise_preserves_value_type >>
+      simp[] >>
+      metis_tac[evaluate_type_well_formed_type_value]) >>
+    drule materialise_state >> strip_tac >> gvs[] >>
+    strip_tac >> gvs[] >>
+    conj_tac >- (
+      gvs[expr_runtime_typed_def] >>
+      drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
+      drule_all materialise_typed_non_none_no_type_error >> simp[]) >>
+    drule materialise_no_control >> strip_tac >>
+    Cases_on `y` >> gvs[no_control_exc_def, return_exception_typed_def]) >>
+  strip_tac >> gvs[] >>
+  drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
 Resume eval_all_type_sound_mutual[RaiseBare]:
