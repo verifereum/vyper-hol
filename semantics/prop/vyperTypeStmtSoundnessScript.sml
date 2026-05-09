@@ -468,15 +468,19 @@ Resume eval_all_type_sound_mutual[Pass]:
 QED
 
 Resume eval_all_type_sound_mutual[Continue]:
-  cheat
+  gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
+      return_exception_typed_def]
 QED
 
 Resume eval_all_type_sound_mutual[Break]:
-  cheat
+  gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
+      return_exception_typed_def]
 QED
 
 Resume eval_all_type_sound_mutual[Return_NONE]:
-  cheat
+  gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
+      return_exception_typed_def, value_runtime_typed_def, value_has_type_def,
+      evaluate_type_def]
 QED
 
 Resume eval_all_type_sound_mutual[Return_SOME]:
@@ -484,11 +488,13 @@ Resume eval_all_type_sound_mutual[Return_SOME]:
 QED
 
 Resume eval_all_type_sound_mutual[RaiseBare]:
-  cheat
+  gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
+      return_exception_typed_def]
 QED
 
 Resume eval_all_type_sound_mutual[RaiseUnreachable]:
-  cheat
+  gvs[evaluate_def, raise_def, no_type_error_result_def, type_stmt_def,
+      return_exception_typed_def]
 QED
 
 Resume eval_all_type_sound_mutual[RaiseReason]:
