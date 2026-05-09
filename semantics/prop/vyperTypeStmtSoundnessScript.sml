@@ -36,6 +36,13 @@ Proof
   Cases_on `exn` >> rw[no_control_exc_def, return_exception_typed_def]
 QED
 
+Theorem expr_runtime_typed_hashmap_ref_place:
+  expr_runtime_typed env e tv /\ is_HashMapRef tv ==>
+  ?kt vt. type_place_expr env e = SOME (HashMapT kt vt)
+Proof
+  cheat
+QED
+
 Theorem eval_expr_exception_return_typed:
   eval_expr cx e st = (INR exn, st') ==> return_exception_typed env ret_ty exn
 Proof
@@ -50,6 +57,21 @@ Proof
   strip_tac >>
   drule (cj 2 eval_expr_no_control) >>
   rw[no_control_exc_return_exception_typed]
+QED
+
+Theorem value_runtime_typed_env_static:
+  env'.type_defs = env.type_defs /\ value_runtime_typed env' ty v ==>
+  value_runtime_typed env ty v
+Proof
+  rw[value_runtime_typed_def] >> metis_tac[]
+QED
+
+Theorem return_exception_typed_env_static:
+  env'.type_defs = env.type_defs /\ return_exception_typed env' ret_ty exn ==>
+  return_exception_typed env ret_ty exn
+Proof
+  Cases_on `exn` >> rw[return_exception_typed_def] >>
+  metis_tac[value_runtime_typed_env_static]
 QED
 
 (* ===== Environment threading facts for executable statement typing ===== *)
@@ -442,7 +464,7 @@ Proof
 QED
 
 Resume eval_all_type_sound_mutual[Pass]:
-  cheat
+  gvs[evaluate_def, return_def, no_type_error_result_def, type_stmt_def]
 QED
 
 Resume eval_all_type_sound_mutual[Continue]:
@@ -511,13 +533,15 @@ Resume eval_all_type_sound_mutual[AssertReason]:
   imp_res_tac get_Value_state >>
   imp_res_tac lift_option_type_state >>
   gvs[expr_runtime_typed_def,evaluate_type_def] >>
+  TRY(
+    gvs[no_type_error_result_def,return_exception_typed_def] >>
+    NO_TAC ) >>
   TRY(Cases_on`stv` >> gvs[toplevel_value_typed_def, return_def] >>
       TRY (
       Cases_on`sv` >>
       gvs[value_has_type_def,dest_StringV_def,
           lift_option_type_def]))
    >> gvs[no_type_error_result_def]
-   >- gvs[return_exception_typed_def]
    >> drule eval_expr_exception_return_typed
    >> rw[]
 QED
@@ -658,19 +682,58 @@ Resume eval_all_type_sound_mutual[If]:
   goal_assum drule_all >> simp[]
 QED
 
-Resume eval_all_type_sound_mutual[For]:
-  cheat
-QED
-
 Resume eval_all_type_sound_mutual[Expr]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, type_check_def,
+    assert_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `eval_expr cx e st` >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `q` >> gvs[no_type_error_result_def]
+  >- (
+    strip_tac >> gvs[] >>
+    drule_all expr_runtime_typed_hashmap_ref_place >> simp[]) >>
+  strip_tac >> gvs[] >>
+  drule_all eval_expr_exception_return_typed >> simp[]
 QED
 
 Resume eval_all_type_sound_mutual[Stmts_nil]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  gvs[Once type_stmt_def, Once evaluate_def,
+      return_def, no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Stmts_cons]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmts _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, ignore_bind_apply] >>
+  Cases_on `eval_stmt cx s st` >>
+  rename1 `eval_stmt cx s st = (r1,st1)` >>
+  last_x_assum drule_all >> strip_tac >>
+  Cases_on `r1` >> gvs[]
+  >- (
+    Cases_on `eval_stmts cx ss st1` >>
+    rename1 `eval_stmts cx ss st1 = (r2,st2)` >>
+    first_x_assum drule_all >> strip_tac >>
+    strip_tac >> fs[bind_def] >> gvs[] >>
+    Cases_on `r2` >> gvs[no_type_error_result_def]
+    >- (
+      conj_tac >- (
+        irule type_stmt_env_consistent_weaken >>
+        conj_tac >- (irule env_consistent_env_maps_wf >> goal_assum drule >> simp[]) >>
+        goal_assum drule >> simp[]) >>
+      drule_all type_stmt_env_preserved_static >> strip_tac >>
+      drule_all return_exception_typed_env_static >> simp[]) >>
+    simp[]) >>
+  strip_tac >> gvs[]
+QED
+
+Resume eval_all_type_sound_mutual[For]:
   cheat
 QED
 
