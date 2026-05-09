@@ -846,8 +846,6 @@ Resume eval_all_type_sound_mutual[Assign]:
       drule materialise_no_control >> rw[no_control_exc_return_exception_typed]) >>
     rw[] >> drule eval_expr_exception_return_typed >> rw[]) >>
   strip_tac >> gvs[] >>
-  drule (cj 4 eval_all_type_sound_mutual) >>
-  disch_then drule_all >> strip_tac >> gvs[] >>
   drule (cj 1 eval_target_no_control) >>
   rw[no_control_exc_return_exception_typed]
 QED
