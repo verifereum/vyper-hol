@@ -10,7 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeEnvPreservation vyperTypeBuiltins vyperTypeExprSoundness
-  vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
+  vyperTypeAssignSoundness vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib markerLib
@@ -59,6 +59,15 @@ Proof
   rw[no_control_exc_return_exception_typed]
 QED
 
+Theorem eval_target_no_control:
+  (!cx tgt st exn st'.
+    eval_target cx tgt st = (INR exn, st') ==> no_control_exc exn) /\
+  (!cx tgts st exn st'.
+    eval_targets cx tgts st = (INR exn, st') ==> no_control_exc exn)
+Proof
+  cheat
+QED
+
 Theorem value_runtime_typed_env_static:
   env'.type_defs = env.type_defs /\ value_runtime_typed env' ty v ==>
   value_runtime_typed env ty v
@@ -81,6 +90,7 @@ Theorem materialise_preserves_value_type:
 Proof
   metis_tac[materialise_preserves_type]
 QED
+
 
 (* ===== Environment threading facts for executable statement typing ===== *)
 
@@ -200,6 +210,7 @@ QED
 (* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
  * lists, and for-loops.  This follows the evaluator recursion and is the
  * intended final shape for removing the no-TypeError cheats. *)
+
 (* ===== Scope-bracket helpers for block statements ===== *)
 
 Theorem scope_bracket_decompose:
@@ -596,6 +607,9 @@ Resume eval_all_type_sound_mutual[Log]:
   cheat
 QED
 
+(* TEMPORARILY CHEATED - AnnAssign proof attempt showed evaluator first
+   performs lift_option_type (evaluate_type ...), so the proof must split that
+   before applying the expression IH. *)
 Resume eval_all_type_sound_mutual[AnnAssign]:
   cheat
 QED
@@ -604,8 +618,238 @@ Resume eval_all_type_sound_mutual[Append]:
   cheat
 QED
 
+(* TEMPORARILY CHEATED - Assign proof attempt exposed missing fresh-stack
+   assign_target no-TypeError/no-return lemmas.  Do not import the old
+   vyperTypeSoundnessHelpers theory: it is outside the fresh stack and currently
+   fails to rebuild.  Preserved attempt:
 Resume eval_all_type_sound_mutual[Assign]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_target cx tgt st` >>
+  rename1 `eval_target cx tgt st = (tres,s1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `tres` >> gvs[no_type_error_result_def] >> ...
+QED
+*)
+(* TEMPORARILY CHEATED - current Assign proof attempt preserved.
+Resume eval_all_type_sound_mutual[Assign]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_target cx tgt st` >>
+  rename1 `eval_target cx tgt st = (target_res, st1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `target_res` >> gvs[no_type_error_result_def]
+  >- (
+    rename1 `eval_target cx tgt st = (INL gv, st1)` >>
+    Cases_on `eval_expr cx e st1` >>
+    rename1 `eval_expr cx e st1 = (expr_res, st2)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `expr_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `eval_expr cx e st1 = (INL tvl, st2)` >>
+      Cases_on `materialise cx tvl st2` >>
+      rename1 `materialise cx tvl st2 = (mat_res, st3)` >>
+      Cases_on `mat_res` >> gvs[no_type_error_result_def]
+      >- (
+        rename1 `materialise cx tvl st2 = (INL v, st3)` >>
+        Cases_on `assign_target cx gv (Replace v) st3` >>
+        rename1 `assign_target cx gv (Replace v) st3 = (assign_res, st4)` >>
+        Cases_on `assign_res` >> gvs[return_def, bind_apply, no_type_error_result_def]
+        >- (
+          strip_tac >>
+          qpat_x_assum `do assign_target _ _ _; return _ od _ = _` mp_tac >>
+          simp[bind_apply, return_def] >> strip_tac >> gvs[] >>
+          conj_tac
+          >- (irule assign_target_preserves_state_well_typed >>
+              simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+              goal_assum drule >> simp[value_runtime_typed_def, expr_runtime_typed_def] >>
+              goal_assum drule >> simp[] >>
+              irule materialise_preserves_value_type >> simp[] >>
+              goal_assum drule >> simp[] >>
+              irule evaluate_type_well_formed_type_value >> goal_assum drule >> simp[]) >>
+          conj_tac
+          >- (irule assign_target_preserves_runtime_consistent >>
+              simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+              goal_assum drule >> simp[value_runtime_typed_def, expr_runtime_typed_def] >>
+              goal_assum drule >> simp[] >>
+              irule materialise_preserves_value_type >> simp[] >>
+              goal_assum drule >> simp[] >>
+              irule evaluate_type_well_formed_type_value >> goal_assum drule >> simp[]) >>
+          conj_tac
+          >- (strip_tac >> gvs[]) >>
+          rw[return_exception_typed_def]) >>
+        qpat_x_assum `do _ od _ = _` mp_tac >> simp[bind_apply, return_def] >>
+        Cases_on `res` >> gvs[] >> strip_tac >> gvs[] >>
+        conj_tac
+        >- (irule assign_target_preserves_state_well_typed >>
+            simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+            goal_assum drule >> simp[value_runtime_typed_def, expr_runtime_typed_def] >>
+            goal_assum drule >> simp[] >>
+            irule materialise_preserves_value_type >> simp[] >>
+            goal_assum drule >> simp[] >>
+            irule evaluate_type_well_formed_type_value >> goal_assum drule >> simp[]) >>
+        conj_tac
+        >- (irule assign_target_preserves_runtime_consistent >>
+            simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+            goal_assum drule >> simp[value_runtime_typed_def, expr_runtime_typed_def] >>
+            goal_assum drule >> simp[] >>
+            irule materialise_preserves_value_type >> simp[] >>
+            goal_assum drule >> simp[] >>
+            irule evaluate_type_well_formed_type_value >> goal_assum drule >> simp[]) >>
+        conj_tac
+        >- (strip_tac >> gvs[] >>
+            drule (cj 1 assign_target_no_type_error) >> simp[] >>
+            impl_tac
+            >- (simp[] >>
+                conj_tac >- (irule eval_target_assignable >> goal_assum drule >> simp[]) >>
+                conj_tac >- (irule materialise_state >> goal_assum drule >> simp[]) >>
+                conj_tac >- simp[] >>
+                gvs[expr_runtime_typed_def] >>
+                qexists_tac `tv` >> simp[] >>
+                irule materialise_preserves_value_type >> simp[] >>
+                goal_assum drule >> simp[] >>
+                irule evaluate_type_well_formed_type_value >> goal_assum drule >> simp[]) >>
+            disch_then drule >> simp[]) >>
+        Cases_on `y` >> rw[return_exception_typed_def] >>
+        drule (cj 1 assign_target_no_return) >> disch_then drule >> simp[]) >>
+      conj_tac >- (drule materialise_state >> rw[]) >>
+      conj_tac >- (drule materialise_state >> rw[]) >>
+      conj_tac
+      >- (strip_tac >> gvs[] >>
+          gvs[expr_runtime_typed_def] >>
+          drule_all materialise_typed_non_none_no_type_error >> simp[] >>
+          metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV]) >>
+      drule materialise_no_control >> rw[no_control_exc_return_exception_typed]) >>
+    rw[] >> drule eval_expr_exception_return_typed >> rw[]) >>
+  rw[] >> drule (cj 3 eval_all_type_sound_mutual) >> rw[]
+QED
+*)
+Resume eval_all_type_sound_mutual[Assign]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_target cx tgt st` >>
+  rename1 `eval_target cx tgt st = (target_res, st1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `target_res` >> gvs[no_type_error_result_def]
+  >- (
+    rename1 `eval_target cx tgt st = (INL gv, st1)` >>
+    Cases_on `eval_expr cx e st1` >>
+    rename1 `eval_expr cx e st1 = (expr_res, st2)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `expr_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `eval_expr cx e st1 = (INL tvl, st2)` >>
+      Cases_on `materialise cx tvl st2` >>
+      rename1 `materialise cx tvl st2 = (mat_res, st3)` >>
+      Cases_on `mat_res` >> gvs[no_type_error_result_def]
+      >- (
+        rename1 `materialise cx tvl st2 = (INL v, st3)` >>
+        Cases_on `assign_target cx gv (Replace v) st3` >>
+        rename1 `assign_target cx gv (Replace v) st3 = (assign_res, st4)` >>
+        Cases_on `assign_res` >> gvs[return_def, bind_apply, no_type_error_result_def]
+        >- (
+          imp_res_tac materialise_state >> gvs[] >>
+          simp[bind_apply, ignore_bind_apply, return_def] >>
+          strip_tac >> gvs[] >>
+          drule_at(Pat`assign_target`)
+            assign_target_preserves_state_well_typed >>
+          simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+          disch_then drule >>
+          simp[value_runtime_typed_def, expr_runtime_typed_def, PULL_EXISTS] >>
+          drule_at(Pat`materialise`) materialise_preserves_value_type >>
+          gvs[expr_runtime_typed_def] >>
+          drule evaluate_type_well_formed_type_value >>
+          strip_tac >>
+          disch_then drule_all >> strip_tac >>
+          disch_then $ drule_at Any >>
+          disch_then $ drule_at Any >>
+          strip_tac >>
+          `target_runtime_typed env cx st2 tgt (expr_type e) gv` by (
+            irule target_runtime_typed_rebuild >>
+            simp[runtime_consistent_def] >>
+            goal_assum drule) >>
+          first_x_assum drule >> strip_tac >>
+          conj_tac >- simp[] >>
+          conj_tac >- simp[] >>
+          drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent >>
+          simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+          disch_then drule >>
+          simp[value_runtime_typed_def, expr_runtime_typed_def] >>
+          strip_tac >> first_x_assum irule >> simp[] >>
+          qexists_tac `tgt` >> qexists_tac `expr_type e` >> simp[] >>
+          qexists_tac `tv` >> simp[]) >>
+        qpat_x_assum `do _ od _ = _` mp_tac >> simp[bind_apply, return_def] >>
+        Cases_on `res` >> gvs[ignore_bind_apply] >>
+        strip_tac >> gvs[] >>
+        strip_tac >> gvs[] >>
+        imp_res_tac materialise_state >> gvs[] >>
+        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
+              value_has_type tv v /\ well_formed_type_value tv` by (
+          gvs[expr_runtime_typed_def] >>
+          drule evaluate_type_well_formed_type_value >> strip_tac >>
+          drule_at(Pat`materialise`) materialise_preserves_value_type >>
+          simp[] >> strip_tac >> goal_assum drule >> simp[]) >>
+        `target_runtime_typed env cx st2 tgt (expr_type e) gv` by (
+          irule target_runtime_typed_rebuild >>
+          simp[runtime_consistent_def] >> goal_assum drule) >>
+        drule_at(Pat`assign_target`)
+          assign_target_preserves_state_well_typed_result >>
+        disch_then(drule_at Any) >>
+        simp[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
+        simp[runtime_consistent_def] >>
+        strip_tac >>
+        drule_all eval_expr_preserves_ec >> strip_tac >>
+        conj_asm1_tac
+        >- (rpt strip_tac >> gvs[] >>
+            drule (cj 1 assign_target_no_type_error) >>
+            simp[PULL_EXISTS] >>
+            goal_assum(drule_at(Pat`assign_target`)) >> simp[] >>
+            `get_tenv cx = env.type_defs` by gvs[env_consistent_def] >>
+            gvs[] >>
+            goal_assum(drule_at(Pat`evaluate_type`)) >> simp[] >>
+            goal_assum drule >>
+            simp[] >>
+            drule eval_target_assignable >>
+            disch_then drule >>
+            strip_tac >>
+            simp[]) >>
+        drule_at(Pat`assign_target`)
+          assign_target_preserves_runtime_consistent_result >>
+        simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
+        simp[value_runtime_typed_def, PULL_EXISTS] >>
+        disch_then(drule_at(Pat`target_runtime_typed`)) >> simp[] >>
+        strip_tac >>
+        Cases_on `y` >> rw[return_exception_typed_def] >>
+        drule (cj 1 assign_target_no_return) >> simp[] >>
+        disch_then drule >> simp[]) >>
+      strip_tac >> gvs[] >>
+      drule materialise_state >> strip_tac >> gvs[] >>
+      conj_tac
+      >- (rpt strip_tac >> gvs[] >>
+          gvs[expr_runtime_typed_def] >>
+          drule_at Any materialise_typed_non_none_no_type_error >> simp[] >>
+          goal_assum drule >>
+          drule evaluate_type_not_NoneT_imp_not_NoneTV >>
+          simp[]) >>
+      drule materialise_no_control >> rw[no_control_exc_return_exception_typed]) >>
+    rw[] >> drule eval_expr_exception_return_typed >> rw[]) >>
+  strip_tac >> gvs[] >>
+  drule (cj 4 eval_all_type_sound_mutual) >>
+  disch_then drule_all >> strip_tac >> gvs[] >>
+  drule (cj 1 eval_target_no_control) >>
+  rw[no_control_exc_return_exception_typed]
 QED
 
 Resume eval_all_type_sound_mutual[AugAssign]:

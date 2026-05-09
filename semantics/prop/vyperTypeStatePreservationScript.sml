@@ -177,7 +177,7 @@ Proof
   >- (qpat_x_assum `decode_dyn_array _ _ _ _ = _`
         (ASSUME_TAC o MATCH_MP decode_dyn_array_length) >>
       gvs[MIN_DEF])
-  >- (first_x_assum irule >> gvs[EVERY_MEM])
+  >> (first_x_assum irule >> gvs[EVERY_MEM])
 QED
 
 Theorem read_storage_slot_success_type:
@@ -513,6 +513,27 @@ Theorem assign_target_preserves_state_well_typed:
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
   metis_tac[assign_target_preserves_runtime_consistent, runtime_consistent_def]
+QED
+
+(* TEMPORARILY CHEATED - statement soundness needs preservation for both
+   success and exception/error results of assignment.  This is the all-result
+   version of the success-only assignment preservation theorem above. *)
+Theorem assign_target_preserves_runtime_consistent_result:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_target cx gv op st = (res, st') ==>
+  runtime_consistent env cx st'
+Proof
+  cheat
+QED
+
+Theorem assign_target_preserves_state_well_typed_result:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_target cx gv op st = (res, st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  metis_tac[assign_target_preserves_runtime_consistent_result, runtime_consistent_def]
 QED
 
 Theorem materialise_preserves_type:
