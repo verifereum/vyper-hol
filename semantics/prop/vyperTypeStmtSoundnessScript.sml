@@ -10,7 +10,8 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeEnvPreservation vyperTypeBuiltins vyperTypeExprSoundness
-  vyperExprNoControl vyperScopePreservation vyperStatePreservation vyperTypeStatePreservation
+  vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
+  vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib markerLib
 
@@ -169,6 +170,132 @@ QED
 (* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
  * lists, and for-loops.  This follows the evaluator recursion and is the
  * intended final shape for removing the no-TypeError cheats. *)
+(* ===== Scope-bracket helpers for block statements ===== *)
+
+Theorem scope_bracket_decompose:
+  (!q st_body. body (st with scopes updated_by CONS FEMPTY) = (q, st_body) ==> st_body.scopes <> []) /\
+  (do push_scope; finally body pop_scope od) st = (res, st') ==>
+  ?q st_body.
+    body (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
+    st' = st_body with scopes := TL st_body.scopes /\
+    (((?x. q = INL x) ==> ?u. res = INL u) /\
+     (!e. q = INR e ==> res = INR e))
+Proof
+  rpt strip_tac >>
+  gvs[push_scope_def, finally_def, pop_scope_def,
+      return_def, raise_def, bind_def, ignore_bind_def,
+      AllCaseEqs()] >>
+  Cases_on `body (st with scopes updated_by CONS FEMPTY)` >>
+  Cases_on `q` >>
+  gvs[AllCaseEqs(), pop_scope_def, return_def, raise_def] >>
+  imp_res_tac eval_stmts_preserves_scopes_len >>
+  Cases_on `r.scopes` >> gvs[return_def, raise_def,
+    evaluation_state_component_equality]
+QED
+
+Theorem scope_bracket_preserves_swt:
+  eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st_body) /\
+  state_well_typed st_body ==>
+  state_well_typed (st_body with scopes := TL st_body.scopes)
+Proof
+  rpt strip_tac >>
+  imp_res_tac eval_stmts_preserves_scopes_len >>
+  Cases_on `st_body.scopes` >> gvs[] >>
+  irule pop_scope_preserves_state_well_typed >>
+  qexists_tac `st_body` >>
+  qexists_tac `()` >>
+  simp[pop_scope_def, return_def]
+QED
+
+Theorem scope_bracket_preserves:
+  env_maps_wf env /\
+  type_stmts env ret_ty ss = SOME env_after /\
+  eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
+  state_well_typed st_body /\
+  env_consistent env_after cx st_body /\
+  accounts_well_typed st_body.accounts ==>
+  state_well_typed (st_body with scopes := TL st_body.scopes) /\
+  env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+  accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts
+Proof
+  strip_tac
+  >> conj_tac >- (drule scope_bracket_preserves_swt >> simp[])
+  >> conj_tac >- (irule scope_bracket_preserves_ec >>
+      conj_tac >- rw[] >>
+      goal_assum(drule_at(Pat`type_stmts`)) >>
+      goal_assum(drule_at(Pat`eval_stmts`)) >>
+      simp[])
+  >> simp[evaluation_state_component_equality]
+QED
+
+Theorem scope_bracket_result_post:
+  (!e. q = INR e ==> res = INR e) /\
+  ((?x. q = INL x) ==> res = INL ()) /\
+  no_type_error_result q /\
+  (case q of INR exn => return_exception_typed env ret_ty exn | _ => T) ==>
+  no_type_error_result res /\
+  (case res of INR exn => return_exception_typed env ret_ty exn | _ => T)
+Proof
+  CASE_TAC >> strip_tac >> gvs[no_type_error_result_def]
+QED
+
+Theorem scope_bracket_post:
+  env_maps_wf env /\
+  env_consistent env cx st /\
+  (!st_body. body (st with scopes updated_by CONS FEMPTY) = (INL (), st_body) ==> env_consistent env cx st_body) /\
+  (!q st_body. body (st with scopes updated_by CONS FEMPTY) = (q, st_body) ==> st_body.scopes <> []) /\
+  (do push_scope; finally body pop_scope od) st = (res, st_final) /\
+  (!q st_body.
+     body (st with scopes updated_by CONS FEMPTY) = (q, st_body) ==>
+     state_well_typed st_body /\ accounts_well_typed st_body.accounts /\
+     no_type_error_result q /\
+     case q of
+     | INL _ => env_consistent env cx st_body
+     | INR exn => env_consistent env cx st_body /\ return_exception_typed env ret_ty exn) /\
+  (!q st_body.
+     body (st with scopes updated_by CONS FEMPTY) = (q, st_body) ==>
+     !h t. st_body.scopes = h::t ==>
+       (case q of INL _ =>
+          (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
+          (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE)
+        | INR _ =>
+          (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
+          (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE))) ==>
+  state_well_typed st_final /\ accounts_well_typed st_final.accounts /\ no_type_error_result res /\
+  case res of
+  | INL _ => env_consistent env cx st_final
+  | INR exn => env_consistent env cx st_final /\ return_exception_typed env ret_ty exn
+Proof
+  strip_tac >>
+  qpat_x_assum `do push_scope; finally body pop_scope od st = (res,st_final)` mp_tac >>
+  qpat_x_assum `!q st_body. body _ = _ ==> st_body.scopes <> []` mp_tac >>
+  qpat_x_assum `!st_body. body _ = _ ==> env_consistent env cx st_body` mp_tac >>
+  strip_tac >> strip_tac >> strip_tac >>
+  `?q st_body.
+     body (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
+     st_final = st_body with scopes := TL st_body.scopes /\
+     (((?x. q = INL x) ==> ?u. res = INL u) /\
+      (!e. q = INR e ==> res = INR e))` by
+    (irule scope_bracket_decompose >> simp[]) >>
+  gvs[] >>
+  qmatch_assum_rename_tac`no_type_error_result r1` >>
+  reverse (Cases_on`r1`) >- (
+    gvs[] >>
+    drule pop_scope_preserves_state_well_typed >>
+    simp[pop_scope_def] >>
+    Cases_on `st_body.scopes` >> gvs[raise_def, return_def] >>
+    drule pop_scope_env_consistent >>
+    simp[]
+  ) >>
+  `env_consistent env cx st_body` by (first_x_assum irule >> simp[]) >>
+  gvs[no_type_error_result_def] >>
+  drule pop_scope_preserves_state_well_typed >>
+  simp[pop_scope_def] >>
+  Cases_on `st_body.scopes` >> gvs[raise_def, return_def] >>
+  drule pop_scope_env_consistent >>
+  simp[]
+QED
+
 Theorem eval_all_type_sound_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
@@ -443,7 +570,92 @@ Resume eval_all_type_sound_mutual[If]:
   gvs[expr_runtime_typed_def, evaluate_type_def] >>
   drule toplevel_value_typed_BoolTV >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
-  NO_TAC
+  strip_tac >>
+  qpat_x_assum `IS_SOME (type_stmts env ret_ty ss)` mp_tac >>
+  qpat_x_assum `IS_SOME (type_stmts env ret_ty ss')` mp_tac >>
+  simp[optionTheory.IS_SOME_EXISTS] >> ntac 2 strip_tac >>
+  irule scope_bracket_post >>
+  conj_asm1_tac >- (
+    irule env_consistent_env_maps_wf >> simp[] >>
+    goal_assum drule >> simp[]
+  ) >>
+  qmatch_asmsub_abbrev_tac`finally body pop_scope sf` >>
+  qexistsl_tac[`body`,`st1`] >>
+  simp[bind_def, ignore_bind_def] >>
+  first_x_assum (drule_then drule) >> strip_tac >>
+  last_x_assum (drule_then drule) >> strip_tac >>
+  gvs[push_scope_def, return_def, finally_def] >>
+  qmatch_goalsub_abbrev_tac`body st2` >>
+  Cases_on`body st2` >> gvs[] >>
+  qmatch_assum_rename_tac`body st2 = (rf,sf)` >>
+  qho_match_abbrev_tac`P rf sf` >>
+  irule switch_BoolV_post >>
+  qunabbrev_tac`body` >>
+  goal_assum $ drule_at(Pat`switch_BoolV`) >>
+  simp[] >>
+  `accounts_well_typed st2.accounts` by simp[Abbr`st2`] >>
+  `env_consistent env cx st2` by (simp[Abbr`st2`] >> irule push_scope_env_consistent >> simp[]) >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    simp[Abbr`P`] >>
+    `state_well_typed st2` by gvs[Abbr`st2`, state_well_typed_def, scope_well_typed_def] >>
+    first_x_assum drule_all >> strip_tac >>
+    simp[] >>
+    `st2 = st1 with scopes := FEMPTY::st1.scopes`
+      by simp[evaluation_state_component_equality, Abbr`st2`] >>
+    conj_tac >- (
+      strip_tac >> gvs[] >> irule type_stmts_env_consistent_weaken >>
+      conj_tac >- simp[] >>
+      goal_assum drule_all >> simp[] ) >>
+    conj_tac >- (
+      qx_gen_tac`h` >> gen_tac >> strip_tac >>
+      conj_asm1_tac >- (
+        rpt strip_tac >> fs[] >>
+        drule_at(Pat`eval_stmts`)lookup_scopes_not_in_new_head >>
+        simp[] >> disch_then irule >>
+        qpat_x_assum`env_consistent _ _ st1`mp_tac >>
+        simp[env_consistent_def,IS_SOME_EXISTS]) >>
+      rpt strip_tac >>
+      first_x_assum irule >>
+      qpat_x_assum`env_consistent _ _ st1`mp_tac >>
+      simp[env_consistent_def, IS_SOME_EXISTS]) >>
+    conj_tac >- (drule eval_stmts_preserves_scopes_len >>
+                 rpt strip_tac >> gvs[]) >>
+    gvs[] >>
+    CASE_TAC >> gvs[] >>
+    irule type_stmts_env_consistent_weaken >>
+    conj_tac >- (rpt strip_tac >> gvs[]) >>
+    goal_assum drule_all >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  simp[Abbr`P`] >>
+  `state_well_typed st2` by gvs[Abbr`st2`, state_well_typed_def, scope_well_typed_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[] >>
+  `st2 = st1 with scopes := FEMPTY::st1.scopes`
+    by simp[evaluation_state_component_equality, Abbr`st2`] >>
+  conj_tac >- (
+    strip_tac >> gvs[] >> irule type_stmts_env_consistent_weaken >>
+    conj_tac >- simp[] >>
+    goal_assum drule_all >> simp[]) >>
+  conj_tac >- (
+    qx_gen_tac`h` >> gen_tac >> strip_tac >>
+    conj_asm1_tac >- (
+      rpt strip_tac >> fs[] >>
+      drule_at(Pat`eval_stmts`)lookup_scopes_not_in_new_head >>
+      simp[] >> disch_then irule >>
+      qpat_x_assum`env_consistent _ _ st1`mp_tac >>
+      simp[env_consistent_def,IS_SOME_EXISTS]) >>
+    rpt strip_tac >>
+    first_x_assum irule >>
+    qpat_x_assum`env_consistent _ _ st1`mp_tac >>
+    simp[env_consistent_def, IS_SOME_EXISTS]) >>
+  conj_tac >- (drule eval_stmts_preserves_scopes_len >>
+               rpt strip_tac >> gvs[]) >>
+  gvs[] >>
+  CASE_TAC >> gvs[] >>
+  irule type_stmts_env_consistent_weaken >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  goal_assum drule_all >> simp[]
 QED
 
 Resume eval_all_type_sound_mutual[For]:
