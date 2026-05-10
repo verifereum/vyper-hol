@@ -2294,6 +2294,39 @@ Proof
   simp[ao_transform_function_def, ao_fn_total_fresh_vars_def, LET_THM]
 QED
 
+(* ao_dfg_inv holds for the initial state when ADDRESS/SIGNEXTEND outputs
+   are not yet defined (lookup_var = NONE). *)
+Triviality ao_dfg_inv_initial[local]:
+  !fn s.
+    (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+      (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
+      lookup_var x s = NONE) ==>
+    ao_dfg_inv (dfg_build_function
+      (fn with fn_blocks :=
+        MAP (\bb. bb with bb_instructions :=
+          MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)) s
+Proof
+  rpt strip_tac >> simp[ao_dfg_inv_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+  (* Split into ADDRESS/SIGNEXTEND cases, then derive contradiction *)
+  rpt strip_tac >> (
+    (* In each case, inst.inst_opcode ∈ {ADDRESS, SIGNEXTEND} *)
+    (* inst ∈ fn_insts fn0 → inst ∈ fn_insts fn (offset is identity) *)
+    `MEM inst (fn_insts fn)` by
+      (simp[fn_insts_def] >>
+       qpat_x_assum `MEM inst (fn_insts _)` mp_tac >>
+       simp[fn_insts_def] >> strip_tac >>
+       drule fn_insts_blocks_map_offset >> strip_tac >>
+       `~(inst0.inst_opcode = ADD /\
+          ?l v. inst0.inst_operands = [Label l; Lit v])` by
+         (strip_tac >> gvs[ao_handle_offset_inst_def]) >>
+       imp_res_tac ao_handle_offset_inst_id >> gvs[]) >>
+    `lookup_var x s = NONE` by
+      (first_x_assum irule >> metis_tac[]) >>
+    fs[])
+QED
+
 Theorem ao_transform_function_correct_proof:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
@@ -2306,7 +2339,12 @@ Theorem ao_transform_function_correct_proof:
     (!inst v. MEM inst (fn_insts fn) /\
               MEM v inst.inst_outputs ==> v NOTIN fv) /\
     (* Well-formedness *)
-    ssa_form fn /\ EVERY inst_wf (fn_insts fn)
+    ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+    (* DFG invariant: ADDRESS/SIGNEXTEND outputs consistent with initial state.
+       Trivially true when these output vars are undefined in s (the typical case). *)
+    (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+      (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
+      lookup_var x s = NONE)
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -2359,7 +2397,8 @@ Proof
              qexistsl_tac [`Lit v`, `l`] >> simp[])
          >- (imp_res_tac ao_handle_offset_inst_id >> gvs[]))
      >- (* ao_dfg_inv dfg s *)
-        cheat) >>
+        (MATCH_MP_TAC ao_dfg_inv_initial >> rpt strip_tac >>
+         first_x_assum irule >> metis_tac[])) >>
   gvs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
