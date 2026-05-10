@@ -51,7 +51,12 @@ Theorem typed_expr_no_type_error:
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
   no_type_error_eval (eval_expr cx e st)
 Proof
-  metis_tac[eval_expr_no_type_error]
+  strip_tac >>
+  Cases_on `eval_expr cx e st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
+  disch_then drule >> simp[] >>
+  rpt strip_tac >> gvs[no_type_error_result_def]
 QED
 
 Theorem typed_expr_success_preserves_type:
@@ -60,7 +65,8 @@ Theorem typed_expr_success_preserves_type:
   eval_expr cx e st = (INL tvl, st') ==>
   state_well_typed st' /\ expr_runtime_typed env e tvl
 Proof
-  metis_tac[eval_expr_type_preservation]
+  strip_tac >>
+  drule_all (cj 8 eval_all_type_sound_mutual) >> simp[]
 QED
 
 (* ===== Callable-function theorem shape ===== *)

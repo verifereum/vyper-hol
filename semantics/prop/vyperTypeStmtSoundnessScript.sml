@@ -375,41 +375,6 @@ Proof
   simp[]
 QED
 
-Theorem AnnAssign_env_consistent_after_new_variable:
-  type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
-  env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  eval_stmt cx (AnnAssign id typ e) st = (INL u, st') ==>
-  env_consistent env' cx st' /\ state_well_typed st'
-Proof
-  rw[type_stmt_def] >> gvs[AllCaseEqs(), extend_local_def] >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, lift_option_type_def, return_def, raise_def,
-       AllCaseEqs(), LET_THM, option_CASE_rator] >>
-  strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e st = (INL tvl, st1)` >>
-  rename1 `materialise cx tvl st1 = (INL v, st2)` >>
-  rename1 `new_variable id tv v st2 = (INL u, st')` >>
-  drule_all eval_expr_type_preservation >> strip_tac >>
-  drule evaluate_type_well_formed_type_value >> strip_tac >>
-  drule_at(Pat`materialise`) materialise_preserves_type >>
-  `env.type_defs = get_tenv cx` by gvs[env_consistent_def, env_context_consistent_def] >>
-  gvs[expr_runtime_typed_def] >>
-  disch_then drule_all >> strip_tac >>
-  drule_at(Pat`new_variable`) extend_local_env_consistent_after_new_variable >>
-  simp[extend_local_def] >>
-  disch_then (drule_at Any)
-  >- (
-    disch_then irule >> simp[] >>
-    drule materialise_state >>
-    rw[] >>
-    drule_all eval_expr_preserves_ec >> simp[]) >>
-  strip_tac >>
-  irule new_variable_preserves_state_well_typed >>
-  goal_assum(drule_at(Pat`new_variable`)) >>
-  simp[] >> goal_assum drule
-QED
-
 Theorem eval_base_target_target_runtime_typed:
   well_typed_target env bt ty /\ env_consistent env cx st /\ state_well_typed st /\
   eval_base_target cx bt st = (INL (loc,sbs), st') ==>
@@ -1630,7 +1595,10 @@ Theorem eval_stmt_type_preservation_exception:
   eval_stmt cx s st = (INR exn, st') ==>
   state_well_typed st' /\ stmt_error_ok env ret_ty (INR exn) /\ accounts_well_typed st'.accounts
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all (cj 1 eval_all_type_sound_mutual) >>
+  simp[stmt_error_ok_def] >>
+  simp[no_type_error_result_def]
 QED
 
 Theorem eval_stmt_type_preservation_exception_state:
@@ -1730,43 +1698,6 @@ Proof
   gvs[] >>
   drule_all type_stmt_preserves_stmt_error_ok >>
   rw[]
-QED
-
-(* ===== Loop preservation ===== *)
-
-Theorem eval_for_preserves_state_well_typed:
-  state_well_typed st /\ env_consistent env cx st /\
-  evaluate_type env.type_defs ty = SOME tv /\ EVERY (value_has_type tv) vs /\
-  id NOTIN FDOM env.var_types /\
-  type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  eval_for cx tv id body vs st = (INL u, st') ==>
-  state_well_typed st'
-Proof
-  MAP_EVERY qid_spec_tac [`st'`, `u`, `st`, `vs`] >>
-  Induct >>
-  simp[Once evaluate_def, return_def] >>
-  simp[Once evaluate_def, bind_def, push_scope_with_var_def, return_def,
-       finally_def, try_def, ignore_bind_def] >>
-  rpt gen_tac >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `eval_stmts cx body st_push` >>
-  (* Case split on eval_stmts result *)
-  Cases_on `eval_stmts cx body st_push` >>
-  gvs[bind_def] >>
-  rename1 `eval_stmts cx body st_push = (body_res, st_body)` >>
-  (* Establish st_push is well-typed *)
-  `well_formed_type_value tv` by
-    (gvs[env_consistent_def] >> irule evaluate_type_well_formed_type_value >> metis_tac[]) >>
-  `state_well_typed st_push` by
-    (gvs[Abbr`st_push`, state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE]) >>
-  (* Establish env_consistent for extended env *)
-  `env_consistent (extend_local env id ty F) cx st_push` by
-    (simp[Abbr`st_push`] >> irule push_scope_with_var_env_consistent >>
-     gvs[env_consistent_def] >> cheat) >>
-  (* Use eval_stmts preservation (cheated) to get st_body well-typed *)
-  `state_well_typed st_body` by
-    (Cases_on `body_res` >> gvs[] >> cheat) >>
-  cheat
 QED
 
 (* ===== Top-level theorem shape ===== *)
