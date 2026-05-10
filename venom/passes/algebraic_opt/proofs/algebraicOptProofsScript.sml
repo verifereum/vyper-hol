@@ -2331,7 +2331,35 @@ Proof
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
     (irule ao_phases123_run_blocks_sim >>
      rpt conj_tac >> fs[markerTheory.Abbrev_def] >>
-     TRY (cheat (* ssa_form fn0, EVERY inst_wf fn0, ao_dfg_inv *))) >>
+     rpt conj_tac
+     >- cheat (* H_range *)
+     >- cheat (* H_resolve *)
+     >- (* ssa_form fn0: ao_handle_offset preserves inst_outputs *)
+        (fs[ssa_form_def, fn_insts_def] >>
+         `!bbs. FLAT (MAP (\i. i.inst_outputs)
+            (fn_insts_blocks
+              (MAP (\bb. bb with bb_instructions :=
+                MAP ao_handle_offset_inst bb.bb_instructions) bbs))) =
+          FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))`
+           suffices_by simp[] >>
+         Induct >> simp[fn_insts_blocks_def, listTheory.MAP_MAP_o] >>
+         gen_tac >>
+         `MAP ((\i. i.inst_outputs) o ao_handle_offset_inst)
+              h.bb_instructions =
+          MAP (\i. i.inst_outputs) h.bb_instructions` suffices_by simp[] >>
+         irule listTheory.MAP_CONG >> simp[ao_handle_offset_inst_outputs])
+     >- (* EVERY inst_wf fn0 *)
+        (simp[fn_insts_def, listTheory.EVERY_MEM] >> rpt strip_tac >>
+         drule fn_insts_blocks_map_offset >> strip_tac >> gvs[] >>
+         `inst_wf inst0` by
+           (fs[listTheory.EVERY_MEM, fn_insts_def] >> res_tac) >>
+         Cases_on `inst0.inst_opcode = ADD /\
+                   ?l v. inst0.inst_operands = [Label l; Lit v]`
+         >- (gvs[ao_handle_offset_inst_def, inst_wf_def] >>
+             qexistsl_tac [`Lit v`, `l`] >> simp[])
+         >- (imp_res_tac ao_handle_offset_inst_id >> gvs[]))
+     >- (* ao_dfg_inv dfg s *)
+        cheat) >>
   gvs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
