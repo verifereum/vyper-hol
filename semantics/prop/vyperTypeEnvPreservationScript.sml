@@ -163,20 +163,20 @@ Theorem push_scope_env_consistent:
   env_consistent env cx st ==>
   env_consistent env cx (st with scopes updated_by CONS FEMPTY)
 Proof
-  rw[env_consistent_def, lookup_scopes_def, FLOOKUP_DEF] >>
+  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, lookup_scopes_def, FLOOKUP_DEF] >>
   metis_tac[]
 QED
 
 Theorem pop_scope_env_consistent:
-  env_consistent env cx st /\ st.scopes = h::tl /\
+  env_consistent env cx st /\ st.scopes = h::tl /\ tl <> [] /\
   (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
   (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE) ==>
   env_consistent env cx (st with scopes := tl)
 Proof
   strip_tac >>
-  fs[env_consistent_def, lookup_scopes_def] >>
+  fs[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, lookup_scopes_def] >>
   rpt strip_tac >> res_tac >> gvs[] >>
-  first_x_assum drule >> simp[]
+  Cases_on `FLOOKUP h id` >> gvs[] >> res_tac >> gvs[]
 QED
 
 Theorem push_scope_with_var_env_consistent:
@@ -186,9 +186,9 @@ Theorem push_scope_with_var_env_consistent:
   env_consistent (extend_local env nm typ F) cx
     (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)))
 Proof
-  rw[env_consistent_def, extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
   Cases_on `id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
-  res_tac >> gvs[optionTheory.IS_SOME_EXISTS, FLOOKUP_DEF]
+  res_tac >> gvs[]
 QED
 
 Definition env_maps_wf_def:
@@ -200,7 +200,7 @@ End
 Theorem env_consistent_env_maps_wf:
   env_consistent env cx st ==> env_maps_wf env
 Proof
-  rw[env_consistent_def, env_maps_wf_def]
+  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_maps_wf_def]
 QED
 
 Theorem env_maps_wf_no_stale_assignable_T:
@@ -213,28 +213,36 @@ QED
 
 Theorem extend_local_env_consistent_weaken:
   env_maps_wf env /\
-  id NOTIN FDOM env.var_types /\
+  id NOTIN FDOM env.var_types /\ lookup_scopes id st.scopes = NONE /\
   env_consistent (extend_local env id ty assignable) cx st ==>
   env_consistent env cx st
 Proof
-  rw[] >>
-  qpat_x_assum `env_consistent (extend_local _ _ _ _) _ _` mp_tac >>
-  simp[env_consistent_def, extend_local_def, FLOOKUP_UPDATE, TO_FLOOKUP] >>
-  strip_tac >> gvs[] >>
-  conj_tac >- (
-    rpt strip_tac >> Cases_on `id = id'` >> gvs[]) >>
-  conj_tac >- (
-    rpt strip_tac >> Cases_on `id = id'` >> gvs[TO_FLOOKUP] >>
-    ntac 2 (last_x_assum(qspec_then`id'`mp_tac)) >> rw[]) >>
-  conj_tac >- (
-    rpt strip_tac >> Cases_on `id = id'` >> gvs[]
-    >- metis_tac[env_maps_wf_no_stale_assignable_T] >>
-    ntac 3 (last_x_assum(qspec_then`id'`mp_tac)) >> rw[]) >>
-  conj_tac >- (
+  simp[env_consistent_def] >> strip_tac >>
+  conj_asm1_tac >- (
+    qpat_x_assum `env_context_consistent _ _` mp_tac >>
+    rw[env_context_consistent_def, extend_local_def] >> metis_tac[]) >>
+  conj_asm1_tac >- (
+    qpat_x_assum `env_scopes_consistent (extend_local _ _ _ _) _ _` mp_tac >>
+    simp[env_scopes_consistent_def, extend_local_def, FLOOKUP_UPDATE, TO_FLOOKUP] >>
+    strip_tac >> gvs[] >>
+    conj_tac >- (
+      rpt strip_tac >> Cases_on `id = id'` >> gvs[]) >>
+    conj_tac >- (
+      rpt strip_tac >> Cases_on `id = id'` >> gvs[TO_FLOOKUP] >>
+      ntac 2 (last_x_assum(qspec_then`id'`mp_tac)) >> rw[]) >>
+    conj_tac >- (
+      rpt strip_tac >> Cases_on `id = id'` >> gvs[TO_FLOOKUP] >>
+      last_x_assum(qspecl_then [`id'`, `ty'`, `entry`] mp_tac) >> rw[]) >>
+    conj_tac >- (
+      rpt strip_tac >> Cases_on `id = id'` >> gvs[]
+      >- metis_tac[env_maps_wf_no_stale_assignable_T] >>
+      qpat_x_assum `!id'. (if id = id' then SOME assignable else FLOOKUP env.var_assignable id') = SOME T ==> IS_SOME _`
+        (qspec_then`id'`mp_tac) >> simp[]) >>
     rpt strip_tac >> Cases_on `id = id'` >> gvs[]
     >- metis_tac[env_maps_wf_no_stale_assignable_T] >>
     metis_tac[]) >>
-  metis_tac[]
+  qpat_x_assum `env_immutables_consistent _ _ _` mp_tac >>
+  rw[env_immutables_consistent_def, extend_local_def] >> metis_tac[]
 QED
 
 Theorem extend_local_env_maps_wf:
@@ -266,9 +274,44 @@ Proof
   metis_tac[type_stmt_env_maps_wf]
 QED
 
+Theorem type_stmt_var_types_mono:
+  type_stmt env ret_ty s = SOME env' /\ FLOOKUP env'.var_types id = NONE ==>
+  FLOOKUP env.var_types id = NONE
+Proof
+  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs(), extend_local_def, FLOOKUP_UPDATE] >>
+  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  rw[] >> gvs[FLOOKUP_UPDATE]
+QED
+
+Theorem type_stmt_var_types_preserve:
+  type_stmt env ret_ty s = SOME env' /\ FLOOKUP env.var_types id = SOME ty ==>
+  FLOOKUP env'.var_types id = SOME ty
+Proof
+  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs(), extend_local_def, FLOOKUP_UPDATE] >>
+  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
+  rw[] >> gvs[FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num s'' = id` >> gvs[] >>
+  fs[TO_FLOOKUP]
+QED
+
+Theorem type_stmts_var_types_preserve:
+  type_stmts env ret_ty ss = SOME env' /\ FLOOKUP env.var_types id = SOME ty ==>
+  FLOOKUP env'.var_types id = SOME ty
+Proof
+  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
+  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
+  metis_tac[type_stmt_var_types_preserve]
+QED
+
 Theorem type_stmt_env_consistent_weaken:
   env_maps_wf env /\
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env' cx st ==>
+  type_stmt env ret_ty s = SOME env' /\ env_consistent env' cx st /\
+  (!id ty. FLOOKUP env'.var_types id = SOME ty /\ FLOOKUP env.var_types id = NONE ==>
+     lookup_scopes id st.scopes = NONE) ==>
   env_consistent env cx st
 Proof
   Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs()] >>
@@ -276,21 +319,34 @@ Proof
   TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   rpt strip_tac >> gvs[] >>
-  drule_then irule extend_local_env_consistent_weaken >>
-  goal_assum $ drule_at Any >> gvs[]
+  irule extend_local_env_consistent_weaken >> simp[] >>
+  qexists_tac `T` >> qexists_tac `string_to_num s''` >>
+  qexists_tac `expr_type e` >>
+  gvs[extend_local_def, FLOOKUP_UPDATE] >>
+  first_x_assum irule >> simp[FLOOKUP_DEF]
 QED
 
 Theorem type_stmts_env_consistent_weaken:
   env_maps_wf env /\
-  type_stmts env ret_ty ss = SOME env' /\ env_consistent env' cx st ==>
+  type_stmts env ret_ty ss = SOME env' /\ env_consistent env' cx st /\
+  (!id ty. FLOOKUP env'.var_types id = SOME ty /\ FLOOKUP env.var_types id = NONE ==>
+     lookup_scopes id st.scopes = NONE) ==>
   env_consistent env cx st
 Proof
   MAP_EVERY qid_spec_tac [`env`, `env'`] >>
   Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
   rpt gen_tac >> strip_tac >>
   `env_maps_wf env''` by metis_tac[type_stmt_env_maps_wf] >>
-  first_x_assum drule_all >> strip_tac >>
-  drule_all type_stmt_env_consistent_weaken >> gvs[]
+  first_x_assum (qspecl_then [`env'`, `env''`] mp_tac) >>
+  impl_tac >- (
+    simp[] >> rpt gen_tac >> strip_tac >> first_x_assum irule >> gvs[] >>
+    drule_all type_stmt_var_types_mono >> simp[]) >>
+  strip_tac >>
+  irule type_stmt_env_consistent_weaken >> simp[] >>
+  qexists_tac `env''` >> qexists_tac `ret_ty` >> qexists_tac `h` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> gvs[] >>
+  drule_all type_stmts_var_types_preserve >> simp[]
 QED
 
 Theorem scope_bracket_preserves_ec:
@@ -309,6 +365,8 @@ QED
 Theorem env_consistent_preserved_by_frame:
   env_consistent env cx st /\
   preserves_tv cx st st' /\
+  (!id entry. lookup_scopes id st'.scopes = SOME entry ==>
+     ?entry'. lookup_scopes id st.scopes = SOME entry' /\ entry.type = entry'.type) /\
   MAP FDOM st.scopes = MAP FDOM st'.scopes /\
   (!id entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
      ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable) /\
@@ -319,23 +377,31 @@ Theorem env_consistent_preserved_by_frame:
   ==>
   env_consistent env cx st'
 Proof
-  strip_tac >> gvs[env_consistent_def]
-  >> conj_asm1_tac >- (
-    rpt strip_tac >>
-    last_x_assum drule >>
-    rw[IS_SOME_EXISTS] >>
-    drule_all lookup_scopes_same_fdoms_some >>
-    rw[IS_SOME_EXISTS]
-  ) >>
-  conj_asm1_tac >- (
-    rpt strip_tac >>
-    drule lookup_scopes_type_preserved_under_preserves_tv >>
-    simp[] >>
-    strip_tac >>
-    first_x_assum drule >> rw[] >>
-    last_x_assum $ drule_then drule >> gvs[]
-  ) >>
-  conj_asm1_tac >- metis_tac[] >>
+  strip_tac >> gvs[env_consistent_def] >>
+  conj_tac >- (
+    qpat_x_assum `env_scopes_consistent env cx st` mp_tac >>
+    rw[env_scopes_consistent_def]
+    >- (Cases_on `st.scopes` >> gvs[] >> Cases_on `st'.scopes` >> gvs[])
+    >- (last_x_assum drule >>
+        rw[IS_SOME_EXISTS] >>
+        drule_all lookup_scopes_same_fdoms_some >>
+        rw[IS_SOME_EXISTS])
+    >- (drule lookup_scopes_is_some_same_fdoms >> simp[] >>
+        disch_then (qspec_then `id` mp_tac) >> simp[] >>
+        rw[optionTheory.IS_SOME_EXISTS] >>
+        qpat_x_assum `!id entry. lookup_scopes id st.scopes = SOME entry ==> _`
+          (qspecl_then [`id`, `x`] mp_tac) >> simp[] >>
+        rw[optionTheory.IS_SOME_EXISTS])
+    >- (qpat_x_assum `!id entry. lookup_scopes id st'.scopes = SOME entry ==> ?entry'. _`
+          (qspecl_then [`id`, `entry`] mp_tac) >> simp[] >>
+        strip_tac >> gvs[] >>
+        qpat_x_assum `!id ty entry. FLOOKUP env.var_types id = SOME ty /\ lookup_scopes id st.scopes = SOME entry ==> _`
+          (qspecl_then [`id`, `ty`, `entry'`] mp_tac) >> simp[]) >>
+    metis_tac[]) >>
+  qpat_x_assum `env_context_consistent env cx` mp_tac >>
+  simp[env_context_consistent_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `env_immutables_consistent env cx st` mp_tac >>
+  simp[env_immutables_consistent_def] >> strip_tac >>
   conj_asm1_tac >- (
     rpt strip_tac >>
     first_x_assum drule_all >>
@@ -357,23 +423,21 @@ Proof
     drule_all preserves_tv_immutables_type_preserved >>
     strip_tac >>
     gvs[]) >>
-  conj_asm1_tac >- (
-    rpt strip_tac >>
-    first_x_assum drule_all >>
-    strip_tac >> gvs[] >>
-    rw[] >>
-    `?old_pair. FLOOKUP (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME old_pair` by (
-      qpat_x_assum `!src n. IS_SOME (FLOOKUP (get_source_immutables src _) n) ==> _`
-        (qspecl_then [`src`, `id`] mp_tac) >>
-      metis_tac[IS_SOME_EXISTS]) >>
-    PairCases_on `old_pair` >>
-    `evaluate_type (get_tenv cx) ty = SOME old_pair0` by
-      metis_tac[] >>
-    drule_all preserves_tv_immutables_type_preserved >>
-    strip_tac >>
-    gvs[]) >>
-  metis_tac[]
+  rpt strip_tac >>
+  first_x_assum drule_all >>
+  strip_tac >> gvs[] >>
+  rw[] >>
+  `?old_pair. FLOOKUP (get_source_immutables src
+      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME old_pair` by (
+    qpat_x_assum `!src n. IS_SOME (FLOOKUP (get_source_immutables src _) n) ==> _`
+      (qspecl_then [`src`, `id`] mp_tac) >>
+    metis_tac[IS_SOME_EXISTS]) >>
+  PairCases_on `old_pair` >>
+  `evaluate_type (get_tenv cx) ty = SOME old_pair0` by
+    metis_tac[] >>
+  drule_all preserves_tv_immutables_type_preserved >>
+  strip_tac >>
+  gvs[]
 QED
 
 (* ===== Assignability preservation for expression evaluation ===== *)
@@ -528,10 +592,13 @@ Proof
   qexists_tac `st` >> simp[] >>
   drule (cj 8 eval_preserves_tv) >> simp[] >> strip_tac >>
   drule eval_expr_preserves_scopes_dom >> simp[] >> strip_tac >>
+  `!id entry. lookup_scopes id st'.scopes = SOME entry ==>
+      ?entry'. lookup_scopes id st.scopes = SOME entry' /\ entry.type = entry'.type` by
+    (rpt strip_tac >> drule lookup_scopes_type_preserved_under_preserves_tv >> simp[]) >>
+  conj_tac >- metis_tac[eval_expr_preserves_assignable_lookup] >>
   drule eval_expr_preserves_immutables_addr_dom >>
   drule eval_expr_preserves_immutables_dom >>
-  rw[IS_SOME_EXISTS]
-  >- metis_tac[eval_expr_preserves_assignable_lookup] >>
+  rw[IS_SOME_EXISTS] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
   gvs[EQ_IMP_THM, PULL_EXISTS, SF DNF_ss] >>
@@ -547,10 +614,13 @@ Proof
   qexists_tac `st` >> simp[] >>
   drule (cj 9 eval_preserves_tv) >> simp[] >> strip_tac >>
   drule eval_exprs_preserves_scopes_dom >> simp[] >> strip_tac >>
+  `!id entry. lookup_scopes id st'.scopes = SOME entry ==>
+      ?entry'. lookup_scopes id st.scopes = SOME entry' /\ entry.type = entry'.type` by
+    (rpt strip_tac >> drule lookup_scopes_type_preserved_under_preserves_tv >> simp[]) >>
+  conj_tac >- metis_tac[eval_exprs_preserves_assignable_lookup] >>
   drule eval_exprs_preserves_immutables_addr_dom >>
   drule eval_exprs_preserves_immutables_dom >>
-  rw[IS_SOME_EXISTS]
-  >- metis_tac[eval_exprs_preserves_assignable_lookup] >>
+  rw[IS_SOME_EXISTS] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
   gvs[EQ_IMP_THM, PULL_EXISTS, SF DNF_ss] >>

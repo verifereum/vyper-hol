@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeExprSoundness vyperTypeStatePreservation
-  vyperTypeBuiltins
+  vyperTypeBuiltins vyperExprNoControl
 Libs
   wordsLib markerLib
 
@@ -124,9 +124,6 @@ Proof
   simp[get_scopes_def, return_def]
 QED
 
-(* TEMPORARILY CHEATED - copied/adapted into fresh assignment helper theory.
-   The preserved proof above from the old stack needs cleanup for the HashMapRef
-   branch after split_hashmap_subscripts returns a triple. *)
 Theorem assign_target_no_return:
   (!cx tgt ao st res st'.
     assign_target cx tgt ao st = (res, st') ==>
@@ -135,7 +132,15 @@ Theorem assign_target_no_return:
     assign_targets cx tgts vs st = (res, st') ==>
     !v. res <> INR (ReturnException v))
 Proof
-  cheat
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+      Cases_on `res` >> simp[] >>
+      drule (cj 1 assign_target_no_control) >>
+      rw[no_control_exc_def]) >>
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  Cases_on `res` >> simp[] >>
+  drule (cj 2 assign_target_no_control) >>
+  rw[no_control_exc_def]
 QED
 
 (* ===== Dynamic assignability side condition ===== *)
@@ -174,7 +179,7 @@ Theorem well_typed_target_NameTarget_assignable:
 Proof
   rw[well_typed_target_def, assign_target_assignable_def] >>
   gvs[well_typed_expr_def, AllCaseEqs(), LET_THM] >>
-  fs[env_consistent_def] >>
+  fs[env_consistent_def, env_scopes_consistent_def] >>
   first_x_assum drule >> strip_tac >>
   drule lookup_scopes_find_containing_scope >> strip_tac >>
   rpt (goal_assum drule) >> simp[]
@@ -237,7 +242,7 @@ Theorem eval_base_target_scoped_assignable_place:
     env_consistent env cx st ==>
     assign_target_assignable (BaseTargetV (ScopedVar s) sbs) st
 Proof
-  rw[assign_target_assignable_def, env_consistent_def] >>
+  rw[assign_target_assignable_def, env_consistent_def, env_scopes_consistent_def] >>
   drule_all eval_base_target_scoped_root_assignable >> strip_tac >> gvs[] >>
   first_x_assum drule >> strip_tac >>
   drule lookup_scopes_find_containing_scope >> strip_tac >>

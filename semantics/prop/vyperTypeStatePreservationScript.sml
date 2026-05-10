@@ -56,6 +56,41 @@ Proof
   metis_tac[evaluate_type_well_formed_type_value]
 QED
 
+Theorem new_variable_preserves_state_well_typed_result:
+  state_well_typed st /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ new_variable id tv v st = (res, st') ==>
+  state_well_typed st'
+Proof
+  rw[new_variable_def, bind_def, ignore_bind_def, return_def, raise_def,
+     get_scopes_def, set_scopes_def, type_check_def, AllCaseEqs(), LET_THM,
+     state_well_typed_def, scope_well_typed_def, list_CASE_rator,
+     assert_def] >> gvs[scope_well_typed_def, FLOOKUP_UPDATE] >>
+  rw[] >> rw[] >>
+  metis_tac[evaluate_type_well_formed_type_value]
+QED
+
+Theorem new_variable_accounts:
+  new_variable id tv v st = (res, st') ==> st'.accounts = st.accounts
+Proof
+  rw[new_variable_def, bind_apply, ignore_bind_apply, return_def, raise_def,
+     get_scopes_def, set_scopes_def, type_check_def, assert_def, AllCaseEqs(),
+     LET_THM, list_CASE_rator] >> gvs[]
+QED
+
+Theorem new_variable_no_type_error:
+  env_consistent env cx st /\ string_to_num id NOTIN FDOM env.var_types /\
+  new_variable id tv v st = (INR (Error e), st') ==>
+  !msg. e <> TypeError msg
+Proof
+  rw[new_variable_def, bind_apply, ignore_bind_apply, return_def, raise_def,
+     get_scopes_def, set_scopes_def, type_check_def, assert_def, AllCaseEqs(),
+     LET_THM, list_CASE_rator] >>
+  gvs[env_consistent_def, env_scopes_consistent_def, optionTheory.IS_SOME_EXISTS, TO_FLOOKUP] >>
+  Cases_on `lookup_scopes (string_to_num id) st.scopes` >> gvs[] >>
+  qpat_x_assum `!id entry. lookup_scopes id st.scopes = SOME entry ==> _`
+    (qspecl_then [`string_to_num id`, `x`] mp_tac) >> simp[TO_FLOOKUP]
+QED
+
 (* ===== Storage/account/immutable operations ===== *)
 
 Theorem read_storage_slot_preserves_state_well_typed:
@@ -346,20 +381,26 @@ Theorem target_runtime_typed_rebuild:
   target_runtime_typed env cx st' tgt ty gv
 Proof
   Cases_on `gv` >> simp[target_runtime_typed_def] >> rpt strip_tac >> gvs[] >>
-  Cases_on `l` >> gvs[location_runtime_typed_def, runtime_consistent_def, env_consistent_def]
+  Cases_on `l` >> gvs[location_runtime_typed_def, runtime_consistent_def, env_consistent_def,
+                         env_scopes_consistent_def, env_immutables_consistent_def]
   >- (
     rename1 `FLOOKUP env.var_types (string_to_num s) = SOME var_ty` >>
     `?entry'. lookup_scopes (string_to_num s) st'.scopes = SOME entry'` by metis_tac[IS_SOME_EXISTS] >>
-    `entry'.type = entry.type` by metis_tac[optionTheory.SOME_11] >>
+    `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
+    `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
+    `entry'.type = entry.type` by gvs[] >>
     qexists_tac `Type var_ty` >> simp[] >>
     qexists_tac `final_tv` >> simp[])
   >- (
-    rename1 `FLOOKUP env.bare_globals (current_module cx,string_to_num s) = SOME imm_ty` >>
+    rename1 `FLOOKUP env.bare_globals (_,string_to_num s) = SOME imm_ty` >>
+    `env.current_src = current_module cx` by fs[env_context_consistent_def] >> gvs[] >>
     `?pair. FLOOKUP (get_source_immutables (current_module cx)
         (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
         (string_to_num s) = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
     PairCases_on `pair` >>
-    `pair0 = tv` by metis_tac[optionTheory.SOME_11] >>
+    `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
+    `evaluate_type (get_tenv cx) imm_ty = SOME pair0` by metis_tac[] >>
+    `pair0 = tv` by gvs[] >>
     qexists_tac `Type imm_ty` >> simp[] >>
     qexists_tac `final_tv` >> simp[] >>
     qexists_tac `get_source_immutables (current_module cx)

@@ -28,7 +28,8 @@ Theorem env_consistent_lookup_var_type:
   ?tv. evaluate_type env.type_defs ty = SOME tv /\ entry.type = tv /\
        value_has_type tv entry.value
 Proof
-  rw[env_consistent_def, state_well_typed_def]
+  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_context_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def, state_well_typed_def]
   >> drule_all scope_well_typed_lookup_scopes
   >> strip_tac
   >> first_x_assum drule_all
@@ -44,11 +45,11 @@ Proof
   rw[well_typed_expr_def]
   >> `∃entry. lookup_scopes (string_to_num id) st.scopes = SOME entry`
   by (
-    gvs[env_consistent_def] >> last_x_assum drule
+    gvs[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_scopes_consistent_def] >> last_x_assum drule
     >> rw[IS_SOME_EXISTS] )
   >> goal_assum drule
   >> conj_asm1_tac >- (
-    gvs[env_consistent_def] >>
+    gvs[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_context_consistent_def, env_scopes_consistent_def] >>
     first_x_assum $ drule_then irule >>
     simp[] )
   >> drule_at(Pat`lookup_scopes`) $ env_consistent_lookup_var_type
@@ -60,7 +61,7 @@ Theorem var_assignable_sound:
   env_consistent env cx st /\ FLOOKUP env.var_assignable id = SOME T ==>
   ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable
 Proof
-  rw[env_consistent_def]
+  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
 QED
 
 Theorem NameTarget_sound:
@@ -68,7 +69,7 @@ Theorem NameTarget_sound:
   env_consistent env cx st ==>
   ?entry. lookup_scopes (string_to_num id) st.scopes = SOME entry /\ entry.assignable
 Proof
-  rw[well_typed_expr_def, env_consistent_def]
+  rw[well_typed_expr_def, env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
   >> gvs[well_typed_expr_def, AllCaseEqs(), LET_THM]
 QED
 
@@ -79,38 +80,6 @@ Proof
   rw[lookup_scopes_def, FLOOKUP_UPDATE]
 QED
 
-Theorem new_variable_env_consistent_fresh:
-  new_variable id tv v st = (INL u, st') /\
-  env_consistent env cx st /\ string_to_num id NOTIN FDOM env.var_types ==>
-  env_consistent env cx st'
-Proof
-  rw[new_variable_def, LET_THM] >>
-  gvs[bind_def, ignore_bind_def, get_scopes_def, type_check_def,
-      assert_def, set_scopes_def, return_def, raise_def, AllCaseEqs(),
-      list_CASE_rator, option_CASE_rator] >>
-  rw[env_consistent_def] >> gvs[env_consistent_def]
-  >- (
-    Cases_on `id' = string_to_num id` >- gvs[FLOOKUP_DEF] >>
-    first_x_assum drule >> strip_tac >>
-    gvs[lookup_scopes_def, FLOOKUP_UPDATE])
-  >- (
-    Cases_on `id' = string_to_num id` >- gvs[FLOOKUP_DEF] >>
-    last_x_assum irule >>
-    gvs[lookup_scopes_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
-    goal_assum $ drule_at Any >> simp[])
-  >- (
-    Cases_on `id' = string_to_num id` >- (
-      first_x_assum drule >> gvs[]) >>
-    first_x_assum drule >> strip_tac >>
-    gvs[lookup_scopes_def, FLOOKUP_UPDATE])
-  >- (
-    Cases_on `id' = string_to_num id` >- (
-      first_x_assum drule >> gvs[]) >>
-    first_x_assum drule >> strip_tac >>
-    gvs[lookup_scopes_def, FLOOKUP_UPDATE]) >>
-  res_tac >> gvs[]
-QED
-
 Theorem extend_local_env_consistent_after_new_variable:
   env_consistent env cx st /\ state_well_typed st /\
   evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
@@ -119,34 +88,15 @@ Theorem extend_local_env_consistent_after_new_variable:
   env_consistent (extend_local env (string_to_num id) typ T) cx st'
 Proof
   strip_tac >>
-  drule_all new_variable_env_consistent_fresh >>
-  simp[env_consistent_def, extend_local_def] >>
-  strip_tac >> gvs[FLOOKUP_UPDATE] >>
+  simp[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, extend_local_def] >>
+  gvs[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def] >>
   gvs[new_variable_def, bind_def, AllCaseEqs(), ignore_bind_def,
       type_check_def, list_CASE_rator, raise_def, assert_def,
       set_scopes_def, return_def, get_scopes_def] >>
   gvs[lookup_scopes_def, FLOOKUP_UPDATE,AllCaseEqs()] >>
-  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs[] ) >>
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> gvs[] >>
-    last_x_assum irule >> gvs[] >>
-    goal_assum drule >> simp[]
-  ) >>
-  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] ) >>
-  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] ) >>
-  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] >>
-    last_x_assum drule_all >> simp[]
-  ) >>
-  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] >>
-    last_x_assum irule >> gvs[] >>
-    goal_assum drule >> gvs[]
-  ) >>
-  conj_tac >- ( rpt gen_tac >> strip_tac >> gvs [] >>
-    last_x_assum drule_all >> gvs[]
-  ) >>
-  rpt gen_tac >> strip_tac >>
-  last_x_assum drule_all >> gvs[]
+  rw[] >> gvs[] >> TRY(first_x_assum drule_all >> simp[]) >> TRY(res_tac >> gvs[])
 QED
+
 
 (* ===== Immutables / bare globals ===== *)
 
@@ -197,7 +147,7 @@ Theorem bare_global_lookup_sound:
             (string_to_num id) = SOME (tv,v) /\
          evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
 Proof
-  simp[well_typed_expr_def, env_consistent_def] >>
+  simp[well_typed_expr_def, env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def] >>
   strip_tac >> gvs[] >>
   qmatch_goalsub_abbrev_tac`fl = SOME _` >>
   `IS_SOME fl` by (
@@ -226,7 +176,7 @@ Theorem toplevel_vtype_Type_immutable_sound:
     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
   evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
 Proof
-  rw[env_consistent_def]
+  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
   >> first_x_assum drule_all
   >> strip_tac
   >> drule current_immutables_well_typed

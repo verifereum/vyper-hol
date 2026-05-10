@@ -625,21 +625,40 @@ Definition fn_sigs_consistent_def:
         sig.num_defaults = LENGTH dflts
 End
 
-Definition env_consistent_def:
-  env_consistent env cx st <=>
+Definition env_context_consistent_def:
+  env_context_consistent env cx <=>
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
+    (!src id ty ts. FLOOKUP env.bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
+       FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+       is_immutable_decl id ts /\ ty <> NoneT) /\
+    (!src id kt vt ts.
+       FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) /\ get_module_code cx src = SOME ts ==>
+       ?is_transient id_str.
+          find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str)) /\
+    (!src fid ls.
+       FLOOKUP env.flag_members (src, fid) = SOME ls ==>
+       ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
+            FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls)))
+End
+
+Definition env_scopes_consistent_def:
+  env_scopes_consistent env cx (st:evaluation_state) <=>
+    st.scopes <> [] /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==> IS_SOME (lookup_scopes id st.scopes)) /\
+    (!id entry. lookup_scopes id st.scopes = SOME entry ==>
+       IS_SOME (FLOOKUP env.var_types id)) /\
     (!id ty entry.
        FLOOKUP env.var_types id = SOME ty /\ lookup_scopes id st.scopes = SOME entry ==>
        evaluate_type (get_tenv cx) ty = SOME entry.type) /\
     (!id. FLOOKUP env.var_assignable id = SOME T ==> IS_SOME (FLOOKUP env.var_types id)) /\
     (!id. FLOOKUP env.var_assignable id = SOME T ==>
-       ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable) /\
-    (!src id ty ts. FLOOKUP env.bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
-       FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-       is_immutable_decl id ts /\ ty <> NoneT) /\
+       ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable)
+End
+
+Definition env_immutables_consistent_def:
+  env_immutables_consistent env cx (st:evaluation_state) <=>
     (!id ty. FLOOKUP env.bare_globals (env.current_src,id) = SOME ty ==>
        IS_SOME (FLOOKUP (get_source_immutables env.current_src
          (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)) /\
@@ -657,15 +676,14 @@ Definition env_consistent_def:
        (find_var_decl_by_num id ts = NONE ==>
          !tv v. FLOOKUP (get_source_immutables src
            (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-         evaluate_type (get_tenv cx) ty = SOME tv)) /\
-    (!src id kt vt ts.
-       FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) /\ get_module_code cx src = SOME ts ==>
-       ?is_transient id_str.
-          find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str)) /\
-    (!src fid ls.
-       FLOOKUP env.flag_members (src, fid) = SOME ls ==>
-       ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-            FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls)))
+         evaluate_type (get_tenv cx) ty = SOME tv))
+End
+
+Definition env_consistent_def:
+  env_consistent env cx (st:evaluation_state) <=>
+    env_context_consistent env cx /\
+    env_scopes_consistent env cx st /\
+    env_immutables_consistent env cx st
 End
 
 Definition defaults_env_def:
