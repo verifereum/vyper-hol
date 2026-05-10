@@ -2388,7 +2388,25 @@ Theorem ao_transform_function_correct_proof:
            (fn with fn_blocks :=
              MAP (\bb. bb with bb_instructions :=
                MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
-         bb.bb_label idx op) v)
+         bb.bb_label idx op) v) /\
+    (* Phase 4: per-block cmp_flip simulation *)
+    (let fn0 = fn with fn_blocks :=
+       MAP (\bb. bb with bb_instructions :=
+         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+     let targets = ao_compute_fn_iszero_targets fn0 in
+     let dfg = dfg_build_function fn0 in
+     let ra = range_analyze fn0 in
+     let fn1 = fn0 with fn_blocks :=
+       MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+     let dfg1 = dfg_build_function fn1 in
+     let dead = ao_cmp_flip_dead_vars dfg1 fn1 in
+     !lbl bb1 bb' fuel' ctx' s1 s2.
+       lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+       lookup_block lbl (ao_cmp_flip_function dfg1 fn1).fn_blocks = SOME bb' /\
+       state_equiv dead s1 s2 /\ s1.vs_inst_idx = 0 ==>
+       lift_result (state_equiv dead) (execution_equiv dead)
+         (execution_equiv dead)
+         (exec_block fuel' ctx' bb1 s1) (exec_block fuel' ctx' bb' s2))
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -2464,11 +2482,11 @@ Proof
          (execution_equiv dead)
          (run_blocks fuel ctx fn1 s)
          (run_blocks fuel ctx (ao_cmp_flip_function dfg1 fn1) s)` by
-        (* CHEATED subgoal: per-block cmp_flip sim not yet proved
-           (tasks #2/#3: ao_cmp_flip_block_sim) *)
+        (* Per-block cmp_flip sim: from hypothesis *)
         (irule ao_phase4_run_blocks_sim >>
          simp[Abbr `dead`, Abbr `dfg1`, Abbr `fn1`, Abbr `fn0`,
-              Abbr `dfg`, Abbr `ra`, Abbr `targets`] >> cheat) >>
+              Abbr `dfg`, Abbr `ra`, Abbr `targets`] >>
+         first_x_assum ACCEPT_TAC) >>
       (* Compose via lift_result_trans + lift_result_mono *)
       irule (UNDISCH_ALL lift_result_trans) >>
       conj_tac >- metis_tac[state_equiv_trans] >>
