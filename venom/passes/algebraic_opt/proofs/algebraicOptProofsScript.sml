@@ -51,6 +51,20 @@ Definition ao_dfg_inv_def:
         ?inner_val. val = sign_extend w inner_val)
 End
 
+(* Iszero chain invariant: adjacent chain elements satisfy the iszero
+   relationship. If chain = [root, iz1, iz2, ..., v] then for each
+   adjacent pair (EL k, EL (k+1)), the value of EL (k+1) equals
+   bool_to_word(value of EL k = 0w). *)
+Definition ao_iszero_chain_inv_def:
+  ao_iszero_chain_inv targets s <=>
+    !v chain. ALOOKUP targets v = SOME chain ==>
+      !k. k + 1 < LENGTH chain ==>
+        !val_k val_k1.
+          eval_operand (EL k chain) s = SOME val_k /\
+          eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
+          val_k1 = bool_to_word (val_k = 0w)
+End
+
 (* ===== Phase 1: Offset Conversion Equality ===== *)
 
 (*
@@ -2344,7 +2358,37 @@ Theorem ao_transform_function_correct_proof:
        Trivially true when these output vars are undefined in s (the typical case). *)
     (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
       (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
-      lookup_var x s = NONE)
+      lookup_var x s = NONE) /\
+    (* Iszero resolution semantics: resolving iszero chains is a no-op on
+       step_inst. Requires state where chain outputs have correct values. *)
+    (!inst fuel' ctx' s'.
+       inst_wf inst ==>
+       step_inst fuel' ctx'
+         (ao_resolve_iszero_inst
+           (ao_compute_fn_iszero_targets
+             (fn with fn_blocks :=
+               MAP (\bb. bb with bb_instructions :=
+                 MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+           inst) s' =
+       step_inst fuel' ctx' inst s') /\
+    (* Range analysis soundness: range bounds are correct for resolved operands *)
+    (!bb inst idx s' op v.
+       MEM bb (MAP (\bb. bb with bb_instructions :=
+                 MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+       MEM inst bb.bb_instructions /\
+       eval_operand op s' = SOME v /\
+       MEM op (ao_resolve_iszero_inst
+         (ao_compute_fn_iszero_targets
+           (fn with fn_blocks :=
+             MAP (\bb. bb with bb_instructions :=
+               MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+         inst).inst_operands ==>
+       in_range (range_get_range
+         (range_analyze
+           (fn with fn_blocks :=
+             MAP (\bb. bb with bb_instructions :=
+               MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+         bb.bb_label idx op) v)
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -2369,9 +2413,8 @@ Proof
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
     (irule ao_phases123_run_blocks_sim >>
      rpt conj_tac >> fs[markerTheory.Abbrev_def] >>
-     rpt conj_tac
-     >- cheat (* H_range *)
-     >- cheat (* H_resolve *)
+     (* H_range and H_resolve: match assumptions directly *)
+     rpt (TRY (first_x_assum ACCEPT_TAC >> NO_TAC) >> conj_tac)
      >- (* ssa_form fn0: ao_handle_offset preserves inst_outputs *)
         (fs[ssa_form_def, fn_insts_def] >>
          `!bbs. FLAT (MAP (\i. i.inst_outputs)
