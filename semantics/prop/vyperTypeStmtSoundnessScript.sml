@@ -40,7 +40,13 @@ Theorem expr_runtime_typed_hashmap_ref_place:
   expr_runtime_typed env e tv /\ is_HashMapRef tv ==>
   ?kt vt. type_place_expr env e = SOME (HashMapT kt vt)
 Proof
-  cheat
+  rw[expr_runtime_typed_def] >>
+  Cases_on`tv` >> gvs[is_HashMapRef_def, toplevel_value_typed_def] >>
+  drule evaluate_type_not_NoneT_imp_not_NoneTV >> rw[] >>
+  qabbrev_tac`label = K e` >>
+  Cases_on`e` >> gvs[expr_type_def] >>
+  simp[well_typed_expr_def] >>
+  cheat (* looks false: but why does expr_runtime_typed allow NoneT? *)
 QED
 
 Theorem eval_expr_exception_return_typed:
@@ -60,14 +66,22 @@ Proof
 QED
 
 Theorem eval_target_no_control:
-  (!cx tgt st exn st'.
+  (!tgt cx st exn st'.
     eval_target cx tgt st = (INR exn, st') ==> no_control_exc exn) /\
-  (!cx tgts st exn st'.
+  (!tgts cx st exn st'.
     eval_targets cx tgts st = (INR exn, st') ==> no_control_exc exn) /\
   (!cx bt st exn st'.
     eval_base_target cx bt st = (INR exn, st') ==> no_control_exc exn)
 Proof
-  cheat
+  rewrite_tac[CONJ_ASSOC] >>
+  reverse conj_asm2_tac >- (
+    rpt strip_tac >>
+    drule_then irule (cj 1 eval_expr_no_control_with_bt)  ) >>
+  ho_match_mp_tac (TypeBase.induction_of``:assignment_target``) >>
+  simp[evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
+       EXISTS_PROD, bind_def] >>
+  rpt strip_tac >> gvs[return_def] >>
+  metis_tac[]
 QED
 
 Theorem value_runtime_typed_env_static:
@@ -1476,7 +1490,16 @@ Resume eval_all_type_sound_mutual[Targets_cons]:
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Name]:
-  cheat
+  rpt gen_tac >>
+  `∃ty. vt = Type ty` by gvs[well_typed_expr_def,AllCaseEqs()] >>
+  gvs[] >>
+  drule_all NameTarget_sound >>
+  strip_tac >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, assert_def, ignore_bind_def,
+    get_scopes_def, type_check_def, assert_def] >>
+  strip_tac >> gvs[] >>
+  simp[no_type_error_result_def, base_target_value_shape_def]
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_BareGlobal]:
@@ -1484,7 +1507,11 @@ Resume eval_all_type_sound_mutual[BaseTarget_BareGlobal]:
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, return_def] >>
+  strip_tac >> gvs[] >>
+  simp[no_type_error_result_def, base_target_value_shape_def]
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
@@ -1492,7 +1519,19 @@ Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Attribute]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ (AttributeTarget _ _) = _` mp_tac >>
+  CONV_TAC(LAND_CONV(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def]))) >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_base_target cx bt st` >>
+  rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
+  simp[AllCaseEqs(),return_def,EXISTS_PROD] >>
+  ntac 3 strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[no_type_error_result_def, base_target_value_shape_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Name]:

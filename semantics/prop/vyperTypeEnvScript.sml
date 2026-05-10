@@ -64,6 +64,57 @@ Proof
   rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
 QED
 
+Theorem type_place_target_NameTarget:
+  type_place_target env (NameTarget id) = SOME vt <=>
+  ?ty. vt = Type ty /\
+       FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+       FLOOKUP env.var_assignable (string_to_num id) = SOME T
+Proof
+  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
+  simp[LET_THM, AllCaseEqs(), PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem type_place_target_BareGlobalNameTarget:
+  type_place_target env (BareGlobalNameTarget id) = SOME vt <=>
+  ?ty. vt = Type ty /\
+       FLOOKUP env.bare_globals (env.current_src, string_to_num id) = SOME ty
+Proof
+  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem type_place_target_TopLevelNameTarget:
+  type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME vt <=>
+  FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt
+Proof
+  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
+  simp[]
+QED
+
+Theorem type_place_target_AttributeTarget:
+  type_place_target env (AttributeTarget tgt id) = SOME vt <=>
+  ?tgt_ty ty. type_place_target env tgt = SOME (Type tgt_ty) /\
+              attribute_type env.type_defs tgt_ty id = SOME ty /\
+              vt = Type ty
+Proof
+  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem type_place_target_SubscriptTarget:
+  type_place_target env (SubscriptTarget tgt e) = SOME vt <=>
+  well_typed_expr env e /\
+  ?vt'. type_place_target env tgt = SOME vt' /\
+        subscript_vtype vt' (expr_type e) = SOME vt
+Proof
+  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  metis_tac[]
+QED
+
 Theorem NameTarget_sound:
   type_place_target env (NameTarget id) = SOME (Type ty) /\
   env_consistent env cx st ==>
