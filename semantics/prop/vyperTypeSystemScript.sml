@@ -120,6 +120,14 @@ Definition well_typed_binop_def:
                           (?bd. t2 = ArrayT t1 bd)))
 End
 
+Theorem well_typed_binop_not_In_second_type:
+  well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
+  t2 <> NoneT /\ (!t bd. t2 <> ArrayT t bd)
+Proof
+  Cases_on `bop` >> simp[well_typed_binop_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Definition env_item_type_def:
   env_item_type Sender = BaseT AddressT /\
   env_item_type SelfAddr = BaseT AddressT /\

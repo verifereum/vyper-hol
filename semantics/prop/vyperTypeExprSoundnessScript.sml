@@ -76,6 +76,16 @@ Proof
   Cases_on `b` >> gvs[switch_BoolV_def]
 QED
 
+Theorem get_Value_no_type_error:
+  toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) /\
+  get_Value tv st = (res, st') ==>
+  no_type_error_result res
+Proof
+  rw[] >>
+  drule_all toplevel_value_typed_not_ArrayRef >> strip_tac >>
+  gvs[get_Value_def, return_def, no_type_error_result_def]
+QED
+
 Theorem get_Value_String_no_type_error:
   toplevel_value_typed tv (BaseTV (StringT n)) /\
   get_Value tv st = (res, st') ==>

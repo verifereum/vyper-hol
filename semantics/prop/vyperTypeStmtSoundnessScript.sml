@@ -63,7 +63,9 @@ Theorem eval_target_no_control:
   (!cx tgt st exn st'.
     eval_target cx tgt st = (INR exn, st') ==> no_control_exc exn) /\
   (!cx tgts st exn st'.
-    eval_targets cx tgts st = (INR exn, st') ==> no_control_exc exn)
+    eval_targets cx tgts st = (INR exn, st') ==> no_control_exc exn) /\
+  (!cx bt st exn st'.
+    eval_base_target cx bt st = (INR exn, st') ==> no_control_exc exn)
 Proof
   cheat
 QED
@@ -300,6 +302,65 @@ Proof
   qexists_tac `st_outer` >> simp[]
 QED
 
+Theorem eval_stmts_pushed_scope_env_consistent_after_pop:
+  env_maps_wf env /\ env_consistent env cx st /\
+  preserves_tv cx (st with scopes updated_by CONS FEMPTY) st_body /\
+  eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (res, st_body) /\
+  env_extends env env_body /\ env_consistent env_body cx st_body ==>
+  env_consistent env cx (st_body with scopes := TL st_body.scopes)
+Proof
+  strip_tac >>
+  `st with scopes updated_by CONS FEMPTY =
+   st with scopes := FEMPTY::st.scopes`
+  by simp[evaluation_state_component_equality] >>
+  Cases_on `st_body.scopes` >> gvs[]
+  >- (drule eval_stmts_preserves_scopes_len >> simp[]) >>
+  irule env_extends_env_consistent_after_pop >> simp[] >>
+  conj_tac >- (
+    drule eval_stmts_preserves_scopes_len >> simp[] >>
+    strip_tac >>
+    `st.scopes <> []` by fs[env_consistent_def, env_scopes_consistent_def] >>
+    Cases_on `st.scopes` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  conj_tac >- (
+    conj_tac >- (
+      rpt strip_tac >> fs[] >>
+      `?entry. lookup_scopes id st.scopes = SOME entry` by (
+        qpat_x_assum`env_consistent _ _ st`mp_tac >>
+        simp[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS]) >>
+      `FLOOKUP h id = NONE` suffices_by simp[] >>
+      `FLOOKUP (HD st_body.scopes) id = NONE` suffices_by simp[] >>
+      irule lookup_scopes_not_in_new_head >> simp[] >>
+      qexists_tac `cx` >> qexists_tac `entry` >> qexists_tac `res` >>
+      qexists_tac `st.scopes` >> qexists_tac `st` >> simp[] >>
+      qexists_tac `FEMPTY` >> qexists_tac `ss` >> simp[]) >>
+    rpt strip_tac >> fs[] >>
+    `?entry. lookup_scopes id st.scopes = SOME entry` by (
+      qpat_x_assum`env_consistent _ _ st`mp_tac >>
+      simp[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS]) >>
+    `FLOOKUP h id = NONE` suffices_by simp[] >>
+    `FLOOKUP (HD st_body.scopes) id = NONE` suffices_by simp[] >>
+    irule lookup_scopes_not_in_new_head >> simp[] >>
+    qexists_tac `cx` >> qexists_tac `entry` >> qexists_tac `res` >>
+    qexists_tac `st.scopes` >> qexists_tac `st` >> simp[] >>
+    qexists_tac `FEMPTY` >> qexists_tac `ss` >> simp[]) >>
+  conj_tac >- (
+    qexists_tac `env_body` >> simp[] >>
+    rpt strip_tac >> fs[] >>
+    `lookup_scopes id st.scopes = NONE` by (
+      qpat_x_assum`env_consistent env cx st`mp_tac >>
+      simp[env_consistent_def, env_scopes_consistent_def] >> strip_tac >>
+      Cases_on `lookup_scopes id st.scopes` >> gvs[] >>
+      metis_tac[optionTheory.IS_SOME_DEF]) >>
+    qspecl_then [`cx`, `ss`, `st`, `FEMPTY`, `st.scopes`, `res`, `st_body`, `id`, `h`, `t`]
+      mp_tac eval_stmts_preserves_tail_lookup_none >>
+    simp[]) >>
+  qexists_tac `st` >> simp[] >>
+  qspecl_then [`cx`, `ss`, `FEMPTY`, `st`, `res`, `st_body`]
+    mp_tac (GEN_ALL eval_stmts_scope_bracket_gen_preserves_tv) >>
+  simp[]
+QED
+
 Theorem AnnAssign_env_consistent_after_new_variable:
   type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
   env_consistent env cx st /\ state_well_typed st /\
@@ -333,6 +394,14 @@ Proof
   irule new_variable_preserves_state_well_typed >>
   goal_assum(drule_at(Pat`new_variable`)) >>
   simp[] >> goal_assum drule
+QED
+
+Theorem eval_base_target_target_runtime_typed:
+  well_typed_target env bt ty /\ env_consistent env cx st /\ state_well_typed st /\
+  eval_base_target cx bt st = (INL (loc,sbs), st') ==>
+  target_runtime_typed env cx st' (BaseTarget bt) ty (BaseTargetV loc sbs)
+Proof
+  cheat
 QED
 
 Theorem non_decl_stmt_env_consistent_after_success:
@@ -942,7 +1011,112 @@ Resume eval_all_type_sound_mutual[Assign]:
 QED
 
 Resume eval_all_type_sound_mutual[AugAssign]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_target cx bt st` >>
+  rename1 `eval_base_target cx bt st = (target_res, st1)` >>
+  (* Apply base-target IH *)
+  `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
+  qpat_x_assum `!env vt st res st'. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ eval_base_target _ _ _ = _ ==> _`
+    (drule_at (Pat`type_place_target`)) >>
+  simp[] >> strip_tac >>
+  Cases_on `target_res`
+  >- (
+    fs[no_type_error_result_def] >>
+    Cases_on `x` >> fs[] >> simp[bind_def] >>
+    rename1 `eval_base_target cx bt st = (INL (loc,sbs), st1)` >>
+    Cases_on `eval_expr cx e st1` >>
+    rename1 `eval_expr cx e st1 = (expr_res, st2)` >>
+    (* Apply expr IH via eval_base_target witness *)
+    first_x_assum (qspecl_then [`st`, `loc`, `sbs`, `st1`] mp_tac) >> simp[] >>
+    disch_then (qspecl_then [`env`, `st1`, `expr_res`, `st2`] mp_tac) >> simp[] >>
+    `state_well_typed st1 /\ env_consistent env cx st1 /\ accounts_well_typed st1.accounts` by (
+      qpat_x_assum `!st' res st''. env_consistent _ _ st' /\ _ ==> _`
+        (qspecl_then [`st`, `INL (loc,sbs)`, `st1`] mp_tac) >> simp[]) >>
+    simp[] >> strip_tac >>
+    Cases_on `expr_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `eval_expr cx e st1 = (INL tvl, st2)` >>
+      Cases_on `get_Value tvl st2` >>
+      rename1 `get_Value tvl st2 = (val_res, st3)` >>
+      Cases_on `val_res` >> gvs[no_type_error_result_def]
+      >- (
+        rename1 `get_Value tvl st2 = (INL v, st3)` >>
+        imp_res_tac get_Value_state >> gvs[] >>
+        `target_runtime_typed env cx st1 (BaseTarget bt) ty (BaseTargetV loc sbs)` by (
+          drule_all eval_base_target_target_runtime_typed >> simp[]) >>
+        `target_runtime_typed env cx st2 (BaseTarget bt) ty (BaseTargetV loc sbs)` by (
+          metis_tac[target_runtime_typed_rebuild, runtime_consistent_def]) >>
+        `tvl = Value v` by (
+          qpat_x_assum `get_Value _ _ = _` mp_tac >>
+          Cases_on `tvl` >> simp[get_Value_def, return_def, raise_def]) >>
+        `assign_operation_runtime_typed env ty (Update ty bop v)` by (
+          simp[assign_operation_runtime_typed_def] >>
+          qexists_tac `expr_type e` >>
+          gvs[expr_runtime_typed_def, value_runtime_typed_def,
+              toplevel_value_typed_def]) >>
+        simp[bind_apply, return_def] >>
+        Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st2` >>
+        rename1 `assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st2 = (assign_res, st4)` >>
+        Cases_on `assign_res` >> simp[return_def, ignore_bind_def, no_type_error_result_def]
+        >- (
+          strip_tac >> gvs[] >>
+          drule_at(Pat`assign_target`)
+            assign_target_preserves_runtime_consistent >>
+          disch_then $ drule_at(Pat`target_runtime_typed`) >>
+          simp[] >>
+          impl_keep_tac >- simp[runtime_consistent_def] >>
+          strip_tac >>
+          gvs[runtime_consistent_def, bind_def, return_def]) >>
+        strip_tac >> gvs[] >>
+        drule_at(Pat`assign_target`)
+          assign_target_preserves_runtime_consistent_result >>
+        disch_then $ drule_at(Pat`target_runtime_typed`) >>
+        simp[] >>
+        impl_keep_tac >- simp[runtime_consistent_def] >>
+        strip_tac >> gvs[runtime_consistent_def] >>
+        `res = INR y /\ st' = st4` by (
+          qpat_x_assum `do _ od _ = _` mp_tac >>
+          simp[bind_def, return_def]) >>
+        gvs[] >>
+        Cases_on `y` >> rw[return_exception_typed_def]
+        >- (spose_not_then strip_assume_tac >> gvs[] >>
+            drule_at(Pat`assign_target`)assign_target_update_no_type_error >>
+            disch_then drule >>
+            disch_then(drule_at(Pat`well_typed_binop`)) >>
+            disch_then drule >>
+            simp[assign_target_assignable_def] >>
+            CASE_TAC >>
+            drule_at(Pat`eval_base_target`)eval_base_target_scoped_assignable >>
+            simp[assign_target_assignable_def] >>
+            disch_then irule >>
+            goal_assum drule >>
+            goal_assum drule ) >>
+        drule (cj 1 assign_target_no_return) >> simp[] >>
+        disch_then drule >> simp[]) >>
+      strip_tac >> gvs[] >>
+      imp_res_tac get_Value_state >> gvs[] >>
+      drule get_Value_no_control >>
+      strip_tac >> drule no_control_exc_return_exception_typed >>
+      simp[] >>
+      rpt strip_tac >> gvs[] >>
+      gvs[expr_runtime_typed_def] >>
+      drule_all well_typed_binop_not_In_second_type >> strip_tac >>
+      drule_all evaluate_type_not_ArrayT_imp_not_ArrayTV >> strip_tac >>
+      drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
+      drule_all get_Value_no_type_error >>
+      simp[no_type_error_result_def]) >>
+    strip_tac >> gvs[] >>
+    drule eval_expr_exception_return_typed >> rw[]) >>
+  fs[no_type_error_result_def] >>
+  strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
+  drule (cj 3 eval_target_no_control) >>
+  rw[no_control_exc_return_exception_typed]
 QED
 
 Resume eval_all_type_sound_mutual[If]:

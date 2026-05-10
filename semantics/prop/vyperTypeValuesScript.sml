@@ -89,6 +89,26 @@ Proof
   Cases_on `bt` >> rw[evaluate_type_def, AllCaseEqs(), LET_THM]
 QED
 
+Theorem evaluate_type_BaseT_imp_not_ArrayTV:
+  evaluate_type tenv (BaseT bt) = SOME tyv ==> !t b. tyv <> ArrayTV t b
+Proof
+  strip_tac >> drule evaluate_type_BaseT_cases >> strip_tac >> gvs[]
+QED
+
+Theorem evaluate_type_FlagT_imp_not_ArrayTV:
+  evaluate_type tenv (FlagT fid) = SOME tyv ==> !t b. tyv <> ArrayTV t b
+Proof
+  rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()]
+QED
+
+Theorem evaluate_type_not_ArrayT_imp_not_ArrayTV:
+  evaluate_type tenv ty = SOME tyv /\ (!t bd. ty <> ArrayT t bd) ==>
+  !t b. tyv <> ArrayTV t b
+Proof
+  Cases_on `ty` >> rpt strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM]
+QED
+
 Theorem evaluate_type_ArrayT_cases:
   evaluate_type tenv (ArrayT elem bd) = SOME tv ==>
   ?elem_tv. tv = ArrayTV elem_tv bd /\ evaluate_type tenv elem = SOME elem_tv
@@ -156,6 +176,14 @@ Theorem toplevel_value_typed_Value:
   toplevel_value_typed (Value v) tv <=> value_has_type tv v
 Proof
   simp[toplevel_value_typed_def]
+QED
+
+Theorem toplevel_value_typed_not_ArrayRef:
+  toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==>
+  ?v. tv = Value v
+Proof
+  Cases_on `tv` >> gvs[toplevel_value_typed_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem toplevel_value_typed_not_hashmap_material:
