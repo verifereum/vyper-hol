@@ -2300,9 +2300,11 @@ Theorem ao_transform_function_correct_proof:
     let fv' = ao_fn_total_fresh_vars fn in
     (* No INVOKE in function (standard for state_equiv-based proofs) *)
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
-    (* Freshness: original operands don't use fresh variable names *)
+    (* Freshness: original operands/outputs don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
     (* Well-formedness *)
     ssa_form fn /\ EVERY inst_wf (fn_insts fn)
     ==>
