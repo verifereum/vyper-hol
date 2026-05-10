@@ -418,28 +418,6 @@ Proof
   cheat
 QED
 
-Theorem non_decl_stmt_env_consistent_after_success:
-  type_stmt env ret_ty s = SOME env /\ env_consistent env cx st /\ state_well_typed st /\
-  eval_stmt cx s st = (INL u, st') ==>
-  env_consistent env cx st' /\ state_well_typed st'
-Proof
-  cheat
-QED
-
-Theorem eval_stmt_success_accounts_well_typed:
-  accounts_well_typed st.accounts /\ eval_stmt cx s st = (INL u, st') ==>
-  accounts_well_typed st'.accounts
-Proof
-  cheat
-QED
-
-Theorem eval_stmt_exception_accounts_well_typed:
-  accounts_well_typed st.accounts /\ eval_stmt cx s st = (INR exn, st') ==>
-  accounts_well_typed st'.accounts
-Proof
-  cheat
-QED
-
 (* ===== Statement soundness ===== *)
 
 (* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
@@ -1641,100 +1619,10 @@ Theorem eval_stmt_type_preservation_success:
   eval_stmt cx s st = (INL u, st') ==>
   state_well_typed st' /\ env_consistent env' cx st' /\ accounts_well_typed st'.accounts
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `s` >>
-  TRY(rename1 `eval_stmt cx (AnnAssign id typ e) st = _` >> suspend "AnnAssign") >>
-  gvs[type_stmt_def] >>
-  TRY(rename1 `eval_stmt cx Pass st = _` >> suspend "Pass") >>
-  TRY(rename1 `eval_stmt cx Continue st = _` >> suspend "Continue") >>
-  TRY(rename1 `eval_stmt cx Break st = _` >> suspend "Break") >>
-  TRY(rename1 `eval_stmt cx (Return o') st = _` >> suspend "Return") >>
-  TRY(rename1 `eval_stmt cx (Raise r) st = _` >> suspend "Raise") >>
-  TRY(rename1 `eval_stmt cx (Assert e a) st = _` >> suspend "Assert") >>
-  TRY(rename1 `eval_stmt cx (Log id es) st = _` >> suspend "Log") >>
-  TRY(rename1 `eval_stmt cx (Append bt e) st = _` >> suspend "Append") >>
-  TRY(rename1 `eval_stmt cx (Assign tgt e) st = _` >> suspend "Assign") >>
-  TRY(rename1 `eval_stmt cx (AugAssign ty bt bop e) st = _` >> suspend "AugAssign") >>
-  TRY(rename1 `eval_stmt cx (If e ss1 ss2) st = _` >> suspend "If") >>
-  TRY(rename1 `eval_stmt cx (For id typ it n body) st = _` >> suspend "For") >>
-  TRY(rename1 `eval_stmt cx (Expr e) st = _` >> suspend "Expr")
+  strip_tac >>
+  drule_all (cj 1 eval_all_type_sound_mutual) >>
+  simp[]
 QED
-
-Resume eval_stmt_type_preservation_success[Pass]:
-  gvs[Once evaluate_def, return_def]
-QED
-
-Resume eval_stmt_type_preservation_success[Continue]:
-  gvs[Once evaluate_def, raise_def]
-QED
-
-Resume eval_stmt_type_preservation_success[Break]:
-  gvs[Once evaluate_def, raise_def]
-QED
-
-Resume eval_stmt_type_preservation_success[Return]:
-  Cases_on `o'` >> gvs[type_stmt_def, Once evaluate_def, bind_def, raise_def, AllCaseEqs()]
-QED
-
-Resume eval_stmt_type_preservation_success[Raise]:
-  Cases_on `r` >> gvs[type_stmt_def, Once evaluate_def, bind_def, raise_def, AllCaseEqs()]
-QED
-
-Resume eval_stmt_type_preservation_success[Assert]:
-  `env' = env` by (Cases_on `a` >> gvs[type_stmt_def]) >> gvs[] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[Log]:
-  `type_stmt env ret_ty (Log id es) = SOME env` by simp[type_stmt_def] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[AnnAssign]:
-  drule_all AnnAssign_env_consistent_after_new_variable >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >>
-  rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[Append]:
-  `env' = env` by gvs[type_stmt_def, AllCaseEqs()] >> gvs[] >>
-  `type_stmt env ret_ty (Append bt e) = SOME env` by gvs[type_stmt_def, AllCaseEqs()] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[Assign]:
-  `type_stmt env ret_ty (Assign tgt e) = SOME env` by simp[type_stmt_def] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[AugAssign]:
-  `type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env` by simp[type_stmt_def] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[If]:
-  `type_stmt env ret_ty (If e ss1 ss2) = SOME env` by simp[type_stmt_def] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[For]:
-  `type_stmt env ret_ty (For id typ it n body) = SOME env` by simp[type_stmt_def] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Resume eval_stmt_type_preservation_success[Expr]:
-  `type_stmt env ret_ty (Expr e) = SOME env` by simp[type_stmt_def] >>
-  drule_all non_decl_stmt_env_consistent_after_success >> strip_tac >>
-  drule_all eval_stmt_success_accounts_well_typed >> rw[]
-QED
-
-Finalise eval_stmt_type_preservation_success
 
 Theorem eval_stmt_type_preservation_exception:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
