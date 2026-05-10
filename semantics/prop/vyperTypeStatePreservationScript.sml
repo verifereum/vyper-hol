@@ -269,12 +269,20 @@ Proof
   rw[assign_operation_runtime_typed_def] >> gvs[]
 QED
 
+Theorem place_leaf_path_typed_evaluate_type:
+  place_leaf_path_typed env vt path ty final_tv ==> evaluate_type env.type_defs ty = SOME final_tv
+Proof
+  MAP_EVERY qid_spec_tac [`vt`, `path`] >>
+  Induct_on `path` >> Cases_on `vt` >>
+  rw[place_leaf_path_typed_def] >> gvs[] >>
+  metis_tac[]
+QED
+
 Theorem place_leaf_typed_evaluate_type:
   place_leaf_typed env vt sbs ty final_tv ==> evaluate_type env.type_defs ty = SOME final_tv
 Proof
-  MAP_EVERY qid_spec_tac [`vt`, `sbs`] >>
-  Induct_on `sbs` >> Cases_on `vt` >> rw[place_leaf_typed_def] >> gvs[] >>
-  metis_tac[]
+  rw[place_leaf_typed_def] >>
+  drule place_leaf_path_typed_evaluate_type >> simp[]
 QED
 
 Theorem assign_operation_leaf_replace:

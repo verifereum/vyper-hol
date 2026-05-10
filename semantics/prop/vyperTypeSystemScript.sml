@@ -217,6 +217,11 @@ Definition well_formed_type_def:
   well_formed_type tenv ty = IS_SOME (evaluate_type tenv ty)
 End
 
+Definition well_formed_vtype_def:
+  well_formed_vtype tenv (Type ty) = well_formed_type tenv ty /\
+  well_formed_vtype tenv (HashMapT kt vt) = (well_formed_type tenv kt /\ well_formed_vtype tenv vt)
+End
+
 (* ===== Value-type/place typing for storage arrays and hashmaps ===== *)
 
 Definition value_type_as_type_def:
@@ -243,10 +248,7 @@ End
 Definition subscript_vtype_def:
   subscript_vtype (Type (ArrayT elem_ty _)) idx_ty =
     (if is_int_type idx_ty then SOME (Type elem_ty) else NONE) /\
-  subscript_vtype (Type (TupleT ts)) idx_ty =
-    (if is_int_type idx_ty /\ ts <> [] then
-       case ts of [] => NONE | t::_ => if EVERY ($= t) ts then SOME (Type t) else NONE
-     else NONE) /\
+  subscript_vtype (Type (TupleT ts)) idx_ty = NONE /\
   subscript_vtype (HashMapT kt vt) idx_ty =
     (if idx_ty = kt then SOME vt else NONE) /\
   subscript_vtype _ _ = NONE
@@ -641,6 +643,8 @@ Definition env_context_consistent_def:
     (!src id ty ts. FLOOKUP env.bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
        FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
        is_immutable_decl id ts /\ ty <> NoneT) /\
+    (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+       well_formed_vtype env.type_defs vt) /\
     (!src id kt vt ts.
        FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) /\ get_module_code cx src = SOME ts ==>
        ?is_transient id_str.

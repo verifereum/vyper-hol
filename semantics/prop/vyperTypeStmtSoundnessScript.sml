@@ -375,14 +375,6 @@ Proof
   simp[]
 QED
 
-Theorem eval_base_target_target_runtime_typed:
-  well_typed_target env bt ty /\ env_consistent env cx st /\ state_well_typed st /\
-  eval_base_target cx bt st = (INL (loc,sbs), st') ==>
-  target_runtime_typed env cx st' (BaseTarget bt) ty (BaseTargetV loc sbs)
-Proof
-  cheat
-QED
-
 (* ===== Statement soundness ===== *)
 
 (* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
@@ -493,6 +485,86 @@ Proof
     simp[pop_scope_def, return_def, raise_def]) >>
   Cases_on`r1` >> gvs[no_type_error_result_def]
 QED
+Theorem leaf_type_append:
+  !base_tv xs ys.
+    leaf_type base_tv (xs ++ ys) = leaf_type (leaf_type base_tv xs) ys
+Proof
+  Induct_on `xs` >> simp[leaf_type_def] >>
+  Cases_on `h` >> simp[leaf_type_def] >>
+  Cases_on `base_tv` >> simp[leaf_type_def] >>
+  TRY(Cases_on `b` >> simp[leaf_type_def]) >>
+  TRY(Cases_on `ALOOKUP l s` >> simp[leaf_type_def]) >>
+  Cases_on `ys` >> simp[leaf_type_def]
+QED
+
+
+
+(* Helper: OPT_MMAP + ALOOKUP on ZIP *)
+Theorem OPT_MMAP_ALOOKUP_ZIP:
+  !f (args:('k # 'a) list) ys field_id ty.
+    OPT_MMAP f (MAP SND args) = SOME ys /\
+    ALOOKUP args field_id = SOME ty ==>
+    ?tv. f ty = SOME tv /\
+         ALOOKUP (ZIP(MAP FST args, ys)) field_id = SOME tv
+Proof
+  Induct_on `args` >> simp[] >>
+  Cases >> simp[OPT_MMAP_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `q = field_id` >> gvs[]
+QED
+
+Theorem evaluate_type_mono:
+  (!tenv ty tv k.
+    evaluate_type (tenv \\ k) ty = SOME tv ==>
+    evaluate_type tenv ty = SOME tv) /\
+  (!tenv ts acc tvs k.
+    evaluate_types (tenv \\ k) ts acc = SOME tvs ==>
+    evaluate_types tenv ts acc = SOME tvs)
+Proof
+  ho_match_mp_tac evaluate_type_ind
+  >> conj_tac >- simp[evaluate_type_def]
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    first_x_assum drule >> simp[])
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    first_x_assum drule >> simp[])
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs(), DOMSUB_FLOOKUP_THM, DOMSUB_COMMUTES] >>
+    first_x_assum drule >>
+    strip_tac >> goal_assum drule >> gvs[])
+  >> conj_tac >- (
+    rpt gen_tac >> rpt gen_tac >>
+    simp[evaluate_type_def, AllCaseEqs(), DOMSUB_FLOOKUP_THM] >>
+    rpt strip_tac >> gvs[])
+  >> conj_tac >- simp[evaluate_type_def]
+  >> conj_tac >- simp[evaluate_type_def]
+  >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >>
+  first_x_assum (fn th => drule (cj 1 th)) >> strip_tac >> simp[] >>
+  first_x_assum drule >> simp[] >>
+  disch_then irule >> goal_assum drule
+QED
+
+(* attribute_type + evaluate_type gives ALOOKUP on evaluated struct fields *)
+Theorem attribute_type_evaluates:
+  !tenv struct_ty field_id result_ty ftypes.
+    attribute_type tenv struct_ty field_id = SOME result_ty /\
+    evaluate_type tenv struct_ty = SOME (StructTV ftypes) ==>
+    ?tv. evaluate_type tenv result_ty = SOME tv /\
+         ALOOKUP ftypes field_id = SOME tv
+Proof
+  Cases_on `struct_ty` >> simp[attribute_type_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM, evaluate_types_OPT_MMAP] >>
+  Cases_on `ALOOKUP args field_id` >> gvs[] >>
+  drule_all OPT_MMAP_ALOOKUP_ZIP >> strip_tac >>
+  metis_tac[evaluate_type_mono]
+QED
 
 Theorem eval_all_type_sound_mutual:
   (!cx s. !env ret_ty env' st res st'.
@@ -547,7 +619,10 @@ Theorem eval_all_type_sound_mutual:
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
     case res of
-    | INL (loc,sbs) => base_target_value_shape env bt loc sbs
+    | INL (loc,sbs) =>
+        base_target_value_shape env bt loc sbs /\
+        ?loc_vt. location_runtime_typed env cx st' loc loc_vt /\
+          target_path_type env loc_vt sbs vt
     | INR _ => T) /\
   (!cx tyv id body vs. !env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
@@ -756,9 +831,9 @@ Resume eval_all_type_sound_mutual[AssertReason]:
       Cases_on`sv` >>
       gvs[value_has_type_def,dest_StringV_def,
           lift_option_type_def]))
-   >> gvs[no_type_error_result_def]
-   >> drule eval_expr_exception_return_typed
-   >> rw[]
+  >> gvs[no_type_error_result_def]
+  >> drule eval_expr_exception_return_typed
+  >> rw[]
 QED
 
 Resume eval_all_type_sound_mutual[Log]:
@@ -1005,7 +1080,12 @@ Resume eval_all_type_sound_mutual[AugAssign]:
         rename1 `get_Value tvl st2 = (INL v, st3)` >>
         imp_res_tac get_Value_state >> gvs[] >>
         `target_runtime_typed env cx st1 (BaseTarget bt) ty (BaseTargetV loc sbs)` by (
-          drule_all eval_base_target_target_runtime_typed >> simp[]) >>
+          qpat_x_assum `!st' res st''. _` (qspecl_then [`st`, `INL (loc,sbs)`, `st1`] mp_tac) >>
+          simp[] >> strip_tac >> gvs[] >>
+          rw[target_runtime_typed_def]
+          >- simp[well_typed_atarget_def, well_typed_target_def]
+          >- simp[target_value_shape_def]
+          >> metis_tac[target_path_type_Type_place_leaf_typed]) >>
         `target_runtime_typed env cx st2 (BaseTarget bt) ty (BaseTargetV loc sbs)` by (
           metis_tac[target_runtime_typed_rebuild, runtime_consistent_def]) >>
         `tvl = Value v` by (
@@ -1442,7 +1522,15 @@ Resume eval_all_type_sound_mutual[BaseTarget_Name]:
   simp[Once evaluate_def, bind_def, return_def, assert_def, ignore_bind_def,
     get_scopes_def, type_check_def, assert_def] >>
   strip_tac >> gvs[] >>
-  simp[no_type_error_result_def, base_target_value_shape_def]
+  simp[no_type_error_result_def, base_target_value_shape_def] >>
+  qexists_tac `Type ty` >> simp[location_runtime_typed_def] >>
+  conj_tac >- (
+    gvs[well_typed_expr_def, AllCaseEqs(), LET_THM,
+        env_consistent_def, env_scopes_consistent_def,
+        env_context_consistent_def] >>
+    first_x_assum (qspecl_then [`string_to_num id`, `ty`, `entry`] mp_tac) >>
+    simp[]) >>
+  simp[target_path_type_refl]
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_BareGlobal]:
@@ -1454,7 +1542,14 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, return_def] >>
   strip_tac >> gvs[] >>
-  simp[no_type_error_result_def, base_target_value_shape_def]
+  simp[no_type_error_result_def, base_target_value_shape_def] >>
+  simp[location_runtime_typed_def] >>
+  gvs[well_typed_expr_def, place_leaf_typed_def, leaf_type_def] >>
+  rw[] >> gvs[env_consistent_def] >>
+  gvs[env_context_consistent_def] >>
+  first_x_assum drule >>
+  rw[well_formed_vtype_def, well_formed_type_def] >>
+  gvs[IS_SOME_EXISTS, target_path_type_refl]
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
@@ -1474,7 +1569,13 @@ Resume eval_all_type_sound_mutual[BaseTarget_Attribute]:
   simp[AllCaseEqs(),return_def,EXISTS_PROD] >>
   ntac 3 strip_tac >> gvs[] >>
   first_x_assum drule_all >> strip_tac >>
-  gvs[no_type_error_result_def, base_target_value_shape_def]
+  gvs[no_type_error_result_def, base_target_value_shape_def] >>
+  goal_assum drule >>
+  Cases_on`tgt_ty` >> gvs[attribute_type_def, AllCaseEqs()] >>
+  simp[target_path_type_def] >>
+  goal_assum drule >>
+  simp[target_path_step_type_def] >>
+  simp[attribute_type_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Name]:

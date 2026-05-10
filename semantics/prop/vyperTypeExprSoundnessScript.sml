@@ -259,15 +259,89 @@ Definition location_runtime_typed_def:
     FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt)
 End
 
-Definition place_leaf_typed_def:
-  (place_leaf_typed env (Type base_ty) sbs ty final_tv <=>
-    (?base_tv. evaluate_type env.type_defs base_ty = SOME base_tv /\
-               final_tv = leaf_type base_tv (REVERSE sbs) /\
-               evaluate_type env.type_defs ty = SOME final_tv)) /\
-  (place_leaf_typed env (HashMapT kt vt) [] ty final_tv <=> F) /\
-  (place_leaf_typed env (HashMapT kt vt) (sb::sbs) ty final_tv <=>
-    place_leaf_typed env vt sbs ty final_tv)
+Definition target_path_step_type_def:
+  target_path_step_type env cur_vt sb next_vt <=>
+    case cur_vt of
+    | HashMapT kt vt => next_vt = vt
+    | Type ty =>
+        case ty of
+        | ArrayT elem_ty len => next_vt = Type elem_ty
+        | StructT s =>
+            case sb of
+            | AttrSubscript id =>
+                ?field_ty. next_vt = Type field_ty /\
+                  attribute_type env.type_defs (StructT s) id = SOME field_ty
+            | _ => F
+        | _ => F
 End
+
+Definition target_path_type_def:
+  (target_path_type env loc_vt [] vt <=> loc_vt = vt) /\
+  (target_path_type env loc_vt (sb::sbs) vt <=>
+    ?mid_vt. target_path_type env loc_vt sbs mid_vt /\
+             target_path_step_type env mid_vt sb vt)
+End
+
+Definition place_leaf_path_typed_def:
+  (place_leaf_path_typed env (Type base_ty) path ty final_tv <=>
+    (?base_tv. evaluate_type env.type_defs base_ty = SOME base_tv /\
+               final_tv = leaf_type base_tv path /\
+               evaluate_type env.type_defs ty = SOME final_tv)) /\
+  (place_leaf_path_typed env (HashMapT kt vt) [] ty final_tv <=> F) /\
+  (place_leaf_path_typed env (HashMapT kt vt) (sb::path) ty final_tv <=>
+    place_leaf_path_typed env vt path ty final_tv)
+End
+
+Definition place_leaf_typed_def:
+  place_leaf_typed env loc_vt sbs ty final_tv <=>
+    place_leaf_path_typed env loc_vt (REVERSE sbs) ty final_tv
+End
+
+Theorem target_path_type_refl:
+  target_path_type env vt [] vt
+Proof
+  simp[target_path_type_def]
+QED
+
+Theorem target_path_type_attr_cons:
+  target_path_type env loc_vt sbs (Type (StructT s)) /\
+  attribute_type env.type_defs (StructT s) id = SOME field_ty ==>
+  target_path_type env loc_vt (AttrSubscript id::sbs) (Type field_ty)
+Proof
+  rw[target_path_type_def, target_path_step_type_def] >>
+  qexists_tac `Type (StructT s)` >> simp[]
+QED
+
+Theorem target_path_type_hashmap_cons:
+  target_path_type env loc_vt sbs (HashMapT kt vt) ==>
+  target_path_type env loc_vt (sb::sbs) vt
+Proof
+  rw[target_path_type_def, target_path_step_type_def] >>
+  qexists_tac `HashMapT kt vt` >> simp[]
+QED
+
+Theorem target_path_type_array_cons:
+  target_path_type env loc_vt sbs (Type (ArrayT elem_ty len)) ==>
+  target_path_type env loc_vt (sb::sbs) (Type elem_ty)
+Proof
+  rw[target_path_type_def, target_path_step_type_def] >>
+  qexists_tac `Type (ArrayT elem_ty len)` >> simp[]
+QED
+
+Theorem target_path_type_subscript_cons:
+  target_path_type env loc_vt sbs vt /\
+  subscript_vtype vt idx_ty = SOME result_vt ==>
+  target_path_type env loc_vt (sb::sbs) result_vt
+Proof
+  cheat
+QED
+
+Theorem target_path_type_Type_place_leaf_typed:
+  target_path_type env loc_vt sbs (Type ty) ==>
+  ?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
+Proof
+  cheat
+QED
 
 Definition target_runtime_typed_def:
   target_runtime_typed env cx st tgt ty gv <=>
