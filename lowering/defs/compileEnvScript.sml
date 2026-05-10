@@ -26,7 +26,8 @@
 Theory compileEnv
 Ancestors
   valueEncoding venomExecSemantics venomInst
-  vyperState vyperContext
+  vyperState vyperContext vyperValue vyperABI contractABI
+  byte keccak
 Libs
   monadsyntax
 
@@ -257,9 +258,13 @@ Datatype:
        cannot represent it. Used by compile_subscript for dispatch.
        Mirrors Python: isinstance(base_typ, HashMapT) *)
     ce_is_hashmap : string -> bool;
-    (* Event metadata: event_nsid →
-       (event_id : num, indexed : bool list, topic_is_bytestring : bool list) *)
-    ce_event_info : string -> (num # bool list # bool list);
+    (* Event metadata: event_nsid → SOME (event_id, arg_types, indexed_flags).
+       NONE means the event is not declared in this compilation unit. Keeping
+       absence explicit prevents unknown events from silently compiling/logging
+       as hash-0/no-arg events. *)
+    ce_event_info : string -> (num # type list # bool list) option;
+    (* Type environment used by ABI conversion for structs/flags/interfaces. *)
+    ce_type_env : (num, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
@@ -661,13 +666,22 @@ Definition transient_vars_rel_def:
                   n2w slot_num = slot
 End
 
+(* Check if a type is a bytestring (dynamic Bytes or String).
+   Used by log topics and bytestring-specific copy. *)
+Definition is_bytestring_type_def:
+  is_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
+  is_bytestring_type (BaseT (StringT _)) = T ∧
+  is_bytestring_type _ = F
+End
+
 (* ===== Log Equivalence ===== *)
 (* Single log entry equivalence.
    Interpreter log: (nsid, value list) where nsid = (num option, string).
    Venom event: <| logger; topics : bytes32 list; data : byte list |>.
    The lowering (compile_stmt Log) computes:
    - event_hash from ce_event_info → first topic
-   - indexed args → ABI-encoded topics (words)
+   - indexed static args → ABI word topics
+   - indexed bytes/string args → keccak256(raw bytes) topics
    - non-indexed args → ABI-encoded data buffer
    logger = contract address (cc_address).
 
@@ -688,19 +702,78 @@ Definition indexed_values_def:
   indexed_values _ _ = []
 End
 
+Definition indexed_topic_flags_def:
+  indexed_topic_flags [] [] = ([] : bool list) ∧
+  indexed_topic_flags (T :: flags) (b :: bs) =
+    b :: indexed_topic_flags flags bs ∧
+  indexed_topic_flags (F :: flags) (_ :: bs) =
+    indexed_topic_flags flags bs ∧
+  indexed_topic_flags _ _ = []
+End
+
+Definition log_bytestring_topic_def:
+  log_bytestring_topic (BytesV bs) =
+    SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) ∧
+  log_bytestring_topic (StringV s) =
+    SOME (word_of_bytes T (0w:bytes32)
+            (Keccak_256_w64 (MAP (n2w o ORD) s))) ∧
+  log_bytestring_topic _ = NONE
+End
+
+Definition log_topic_equiv_def:
+  log_topic_equiv T v topic = (log_bytestring_topic v = SOME topic) ∧
+  log_topic_equiv F v topic = (topic = val_to_w256 v)
+End
+
+Definition log_indexed_topics_equiv_def:
+  log_indexed_topics_equiv [] [] [] = T ∧
+  log_indexed_topics_equiv (is_bytestring :: bs) (v :: vals) (topic :: topics) =
+    (log_topic_equiv is_bytestring v topic ∧
+     log_indexed_topics_equiv bs vals topics) ∧
+  log_indexed_topics_equiv _ _ _ = F
+End
+
+Definition log_non_indexed_values_def:
+  log_non_indexed_values [] [] = ([] : value list) ∧
+  log_non_indexed_values (T :: flags) (_ :: vals) =
+    log_non_indexed_values flags vals ∧
+  log_non_indexed_values (F :: flags) (v :: vals) =
+    v :: log_non_indexed_values flags vals ∧
+  log_non_indexed_values _ _ = []
+End
+
+Definition log_non_indexed_types_def:
+  log_non_indexed_types [] [] = ([] : type list) ∧
+  log_non_indexed_types (T :: flags) (_ :: tys) =
+    log_non_indexed_types flags tys ∧
+  log_non_indexed_types (F :: flags) (ty :: tys) =
+    ty :: log_non_indexed_types flags tys ∧
+  log_non_indexed_types _ _ = []
+End
+
 Definition log_entry_equiv_def:
   log_entry_equiv cenv (addr:address) ((event_nsid, args) : log) (ev : event) ⇔
     let event_name = nsid_to_string event_nsid in
-    let (event_hash, indexed_flags, _) = cenv.ce_event_info event_name in
-    let idx_vals = indexed_values indexed_flags args in
-    (* Logger is the contract address *)
-    ev.logger = addr ∧
-    (* First topic is the event selector hash, rest are indexed arg values.
-       NOTE: val_to_w256 uses a length-20 heuristic for BytesV addresses.
-       Fully correct encoding needs per-arg types (not in ce_event_info). *)
-    ev.topics = n2w event_hash :: MAP val_to_w256 idx_vals
-    (* NOTE: data encoding relation (non-indexed args → ABI-encoded bytes)
-       deferred — requires full ABI encode specification. *)
+    case cenv.ce_event_info event_name of
+      NONE => F
+    | SOME (event_hash, arg_types, indexed_flags) =>
+        let idx_vals = indexed_values indexed_flags args in
+        let idx_bs = indexed_topic_flags indexed_flags (MAP is_bytestring_type arg_types) in
+        let nidx_vals = log_non_indexed_values indexed_flags args in
+        let nidx_types = log_non_indexed_types indexed_flags arg_types in
+          LENGTH indexed_flags = LENGTH args ∧
+          LENGTH arg_types = LENGTH args ∧
+          ev.logger = addr ∧
+          (* First topic is the event selector hash. Static indexed args match
+             val_to_w256; indexed bytes/string args match keccak256(raw bytes). *)
+          (∃topic_tail.
+             ev.topics = n2w event_hash :: topic_tail ∧
+             log_indexed_topics_equiv idx_bs idx_vals topic_tail) ∧
+          (* Non-indexed args are ABI-encoded into LOG data. *)
+          (?abi_vals.
+             vyper_to_abi_list cenv.ce_type_env nidx_types nidx_vals = SOME abi_vals ∧
+             ev.data = enc (Tuple (vyper_to_abi_types cenv.ce_type_env nidx_types))
+                           (ListV abi_vals))
 End
 
 (* Logs relation: pairwise equivalence *)
@@ -1009,12 +1082,4 @@ Definition elem_size_in_location_def:
       (mem_size + 31) DIV 32
     else
       type_memory_bytes cenv elem_ty
-End
-
-(* Check if a type is a bytestring (dynamic Bytes or String).
-   Used to dispatch to bytestring-specific copy (length-aware). *)
-Definition is_bytestring_type_def:
-  is_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
-  is_bytestring_type (BaseT (StringT _)) = T ∧
-  is_bytestring_type _ = F
 End
