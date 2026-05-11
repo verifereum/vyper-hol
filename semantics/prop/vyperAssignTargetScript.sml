@@ -429,12 +429,11 @@ QED
 
 (* Depth-1: assign_target for leaf HashMap with Replace *)
 Theorem assign_target_leaf_replace:
-  ∀cx st src_id_opt n key kv v cur.
+  ∀cx st src_id_opt n kv v cur.
     is_leaf_hashmap cx src_id_opt n ∧
-    value_to_key kv = SOME key ∧
     hashmap_ref_storable cx (THE (lookup_toplevel_name cx st src_id_opt n)) v ∧
     lookup_hashmap cx st src_id_opt n kv = SOME cur ⇒
-    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) [key]) (Replace v) st =
+    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) [ValueSubscript kv]) (Replace v) st =
     (INL NONE, update_hashmap cx st src_id_opt n kv v)
 Proof
   rw[is_leaf_hashmap_def] >>
@@ -446,14 +445,13 @@ Proof
    SOME (HashMapRef is_transient (n2w offset) kt (Type t))` by
     (simp[lookup_toplevel_name_def]) >>
   gvs[lookup_hashmap_def, read_hashmap_def, hashmap_read_def] >>
-  drule_at (Pos last) encode_hashmap_key_value_to_key >>
-  disch_then (qspec_then `kt` strip_assume_tac) >>
+  strip_assume_tac (SPEC_ALL encode_hashmap_key_ValueSubscript) >>
   `value_has_type tv v` by gvs[hashmap_ref_storable_def] >>
   `∃writes. encode_value tv v = SOME writes` by
     (`∃s'. hashmap_write (get_storage cx st is_transient) (n2w offset)
            kt tv kv v = SOME s'` by (irule hashmap_write_some >> simp[]) >>
      gvs[hashmap_write_def, AllCaseEqs()]) >>
-  `compute_hashmap_slot (n2w offset) [kt] [key] =
+  `compute_hashmap_slot (n2w offset) [kt] [ValueSubscript kv] =
    SOME (hashmap_slot_for (n2w offset) kt kv)` by
     (drule compute_hashmap_slot_single >>
      simp[hashmap_slot_for_def]) >>
@@ -470,20 +468,19 @@ QED
 
 (* Depth-1: assign_target for leaf HashMap with Update *)
 Theorem assign_target_leaf_update:
-  ∀cx st src_id_opt n key kv v v_old v_new ty bop code is_transient kt t id offset tv.
+  ∀cx st src_id_opt n kv v v_old v_new ty bop code is_transient kt t id offset tv.
     get_module_code cx src_id_opt = SOME code ∧
     find_var_decl_by_num (string_to_num n) code = SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
     lookup_var_slot_from_layout cx is_transient src_id_opt id = SOME offset ∧
     offset < dimword(:256) ∧
     evaluate_type (get_tenv cx) t = SOME tv ∧
     well_formed_type_value tv ∧
-    value_to_key kv = SOME key ∧
     lookup_hashmap cx st src_id_opt n kv = SOME v_old ∧
     evaluate_binop
       (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
       tv bop v_old v = INL v_new ∧
     hashmap_ref_storable cx (THE (lookup_toplevel_name cx st src_id_opt n)) v_new ⇒
-    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) [key]) (Update ty bop v) st =
+    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) [ValueSubscript kv]) (Update ty bop v) st =
     (INL NONE, update_hashmap cx st src_id_opt n kv v_new)
 Proof
   rpt strip_tac >>
@@ -495,14 +492,13 @@ Proof
    SOME (HashMapRef is_transient (n2w offset) kt (Type t))` by
     (simp[lookup_toplevel_name_def]) >>
   gvs[lookup_hashmap_def, read_hashmap_def, hashmap_read_def] >>
-  drule_at (Pos last) encode_hashmap_key_value_to_key >>
-  disch_then (qspec_then `kt` strip_assume_tac) >>
+  strip_assume_tac (SPEC_ALL encode_hashmap_key_ValueSubscript) >>
   `value_has_type tv v_new` by gvs[hashmap_ref_storable_def] >>
   `∃writes. encode_value tv v_new = SOME writes` by
     (`∃s'. hashmap_write (get_storage cx st is_transient) (n2w offset)
            kt tv kv v_new = SOME s'` by (irule hashmap_write_some >> simp[]) >>
      gvs[hashmap_write_def, AllCaseEqs()]) >>
-  `compute_hashmap_slot (n2w offset) [kt] [key] =
+  `compute_hashmap_slot (n2w offset) [kt] [ValueSubscript kv] =
    SOME (hashmap_slot_for (n2w offset) kt kv)` by
     (drule compute_hashmap_slot_single >>
      simp[hashmap_slot_for_def]) >>

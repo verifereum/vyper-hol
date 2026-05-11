@@ -327,16 +327,13 @@ Proof
   Cases_on `kv` >> rw[check_array_bounds_def, return_def]
 QED
 
-(* value_to_key / subscript_to_value / encode_hashmap_key connection *)
-Theorem encode_hashmap_key_value_to_key:
-  ∀kv key kt.
-    value_to_key kv = SOME key ⇒
-    ∃v. subscript_to_value key = SOME v ∧
+(* ValueSubscript / subscript_to_value / encode_hashmap_key connection *)
+Theorem encode_hashmap_key_ValueSubscript:
+  ∀kv kt.
+    ∃v. subscript_to_value (ValueSubscript kv) = SOME v ∧
         encode_hashmap_key kt v = encode_hashmap_key kt kv
 Proof
-  Cases_on `kv` >>
-  simp[value_to_key_def, subscript_to_value_def] >>
-  rw[] >> simp[integer_wordTheory.i2w_def]
+  simp[subscript_to_value_def]
 QED
 
 (* Bridge: hashmap_index_chain + split_hashmap_subscripts + compute_hashmap_slot *)

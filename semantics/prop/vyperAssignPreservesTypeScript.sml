@@ -299,9 +299,9 @@ QED
    For Update: caller ensures binop result has the leaf type.
    For AppendOp: new element must have element type of the leaf array.
    For PopOp: no extra condition needed. *)
-Theorem assign_subscripts_IntSubscript_ArrayV[local]:
+Theorem assign_subscripts_ValueSubscript_IntV_ArrayV[local]:
   !tv av idx rest ao.
-  assign_subscripts tv (ArrayV av) (IntSubscript idx::rest) ao =
+  assign_subscripts tv (ArrayV av) (ValueSubscript (IntV idx)::rest) ao =
     (let
        elem_tv =
          case tv of
@@ -398,13 +398,13 @@ Proof
   >> conj_tac >- (rpt gen_tac >> simp[leaf_type_def, Once assign_subscripts_def] >>
       rpt strip_tac >>
       drule_all pop_element_preserves_type >> simp[])
-  (* IntSubscript *)
+  (* ValueSubscript (IntV _) *)
   >> conj_tac >- (rpt gen_tac >> strip_tac >>
       rpt gen_tac >> strip_tac >>
       Cases_on `a` >> gvs[Once assign_subscripts_def] >>
-      (* Unfold the IntSubscript case for ArrayV *)
+      (* Unfold the ValueSubscript (IntV _) case for ArrayV *)
       qpat_x_assum `_ = INL v` mp_tac >>
-      simp[assign_subscripts_IntSubscript_ArrayV, LET_THM] >>
+      simp[assign_subscripts_ValueSubscript_IntV_ArrayV, LET_THM] >>
       qabbrev_tac `elem_tv = case tv of ArrayTV t _ => t | _ => NoneTV` >>
       (* Split on array_index and recursive assign_subscripts *)
       simp[CaseEq"sum",CaseEq"option"]

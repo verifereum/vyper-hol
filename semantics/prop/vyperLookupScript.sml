@@ -585,7 +585,12 @@ Proof
       rename1 `ArrayV av` >> Cases_on `av` >> gvs[pop_element_def, popped_value_def])
   (* step case *)
   >> rpt gen_tac >>
-  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def]
+  >- (Cases_on `v` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      Cases_on `a` >>
+      gvs[assign_subscripts_def, evaluate_subscripts_def] >>
+      simp[AllCaseEqs()] >> gvs[AllCaseEqs()]) >>
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   (* AttrSubscript: case split on the value being subscripted *)
   Cases_on `a` >>

@@ -11,9 +11,7 @@ Libs
 
 Datatype:
   subscript
-  = IntSubscript int
-  | StrSubscript string
-  | BytesSubscript (word8 list)
+  = ValueSubscript value
   | AttrSubscript identifier
 End
 
@@ -457,9 +455,7 @@ val () = cv_auto_trans update_immutable_def;
 
 (* Convert subscript back to a value for hashmap key encoding *)
 Definition subscript_to_value_def:
-  subscript_to_value (IntSubscript i) = SOME (IntV i) ∧
-  subscript_to_value (StrSubscript s) = SOME (StringV s) ∧
-  subscript_to_value (BytesSubscript bs) = SOME (BytesV bs) ∧
+  subscript_to_value (ValueSubscript v) = SOME v ∧
   subscript_to_value (AttrSubscript _) = NONE  (* Attributes are not valid hashmap keys *)
 End
 
@@ -685,16 +681,6 @@ val () = toplevel_array_length_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
   |> cv_auto_trans;
 
-Definition value_to_key_def:
-  value_to_key (IntV i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV bs) = SOME $ BytesSubscript bs ∧
-  value_to_key (FlagV n) = SOME $ IntSubscript $ &n ∧
-  value_to_key _ = NONE
-End
-
-val () = cv_auto_trans value_to_key_def;
-
 Definition evaluate_subscript_def:
   evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) =
   (case array_index tv av i
@@ -724,7 +710,7 @@ val () = cv_auto_trans evaluate_subscript_def;
 
 Definition evaluate_subscripts_def:
   evaluate_subscripts tv a [] = INL a ∧
-  evaluate_subscripts tv a ((IntSubscript i)::is) =
+  evaluate_subscripts tv a ((ValueSubscript (IntV i))::is) =
   (case a of ArrayV av =>
    (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
     case array_index tv av i of SOME v =>
@@ -777,7 +763,7 @@ Definition assign_subscripts_def:
        evaluate_binop u tv bop a v) ∧
   assign_subscripts tv a [] (AppendOp v) = append_element tv a v ∧
   assign_subscripts tv a [] PopOp = pop_element a ∧
-  assign_subscripts tv a ((IntSubscript i)::is) ao =
+  assign_subscripts tv a ((ValueSubscript (IntV i))::is) ao =
   (case a of ArrayV av =>
    (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
     case array_index tv av i of SOME v =>
@@ -828,7 +814,7 @@ Type base_target_value = “:location # subscript list”;
 
 (* Walk through nested array subscripts computing the final element slot *)
 Definition resolve_array_element_def:
-  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) ((IntSubscript idx)::rest) = do
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) ((ValueSubscript (IntV idx))::rest) = do
     elem_offset <- (case bd of
      | Fixed n => do
          check (0 ≤ idx ∧ Num idx < n) "array fixed oob";

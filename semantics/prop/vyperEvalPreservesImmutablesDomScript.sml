@@ -843,24 +843,17 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  (* Case split on x to get (loc, sbs) and unfold the lambda *)
   Cases_on `x` >> gvs[] >>
-  (* Derive unconditional eval_expr IH and base_target preservation *)
   first_x_assum (qspecl_then [`st`, `q`, `r`, `s''`] mp_tac) >> simp[] >>
   strip_tac >>
-  (* Unfold the do-block *)
   qpat_x_assum `_ s'' = (res, st')` mp_tac >>
   simp[bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >>
+  imp_res_tac get_Value_immutables >> gvs[] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
-  conj_tac >- (first_x_assum drule >> simp[]) >>
-  TRY (irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
-  Cases_on `value_to_key v''` >> gvs[return_def, raise_def] >>
-  irule preserves_immutables_dom_eq >> gvs[]
+  qpat_x_assum `!st res st'. eval_expr cx e st = (res,st') ==> _` drule >>
+  simp[preserves_immutables_dom_def]
 QED
 
 (* ----- Case 29: eval_for (v::vs) ----- *)
