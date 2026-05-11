@@ -619,13 +619,28 @@ Proof
 QED
 
 Definition target_runtime_typed_def:
-  target_runtime_typed env cx st tgt ty gv <=>
-    well_typed_atarget env tgt ty /\ target_value_shape env tgt gv /\
-    case gv of
-    | BaseTargetV loc sbs =>
-        ?vt. location_runtime_typed env cx st loc vt /\
-             target_path_type env vt sbs (Type ty)
-    | TupleTargetV gvs => T
+  (target_runtime_typed env cx st (BaseTarget bt) ty (BaseTargetV loc sbs) <=>
+    well_typed_atarget env (BaseTarget bt) ty /\
+    target_value_shape env (BaseTarget bt) (BaseTargetV loc sbs) /\
+    ?vt. location_runtime_typed env cx st loc vt /\
+         target_path_type env vt sbs (Type ty)) /\
+  (target_runtime_typed env cx st (BaseTarget bt) ty (TupleTargetV gvs) <=> F) /\
+  (target_runtime_typed env cx st (TupleTarget tgts) ty (BaseTargetV loc sbs) <=> F) /\
+  (target_runtime_typed env cx st (TupleTarget tgts) ty (TupleTargetV gvs) <=>
+    ?tys. ty = TupleT tys /\
+          well_typed_atarget env (TupleTarget tgts) ty /\
+          target_value_shape env (TupleTarget tgts) (TupleTargetV gvs) /\
+          target_values_runtime_typed env cx st tgts tys gvs) /\
+  (target_values_runtime_typed env cx st [] [] [] <=> T) /\
+  (target_values_runtime_typed env cx st (tgt::tgts) (ty::tys) (gv::gvs) <=>
+    target_runtime_typed env cx st tgt ty gv /\
+    target_values_runtime_typed env cx st tgts tys gvs) /\
+  (target_values_runtime_typed env cx st _ _ _ <=> F)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (env,cx,st,tgt,ty,gv) => assignment_target_size tgt
+    | INR (env,cx,st,tgts,tys,gvs) => list_size assignment_target_size tgts)` >>
+  rw[]
 End
 
 Theorem target_values_shape_LIST_REL:

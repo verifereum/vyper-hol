@@ -66,7 +66,11 @@ QED
 Theorem write_storage_slot_error:
   write_storage_slot a b c d e f = (INR g, h) ==> ?m. g = Error m
 Proof
-  cheat
+  rw[write_storage_slot_def, bind_apply, AllCaseEqs(), lift_option_def,
+     return_def, raise_def] >> gvs[]
+  >- (Cases_on `encode_value d e` >> gvs[return_def, raise_def]) >>
+  Cases_on `b` >> gvs[get_storage_backend_def, get_accounts_def,
+    get_transient_storage_def, bind_def, return_def]
 QED
 
 Theorem lookup_global_error:
@@ -95,25 +99,25 @@ Proof
   drule write_storage_slot_error >> rw[]
 QED
 
-(* TEMPORARILY CHEATED - copied into fresh assignment helper theory.  The old
-   proof almost works but needs deterministic witnesses in the recursive storage
-   array branch; keep the attempted structure for repair.
-Proof
-  ho_match_mp_tac resolve_array_element_ind >>
-  rw[resolve_array_element_def, raise_def, return_def] >>
-  gvs[bind_apply, AllCaseEqs(), bound_CASE_rator, ignore_bind_apply,
-      return_def, check_def, assert_def, raise_def] >>
-  first_x_assum irule >>
-  TRY(qexists_tac `0` >> simp[] >> goal_assum drule) >>
-  qexists_tac `1` >> simp[] >>
-  gvs[wordsTheory.word_add_n2w] >>
-  goal_assum drule
-QED
-*)
 Theorem resolve_array_element_error:
   !a b c d e f g h. resolve_array_element a b c d e f = (INR g, h) ==> ?m. g = Error m
 Proof
-  cheat
+  ho_match_mp_tac resolve_array_element_ind >>
+  rw[resolve_array_element_def, bind_apply, ignore_bind_apply, check_def,
+     assert_def, return_def, raise_def, AllCaseEqs(), bound_CASE_rator] >>
+  gvs[] >- (
+    first_x_assum irule >>
+    qexists_tac`0` >> simp[] >>
+    goal_assum drule
+  )
+  >- (
+    first_x_assum irule >>
+    qexists_tac`1` >> simp[] >>
+    goal_assum drule
+  ) >>
+  gvs[oneline get_storage_backend_def, COND_RATOR, AllCaseEqs(),
+      bind_apply, return_def, get_transient_storage_def,
+      get_accounts_def]
 QED
 
 (* ===== Assignment target never raises control exceptions ===== *)
