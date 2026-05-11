@@ -321,6 +321,37 @@ Proof
   simp[]
 QED
 
+Theorem location_runtime_typed_well_formed_vtype:
+  runtime_consistent env cx st /\
+  location_runtime_typed env cx st loc vt ==>
+  well_formed_vtype env.type_defs vt
+Proof
+  rw[] >> Cases_on `loc` >> gvs[location_runtime_typed_def, well_formed_vtype_def]
+  >- (
+    fs[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def] >>
+    first_x_assum drule >> strip_tac >> gvs[well_formed_type_def])
+  >- (
+    fs[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def,
+       well_formed_type_def] >>
+    simp[]) >>
+  fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def,
+     well_formed_vtype_def, well_formed_type_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem target_runtime_typed_place_leaf_typed:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty (BaseTargetV loc sbs) ==>
+  ?vt final_tv. location_runtime_typed env cx st loc vt /\
+                target_path_type env vt sbs (Type ty) /\
+                place_leaf_typed env vt sbs ty final_tv
+Proof
+  rw[target_runtime_typed_def] >>
+  goal_assum drule >> simp[] >>
+  irule target_path_type_Type_place_leaf_typed >> simp[] >>
+  irule location_runtime_typed_well_formed_vtype >> metis_tac[]
+QED
+
 Theorem set_storage_preserves_state_well_typed:
   state_well_typed st ==> state_well_typed (set_storage cx st is_trans storage')
 Proof

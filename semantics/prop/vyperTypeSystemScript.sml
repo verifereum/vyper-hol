@@ -217,9 +217,21 @@ Definition well_formed_type_def:
   well_formed_type tenv ty = IS_SOME (evaluate_type tenv ty)
 End
 
+Definition hashmap_key_type_def:
+  hashmap_key_type (BaseT (UintT _)) = T /\
+  hashmap_key_type (BaseT (IntT _)) = T /\
+  hashmap_key_type (BaseT BoolT) = T /\
+  hashmap_key_type (BaseT AddressT) = T /\
+  hashmap_key_type (BaseT (BytesT _)) = T /\
+  hashmap_key_type (BaseT (StringT _)) = T /\
+  hashmap_key_type (FlagT _) = T /\
+  hashmap_key_type _ = F
+End
+
 Definition well_formed_vtype_def:
   well_formed_vtype tenv (Type ty) = well_formed_type tenv ty /\
-  well_formed_vtype tenv (HashMapT kt vt) = (well_formed_type tenv kt /\ well_formed_vtype tenv vt)
+  well_formed_vtype tenv (HashMapT kt vt) =
+    (well_formed_type tenv kt /\ hashmap_key_type kt /\ well_formed_vtype tenv vt)
 End
 
 (* ===== Value-type/place typing for storage arrays and hashmaps ===== *)
@@ -250,7 +262,7 @@ Definition subscript_vtype_def:
     (if is_int_type idx_ty then SOME (Type elem_ty) else NONE) /\
   subscript_vtype (Type (TupleT ts)) idx_ty = NONE /\
   subscript_vtype (HashMapT kt vt) idx_ty =
-    (if idx_ty = kt then SOME vt else NONE) /\
+    (if idx_ty = kt /\ hashmap_key_type kt then SOME vt else NONE) /\
   subscript_vtype _ _ = NONE
 End
 

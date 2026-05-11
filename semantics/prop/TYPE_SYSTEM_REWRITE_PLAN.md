@@ -334,6 +334,206 @@ target_path_typed env loc_vt sbs (Type ty)
 ?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
 ```
 
+### Concrete target-path-to-leaf bridge plan
+
+This bridge is central to assignment preservation and must cover **all** location roots, not only locals:
+
+- `Type root_ty` roots for local variables, constants, immutables, ordinary top-level values, and arrays/structs;
+- `HashMapT kt vt` roots for storage/transient hashmap references, including nested hashmaps;
+- final assignment targets ending in `Type ty`.
+
+Do **not** rely on a scoped/local-only bridge as the final architecture. It may close `ScopedVar`, but it does not justify `TopLevelVar`/storage hashmap assignment and therefore is insufficient for overall type soundness.
+
+The useful final bridge is:
+
+```sml
+Theorem target_path_type_Type_place_leaf_typed:
+  well_formed_vtype env.type_defs loc_vt /\
+  target_path_type env loc_vt sbs (Type ty) ==>
+  ?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
+```
+
+The clean proof route is to prove the stronger internal bridge through `place_vtype_path_typed`, then specialize to `Type` endpoints:
+
+```sml
+Theorem target_path_type_to_place_vtype_path_typed:
+  well_formed_vtype env.type_defs loc_vt /\
+  target_path_type env loc_vt sbs vt ==>
+  place_vtype_path_typed env loc_vt (REVERSE sbs) vt
+```
+
+This stronger theorem is justified because `place_vtype_path_typed` carries exactly the extra future-key obligation needed for hashmap endpoints:
+
+```sml
+place_vtype_path_typed env loc_vt path (HashMapT kt vt) <=>
+  !v. place_vtype_path_typed env loc_vt (path ++ [ValueSubscript v]) vt
+```
+
+That obligation is not accidental; it is what makes the induction strong enough when a path reaches a hashmap value before the final assignment leaf.
+
+Prove the bridge in this order.
+
+1. Extract endpoint evaluation from concrete leaf typing:
+
+   ```sml
+   Theorem place_leaf_path_typed_evaluate:
+     place_leaf_path_typed env loc_vt path ty final_tv ==>
+     evaluate_type env.type_defs ty = SOME final_tv
+   ```
+
+   This follows by recursion/cases on `loc_vt` and `path`. For a `Type` root it is immediate from `place_leaf_path_typed_def`; for a `HashMapT` root, the empty path case is false and the nonempty path case peels one key and recurses.
+
+2. Prove step-extension lemmas for `place_vtype_path_typed`.
+
+   Hashmap step:
+
+   ```sml
+   Theorem place_vtype_path_typed_hashmap_step:
+     place_vtype_path_typed env loc_vt path (HashMapT kt vt) ==>
+     place_vtype_path_typed env loc_vt (path ++ [ValueSubscript key]) vt
+   ```
+
+   This is direct from `place_vtype_path_typed_def`.
+
+   Array step should be proved through a leaf-level append lemma that works for arbitrary roots, not only `Type root_ty` roots:
+
+   ```sml
+   Theorem place_leaf_path_typed_array_append:
+     place_leaf_path_typed env loc_vt path (ArrayT elem_ty len) mid_tv ==>
+     ?elem_tv. place_leaf_path_typed env loc_vt
+       (path ++ [ValueSubscript (IntV i)])
+       elem_ty elem_tv
+   ```
+
+   Prove this by induction/cases following `place_leaf_path_typed_def`:
+
+   - `loc_vt = Type root_ty`: use `place_leaf_path_typed_evaluate` to obtain
+
+     ```sml
+     evaluate_type env.type_defs (ArrayT elem_ty len) = SOME mid_tv
+     ```
+
+     then unfold `evaluate_type_def` for arrays and use `leaf_type_append`/`leaf_type_def`.
+   - `loc_vt = HashMapT kt vt`, `path = []`: impossible by `place_leaf_path_typed_def`.
+   - `loc_vt = HashMapT kt vt`, `path = sb::rest`: peel the hashmap root and apply the induction hypothesis to `vt` and `rest`; use
+
+     ```sml
+     (sb::rest) ++ [x] = sb :: (rest ++ [x])
+     ```
+
+     and unfold `place_leaf_path_typed_def` once.
+
+   Then derive the value-type step:
+
+   ```sml
+   Theorem place_vtype_path_typed_array_step:
+     place_vtype_path_typed env loc_vt path (Type (ArrayT elem_ty len)) ==>
+     place_vtype_path_typed env loc_vt
+       (path ++ [ValueSubscript (IntV i)])
+       (Type elem_ty)
+   ```
+
+   Struct step should be proved similarly through a leaf-level append lemma:
+
+   ```sml
+   Theorem place_leaf_path_typed_struct_append:
+     place_leaf_path_typed env loc_vt path (StructT s) mid_tv /\
+     attribute_type env.type_defs (StructT s) id = SOME field_ty ==>
+     ?field_tv. place_leaf_path_typed env loc_vt
+       (path ++ [AttrSubscript id])
+       field_ty field_tv
+   ```
+
+   The `Type root_ty` case uses `place_leaf_path_typed_evaluate`, `attribute_type_evaluates`, `leaf_type_append`, and `leaf_type_def`. The `HashMapT` root cases peel exactly as in the array append lemma.
+
+   Then derive:
+
+   ```sml
+   Theorem place_vtype_path_typed_struct_step:
+     place_vtype_path_typed env loc_vt path (Type (StructT s)) /\
+     attribute_type env.type_defs (StructT s) id = SOME field_ty ==>
+     place_vtype_path_typed env loc_vt
+       (path ++ [AttrSubscript id])
+       (Type field_ty)
+   ```
+
+3. Combine the step lemmas:
+
+   ```sml
+   Theorem place_vtype_path_typed_step:
+     place_vtype_path_typed env loc_vt path mid_vt /\
+     target_path_step_type env mid_vt sb next_vt ==>
+     place_vtype_path_typed env loc_vt (path ++ [sb]) next_vt
+   ```
+
+   Prove by cases on `mid_vt` and then on the source type in the `Type` case. Hashmap, array, and struct dispatch to the step lemmas above; impossible cases are eliminated by `target_path_step_type_def`.
+
+4. Prove reflexivity/root-shift for well-formed value types.
+
+   Needed theorem:
+
+   ```sml
+   Theorem well_formed_vtype_place_vtype_path_typed_refl:
+     well_formed_vtype env.type_defs vt ==>
+     place_vtype_path_typed env vt [] vt
+   ```
+
+   The risky case is `HashMapT kt vt`, because reflexivity requires all possible future keys:
+
+   ```sml
+   !key. place_vtype_path_typed env (HashMapT kt vt) [ValueSubscript key] vt
+   ```
+
+   Prove a root-shift helper rather than trying to fake hashmap reflexivity with a local special case:
+
+   ```sml
+   Theorem place_vtype_path_typed_hashmap_root_cons:
+     place_vtype_path_typed env vt path endpoint ==>
+     place_vtype_path_typed env (HashMapT kt vt)
+       (ValueSubscript key :: path)
+       endpoint
+   ```
+
+   This should be proved by structural induction/cases on `endpoint`, using the `Type` endpoint definition of `place_leaf_path_typed` and the hashmap endpoint universal-key clause of `place_vtype_path_typed`. Then use it with the IH for the inner `vt` to prove the hashmap reflexivity case.
+
+   If this helper needs strengthening, strengthen it generally, not with a one-off theorem specialized to `[]` or a single hashmap layer. The required semantic fact is that adding a concrete hashmap key in front of the concrete path shifts the root from `vt` to `HashMapT kt vt`.
+
+5. Prove the general structural bridge:
+
+   ```sml
+   Theorem target_path_type_to_place_vtype_path_typed:
+     well_formed_vtype env.type_defs loc_vt /\
+     target_path_type env loc_vt sbs vt ==>
+     place_vtype_path_typed env loc_vt (REVERSE sbs) vt
+   ```
+
+   Induct on `sbs`:
+
+   - base: `target_path_type_def` gives `loc_vt = vt`; use `well_formed_vtype_place_vtype_path_typed_refl`;
+   - step: use the IH on the recursive `target_path_type`, then `place_vtype_path_typed_step`; `REVERSE (sb::sbs) = REVERSE sbs ++ [sb]`.
+
+6. Derive the assignment-facing bridge:
+
+   ```sml
+   Theorem target_path_type_Type_place_leaf_typed:
+     well_formed_vtype env.type_defs loc_vt /\
+     target_path_type env loc_vt sbs (Type ty) ==>
+     ?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
+   ```
+
+   This is immediate from `target_path_type_to_place_vtype_path_typed`, `place_leaf_typed_def`, and the `Type` case of `place_vtype_path_typed_def`.
+
+#### Bridge risk review
+
+The main possible failure points are now localized and checkable:
+
+1. `place_vtype_path_typed_hashmap_root_cons` may need a stronger induction statement. This is proof-engineering risk, not an architecture mismatch: semantically, `place_leaf_path_typed` for `HashMapT` explicitly peels the first concrete path element.
+2. Array extension depends on extracting the element evaluation from `evaluate_type env.type_defs (ArrayT elem_ty len) = SOME mid_tv`. This should follow from `evaluate_type_def`; all array side conditions are already encoded in the successful evaluation assumption.
+3. Struct extension depends on `attribute_type_evaluates`. This theorem already provides the needed evaluated field type and runtime field lookup.
+4. The old mistake was proving only a `Type`-endpoint IH. That fails when the recursive midpoint is `HashMapT kt vt`. The general `place_vtype_path_typed` bridge avoids that by carrying hashmap future-key obligations through the induction.
+
+If any of these fail, stop and reassess the definitions. Do not replace the bridge with a scoped-only theorem, because that would leave overall assignment/type soundness incomplete.
+
 Already proved useful rebuild lemmas in `vyperTypeStatePreservationScript.sml` may need to be updated to the structural target predicate:
 
 ```sml

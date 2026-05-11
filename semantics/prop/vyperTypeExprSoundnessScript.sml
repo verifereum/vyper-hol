@@ -260,19 +260,20 @@ Definition location_runtime_typed_def:
 End
 
 Definition target_path_step_type_def:
-  target_path_step_type env cur_vt sb next_vt <=>
-    case cur_vt of
-    | HashMapT kt vt => next_vt = vt
-    | Type ty =>
-        case ty of
-        | ArrayT elem_ty len => next_vt = Type elem_ty
-        | StructT s =>
-            case sb of
-            | AttrSubscript id =>
-                ?field_ty. next_vt = Type field_ty /\
-                  attribute_type env.type_defs (StructT s) id = SOME field_ty
-            | _ => F
-        | _ => F
+  (target_path_step_type env (HashMapT kt vt) sb next_vt <=>
+    case sb of ValueSubscript _ => next_vt = vt | _ => F) /\
+  (target_path_step_type env (Type (ArrayT elem_ty len)) sb next_vt <=>
+    case sb of ValueSubscript (IntV _) => next_vt = Type elem_ty | _ => F) /\
+  (target_path_step_type env (Type (StructT s)) sb next_vt <=>
+    case sb of
+    | AttrSubscript id =>
+        ?field_ty. next_vt = Type field_ty /\
+          attribute_type env.type_defs (StructT s) id = SOME field_ty
+    | _ => F) /\
+  (target_path_step_type env (Type (BaseT b)) sb next_vt <=> F) /\
+  (target_path_step_type env (Type (TupleT ts)) sb next_vt <=> F) /\
+  (target_path_step_type env (Type (FlagT name)) sb next_vt <=> F) /\
+  (target_path_step_type env (Type NoneT) sb next_vt <=> F)
 End
 
 Definition target_path_type_def:
@@ -301,7 +302,7 @@ Definition place_vtype_path_typed_def:
   (place_vtype_path_typed env loc_vt path (Type ty) <=>
     ?final_tv. place_leaf_path_typed env loc_vt path ty final_tv) /\
   (place_vtype_path_typed env loc_vt path (HashMapT kt vt) <=>
-    !sb. place_vtype_path_typed env loc_vt (path ++ [sb]) vt)
+    !v. place_vtype_path_typed env loc_vt (path ++ [ValueSubscript v]) vt)
 Termination
   WF_REL_TAC `measure (value_type_size o SND o SND o SND)` >>
   rw[]
@@ -318,39 +319,46 @@ Theorem target_path_type_attr_cons:
   attribute_type env.type_defs (StructT s) id = SOME field_ty ==>
   target_path_type env loc_vt (AttrSubscript id::sbs) (Type field_ty)
 Proof
-  rw[target_path_type_def, target_path_step_type_def] >>
-  qexists_tac `Type (StructT s)` >> simp[]
+  rw[target_path_type_def] >>
+  qexists_tac `Type (StructT s)` >> simp[target_path_step_type_def]
 QED
 
 Theorem target_path_type_hashmap_cons:
   target_path_type env loc_vt sbs (HashMapT kt vt) ==>
-  target_path_type env loc_vt (sb::sbs) vt
+  target_path_type env loc_vt (ValueSubscript v::sbs) vt
 Proof
-  rw[target_path_type_def, target_path_step_type_def] >>
-  qexists_tac `HashMapT kt vt` >> simp[]
+  rw[target_path_type_def] >>
+  qexists_tac `HashMapT kt vt` >> simp[target_path_step_type_def]
 QED
 
 Theorem target_path_type_array_cons:
   target_path_type env loc_vt sbs (Type (ArrayT elem_ty len)) ==>
-  target_path_type env loc_vt (sb::sbs) (Type elem_ty)
+  target_path_type env loc_vt (ValueSubscript (IntV i)::sbs) (Type elem_ty)
 Proof
-  rw[target_path_type_def, target_path_step_type_def] >>
-  qexists_tac `Type (ArrayT elem_ty len)` >> simp[]
+  rw[target_path_type_def] >>
+  qexists_tac `Type (ArrayT elem_ty len)` >> simp[target_path_step_type_def]
 QED
 
 Theorem target_path_type_subscript_cons:
   target_path_type env loc_vt sbs vt /\
-  subscript_vtype vt idx_ty = SOME result_vt ==>
+  subscript_vtype vt idx_ty = SOME result_vt /\
+  (case vt of
+   | HashMapT _ _ => ?v. sb = ValueSubscript v
+   | Type (ArrayT _ _) => ?i. sb = ValueSubscript (IntV i)
+   | _ => T) ==>
   target_path_type env loc_vt (sb::sbs) result_vt
 Proof
   strip_tac >>
   Cases_on `vt`
   >- (
     Cases_on `t` >> gvs[subscript_vtype_def] >>
-    drule_then (qspec_then `sb` mp_tac) target_path_type_array_cons >> simp[] >>
-    NO_TAC) >>
+    gvs[] >>
+    simp[target_path_type_def] >>
+    goal_assum drule >> simp[target_path_step_type_def]) >>
   gvs[subscript_vtype_def] >>
-  drule_then (qspec_then `sb` mp_tac) target_path_type_hashmap_cons >> simp[]
+  gvs[] >>
+  simp[target_path_type_def] >>
+  qexists_tac `HashMapT idx_ty result_vt` >> simp[target_path_step_type_def]
 QED
 
 Theorem leaf_type_append:
@@ -364,6 +372,12 @@ Proof
   TRY(Cases_on `b` >> simp[leaf_type_def]) >>
   TRY(Cases_on `ALOOKUP l s` >> simp[leaf_type_def]) >>
   Cases_on `ys` >> simp[leaf_type_def]
+QED
+
+Theorem leaf_type_snoc:
+  leaf_type base_tv (path ++ [sb]) = leaf_type (leaf_type base_tv path) [sb]
+Proof
+  simp[leaf_type_append]
 QED
 
 Theorem OPT_MMAP_ALOOKUP_ZIP:
@@ -429,6 +443,179 @@ Proof
   Cases_on `ALOOKUP args field_id` >> gvs[] >>
   drule_all OPT_MMAP_ALOOKUP_ZIP >> strip_tac >>
   metis_tac[evaluate_type_mono]
+QED
+
+Theorem place_leaf_path_typed_evaluate:
+  !path loc_vt ty final_tv.
+    place_leaf_path_typed env loc_vt path ty final_tv ==>
+    evaluate_type env.type_defs ty = SOME final_tv
+Proof
+  Induct >> Cases_on `loc_vt` >> gvs[place_leaf_path_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem place_leaf_path_typed_array_append:
+  !path loc_vt mid_tv.
+    place_leaf_path_typed env loc_vt path (ArrayT elem_ty len) mid_tv ==>
+    ?elem_tv. place_leaf_path_typed env loc_vt
+      (path ++ [ValueSubscript (IntV i)]) elem_ty elem_tv
+Proof
+  Induct >> Cases_on `loc_vt` >> simp[place_leaf_path_typed_def]
+  >- (
+    rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs(), leaf_type_def])
+  >- (
+    rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    `leaf_type base_tv (h::(path ++ [ValueSubscript (IntV i)])) =
+     leaf_type (leaf_type base_tv (h::path)) [ValueSubscript (IntV i)]` by
+      (qspec_then `base_tv` (qspec_then `h::path` (qspec_then `[ValueSubscript (IntV i)]` mp_tac)) leaf_type_append >> simp[]) >>
+    pop_assum SUBST_ALL_TAC >>
+    pop_assum (SUBST1_TAC o SYM) >>
+    simp[leaf_type_def]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[place_leaf_path_typed_def] >>
+  goal_assum drule
+QED
+
+Theorem place_leaf_path_typed_struct_append:
+  !path loc_vt mid_tv.
+    place_leaf_path_typed env loc_vt path (StructT s) mid_tv /\
+    attribute_type env.type_defs (StructT s) id = SOME field_ty ==>
+    ?field_tv. place_leaf_path_typed env loc_vt
+      (path ++ [AttrSubscript id]) field_ty field_tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `evaluate_type env.type_defs (StructT s) = SOME mid_tv` by
+    metis_tac[place_leaf_path_typed_evaluate] >>
+  Cases_on `mid_tv` >> gvs[evaluate_type_def, AllCaseEqs()] >>
+  `evaluate_type env.type_defs (StructT s) = SOME (StructTV (ZIP (MAP FST args,tvs)))` by
+    simp[evaluate_type_def] >>
+  drule_all attribute_type_evaluates >> strip_tac >>
+  `ALOOKUP (ZIP (MAP FST args,tvs)) id = SOME tv` by metis_tac[] >>
+  qexists_tac `tv` >>
+  qpat_x_assum `place_leaf_path_typed env loc_vt path (StructT s) (StructTV (ZIP (MAP FST args,tvs)))` mp_tac >>
+  qid_spec_tac `loc_vt` >> qid_spec_tac `path` >>
+  Induct >> Cases_on `loc_vt` >> gvs[place_leaf_path_typed_def]
+  >- (
+    rpt gen_tac >> strip_tac >>
+    gvs[leaf_type_append] >>
+    Cases_on `base_tv` >> fs[leaf_type_def])
+  >- (
+    rpt gen_tac >> strip_tac >>
+    gvs[leaf_type_append] >>
+    `leaf_type base_tv (h::path) = StructTV (ZIP (MAP FST args,tvs))` by gvs[] >>
+    `h::(path ++ [AttrSubscript id]) = (h::path) ++ [AttrSubscript id]` by simp[] >>
+    pop_assum SUBST_ALL_TAC >>
+    `leaf_type base_tv ((h::path) ++ [AttrSubscript id]) =
+     leaf_type (leaf_type base_tv (h::path)) [AttrSubscript id]` by
+      (irule leaf_type_append) >>
+    pop_assum SUBST_ALL_TAC >>
+    Cases_on `leaf_type base_tv (h::path)` >> fs[leaf_type_def]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[place_leaf_path_typed_def] >>
+  goal_assum drule
+QED
+
+Theorem place_vtype_path_typed_hashmap_step:
+  place_vtype_path_typed env loc_vt path (HashMapT kt vt) ==>
+  place_vtype_path_typed env loc_vt (path ++ [ValueSubscript key]) vt
+Proof
+  simp[place_vtype_path_typed_def]
+QED
+
+Theorem place_vtype_path_typed_array_step:
+  place_vtype_path_typed env loc_vt path (Type (ArrayT elem_ty len)) ==>
+  place_vtype_path_typed env loc_vt
+    (path ++ [ValueSubscript (IntV i)]) (Type elem_ty)
+Proof
+  simp[place_vtype_path_typed_def] >> strip_tac >>
+  drule place_leaf_path_typed_array_append >> simp[]
+QED
+
+Theorem place_vtype_path_typed_struct_step:
+  place_vtype_path_typed env loc_vt path (Type (StructT s)) /\
+  attribute_type env.type_defs (StructT s) id = SOME field_ty ==>
+  place_vtype_path_typed env loc_vt
+    (path ++ [AttrSubscript id]) (Type field_ty)
+Proof
+  simp[place_vtype_path_typed_def] >> strip_tac >>
+  drule_all place_leaf_path_typed_struct_append >> simp[]
+QED
+
+Theorem place_leaf_path_typed_hashmap_root_cons:
+  !path ty final_tv.
+    place_leaf_path_typed env vt path ty final_tv ==>
+    place_leaf_path_typed env (HashMapT kt vt) (ValueSubscript key :: path) ty final_tv
+Proof
+  simp[place_leaf_path_typed_def]
+QED
+
+Theorem place_vtype_path_typed_hashmap_root_cons:
+  !endpoint path.
+    place_vtype_path_typed env vt path endpoint ==>
+    place_vtype_path_typed env (HashMapT kt vt) (ValueSubscript key :: path) endpoint
+Proof
+  Induct >> rw[place_vtype_path_typed_def]
+  >- metis_tac[place_leaf_path_typed_hashmap_root_cons] >>
+  first_x_assum drule >>
+  disch_then (qspec_then `v'` mp_tac) >>
+  simp[APPEND]
+QED
+
+Theorem well_formed_vtype_place_vtype_path_typed_refl:
+  !vt. well_formed_vtype env.type_defs vt ==>
+       place_vtype_path_typed env vt [] vt
+Proof
+  Induct >> rw[well_formed_vtype_def, place_vtype_path_typed_def]
+  >- (
+    gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+    qexists_tac `x` >> simp[place_leaf_path_typed_def, leaf_type_def]) >>
+  first_x_assum drule >> strip_tac >>
+  drule place_vtype_path_typed_hashmap_root_cons >> simp[]
+QED
+
+Theorem place_vtype_path_typed_step:
+  place_vtype_path_typed env loc_vt path mid_vt /\
+  target_path_step_type env mid_vt sb next_vt ==>
+  place_vtype_path_typed env loc_vt (path ++ [sb]) next_vt
+Proof
+  Cases_on `mid_vt` >> rw[target_path_step_type_def]
+  >- (
+    Cases_on `t` >> fs[target_path_step_type_def]
+    >- (
+      Cases_on `sb` >> fs[target_path_step_type_def] >>
+      Cases_on `v` >> fs[target_path_step_type_def] >>
+      drule place_vtype_path_typed_array_step >> simp[]) >>
+    Cases_on `sb` >> fs[target_path_step_type_def] >>
+    drule_all place_vtype_path_typed_struct_step >> simp[]) >>
+  Cases_on `sb` >> fs[target_path_step_type_def] >>
+  drule place_vtype_path_typed_hashmap_step >>
+  simp[]
+QED
+
+Theorem target_path_type_to_place_vtype_path_typed:
+  well_formed_vtype env.type_defs loc_vt /\
+  target_path_type env loc_vt sbs vt ==>
+  place_vtype_path_typed env loc_vt (REVERSE sbs) vt
+Proof
+  MAP_EVERY qid_spec_tac [`vt`, `sbs`] >>
+  Induct >> rw[target_path_type_def]
+  >- gvs[well_formed_vtype_place_vtype_path_typed_refl] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all place_vtype_path_typed_step >> simp[]
+QED
+
+Theorem target_path_type_Type_place_leaf_typed:
+  well_formed_vtype env.type_defs loc_vt /\
+  target_path_type env loc_vt sbs (Type ty) ==>
+  ?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
+Proof
+  rw[place_leaf_typed_def] >>
+  drule_all target_path_type_to_place_vtype_path_typed >>
+  simp[place_vtype_path_typed_def]
 QED
 
 Definition target_runtime_typed_def:
