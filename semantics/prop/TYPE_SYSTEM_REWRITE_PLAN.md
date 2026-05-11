@@ -105,11 +105,119 @@ Static typing should match:
 - `If` typechecks both branches under the input env and returns the input env; branch declarations do not escape.
 - `For` typechecks body under env extended with loop var assignable `F`, but returns the input env.
 
-## Hashmaps and places
+## Hashmaps, subscripts, and places
 
-Keep `well_typed_expr` as first-class/materialisable expression typing. Bare hashmaps and intermediate hashmap refs must not be accepted as ordinary expressions.
+### High-level decision: start with a subscript refactor
 
-Place typing helpers:
+Before finishing the type-soundness proof, fix the runtime representation of target path subscripts. The current interpreter has an important inconsistency:
+
+- expression reads of hashmap keys use the actual runtime key value directly:
+
+  ```sml
+  evaluate_subscript tenv _ (HashMapRef is_transient slot kt vt) kv =
+    let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in ...
+  ```
+
+  Therefore expression reads such as `hm[True]` can work, because `encode_hashmap_key` handles `BoolV`.
+
+- assignment targets first convert the key value to the `subscript` datatype:
+
+  ```sml
+  v <- get_Value tv;
+  k <- lift_option_type (value_to_key v) "SubscriptTarget value_to_key";
+  return (loc, k :: sbs)
+  ```
+
+  But the current `value_to_key` has no bool case:
+
+  ```sml
+  value_to_key (IntV i) = SOME (IntSubscript i)
+  value_to_key (StringV s) = SOME (StrSubscript s)
+  value_to_key (BytesV bs) = SOME (BytesSubscript bs)
+  value_to_key (FlagV n) = SOME (IntSubscript (&n))
+  value_to_key _ = NONE
+  ```
+
+  and the current path representation has no bool constructor:
+
+  ```sml
+  subscript = IntSubscript int | StrSubscript string | BytesSubscript (word8 list) | AttrSubscript identifier
+  ```
+
+So the current interpreter accepts bool hashmap keys for reads but rejects bool hashmap keys for assignment targets. It is also lossy for flags: `FlagV n` is stored as `IntSubscript (&n)` and later reconstructed as `IntV (&n)` by `subscript_to_value`.
+
+The correct long-term design is to make path subscripts preserve runtime key values instead of re-encoding them into a partial ad-hoc datatype.
+
+Recommended semantic refactor:
+
+```sml
+Datatype:
+  subscript = ValueSubscript value | AttrSubscript identifier
+End
+```
+
+Then:
+
+```sml
+value_to_key v = SOME (ValueSubscript v)
+subscript_to_value (ValueSubscript v) = SOME v
+subscript_to_value (AttrSubscript _) = NONE
+```
+
+Array paths use `ValueSubscript (IntV i)`. Struct field paths use `AttrSubscript id`. Hashmap paths keep the actual key value, including bool and flags.
+
+This is an interpreter change, not just a proof refactor. Update the executable semantics first, then repair proofs around the cleaner representation. Do **not** finish the old proof architecture by adding brittle workarounds around `IntSubscript`/`StrSubscript`/`BytesSubscript` unless explicitly choosing a short-term compatibility path.
+
+Expected files affected by the semantic refactor include at least:
+
+- `semantics/vyperStateScript.sml`
+  - `subscript` datatype
+  - `value_to_key`
+  - `subscript_to_value`
+  - `compute_hashmap_slot`
+  - `leaf_type`
+  - `evaluate_subscripts`
+  - `assign_subscripts`
+  - `resolve_array_element`
+  - `assign_target`
+- `semantics/vyperInterpreterScript.sml`
+  - target and expression subscript users indirectly through shared helpers
+- proof files mentioning concrete subscript constructors or target paths.
+
+### Hashmap key-type restriction
+
+Even after preserving key values, static typing must still restrict hashmap key types to source types that are valid hashmap keys. Add an executable predicate, for example:
+
+```sml
+hashmap_key_type : type -> bool
+```
+
+The exact allowed set should match Vyper and the executable encoder. With value-preserving subscripts, bool keys can and should be supported if Vyper allows them. Arrays, tuples, structs, and `NoneT` should not be accepted as hashmap key types unless the runtime semantics intentionally supports them.
+
+Strengthen value-type well-formedness:
+
+```sml
+well_formed_vtype tenv (Type ty) = well_formed_type tenv ty
+well_formed_vtype tenv (HashMapT kt vt) =
+  well_formed_type tenv kt /\
+  hashmap_key_type kt /\
+  well_formed_vtype tenv vt
+```
+
+and strengthen static subscript typing:
+
+```sml
+subscript_vtype (HashMapT kt vt) idx_ty =
+  if idx_ty = kt /\ hashmap_key_type kt then SOME vt else NONE
+```
+
+This prevents well-typed programs from constructing hashmap targets whose key expressions cannot be represented/encoded at runtime.
+
+### Place typing helpers
+
+Keep `well_typed_expr` as first-class/materialisable expression typing. Bare hashmaps and intermediate hashmap refs must not be accepted as ordinary materialised expressions.
+
+Use place typing helpers:
 
 ```sml
 type_place_expr   : typing_env -> expr -> value_type option
@@ -117,36 +225,116 @@ type_place_target : typing_env -> base_assignment_target -> value_type option
 subscript_vtype   : value_type -> type -> value_type option
 ```
 
-Current intended behavior:
+Intended behavior after the subscript/key refactor:
 
 - `type_place_expr (TopLevelName _ nsid)` looks up `toplevel_vtypes nsid`.
 - `type_place_expr (Subscript _ e idx)` follows `subscript_vtype` when `idx` is well-typed.
-- `subscript_vtype (HashMapT kt vt) idx_ty` succeeds when `idx_ty = kt`, returning `vt`.
+- `subscript_vtype (HashMapT kt vt) idx_ty` succeeds only when `idx_ty = kt` and `hashmap_key_type kt`, returning `vt`.
 - `subscript_vtype (Type (ArrayT elem bd)) idx_ty` succeeds for integer index, returning `Type elem`.
-- ordinary `well_typed_expr (Subscript ty e idx)` allows either ordinary array/tuple subscript or place/hashmap subscript whose final result is `Type ty`.
+- tuple target indexing remains disabled unless/until the runtime leaf/path machinery supports it consistently.
+- ordinary `well_typed_expr (Subscript ty e idx)` allows either ordinary array subscript or place/hashmap subscript whose final result is `Type ty`.
 - assignment targets must end in `Type ty`, not `HashMapT`.
+
+### Place/reference runtime typing
+
+Do not force hashmap references into ordinary `toplevel_value_typed`. The current ordinary runtime typing says:
+
+```sml
+toplevel_value_typed (HashMapRef _ _ _ _) tyv <=> tyv = NoneTV
+```
+
+So a `HashMapRef` is not an ordinary materialised value of hashmap type. It is a runtime place/reference. Mirror the static distinction with a separate place predicate, e.g.:
+
+```sml
+toplevel_place_value_typed env tvl vt
+```
+
+Suggested shape:
+
+```sml
+toplevel_place_value_typed env (Value v) (Type ty) <=>
+  ?tv. evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
+
+toplevel_place_value_typed env (ArrayRef is_t slot elem_tv bd) (Type (ArrayT elem_ty bd')) <=>
+  bd = bd' /\ evaluate_type env.type_defs elem_ty = SOME elem_tv
+
+toplevel_place_value_typed env (HashMapRef is_t slot kt vt) (HashMapT kt' vt') <=>
+  kt = kt' /\ vt = vt' /\ well_formed_vtype env.type_defs (HashMapT kt vt)
+```
+
+Expression soundness should eventually distinguish ordinary r-value typing from place/reference typing. In particular, place-expression soundness should prove:
+
+```sml
+type_place_expr env e = SOME vt /\
+well_typed_expr env e /\
+runtime_consistent env cx st /\
+eval_expr cx e st = (INL tvl, st')
+==>
+toplevel_place_value_typed env tvl vt
+```
 
 ### Runtime target proof relation
 
-The old shape-only relation was too weak. The current clean design is state-aware and place-based:
+High-level target soundness should be structural and should not require concrete `place_leaf_typed` witnesses too early.
+
+Use:
 
 ```sml
 runtime_consistent env cx st
 location_runtime_typed env cx st loc vt
-place_leaf_typed env vt sbs ty final_tv
+target_path_typed env loc_vt sbs vt
 target_runtime_typed env cx st tgt ty gv
 ```
 
-Key points:
+where `target_runtime_typed` for a base target should package:
 
-- `runtime_consistent` bundles `env_consistent`, `state_well_typed`, `context_well_typed`, and `accounts_well_typed`.
-- `location_runtime_typed` returns a `value_type`, not a `type_value`:
-  - locals and immutables are `Type ty` roots;
-  - top-level locations use `env.toplevel_vtypes` directly, so `HashMapT kt vt` roots are supported.
-- `place_leaf_typed` connects a value-type root plus runtime subscripts to the static assignment leaf type and runtime leaf `type_value`.
-- `target_runtime_typed env cx st tgt ty gv` combines static target typing, runtime shape, location typing, and leaf typing.
+```sml
+?loc_vt.
+  location_runtime_typed env cx st loc loc_vt /\
+  target_path_typed env loc_vt sbs (Type ty)
+```
 
-Already proved useful rebuild lemmas in `vyperTypeStatePreservationScript.sml`:
+Prefer making the primary path relation consume paths in semantic/order-of-access order, with a raw wrapper for evaluator output:
+
+```sml
+target_path_typed_ordered env loc_vt [] vt <=> loc_vt = vt
+
+target_path_typed_ordered env loc_vt (sb::path) vt <=>
+  ?mid_vt.
+    target_path_step_typed env loc_vt sb mid_vt /\
+    target_path_typed_ordered env mid_vt path vt
+
+target_path_typed env loc_vt sbs vt <=>
+  target_path_typed_ordered env loc_vt (REVERSE sbs) vt
+```
+
+With value-preserving subscripts, the important path steps are conceptually:
+
+```sml
+target_path_step_typed env (Type (ArrayT elem bd)) (ValueSubscript (IntV i)) (Type elem)
+
+target_path_step_typed env (Type (StructT s)) (AttrSubscript id) (Type field_ty) <=>
+  attribute_type env.type_defs (StructT s) id = SOME field_ty
+
+target_path_step_typed env (HashMapT kt vt) (ValueSubscript v) vt <=>
+  ?ktv. evaluate_type env.type_defs kt = SOME ktv /\ value_has_type ktv v /\ hashmap_key_type kt
+```
+
+The exact array-index bounds premise can be kept separate if bounds errors are ordinary runtime errors rather than TypeErrors.
+
+`place_leaf_typed` remains useful, but only as a lower-level assignment/state-preservation bridge from structural target paths to concrete `type_value` leaves. Do not use concrete leaf witnesses in the high-level `eval_base_target` / `target_runtime_typed` theorem statement.
+
+After the subscript refactor, prove the concrete bridge in the assignment layer with well-formedness/runtime-consistency premises, e.g.:
+
+```sml
+runtime_consistent env cx st /\
+location_runtime_typed env cx st loc loc_vt /\
+target_path_typed env loc_vt sbs (Type ty)
+==>
+?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
+```
+
+Already proved useful rebuild lemmas in `vyperTypeStatePreservationScript.sml` may need to be updated to the structural target predicate:
 
 ```sml
 target_runtime_typed_rebuild
