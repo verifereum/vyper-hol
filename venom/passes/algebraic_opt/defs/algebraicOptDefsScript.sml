@@ -39,6 +39,29 @@ Definition ao_fresh_var_def:
     STRCAT "ao_" (STRCAT (toString id) (STRCAT "_" suffix))
 End
 
+(* Fresh instruction ID for helper instructions in 1-to-N expansions.
+   Python creates genuinely new IRInstruction objects (identity by reference);
+   in HOL4 we need explicit distinct IDs.
+
+   Convention: the modified original instruction keeps inst.inst_id.
+   Helper instructions inserted before it get IDs from a range that is
+   disjoint from original IDs.  We achieve this by offsetting into a
+   high range: max_id is the maximum instruction ID in the function
+   (passed in from ao_transform_block/ao_transform_function).
+   Helper k for original inst_id gets  max_id + 1 + inst_id * 3 + k
+   where k ∈ {0,1,2}.  This is injective and > max_id, so it cannot
+   collide with any original ID or with helpers from other instructions. *)
+Definition ao_fresh_id_def:
+  ao_fresh_id (max_id:num) (id:num) (slot:num) = max_id + 1 + id * 3 + slot
+End
+
+(* Maximum instruction ID in a function.  Used to compute ao_fresh_id base. *)
+Definition fn_max_inst_id_def:
+  fn_max_inst_id fn =
+    FOLDL MAX 0
+      (MAP (\i. i.inst_id) (fn_insts fn))
+End
+
 (* Truthy instructions: can accept a truthy value (0/nonzero).
    Matches Python TRUTHY_INSTRUCTIONS = ("iszero", "jnz", "assert", "assert_unreachable").
    ISZERO is included for use-analysis (OR truthy, EQ prefer_iszero).
@@ -403,7 +426,7 @@ End
        prefer_iszero: eq(x,y) → iszero(xor(x,y))
    Commutative: after pre-flip, literal at op2. *)
 Definition ao_opt_eq_def:
-  ao_opt_eq dfg inst =
+  ao_opt_eq mid dfg inst =
     case inst.inst_operands of
       [op1; op2] =>
         if op1 = op2 then
@@ -413,7 +436,7 @@ Definition ao_opt_eq_def:
         else if lit_eq op2 (0w - 1w) then
           let id = inst.inst_id in
           let tmp = ao_fresh_var id "not" in
-          [<| inst_id := id; inst_opcode := NOT;
+          [<| inst_id := ao_fresh_id mid id 0; inst_opcode := NOT;
               inst_operands := [op1]; inst_outputs := [tmp] |>;
            inst with <| inst_opcode := ISZERO;
                         inst_operands := [Var tmp] |>]
@@ -421,7 +444,7 @@ Definition ao_opt_eq_def:
         else if ao_all_prefer_iszero dfg inst then
           let id = inst.inst_id in
           let tmp = ao_fresh_var id "xor" in
-          [<| inst_id := id; inst_opcode := XOR;
+          [<| inst_id := ao_fresh_id mid id 0; inst_opcode := XOR;
               inst_operands := [op1; op2]; inst_outputs := [tmp] |>;
            inst with <| inst_opcode := ISZERO;
                         inst_operands := [Var tmp] |>]
@@ -515,9 +538,9 @@ End
 (* Helper: prefer_iszero + almost_always with val=0
    gt x 0 in iszero context → iszero(iszero(x)) *)
 Definition ao_cmp_prefer_iz_zero_def:
-  ao_cmp_prefer_iz_zero id op1 inst =
+  ao_cmp_prefer_iz_zero mid id op1 inst =
     let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := ISZERO;
+    [<| inst_id := ao_fresh_id mid id 0; inst_opcode := ISZERO;
         inst_operands := [op1]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
                   inst_operands := [Var tmp] |>]
@@ -526,12 +549,12 @@ End
 (* Helper: prefer_iszero + almost_always with val=-1
    slt x MAX in iszero context → iszero(iszero(not(x))) *)
 Definition ao_cmp_prefer_iz_max_def:
-  ao_cmp_prefer_iz_max id op1 inst =
+  ao_cmp_prefer_iz_max mid id op1 inst =
     let inner = ao_fresh_var id "not" in
     let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := NOT;
+    [<| inst_id := ao_fresh_id mid id 0; inst_opcode := NOT;
         inst_operands := [op1]; inst_outputs := [inner] |>;
-     <| inst_id := id; inst_opcode := ISZERO;
+     <| inst_id := ao_fresh_id mid id 1; inst_opcode := ISZERO;
         inst_operands := [Var inner]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
                   inst_operands := [Var tmp] |>]
@@ -540,12 +563,12 @@ End
 (* Helper: prefer_iszero + almost_always with general val
    cmp x val in iszero context → iszero(iszero(xor(x, val))) *)
 Definition ao_cmp_prefer_iz_general_def:
-  ao_cmp_prefer_iz_general id op1 op2 inst =
+  ao_cmp_prefer_iz_general mid id op1 op2 inst =
     let inner = ao_fresh_var id "xor" in
     let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := XOR;
+    [<| inst_id := ao_fresh_id mid id 0; inst_opcode := XOR;
         inst_operands := [op1; op2]; inst_outputs := [inner] |>;
-     <| inst_id := id; inst_opcode := ISZERO;
+     <| inst_id := ao_fresh_id mid id 1; inst_opcode := ISZERO;
         inst_operands := [Var inner]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
                   inst_operands := [Var tmp] |>]
@@ -561,7 +584,7 @@ End
  *   - prefer_iszero + almost_always uses xor/not pattern (not eq)
  *)
 Definition ao_opt_comparator_def:
-  ao_opt_comparator dfg ra lbl idx inst =
+  ao_opt_comparator mid dfg ra lbl idx inst =
     let opc = inst.inst_opcode in
     case inst.inst_operands of
       [op1; op2] =>
@@ -598,7 +621,7 @@ Definition ao_opt_comparator_def:
               (* eq x (-1) → iszero(not(x)) *)
               let id = inst.inst_id in
               let tmp = ao_fresh_var id "not" in
-              [<| inst_id := id; inst_opcode := NOT;
+              [<| inst_id := ao_fresh_id mid id 0; inst_opcode := NOT;
                   inst_operands := [op1]; inst_outputs := [tmp] |>;
                inst with <| inst_opcode := ISZERO;
                             inst_operands := [Var tmp] |>]
@@ -614,16 +637,16 @@ Definition ao_opt_comparator_def:
             let id = inst.inst_id in
             let val_w = case op2 of Lit w => w | _ => 0w in
             if val_w = 0w then
-              ao_cmp_prefer_iz_zero id op1 inst
+              ao_cmp_prefer_iz_zero mid id op1 inst
             else if val_w = 0w - 1w then
-              ao_cmp_prefer_iz_max id op1 inst
+              ao_cmp_prefer_iz_max mid id op1 inst
             else
-              ao_cmp_prefer_iz_general id op1 op2 inst
+              ao_cmp_prefer_iz_general mid id op1 op2 inst
           (* gt x 0 → iszero(iszero(x)). Only for unsigned GT with literal 0. *)
           else if opc = GT /\ lit_eq op2 0w then
             let id = inst.inst_id in
             let tmp = ao_fresh_var id "iz" in
-            [<| inst_id := id; inst_opcode := ISZERO;
+            [<| inst_id := ao_fresh_id mid id 0; inst_opcode := ISZERO;
                 inst_operands := [op1]; inst_outputs := [tmp] |>;
              inst with <| inst_opcode := ISZERO;
                           inst_operands := [Var tmp] |>]
@@ -640,7 +663,7 @@ End
  * Pre-flip is applied before dispatch, post-flip after.
  *)
 Definition ao_peephole_inst_def:
-  ao_peephole_inst (dfg : dfg_analysis) ra lbl idx inst =
+  ao_peephole_inst mid (dfg : dfg_analysis) ra lbl idx inst =
     let opc = inst.inst_opcode in
     if inst.inst_outputs = [] then [inst]
     else if opc = ASSIGN \/ opc = PHI \/ opc = PARAM then [inst]
@@ -652,9 +675,9 @@ Definition ao_peephole_inst_def:
     else if opc = MUL \/ opc = Div \/ opc = SDIV \/
             opc = Mod \/ opc = SMOD then ao_opt_muldiv inst
     else if opc = OR then ao_opt_or dfg inst
-    else if opc = EQ then ao_opt_eq dfg inst
+    else if opc = EQ then ao_opt_eq mid dfg inst
     else if opc = GT \/ opc = LT \/ opc = SGT \/ opc = SLT then
-      ao_opt_comparator dfg ra lbl idx inst
+      ao_opt_comparator mid dfg ra lbl idx inst
     else [inst]
 End
 
@@ -797,7 +820,7 @@ End
  * 3. Pre-flip + peephole + post-flip
  *)
 Definition ao_transform_inst_def:
-  ao_transform_inst dfg ra lbl idx targets inst =
+  ao_transform_inst mid dfg ra lbl idx targets inst =
     let inst0 = ao_resolve_iszero_inst targets inst in
     if inst0.inst_outputs = [] then [inst0]
     else if inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/
@@ -807,15 +830,15 @@ Definition ao_transform_inst_def:
         SOME result => MAP ao_post_flip_inst result
       | NONE =>
           let inst1 = ao_pre_flip_inst inst0 in
-          let result = ao_peephole_inst dfg ra lbl idx inst1 in
+          let result = ao_peephole_inst mid dfg ra lbl idx inst1 in
           MAP ao_post_flip_inst result
 End
 
 Definition ao_transform_block_def:
-  ao_transform_block dfg ra targets bb =
+  ao_transform_block mid dfg ra targets bb =
     bb with bb_instructions :=
       FLAT (MAPi (\idx inst.
-        ao_transform_inst dfg ra bb.bb_label idx targets inst)
+        ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
         bb.bb_instructions)
 End
 
@@ -837,8 +860,9 @@ Definition ao_transform_function_def:
     (* Phase 3: main rewrite pass *)
     let dfg = dfg_build_function fn0 in
     let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
     let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     (* Phase 4: comparator iszero flip *)
     let dfg1 = dfg_build_function fn1 in
     ao_cmp_flip_function dfg1 fn1

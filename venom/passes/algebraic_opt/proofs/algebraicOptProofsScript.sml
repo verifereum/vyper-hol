@@ -797,9 +797,9 @@ QED
 
 (* Peephole is identity for terminators with non-empty outputs *)
 Triviality ao_peephole_inst_terminator[local]:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     is_terminator inst.inst_opcode /\ inst.inst_outputs <> [] ==>
-    ao_peephole_inst dfg ra lbl idx inst = [inst]
+    ao_peephole_inst mid dfg ra lbl idx inst = [inst]
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
@@ -809,10 +809,10 @@ QED
 (* Comparator: non-special even without inst_wf.
    Separate because ao_opt_comparator is the most complex opt function. *)
 Triviality ao_opt_comparator_non_special[local]:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      (ao_opt_comparator dfg ra lbl idx inst)
+      (ao_opt_comparator mid dfg ra lbl idx inst)
 Proof
   rpt strip_tac >>
   simp[ao_opt_comparator_def, LET_THM,
@@ -837,10 +837,10 @@ QED
    regardless of inst_wf. Each ao_opt_* function returns either [inst]
    or instructions with explicit non-special opcodes (ASSIGN, ISZERO, etc). *)
 Triviality ao_peephole_inst_non_special[local]:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
     EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      (ao_peephole_inst dfg ra lbl idx inst)
+      (ao_peephole_inst mid dfg ra lbl idx inst)
 Proof
   rpt gen_tac >> strip_tac >>
   simp[ao_peephole_inst_def, LET_THM] >>
@@ -858,9 +858,9 @@ Proof
 QED
 
 Triviality ao_transform_inst_structural[local]:
-  !dfg ra lbl targets.
+  !mid dfg ra lbl targets.
     inst_transform_structural
-      (\(v:num) inst. ao_transform_inst dfg ra lbl v targets inst)
+      (\(v:num) inst. ao_transform_inst mid dfg ra lbl v targets inst)
 Proof
   rpt gen_tac >> simp[inst_transform_structural_def] >> rpt conj_tac
   >- (* Terminators: singleton terminator *)
@@ -877,7 +877,7 @@ Proof
           `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) = NONE` by
             (irule ao_opt_producer_non_special >>
              simp[ao_resolve_iszero_inst_opcode]) >>
-          `ao_peephole_inst dfg ra lbl v
+          `ao_peephole_inst mid dfg ra lbl v
              (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)) =
            [ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)]` by
             (irule ao_peephole_inst_terminator >>
@@ -889,7 +889,7 @@ Proof
                ao_post_flip_inst_opcode, ao_pre_flip_inst_opcode]))
   >- (* INVOKE: singleton INVOKE *)
      (rpt gen_tac >> strip_tac >>
-      qspecl_then [`dfg`, `ra`, `lbl`, `v`, `targets`, `inst`]
+      qspecl_then [`mid`, `dfg`, `ra`, `lbl`, `v`, `targets`, `inst`]
         strip_assume_tac ao_transform_inst_invoke >>
       gvs[] >> qexists_tac `inst'` >> simp[])
   >- (* Non-term non-INVOKE: EVERY non-term non-INVOKE *)
@@ -935,7 +935,7 @@ QED
 (* Helper: non-INVOKE peephole path simulation.
    Uses original inst in step_inst, resolved inst for peephole. *)
 Triviality ao_peephole_path_sim[local]:
-  !fv dfg ra lbl targets fuel ctx v inst s.
+  !fv mid dfg ra lbl targets fuel ctx v inst s.
     inst_wf inst /\
     ~is_terminator inst.inst_opcode /\
     inst.inst_opcode <> INVOKE /\
@@ -956,13 +956,13 @@ Triviality ao_peephole_path_sim[local]:
       (step_inst fuel ctx inst s)
       (run_insts fuel ctx
         (MAP ao_post_flip_inst
-          (ao_peephole_inst dfg ra lbl v
+          (ao_peephole_inst mid dfg ra lbl v
             (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)))) s)
 Proof
   rpt gen_tac >> strip_tac >>
   `inst_wf (ao_resolve_iszero_inst targets inst)` by
     (irule ao_resolve_iszero_inst_wf >> simp[]) >>
-  qspecl_then [`fv`, `dfg`, `ra`, `lbl`, `v`,
+  qspecl_then [`fv`, `mid`, `dfg`, `ra`, `lbl`, `v`,
     `ao_resolve_iszero_inst targets inst`,
     `fuel`, `ctx`, `s`]
     mp_tac ao_peephole_full_sim >>
@@ -1258,7 +1258,7 @@ QED
      H_range   — range analysis sound for resolved operands
    Uses ao_dfg_inv in the soundness predicate for producer rewrites. *)
 Triviality ao_transform_inst_sim[local]:
-  !fv dfg ra lbl targets.
+  !fv mid dfg ra lbl targets.
     (* H_resolve: iszero resolution preserves step_inst *)
     (!inst fuel ctx s. inst_wf inst ==>
       step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
@@ -1273,7 +1273,7 @@ Triviality ao_transform_inst_sim[local]:
       eval_operand op s = SOME v ==>
       in_range (range_get_range ra lbl idx op) v)
     ==>
-    let f = \(v:num) inst. ao_transform_inst dfg ra lbl v targets inst in
+    let f = \(v:num) inst. ao_transform_inst mid dfg ra lbl v targets inst in
     analysis_inst_simulates
       (state_equiv fv) (execution_equiv fv)
       (\(v:num) s. ao_dfg_inv dfg (s with vs_inst_idx := 0))
@@ -1357,9 +1357,9 @@ End
    per-instruction soundness that depends on H_resolve, H_range, ao_dfg_inv.
    Conclusion relates exec_block on bb to exec_block on ao_transform_block bb. *)
 Theorem ao_phases123_block_sim[local]:
-  !fv dfg ra targets bb fuel ctx s.
+  !fv mid dfg ra targets bb fuel ctx s.
     analysis_inst_simulates (state_equiv fv) (execution_equiv fv) (\v s. T)
-      (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) /\
+      (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) /\
     EVERY inst_wf bb.bb_instructions /\
     (!inst x. MEM inst bb.bb_instructions /\
               MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
@@ -1367,7 +1367,7 @@ Theorem ao_phases123_block_sim[local]:
     (?e. exec_block fuel ctx bb s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (exec_block fuel ctx bb s)
-      (exec_block fuel ctx (ao_transform_block dfg ra targets bb) s)
+      (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
 Proof
   rpt gen_tac >> strip_tac >>
   irule ao_phase3_block_sim >> metis_tac[]
@@ -1382,8 +1382,9 @@ Triviality fn1_same_labels[local]:
     let targets = ao_compute_fn_iszero_targets fn0 in
     let dfg = dfg_build_function fn0 in
     let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
     let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     IS_SOME (lookup_block lbl fn1.fn_blocks) <=>
     IS_SOME (lookup_block lbl fn.fn_blocks)
 Proof
@@ -1499,8 +1500,8 @@ Proof
 QED
 
 Triviality ao_transform_block_label[local,simp]:
-  !dfg ra targets bb.
-    (ao_transform_block dfg ra targets bb).bb_label = bb.bb_label
+  !mid dfg ra targets bb.
+    (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
 Proof
   simp[ao_transform_block_def]
 QED
@@ -1748,7 +1749,7 @@ QED
 (* Per-block sim for fn0 blocks with invariant, using f_safe wrapper.
    Key: only requires per-instruction sim for block instructions (MEM). *)
 Triviality ao_block_sim_fn0[local]:
-  !fv dfg ra targets bb (state_inv : venom_state -> bool).
+  !fv mid dfg ra targets bb (state_inv : venom_state -> bool).
     (!fuel ctx v inst s.
        MEM inst bb.bb_instructions /\
        state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
@@ -1756,9 +1757,9 @@ Triviality ao_block_sim_fn0[local]:
        lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
          (step_inst fuel ctx inst s)
          (run_insts fuel ctx
-           (ao_transform_inst dfg ra bb.bb_label v targets inst) s)) /\
+           (ao_transform_inst mid dfg ra bb.bb_label v targets inst) s)) /\
     inst_transform_structural
-      (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) /\
+      (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) /\
     EVERY inst_wf bb.bb_instructions /\
     (!inst x. MEM inst bb.bb_instructions /\
               MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
@@ -1774,23 +1775,23 @@ Triviality ao_block_sim_fn0[local]:
       (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
         (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (ao_transform_block dfg ra targets bb) s)
+        (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
 Proof
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   (* Define safe wrapper: identity for non-block instructions *)
   qabbrev_tac `f_safe = \(v:num) inst.
     if MEM inst bb.bb_instructions
-    then ao_transform_inst dfg ra bb.bb_label v targets inst
+    then ao_transform_inst mid dfg ra bb.bb_label v targets inst
     else [inst]` >>
   (* Rewrite ao_transform_block to analysis_block_transform with f_safe *)
-  `ao_transform_block dfg ra targets bb =
+  `ao_transform_block mid dfg ra targets bb =
    analysis_block_transform 0
      (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
      f_safe bb` by
     (simp[analysis_block_transform_def, ao_transform_block_def] >>
      `MAPi (\idx inst.
-        ao_transform_inst dfg ra bb.bb_label idx targets inst)
+        ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
         bb.bb_instructions =
       MAPi (\idx inst.
         f_safe (df_at 0
@@ -1917,7 +1918,7 @@ QED
 (* Per-instruction sim with per-instruction H_fresh.
    Unlike ao_transform_inst_sim, only needs fresh vars for THIS inst. *)
 Triviality ao_transform_inst_sim_inst[local]:
-  !fv dfg ra lbl targets fuel ctx v inst s.
+  !fv mid dfg ra lbl targets fuel ctx v inst s.
     inst_wf inst /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_fresh_var inst.inst_id "not" IN fv /\
@@ -1935,7 +1936,7 @@ Triviality ao_transform_inst_sim_inst[local]:
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst fuel ctx inst s)
       (run_insts fuel ctx
-        (ao_transform_inst dfg ra lbl v targets inst) s)
+        (ao_transform_inst mid dfg ra lbl v targets inst) s)
 Proof
   rpt gen_tac >> strip_tac >>
   `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
@@ -1989,10 +1990,11 @@ QED
 (* Per-inst sim for fn0 block instructions: combines
    ao_transform_inst_sim_inst + fn0_inst_fresh_in_fv *)
 Triviality ao_per_inst_sim_fn0[local]:
-  !fn fn0 dfg ra targets bb fuel ctx v inst s.
+  !fn fn0 mid dfg ra targets bb fuel ctx v inst s.
     fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    mid = fn_max_inst_id fn0 /\
     dfg = dfg_build_function fn0 /\
     ra = range_analyze fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
@@ -2014,7 +2016,7 @@ Triviality ao_per_inst_sim_fn0[local]:
       (execution_equiv (ao_fn_fresh_vars fn))
       (step_inst fuel ctx inst s)
       (run_insts fuel ctx
-        (ao_transform_inst dfg ra bb.bb_label v targets inst) s)
+        (ao_transform_inst mid dfg ra bb.bb_label v targets inst) s)
 Proof
   rpt gen_tac >> strip_tac >>
   irule ao_transform_inst_sim_inst >> simp[] >>
@@ -2027,15 +2029,16 @@ Proof
 QED
 
 Theorem ao_phases123_run_blocks_sim[local]:
-  !fn fn0 dfg ra targets fn1 fuel ctx s.
+  !fn fn0 mid dfg ra targets fn1 fuel ctx s.
     fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    mid = fn_max_inst_id fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
     dfg = dfg_build_function fn0 /\
     ra = range_analyze fn0 /\
     fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks /\
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks /\
     ssa_form fn0 /\
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     EVERY inst_wf (fn_insts fn0) /\
@@ -2067,6 +2070,8 @@ Proof
   (* Protect plain equalities from simp — only inside >- scopes *)
   qpat_x_assum `fn0 = _` (ASSUME_TAC o
     CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qpat_x_assum `mid = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
   qpat_x_assum `dfg = _` (ASSUME_TAC o
     CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
   qpat_x_assum `ra = _` (ASSUME_TAC o
@@ -2080,7 +2085,7 @@ Proof
   pop_assum (fn th => REWRITE_TAC [GSYM th]) >>
   ONCE_REWRITE_TAC[run_blocks_inst_idx_irrel] >>
   qabbrev_tac `fv = ao_fn_fresh_vars fn` >>
-  qabbrev_tac `bt = ao_transform_block dfg ra targets` >>
+  qabbrev_tac `bt = ao_transform_block mid dfg ra targets` >>
   qabbrev_tac `sinv = \s:venom_state.
     ao_dfg_inv dfg (s with vs_inst_idx := 0)` >>
   `fn1 = function_map_transform bt fn0` by
@@ -2097,7 +2102,7 @@ Proof
     >- (* Per-block sim: use ao_block_sim_fn0 *)
        (rpt gen_tac >> rpt strip_tac >>
         simp[Abbr `bt`, Abbr `sinv`] >>
-        qspecl_then [`fv`, `dfg`, `ra`, `targets`, `bb`,
+        qspecl_then [`fv`, `mid`, `dfg`, `ra`, `targets`, `bb`,
           `\s'. ao_dfg_inv dfg (s' with vs_inst_idx := 0)`]
           mp_tac ao_block_sim_fn0 >>
         impl_tac >- (
@@ -2284,8 +2289,9 @@ Definition ao_fn_total_fresh_vars_def:
     let targets = ao_compute_fn_iszero_targets fn0 in
     let dfg = dfg_build_function fn0 in
     let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
     let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     let dfg1 = dfg_build_function fn1 in
     ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
 End
@@ -2299,8 +2305,9 @@ Triviality ao_phase_decompose[local]:
     let targets = ao_compute_fn_iszero_targets fn0 in
     let dfg = dfg_build_function fn0 in
     let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
     let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     let dfg1 = dfg_build_function fn1 in
     ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 /\
     ao_fn_total_fresh_vars fn =
@@ -2374,8 +2381,9 @@ Proof
   qabbrev_tac `targets = ao_compute_fn_iszero_targets fn0` >>
   qabbrev_tac `dfg = dfg_build_function fn0` >>
   qabbrev_tac `ra = range_analyze fn0` >>
+  qabbrev_tac `mid = fn_max_inst_id fn0` >>
   qabbrev_tac `fn1 = fn0 with fn_blocks :=
-    MAP (ao_transform_block dfg ra targets) fn0.fn_blocks` >>
+    MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks` >>
   (* Get phases 1-3 simulation: Error \/ lift_result *)
   `(?e. run_blocks fuel ctx fn s = Error e) \/
    lift_result (state_equiv (ao_fn_fresh_vars fn))
@@ -2395,12 +2403,14 @@ Proof
       `ao_transform_function fn = ao_cmp_flip_function
          (dfg_build_function fn1) fn1` by
         simp[ao_transform_function_def, LET_THM,
-             Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`, Abbr `targets`] >>
+             Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`,
+             Abbr `mid`, Abbr `targets`] >>
       (* Show ao_fn_total_fresh_vars fn = fv ∪ dead *)
       `ao_fn_total_fresh_vars fn = ao_fn_fresh_vars fn UNION
          ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1` by
         simp[ao_fn_total_fresh_vars_def, LET_THM,
-             Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`, Abbr `targets`] >>
+             Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`,
+             Abbr `mid`, Abbr `targets`] >>
       ASM_REWRITE_TAC [] >>
       qabbrev_tac `dfg1 = dfg_build_function fn1` >>
       qabbrev_tac `dead = ao_cmp_flip_dead_vars dfg1 fn1` >>

@@ -49,25 +49,25 @@ QED
 (* ===== Transform equivalence =====
  *
  * analysis_block_transform 0 (idx_df_state lbl n) f bb
- * = ao_transform_block dfg ra targets bb
- * when f = \v inst. ao_transform_inst dfg ra lbl v targets inst
+ * = ao_transform_block mid dfg ra targets bb
+ * when f = \v inst. ao_transform_inst mid dfg ra lbl v targets inst
  * and n >= LENGTH bb.bb_instructions
  *)
 Triviality transform_eq[local]:
-  !dfg ra targets bb.
+  !mid dfg ra targets bb.
     let lbl = bb.bb_label in
     let n = LENGTH bb.bb_instructions in
-    let f = \v inst. ao_transform_inst dfg ra lbl v targets inst in
+    let f = \v inst. ao_transform_inst mid dfg ra lbl v targets inst in
     analysis_block_transform 0 (idx_df_state lbl n) f bb =
-    ao_transform_block dfg ra targets bb
+    ao_transform_block mid dfg ra targets bb
 Proof
   rw[LET_THM, analysis_block_transform_def, ao_transform_block_def] >>
   `FLAT (MAPi (\idx inst.
-     ao_transform_inst dfg ra bb.bb_label
+     ao_transform_inst mid dfg ra bb.bb_label
        (df_at 0 (idx_df_state bb.bb_label (LENGTH bb.bb_instructions))
           bb.bb_label idx) targets inst) bb.bb_instructions) =
    FLAT (MAPi (\idx inst.
-     ao_transform_inst dfg ra bb.bb_label idx targets inst)
+     ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
        bb.bb_instructions)` suffices_by simp[] >>
   AP_TERM_TAC >>
   irule MAPi_CONG' >> simp[] >>
@@ -101,11 +101,11 @@ QED
 (* ===== Main theorem: Phase 3 block simulation ===== *)
 
 Theorem ao_phase3_block_sim:
-  !fv dfg ra targets bb.
+  !fv mid dfg ra targets bb.
     (* Per-instruction simulation holds *)
     analysis_inst_simulates
       (state_equiv fv) (execution_equiv fv) (\v s. T)
-      (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) /\
+      (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) /\
     (* All instructions are well-formed *)
     EVERY inst_wf bb.bb_instructions /\
     (* Operands of original block instructions are not in fv *)
@@ -117,7 +117,7 @@ Theorem ao_phase3_block_sim:
       (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
         (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (ao_transform_block dfg ra targets bb) s)
+        (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
 Proof
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -128,7 +128,7 @@ Proof
   qspecl_then
     [`state_equiv fv`, `execution_equiv fv`,
      `\(v:num) (s:venom_state). T`,
-     `\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst`,
+     `\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst`,
      `bb`, `0`, `idx_df_state bb.bb_label (LENGTH bb.bb_instructions)`]
     mp_tac analysis_block_sim_univ >>
   impl_tac
@@ -159,7 +159,7 @@ QED
    Per-instruction sim requires BOTH sound AND state_inv.
    state_inv is preserved through step_inst and state_equiv. *)
 Theorem ao_phase3_block_sim_inv:
-  !fv dfg ra targets bb (state_inv : venom_state -> bool).
+  !fv mid dfg ra targets bb (state_inv : venom_state -> bool).
     (* Per-instruction simulation under state_inv *)
     (!fuel ctx v inst s.
        state_inv (s with vs_inst_idx := 0) /\ inst_wf inst ==>
@@ -167,9 +167,9 @@ Theorem ao_phase3_block_sim_inv:
        lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
          (step_inst fuel ctx inst s)
          (run_insts fuel ctx
-           (ao_transform_inst dfg ra bb.bb_label v targets inst) s)) /\
+           (ao_transform_inst mid dfg ra bb.bb_label v targets inst) s)) /\
     inst_transform_structural
-      (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) /\
+      (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) /\
     EVERY inst_wf bb.bb_instructions /\
     (!inst x. MEM inst bb.bb_instructions /\
               MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
@@ -187,19 +187,19 @@ Theorem ao_phase3_block_sim_inv:
       (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
         (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (ao_transform_block dfg ra targets bb) s)
+        (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
 Proof
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   (* Rewrite ao_transform_block to analysis_block_transform *)
-  `ao_transform_block dfg ra targets bb =
+  `ao_transform_block mid dfg ra targets bb =
    analysis_block_transform 0
      (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
-     (\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst) bb` by
+     (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) bb` by
     (simp[analysis_block_transform_def, ao_transform_block_def] >>
-     `MAPi (\idx inst. ao_transform_inst dfg ra bb.bb_label idx targets inst)
+     `MAPi (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
           bb.bb_instructions =
-      MAPi (\idx inst. ao_transform_inst dfg ra bb.bb_label
+      MAPi (\idx inst. ao_transform_inst mid dfg ra bb.bb_label
           (df_at 0 (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
              bb.bb_label idx) targets inst) bb.bb_instructions`
        suffices_by simp[] >>
@@ -210,7 +210,7 @@ Proof
   qspecl_then
     [`state_equiv fv`, `execution_equiv fv`,
      `\(v:num) (s:venom_state). T`, `state_inv`,
-     `\v inst. ao_transform_inst dfg ra bb.bb_label v targets inst`,
+     `\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst`,
      `bb`, `0`, `idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions))`,
      `\(ctx:'b) (inst:instruction) v. SUC v`, `ARB`]
     mp_tac analysis_block_sim_inv >>

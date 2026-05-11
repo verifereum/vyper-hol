@@ -166,7 +166,7 @@ QED
    step_inst on the same state gives identical results. *)
 Theorem ao_peephole_identity_sim:
   !fv inst fuel ctx s.
-    ao_peephole_inst dfg ra lbl idx inst = [inst] ==>
+    ao_peephole_inst mid dfg ra lbl idx inst = [inst] ==>
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst fuel ctx inst s)
       (run_insts fuel ctx [inst] s)
@@ -194,9 +194,9 @@ QED
 
 (* ao_peephole_inst preserves terminators as singletons *)
 Theorem ao_peephole_inst_terminator:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     is_terminator inst.inst_opcode ==>
-    ao_peephole_inst dfg ra lbl idx inst = [inst]
+    ao_peephole_inst mid dfg ra lbl idx inst = [inst]
 Proof
   rw[ao_peephole_inst_def, LET_THM] >>
   (* Terminators have inst_outputs = [] in well-formed blocks *)
@@ -258,8 +258,8 @@ Proof
 QED
 
 Triviality opt_eq_not_invoke[local]:
-  !dfg inst. inst.inst_opcode <> INVOKE ==>
-    EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_eq dfg inst)
+  !mid dfg inst. inst.inst_opcode <> INVOKE ==>
+    EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_eq mid dfg inst)
 Proof
   simp[ao_opt_eq_def, LET_THM] >> rpt gen_tac >> strip_tac >>
   every_case_tac >> simp[listTheory.EVERY_DEF]
@@ -274,12 +274,12 @@ Proof
 QED
 
 Triviality cmp_helpers_not_invoke[local]:
-  (!id op1 inst. EVERY (\i. i.inst_opcode <> INVOKE)
-    (ao_cmp_prefer_iz_zero id op1 inst)) /\
-  (!id op1 inst. EVERY (\i. i.inst_opcode <> INVOKE)
-    (ao_cmp_prefer_iz_max id op1 inst)) /\
-  (!id op1 op2 inst. EVERY (\i. i.inst_opcode <> INVOKE)
-    (ao_cmp_prefer_iz_general id op1 op2 inst))
+  (!mid id op1 inst. EVERY (\i. i.inst_opcode <> INVOKE)
+    (ao_cmp_prefer_iz_zero mid id op1 inst)) /\
+  (!mid id op1 inst. EVERY (\i. i.inst_opcode <> INVOKE)
+    (ao_cmp_prefer_iz_max mid id op1 inst)) /\
+  (!mid id op1 op2 inst. EVERY (\i. i.inst_opcode <> INVOKE)
+    (ao_cmp_prefer_iz_general mid id op1 op2 inst))
 Proof
   simp[ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
        ao_cmp_prefer_iz_general_def, LET_THM, listTheory.EVERY_DEF]
@@ -292,11 +292,11 @@ QED
    compilation makes ARB for 3+ operands. We add LENGTH = 2 precondition.
    This is always true for well-formed comparator instructions. *)
 Triviality opt_comparator_not_invoke[local]:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     (inst.inst_opcode = GT \/ inst.inst_opcode = LT \/
      inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) /\
     LENGTH inst.inst_operands = 2 ==>
-    EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_comparator dfg ra lbl idx inst)
+    EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_comparator mid dfg ra lbl idx inst)
 Proof
   rpt strip_tac >> gvs[] >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by
@@ -316,9 +316,9 @@ Proof
 QED
 
 Theorem ao_peephole_inst_not_invoke:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     inst.inst_opcode <> INVOKE /\ inst_wf inst ==>
-    EVERY (\i. i.inst_opcode <> INVOKE) (ao_peephole_inst dfg ra lbl idx inst)
+    EVERY (\i. i.inst_opcode <> INVOKE) (ao_peephole_inst mid dfg ra lbl idx inst)
 Proof
   rpt strip_tac >>
   simp[ao_peephole_inst_def, LET_THM] >>
@@ -390,8 +390,8 @@ Proof
 QED
 
 Triviality opt_eq_non_term[local]:
-  !dfg inst. ~is_terminator inst.inst_opcode ==>
-    EVERY (\i. ~is_terminator i.inst_opcode) (ao_opt_eq dfg inst)
+  !mid dfg inst. ~is_terminator inst.inst_opcode ==>
+    EVERY (\i. ~is_terminator i.inst_opcode) (ao_opt_eq mid dfg inst)
 Proof
   simp[ao_opt_eq_def, LET_THM, is_terminator_def] >>
   rpt gen_tac >> strip_tac >>
@@ -408,12 +408,12 @@ Proof
 QED
 
 Triviality opt_comparator_non_term[local]:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     (inst.inst_opcode = GT \/ inst.inst_opcode = LT \/
      inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) /\
     LENGTH inst.inst_operands = 2 ==>
     EVERY (\i. ~is_terminator i.inst_opcode)
-          (ao_opt_comparator dfg ra lbl idx inst)
+          (ao_opt_comparator mid dfg ra lbl idx inst)
 Proof
   rpt strip_tac >> gvs[] >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by
@@ -433,10 +433,10 @@ Proof
 QED
 
 Theorem ao_peephole_inst_non_term:
-  !dfg ra lbl idx inst.
+  !mid dfg ra lbl idx inst.
     ~is_terminator inst.inst_opcode /\ inst_wf inst ==>
     EVERY (\i. ~is_terminator i.inst_opcode)
-          (ao_peephole_inst dfg ra lbl idx inst)
+          (ao_peephole_inst mid dfg ra lbl idx inst)
 Proof
   rpt strip_tac >>
   simp[ao_peephole_inst_def, LET_THM] >>
@@ -831,7 +831,7 @@ QED
    of whether the DFG analysis is accurate. *)
 
 Theorem ao_peephole_full_sim:
-  !fv dfg ra lbl idx inst fuel ctx s.
+  !fv mid dfg ra lbl idx inst fuel ctx s.
     inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     inst_wf inst /\
@@ -847,7 +847,7 @@ Theorem ao_peephole_full_sim:
       (step_inst fuel ctx inst s)
       (run_insts fuel ctx
         (MAP ao_post_flip_inst
-          (ao_peephole_inst dfg ra lbl idx (ao_pre_flip_inst inst))) s)
+          (ao_peephole_inst mid dfg ra lbl idx (ao_pre_flip_inst inst))) s)
 Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (ao_pre_flip_inst inst) s = step_inst_base inst s`
@@ -1156,10 +1156,10 @@ Proof
     `inst0.inst_id = inst.inst_id` by
       (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
        every_case_tac >> simp[]) >>
-    `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_eq dfg inst0)` by (
+    `EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_eq mid dfg inst0)` by (
       irule opt_eq_not_invoke >> simp[]) >>
     simp[run_insts_map_post_flip] >>
-    mp_tac (Q.SPECL [`fv`, `dfg`, `inst0`, `s`, `fuel`, `ctx`] ao_eq_sim) >>
+    mp_tac (Q.SPECL [`fv`, `mid`, `dfg`, `inst0`, `s`, `fuel`, `ctx`] ao_eq_sim) >>
     impl_tac >- simp[] >>
     strip_tac >- metis_tac[] >>
     DISJ2_TAC >> metis_tac[])
@@ -1173,7 +1173,7 @@ Proof
       (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
        every_case_tac >> simp[]) >>
     `EVERY (\i. i.inst_opcode <> INVOKE)
-           (ao_opt_comparator dfg ra lbl idx inst0)` by (
+           (ao_opt_comparator mid dfg ra lbl idx inst0)` by (
       irule opt_comparator_not_invoke >> simp[]) >>
     simp[run_insts_map_post_flip] >>
     `!op v. MEM op inst0.inst_operands /\
@@ -1187,7 +1187,7 @@ Proof
         every_case_tac >>
         simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
       fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-    mp_tac (Q.SPECL [`fv`, `dfg`, `ra`, `lbl`, `idx`, `inst0`,
+    mp_tac (Q.SPECL [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`, `inst0`,
                       `s`, `fuel`, `ctx`] ao_cmp_sim_full) >>
     impl_tac >- simp[] >>
     strip_tac >- metis_tac[] >>

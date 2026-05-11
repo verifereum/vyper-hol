@@ -328,10 +328,10 @@ QED
    Terminators in Venom IR don't have outputs (inst_outputs = []),
    so they hit the first branch in ao_transform_inst. *)
 Theorem ao_transform_inst_terminator:
-  !dfg ra lbl idx targets inst.
+  !mid dfg ra lbl idx targets inst.
     is_terminator inst.inst_opcode /\
     inst.inst_outputs = [] ==>
-    ?inst'. ao_transform_inst dfg ra lbl idx targets inst = [inst'] /\
+    ?inst'. ao_transform_inst mid dfg ra lbl idx targets inst = [inst'] /\
             inst'.inst_opcode = inst.inst_opcode /\
             inst'.inst_id = inst.inst_id /\
             inst'.inst_outputs = inst.inst_outputs
@@ -347,9 +347,9 @@ QED
    dispatch case, so it passes through (possibly with resolved operands).
    Proof requires tracing through the full peephole dispatch for INVOKE. *)
 Theorem ao_transform_inst_invoke:
-  !dfg ra lbl idx targets inst.
+  !mid dfg ra lbl idx targets inst.
     inst.inst_opcode = INVOKE ==>
-    ?inst'. ao_transform_inst dfg ra lbl idx targets inst = [inst'] /\
+    ?inst'. ao_transform_inst mid dfg ra lbl idx targets inst = [inst'] /\
             inst'.inst_opcode = INVOKE
 Proof
   rpt strip_tac >>

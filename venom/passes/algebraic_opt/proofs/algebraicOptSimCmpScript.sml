@@ -174,7 +174,7 @@ QED
    or the original step_inst_base errors.
    Covers: op1=op2, op2=0, op2=-1 (1-to-2), prefer_iszero (1-to-2), identity *)
 Theorem ao_eq_sim:
-  !fv dfg inst s fuel ctx.
+  !fv mid dfg inst s fuel ctx.
     inst.inst_opcode = EQ /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
@@ -183,7 +183,7 @@ Theorem ao_eq_sim:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_eq dfg inst) s)
+      (run_insts fuel ctx (ao_opt_eq mid dfg inst) s)
 Proof
   rpt strip_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
@@ -634,7 +634,7 @@ val iszero_iszero_tac =
 (* ===== GT simulation ===== *)
 
 Triviality ao_cmp_sim_gt[local]:
-  !fv dfg ra lbl idx inst s fuel ctx.
+  !fv mid dfg ra lbl idx inst s fuel ctx.
     inst.inst_opcode = GT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
@@ -645,7 +645,7 @@ Triviality ao_cmp_sim_gt[local]:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_comparator dfg ra lbl idx inst) s)
+      (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
   rpt strip_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
@@ -752,7 +752,7 @@ QED
 (* ===== LT simulation ===== *)
 
 Triviality ao_cmp_sim_lt[local]:
-  !fv dfg ra lbl idx inst s fuel ctx.
+  !fv mid dfg ra lbl idx inst s fuel ctx.
     inst.inst_opcode = LT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
@@ -763,7 +763,7 @@ Triviality ao_cmp_sim_lt[local]:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_comparator dfg ra lbl idx inst) s)
+      (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
   rpt strip_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
@@ -846,7 +846,7 @@ QED
 
 (* ===== SGT simulation ===== *)
 Triviality ao_cmp_sim_sgt[local]:
-  !fv dfg ra lbl idx inst s fuel ctx.
+  !fv mid dfg ra lbl idx inst s fuel ctx.
     inst.inst_opcode = SGT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
@@ -857,7 +857,7 @@ Triviality ao_cmp_sim_sgt[local]:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_comparator dfg ra lbl idx inst) s)
+      (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
   rpt strip_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
@@ -947,7 +947,7 @@ QED
 
 (* ===== SLT simulation ===== *)
 Triviality ao_cmp_sim_slt[local]:
-  !fv dfg ra lbl idx inst s fuel ctx.
+  !fv mid dfg ra lbl idx inst s fuel ctx.
     inst.inst_opcode = SLT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
@@ -958,7 +958,7 @@ Triviality ao_cmp_sim_slt[local]:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_comparator dfg ra lbl idx inst) s)
+      (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
   rpt strip_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
@@ -1050,7 +1050,7 @@ QED
 (* ===== Main comparator simulation theorem ===== *)
 
 Theorem ao_cmp_sim:
-  !fv dfg ra lbl idx inst s fuel ctx.
+  !fv mid dfg ra lbl idx inst s fuel ctx.
     (inst.inst_opcode = GT \/ inst.inst_opcode = LT \/
      inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) /\
     LENGTH inst.inst_operands = 2 /\
@@ -1064,7 +1064,7 @@ Theorem ao_cmp_sim:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_comparator dfg ra lbl idx inst) s)
+      (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
   rpt strip_tac >> gvs[]
   >- (irule ao_cmp_sim_gt >> simp[])
@@ -1308,7 +1308,7 @@ QED
 
 (* Full comparator simulation: combines boundary (NONE) and range (SOME) cases *)
 Theorem ao_cmp_sim_full:
-  !fv dfg ra lbl idx inst s fuel ctx.
+  !fv mid dfg ra lbl idx inst s fuel ctx.
     (inst.inst_opcode = GT \/ inst.inst_opcode = LT \/
      inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) /\
     LENGTH inst.inst_operands = 2 /\
@@ -1322,7 +1322,7 @@ Theorem ao_cmp_sim_full:
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
-      (run_insts fuel ctx (ao_opt_comparator dfg ra lbl idx inst) s)
+      (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
   rpt gen_tac >> disch_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
@@ -1342,7 +1342,7 @@ Proof
     `op1 <> op2` by (
       strip_tac >> gvs[ao_opt_cmp_range_def, is_lit_op_def] >>
       Cases_on `op1` >> gvs[]) >>
-    `ao_opt_comparator dfg ra lbl idx inst =
+    `ao_opt_comparator mid dfg ra lbl idx inst =
      [inst with <| inst_opcode := ASSIGN;
                    inst_operands := [replacement] |>]` by
       simp[ao_opt_comparator_def, LET_THM] >>
