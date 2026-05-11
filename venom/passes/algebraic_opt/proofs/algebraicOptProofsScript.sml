@@ -1337,18 +1337,7 @@ QED
 
 (* ===== Phase 4: cmp_flip dead variables ===== *)
 
-(* Variables whose values may change under cmp_flip:
-   - Comparator outputs that get flipped (out_var differs)
-   - Fresh variables introduced by insert (ISZERO before ASSERT) *)
-Definition ao_cmp_flip_dead_vars_def:
-  ao_cmp_flip_dead_vars dfg fn =
-    let (flips, removes, inserts) = ao_cmp_flip_scan dfg (fn_insts fn) in
-    { v | ?inst. MEM inst (fn_insts fn) /\
-          MEM inst.inst_id (MAP FST flips) /\
-          MEM v inst.inst_outputs } UNION
-    { fresh | ?aid out_var cmp_id.
-          MEM (aid, out_var, fresh, cmp_id) inserts }
-End
+(* ao_cmp_flip_dead_vars is now in algebraicOptDefsScript.sml *)
 
 (* ===== Phases 1-3: offset + iszero + peephole (single-state block sim) ===== *)
 
@@ -2228,10 +2217,10 @@ QED
    (2) same-block ordering of flip+remove/insert pairs,
    (3) SSA-like single-assignment for dead variables. *)
 Triviality ao_cmp_flip_two_state_block_sim[local]:
-  !dead dfg fn1 lbl bb1 bb' fuel ctx s1 s2.
+  !mid1 dead dfg fn1 lbl bb1 bb' fuel ctx s1 s2.
     dead = ao_cmp_flip_dead_vars dfg fn1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-    lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
+    lookup_block lbl (ao_cmp_flip_function mid1 dfg fn1).fn_blocks = SOME bb' /\
     (* Per-block cmp_flip sim hypothesis *)
     (!fuel' ctx' st1 st2.
        state_equiv dead st1 st2 /\ st1.vs_inst_idx = 0 ==>
@@ -2252,12 +2241,12 @@ QED
 (* Phase 4 run_blocks sim via block_sim_to_run_blocks.
    The per-block cmp_flip sim is taken as a hypothesis. *)
 Theorem ao_phase4_run_blocks_sim[local]:
-  !dead dfg fn1 fuel ctx s.
+  !mid1 dead dfg fn1 fuel ctx s.
     dead = ao_cmp_flip_dead_vars dfg fn1 /\
     (* Per-block cmp_flip sim for all blocks *)
     (!lbl bb1 bb' fuel' ctx' s1 s2.
        lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-       lookup_block lbl (ao_cmp_flip_function dfg fn1).fn_blocks = SOME bb' /\
+       lookup_block lbl (ao_cmp_flip_function mid1 dfg fn1).fn_blocks = SOME bb' /\
        state_equiv dead s1 s2 /\ s1.vs_inst_idx = 0 ==>
        lift_result (state_equiv dead) (execution_equiv dead)
          (execution_equiv dead)
@@ -2267,7 +2256,7 @@ Theorem ao_phase4_run_blocks_sim[local]:
                 (execution_equiv dead)
                 (execution_equiv dead)
       (run_blocks fuel ctx fn1 s)
-      (run_blocks fuel ctx (ao_cmp_flip_function dfg fn1) s)
+      (run_blocks fuel ctx (ao_cmp_flip_function mid1 dfg fn1) s)
 Proof
   rpt gen_tac >> strip_tac >>
   irule block_sim_to_run_blocks >>
@@ -2309,7 +2298,8 @@ Triviality ao_phase_decompose[local]:
     let fn1 = fn0 with fn_blocks :=
       MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     let dfg1 = dfg_build_function fn1 in
-    ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 /\
+    let mid1 = fn_max_inst_id fn1 in
+    ao_transform_function fn = ao_cmp_flip_function mid1 dfg1 fn1 /\
     ao_fn_total_fresh_vars fn =
       ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
 Proof
@@ -2399,9 +2389,9 @@ Proof
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
   (
-      (* Show ao_transform_function fn = ao_cmp_flip_function dfg1 fn1 *)
+      (* Show ao_transform_function fn = ao_cmp_flip_function mid1 dfg1 fn1 *)
       `ao_transform_function fn = ao_cmp_flip_function
-         (dfg_build_function fn1) fn1` by
+         (fn_max_inst_id fn1) (dfg_build_function fn1) fn1` by
         simp[ao_transform_function_def, LET_THM,
              Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`,
              Abbr `mid`, Abbr `targets`] >>
@@ -2418,10 +2408,13 @@ Proof
       `lift_result (state_equiv dead) (execution_equiv dead)
          (execution_equiv dead)
          (run_blocks fuel ctx fn1 s)
-         (run_blocks fuel ctx (ao_cmp_flip_function dfg1 fn1) s)` by
+         (run_blocks fuel ctx (ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1) s)` by
         (irule ao_phase4_run_blocks_sim >>
          simp[Abbr `dead`] >> rpt strip_tac >>
-         metis_tac[SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_sim]) >>
+         qspecl_then [`fn_max_inst_id fn1`, `dfg1`, `fn1`, `lbl`, `bb1`,
+                      `bb'`, `fuel'`, `ctx'`, `s1`, `s2`]
+           mp_tac (SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_sim) >>
+         simp[]) >>
       (* Compose via lift_result_trans + lift_result_mono *)
       irule (UNDISCH_ALL lift_result_trans) >>
       conj_tac >- metis_tac[state_equiv_trans] >>

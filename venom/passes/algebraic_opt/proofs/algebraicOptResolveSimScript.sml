@@ -135,11 +135,11 @@ QED
 
 (* When instruction is not in any of the three lists, cmp_flip is identity *)
 Theorem ao_cmp_flip_identity:
-  !flips removes inserts inst.
+  !mid flips removes inserts inst.
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE ==>
-    ao_cmp_flip_apply_inst flips removes inserts inst = [inst]
+    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
 Proof
   rw[ao_cmp_flip_apply_inst_def]
 QED
@@ -148,7 +148,7 @@ QED
 Theorem ao_cmp_flip_apply_flip:
   !flips removes inserts inst new_opc new_w orig_op1.
     ALOOKUP flips inst.inst_id = SOME (new_opc, new_w, orig_op1) ==>
-    ao_cmp_flip_apply_inst flips removes inserts inst =
+    ao_cmp_flip_apply_inst mid flips removes inserts inst =
     [inst with <| inst_opcode := new_opc;
                   inst_operands := [orig_op1; Lit new_w] |>]
 Proof
@@ -157,10 +157,10 @@ QED
 
 (* Remove case: produces a singleton with ASSIGN *)
 Theorem ao_cmp_flip_apply_remove:
-  !flips removes inserts inst.
+  !mid flips removes inserts inst.
     ALOOKUP flips inst.inst_id = NONE /\
     MEM inst.inst_id removes ==>
-    ao_cmp_flip_apply_inst flips removes inserts inst =
+    ao_cmp_flip_apply_inst mid flips removes inserts inst =
     [inst with <| inst_opcode := ASSIGN |>]
 Proof
   rw[ao_cmp_flip_apply_inst_def]
@@ -168,12 +168,12 @@ QED
 
 (* Insert case: produces two instructions *)
 Theorem ao_cmp_flip_apply_insert:
-  !flips removes inserts inst cmp_out fresh cmp_id.
+  !mid flips removes inserts inst cmp_out fresh cmp_id.
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = SOME (cmp_out, fresh, cmp_id) ==>
-    ao_cmp_flip_apply_inst flips removes inserts inst =
-    [<| inst_id := cmp_id; inst_opcode := ISZERO;
+    ao_cmp_flip_apply_inst mid flips removes inserts inst =
+    [<| inst_id := ao_fresh_id mid cmp_id 0; inst_opcode := ISZERO;
         inst_operands := [Var cmp_out];
         inst_outputs := [fresh] |>;
      inst with <| inst_operands := [Var fresh] |>]
@@ -183,8 +183,8 @@ QED
 
 (* cmp_flip never produces empty lists *)
 Theorem ao_cmp_flip_apply_inst_nonempty:
-  !flips removes inserts inst.
-    ao_cmp_flip_apply_inst flips removes inserts inst <> []
+  !mid flips removes inserts inst.
+    ao_cmp_flip_apply_inst mid flips removes inserts inst <> []
 Proof
   rw[ao_cmp_flip_apply_inst_def] >>
   every_case_tac >> simp[]
@@ -192,11 +192,11 @@ QED
 
 (* cmp_flip preserves terminator status for identity case *)
 Theorem ao_cmp_flip_identity_terminator:
-  !flips removes inserts inst.
+  !mid flips removes inserts inst.
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE ==>
-    is_terminator (HD (ao_cmp_flip_apply_inst flips removes inserts inst)).inst_opcode =
+    is_terminator (HD (ao_cmp_flip_apply_inst mid flips removes inserts inst)).inst_opcode =
     is_terminator inst.inst_opcode
 Proof
   rw[ao_cmp_flip_apply_inst_def]
@@ -376,13 +376,13 @@ QED
 (* ao_cmp_flip_apply_inst structural: non-terminators produce non-terminators
    (for the identity case which covers most instructions) *)
 Theorem ao_cmp_flip_apply_identity_every_non_term:
-  !flips removes inserts inst.
+  !mid flips removes inserts inst.
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE /\
     ~is_terminator inst.inst_opcode ==>
     EVERY (\j. ~is_terminator j.inst_opcode)
-      (ao_cmp_flip_apply_inst flips removes inserts inst)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst)
 Proof
   rw[ao_cmp_flip_apply_inst_def, listTheory.EVERY_DEF]
 QED
@@ -390,13 +390,13 @@ QED
 (* ao_cmp_flip_apply_inst: non-terminators produce non-INVOKE
    (for the identity case) *)
 Theorem ao_cmp_flip_apply_identity_every_non_invoke:
-  !flips removes inserts inst.
+  !mid flips removes inserts inst.
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE /\
     inst.inst_opcode <> INVOKE ==>
     EVERY (\j. j.inst_opcode <> INVOKE)
-      (ao_cmp_flip_apply_inst flips removes inserts inst)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst)
 Proof
   rw[ao_cmp_flip_apply_inst_def, listTheory.EVERY_DEF]
 QED

@@ -779,7 +779,7 @@ End
 
 (* Apply cmp_flip changes to a single instruction. *)
 Definition ao_cmp_flip_apply_inst_def:
-  ao_cmp_flip_apply_inst flips removes inserts inst =
+  ao_cmp_flip_apply_inst mid flips removes inserts inst =
     case ALOOKUP flips inst.inst_id of
       SOME (new_opc, new_w, orig_op1) =>
         [inst with <| inst_opcode := new_opc;
@@ -790,7 +790,7 @@ Definition ao_cmp_flip_apply_inst_def:
         else
           case ALOOKUP inserts inst.inst_id of
             SOME (cmp_out, fresh, cmp_id) =>
-              [<| inst_id := cmp_id; inst_opcode := ISZERO;
+              [<| inst_id := ao_fresh_id mid cmp_id 0; inst_opcode := ISZERO;
                   inst_operands := [Var cmp_out];
                   inst_outputs := [fresh] |>;
                inst with <| inst_operands := [Var fresh] |>]
@@ -799,14 +799,14 @@ End
 
 (* Apply cmp_flip to a function: scan all instructions, then FLAT MAP per block. *)
 Definition ao_cmp_flip_function_def:
-  ao_cmp_flip_function dfg fn =
+  ao_cmp_flip_function mid dfg fn =
     let all_insts = fn_insts fn in
     let (flips, removes, inserts) = ao_cmp_flip_scan dfg all_insts in
     if NULL flips then fn
     else
       fn with fn_blocks :=
         MAP (\bb. bb with bb_instructions :=
-          FLAT (MAP (ao_cmp_flip_apply_inst flips removes inserts)
+          FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
                     bb.bb_instructions))
           fn.fn_blocks
 End
@@ -865,7 +865,21 @@ Definition ao_transform_function_def:
       MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     (* Phase 4: comparator iszero flip *)
     let dfg1 = dfg_build_function fn1 in
-    ao_cmp_flip_function dfg1 fn1
+    let mid1 = fn_max_inst_id fn1 in
+    ao_cmp_flip_function mid1 dfg1 fn1
+End
+
+(* Variables whose values may change under cmp_flip:
+   - Comparator outputs that get flipped (out_var differs)
+   - Fresh variables introduced by insert (ISZERO before ASSERT) *)
+Definition ao_cmp_flip_dead_vars_def:
+  ao_cmp_flip_dead_vars dfg fn =
+    let (flips, removes, inserts) = ao_cmp_flip_scan dfg (fn_insts fn) in
+    { v | ?inst. MEM inst (fn_insts fn) /\
+          MEM inst.inst_id (MAP FST flips) /\
+          MEM v inst.inst_outputs } UNION
+    { fresh | ?aid out_var cmp_id.
+          MEM (aid, out_var, fresh, cmp_id) inserts }
 End
 
 Definition ao_transform_context_def:
