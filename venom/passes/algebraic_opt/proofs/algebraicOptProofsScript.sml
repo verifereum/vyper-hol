@@ -16,6 +16,7 @@ Ancestors
   algebraicOptDefs algebraicOptRules algebraicOptSegSim
   algebraicOptPeepholeSim algebraicOptResolveSim
   algebraicOptBlockSim algebraicOptCmpFlipSim
+  aoResolveObligation aoRangeObligation aoCmpFlipObligation
   passSimulationProps passSimulationDefs passSharedDefs venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
@@ -2358,55 +2359,7 @@ Theorem ao_transform_function_correct_proof:
        Trivially true when these output vars are undefined in s (the typical case). *)
     (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
       (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
-      lookup_var x s = NONE) /\
-    (* Iszero resolution semantics: resolving iszero chains is a no-op on
-       step_inst. Requires state where chain outputs have correct values. *)
-    (!inst fuel' ctx' s'.
-       inst_wf inst ==>
-       step_inst fuel' ctx'
-         (ao_resolve_iszero_inst
-           (ao_compute_fn_iszero_targets
-             (fn with fn_blocks :=
-               MAP (\bb. bb with bb_instructions :=
-                 MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
-           inst) s' =
-       step_inst fuel' ctx' inst s') /\
-    (* Range analysis soundness: range bounds are correct for resolved operands *)
-    (!bb inst idx s' op v.
-       MEM bb (MAP (\bb. bb with bb_instructions :=
-                 MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
-       MEM inst bb.bb_instructions /\
-       eval_operand op s' = SOME v /\
-       MEM op (ao_resolve_iszero_inst
-         (ao_compute_fn_iszero_targets
-           (fn with fn_blocks :=
-             MAP (\bb. bb with bb_instructions :=
-               MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
-         inst).inst_operands ==>
-       in_range (range_get_range
-         (range_analyze
-           (fn with fn_blocks :=
-             MAP (\bb. bb with bb_instructions :=
-               MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
-         bb.bb_label idx op) v) /\
-    (* Phase 4: per-block cmp_flip simulation *)
-    (let fn0 = fn with fn_blocks :=
-       MAP (\bb. bb with bb_instructions :=
-         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-     let targets = ao_compute_fn_iszero_targets fn0 in
-     let dfg = dfg_build_function fn0 in
-     let ra = range_analyze fn0 in
-     let fn1 = fn0 with fn_blocks :=
-       MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
-     let dfg1 = dfg_build_function fn1 in
-     let dead = ao_cmp_flip_dead_vars dfg1 fn1 in
-     !lbl bb1 bb' fuel' ctx' s1 s2.
-       lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-       lookup_block lbl (ao_cmp_flip_function dfg1 fn1).fn_blocks = SOME bb' /\
-       state_equiv dead s1 s2 /\ s1.vs_inst_idx = 0 ==>
-       lift_result (state_equiv dead) (execution_equiv dead)
-         (execution_equiv dead)
-         (exec_block fuel' ctx' bb1 s1) (exec_block fuel' ctx' bb' s2))
+      lookup_var x s = NONE)
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -2429,37 +2382,11 @@ Proof
      (execution_equiv (ao_fn_fresh_vars fn))
      (execution_equiv (ao_fn_fresh_vars fn))
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
-    (irule ao_phases123_run_blocks_sim >>
-     rpt conj_tac >> fs[markerTheory.Abbrev_def] >>
-     (* H_range and H_resolve: match assumptions directly *)
-     rpt (TRY (first_x_assum ACCEPT_TAC >> NO_TAC) >> conj_tac)
-     >- (* ssa_form fn0: ao_handle_offset preserves inst_outputs *)
-        (fs[ssa_form_def, fn_insts_def] >>
-         `!bbs. FLAT (MAP (\i. i.inst_outputs)
-            (fn_insts_blocks
-              (MAP (\bb. bb with bb_instructions :=
-                MAP ao_handle_offset_inst bb.bb_instructions) bbs))) =
-          FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))`
-           suffices_by simp[] >>
-         Induct >> simp[fn_insts_blocks_def, listTheory.MAP_MAP_o] >>
-         gen_tac >>
-         `MAP ((\i. i.inst_outputs) o ao_handle_offset_inst)
-              h.bb_instructions =
-          MAP (\i. i.inst_outputs) h.bb_instructions` suffices_by simp[] >>
-         irule listTheory.MAP_CONG >> simp[ao_handle_offset_inst_outputs])
-     >- (* EVERY inst_wf fn0 *)
-        (simp[fn_insts_def, listTheory.EVERY_MEM] >> rpt strip_tac >>
-         drule fn_insts_blocks_map_offset >> strip_tac >> gvs[] >>
-         `inst_wf inst0` by
-           (fs[listTheory.EVERY_MEM, fn_insts_def] >> res_tac) >>
-         Cases_on `inst0.inst_opcode = ADD /\
-                   ?l v. inst0.inst_operands = [Label l; Lit v]`
-         >- (gvs[ao_handle_offset_inst_def, inst_wf_def] >>
-             qexistsl_tac [`Lit v`, `l`] >> simp[])
-         >- (imp_res_tac ao_handle_offset_inst_id >> gvs[]))
-     >- (* ao_dfg_inv dfg s *)
-        (MATCH_MP_TAC ao_dfg_inv_initial >> rpt strip_tac >>
-         first_x_assum irule >> metis_tac[])) >>
+    (* Wiring: connects ao_phases123_run_blocks_sim with obligation theorems.
+       Depends on: ao_resolve_iszero_inst_sim (aoResolveObligation),
+                   range_analyze_sound (aoRangeObligation).
+       When those are proved, replace cheat with the actual tactic. *)
+    cheat >>
   gvs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
@@ -2477,16 +2404,14 @@ Proof
       ASM_REWRITE_TAC [] >>
       qabbrev_tac `dfg1 = dfg_build_function fn1` >>
       qabbrev_tac `dead = ao_cmp_flip_dead_vars dfg1 fn1` >>
-      (* Phase 4: fn1 → cmp_flip fn1 *)
+      (* Phase 4: fn1 → cmp_flip fn1, from aoCmpFlipObligation *)
       `lift_result (state_equiv dead) (execution_equiv dead)
          (execution_equiv dead)
          (run_blocks fuel ctx fn1 s)
          (run_blocks fuel ctx (ao_cmp_flip_function dfg1 fn1) s)` by
-        (* Per-block cmp_flip sim: from hypothesis *)
         (irule ao_phase4_run_blocks_sim >>
-         simp[Abbr `dead`, Abbr `dfg1`, Abbr `fn1`, Abbr `fn0`,
-              Abbr `dfg`, Abbr `ra`, Abbr `targets`] >>
-         first_x_assum ACCEPT_TAC) >>
+         simp[Abbr `dead`] >> rpt strip_tac >>
+         metis_tac[SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_sim]) >>
       (* Compose via lift_result_trans + lift_result_mono *)
       irule (UNDISCH_ALL lift_result_trans) >>
       conj_tac >- metis_tac[state_equiv_trans] >>

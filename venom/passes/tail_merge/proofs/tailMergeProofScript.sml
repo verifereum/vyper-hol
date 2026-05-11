@@ -57,14 +57,14 @@ QED
    Section 2: Properties of block_sigs and compute_merge_map
    ================================================================ *)
 
-Theorem block_sigs_excludes_entry[local]:
+Theorem block_sigs_excludes_entry:
   !func entry bbs lbl sig.
     MEM (lbl, sig) (block_sigs func entry bbs) ==> lbl <> entry
 Proof
   Induct_on `bbs` >> simp[block_sigs_def] >> rw[] >> gvs[]
 QED
 
-Theorem block_sigs_MEM_blocks[local]:
+Theorem block_sigs_MEM_blocks:
   !func entry bbs lbl sig.
     MEM (lbl, sig) (block_sigs func entry bbs) ==>
     ?bb. MEM bb bbs /\ bb.bb_label = lbl /\ sig = block_signature bb
@@ -81,7 +81,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem block_sigs_all_distinct_FST[local]:
+Theorem block_sigs_all_distinct_FST:
   !func entry bbs.
     ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
     ALL_DISTINCT (MAP FST (block_sigs func entry bbs))
@@ -130,7 +130,7 @@ Proof
   ]
 QED
 
-Theorem compute_merge_map_keeper_same_sig[local]:
+Theorem compute_merge_map_keeper_same_sig:
   !sigs lbl keeper.
     MEM (lbl, keeper) (compute_merge_map sigs []) ==>
     ?sig. MEM (lbl, SOME sig) sigs /\ MEM (keeper, SOME sig) sigs
@@ -139,7 +139,7 @@ Proof
   strip_tac >> qexists_tac `sig` >> fs[alistTheory.ALOOKUP_def]
 QED
 
-Theorem compute_merge_map_not_entry[local]:
+Theorem compute_merge_map_not_entry:
   !func entry bbs lbl keeper.
     MEM (lbl, keeper) (compute_merge_map (block_sigs func entry bbs) []) ==>
     lbl <> entry /\ keeper <> entry
@@ -174,7 +174,7 @@ Proof
 QED
 
 (* Sources of compute_merge_map come from sigs *)
-Theorem compute_merge_map_FST_subset[local]:
+Theorem compute_merge_map_FST_subset:
   !sigs groups x.
     MEM x (MAP FST (compute_merge_map sigs groups)) ==>
     MEM x (MAP FST sigs)
@@ -226,7 +226,7 @@ QED
 (* Sources (MAP FST) and keepers (MAP SND) of compute_merge_map are disjoint.
    Direct induction: a label is either stored in groups (keeper) or emitted (source),
    never both, because ALL_DISTINCT prevents re-processing. *)
-Theorem compute_merge_map_disjoint_gen[local]:
+Theorem compute_merge_map_disjoint_gen:
   !sigs groups.
     ALL_DISTINCT (MAP FST sigs) /\
     DISJOINT (set (MAP FST sigs)) (set (MAP SND groups)) ==>
@@ -269,7 +269,7 @@ Proof
   simp[]
 QED
 
-Theorem compute_merge_map_disjoint[local]:
+Theorem compute_merge_map_disjoint:
   !sigs.
     ALL_DISTINCT (MAP FST sigs) ==>
     DISJOINT (set (MAP FST (compute_merge_map sigs [])))
@@ -279,7 +279,7 @@ Proof
   simp[pred_setTheory.DISJOINT_EMPTY]
 QED
 
-Theorem compute_merge_map_SND_not_FST[local]:
+Theorem compute_merge_map_SND_not_FST:
   !sigs lbl keeper.
     ALL_DISTINCT (MAP FST sigs) /\
     MEM (lbl, keeper) (compute_merge_map sigs []) ==>
@@ -2989,7 +2989,7 @@ Proof
 QED
 
 (* subst_block_labels_block preserves bb_well_formed *)
-Theorem bb_well_formed_subst[local]:
+Theorem bb_well_formed_subst:
   !m bb. bb_well_formed bb ==> bb_well_formed (subst_block_labels_block m bb)
 Proof
   rw[bb_well_formed_def, subst_block_labels_block_def] >>
@@ -3587,7 +3587,7 @@ Proof
   irule execution_equiv_UNIV_sym >> simp[]
 QED
 
-Theorem block_sigs_FST_subset_fn_labels[local]:
+Theorem block_sigs_FST_subset_fn_labels:
   !func entry bbs l.
     MEM l (MAP FST (block_sigs func entry bbs)) ==>
     MEM l (MAP (\bb. bb.bb_label) bbs)
@@ -3600,7 +3600,7 @@ Proof
 QED
 
 (* tail_merge_fn preserves fn_entry_label *)
-Theorem tail_merge_fn_preserves_entry[local]:
+Theorem tail_merge_fn_preserves_entry:
   !func lbl.
     fn_entry_label func = SOME lbl ==>
     fn_entry_label (tail_merge_fn func) = SOME lbl

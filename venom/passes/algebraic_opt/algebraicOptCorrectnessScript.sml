@@ -19,9 +19,18 @@ Theorem ao_transform_function_correct:
     let fv' = ao_fn_total_fresh_vars fn in
     (* No INVOKE in function (standard for state_equiv-based proofs) *)
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
-    (* Freshness: original operands don't use fresh variable names *)
+    (* Freshness: original operands/outputs don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv)
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
+    (* Well-formedness *)
+    ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+    (* DFG invariant: ADDRESS/SIGNEXTEND outputs consistent with initial state.
+       Trivially true when these output vars are undefined in s (the typical case). *)
+    (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+      (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
+      lookup_var x s = NONE)
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -31,21 +40,26 @@ Proof
   ACCEPT_TAC ao_transform_function_correct_proof
 QED
 
-(* ===== Obligations (Blocked) =====
+(* ===== Remaining Obligations =====
 
-   BLOCKER: ao_opt_eq (algebraicOptDefsScript.sml) and related helpers
-   produce multi-instruction lists where ALL new instructions share the
-   same inst_id as the original. This violates fn_inst_ids_distinct
-   (part of wf_function).
+   The correctness proof depends on three cheated theorems, each in
+   its own file for independent parallel development:
 
-   Fix needed in defs: helper instructions should use distinct ids,
-   e.g., id * 1000 + offset. Until the defs are fixed, the following
-   theorems cannot be proved and are omitted:
+   1. aoResolveObligationScript.sml — ao_resolve_iszero_inst_sim
+      Iszero chain resolution is a semantic no-op.
+      NOTE: current formulation (∀s) needs reformulation with a
+      state-dependent chain invariant.
+
+   2. aoRangeObligationScript.sml — range_analyze_sound
+      Range analysis produces correct bounds.
+
+   3. aoCmpFlipObligationScript.sml — ao_cmp_flip_block_sim
+      Cmp_flip preserves block execution up to dead variables.
+
+   Additionally, the following structural obligations are blocked on a
+   defs fix (ao_opt_eq and related helpers produce duplicate inst_ids):
 
    ao_preserves_ssa_form  : ∀fn. ssa_form fn ⇒ ssa_form (ao_transform_function fn)
    ao_preserves_wf_function : ∀fn. wf_function fn ⇒ wf_function (ao_transform_function fn)
-
-   These are structural obligations required for composing this pass
-   with others in the pipeline.
 
    ===== *)

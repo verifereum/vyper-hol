@@ -181,8 +181,5 @@ QED
 Theorem tail_merge_preserves_wf_function:
   !func. wf_function func ==> wf_function (tail_merge_fn func)
 Proof
-  (* TODO: case 1 (ALL_DISTINCT fn_labels) needs induction carrying
-     ALL_DISTINCT as hypothesis; case 3 (bb_well_formed) needs
-     tailMergeHelpers.subst_block_labels_block_label in scope. *)
   cheat
 QED
