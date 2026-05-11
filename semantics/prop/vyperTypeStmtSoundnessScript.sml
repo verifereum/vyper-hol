@@ -491,6 +491,7 @@ Theorem leaf_type_append:
 Proof
   Induct_on `xs` >> simp[leaf_type_def] >>
   Cases_on `h` >> simp[leaf_type_def] >>
+  TRY(Cases_on `v` >> simp[leaf_type_def]) >>
   Cases_on `base_tv` >> simp[leaf_type_def] >>
   TRY(Cases_on `b` >> simp[leaf_type_def]) >>
   TRY(Cases_on `ALOOKUP l s` >> simp[leaf_type_def]) >>
@@ -1085,7 +1086,7 @@ Resume eval_all_type_sound_mutual[AugAssign]:
           rw[target_runtime_typed_def]
           >- simp[well_typed_atarget_def, well_typed_target_def]
           >- simp[target_value_shape_def]
-          >> metis_tac[target_path_type_Type_place_leaf_typed]) >>
+          >> metis_tac[]) >>
         `target_runtime_typed env cx st2 (BaseTarget bt) ty (BaseTargetV loc sbs)` by (
           metis_tac[target_runtime_typed_rebuild, runtime_consistent_def]) >>
         `tvl = Value v` by (

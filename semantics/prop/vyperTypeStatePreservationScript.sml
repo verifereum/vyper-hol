@@ -397,8 +397,7 @@ Proof
     `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
     `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
     `entry'.type = entry.type` by gvs[] >>
-    qexists_tac `Type var_ty` >> simp[] >>
-    qexists_tac `final_tv` >> simp[])
+    qexists_tac `Type var_ty` >> simp[])
   >- (
     rename1 `FLOOKUP env.bare_globals (_,string_to_num s) = SOME imm_ty` >>
     `env.current_src = current_module cx` by fs[env_context_consistent_def] >> gvs[] >>
@@ -410,7 +409,6 @@ Proof
     `evaluate_type (get_tenv cx) imm_ty = SOME pair0` by metis_tac[] >>
     `pair0 = tv` by gvs[] >>
     qexists_tac `Type imm_ty` >> simp[] >>
-    qexists_tac `final_tv` >> simp[] >>
     qexists_tac `get_source_immutables (current_module cx)
         (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m)` >>
     qexists_tac `pair1` >>

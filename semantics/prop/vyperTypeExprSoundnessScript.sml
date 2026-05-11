@@ -297,6 +297,16 @@ Definition place_leaf_typed_def:
     place_leaf_path_typed env loc_vt (REVERSE sbs) ty final_tv
 End
 
+Definition place_vtype_path_typed_def:
+  (place_vtype_path_typed env loc_vt path (Type ty) <=>
+    ?final_tv. place_leaf_path_typed env loc_vt path ty final_tv) /\
+  (place_vtype_path_typed env loc_vt path (HashMapT kt vt) <=>
+    !sb. place_vtype_path_typed env loc_vt (path ++ [sb]) vt)
+Termination
+  WF_REL_TAC `measure (value_type_size o SND o SND o SND)` >>
+  rw[]
+End
+
 Theorem target_path_type_refl:
   target_path_type env vt [] vt
 Proof
@@ -333,14 +343,92 @@ Theorem target_path_type_subscript_cons:
   subscript_vtype vt idx_ty = SOME result_vt ==>
   target_path_type env loc_vt (sb::sbs) result_vt
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `vt`
+  >- (
+    Cases_on `t` >> gvs[subscript_vtype_def] >>
+    drule_then (qspec_then `sb` mp_tac) target_path_type_array_cons >> simp[] >>
+    NO_TAC) >>
+  gvs[subscript_vtype_def] >>
+  drule_then (qspec_then `sb` mp_tac) target_path_type_hashmap_cons >> simp[]
 QED
 
-Theorem target_path_type_Type_place_leaf_typed:
-  target_path_type env loc_vt sbs (Type ty) ==>
-  ?final_tv. place_leaf_typed env loc_vt sbs ty final_tv
+Theorem leaf_type_append:
+  !base_tv xs ys.
+    leaf_type base_tv (xs ++ ys) = leaf_type (leaf_type base_tv xs) ys
 Proof
-  cheat
+  Induct_on `xs` >> simp[leaf_type_def] >>
+  Cases_on `h` >> simp[leaf_type_def] >>
+  TRY(Cases_on `v` >> simp[leaf_type_def]) >>
+  Cases_on `base_tv` >> simp[leaf_type_def] >>
+  TRY(Cases_on `b` >> simp[leaf_type_def]) >>
+  TRY(Cases_on `ALOOKUP l s` >> simp[leaf_type_def]) >>
+  Cases_on `ys` >> simp[leaf_type_def]
+QED
+
+Theorem OPT_MMAP_ALOOKUP_ZIP:
+  !f (args:('k # 'a) list) ys field_id ty.
+    OPT_MMAP f (MAP SND args) = SOME ys /\
+    ALOOKUP args field_id = SOME ty ==>
+    ?tv. f ty = SOME tv /\
+         ALOOKUP (ZIP(MAP FST args, ys)) field_id = SOME tv
+Proof
+  Induct_on `args` >> simp[] >>
+  Cases >> simp[OPT_MMAP_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `q = field_id` >> gvs[]
+QED
+
+Theorem evaluate_type_mono:
+  (!tenv ty tv k.
+    evaluate_type (tenv \\ k) ty = SOME tv ==>
+    evaluate_type tenv ty = SOME tv) /\
+  (!tenv ts acc tvs k.
+    evaluate_types (tenv \\ k) ts acc = SOME tvs ==>
+    evaluate_types tenv ts acc = SOME tvs)
+Proof
+  ho_match_mp_tac evaluate_type_ind
+  >> conj_tac >- simp[evaluate_type_def]
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    first_x_assum drule >> simp[])
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs()] >>
+    first_x_assum drule >> simp[])
+  >> conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[evaluate_type_def, AllCaseEqs(), DOMSUB_FLOOKUP_THM, DOMSUB_COMMUTES] >>
+    first_x_assum drule >>
+    strip_tac >> goal_assum drule >> gvs[])
+  >> conj_tac >- (
+    rpt gen_tac >> rpt gen_tac >>
+    simp[evaluate_type_def, AllCaseEqs(), DOMSUB_FLOOKUP_THM] >>
+    rpt strip_tac >> gvs[])
+  >> conj_tac >- simp[evaluate_type_def]
+  >> conj_tac >- simp[evaluate_type_def]
+  >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >>
+  first_x_assum (fn th => drule (cj 1 th)) >> strip_tac >> simp[] >>
+  first_x_assum drule >> simp[] >>
+  disch_then irule >> goal_assum drule
+QED
+
+Theorem attribute_type_evaluates:
+  !tenv struct_ty field_id result_ty ftypes.
+    attribute_type tenv struct_ty field_id = SOME result_ty /\
+    evaluate_type tenv struct_ty = SOME (StructTV ftypes) ==>
+    ?tv. evaluate_type tenv result_ty = SOME tv /\
+         ALOOKUP ftypes field_id = SOME tv
+Proof
+  Cases_on `struct_ty` >> simp[attribute_type_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM, evaluate_types_OPT_MMAP] >>
+  Cases_on `ALOOKUP args field_id` >> gvs[] >>
+  drule_all OPT_MMAP_ALOOKUP_ZIP >> strip_tac >>
+  metis_tac[evaluate_type_mono]
 QED
 
 Definition target_runtime_typed_def:
@@ -348,8 +436,8 @@ Definition target_runtime_typed_def:
     well_typed_atarget env tgt ty /\ target_value_shape env tgt gv /\
     case gv of
     | BaseTargetV loc sbs =>
-        ?vt final_tv. location_runtime_typed env cx st loc vt /\
-          place_leaf_typed env vt sbs ty final_tv
+        ?vt. location_runtime_typed env cx st loc vt /\
+             target_path_type env vt sbs (Type ty)
     | TupleTargetV gvs => T
 End
 
