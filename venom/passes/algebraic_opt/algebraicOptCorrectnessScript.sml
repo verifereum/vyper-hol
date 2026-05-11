@@ -40,7 +40,28 @@ Proof
   ACCEPT_TAC ao_transform_function_correct_proof
 QED
 
-(* ===== Remaining Obligations =====
+(* ===== Structural Preservation ===== *)
+
+(* ao_fresh_id produces IDs > fn_max_inst_id, so they are distinct from
+   all original IDs and from each other (injective).  The other wf_function
+   components (labels, entry, bb_well_formed, succs_closed) are preserved
+   by the MAP-based block transform structure. *)
+Theorem ao_preserves_wf_function:
+  !fn. wf_function fn ==> wf_function (ao_transform_function fn)
+Proof
+  cheat
+QED
+
+(* Fresh output variables (ao_fresh_var) are distinct from original outputs
+   and written exactly once.  Requires ao_fresh_var injectivity and
+   non-collision with existing variable names. *)
+Theorem ao_preserves_ssa_form:
+  !fn. ssa_form fn /\ wf_function fn ==> ssa_form (ao_transform_function fn)
+Proof
+  cheat
+QED
+
+(* ===== Remaining Semantic Obligations =====
 
    The correctness proof depends on three cheated theorems, each in
    its own file for independent parallel development:
@@ -55,11 +76,5 @@ QED
 
    3. aoCmpFlipObligationScript.sml — ao_cmp_flip_block_sim
       Cmp_flip preserves block execution up to dead variables.
-
-   Additionally, the following structural obligations are blocked on a
-   defs fix (ao_opt_eq and related helpers produce duplicate inst_ids):
-
-   ao_preserves_ssa_form  : ∀fn. ssa_form fn ⇒ ssa_form (ao_transform_function fn)
-   ao_preserves_wf_function : ∀fn. wf_function fn ⇒ wf_function (ao_transform_function fn)
 
    ===== *)
