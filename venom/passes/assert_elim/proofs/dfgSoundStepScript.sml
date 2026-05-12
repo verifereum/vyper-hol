@@ -2062,6 +2062,11 @@ Proof
   drule_all exec_pure1_var_operand_defined >> simp[]
 QED
 
+val pure2_tracked_operand_defined_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >> strip_tac >>
+  drule_all exec_pure2_var_operand_defined >> simp[];
+
 Theorem step_inst_base_pure2_tracked_operand_defined[local]:
   !inst s s' u.
     (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
@@ -2070,10 +2075,14 @@ Theorem step_inst_base_pure2_tracked_operand_defined[local]:
     step_inst_base inst s = OK s' /\ MEM (Var u) inst.inst_operands ==>
     ?w. FLOOKUP s.vs_vars u = SOME w
 Proof
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def] >> strip_tac >>
-  drule_all exec_pure2_var_operand_defined >> simp[]
+  rpt strip_tac >> gvs[]
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
 QED
 
 val tracked_operand_defined_tac =
