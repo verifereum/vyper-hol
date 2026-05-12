@@ -644,9 +644,62 @@ Proof
   Cases_on `ALOOKUP imms src` >> gvs[] >> metis_tac[]
 QED
 
+Theorem get_source_set_source_immutables_same[simp]:
+  get_source_immutables s (set_source_immutables s imms blah) = imms
+Proof
+  rw[set_source_immutables_def] >>
+  rw[get_source_immutables_def]
+QED
+
+Theorem get_source_set_source_immutables:
+  get_source_immutables s1 (set_source_immutables s2 blah rest) =
+  if s1 = s2 then blah else get_source_immutables s1 rest
+Proof
+  rw[] >>
+  gvs[set_source_immutables_def, get_source_immutables_def] >>
+  simp[alistTheory.ALOOKUP_ADELKEY]
+QED
+
+Theorem set_immutable_preserves_env_consistent:
+  env_consistent env cx st /\
+  FLOOKUP env.bare_globals (env.current_src,n) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  set_immutable cx (current_module cx) n tv v st = (res, st') ==>
+  env_consistent env cx st'
+Proof
+  rw[set_immutable_def, get_address_immutables_def, bind_def, lift_option_def,
+     set_address_immutables_def, return_def, raise_def, AllCaseEqs(), LET_THM] >>
+  qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `ALOOKUP _ _ = SOME _` assume_tac >>
+  gvs[env_consistent_def] >>
+  `current_module cx = env.current_src` by gvs[env_context_consistent_def] >>
+  pop_assum SUBST_ALL_TAC >>
+  conj_tac >- (gvs[env_scopes_consistent_def] >> metis_tac[] ) >>
+  gvs[env_immutables_consistent_def, FLOOKUP_UPDATE] >>
+  conj_tac >- rw[] >>
+  conj_tac >- (
+    reverse $ rw[] >> gvs[] >- metis_tac[] >>
+    NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  strip_tac >>
+  rpt gen_tac >>
+  reverse(simp[get_source_set_source_immutables] >>
+          rw[FLOOKUP_UPDATE]) >- metis_tac[] >>
+  reverse(pop_assum mp_tac >> rw[] >> gvs[]) >- metis_tac[] >>
+  first_x_assum(CHANGED_TAC o SUBST1_TAC o SYM) >>
+  `env.type_defs = get_tenv cx` by gvs[env_context_consistent_def] >>
+  gvs[env_context_consistent_def] >>
+  last_x_assum drule_all >>
+  strip_tac >> gvs[]
+QED
+
 Theorem set_immutable_preserves_state_well_typed:
   state_well_typed st /\ value_has_type tv v /\ well_formed_type_value tv /\
-  set_immutable cx src n tv v st = (INL res, st') ==>
+  set_immutable cx src n tv v st = (res, st') ==>
   state_well_typed st'
 Proof
   rw[set_immutable_def, get_address_immutables_def, bind_def, lift_option_def,
@@ -812,13 +865,13 @@ QED
 
 Theorem assign_target_preserves_state_well_typed_mutual:
   (!cx gv op st res st'.
-    assign_target cx gv op st = (INL res, st') ==>
+    assign_target cx gv op st = (res, st') ==>
     !env tgt ty.
       runtime_consistent env cx st /\
       target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op ==>
       runtime_consistent env cx st') /\
   (!cx gvs vs st res st'.
-    assign_targets cx gvs vs st = (INL res, st') ==>
+    assign_targets cx gvs vs st = (res, st') ==>
     !env tgts.
       runtime_consistent env cx st /\
       target_assignment_values_typed env cx st tgts gvs vs ==>
@@ -845,7 +898,7 @@ QED
 
 Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
   rpt strip_tac >>
-  rename1 `assign_target cx (BaseTargetV (ScopedVar id) sbs) op st = (INL res, st')` >>
+  rename1 `assign_target cx (BaseTargetV (ScopedVar id) sbs) op st = (res, st')` >>
   `?vt final_tv. location_runtime_typed env cx st (ScopedVar id) vt /\
                  target_path_type env vt sbs (Type ty) /\
                  place_leaf_typed env vt sbs ty final_tv` by
@@ -853,25 +906,21 @@ Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
   gvs[location_runtime_typed_def] >>
   gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-      assert_def, check_def, AllCaseEqs()] >>
-  qpat_x_assum `(case find_containing_scope (string_to_num id) sc of _ => _) _ = _` mp_tac >>
-  Cases_on `find_containing_scope (string_to_num id) sc` >> gvs[return_def, raise_def] >>
-  PairCases_on `x` >> gvs[] >> strip_tac >> gvs[] >>
-  `sc = st.scopes` by gvs[get_scopes_def, return_def] >> gvs[] >>
-  drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
-  qpat_x_assum `do _ od _ = (INL res,st')` mp_tac >>
-  simp[bind_def, ignore_bind_def, return_def, raise_def,
-       lift_sum_def, type_check_def, assert_def, AllCaseEqs()] >>
+      assert_def, check_def, AllCaseEqs(), option_CASE_rator, get_scopes_def] >>
+  pairarg_tac >> gvs[] >>
+  drule find_containing_scope_lookup >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `(case assign_subscripts entry.type entry.value (REVERSE sbs) op of _ => _) _ = _` mp_tac >>
-  Cases_on `assign_subscripts entry.type entry.value (REVERSE sbs) op` >>
-  gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  gvs[bind_apply, assert_def] >>
+  Cases_on`entry.assignable` >> gvs[] >>
+  qpat_x_assum`_ = (res,_)`mp_tac >>
+  reverse CASE_TAC >> gvs[raise_def, return_def]
+  >- (strip_tac >> gvs[]) >>
   rename1 `assign_subscripts entry.type entry.value (REVERSE sbs) op = INL new_value` >>
   sg `value_has_type entry.type new_value` >- (
     gvs[place_leaf_typed_def, place_leaf_path_typed_def] >>
     irule assign_subscripts_preserves_type >> simp[] >>
     conj_asm1_tac >- (
-      drule evaluate_type_well_formed_type_value >> rw[] ) >>
+      drule_then irule evaluate_type_well_formed_type_value  ) >>
     goal_assum $ drule_at Any >>
     conj_tac >- metis_tac[assign_operation_leaf_type_update] >>
     conj_tac >- metis_tac[assign_operation_leaf_type_append] >>
@@ -881,10 +930,10 @@ Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
   ) >>
   drule find_containing_scope_structure >> strip_tac >> gvs[] >>
   drule find_containing_scope_pre_none >> strip_tac >> gvs[] >>
-  qpat_x_assum `set_scopes _ _ = _` mp_tac >>
-  simp[set_scopes_def, return_def, raise_def] >> strip_tac >> gvs[] >>
-  qpat_x_assum `assign_result _ _ _ _ _ = (INL res,st')`
-    (ASSUME_TAC o MATCH_MP assign_result_preserves_state) >>
+  simp[set_scopes_def, return_def, raise_def] >>
+  strip_tac >>
+  drule assign_result_preserves_state >>
+  strip_tac >> gvs[] >>
   gvs[runtime_consistent_def] >>
   gvs[get_scopes_def, return_def, set_scopes_def] >>
   conj_tac >- (
@@ -896,7 +945,7 @@ QED
 
 Resume assign_target_preserves_state_well_typed_mutual[TopLevelVar]:
   rpt strip_tac >>
-  rename1 `assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (INL res, st')` >>
+  rename1 `assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (res, st')` >>
   `?vt final_tv. location_runtime_typed env cx st (TopLevelVar src id) vt /\
                  target_path_type env vt sbs (Type ty) /\
                  place_leaf_typed env vt sbs ty final_tv` by
@@ -904,113 +953,51 @@ Resume assign_target_preserves_state_well_typed_mutual[TopLevelVar]:
   gvs[location_runtime_typed_def] >>
   gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-      assert_def, check_def, AllCaseEqs()] >>
-  Cases_on `tv` >> gvs[]
-  >- (
-    gvs[bind_def, return_def, raise_def, lift_option_type_def,
-        lift_sum_def, ignore_bind_def, AllCaseEqs()] >>
-    imp_res_tac assign_result_preserves_state >> gvs[] >>
-    imp_res_tac lookup_global_state >>
-    imp_res_tac lift_option_type_state >> gvs[] >>
-    qpat_x_assum `(case assign_subscripts _ _ _ _ of _ => _) _ = _` mp_tac >>
-    Cases_on `assign_subscripts var_tv v (REVERSE sbs) op` >>
-    gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-    qpat_x_assum `(case OPTION_BIND _ _ of _ => _) _ = _` mp_tac >>
-    Cases_on `OPTION_BIND (find_var_decl_by_num (string_to_num id) ts)
-          (λp. case FST p of StorageVarDecl v5 typ => evaluate_type (get_tenv cx) typ
-               | HashMapVarDecl v7 v8 v9 => NONE)` >>
-    gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-    qpat_x_assum `(case get_module_code _ _ of _ => _) _ = _` mp_tac >>
-    Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-    strip_tac >> gvs[] >>
+      assert_def, check_def, AllCaseEqs(), option_CASE_rator,
+      toplevel_value_CASE_rator, sum_CASE_rator]
+  >> imp_res_tac lookup_global_state
+  >> imp_res_tac resolve_array_element_state
+  >> imp_res_tac assign_result_preserves_state
+  >> gvs[]
+  >> TRY (
+    drule set_global_preserves_env_consistent >>
     gvs[runtime_consistent_def] >>
-    conj_tac >- (
-      irule set_global_preserves_env_consistent >> goal_assum drule >> simp[]) >>
-    conj_tac >- (
-      qspecl_then [`cx`, `src`, `string_to_num id`, `v'³'`, `s''`, `INL ()`, `s'⁶'`, `env`]
-        mp_tac set_global_preserves_state_well_typed >> simp[]) >>
-    qspecl_then [`cx`, `src`, `string_to_num id`, `v'³'`, `s''`, `INL ()`, `s'⁶'`]
-      mp_tac set_global_preserves_accounts_well_typed >> simp[])
+    disch_then drule >> strip_tac >>
+    drule set_global_preserves_state_well_typed >>
+    drule set_global_preserves_accounts_well_typed >>
+    simp[] >> strip_tac >> disch_then irule >> simp[] >>
+    goal_assum drule )
+  >> pairarg_tac >> gvs[]
   >- (
-    gvs[bind_def, return_def, raise_def, lift_option_type_def,
-        lift_sum_def, ignore_bind_def, AllCaseEqs()] >>
-    PairCases_on `x` >> gvs[] >>
-    imp_res_tac assign_result_preserves_state >> gvs[] >>
-    imp_res_tac lookup_global_state >>
-    imp_res_tac lift_option_type_state >>
+    gvs[bind_apply, AllCaseEqs(), return_def, raise_def,
+        option_CASE_rator, sum_CASE_rator] >>
+    imp_res_tac assign_result_preserves_state >>
     imp_res_tac read_storage_slot_state >> gvs[] >>
-    qpat_x_assum `do _ od _ = _` mp_tac >>
-    Cases_on `split_hashmap_subscripts v x1` >>
-    gvs[bind_def, return_def, raise_def, lift_option_type_def, lift_sum_def] >>
-    PairCases_on `x` >> gvs[bind_def, return_def, raise_def, lift_option_type_def, lift_sum_def] >>
-    Cases_on `compute_hashmap_slot c (t::x1') (x0::TAKE (LENGTH x1 - LENGTH x2) x1)` >>
-    gvs[bind_def, return_def, raise_def, lift_option_type_def, lift_sum_def] >>
-    Cases_on `evaluate_type (get_tenv cx) x0'` >>
-    gvs[bind_def, return_def, raise_def, lift_option_type_def, lift_sum_def] >>
-    Cases_on `read_storage_slot cx b x x' s'⁴'` >> Cases_on `q` >> gvs[] >>
-    Cases_on `assign_subscripts x' x'' x2 op` >>
-    gvs[bind_def, return_def, raise_def, lift_option_type_def, lift_sum_def] >>
-    Cases_on `write_storage_slot cx b x x' x''' r` >> Cases_on `q` >> gvs[] >>
-    strip_tac >> gvs[] >>
-    imp_res_tac assign_result_preserves_state >> gvs[] >>
-    imp_res_tac lookup_global_state >>
-    qpat_x_assum `(case get_module_code _ _ of _ => _) _ = _` mp_tac >>
-    Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-    qpat_x_assum `(case case REVERSE _ of _ => _ | _ => _ of _ => _) _ = _` mp_tac >>
-    Cases_on `REVERSE sbs` >> gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-    imp_res_tac read_storage_slot_preserves_env_consistent >>
-    imp_res_tac read_storage_slot_preserves_state_well_typed >>
-    imp_res_tac read_storage_slot_state >> gvs[] >>
-    gvs[runtime_consistent_def] >>
-    conj_tac >- (
-      irule write_storage_slot_preserves_env_consistent >>
-      goal_assum drule >> simp[]) >>
-    conj_tac >- (
-      qspecl_then [`cx`, `b`, `x`, `x'`, `x'³'`, `r`, `INL ()`, `r''`]
-        mp_tac write_storage_slot_preserves_state_well_typed_any >> simp[]) >>
-    qspecl_then [`cx`, `b`, `x`, `x'`, `x'³'`, `r`, `INL ()`, `r''`]
-      mp_tac write_storage_slot_preserves_accounts_well_typed >> simp[])
-  >>
-    gvs[bind_def, return_def, raise_def, lift_option_type_def,
-        lift_sum_def, ignore_bind_def, assert_def, check_def, AllCaseEqs()] >>
-    pairarg_tac >>
-    gvs[option_CASE_rator, AllCaseEqs(), raise_def, return_def,
-        type_value_CASE_rator, bind_apply, sum_CASE_rator,
-        bound_CASE_rator, assign_operation_CASE_rator, assert_def] >>
-    imp_res_tac assign_result_preserves_state >> gvs[] >>
-    imp_res_tac lookup_global_state >>
-    imp_res_tac resolve_array_element_state >>
-    imp_res_tac read_storage_slot_state >>
-    imp_res_tac get_storage_backend_state >> gvs[]
-    >> TRY (
-      qmatch_rename_tac`runtime_consistent env cx sg` >>
-      qmatch_assum_rename_tac`write_storage_slot _ _ _ _ _ sf = (_,sg)` >>
-      qmatch_assum_rename_tac`write_storage_slot _ _ _ _ _ se = (_,sf)` >>
-      `(runtime_consistent env cx sf ⇒ runtime_consistent env cx sg) ∧
-       runtime_consistent env cx sf` suffices_by (rw[] >> gvs[]) >>
-      rpt strip_tac) >>
-    qmatch_rename_tac`runtime_consistent _ _ sk` >>
-    qpat_x_assum`write_storage_slot _ _ _ _ _ _ = (_,sk)`assume_tac >>
+    drule_at(Pat`write_storage_slot`) write_storage_slot_preserves_accounts_well_typed >>
     drule write_storage_slot_preserves_env_consistent >>
     drule write_storage_slot_preserves_state_well_typed_any >>
-    drule write_storage_slot_preserves_accounts_well_typed >>
-    gvs[runtime_consistent_def]
-QED
-
-Theorem get_source_set_source_immutables_same[simp]:
-  get_source_immutables s (set_source_immutables s imms blah) = imms
-Proof
-  rw[set_source_immutables_def] >>
-  rw[get_source_immutables_def]
-QED
-
-Theorem get_source_set_source_immutables:
-  get_source_immutables s1 (set_source_immutables s2 blah rest) =
-  if s1 = s2 then blah else get_source_immutables s1 rest
-Proof
-  rw[] >>
-  gvs[set_source_immutables_def, get_source_immutables_def] >>
-  simp[alistTheory.ALOOKUP_ADELKEY]
+    gvs[runtime_consistent_def])
+  >> gvs[bind_apply, return_def, raise_def, lift_option_type_def,
+         lift_sum_def, ignore_bind_def, assert_def, check_def, AllCaseEqs(),
+         option_CASE_rator, type_value_CASE_rator, sum_CASE_rator,
+         bound_CASE_rator, assign_operation_CASE_rator]
+  >> imp_res_tac assign_result_preserves_state
+  >> imp_res_tac read_storage_slot_state
+  >> imp_res_tac get_storage_backend_state
+  >> gvs[]
+  >> TRY (
+    qmatch_rename_tac`runtime_consistent env cx sg` >>
+    qmatch_assum_rename_tac`write_storage_slot _ _ _ _ _ sf = (_,sg)` >>
+    qmatch_assum_rename_tac`write_storage_slot _ _ _ _ _ se = (_,sf)` >>
+    `(runtime_consistent env cx sf ⇒ runtime_consistent env cx sg) ∧
+     runtime_consistent env cx sf` suffices_by (rw[] >> gvs[]) >>
+    rpt strip_tac)
+  >> qmatch_rename_tac`runtime_consistent _ _ sk`
+  >> qpat_x_assum`write_storage_slot _ _ _ _ _ _ = (_,sk)`assume_tac
+  >> drule write_storage_slot_preserves_env_consistent
+  >> drule write_storage_slot_preserves_state_well_typed_any
+  >> drule write_storage_slot_preserves_accounts_well_typed
+  >> gvs[runtime_consistent_def]
 QED
 
 Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
@@ -1040,10 +1027,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
   PairCases_on `tva` >>
   gvs[AllCaseEqs(), return_def, raise_def, sum_CASE_rator] >>
   gvs[runtime_consistent_def] >>
-  imp_res_tac assign_result_preserves_state >> gvs[] >>
-  drule_at(Pat`set_immutable`) set_immutable_preserves_state_well_typed >>
-  simp[] >>
-  impl_keep_tac >- (
+  `value_has_type tv a'` by (
     gvs[place_leaf_typed_def, place_leaf_path_typed_def] >>
     qspecl_then [`tv`, `v`, `REVERSE is`, `op`, `a'`] mp_tac
       assign_subscripts_preserves_type >>
@@ -1053,41 +1037,43 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
       conj_tac >- metis_tac[assign_operation_leaf_type_update] >>
       metis_tac[assign_operation_leaf_type_append]) >>
     simp[]) >>
-  qpat_x_assum `assign_result _ _ _ _ _ = (INL res,st')`
-    (ASSUME_TAC o MATCH_MP assign_result_preserves_state) >>
-  strip_tac >>
-  qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
-  simp[set_immutable_def, get_address_immutables_def, bind_def, lift_option_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs(), LET_THM] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
-  Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
-  gvs[return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  gvs[env_consistent_def] >>
-  `current_module cx = env.current_src` by (
-    gvs[env_context_consistent_def] ) >>
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
   conj_tac >- (
-    gvs[env_scopes_consistent_def] >>
-    metis_tac[] ) >>
-  gvs[env_immutables_consistent_def, FLOOKUP_UPDATE] >>
-  conj_tac >- ( rw[] ) >>
-  conj_tac >- ( rw[] >> gvs[env_context_consistent_def] >>
-    first_x_assum irule >> goal_assum drule >> simp[]
-  ) >>
-  rpt gen_tac >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  strip_tac >>
-  rpt gen_tac >>
-  reverse(simp[get_source_set_source_immutables] >>
-          rw[FLOOKUP_UPDATE]) >- metis_tac[] >>
-  reverse(pop_assum mp_tac >> rw[] >> gvs[]) >- metis_tac[] >>
-  first_x_assum(CHANGED_TAC o SUBST1_TAC o SYM) >>
-  `env.type_defs = get_tenv cx` by gvs[env_context_consistent_def] >>
-  gvs[env_context_consistent_def] >>
-  last_x_assum drule_all >>
-  strip_tac >> gvs[]
+    irule set_immutable_preserves_env_consistent >>
+    qexists_tac `string_to_num id` >> qexists_tac `INL ()` >>
+    qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
+    qexists_tac `a'` >>
+    gvs[env_consistent_def, env_context_consistent_def] >>
+    rpt strip_tac >> first_x_assum drule_all >> simp[])
+  >- (conj_tac >- (
+        irule set_immutable_preserves_state_well_typed >>
+        qexists_tac `cx` >> qexists_tac `string_to_num id` >>
+        qexists_tac `INL ()` >> qexists_tac `current_module cx` >>
+        qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `a'` >>
+        simp[]) >>
+      qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
+      simp[set_immutable_def, get_address_immutables_def, bind_def,
+           lift_option_def, set_address_immutables_def, return_def,
+           raise_def, AllCaseEqs(), LET_THM] >>
+      strip_tac >> gvs[] >>
+      qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
+      Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
+      gvs[return_def, raise_def] >> strip_tac >> gvs[])
+  >- (irule set_immutable_preserves_env_consistent >>
+      qexists_tac `string_to_num id` >> qexists_tac `INR e` >>
+      qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
+      qexists_tac `a'` >>
+      gvs[env_consistent_def, env_context_consistent_def] >>
+      rpt strip_tac >> first_x_assum drule_all >> simp[])
+  >- (qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
+      simp[set_immutable_def, get_address_immutables_def, bind_def,
+           lift_option_def, set_address_immutables_def, return_def,
+           raise_def, AllCaseEqs(), LET_THM] >>
+      Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
+      gvs[return_def, raise_def] >> strip_tac >> gvs[]) >>
+  gvs[set_immutable_def, get_address_immutables_def, bind_def,
+      lift_option_def, set_address_immutables_def, return_def,
+      raise_def, AllCaseEqs(), LET_THM]
 QED
 
 Resume assign_target_preserves_state_well_typed_mutual[TupleTargetV]:
@@ -1097,9 +1083,7 @@ Resume assign_target_preserves_state_well_typed_mutual[TupleTargetV]:
       assert_def, check_def, AllCaseEqs()] >>
   Cases_on `tgt` >> gvs[target_runtime_typed_def, target_value_shape_def, well_typed_atarget_def,
       target_assignment_values_typed_def] >>
-  rename1 `assign_targets cx gvs vs st = (INL res,st')` >>
-  qpat_x_assum `!st0 st1. assign_targets cx gvs vs st0 = (INL res,st1) ==> _`
-    (qspecl_then [`st`, `st'`] mp_tac) >>
+  first_x_assum drule >>
   simp[] >>
   strip_tac >>
   first_x_assum irule >>
@@ -1122,29 +1106,22 @@ QED
 
 Resume assign_target_preserves_state_well_typed_mutual[assign_targets_cons]:
   rpt strip_tac >>
+  reverse $
   gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
       assert_def, check_def, AllCaseEqs(), target_assignment_values_typed_def] >>
   Cases_on `tgts` >> gvs[LIST_REL3_def] >>
-  rename1 `assign_target cx gv (Replace v) st = (INL head_res, s_mid)` >>
-  rename1 `assign_targets cx gvs vs s_mid = (INL _, st')` >>
-  `runtime_consistent env cx s_mid` by (
-    qpat_x_assum `!st0 res0 st1. assign_target cx gv (Replace v) st0 = (INL res0,st1) ==> _`
-      (qspecl_then [`st`, `head_res`, `s_mid`] mp_tac) >>
-    simp[] >>
-    disch_then (qspecl_then [`env`, `h`, `ty`] mp_tac) >>
-    simp[assign_operation_runtime_typed_def, value_runtime_typed_def]) >>
-  qpat_x_assum `!st0 st1. assign_targets cx gvs vs st0 = (INL (),st1) ==> _`
-    (qspecl_then [`s_mid`, `st'`] mp_tac) >>
-  simp[] >>
-  disch_then (qspecl_then [`env`, `t`] mp_tac) >>
-  simp[target_assignment_values_typed_def] >>
-  strip_tac >>
-  first_x_assum irule >>
+  first_x_assum (drule_then drule) >>
+  simp[assign_operation_runtime_typed_def,
+       value_runtime_typed_def, PULL_EXISTS] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  first_x_assum (drule_then drule) >> simp[] >>
+  disch_then irule >>
   `target_assignment_values_typed env cx st t gvs vs` by
     simp[target_assignment_values_typed_def] >>
   drule_all target_assignment_values_typed_rebuild >>
-  simp[target_assignment_values_typed_def]
+  simp[target_assignment_values_typed_def] >>
+  strip_tac >> goal_assum drule
 QED
 
 Finalise assign_target_preserves_state_well_typed_mutual
@@ -1185,16 +1162,13 @@ Proof
   metis_tac[assign_target_preserves_runtime_consistent, runtime_consistent_def]
 QED
 
-(* TEMPORARILY CHEATED - statement soundness needs preservation for both
-   success and exception/error results of assignment.  This is the all-result
-   version of the success-only assignment preservation theorem above. *)
 Theorem assign_target_preserves_runtime_consistent_result:
   runtime_consistent env cx st /\
   target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
   assign_target cx gv op st = (res, st') ==>
   runtime_consistent env cx st'
 Proof
-  cheat
+  metis_tac[assign_target_preserves_state_well_typed_mutual]
 QED
 
 Theorem assign_target_preserves_state_well_typed_result:

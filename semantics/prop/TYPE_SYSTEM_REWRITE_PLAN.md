@@ -54,18 +54,29 @@ holbuild build vyperSemanticsHolTheory
 # succeeds, but reachable fresh-stack ancestors still contain cheats
 ```
 
-Reachable fresh-stack cheat inventory at the last audit:
+Reachable fresh-stack cheat inventory at the latest audit:
 
 ```text
-semantics/prop/vyperTypeStatePreservationScript.sml   1
 semantics/prop/vyperTypeEnvPreservationScript.sml     3
 semantics/prop/vyperTypeAssignSoundnessScript.sml     3
 semantics/prop/vyperTypeBuiltinsScript.sml           19
-semantics/prop/vyperTypeStmtSoundnessScript.sml      40
+semantics/prop/vyperTypeStmtSoundnessScript.sml      39
 semantics/prop/vyperTypeCallSoundnessScript.sml       4
 --------------------------------------------------------
-Total reachable fresh-stack cheats                    70
+Total reachable fresh-stack cheats                    68
 ```
+
+Recent progress:
+
+- Removed the false/suspicious `expr_runtime_typed_hashmap_ref_place` theorem.
+  Successful expression results now use `expr_result_typed`, which strengthens
+  `expr_runtime_typed` with the required hashmap-reference/place invariant.
+- Strengthened assignment preservation from success-only to all-result mutual
+  preservation over `assign_target` / `assign_targets`.
+- Proved the formerly cheated all-result assignment preservation corollary
+  `assign_target_preserves_runtime_consistent_result`.
+- `vyperTypeStatePreservationScript.sml` currently has no cheats in the latest
+  audit.
 
 No reachable cheats were found in:
 
@@ -99,38 +110,37 @@ fresh stack:
   - `place_vtype_path_typed_hashmap_root_cons`
   - `target_path_type_to_place_vtype_path_typed`
   - `target_path_type_Type_place_leaf_typed`
-- Success-only assignment preservation:
-  - `assign_target_preserves_state_well_typed_mutual`
+- All-result assignment preservation:
+  - `assign_target_preserves_state_well_typed_mutual` now proves preservation
+    for arbitrary `(res, st')`, not only `(INL res, st')`.
   - `assign_target_preserves_runtime_consistent`
   - `assign_targets_preserves_runtime_consistent`
+  - `assign_target_preserves_runtime_consistent_result`
+- Immutable update preservation helpers factored out of the assignment proof:
+  - `set_immutable_preserves_env_consistent`
+  - all-result `set_immutable_preserves_state_well_typed`
 
 ### Current priority order
 
 Before clearing large numbers of statement cases, validate theorem statements
 that are currently suspicious or known incomplete:
 
-1. Investigate `expr_runtime_typed_hashmap_ref_place` in
-   `vyperTypeStmtSoundnessScript.sml`.  It is currently cheated with the comment
-   `looks false: but why does expr_runtime_typed allow NoneT?`.  If false, fix
-   the ordinary-expression/place typing split before relying on downstream
-   statement proofs.
-2. Decide the ABI encode bound issue.  The current static typing allows
+1. Decide the ABI encode bound issue.  The current static typing allows
    `BaseT (BytesT (Dynamic n))` without proving `n` bounds the encoded output.
    This cannot remain an informal caveat if the final reachable theorem claims
    successful expression result typing for AbiEncode.
-3. Audit `vyperTypeBuiltinsScript.sml` TODOs that explicitly say the type system
+2. Audit `vyperTypeBuiltinsScript.sml` TODOs that explicitly say the type system
    must be strengthened.  Some builtin cheats are likely definition gaps, not
    just proof-script gaps.
-4. Prove foundational preservation cheats:
-   - `assign_target_preserves_runtime_consistent_result`
+3. Prove remaining foundational preservation cheats:
    - `scope_bracket_preserves_ec`
    - `eval_base_target_preserves_assignable_lookup`
    - `eval_expr_preserves_assignable_lookup`
-5. Prove assignment no-TypeError cheats:
+4. Prove assignment no-TypeError cheats:
    - `assign_target_no_type_error`
    - `assign_target_update_no_type_error`
    - `assign_target_append_no_type_error`
-6. Then discharge builtin, statement, and call soundness cheats in dependency
+5. Then discharge builtin, statement, and call soundness cheats in dependency
    order.
 
 Eventually replace:
@@ -643,9 +653,10 @@ target_assignment_values_typed_rebuild
 
 These rebuild target typing in a later state from `runtime_consistent`; they are essential for tuple assignment tails.
 
-## Assignment preservation status and next-agent instructions
+## Assignment preservation status and proof engineering lessons
 
-The success-only assignment preservation theorem is complete:
+The assignment preservation theorem has been strengthened to the all-result
+mutual statement:
 
 ```sml
 assign_target_preserves_state_well_typed_mutual
@@ -657,30 +668,24 @@ Despite the historical name, its statement preserves the full invariant:
 runtime_consistent env cx st'
 ```
 
-for successful `assign_target`/`assign_targets` evaluations. Public corollaries
-derive state/account preservation from runtime consistency.
+for arbitrary `assign_target`/`assign_targets` evaluations:
 
-The remaining foundational assignment-preservation cheat is the all-result
-version:
+```sml
+assign_target cx gv op st = (res, st')
+assign_targets cx gvs vs st = (res, st')
+```
+
+not only successful `(INL ..., st')` results. Public success-only corollaries are
+now weaker wrappers. The formerly cheated all-result corollary is proved:
 
 ```sml
 assign_target_preserves_runtime_consistent_result
 ```
 
-Current statement shape:
-
-```sml
-runtime_consistent env cx st /\
-target_runtime_typed env cx st tgt ty gv /\
-assign_operation_runtime_typed env ty op /\
-assign_target cx gv op st = (res, st') ==>
-runtime_consistent env cx st'
-```
-
-This theorem is needed because statement soundness must preserve invariants for
-both successful assignments and error/exception results.  Error paths may still
-perform intermediate reads/state operations before failing, so the success-only
-assignment theorem is not enough.
+This strengthening was the right architecture: tuple/list assignment can perform
+partial successful prefix updates before a later failure, so the proof must use
+the mutual induction principle directly rather than a separate success/error
+layer.
 
 ### Important semantic change already made
 
@@ -720,89 +725,118 @@ assign_operation_leaf_update
 ty = ArrayT elem_ty (Dynamic n)
 ```
 
-### Suggested proof strategy for the all-result assignment theorem
+### Lessons from the all-result assignment proof
 
-Reuse the completed success proof structure, but split by the actual result path
-of `assign_target` rather than assuming `INL` success.
+#### Strengthen the mutual theorem, do not layer decompositions
 
-General pattern for `ScopedVar` and `ImmutableVar`:
-
-1. Unfold `assign_target_def` and monadic combinators.
-2. Extract the current root type/value from runtime lookup.
-3. Use `target_runtime_typed_def`, `location_runtime_typed_def`, and `place_leaf_typed` to get the static/runtime leaf typing.
-4. Prove the new assigned value has the original root type using:
-
-   ```sml
-   assign_subscripts_preserves_type
-   assign_operation_leaf_replace
-   assign_operation_leaf_update
-   assign_operation_leaf_append
-   ```
-
-   For `PopOp`, `assign_subscripts_preserves_type` has no extra premise.
-5. Prove `state_well_typed` after the update:
-   - locals: use `scope_well_typed_update_value` / `update_name_preserves_state_well_typed` or inline `find_containing_scope_structure`.
-   - immutables: use/adapt old helper facts if needed, but copy into the new stack rather than importing old soundness helpers.
-6. Prove `env_consistent` after the update using frame preservation:
-
-   ```sml
-env_consistent_preserved_by_frame
-   ```
-
-   You will need frame facts for scopes/immutables and assignability preservation. Existing env-preservation lemmas include:
-
-   ```sml
-lookup_scopes_fupdate_other
-lookup_scopes_append_cons
-lookup_scopes_append_fupdate_other
-update_name_preserves_assignable_lookup
-materialise_preserves_assignable_lookup
-get_Value_preserves_assignable_lookup
-   ```
-
-General pattern for `TupleTargetV`:
-
-- Unfold `assign_target_def` for tuple replace.
-- Use `target_runtime_typed_def` to get tuple static/shape info.
-- Use `target_assignment_values_typed_def` and `LIST_REL3` alignment.
-- Apply `assign_targets_preserves_runtime_consistent` / the list IH for success
-  branches, and use the all-result IH for error branches.
-
-General pattern for `TopLevelVar`:
-
-- Do not try to prove one giant inline branch. Split by `lookup_global` result:
-  - `Value v`
-  - `ArrayRef is_transient base_slot elem_tv bd`
-  - `HashMapRef is_transient base_slot kt vt`
-- Recommended helper lemmas:
+For mutually recursive semantics such as:
 
 ```sml
-assign_toplevel_value_preserves_runtime_consistent
-assign_toplevel_arrayref_preserves_runtime_consistent
-assign_toplevel_hashmapref_preserves_runtime_consistent
+assign_target ... TupleTargetV ... -> assign_targets ...
+assign_targets ... -> assign_target ...; assign_targets ...
 ```
 
-- The value-type based `location_runtime_typed` now supports both `Type ty` and `HashMapT kt vt` top-level roots, so there should be no remaining design blocker.
-- Use storage helpers already proved:
+prove the strong all-result mutual invariant directly. Avoid a separate stack of
+success theorem + error theorem + combined theorem. The direct mutual proof was
+simpler and handled partial tuple/list updates naturally.
+
+#### Control subgoals aggressively
+
+Do not let simplification produce unmanaged parallel goals. Do not use `>|` or
+`THENL`. Preferred patterns:
 
 ```sml
-read_storage_slot_success_type
-materialise_preserves_type
-write_storage_preserves_state_well_typed
-set_storage_preserves_state_well_typed
-set_storage_preserves_accounts_well_typed
+... >> tactic_for_one_focused_goal
+... >- branch_for_first_goal
+reverse $ gvs[...]
+NO_TAC  (* temporary checkpoint only, to confirm there is exactly one subgoal *)
 ```
 
-- Hashmap branch likely needs facts about:
+Avoid generated-name-dependent scripts such as `Cases_on `tv`` after a large
+`gvs[AllCaseEqs()]`: the displayed variable may not be a stable script-level
+name. Instead normalize with case-rator theorems and solve one focused branch at
+a time:
 
 ```sml
-split_hashmap_subscripts
-compute_hashmap_slot
-read_storage_slot
-write_storage_slot
+gvs[Once assign_target_def, bind_def, return_def, raise_def,
+    lift_option_def, lift_option_type_def, lift_sum_def,
+    AllCaseEqs(), option_CASE_rator, sum_CASE_rator,
+    toplevel_value_CASE_rator]
 ```
 
-If this branch becomes large, state the exact branch goal as a helper theorem and prove it separately.
+#### Use exact preservation helpers for state updates
+
+For branches that update only one component of the state, factor the preservation
+obligation instead of reconstructing a large invariant inline. The immutable case
+introduced:
+
+```sml
+set_immutable_preserves_env_consistent
+set_immutable_preserves_state_well_typed
+```
+
+Important: `env_consistent` helpers often need static environment links, not just
+runtime value typing. For immutable updates, the helper must carry:
+
+```sml
+FLOOKUP env.bare_globals (env.current_src,n) = SOME ty
+.evaluate_type (get_tenv cx) ty = SOME tv
+```
+
+whereas `state_well_typed` needs runtime facts such as:
+
+```sml
+value_has_type tv v
+well_formed_type_value tv
+```
+
+Do not confuse these two proof obligations.
+
+#### Branches ending in `assign_result`
+
+For assignment branches that write/update state and then call `assign_result`,
+prove the invariant for the post-write state first and then use:
+
+```sml
+assign_result_preserves_state
+```
+
+This avoids assuming the final result is `INL`.
+
+#### Tuple/list assignment pattern
+
+`TupleTargetV` should use the strengthened list IH directly. Construct the
+`target_assignment_values_typed` witness from tuple typing facts using:
+
+```sml
+LIST_REL3_from_LIST_REL2
+LIST_REL3_EL
+target_values_runtime_typed_LIST_REL3
+```
+
+The `assign_targets_cons` case is the key partial-update pattern:
+
+1. Use the first-target IH to get `runtime_consistent` for the intermediate
+   state, regardless of result shape.
+2. If the first target succeeds and the tail runs, rebuild tail typing in the
+   updated state with:
+
+   ```sml
+   target_assignment_values_typed_rebuild
+   ```
+
+3. Apply the list IH to the tail.
+
+This is the canonical pattern for any future recursive/list evaluator
+preservation proof.
+
+#### Top-level assignment pattern
+
+The `TopLevelVar` case is best handled by normalizing the semantic branch and
+using existing read/write/storage preservation lemmas immediately. Avoid trying
+to destruct the pretty-printed `tv` variable after a broad simplification.
+Storage array `AppendOp`/`PopOp` are multi-write cases; chain write preservation
+facts explicitly.
 
 ### Build commands
 
