@@ -362,9 +362,9 @@ Proof
 QED
 
 Theorem assign_target_append_no_type_error:
-  !cx bt loc sbs st0 st1 v st res st' env elem_ty bd.
+  !cx bt loc sbs st0 st1 v st res st' env elem_ty n.
     eval_base_target cx bt st0 = (INL (loc,sbs), st1) /\
-    well_typed_target env bt (ArrayT elem_ty bd) /\
+    well_typed_target env bt (ArrayT elem_ty (Dynamic n)) /\
     assign_target cx (BaseTargetV loc sbs) (AppendOp v) st = (res, st') /\
     state_well_typed st /\
     env_consistent env cx st /\

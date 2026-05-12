@@ -597,7 +597,7 @@ Definition type_stmt_def:
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
-     | SOME (Type (ArrayT elem_ty bd)) =>
+     | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
          if well_typed_expr env e /\ expr_type e = elem_ty /\ elem_ty <> NoneT then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
