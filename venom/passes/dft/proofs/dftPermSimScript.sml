@@ -1129,8 +1129,10 @@ Triviality flip_commutative:
 Proof
   rpt strip_tac >>
   drule commutative_cases >> drule commutative_not_comparator >>
-  strip_tac >> strip_tac >>
-  fs[flip_operands_def, step_inst_base_def] >>
+  strip_tac >> strip_tac >> gvs[] >>
+  ASM_REWRITE_TAC[flip_operands_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[] >>
   irule exec_pure2_swap >> rw comm_lemmas >> rw[EQ_SYM_EQ]
 QED
 
@@ -1140,9 +1142,10 @@ Triviality flip_comparator:
     step_inst_base (flip_operands i) st = step_inst_base i st
 Proof
   rpt strip_tac >>
-  drule comparator_cases >> strip_tac >>
-  fs[flip_operands_def, is_comparator_def, flip_comparison_opcode_def,
-     step_inst_base_def] >>
+  drule comparator_cases >> strip_tac >> gvs[] >>
+  ASM_REWRITE_TAC[flip_operands_def, is_comparator_def,
+                  flip_comparison_opcode_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
   (* exec_pure2_opcode_irrel strips the opcode update *)
   simp[] >>
   irule exec_pure2_swap >> rw comm_lemmas
@@ -1244,8 +1247,7 @@ Theorem step_inst_nofail_not_halt_abort:
     (!a es. step_inst_base inst s <> Abort a es)
 Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[opcode_fail_class_def, is_terminator_def] >>
-  metis_tac[per_op_combined]
+  simp[opcode_fail_class_def, is_terminator_def, per_op_combined]
 QED
 
 

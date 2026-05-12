@@ -19,7 +19,7 @@
 Theory exprLoweringProps
 Ancestors
   exprLowering emitHelper compileEnv
-  venomExecSemantics venomState
+  venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingProofs
@@ -882,16 +882,37 @@ Proof
   rw[blocks_pres_emit_void]
 QED
 
+Theorem blocks_grow_new_block[local]:
+  ∀ lbl sa.
+    LENGTH (SND (new_block lbl sa)).cs_blocks =
+    SUC (LENGTH sa.cs_blocks)
+Proof
+  rw[new_block_def]
+QED
+
+Theorem blocks_pres_scaled_offset[local]:
+  ∀ scale base ctr sa.
+    LENGTH (SND
+      ((if scale = 1 then emit_op ADD [base; ctr]
+        else do scaled <- emit_op MUL [ctr; Lit (n2w scale)];
+                emit_op ADD [base; scaled]
+             od) sa)).cs_blocks =
+    LENGTH sa.cs_blocks
+Proof
+  rw[] >>
+  simp[comp_bind_def, LET_THM, pairTheory.UNCURRY, blocks_pres_emit_op]
+QED
+
 (* compile_word_copy_loop grows blocks by exactly 3 *)
 val blocks_len_rws = [blocks_len_bind,
   SIMP_RULE bool_ss [] (Q.SPECL [`i`,`sa`] (INST_TYPE [alpha |-> ``:unit``] blocks_pres_emit_op)),
   blocks_pres_emit_op, blocks_pres_emit_void, blocks_pres_emit_inst,
   blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
+  blocks_pres_scaled_offset, blocks_grow_new_block,
   SIMP_RULE bool_ss [LET_THM] fresh_var_def,
   SIMP_RULE bool_ss [LET_THM] fresh_id_def,
   SIMP_RULE bool_ss [LET_THM] fresh_label_def,
   SIMP_RULE bool_ss [] emit_def,
-  SIMP_RULE bool_ss [LET_THM] new_block_def,
   comp_return_def];
 
 Theorem blocks_grow_compile_word_copy_loop[local]:
@@ -900,9 +921,11 @@ Theorem blocks_grow_compile_word_copy_loop[local]:
     LENGTH (SND (compile_word_copy_loop src dst wc ll sl ic sa)).cs_blocks
 Proof
   rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
-  simp (blocks_len_rws @ [comp_bind_def, pairTheory.UNCURRY,
-        comp_ignore_bind_def]) >>
-  rw[] >> simp blocks_len_rws
+  simp[comp_bind_def, comp_ignore_bind_def, pairTheory.UNCURRY,
+       fresh_label_def, fresh_var_def, comp_return_def,
+       blocks_pres_emit_inst, blocks_pres_emit_op,
+       blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
+       blocks_pres_scaled_offset, blocks_grow_new_block]
 QED
 
 (* ci_mono for compile_word_copy_loop *)
@@ -2327,6 +2350,122 @@ QED
 (* Helper: step_inst_base preserves call/tx/block context for ANY instruction
    that returns OK. Unlike step_inst_base_preserves_inst_idx, we don't need
    ~is_terminator because jump_to only modifies vs_prev_bb/vs_current_bb/vs_inst_idx. *)
+val term_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
+       AllCaseEqs()] >>
+  rpt CASE_TAC >> gvs[];
+
+Theorem step_inst_base_ok_terminator_jump[local]:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  term_ok_jump_tac
+QED
+
+Theorem step_inst_base_ok_jmp_ctxs[local]:
+  !inst s s'.
+    inst.inst_opcode = JMP /\ step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[] >> gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+QED
+
+Theorem step_inst_base_ok_jnz_ctxs[local]:
+  !inst s s'.
+    inst.inst_opcode = JNZ /\ step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[] >> gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+QED
+
+Theorem step_inst_base_ok_djmp_ctxs[local]:
+  !inst s s'.
+    inst.inst_opcode = DJMP /\ step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[] >> gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+QED
+
+Theorem step_inst_base_ok_jump_ctxs[local]:
+  !inst s s'.
+    (inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+     inst.inst_opcode = DJMP) /\
+    step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  metis_tac[step_inst_base_ok_jmp_ctxs,
+            step_inst_base_ok_jnz_ctxs,
+            step_inst_base_ok_djmp_ctxs]
+QED
+
+Theorem step_inst_base_ok_terminator_ctxs[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\ is_terminator inst.inst_opcode ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rpt strip_tac >>
+  drule_all step_inst_base_ok_terminator_jump >> strip_tac >>
+  metis_tac[step_inst_base_ok_jump_ctxs]
+QED
+
+Theorem step_inst_base_preserves_call_ctx[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_preserves_call_ctx >>
+  ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
+QED
+
+Theorem step_inst_base_preserves_tx_ctx[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_tx_ctx = s.vs_tx_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_preserves_tx_ctx >>
+  ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
+QED
+
+Theorem step_inst_base_preserves_block_ctx[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_preserves_block_ctx >>
+  ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
+QED
+
 Theorem step_inst_base_preserves_ctxs[local]:
   !inst s s'.
     step_inst_base inst s = OK s' ==>
@@ -2334,19 +2473,9 @@ Theorem step_inst_base_preserves_ctxs[local]:
     s'.vs_tx_ctx = s.vs_tx_ctx /\
     s'.vs_block_ctx = s.vs_block_ctx
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs()] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def, mcopy_def, jump_to_def,
-     revert_state_def, set_returndata_def, halt_state_def,
-     eval_operands_def]
+  metis_tac[step_inst_base_preserves_call_ctx,
+            step_inst_base_preserves_tx_ctx,
+            step_inst_base_preserves_block_ctx]
 QED
 
 (* compile_expr preserves external-facing state components.

@@ -1433,6 +1433,29 @@ QED
 
 Finalise cr_state_equiv_non_pv
 
+Triviality lookup_var_update_var:
+  !x y w s.
+    lookup_var x (update_var y w s) =
+    if x = y then SOME w else lookup_var x s
+Proof
+  rw[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Triviality in_alloca_region_update_var:
+  !s out w i.
+    in_alloca_region (update_var out w s) i <=> in_alloca_region s i
+Proof
+  rw[in_alloca_region_def, update_var_def]
+QED
+
+Triviality allocas_non_overlapping_update_var:
+  !s out w.
+    allocas_non_overlapping (update_var out w s) <=>
+    allocas_non_overlapping s
+Proof
+  rw[allocas_non_overlapping_def, update_var_def]
+QED
+
 (* CR preserved by update_var with same value on non-pv output *)
 Triviality cr_update_var_non_pv:
   !amap fn livesets init s1 s2 out v.
@@ -1476,11 +1499,25 @@ Triviality cr_update_var_pv:
       (update_var out w1 s1) (update_var out w2 s2)
 Proof
   rpt strip_tac >>
-  fs[concretize_rel_def, LET_THM, update_var_def, lookup_var_def,
-     FLOOKUP_UPDATE, allocas_non_overlapping_def, in_alloca_region_def] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
-  TRY (IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
-  res_tac >> fs[]
+  fs[concretize_rel_def, LET_THM] >>
+  simp[concretize_rel_def, LET_THM, lookup_var_update_var,
+       in_alloca_region_update_var, allocas_non_overlapping_update_var,
+       update_var_def] >>
+  rpt conj_tac
+  >- (
+    rpt strip_tac >>
+    Cases_on `v = out` >> gvs[] >>
+    qpat_x_assum `!v. v NOTIN pointer_derived_vars fn (FDOM amap) ==> _`
+      drule >> simp[])
+  >- (
+    rpt strip_tac >>
+    Cases_on `v = out` >> gvs[]
+    >- (
+      qexistsl_tac [`aid`, `orig_off`, `sz`, `addr`] >>
+      simp[]) >>
+    qpat_x_assum `!v. v IN pointer_derived_vars fn (FDOM amap) ==> _`
+      drule >> simp[])
+  >> metis_tac[]
 QED
 
 (* CR preserved by update_var on alloca reuse: side1 gets n2w off,
@@ -2043,15 +2080,21 @@ Proof
   rw[concretize_rel_def, LET_THM] >> res_tac >> gvs[]
 QED
 
+val pp_empty_outputs_tac =
+  simp[step_inst_base_def, exec_pure2_def] >>
+  rpt CASE_TAC >> gvs[];
+
 Triviality pp_empty_outputs_error:
   !inst s. is_pointer_preserving_op inst.inst_opcode /\
            inst.inst_outputs = [] ==>
            ?e. step_inst_base inst s = Error e
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def] >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def]
+  >- pp_empty_outputs_tac
+  >- pp_empty_outputs_tac
+  >- pp_empty_outputs_tac
+  >- pp_empty_outputs_tac
 QED
 
 (* Helper: binary pv op, Case 1: first operand is pv Var *)

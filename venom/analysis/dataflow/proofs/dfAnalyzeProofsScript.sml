@@ -1515,27 +1515,27 @@ Theorem df_fold_forward_P:
     ==>
     P fv /\ (!k v. FLOOKUP im k = SOME v ==> P v)
 Proof
-  Induct_on `instrs` >>
-  rw[dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM]
-  (* base: P acc *)
-  >- fs[]
-  (* base: FLOOKUP (inst_map |+ (..)) k = SOME v ⇒ P v *)
-  >- (Cases_on `k = (lbl,idx)` >>
-      fs[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[])
-  (* step: P fv *)
-  >- (first_x_assum (qspecl_then [`transfer`, `lbl`, `idx+1`,
-        `transfer h acc`, `inst_map |+ ((lbl,idx),acc)`, `fv`, `im`] mp_tac) >>
-      impl_tac
-      >- (rw[] >> Cases_on `k = (lbl,idx)` >>
-          fs[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[])
-      >> rw[])
-  (* step: P v *)
-  >- (first_x_assum (qspecl_then [`transfer`, `lbl`, `idx+1`,
-        `transfer h acc`, `inst_map |+ ((lbl,idx),acc)`, `fv`, `im`] mp_tac) >>
-      impl_tac
-      >- (rw[] >> Cases_on `k' = (lbl,idx)` >>
-          fs[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[])
-      >> rw[] >> metis_tac[])
+  Induct_on `instrs` >> rpt gen_tac >> strip_tac
+  >- (fs[dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM] >>
+      rw[] >>
+      Cases_on `k = (lbl,idx)` >>
+      fs[finite_mapTheory.FLOOKUP_UPDATE] >>
+      metis_tac[])
+  >> fs[dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM] >>
+     qpat_x_assum `!transfer lbl idx acc inst_map fv im. _`
+       (qspecl_then [`transfer`, `lbl`, `idx + 1`, `transfer h acc`,
+                     `inst_map |+ ((lbl,idx),acc)`, `fv`, `im`] mp_tac) >>
+     impl_tac
+     >- (`P (transfer h acc)` by metis_tac[] >>
+         `!key val.
+            FLOOKUP (inst_map |+ ((lbl,idx),acc)) key = SOME val ==>
+            P val` by
+           (qx_gen_tac `key` >> qx_gen_tac `val` >> strip_tac >>
+            Cases_on `key = (lbl,idx)` >>
+            fs[finite_mapTheory.FLOOKUP_UPDATE] >>
+            metis_tac[]) >>
+         ASM_REWRITE_TAC[]) >>
+     rw[]
 QED
 
 (* Fold P-preservation: backward fold values all satisfy P *)

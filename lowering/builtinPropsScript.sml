@@ -651,6 +651,46 @@ Definition pure_opc_arity_def:
   pure_opc_arity OFFSET = NONE
 End
 
+Triviality exec_pure1_update_ok[local]:
+  !f inst ss.
+    LENGTH inst.inst_operands = 1 /\
+    LENGTH inst.inst_outputs = 1 /\
+    EVERY (λop. eval_operand op ss <> NONE) inst.inst_operands ==>
+    ?w. exec_pure1 f inst ss = OK (update_var (HD inst.inst_outputs) w ss)
+Proof
+  rpt strip_tac >>
+  gvs[exec_pure1_def, listTheory.LENGTH_EQ_NUM_compute,
+      listTheory.EVERY_DEF] >>
+  Cases_on `eval_operand h ss` >> gvs[] >>
+  metis_tac[]
+QED
+
+Triviality exec_pure2_update_ok[local]:
+  !f inst ss.
+    LENGTH inst.inst_operands = 2 /\
+    LENGTH inst.inst_outputs = 1 /\
+    EVERY (λop. eval_operand op ss <> NONE) inst.inst_operands ==>
+    ?w. exec_pure2 f inst ss = OK (update_var (HD inst.inst_outputs) w ss)
+Proof
+  rpt strip_tac >>
+  gvs[exec_pure2_def, listTheory.LENGTH_EQ_NUM_compute,
+      listTheory.EVERY_DEF] >>
+  Cases_on `eval_operand h ss` >> gvs[] >>
+  Cases_on `eval_operand h' ss` >> gvs[] >>
+  metis_tac[]
+QED
+
+val pure_chain_pure_tac =
+  simp[Once step_inst_base_def] >>
+  FIRST [irule exec_pure2_update_ok, irule exec_pure1_update_ok] >>
+  simp[];
+
+val pure_chain_assign_tac =
+  simp[Once step_inst_base_def] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute, listTheory.EVERY_DEF] >>
+  Cases_on `eval_operand h ss` >> gvs[] >>
+  metis_tac[];
+
 (* Master step lemma: for pure chain opcodes with correct arity and 1 output,
    if all operands are defined then step returns OK (update_var ...). *)
 Theorem pure_chain_step_ok[local]:
@@ -665,12 +705,27 @@ Theorem pure_chain_step_ok[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[pure_opc_arity_def] >>
-  simp[Once step_inst_base_def] >> (
-    fs[exec_pure2_def, exec_pure1_def] >>
-    BasicProvers.every_case_tac >> gvs[listTheory.EVERY_DEF] >>
-    metis_tac[]
-  )
+  gvs[pure_opc_arity_def]
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_pure_tac
+  >- pure_chain_assign_tac
 QED
 
 (* Chain check: verify well-formedness of instruction chain against a set
@@ -865,7 +920,17 @@ Proof
   gvs[compile_shift_def, compile_select_def] >>
   gvs compile_defs >>
   emitted_insts_tac >>
-  pure_chain_tac
+  qmatch_goalsub_abbrev_tac `run_inst_seq insts ss` >>
+  qmatch_goalsub_abbrev_tac `eval_operand (Var out) _` >>
+  irule (Q.SPECL [`insts`, `operand_vars [val_op; bits_op]`, `ss`, `out`]
+          run_inst_seq_check_chain_output) >>
+  simp[Abbr`insts`, Abbr`out`, check_chain_def, chain_labels_def,
+       pure_opc_arity_def, mk_inst_def, operand_vars_def] >>
+  rpt conj_tac >>
+  TRY (MAP_EVERY qexists_tac [`bits_op`, `val_op`]) >>
+  Cases_on `val_op` >> Cases_on `bits_op` >>
+  rw[operand_vars_def, operand_var_def, eval_operand_def] >>
+  fs[eval_operand_def]
 QED
 
 (* ===== Simple Builtins ===== *)
@@ -1600,6 +1665,95 @@ Proof
   rw[exec_read1_def, mk_inst_def]
 QED
 
+Theorem step_MLOAD_result[local]:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    (case step_inst_base (mk_inst id MLOAD [op1] [out]) ss of
+       OK ss' => OK ss'
+     | Halt ss' => Halt ss'
+     | Abort a ss' => Abort a ss'
+     | IntRet vs ss' => IntRet vs ss'
+     | Error e => Error e) =
+      OK (update_var out (mload (w2n v1) ss) ss)
+Proof
+  rw[] >> drule_all step_MLOAD >> simp[]
+QED
+
+Theorem step_SLOAD_result[local]:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    (case step_inst_base (mk_inst id SLOAD [op1] [out]) ss of
+       OK ss' => OK ss'
+     | Halt ss' => Halt ss'
+     | Abort a ss' => Abort a ss'
+     | IntRet vs ss' => IntRet vs ss'
+     | Error e => Error e) =
+      OK (update_var out (sload v1 ss) ss)
+Proof
+  rw[] >> drule_all step_SLOAD >> simp[]
+QED
+
+Theorem step_TLOAD_result[local]:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    (case step_inst_base (mk_inst id TLOAD [op1] [out]) ss of
+       OK ss' => OK ss'
+     | Halt ss' => Halt ss'
+     | Abort a ss' => Abort a ss'
+     | IntRet vs ss' => IntRet vs ss'
+     | Error e => Error e) =
+      OK (update_var out (tload v1 ss) ss)
+Proof
+  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+QED
+
+Theorem step_CALLDATALOAD_result[local]:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    (case step_inst_base (mk_inst id CALLDATALOAD [op1] [out]) ss of
+       OK ss' => OK ss'
+     | Halt ss' => Halt ss'
+     | Abort a ss' => Abort a ss'
+     | IntRet vs ss' => IntRet vs ss'
+     | Error e => Error e) =
+      OK (update_var out
+        (word_of_bytes T (0w:bytes32)
+           (TAKE 32 (DROP (w2n v1) ss.vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))) ss)
+Proof
+  rw[] >> drule_all step_CALLDATALOAD >> simp[LET_THM]
+QED
+
+Theorem step_ILOAD_result[local]:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    (case step_inst_base (mk_inst id ILOAD [op1] [out]) ss of
+       OK ss' => OK ss'
+     | Halt ss' => Halt ss'
+     | Abort a ss' => Abort a ss'
+     | IntRet vs ss' => IntRet vs ss'
+     | Error e => Error e) =
+      OK (update_var out
+        (case FLOOKUP ss.vs_immutables (w2n v1) of SOME v => v | NONE => 0w) ss)
+Proof
+  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+QED
+
+Theorem step_DLOAD_result[local]:
+  ∀ op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ⇒
+    (case step_inst_base (mk_inst id DLOAD [op1] [out]) ss of
+       OK ss' => OK ss'
+     | Halt ss' => Halt ss'
+     | Abort a ss' => Abort a ss'
+     | IntRet vs ss' => IntRet vs ss'
+     | Error e => Error e) =
+      OK (update_var out
+        (word_of_bytes T (0w:bytes32)
+           (TAKE 32 (DROP (w2n v1) ss.vs_data_section ++ REPLICATE 32 0w))) ss)
+Proof
+  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+QED
+
 (* len for dynarray: reads stored length *)
 Theorem compile_builtin_len_correct:
   ∀ is_ctor ptr_op loc ss st op st' addr.
@@ -1616,9 +1770,12 @@ Proof
   gvs[compile_ptr_load_def, ptr_load_val_def] >>
   TRY (Cases_on `is_ctor` >> gvs[compile_ptr_load_def, ptr_load_val_def]) >>
   imp_res_tac emitted_insts_emit_op >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def,
-       exec_read1_def, exec_pure1_def, mk_inst_def,
-       eval_operand_update_var]
+  qmatch_goalsub_abbrev_tac `eval_operand (Var out) _ = SOME val` >>
+  qexists_tac `update_var out val ss` >>
+  simp[run_inst_seq_def, eval_operand_update_var] >>
+  unabbrev_all_tac >>
+  simp[step_MLOAD_result, step_SLOAD_result, step_TLOAD_result,
+       step_CALLDATALOAD_result, step_ILOAD_result, step_DLOAD_result]
 QED
 
 (* empty: zero-initializes a primitive value *)

@@ -170,35 +170,71 @@ fun exec_pos_prove def =
   rpt strip_tac >> gvs[] >>
   rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
 
-val hyps = ``LENGTH new_ops = LENGTH inst.inst_operands /\
-  (!i. i < LENGTH inst.inst_operands ==>
-       eval_operand (EL i new_ops) (st:venom_state) =
-       eval_operand (EL i inst.inst_operands) st)``;
+Triviality exec_pure1_pos[local]:
+  !f inst new_ops st.
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    exec_pure1 f (inst with inst_operands := new_ops) st = exec_pure1 f inst st
+Proof
+  exec_pos_prove exec_pure1_def
+QED
 
-Theorem exec_pure1_pos[local] =
-  prove(``!f inst new_ops st. ^hyps ==>
-    exec_pure1 f (inst with inst_operands := new_ops) st = exec_pure1 f inst st``,
-    exec_pos_prove exec_pure1_def)
-Theorem exec_pure2_pos[local] =
-  prove(``!f inst new_ops st. ^hyps ==>
-    exec_pure2 f (inst with inst_operands := new_ops) st = exec_pure2 f inst st``,
-    exec_pos_prove exec_pure2_def)
-Theorem exec_pure3_pos[local] =
-  prove(``!f inst new_ops st. ^hyps ==>
-    exec_pure3 f (inst with inst_operands := new_ops) st = exec_pure3 f inst st``,
-    exec_pos_prove exec_pure3_def)
-Theorem exec_read0_pos[local] =
-  prove(``!f inst new_ops st. ^hyps ==>
-    exec_read0 f (inst with inst_operands := new_ops) st = exec_read0 f inst st``,
-    exec_pos_prove exec_read0_def)
-Theorem exec_read1_pos[local] =
-  prove(``!f inst new_ops st. ^hyps ==>
-    exec_read1 f (inst with inst_operands := new_ops) st = exec_read1 f inst st``,
-    exec_pos_prove exec_read1_def)
-Theorem exec_write2_pos[local] =
-  prove(``!f inst new_ops st. ^hyps ==>
-    exec_write2 f (inst with inst_operands := new_ops) st = exec_write2 f inst st``,
-    exec_pos_prove exec_write2_def)
+Triviality exec_pure2_pos[local]:
+  !f inst new_ops st.
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    exec_pure2 f (inst with inst_operands := new_ops) st = exec_pure2 f inst st
+Proof
+  exec_pos_prove exec_pure2_def
+QED
+
+Triviality exec_pure3_pos[local]:
+  !f inst new_ops st.
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    exec_pure3 f (inst with inst_operands := new_ops) st = exec_pure3 f inst st
+Proof
+  exec_pos_prove exec_pure3_def
+QED
+
+Triviality exec_read0_pos[local]:
+  !f inst new_ops st.
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    exec_read0 f (inst with inst_operands := new_ops) st = exec_read0 f inst st
+Proof
+  exec_pos_prove exec_read0_def
+QED
+
+Triviality exec_read1_pos[local]:
+  !f inst new_ops st.
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    exec_read1 f (inst with inst_operands := new_ops) st = exec_read1 f inst st
+Proof
+  exec_pos_prove exec_read1_def
+QED
+
+Triviality exec_write2_pos[local]:
+  !f inst new_ops st.
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) (st:venom_state) =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    exec_write2 f (inst with inst_operands := new_ops) st = exec_write2 f inst st
+Proof
+  exec_pos_prove exec_write2_def
+QED
 
 val exec_pos_thms = [exec_pure1_pos, exec_pure2_pos, exec_pure3_pos,
                      exec_read0_pos, exec_read1_pos, exec_write2_pos];
@@ -242,6 +278,9 @@ val label_op_tac =
        TRY (first_x_assum (qspec_then `Var vn` mp_tac) >> simp[]) >>
        NO_TAC);
 
+val opcode_cases_tac =
+  Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def];
+
 Theorem step_inst_base_operands_irrelevant_safe[local]:
   !g inst s.
     (!op. eval_operand (g op) s = eval_operand op s) /\
@@ -267,8 +306,16 @@ Proof
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
-  TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
-  TRY (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def])
+  TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[])
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
+  >- opcode_cases_tac
 QED
 
 Triviality step_inst_base_jnz_map[local]:
@@ -489,39 +536,38 @@ Proof
   TRY (`subst_operands_map subs inst = inst` by
          (irule subst_operands_map_id >> simp[subst_op_map_def]) >>
        simp[] >> NO_TAC) >>
-  gvs[subst_operands_map_def, subst_op_map_def] >|
-  [(* ALLOCA: resolve is_alloca_op *)
-   `inst.inst_opcode = ALLOCA` by
-     (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
-   gvs[inst_wf_def, subst_op_map_def, step_inst_def, exec_alloca_def] >>
-   simp[Once step_inst_base_def, SimpLHS] >>
-   simp[Once step_inst_base_def, SimpRHS] >> simp[exec_alloca_def],
-   (* LOG *)
-   `rest <> []` by (Cases_on `rest` >> gvs[]) >>
-   simp[step_inst_non_invoke] >>
-   simp[Once step_inst_base_def] >>
-   simp[Once step_inst_base_def] >>
-   simp[GSYM listTheory.MAP_DROP, listTheory.EL_MAP,
-        rich_listTheory.MAP_HD] >>
-   `eval_operands (MAP (subst_op_map subs) (DROP 2 rest)) s =
-    eval_operands (DROP 2 rest) s` by
-     (irule eval_operands_map_thm >> metis_tac[]) >> simp[],
-   (* JNZ *)
-   simp[step_inst_non_invoke] >>
-   simp[Once step_inst_base_def] >>
-   simp[Once step_inst_base_def],
-   (* DJMP *)
-   imp_res_tac subst_op_map_preserves_labels >>
-   simp[step_inst_non_invoke] >>
-   simp[Once step_inst_base_def] >>
-   simp[Once step_inst_base_def],
-   (* INVOKE *)
-   simp[step_inst_def, decode_invoke_def] >>
-   `eval_operands (MAP (subst_op_map subs) args) s =
-    eval_operands args s` by
-     (irule eval_operands_map_thm >> metis_tac[]) >>
-   simp[] >> rpt (CASE_TAC >> simp[])
-  ]
+  gvs[subst_operands_map_def, subst_op_map_def]
+  >- ((* ALLOCA: resolve is_alloca_op *)
+    `inst.inst_opcode = ALLOCA` by
+      (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+    gvs[inst_wf_def, subst_op_map_def, step_inst_def, exec_alloca_def] >>
+    simp[Once step_inst_base_def, SimpLHS] >>
+    simp[Once step_inst_base_def, SimpRHS] >> simp[exec_alloca_def])
+  >- ((* LOG *)
+    `rest <> []` by (Cases_on `rest` >> gvs[]) >>
+    simp[step_inst_non_invoke] >>
+    simp[Once step_inst_base_def] >>
+    simp[Once step_inst_base_def] >>
+    simp[GSYM listTheory.MAP_DROP, listTheory.EL_MAP,
+         rich_listTheory.MAP_HD] >>
+    `eval_operands (MAP (subst_op_map subs) (DROP 2 rest)) s =
+     eval_operands (DROP 2 rest) s` by
+      (irule eval_operands_map_thm >> metis_tac[]) >> simp[])
+  >- ((* JNZ *)
+    simp[step_inst_non_invoke] >>
+    simp[Once step_inst_base_def] >>
+    simp[Once step_inst_base_def])
+  >- ((* DJMP *)
+    imp_res_tac subst_op_map_preserves_labels >>
+    simp[step_inst_non_invoke] >>
+    simp[Once step_inst_base_def] >>
+    simp[Once step_inst_base_def])
+  >- ((* INVOKE *)
+    simp[step_inst_def, decode_invoke_def] >>
+    `eval_operands (MAP (subst_op_map subs) args) s =
+     eval_operands args s` by
+      (irule eval_operands_map_thm >> metis_tac[]) >>
+    simp[] >> rpt (CASE_TAC >> simp[]))
 QED
 
 (* ===================================================================== *)
@@ -539,8 +585,111 @@ fun inst_eval_tac (asl, g) = let
   val th = ASSUME eval_hyp
   fun inst_at n = ASSUME_TAC (SIMP_RULE (srw_ss()) []
     (SPEC (numSyntax.mk_numeral (Arbnum.fromInt n)) th))
-  fun go n = if n > 6 then ALL_TAC else inst_at n >> go (n+1)
+  fun go n = if n > 12 then ALL_TAC else inst_at n >> go (n+1)
 in go 0 (asl, g) end handle _ => ALL_TAC (asl, g);
+
+val wf_opcode_finish_tac =
+  Cases_on `inst.inst_opcode` >>
+  ASM_REWRITE_TAC[] >>
+  gvs[is_alloca_op_def];
+
+val long_safe_finish_tac =
+  Cases_on `inst` >>
+  gvs[venomInstTheory.instruction_fn_updates,
+      venomInstTheory.instruction_accessors] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp[exec_read0_def, eval_operands_def] >>
+  simp (exec_pos_thms @ exec_inst_operands_thms);
+
+Triviality step_inst_base_CALL_pos[local]:
+  !inst new_ops st.
+    inst.inst_opcode = CALL /\
+    LENGTH inst.inst_operands = 7 /\
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) st =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    step_inst_base (inst with inst_operands := new_ops) st =
+    step_inst_base inst st
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+  inst_eval_tac >> gvs[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp[exec_ext_call_inst_operands]
+QED
+
+val call_long_finish_tac =
+  drule_all step_inst_base_CALL_pos >> simp[];
+
+val long_or_call_finish_tac =
+  (long_safe_finish_tac >> NO_TAC) ORELSE call_long_finish_tac;
+
+Triviality step_inst_base_pos_safe_long[local]:
+  !inst new_ops st.
+    inst_wf inst /\
+    ~is_alloca_op inst.inst_opcode /\
+    inst.inst_opcode <> PARAM /\
+    inst.inst_opcode <> PHI /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> LOG /\
+    inst.inst_opcode <> JMP /\
+    inst.inst_opcode <> JNZ /\
+    inst.inst_opcode <> DJMP /\
+    6 < LENGTH inst.inst_operands /\
+    LENGTH new_ops = LENGTH inst.inst_operands /\
+    eval_operands new_ops st = eval_operands inst.inst_operands st /\
+    (!i. i < LENGTH inst.inst_operands ==>
+         eval_operand (EL i new_ops) st =
+         eval_operand (EL i inst.inst_operands) st) ==>
+    step_inst_base (inst with inst_operands := new_ops) st =
+    step_inst_base inst st
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  fs[inst_wf_def, is_alloca_op_def]
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_safe_finish_tac
+  >- long_or_call_finish_tac
+  >- long_or_call_finish_tac
+  >- long_or_call_finish_tac
+  >- long_or_call_finish_tac
+  >- long_or_call_finish_tac >>
+  gvs[]
+QED
+
+val wf_opcode_contra_tac =
+  qsuff_tac `F` >- simp[] >>
+  qpat_x_assum `inst_wf inst` (mp_tac o REWRITE_RULE [inst_wf_def]) >>
+  Cases_on `inst.inst_opcode` >>
+  ASM_REWRITE_TAC[] >>
+  gvs[is_alloca_op_def];
+
+val pos_opcode_finish_tac =
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp (exec_pos_thms @ exec_inst_operands_thms) >>
+  rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
 
 Triviality step_inst_base_pos_safe[local]:
   !inst new_ops st.
@@ -563,20 +712,95 @@ Proof
   rpt strip_tac >>
   `eval_operands new_ops st = eval_operands inst.inst_operands st` by
     (irule eval_operands_positional >> simp[]) >>
-  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-  simp (exec_pos_thms @ exec_inst_operands_thms) >>
-  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-  simp[] >>
-  Cases_on `inst.inst_operands` >> Cases_on `new_ops` >> gvs[] >>
-  inst_eval_tac >> gvs[] >>
-  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[] >> inst_eval_tac >> gvs[]) >>
-  TRY (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def, inst_wf_def])
+  Cases_on `6 < LENGTH inst.inst_operands` >-
+   (irule step_inst_base_pos_safe_long >> simp[]) >>
+  Cases_on `inst.inst_opcode` >>
+  fs[inst_wf_def, is_alloca_op_def] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >>
+  inst_eval_tac >> gvs[]
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
+  >- pos_opcode_finish_tac
 QED
 
 (*

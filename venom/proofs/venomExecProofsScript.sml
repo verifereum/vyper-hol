@@ -138,6 +138,34 @@ Proof
   rw[] >> gvs[]
 QED
 
+val step_term_ok_jump_fields_tac =
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[lookup_var_def] >> NO_TAC;
+
+Triviality step_inst_ok_terminator_jump_fields[local]:
+  !fuel ctx inst s v.
+    step_inst fuel ctx inst s = OK v /\
+    is_terminator inst.inst_opcode ==>
+    v.vs_inst_idx = 0 /\ v.vs_prev_bb = SOME s.vs_current_bb /\
+    v.vs_halted = s.vs_halted /\
+    (!x. lookup_var x v = lookup_var x s) /\
+    v.vs_labels = s.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+QED
+
 Theorem exec_block_OK_inst_idx_0:
   !fuel ctx bb s v. exec_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
 Proof
@@ -151,13 +179,9 @@ Proof
   Cases_on `step_inst fuel ctx inst s` >> simp[] >>
   rw[] >> gvs[] >>
   Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
-  (* terminator case: step_inst returned OK, must be JMP/JNZ/DJMP *)
-  qpat_x_assum `is_terminator _` mp_tac >>
-  simp[is_terminator_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
-  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `v`] mp_tac
+    step_inst_ok_terminator_jump_fields >>
+  impl_tac >- gvs[] >> gvs[]
 QED
 
 (* exec_block OK implies prev_bb was set by jump_to (JMP/JNZ/DJMP) *)
@@ -176,13 +200,9 @@ Proof
   Cases_on `step_inst fuel ctx inst s` >> simp[] >>
   rw[] >> gvs[] >>
   Cases_on `is_terminator inst.inst_opcode` >> gvs[] >>
-  (* terminator case: step_inst returned OK, must be JMP/JNZ/DJMP *)
-  qpat_x_assum `is_terminator _` mp_tac >>
-  simp[is_terminator_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
-  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+    step_inst_ok_terminator_jump_fields >>
+  impl_tac >- gvs[] >> gvs[]
 QED
 
 (* bind_outputs preserves vs_prev_bb *)
@@ -292,20 +312,30 @@ Proof
   pairarg_tac >> gvs[]
 QED
 
+Triviality is_terminator_not_invoke[local]:
+  !op. is_terminator op ==> op <> INVOKE
+Proof
+  Cases >> EVAL_TAC
+QED
+
 (* step_inst_base OK preserves vs_halted *)
 Theorem step_inst_base_OK_preserves_halted:
   step_inst_base inst s = OK s' ==> s'.vs_halted = s.vs_halted
 Proof
-  Cases_on `inst.inst_opcode` >>
-  simp[step_inst_base_def, AllCaseEqs()] >> rw[] >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      update_var_def, AllCaseEqs(), jump_to_def,
-      mstore_def, mstore8_def, mload_def, sstore_def, sload_def,
-      tstore_def, tload_def, write_memory_with_expansion_def,
-      mcopy_def, exec_alloca_def,
-      exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
-  imp_res_tac extract_venom_result_preserves_halted >> gvs[update_var_def]
+  strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (`inst.inst_opcode <> INVOKE` by
+        metis_tac[is_terminator_not_invoke] >>
+      `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
+      qspecl_then [`ARB`, `ARB`, `inst`, `s`, `s'`] mp_tac
+        step_inst_ok_terminator_jump_fields >>
+      impl_tac >- gvs[] >> gvs[])
+  >- (`inst.inst_opcode <> INVOKE` by
+        (drule step_inst_base_OK_not_INVOKE >> simp[]) >>
+      `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
+      qspecl_then [`ARB`, `ARB`, `inst`, `s`, `s'`] mp_tac
+        venomInstProofsTheory.step_preserves_halted >>
+      impl_tac >- gvs[] >> gvs[])
 QED
 
 (* Backward compat alias *)
@@ -475,15 +505,9 @@ Theorem step_terminator_preserves_vars:
     !v. lookup_var v s' = lookup_var v s
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (
-    Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  fs[step_inst_non_invoke] >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  fs[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       fs[jump_to_def, halt_state_def, revert_state_def,
-          set_returndata_def, lookup_var_def]) >>
-  rw[]
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+    step_inst_ok_terminator_jump_fields >>
+  impl_tac >- gvs[] >> rw[]
 QED
 
 (* step_inst ALWAYS preserves vs_labels (both terminator and non-terminator) *)
@@ -494,15 +518,9 @@ Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
   >- (
-    `inst.inst_opcode <> INVOKE` by (
-      Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-    fs[step_inst_non_invoke] >>
-    Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-    fs[step_inst_base_def, LET_THM] >>
-    rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-         fs[jump_to_def, halt_state_def, revert_state_def,
-            set_returndata_def]) >>
-    rw[])
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+      step_inst_ok_terminator_jump_fields >>
+    impl_tac >- gvs[] >> rw[])
   >- metis_tac[step_preserves_labels]
 QED
 
@@ -529,6 +547,22 @@ QED
 
 (* After a well-formed terminator executes OK without halting,
    vs_current_bb is in get_successors of that instruction. *)
+val term_succ_basic_tac =
+  fs[step_inst_base_def, inst_wf_def, get_successors_def,
+     get_label_def, jump_to_def, is_terminator_def] >>
+  gvs[AllCaseEqs()] >> rw[] >> gvs[];
+
+val term_succ_djmp_tac =
+  term_succ_basic_tac >>
+  `MAP (THE o get_label) label_ops = labels` by
+    metis_tac[extract_labels_eq_map] >>
+  `FILTER IS_SOME (MAP get_label label_ops) = MAP get_label label_ops` by
+    simp[FILTER_EQ_ID, EVERY_MAP] >>
+  `MAP THE (MAP get_label label_ops) = labels` by
+    fs[MAP_MAP_o] >>
+  Cases_on `IS_SOME (get_label sel)` >> asm_rewrite_tac[MAP, MEM] >>
+  fs[MEM_EL] >> metis_tac[MEM_EL];
+
 Theorem step_inst_base_term_succs:
   !inst s s'.
     inst_wf inst /\ is_terminator inst.inst_opcode /\
@@ -536,22 +570,17 @@ Theorem step_inst_base_term_succs:
     MEM s'.vs_current_bb (get_successors inst)
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def] >>
-  fs[step_inst_base_def, inst_wf_def, get_successors_def,
-     get_label_def, AllCaseEqs(), jump_to_def, is_terminator_def] >>
-  gvs[]
-  >- (Cases_on `c` >> fs[get_label_def])
-  >- (Cases_on `c` >> fs[get_label_def])
-  >- (
-    `MAP (THE o get_label) label_ops = labels` by
-      metis_tac[extract_labels_eq_map] >>
-    `FILTER IS_SOME (MAP get_label label_ops) = MAP get_label label_ops` by
-      simp[FILTER_EQ_ID, EVERY_MAP] >>
-    `MAP THE (MAP get_label label_ops) = labels` by
-      fs[MAP_MAP_o] >>
-    Cases_on `IS_SOME (get_label sel)` >> asm_rewrite_tac[MAP, MEM] >>
-    fs[MEM_EL] >> metis_tac[MEM_EL])
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def]
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
+  >- term_succ_djmp_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
 QED
 
 (* After a terminator step_inst_base returns OK,
@@ -564,10 +593,11 @@ Theorem step_inst_base_term_prev_bb:
     s'.vs_prev_bb = SOME s.vs_current_bb
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def] >>
-  fs[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
-  gvs[]
+  `inst.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_invoke] >>
+  `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
+  qspecl_then [`ARB`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_inst_ok_terminator_jump_fields >>
+  impl_tac >- gvs[] >> gvs[]
 QED
 
 (* exec_block OK with vs_inst_idx=0 implies nonempty block *)
@@ -1001,6 +1031,76 @@ QED
    JMP/PARAM/ALLOCA also excluded because their operands are Lit/Label only. *)
 (* Split into two parts to stay under 5s per tactic step *)
 
+Triviality exec_pure1_operands_none_error[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 1 /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. exec_pure1 f inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >>
+  gvs[LENGTH_EQ_NUM_compute, eval_operands_def, exec_pure1_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Triviality exec_pure2_operands_none_error[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 2 /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. exec_pure2 f inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >>
+  gvs[LENGTH_EQ_NUM_compute, eval_operands_def, exec_pure2_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Triviality exec_pure3_operands_none_error[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 3 /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. exec_pure3 f inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >>
+  gvs[LENGTH_EQ_NUM_compute, eval_operands_def, exec_pure3_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Triviality exec_read1_operands_none_error[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 1 /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. exec_read1 f inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >>
+  gvs[LENGTH_EQ_NUM_compute, eval_operands_def, exec_read1_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Triviality exec_write2_operands_none_error[local]:
+  !f inst s.
+    LENGTH inst.inst_operands = 2 /\
+    eval_operands inst.inst_operands s = NONE ==>
+    ?e. exec_write2 f inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >>
+  gvs[LENGTH_EQ_NUM_compute, eval_operands_def, exec_write2_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+val operands_none_wrapper_tac =
+  gvs[inst_wf_def, step_inst_base_def] >>
+  FIRST [
+    drule_all exec_pure1_operands_none_error >> simp[] >> NO_TAC,
+    drule_all exec_pure2_operands_none_error >> simp[] >> NO_TAC,
+    drule_all exec_pure3_operands_none_error >> simp[] >> NO_TAC,
+    drule_all exec_read1_operands_none_error >> simp[] >> NO_TAC,
+    drule_all exec_write2_operands_none_error >> simp[] >> NO_TAC
+  ];
+
 (* Part 1: "uniform" opcodes that go through exec_pure/read/write wrappers *)
 Triviality step_inst_base_operands_none_uniform[local]:
   !inst s.
@@ -1014,14 +1114,55 @@ Triviality step_inst_base_operands_none_uniform[local]:
     eval_operands inst.inst_operands s = NONE ==>
     ?e. step_inst_base inst s = Error e
 Proof
-  rpt strip_tac >> gvs[MEM] >>
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[MEM]
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+  >- operands_none_wrapper_tac
+QED
+
+val operands_none_custom_tac =
   gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
       step_inst_base_def,
-      exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read1_def, exec_write2_def,
       eval_operands_def, eval_operand_def, lookup_var_def] >>
-  BasicProvers.every_case_tac >> gvs[]
-QED
+  BasicProvers.every_case_tac >> gvs[];
 
 (* Part 2: custom opcodes with inline operand handling.
    JNZ excluded: its Label operands cause eval_operands=NONE but
@@ -1037,11 +1178,28 @@ Triviality step_inst_base_operands_none_custom[local]:
     eval_operands inst.inst_operands s = NONE ==>
     ?e. step_inst_base inst s = Error e
 Proof
-  rpt strip_tac >> gvs[MEM] >>
-  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
-      step_inst_base_def,
-      eval_operands_def, eval_operand_def, lookup_var_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  rpt strip_tac >> gvs[MEM]
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
 QED
 
 (* Part 3: LOG — needs special handling because inst_wf gives parametric-length

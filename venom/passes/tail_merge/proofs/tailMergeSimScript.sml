@@ -134,6 +134,28 @@ Proof
   fs[var_corr_def, lookup_var_def, execution_equiv_def]
 QED
 
+Theorem canon_operand_eval_from_cons_lookup[local]:
+  !vm1 vm2 h1 h2 vm1' vm2' cop s1 s2 ops1 ops2.
+    canon_operand vm1 h1 = (vm1', cop) /\
+    canon_operand vm2 h2 = (vm2', cop) /\
+    var_corr vm1 vm2 s1 s2 /\
+    execution_equiv UNIV s1 s2 /\
+    (!v. MEM (Var v) (h1::ops1) ==> ?idx. ALOOKUP vm1 v = SOME idx) /\
+    (!v. MEM (Var v) (h2::ops2) ==> ?idx. ALOOKUP vm2 v = SOME idx) ==>
+    eval_operand h1 s1 = eval_operand h2 s2
+Proof
+  rpt strip_tac >>
+  irule canon_operand_eval >>
+  ASM_REWRITE_TAC[] >>
+  qexists_tac `cop` >> qexists_tac `vm1` >> qexists_tac `vm1'` >>
+  qexists_tac `vm2` >> qexists_tac `vm2'` >>
+  ASM_REWRITE_TAC[] >>
+  rpt strip_tac >>
+  FIRST [
+    qpat_x_assum `!v. MEM (Var v) (h1::ops1) ==> _` irule >> simp[],
+    qpat_x_assum `!v. MEM (Var v) (h2::ops2) ==> _` irule >> simp[]]
+QED
+
 Theorem canon_operand_preserves:
   !vm1 vm2 op1 op2 vm1' vm2' cop s1 s2.
     canon_operand vm1 op1 = (vm1', cop) /\
@@ -173,6 +195,32 @@ Proof
   simp[Once canon_operands_def]
 QED
 
+Theorem canon_operands_cons_eq[local]:
+  !vm h t.
+    canon_operands vm (h::t) =
+    (let (vm1, cop) = canon_operand vm h in
+     let (vm2, cops) = canon_operands vm1 t in
+       (vm2, cop::cops))
+Proof
+  simp[Once canon_operands_def]
+QED
+
+Theorem canon_operands_cons_inv[local]:
+  !vm h t vm' cops.
+    canon_operands vm (h::t) = (vm', cops) ==>
+    ?vmh cop tcops.
+      canon_operand vm h = (vmh, cop) /\
+      canon_operands vmh t = (vm', tcops) /\
+      cops = cop::tcops
+Proof
+  rpt gen_tac >>
+  simp[canon_operands_cons_eq, LET_THM] >>
+  Cases_on `canon_operand vm h` >>
+  Cases_on `canon_operands q t` >>
+  gvs[] >>
+  metis_tac[]
+QED
+
 Theorem canon_operand_var_in_tail:
   !vm h vm' cop v.
     canon_operand vm h = (vm', cop) /\
@@ -182,6 +230,19 @@ Proof
   Cases_on `h` >> simp[canon_operand_def, LET_THM] >>
   rpt strip_tac >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[alistTheory.ALOOKUP_def])
+QED
+
+Theorem canon_operand_preserves_tail_lookup[local]:
+  !vm h vm' cop ops v.
+    canon_operand vm h = (vm', cop) /\
+    (!v. MEM (Var v) (h::ops) ==> ?idx. ALOOKUP vm v = SOME idx) /\
+    MEM (Var v) ops ==>
+    ?idx. ALOOKUP vm' v = SOME idx
+Proof
+  rpt strip_tac >>
+  irule canon_operand_var_in_tail >>
+  qexists_tac `cop` >> qexists_tac `h` >> qexists_tac `vm` >> simp[] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* Combined: eval equality + invariant preservation for canon_operands *)
@@ -208,38 +269,39 @@ Proof
     imp_res_tac canon_operands_nil >> imp_res_tac canon_operands_cons_result >>
     BasicProvers.VAR_EQ_TAC >> fs[] >> NO_TAC) >>
   (* cons: extract head/tail from canon_operands vm1 (h::ops1) *)
-  qpat_x_assum `canon_operands vm1 (_::_) = _` mp_tac >>
-  simp[Once canon_operands_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `canon_operands vm1 (_::_) = _`
+    (strip_assume_tac o MATCH_MP canon_operands_cons_inv) >>
   (* ops2 must also be cons *)
   `?h' t'. ops2 = h'::t'` by (
     Cases_on `ops2` >> fs[] >>
     imp_res_tac canon_operands_nil >> fs[]) >>
   BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `canon_operands vm2 (_::_) = _` mp_tac >>
-  simp[Once canon_operands_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
-  (* cops from both sides must match: cop::cops' = cop'::cops'' *)
-  `cop::cops' = cop'::cops''` by metis_tac[] >>
-  fs[] >>
-  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `canon_operands vm2 (_::_) = _`
+    (strip_assume_tac o MATCH_MP canon_operands_cons_inv) >>
+  (* cops from both sides must match; avoid search in this rich context. *)
+  qpat_x_assum `cops = cop::tcops` SUBST_ALL_TAC >>
+  qpat_x_assum `cop::tcops = cop'::tcops'` mp_tac >>
+  PURE_REWRITE_TAC[listTheory.CONS_11] >> strip_tac >>
+  qpat_x_assum `cop = cop'` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `tcops = tcops'` (SUBST_ALL_TAC o SYM) >>
   (* Head: eval equality *)
-  `eval_operand h s1 = eval_operand h' s2` by (
-    irule canon_operand_eval >>
-    metis_tac[]) >>
+  `eval_operand h s1 = eval_operand h' s2` by
+    metis_tac[canon_operand_eval_from_cons_lookup] >>
   (* Head: preservation *)
-  `var_corr var_map' var_map''' s1 s2 /\
-   var_map_wf var_map' /\ var_map_wf var_map''' /\
-   LENGTH var_map' = LENGTH var_map'''`
-    by metis_tac[canon_operand_preserves] >>
-  simp[] >>
+  `var_corr vmh vmh' s1 s2 /\
+   var_map_wf vmh /\ var_map_wf vmh' /\
+   LENGTH vmh = LENGTH vmh'` by
+    metis_tac[canon_operand_preserves] >>
   (* Tail: apply IH *)
-  first_x_assum (qspecl_then [`var_map'`, `var_map'''`, `t'`,
-    `vm1'`, `vm2'`, `cops'`, `s1`, `s2`] mp_tac) >>
+  first_x_assum (qspecl_then [`vmh`, `vmh'`, `t'`,
+    `vm1'`, `vm2'`, `tcops`, `s1`, `s2`] mp_tac) >>
   (impl_tac >- (
-    simp[] >> rpt strip_tac >>
-    metis_tac[canon_operand_var_in_tail])) >>
-  simp[]
+    ASM_REWRITE_TAC[] >> rpt strip_tac >>
+    irule canon_operand_preserves_tail_lookup >> metis_tac[])) >>
+  strip_tac >>
+  PURE_REWRITE_TAC[listTheory.MAP] >>
+  BETA_TAC >>
+  ASM_REWRITE_TAC[]
 QED
 
 (* ================================================================
@@ -367,6 +429,116 @@ Proof
   simp[execution_equiv_def, lookup_var_def]
 QED
 
+Theorem is_halting_opcode_cases[local]:
+  !opc.
+    is_halting_opcode opc ==>
+    opc = RETURN \/ opc = REVERT \/ opc = STOP \/
+    opc = INVALID \/ opc = SELFDESTRUCT
+Proof
+  Cases >> simp[is_halting_opcode_def]
+QED
+
+Theorem return_term_sim[local]:
+  !inst1 inst2 s1 s2.
+    inst1.inst_opcode = RETURN /\
+    inst2.inst_opcode = RETURN /\
+    execution_equiv UNIV s1 s2 /\
+    MAP (\op. eval_operand op s1) inst1.inst_operands =
+    MAP (\op. eval_operand op s2) inst2.inst_operands ==>
+    result_equiv UNIV (step_inst_base inst1 s1) (step_inst_base inst2 s2)
+Proof
+  rpt strip_tac >>
+  `s1.vs_memory = s2.vs_memory` by gvs[execution_equiv_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  Cases_on `inst1.inst_operands` >> Cases_on `inst2.inst_operands` >>
+  gvs[result_equiv_def] >>
+  TRY (Cases_on `t`) >> TRY (Cases_on `t'`) >>
+  TRY (Cases_on `t''`) >> TRY (Cases_on `t'''`) >>
+  gvs[AllCaseEqs(), result_equiv_def, LET_THM] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  irule halt_state_ee_UNIV >>
+  irule set_returndata_ee_UNIV >>
+  ASM_REWRITE_TAC[]
+QED
+
+Theorem revert_term_sim[local]:
+  !inst1 inst2 s1 s2.
+    inst1.inst_opcode = REVERT /\
+    inst2.inst_opcode = REVERT /\
+    execution_equiv UNIV s1 s2 /\
+    MAP (\op. eval_operand op s1) inst1.inst_operands =
+    MAP (\op. eval_operand op s2) inst2.inst_operands ==>
+    result_equiv UNIV (step_inst_base inst1 s1) (step_inst_base inst2 s2)
+Proof
+  rpt strip_tac >>
+  `s1.vs_memory = s2.vs_memory` by gvs[execution_equiv_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  Cases_on `inst1.inst_operands` >> Cases_on `inst2.inst_operands` >>
+  gvs[result_equiv_def] >>
+  TRY (Cases_on `t`) >> TRY (Cases_on `t'`) >>
+  TRY (Cases_on `t''`) >> TRY (Cases_on `t'''`) >>
+  gvs[AllCaseEqs(), result_equiv_def, LET_THM, revert_state_def] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  PURE_REWRITE_TAC[GSYM halt_state_def] >>
+  irule halt_state_ee_UNIV >>
+  irule set_returndata_ee_UNIV >>
+  ASM_REWRITE_TAC[]
+QED
+
+Theorem stop_term_sim[local]:
+  !inst1 inst2 s1 s2.
+    inst1.inst_opcode = STOP /\
+    inst2.inst_opcode = STOP /\
+    execution_equiv UNIV s1 s2 ==>
+    result_equiv UNIV (step_inst_base inst1 s1) (step_inst_base inst2 s2)
+Proof
+  rw[] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[result_equiv_def] >>
+  irule halt_state_ee_UNIV >>
+  ASM_REWRITE_TAC[]
+QED
+
+Theorem invalid_term_sim[local]:
+  !inst1 inst2 s1 s2.
+    inst1.inst_opcode = INVALID /\
+    inst2.inst_opcode = INVALID /\
+    execution_equiv UNIV s1 s2 ==>
+    result_equiv UNIV (step_inst_base inst1 s1) (step_inst_base inst2 s2)
+Proof
+  rw[] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[result_equiv_def] >>
+  irule halt_state_ee_UNIV >>
+  irule set_returndata_ee_UNIV >>
+  ASM_REWRITE_TAC[]
+QED
+
+Theorem selfdestruct_term_sim[local]:
+  !inst1 inst2 s1 s2.
+    inst1.inst_opcode = SELFDESTRUCT /\
+    inst2.inst_opcode = SELFDESTRUCT /\
+    execution_equiv UNIV s1 s2 /\
+    MAP (\op. eval_operand op s1) inst1.inst_operands =
+    MAP (\op. eval_operand op s2) inst2.inst_operands ==>
+    result_equiv UNIV (step_inst_base inst1 s1) (step_inst_base inst2 s2)
+Proof
+  rpt strip_tac >>
+  `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx`
+    by gvs[execution_equiv_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  Cases_on `inst1.inst_operands` >> Cases_on `inst2.inst_operands` >>
+  gvs[result_equiv_def] >>
+  TRY (Cases_on `t`) >> TRY (Cases_on `t'`) >>
+  gvs[AllCaseEqs(), result_equiv_def, LET_THM] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[result_equiv_def]) >>
+  irule halt_state_ee_UNIV >>
+  irule ee_UNIV_with_accounts >>
+  ASM_REWRITE_TAC[]
+QED
+
 Theorem halting_term_sim:
   !inst1 inst2 s1 s2.
     is_halting_opcode inst1.inst_opcode /\
@@ -377,26 +549,12 @@ Theorem halting_term_sim:
     result_equiv UNIV (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
   rpt strip_tac >>
-  `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_call_ctx = s2.vs_call_ctx`
-    by gvs[execution_equiv_def] >>
-  `LENGTH inst1.inst_operands = LENGTH inst2.inst_operands`
-    by metis_tac[map_eval_same_length] >>
-  Cases_on `inst1.inst_opcode` >>
-  gvs[is_halting_opcode_def, step_inst_base_def] >>
-  Cases_on `inst1.inst_operands` >> Cases_on `inst2.inst_operands` >>
-  gvs[result_equiv_def] >>
-  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[result_equiv_def]) >>
-  TRY (Cases_on `t''` >> Cases_on `t'''` >> gvs[result_equiv_def]) >>
-  gvs[AllCaseEqs(), result_equiv_def, LET_THM, revert_state_def] >>
-  rpt strip_tac >>
-  rpt (CASE_TAC >> gvs[result_equiv_def]) >>
-  TRY (irule halt_state_ee_UNIV >> irule set_returndata_ee_UNIV >> simp[] >> NO_TAC) >>
-  TRY (irule halt_state_ee_UNIV >> irule ee_UNIV_with_accounts >> simp[] >> NO_TAC) >>
-  TRY (irule halt_state_ee_UNIV >> simp[] >> NO_TAC) >>
-  TRY (irule set_returndata_ee_UNIV >> simp[] >> NO_TAC) >>
-  simp[execution_equiv_def, set_returndata_def, halt_state_def,
-       lookup_var_def] >> gvs[execution_equiv_def]
+  drule is_halting_opcode_cases >> strip_tac >> gvs[]
+  >- (irule return_term_sim >> ASM_REWRITE_TAC[])
+  >- (irule revert_term_sim >> ASM_REWRITE_TAC[])
+  >- (irule stop_term_sim >> ASM_REWRITE_TAC[])
+  >- (irule invalid_term_sim >> ASM_REWRITE_TAC[])
+  >- (irule selfdestruct_term_sim >> ASM_REWRITE_TAC[])
 QED
 
 Theorem is_halting_is_terminator:

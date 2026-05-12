@@ -39,7 +39,7 @@ Theorem vsr_step_inst_pure2:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_pure2 >> simp[]
 QED
 
@@ -75,7 +75,7 @@ Theorem vsr_step_inst_read0:
        CODESIZE] ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_read0 >> simp[] >>
   imp_res_tac vsr_R_ok_fields >> simp[]
 QED
@@ -89,7 +89,7 @@ Theorem vsr_step_inst_read1:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
   imp_res_tac vsr_R_ok_fields >>
   gvs[mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def]
@@ -114,7 +114,7 @@ Theorem vsr_step_inst_write2:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_write2 >> simp[] >> rw[] >>
   FIRST [vsr_irule vsr_mstore, vsr_irule vsr_mstore8,
          vsr_irule vsr_sstore, vsr_irule vsr_tstore] >>
@@ -127,7 +127,7 @@ Theorem vsr_step_inst_terminator:
     MEM inst.inst_opcode [STOP;SINK] ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def, lift_result_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
   imp_res_tac vsr_terminal_R_term >> simp[]
 QED
 
@@ -155,6 +155,38 @@ Proof
   vsr_terminal_tac ()
 QED
 
+Theorem vsr_step_inst_jmp:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = JMP /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
+  rpt (CASE_TAC >> fs[lift_result_def]) >>
+  vsr_irule vsr_jump_to >> simp[]
+QED
+
+Theorem vsr_step_inst_jnz:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = JNZ /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
+  Cases_on `inst.inst_operands` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  Cases_on `h'` >> gvs[lift_result_def] >>
+  Cases_on `t'` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  Cases_on `h'` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand h s2` >> gvs[lift_result_def] >>
+  Cases_on `x = 0w` >> gvs[lift_result_def] >>
+  gvs[lift_result_def] >>
+  vsr_irule vsr_jump_to >> simp[]
+QED
+
 Theorem vsr_step_inst_control:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
@@ -162,9 +194,8 @@ Theorem vsr_step_inst_control:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  vsr_irule vsr_jump_to >> simp[]
+  rw[] >- (irule vsr_step_inst_jmp >> simp[]) >>
+  irule vsr_step_inst_jnz >> simp[]
 QED
 
 Theorem vsr_step_inst_djmp:
@@ -175,7 +206,7 @@ Theorem vsr_step_inst_djmp:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  rpt (CASE_TAC >> fs[lift_result_def]) >>
   vsr_irule vsr_jump_to >> simp[]
 QED
 

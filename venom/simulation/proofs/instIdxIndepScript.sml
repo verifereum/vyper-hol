@@ -351,6 +351,17 @@ val idx_rw = [eval_op_inst_idx, eval_ops_inst_idx, update_var_idx,
               mstore_idx, mstore8_idx, sstore_idx, tstore_idx, mcopy_idx, mload_idx,
               sload_idx, tload_idx, exec_result_map_def];
 
+val opcode_idx_tac =
+  simp[step_inst_base_def, exec_pure1_idx, exec_pure2_idx, exec_pure3_idx,
+       exec_alloca_idx] >>
+  TRY (irule exec_read0_idx >> simp idx_rw >> NO_TAC) >>
+  TRY (irule exec_read1_idx >> simp idx_rw >> NO_TAC) >>
+  TRY (irule exec_write2_idx >> simp idx_rw >> NO_TAC) >>
+  simp[eval_op_inst_idx, eval_ops_inst_idx,
+       exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx] >>
+  EVERY_CASE_TAC >>
+  simp(idx_rw @ [venom_state_component_equality]);
+
 (* ================================================================
    THE MAIN THEOREM — exported
    ================================================================ *)
@@ -361,21 +372,102 @@ Theorem step_inst_inst_idx_indep:
     exec_result_map (\s'. s' with vs_inst_idx := n) (step_inst_base inst s)
 Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_terminator_def] >>
-  simp[step_inst_base_def, exec_pure1_idx, exec_pure2_idx, exec_pure3_idx,
-       exec_alloca_idx] >>
-  TRY (irule exec_read0_idx >> simp idx_rw >> NO_TAC) >>
-  TRY (irule exec_read1_idx >> simp idx_rw >> NO_TAC) >>
-  TRY (irule exec_write2_idx >> simp idx_rw >> NO_TAC) >>
-  simp[eval_op_inst_idx, eval_ops_inst_idx,
-       exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx] >>
-  EVERY_CASE_TAC >>
-  simp(idx_rw @ [venom_state_component_equality])
+  simp[is_terminator_def]
+  >- opcode_idx_tac  (* ADD *)
+  >- opcode_idx_tac  (* SUB *)
+  >- opcode_idx_tac  (* MUL *)
+  >- opcode_idx_tac  (* Div *)
+  >- opcode_idx_tac  (* SDIV *)
+  >- opcode_idx_tac  (* Mod *)
+  >- opcode_idx_tac  (* SMOD *)
+  >- opcode_idx_tac  (* Exp *)
+  >- opcode_idx_tac  (* ADDMOD *)
+  >- opcode_idx_tac  (* MULMOD *)
+  >- opcode_idx_tac  (* EQ *)
+  >- opcode_idx_tac  (* LT *)
+  >- opcode_idx_tac  (* GT *)
+  >- opcode_idx_tac  (* SLT *)
+  >- opcode_idx_tac  (* SGT *)
+  >- opcode_idx_tac  (* ISZERO *)
+  >- opcode_idx_tac  (* AND *)
+  >- opcode_idx_tac  (* OR *)
+  >- opcode_idx_tac  (* XOR *)
+  >- opcode_idx_tac  (* NOT *)
+  >- opcode_idx_tac  (* SHL *)
+  >- opcode_idx_tac  (* SHR *)
+  >- opcode_idx_tac  (* SAR *)
+  >- opcode_idx_tac  (* SIGNEXTEND *)
+  >- opcode_idx_tac  (* BYTE *)
+  >- opcode_idx_tac  (* MLOAD *)
+  >- opcode_idx_tac  (* MSTORE *)
+  >- opcode_idx_tac  (* MSTORE8 *)
+  >- opcode_idx_tac  (* MCOPY *)
+  >- opcode_idx_tac  (* MEMTOP *)
+  >- opcode_idx_tac  (* SLOAD *)
+  >- opcode_idx_tac  (* SSTORE *)
+  >- opcode_idx_tac  (* TLOAD *)
+  >- opcode_idx_tac  (* TSTORE *)
+  >- opcode_idx_tac  (* ILOAD *)
+  >- opcode_idx_tac  (* ISTORE *)
+  >- opcode_idx_tac  (* PHI *)
+  >- opcode_idx_tac  (* PARAM *)
+  >- opcode_idx_tac  (* ASSIGN *)
+  >- opcode_idx_tac  (* NOP *)
+  >- opcode_idx_tac  (* ALLOCA *)
+  >- opcode_idx_tac  (* INVOKE *)
+  >- opcode_idx_tac  (* CALLER *)
+  >- opcode_idx_tac  (* CALLVALUE *)
+  >- opcode_idx_tac  (* CALLDATALOAD *)
+  >- opcode_idx_tac  (* CALLDATASIZE *)
+  >- opcode_idx_tac  (* CALLDATACOPY *)
+  >- opcode_idx_tac  (* ADDRESS *)
+  >- opcode_idx_tac  (* ORIGIN *)
+  >- opcode_idx_tac  (* GASPRICE *)
+  >- opcode_idx_tac  (* GAS *)
+  >- opcode_idx_tac  (* GASLIMIT *)
+  >- opcode_idx_tac  (* COINBASE *)
+  >- opcode_idx_tac  (* TIMESTAMP *)
+  >- opcode_idx_tac  (* NUMBER *)
+  >- opcode_idx_tac  (* PREVRANDAO *)
+  >- opcode_idx_tac  (* CHAINID *)
+  >- opcode_idx_tac  (* SELFBALANCE *)
+  >- opcode_idx_tac  (* BALANCE *)
+  >- opcode_idx_tac  (* BLOCKHASH *)
+  >- opcode_idx_tac  (* BASEFEE *)
+  >- opcode_idx_tac  (* CODESIZE *)
+  >- opcode_idx_tac  (* CODECOPY *)
+  >- opcode_idx_tac  (* EXTCODESIZE *)
+  >- opcode_idx_tac  (* EXTCODEHASH *)
+  >- opcode_idx_tac  (* EXTCODECOPY *)
+  >- opcode_idx_tac  (* RETURNDATASIZE *)
+  >- opcode_idx_tac  (* RETURNDATACOPY *)
+  >- opcode_idx_tac  (* BLOBHASH *)
+  >- opcode_idx_tac  (* BLOBBASEFEE *)
+  >- opcode_idx_tac  (* SHA3 *)
+  >- opcode_idx_tac  (* CALL *)
+  >- opcode_idx_tac  (* STATICCALL *)
+  >- opcode_idx_tac  (* DELEGATECALL *)
+  >- opcode_idx_tac  (* CREATE *)
+  >- opcode_idx_tac  (* CREATE2 *)
+  >- opcode_idx_tac  (* LOG *)
+  >- opcode_idx_tac  (* ASSERT *)
+  >- opcode_idx_tac  (* ASSERT_UNREACHABLE *)
+  >- opcode_idx_tac  (* DLOAD *)
+  >- opcode_idx_tac  (* DLOADBYTES *)
+  >- opcode_idx_tac  (* OFFSET *)
 QED
 
 (* ================================================================
    TERMINATOR idx-indep: normalizing idx to 0 yields same result
    ================================================================ *)
+
+val terminator_idx_tac =
+  simp[step_inst_base_def,
+       eval_op_inst_idx, eval_ops_inst_idx,
+       jump_to_idx, halt_state_idx, revert_state_idx,
+       set_returndata_idx, read_mem_idx, write_mem_idx] >>
+  EVERY_CASE_TAC >>
+  simp[exec_result_map_def, venom_state_component_equality];
 
 Theorem terminator_step_inst_base_idx_norm0:
   !inst s n. is_terminator inst.inst_opcode ==>
@@ -385,13 +477,17 @@ Theorem terminator_step_inst_base_idx_norm0:
       (step_inst_base inst s)
 Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_terminator_def] >>
-  simp[step_inst_base_def,
-       eval_op_inst_idx, eval_ops_inst_idx,
-       jump_to_idx, halt_state_idx, revert_state_idx,
-       set_returndata_idx, read_mem_idx, write_mem_idx] >>
-  EVERY_CASE_TAC >>
-  simp[exec_result_map_def, venom_state_component_equality]
+  simp[is_terminator_def]
+  >- terminator_idx_tac  (* JMP *)
+  >- terminator_idx_tac  (* JNZ *)
+  >- terminator_idx_tac  (* DJMP *)
+  >- terminator_idx_tac  (* RET *)
+  >- terminator_idx_tac  (* RETURN *)
+  >- terminator_idx_tac  (* REVERT *)
+  >- terminator_idx_tac  (* STOP *)
+  >- terminator_idx_tac  (* SINK *)
+  >- terminator_idx_tac  (* SELFDESTRUCT *)
+  >- terminator_idx_tac  (* INVALID *)
 QED
 
 (* OK-producing terminators always set idx=0 (via jump_to) *)
@@ -400,8 +496,17 @@ Theorem terminator_OK_inst_idx_0:
     step_inst_base inst s = OK v ==> v.vs_inst_idx = 0
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def, step_inst_base_def] >>
-  gvs[AllCaseEqs(), jump_to_def]
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* JMP *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* JNZ *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* DJMP *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* RET *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* RETURN *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* REVERT *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* STOP *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* SINK *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* SELFDESTRUCT *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* INVALID *)
 QED
 
 

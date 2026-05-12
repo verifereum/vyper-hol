@@ -5108,7 +5108,9 @@ Proof
           spose_not_then strip_assume_tac >>
           `m < LENGTH l1 /\ is_barrier (EL m l1)` suffices_by metis_tac[] >>
           simp[] >> first_x_assum (qspec_then `m` mp_tac) >> simp[]) >>
-    `EL k l2 = EL k l1` by metis_tac[barriers_same_el] >>
+    `EL k l2 = EL k l1` by (
+      qspecl_then [`l1`, `l2`, `dep`, `k`] mp_tac barriers_same_el >>
+      (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]) >>
     `k < LENGTH l2` by simp[] >>
     (* Barrier-free prefix: use barrier_free_topo_perm_result *)
     `PERM (TAKE k l1) (TAKE k l2)` by metis_tac[barrier_prefix_perm] >>
@@ -5232,7 +5234,9 @@ Proof
           spose_not_then strip_assume_tac >>
           `m < LENGTH l1 /\ is_barrier (EL m l1)` suffices_by metis_tac[] >>
           simp[] >> first_x_assum (qspec_then `m` mp_tac) >> simp[]) >>
-    `EL k l2 = EL k l1` by metis_tac[barriers_same_el] >>
+    `EL k l2 = EL k l1` by (
+      qspecl_then [`l1`, `l2`, `dep`, `k`] mp_tac barriers_same_el >>
+      (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]) >>
     `k < LENGTH l2` by simp[] >>
     `PERM (TAKE k l1) (TAKE k l2)` by
       (qspecl_then [`l1`, `l2`, `dep`, `k`] mp_tac barrier_prefix_perm >>
@@ -8655,8 +8659,16 @@ Proof
   `from_block orig_bi b_orig` by metis_tac[from_block_MEM_filter] >>
   `is_barrier b_orig` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
   `MEM b_orig pfx \/ MEM b_orig sfx` by metis_tac[mem_orig_filter_split] >>
-  Cases_on `MEM b_orig pfx` >- metis_tac[contra_b_orig_in_pfx] >>
-  metis_tac[contra_b_orig_in_sfx]
+  Cases_on `MEM b_orig pfx`
+  >- (qspecl_then [`orig_bi`, `cur_bi`, `x`, `y`, `pfx`, `sfx`, `mid`,
+        `px_c`, `px_b`, `sfx_x`, `yb_c`, `b'`, `b_orig`] mp_tac
+        contra_b_orig_in_pfx >>
+      (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]) >>
+  `MEM b_orig sfx` by fs[] >>
+  qspecl_then [`orig_bi`, `cur_bi`, `x`, `y`, `pfx`, `sfx`, `mid`,
+    `px_c`, `px_b`, `sfx_x`, `yb_c`, `b'`, `b_orig`] mp_tac
+    contra_b_orig_in_sfx >>
+  (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]
 QED
 
 Triviality last_barrier_in_prefix_eq_y[local]:

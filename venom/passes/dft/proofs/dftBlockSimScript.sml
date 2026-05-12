@@ -9,7 +9,7 @@ Theory dftBlockSim
 Ancestors
   dftDefs dftCommutation passSharedProps passSharedTransfer
   passSharedField venomExecSemantics venomExecProps venomEffects venomInstProofs
-  venomState finite_map venomInst stateEquiv stateEquivProps
+  venomMemProofs venomState finite_map venomInst stateEquiv stateEquivProps
   passSimulationDefs venomInstProps pred_set sorting passSharedFrame
   vfmState venomWf
 
@@ -38,16 +38,12 @@ Proof
     gvs[bind_outputs_def, AllCaseEqs(), merge_callee_state_def])
   >>
   gvs[step_inst_non_invoke] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs(), update_var_def, mstore_def, mstore8_def, sstore_def,
-      tstore_def, write_memory_with_expansion_def, mcopy_def,
-      halt_state_def, revert_state_def, set_returndata_def, jump_to_def]
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+  qspecl_then [`inst`, `s`, `s'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_allocas >>
+  impl_tac >- simp[] >>
+  simp[]
 QED
 
 Theorem step_inst_preserves_alloca_next:
@@ -61,16 +57,12 @@ Theorem step_inst_preserves_alloca_next:
 Proof
   rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs(), update_var_def, mstore_def, mstore8_def, sstore_def,
-      tstore_def, write_memory_with_expansion_def, mcopy_def,
-      halt_state_def, revert_state_def, set_returndata_def, jump_to_def]
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+  qspecl_then [`inst`, `s`, `s'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_next >>
+  impl_tac >- simp[] >>
+  simp[]
 QED
 
 (* ================================================================
@@ -255,17 +247,92 @@ Triviality account_read_output_agree[local]:
     MEM w inst.inst_outputs ==>
     lookup_var w r1 = lookup_var w r2
 Proof
-  rpt strip_tac >> gvs[] >>
-  gvs[step_inst_base_def, exec_read0_def, exec_read1_def,
-      AllCaseEqs(), update_var_def, lookup_var_def,
-      FLOOKUP_UPDATE, lookup_account_def] >>
-  (* EXTCODEHASH: account_empty tautology on s2's own fields *)
-  gvs[account_empty_def] >> metis_tac[]
+  rpt strip_tac >>
+  (Cases_on `inst.inst_opcode` >> gvs[])
+  >- (qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+      qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
+      ASM_REWRITE_TAC[step_inst_base_def] >> simp[exec_read1_def] >>
+      rpt strip_tac >>
+      gvs[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+          lookup_account_def] >> metis_tac[])
+  >- (qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+      qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
+      ASM_REWRITE_TAC[step_inst_base_def] >> simp[exec_read0_def] >>
+      rpt strip_tac >>
+      gvs[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+          lookup_account_def] >> metis_tac[])
+  >- (qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+      qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
+      ASM_REWRITE_TAC[step_inst_base_def] >> simp[exec_read1_def] >>
+      rpt strip_tac >>
+      gvs[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+          lookup_account_def] >> metis_tac[]) >>
+  qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+  qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[exec_read1_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+      lookup_account_def, account_empty_def] >> metis_tac[]
+QED
+
+Triviality account_read_step_output_agree[local]:
+  !fuel ctx inst ss vb va sba w.
+    step_inst fuel ctx inst ss = OK va /\
+    step_inst fuel ctx inst vb = OK sba /\
+    is_effect_free_op inst.inst_opcode /\
+    (Eff_BALANCE IN read_effects inst.inst_opcode \/
+     Eff_EXTCODE IN read_effects inst.inst_opcode) /\
+    inst.inst_opcode <> INVOKE /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op ss = eval_operand op vb) /\
+    (!addr. (vb.vs_accounts addr).balance =
+            (ss.vs_accounts addr).balance /\
+            (vb.vs_accounts addr).nonce =
+            (ss.vs_accounts addr).nonce /\
+            (vb.vs_accounts addr).code =
+            (ss.vs_accounts addr).code) /\
+    vb.vs_call_ctx = ss.vs_call_ctx /\
+    MEM w inst.inst_outputs ==>
+    lookup_var w va = lookup_var w sba
+Proof
+  rpt strip_tac >>
+  `step_inst_base inst ss = OK va` by metis_tac[step_inst_non_invoke] >>
+  `step_inst_base inst vb = OK sba` by metis_tac[step_inst_non_invoke] >>
+  `!addr. (ss.vs_accounts addr).balance =
+          (vb.vs_accounts addr).balance /\
+          (ss.vs_accounts addr).nonce =
+          (vb.vs_accounts addr).nonce /\
+          (ss.vs_accounts addr).code =
+          (vb.vs_accounts addr).code` by metis_tac[] >>
+  `ss.vs_call_ctx = vb.vs_call_ctx` by metis_tac[] >>
+  `inst.inst_opcode = BALANCE \/ inst.inst_opcode = SELFBALANCE \/
+   inst.inst_opcode = EXTCODESIZE \/ inst.inst_opcode = EXTCODEHASH` by
+    (irule effect_free_account_read_opcodes >> ASM_REWRITE_TAC[]) >>
+  gvs[] >>
+  qspecl_then [`inst`, `ss`, `vb`, `va`, `sba`, `w`] mp_tac
+    account_read_output_agree >>
+  ASM_REWRITE_TAC[]
 QED
 
 (* Non-effect-free eligible ops preserve all vars.
    These ops (MSTORE, SSTORE, MCOPY, LOG, ASSERT, etc.) modify
    side-effect fields only — vs_vars is untouched. *)
+Triviality side_effect_lookup_var[local]:
+  (!off bytes s v.
+     lookup_var v (write_memory_with_expansion off bytes s) = lookup_var v s) /\
+  (!off val s v. lookup_var v (mstore off val s) = lookup_var v s) /\
+  (!off val s v. lookup_var v (mstore8 off val s) = lookup_var v s) /\
+  (!dst src sz s v. lookup_var v (mcopy dst src sz s) = lookup_var v s) /\
+  (!key val s v. lookup_var v (sstore key val s) = lookup_var v s) /\
+  (!key val s v. lookup_var v (tstore key val s) = lookup_var v s) /\
+  (!s v. lookup_var v (halt_state s) = lookup_var v s) /\
+  (!s v. lookup_var v (revert_state s) = lookup_var v s) /\
+  (!rd s v. lookup_var v (set_returndata rd s) = lookup_var v s)
+Proof
+  rw[write_memory_with_expansion_def, mstore_def, mstore8_def,
+     mcopy_def, sstore_def, tstore_def, halt_state_def,
+     revert_state_def, set_returndata_def, lookup_var_def]
+QED
+
 Theorem step_non_effect_free_preserves_all_vars[local]:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
@@ -285,10 +352,7 @@ Proof
       is_alloca_op_def, is_ext_call_op_def] >>
   simp[exec_write2_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[lookup_var_def, mcopy_def, mstore_def, mstore8_def,
-      sstore_def, tstore_def, write_memory_with_expansion_def,
-      halt_state_def, revert_state_def, set_returndata_def] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+  simp[side_effect_lookup_var, lookup_var_def]
 QED
 
 (* ================================================================
@@ -395,8 +459,9 @@ Proof
     >- (
       (* inst_a ∈ {BALANCE, SELFBALANCE, EXTCODESIZE, EXTCODEHASH}.
          Prove output agreement directly from sub-field preservation. *)
-      irule account_read_output_agree >> simp[] >>
-      metis_tac[effect_free_account_read_opcodes])
+      qspecl_then [`fuel`, `ctx`, `inst_a`, `ss`, `vb`, `va`, `sba`, `w`]
+        mp_tac account_read_step_output_agree >>
+      ASM_REWRITE_TAC[])
     >- (
       (* No account-reading effects: generic theorem applies *)
       irule step_inst_base_effect_free_output_determined_vars >>
@@ -497,6 +562,46 @@ Proof
   Induct >> rw[] >> Cases_on `h` >> simp[update_var_def]
 QED
 
+Triviality exec_pure1_structure[local]:
+  !f inst s s'.
+    exec_pure1 f inst s = OK s' ==>
+    ?out val. inst.inst_outputs = [out] /\ s' = update_var out val s
+Proof
+  rw[exec_pure1_def] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Triviality exec_pure2_structure[local]:
+  !f inst s s'.
+    exec_pure2 f inst s = OK s' ==>
+    ?out val. inst.inst_outputs = [out] /\ s' = update_var out val s
+Proof
+  rw[exec_pure2_def] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Triviality exec_pure3_structure[local]:
+  !f inst s s'.
+    exec_pure3 f inst s = OK s' ==>
+    ?out val. inst.inst_outputs = [out] /\ s' = update_var out val s
+Proof
+  rw[exec_pure3_def] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Triviality exec_read0_structure[local]:
+  !f inst s s'.
+    exec_read0 f inst s = OK s' ==>
+    ?out val. inst.inst_outputs = [out] /\ s' = update_var out val s
+Proof
+  rw[exec_read0_def] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Triviality exec_read1_structure[local]:
+  !f inst s s'.
+    exec_read1 f inst s = OK s' ==>
+    ?out val. inst.inst_outputs = [out] /\ s' = update_var out val s
+Proof
+  rw[exec_read1_def] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
 (* A pure (empty read/write effects), eligible step_inst_base either
    produces no outputs (NOP) and returns the state unchanged, or produces
    exactly one output via update_var. *)
@@ -517,9 +622,17 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       write_effects_def, read_effects_def] >>
-  gvs[step_inst_base_def, exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, inst_wf_def, AllCaseEqs()] >>
-  metis_tac[]
+  qpat_x_assum `step_inst_base inst ss = OK v2` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  strip_tac >>
+  gvs[inst_wf_def] >>
+  FIRST [
+    drule exec_pure1_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_pure2_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_pure3_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_read0_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_read1_structure >> strip_tac >> gvs[] >> metis_tac[],
+    gvs[AllCaseEqs()] >> metis_tac[]]
 QED
 
 (* Output agreement for pure, empty-effect, non-INVOKE opcodes.

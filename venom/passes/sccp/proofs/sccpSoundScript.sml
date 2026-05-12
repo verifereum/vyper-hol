@@ -248,24 +248,49 @@ QED
 
 (* ===== inst_transform_structural ===== *)
 
+val sccp_struct_case_tac =
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[mk_nop_inst_def, is_terminator_def];
+
+Triviality sccp_inst_terminator[local]:
+  !st inst.
+    is_terminator inst.inst_opcode ==>
+    is_terminator (sccp_inst st inst).inst_opcode
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[sccp_inst_def, LET_THM, is_terminator_def] >>
+  sccp_struct_case_tac
+QED
+
+Triviality sccp_inst_invoke[local]:
+  !st inst.
+    inst.inst_opcode = INVOKE ==>
+    (sccp_inst st inst).inst_opcode = INVOKE
+Proof
+  rw[sccp_inst_def, LET_THM]
+QED
+
+Triviality sccp_inst_nonterm_noninvoke[local]:
+  !st inst.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+    ~is_terminator (sccp_inst st inst).inst_opcode /\
+    (sccp_inst st inst).inst_opcode <> INVOKE
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[sccp_inst_def, LET_THM, is_terminator_def] >>
+  sccp_struct_case_tac
+QED
+
 Theorem sccp_inst_structural[local]:
   inst_transform_structural (\lat inst. [sccp_inst lat.sl_vals inst])
 Proof
-  rw[inst_transform_structural_def] >> rpt conj_tac >> rpt gen_tac >>
-  rw[sccp_inst_def, LET_THM, mk_nop_inst_def] >> rpt strip_tac >> (
-    TRY (fs[is_terminator_def] >> NO_TAC) >>
-    TRY (
-      `~is_terminator (mk_nop_inst inst).inst_opcode /\
-       (mk_nop_inst inst).inst_opcode <> INVOKE` by EVAL_TAC >>
-      fs[]) >>
-    rpt (CASE_TAC >> gvs[is_terminator_def]) >>
-    rpt (IF_CASES_TAC >> gvs[is_terminator_def]) >>
-    (* Remaining ASSERT/ASSERT_UNREACHABLE goals: case expr in asms *)
-    TRY (qpat_x_assum `is_terminator _` mp_tac) >>
-    TRY (qpat_x_assum `_ = INVOKE` mp_tac) >>
-    simp_tac (srw_ss()) [] >>
-    CASE_TAC >> gvs[is_terminator_def] >>
-    rpt (CASE_TAC >> gvs[is_terminator_def]))
+  rw[inst_transform_structural_def]
+  >- (irule sccp_inst_terminator >> simp[])
+  >- (irule sccp_inst_invoke >> simp[]) >>
+  simp[EVERY_DEF] >>
+  metis_tac[sccp_inst_nonterm_noninvoke]
 QED
 
 (* ===== analysis_inst_simulates ===== *)

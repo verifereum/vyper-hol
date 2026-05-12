@@ -980,7 +980,7 @@ Proof
     >- (first_x_assum drule >> simp[] >> strip_tac >> gvs[]) >>
     last_x_assum irule >>
     qexists_tac`id` >> rw[] >>
-    Cases_on`st.scopes` >>
+    Cases_on`st.scopes` >> gvs[] >>
     gvs[lookup_scopes_def, FLOOKUP_DEF]) >>
   (* global_types conjunct *)
   rpt strip_tac >> res_tac
@@ -1041,16 +1041,21 @@ Proof
     `FDOM (EL i st'.scopes) = FDOM (EL i st.scopes)` by (
       imp_res_tac listTheory.MAP_EQ_EVERY2 >>
       gvs[listTheory.LIST_REL_EL_EQN, preserves_tv_def]) >>
+    `id IN FDOM (EL i st.scopes)` by
+      metis_tac[finite_mapTheory.flookup_thm] >>
     `?entry0. FLOOKUP (EL i st.scopes) id = SOME entry0` by
-      gvs[finite_mapTheory.FLOOKUP_DEF, PULL_EXISTS] >>
+      metis_tac[finite_mapTheory.flookup_thm] >>
     `!j. j < i ==> FLOOKUP (EL j st.scopes) id = NONE` by (
       rpt strip_tac >>
       `FDOM (EL j st'.scopes) = FDOM (EL j st.scopes)` by (
         imp_res_tac listTheory.MAP_EQ_EVERY2 >>
         gvs[listTheory.LIST_REL_EL_EQN, preserves_tv_def]) >>
       `FLOOKUP (EL j st'.scopes) id = NONE` by res_tac >>
-      gvs[finite_mapTheory.FLOOKUP_DEF] >>
-      first_x_assum drule >> rw[]) >>
+      `id NOTIN FDOM (EL j st'.scopes)` by
+        metis_tac[finite_mapTheory.flookup_thm] >>
+      `id NOTIN FDOM (EL j st.scopes)` by metis_tac[] >>
+      Cases_on `FLOOKUP (EL j st.scopes) id` >> gvs[] >>
+      metis_tac[finite_mapTheory.flookup_thm]) >>
     `lookup_scopes id st.scopes = SOME entry0` by (
       irule lookup_scopes_from_EL >>
       goal_assum drule >> simp[]) >>
@@ -2206,19 +2211,23 @@ val bind_decompose_ss =
    then applies terminal lemmas (write_storage_slot, set_global). *)
 val state_identity_preserves_tac =
   rpt strip_tac
-  >> TRY (imp_res_tac lift_option_type_state >> gvs[])
-  >> TRY (imp_res_tac lift_sum_state >> gvs[])
-  >> TRY (imp_res_tac read_storage_slot_state >> gvs[])
-  >> TRY (imp_res_tac resolve_array_element_state >> gvs[])
-  >> TRY (imp_res_tac assign_result_state >> gvs[])
-  >> TRY (imp_res_tac check_state >> gvs[])
-  >> TRY (imp_res_tac get_storage_backend_state >> gvs[])
-  >> TRY (imp_res_tac lookup_global_state >> gvs[])
-  >> TRY (imp_res_tac return_state >> gvs[])
-  >> TRY (imp_res_tac raise_state >> gvs[])
-  >> TRY (imp_res_tac write_storage_slot_well_typed >> gvs[])
-  >> TRY (imp_res_tac set_global_well_typed >> gvs[])
-  >> TRY (res_tac >> gvs[]);
+  >> TRY (imp_res_tac lift_option_type_state)
+  >> TRY (imp_res_tac lift_sum_state)
+  >> TRY (imp_res_tac read_storage_slot_state)
+  >> TRY (imp_res_tac resolve_array_element_state)
+  >> TRY (imp_res_tac assign_result_state)
+  >> TRY (imp_res_tac check_state)
+  >> TRY (imp_res_tac get_storage_backend_state)
+  >> TRY (imp_res_tac lookup_global_state)
+  >> TRY (imp_res_tac return_state)
+  >> TRY (imp_res_tac raise_state)
+  >> gvs[]
+  >> FIRST [
+       drule_all write_storage_slot_well_typed >> gvs[],
+       drule_all set_global_well_typed >> gvs[],
+       first_assum ACCEPT_TAC,
+       gvs[]
+     ];
 
 (* Simpset for full monadic chain decomposition including pair-pattern binds.
    bind_def (not bind_apply) + UNCURRY + EXISTS_PROD handles \(a,b) <- f patterns.
@@ -2809,7 +2818,8 @@ QED
 
 Resume evaluate_no_return[ExtCall_nr]:
   enr_tac
-  \\ gvs[bind_def, COND_RATOR, return_def, AllCaseEqs()]
+  \\ Cases_on `is_static'` \\ gvs[]
+  \\ gvs[bind_def, return_def, AllCaseEqs()]
   \\ strip_tac \\ gvs[get_transient_storage_def, return_def] \\ enr_tac
   \\ TRY pairarg_tac \\ gvs[]
   \\ pop_assum mp_tac \\ enr_tac
@@ -3426,10 +3436,11 @@ Proof
     (* id not in head: lookup in full scopes = lookup in tail *)
     >- (res_tac >> Cases_on `st_body.scopes` >> gvs[lookup_scopes_def] >> res_tac)
     (* id in head of st_body *)
-    >> `id IN FDOM (HD st_body.scopes)` by gvs[FLOOKUP_DEF] >>
+    >> `id IN FDOM (HD st_body.scopes)` by
+      metis_tac[finite_mapTheory.flookup_thm] >>
     (* id not in pushed head sc (by disjointness with env.var_types) *)
     `id NOTIN FDOM sc` by
-      (first_x_assum irule >> gvs[FLOOKUP_DEF]) >>
+      (first_x_assum irule >> metis_tac[finite_mapTheory.flookup_thm]) >>
     `id NOTIN FDOM (HD ((st with scopes updated_by CONS sc).scopes))` by
       simp[] >>
     (* id is new in head: new_in_head gives contradiction *)
@@ -4399,8 +4410,43 @@ Proof
   pop_assum mp_tac >>
   PURE_ONCE_REWRITE_TAC[bind_def] >>
   simp_tac bool_ss [BETA_THM] >>
-  rpt (CASE_TAC >>
-       simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
+                             raise_def, UNCURRY, lift_option_type_def,
+                             get_immutables_def]) >>
+  TRY (CASE_TAC >> simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def,
                              raise_def, UNCURRY, lift_option_type_def,
                              get_immutables_def]) >>
   rw[] >> gvs[] >>
@@ -4466,7 +4512,7 @@ Proof
        get_scopes_def, push_function_def,
        finally_def, try_def, handle_function_def, pop_function_def,
        lift_sum_def, lift_sum_runtime_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> qexists_tac `crv` >> simp[]
 QED
 
 (* Uniform tactic for all 20 eval_expr toplevel_wf cases.
@@ -4594,32 +4640,42 @@ Theorem eval_expr_toplevel_wf:
     !tv. res = INL tv ==> toplevel_value_wf tv) /\
   (!cx es st res st'. eval_exprs cx es st = (res, st') ==> T)
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >| (
-  List.tabulate(34, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH]) @
+  ho_match_mp_tac evaluate_ind
+  >> ntac 34 (conj_tac >- (rpt strip_tac >> REWRITE_TAC[TRUTH]))
   (* 20 P7 eval_expr cases *)
-  List.map tv_wf_blast_core
-    (List.map (fn i => el i ev_expr_cjs) [1,2,3,4]) @
-  [(* 5:IfExp — IH needs two drules: condition eval, then branch eval *)
-   tv_wf_blast_core (el 5 ev_expr_cjs) >>
-   first_x_assum (drule_then (drule_then strip_assume_tac)) >>
-   gvs[toplevel_value_wf_def]] @
-  List.map tv_wf_blast_core
-    (List.map (fn i => el i ev_expr_cjs) [6,7]) @
-  [(* 8:Subscript — IH gives wf for array, then evaluate_subscript_toplevel_wf *)
-   tv_wf_blast_core (el 8 ev_expr_cjs) >>
-   (* Get toplevel_value_wf tv1 from the direct IH (not the nested one) *)
-   qpat_x_assum `!st res st'. eval_expr _ _ st = (res, st') ==> _`
-     (drule_then strip_assume_tac) >>
-   imp_res_tac evaluate_subscript_toplevel_wf >>
-   gvs[toplevel_value_wf_def]] @
-  List.map tv_wf_blast_core
-    (List.map (fn i => el i ev_expr_cjs) [9,10,11,12,13]) @
-  [(* 14:ExtCall *)
-   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> suspend "ExtCall"] @
-  List.map tv_wf_blast_core
-    (List.map (fn i => el i ev_expr_cjs) [15,16,17,18,19,20]) @
-  List.tabulate(2, fn _ => rpt strip_tac >> REWRITE_TAC[TRUTH])
-  )
+  >> conj_tac >- tv_wf_blast_core (el 1 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 2 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 3 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 4 ev_expr_cjs)
+  (* IfExp — IH needs two drules: condition eval, then branch eval *)
+  >> conj_tac >- (
+    tv_wf_blast_core (el 5 ev_expr_cjs) >>
+    first_x_assum (drule_then (drule_then strip_assume_tac)) >>
+    gvs[toplevel_value_wf_def])
+  >> conj_tac >- tv_wf_blast_core (el 6 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 7 ev_expr_cjs)
+  (* Subscript — IH gives wf for array, then evaluate_subscript_toplevel_wf *)
+  >> conj_tac >- (
+    tv_wf_blast_core (el 8 ev_expr_cjs) >>
+    qpat_x_assum `!st res st'. eval_expr _ _ st = (res, st') ==> _`
+      (drule_then strip_assume_tac) >>
+    imp_res_tac evaluate_subscript_toplevel_wf >>
+    gvs[toplevel_value_wf_def])
+  >> conj_tac >- tv_wf_blast_core (el 9 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 10 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 11 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 12 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 13 ev_expr_cjs)
+  (* ExtCall *)
+  >> conj_tac >- (rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> suspend "ExtCall")
+  >> conj_tac >- tv_wf_blast_core (el 15 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 16 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 17 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 18 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 19 ev_expr_cjs)
+  >> conj_tac >- tv_wf_blast_core (el 20 ev_expr_cjs)
+  >> conj_tac >- (rpt strip_tac >> REWRITE_TAC[TRUTH])
+  >> rpt strip_tac >> REWRITE_TAC[TRUTH]
 QED
 
 Resume eval_expr_toplevel_wf[ExtCall]:
@@ -5248,6 +5304,33 @@ Proof
   ASM_REWRITE_TAC[] >> simp[bitTheory.BITWISE_LT_2EXP]
 QED
 
+Theorem int_bitwise_and_nat_bound_lt[local]:
+  !a b k. a < 2**k /\ b < 2**k ==>
+    Num (int_bitwise $/\ (&a) (&b)) < 2**k
+Proof
+  rpt strip_tac >>
+  qspecl_then [`$/\`,`a`,`b`,`k`] mp_tac int_bitwise_nat_bound >>
+  simp[]
+QED
+
+Theorem int_bitwise_or_nat_bound_lt[local]:
+  !a b k. a < 2**k /\ b < 2**k ==>
+    Num (int_bitwise $\/ (&a) (&b)) < 2**k
+Proof
+  rpt strip_tac >>
+  qspecl_then [`$\/`,`a`,`b`,`k`] mp_tac int_bitwise_nat_bound >>
+  simp[]
+QED
+
+Theorem int_bitwise_xor_nat_bound_lt[local]:
+  !a b k. a < 2**k /\ b < 2**k ==>
+    Num (int_bitwise (\x y:bool. x <> y) (&a) (&b)) < 2**k
+Proof
+  rpt strip_tac >>
+  qspecl_then [`\x y:bool. x <> y`,`a`,`b`,`k`] mp_tac int_bitwise_nat_bound >>
+  simp[]
+QED
+
 (* Int division upper bound: x / d < n implies x < n * d *)
 Theorem int_div_lt_imp[local]:
   !x d (n:int). 0 <= x /\ 0 < d /\ x / d < n ==> x < n * d
@@ -5329,6 +5412,27 @@ Proof
   simp[]
 QED
 
+val binop_nonint_tac =
+  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def,
+      binop_negate_def, bounded_decimal_op_def, within_int_bound_def] >>
+  TRY (Cases_on `b'` >> gvs[value_has_type_def, well_formed_type_value_def] >>
+       NO_TAC) >>
+  TRY (Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def,
+       within_int_bound_def] >> NO_TAC) >>
+  PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def, int_bitwiseTheory.int_or_def,
+                   int_bitwiseTheory.int_xor_def] >>
+  TRY (irule int_bitwise_and_nat_bound_lt >> simp[] >> NO_TAC) >>
+  TRY (irule int_bitwise_or_nat_bound_lt >> simp[] >> NO_TAC) >>
+  TRY (irule int_bitwise_xor_nat_bound_lt >> simp[] >> NO_TAC) >>
+  TRY (
+    Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def,
+         within_int_bound_def] >>
+    TRY (rpt IF_CASES_TAC >> gvs[] >> NO_TAC) >>
+    `within_int_bound (Signed 168) (ABS (i * i2) / 10000000000)`
+      by (simp[within_int_bound_def, LET_THM]) >>
+    drule decimal_mul_word_bound >>
+    simp[within_int_bound_def, LET_THM]);
+
 Theorem evaluate_binop_preserves_vht:
   !u tv2 bop a v result tv.
     evaluate_binop u tv2 bop a v = INL result /\
@@ -5350,40 +5454,31 @@ Proof
     drule evaluate_binop_intv_preserves_vht >>
     disch_then (qspec_then `b` mp_tac) >>
     (impl_tac >- ASM_REWRITE_TAC[]) >>
-    strip_tac >> NO_TAC) >>
+    strip_tac >> NO_TAC)
   (* Remaining: non-IntV cases. Most evaluate_binop calls return error. *)
-  Cases_on `bop` >>
-  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def,
-      binop_negate_def, bounded_decimal_op_def, within_int_bound_def] >>
-  (* BoolV: result is BoolV, b' must be BoolT *)
-  TRY (Cases_on `b'` >> gvs[value_has_type_def, well_formed_type_value_def] >>
-       NO_TAC) >>
-  (* DecimalV: within_int_bound check already in assumptions *)
-  TRY (Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def,
-       within_int_bound_def] >> NO_TAC) >>
-  (* FlagV: bitwise ops on bounded nats — unfold to int_bitwise, apply bound *)
-  PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def, int_bitwiseTheory.int_or_def,
-                   int_bitwiseTheory.int_xor_def] >>
-  TRY (
-    qspecl_then [`$/\`,`n`,`n2`,`n'`] mp_tac int_bitwise_nat_bound >>
-    ASM_REWRITE_TAC[] >> strip_tac >> ASM_REWRITE_TAC[] >> NO_TAC) >>
-  TRY (
-    qspecl_then [`$\/`,`n`,`n2`,`n'`] mp_tac int_bitwise_nat_bound >>
-    ASM_REWRITE_TAC[] >> strip_tac >> ASM_REWRITE_TAC[] >> NO_TAC) >>
-  TRY (
-    qspecl_then [`\x y:bool. x <> y`,`n`,`n2`,`n'`] mp_tac int_bitwise_nat_bound >>
-    simp_tac std_ss [] >>
-    ASM_REWRITE_TAC[] >> strip_tac >> ASM_REWRITE_TAC[] >> NO_TAC) >>
-  (* DecimalV: remaining cases (Mul, Min, Max) *)
-  Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def,
-       within_int_bound_def] >>
-  (* Min/Max: case split on i < i2, use corresponding bound *)
-  TRY (rpt IF_CASES_TAC >> gvs[] >> NO_TAC) >>
-  (* Mul: word-level decimal multiplication — apply decimal_mul_word_bound *)
-  `within_int_bound (Signed 168) (ABS (i * i2) / 10000000000)`
-    by (simp[within_int_bound_def, LET_THM]) >>
-  drule decimal_mul_word_bound >>
-  simp[within_int_bound_def, LET_THM]
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+  >- (Cases_on `bop` >> binop_nonint_tac)
+QED
+
+(* Successful shift evaluation implies both operands are IntV; this keeps the
+   preservation proof from case-splitting every value constructor in context. *)
+Theorem evaluate_binop_shift_inl_ints:
+  !u tv2 bop a v result.
+    (bop = ShL \/ bop = ShR) /\
+    evaluate_binop u tv2 bop a v = INL result ==>
+    ?i j. a = IntV i /\ v = IntV j
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bop = ShL` >> gvs[]
+  >- (Cases_on `a` >> Cases_on `v` >> gvs[evaluate_binop_def]) >>
+  Cases_on `a` >> Cases_on `v` >> gvs[evaluate_binop_def]
 QED
 
 (* Shift variant: v (the shift amount) may have a different type.
@@ -5400,21 +5495,17 @@ Theorem evaluate_binop_shift_preserves_vht:
     value_has_type tv result
 Proof
   rpt gen_tac >> strip_tac >>
-  (* Only IntV + BaseTV (UintT/IntT) has shift ops defined *)
-  Cases_on `a` >> Cases_on `tv` >>
-  gvs[value_has_type_def, well_formed_type_value_def] >>
-  (* Eliminate non-IntV and non-BaseTV cases: ShL/ShR returns error *)
-  TRY (Cases_on `v` >>
-       gvs[evaluate_binop_def, AllCaseEqs()] >> NO_TAC) >>
-  (* Remaining: a = IntV i, tv = BaseTV b *)
+  `?i j. a = IntV i /\ v = IntV j` by
+    metis_tac[evaluate_binop_shift_inl_ints] >>
+  gvs[] >>
+  Cases_on `tv` >> gvs[value_has_type_def, well_formed_type_value_def] >>
   Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def] >>
-  Cases_on `v` >>
   gvs[evaluate_binop_def, AllCaseEqs(), LET_THM, value_has_type_def,
       int_bound_bits_def] >>
   TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   (* ShR: keep within_int_bound folded *)
   TRY (  (* Unsigned ShR *)
-    qspecl_then [`Num i'`, `n`, `i`] mp_tac int_shift_right_unsigned_bounds >>
+    qspecl_then [`Num j`, `n`, `i`] mp_tac int_shift_right_unsigned_bounds >>
     (impl_tac >- (
       ASM_REWRITE_TAC[] >> irule (iffLR NUM_LT_INT) >> ASM_REWRITE_TAC[])) >>
     strip_tac >>
@@ -5977,6 +6068,221 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
+(* Return-data=[] path: delegate to the default-return expression IH. *)
+Theorem extcall_drv_preserves_swt:
+  !cx env ret_type drv st0 res st'.
+    state_well_typed st0 /\ env_consistent env cx st0 /\
+    functions_well_typed cx /\ context_well_typed cx /\
+    well_typed_opt env drv /\ IS_SOME drv /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (!e. drv = SOME e ==>
+      !env' st1 res1 st1'.
+        well_typed_expr env' e /\ env_consistent env' cx st1 /\
+        state_well_typed st1 /\ functions_well_typed cx /\ context_well_typed cx /\
+        eval_expr cx e st1 = (res1, st1') ==>
+        state_well_typed st1' /\ env_consistent env' cx st1' /\
+        !tv. res1 = INL tv ==>
+          (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                 toplevel_value_typed tv tyv) /\
+          (!v st''. materialise cx tv st1' = (INL v, st'') ==>
+             state_well_typed st'' /\ env_consistent env' cx st'' /\
+             ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                   value_has_type tyv v)) /\
+    eval_expr cx (THE drv) st0 = (res, st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    !tv. res = INL tv ==>
+      (?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
+             toplevel_value_typed tv tyv) /\
+      (!v st''. materialise cx tv st' = (INL v, st'') ==>
+         state_well_typed st'' /\ env_consistent env cx st'' /\
+         ?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
+               value_has_type tyv v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `drv` >- gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `SOME drv_expr` >>
+  `well_typed_expr env drv_expr` by (
+    qpat_x_assum `well_typed_opt env (SOME drv_expr)` mp_tac >>
+    simp[well_typed_opt_SOME]) >>
+  qpat_x_assum `eval_expr cx (THE (SOME drv_expr)) st0 = _` mp_tac >>
+  PURE_REWRITE_TAC[optionTheory.THE_DEF] >> strip_tac >>
+  `expr_type drv_expr = ret_type` by (
+    qpat_x_assum `!e. SOME drv_expr = SOME e ==> _`
+      (qspec_then `drv_expr` mp_tac) >> simp[]) >>
+  qpat_x_assum `expr_type drv_expr = ret_type` SUBST_ALL_TAC >>
+  qpat_x_assum `!e. SOME drv_expr = SOME e ==> !env' st1 res1 st1'. _`
+    (qspec_then `drv_expr` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env`, `st0`, `res`, `st'`] mp_tac) >>
+  simp[]
+QED
+
+(* Tail after a successful run_ext_call: account/transient updates preserve the
+   state invariants; return-data=[] delegates to the drv IH, otherwise ABI
+   decoding supplies the return value type. *)
+Theorem extcall_tail_preserves_swt:
+  !cx env ret_type drv success returnData accounts' tStorage' st0 res st'.
+    state_well_typed st0 /\ env_consistent env cx st0 /\
+    functions_well_typed cx /\ context_well_typed cx /\
+    well_typed_opt env drv /\
+    IS_SOME (evaluate_type (get_tenv cx) ret_type) /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (!e. drv = SOME e ==>
+      !env' st1 res1 st1'.
+        well_typed_expr env' e /\ env_consistent env' cx st1 /\
+        state_well_typed st1 /\ functions_well_typed cx /\ context_well_typed cx /\
+        eval_expr cx e st1 = (res1, st1') ==>
+        state_well_typed st1' /\ env_consistent env' cx st1' /\
+        !tv. res1 = INL tv ==>
+          (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                 toplevel_value_typed tv tyv) /\
+          (!v st''. materialise cx tv st1' = (INL v, st'') ==>
+             state_well_typed st'' /\ env_consistent env' cx st'' /\
+             ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                   value_has_type tyv v)) /\
+    (do
+       check success "ExtCall reverted";
+       update_accounts (K accounts');
+       update_transient (K tStorage');
+       if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+       else do
+         ret_val <- lift_sum_runtime
+           (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+         return (Value ret_val)
+       od
+     od) st0 = (res, st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    !tv. res = INL tv ==>
+      (?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
+             toplevel_value_typed tv tyv) /\
+      (!v st''. materialise cx tv st' = (INL v, st'') ==>
+         state_well_typed st'' /\ env_consistent env cx st'' /\
+         ?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
+               value_has_type tyv v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp_tac (srw_ss()) [bind_apply, ignore_bind_apply, check_def,
+    assert_def, update_accounts_def, update_transient_def,
+    return_def, raise_def] >>
+  Cases_on `success` >> simp_tac (srw_ss()) [return_def, raise_def]
+  >- (
+    qabbrev_tac `updated_st = st0 with <|accounts := accounts'; tStorage := tStorage'|>` >>
+    `state_well_typed updated_st /\ env_consistent env cx updated_st` by (
+      unabbrev_all_tac >> irule tp_preserved_scopes_immutables >>
+      qexists_tac `st0` >> simp[evaluation_state_component_equality]) >>
+    Cases_on `returnData = [] /\ IS_SOME drv` >> ASM_REWRITE_TAC []
+    >- (
+      strip_tac >>
+      qpat_x_assum `returnData = [] /\ IS_SOME drv` strip_assume_tac >>
+      qspecl_then [`cx`, `env`, `ret_type`, `drv`, `updated_st`, `res`, `st'`]
+        mp_tac extcall_drv_preserves_swt >>
+      disch_then match_mp_tac >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    simp_tac (srw_ss()) [bind_apply, lift_sum_runtime_def,
+      return_def, raise_def] >>
+    Cases_on `evaluate_abi_decode_return (get_tenv cx) ret_type returnData` >>
+    gvs[return_def, raise_def, materialise_def, toplevel_value_typed_def,
+        IS_SOME_EXISTS] >>
+    imp_res_tac evaluate_abi_decode_return_well_typed >>
+    strip_tac >>
+    BasicProvers.VAR_EQ_TAC >>
+    ASM_REWRITE_TAC[] >>
+    rpt gen_tac >> strip_tac >>
+    BasicProvers.VAR_EQ_TAC >>
+    conj_tac >- gvs[toplevel_value_typed_def] >>
+    rpt gen_tac >>
+    gvs[materialise_def, return_def] >>
+    strip_tac >> gvs[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem extcall_value_branch_state:
+  !vs st res st'.
+    (do
+       check (TL vs <> []) "ExtCall no value";
+       v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
+       return (SOME v, TL (TL vs))
+     od) st = (res, st') ==>
+    st' = st
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ignore_bind_split >> strip_tac
+  >- (
+    imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+    drule bind_split >> strip_tac
+    >- (
+      imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+      gvs[return_def]) >>
+    imp_res_tac lift_option_type_state >> gvs[]) >>
+  imp_res_tac check_state >> gvs[]
+QED
+
+(* Wrapper around lift_option (run_ext_call ...): NONE is an error result;
+   SOME delegates to the successful-result tail helper.  Put the equality first
+   so drule can infer the hidden run_res term from the main proof. *)
+Theorem extcall_run_result_preserves_swt:
+  !cx env ret_type drv run_res st0 res st'.
+    (case lift_option run_res "ExtCall run failed" st0 of
+       (INL result, s1) =>
+         (λ(success, returnData, accounts', tStorage').
+           do
+             check success "ExtCall reverted";
+             update_accounts (K accounts');
+             update_transient (K tStorage');
+             if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+             else do
+               ret_val <- lift_sum_runtime
+                 (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+               return (Value ret_val)
+             od
+           od) result s1
+     | (INR e, s1) => (INR e, s1)) = (res, st') ==>
+    state_well_typed st0 /\ env_consistent env cx st0 /\
+    functions_well_typed cx /\ context_well_typed cx /\
+    well_typed_opt env drv /\
+    IS_SOME (evaluate_type (get_tenv cx) ret_type) /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (!e. drv = SOME e ==>
+      !env' st1 res1 st1'.
+        well_typed_expr env' e /\ env_consistent env' cx st1 /\
+        state_well_typed st1 /\ functions_well_typed cx /\ context_well_typed cx /\
+        eval_expr cx e st1 = (res1, st1') ==>
+        state_well_typed st1' /\ env_consistent env' cx st1' /\
+        !tv. res1 = INL tv ==>
+          (?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                 toplevel_value_typed tv tyv) /\
+          (!v st''. materialise cx tv st1' = (INL v, st'') ==>
+             state_well_typed st'' /\ env_consistent env' cx st'' /\
+             ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                   value_has_type tyv v)) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    !tv. res = INL tv ==>
+      (?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
+             toplevel_value_typed tv tyv) /\
+      (!v st''. materialise cx tv st' = (INL v, st'') ==>
+         state_well_typed st'' /\ env_consistent env cx st'' /\
+         ?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
+               value_has_type tyv v)
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `run_res` >> gvs[lift_option_def, return_def, raise_def] >>
+  TRY (strip_tac >> gvs[] >> NO_TAC) >>
+  PairCases_on `x` >> gvs[] >>
+  qspecl_then [`cx`, `env`, `ret_type`, `drv`, `x0`,
+    `x1`, `x2`, `x3`, `st0`, `res`, `st'`]
+    mp_tac extcall_tail_preserves_swt >>
+  disch_then match_mp_tac >>
+  ASM_REWRITE_TAC[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!e. drv = SOME e ==> !env' st1 res1 st1'. _`
+    (qspec_then `e` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env'`, `st1`, `res1`, `st1'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!e. drv = SOME e ==> expr_type e = ret_type`
+    (qspec_then `e` mp_tac) >> simp[] >> strip_tac >>
+  ASM_REWRITE_TAC[]
+QED
+
 (* ExtCall chain: from if/else through to final result.
    The chain after check+lift_option_type in ExtCall.
    Takes swt+ec for post-eval_exprs state, P7 IH for drv as direct hypothesis.
@@ -6047,63 +6353,67 @@ Theorem extcall_chain_preserves_swt:
          ?tyv. evaluate_type (get_tenv cx) ret_type = SOME tyv /\
                value_has_type tyv v)
 Proof
-  let
-    val ect = BasicProvers.every_case_tac
-    val extcall_tail_tac =
-      gvs[bind_apply, lift_option_def, return_def, raise_def,
-          get_accounts_def, get_transient_storage_def,
-          check_def, assert_def, ignore_bind_apply,
-          update_accounts_def, update_transient_def,
-          lift_option_type_def] >>
-      ect >> gvs[raise_def, return_def, bind_apply, assert_def,
-          ignore_bind_apply, update_accounts_def, update_transient_def,
-          lift_sum_runtime_def] >>
-      rename1 `run_ext_call _ _ _ _ _ _ _ = SOME result_tup` >>
-      PairCases_on `result_tup` >> gvs[] >>
-      gvs[bind_apply, assert_def, ignore_bind_apply,
-          update_accounts_def, update_transient_def, return_def, raise_def] >>
-      Cases_on `result_tup0` >> gvs[raise_def] >>
-      rename1 `env_consistent env cx mid_st` >>
-      rename1 `run_ext_call _ _ _ _ mid_st.accounts mid_st.tStorage _ =
-               SOME (T, returnData, new_accts, new_tstor)` >>
-      `state_well_typed (mid_st with <|accounts := new_accts; tStorage := new_tstor|>) /\
-       env_consistent env cx (mid_st with <|accounts := new_accts; tStorage := new_tstor|>)` by (
-        irule tp_preserved_scopes_immutables >>
-        qexists_tac `mid_st` >> simp[evaluation_state_component_equality]) >>
-      Cases_on `returnData = [] ∧ IS_SOME drv` >| [
-        ASM_REWRITE_TAC [] >>
-        gvs[] >> strip_tac >>
-        Cases_on `drv` >> gvs[] >>
-        rename1 `well_typed_opt env (SOME drv_expr)` >>
-        `well_typed_expr env drv_expr` by gvs[well_typed_opt_SOME] >>
-        first_x_assum (qspecl_then [`env`,
-          `mid_st with <|accounts := new_accts; tStorage := new_tstor|>`,
-          `res`, `st'`] mp_tac) >>
-        simp[] >> strip_tac >> gvs[] >>
-        rpt strip_tac >| [
-          first_x_assum (qspec_then `tv` mp_tac) >> simp[],
-          first_x_assum (qspec_then `tv` mp_tac) >> simp[] >>
-          disch_then drule >> strip_tac >>
-          qexists_tac `tyv` >> gvs[]
-        ],
-        ASM_REWRITE_TAC [] >>
-        simp_tac (srw_ss()) [bind_apply, return_def, raise_def, lift_sum_runtime_def] >>
-        ect >> gvs[return_def, raise_def, bind_apply, materialise_def,
-                   toplevel_value_typed_def] >>
-        gvs[IS_SOME_EXISTS] >>
-        imp_res_tac evaluate_abi_decode_return_well_typed >> metis_tac[]
-      ]
-  in
-    rpt gen_tac >> strip_tac >>
-    (* Unfold the entire chain including check + lift_option_type prefix *)
-    qpat_x_assum `(do _ od) _ = _` mp_tac >>
-    simp_tac (srw_ss()) [bind_apply, pair_bind_apply, check_def, assert_def,
-      return_def, raise_def, lift_option_type_def, ignore_bind_apply] >>
-    Cases_on `is_stat` >> ASM_REWRITE_TAC [] >>
-    simp_tac (srw_ss()) [return_def, check_def, assert_def,
-      bind_apply, raise_def, lift_option_type_def] >>
-    strip_tac >> extcall_tail_tac
-  end
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp_tac std_ss [bind_apply, ignore_bind_apply] >>
+  (* check (vs <> []) *)
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  (* target address *)
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  (* static/non-static value branch *)
+  Cases_on `is_stat` >> ASM_REWRITE_TAC []
+  >- (
+    simp_tac (srw_ss()) [pair_bind_apply, return_pair_bind, bind_apply, return_def] >>
+    simp_tac (srw_ss()) [bind_apply] >>
+    (* calldata *)
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac lift_option_state >> TRY BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+    (* accounts / transient storage are reads *)
+    simp_tac (srw_ss())
+      [get_accounts_def, get_transient_storage_def, return_def, bind_apply] >>
+    (* external call result *)
+    strip_tac >>
+    drule_at_then Any match_mp_tac extcall_run_result_preserves_swt >>
+    ASM_REWRITE_TAC[]) >>
+  simp_tac std_ss [pair_bind_apply, bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  (fn (asl, g) =>
+    let val asm = hd asl
+        val (lhs, rhs) = dest_eq asm
+        val (_, out_st) = pairSyntax.dest_pair rhs
+        val in_st = rand lhs
+    in
+      (SUBGOAL_THEN (mk_eq(out_st, in_st)) SUBST_ALL_TAC >- (
+        imp_res_tac extcall_value_branch_state >> gvs[])) (asl, g)
+    end) >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  rename1 `(do _ od) _ = (INL value_pair, _)` >>
+  PairCases_on `value_pair` >> gvs[] >>
+  simp_tac (srw_ss()) [bind_apply] >>
+  (* calldata *)
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_state >> TRY BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  (* accounts / transient storage are reads *)
+  simp_tac (srw_ss())
+    [get_accounts_def, get_transient_storage_def, return_def, bind_apply] >>
+  (* external call result *)
+  strip_tac >>
+  drule_at_then Any match_mp_tac extcall_run_result_preserves_swt >>
+  ASM_REWRITE_TAC[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!e. drv = SOME e ==> !env' st0 res0 st0'. _`
+    (qspec_then `e` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`env'`, `st1`, `res1`, `st1'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!e. drv = SOME e ==> expr_type e = ret_type`
+    (qspec_then `e` mp_tac) >> simp[] >> strip_tac >>
+  ASM_REWRITE_TAC[]
 QED
 
 
