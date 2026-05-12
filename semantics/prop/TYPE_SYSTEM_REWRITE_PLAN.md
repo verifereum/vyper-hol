@@ -59,18 +59,19 @@ holbuild build vyperTypeStmtSoundnessTheory      # succeeds, through the proved 
 holbuild build vyperSemanticsHolTheory           # succeeds
 ```
 
-Reachable fresh-stack cheat inventory at the latest audit, after proving the
-scope-pop scaffold:
+Reachable fresh-stack cheat inventory at the latest audit, after proving
+scope-pop and item-2 assignability preservation:
 
 ```text
-semantics/prop/vyperTypeEnvPreservationScript.sml     3
 semantics/prop/vyperTypeAssignSoundnessScript.sml     3
 semantics/prop/vyperTypeBuiltinsScript.sml           19
 semantics/prop/vyperTypeStmtSoundnessScript.sml      39
 semantics/prop/vyperTypeCallSoundnessScript.sml       4
 --------------------------------------------------------
-Total reachable fresh-stack cheats                    68
+Total reachable fresh-stack cheats                    65
 ```
+
+`vyperTypeEnvPreservationScript.sml` now has no cheats.
 
 Recent progress:
 
@@ -99,6 +100,20 @@ Recent progress:
   verified: `holbuild build vyperTypeStmtSoundnessTheory`.
 - Rebuilt the public stack after the scope-pop proof:
   `holbuild build vyperSemanticsHolTheory` succeeds.
+- Completed item-2 assignability preservation without a new evaluator mutual
+  induction by strengthening `preserves_tv_def` in
+  `vyperEvalPreservesScopesScript.sml` so preserved scope entries also preserve
+  `entry.assignable`.  The existing `eval_preserves_tv` mutual theorem now
+  carries assignability preservation.  In `vyperTypeEnvPreservationScript.sml`,
+  the exported evaluator assignability corollaries
+  `eval_base_target_preserves_assignable_lookup`,
+  `eval_expr_preserves_assignable_lookup`, and
+  `eval_exprs_preserves_assignable_lookup` are proved from `eval_preserves_tv`
+  plus existing scope-domain preservation.  Verified:
+  `holbuild build vyperEvalPreservesScopesTheory`,
+  `holbuild build vyperTypeEnvPreservationTheory`,
+  `holbuild build vyperTypeStmtSoundnessTheory`, and
+  `holbuild build vyperSemanticsHolTheory`.
 
 No reachable cheats were found in:
 
@@ -147,6 +162,15 @@ fresh stack:
 Before clearing large numbers of statement cases, validate theorem statements
 that are currently suspicious or known incomplete:
 
+Completed foundational checkpoint:
+
+- Assignability preservation is now proved as part of the strengthened
+  `preserves_tv` frame invariant.  The old warning not to derive assignability
+  from the previous `preserves_tv` remains historically relevant: the definition
+  first had to be strengthened to preserve `entry.assignable`.
+
+Remaining priorities:
+
 1. Decide the ABI encode bound issue.  The current static typing allows
    `BaseT (BytesT (Dynamic n))` without proving `n` bounds the encoded output.
    This cannot remain an informal caveat if the final reachable theorem claims
@@ -154,14 +178,11 @@ that are currently suspicious or known incomplete:
 2. Audit `vyperTypeBuiltinsScript.sml` TODOs that explicitly say the type system
    must be strengthened.  Some builtin cheats are likely definition gaps, not
    just proof-script gaps.
-3. Prove remaining foundational preservation cheats:
-   - `eval_base_target_preserves_assignable_lookup`
-   - `eval_expr_preserves_assignable_lookup`
-4. Prove assignment no-TypeError cheats:
+3. Prove assignment no-TypeError cheats:
    - `assign_target_no_type_error`
    - `assign_target_update_no_type_error`
    - `assign_target_append_no_type_error`
-5. Then discharge builtin, statement, and call soundness cheats in dependency
+4. Then discharge builtin, statement, and call soundness cheats in dependency
    order.
 
 Eventually replace:

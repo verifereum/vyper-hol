@@ -7,8 +7,8 @@ Ancestors
   alist list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperABI vyperInterpreter vyperState
   vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeValues
-  vyperLookup vyperStatePreservation vyperTypeEnv vyperTypeEnvExtension
-  vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
+  vyperLookup vyperStatePreservation vyperStorageBackend vyperTypeEnv vyperTypeEnvExtension
+  vyperEvalPreservesScopes vyperScopePreservation vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom
 Libs
   wordsLib
@@ -114,6 +114,33 @@ Proof
   `FDOM (EL j st.scopes) = FDOM (EL j st'.scopes)` by
     (irule MAP_FDOM_EL_FDOM >> gvs[] >>
      qpat_x_assum `preserves_tv _ _ _` mp_tac >> simp[preserves_tv_def]) >>
+  metis_tac[flookup_thm]
+QED
+
+Theorem lookup_scopes_assignable_preserved_under_preserves_tv:
+  !cx st st' id entry.
+    preserves_tv cx st st' /\
+    MAP FDOM st'.scopes = MAP FDOM st.scopes /\
+    lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
+    ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
+Proof
+  rpt strip_tac >>
+  drule lookup_scopes_EL >> strip_tac >>
+  `i < LENGTH st'.scopes` by
+    (qpat_x_assum `preserves_tv _ _ _` mp_tac >> simp[preserves_tv_def]) >>
+  `?entry'. FLOOKUP (EL i st'.scopes) id = SOME entry' /\
+              entry'.type = entry.type /\
+              entry'.assignable = entry.assignable` by (
+    qpat_x_assum `preserves_tv _ _ _` mp_tac >>
+    simp[preserves_tv_def] >> strip_tac >>
+    first_x_assum drule_all >> simp[]) >>
+  qexists_tac `entry'` >> simp[] >>
+  irule lookup_scopes_from_EL >>
+  qexists_tac `i` >> simp[] >>
+  rpt strip_tac >>
+  `id NOTIN FDOM (EL j st'.scopes)` suffices_by metis_tac[flookup_thm] >>
+  `FDOM (EL j st'.scopes) = FDOM (EL j st.scopes)` by
+    (irule MAP_FDOM_EL_FDOM >> simp[]) >>
   metis_tac[flookup_thm]
 QED
 
@@ -419,6 +446,33 @@ Proof
   rpt strip_tac >> Cases_on `FLOOKUP env id` >> gvs[]
 QED
 
+Definition preserves_assignable_lookup_def:
+  preserves_assignable_lookup st st' <=>
+    !id entry.
+      lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
+      ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
+End
+
+Theorem preserves_assignable_lookup_refl[simp]:
+  !st. preserves_assignable_lookup st st
+Proof
+  simp[preserves_assignable_lookup_def] >> metis_tac[]
+QED
+
+Theorem preserves_assignable_lookup_trans:
+  !st1 st2 st3.
+    preserves_assignable_lookup st1 st2 /\ preserves_assignable_lookup st2 st3 ==>
+    preserves_assignable_lookup st1 st3
+Proof
+  simp[preserves_assignable_lookup_def] >> metis_tac[]
+QED
+
+Theorem preserves_assignable_lookup_scopes_eq:
+  st'.scopes = st.scopes ==> preserves_assignable_lookup st st'
+Proof
+  simp[preserves_assignable_lookup_def] >> metis_tac[]
+QED
+
 Theorem update_name_preserves_assignable_lookup:
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
   ?entry'. lookup_scopes id (update_name st nm v).scopes = SOME entry' /\
@@ -446,23 +500,126 @@ Proof
   simp[lookup_scopes_append_fupdate_other]
 QED
 
+Theorem update_name_preserves_assignable:
+  preserves_assignable_lookup st (update_name st nm v)
+Proof
+  simp[preserves_assignable_lookup_def] >> metis_tac[update_name_preserves_assignable_lookup]
+QED
+
+Theorem set_scopes_preserves_assignable_lookup:
+  set_scopes scopes st = (res, st') /\
+  (!id entry.
+     lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
+     ?entry'. lookup_scopes id scopes = SOME entry' /\ entry'.assignable) ==>
+  preserves_assignable_lookup st st'
+Proof
+  rw[set_scopes_def, return_def, preserves_assignable_lookup_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem assign_target_scoped_preserves_assignable_lookup:
+  assign_target cx (BaseTargetV (ScopedVar nm) sbs) ao st = (res, st') ==>
+  preserves_assignable_lookup st st'
+Proof
+  simp[preserves_assignable_lookup_def] >> rpt strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_sum_def, type_check_def, assert_def,
+       ignore_bind_def, set_scopes_def, AllCaseEqs()] >>
+  Cases_on `find_containing_scope (string_to_num nm) st.scopes` >> simp[return_def, raise_def] >- metis_tac[] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `assign_subscripts x2.type x2.value (REVERSE sbs) ao` >>
+  simp[return_def, raise_def] >>
+  Cases_on `x2.assignable` >> simp[return_def, raise_def] >>
+  gvs[bind_def, assert_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac assign_result_state >> gvs[] >>
+  drule find_containing_scope_structure >>
+  drule find_containing_scope_pre_none >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `id = string_to_num nm` >- (
+    `lookup_scopes id x0 = NONE` by gvs[] >>
+    `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
+      metis_tac[lookup_scopes_append_cons] >>
+    gvs[] >>
+    qexists_tac `entry with value := x` >>
+    simp[lookup_scopes_update]) >>
+  qexists_tac `entry` >>
+  simp[lookup_scopes_append_fupdate_other]
+QED
+
+Theorem assign_target_toplevel_preserves_assignable_lookup:
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt nm) sbs) ao st = (res, st') ==>
+  preserves_assignable_lookup st st'
+Proof
+  rpt strip_tac >>
+  irule preserves_assignable_lookup_scopes_eq >>
+  drule assign_target_toplevel_scopes_immutables >> simp[]
+QED
+
+Theorem assign_target_immutable_preserves_assignable_lookup:
+  assign_target cx (BaseTargetV (ImmutableVar nm) sbs) ao st = (res, st') ==>
+  preserves_assignable_lookup st st'
+Proof
+  rpt strip_tac >>
+  irule preserves_assignable_lookup_scopes_eq >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, return_def, raise_def,
+       get_immutables_def, get_address_immutables_def, set_immutable_def,
+       set_address_immutables_def, lift_option_def, lift_option_type_def,
+       lift_sum_def, ignore_bind_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num nm)` >>
+  simp[return_def, raise_def] >>
+  PairCases_on `x'` >> simp[] >>
+  Cases_on `assign_subscripts x'0 x'1 (REVERSE sbs) ao` >> simp[return_def, raise_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac assign_result_state >> gvs[]
+QED
+
 (* Helper: expression base-target evaluation preserves assignability of any
    previously visible assignable local.  This is separated because expression
    evaluation invokes base-target evaluation in several cases. *)
-Theorem materialise_preserves_assignable_lookup:
-  materialise cx tvl st = (res, st') /\
-  lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
-  ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
+Theorem assign_target_preserves_assignable_lookup:
+  (∀cx gv ao st res st'.
+     assign_target cx gv ao st = (res, st') ⇒
+     preserves_assignable_lookup st st') ∧
+  (∀cx gvs vs st res st'.
+     assign_targets cx gvs vs st = (res, st') ⇒
+     preserves_assignable_lookup st st')
 Proof
-  rpt strip_tac >> imp_res_tac materialise_state >> gvs[] >> metis_tac[]
-QED
-
-Theorem get_Value_preserves_assignable_lookup:
-  get_Value tvl st = (res, st') /\
-  lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
-  ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
-Proof
-  Cases_on `tvl` >> gvs[get_Value_def, return_def, raise_def] >> metis_tac[]
+  ho_match_mp_tac assign_target_ind >>
+  rpt strip_tac >>
+  simp[Once assign_target_def]
+  >- metis_tac[assign_target_scoped_preserves_assignable_lookup]
+  >- metis_tac[assign_target_toplevel_preserves_assignable_lookup]
+  >- metis_tac[assign_target_immutable_preserves_assignable_lookup]
+  >- (
+    qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+    simp[Once assign_target_def, bind_def, ignore_bind_def, type_check_def,
+         assert_def, return_def, raise_def] >>
+    Cases_on `LENGTH gvs = LENGTH vs` >> simp[return_def, raise_def] >>
+    Cases_on `assign_targets cx gvs vs st` >> simp[return_def, raise_def] >>
+    Cases_on `q` >> simp[return_def, raise_def] >>
+    strip_tac >> gvs[] >>
+    first_x_assum drule >> strip_tac >>
+    irule preserves_assignable_lookup_trans >>
+    qexists_tac `st'` >> simp[preserves_assignable_lookup_refl])
+  >> gvs[Once assign_target_def, return_def, raise_def,
+         preserves_assignable_lookup_refl]
+  >- (
+    qpat_x_assum `do assign_target _ _ _; _ od _ = _` mp_tac >>
+    simp[bind_def, ignore_bind_def, return_def, raise_def] >>
+    Cases_on `assign_target cx gv (Replace v) st` >> simp[return_def, raise_def] >>
+    Cases_on `q` >> simp[return_def, raise_def] >>
+    Cases_on `assign_targets cx gvs vs r` >> simp[return_def, raise_def] >>
+    Cases_on `q` >> simp[return_def, raise_def] >>
+    strip_tac >> fs[bind_def, ignore_bind_def, return_def, raise_def] >>
+    gvs[] >>
+    first_x_assum drule >> strip_tac >>
+    irule preserves_assignable_lookup_trans >>
+    qexists_tac `r` >> simp[])
 QED
 
 Theorem eval_base_target_preserves_assignable_lookup:
@@ -470,10 +627,11 @@ Theorem eval_base_target_preserves_assignable_lookup:
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
   ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
 Proof
-  (* Draft proof shape: induction over eval_base_target cases from
-     evaluate_ind, using update_name_preserves_assignable_lookup for any local
-     update and chaining the IHs through bind cases. *)
-  cheat
+  rpt strip_tac >>
+  drule (cj 6 eval_preserves_tv) >> strip_tac >>
+  drule eval_base_target_preserves_scopes_dom >> simp[] >> strip_tac >>
+  `MAP FDOM st'.scopes = MAP FDOM st.scopes` by simp[] >>
+  drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> simp[]
 QED
 
 Theorem eval_expr_preserves_assignable_lookup:
@@ -481,36 +639,11 @@ Theorem eval_expr_preserves_assignable_lookup:
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
   ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
 Proof
-  (* Proof draft.
-
-     This should be a mutual induction over evaluate_ind with only the P7/P8
-     expression predicates non-trivial, analogous to
-     vyperEvalExprPreservesScopesDomScript.sml.
-
-     Suggested predicates:
-       P5 cx bt = !st res st' id entry.
-         eval_base_target cx bt st = (res,st') /\
-         lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
-         ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
-       P7 cx e = same for eval_expr
-       P8 cx es = same for eval_exprs
-
-     Case strategy:
-     - Pure/read-only expression cases: unfold Once evaluate_def and close with
-       return/get/lift/materialise_state facts.
-     - Chained bind cases: apply the IH to the first evaluation to get an
-       assignable entry in the intermediate state, then apply the next IH.
-     - Any materialise in between: use materialise_state to rewrite the state.
-     - Any base-target evaluation: use eval_base_target_preserves_assignable_lookup.
-     - Any update_name path introduced by assignment-like expression cases:
-       use update_name_preserves_assignable_lookup.
-
-     The already-proved eval_exprs_preserves_assignable_lookup should be kept
-     as the public list corollary; during mutual induction it may be easier to
-     prove P8 directly and then derive that theorem, but the statement below is
-     the required P7 public theorem.
-  *)
-  cheat
+  rpt strip_tac >>
+  drule (cj 8 eval_preserves_tv) >> strip_tac >>
+  drule eval_expr_preserves_scopes_dom >> simp[] >> strip_tac >>
+  `MAP FDOM st'.scopes = MAP FDOM st.scopes` by simp[] >>
+  drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> simp[]
 QED
 
 Theorem eval_exprs_preserves_assignable_lookup:
@@ -518,13 +651,11 @@ Theorem eval_exprs_preserves_assignable_lookup:
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
   ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
 Proof
-  MAP_EVERY qid_spec_tac [`st'`, `st`, `res`, `entry`] >>
-  Induct_on `es` >> simp[Once evaluate_def, return_def, bind_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  drule_all eval_expr_preserves_assignable_lookup >>
-  strip_tac >>
-  imp_res_tac materialise_state >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  rpt strip_tac >>
+  drule eval_exprs_preserves_scopes_dom >> simp[] >> strip_tac >>
+  drule (cj 9 eval_preserves_tv) >> strip_tac >>
+  `MAP FDOM st'.scopes = MAP FDOM st.scopes` by simp[] >>
+  drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> simp[]
 QED
 
 (* ===== Evaluation corollaries ===== *)

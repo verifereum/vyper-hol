@@ -1173,7 +1173,8 @@ Definition preserves_tv_def:
     (∀i id entry. i < LENGTH st.scopes ∧
                  FLOOKUP (EL i st.scopes) id = SOME entry ⇒
                  ∃entry'. FLOOKUP (EL i st'.scopes) id = SOME entry' ∧
-                          entry'.type = entry.type) ∧
+                          entry'.type = entry.type ∧
+                          entry'.assignable = entry.assignable) ∧
     (∀src id tv v.
        FLOOKUP (get_source_immutables src
          (case ALOOKUP st.immutables cx.txn.target of
