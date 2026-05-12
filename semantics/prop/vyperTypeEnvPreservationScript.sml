@@ -7,7 +7,8 @@ Ancestors
   alist list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperABI vyperInterpreter vyperState
   vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeValues
-  vyperLookup vyperStatePreservation vyperTypeEnv vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
+  vyperLookup vyperStatePreservation vyperTypeEnv vyperTypeEnvExtension
+  vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom
 Libs
   wordsLib
@@ -31,6 +32,13 @@ Theorem lookup_scopes_same_fdoms_some:
     IS_SOME (lookup_scopes id scopes2)
 Proof
   metis_tac[lookup_scopes_is_some_same_fdoms, IS_SOME_EXISTS]
+QED
+
+Theorem lookup_scopes_is_some_cons_tl:
+  IS_SOME (lookup_scopes id (h::t)) /\ FLOOKUP h id = NONE ==>
+  IS_SOME (lookup_scopes id t)
+Proof
+  Cases_on `lookup_scopes id t` >> simp[lookup_scopes_def]
 QED
 
 Theorem lookup_scopes_EL:
@@ -191,26 +199,6 @@ Proof
   res_tac >> gvs[]
 QED
 
-Definition env_maps_wf_def:
-  env_maps_wf env <=>
-    !id. FLOOKUP env.var_assignable id = SOME T ==>
-         IS_SOME (FLOOKUP env.var_types id)
-End
-
-Theorem env_consistent_env_maps_wf:
-  env_consistent env cx st ==> env_maps_wf env
-Proof
-  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_maps_wf_def]
-QED
-
-Theorem env_maps_wf_no_stale_assignable_T:
-  env_maps_wf env /\ id NOTIN FDOM env.var_types ==>
-  FLOOKUP env.var_assignable id <> SOME T
-Proof
-  rw[env_maps_wf_def, TO_FLOOKUP] >>
-  first_x_assum (qspec_then `id` mp_tac) >> simp[]
-QED
-
 Theorem extend_local_env_consistent_weaken:
   env_maps_wf env /\
   id NOTIN FDOM env.var_types /\ lookup_scopes id st.scopes = NONE /\
@@ -243,68 +231,6 @@ Proof
     metis_tac[]) >>
   qpat_x_assum `env_immutables_consistent _ _ _` mp_tac >>
   rw[env_immutables_consistent_def, extend_local_def] >> metis_tac[]
-QED
-
-Theorem extend_local_env_maps_wf:
-  env_maps_wf env ==> env_maps_wf (extend_local env id ty assignable)
-Proof
-  rw[env_maps_wf_def, extend_local_def, FLOOKUP_UPDATE] >>
-  Cases_on `id = id'` >> gvs[]
-QED
-
-Theorem type_stmt_env_maps_wf:
-  env_maps_wf env /\ type_stmt env ret_ty s = SOME env' ==>
-  env_maps_wf env'
-Proof
-  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs()] >>
-  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  TRY (rw[env_maps_wf_def, extend_local_def, FLOOKUP_UPDATE] >>
-       Cases_on `string_to_num s'' = id` >> gvs[FLOOKUP_UPDATE]) >>
-  strip_tac >> gvs[]
-QED
-
-Theorem type_stmts_env_maps_wf:
-  env_maps_wf env /\ type_stmts env ret_ty ss = SOME env' ==>
-  env_maps_wf env'
-Proof
-  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
-  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
-  metis_tac[type_stmt_env_maps_wf]
-QED
-
-Theorem type_stmt_var_types_mono:
-  type_stmt env ret_ty s = SOME env' /\ FLOOKUP env'.var_types id = NONE ==>
-  FLOOKUP env.var_types id = NONE
-Proof
-  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs(), extend_local_def, FLOOKUP_UPDATE] >>
-  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  rw[] >> gvs[FLOOKUP_UPDATE]
-QED
-
-Theorem type_stmt_var_types_preserve:
-  type_stmt env ret_ty s = SOME env' /\ FLOOKUP env.var_types id = SOME ty ==>
-  FLOOKUP env'.var_types id = SOME ty
-Proof
-  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs(), extend_local_def, FLOOKUP_UPDATE] >>
-  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  rw[] >> gvs[FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num s'' = id` >> gvs[] >>
-  fs[TO_FLOOKUP]
-QED
-
-Theorem type_stmts_var_types_preserve:
-  type_stmts env ret_ty ss = SOME env' /\ FLOOKUP env.var_types id = SOME ty ==>
-  FLOOKUP env'.var_types id = SOME ty
-Proof
-  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
-  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
-  metis_tac[type_stmt_var_types_preserve]
 QED
 
 Theorem type_stmt_env_consistent_weaken:
@@ -349,16 +275,36 @@ Proof
   drule_all type_stmts_var_types_preserve >> simp[]
 QED
 
-Theorem scope_bracket_preserves_ec:
-  env_maps_wf env /\
-  type_stmts env ret_ty ss = SOME env_after /\
-  env_consistent env_after cx st_body /\
-  eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st_body) /\
-  (!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc) ==>
-  env_consistent env cx (st_body with scopes := TL st_body.scopes)
+Theorem lookup_scopes_none_tl:
+  lookup_scopes id (h::t) = NONE ==> lookup_scopes id t = NONE
 Proof
-  cheat
+  simp[lookup_scopes_def, AllCaseEqs()]
 QED
+
+Theorem env_context_consistent_type_stmts_weaken:
+  type_stmts env ret_ty ss = SOME env' /\ env_context_consistent env' cx ==>
+  env_context_consistent env cx
+Proof
+  rpt strip_tac >>
+  drule_all type_stmts_preserve_nonlocal_fields >> strip_tac >>
+  fs[env_context_consistent_def] >> metis_tac[]
+QED
+
+Theorem env_immutables_consistent_type_stmts_weaken:
+  type_stmts env ret_ty ss = SOME env' /\ env_immutables_consistent env' cx st ==>
+  env_immutables_consistent env cx st
+Proof
+  rpt strip_tac >>
+  drule_all type_stmts_preserve_nonlocal_fields >> strip_tac >>
+  fs[env_immutables_consistent_def] >> metis_tac[]
+QED
+
+(* MOVED-BY-PLAN: scope_bracket_preserves_ec belongs in the planned
+   vyperTypeScopePop theory, with the stronger precondition
+   env_consistent env cx st.  The old in-place proof is intentionally not
+   exported from vyperTypeEnvPreservation because the st.scopes <> [] shape is
+   too weak for the final architecture.  Original proof body preserved in git
+   history and the rewrite plan. *)
 
 (* ===== Main frame lemma ===== *)
 

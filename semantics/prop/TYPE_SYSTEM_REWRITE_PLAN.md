@@ -19,7 +19,9 @@ Current fresh theory stack:
 - `vyperTypeSystemScript.sml` — new executable type-system definitions.
 - `vyperTypeValuesScript.sml` — pure value/type lemmas.
 - `vyperTypeEnvScript.sml` — env/state/scope/immutable consistency lemmas.
+- `vyperTypeEnvExtensionScript.sml` — planned static typing-env extension/weakening layer (to be created; see scope-pop reorganisation below).
 - `vyperTypeEnvPreservationScript.sml` — frame-style env consistency preservation lemmas.
+- `vyperTypeScopePopScript.sml` — planned pushed-scope execution/pop restoration layer (to be created; see scope-pop reorganisation below).
 - `vyperTypeBytesCryptoScript.sml` — bytes/crypto value typing helpers.
 - `vyperTypeDefaultsScript.sml` — default argument typing helpers.
 - `vyperTypeConversionsScript.sml` — conversion typing helpers.
@@ -132,15 +134,24 @@ that are currently suspicious or known incomplete:
 2. Audit `vyperTypeBuiltinsScript.sml` TODOs that explicitly say the type system
    must be strengthened.  Some builtin cheats are likely definition gaps, not
    just proof-script gaps.
-3. Prove remaining foundational preservation cheats:
-   - `scope_bracket_preserves_ec`
+3. Reorganise and prove the pushed-scope/env-pop preservation layer before
+   continuing statement cases.  The immediate target is still
+   `scope_bracket_preserves_ec`, but the proof should not be patched in place.
+   Create/factor clean reusable theories:
+   - `vyperTypeEnvExtensionScript.sml` for static env extension/weakening facts.
+   - `vyperTypeScopePopScript.sml` for pushed-scope execution, pop, and env
+     consistency restoration.
+   Move generic helpers currently sitting in `vyperTypeStmtSoundnessScript.sml`
+   into these lower layers, then prove `scope_bracket_preserves_ec` with the
+   stronger and stable precondition `env_consistent env cx st`.
+4. Prove remaining foundational preservation cheats:
    - `eval_base_target_preserves_assignable_lookup`
    - `eval_expr_preserves_assignable_lookup`
-4. Prove assignment no-TypeError cheats:
+5. Prove assignment no-TypeError cheats:
    - `assign_target_no_type_error`
    - `assign_target_update_no_type_error`
    - `assign_target_append_no_type_error`
-5. Then discharge builtin, statement, and call soundness cheats in dependency
+6. Then discharge builtin, statement, and call soundness cheats in dependency
    order.
 
 Eventually replace:
@@ -724,6 +735,227 @@ assign_operation_leaf_update
 ```sml
 ty = ArrayT elem_ty (Dynamic n)
 ```
+
+## Scope-pop/env-extension reorganisation plan
+
+The immediate foundational blocker is `scope_bracket_preserves_ec`.  The final
+organisation should not patch this theorem in place with ad-hoc local lemmas.
+The clean split is:
+
+```text
+vyperTypeEnvExtension
+  Static typing-env extension/weakening and env-map well-formedness facts.
+  This is a low-level static-env theory and must not depend on
+  vyperTypeEnvPreservation or statement soundness.
+
+vyperTypeEnvPreservation
+  Generic frame-style preservation of env consistency.
+
+vyperTypeScopePop
+  Runtime pushed-scope execution, pop, and restoration of outer env consistency.
+  This should depend on vyperTypeEnvExtension plus evaluator/state preservation
+  facts.  It should not depend on statement soundness.
+
+vyperTypeStmtSoundness
+  Statement/list/for-loop no-TypeError and result/postcondition proof layer.
+```
+
+Preferred dependency graph:
+
+```text
+vyperTypeSystem / vyperTypeValues / vyperTypeEnv
+        ↓
+vyperTypeEnvExtension
+        ↓
+vyperTypeEnvPreservation
+        ↓
+expression / assignment / other frame users
+
+vyperTypeEnvExtension + vyperEvalPreservesScopes + vyperStatePreservation
+        ↓
+vyperTypeScopePop
+        ↓
+vyperTypeStmtSoundness
+        ↓
+vyperTypeCallSoundness
+        ↓
+vyperTypeSoundnessNew
+        ↓
+vyperSemanticsHol
+```
+
+`vyperTypeScopePop` should not import `vyperTypeEnvPreservation` unless a
+specific theorem from it is genuinely needed; the intended scope-pop proof can
+be done from env extension, evaluator scope facts, and `preserves_tv` facts.
+
+### `vyperTypeEnvExtensionScript.sml` responsibilities
+
+Create this theory and move/factor the generic static-env facts out of
+`vyperTypeEnvPreservationScript.sml` and `vyperTypeStmtSoundnessScript.sml`:
+
+```sml
+env_maps_wf_def
+env_consistent_env_maps_wf
+env_maps_wf_no_stale_assignable_T
+
+env_extends_def
+env_extends_refl
+env_extends_trans
+
+extend_local_preserves_static
+type_stmt_preserve_nonlocal_fields
+type_stmts_preserve_nonlocal_fields
+
+(* Compatibility names may be kept as aliases, or downstream references updated. *)
+type_stmt_env_preserved_static
+type_stmts_env_preserved_static
+type_stmt_env_consistent_preserved_static
+type_stmts_env_consistent_preserved_static
+
+type_stmt_var_types_preserve
+type_stmts_var_types_preserve
+type_stmt_var_types_mono
+type_stmts_var_types_mono
+
+type_stmt_var_assignable_T_preserve
+type_stmts_var_assignable_T_preserve
+
+type_stmt_env_maps_wf
+type_stmts_env_maps_wf
+
+type_stmt_env_extends
+type_stmts_env_extends
+```
+
+This theory should depend only on the executable type-system definitions and
+basic env definitions, not on statement soundness and not on
+`vyperTypeEnvPreservation`.
+
+Because `env_maps_wf_def` moves here, every fresh theory using `env_maps_wf`
+should import `vyperTypeEnvExtension` directly rather than relying on
+`vyperTypeEnvPreservation` to provide it transitively.
+
+### `vyperTypeScopePopScript.sml` responsibilities
+
+Create this theory for pushed-scope/pop facts and move/factor the generic scope
+helpers currently in `vyperTypeStmtSoundnessScript.sml`:
+
+```sml
+push_scope_env_consistent
+pop_scope_env_consistent
+push_scope_with_var_env_consistent
+
+env_extends_env_consistent_after_pop
+type_stmts_env_consistent_after_pop
+eval_stmts_pushed_scope_env_consistent_after_pop
+scope_bracket_preserves_ec
+scope_bracket_preserves_swt
+```
+
+Do **not** move `env_extends_return_exception_typed` into this lower theory for
+now.  It depends on statement-level exception/result typing definitions
+(`return_exception_typed_def`) and should remain in `vyperTypeStmtSoundness` unless
+that result-typing layer is later factored out separately.
+
+`scope_bracket_preserves_ec` must have the stable final precondition
+`env_consistent env cx st`, not merely `st.scopes <> []`:
+
+```sml
+Theorem scope_bracket_preserves_ec:
+  env_maps_wf env /\
+  env_consistent env cx st /\
+  type_stmts env ret_ty ss = SOME env_after /\
+  env_consistent env_after cx st_body /\
+  eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st_body) /\
+  (!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc) ==>
+  env_consistent env cx (st_body with scopes := TL st_body.scopes)
+```
+
+This shape is required for type soundness because it supplies all three facts
+needed by the pop proof:
+
+1. original scopes are nonempty;
+2. old env variables are visible in the pre-state, so they cannot be introduced
+   as new variables in the pushed head;
+3. variables newly present in `env_after` but absent from `env` are absent from
+   the original tail and therefore cannot escape after the pop.
+
+The proof should be a short wrapper around `type_stmts_env_consistent_after_pop`.
+Do **not** try to prove `env_consistent env cx st_body` before popping; that can
+be false because variables declared in the pushed runtime head are visible in
+`st_body` but absent from the outer static env.  Instead prove the popped target
+directly:
+
+- case-split `st_body.scopes = h::tl`; the empty case contradicts scope-length
+  preservation from evaluation under `sc::st.scopes` plus pre-state env
+  consistency;
+- get `tl <> []` from `env_consistent env cx st` and
+  `eval_stmts_preserves_scopes_len`;
+- prove old env variables are absent from the final head using
+  `lookup_scopes_not_in_new_head` and the pushed-scope side condition;
+- prove old assignable variables are absent from the final head by combining
+  `env_maps_wf` with the previous old-variable argument;
+- prove new `env_after` variables do not escape into the tail using
+  `eval_stmts_preserves_tail_lookup_none` plus pre-state env consistency;
+- prove the required frame fact with
+  `eval_stmts_scope_bracket_gen_preserves_tv` and the statement-list component
+  of `eval_preserves_tv`.
+
+### `vyperTypeStmtSoundnessScript.sml` cleanup
+
+After creating the lower theories, remove duplicate generic definitions/theorems
+from statement soundness.  Keep statement-specific result and postcondition
+facts there, including `env_extends_return_exception_typed` unless/until return
+exception typing is moved into its own theory.
+
+`scope_bracket_preserves` should remain a statement-level orchestration helper
+but be strengthened to require the pre-state env consistency needed by
+`scope_bracket_preserves_ec`:
+
+```sml
+Theorem scope_bracket_preserves:
+  env_maps_wf env /\
+  env_consistent env cx st /\
+  type_stmts env ret_ty ss = SOME env_after /\
+  eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
+  state_well_typed st_body /\
+  env_consistent env_after cx st_body /\
+  accounts_well_typed st_body.accounts ==>
+  state_well_typed (st_body with scopes := TL st_body.scopes) /\
+  env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+  accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts
+```
+
+Fresh statement-soundness call sites already operate under pre-state runtime/env
+consistency, so this strengthening matches the final type-soundness invariant.
+The common block-scope case uses `sc = FEMPTY`, so the side condition
+`!id. id IN FDOM env.var_types ==> id NOTIN FDOM sc` is trivial there.  For
+loop/prepopulated scopes, the side condition states the required non-shadowing of
+existing static env variables.
+
+### Build checkpoints for the reorganisation
+
+Use these checkpoints in order:
+
+```sh
+holbuild build vyperTypeEnvExtensionTheory
+holbuild build vyperTypeEnvPreservationTheory
+holbuild build vyperTypeScopePopTheory
+holbuild build vyperTypeStmtSoundnessTheory
+holbuild build vyperSemanticsHolTheory
+```
+
+Do not count the scope-pop task complete until all duplicate moved definitions
+are removed/renamed as needed and the final public build is back to a known
+state.  This reorganisation is a foundational step, not the whole soundness
+proof: the later ABI/builtin/expression-assignability/assignment-no-TypeError,
+statement, and call cheats must still be discharged for the final
+`vyperSemanticsHolTheory` no-cheat completion target.
+
+Non-ABI builtin TODOs that say the executable type system must be strengthened
+remain a possible definition-level risk and must be audited before claiming final
+non-ABI type soundness.  Treat those as specification/definition obligations,
+not merely proof-script cleanup.
 
 ### Lessons from the all-result assignment proof
 

@@ -9,8 +9,9 @@ Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
-  vyperTypeEnv vyperTypeEnvPreservation vyperTypeBuiltins vyperTypeExprSoundness
-  vyperTypeAssignSoundness vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
+  vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
+  vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
+  vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperStatePreservation vyperTypeStatePreservation
 Libs
   wordsLib markerLib
@@ -103,126 +104,7 @@ QED
 
 (* ===== Environment threading facts for executable statement typing ===== *)
 
-Theorem extend_local_preserves_static:
-  (extend_local env id ty assignable).type_defs = env.type_defs /\
-  (extend_local env id ty assignable).current_src = env.current_src /\
-  (extend_local env id ty assignable).fn_sigs = env.fn_sigs /\
-  (extend_local env id ty assignable).bare_globals = env.bare_globals /\
-  (extend_local env id ty assignable).toplevel_vtypes = env.toplevel_vtypes /\
-  (extend_local env id ty assignable).flag_members = env.flag_members
-Proof
-  simp[extend_local_def]
-QED
-
-Theorem type_stmt_env_preserved_static:
-  type_stmt env ret_ty s = SOME env' ==>
-  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
-Proof
-  Cases_on `s` >>
-  rw[type_stmt_def, AllCaseEqs(), extend_local_def] >>
-  gvs[oneline type_stmt_def, AllCaseEqs()]
-QED
-
-Theorem type_stmts_env_preserved_static:
-  type_stmts env ret_ty ss = SOME env' ==>
-  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
-Proof
-  qid_spec_tac `env` >> Induct_on `ss` >>
-  rw[type_stmt_def] >>
-  gvs[type_stmt_def, AllCaseEqs()] >>
-  drule type_stmt_env_preserved_static >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[]
-QED
-
-Theorem type_stmt_env_consistent_preserved_static:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st ==>
-  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
-Proof
-  metis_tac[type_stmt_env_preserved_static]
-QED
-
-Theorem type_stmts_env_consistent_preserved_static:
-  type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st ==>
-  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
-Proof
-  metis_tac[type_stmts_env_preserved_static]
-QED
-
-Definition env_extends_def:
-  env_extends env env' <=>
-    env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-    env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-    env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members /\
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP env'.var_types id = SOME ty) /\
-    (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP env'.var_assignable id = SOME T)
-End
-
-Theorem env_extends_refl[simp]:
-  env_extends env env
-Proof
-  simp[env_extends_def]
-QED
-
-Theorem env_extends_trans:
-  env_extends env1 env2 /\ env_extends env2 env3 ==> env_extends env1 env3
-Proof
-  rw[env_extends_def] >> metis_tac[]
-QED
-
-Theorem type_stmt_var_assignable_T_preserve:
-  env_maps_wf env /\ type_stmt env ret_ty s = SOME env' /\
-  FLOOKUP env.var_assignable id = SOME T ==>
-  FLOOKUP env'.var_assignable id = SOME T
-Proof
-  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs(), extend_local_def, FLOOKUP_UPDATE] >>
-  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  rw[] >> gvs[FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num s'' = id` >> gvs[] >>
-  fs[env_maps_wf_def, TO_FLOOKUP]
-QED
-
-Theorem type_stmts_var_assignable_T_preserve:
-  env_maps_wf env /\ type_stmts env ret_ty ss = SOME env' /\
-  FLOOKUP env.var_assignable id = SOME T ==>
-  FLOOKUP env'.var_assignable id = SOME T
-Proof
-  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
-  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
-  rpt gen_tac >> strip_tac >>
-  `FLOOKUP env''.var_assignable id = SOME T` by
-    metis_tac[type_stmt_var_assignable_T_preserve] >>
-  `env_maps_wf env''` by metis_tac[type_stmt_env_maps_wf] >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Theorem type_stmt_env_extends:
-  env_maps_wf env /\ type_stmt env ret_ty s = SOME env' ==> env_extends env env'
-Proof
-  strip_tac >>
-  drule_all type_stmt_env_preserved_static >> strip_tac >>
-  rw[env_extends_def] >>
-  metis_tac[type_stmt_var_types_preserve, type_stmt_var_assignable_T_preserve]
-QED
-
-Theorem type_stmts_env_extends:
-  env_maps_wf env /\ type_stmts env ret_ty ss = SOME env' ==> env_extends env env'
-Proof
-  strip_tac >>
-  drule_all type_stmts_env_preserved_static >> strip_tac >>
-  rw[env_extends_def] >>
-  metis_tac[type_stmts_var_types_preserve, type_stmts_var_assignable_T_preserve]
-QED
+(* Generic static env-extension facts moved to vyperTypeEnvExtension. *)
 
 Theorem env_extends_return_exception_typed:
   env_extends env env' /\ return_exception_typed env' ret_ty exn ==>
@@ -233,140 +115,7 @@ Proof
   metis_tac[value_runtime_typed_env_static, env_extends_def]
 QED
 
-Theorem env_extends_env_consistent_after_pop:
-  env_maps_wf env /\ env_consistent env cx st_outer /\
-  preserves_tv cx st_outer (st_body with scopes := tl) /\
-  env_extends env env_body /\ env_consistent env_body cx st_body /\
-  st_body.scopes = h::tl /\ tl <> [] /\
-  (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
-  (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE) /\
-  (!id ty.
-     FLOOKUP env_body.var_types id = SOME ty /\ FLOOKUP env.var_types id = NONE ==>
-     lookup_scopes id tl = NONE) ==>
-  env_consistent env cx (st_body with scopes := tl)
-Proof
-  strip_tac >>
-  fs[env_consistent_def] >>
-  fs[env_extends_def] >>
-  simp[env_consistent_def] >>
-  conj_tac >- (
-    qpat_x_assum `env_scopes_consistent env_body cx st_body` mp_tac >>
-    simp[env_scopes_consistent_def] >> strip_tac >>
-    rw[env_scopes_consistent_def]
-    >- (qpat_x_assum `!id ty. FLOOKUP env.var_types id = SOME ty ==> _` drule >> strip_tac >>
-        qpat_x_assum `!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP env_body.var_types id = SOME ty` drule >>
-        strip_tac >>
-        qpat_x_assum `!id ty. FLOOKUP env_body.var_types id = SOME ty ==> _` drule >>
-        simp[lookup_scopes_def] >>
-        Cases_on `FLOOKUP h id` >> gvs[])
-    >- (Cases_on `FLOOKUP env.var_types id` >> gvs[] >>
-        qpat_x_assum `!id' entry'. lookup_scopes id' (h::tl) = SOME entry' ==> _`
-          (qspec_then `id` mp_tac) >>
-        simp[lookup_scopes_def] >>
-        Cases_on `FLOOKUP h id` >> gvs[] >>
-        Cases_on `FLOOKUP env_body.var_types id` >> gvs[] >>
-        rename1 `FLOOKUP env_body.var_types id = SOME ty` >>
-        first_x_assum drule_all >> simp[])
-    >- (qpat_x_assum `!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP env_body.var_types id = SOME ty` drule >>
-        strip_tac >>
-        qpat_x_assum `!id' ty' entry'. FLOOKUP env_body.var_types id' = SOME ty' /\ _ ==> _`
-          (qspecl_then [`id`, `ty`, `entry`] mp_tac) >>
-        simp[lookup_scopes_def] >>
-        Cases_on `FLOOKUP h id` >> gvs[])
-    >- (fs[env_scopes_consistent_def] >> metis_tac[]) >>
-    qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> _` drule >> strip_tac >>
-    qpat_x_assum `!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP env_body.var_assignable id = SOME T` drule >>
-    strip_tac >>
-    qpat_x_assum `!id'. FLOOKUP env_body.var_assignable id' = SOME T ==> _` drule >>
-    simp[lookup_scopes_def] >>
-    Cases_on `FLOOKUP h id` >> gvs[] >>
-    metis_tac[]) >>
-  qpat_x_assum `env_immutables_consistent env_body cx st_body` mp_tac >>
-  simp[env_immutables_consistent_def] >> strip_tac >>
-  rw[env_immutables_consistent_def]
-  >- (qpat_x_assum `preserves_tv _ _ _` mp_tac >> simp[preserves_tv_def] >> metis_tac[])
-  >- (qpat_x_assum `preserves_tv _ _ _` mp_tac >> simp[preserves_tv_def] >> metis_tac[]) >>
-  qpat_x_assum `!src id ty ts. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ _ ==> _`
-    (qspecl_then [`src`, `id`, `ty`, `ts`] mp_tac) >> simp[] >> metis_tac[]
-QED
-
-Theorem type_stmts_env_consistent_after_pop:
-  env_maps_wf env /\ env_consistent env cx st_outer /\
-  preserves_tv cx st_outer (st_body with scopes := tl) /\
-  type_stmts env ret_ty ss = SOME env' /\ env_consistent env' cx st_body /\
-  st_body.scopes = h::tl /\ tl <> [] /\
-  (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP h id = NONE) /\
-  (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP h id = NONE) /\
-  (!id ty.
-     FLOOKUP env'.var_types id = SOME ty /\ FLOOKUP env.var_types id = NONE ==>
-     lookup_scopes id tl = NONE) ==>
-  env_consistent env cx (st_body with scopes := tl)
-Proof
-  strip_tac >>
-  `env_extends env env'` by metis_tac[type_stmts_env_extends] >>
-  irule env_extends_env_consistent_after_pop >> simp[] >>
-  conj_tac >- (qexists_tac `env'` >> simp[]) >>
-  qexists_tac `st_outer` >> simp[]
-QED
-
-Theorem eval_stmts_pushed_scope_env_consistent_after_pop:
-  env_maps_wf env /\ env_consistent env cx st /\
-  preserves_tv cx (st with scopes updated_by CONS FEMPTY) st_body /\
-  eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (res, st_body) /\
-  env_extends env env_body /\ env_consistent env_body cx st_body ==>
-  env_consistent env cx (st_body with scopes := TL st_body.scopes)
-Proof
-  strip_tac >>
-  `st with scopes updated_by CONS FEMPTY =
-   st with scopes := FEMPTY::st.scopes`
-  by simp[evaluation_state_component_equality] >>
-  Cases_on `st_body.scopes` >> gvs[]
-  >- (drule eval_stmts_preserves_scopes_len >> simp[]) >>
-  irule env_extends_env_consistent_after_pop >> simp[] >>
-  conj_tac >- (
-    drule eval_stmts_preserves_scopes_len >> simp[] >>
-    strip_tac >>
-    `st.scopes <> []` by fs[env_consistent_def, env_scopes_consistent_def] >>
-    Cases_on `st.scopes` >> gvs[] >>
-    Cases_on `t` >> gvs[]) >>
-  conj_tac >- (
-    conj_tac >- (
-      rpt strip_tac >> fs[] >>
-      `?entry. lookup_scopes id st.scopes = SOME entry` by (
-        qpat_x_assum`env_consistent _ _ st`mp_tac >>
-        simp[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS]) >>
-      `FLOOKUP h id = NONE` suffices_by simp[] >>
-      `FLOOKUP (HD st_body.scopes) id = NONE` suffices_by simp[] >>
-      irule lookup_scopes_not_in_new_head >> simp[] >>
-      qexists_tac `cx` >> qexists_tac `entry` >> qexists_tac `res` >>
-      qexists_tac `st.scopes` >> qexists_tac `st` >> simp[] >>
-      qexists_tac `FEMPTY` >> qexists_tac `ss` >> simp[]) >>
-    rpt strip_tac >> fs[] >>
-    `?entry. lookup_scopes id st.scopes = SOME entry` by (
-      qpat_x_assum`env_consistent _ _ st`mp_tac >>
-      simp[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS]) >>
-    `FLOOKUP h id = NONE` suffices_by simp[] >>
-    `FLOOKUP (HD st_body.scopes) id = NONE` suffices_by simp[] >>
-    irule lookup_scopes_not_in_new_head >> simp[] >>
-    qexists_tac `cx` >> qexists_tac `entry` >> qexists_tac `res` >>
-    qexists_tac `st.scopes` >> qexists_tac `st` >> simp[] >>
-    qexists_tac `FEMPTY` >> qexists_tac `ss` >> simp[]) >>
-  conj_tac >- (
-    qexists_tac `env_body` >> simp[] >>
-    rpt strip_tac >> fs[] >>
-    `lookup_scopes id st.scopes = NONE` by (
-      qpat_x_assum`env_consistent env cx st`mp_tac >>
-      simp[env_consistent_def, env_scopes_consistent_def] >> strip_tac >>
-      Cases_on `lookup_scopes id st.scopes` >> gvs[] >>
-      metis_tac[optionTheory.IS_SOME_DEF]) >>
-    qspecl_then [`cx`, `ss`, `st`, `FEMPTY`, `st.scopes`, `res`, `st_body`, `id`, `h`, `t`]
-      mp_tac eval_stmts_preserves_tail_lookup_none >>
-    simp[]) >>
-  qexists_tac `st` >> simp[] >>
-  qspecl_then [`cx`, `ss`, `FEMPTY`, `st`, `res`, `st_body`]
-    mp_tac (GEN_ALL eval_stmts_scope_bracket_gen_preserves_tv) >>
-  simp[]
-QED
+(* Generic scope-pop env-consistency facts moved to vyperTypeScopePop. *)
 
 (* ===== Statement soundness ===== *)
 
@@ -397,22 +146,9 @@ Proof
     evaluation_state_component_equality]
 QED
 
-Theorem scope_bracket_preserves_swt:
-  eval_stmts cx ss (st with scopes updated_by CONS sc) = (res, st_body) /\
-  state_well_typed st_body ==>
-  state_well_typed (st_body with scopes := TL st_body.scopes)
-Proof
-  rpt strip_tac >>
-  imp_res_tac eval_stmts_preserves_scopes_len >>
-  Cases_on `st_body.scopes` >> gvs[] >>
-  irule pop_scope_preserves_state_well_typed >>
-  qexists_tac `st_body` >>
-  qexists_tac `()` >>
-  simp[pop_scope_def, return_def]
-QED
-
 Theorem scope_bracket_preserves:
   env_maps_wf env /\
+  env_consistent env cx st /\
   type_stmts env ret_ty ss = SOME env_after /\
   eval_stmts cx ss (st with scopes updated_by CONS FEMPTY) = (q, st_body) /\
   state_well_typed st_body /\
