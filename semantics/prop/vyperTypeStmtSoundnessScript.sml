@@ -36,18 +36,11 @@ Proof
   Cases_on `exn` >> rw[no_control_exc_def, return_exception_typed_def]
 QED
 
-Theorem expr_runtime_typed_hashmap_ref_place:
-  expr_runtime_typed env e tv /\ is_HashMapRef tv ==>
-  ?kt vt. type_place_expr env e = SOME (HashMapT kt vt)
-Proof
-  rw[expr_runtime_typed_def] >>
-  Cases_on`tv` >> gvs[is_HashMapRef_def, toplevel_value_typed_def] >>
-  drule evaluate_type_not_NoneT_imp_not_NoneTV >> rw[] >>
-  qabbrev_tac`label = K e` >>
-  Cases_on`e` >> gvs[expr_type_def] >>
-  simp[well_typed_expr_def] >>
-  cheat (* looks false: but why does expr_runtime_typed allow NoneT? *)
-QED
+Definition expr_result_typed_def:
+  expr_result_typed env e tv <=>
+    expr_runtime_typed env e tv /\
+    (is_HashMapRef tv ==> ?kt vt. type_place_expr env e = SOME (HashMapT kt vt))
+End
 
 Theorem eval_expr_exception_return_typed:
   eval_expr cx e st = (INR exn, st') ==> return_exception_typed env ret_ty exn
@@ -644,7 +637,7 @@ Theorem eval_all_type_sound_mutual:
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
     case res of
-    | INL tv => expr_runtime_typed env e tv
+    | INL tv => expr_result_typed env e tv
     | INR _ => T) /\
   (!cx es. !env st res st'.
     well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
@@ -755,7 +748,7 @@ Resume eval_all_type_sound_mutual[Return_SOME]:
     >- (
       drule materialise_state >> strip_tac >> gvs[] >>
       strip_tac >> gvs[] >>
-      gvs[expr_runtime_typed_def, return_exception_typed_def,
+      gvs[expr_result_typed_def, expr_runtime_typed_def, return_exception_typed_def,
           value_runtime_typed_def] >>
       irule materialise_preserves_value_type >>
       simp[] >>
@@ -763,7 +756,7 @@ Resume eval_all_type_sound_mutual[Return_SOME]:
     drule materialise_state >> strip_tac >> gvs[] >>
     strip_tac >> gvs[] >>
     conj_tac >- (
-      gvs[expr_runtime_typed_def] >>
+      gvs[expr_result_typed_def, expr_runtime_typed_def] >>
       drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
       drule_all materialise_typed_non_none_no_type_error >> simp[]) >>
     drule materialise_no_control >> strip_tac >>
@@ -811,8 +804,8 @@ Resume eval_all_type_sound_mutual[AssertReason]:
   BasicProvers.VAR_EQ_TAC >>
   first_x_assum drule_all >> simp[] >> strip_tac >>
   first_x_assum (funpow 3 drule_then drule) >> simp[] >> strip_tac >>
-  qhdtm_x_assum`expr_runtime_typed`mp_tac >>
-  asm_rewrite_tac[expr_runtime_typed_def] >>
+  qhdtm_x_assum`expr_result_typed`mp_tac >>
+  asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
   simp[evaluate_type_def] >> strip_tac >>
   qho_match_abbrev_tac`P res st'` >>
   drule_then (drule_then irule) switch_BoolV_post >>
@@ -823,7 +816,7 @@ Resume eval_all_type_sound_mutual[AssertReason]:
   strip_tac >> gvs[Abbr`P`] >>
   imp_res_tac get_Value_state >>
   imp_res_tac lift_option_type_state >>
-  gvs[expr_runtime_typed_def,evaluate_type_def] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def,evaluate_type_def] >>
   TRY(
     gvs[no_type_error_result_def,return_exception_typed_def] >>
     NO_TAC ) >>
@@ -873,7 +866,7 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
           strip_tac >> gvs[] >>
           imp_res_tac materialise_state >> gvs[] >>
           `value_has_type x v` by (
-            gvs[expr_runtime_typed_def] >>
+            gvs[expr_result_typed_def, expr_runtime_typed_def] >>
             drule_at(Pat`materialise`) materialise_preserves_value_type >>
             simp[] >> disch_then irule >>
             drule evaluate_type_well_formed_type_value >> simp[]) >>
@@ -888,7 +881,7 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
         strip_tac >> gvs[] >>
         imp_res_tac materialise_state >> gvs[] >>
         `value_has_type x v` by (
-          gvs[expr_runtime_typed_def] >>
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
           drule_at(Pat`materialise`) materialise_preserves_value_type >>
           simp[] >> disch_then irule >>
           drule evaluate_type_well_formed_type_value >> simp[]) >>
@@ -909,7 +902,7 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
       drule materialise_state >> strip_tac >> gvs[] >>
       conj_tac
       >- (rpt strip_tac >> gvs[] >>
-          gvs[expr_runtime_typed_def] >>
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
           drule_at_then Any drule
             materialise_typed_non_none_no_type_error >>
           simp[] >>
@@ -962,7 +955,7 @@ Resume eval_all_type_sound_mutual[Assign]:
           disch_then drule >>
           simp[value_runtime_typed_def, expr_runtime_typed_def, PULL_EXISTS] >>
           drule_at(Pat`materialise`) materialise_preserves_value_type >>
-          gvs[expr_runtime_typed_def] >>
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
           drule evaluate_type_well_formed_type_value >>
           strip_tac >>
           disch_then drule_all >> strip_tac >>
@@ -990,7 +983,7 @@ Resume eval_all_type_sound_mutual[Assign]:
         imp_res_tac materialise_state >> gvs[] >>
         `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
               value_has_type tv v /\ well_formed_type_value tv` by (
-          gvs[expr_runtime_typed_def] >>
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
           drule evaluate_type_well_formed_type_value >> strip_tac >>
           drule_at(Pat`materialise`) materialise_preserves_value_type >>
           simp[] >> strip_tac >> goal_assum drule >> simp[]) >>
@@ -1031,7 +1024,7 @@ Resume eval_all_type_sound_mutual[Assign]:
       drule materialise_state >> strip_tac >> gvs[] >>
       conj_tac
       >- (rpt strip_tac >> gvs[] >>
-          gvs[expr_runtime_typed_def] >>
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
           drule_at Any materialise_typed_non_none_no_type_error >> simp[] >>
           goal_assum drule >>
           drule evaluate_type_not_NoneT_imp_not_NoneTV >>
@@ -1095,7 +1088,7 @@ Resume eval_all_type_sound_mutual[AugAssign]:
         `assign_operation_runtime_typed env ty (Update ty bop v)` by (
           simp[assign_operation_runtime_typed_def] >>
           qexists_tac `expr_type e` >>
-          gvs[expr_runtime_typed_def, value_runtime_typed_def,
+          gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
               toplevel_value_typed_def]) >>
         simp[bind_apply, return_def] >>
         Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st2` >>
@@ -1142,7 +1135,7 @@ Resume eval_all_type_sound_mutual[AugAssign]:
       strip_tac >> drule no_control_exc_return_exception_typed >>
       simp[] >>
       rpt strip_tac >> gvs[] >>
-      gvs[expr_runtime_typed_def] >>
+      gvs[expr_result_typed_def, expr_runtime_typed_def] >>
       drule_all well_typed_binop_not_In_second_type >> strip_tac >>
       drule_all evaluate_type_not_ArrayT_imp_not_ArrayTV >> strip_tac >>
       drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
@@ -1182,7 +1175,7 @@ Resume eval_all_type_sound_mutual[If]:
     simp_tac(srw_ss())[push_scope_def,return_def]
   ) >>
   rename1 `eval_expr cx e st = (INL tv, st1)` >>
-  gvs[expr_runtime_typed_def, evaluate_type_def] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, evaluate_type_def] >>
   drule toplevel_value_typed_BoolTV >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
   strip_tac >>
@@ -1437,8 +1430,8 @@ Resume eval_all_type_sound_mutual[Expr]:
   first_x_assum drule_all >> strip_tac >>
   Cases_on `q` >> gvs[no_type_error_result_def]
   >- (
-    strip_tac >> gvs[] >>
-    drule_all expr_runtime_typed_hashmap_ref_place >> simp[]) >>
+    strip_tac >> gvs[expr_result_typed_def] >>
+    metis_tac[]) >>
   strip_tac >> gvs[] >>
   drule_all eval_expr_exception_return_typed >> simp[]
 QED

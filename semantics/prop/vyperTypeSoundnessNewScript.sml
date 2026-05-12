@@ -66,7 +66,7 @@ Theorem typed_expr_success_preserves_type:
   state_well_typed st' /\ expr_runtime_typed env e tvl
 Proof
   strip_tac >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >> simp[]
+  drule_all (cj 8 eval_all_type_sound_mutual) >> simp[expr_result_typed_def]
 QED
 
 (* ===== Callable-function theorem shape ===== *)
