@@ -33,6 +33,106 @@ Current fresh theory stack:
 
 The aggregator `vyperSemanticsHolScript.sml` has been switched to import `vyperTypeSoundnessNew` rather than the old final theory.
 
+## Current status (2026-05-12)
+
+### Completion scope
+
+Completion for this rewrite means:
+
+```text
+holbuild build vyperSemanticsHolTheory
+```
+
+succeeds with **zero CHEAT warnings reachable from `vyperSemanticsHolTheory`**.
+Old retired theories are out of scope unless they are imported transitively by
+`vyperSemanticsHolTheory`.
+
+Current build status:
+
+```text
+holbuild build vyperSemanticsHolTheory
+# succeeds, but reachable fresh-stack ancestors still contain cheats
+```
+
+Reachable fresh-stack cheat inventory at the last audit:
+
+```text
+semantics/prop/vyperTypeStatePreservationScript.sml   1
+semantics/prop/vyperTypeEnvPreservationScript.sml     3
+semantics/prop/vyperTypeAssignSoundnessScript.sml     3
+semantics/prop/vyperTypeBuiltinsScript.sml           19
+semantics/prop/vyperTypeStmtSoundnessScript.sml      40
+semantics/prop/vyperTypeCallSoundnessScript.sml       4
+--------------------------------------------------------
+Total reachable fresh-stack cheats                    70
+```
+
+No reachable cheats were found in:
+
+```text
+vyperTypeSystemScript.sml
+vyperTypeValuesScript.sml
+vyperTypeEnvScript.sml
+vyperTypeBytesCryptoScript.sml
+vyperTypeDefaultsScript.sml
+vyperTypeConversionsScript.sml
+vyperTypeABIScript.sml
+vyperTypeExprSoundnessScript.sml
+vyperTypeSoundnessNewScript.sml
+```
+
+### Completed architecture items
+
+The following major plan items are already implemented/proved in the current
+fresh stack:
+
+- Runtime subscript refactor to value-preserving paths:
+  `ValueSubscript value | AttrSubscript identifier`.
+- Static hashmap key restriction via `hashmap_key_type`.
+- `well_formed_vtype` for `Type ty` and nested `HashMapT kt vt`.
+- `subscript_vtype` for arrays and hashmaps.
+- Structural target-path/place bridge in `vyperTypeExprSoundnessScript.sml`,
+  including:
+  - `place_leaf_path_typed_evaluate`
+  - `place_leaf_path_typed_array_append`
+  - `place_leaf_path_typed_struct_append`
+  - `place_vtype_path_typed_hashmap_root_cons`
+  - `target_path_type_to_place_vtype_path_typed`
+  - `target_path_type_Type_place_leaf_typed`
+- Success-only assignment preservation:
+  - `assign_target_preserves_state_well_typed_mutual`
+  - `assign_target_preserves_runtime_consistent`
+  - `assign_targets_preserves_runtime_consistent`
+
+### Current priority order
+
+Before clearing large numbers of statement cases, validate theorem statements
+that are currently suspicious or known incomplete:
+
+1. Investigate `expr_runtime_typed_hashmap_ref_place` in
+   `vyperTypeStmtSoundnessScript.sml`.  It is currently cheated with the comment
+   `looks false: but why does expr_runtime_typed allow NoneT?`.  If false, fix
+   the ordinary-expression/place typing split before relying on downstream
+   statement proofs.
+2. Decide the ABI encode bound issue.  The current static typing allows
+   `BaseT (BytesT (Dynamic n))` without proving `n` bounds the encoded output.
+   This cannot remain an informal caveat if the final reachable theorem claims
+   successful expression result typing for AbiEncode.
+3. Audit `vyperTypeBuiltinsScript.sml` TODOs that explicitly say the type system
+   must be strengthened.  Some builtin cheats are likely definition gaps, not
+   just proof-script gaps.
+4. Prove foundational preservation cheats:
+   - `assign_target_preserves_runtime_consistent_result`
+   - `scope_bracket_preserves_ec`
+   - `eval_base_target_preserves_assignable_lookup`
+   - `eval_expr_preserves_assignable_lookup`
+5. Prove assignment no-TypeError cheats:
+   - `assign_target_no_type_error`
+   - `assign_target_update_no_type_error`
+   - `assign_target_append_no_type_error`
+6. Then discharge builtin, statement, and call soundness cheats in dependency
+   order.
+
 Eventually replace:
 
 - `vyperTypeSoundnessDefsScript.sml`
@@ -545,19 +645,42 @@ These rebuild target typing in a later state from `runtime_consistent`; they are
 
 ## Assignment preservation status and next-agent instructions
 
-Current critical theorem:
+The success-only assignment preservation theorem is complete:
 
 ```sml
 assign_target_preserves_state_well_typed_mutual
 ```
 
-Despite the historical name, its statement now preserves the full invariant:
+Despite the historical name, its statement preserves the full invariant:
 
 ```sml
 runtime_consistent env cx st'
 ```
 
-for both `assign_target` and `assign_targets`. Public corollaries derive state/account preservation from runtime consistency.
+for successful `assign_target`/`assign_targets` evaluations. Public corollaries
+derive state/account preservation from runtime consistency.
+
+The remaining foundational assignment-preservation cheat is the all-result
+version:
+
+```sml
+assign_target_preserves_runtime_consistent_result
+```
+
+Current statement shape:
+
+```sml
+runtime_consistent env cx st /\
+target_runtime_typed env cx st tgt ty gv /\
+assign_operation_runtime_typed env ty op /\
+assign_target cx gv op st = (res, st') ==>
+runtime_consistent env cx st'
+```
+
+This theorem is needed because statement soundness must preserve invariants for
+both successful assignments and error/exception results.  Error paths may still
+perform intermediate reads/state operations before failing, so the success-only
+assignment theorem is not enough.
 
 ### Important semantic change already made
 
@@ -597,26 +720,10 @@ assign_operation_leaf_update
 ty = ArrayT elem_ty (Dynamic n)
 ```
 
-### Remaining suspended cases
+### Suggested proof strategy for the all-result assignment theorem
 
-Run:
-
-```sh
-grep -n "Resume assign_target_preserves_state_well_typed_mutual\|cheat" semantics/prop/vyperTypeStatePreservationScript.sml
-```
-
-Expected remaining cases:
-
-```sml
-ScopedVar
-TopLevelVar
-ImmutableVar
-TupleTargetV
-```
-
-`assign_targets_cons` is already proved.
-
-### Suggested proof strategy for remaining cases
+Reuse the completed success proof structure, but split by the actual result path
+of `assign_target` rather than assuming `INL` success.
 
 General pattern for `ScopedVar` and `ImmutableVar`:
 
@@ -658,7 +765,8 @@ General pattern for `TupleTargetV`:
 - Unfold `assign_target_def` for tuple replace.
 - Use `target_runtime_typed_def` to get tuple static/shape info.
 - Use `target_assignment_values_typed_def` and `LIST_REL3` alignment.
-- Apply `assign_targets_preserves_runtime_consistent` / the list IH.
+- Apply `assign_targets_preserves_runtime_consistent` / the list IH for success
+  branches, and use the all-result IH for error branches.
 
 General pattern for `TopLevelVar`:
 
@@ -701,11 +809,13 @@ If this branch becomes large, state the exact branch goal as a helper theorem an
 Use:
 
 ```sh
-holbuild build --new-ir vyperTypeStatePreservationTheory
-holbuild build --new-ir vyperSemanticsHolTheory
+holbuild build vyperTypeStatePreservationTheory
+holbuild build vyperSemanticsHolTheory
 ```
 
-The first should be used during assignment-preservation work; the second verifies downstream fallout.
+The first should be used during assignment-preservation work; the second verifies
+downstream fallout and the final completion target.  `--new-ir` is deprecated and
+has no effect.
 
 ## Defaults
 
@@ -724,13 +834,22 @@ Do not erase globals/toplevels/type defs/flag members/function signatures unless
 
 ## ABI encode known gap
 
-ABI encode success typing remains intentionally skipped/blocked by a missing static bound. Current typing of ABI encode permits result type:
+ABI encode success typing is blocked by a missing static bound. Current typing of ABI encode permits result type:
 
 ```sml
 BaseT (BytesT (Dynamic n))
 ```
 
-but does not require `n` to be large enough for the encoded output. Leave this as a known design gap unless explicitly asked to fix ABI bounds.
+but does not require `n` to be large enough for the encoded output.
+
+This is a correctness-risk item, not merely a documentation note.  Before the
+reachable final theorem can be cheat-free, choose and implement one of:
+
+1. add static encoded-size bounds strong enough to prove success typing;
+2. exclude or specially weaken AbiEncode success typing in the relevant theorem
+   shapes while retaining no-TypeError soundness; or
+3. prove that the current runtime/result typing does not require the missing
+   bound.
 
 ## Soundness theorem shapes
 
