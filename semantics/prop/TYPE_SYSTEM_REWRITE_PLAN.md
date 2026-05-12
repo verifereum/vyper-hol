@@ -14,6 +14,48 @@ The new development should provide:
 
 Do not mutate the old proof stack in place. Build new theories with new names, then switch over and delete/retire the old theories once complete.
 
+### Core proof principle: prove the strongest joint invariant
+
+**Always prove the strongest joint invariant that follows the evaluator/recursive
+structure.**  Do not split no-TypeError, result typing, state preservation,
+environment preservation, accounts preservation, assignability preservation, and
+exception/return typing into separate parallel proof trees when they use the same
+case split or induction.
+
+The workhorse theorem for an evaluator should have one combined postcondition,
+for example:
+
+```sml
+state_well_typed st' /\
+accounts_well_typed st'.accounts /\
+env_consistent ... st' /\
+no_type_error_result res /\
+case res of
+| INL v => result_runtime_typed ... v
+| INR exn => exception_or_error_typed ... exn
+```
+
+Then derive small public wrapper theorems such as `*_no_type_error` or
+`*_success_preserves_state` as corollaries.  These wrappers are for the external
+API only; they should not drive the internal proof architecture.
+
+Rationale:
+
+- no-TypeError and preservation usually require the same semantic facts;
+- separated helpers duplicate evaluator case analysis;
+- separated helpers often fail because they lack the strengthened induction
+  hypotheses already available in the mutual theorem;
+- if a property is needed later, strengthen the existing mutual/frame invariant
+  rather than starting a second induction over the same evaluator.
+
+Concrete example: assignment no-TypeError should not be proved by independent
+lemmas such as `assign_target_append_no_type_error` that reconstruct target
+runtime typing from scratch.  The preferred shape is a joint assignment theorem
+from `target_runtime_typed` and `assign_operation_runtime_typed` that proves both
+no-TypeError and state/env/accounts preservation.  The legacy no-TypeError
+lemmas should become one-line compatibility corollaries or disappear from the
+internal proof path.
+
 Current fresh theory stack:
 
 - `vyperTypeSystemScript.sml` — new executable type-system definitions.
@@ -171,19 +213,63 @@ Completed foundational checkpoint:
 
 Remaining priorities:
 
-1. Decide the ABI encode bound issue.  The current static typing allows
-   `BaseT (BytesT (Dynamic n))` without proving `n` bounds the encoded output.
-   This cannot remain an informal caveat if the final reachable theorem claims
-   successful expression result typing for AbiEncode.
-2. Audit `vyperTypeBuiltinsScript.sml` TODOs that explicitly say the type system
-   must be strengthened.  Some builtin cheats are likely definition gaps, not
-   just proof-script gaps.
-3. Prove assignment no-TypeError cheats:
+The current tactical priority is to derisk the non-self-contained structure and
+avoid churn.  Do **not** spend time first on the known self-contained builtin
+issues unless they block another proof.  In particular, for now it is acceptable
+to leave informal comments and cheats around:
+
+- the ABI encode bound issue;
+- `Env MsgGas` / runtime support for `MsgGas`;
+- other isolated/self-contained builtin lemmas.
+
+These are still part of final completion and must eventually be proved or fixed;
+they are deferred only because they appear localized and should not determine the
+shape of the statement/call/assignment proof architecture.  The goal of the next
+phase is to find hidden architecture problems before investing in localized
+builtin arithmetic/encoding proofs.
+
+Priority order for the next phase:
+
+1. **Problem-finding / architecture audit.**  Before proving many cases, inspect
+   the remaining cheated theorem statements and their dependencies for possible
+   false or underspecified claims.  Prefer identifying definition-level gaps over
+   pushing through brittle proof scripts.  Apply the strongest-joint-invariant
+   principle above: if two cheats follow the same evaluator recursion, replace
+   them by a single stronger theorem rather than proving them separately.
+2. **Refactor assignment soundness around a joint invariant, not standalone
+   no-TypeError helpers.**  The old priority list named:
    - `assign_target_no_type_error`
    - `assign_target_update_no_type_error`
    - `assign_target_append_no_type_error`
-4. Then discharge builtin, statement, and call soundness cheats in dependency
-   order.
+
+   These are now treated as compatibility corollaries only.  The actual target
+   should be a combined assignment theorem, roughly:
+
+   ```sml
+   runtime_consistent env cx st /\
+   target_runtime_typed env cx st tgt ty gv /\
+   assign_operation_runtime_typed env ty op /\
+   assign_target cx gv op st = (res, st')
+   ==>
+   no_type_error_result res /\
+   state_well_typed st' /\
+   env_consistent env cx st' /\
+   accounts_well_typed st'.accounts /\
+   ... result-specific typing facts ...
+   ```
+
+   Then derive any old `assign_target_*_no_type_error` theorem needed by current
+   callers from this joint theorem, or update callers to use the joint theorem
+   directly.
+3. Prove/evaluate target and expression structural cases that exercise the place,
+   hashmap, materialisation, and env-consistency architecture.  Keep target
+   no-TypeError and target runtime typing in the same mutual theorem.
+4. Then discharge statement and call soundness cheats in dependency order, but
+   avoid separate call no-TypeError/type-preservation proof trees; calls should
+   use a joint call/expression soundness theorem and expose split wrappers only at
+   the public API.
+5. Return to the deferred self-contained builtin issues before claiming final
+   no-cheat `vyperSemanticsHolTheory` soundness.
 
 Eventually replace:
 
@@ -1138,7 +1224,13 @@ env_default = env_body with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 
 Do not erase globals/toplevels/type defs/flag members/function signatures unless intentionally restricting defaults further.
 
-## ABI encode known gap
+## Deferred self-contained builtin gaps
+
+The following issues are intentionally deferred during the current derisking
+phase, but they remain final obligations.  Keep the existing comments/cheats as
+markers rather than prematurely reshaping the whole proof around them.
+
+### ABI encode known gap
 
 ABI encode success typing is blocked by a missing static bound. Current typing of ABI encode permits result type:
 
@@ -1156,6 +1248,18 @@ reachable final theorem can be cheat-free, choose and implement one of:
    shapes while retaining no-TypeError soundness; or
 3. prove that the current runtime/result typing does not require the missing
    bound.
+
+Do not prioritize this until the broader assignment/target/statement/call proof
+structure has been validated, unless it unexpectedly blocks that work.
+
+### `MsgGas` / other isolated builtin gaps
+
+`Env MsgGas` and other self-contained builtin proof gaps should likewise be left
+as explicit comments/cheats for now.  They are expected to be local runtime/type
+or arithmetic/encoding obligations.  They must be fixed before final completion,
+but should not drive near-term architecture work unless an audit shows that a
+supposedly local builtin gap actually affects theorem shapes outside the builtin
+layer.
 
 ## Soundness theorem shapes
 
