@@ -1,0 +1,30 @@
+[holbuild]
+schema = 1
+
+[project]
+name = "HOLDIR"
+version = "prototype"
+
+[build]
+members = [
+  "examples/Crypto/MD",
+  "examples/Crypto/Keccak",
+  "examples/Crypto/SHA-2",
+  "examples/Crypto/RIPEMD",
+  "examples/machine-code/hoare-triple",
+]
+exclude = ["*Theory.sml", "*Theory.sig", "selftest.sml", "test.sml"]
+
+[actions.progSyntax]
+deps = ["progTheory"]
+
+[actions.temporalSyntax]
+deps = ["temporalTheory"]
+loads = ["progSyntax"]
+
+[actions.helperLib]
+loads = ["wordsLib", "stringLib", "progSyntax"]
+
+[actions.mc_tailrecLib]
+deps = ["tailrecTheory"]
+loads = ["helperLib"]
