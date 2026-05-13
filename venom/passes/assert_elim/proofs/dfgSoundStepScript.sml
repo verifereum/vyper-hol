@@ -31,6 +31,7 @@ Ancestors
 Libs
   BasicProvers
 
+
 (* ===== state_equiv {} => vs_vars equality ===== *)
 
 (* Reusable: state_equiv with empty exclusion set implies full vs_vars equality.
@@ -119,8 +120,11 @@ Definition dfg_compare_full_sound_def:
                    else w2n w1 > w2n w2))
 End
 
-(* --- dfg_sound FUPDATE: 4 sub-lemmas + combiner --- *)
+(* ===== dfg_sound FUPDATE: 4 sub-lemmas + combiner ===== *)
 
+(* ASSIGN soundness extends to an env extended with a new key k,
+   provided k was absent and nv equals the FLOOKUP of the operand variable
+   for any ASSIGN [Var u] that defines k in the DFG. *)
 Theorem dfg_assign_sound_fupdate:
   !dfg env k nv.
     dfg_assign_sound dfg env /\ k NOTIN FDOM env /\
@@ -152,6 +156,10 @@ Proof
       simp[FLOOKUP_UPDATE])
 QED
 
+(* ISZERO soundness extends to an env extended with a new key k,
+   provided k was absent, tracked-opcode operand vars remain defined in env,
+   and nv's truthiness matches ISZERO semantics for the operand of any
+   ISZERO defining k in the DFG. *)
 Theorem dfg_iszero_sound_fupdate:
   !dfg env k nv.
     dfg_iszero_sound dfg env /\ k NOTIN FDOM env /\
@@ -200,6 +208,8 @@ Definition dfg_iszero_lit_sound_def:
       FLOOKUP env v = SOME (if n = 0w then 1w else 0w)
 End
 
+(* ISZERO-literal soundness extends to an env extended with a new key k,
+   provided nv = bool_to_word(n = 0w) for any ISZERO [Lit n] defining k. *)
 Theorem dfg_iszero_lit_sound_fupdate:
   !dfg env k nv.
     dfg_iszero_lit_sound dfg env /\
@@ -220,6 +230,9 @@ Proof
       metis_tac[])
 QED
 
+(* EQ soundness extends to an env extended with a new key k,
+   provided k was absent and nv's non-zero value is consistent with
+   equality of the operand pair for any EQ defining k in the DFG. *)
 Theorem dfg_eq_sound_fupdate:
   !dfg env k nv.
     dfg_eq_sound dfg env /\ k NOTIN FDOM env /\
@@ -260,6 +273,10 @@ Proof
      res_tac >> metis_tac[flookup_thm]
 QED
 
+(* Compare soundness (LT/GT/SLT/SGT) extends to an env extended with
+   a new key k, provided k was absent, tracked-opcode operand vars remain
+   defined in env, and nv's non-zero status matches the comparison
+   semantics for any compare instruction defining k in the DFG. *)
 Theorem dfg_compare_sound_fupdate:
   !dfg env k nv.
     dfg_compare_sound dfg env /\ k NOTIN FDOM env /\
@@ -319,7 +336,9 @@ Proof
     res_tac >> gvs[])
 QED
 
-(* Combine sub-lemmas into dfg_sound_fupdate *)
+(* Combined dfg_sound extends to an env extended with a new key k,
+   provided all sub-soundness preconditions hold for each tracked opcode
+   (ASSIGN, ISZERO, EQ, LT/GT/SLT/SGT) that may define k in the DFG. *)
 Theorem dfg_sound_fupdate:
   !dfg env k nv.
     dfg_sound dfg env /\ k NOTIN FDOM env /\
@@ -373,7 +392,8 @@ Proof
   rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
 QED
 
-(* Helper: fn_inst_wf + MEM in fn_insts ==> inst_wf *)
+(* Every instruction in a well-formed function's flat instruction list
+   satisfies inst_wf. *)
 Theorem fn_insts_inst_wf:
   !fn i. fn_inst_wf fn /\ MEM i (fn_insts fn) ==> inst_wf i
 Proof
@@ -788,8 +808,8 @@ Definition dfg_block_local_def:
               i < j
 End
 
-(* Variables whose defining instruction is NOT in a block are not
-   written by that block, so lookup_var is unchanged. *)
+(* Variables not written by any instruction in a block have unchanged
+   lookup_var after exec_block. *)
 Theorem exec_block_non_output_lookup_var:
   !bb fuel ctx s r v.
     exec_block fuel ctx bb s = OK r /\
@@ -833,6 +853,8 @@ Proof
       fs[lookup_var_def]))
 QED
 
+(* Variables not written by any instruction in a block have unchanged
+   lookup_var after run_block. *)
 Theorem run_block_non_output_lookup_var:
   !bb fuel ctx s r v.
     run_block fuel ctx bb s = OK r /\
@@ -840,9 +862,22 @@ Theorem run_block_non_output_lookup_var:
     lookup_var v r = lookup_var v s
 Proof
   rpt strip_tac >>
-  fs[run_block_def] >>
-  drule exec_block_non_output_lookup_var >>
-  simp[lookup_var_def]
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_THEN STRIP_ASSUME_TAC
+    (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+  strip_tac >>
+  `lookup_var v r = lookup_var v s_phi` by
+    (mp_tac (Q.SPECL [`bb`, `fuel`, `ctx`,
+       `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+       `r`, `v`] exec_block_non_output_lookup_var) >>
+     simp[lookup_var_def]) >>
+  `FLOOKUP s_phi.vs_vars v = FLOOKUP s.vs_vars v` by
+    (irule venomExecProofsTheory.eval_phis_flookup_not_phi_output >>
+     simp[] >> metis_tac[]) >>
+  fs[lookup_var_def]
 QED
 
 (* Corollary: FLOOKUP is preserved for non-output variables *)
@@ -917,9 +952,14 @@ Theorem run_block_suffix_non_output_lookup_var:
     lookup_var v r = lookup_var v s
 Proof
   rpt strip_tac >>
-  `exec_block fuel ctx bb s = OK r` by fs[run_block_def] >>
-  `lookup_var v r = lookup_var v s` by
-    metis_tac[exec_block_suffix_non_output_lookup_var] >>
+  mp_tac (Q.SPECL [`bb`, `fuel`, `ctx`, `s`, `r`, `v`]
+    run_block_non_output_lookup_var) >>
+  impl_tac >- (
+    simp[] >> rpt strip_tac >>
+    `?i. i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions`
+      by metis_tac[MEM_EL] >>
+    gvs[] >>
+    first_x_assum (qspec_then `i` mp_tac) >> simp[]) >>
   simp[]
 QED
 
@@ -1182,10 +1222,48 @@ Proof
     gvs[lookup_var_def])
 QED
 
+Theorem phi_prefix_length_le_non_phi_el[local]:
+  !insts j.
+    j < LENGTH insts /\ (EL j insts).inst_opcode <> PHI ==>
+    phi_prefix_length insts <= j
+Proof
+  Induct_on `insts` >> simp[] >>
+  rpt strip_tac >>
+  Cases_on `j` >> gvs[phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem eval_phis_flookup_not_prefix_output[local]:
+  !insts s s' x.
+    eval_phis s insts = OK s' /\
+    (!k. k < phi_prefix_length insts ==>
+       ~MEM x (EL k insts).inst_outputs) ==>
+    FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
+Proof
+  Induct_on `insts` >> simp[eval_phis_def, phi_prefix_length_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, phi_prefix_length_def] >>
+  Cases_on `eval_one_phi s h` >> gvs[] >>
+  PairCases_on `x'` >> gvs[] >>
+  Cases_on `eval_phis s insts` >> gvs[update_var_def] >>
+  rename1 `eval_phis s insts = OK s_rest` >>
+  `FLOOKUP s_rest.vs_vars x = FLOOKUP s.vs_vars x` by
+    (first_x_assum irule >> rpt strip_tac >>
+     first_x_assum (qspec_then `SUC k` mp_tac) >> simp[]) >>
+  `x'0 <> x` by
+    (spose_not_then strip_assume_tac >> gvs[] >>
+     `MEM x h.inst_outputs` by
+       (drule venomExecProofsTheory.eval_one_phi_output_mem >> simp[]) >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  fs[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem run_block_decompose:
   !bb fuel ctx s r j.
     run_block fuel ctx bb s = OK r /\
     s.vs_inst_idx = 0 /\
+    phi_prefix_length bb.bb_instructions <= j /\
     j < LENGTH bb.bb_instructions /\
     (!i. i < j ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode) ==>
@@ -1198,11 +1276,31 @@ Theorem run_block_decompose:
         FLOOKUP s_j.vs_vars v = FLOOKUP s.vs_vars v)
 Proof
   rpt strip_tac >>
-  `exec_block fuel ctx bb s = OK r` by fs[run_block_def] >>
-  drule exec_block_decompose >>
-  disch_then (qspec_then `j` mp_tac) >> simp[] >>
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_THEN STRIP_ASSUME_TAC
+    (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+  strip_tac >>
+  mp_tac (Q.SPECL [`bb`, `fuel`, `ctx`,
+    `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `r`, `j`] exec_block_decompose) >>
+  impl_tac >- simp[] >>
   strip_tac >> qexistsl_tac [`s_j`, `s_j1`] >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> simp[]
+  rpt strip_tac >>
+  `FLOOKUP s_j.vs_vars v = FLOOKUP s_phi.vs_vars v` by
+    (qpat_x_assum `!v. _ ==> FLOOKUP s_j.vs_vars v = _`
+       (qspec_then `v` mp_tac) >>
+     simp[] >> disch_then irule >> rpt strip_tac >>
+     qpat_x_assum `!k. k < j ==> _` (qspec_then `k` mp_tac) >> simp[]) >>
+  `FLOOKUP s_phi.vs_vars v = FLOOKUP s.vs_vars v` by
+    (mp_tac (Q.SPECL [`bb.bb_instructions`, `s`, `s_phi`, `v`]
+       eval_phis_flookup_not_prefix_output) >>
+     impl_tac >- (simp[] >> rpt strip_tac >>
+       qpat_x_assum `!k. k < j ==> _` (qspec_then `k` mp_tac) >> simp[]) >>
+     simp[]) >>
+  simp[]
 QED
 
 (* Generic list lemma: if FLAT xss is ALL_DISTINCT and x appears in two
@@ -1571,6 +1669,9 @@ Proof
   `!i. i < j ==> ~is_terminator (EL i bb.bb_instructions).inst_opcode` by
     (rpt strip_tac >> `i < LENGTH bb.bb_instructions - 1` by simp[] >>
      metis_tac[]) >>
+  `phi_prefix_length bb.bb_instructions <= j` by
+    (irule phi_prefix_length_le_non_phi_el >> simp[] >>
+     gvs[dfg_tracked_opcode_def]) >>
   mp_tac (Q.SPECL [`bb`,`fuel`,`ctx`,`s`,`r`,`j`] run_block_decompose) >>
   simp[] >> strip_tac >>
   qexistsl_tac [`s_j`, `s_j1`] >> simp[] >>
@@ -2203,6 +2304,9 @@ Proof
     (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`]) >>
   `EL ti bb.bb_instructions = LAST bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`, LAST_EL]) >>
+  `phi_prefix_length bb.bb_instructions <= ti` by
+    (irule phi_prefix_length_le_non_phi_el >> simp[] >>
+     qpat_x_assum `EL ti _ = LAST _` SUBST1_TAC >> simp[]) >>
   (* Decompose run_block to get state just before JNZ *)
   mp_tac run_block_decompose >>
   disch_then (qspecl_then [`bb`, `fuel`, `ctx`, `s`, `v`, `ti`] mp_tac) >>
@@ -2228,4 +2332,3 @@ Proof
   rw[step_inst_def, step_inst_base_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[jump_to_def]
 QED
-

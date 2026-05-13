@@ -84,7 +84,7 @@ Definition dfg_prefix_sound_def:
                 else w2n w1 > w2n w2))))
 End
 
-(* dfg_prefix_sound at 0: trivially true (no entries at negative positions) *)
+(* dfg_prefix_sound at 0: trivially true since no position k < 0 exists for naturals *)
 Theorem dfg_prefix_sound_0:
   !dfg bb env. dfg_prefix_sound dfg bb env 0
 Proof
@@ -295,7 +295,7 @@ QED
 
 (* ================================================================
    LT/GT contradiction helpers — each takes only the facts needed
-   for its branch, avoiding the 40+ assumption accumulation issue.
+   for its branch.
    ================================================================ *)
 
 (* LT case: ADD overflow can't produce a true comparison *)
@@ -1216,4 +1216,3 @@ Proof
     >> gvs[dfg_tracked_opcode_def]
   )
 QED
-
