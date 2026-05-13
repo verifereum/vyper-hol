@@ -505,6 +505,18 @@ Proof
   metis_tac[listTheory.FILTER_ALL_DISTINCT]
 QED
 
+Theorem all_distinct_pred_split:
+  !(l:'a list) P.
+    ALL_DISTINCT (FILTER P l) /\
+    ALL_DISTINCT (FILTER ($~ o P) l) ==>
+    ALL_DISTINCT l
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  Cases_on `P h` >> gvs[listTheory.MEM_FILTER] >>
+  first_x_assum irule >>
+  metis_tac[listTheory.FILTER_ALL_DISTINCT]
+QED
+
 (* ===== Top-level preservation ===== *)
 
 (* Phase 1 transform equals function_map_transform *)
@@ -1548,6 +1560,128 @@ Proof
   metis_tac[flip_comparison_opcode_def]
 QED
 
+(* ao_cmp_flip_scan: non-comparator instruction doesn't change anything *)
+Triviality ao_cmp_flip_scan_non_comp_unchanged[local]:
+  !dfg h insts flips removes inserts flips' removes' inserts'.
+    ao_cmp_flip_scan dfg insts = (flips', removes', inserts') /\
+    ao_cmp_flip_scan dfg (h::insts) = (flips, removes, inserts) /\
+    ~is_comparator h.inst_opcode ==>
+    flips = flips' /\ removes = removes' /\ inserts = inserts'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ao_cmp_flip_scan _ (_::_) = _` mp_tac >>
+  simp[ao_cmp_flip_scan_def, LET_THM] >>
+  pairarg_tac >> gvs[]
+QED
+
+(* ao_cmp_flip_scan: flips keys come from comparator instructions in insts *)
+Triviality ao_cmp_flip_scan_flips_domain[local]:
+  !dfg insts flips removes inserts id v.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    ALOOKUP flips id = SOME v ==>
+    ?inst. MEM inst insts /\ inst.inst_id = id /\ is_comparator inst.inst_opcode
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `ao_cmp_flip_scan dfg insts = (flips', removes', inserts')` >>
+  Cases_on `is_comparator h.inst_opcode`
+  >- (drule_all ao_cmp_flip_scan_flips_shape >>
+      strip_tac >> gvs[]
+      >- (first_x_assum drule_all >> strip_tac >>
+          qexists_tac `inst` >> simp[])
+      >- (Cases_on `h.inst_id = id` >> gvs[]
+          >- (qexists_tac `h` >> simp[])
+          >- (first_x_assum drule_all >> strip_tac >>
+              qexists_tac `inst` >> simp[])))
+  >- (drule_all ao_cmp_flip_scan_non_comp_unchanged >> strip_tac >> gvs[] >>
+      first_x_assum drule_all >> strip_tac >>
+      qexists_tac `inst` >> simp[])
+QED
+
+(* ao_cmp_flip_scan: removes either unchanged or prepended with an ISZERO DFG id *)
+Triviality ao_cmp_flip_scan_removes_shape[local]:
+  !dfg h insts flips removes inserts flips' removes' inserts'.
+    ao_cmp_flip_scan dfg insts = (flips', removes', inserts') /\
+    ao_cmp_flip_scan dfg (h::insts) = (flips, removes, inserts) ==>
+    removes = removes' \/
+    ?v. LENGTH (dfg_get_uses dfg v) = 1 /\
+        (HD (dfg_get_uses dfg v)).inst_opcode = ISZERO /\
+        removes = (HD (dfg_get_uses dfg v)).inst_id :: removes'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ao_cmp_flip_scan _ (_::_) = _` mp_tac >>
+  simp[ao_cmp_flip_scan_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  simp[AllCaseEqs(), PULL_EXISTS,
+       ao_signed_boundaries_def, ao_unsigned_boundaries_def, LET_THM] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+(* ao_cmp_flip_scan: inserts either unchanged or prepended with an ASSERT DFG id *)
+Triviality ao_cmp_flip_scan_inserts_shape[local]:
+  !dfg h insts flips removes inserts flips' removes' inserts'.
+    ao_cmp_flip_scan dfg insts = (flips', removes', inserts') /\
+    ao_cmp_flip_scan dfg (h::insts) = (flips, removes, inserts) ==>
+    inserts = inserts' \/
+    ?v. LENGTH (dfg_get_uses dfg v) = 1 /\
+        (HD (dfg_get_uses dfg v)).inst_opcode = ASSERT /\
+        inserts = ((HD (dfg_get_uses dfg v)).inst_id, v,
+                   ao_fresh_var h.inst_id "iz", h.inst_id) :: inserts'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ao_cmp_flip_scan _ (_::_) = _` mp_tac >>
+  simp[ao_cmp_flip_scan_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  simp[AllCaseEqs(), PULL_EXISTS,
+       ao_signed_boundaries_def, ao_unsigned_boundaries_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* ao_cmp_flip_scan: removes entries come from DFG lookups *)
+Triviality ao_cmp_flip_scan_removes_from_dfg[local]:
+  !dfg insts flips removes inserts id.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    MEM id removes ==>
+    ?v inst. MEM inst (dfg_get_uses dfg v) /\ inst.inst_id = id /\
+             inst.inst_opcode = ISZERO
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `ao_cmp_flip_scan dfg insts = (flips', removes', inserts')` >>
+  drule_all ao_cmp_flip_scan_removes_shape >>
+  strip_tac
+  >- (gvs[] >> first_x_assum drule_all >> metis_tac[])
+  >- (gvs[] >>
+      Cases_on `dfg_get_uses dfg v` >> gvs[] >>
+      metis_tac[listTheory.MEM])
+QED
+
+(* ao_cmp_flip_scan: inserts keys come from ASSERT DFG lookups *)
+Triviality ao_cmp_flip_scan_inserts_from_dfg[local]:
+  !dfg insts flips removes inserts id v.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    ALOOKUP inserts id = SOME v ==>
+    ?w inst. MEM inst (dfg_get_uses dfg w) /\ inst.inst_id = id /\
+             inst.inst_opcode = ASSERT
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `ao_cmp_flip_scan dfg insts = (flips', removes', inserts')` >>
+  drule_all ao_cmp_flip_scan_inserts_shape >>
+  strip_tac
+  >- (gvs[] >> first_x_assum drule_all >> metis_tac[])
+  >- (gvs[] >>
+      Cases_on `dfg_get_uses dfg v'` >> gvs[] >>
+      metis_tac[listTheory.MEM])
+QED
+
 (* ao_cmp_flip_scan: flips only contain non-terminator opcodes *)
 Triviality ao_cmp_flip_scan_flips_non_term[local]:
   !dfg insts flips removes inserts.
@@ -1570,11 +1704,25 @@ Proof
       >- (first_x_assum drule_all >> gvs[]))
 QED
 
-(* ao_cmp_flip_scan: flips/removes/inserts don't include terminators *)
+(* Terminators/PHIs are not affected by the scan, given distinct ids and DFG soundness.
+   The proof uses domain lemmas: flips keys are from comparators in insts,
+   removes/inserts ids are from DFG lookups. With ALL_DISTINCT ids and the
+   DFG returning function instructions, no terminator/PHI id can collide. *)
+Triviality all_distinct_id_eq[local]:
+  !l x y. ALL_DISTINCT (MAP (\i. i.inst_id) l) /\
+           MEM x l /\ MEM y l /\ x.inst_id = y.inst_id ==> x = y
+Proof
+  Induct_on `l` >> simp[] >> rpt strip_tac >> gvs[] >>
+  gvs[listTheory.MEM_MAP]
+QED
+
 Triviality ao_cmp_flip_scan_no_term[local]:
   !dfg insts flips removes inserts inst.
     ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
-    is_terminator inst.inst_opcode ==>
+    MEM inst insts /\
+    is_terminator inst.inst_opcode /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i insts) ==>
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE
@@ -1582,11 +1730,13 @@ Proof
   cheat
 QED
 
-(* ao_cmp_flip_scan: flips/removes/inserts don't include PHIs *)
 Triviality ao_cmp_flip_scan_no_phi[local]:
   !dfg insts flips removes inserts inst.
     ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
-    inst.inst_opcode = PHI ==>
+    MEM inst insts /\
+    inst.inst_opcode = PHI /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i insts) ==>
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE
@@ -1617,37 +1767,15 @@ Triviality ao_cmp_flip_apply_non_phi[local]:
 Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_apply_inst_def] >>
-  every_case_tac >> gvs[listTheory.EVERY_DEF] >>
-  res_tac
+  every_case_tac >> gvs[] >>
+  CCONTR_TAC >> gvs[]
 QED
 
 Triviality ao_phase4_preserves_wf[local]:
   !mid dfg fn. wf_function fn ==>
     wf_function (ao_cmp_flip_function mid dfg fn)
 Proof
-  rpt strip_tac >>
-  simp[ao_cmp_flip_function_def, LET_THM] >>
-  pairarg_tac >> gvs[] >>
-  IF_CASES_TAC >> simp[] >>
-  qabbrev_tac `apply = ao_cmp_flip_apply_inst mid flips removes inserts` >>
-  fs[wf_function_def, fn_labels_def, fn_has_entry_def,
-     fn_succs_closed_def, fn_inst_ids_distinct_def] >>
-  rpt conj_tac
-  (* 1. ALL_DISTINCT labels *)
-  >- simp[listTheory.MAP_MAP_o, combinTheory.o_DEF]
-  (* 2. entry exists *)
-  >- (simp[listTheory.EXISTS_MAP] >>
-      qexists_tac `HD fn.fn_blocks` >>
-      Cases_on `fn.fn_blocks` >> gvs[])
-  (* 3. bb_well_formed *)
-  >- (rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
-      cheat)
-  (* 4. fn_succs_closed *)
-  >- (rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
-      simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-      cheat)
-  (* 5. fn_inst_ids_distinct *)
-  >- cheat
+  cheat
 QED
 
 Theorem ao_preserves_wf_function:
@@ -1675,6 +1803,39 @@ Proof
       fs[fn_insts_def, fn_insts_blocks_every])
 QED
 
+(* ao_fresh_var is injective on our suffixes *)
+Theorem ao_fresh_var_full_inj:
+  !id1 s1 id2 s2.
+    (s1 = "not" \/ s1 = "iz" \/ s1 = "xor") /\
+    (s2 = "not" \/ s2 = "iz" \/ s2 = "xor") /\
+    ao_fresh_var id1 s1 = ao_fresh_var id2 s2 ==>
+    id1 = id2 /\ s1 = s2
+Proof
+  rpt strip_tac >> gvs[] >>
+  fs[ao_fresh_var_def, stringTheory.STRCAT_11,
+     ASCIInumbersTheory.toString_inj]
+QED
+
+(* LAST of ao_peephole_inst preserves outputs *)
+Triviality ao_peephole_inst_last_outputs[local]:
+  !mid dfg ra lbl idx inst.
+    ao_peephole_inst mid dfg ra lbl idx inst <> [] /\
+    (LAST (ao_peephole_inst mid dfg ra lbl idx inst)).inst_outputs =
+      inst.inst_outputs
+Proof
+  rpt gen_tac >>
+  simp[ao_peephole_inst_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def,
+       ao_opt_or_def, ao_opt_eq_def, ao_opt_comparator_def, LET_THM,
+       ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+       ao_cmp_prefer_iz_general_def,
+       ao_unsigned_boundaries_def, ao_signed_boundaries_def] >>
+  every_case_tac >> gvs[] >>
+  rpt IF_CASES_TAC >> gvs[]
+QED
+
 Theorem ao_preserves_ssa_form:
   !fn. ssa_form fn /\ wf_function fn /\
     (!inst v. MEM inst (fn_insts fn) /\
@@ -1685,11 +1846,16 @@ Theorem ao_preserves_ssa_form:
                   v = ao_fresh_var id "xor")))) ==>
     ssa_form (ao_transform_function fn)
 Proof
-  (* SSA preservation: fresh output variables (ao_fresh_var) are distinct
-     from original outputs by the freshness precondition, and from each other
-     by ao_fresh_var injectivity. Original outputs are preserved (same outputs
-     for terminators/PHIs, same or subset for peephole results). *)
-  cheat
+  rpt strip_tac >>
+  simp[ssa_form_def, fn_insts_def] >>
+  irule all_distinct_pred_split >>
+  qexists_tac `\v. ?id s. MEM id (MAP (\i. i.inst_id) (fn_insts fn)) /\
+    (s = "not" \/ s = "iz" \/ s = "xor") /\ v = ao_fresh_var id s` >>
+  conj_tac
+  >- ((* Fresh half: ALL_DISTINCT (FILTER fresh outputs) *)
+      cheat)
+  >- ((* Non-fresh half: ALL_DISTINCT (FILTER (¬fresh) outputs) *)
+      cheat)
 QED
 
 val _ = export_theory();

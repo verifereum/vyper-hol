@@ -1893,6 +1893,527 @@ Proof
   \\ gvs[]
 QED
 
+(* Index-restricted variant of analysis_block_sim_wf.
+   Per-inst sim and transfer_sound only need to hold at the correct
+   (idx, EL idx bb) pairing, not universally.
+   Essential for passes where sim depends on position-specific analysis
+   (e.g. range analysis: range_at_inst at index idx only valid for EL idx bb). *)
+Theorem analysis_block_sim_wf_at:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (sound : 'a -> venom_state -> bool)
+   (f : 'a -> instruction -> instruction list) bb
+   (bottom : 'a) (result : 'a df_state) transfer run_ctx.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (* Per-inst sim restricted to (idx, EL idx bb) pairing *)
+    (!fuel ctx idx s.
+       idx < LENGTH bb.bb_instructions /\
+       sound (df_at bottom result bb.bb_label idx) s /\
+       inst_wf (EL idx bb.bb_instructions) ==>
+       (?e. step_inst fuel ctx (EL idx bb.bb_instructions) s = Error e) \/
+       lift_result R_ok R_term R_term
+         (step_inst fuel ctx (EL idx bb.bb_instructions) s)
+         (run_insts fuel ctx
+           (f (df_at bottom result bb.bb_label idx)
+              (EL idx bb.bb_instructions)) s)) /\
+    inst_transform_structural f /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    (* transfer_sound restricted to (idx, EL idx bb) pairing *)
+    (!fuel ctx' idx s s'.
+       idx < LENGTH bb.bb_instructions /\
+       inst_wf (EL idx bb.bb_instructions) /\
+       sound (df_at bottom result bb.bb_label idx) s /\
+       step_inst fuel ctx' (EL idx bb.bb_instructions) s = OK s' ==>
+       sound (df_at bottom result bb.bb_label (SUC idx)) s') /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx))
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s ==>
+      (?e. exec_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term R_term
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx
+           (analysis_block_transform bottom result f bb) s)
+Proof
+  rpt strip_tac >>
+  simp[analysis_block_transform_def] >>
+  qabbrev_tac `g = \idx inst. f (df_at bottom result bb.bb_label idx) inst` >>
+  `!n fuel ctx s.
+     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+     s.vs_inst_idx <= LENGTH bb.bb_instructions /\
+     sound (df_at bottom result bb.bb_label s.vs_inst_idx)
+           (s with vs_inst_idx := 0) ==>
+     (?e. exec_block fuel ctx bb s = Error e) \/
+     lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+          (s with vs_inst_idx :=
+             LENGTH (FLAT (TAKE s.vs_inst_idx (MAPi g bb.bb_instructions)))))`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
+      `s with vs_inst_idx := 0 = s` by fs[venom_state_component_equality] >>
+      simp[TAKE_0]) >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `i = s'.vs_inst_idx` >>
+  Cases_on `i >= LENGTH bb.bb_instructions`
+  >- (
+    (* Base: i >= LENGTH, both Error *)
+    `i = LENGTH bb.bb_instructions` by fs[] >>
+    DISJ1_TAC >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  (* Inductive step: i < LENGTH *)
+  `i < LENGTH bb.bb_instructions` by fs[] >>
+  qabbrev_tac `v = df_at bottom result bb.bb_label i` >>
+  `inst_wf (EL i bb.bb_instructions)` by metis_tac[EVERY_EL] >>
+  (* Structural facts from inst_transform_structural *)
+  qpat_x_assum `inst_transform_structural _`
+    (fn its =>
+      let val structurals = CONJUNCTS (REWRITE_RULE [inst_transform_structural_def] its)
+      in MAP_EVERY ASSUME_TAC structurals end) >>
+  (* EL into FLAT for transformed block *)
+  sg `!k. k < LENGTH (g i (EL i bb.bb_instructions)) ==>
+       EL (LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) + k)
+          (FLAT (MAPi g bb.bb_instructions)) =
+       EL k (g i (EL i bb.bb_instructions))`
+  >- (rpt strip_tac >> irule EL_FLAT_MAPi >> simp[]) >>
+  sg `LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) +
+      LENGTH (g i (EL i bb.bb_instructions)) <=
+      LENGTH (FLAT (MAPi g bb.bb_instructions))`
+  >- (irule FLAT_MAPi_offset_bound >> simp[]) >>
+  qabbrev_tac `inst = EL i bb.bb_instructions` >>
+  qabbrev_tac `j = LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions)))` >>
+  `g i inst = f v inst` by simp[Abbr `g`, Abbr `v`, Abbr `inst`] >>
+  (* Establish exec_block unrolling as a fact, then SUBST1_TAC *)
+  sg `exec_block fuel ctx bb s' =
+      case step_inst fuel ctx inst s' of
+        OK s'' =>
+          if is_terminator inst.inst_opcode then
+            if s''.vs_halted then Halt s'' else OK s''
+          else exec_block fuel ctx bb (s'' with vs_inst_idx := SUC i)
+      | Halt s'' => Halt s''
+      | Abort a s'' => Abort a s''
+      | IntRet rv ss => IntRet rv ss
+      | Error e => Error e`
+  >- (
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+    simp[get_instruction_def, Abbr `inst`, Abbr `i`]
+  ) >>
+  pop_assum SUBST1_TAC >>
+  (* Per-inst sim at idx=0: Error \/ lift_result *)
+  `sound v (s' with vs_inst_idx := 0)` by fs[Abbr `v`] >>
+  (* Per-inst sim: prove in terms of inst/v using restricted hypothesis *)
+  `(?e. step_inst fuel ctx inst (s' with vs_inst_idx := 0) = Error e) \/
+   lift_result R_ok R_term R_term
+     (step_inst fuel ctx inst (s' with vs_inst_idx := 0))
+     (run_insts fuel ctx (f v inst) (s' with vs_inst_idx := 0))` by
+    (qpat_assum `!fuel ctx idx s. idx < _ /\ _ ==> _`
+       (qspecl_then [`fuel`, `ctx`, `i`, `s' with vs_inst_idx := 0`] mp_tac) >>
+     qpat_assum `Abbrev (inst = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     qpat_assum `Abbrev (v = _)`
+       (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     simp[])
+  >- (
+    (* Error: step_inst at idx=0 errors, bridge to s' via idx_indep *)
+    DISJ1_TAC >>
+    `s' with vs_inst_idx := i = s'` by
+      simp[Abbr `i`, venom_state_component_equality] >>
+    `step_inst fuel ctx inst s' = Error e` by metis_tac[step_inst_error_idx_indep] >>
+    simp[]
+  ) >>
+  (* lift_result from here on *)
+  (* === Terminator case === *)
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (
+    `?inst'. f v inst = [inst'] /\ is_terminator inst'.inst_opcode` by
+      metis_tac[] >>
+    `g i inst = [inst']` by fs[] >>
+    `j < LENGTH (FLAT (MAPi g bb.bb_instructions))` by fs[] >>
+    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst'` by
+      (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `inst`, Abbr `j`]) >>
+    `lift_result R_ok R_term R_term
+       (step_inst fuel ctx inst (s' with vs_inst_idx := 0))
+       (step_inst fuel ctx inst' (s' with vs_inst_idx := 0))` by
+      fs[run_insts_singleton] >>
+    DISJ2_TAC >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+    simp[get_instruction_def] >>
+    irule lift_result_trans_proof >>
+    conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
+    qexists_tac `case step_inst fuel ctx inst' (s' with vs_inst_idx := 0) of
+       OK s'' => if s''.vs_halted then Halt s'' else OK s''
+     | Halt s' => Halt s' | Abort a s' => Abort a s'
+     | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
+    conj_tac
+    >- (
+      irule lift_result_trans_proof >>
+      conj_tac >- fs[] >> conj_tac >- fs[] >> conj_tac >- fs[] >>
+      qexists_tac `case step_inst fuel ctx inst (s' with vs_inst_idx := 0) of
+         OK s'' => if s''.vs_halted then Halt s'' else OK s''
+       | Halt s' => Halt s' | Abort a s' => Abort a s'
+       | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
+      conj_tac
+      >- (irule terminator_exec_block_step_lift >> simp[])
+      >- (irule lift_result_halt_wrap >> simp[])
+    )
+    >- (
+      `(s' with vs_inst_idx := 0) with vs_inst_idx := j =
+       s' with vs_inst_idx := j` by simp[] >>
+      pop_assum (SUBST1_TAC o SYM) >>
+      irule terminator_exec_block_step_lift >> simp[]
+    )
+  ) >>
+  (* === INVOKE case === *)
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    (* Get inst' from structural *)
+    `?inst'. f v inst = [inst'] /\ inst'.inst_opcode = INVOKE` by
+      metis_tac[] >>
+    `g i inst = [inst']` by fs[] >>
+    `j < LENGTH (FLAT (MAPi g bb.bb_instructions))` by fs[] >>
+    `EL j (FLAT (MAPi g bb.bb_instructions)) = inst'` by
+      (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+    (* lift_result between step_inst inst and inst' at idx=0 *)
+    `lift_result R_ok R_term R_term
+       (step_inst fuel ctx inst (s' with vs_inst_idx := 0))
+       (step_inst fuel ctx inst' (s' with vs_inst_idx := 0))` by
+      fs[run_insts_singleton] >>
+    (* Bridge lift_result from idx=0 to s' (idx=i) *)
+    `lift_result R_ok R_term R_term
+       (step_inst fuel ctx inst s')
+       (step_inst fuel ctx inst' s')` by (
+      `s' = (s' with vs_inst_idx := 0) with vs_inst_idx := i` by
+        simp[Abbr `i`, venom_state_component_equality] >>
+      pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+      irule invoke_lift_result_idx_bridge >> fs[]
+    ) >>
+    (* Unroll RHS exec_block at j *)
+    `exec_block fuel ctx
+       (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+       (s' with vs_inst_idx := j) =
+     (case step_inst fuel ctx inst' (s' with vs_inst_idx := j) of
+        OK s'' => exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+          (s'' with vs_inst_idx :=
+             SUC (LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions)))))
+      | Halt s'' => Halt s''
+      | Abort a s'' => Abort a s''
+      | IntRet rv ss => IntRet rv ss
+      | Error e => Error e)` by (
+      CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+      simp[get_instruction_def, is_terminator_def]
+    ) >>
+    pop_assum SUBST1_TAC >>
+    simp[] >>
+    (* Case split on step_inst *)
+    `step_inst fuel ctx inst' (s' with vs_inst_idx := j) =
+     case step_inst fuel ctx inst' s' of
+       OK s'' => OK (s'' with vs_inst_idx := j)
+     | x => x` by simp[invoke_step_inst_idx_OK_only] >>
+    Cases_on `step_inst fuel ctx inst s'` >>
+    Cases_on `step_inst fuel ctx inst' s'` >>
+    gvs[lift_result_def]
+    >- (
+    (* INVOKE OK/OK case *)
+    `step_inst fuel ctx inst (s' with vs_inst_idx := 0) =
+     OK (v' with vs_inst_idx := 0)` by
+      (irule step_inst_at_0 >> fs[]) >>
+    `sound (df_at bottom result bb.bb_label (SUC i)) (v' with vs_inst_idx := 0)` by (
+      qpat_assum `!fuel ctx' idx s s'. idx < _ /\ inst_wf _ /\ _ ==> _`
+        (qspecl_then [`fuel`, `ctx`, `i`,
+            `s' with vs_inst_idx := 0`, `v' with vs_inst_idx := 0`] mp_tac) >>
+      simp[Abbr `v`, Abbr `inst`]) >>
+    `transfer run_ctx inst v = df_at bottom result bb.bb_label (SUC i)` by (
+      `SUC i <= LENGTH bb.bb_instructions` by fs[] >>
+      qpat_x_assum `!idx. SUC idx <= _ ==> _` (qspec_then `i` mp_tac) >>
+      simp[Abbr `inst`, Abbr `v`]) >>
+    (* Soundness transfer to v'' *)
+    `R_ok (v' with vs_inst_idx := 0) (v'' with vs_inst_idx := 0)` by
+      metis_tac[R_ok_idx_change] >>
+    `sound (df_at bottom result bb.bb_label (SUC i))
+           (v'' with vs_inst_idx := 0)` by metis_tac[] >>
+    (* Apply block_sim_continuation: v' ~ v'' via R_ok,
+       then IH at SUC i for v'' gives Error \/ lift_result *)
+    irule block_sim_continuation >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    (* IH for v'' at SUC i *)
+    `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) = SUC j` by (
+      `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
+       LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) +
+       LENGTH (g i (EL i bb.bb_instructions))`
+        by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
+      simp[Abbr `j`, Abbr `inst`]) >>
+    qpat_x_assum `!m. m < _ ==> !fuel' ctx' s'. _`
+      (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+    impl_tac >- decide_tac >>
+    disch_then (qspecl_then [`fuel`, `ctx`,
+      `v'' with vs_inst_idx := SUC i`] mp_tac) >>
+    SIMP_TAC (srw_ss()) [] >>
+    impl_tac >- (rpt conj_tac >> TRY decide_tac >> first_assum ACCEPT_TAC) >>
+    metis_tac[]
+    )
+  ) >>
+  (* === Non-term non-INVOKE case === *)
+  `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
+    (f v inst)` by metis_tac[] >>
+  (* Derive simulation at s' via idx-independence detour through idx=0 *)
+  `lift_result R_ok R_term R_term (step_inst fuel ctx inst s')
+    (run_insts fuel ctx (f v inst) s')` by (
+    qabbrev_tac `s_nat = s' with vs_inst_idx := 0` >>
+    `sound v s_nat` by simp[Abbr `v`, Abbr `s_nat`] >>
+    `lift_result R_ok R_term R_term (step_inst fuel ctx inst s_nat)
+      (run_insts fuel ctx (f v inst) s_nat)` by (
+      qpat_x_assum `!fuel ctx idx s. idx < _ /\ _ ==> _`
+        (qspecl_then [`fuel`, `ctx`, `i`, `s_nat`] mp_tac) >>
+      simp[Abbr `v`, Abbr `inst`]) >>
+    `s' = s_nat with vs_inst_idx := i` by
+      simp[Abbr `s_nat`, Abbr `i`, venom_state_component_equality] >>
+    `step_inst fuel ctx inst s' =
+     exec_result_map (\s''. s'' with vs_inst_idx := i)
+       (step_inst fuel ctx inst s_nat)` by (
+      qpat_assum `s' = _` (fn th =>
+        CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+      simp[step_inst_idx_indep]) >>
+    `run_insts fuel ctx (f v inst) s' =
+     exec_result_map (\s''. s'' with vs_inst_idx := i)
+       (run_insts fuel ctx (f v inst) s_nat)` by (
+      qpat_x_assum `s' = _` (fn th =>
+        CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+      simp[run_insts_idx_indep]) >>
+    ntac 2 (pop_assum SUBST1_TAC) >>
+    irule lift_result_exec_result_map >>
+    simp[] >> metis_tac[R_ok_idx_change, R_term_idx_change_both]) >>
+  (* Case split on step_inst. After simp[], Error solved, 4 goals remain:
+     OK, Halt, Abort, IntRet (in constructor order). *)
+  Cases_on `step_inst fuel ctx inst s'` >> simp[]
+  (* After simp: Error case solved, 4 goals remain: OK, Halt, Abort, IntRet *)
+  (* Halt/Abort/IntRet dispatched first, then OK case *)
+  >- (
+    (* === OK case === *)
+    rename1 `step_inst _ _ _ _ = OK st1` >>
+    `st1.vs_inst_idx = s'.vs_inst_idx` by
+      metis_tac[step_inst_preserves_inst_idx] >>
+    `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
+     j + LENGTH (g i inst)` by (
+      `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
+       LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) +
+       LENGTH (g i (EL i bb.bb_instructions))`
+        by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
+      simp[Abbr `j`, Abbr `inst`]) >>
+    (* Case split on run_insts *)
+    Cases_on `run_insts fuel ctx (f v inst) s'`
+    >- (
+      (* run_insts OK: skip prefix, establish soundness, apply IH *)
+      rename1 `run_insts _ _ _ _ = OK st2` >>
+      `st2.vs_inst_idx = s'.vs_inst_idx` by
+        metis_tac[run_insts_preserves_idx] >>
+      `R_ok st1 st2` by (
+        qpat_x_assum `lift_result _ _ _ (OK _) (OK _)` mp_tac >>
+        simp[lift_result_def]) >>
+      (* Skip past the f v inst prefix in the transformed block *)
+      `exec_block fuel ctx
+         (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+         (s' with vs_inst_idx := j) =
+       exec_block fuel ctx
+         (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+         (st2 with vs_inst_idx := j + LENGTH (g i inst))` by (
+        qspecl_then [`f v inst`, `fuel`, `ctx`,
+          `bb with bb_instructions := FLAT (MAPi g bb.bb_instructions)`,
+          `s'`, `j`, `st2`] mp_tac exec_block_skip_prefix >>
+        impl_tac >- fs[] >>
+        simp[]) >>
+      `j + LENGTH (g i inst) = j + LENGTH (f v inst)` by simp[] >>
+      pop_assum (fn th => FULL_SIMP_TAC (srw_ss()) [th]) >>
+      (* Establish soundness at SUC i for st1 *)
+      `sound (df_at bottom result bb.bb_label (SUC i))
+             (st1 with vs_inst_idx := 0)` by (
+        `step_inst fuel ctx inst (s' with vs_inst_idx := 0) =
+         OK (st1 with vs_inst_idx := 0)` by
+          (irule step_inst_at_0 >> fs[]) >>
+        qpat_x_assum `!fuel ctx' idx s s'. idx < _ /\ inst_wf _ /\ _ ==> _`
+          (qspecl_then [`fuel`, `ctx`, `i`,
+              `s' with vs_inst_idx := 0`, `st1 with vs_inst_idx := 0`] mp_tac) >>
+        simp[Abbr `v`, Abbr `inst`]) >>
+      (* Transfer soundness from st1 to st2 via R_ok *)
+      `R_ok (st1 with vs_inst_idx := 0) (st2 with vs_inst_idx := 0)` by (
+        match_mp_tac (Q.SPECL [`R_ok`, `R_term`] R_ok_idx_change) >>
+        simp[]) >>
+      `sound (df_at bottom result bb.bb_label (SUC i))
+             (st2 with vs_inst_idx := 0)` by (
+        qpat_assum `!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> _`
+          (qspecl_then [`df_at bottom result bb.bb_label (SUC i)`,
+             `st1 with vs_inst_idx := 0`,
+             `st2 with vs_inst_idx := 0`] mp_tac) >>
+        simp[]) >>
+      (* Apply block_sim_continuation + IH *)
+      irule block_sim_continuation >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
+       j + LENGTH (g i inst)` by (
+        `LENGTH (FLAT (TAKE (SUC i) (MAPi g bb.bb_instructions))) =
+         LENGTH (FLAT (TAKE i (MAPi g bb.bb_instructions))) +
+         LENGTH (g i (EL i bb.bb_instructions))`
+          by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
+        simp[Abbr `j`, Abbr `inst`]) >>
+      qpat_x_assum `!m. m < _ ==> !fuel' ctx' s'. _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- decide_tac >>
+      disch_then (qspecl_then [`fuel`, `ctx`,
+        `st2 with vs_inst_idx := SUC i`] mp_tac) >>
+      SIMP_TAC (srw_ss()) [] >>
+      impl_tac >- (rpt conj_tac >> TRY decide_tac >> first_assum ACCEPT_TAC) >>
+      simp[]
+    )
+    >- (gvs[lift_result_def])
+    >- (gvs[lift_result_def])
+    >- (gvs[lift_result_def])
+    >- (gvs[lift_result_def])
+  )
+  (* === Halt/Abort/IntRet step_inst cases === *)
+  (* step_inst is non-OK, so run_insts can't be OK either.
+     Chain: step_inst result ~ run_insts result ~ exec_block on transformed. *)
+  >- (
+    `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
+      (Cases_on `run_insts fuel ctx (f v inst) s'` >> gvs[lift_result_def]) >>
+    `lift_result R_ok R_term R_term (run_insts fuel ctx (f v inst) s')
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+          (s' with vs_inst_idx := j))` by (
+      irule run_insts_lift_exec_block >> fs[]) >>
+    irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
+  >- (
+    `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
+      (Cases_on `run_insts fuel ctx (f v inst) s'` >> gvs[lift_result_def]) >>
+    `lift_result R_ok R_term R_term (run_insts fuel ctx (f v inst) s')
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+          (s' with vs_inst_idx := j))` by (
+      irule run_insts_lift_exec_block >> fs[]) >>
+    irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
+  >- (
+    `~(?s0. run_insts fuel ctx (f v inst) s' = OK s0)` by
+      (Cases_on `run_insts fuel ctx (f v inst) s'` >> gvs[lift_result_def]) >>
+    `lift_result R_ok R_term R_term (run_insts fuel ctx (f v inst) s')
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g bb.bb_instructions))
+          (s' with vs_inst_idx := j))` by (
+      irule run_insts_lift_exec_block >> fs[]) >>
+    irule lift_result_trans_proof >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `run_insts fuel ctx (f v inst) s'` >> gvs[])
+QED
+
+(* Index-restricted variant with state_inv.
+   Wraps analysis_block_sim_wf_at like analysis_block_sim_inv wraps _wf. *)
+Theorem analysis_block_sim_inv_at:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (sound : 'a -> venom_state -> bool)
+   (state_inv : venom_state -> bool)
+   (f : 'a -> instruction -> instruction list) bb
+   (bottom : 'a) (result : 'a df_state) transfer run_ctx.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (* Per-inst sim restricted to (idx, EL idx bb) with state_inv *)
+    (!fuel ctx idx s.
+       idx < LENGTH bb.bb_instructions /\
+       sound (df_at bottom result bb.bb_label idx) s /\
+       state_inv (s with vs_inst_idx := 0) /\
+       inst_wf (EL idx bb.bb_instructions) ==>
+       (?e. step_inst fuel ctx (EL idx bb.bb_instructions) s = Error e) \/
+       lift_result R_ok R_term R_term
+         (step_inst fuel ctx (EL idx bb.bb_instructions) s)
+         (run_insts fuel ctx
+           (f (df_at bottom result bb.bb_label idx)
+              (EL idx bb.bb_instructions)) s)) /\
+    inst_transform_structural f /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!inst x.
+       MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    (* transfer_sound restricted to (idx, EL idx bb) *)
+    (!fuel ctx' idx s s'.
+       idx < LENGTH bb.bb_instructions /\
+       inst_wf (EL idx bb.bb_instructions) /\
+       sound (df_at bottom result bb.bb_label idx) s /\
+       step_inst fuel ctx' (EL idx bb.bb_instructions) s = OK s' ==>
+       sound (df_at bottom result bb.bb_label (SUC idx)) s') /\
+    (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+       df_at bottom result bb.bb_label (SUC idx) =
+       transfer run_ctx (EL idx bb.bb_instructions)
+         (df_at bottom result bb.bb_label idx)) /\
+    (* state_inv preserved through step_inst at each index *)
+    (!fuel ctx idx s s'.
+       idx < LENGTH bb.bb_instructions /\
+       inst_wf (EL idx bb.bb_instructions) /\
+       state_inv (s with vs_inst_idx := 0) /\
+       step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
+       state_inv (s' with vs_inst_idx := 0)) /\
+    (* state_inv preserved through R_ok *)
+    (!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2)
+  ==>
+    !fuel ctx s.
+      s.vs_inst_idx = 0 /\
+      sound (df_at bottom result bb.bb_label 0) s /\
+      state_inv s ==>
+      (?e. exec_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term R_term
+        (exec_block fuel ctx bb s)
+        (exec_block fuel ctx
+           (analysis_block_transform bottom result f bb) s)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `sound' = \(v:'a) s. sound v s /\
+       state_inv (s with vs_inst_idx := 0)` >>
+  qspecl_then [`R_ok`, `R_term`, `sound'`, `f`, `bb`, `bottom`,
+       `result`, `transfer`, `run_ctx`] mp_tac analysis_block_sim_wf_at >>
+  impl_tac
+  >- (
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+    (* per-inst sim for sound' *)
+    >- (rpt strip_tac >> gvs[Abbr `sound'`] >> res_tac)
+    (* transfer_sound for sound' *)
+    >- (rpt strip_tac >> gvs[Abbr `sound'`] >> conj_tac
+        >- res_tac
+        >> res_tac)
+    (* sound' preserved by R_ok *)
+    >> rpt strip_tac >> gvs[Abbr `sound'`] >> conj_tac >- res_tac
+    >> qspecl_then [`R_ok`, `R_term`, `s1`, `s2`, `0`]
+         mp_tac R_ok_idx_change >> simp[]
+    >> disch_tac >> res_tac) >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  simp[Abbr `sound'`] >>
+  disch_then irule >>
+  `s with vs_inst_idx := 0 = s` by
+    (Cases_on `s` >> gvs[venom_state_fn_updates]) >>
+  gvs[]
+QED
+
 (* Variant of analysis_block_sim with universal soundness instead of
    transfer_sound + chain. Drops R_ok-monotonicity of sound and
    sound(df_at 0, s) precondition since universal soundness subsumes both. *)

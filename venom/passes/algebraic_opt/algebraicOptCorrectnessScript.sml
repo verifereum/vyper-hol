@@ -17,20 +17,19 @@ Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
     let fv' = ao_fn_total_fresh_vars fn in
-    (* No INVOKE in function (standard for state_equiv-based proofs) *)
-    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
     (* Freshness: original operands/outputs don't use fresh variable names *)
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
     (!inst v. MEM inst (fn_insts fn) /\
               MEM v inst.inst_outputs ==> v NOTIN fv) /\
     (* Well-formedness *)
-    ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+    wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
     (* DFG invariant: ADDRESS/SIGNEXTEND outputs consistent with initial state.
        Trivially true when these output vars are undefined in s (the typical case). *)
     (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
       (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
-      lookup_var x s = NONE)
+      lookup_var x s = NONE) /\
+    fn_entry_label fn = SOME s.vs_current_bb
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv fv') (execution_equiv fv') (execution_equiv fv')
@@ -63,18 +62,23 @@ QED
 
 (* ===== Remaining Semantic Obligations =====
 
-   The correctness proof depends on three cheated theorems, each in
-   its own file for independent parallel development:
+   The correctness proof depends on cheated theorems in separate files
+   for independent parallel development:
 
+   DONE (0 cheats):
    1. aoResolveObligationScript.sml — ao_resolve_iszero_inst_sim
       Iszero chain resolution is a semantic no-op.
-      NOTE: current formulation (∀s) needs reformulation with a
-      state-dependent chain invariant.
-
    2. aoRangeObligationScript.sml — range_analyze_sound
       Range analysis produces correct bounds.
 
+   IN PROGRESS:
    3. aoCmpFlipObligationScript.sml — ao_cmp_flip_block_sim
       Cmp_flip preserves block execution up to dead variables.
+   4. aoStepInvObligationScript.sml — step-level invariant obligations:
+      in_range_state/sinv compat with state_equiv, sinv step preservation,
+      chain variable freshness.
+   5. aoBlockInvObligationScript.sml — block-level invariant obligations:
+      chain_inv/chains_defined through exec_block, range_sound + cfg at
+      successor, initial state establishment.
 
    ===== *)

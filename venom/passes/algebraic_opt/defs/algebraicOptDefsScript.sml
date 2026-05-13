@@ -886,3 +886,41 @@ Definition ao_transform_context_def:
   ao_transform_context ctx =
     ctx with ctx_functions := MAP ao_transform_function ctx.ctx_functions
 End
+
+(* ===== Proof Invariant Definitions ===== *)
+
+Definition ao_fn_fresh_vars_def:
+  ao_fn_fresh_vars fn =
+    { v | ?id.
+        MEM id (MAP (\i. i.inst_id) (fn_insts fn)) /\
+        (v = ao_fresh_var id "not" \/
+         v = ao_fresh_var id "iz" \/
+         v = ao_fresh_var id "xor") }
+End
+
+Definition ao_fn_total_fresh_vars_def:
+  ao_fn_total_fresh_vars fn =
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
+    let dfg1 = dfg_build_function fn1 in
+    ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
+End
+
+(* DFG runtime invariant: tracked opcode outputs have expected values *)
+Definition ao_dfg_inv_def:
+  ao_dfg_inv dfg s <=>
+    !x inst val. dfg_get_def dfg x = SOME inst /\
+      lookup_var x s = SOME val ==>
+      (inst.inst_opcode = ADDRESS ==>
+        val = w2w s.vs_call_ctx.cc_address) /\
+      (inst.inst_opcode = SIGNEXTEND ==>
+        !w inner_op. inst.inst_operands = [Lit w; inner_op] ==>
+        ?inner_val. val = sign_extend w inner_val)
+End
