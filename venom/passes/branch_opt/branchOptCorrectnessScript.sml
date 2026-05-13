@@ -1,6 +1,21 @@
+(*
+ * Branch Optimization Pass — Correctness
+ *
+ * Top-level correctness theorem: branch_opt_function preserves
+ * result equivalence up to fresh-variable projection, assuming
+ * bo_iszero_inv invariance conditions.
+ *
+ * TOP-LEVEL:
+ *   branch_opt_function_correct       — main correctness theorem
+ *
+ * Obligations (cheated):
+ *   branch_opt_preserves_ssa_form       — SSA form preservation
+ *   branch_opt_preserves_wf_function     — well-formed function preservation
+ *)
+
 Theory branchOptCorrectness
 Ancestors
-  branchOptProofs venomWf
+  branchOptProofs venomExecSemantics venomWf
 
 Theorem branch_opt_function_correct:
   !fuel ctx live_at fn s.
@@ -11,17 +26,24 @@ Theorem branch_opt_function_correct:
     (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==> x NOTIN bo_fresh_vars_fn fn) /\
     bo_iszero_inv dfg s /\
+    (* Inv preservation across PHI prefix *)
+    (!bb s0 s_phi.
+       MEM bb fn.fn_blocks /\
+       bo_iszero_inv dfg s0 /\
+       eval_phis s0 bb.bb_instructions = OK s_phi ==>
+       bo_iszero_inv dfg
+         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
     (* Inv preservation across original blocks *)
     (!bb fuel' ctx' s0 s0'.
        MEM bb fn.fn_blocks /\
-       bo_iszero_inv dfg s0 /\ s0.vs_inst_idx = 0 /\
-       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       bo_iszero_inv dfg s0 /\
+       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        bo_iszero_inv dfg s0') /\
     (* Inv preservation across transformed blocks *)
     (!bb fuel' ctx' s0 s0'.
        MEM bb fn'.fn_blocks /\
-       bo_iszero_inv dfg s0 /\ s0.vs_inst_idx = 0 /\
-       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       bo_iszero_inv dfg s0 /\
+       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        bo_iszero_inv dfg s0') /\
     (* Inv preservation within block prefix (both original and transformed) *)
     (!bb fuel' ctx' st st' inst.

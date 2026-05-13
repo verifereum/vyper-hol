@@ -40,6 +40,8 @@ Ancestors
   execEquivParamBase execEquivParamProps
   finite_map worklistDefs worklistProps
   list
+Libs
+  pairLib BasicProvers
 
 (* ===== Counterexample infrastructure ===== *)
 
@@ -325,7 +327,9 @@ Proof
   metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
 QED
 
-(* Intra-block transfer at fixpoint for SCCP *)
+(* At the dataflow fixpoint, each intra-block transfer step equals
+   sccp_transfer_inst applied to the instruction and prior lattice state.
+   Requires wf_function and label in cfg_dfs_pre. *)
 Theorem sccp_intra_fwd:
   !fn lbl bb idx.
     wf_function fn /\
@@ -381,6 +385,7 @@ Proof
   simp[sccp_refold, sccp_is_fixpoint]
 QED
 
+(* Well-formed functions contain only well-formed basic blocks *)
 Theorem wf_function_bb_well_formed:
   wf_function fn /\ MEM bb fn.fn_blocks ==> bb_well_formed bb
 Proof
@@ -442,7 +447,8 @@ Proof
   metis_tac[all_distinct_flat_map_disjoint]
 QED
 
-(* Version with explicit inst equality — easier to use with abbreviations *)
+(* In SSA form, different instructions in the same block produce disjoint
+   output variables *)
 Theorem ssa_no_output_overlap_inst:
   !fn bb k idx y.
     ssa_form fn /\ MEM bb fn.fn_blocks /\
@@ -544,8 +550,6 @@ QED
 
 (* ===== Per-block simulation from cond_const_sound ===== *)
 
-(* ===== Per-block simulation from cond_const_sound ===== *)
-
 (* Bridge strategy: restrict lattice to FDOM, giving const_sound,
    then show sccp_inst agrees on the restriction for operand vars. *)
 
@@ -630,9 +634,9 @@ Proof
   rpt strip_tac >> Cases_on `x` >> simp[const_subst_op_def]
 QED
 
-(* Key bridge: cond_const_sound + operand vars in FDOM →
-   sccp_inst preserves step_inst.
-   Proof: build const_sound for relevant vars, apply sccp_inst_step_correct. *)
+(* sccp_inst preserves step_inst when cond_const_sound holds and all Var
+   operands are defined in the state. Bridges cond_const_sound to
+   const_sound via DRESTRICT. *)
 Theorem sccp_inst_step_correct_cond:
   !st fuel ctx inst s.
     cond_const_sound st s /\ inst_wf inst /\
@@ -845,7 +849,8 @@ Proof
   gvs[step_inst_non_invoke]
 QED
 
-(* sccp_inst preserves step_inst equality for non-Error results *)
+(* sccp_inst preserves step_inst for non-Error results under
+   cond_const_sound and inst_wf *)
 Theorem sccp_inst_cond_eq:
   !lat fuel ctx inst s.
     cond_const_sound lat s /\ inst_wf inst /\
@@ -960,7 +965,8 @@ Proof
   metis_tac[lookup_var_def]
 QED
 
-(* FOLDL |+ CL_Bottom: MEM ⟹ SOME CL_Bottom, ¬MEM ⟹ unchanged *)
+(* FOLDL of |+ CL_Bottom: members get SOME CL_Bottom,
+   non-members preserve FLOOKUP *)
 Theorem foldl_fupdate_bottom:
   !outs l x.
     (MEM x outs ==>
@@ -1056,6 +1062,7 @@ Proof
   Cases_on `eval_operand src_op s` >> simp[]
 QED
 
+(* sccp_transfer_inst preserves cond_const_sound through each step *)
 Theorem sccp_transfer_sound_cond:
   !fn. transfer_sound_wf (\lat. cond_const_sound lat.sl_vals)
          sccp_transfer_inst fn
@@ -1232,7 +1239,8 @@ QED
 
 (* ===== FDOM/non-CL_Top tracking through sccp_transfer_inst ===== *)
 
-(* Transfer preserves FDOM membership *)
+(* sccp_transfer_inst is FDOM-monotone: the output FDOM is a superset
+   of the input *)
 Theorem sccp_transfer_fdom_mono:
   !fn inst lat x. x IN FDOM lat.sl_vals ==>
     x IN FDOM (sccp_transfer_inst fn inst lat).sl_vals
@@ -1266,7 +1274,7 @@ Proof
   Induct >> simp[FLOOKUP_UPDATE]
 QED
 
-(* Transfer preserves FLOOKUP for non-output variables *)
+(* sccp_transfer_inst preserves FLOOKUP for non-output variables *)
 Theorem sccp_transfer_non_output_flookup:
   !fn inst lat x. ~MEM x inst.inst_outputs ==>
     FLOOKUP (sccp_transfer_inst fn inst lat).sl_vals x =
@@ -1487,6 +1495,8 @@ Proof
   irule foldl_fupdate_bottom_preserves >> simp[FLOOKUP_UPDATE]
 QED
 
+(* If lookup_var is preserved from s to s' and x ∈ FDOM s', then
+   x ∈ FDOM s *)
 Theorem lookup_var_fdom_back:
   lookup_var x s' = lookup_var x s /\ x IN FDOM s'.vs_vars ==>
   x IN FDOM s.vs_vars
@@ -1625,7 +1635,8 @@ Proof
   \\ res_tac >> gvs[] >> metis_tac[flookup_thm]
 QED
 
-(* Main theorem: combine 3 cases *)
+(* sccp_transfer_inst preserves the FDOM/non-CL_Top coverage invariant
+   through each step *)
 Theorem sccp_transfer_sound_fdom:
   !fn. transfer_sound_wf
     (\lat s. !x. x IN FDOM s.vs_vars ==>
@@ -1948,8 +1959,7 @@ QED
 
 (* ===== Exit helpers: nophi at entry → full invariant at exit ===== *)
 
-(* Key helper: nophi_sound + all PHI outputs have CL_Bottom ⟹ cond_const_sound.
-   Used in both terminator and non-PHI cases of the complete induction. *)
+(* nophi_sound plus CL_Bottom on PHI outputs implies cond_const_sound *)
 Theorem nophi_phi_bottom_imp_cond:
   !fn bb instrs lbl lat s.
     lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -1972,8 +1982,8 @@ Proof
   >> metis_tac[]
 QED
 
-(* Bridge: nophi_coverage + phi_bottom ⟹ unconditional coverage.
-   Parallel to nophi_phi_bottom_imp_cond but for the FDOM/¬Top invariant. *)
+(* nophi_coverage plus CL_Bottom on PHI outputs implies full
+   FDOM/non-CL_Top coverage *)
 Theorem nophi_phi_bottom_imp_coverage:
   !fn bb instrs lbl lat s.
     lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -1998,25 +2008,31 @@ Proof
   >> (first_x_assum (qspec_then `x` mp_tac) >> simp[])
 QED
 
-(* Combined exit property: cond_const_sound + FDOM/¬Top coverage at exit.
-   Both follow from nophi_sound + nophi_coverage at entry via
-   complete induction over instruction position with dual invariant. *)
-Triviality sccp_nophi_exit_props[local]:
+(* Starting from nophi_sound/nophi_coverage at any instruction position in
+   a block, cond_const_sound, FDOM/non-CL_Top coverage, and
+   successor-in-sl_targets all hold at block exit *)
+Theorem sccp_nophi_exit_props_from:
   !f bb fuel ctx s v.
     wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
     MEM bb f.fn_blocks /\
     MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
-    s.vs_inst_idx = 0 /\
-    (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
-              = SOME (CL_Const c) /\
+    s.vs_inst_idx <= PRE (LENGTH bb.bb_instructions) /\
+    (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
+              bb.bb_label s.vs_inst_idx).sl_vals x = SOME (CL_Const c) /\
            x IN FDOM s.vs_vars /\
            ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
            FLOOKUP s.vs_vars x = SOME c) /\
+    (!k y. k < s.vs_inst_idx /\ k < LENGTH bb.bb_instructions /\
+           (EL k bb.bb_instructions).inst_opcode = PHI /\
+           MEM y (EL k bb.bb_instructions).inst_outputs ==>
+           FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
+              bb.bb_label s.vs_inst_idx).sl_vals y = SOME CL_Bottom) /\
     (!x. x IN FDOM s.vs_vars /\
          ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
-       x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
-       FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
-         <> SOME CL_Top) /\
+       x IN FDOM (df_at sccp_bottom (sccp_df_analyze f)
+                    bb.bb_label s.vs_inst_idx).sl_vals /\
+       FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
+                  bb.bb_label s.vs_inst_idx).sl_vals x <> SOME CL_Top) /\
     exec_block fuel ctx bb s = OK v ==>
     cond_const_sound
       (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
@@ -2090,8 +2106,13 @@ Proof
           <> SOME CL_Top) /\
      v.vs_current_bb IN (df_at sccp_bottom result lbl (SUC ti)).sl_targets`
     suffices_by (
-      disch_then (qspecl_then [`ti + 1`, `fuel`, `ctx`, `s`] mp_tac) >>
-      impl_tac >- simp[] >>
+      strip_tac >>
+      qpat_x_assum `SUC ti = LENGTH instrs`
+        (fn th => PURE_REWRITE_TAC [SYM th]) >>
+      qpat_x_assum `!n fuel0 ctx0 s0. n = ti + 1 - s0.vs_inst_idx /\ _ ==> _`
+        (mp_tac o Q.SPECL [`ti + 1 - s.vs_inst_idx`, `fuel`, `ctx`, `s`]) >>
+      disch_then match_mp_tac >>
+      gvs[Abbr `ti`, Abbr `instrs`, Abbr `lbl`, Abbr `result`] >>
       metis_tac[]) >>
   completeInduct_on `n` >> gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qabbrev_tac `idx = s'.vs_inst_idx` >>
@@ -2202,7 +2223,7 @@ Proof
   >> fs[AllCaseEqs()]
 QED
 
-Resume sccp_nophi_exit_props[nophi_step]:
+Resume sccp_nophi_exit_props_from[nophi_step]:
   Cases_on `inst.inst_opcode = PHI`
   >- (
     (* === PHI case: split into 3 suspended conjuncts === *)
@@ -2214,7 +2235,7 @@ Resume sccp_nophi_exit_props[nophi_step]:
 QED
 
 (* --- PHI case, Conjunct 1: nophi_sound --- *)
-Resume sccp_nophi_exit_props[phi_c1]:
+Resume sccp_nophi_exit_props_from[phi_c1]:
   rpt strip_tac >>
   `~MEM x inst.inst_outputs` by (
     spose_not_then assume_tac >>
@@ -2232,7 +2253,7 @@ Resume sccp_nophi_exit_props[phi_c1]:
 QED
 
 (* --- PHI case, Conjunct 2: phi_bottom --- *)
-Resume sccp_nophi_exit_props[phi_c2]:
+Resume sccp_nophi_exit_props_from[phi_c2]:
   rpt strip_tac >>
   Cases_on `k = idx`
   >- (simp[sccp_transfer_inst_def, Abbr `inst`] >>
@@ -2247,7 +2268,7 @@ Resume sccp_nophi_exit_props[phi_c2]:
 QED
 
 (* --- PHI case, Conjunct 3: nophi_coverage --- *)
-Resume sccp_nophi_exit_props[phi_c3]:
+Resume sccp_nophi_exit_props_from[phi_c3]:
   rpt gen_tac >> strip_tac >> rpt conj_tac
   >- (
     (* FDOM membership *)
@@ -2282,7 +2303,7 @@ Resume sccp_nophi_exit_props[phi_c3]:
 QED
 
 (* --- Non-PHI case --- *)
-Resume sccp_nophi_exit_props[nonphi]:
+Resume sccp_nophi_exit_props_from[nonphi]:
   (* All PHIs are before idx *)
   `!k. k < LENGTH instrs /\ (EL k instrs).inst_opcode = PHI ==>
    k < idx` by (
@@ -2313,7 +2334,7 @@ Resume sccp_nophi_exit_props[nonphi]:
 QED
 
 (* --- np_c1: nophi_sound conjunct (non-PHI case) --- *)
-Resume sccp_nophi_exit_props[np_c1]:
+Resume sccp_nophi_exit_props_from[np_c1]:
   (* Goal: nophi_sound at SUC idx after non-PHI instruction *)
   (* Have cond_const_sound at idx via nophi + phi_bottom bridge *)
   `cond_const_sound (df_at sccp_bottom result lbl idx).sl_vals
@@ -2335,7 +2356,7 @@ Resume sccp_nophi_exit_props[np_c1]:
 QED
 
 (* --- np_c2: phi_bottom conjunct (non-PHI case) --- *)
-Resume sccp_nophi_exit_props[np_c2]:
+Resume sccp_nophi_exit_props_from[np_c2]:
   rpt strip_tac >>
   `k < idx` by metis_tac[] >>
   `FLOOKUP (df_at sccp_bottom result lbl idx).sl_vals y
@@ -2347,7 +2368,7 @@ Resume sccp_nophi_exit_props[np_c2]:
 QED
 
 (* --- np_c3: nophi_coverage conjunct (non-PHI case) --- *)
-Resume sccp_nophi_exit_props[np_c3]:
+Resume sccp_nophi_exit_props_from[np_c3]:
   rpt gen_tac >> disch_tac >>
   (* Unconditional coverage at idx: bridge nophi + phi_bottom *)
   `!x'. x' IN FDOM s'.vs_vars ==>
@@ -2366,7 +2387,7 @@ Resume sccp_nophi_exit_props[np_c3]:
 QED
 
 (* --- np_c3_bridge: unconditional coverage at idx --- *)
-Resume sccp_nophi_exit_props[np_c3_bridge]:
+Resume sccp_nophi_exit_props_from[np_c3_bridge]:
   (* Use nophi_phi_bottom_imp_coverage to bridge *)
   match_mp_tac (nophi_phi_bottom_imp_coverage
     |> Q.SPECL [`f`, `bb`, `instrs`, `lbl`]) >>
@@ -2378,11 +2399,11 @@ Resume sccp_nophi_exit_props[np_c3_bridge]:
   simp[]
 QED
 
-Resume sccp_nophi_exit_props[term_targets]:
+Resume sccp_nophi_exit_props_from[term_targets]:
   metis_tac[sccp_transfer_term_succ_in_targets]
 QED
 
-Finalise sccp_nophi_exit_props
+Finalise sccp_nophi_exit_props_from
 
 (* Projections for callers that need only one half *)
 Triviality sccp_nophi_exit_cond_sound[local]:
@@ -2406,7 +2427,12 @@ Triviality sccp_nophi_exit_cond_sound[local]:
       (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
          (LENGTH bb.bb_instructions)).sl_vals v
 Proof
-  metis_tac[sccp_nophi_exit_props]
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `v`]
+            sccp_nophi_exit_props_from) >>
+  impl_tac >- gvs[] >>
+  strip_tac >>
+  gvs[]
 QED
 
 Triviality sccp_nophi_exit_covered[local]:
@@ -2432,7 +2458,12 @@ Triviality sccp_nophi_exit_covered[local]:
        FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
                   (LENGTH bb.bb_instructions)).sl_vals x <> SOME CL_Top)
 Proof
-  metis_tac[sccp_nophi_exit_props]
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `v`]
+            sccp_nophi_exit_props_from) >>
+  impl_tac >- gvs[] >>
+  strip_tac >>
+  gvs[]
 QED
 
 Triviality sccp_nophi_exit_succ_in_targets[local]:
@@ -2456,7 +2487,12 @@ Triviality sccp_nophi_exit_succ_in_targets[local]:
       (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
          (LENGTH bb.bb_instructions)).sl_targets
 Proof
-  metis_tac[sccp_nophi_exit_props]
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `v`]
+            sccp_nophi_exit_props_from) >>
+  impl_tac >- gvs[] >>
+  strip_tac >>
+  gvs[]
 QED
 
 (* Helper: lookup_block from fn_labels membership *)
@@ -2617,23 +2653,31 @@ Proof
 QED
 
 (* ===== Cross-block invariant: nophi sound + coverage preserved ===== *)
-
+(* Cross-block transfer: nophi_sound and nophi_coverage preserved from
+   block entry to successor entry *)
 Triviality sccp_cross_block_inv:
   !f bb fuel ctx s v.
     wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
     MEM bb f.fn_blocks /\
     MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
-    (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
-              = SOME (CL_Const c) /\
+    s.vs_inst_idx <= PRE (LENGTH bb.bb_instructions) /\
+    (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
+              bb.bb_label s.vs_inst_idx).sl_vals x = SOME (CL_Const c) /\
            x IN FDOM s.vs_vars /\
            ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
            FLOOKUP s.vs_vars x = SOME c) /\
+    (!k y. k < s.vs_inst_idx /\ k < LENGTH bb.bb_instructions /\
+           (EL k bb.bb_instructions).inst_opcode = PHI /\
+           MEM y (EL k bb.bb_instructions).inst_outputs ==>
+           FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
+              bb.bb_label s.vs_inst_idx).sl_vals y = SOME CL_Bottom) /\
     (!x. x IN FDOM s.vs_vars /\
          ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
-       x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals /\
-       FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
-         <> SOME CL_Top) /\
-    s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
+       x IN FDOM (df_at sccp_bottom (sccp_df_analyze f)
+                    bb.bb_label s.vs_inst_idx).sl_vals /\
+       FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
+                  bb.bb_label s.vs_inst_idx).sl_vals x <> SOME CL_Top) /\
+    s.vs_current_bb = bb.bb_label /\
     exec_block fuel ctx bb s = OK v ==>
     (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) v.vs_current_bb 0).sl_vals x
               = SOME (CL_Const c) /\
@@ -2652,14 +2696,19 @@ Proof
   (* Exit properties *)
   `cond_const_sound
      (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
-        (LENGTH bb.bb_instructions)).sl_vals v` by
-    metis_tac[sccp_nophi_exit_cond_sound] >>
-  `!x. x IN FDOM v.vs_vars ==>
+        (LENGTH bb.bb_instructions)).sl_vals v /\
+   (!x. x IN FDOM v.vs_vars ==>
      x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
         (LENGTH bb.bb_instructions)).sl_vals /\
      FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
-        (LENGTH bb.bb_instructions)).sl_vals x <> SOME CL_Top` by
-    metis_tac[sccp_nophi_exit_covered] >>
+        (LENGTH bb.bb_instructions)).sl_vals x <> SOME CL_Top) /\
+   v.vs_current_bb IN
+     (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
+        (LENGTH bb.bb_instructions)).sl_targets` by (
+    mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `v`]
+      sccp_nophi_exit_props_from) >>
+    impl_tac >- metis_tac[] >>
+    simp[]) >>
   (* dfs_pre membership *)
   `MEM v.vs_current_bb (cfg_analyze f).cfg_dfs_pre` by suspend "xb_dfs_pre" >>
   simp[] >>
@@ -2682,6 +2731,7 @@ Proof
     rpt strip_tac >> fs[bb_well_formed_def] >>
     `i = PRE (LENGTH bb.bb_instructions)` by (first_x_assum irule >> simp[]) >>
     fs[]) >>
+  `s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
   `MEM bb.bb_label (cfg_preds_of (cfg_analyze f) v.vs_current_bb)` by (
     `MEM v.vs_current_bb (bb_succs bb)` by
       metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
@@ -2691,7 +2741,7 @@ Proof
   `v.vs_current_bb IN
      (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label
         (LENGTH bb.bb_instructions)).sl_targets` by
-    metis_tac[sccp_nophi_exit_succ_in_targets] >>
+    metis_tac[] >>
   `v.vs_current_bb IN
      (df_boundary sccp_bottom (sccp_df_analyze f) bb.bb_label).sl_targets` by (
     mp_tac (Q.SPECL [`f`, `bb.bb_label`, `bb`] sccp_boundary_fixpoint) >>
@@ -2760,17 +2810,25 @@ QED
 
 (* --- xb_dfs_pre: successor is in cfg_dfs_pre --- *)
 Resume sccp_cross_block_inv[xb_dfs_pre]:
-  irule (SIMP_RULE std_ss [LET_THM] successor_in_cfg_dfs_pre) >>
   fs[wf_function_def] >>
-  rpt conj_tac
-  >- (rpt strip_tac >> CCONTR_TAC >>
-      `bb_well_formed bb'` by metis_tac[] >>
-      fs[bb_well_formed_def] >>
-      `i = PRE (LENGTH bb'.bb_instructions)` by
-        (first_x_assum irule >> simp[]) >>
-      fs[])
-  >>
-  qexistsl_tac [`bb`, `ctx`, `fuel`, `s`] >> simp[]
+  `bb_well_formed bb` by metis_tac[] >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
+    rpt strip_tac >>
+    `bb_well_formed bb` by metis_tac[] >>
+    fs[bb_well_formed_def] >>
+    `i = PRE (LENGTH bb.bb_instructions)` by
+      (first_x_assum irule >> simp[]) >>
+    fs[]) >>
+  `s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+  `MEM v.vs_current_bb (bb_succs bb)` by
+    metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
+  `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze f) bb.bb_label)` by
+    metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
+  imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
 QED
 
 (* --- xb_sound: nophi_sound at successor --- *)
@@ -2829,6 +2887,8 @@ Finalise sccp_cross_block_inv
 
 (* ===== Per-block simulation ===== *)
 
+(* SCCP per-block simulation under cond_const_sound: execution is
+   equivalent or both produce Error *)
 Theorem sccp_per_block_sim:
   !fn bb.
     wf_function fn /\ fn_inst_wf fn /\
@@ -2875,7 +2935,7 @@ Proof
 QED
 
 
-(* Entry label is in cfg_dfs_pre *)
+(* The function entry label is in cfg_dfs_pre *)
 Theorem entry_label_in_dfs_pre:
   !fn lbl. fn_entry_label fn = SOME lbl ==>
     MEM lbl (cfg_analyze fn).cfg_dfs_pre
@@ -2888,7 +2948,7 @@ QED
 
 (* ===== Function-level lift_result ===== *)
 
-(* Helper: FLAT of singleton MAPi = MAPi *)
+(* FLAT (MAPi with singleton wrapper) = MAPi *)
 Theorem flat_mapi_singleton:
   !(g:num -> 'a -> 'b) l.
     FLAT (MAPi (\i x. [g i x]) l) = MAPi g l
@@ -2898,7 +2958,7 @@ Proof
   simp[combinTheory.o_DEF]
 QED
 
-(* Helper: transformed block has same length *)
+(* SCCP block transformation preserves instruction count *)
 Theorem sccp_bt_length:
   !(bb:basic_block) bottom result
    (f:sccp_lattice -> instruction -> instruction list).
@@ -2910,7 +2970,8 @@ Proof
   ASM_REWRITE_TAC[] >> simp[flat_mapi_singleton, indexedListsTheory.LENGTH_MAPi]
 QED
 
-(* Helper: EL correspondence for transformed block *)
+(* SCCP block transformation: EL idx of transformed instructions equals
+   sccp_inst of the original instruction with its lattice state *)
 Theorem sccp_bt_el:
   !(bb:basic_block) bottom result
    (f:sccp_lattice -> instruction -> instruction list) idx.
@@ -2924,13 +2985,14 @@ Proof
   ASM_REWRITE_TAC[] >> simp[flat_mapi_singleton, indexedListsTheory.EL_MAPi]
 QED
 
-(* Helper: sccp_inst is identity on PHI *)
+(* sccp_inst is the identity on PHI instructions *)
 Theorem sccp_inst_phi_identity:
   !st inst. inst.inst_opcode = PHI ==> sccp_inst st inst = inst
 Proof
   simp[sccp_inst_def]
 QED
 
+(* PHI outputs get CL_Bottom in sccp_transfer_inst *)
 Triviality sccp_transfer_phi_bottom:
   !f inst lat y.
     inst.inst_opcode = PHI /\ MEM y inst.inst_outputs ==>
@@ -3164,6 +3226,8 @@ Proof
   `k < idx` by metis_tac[] >> metis_tac[]
 QED
 
+(* Core block induction with nophi invariant: backward induction from
+   terminator shows per-block equivalence or Error disjunction *)
 Theorem sccp_block_induction_core:
   !f bb.
     wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
@@ -3332,7 +3396,8 @@ QED
 
 Finalise sccp_block_induction_core;
 
-(* Per-block simulation from nophi invariant. *)
+(* SCCP per-block simulation from nophi invariant at entry:
+   execution is equivalent or both produce Error *)
 Theorem sccp_per_block_sim_nophi:
   !f bb.
     wf_function f /\ wf_ssa f /\ fn_inst_wf f /\

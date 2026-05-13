@@ -18,7 +18,7 @@
  *   All non-INVOKE, so step_inst = step_inst_base (via step_inst_non_invoke).
  *
  * inst_wf is needed for equality: without it, ASSIGN and exec_pure1/exec_pure2
- * produce different error strings when inst_outputs is malformed.
+ *   produce different error strings when inst_outputs is malformed.
  * At the function level, lift_result absorbs error differences so no
  * precondition is needed.
  *
@@ -28,13 +28,14 @@
 Theory literalsCodesizeProofs
 Ancestors
   literalsCodesizeDefs passSimulationDefs passSimulationProps venomWf
-  venomExecSemantics stateEquiv stateEquivProps crossBlockSimProps
+  venomExecSemantics venomExecProofs stateEquiv stateEquivProps crossBlockSimProps
+  option list
 Libs
   fcpLib
 
 (* ===== Word-level helpers ===== *)
 
-(* trailing_zeros produces bits that are all zero below tz *)
+(* Bit SUC n of w equals bit n of w shifted right by 1 *)
 Theorem word_bit_suc_lsr[local]:
   !(w : 256 word) n. n < 255 ==>
     (word_bit (SUC n) w <=> word_bit n (w >>> 1))
@@ -44,7 +45,7 @@ Proof
   simp[fcpTheory.FCP_BETA, arithmeticTheory.ADD1]
 QED
 
-(* Helper: w <> 0w /\ ~word_bit 0 w ==> w >>> 1 <> 0w *)
+(* A nonzero word with bit 0 clear stays nonzero after right shift by 1 *)
 Theorem lsr1_nonzero[local]:
   !(w : 256 word). w <> 0w /\ ~word_bit 0 w ==> w >>> 1 <> 0w
 Proof
@@ -155,6 +156,66 @@ QED
 
 (* ===== Lifting to block and function level ===== *)
 
+(* Helper: block_map_transform preserves bb_instructions via MAP *)
+Triviality block_map_transform_bb_instructions[local]:
+  !f bb. (block_map_transform f bb).bb_instructions = MAP f bb.bb_instructions
+Proof
+  Cases_on `bb` >>
+  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* Helper: block_map_transform preserves bb_label *)
+Theorem block_map_transform_label:
+  !f bb. (block_map_transform f bb).bb_label = bb.bb_label
+Proof
+  Cases_on `bb` >>
+  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* Unconditional: lookup on MAP gives OPTION_MAP of original lookup *)
+Theorem lookup_block_lit_codesize_eq:
+  !lbl fns.
+    lookup_block lbl (MAP (block_map_transform lit_codesize_inst) fns) =
+    OPTION_MAP (block_map_transform lit_codesize_inst) (lookup_block lbl fns)
+Proof
+  rpt strip_tac >>
+  irule passSimulationPropsTheory.lookup_block_map >>
+  rpt strip_tac >> Cases_on `bb` >>
+  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* Conditional: if original lookup is NONE, so is transformed lookup *)
+Theorem lookup_block_lit_codesize_NONE[local]:
+  !lbl fns.
+    lookup_block lbl fns = NONE ==>
+    lookup_block lbl (MAP (block_map_transform lit_codesize_inst) fns) = NONE
+Proof
+  simp[lookup_block_lit_codesize_eq]
+QED
+
+(* Conditional: if original lookup is SOME bb, transformed lookup is SOME (f bb) *)
+Theorem lookup_block_lit_codesize_SOME[local]:
+  !lbl fns bb.
+    lookup_block lbl fns = SOME bb ==>
+    lookup_block lbl (MAP (block_map_transform lit_codesize_inst) fns) =
+    SOME (block_map_transform lit_codesize_inst bb)
+Proof
+  simp[lookup_block_lit_codesize_eq]
+QED
+
+(* Helper: function_map_transform preserves fn_blocks via MAP *)
+(* Critical: simp cannot reduce (fn with fn_blocks := MAP bt fn.fn_blocks).fn_blocks *)
+Triviality function_map_transform_fn_blocks[local]:
+  !bt fn. (function_map_transform bt fn).fn_blocks = MAP bt fn.fn_blocks
+Proof
+  Cases_on `fn` >>
+  simp[passSimulationDefsTheory.function_map_transform_def] >>
+  EVAL_TAC >> simp[]
+QED
+
 (* Helper: get_instruction on block_map_transform *)
 Theorem get_instruction_block_map_transform[local]:
   !f bb idx.
@@ -162,14 +223,44 @@ Theorem get_instruction_block_map_transform[local]:
     OPTION_MAP f (get_instruction bb idx)
 Proof
   rw[venomInstTheory.get_instruction_def,
-     passSimulationDefsTheory.block_map_transform_def] >>
-  simp[listTheory.EL_MAP]
+     block_map_transform_bb_instructions,
+     listTheory.EL_MAP, listTheory.LENGTH_MAP]
 QED
 
 (* Helper: lit_codesize_inst preserves is_terminator *)
 Theorem lit_codesize_inst_is_terminator[local]:
   !inst. is_terminator (lit_codesize_inst inst).inst_opcode =
          is_terminator inst.inst_opcode
+Proof
+  rw[lit_codesize_inst_def] >>
+  Cases_on `inst.inst_opcode = ASSIGN` >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[venomInstTheory.is_terminator_def])
+QED
+
+(* Lit_codesize_inst preserves PHI instructions and never creates PHIs *)
+Theorem lit_codesize_inst_phi_preserving[local]:
+  !inst.
+    inst.inst_opcode = PHI ==>
+    lit_codesize_inst inst = inst
+Proof
+  rw[lit_codesize_inst_def]
+QED
+
+Theorem lit_codesize_inst_phi_opcode_preserving[local]:
+  !inst.
+    inst.inst_opcode = PHI ==>
+    (lit_codesize_inst inst).inst_opcode = PHI
+Proof
+  rw[lit_codesize_inst_def]
+QED
+
+Theorem lit_codesize_inst_non_phi_opcode_preserving[local]:
+  !inst.
+    inst.inst_opcode <> PHI ==>
+    (lit_codesize_inst inst).inst_opcode <> PHI
 Proof
   rw[lit_codesize_inst_def] >>
   Cases_on `inst.inst_opcode = ASSIGN` >> simp[] >>
@@ -209,50 +300,128 @@ Proof
   fs[venomInstTheory.get_instruction_def]
 QED
 
-(* Function-level equality: transformed function produces identical result *)
-Theorem lit_codesize_function_eq:
+Theorem phi_prefix_length_lit_codesize_inst[local]:
+  !insts. phi_prefix_length (MAP lit_codesize_inst insts) = phi_prefix_length insts
+Proof
+  Induct >- simp[phi_prefix_length_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >- (
+    metis_tac[lit_codesize_inst_phi_opcode_preserving,
+              lit_codesize_inst_phi_preserving]) >>
+  metis_tac[lit_codesize_inst_non_phi_opcode_preserving]
+QED
+
+Theorem eval_phis_lit_codesize_inst2[local]:
+  !s insts.
+    eval_phis s (MAP lit_codesize_inst insts) = eval_phis s insts
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  rpt gen_tac >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >- (
+    `lit_codesize_inst h = h` by metis_tac[lit_codesize_inst_phi_preserving] >>
+    `(lit_codesize_inst h).inst_opcode = PHI` by simp[] >>
+    simp[eval_phis_def]) >>
+  `(lit_codesize_inst h).inst_opcode <> PHI` by
+    metis_tac[lit_codesize_inst_non_phi_opcode_preserving] >>
+  simp[eval_phis_def]
+QED
+
+Theorem lit_codesize_run_block_eq6:
+  !fuel ctx bb s.
+    EVERY inst_wf bb.bb_instructions ==>
+    run_block fuel ctx (block_map_transform lit_codesize_inst bb) s =
+    run_block fuel ctx bb s
+Proof
+  rpt strip_tac >>
+  `!s. exec_block fuel ctx (block_map_transform lit_codesize_inst bb) s =
+       exec_block fuel ctx bb s`
+    by metis_tac[lit_codesize_block_eq] >>
+  irule run_block_eq_from_exec_block_eq >>
+  simp[block_map_transform_def,
+       phi_prefix_length_lit_codesize_inst,
+       eval_phis_lit_codesize_inst2]
+QED
+
+(* Bridge: run_block equality implies run_block_entry equality (overloads) *)
+Theorem lit_codesize_run_block_entry_eq:
+  !fuel ctx bb s.
+    EVERY inst_wf bb.bb_instructions ==>
+    run_block_entry fuel ctx (block_map_transform lit_codesize_inst bb) s =
+    run_block_entry fuel ctx bb s
+Proof
+  metis_tac[lit_codesize_run_block_eq6]
+QED
+
+
+(* Per-block run_block_entry equality for lit_codesize_inst,
+   instantiated from fn_inst_wf. *)
+Theorem lit_codesize_rbe_from_fnwf:
+  !fuel' ctx fn bb s'.
+    fn_inst_wf fn /\ MEM bb fn.fn_blocks ==>
+    run_block_entry fuel' ctx (block_map_transform lit_codesize_inst bb) s' =
+    run_block_entry fuel' ctx bb s'
+Proof
+  rpt strip_tac >>
+  irule lit_codesize_run_block_entry_eq >>
+  qpat_x_assum `fn_inst_wf fn` mp_tac >>
+  simp[fn_inst_wf_def, EVERY_MEM] >>
+  strip_tac >> first_x_assum drule >> simp[EVERY_MEM]
+QED
+
+(* Per-block label preservation for lit_codesize_inst *)
+Theorem lit_codesize_lbl_from_mem:
+  !fn bb.
+    MEM bb fn.fn_blocks ==>
+    (block_map_transform lit_codesize_inst bb).bb_label = bb.bb_label
+Proof
+  rpt strip_tac >>
+  simp[block_map_transform_label]
+QED
+
+
+
+Theorem lit_codesize_fmap_xform_ante:
+  !fn ctx.
+    fn_inst_wf fn ==>
+    (!bb. MEM bb fn.fn_blocks ==>
+       (block_map_transform lit_codesize_inst bb).bb_label = bb.bb_label) /\
+    (!fuel' bb s'. MEM bb fn.fn_blocks ==>
+       run_block_entry fuel' ctx (block_map_transform lit_codesize_inst bb) s' =
+       run_block_entry fuel' ctx bb s')
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      simp[block_map_transform_label]) >>
+  rpt gen_tac >> strip_tac >>
+  irule lit_codesize_run_block_entry_eq >>
+  qpat_x_assum `fn_inst_wf fn` mp_tac >>
+  simp[fn_inst_wf_def, EVERY_MEM] >>
+  strip_tac >> first_x_assum drule >> simp[EVERY_MEM]
+QED
+
+Theorem lit_codesize_fn_eq:
   !fuel ctx fn s.
     fn_inst_wf fn ==>
     run_blocks fuel ctx (lit_codesize_function fn) s =
     run_blocks fuel ctx fn s
 Proof
-  Induct_on `fuel` >-
-    (rpt strip_tac >>
-     ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_blocks_def] >>
-     simp[]) >>
   rpt strip_tac >>
-  simp[lit_codesize_function_def,
-       passSimulationDefsTheory.function_map_transform_def] >>
-  ONCE_REWRITE_TAC[venomExecSemanticsTheory.run_blocks_def] >>
-  simp[lookup_block_map,
-       passSimulationDefsTheory.block_map_transform_def] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
-  rename1 `SOME bb` >>
-  `EVERY inst_wf bb.bb_instructions` by (
-    drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
-    fs[fn_inst_wf_def, listTheory.EVERY_MEM] >>
-    metis_tac[]) >>
-  simp[lit_codesize_block_eq, GSYM run_block_def] >>
-  Cases_on `run_block fuel ctx bb s` >> simp[] >>
-  IF_CASES_TAC >> simp[] >>
-  (* Fold back to lit_codesize_function for IH *)
-  simp[GSYM passSimulationDefsTheory.function_map_transform_def,
-       GSYM lit_codesize_function_def]
+  PURE_REWRITE_TAC[lit_codesize_function_def] >>
+  irule passSimulationPropsTheory.run_blocks_fmap_xform_eq >>
+  qspecl_then [`fn`,`ctx`] drule lit_codesize_fmap_xform_ante >>
+  strip_tac >>
+  metis_tac[]
 QED
 
-(* TOP-LEVEL: pass_correct from strict equality *)
 Theorem lit_codesize_function_correct_proof:
-  !ctx fn s.
+  !fuel ctx fn s.
     fn_inst_wf fn ==>
-    pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (\fuel. run_blocks fuel ctx fn s)
-      (\fuel. run_blocks fuel ctx (lit_codesize_function fn) s)
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (lit_codesize_function fn) s)
 Proof
   rpt strip_tac >>
-  simp[pass_correct_def, lit_codesize_function_eq] >>
-  rpt strip_tac >>
-  `run_blocks fuel ctx fn s = run_blocks fuel' ctx fn s` by
-    metis_tac[run_blocks_deterministic] >>
-  simp[] >> irule lift_result_refl >>
-  simp[state_equiv_refl, execution_equiv_refl]
+  simp[lit_codesize_fn_eq, lift_result_refl,
+       state_equiv_refl, execution_equiv_refl]
 QED

@@ -2,6 +2,9 @@ Theory assertCombinerCorrectness
 Ancestors
   assertCombinerProofs venomWf
 
+(* The assert combiner transformation preserves semantic equivalence: running the
+   transformed function yields an equivalent result to the original, modulo fresh
+   variables introduced by the transformation. *)
 Theorem ac_transform_function_correct:
   !fuel ctx fn s.
     let fn' = ac_transform_function fn in
@@ -26,8 +29,7 @@ Theorem ac_transform_function_correct:
        ac_inv fn dfg s0 /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
-       s0.vs_inst_idx = 0 /\
-       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
@@ -37,8 +39,7 @@ Theorem ac_transform_function_correct:
        ac_inv fn dfg s0 /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
-       s0.vs_inst_idx = 0 /\
-       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
@@ -53,12 +54,14 @@ QED
 
 (* ===== Obligations ===== *)
 
+(* The assert combiner transformation preserves SSA form. *)
 Theorem ac_preserves_ssa_form:
   ∀fn. ssa_form fn ⇒ ssa_form (ac_transform_function fn)
 Proof
   cheat
 QED
 
+(* The assert combiner transformation preserves well-formedness. *)
 Theorem ac_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (ac_transform_function fn)
 Proof

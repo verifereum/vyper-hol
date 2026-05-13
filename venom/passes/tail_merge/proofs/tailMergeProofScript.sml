@@ -9,14 +9,9 @@
 Theory tailMergeProof
 Ancestors
   tailMergeSim tailMergeHelpers tailMergeStep tailMergeDefs stateEquiv
-  venomExecSemantics cfgTransformProofs execEquivProofs venomInstProps
-  execEquivParamProps
-Libs
-  tailMergeSimTheory tailMergeHelpersTheory tailMergeStepTheory
-  cfgTransformTheory venomStateTheory venomExecSemanticsTheory venomInstTheory
-  venomWfTheory tailMergeDefsTheory stateEquivTheory cfgTransformProofsTheory
-  execEquivProofsTheory stateEquivProofsTheory venomInstPropsTheory
-  venomExecPropsTheory execEquivParamPropsTheory
+  cfgTransform venomState venomExecSemantics venomInst
+  venomWf cfgTransformProofs execEquivProofs stateEquivProofs
+  venomInstProps venomExecProps execEquivParamProps
 
 (* ================================================================
    Section 1: lookup_block in transformed function
@@ -817,9 +812,7 @@ Proof
   rpt strip_tac >> fs[var_map_wf_def] >> res_tac
 QED
 
-(* var_corr preserved through a step with output opcode.
-   Extracted as separate [local] helper to avoid batch mode failures
-   with 40+ assumptions in the monolithic sim_inv_after_step_output. *)
+(* var_corr preserved through a step with output opcode *)
 Theorem var_corr_after_step_output[local]:
   !vm1 vm2 inst1 inst2 vm1' vm2' ci s1 s2 s1' s2'.
     canon_inst vm1 inst1 = (vm1', ci) /\
@@ -935,7 +928,7 @@ Theorem sim_inv_after_step_output[local]:
     sim_inv vm1' vm2' s1' s2'
 Proof
   rpt strip_tac
-  (* Phase 1: derive structural/wf facts *)
+  (* derive structural/wf facts *)
   \\ `inst1.inst_opcode = inst2.inst_opcode /\
       inst1.inst_id = inst2.inst_id /\
       LENGTH inst1.inst_operands = LENGTH inst2.inst_operands /\
@@ -946,7 +939,7 @@ Proof
   \\ `var_map_wf vm1 /\ var_map_wf vm2 /\ LENGTH vm1 = LENGTH vm2 /\
       var_corr vm1 vm2 s1 s2 /\ execution_equiv UNIV s1 s2`
        by fs[sim_inv_def]
-  (* Phase 2: derive ALOOKUP NONE for outputs *)
+  (* derive ALOOKUP NONE for outputs *)
   \\ `!w. MEM w inst1.inst_outputs ==> ALOOKUP vm1 w = NONE` by (
        rpt strip_tac >> CCONTR_TAC >>
        `?i. ALOOKUP vm1 w = SOME i` by (Cases_on `ALOOKUP vm1 w` >> gvs[]) >>
@@ -955,7 +948,7 @@ Proof
        rpt strip_tac >> CCONTR_TAC >>
        `?i. ALOOKUP vm2 w = SOME i` by (Cases_on `ALOOKUP vm2 w` >> gvs[]) >>
        metis_tac[])
-  (* Phase 3: ALOOKUP characterizations *)
+  (* ALOOKUP characterizations *)
   \\ `!v idx. ALOOKUP vm1' v = SOME idx <=>
        (?k. k < LENGTH inst1.inst_outputs /\ v = EL k inst1.inst_outputs /\
             idx = LENGTH vm1 + k) \/
@@ -976,7 +969,7 @@ Proof
        ASM_REWRITE_TAC[] >>
        CONV_TAC (DEPTH_CONV (REWR_CONV arithmeticTheory.ADD_COMM)) >>
        REWRITE_TAC[])
-  (* Phase 4: step_inst from step_inst_base *)
+  (* step_inst from step_inst_base *)
   \\ `step_inst ARB ARB inst1 s1 = OK s1'` by (
        qpat_assum `inst1.inst_opcode <> INVOKE`
          (fn th => REWRITE_TAC[MATCH_MP step_inst_non_invoke th]) >>
@@ -985,7 +978,7 @@ Proof
        qpat_assum `inst2.inst_opcode <> INVOKE`
          (fn th => REWRITE_TAC[MATCH_MP step_inst_non_invoke th]) >>
        ASM_REWRITE_TAC[])
-  (* Phase 5: step_preserves_non_output_vars *)
+  (* step_preserves_non_output_vars *)
   \\ `!v. ~MEM v inst1.inst_outputs ==> lookup_var v s1' = lookup_var v s1`
        by (gen_tac >> strip_tac >>
            irule step_preserves_non_output_vars >>
@@ -994,22 +987,22 @@ Proof
        by (gen_tac >> strip_tac >>
            irule step_preserves_non_output_vars >>
            qexistsl_tac [`ARB`, `ARB`, `inst2`] >> ASM_REWRITE_TAC[])
-  (* Phase 6: step_sim + ee *)
+  (* step_sim + ee *)
   \\ `step_sim inst1 inst2 s1 s2` by (
        irule step_inst_base_sim >> rpt conj_tac >> ASM_REWRITE_TAC[])
   \\ `execution_equiv UNIV s1' s2'` by metis_tac[step_sim_ok_ee]
-  (* Phase 7: var_corr via helper *)
+  (* var_corr via helper *)
   \\ `var_corr vm1' vm2' s1' s2'` by (
        irule var_corr_after_step_output >>
        qexistsl_tac [`ci`, `inst1`, `inst2`, `s1`, `s2`, `vm1`, `vm2`] >>
        ASM_REWRITE_TAC[] >>
        rpt conj_tac >> first_assum ACCEPT_TAC)
-  (* Phase 8: wf + LENGTH *)
+  (* wf + LENGTH *)
   \\ `var_map_wf vm1'` by metis_tac[canon_inst_wf]
   \\ `var_map_wf vm2'` by metis_tac[canon_inst_wf]
   \\ `LENGTH vm1' = LENGTH vm2'` by
        metis_tac[canon_inst_map_eq_length]
-  (* Phase 9: Assemble sim_inv *)
+  (* Assemble sim_inv *)
   \\ ASM_REWRITE_TAC[sim_inv_def]
 QED
 
@@ -1175,9 +1168,7 @@ QED
 
 (* Lift step_sim to result_equiv for case-split continuations.
    Handles Error/Error, Abort/Abort automatically; delegates OK/OK to caller. *)
-(* Derives step_sim from block-level context.
-   Avoids res_tac/fs in 40+ assumption context by taking
-   exactly what's needed and producing exactly step_sim. *)
+(* Derives step_sim from block-level context *)
 Theorem block_ctx_step_sim[local]:
   !idx bb1 bb2 vm1 vm2 ci vm1' vm2' s1 s2.
     sim_inv vm1 vm2 s1 s2 /\
@@ -1316,8 +1307,7 @@ Proof
   ASM_REWRITE_TAC[] >> decide_tac
 QED
 
-(* Single-block domain invariant update through canon_inst:
-   Split into forward + inverse helpers to avoid nested >- dispatch. *)
+(* Single-block domain invariant update through canon_inst *)
 
 (* Forward direction: j < SUC idx ==> ALOOKUP vm' v exists *)
 Theorem canon_inst_domain_forward[local]:
@@ -2188,7 +2178,9 @@ Theorem step_inst_base_subst_jmp[local]:
         step_inst_base (subst_block_labels_inst m inst) st =
           OK (jump_to (case ALOOKUP m lbl of NONE => lbl | SOME k => k) st) /\
         s1 = jump_to lbl st
-    | _ => F
+    | Halt s1 => F     (* JMP never produces Halt *)
+    | Abort a s1 => F  (* JMP never produces Abort *)
+    | IntRet v s1 => F  (* JMP never produces IntRet *)
 Proof
   rpt gen_tac >> strip_tac >>
   `subst_block_labels_inst m inst =
@@ -2215,7 +2207,9 @@ Theorem step_inst_base_subst_jnz[local]:
         step_inst_base (subst_block_labels_inst m inst) st =
           OK (jump_to (case ALOOKUP m lbl of NONE => lbl | SOME k => k) st) /\
         s1 = jump_to lbl st
-    | _ => F
+    | Halt s1 => F     (* JNZ never produces Halt *)
+    | Abort a s1 => F  (* JNZ never produces Abort *)
+    | IntRet v s1 => F  (* JNZ never produces IntRet *)
 Proof
   rpt gen_tac >> strip_tac >>
   `subst_block_labels_inst m inst =
@@ -2249,7 +2243,9 @@ Theorem step_inst_base_subst_djmp[local]:
         step_inst_base (subst_block_labels_inst m inst) st =
           OK (jump_to (case ALOOKUP m lbl of NONE => lbl | SOME k => k) st) /\
         s1 = jump_to lbl st
-    | _ => F
+    | Halt s1 => F     (* DJMP never produces Halt *)
+    | Abort a s1 => F  (* DJMP never produces Abort *)
+    | IntRet v s1 => F  (* DJMP never produces IntRet *)
 Proof
   rpt gen_tac >> strip_tac >>
   `subst_block_labels_inst m inst =
@@ -2282,7 +2278,9 @@ Theorem step_inst_base_subst_jump[local]:
         step_inst_base (subst_block_labels_inst m inst) st =
           OK (jump_to (case ALOOKUP m lbl of NONE => lbl | SOME k => k) st) /\
         s1 = jump_to lbl st
-    | _ => F
+    | Halt s1 => F
+    | Abort a s1 => F
+    | IntRet v s1 => F
 Proof
   rpt strip_tac >> gvs[] >>
   metis_tac[step_inst_base_subst_jmp, step_inst_base_subst_jnz,
@@ -2638,6 +2636,50 @@ QED
    Section 5: Helpers for tail_merge_fn_correct_gen
    ================================================================ *)
 
+(* exec_block OK from inst_idx=0 on a well-formed block implies no PHIs.
+   Reason: step_inst on PHI returns Error, so exec_block would return Error.
+   Uses phi_before_non_phi (PHIs form a prefix in well-formed blocks). *)
+Theorem exec_block_OK_imp_no_phis[local]:
+  !fuel ctx bb s v.
+    bb_well_formed bb /\
+    exec_block fuel ctx bb s = OK v /\
+    s.vs_inst_idx = 0 ==>
+    EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  CCONTR_TAC >>
+  fs[listTheory.NOT_EVERY_EXISTS_FIRST] >>
+  `0 < LENGTH bb.bb_instructions` by decide_tac >>
+  Cases_on `(EL 0 bb.bb_instructions).inst_opcode = PHI` THENL [
+    (* YES case: EL 0 is PHI. exec_block encounters it and step_inst returns Error.
+       So exec_block returns Error, contradiction with exec_block = OK v *)
+    `(EL 0 bb.bb_instructions).inst_opcode <> INVOKE` by simp[] >>
+    `get_instruction bb 0 = SOME (EL 0 bb.bb_instructions)` by simp[get_instruction_def] >>
+    `step_inst fuel ctx (EL 0 bb.bb_instructions) s = Error "phi outside prefix"`
+      by metis_tac[venomExecProofsTheory.step_inst_phi_error] >>
+    (* Unfold exec_block = OK v in the assumption to get step_inst, then contradiction *)
+    qpat_x_assum `exec_block _ _ _ _ = OK _` (assume_tac o ONCE_REWRITE_RULE[exec_block_def]) >>
+    gvs[get_instruction_def],
+    (* NO case: EL 0 is not PHI. But EL i is PHI (from NOT_EVERY_EXISTS_FIRST).
+       phi_before_non_phi(i,0) gives i < 0, which is impossible. *)
+    mp_tac (Q.SPECL [`bb`, `i`, `0`] venomExecProofsTheory.phi_before_non_phi) >>
+    simp[] >> decide_tac]
+QED
+
+(* Bridge: run_block_entry = OK v when exec_block = OK v and no_phis *)
+Theorem run_block_entry_eq_exec_block_OK[local]:
+  !fuel ctx bb s v.
+    bb_well_formed bb /\
+    exec_block fuel ctx bb s = OK v /\
+    s.vs_inst_idx = 0 ==>
+    run_block_entry fuel ctx bb s = OK v
+Proof
+  rpt strip_tac >>
+  imp_res_tac exec_block_OK_imp_no_phis >>
+  imp_res_tac venomExecProofsTheory.run_block_no_phis_eq_exec_block >>
+  fs[venom_state_component_equality]
+QED
+
 (* FIND SOME implies MEM *)
 Theorem FIND_SOME_MEM[local]:
   !P l x. FIND P l = SOME x ==> MEM x l
@@ -2974,13 +3016,6 @@ Proof
   metis_tac[merge_map_lookup_halting]
 QED
 
-(* ALOOKUP NONE iff not MEM in MAP FST *)
-Theorem ALOOKUP_NONE_MEM_FST[local]:
-  !m k. ALOOKUP m k = NONE <=> ~MEM k (MAP FST m)
-Proof
-  simp[alistTheory.ALOOKUP_NONE]
-QED
-
 (* subst_block_labels_block preserves bb_is_halting *)
 Theorem bb_is_halting_subst[local]:
   !m bb. bb_is_halting bb ==> bb_is_halting (subst_block_labels_block m bb)
@@ -3013,18 +3048,86 @@ Proof
   irule execution_equiv_UNIV_sym >> simp[]
 QED
 
-(* Helper: run_blocks on a halting block reduces to exec_block *)
+(* Label substitution preserves no_phis (doesn't change opcodes) *)
+Theorem no_phis_subst_block_labels[local]:
+  !m bb. no_phis bb ==> no_phis (subst_block_labels_block m bb)
+Proof
+  simp[no_phis_def, subst_block_labels_block_def, listTheory.EVERY_MAP] >>
+  metis_tac[subst_block_labels_inst_opcode]
+QED
+
+Theorem phi_prefix_length_subst_block_labels[local]:
+  !m insts.
+    phi_prefix_length (MAP (subst_block_labels_inst m) insts) =
+    phi_prefix_length insts
+Proof
+  Induct_on `insts` >> simp[phi_prefix_length_def, subst_block_labels_inst_opcode]
+QED
+
+Theorem eval_one_phi_subst_block_labels[local]:
+  !m inst (s:venom_state).
+    inst.inst_opcode = PHI /\
+    (case s.vs_prev_bb of NONE => T
+     | SOME prev => ~MEM prev (MAP FST m) /\ ~MEM prev (MAP SND m)) /\
+    (!l. MEM l (MAP FST m) ==> FLOOKUP s.vs_labels l = NONE) /\
+    (!l. MEM l (MAP SND m) ==> FLOOKUP s.vs_labels l = NONE) ==>
+    eval_one_phi s (subst_block_labels_inst m inst) = eval_one_phi s inst
+Proof
+  rw[subst_block_labels_inst_def, is_block_label_opcode_def,
+     subst_label_map_inst_def, eval_one_phi_def] >>
+  simp[venomInstTheory.is_terminator_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `s.vs_prev_bb` >> simp[] >>
+  gvs[resolve_phi_subst_comm] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> simp[] >>
+  `eval_operand (subst_label_map_op m x') s = eval_operand x' s` by (
+    irule eval_operand_subst_label_map >> simp[]) >>
+  simp[]
+QED
+
+Theorem eval_phis_subst_block_labels[local]:
+  !m (s:venom_state) insts.
+    (case s.vs_prev_bb of NONE => T
+     | SOME prev => ~MEM prev (MAP FST m) /\ ~MEM prev (MAP SND m)) /\
+    (!l. MEM l (MAP FST m) ==> FLOOKUP s.vs_labels l = NONE) /\
+    (!l. MEM l (MAP SND m) ==> FLOOKUP s.vs_labels l = NONE) ==>
+    eval_phis s (MAP (subst_block_labels_inst m) insts) = eval_phis s insts
+Proof
+  Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt strip_tac >>
+  `(subst_block_labels_inst m h).inst_opcode = h.inst_opcode` by
+    simp[subst_block_labels_inst_opcode] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def] >>
+  `eval_one_phi s (subst_block_labels_inst m h) = eval_one_phi s h` by (
+    irule eval_one_phi_subst_block_labels >> simp[]) >>
+  simp[] >>
+  Cases_on `eval_one_phi s h` >> simp[] >>
+  Cases_on `x` >> simp[]
+QED
+
+(* Helper: run_blocks on a halting no-phis block reduces to exec_block.
+   With no_phis, run_block = exec_block (s with vs_inst_idx := 0).
+   Since s.vs_inst_idx = 0, this is exec_block s.
+   For a halting block, exec_block never returns OK,
+   so the run_blocks wrapper passes through the result unchanged. *)
 Theorem run_function_halting_step[local]:
   !fuel ctx fn bb s.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    bb_is_halting bb /\ bb_well_formed bb /\ ~s.vs_halted /\
+    bb_is_halting bb /\ bb_well_formed bb /\ no_phis bb /\ ~s.vs_halted /\
     s.vs_inst_idx = 0 ==>
     run_blocks (SUC fuel) ctx fn s = exec_block fuel ctx bb s
 Proof
   rpt strip_tac >>
-  simp[Once run_blocks_def] >>
-  Cases_on `exec_block fuel ctx bb s` >> simp[] >>
-  `F` by metis_tac[halting_block_not_OK, DECIDE ``0n <= m``]
+  fs[no_phis_def] >>
+  drule venomExecProofsTheory.run_block_no_phis_eq_exec_block >>
+  strip_tac >>
+  `s with vs_inst_idx := 0 = s` by
+    simp[venomStateTheory.venom_state_component_equality] >>
+  simp[Once run_blocks_unfold] >>
+  gvs[] >>
+  Cases_on `exec_block fuel ctx bb s` >> gvs[] >>
+  metis_tac[halting_block_not_OK, DECIDE ``0 ≤ n:num``]
 QED
 
 (* Helper: MEM bb bbs with bb.bb_label = lbl => lookup_block finds something *)
@@ -3174,7 +3277,7 @@ Theorem block_subst_rel_after_ok[local]:
   !fuel fuel' ctx m bb s s' kpr_bb s''.
     ~MEM s.vs_current_bb (MAP FST m) /\
     ~MEM s.vs_current_bb (MAP SND m) /\
-    bb_well_formed bb /\ s.vs_inst_idx = 0 /\
+    bb_well_formed bb /\ s.vs_inst_idx <= LENGTH bb.bb_instructions /\
     exec_block fuel ctx bb s = OK s' /\
     bb_well_formed kpr_bb /\
     s''.vs_inst_idx = 0 /\
@@ -3196,8 +3299,8 @@ Proof
   simp[]
 QED
 
-(* OK-continuation case: extracted to avoid IH pollution *)
-(* SOME-keeper case: no IH needed, extracted to avoid pollution *)
+(* OK-continuation case *)
+(* SOME-keeper case *)
 Theorem tail_merge_some_case[local]:
   !fuel func ctx s entry m bb s' s'' keeper.
     wf_function func /\
@@ -3211,7 +3314,7 @@ Theorem tail_merge_some_case[local]:
       EVERY (\i. is_output_opcode i.inst_opcode \/ i.inst_outputs = [])
             bb.bb_instructions) /\
     ~MEM s.vs_current_bb (MAP FST m) /\
-    s.vs_inst_idx = 0 /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
     (case s.vs_prev_bb of
        NONE => T
      | SOME p => ~MEM p (MAP FST m) /\ ~MEM p (MAP SND m)) /\
@@ -3260,9 +3363,14 @@ Proof
   ) >>
   `s'.vs_inst_idx = 0` by (
     drule venomExecPropsTheory.exec_block_OK_inst_idx_0 >> simp[]) >>
-  Cases_on `fuel` >- simp[run_blocks_def, result_equiv_def] >>
-  rename1 `SUC fuel'` >>
-  `run_blocks (SUC fuel') ctx func s' = exec_block fuel' ctx src_bb s'` by (
+  Cases_on `fuel` THENL [simp[run_blocks_def, result_equiv_def], ALL_TAC] >>
+  `no_phis src_bb` by (
+    simp[no_phis_def] >>
+    `bb_self_contained src_bb` by (
+      CCONTR_TAC >> fs[block_signature_def] >>
+      Cases_on `bb_is_halting src_bb` >> fs[]) >>
+    fs[bb_self_contained_def]) >>
+  `run_blocks (SUC n) ctx func s' = exec_block n ctx src_bb s'` by (
     irule run_function_halting_step >> simp[]
   ) >>
   `ALL_DISTINCT (MAP FST (block_sigs func entry func.fn_blocks))` by (
@@ -3290,8 +3398,16 @@ Proof
     irule bb_well_formed_subst >> ASM_REWRITE_TAC[]) >>
   `s''.vs_inst_idx <= LENGTH (subst_block_labels_block m kpr_bb).bb_instructions` by
     simp[subst_block_labels_block_length] >>
-  `run_blocks (SUC fuel') ctx (tail_merge_fn func) s'' =
-   exec_block fuel' ctx (subst_block_labels_block m kpr_bb) s''` by (
+  `no_phis kpr_bb` by (
+    simp[no_phis_def] >>
+    `bb_self_contained kpr_bb` by (
+      CCONTR_TAC >> fs[block_signature_def] >>
+      Cases_on `bb_is_halting kpr_bb` >> fs[]) >>
+    fs[bb_self_contained_def]) >>
+  `no_phis (subst_block_labels_block m kpr_bb)` by (
+    irule no_phis_subst_block_labels >> ASM_REWRITE_TAC[]) >>
+  `run_blocks (SUC n) ctx (tail_merge_fn func) s'' =
+   exec_block n ctx (subst_block_labels_block m kpr_bb) s''` by (
     irule run_function_halting_step >> ASM_REWRITE_TAC[]
   ) >>
   qpat_x_assum `run_blocks _ _ (tail_merge_fn _) _ = _`
@@ -3312,15 +3428,15 @@ Proof
          kpr_bb.bb_instructions` by (
     first_assum (qspec_then `kpr_bb` mp_tac) >> simp[]
   ) >>
-  `result_equiv UNIV (exec_block fuel' ctx src_bb s')
-                     (exec_block fuel' ctx kpr_bb s'')` by (
+  `result_equiv UNIV (exec_block n ctx src_bb s')
+                     (exec_block n ctx kpr_bb s'')` by (
     irule halting_sig_equiv >> simp[] >>
     irule execution_equiv_UNIV_sym >> simp[]
   ) >>
   `~MEM s.vs_current_bb (MAP SND m)` by (
     rpt strip_tac >>
     mp_tac (Q.SPECL [`func`, `entry`, `m`,
-      `s.vs_current_bb`, `bb`, `SUC fuel'`, `ctx`, `s`, `s'`]
+      `s.vs_current_bb`, `bb`, `SUC n`, `ctx`, `s`, `s'`]
       keeper_block_not_OK) >>
     ASM_REWRITE_TAC[] >> simp[]) >>
   `s''.vs_labels = s.vs_labels` by (
@@ -3328,12 +3444,12 @@ Proof
       (mp_tac o MATCH_MP venomExecPropsTheory.exec_block_preserves_labels) >>
     simp[]) >>
   qpat_x_assum `m = _` (K ALL_TAC) >>
-  mp_tac (Q.SPECL [`SUC fuel'`, `fuel'`, `ctx`, `m`, `bb`, `s`, `s'`,
+  mp_tac (Q.SPECL [`SUC n`, `n`, `ctx`, `m`, `bb`, `s`, `s'`,
                     `kpr_bb`, `s''`] block_subst_rel_after_ok) >>
   ASM_REWRITE_TAC[] >> strip_tac >>
   irule result_equiv_block_subst_rel_non_ok >>
   qexists_tac `m` >>
-  qexists_tac `exec_block fuel' ctx kpr_bb s''` >>
+  qexists_tac `exec_block n ctx kpr_bb s''` >>
   ASM_REWRITE_TAC[] >>
   rpt strip_tac >>
   `s''.vs_inst_idx <= LENGTH kpr_bb.bb_instructions` by simp[] >>
@@ -3389,7 +3505,7 @@ Theorem tail_merge_none_case[local]:
       EVERY (\i. is_output_opcode i.inst_opcode \/ i.inst_outputs = [])
             bb.bb_instructions) /\
     ~MEM s.vs_current_bb (MAP FST m) /\
-    s.vs_inst_idx = 0 /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
     (case s.vs_prev_bb of
        NONE => T
      | SOME p => ~MEM p (MAP FST m) /\ ~MEM p (MAP SND m)) /\
@@ -3461,7 +3577,7 @@ Theorem tail_merge_ok_case[local]:
       EVERY (\i. is_output_opcode i.inst_opcode \/ i.inst_outputs = [])
             bb.bb_instructions) /\
     ~MEM s.vs_current_bb (MAP FST m) /\
-    s.vs_inst_idx = 0 /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
     (case s.vs_prev_bb of
        NONE => T
      | SOME p => ~MEM p (MAP FST m) /\ ~MEM p (MAP SND m)) /\
@@ -3536,55 +3652,73 @@ Theorem tail_merge_fn_correct_gen[local]:
       (run_blocks fuel ctx func s)
       (run_blocks fuel ctx (tail_merge_fn func) s)
 Proof
-  Induct_on `fuel`
-  >- simp[run_blocks_def, result_equiv_def]
-  >> rpt strip_tac
+  Induct_on `fuel` THENL [simp[run_blocks_def, result_equiv_def], ALL_TAC] >>
+  rpt strip_tac
   >> gvs[]
   >> Cases_on `fn_entry_label func` >> gvs[]
   >> rename1 `fn_entry_label func = SOME entry`
   >> qabbrev_tac `m = compute_merge_map
        (block_sigs func entry func.fn_blocks) []`
-  >> Cases_on `m = []` >- (
+  >> Cases_on `m = []` THENL [
        `tail_merge_fn func = func` by (
          irule tail_merge_fn_nil_merge_map >> metis_tac[]) >>
        simp[result_equiv_def] >>
        Cases_on `run_blocks (SUC fuel) ctx func s` >>
-       simp[result_equiv_def, execution_equiv_def, state_equiv_def])
-  >> simp[Once run_blocks_def]
-  >> Cases_on `lookup_block s.vs_current_bb func.fn_blocks` >- (
+       simp[result_equiv_def, execution_equiv_def, state_equiv_def],
+       ALL_TAC] >>
+  simp[Once run_blocks_unfold] >>
+  Cases_on `lookup_block s.vs_current_bb func.fn_blocks` THENL [
        simp[result_equiv_def] >>
-       simp[Once run_blocks_def] >>
+       simp[Once run_blocks_unfold] >>
        `lookup_block s.vs_current_bb (tail_merge_fn func).fn_blocks = NONE` by (
          irule lookup_block_NONE_tail_merge_fn >> simp[]) >>
-       simp[result_equiv_def])
-  >> rename1 `SOME bb`
+       simp[result_equiv_def],
+       ALL_TAC] >>
+  rename1 `SOME bb`
   >> `lookup_block s.vs_current_bb (tail_merge_fn func).fn_blocks =
         SOME (subst_block_labels_block m bb)` by (
        irule lookup_block_tail_merge_fn >> metis_tac[])
-  >> CONV_TAC (RAND_CONV (PURE_ONCE_REWRITE_CONV [run_blocks_def]))
+  >> CONV_TAC (RAND_CONV (PURE_ONCE_REWRITE_CONV [run_blocks_unfold]))
   >> simp[]
   >> `bb_well_formed bb` by (metis_tac[wf_lookup_bb_well_formed])
-  >> `block_subst_rel m (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (subst_block_labels_block m bb) s)` by (
-       match_mp_tac (Q.SPECL [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
-                               `fuel`, `ctx`, `bb`, `s`, `m`]
+  >> `eval_phis s (subst_block_labels_block m bb).bb_instructions =
+        eval_phis s bb.bb_instructions` by (
+       simp[subst_block_labels_block_def] >>
+       irule eval_phis_subst_block_labels >>
+       Cases_on `s.vs_prev_bb` >> gvs[])
+  >> `phi_prefix_length (subst_block_labels_block m bb).bb_instructions =
+        phi_prefix_length bb.bb_instructions` by
+       simp[subst_block_labels_block_def, phi_prefix_length_subst_block_labels]
+  >> PURE_REWRITE_TAC[run_block_def]
+  >> gvs[]
+  >> DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >> gvs[block_subst_rel_def, result_equiv_def]
+  >> rename1 `eval_phis s bb.bb_instructions = OK s_phi`
+  >> qabbrev_tac `s0 = s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`
+  >> `s_phi = s with vs_vars := s_phi.vs_vars` by (
+       irule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+       qexists_tac `bb.bb_instructions` >> simp[])
+  >> `s_phi.vs_prev_bb = s.vs_prev_bb /\
+      s_phi.vs_labels = s.vs_labels /\
+      s_phi.vs_current_bb = s.vs_current_bb` by
+       gvs[venom_state_component_equality]
+  >> `block_subst_rel m (exec_block fuel ctx bb s0)
+        (exec_block fuel ctx (subst_block_labels_block m bb) s0)` by (
+       match_mp_tac (Q.SPECL [`LENGTH bb.bb_instructions - s0.vs_inst_idx`,
+                               `fuel`, `ctx`, `bb`, `s0`, `m`]
                      run_block_subst_equiv) >>
        ASM_REWRITE_TAC[] >>
-       Cases_on `s.vs_prev_bb` >> gvs[])
-  >> Cases_on `exec_block fuel ctx bb s`
-  >> gvs[block_subst_rel_def] >- (
-       (* OK *)
-       rename1 `OK s'` >>
-       rename1 `OK s''` >>
-       unabbrev_all_tac >>
-       mp_tac (Q.SPECL [`fuel`, `func`, `ctx`, `s`, `entry`,
-         `compute_merge_map (block_sigs func entry func.fn_blocks) []`,
-         `bb`, `s'`, `s''`] tail_merge_ok_case) >>
-       ASM_REWRITE_TAC[] >>
-       simp[])
-  >> (* Halt *)
-  simp[result_equiv_def] >>
-  irule execution_equiv_UNIV_sym >> simp[]
+       gvs[Abbr`s0`, venomExecProofsTheory.phi_prefix_length_le])
+  >> Cases_on `exec_block fuel ctx bb s0`
+  >> gvs[block_subst_rel_def]
+  >> TRY (simp[result_equiv_def] >> NO_TAC)
+  >> TRY (simp[result_equiv_def] >> irule execution_equiv_UNIV_sym >> simp[] >> NO_TAC)
+  >> (* OK case *)
+     mp_tac (Q.SPECL [`fuel`, `func`, `ctx`, `s0`, `entry`,
+       `m`, `bb`, `v`, `s''`] tail_merge_ok_case) >>
+     ASM_REWRITE_TAC[] >>
+     disch_then match_mp_tac >>
+     simp[Abbr`s0`, venomExecProofsTheory.phi_prefix_length_le]
 QED
 
 Theorem block_sigs_FST_subset_fn_labels[local]:
@@ -3608,21 +3742,21 @@ Proof
   rpt strip_tac >>
   simp[tail_merge_fn_def, LET_THM] >>
   Cases_on `compute_merge_map
-    (block_sigs func lbl func.fn_blocks) []` >- simp[] >>
+    (block_sigs func lbl func.fn_blocks) []` THENL [simp[], ALL_TAC] >>
   simp[fn_entry_label_def, entry_block_def,
        subst_block_labels_fn_def, subst_block_labels_block_def, LET_THM] >>
   fs[fn_entry_label_def, entry_block_def] >>
-  Cases_on `func.fn_blocks` >- gvs[] >>
+  Cases_on `func.fn_blocks` THENL [gvs[], ALL_TAC] >>
   gvs[] >>
   Cases_on `h` >>
   (* Entry not in merge map — use EVERY *)
   `q <> h'.bb_label /\ ~MEM h'.bb_label (MAP FST t)` suffices_by (
     strip_tac >> simp[subst_block_labels_block_def]) >>
   (* q <> h'.bb_label *)
-  conj_tac >- (
+  conj_tac THENL [
     `MEM (q,r) (compute_merge_map (block_sigs func h'.bb_label (h'::t')) [])` suffices_by (
       strip_tac >> imp_res_tac compute_merge_map_not_entry >> gvs[]) >>
-    simp[]) >>
+    simp[], ALL_TAC] >>
   (* ~MEM h'.bb_label (MAP FST t) *)
   simp[listTheory.MEM_MAP] >> rpt strip_tac >> Cases_on `y` >> gvs[] >>
   `MEM (h'.bb_label,r') (compute_merge_map (block_sigs func h'.bb_label (h'::t')) [])` suffices_by (
@@ -3682,5 +3816,3 @@ Proof
     simp[] >>
     metis_tac[block_sigs_FST_subset_fn_labels] >> NO_TAC)
 QED
-
-val _ = export_theory();
