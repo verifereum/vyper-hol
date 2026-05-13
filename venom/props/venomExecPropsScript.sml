@@ -121,6 +121,26 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.exec_block_ok_sets_prev_bb
 QED
 
+(* Boundary lemmas for run_block: lift exec_block properties through eval_phis wrapper *)
+
+Theorem run_block_OK_inst_idx_0:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_OK_inst_idx_0
+QED
+
+Theorem run_block_ok_sets_prev_bb:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_prev_bb <> NONE
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_ok_sets_prev_bb
+QED
+
+Theorem run_block_OK_not_halted:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_OK_not_halted
+QED
+
 Theorem step_inst_preserves_prev_bb:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
@@ -299,7 +319,7 @@ Theorem exec_block_current_bb_in_succs:
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     bb.bb_instructions <> [] /\
-    s.vs_inst_idx = 0 /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
     exec_block fuel ctx bb s = OK s1 ==>
     MEM s1.vs_current_bb (bb_succs bb)
 Proof
@@ -313,6 +333,41 @@ Theorem step_inst_base_term_prev_bb:
     s'.vs_prev_bb = SOME s.vs_current_bb
 Proof
   ACCEPT_TAC venomExecProofsTheory.step_inst_base_term_prev_bb
+QED
+
+Theorem run_block_current_bb_in_succs:
+  !fuel ctx bb s v.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    run_block fuel ctx bb s = OK v ==>
+    MEM v.vs_current_bb (bb_succs bb)
+Proof
+  simp[Once venomExecSemanticsTheory.run_block_def] >>
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] mp_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac eval_phis_preserves_current_bb >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`,
+    `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `v`]
+    exec_block_current_bb_in_succs) >>
+  simp[phi_prefix_length_le]
+QED
+
+Theorem run_block_ok_nonempty:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> bb.bb_instructions <> []
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] mp_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  rpt strip_tac >>
+  fs[Once venomExecSemanticsTheory.run_block_def, AllCaseEqs()] >>
+  Cases_on `bb.bb_instructions` >> fs[] >>
+  fs[venomExecSemanticsTheory.phi_prefix_length_def] >>
+  `(s' with vs_inst_idx := 0).vs_inst_idx = 0` by simp[] >>
+  metis_tac[exec_block_ok_nonempty]
 QED
 
 Theorem exec_block_ok_prev_bb:
@@ -362,6 +417,54 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.fuel_mono
 QED
 
+Theorem run_block_fuel_mono:
+  !fuel fuel' ctx bb st res.
+    run_block fuel ctx bb st = res /\ (!e. res <> Error e) /\ fuel <= fuel' ==>
+    run_block fuel' ctx bb st = res
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_fuel_mono
+QED
+
+Theorem run_block_fuel_mono_OK:
+  !n fuel2 ctx bb s v.
+    run_block n ctx bb s = OK v /\ n <= fuel2 ==>
+    run_block fuel2 ctx bb s = OK v
+Proof
+  rpt gen_tac >> strip_tac >>
+  assume_tac (Q.SPECL [`n`, `fuel2`, `ctx`, `bb`, `s`, `OK v`] run_block_fuel_mono) >>
+  first_x_assum match_mp_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+
+
+Theorem exec_block_ok_prev_bb_general:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
+    exec_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.exec_block_ok_prev_bb_general
+QED
+
+Theorem run_block_ok_prev_bb_exact:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  ACCEPT_TAC venomExecProofsTheory.run_block_ok_prev_bb_exact
+QED
+
 Theorem step_inst_base_nonerr_var_fdom:
   !inst s x.
     inst_wf inst /\
@@ -381,6 +484,7 @@ Theorem step_inst_base_fdom:
   !inst s s'.
     step_inst_base inst s = OK s' /\
     inst_wf inst /\
+    inst.inst_opcode <> PHI /\
     ~is_terminator inst.inst_opcode ==>
     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
 Proof
@@ -391,6 +495,7 @@ Theorem step_inst_fdom:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     inst_wf inst /\
+    inst.inst_opcode <> PHI /\
     ~is_terminator inst.inst_opcode ==>
     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
 Proof
@@ -446,49 +551,49 @@ QED
 
 (* ===== Layer 2: Block chaining in run_blocks ===== *)
 
-(* One step of run_blocks: if exec_block produces OK (not halted),
+(* One step of run_blocks: if run_block produces OK (not halted),
    run_blocks continues at the next block. *)
 Theorem run_blocks_step:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
+    run_block fuel ctx bb ss = OK ss' ∧
     ¬ss'.vs_halted
     ⇒
     run_blocks (SUC fuel) ctx fn ss = run_blocks fuel ctx fn ss'
-Proof ACCEPT_TAC run_blocks_step_proof
+Proof ACCEPT_TAC venomExecProofsTheory.run_blocks_step_proof
 QED
 
 (* Two blocks chained: block A produces OK, run_blocks continues *)
 Theorem run_blocks_two_blocks:
   ∀ fuel ctx fn bb_A ss ss_mid result.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
-    exec_block fuel ctx bb_A (ss with vs_inst_idx := 0) = OK ss_mid ∧
+    run_block fuel ctx bb_A ss = OK ss_mid ∧
     ¬ss_mid.vs_halted ∧
     run_blocks fuel ctx fn ss_mid = result
     ⇒
     run_blocks (SUC fuel) ctx fn ss = result
-Proof ACCEPT_TAC run_blocks_two_blocks_proof
+Proof ACCEPT_TAC venomExecProofsTheory.run_blocks_two_blocks_proof
 QED
 
-(* Terminal: exec_block produces OK with halted → run_blocks returns Halt *)
+(* Terminal: run_block produces OK with halted → run_blocks returns Halt *)
 Theorem run_blocks_halt:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
+    run_block fuel ctx bb ss = OK ss' ∧
     ss'.vs_halted
     ⇒
     run_blocks (SUC fuel) ctx fn ss = Halt ss'
-Proof ACCEPT_TAC run_blocks_halt_proof
+Proof ACCEPT_TAC venomExecProofsTheory.run_blocks_halt_proof
 QED
 
-(* Terminal: exec_block produces Abort → run_blocks returns Abort *)
+(* Terminal: run_block produces Abort → run_blocks returns Abort *)
 Theorem run_blocks_abort:
   ∀ fuel ctx fn bb ss a ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = Abort a ss'
+    run_block fuel ctx bb ss = Abort a ss'
     ⇒
     run_blocks (SUC fuel) ctx fn ss = Abort a ss'
-Proof ACCEPT_TAC run_blocks_abort_proof
+Proof ACCEPT_TAC venomExecProofsTheory.run_blocks_abort_proof
 QED
 
 (* exec_block preserves vs_labels: helper with measure *)
@@ -522,15 +627,46 @@ Proof
   metis_tac[exec_block_preserves_labels_aux]
 QED
 
+(* eval_phis preserves vs_labels *)
+Theorem eval_phis_preserves_labels:
+  !s insts s'. eval_phis s insts = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[venomExecSemanticsTheory.eval_phis_def])
+  >> rpt strip_tac >> fs[venomExecSemanticsTheory.eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[]
+  >> `v.vs_labels = s.vs_labels`
+     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒ s''.vs_labels = s.vs_labels`
+         >- metis_tac[] >> metis_tac[])
+  >> fs[venomStateTheory.update_var_def]
+  >> `s' = v with vs_vars := v.vs_vars⟨x0 ↦ x1⟩` by metis_tac[]
+  >> fs[]
+QED
+
+(* run_block preserves vs_labels *)
+Theorem run_block_preserves_labels:
+  !fuel ctx bb s s'. run_block fuel ctx bb s = OK s' ==> s'.vs_labels = s.vs_labels
+Proof
+  simp[Once venomExecSemanticsTheory.run_block_def] >>
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] mp_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac eval_phis_preserves_labels >>
+  drule exec_block_preserves_labels >> simp[]
+QED
+
 (* run_blocks preserves vs_labels *)
 Theorem run_blocks_preserves_labels:
   !fuel ctx fn s s'.
     run_blocks fuel ctx fn s = OK s' ==> s'.vs_labels = s.vs_labels
 Proof
-  Induct_on `fuel` >>
-  simp[Once venomExecSemanticsTheory.run_blocks_def] >>
+  Induct_on `fuel` >- simp[venomExecSemanticsTheory.run_blocks_def] >>
   rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  imp_res_tac exec_block_preserves_labels >> gvs[] >>
-  metis_tac[]
+  gvs[venomExecSemanticsTheory.run_blocks_unfold, AllCaseEqs()] >>
+  imp_res_tac run_block_preserves_labels >> gvs[] >>
+  first_x_assum drule >> simp[]
 QED
