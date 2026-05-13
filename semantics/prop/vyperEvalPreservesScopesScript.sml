@@ -793,6 +793,20 @@ Proof
   gvs[listTheory.MEM_MAP] >> res_tac >> gvs[]
 QED
 
+Theorem eval_stmts_preserves_tail_lookup_none:
+  !cx ss st sc rest res st' id h t.
+    eval_stmts cx ss (st with scopes := sc::rest) = (res, st') /\
+    lookup_scopes id rest = NONE /\
+    st'.scopes = h::t ==>
+    lookup_scopes id t = NONE
+Proof
+  rpt strip_tac >>
+  irule lookup_scopes_none_map_fdom >>
+  qexists_tac `rest` >> simp[] >>
+  drule eval_stmts_preserves_scopes_dom >>
+  simp[preserves_scopes_dom_def]
+QED
+
 (* New entries in HEAD scope are not in any TAIL scope.
    The key property: new_variable checks IS_NONE (lookup_scopes id env)
    before adding, and TAIL FDOMs are preserved throughout evaluation. *)
@@ -1159,7 +1173,8 @@ Definition preserves_tv_def:
     (∀i id entry. i < LENGTH st.scopes ∧
                  FLOOKUP (EL i st.scopes) id = SOME entry ⇒
                  ∃entry'. FLOOKUP (EL i st'.scopes) id = SOME entry' ∧
-                          entry'.type = entry.type) ∧
+                          entry'.type = entry.type ∧
+                          entry'.assignable = entry.assignable) ∧
     (∀src id tv v.
        FLOOKUP (get_source_immutables src
          (case ALOOKUP st.immutables cx.txn.target of

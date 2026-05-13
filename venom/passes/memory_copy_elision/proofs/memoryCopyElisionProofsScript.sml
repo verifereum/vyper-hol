@@ -79,21 +79,94 @@ Proof
   Cases >> simp[is_copy_opcode_def]
 QED
 
-(* Re-prove inst_transform_structural (local in SoundScript) *)
+Triviality copy_opcode_not_phi[local]:
+  !op. is_copy_opcode op ==> op <> PHI
+Proof
+  Cases >> simp[is_copy_opcode_def]
+QED
+
+Triviality cei_non_mcopy_non_invoke[local]:
+  !bp dfg v inst.
+    inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> MCOPY ==>
+    copy_elision_inst bp dfg v inst = inst
+Proof
+  simp[copy_elision_inst_def, LET_THM]
+QED
+
+(* For MCOPY, the result opcode is always NOP or a copy_opcode:
+   - NOP via mk_nop_inst (redundant copy elision)
+   - copy_opcode from forwarding (is_copy_opcode cf.cf_opcode guard)
+   - MCOPY itself (identity, which IS a copy_opcode)
+   Each is not a terminator, not INVOKE, not PHI. *)
+Triviality cei_mcopy_opcode_safe[local]:
+  !bp dfg v inst.
+    inst.inst_opcode = MCOPY ==>
+    (copy_elision_inst bp dfg v inst).inst_opcode = NOP \/
+    is_copy_opcode (copy_elision_inst bp dfg v inst).inst_opcode
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[copy_elision_inst_def, LET_THM, Excl "is_terminator"] >>
+  BasicProvers.every_case_tac >> simp[mk_nop_inst_def, is_copy_opcode_def]
+QED
+
+Triviality nop_not_terminator[local]:
+  ~is_terminator NOP
+Proof
+  simp[is_terminator_def]
+QED
+
+Triviality nop_not_invoke[local]:
+  NOP <> INVOKE
+Proof
+  simp[]
+QED
+
+Triviality nop_not_phi[local]:
+  NOP <> PHI
+Proof
+  simp[]
+QED
+
+(* Re-prove inst_transform_structural using boundary lemmas *)
 Triviality cei_structural[local]:
   !bp dfg.
     inst_transform_structural (\v inst. [copy_elision_inst bp dfg v inst])
 Proof
   rpt gen_tac >>
   simp[inst_transform_structural_def] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  simp[copy_elision_inst_def, LET_THM] >>
-  TRY (Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >> NO_TAC) >>
-  TRY (fs[] >> NO_TAC) >>
-  rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
-  fs[]
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  (* 1. terminator clause *)
+  >- (Cases_on `inst.inst_opcode = INVOKE`
+      >- (`copy_elision_inst bp dfg v inst = inst` by
+            simp[copy_elision_inst_def, LET_THM] >>
+          simp[]) >>
+      Cases_on `inst.inst_opcode = MCOPY`
+      >- (`is_terminator MCOPY` by simp[is_terminator_def] >>
+          fs[]) >>
+      `copy_elision_inst bp dfg v inst = inst` by
+        metis_tac[cei_non_mcopy_non_invoke] >>
+      simp[])
+  (* 2. INVOKE clause *)
+  >- (`copy_elision_inst bp dfg v inst = inst` by
+        simp[copy_elision_inst_def, LET_THM] >>
+      simp[])
+  (* 3. PHI clause *)
+  >- (`copy_elision_inst bp dfg v inst = inst` by
+        metis_tac[cei_non_mcopy_non_invoke] >>
+      simp[])
+  (* 4. safe clause *)
+  >- (Cases_on `inst.inst_opcode = MCOPY`
+      >- (imp_res_tac cei_mcopy_opcode_safe >>
+          Cases_on `(copy_elision_inst bp dfg v inst).inst_opcode = NOP`
+          >- simp[nop_not_terminator, nop_not_invoke, nop_not_phi] >>
+          `is_copy_opcode (copy_elision_inst bp dfg v inst).inst_opcode` by simp[] >>
+          imp_res_tac copy_opcode_not_term >>
+          imp_res_tac copy_opcode_not_invoke >>
+          imp_res_tac copy_opcode_not_phi >>
+          simp[]) >>
+      `copy_elision_inst bp dfg v inst = inst` by
+        metis_tac[cei_non_mcopy_non_invoke] >>
+      simp[])
 QED
 
 (* Helper: block membership implies fn_insts membership *)

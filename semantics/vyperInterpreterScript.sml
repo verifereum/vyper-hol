@@ -969,8 +969,7 @@ Definition evaluate_def:
     (loc, sbs) <- eval_base_target cx t;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    k <- lift_option_type (value_to_key v) "SubscriptTarget value_to_key";
-    return $ (loc, k :: sbs)
+    return $ (loc, ValueSubscript v :: sbs)
   od ∧
   eval_for cx tyv nm body [] = return () ∧
   eval_for cx tyv nm body (v::vs) = do

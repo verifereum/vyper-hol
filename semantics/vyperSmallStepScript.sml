@@ -557,9 +557,7 @@ Definition apply_val_def:
        of (INR ex, st) => apply_exc cx ex st k
         | (INL vs, st) => AK cx (ApplyVals vs) st k) ∧
   apply_val cx v st (SubscriptTargetK1 (loc, sbs) k) =
-    (case lift_option_type (value_to_key v) "SubscriptTarget value_to_key" st
-       of (INR ex, st) => apply_exc cx ex st k
-        | (INL sk, st) => apply_base_target cx (loc, sk :: sbs) st k) ∧
+    AK cx (ApplyBaseTarget (loc, ValueSubscript v :: sbs)) st k ∧
   apply_val cx (BoolV T) st (IfExpK e2 e3 k) =
     eval_expr_cps cx e2 st k ∧
   apply_val cx (BoolV F) st (IfExpK e2 e3 k) =
@@ -1241,17 +1239,7 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ qmatch_asmsub_rename_tac`get_Value tv`
     \\ Cases_on`tv` \\ gvs[get_Value_def, raise_def, return_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- (
-      gvs[lift_option_def, lift_option_type_def, option_CASE_rator, CaseEq"option",
-          raise_def, return_def]
-      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def]
-      \\ gvs[]
-      \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
-    \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def]
-    \\ gvs[]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def] )
+    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def] )
   \\ conj_tac >- rw[eval_for_cps_def, evaluate_def, return_def] (* eval_for [] *)
   \\ conj_tac >- ( (* eval_for (v::vs) *)
     rw[eval_for_cps_def, evaluate_def, ignore_bind_def, bind_def]
