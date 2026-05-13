@@ -9,20 +9,27 @@
 
 Theory venomInstProps
 Ancestors
-  venomInstProofs venomWf
+  venomInstProofs1 venomInstProofs2 venomInstProofs3 venomInstProofs venomWf
+
+(* ===== Effect-free classification ===== *)
 
 Theorem is_effect_free_not_terminator:
   !op. is_effect_free_op op ==> ~is_terminator op
 Proof
-  ACCEPT_TAC venomInstProofsTheory.is_effect_free_not_terminator
+  ACCEPT_TAC is_effect_free_not_terminator
 QED
+
+(* ===== Executor-level state preservation ===== *)
+(* Pure (exec_pureN) and read (exec_readN) executors preserve state equivalence
+   on their output variables. Write executors (exec_write2) preserve vars
+   and control flow provided their semantic function parameter does. *)
 
 Theorem exec_pure1_state_equiv:
   !f inst s s'.
     exec_pure1 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_pure1_state_equiv
+  ACCEPT_TAC exec_pure1_state_equiv
 QED
 
 Theorem exec_pure2_state_equiv:
@@ -30,7 +37,7 @@ Theorem exec_pure2_state_equiv:
     exec_pure2 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_pure2_state_equiv
+  ACCEPT_TAC exec_pure2_state_equiv
 QED
 
 Theorem exec_pure3_state_equiv:
@@ -38,7 +45,7 @@ Theorem exec_pure3_state_equiv:
     exec_pure3 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_pure3_state_equiv
+  ACCEPT_TAC exec_pure3_state_equiv
 QED
 
 Theorem exec_read0_state_equiv:
@@ -46,7 +53,7 @@ Theorem exec_read0_state_equiv:
     exec_read0 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_read0_state_equiv
+  ACCEPT_TAC exec_read0_state_equiv
 QED
 
 Theorem exec_read1_state_equiv:
@@ -54,7 +61,7 @@ Theorem exec_read1_state_equiv:
     exec_read1 f inst s = OK s' ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_read1_state_equiv
+  ACCEPT_TAC exec_read1_state_equiv
 QED
 
 Theorem exec_write2_preserves_vars:
@@ -63,7 +70,7 @@ Theorem exec_write2_preserves_vars:
     (!v1 v2 s0. (f v1 v2 s0).vs_vars = s0.vs_vars) ==>
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_write2_preserves_vars
+  ACCEPT_TAC exec_write2_preserves_vars
 QED
 
 Theorem exec_write2_preserves_control_flow:
@@ -76,8 +83,10 @@ Theorem exec_write2_preserves_control_flow:
     s'.vs_inst_idx = s.vs_inst_idx /\
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
-  ACCEPT_TAC venomInstProofsTheory.exec_write2_preserves_control_flow
+  ACCEPT_TAC exec_write2_preserves_control_flow
 QED
+
+(* ===== Step-level effect-free equivalence ===== *)
 
 Theorem step_effect_free_state_equiv:
   !fuel ctx inst s s'.
@@ -85,13 +94,15 @@ Theorem step_effect_free_state_equiv:
     is_effect_free_op inst.inst_opcode ==>
     state_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_effect_free_state_equiv
+  ACCEPT_TAC step_effect_free_state_equiv
 QED
+
+(* ===== Identity steps ===== *)
 
 Theorem step_nop_identity:
   !fuel ctx inst s. inst.inst_opcode = NOP ==> step_inst fuel ctx inst s = OK s
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_nop_identity
+  ACCEPT_TAC step_nop_identity
 QED
 
 Theorem step_assert_identity:
@@ -99,7 +110,7 @@ Theorem step_assert_identity:
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = ASSERT ==>
     s' = s
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_assert_identity
+  ACCEPT_TAC step_assert_identity
 QED
 
 Theorem step_assert_unreachable_identity:
@@ -108,8 +119,10 @@ Theorem step_assert_unreachable_identity:
     inst.inst_opcode = ASSERT_UNREACHABLE ==>
     s' = s
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_assert_unreachable_identity
+  ACCEPT_TAC step_assert_unreachable_identity
 QED
+
+(* ===== Variable preservation ===== *)
 
 Theorem step_preserves_non_output_vars:
   !fuel ctx inst s s'.
@@ -117,8 +130,11 @@ Theorem step_preserves_non_output_vars:
     ~is_terminator inst.inst_opcode ==>
     !v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_non_output_vars
+  ACCEPT_TAC step_preserves_non_output_vars
 QED
+
+(* ===== Per-opcode state preservation ===== *)
+(* Each theorem lists exactly which state components an opcode leaves unchanged. *)
 
 Theorem step_write2_preserves_all_vars:
   !fuel ctx inst s s'.
@@ -127,7 +143,7 @@ Theorem step_write2_preserves_all_vars:
      inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) ==>
     !v. lookup_var v s' = lookup_var v s
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_write2_preserves_all_vars
+  ACCEPT_TAC step_write2_preserves_all_vars
 QED
 
 Theorem step_mstore_preserves:
@@ -145,7 +161,7 @@ Theorem step_mstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_mstore_preserves
+  ACCEPT_TAC step_mstore_preserves
 QED
 
 Theorem step_mstore8_preserves:
@@ -163,7 +179,7 @@ Theorem step_mstore8_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_mstore8_preserves
+  ACCEPT_TAC step_mstore8_preserves
 QED
 
 Theorem step_sstore_preserves:
@@ -181,7 +197,7 @@ Theorem step_sstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_sstore_preserves
+  ACCEPT_TAC step_sstore_preserves
 QED
 
 Theorem step_tstore_preserves:
@@ -199,7 +215,7 @@ Theorem step_tstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_tstore_preserves
+  ACCEPT_TAC step_tstore_preserves
 QED
 
 Theorem step_istore_preserves:
@@ -217,7 +233,7 @@ Theorem step_istore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_istore_preserves
+  ACCEPT_TAC step_istore_preserves
 QED
 
 Theorem step_log_preserves:
@@ -235,7 +251,7 @@ Theorem step_log_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_log_preserves
+  ACCEPT_TAC step_log_preserves
 QED
 
 Theorem step_mem_write_preserves:
@@ -261,7 +277,7 @@ Theorem step_mem_write_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_mem_write_preserves
+  ACCEPT_TAC step_mem_write_preserves
 QED
 
 Theorem step_alloca_preserves:
@@ -287,7 +303,7 @@ Theorem step_alloca_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_alloca_preserves
+  ACCEPT_TAC step_alloca_preserves
 QED
 
 Theorem step_ext_call_preserves:
@@ -309,9 +325,14 @@ Theorem step_ext_call_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_ext_call_preserves
+  ACCEPT_TAC step_ext_call_preserves
 QED
 
+
+(* ===== Write-effects soundness ===== *)
+(* If an effect is absent from an opcode's write_effects set, the corresponding
+   state component is unchanged. Requires non-alloca (allocas allocate memory
+   outside write_effects) and non-terminator (terminators may change control flow). *)
 
 Theorem write_effects_sound_storage:
   !fuel ctx inst s s'.
@@ -321,7 +342,7 @@ Theorem write_effects_sound_storage:
     Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
     contract_storage s' = contract_storage s
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_storage
+  ACCEPT_TAC write_effects_sound_storage
 QED
 
 Theorem write_effects_sound_transient:
@@ -332,7 +353,7 @@ Theorem write_effects_sound_transient:
     Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
     s'.vs_transient = s.vs_transient
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_transient
+  ACCEPT_TAC write_effects_sound_transient
 QED
 
 Theorem write_effects_sound_memory:
@@ -343,7 +364,7 @@ Theorem write_effects_sound_memory:
     Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
     s'.vs_memory = s.vs_memory
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_memory
+  ACCEPT_TAC write_effects_sound_memory
 QED
 
 Theorem write_effects_sound_immutables:
@@ -354,7 +375,7 @@ Theorem write_effects_sound_immutables:
     Eff_IMMUTABLES NOTIN write_effects inst.inst_opcode ==>
     s'.vs_immutables = s.vs_immutables
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_immutables
+  ACCEPT_TAC write_effects_sound_immutables
 QED
 
 Theorem write_effects_sound_returndata:
@@ -365,7 +386,7 @@ Theorem write_effects_sound_returndata:
     Eff_RETURNDATA NOTIN write_effects inst.inst_opcode ==>
     s'.vs_returndata = s.vs_returndata
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_returndata
+  ACCEPT_TAC write_effects_sound_returndata
 QED
 
 Theorem write_effects_sound_log:
@@ -376,7 +397,7 @@ Theorem write_effects_sound_log:
     Eff_LOG NOTIN write_effects inst.inst_opcode ==>
     s'.vs_logs = s.vs_logs
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_log
+  ACCEPT_TAC write_effects_sound_log
 QED
 
 Theorem write_effects_sound_accounts:
@@ -388,8 +409,12 @@ Theorem write_effects_sound_accounts:
     Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
     s'.vs_accounts = s.vs_accounts
 Proof
-  ACCEPT_TAC venomInstProofsTheory.write_effects_sound_accounts
+  ACCEPT_TAC write_effects_sound_accounts
 QED
+
+(* ===== Non-terminator field preservation ===== *)
+(* Non-terminator instructions cannot modify immutable state fields
+   (contexts, code, metadata, control flow). *)
 
 Theorem step_preserves_call_ctx:
   !fuel ctx inst s s'.
@@ -397,7 +422,7 @@ Theorem step_preserves_call_ctx:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_call_ctx = s.vs_call_ctx
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_call_ctx
+  ACCEPT_TAC step_preserves_call_ctx
 QED
 
 Theorem step_preserves_tx_ctx:
@@ -406,7 +431,7 @@ Theorem step_preserves_tx_ctx:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_tx_ctx = s.vs_tx_ctx
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_tx_ctx
+  ACCEPT_TAC step_preserves_tx_ctx
 QED
 
 Theorem step_preserves_block_ctx:
@@ -415,7 +440,7 @@ Theorem step_preserves_block_ctx:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_block_ctx = s.vs_block_ctx
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_block_ctx
+  ACCEPT_TAC step_preserves_block_ctx
 QED
 
 Theorem step_preserves_code:
@@ -424,7 +449,7 @@ Theorem step_preserves_code:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_code = s.vs_code
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_code
+  ACCEPT_TAC step_preserves_code
 QED
 
 Theorem step_preserves_data_section:
@@ -433,7 +458,7 @@ Theorem step_preserves_data_section:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_data_section = s.vs_data_section
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_data_section
+  ACCEPT_TAC step_preserves_data_section
 QED
 
 Theorem step_preserves_labels:
@@ -442,7 +467,7 @@ Theorem step_preserves_labels:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_labels = s.vs_labels
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_labels
+  ACCEPT_TAC step_preserves_labels
 QED
 
 Theorem step_preserves_params:
@@ -451,7 +476,7 @@ Theorem step_preserves_params:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_params = s.vs_params
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_params
+  ACCEPT_TAC step_preserves_params
 QED
 
 Theorem step_preserves_prev_hashes:
@@ -460,7 +485,7 @@ Theorem step_preserves_prev_hashes:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_prev_hashes = s.vs_prev_hashes
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_prev_hashes
+  ACCEPT_TAC step_preserves_prev_hashes
 QED
 
 Theorem step_preserves_halted:
@@ -469,7 +494,7 @@ Theorem step_preserves_halted:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_halted = s.vs_halted
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_halted
+  ACCEPT_TAC step_preserves_halted
 QED
 
 Theorem step_preserves_control_flow:
@@ -480,8 +505,10 @@ Theorem step_preserves_control_flow:
     s'.vs_inst_idx = s.vs_inst_idx /\
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_preserves_control_flow
+  ACCEPT_TAC step_preserves_control_flow
 QED
+
+(* Effect-free steps produce execution-equivalent states. *)
 
 Theorem step_effect_free_execution_equiv:
   !fuel ctx inst s s'.
@@ -489,8 +516,11 @@ Theorem step_effect_free_execution_equiv:
     is_effect_free_op inst.inst_opcode ==>
     execution_equiv (set inst.inst_outputs) s s'
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_effect_free_execution_equiv
+  ACCEPT_TAC step_effect_free_execution_equiv
 QED
+
+(* Two effect-free steps from the same state that produce the same output
+   values yield state-equivalent results. *)
 
 Theorem step_effect_free_same_value:
   !fuel ctx inst1 inst2 s s1 s2.
@@ -504,7 +534,7 @@ Theorem step_effect_free_same_value:
          lookup_var v s1 = lookup_var v s2) ==>
     state_equiv {} s1 s2
 Proof
-  ACCEPT_TAC venomInstProofsTheory.step_effect_free_same_value
+  ACCEPT_TAC step_effect_free_same_value
 QED
 
 (* ===== Effect-free instructions succeed when operands are defined ===== *)

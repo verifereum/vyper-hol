@@ -10,23 +10,18 @@
 
 Theory assignElimProofs
 Ancestors
-  assignElimSound assignElimConvergence
-  analysisSimProps analysisSimProofsBase
-  passSimulationProps venomWf venomInstProps
+  assignElimDefs assignElimSound assignElimConvergence
+  passSharedDefs passSharedProps
+  passSimulationDefs passSimulationProps
+  venomState venomWf venomInst venomInstProps
+  analysisSimDefs analysisSimProps analysisSimProofsBase
+  stateEquiv stateEquivProps
+  execEquivParamDefs execEquivParamProps
+  venomExecSemantics venomExecProofs
+  dfAnalyzeDefs dfAnalyzeProofs
+  cfgHelpers worklistDefs
   cfgAnalysisProps
-
-open assignElimDefsTheory assignElimSoundTheory assignElimConvergenceTheory
-     passSharedDefsTheory passSharedPropsTheory
-     venomStateTheory venomWfTheory
-     analysisSimDefsTheory analysisSimPropsTheory
-     passSimulationPropsTheory passSimulationDefsTheory
-     stateEquivTheory stateEquivPropsTheory
-     execEquivParamDefsTheory execEquivParamPropsTheory
-     venomExecSemanticsTheory finite_mapTheory
-     listTheory pred_setTheory venomInstTheory
-     dfAnalyzeDefsTheory dfAnalyzeProofsTheory
-     cfgHelpersTheory worklistDefsTheory arithmeticTheory
-     cfgAnalysisPropsTheory
+  finite_map list pred_set arithmetic
 
 (* ===== Copy-prop specific: function-level simulation ===== *)
 
@@ -113,8 +108,82 @@ Proof
   Cases_on `op` >> fs[eval_operand_def, lookup_var_def]
 QED
 
-(* After exec_block OK (non-halted), soundness transfers from entry to exit.
-   Requires: no non-last instruction is a terminator. *)
+Theorem copy_sound_opt_inst_idx_update[local]:
+  !v s k1 k2.
+    copy_sound_opt v (s with vs_inst_idx := k1) <=>
+    copy_sound_opt v (s with vs_inst_idx := k2)
+Proof
+  simp[GSYM copy_sound_opt_inst_idx]
+QED
+
+Triviality copy_prop_transfer_sound_wf[local]:
+  !pv. transfer_sound_wf copy_sound_opt copy_prop_transfer pv
+Proof
+  rw[transfer_sound_wf_def] >>
+  mp_tac (Q.SPEC `pv` copy_prop_transfer_sound) >>
+  simp[transfer_sound_def] >>
+  disch_then (qspecl_then [`fuel`, `run_ctx`, `v`, `inst`, `s`, `s'`] mp_tac) >>
+  simp[]
+QED
+
+Triviality copy_prop_analyze_eq[local]:
+  !fn.
+    df_analyze Forward NONE copy_prop_join copy_prop_transfer
+      copy_prop_edge_transfer (phi_used_vars fn)
+      (OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : copy_lattice)))
+        (fn_entry_label fn)) fn =
+    copy_prop_analyze fn
+Proof
+  simp[copy_prop_analyze_def, LET_THM]
+QED
+
+(* When copy_prop_transfer receives NONE input for a PHI instruction,
+   the result is a FEMPTY-derived map with no entries. *)
+Triviality copy_prop_transfer_phi_none[local]:
+  !phi_vars inst x op.
+    inst.inst_opcode = PHI /\
+    copy_prop_transfer phi_vars inst NONE = SOME copies /\
+    FLOOKUP copies x = SOME op ==> F
+Proof
+  rpt strip_tac >>
+  `~is_forwardable_assign phi_vars inst` by
+    fs[is_forwardable_assign_def] >>
+  gvs[copy_prop_transfer_def, LET_THM, DRESTRICT_FEMPTY, FLOOKUP_EMPTY]
+QED
+
+(* After copy_prop_transfer processes a PHI instruction, surviving entries
+   don't reference the PHI's output variables. *)
+Theorem copy_prop_transfer_phi_restriction[local]:
+  !phi_vars inst copies copies'.
+    inst.inst_opcode = PHI /\
+    copy_prop_transfer phi_vars inst (SOME copies) = SOME copies' ==>
+    !x op. FLOOKUP copies' x = SOME op ==>
+      FLOOKUP copies x = SOME op /\
+      x NOTIN set inst.inst_outputs /\
+      (!y. op = Var y ==> y NOTIN set inst.inst_outputs)
+Proof
+  rpt strip_tac >>
+  `~is_forwardable_assign phi_vars inst` by
+    fs[is_forwardable_assign_def] >>
+  rpt strip_tac >> gvs[copy_prop_transfer_def, is_forwardable_assign_def, inst_defs_def] >> pop_assum (assume_tac o GSYM) >> gvs[FLOOKUP_DRESTRICT, COMPL_DEF] >> rw[] >> fs[]
+QED
+
+(* copy_sound_opt is preserved when state changes only touch variables
+   not referenced by the copy map entries. *)
+Theorem copy_sound_opt_vars_agree[local]:
+  !copies s1 s2.
+    copy_sound_opt (SOME copies) s1 /\
+    (!x. FLOOKUP copies x <> NONE ==> lookup_var x s2 = lookup_var x s1) /\
+    (!x y. FLOOKUP copies x = SOME (Var y) ==> lookup_var y s2 = lookup_var y s1) /\
+    s1.vs_labels = s2.vs_labels ==>
+    copy_sound_opt (SOME copies) s2
+Proof
+  rpt strip_tac >> fs[copy_sound_opt_def, copy_sound_def] >>
+  rpt strip_tac >> res_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
+  Cases_on `op` >> fs[eval_operand_def, lookup_var_def]
+QED
+
 (* Fixpoint property of copy_prop analysis *)
 Triviality copy_prop_is_fixpoint[local]:
   !fn. fn_inst_wf fn ==>
@@ -346,8 +415,8 @@ Triviality copy_prop_exit_sound[local]:
         (df_analyze Forward NONE copy_prop_join copy_prop_transfer
            copy_prop_edge_transfer (phi_used_vars fn)
            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
-        bb.bb_label 0) s /\
-    s.vs_inst_idx = 0 /\
+        bb.bb_label s.vs_inst_idx) s /\
+    s.vs_inst_idx <= PRE (LENGTH bb.bb_instructions) /\
     exec_block fuel ctx bb s = OK v
     ==>
     copy_sound_opt
@@ -358,8 +427,10 @@ Triviality copy_prop_exit_sound[local]:
         bb.bb_label (LENGTH bb.bb_instructions)) v
 Proof
   rpt strip_tac >>
-  `bb.bb_instructions <> []` by
-    metis_tac[venomExecPropsTheory.exec_block_ok_nonempty] >>
+  `bb_well_formed bb` by (fs[wf_function_def] >> metis_tac[]) >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   (* Find the terminator index *)
   qabbrev_tac `ti = PRE (LENGTH bb.bb_instructions)` >>
   `ti < LENGTH bb.bb_instructions` by
@@ -375,34 +446,34 @@ Proof
     impl_tac >- fs[Abbr `ti`] >> simp[]) >>
   `SUC ti = LENGTH bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`]) >>
-  (* Use transfer_sound_exit *)
+  (* Use arbitrary-start transfer_sound_exit_from_wf_len for the post-PHI
+     exec_block entry point. *)
   `copy_sound_opt
      (df_at NONE
        (df_analyze Forward NONE copy_prop_join copy_prop_transfer
           copy_prop_edge_transfer (phi_used_vars fn)
           (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
-       bb.bb_label (SUC ti)) v` by (
-    mp_tac (ISPECL [
-      ``state_equiv {} : venom_state -> venom_state -> bool``,
-      ``execution_equiv {} : venom_state -> venom_state -> bool``,
-      ``copy_sound_opt``,
-      ``copy_prop_transfer``,
-      ``phi_used_vars fn``,
-      ``bb : basic_block``,
-      ``NONE : copy_lattice option``,
-      ``df_analyze Forward NONE copy_prop_join copy_prop_transfer
-          copy_prop_edge_transfer (phi_used_vars fn)
-          (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn``]
-      analysisSimPropsTheory.transfer_sound_exit) >>
-    impl_tac >- (
-      rpt conj_tac
-      >- simp[state_equiv_execution_equiv_valid_state_rel]
-      >- metis_tac[copy_prop_transfer_sound]
-      >- (rpt strip_tac >> metis_tac[copy_sound_opt_state_equiv])
-      >- (rpt strip_tac >> imp_res_tac intra_fwd >> simp_tac std_ss [])) >>
-    disch_then (qspecl_then [`fuel`, `ctx`, `s`, `v`, `ti`] mp_tac) >>
-    simp[]) >>
-  metis_tac[]
+       bb.bb_label s.vs_inst_idx) (s with vs_inst_idx := 0)` by
+    fs[GSYM copy_sound_opt_inst_idx] >>
+  mp_tac (ISPECL [
+    ``state_equiv {} : venom_state -> venom_state -> bool``,
+    ``execution_equiv {} : venom_state -> venom_state -> bool``,
+    ``copy_sound_opt``,
+    ``copy_prop_transfer``,
+    ``phi_used_vars fn``,
+    ``bb : basic_block``,
+    ``NONE : copy_lattice option``,
+    ``df_analyze Forward NONE copy_prop_join copy_prop_transfer
+        copy_prop_edge_transfer (phi_used_vars fn)
+        (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn``]
+    analysisSimProofsTheory.transfer_sound_exit_from_wf_len) >>
+  impl_tac >- (
+    gvs[state_equiv_execution_equiv_valid_state_rel,
+        copy_prop_transfer_sound_wf] >>
+    rpt strip_tac >>
+    metis_tac[copy_sound_opt_state_equiv, intra_fwd]) >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`, `v`] mp_tac) >>
+  simp[]
 QED
 
 (* If one predecessor boundary is sound/non-NONE, then copy_prop_joined is sound.
@@ -458,17 +529,19 @@ Triviality successor_entry_sound[local]:
     MEM bb fn.fn_blocks /\
     bb.bb_label = s.vs_current_bb /\
     MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
-    s.vs_inst_idx = 0 /\
-    copy_sound_opt (df_at NONE result s.vs_current_bb 0) s /\
+    s.vs_inst_idx <= PRE (LENGTH bb.bb_instructions) /\
+    copy_sound_opt (df_at NONE result s.vs_current_bb s.vs_inst_idx) s /\
     exec_block fuel ctx bb s = OK v
     ==>
     copy_sound_opt (df_at NONE result v.vs_current_bb 0) v
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  `bb.bb_instructions <> []` by metis_tac[venomExecPropsTheory.exec_block_ok_nonempty] >>
+  `bb_well_formed bb` by (fs[wf_function_def] >> metis_tac[]) >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
   `EVERY inst_wf bb.bb_instructions` by (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
+  `s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
     (irule venomExecPropsTheory.MEM_lookup_block >> simp[GSYM fn_labels_def]) >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by metis_tac[] >>
@@ -515,6 +588,36 @@ Proof
   >- first_assum ACCEPT_TAC
 QED
 
+Triviality successor_entry_sound_result[local]:
+  !fn bb fuel ctx st v result.
+    result = copy_prop_analyze fn /\
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre result /\
+    wf_function fn /\
+    fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !i. i < LENGTH bb.bb_instructions - 1 ==>
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    MEM bb fn.fn_blocks /\
+    bb.bb_label = st.vs_current_bb /\
+    MEM st.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+    st.vs_inst_idx <= PRE (LENGTH bb.bb_instructions) /\
+    copy_sound_opt (df_at NONE result st.vs_current_bb st.vs_inst_idx) st /\
+    exec_block fuel ctx bb st = OK v
+    ==>
+    copy_sound_opt (df_at NONE result v.vs_current_bb 0) v
+Proof
+  rpt strip_tac >> gvs[] >>
+  mp_tac (SIMP_RULE std_ss [LET_THM] successor_entry_sound) >>
+  disch_then (qspecl_then [`fn`, `bb`, `fuel`, `ctx`, `st`, `v`] mp_tac) >>
+  impl_tac >- gvs[copy_prop_analyze_def, LET_THM] >>
+  simp[copy_prop_analyze_def, LET_THM]
+QED
+
 Triviality copy_prop_join_FEMPTY[local]:
   !x. copy_prop_join (SOME FEMPTY) x = SOME FEMPTY
 Proof
@@ -545,6 +648,612 @@ Proof
   gvs[copy_prop_join_FEMPTY, copy_sound_opt_fempty]
 QED
 
+(* Index in PHI prefix has opcode PHI *)
+Triviality phi_prefix_length_el_phi[local]:
+  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
+Proof
+  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
+  Cases_on `i` >> simp[phi_prefix_length_def]
+QED
+
+Triviality phi_prefix_length_lt_wf[local]:
+  !bb. bb_well_formed bb ==>
+       phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
+Proof
+  rpt strip_tac >> fs[bb_well_formed_def] >>
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  CCONTR_TAC >>
+  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by
+    decide_tac >>
+  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[]) >>
+  `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
+  gvs[is_terminator_def]
+QED
+
+(* Direct indexed variant of eval_phis_flookup_not_phi_output.
+   Uses the indexed condition that df_at_phi_prefix_no_phi_output_at_end
+   already provides directly, avoiding the need for bb_well_formed bridge. *)
+Theorem eval_phis_flookup_idx[local]:
+  !s insts x.
+    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
+    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
+Proof
+  Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
+  (* Derive IH hypothesis for recursive case *)
+  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
+    rpt strip_tac >>
+    first_x_assum (qspec_then `SUC i` mp_tac) >>
+    simp[phi_prefix_length_def]
+  ) >>
+  (* IH gives FLOOKUP preserved through recursive eval_phis *)
+  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by (
+    first_x_assum drule >> simp[]
+  ) >>
+  (* out is not x (not written by this PHI) *)
+  `~MEM x h.inst_outputs` by (
+    last_x_assum (fn th =>
+      mp_tac (Q.SPEC `0` th) >> simp[phi_prefix_length_def])
+  ) >>
+  `MEM out h.inst_outputs` by (
+    drule eval_one_phi_output_mem >> simp[]
+  ) >>
+  `out <> x` by (CCONTR_TAC >> fs[]) >>
+  gvs[update_var_def, FLOOKUP_UPDATE]
+QED
+
+(* Corollary of eval_phis_flookup_idx for Var-valued copy map entries.
+   Factored out to avoid assumption-selection issues in the complex proof
+   context of copy_sound_opt_phi_prefix_eval_phis. *)
+Triviality eval_phis_flookup_var_val[local]:
+  !insts s s_phi copies x y.
+    eval_phis s insts = OK s_phi /\
+    FLOOKUP copies x = SOME (Var y) /\
+    (!i. i < phi_prefix_length insts ==>
+         !x' op. FLOOKUP copies x' = SOME op ==>
+                 ~MEM x' (EL i insts).inst_outputs /\
+                 (!y'. op = Var y' ==> ~MEM y' (EL i insts).inst_outputs))
+    ==> FLOOKUP s_phi.vs_vars y = FLOOKUP s.vs_vars y
+Proof
+  rpt strip_tac >>
+  `!i. i < phi_prefix_length insts ==> ~MEM y (EL i insts).inst_outputs` by (
+    rpt strip_tac >>
+    qpat_x_assum `!i. i < phi_prefix_length _ ==> !x' op. _`
+      (qspec_then `i` mp_tac) >>
+    simp[] >>
+    qexistsl [`x`, `Var y`] >>
+    simp[]
+  ) >>
+  mp_tac (Q.SPECL [`s`, `insts`, `y`] eval_phis_flookup_idx) >>
+  simp[]
+QED
+
+(* PHI prefix analysis transfer preserves copy_sound_opt on the same state.
+   Under final semantics PHIs are not sequential steps; the transfer only
+   kills PHI outputs and entries that reference them. *)
+Triviality copy_prop_transfer_phi_sound[local]:
+  !pv inst v st.
+    inst.inst_opcode = PHI /\ copy_sound_opt v st ==>
+    copy_sound_opt (copy_prop_transfer pv inst v) st
+Proof
+  rpt strip_tac >> Cases_on `v`
+  >- (
+    Cases_on `copy_prop_transfer pv inst NONE` >>
+    simp[copy_sound_opt_def, copy_sound_def] >>
+    rpt strip_tac >> metis_tac[copy_prop_transfer_phi_none])
+  >- (
+    Cases_on `copy_prop_transfer pv inst (SOME x)` >>
+    simp[copy_sound_opt_def, copy_sound_def] >>
+    rpt strip_tac >>
+    drule_all copy_prop_transfer_phi_restriction >> strip_tac >>
+    fs[copy_sound_opt_def, copy_sound_def] >> res_tac >> simp[])
+QED
+
+(* copy_sound_opt propagates through one PHI instruction in the prefix.
+   Since step_inst_base for PHI is a no-op (OK s), and copy_prop_transfer
+   for PHI only kills entries (shrinks the map), soundness is preserved. *)
+Theorem copy_sound_opt_phi_prefix_step[local]:
+  !fn bb st k.
+    wf_function fn /\ fn_inst_wf fn /\
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn) /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb fn.fn_blocks /\
+    k < phi_prefix_length bb.bb_instructions /\
+    copy_sound_opt
+      (df_at NONE
+         (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+            copy_prop_edge_transfer (phi_used_vars fn)
+            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+         bb.bb_label k) st
+    ==>
+    copy_sound_opt
+      (df_at NONE
+         (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+            copy_prop_edge_transfer (phi_used_vars fn)
+            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+         bb.bb_label (SUC k)) st
+Proof
+  rpt strip_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  `SUC k <= LENGTH bb.bb_instructions` by decide_tac >>
+  (* Abbreviate the huge df_at term to avoid metis/simp blowup *)
+  qmatch_asmsub_abbrev_tac `df_at NONE result lbl k` >>
+  `df_at NONE result lbl (SUC k) =
+      copy_prop_transfer (phi_used_vars fn) (EL k bb.bb_instructions)
+        (df_at NONE result lbl k)` by
+    metis_tac[copy_prop_intra_fwd] >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+  irule copy_prop_transfer_phi_sound >> simp[]
+QED
+
+(* Soundness at df_at lbl phi_prefix_length for state s, stepping through
+   all PHI prefix instructions. *)
+Theorem copy_sound_opt_phi_prefix_on_s[local]:
+  !fn bb s k.
+    wf_function fn /\ fn_inst_wf fn /\
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn) /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb fn.fn_blocks /\
+    k <= phi_prefix_length bb.bb_instructions /\
+    copy_sound_opt
+      (df_at NONE
+         (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+            copy_prop_edge_transfer (phi_used_vars fn)
+            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+         bb.bb_label 0) s
+    ==>
+    copy_sound_opt
+      (df_at NONE
+         (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+            copy_prop_edge_transfer (phi_used_vars fn)
+            (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+         bb.bb_label k) s
+Proof
+  Induct_on `k` >- simp[] >>
+  rpt strip_tac >>
+  (* IH: sound at index k *)
+  `copy_sound_opt
+     (df_at NONE
+        (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+           copy_prop_edge_transfer (phi_used_vars fn)
+           (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+        bb.bb_label k) s` by (
+    first_x_assum irule >> simp[] >> metis_tac[]
+  ) >>
+  (* Step: sound at index SUC k from sound at index k *)
+  mp_tac copy_sound_opt_phi_prefix_step >> simp[]
+QED
+
+(* After one copy_prop_transfer step for a PHI instruction,
+   surviving entries' keys are not in the instruction's outputs. *)
+Triviality copy_prop_transfer_phi_no_output_key[local]:
+  !phi_vars inst copies copies'.
+    inst.inst_opcode = PHI /\
+    copy_prop_transfer phi_vars inst (SOME copies) = SOME copies' /\
+    FLOOKUP copies' x = SOME op
+    ==>
+    ~MEM x inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  `~is_forwardable_assign phi_vars inst` by
+    fs[is_forwardable_assign_def] >>
+  imp_res_tac copy_prop_transfer_phi_restriction >>
+  first_x_assum (qspecl_then [`x`, `op`] mp_tac) >> simp[]
+QED
+
+(* After one copy_prop_transfer step for a PHI instruction,
+   surviving entries' Var-values are not in the instruction's outputs. *)
+Triviality copy_prop_transfer_phi_no_output_val[local]:
+  !phi_vars inst copies copies'.
+    inst.inst_opcode = PHI /\
+    copy_prop_transfer phi_vars inst (SOME copies) = SOME copies' /\
+    FLOOKUP copies' x = SOME (Var y)
+    ==>
+    ~MEM y inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  `~is_forwardable_assign phi_vars inst` by
+    fs[is_forwardable_assign_def] >>
+  metis_tac[copy_prop_transfer_phi_restriction]
+QED
+
+(* After stepping through the PHI prefix in df_at, surviving entries
+   are not outputs of any PHI instruction in the list.
+   Proved by induction on k: if FLOOKUP(df_at lbl k) x exists,
+   then x is not in outputs of any PHI at index < k. *)
+Theorem df_at_phi_prefix_no_phi_output[local]:
+  !fn bb k x op.
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn) /\
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    k <= phi_prefix_length bb.bb_instructions /\
+    df_at NONE
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+      bb.bb_label k = SOME copies /\
+    FLOOKUP copies x = SOME op
+    ==>
+    !i. i < k ==>
+        ~MEM x (EL i bb.bb_instructions).inst_outputs /\
+        (!y. op = Var y ==>
+             ~MEM y (EL i bb.bb_instructions).inst_outputs)
+Proof
+  qid_spec_tac `copies` >>
+  Induct_on `k` >- (rpt gen_tac >> strip_tac >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < phi_prefix_length bb.bb_instructions` by decide_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  `SUC k <= LENGTH bb.bb_instructions` by decide_tac >>
+  qabbrev_tac `df_an = df_analyze Forward NONE copy_prop_join
+    copy_prop_transfer copy_prop_edge_transfer (phi_used_vars fn)
+    (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn` >>
+  `df_at NONE df_an bb.bb_label (SUC k) =
+    copy_prop_transfer (phi_used_vars fn) (EL k bb.bb_instructions)
+      (df_at NONE df_an bb.bb_label k)` by
+    metis_tac[copy_prop_intra_fwd] >>
+  Cases_on `df_at NONE df_an bb.bb_label k`
+  >- metis_tac[copy_prop_transfer_phi_none] >>
+  `~is_forwardable_assign (phi_used_vars fn) (EL k bb.bb_instructions)` by
+    fs[is_forwardable_assign_def] >>
+  (* Establish the copy_prop_transfer equation to enable drule_all *)
+  `copy_prop_transfer (phi_used_vars fn) (EL k bb.bb_instructions)
+      (SOME x') = SOME copies` by metis_tac[] >>
+  gen_tac >> strip_tac >>
+  (* Now have i < SUC k as assumption *)
+  Cases_on `i = k`
+  >- ((* i = k *)
+      conj_tac
+      >- metis_tac[copy_prop_transfer_phi_no_output_key]
+      >- (rpt strip_tac >>
+          metis_tac[copy_prop_transfer_phi_no_output_val]))
+  >- ((* i < k: derive restriction then apply IH with copies := x' *)
+      `i < k` by decide_tac >>
+      `k <= phi_prefix_length bb.bb_instructions` by decide_tac >>
+      `FLOOKUP x' x = SOME op` by
+        (drule_all copy_prop_transfer_phi_restriction >> simp[]) >>
+      (* IH ∀-quantifies copies,fn,bb,x,op — specialize copies to x' *)
+      (* Use drule to match first antecedent, then simp resolves rest *)
+      first_x_assum (qspecl_then [`x'`] mp_tac) >>
+      simp[Abbr `df_an`] >>
+      rw[] >> metis_tac[])
+QED
+
+(* Helper: specializing df_at_phi_prefix_no_phi_output to the phi_prefix_length.
+   Avoids ISPECL with huge df_at terms in consumer proofs. *)
+Theorem df_at_phi_prefix_no_phi_output_at_end[local]:
+  !fn bb copies x op.
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn) /\
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    df_at NONE
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn)
+      bb.bb_label (phi_prefix_length bb.bb_instructions) = SOME copies /\
+    FLOOKUP copies x = SOME op
+    ==>
+    !i. i < phi_prefix_length bb.bb_instructions ==>
+        ~MEM x (EL i bb.bb_instructions).inst_outputs /\
+        (!y. op = Var y ==> ~MEM y (EL i bb.bb_instructions).inst_outputs)
+Proof
+  rpt strip_tac >>
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  `phi_prefix_length bb.bb_instructions <= phi_prefix_length bb.bb_instructions` by
+    decide_tac >>
+  drule_all df_at_phi_prefix_no_phi_output >>
+  simp[]
+QED
+
+(* Key eval_phis preservation: copy_sound_opt at df_at lbl phi_prefix_length
+   is preserved when transitioning from original state s to s_phi.
+   Part (a): copy_sound_opt propagates through PHI prefix on state s
+             (PHI step_inst is a no-op, transfer only kills entries).
+   Part (b): copy_sound_opt at phi_prefix_length transfers from s to s_phi
+             (surviving entries don't reference PHI outputs, eval_phis preserves
+             FLOOKUP for non-PHI-output variables). *)
+Theorem copy_sound_opt_phi_prefix_eval_phis[local]:
+  !fn bb s s_phi.
+    wf_function fn /\ fn_inst_wf fn /\
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre
+      (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn)) fn) /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb fn.fn_blocks /\
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    copy_sound_opt (df_at NONE (copy_prop_analyze fn) bb.bb_label 0) s
+    ==>
+    copy_sound_opt (df_at NONE (copy_prop_analyze fn) bb.bb_label
+      (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >>
+  RULE_ASSUM_TAC (BETA_RULE o REWRITE_RULE[copy_prop_analyze_def, LET_THM]) >>
+  simp_tac std_ss [copy_prop_analyze_def, LET_THM] >>
+  BETA_TAC >>
+  (* Part (a): copy_sound_opt propagates through PHI prefix on state s *)
+  `copy_sound_opt
+     (df_at NONE (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+        copy_prop_edge_transfer (phi_used_vars fn)
+        (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn)) fn)
+        bb.bb_label (phi_prefix_length bb.bb_instructions)) s` by (
+    mp_tac copy_sound_opt_phi_prefix_on_s >> simp[] >> decide_tac
+  ) >>
+  (* Part (b): Transport from s to s_phi.
+     Key insight: PHI outputs are not in surviving copy map entries,
+     and eval_phis preserves FLOOKUP for non-PHI-output variables. *)
+  Cases_on `df_at NONE (df_analyze Forward NONE copy_prop_join copy_prop_transfer
+      copy_prop_edge_transfer (phi_used_vars fn)
+      (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn)) fn)
+      bb.bb_label (phi_prefix_length bb.bb_instructions)` >- (
+    simp[copy_sound_opt_def]
+  ) >>
+  rename1 `SOME copies` >>
+  (* Derive the indexed FLOOKUP-preservation condition.
+     Uses eval_phis_flookup_idx (direct induction on insts) to avoid
+     needing bb_well_formed bridge from indexed to MEM-level condition. *)
+  `!i. i < phi_prefix_length bb.bb_instructions ==>
+       !x op. FLOOKUP copies x = SOME op ==>
+              ~MEM x (EL i bb.bb_instructions).inst_outputs /\
+              (!y. op = Var y ==> ~MEM y (EL i bb.bb_instructions).inst_outputs)` by (
+    rpt strip_tac >>
+    mp_tac (Q.SPECL [`fn`,`bb`,`copies`,`x`,`op`]
+      df_at_phi_prefix_no_phi_output_at_end) >>
+    simp[] >> metis_tac[]
+  ) >>
+  (* Key FLOOKUP preservation: for any variable in copies, FLOOKUP is preserved.
+     This covers both conditions needed by copy_sound_opt_vars_agree:
+     (1) FLOOKUP copies x ≠ NONE ⟹ FLOOKUP s_phi.vs_vars x = FLOOKUP s.vs_vars x
+     (2) FLOOKUP copies x = SOME (Var y) ⟹ FLOOKUP s_phi.vs_vars y = FLOOKUP s.vs_vars y *)
+  `!z. FLOOKUP copies z <> NONE ==>
+       FLOOKUP (s_phi with vs_inst_idx := 0).vs_vars z =
+       FLOOKUP s.vs_vars z` by (
+    gen_tac >> strip_tac >>
+    Cases_on `FLOOKUP copies z` >> fs[] >>
+    rename1 `SOME op` >>
+    `lookup_var z (s_phi with vs_inst_idx := 0) = lookup_var z s_phi`
+      by simp[lookup_var_def] >>
+    mp_tac (Q.SPECL [`s`, `bb.bb_instructions`, `z`] eval_phis_flookup_idx) >>
+    simp[] >> strip_tac >>
+    (* Prove indexed antecedent for z from indexed condition *)
+    first_x_assum match_mp_tac >>
+    metis_tac[]
+  ) >>
+  (* Derive the two specific conditions from copy_sound_opt_vars_agree *)
+  `!x. FLOOKUP copies x <> NONE ==>
+       lookup_var x (s_phi with vs_inst_idx := 0) = lookup_var x s` by (
+    gen_tac >> strip_tac >>
+    qpat_x_assum `!z. FLOOKUP copies z <> NONE ==> _`
+      (qspec_then `x` mp_tac) >> simp[] >>
+    fs[lookup_var_def]
+  ) >>
+  `!x y. FLOOKUP copies x = SOME (Var y) ==>
+       lookup_var y (s_phi with vs_inst_idx := 0) = lookup_var y s` by (
+    rpt strip_tac >>
+    simp[lookup_var_def] >>
+    mp_tac (Q.SPECL [`bb.bb_instructions`, `s`, `s_phi`, `copies`, `x`, `y`]
+      eval_phis_flookup_var_val) >>
+    simp[] >> strip_tac >> metis_tac[]
+  ) >>
+  match_mp_tac (Q.SPECL [`copies`, `s`, `s_phi with vs_inst_idx := 0`] copy_sound_opt_vars_agree) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  simp[] >>
+  metis_tac[venomExecPropsTheory.eval_phis_preserves_labels]
+QED
+
+Theorem copy_sound_opt_phi_prefix_eval_phis_result[local]:
+  !fn bb s s_phi result.
+    result = copy_prop_analyze fn /\
+    wf_function fn /\ fn_inst_wf fn /\
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer (phi_used_vars fn)
+         (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+         (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre result /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb fn.fn_blocks /\
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    copy_sound_opt (df_at NONE result bb.bb_label 0) s
+    ==>
+    copy_sound_opt (df_at NONE result bb.bb_label
+      (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >> gvs[] >>
+  mp_tac (Q.SPECL [`fn`, `bb`, `s`, `s_phi`]
+    copy_sound_opt_phi_prefix_eval_phis) >>
+  impl_tac >- gvs[copy_prop_analyze_def, LET_THM] >>
+  simp[copy_prop_analyze_def, LET_THM]
+QED
+
+Theorem run_block_successor_in_cfg_dfs_pre[local]:
+  !fn bb fuel ctx s v.
+    fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !i. i < LENGTH bb.bb_instructions - 1 ==>
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    s.vs_current_bb = bb.bb_label /\
+    run_block fuel ctx bb s = OK v
+    ==>
+    MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+Proof
+  rpt strip_tac >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `bb.bb_instructions <> []` by
+    metis_tac[venomExecPropsTheory.run_block_ok_nonempty] >>
+  `MEM v.vs_current_bb (bb_succs bb)` by
+    metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
+  `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
+    metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
+  imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+  gvs[EVERY_MEM]
+QED
+
+(* After run_block OK with entry soundness at fixpoint,
+   the successor has entry soundness too.
+   Updated for parallel PHI semantics: run_block = eval_phis + exec_block *)
+Theorem run_block_successor_entry_sound[local]:
+  !fn bb fuel ctx s v.
+    let pv = phi_used_vars fn in
+    let ev = OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn) in
+    let result = df_analyze Forward NONE copy_prop_join
+      copy_prop_transfer copy_prop_edge_transfer pv ev fn in
+    is_fixpoint
+      (df_process_block Forward NONE copy_prop_join copy_prop_transfer
+         copy_prop_edge_transfer pv ev (cfg_analyze fn) fn.fn_blocks)
+      (cfg_analyze fn).cfg_dfs_pre result /\
+    wf_function fn /\
+    fn_inst_wf fn /\ ALL_DISTINCT (fn_labels fn) /\
+    (!bb. MEM bb fn.fn_blocks ==>
+      !i. i < LENGTH bb.bb_instructions - 1 ==>
+        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    MEM bb fn.fn_blocks /\
+    bb.bb_label = s.vs_current_bb /\
+    MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+    s.vs_inst_idx = 0 /\
+    copy_sound_opt (df_at NONE result s.vs_current_bb 0) s /\
+    run_block fuel ctx bb s = OK v
+    ==>
+    copy_sound_opt (df_at NONE result v.vs_current_bb 0) v
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  qabbrev_tac `pv = phi_used_vars fn` >>
+  qabbrev_tac `ev = OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : copy_lattice))) (fn_entry_label fn)` >>
+  qabbrev_tac `result = df_analyze Forward NONE copy_prop_join
+    copy_prop_transfer copy_prop_edge_transfer pv ev fn` >>
+  qpat_x_assum `bb.bb_label = s.vs_current_bb`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
+  qspecl_then [`s`,`bb.bb_instructions`] mp_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  rpt strip_tac >>
+  gvs[Once venomExecSemanticsTheory.run_block_def, AllCaseEqs()] >>
+  (* eval_phis preserves current_bb *)
+  `s'.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  (* PHI prefix length bound *)
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  (* eval_phis preserves copy_sound_opt: transfer kills PHI outputs,
+     and surviving copy-map entries do not reference PHI outputs. *)
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    metis_tac[venomExecPropsTheory.MEM_lookup_block, fn_labels_def] >>
+  `result = copy_prop_analyze fn` by
+    simp[Abbr `result`, Abbr `pv`, Abbr `ev`, copy_prop_analyze_def, LET_THM] >>
+  `copy_sound_opt (df_at NONE result bb.bb_label
+      (phi_prefix_length bb.bb_instructions))
+    (s' with vs_inst_idx := 0)` by (
+    mp_tac (Q.SPECL [`fn`, `bb`, `s`, `s'`, `result`]
+      copy_sound_opt_phi_prefix_eval_phis_result) >>
+    impl_tac >- (
+      rpt conj_tac
+      >- (qpat_x_assum `result = copy_prop_analyze fn` ACCEPT_TAC)
+      >- (qpat_x_assum `wf_function fn` ACCEPT_TAC)
+      >- (qpat_x_assum `fn_inst_wf fn` ACCEPT_TAC)
+      >- (qpat_x_assum `is_fixpoint _ _ result` mp_tac >> simp[Abbr `pv`, Abbr `ev`])
+      >- fs[]
+      >- (qpat_x_assum `lookup_block bb.bb_label fn.fn_blocks = SOME bb` ACCEPT_TAC)
+      >- (qpat_x_assum `MEM bb fn.fn_blocks` ACCEPT_TAC)
+      >- (qpat_x_assum `eval_phis s bb.bb_instructions = OK s'` ACCEPT_TAC)
+      >- fs[]) >>
+    simp[]) >>
+  `copy_sound_opt (df_at NONE result bb.bb_label
+      (phi_prefix_length bb.bb_instructions))
+    (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by (
+    qpat_x_assum `copy_sound_opt _ (s' with vs_inst_idx := 0)` mp_tac >>
+    simp[GSYM copy_sound_opt_inst_idx]) >>
+
+  (* Now apply the exec_block-based successor soundness from the
+     post-PHI entry point. *)
+  `bb_well_formed bb` by (fs[wf_function_def] >> metis_tac[]) >>
+  `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+    (irule phi_prefix_length_lt_wf >> first_assum ACCEPT_TAC) >>
+  `phi_prefix_length bb.bb_instructions <= PRE (LENGTH bb.bb_instructions)` by
+    (Cases_on `bb.bb_instructions` >> fs[]) >>
+  mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`,
+      `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+      `v`, `result`]
+    successor_entry_sound_result) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- (qpat_x_assum `result = copy_prop_analyze fn` ACCEPT_TAC)
+    >- (qpat_x_assum `is_fixpoint _ _ result` mp_tac >> simp[Abbr `pv`, Abbr `ev`])
+    >- (qpat_x_assum `wf_function fn` ACCEPT_TAC)
+    >- (qpat_x_assum `fn_inst_wf fn` ACCEPT_TAC)
+    >- (qpat_x_assum `ALL_DISTINCT (fn_labels fn)` ACCEPT_TAC)
+    >- (qpat_x_assum `!bb. MEM bb fn.fn_blocks ==> _` ACCEPT_TAC)
+    >- (qpat_x_assum `MEM bb fn.fn_blocks` ACCEPT_TAC)
+    >- fs[]
+    >- fs[]
+    >- fs[]
+    >- (qpat_x_assum `copy_sound_opt _
+          (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` mp_tac >>
+        fs[])
+    >- (qpat_x_assum `exec_block fuel ctx bb
+          (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v` ACCEPT_TAC)) >>
+  simp[]
+QED
+
 (* Phase 1 function-level: use df_analysis_pass_correct_sound framework *)
 Theorem assign_subst_function_eq[local]:
   !fuel ctx fn s.
@@ -568,7 +1277,7 @@ Proof
   rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac
   (* Expand copy_prop_analyze in goal BEFORE adding framework *)
   \\ simp_tac std_ss [copy_prop_analyze_def, LET_THM]
-  \\ mp_tac (ISPECL [
+  \\ irule (ISPECL [
        ``state_equiv {} : venom_state -> venom_state -> bool``,
        ``execution_equiv {} : venom_state -> venom_state -> bool``,
        ``NONE : copy_lattice option``,
@@ -584,33 +1293,147 @@ Proof
        ``\v inst. [assign_subst_inst v inst]``]
      (SIMP_RULE std_ss [LET_THM]
        analysisSimPropsTheory.df_analysis_pass_correct_sound))
-  \\ impl_tac
-  >- (rpt conj_tac
-      >- simp[state_equiv_execution_equiv_valid_state_rel]
-      >- metis_tac[state_equiv_trans]
-      >- metis_tac[execution_equiv_trans]
-      >- metis_tac[copy_prop_is_fixpoint]
-      >- metis_tac[copy_prop_transfer_sound]
-      >- (rpt strip_tac >>
-          metis_tac[REWRITE_RULE [SIMP_RULE std_ss [LET_THM]
-            copy_prop_analyze_def] copy_sound_opt_at_entry])
-      >- (rpt strip_tac >> rpt conj_tac
-          >- metis_tac[analysisSimPropsTheory.successor_in_cfg_dfs_pre]
-          >- (mp_tac (SIMP_RULE std_ss [LET_THM] successor_entry_sound) >>
-              disch_then irule >> rpt conj_tac >>
-              TRY (first_assum ACCEPT_TAC) >>
-              metis_tac[copy_prop_is_fixpoint]))
-      >- metis_tac[assign_subst_inst_simulates]
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- metis_tac[copy_sound_opt_state_equiv]
-      >- (rpt strip_tac >>
-          fs[state_equiv_def, execution_equiv_def, lookup_var_def]))
-  \\ disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac)
-  \\ simp[]
+  \\ rpt conj_tac
+  >- (rpt strip_tac >> fs[state_equiv_def, execution_equiv_def, lookup_var_def])
+  >- (rpt strip_tac >> rpt conj_tac
+      >- metis_tac[run_block_successor_in_cfg_dfs_pre]
+      >- metis_tac[run_block_successor_entry_sound, copy_prop_is_fixpoint])
+  >- (rpt strip_tac >>
+      rename1 `eval_phis st0 bb.bb_instructions = OK st_phi` >>
+      mp_tac (Q.SPECL [`fn`, `bb`, `st0`, `st_phi`,
+        `df_analyze Forward NONE copy_prop_join copy_prop_transfer
+           copy_prop_edge_transfer (phi_used_vars fn)
+           (OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : copy_lattice)))
+             (fn_entry_label fn)) fn`]
+        copy_sound_opt_phi_prefix_eval_phis_result) >>
+      impl_tac >- (
+        rpt conj_tac
+        >- metis_tac[copy_prop_analyze_eq]
+        >- qpat_x_assum `wf_function fn` ACCEPT_TAC
+        >- qpat_x_assum `fn_inst_wf fn` ACCEPT_TAC
+        >- (irule copy_prop_is_fixpoint >> qpat_x_assum `fn_inst_wf fn` ACCEPT_TAC)
+        >- first_assum ACCEPT_TAC
+        >- (irule venomExecPropsTheory.MEM_lookup_block >> simp[GSYM fn_labels_def])
+        >- first_assum ACCEPT_TAC
+        >- qpat_x_assum `eval_phis st0 bb.bb_instructions = OK st_phi` ACCEPT_TAC
+        >- qpat_x_assum `copy_sound_opt _ st0` ACCEPT_TAC) >>
+      simp[])
+  >- metis_tac[copy_sound_opt_state_equiv]
+  >- (rpt strip_tac >>
+      irule (REWRITE_RULE [SIMP_RULE std_ss [LET_THM]
+        copy_prop_analyze_def] copy_sound_opt_at_entry) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- metis_tac[execution_equiv_trans]
+  >- metis_tac[state_equiv_trans]
+  >- simp[state_equiv_execution_equiv_valid_state_rel]
+  >- (qpat_x_assum `wf_function fn` ACCEPT_TAC)
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[copy_sound_opt_state_equiv]
+  >- simp[state_equiv_execution_equiv_valid_state_rel]
+  >- (irule copy_prop_is_fixpoint >> qpat_x_assum `fn_inst_wf fn` ACCEPT_TAC)
+  >- (irule copy_prop_transfer_sound)
+  >- (irule assign_subst_inst_simulates)
 QED
 
 (* ===== Combined: function-level correctness ===== *)
+
+Triviality find_some_mem_local[local]:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >> rpt strip_tac >>
+  Cases_on `P h` >> fs[] >> metis_tac[]
+QED
+
+Triviality assign_elim_inst_terminator[local]:
+  !pv v inst.
+    is_terminator (assign_elim_inst pv v inst).inst_opcode <=>
+    is_terminator inst.inst_opcode
+Proof
+  rw[assign_elim_inst_def, LET_THM, mk_nop_inst_def,
+     is_forwardable_assign_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def]
+QED
+
+Triviality assign_elim_inst_phi[local]:
+  !pv v inst.
+    (assign_elim_inst pv v inst).inst_opcode = PHI <=>
+    inst.inst_opcode = PHI
+Proof
+  rw[assign_elim_inst_def, LET_THM, mk_nop_inst_def,
+     is_forwardable_assign_def] >>
+  Cases_on `inst.inst_opcode` >> fs[]
+QED
+
+Triviality assign_elim_analysis_blocks_wf[local]:
+  !fn result bb.
+    wf_function fn /\
+    MEM bb (analysis_function_transform NONE result
+      (\v inst. [assign_elim_inst (phi_used_vars fn) v inst]) fn).fn_blocks
+    ==>
+    bb_well_formed bb
+Proof
+  rpt strip_tac >>
+  gvs[analysis_function_transform_def, function_map_transform_def, MEM_MAP] >>
+  rename1 `MEM bb0 fn.fn_blocks` >>
+  fs[analysis_block_transform_def, flat_mapi_singleton] >>
+  irule mapi_transform_bb_well_formed >>
+  fs[wf_function_def] >>
+  rpt conj_tac >> rpt strip_tac >>
+  fs[assign_elim_inst_terminator, assign_elim_inst_phi]
+QED
+
+Triviality lookup_block_clear_nops_local[local]:
+  !lbl bbs. lookup_block lbl (MAP clear_nops_block bbs) =
+            OPTION_MAP clear_nops_block (lookup_block lbl bbs)
+Proof
+  gen_tac >> Induct >>
+  simp[lookup_block_def, listTheory.FIND_thm, clear_nops_block_def] >>
+  rw[] >> fs[lookup_block_def, clear_nops_block_def]
+QED
+
+Triviality clear_nops_function_correct_blocks_wf[local]:
+  !fuel ctx fn s.
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\ s.vs_inst_idx = 0 ==>
+    result_equiv {}
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (clear_nops_function fn) s)
+Proof
+  Induct_on `fuel` >- (
+    rpt strip_tac >> simp[run_blocks_def, result_equiv_def]) >>
+  rpt strip_tac >>
+  once_rewrite_tac[run_blocks_unfold] >>
+  simp[clear_nops_function_def, lookup_block_clear_nops_local] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >-
+    simp[result_equiv_def] >>
+  rename1 `SOME bb` >>
+  `bb_well_formed bb` by (
+    fs[lookup_block_def] >> drule find_some_mem_local >> metis_tac[]) >>
+  `result_equiv {} (run_block fuel ctx bb s)
+     (run_block fuel ctx (clear_nops_block bb) s)` by
+    simp[clear_nops_run_block_equiv] >>
+  Cases_on `run_block fuel ctx bb s`
+  >- (
+    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+    gvs[result_equiv_def] >>
+    TRY (imp_res_tac state_equiv_empty_eq >> gvs[result_equiv_def]) >>
+    imp_res_tac state_equiv_empty_eq >> gvs[] >>
+    imp_res_tac run_block_OK_inst_idx_0 >>
+    Cases_on `v.vs_halted` >> gvs[result_equiv_def]
+    >- simp[result_equiv_def, execution_equiv_def] >>
+    once_rewrite_tac[GSYM clear_nops_function_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt strip_tac >>
+    gvs[clear_nops_function_def, MEM_MAP] >>
+    irule clear_nops_block_preserves_wf >> metis_tac[])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def]) >>
+  Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+  gvs[result_equiv_def]
+QED
 
 (* Monotonicity: lift_result for stronger relation implies lift_result for weaker *)
 Theorem lift_result_weaken[local]:
@@ -654,25 +1477,17 @@ Proof
      assign_subst_function_eq)) >>
   impl_tac >- (fs[wf_function_def]) >>
   strip_tac >- (
-    (* Phase 1 gave Error — just forward it *)
     simp[]
   ) >>
-  (* Have: lift_result state_equiv {} fn fn_subst *)
-  (* Need: Error fn ∨ lift_result state_equiv elim fn (assign_elim_function fn) *)
-  (* Apply Phase 2 *)
   mp_tac (SIMP_RULE std_ss [LET_THM]
     (ISPECL [``fuel:num``, ``ctx:venom_context``,
              ``fn:ir_function``, ``s:venom_state``]
      assign_nop_dead_writes_correct)) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
-  (* Now: Phase 2 conclusion is disjunction about fn_subst → fn_elim *)
   strip_tac >- (
-    (* Phase 2 gave Error on fn_subst *)
     Cases_on `run_blocks fuel ctx fn s` >>
     fs[lift_result_def]
   ) >>
-  (* Have: Phase 1 lift_result (∅), Phase 2 lift_result (elim) *)
-  (* Compose Phases 1+2+3 *)
   DISJ2_TAC >>
   (* Phase 3: clear_nops gives result_equiv {} *)
   qabbrev_tac `fn_elim = analysis_function_transform NONE
@@ -680,13 +1495,15 @@ Proof
      (\v inst. [assign_elim_inst (phi_used_vars fn) v inst]) fn` >>
   `assign_elim_function fn = clear_nops_function fn_elim` by
     simp[assign_elim_function_def, Abbr `fn_elim`] >>
+  `!bb. MEM bb fn_elim.fn_blocks ==> bb_well_formed bb` by
+    (simp[Abbr `fn_elim`] >> metis_tac[assign_elim_analysis_blocks_wf]) >>
   `result_equiv {}
      (run_blocks fuel ctx fn_elim s)
      (run_blocks fuel ctx (assign_elim_function fn) s)` by (
-    pop_assum (fn th => REWRITE_TAC [th]) >>
-    irule clear_nops_function_correct >> simp[]) >>
+    qpat_x_assum `assign_elim_function fn = clear_nops_function fn_elim`
+      (fn th => REWRITE_TAC [th]) >>
+    irule clear_nops_function_correct_blocks_wf >> simp[]) >>
   fs[result_equiv_is_lift_result] >>
-  (* Weaken Phase 1 from state_equiv {} to state_equiv elim *)
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
      (execution_equiv (assign_elim_eliminated_vars fn))
                   (execution_equiv (assign_elim_eliminated_vars fn))
@@ -699,7 +1516,6 @@ Proof
     simp[] >> rpt strip_tac >>
     metis_tac[state_equiv_subset, execution_equiv_subset, EMPTY_SUBSET]
   ) >>
-  (* Compose Phases 1+2 via lift_result_trans *)
   `lift_result (state_equiv (assign_elim_eliminated_vars fn))
      (execution_equiv (assign_elim_eliminated_vars fn))
                   (execution_equiv (assign_elim_eliminated_vars fn))
@@ -712,7 +1528,6 @@ Proof
       (analysis_function_transform NONE (copy_prop_analyze fn)
          (\v inst. [assign_subst_inst v inst]) fn) s` >>
     simp[]) >>
-  (* Compose with Phase 3 (clear_nops) *)
   irule lift_result_trans >>
   conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
   conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>

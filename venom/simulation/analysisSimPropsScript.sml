@@ -1,13 +1,38 @@
 (*
  * Analysis-Driven Simulation — Correctness (Statements Only)
  *
- * Re-exports from proofs/analysisSimProofsScript.sml via ACCEPT_TAC.
- * 1:1 corollary: analysis_inst_simulates_from_1.
+ * Re-exports from proofs/ via ACCEPT_TAC.
+ *
+ * TOP-LEVEL:
+ *   analysis_inst_sim_block_sim         — per-inst sim → per-block sim
+ *   analysis_inst_sim_block_sim_inv     — per-block sim with state_inv
+ *   df_analysis_pass_correct_sound     — end-to-end pass correctness (sound)
+ *   df_analysis_pass_correct_sound_inv2  — inv2 variant (transfer_sound_wf + state_inv)
+ *   df_analysis_pass_correct_sound_inv3  — inv3 variant (transfer_sound_block_inv)
+ *   df_analysis_pass_correct_block_sim    — block-level sim variant
+ *   df_analysis_pass_correct_widen_sound  — widening variant
+ *   df_analysis_pass_correct_widen_sound_inv  — widening + state_inv
+ *   df_analysis_pass_correct_widen_sound_inv2 — widening + transfer_sound_wf + state_inv
+ *   analysis_inst_simulates_from_1       — 1:1 special case of inst_simulates
+ *   df_analysis_pass_correct_prepend    — prepend-aware pass correctness
+ *   analysis_function_transform_compare — compare two transforms of same fn
+ *   cfg_dfs_pre_succs_closed            — DFS pre-order closed under successors
+ *   transfer_sound_step                 — single-step transfer soundness
+ *   transfer_sound_exit                 — transfer-sound chain to terminator
+ *   transfer_sound_exit_wf              — transfer_sound_wf + EVERY inst_wf variant
+ *   transfer_sound_exit_wf_len          — transfer_sound_exit_wf + bb_well_formed
+ *   successor_in_cfg_dfs_pre            — successor block in DFS pre-order
+ *   fwd_df_at_entry_eq_joined           — entry df_at equals joined value at fixpoint
+ *   fwd_df_at_exit_not_none             — exit df_at non-NONE when entry non-NONE
+ *   fwd_joined_sound_from_pred          — joined value sound from one pred
+ *   fwd_successor_entry_sound           — successor entry soundness (general forward)
+ *   fwd_df_at_entry_not_none            — entry df_at non-bottom at fixpoint
  *)
 
 Theory analysisSimProps
 Ancestors
-  analysisSimProofs analysisSimProofsBase
+  analysisSimProofs analysisSimProofsBase analysisSimProofsSound
+  analysisSimProofsWiden analysisSimProofsPrepend analysisSimProofsFwd
 
 (* Per-instruction sim → per-block sim.
    Requires valid_state_rel, R_ok/R_term transitivity,
@@ -127,7 +152,7 @@ Theorem df_analysis_pass_correct_sound:
          MEM bb.bb_label cfg.cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
@@ -137,7 +162,13 @@ Theorem df_analysis_pass_correct_sound:
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         MEM bb.bb_label cfg.cfg_dfs_pre /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_at bottom result bb.bb_label 0) s ==>
+         sound (df_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
@@ -180,7 +211,7 @@ Theorem df_analysis_pass_correct_sound_inv2:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -203,7 +234,14 @@ Theorem df_analysis_pass_correct_sound_inv2:
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_at bottom result bb.bb_label 0) s /\
+         state_inv s ==>
+         sound (df_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0) /\
+         state_inv (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx' s.
         s.vs_inst_idx = 0 /\
@@ -247,7 +285,7 @@ Theorem df_analysis_pass_correct_sound_inv3:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -270,7 +308,15 @@ Theorem df_analysis_pass_correct_sound_inv3:
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         MEM bb.bb_label cfg.cfg_dfs_pre /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_at bottom result bb.bb_label 0) s /\
+         state_inv s ==>
+         sound (df_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0) /\
+         state_inv (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx' s.
         s.vs_inst_idx = 0 /\
@@ -311,7 +357,7 @@ Theorem df_analysis_pass_correct_block_sim:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -322,9 +368,9 @@ Theorem df_analysis_pass_correct_block_sim:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
          state_inv s ==>
-         (?e. exec_block fuel run_ctx bb s = Error e) \/
-         lift_result R_ok R_term R_term (exec_block fuel run_ctx bb s)
-           (exec_block fuel run_ctx
+         (?e. run_block fuel run_ctx bb s = Error e) \/
+         lift_result R_ok R_term R_term (run_block fuel run_ctx bb s)
+           (run_block fuel run_ctx
              (analysis_block_transform bottom result f bb) s)) /\
       wf_function fn /\
       fn_inst_wf fn /\
@@ -367,16 +413,14 @@ Theorem df_analysis_pass_correct_widen_sound:
       (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
       is_fixpoint process cfg.cfg_dfs_pre result /\
       transfer_sound sound transfer ctx /\
-      (* Entry soundness *)
       (!s lbl. fn_entry_label fn = SOME lbl ==>
          sound (df_widen_at bottom result lbl 0) s) /\
-      (* Successor soundness *)
       (!bb fuel run_ctx s v.
          MEM bb fn.fn_blocks /\
          MEM bb.bb_label cfg.cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at bottom result bb.bb_label 0) s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
@@ -386,7 +430,12 @@ Theorem df_analysis_pass_correct_widen_sound:
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_widen_at bottom result bb.bb_label 0) s ==>
+         sound (df_widen_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
@@ -427,7 +476,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -439,7 +488,14 @@ Theorem df_analysis_pass_correct_widen_sound_inv:
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_widen_at bottom result bb.bb_label 0) s /\
+         state_inv s ==>
+         sound (df_widen_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0) /\
+         state_inv (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
@@ -482,7 +538,7 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at bottom result bb.bb_label 0) s /\
          state_inv s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_widen_at bottom result v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -505,7 +561,14 @@ Theorem df_analysis_pass_correct_widen_sound_inv2:
       (!bb inst x.
          MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_widen_at bottom result bb.bb_label 0) s /\
+         state_inv s ==>
+         sound (df_widen_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0) /\
+         state_inv (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx' s.
         s.vs_inst_idx = 0 /\
@@ -532,7 +595,9 @@ Proof
   ACCEPT_TAC analysis_inst_simulates_from_1_proof
 QED
 
-(* Prepend-aware pass correctness. *)
+(* Pass correctness when each block is prepended with extra instructions
+   (e.g. setup code). The prepend must preserve R_ok and contain only
+   non-terminator, non-INVOKE, non-PHI instructions. *)
 Theorem df_analysis_pass_correct_prepend:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
@@ -559,7 +624,7 @@ Theorem df_analysis_pass_correct_prepend:
          MEM bb.bb_label cfg.cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_at bottom result bb.bb_label 0) s /\
-         exec_block fuel run_ctx bb s = OK v ==>
+         run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb cfg.cfg_dfs_pre /\
          sound (df_at bottom result v.vs_current_bb 0) v) /\
       analysis_inst_simulates R_ok R_term sound f /\
@@ -574,14 +639,21 @@ Theorem df_analysis_pass_correct_prepend:
       (!lbl fuel ctx s.
          s.vs_inst_idx = 0 ==>
          ?s'. run_insts fuel ctx (prepend lbl) s = OK s' /\ R_ok s s') /\
-      (* Prepend instructions are non-terminator, non-INVOKE *)
+      (* Prepend instructions are non-terminator, non-INVOKE, non-PHI *)
       (!lbl inst. MEM inst (prepend lbl) ==>
-         ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE) /\
+         ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+         inst.inst_opcode <> PHI) /\
       (* Operand agreement for full transformed function *)
       (!bb inst x.
          MEM bb fn'.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
-         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+         !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+      (* eval_phis preserves entry-point soundness *)
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_at bottom result bb.bb_label 0) s ==>
+         sound (df_at bottom result bb.bb_label (phi_prefix_length bb.bb_instructions)) (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 /\
@@ -617,6 +689,7 @@ Theorem analysis_function_transform_compare:
          (run_insts fuel ctx (f2 v inst) s)) /\
     inst_transform_structural f1 /\
     inst_transform_structural f2 /\
+    wf_function fn /\
     fn_inst_wf fn /\
     (!bb inst x.
        MEM bb fn1.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -704,7 +777,8 @@ Proof
   ACCEPT_TAC analysisSimProofsTheory.transfer_sound_exit_wf
 QED
 
-(* Like transfer_sound_exit_wf but uses bb_well_formed to give LENGTH *)
+(* Like transfer_sound_exit_wf but derives EVERY inst_wf from bb_well_formed
+   (which implies inst_wf for all instructions in the block). *)
 Theorem transfer_sound_exit_wf_len =
   analysisSimProofsTheory.transfer_sound_exit_wf_len
 
@@ -722,7 +796,7 @@ Theorem successor_in_cfg_dfs_pre:
     ==>
     MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
 Proof
-  ACCEPT_TAC analysisSimProofsTheory.successor_in_cfg_dfs_pre
+  ACCEPT_TAC analysisSimProofsFwdTheory.successor_in_cfg_dfs_pre
 QED
 
 (* At fixpoint (Forward), df_at bottom result lbl 0 = joined value *)
@@ -740,7 +814,7 @@ Theorem fwd_df_at_entry_eq_joined:
     df_joined_val Forward bottom join edge_transfer ctx entry_val
       (cfg_analyze fn) result lbl
 Proof
-  ACCEPT_TAC analysisSimProofsTheory.fwd_df_at_entry_eq_joined
+  ACCEPT_TAC analysisSimProofsFwdTheory.fwd_df_at_entry_eq_joined
 QED
 
 (* Forward df_at at exit index is non-NONE when entry is non-NONE *)
@@ -761,7 +835,7 @@ Theorem fwd_df_at_exit_not_none:
     df_at bottom result lbl 0 <> NONE ==>
     df_at bottom result lbl (LENGTH bb.bb_instructions) <> NONE
 Proof
-  ACCEPT_TAC analysisSimProofsTheory.fwd_df_at_exit_not_none
+  ACCEPT_TAC analysisSimProofsFwdTheory.fwd_df_at_exit_not_none
 QED
 
 (* General: if one predecessor's boundary is sound and non-NONE,
@@ -784,7 +858,7 @@ Theorem fwd_joined_sound_from_pred:
     sound (df_joined_val Forward NONE join edge_transfer ctx entry_val
              cfg result lbl) v
 Proof
-  ACCEPT_TAC analysisSimProofsTheory.fwd_joined_sound_from_pred
+  ACCEPT_TAC analysisSimProofsFwdTheory.fwd_joined_sound_from_pred
 QED
 
 (* General forward successor entry soundness — shared by all forward passes *)
@@ -841,9 +915,12 @@ Theorem fwd_successor_entry_sound:
     MEM v.vs_current_bb cfg.cfg_dfs_pre /\
     sound (df_at bottom result v.vs_current_bb 0) v
 Proof
-  ACCEPT_TAC analysisSimProofsTheory.fwd_successor_entry_sound
+  ACCEPT_TAC analysisSimProofsFwdTheory.fwd_successor_entry_sound
 QED
 
+(* At a forward fixpoint, if the entry value is non-bottom and the function
+   entry label matches, then df_at is non-bottom at index 0 for every
+   label in DFS pre-order. *)
 Theorem fwd_df_at_entry_not_none:
   !(bottom : 'a) join transfer edge_transfer ctx entry_val fn lbl.
     let result = df_analyze Forward bottom join transfer edge_transfer
@@ -863,5 +940,5 @@ Theorem fwd_df_at_entry_not_none:
     ==>
     df_at bottom result lbl 0 <> bottom
 Proof
-  ACCEPT_TAC analysisSimProofsTheory.fwd_df_at_entry_not_none
+  ACCEPT_TAC analysisSimProofsFwdTheory.fwd_df_at_entry_not_none
 QED

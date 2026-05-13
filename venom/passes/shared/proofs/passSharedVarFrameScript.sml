@@ -11,10 +11,7 @@
 
 Theory passSharedVarFrame
 Ancestors
-  passSharedDefs venomExecSemantics
-
-open venomStateTheory venomInstTheory venomExecSemanticsTheory
-     venomEffectsTheory venomInstPropsTheory;
+  passSharedDefs venomExecSemantics venomState venomInst venomEffects venomInstProps
 
 (* ===================================================================== *)
 (* ===== Variable/State Helpers ======================================== *)
@@ -198,7 +195,8 @@ Theorem step_inst_base_var_frame_full:
       OK st' => OK (update_var x w st')
     | Abort a st' => Abort a (update_var x w st')
     | Error e => Error e
-    | other => other
+    | Halt st' => Halt st'
+    | IntRet vs st' => IntRet vs st'
 Proof
   rpt strip_tac >>
   `!op. MEM op inst.inst_operands ==>
@@ -207,17 +205,11 @@ Proof
   `eval_operands inst.inst_operands (update_var x w st) =
    eval_operands inst.inst_operands st`
     by (irule eval_operands_update_var >> gvs[]) >>
-  (* Shared tactic for OK and Error bulk case split *)
+  Cases_on `inst.inst_opcode = PHI`
+  >- gvs[step_inst_base_def] >>
+  (* Shared tactic for OK and Error bulk case split. PHI was handled above:
+     final semantics makes step_inst_base PHI return Error immediately. *)
   let val bulk_tac =
-    Cases_on `inst.inst_opcode = PHI`
-    >- (gvs[step_inst_base_def] >>
-        Cases_on `inst.inst_outputs` >> gvs[] >>
-        Cases_on `t` >> gvs[] >>
-        Cases_on `st.vs_prev_bb` >> gvs[update_var_def] >>
-        Cases_on `resolve_phi x' inst.inst_operands` >> gvs[] >>
-        imp_res_tac resolve_phi_mem >> res_tac >>
-        Cases_on `eval_operand x'' st` >> gvs[] >>
-        gvs[update_var_def, finite_mapTheory.FUPDATE_COMMUTES]) >>
     Cases_on `inst.inst_opcode = LOG`
     >- (gvs[step_inst_base_def] >>
         Cases_on `inst.inst_operands` >> gvs[] >>
@@ -330,7 +322,9 @@ Theorem step_inst_var_frame_full:
     | Abort a st' =>
         if inst.inst_opcode = INVOKE then Abort a st'
         else Abort a (update_var x w st')
-    | other => other
+    | Error e => Error e
+    | Halt st' => Halt st'
+    | IntRet vs st' => IntRet vs st'
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`

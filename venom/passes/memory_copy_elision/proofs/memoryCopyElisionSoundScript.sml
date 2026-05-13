@@ -28,6 +28,8 @@ Ancestors
   dfgAnalysisProps dfgDefs dfAnalyzeDefs
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
   finite_map list pred_set
+Libs
+  pairLib fcpLib
 
 (* ===== Soundness predicate ===== *)
 
@@ -615,6 +617,12 @@ Proof
   Cases >> simp[is_copy_opcode_def]
 QED
 
+Triviality copy_opcode_not_phi[local]:
+  !op. is_copy_opcode op ==> op <> PHI
+Proof
+  Cases >> simp[is_copy_opcode_def]
+QED
+
 (* write_memory_with_expansion is identity when bytes already match *)
 Theorem write_mem_identity[local]:
   !dst data s. dst + LENGTH data <= LENGTH s.vs_memory /\
@@ -667,9 +675,16 @@ Proof
   simp[copy_elision_inst_def, LET_THM] >>
   TRY (Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >> NO_TAC) >>
   TRY (fs[] >> NO_TAC) >>
+  TRY (
+    qexists `inst` >> simp[] >>
+    Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >> NO_TAC) >>
+  TRY (
+    qexists `inst` >> simp[] >>
+    Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
   rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
   rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
   imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
+  imp_res_tac copy_opcode_not_phi >>
   fs[]
 QED
 

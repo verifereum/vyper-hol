@@ -11,10 +11,10 @@ Ancestors
   makeSsaHelper ssaSimDefs ssaRenamedSim ssaPipeline makeSsaDefs stateEquiv stateEquivProps
   venomExecSemantics venomExecProofs venomWf venomState venomInst
   cfgTransform cfgTransformProps passSimulationDefs passSimulationProps
-  execEquivParamDefs execEquivParamProofs
+  execEquivParamDefs execEquivParamProofs execEquivProofs
   list rich_list alist finite_map pred_set string arithmetic
 
-(* IH ref cell — must be val, not fun (L1448) *)
+(* IH ref cell — must be val, not fun *)
 val ih_ref : thm ref = ref TRUTH;
 val sigma_exit_ref : thm ref = ref TRUTH;
 val func'_eq_ref : thm ref = ref TRUTH;
@@ -128,12 +128,12 @@ val stash_ih : thm ref -> tactic =
          val (ant, _) = dest_imp body
      in if length vs >= 7 andalso is_conj ant
         then (r := th; ALL_TAC)
-        else FAIL_TAC "not IH"
-     end) handle HOL_ERR _ => FAIL_TAC "not IH");
+        else NO_TAC
+     end) handle HOL_ERR _ => NO_TAC);
 
 
 (* Phi resolve at successor block — extracted to avoid rich-context
-   pattern matching issues inside nested by blocks (L1637, L1673). *)
+   pattern matching issues inside nested by blocks. *)
 Triviality phi_resolve_at_succ:
   !v1_prev_bb s1_cur_bb v1_cur_bb func' bbs1 bbs2
    bb_mid bb' rs_b_entry rs_a_end dtree succ_map rs0.
@@ -337,9 +337,28 @@ Triviality run_block_se:
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
     result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
 Proof
-  rw[run_block_def] >> irule exec_block_se >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+      !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) bb.bb_instructions` by (
+    simp[EVERY_MEM] >> metis_tac[]) >>
+  mp_tac (Q.SPECL [`s1`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s1 bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  mp_tac (Q.SPECL [`s2`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s2 bb.bb_instructions` >> gvs[exec_result_distinct]
+  >- (
+    qspecl_then [`s1`, `s2`, `vars`, `bb.bb_instructions`, `v`] mp_tac
+      eval_phis_state_equiv >> simp[] >> strip_tac >> gvs[] >>
+    irule exec_block_se >>
+    conj_tac >-
+      qpat_x_assum `!inst. MEM inst bb.bb_instructions ==> _` ACCEPT_TAC >>
+    gvs[state_equiv_def, execution_equiv_def, lookup_var_def])
+  >- (
+    qspecl_then [`s1`, `s2`, `vars`, `bb.bb_instructions`, `v`] mp_tac
+      eval_phis_state_equiv >> simp[] >> strip_tac >> gvs[])
+  >- (
+    qspecl_then [`s2`, `s1`, `vars`, `bb.bb_instructions`, `v`] mp_tac
+      eval_phis_state_equiv >> simp[state_equiv_sym] >> strip_tac >> gvs[])
+  >- simp[result_equiv_def]
 QED
 
 (* State-equiv propagation for stale variables.
@@ -357,24 +376,23 @@ Triviality run_blocks_stale_equiv:
       (run_blocks fuel ctx fn s2)
 Proof
   Induct_on `fuel` >-
-  (simp[run_blocks_def, result_equiv_def]) >>
+  (simp[Once run_blocks_def, result_equiv_def] >>
+   simp[Once run_blocks_def, result_equiv_def]) >>
   rpt strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by
     fs[state_equiv_def] >>
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold])) >>
   simp[] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >-
   simp[result_equiv_def] >>
   rename1 `lookup_block _ _ = SOME bb` >> simp[] >>
-  `result_equiv vars
-    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
-    irule exec_block_se >> conj_tac
+  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by (
+    irule run_block_se >> conj_tac
     >- metis_tac[] >>
-    fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
+    first_assum ACCEPT_TAC) >>
+  Cases_on `run_block fuel ctx bb s1` >>
+  Cases_on `run_block fuel ctx bb s2` >>
   gvs[result_equiv_def] >>
   `v.vs_halted <=> v'.vs_halted` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -421,12 +439,13 @@ Triviality run_blocks_stale_equiv_closed:
       (run_blocks fuel ctx fn s2)
 Proof
   Induct_on `fuel` >-
-  (simp[run_blocks_def, result_equiv_def]) >>
+  (simp[Once run_blocks_def, result_equiv_def] >>
+   simp[Once run_blocks_def, result_equiv_def]) >>
   rpt strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by
     fs[state_equiv_def] >>
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold])) >>
   simp[] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >-
   simp[result_equiv_def] >>
@@ -435,14 +454,12 @@ Proof
    (!inst v. MEM inst bb.bb_instructions /\
              MEM (Var v) inst.inst_operands ==> v NOTIN vars) /\
    (!s. MEM s (bb_succs bb) ==> s IN safe)` by metis_tac[] >>
-  `result_equiv vars
-    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
-    irule exec_block_se >> conj_tac
+  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by (
+    irule run_block_se >> conj_tac
     >- metis_tac[] >>
-    fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
+    first_assum ACCEPT_TAC) >>
+  Cases_on `run_block fuel ctx bb s1` >>
+  Cases_on `run_block fuel ctx bb s2` >>
   gvs[result_equiv_def] >>
   `v.vs_halted <=> v'.vs_halted` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -451,7 +468,6 @@ Proof
   (* OK/OK, not halted — apply IH *)
   (* Successor is in safe *)
   `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
-  `run_block fuel ctx bb s1 = OK v` by simp[run_block_def] >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
     rpt strip_tac >> spose_not_then strip_assume_tac >>
@@ -598,6 +614,139 @@ Proof
     simp[lookup_var_def] >> metis_tac[lookup_var_def])
 QED
 
+Triviality eval_one_phi_equiv_resolved:
+  !s1 s2 vars inst out v.
+    state_equiv vars s1 s2 /\
+    eval_one_phi s1 inst = SOME (out, v) /\
+    (!x. s1.vs_prev_bb <> NONE /\
+         resolve_phi (THE s1.vs_prev_bb) inst.inst_operands = SOME (Var x) ==>
+         x NOTIN vars) ==>
+    eval_one_phi s2 inst = SOME (out, v)
+Proof
+  rpt strip_tac >>
+  fs[eval_one_phi_def, AllCaseEqs()] >>
+  `eval_operand val_op s1 = eval_operand val_op s2` by (
+    irule stateEquivPropsTheory.eval_operand_equiv >>
+    qexists_tac `vars` >> simp[] >>
+    rpt strip_tac >> first_x_assum irule >> gvs[]) >>
+  fs[state_equiv_def] >> qexists_tac `prev` >> simp[]
+QED
+
+Triviality eval_phis_state_equiv_phi:
+  !s1 s2 vars insts s1'.
+    state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+      !v. s1.vs_prev_bb <> NONE /\
+          resolve_phi (THE s1.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+          v NOTIN vars) insts /\
+    eval_phis s1 insts = OK s1' ==>
+    ?s2'. eval_phis s2 insts = OK s2' /\ state_equiv vars s1' s2'
+Proof
+  Induct_on `insts` >> rpt strip_tac >> fs[eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >> rfs[] >>
+  Cases_on `eval_one_phi s1 h` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  Cases_on `eval_phis s1 insts` >> gvs[] >>
+  `eval_one_phi s2 h = SOME (x0,x1)` by (
+    irule eval_one_phi_equiv_resolved >>
+    qexists_tac `s1` >> qexists_tac `vars` >> gvs[EVERY_DEF]) >>
+  `?s2'. eval_phis s2 insts = OK s2' /\ state_equiv vars v s2'` by (
+    first_x_assum irule >> qexists_tac `s1` >> gvs[EVERY_DEF]) >>
+  qexists_tac `update_var x0 x1 s2'` >> simp[eval_phis_def] >>
+  metis_tac[stateEquivPropsTheory.update_var_preserves]
+QED
+
+Triviality eval_phis_state_equiv_phi_OK_pair:
+  !s1 s2 vars insts v v'.
+    state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+      !x. s1.vs_prev_bb <> NONE /\
+          resolve_phi (THE s1.vs_prev_bb) inst.inst_operands = SOME (Var x) ==>
+          x NOTIN vars) insts /\
+    eval_phis s1 insts = OK v /\
+    eval_phis s2 insts = OK v' ==>
+    state_equiv vars v v'
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s1`, `s2`, `vars`, `insts`, `v`] mp_tac
+    eval_phis_state_equiv_phi >> simp[] >> strip_tac >> gvs[]
+QED
+
+Triviality phi_exec_cond_inst_idx:
+  !vars s_base s_phi insts n.
+    s_phi.vs_prev_bb = s_base.vs_prev_bb /\
+    (!inst. MEM inst insts ==>
+      (inst.inst_opcode = PHI ==>
+        !v. s_base.vs_prev_bb <> NONE /\
+            resolve_phi (THE s_base.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+            v NOTIN vars) /\
+      (inst.inst_opcode <> PHI ==>
+        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
+    (!inst. MEM inst insts ==>
+      (inst.inst_opcode = PHI ==>
+        !v. (s_phi with vs_inst_idx := n).vs_prev_bb <> NONE /\
+            resolve_phi (THE ((s_phi with vs_inst_idx := n).vs_prev_bb))
+              inst.inst_operands = SOME (Var v) ==>
+            v NOTIN vars) /\
+      (inst.inst_opcode <> PHI ==>
+        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars))
+Proof
+  rw[] >> res_tac >> fs[]
+QED
+
+Triviality phi_exec_cond_after_eval:
+  !vars s s_phi insts.
+    eval_phis s insts = OK s_phi /\
+    (!inst. MEM inst insts ==>
+      (inst.inst_opcode = PHI ==>
+        !v. s.vs_prev_bb <> NONE /\
+            resolve_phi (THE s.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+            v NOTIN vars) /\
+      (inst.inst_opcode <> PHI ==>
+        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
+    (!inst. MEM inst insts ==>
+      (inst.inst_opcode = PHI ==>
+        !v. s_phi.vs_prev_bb <> NONE /\
+            resolve_phi (THE s_phi.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+            v NOTIN vars) /\
+      (inst.inst_opcode <> PHI ==>
+        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars))
+Proof
+  rw[] >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  gvs[venom_state_component_equality] >> metis_tac[]
+QED
+
+Triviality exec_block_se_phi_after_eval:
+  !fuel ctx vars bb s1 s2 s1_phi s2_phi.
+    state_equiv vars s1 s2 /\
+    eval_phis s1 bb.bb_instructions = OK s1_phi /\
+    eval_phis s2 bb.bb_instructions = OK s2_phi /\
+    (!inst. MEM inst bb.bb_instructions ==>
+      (inst.inst_opcode = PHI ==>
+        !v. s1.vs_prev_bb <> NONE /\
+            resolve_phi (THE s1.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+            v NOTIN vars) /\
+      (inst.inst_opcode <> PHI ==>
+        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
+    result_equiv vars
+      (exec_block fuel ctx bb
+        (s1_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+      (exec_block fuel ctx bb
+        (s2_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  irule exec_block_se_phi >> simp[] >>
+  conj_tac >- (
+    mp_tac (Q.SPECL [`vars`, `s1`, `s1_phi`, `bb.bb_instructions`]
+      phi_exec_cond_after_eval) >>
+    simp[] >> disch_then match_mp_tac >>
+    first_assum ACCEPT_TAC) >>
+  irule state_equiv_inst_idx >>
+  irule eval_phis_state_equiv_phi_OK_pair >> simp[EVERY_MEM] >>
+  metis_tac[]
+QED
+
 (* run_block wrapper for exec_block_se_phi *)
 Triviality run_block_se_phi:
   !fuel ctx vars bb s1 s2.
@@ -612,9 +761,36 @@ Triviality run_block_se_phi:
         !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
     result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
 Proof
-  rw[run_block_def] >> irule exec_block_se_phi >>
-  simp[] >> conj_tac >- (first_assum ACCEPT_TAC) >>
-  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+      !v. s1.vs_prev_bb <> NONE /\
+          resolve_phi (THE s1.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+          v NOTIN vars) bb.bb_instructions` by (
+    simp[EVERY_MEM] >> rpt strip_tac >>
+    qpat_x_assum `!inst. MEM inst bb.bb_instructions ==> _` drule >>
+    simp[]) >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+      !v. s2.vs_prev_bb <> NONE /\
+          resolve_phi (THE s2.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
+          v NOTIN vars) bb.bb_instructions` by (
+    qpat_x_assum `EVERY _ bb.bb_instructions` mp_tac >>
+    gvs[state_equiv_def]) >>
+  mp_tac (Q.SPECL [`s1`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s1 bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  mp_tac (Q.SPECL [`s2`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s2 bb.bb_instructions` >> gvs[exec_result_distinct]
+  >- (
+    mp_tac (Q.SPECL [`fuel`, `ctx`, `vars`, `bb`, `s1`, `s2`, `v`, `v'`]
+      exec_block_se_phi_after_eval) >>
+    simp[] >> disch_then match_mp_tac >>
+    qpat_x_assum `!inst. MEM inst bb.bb_instructions ==> _` ACCEPT_TAC)
+  >- (
+    qspecl_then [`s1`, `s2`, `vars`, `bb.bb_instructions`, `v`] mp_tac
+      eval_phis_state_equiv_phi >> simp[] >> strip_tac >> gvs[])
+  >- (
+    qspecl_then [`s2`, `s1`, `vars`, `bb.bb_instructions`, `v`] mp_tac
+      eval_phis_state_equiv_phi >> simp[state_equiv_sym] >> strip_tac >> gvs[])
+  >- simp[result_equiv_def]
 QED
 
 (* run_function with PHI-aware stale_equiv. Safe-set version.
@@ -644,11 +820,12 @@ Triviality run_blocks_stale_equiv_phi:
       (run_blocks fuel ctx fn s2)
 Proof
   Induct_on `fuel` >-
-  (simp[run_blocks_def, result_equiv_def]) >>
+  (simp[Once run_blocks_def, result_equiv_def] >>
+   simp[Once run_blocks_def, result_equiv_def]) >>
   rpt strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold])) >>
   simp[] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >-
   simp[result_equiv_def] >>
@@ -663,25 +840,19 @@ Proof
              resolve_phi prev_lbl inst.inst_operands = SOME (Var v) ==>
              v NOTIN vars) /\
    (!s. MEM s (bb_succs bb) ==> s IN safe)` by metis_tac[] >>
-  (* exec_block_se_phi via run_block wrapper *)
-  `result_equiv vars
-    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
-    irule exec_block_se_phi >> simp[] >>
-    conj_tac
+  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by (
+    irule run_block_se_phi >> simp[] >>
+    rpt gen_tac >> strip_tac >> conj_tac
     >- (
-      rpt gen_tac >> strip_tac >> conj_tac
-      >- (
-        rpt strip_tac >>
-        Cases_on `s1.vs_prev_bb` >> gvs[] >>
-        rename1 `s1.vs_prev_bb = SOME prev_lbl` >>
-        `prev_lbl IN safe` by metis_tac[] >>
-        first_x_assum (qspecl_then [`inst`, `prev_lbl`, `v`] mp_tac) >>
-        simp[])
-      >- metis_tac[]) >>
-    fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
+      rpt strip_tac >>
+      Cases_on `s1.vs_prev_bb` >> gvs[] >>
+      rename1 `s1.vs_prev_bb = SOME prev_lbl` >>
+      `prev_lbl IN safe` by metis_tac[] >>
+      first_x_assum (qspecl_then [`inst`, `prev_lbl`, `v`] mp_tac) >>
+      simp[])
+    >- metis_tac[]) >>
+  Cases_on `run_block fuel ctx bb s1` >>
+  Cases_on `run_block fuel ctx bb s2` >>
   gvs[result_equiv_def] >>
   `v.vs_halted <=> v'.vs_halted` by
     fs[state_equiv_def, execution_equiv_def] >>
@@ -689,7 +860,6 @@ Proof
   fs[state_equiv_def, execution_equiv_def] >>
   (* OK/OK, not halted — apply IH *)
   `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
-  `run_block fuel ctx bb s1 = OK v` by simp[run_block_def] >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
     rpt strip_tac >> spose_not_then strip_assume_tac >>
@@ -903,7 +1073,10 @@ Triviality run_block_OK_not_halted:
   !fuel ctx bb s v.
     run_block fuel ctx bb s = OK v ==> ~v.vs_halted
 Proof
-  rw[run_block_def] >> metis_tac[exec_block_OK_not_halted]
+  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  imp_res_tac exec_block_OK_not_halted >> fs[]
 QED
 
 (* Wrapper for exec_block_ok_sets_prev_bb via run_block *)
@@ -911,11 +1084,14 @@ Triviality run_block_ok_sets_prev_bb:
   !fuel ctx bb s v.
     run_block fuel ctx bb s = OK v ==> v.vs_prev_bb <> NONE
 Proof
-  rw[run_block_def] >> metis_tac[exec_block_ok_sets_prev_bb]
+  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  imp_res_tac exec_block_ok_sets_prev_bb >> fs[]
 QED
 
 (* OK/OK branch of the fuel induction — extracted as standalone Triviality
-   to avoid rich-context issues (L1686, L1637). All facts are explicit
+   to avoid rich-context issues. All facts are explicit
    hypotheses; no universals from the outer proof leak in. *)
 Triviality ok_ok_step:
   !fuel ctx func func' bbs1 bbs2 rs0 dtree succ_map pred_map
@@ -1096,7 +1272,7 @@ Proof
   `!e. run_blocks fuel ctx func v1 <> Error e` by (
     spose_not_then strip_assume_tac >>
     `run_blocks (SUC fuel) ctx func s1 = Error e` by (
-      ONCE_REWRITE_TAC [run_blocks_def] >>
+      ONCE_REWRITE_TAC [run_blocks_unfold] >>
       PURE_REWRITE_TAC [GSYM run_block_def] >> simp[]) >>
     metis_tac[]) >>
   (* live_in_scope preserved *)
@@ -1397,11 +1573,11 @@ Proof
   RULE_ASSUM_TAC (SIMP_RULE std_ss [LET_THM]) >>
   rpt strip_tac
   (* Base: fuel = 0 *)
-  >- (simp[run_blocks_def, result_equiv_def]) >>
-  (* Step: fuel = SUC fuel — stash IH immediately *)
-  stash_ih ih_ref >>
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
+  >- (fs[Once run_blocks_def, result_equiv_def]) >>
+  (* Step: fuel = SUC fuel — keep IH in the assumption list.
+     holbuild checkpoints do not reliably restore ML ref side effects. *)
+  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold]))) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold])) >>
   PURE_REWRITE_TAC [GSYM run_block_def] >>
   qabbrev_tac `func' = make_ssa_fn dom_frontiers dtree dom_post_order
     pred_map succ_map live_in func` >>
@@ -1431,7 +1607,7 @@ Proof
   `!e. run_block fuel ctx bb s1 <> Error e` by (
     spose_not_then strip_assume_tac >>
     `run_blocks (SUC fuel) ctx func s1 = Error e` by (
-      ONCE_REWRITE_TAC [run_blocks_def] >>
+      ONCE_REWRITE_TAC [run_blocks_unfold] >>
       PURE_REWRITE_TAC [GSYM run_block_def] >> simp[]) >>
     metis_tac[]) >>
   `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
@@ -1782,29 +1958,24 @@ Proof
       qpat_assum `Abbrev (func' = _)`
         (fn th => let val eq = PURE_REWRITE_RULE [markerTheory.Abbrev_def] th
           in (func'_eq_ref := eq; PURE_REWRITE_TAC [eq]) end) >>
-      (* Guard: IH goal vs residual conjuncts *)
-      (fn (asl, gl) =>
-        if can (match_term ``result_equiv _ _ _``) gl
-        then
-          (MATCH_MP_TAC (!ih_ref) >>
-           qexists_tac `sigma_ih` >>
-           qexists_tac `bbs1` >>
-           qexists_tac `rs0` >>
-           PURE_REWRITE_TAC [GSYM (!func'_eq_ref)] >>
-           rpt conj_tac >>
-           TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-           (* 2 remaining: func'.fn_blocks = SND(...) and
-              valid_phi_operands ... SND(...) ... *)
-           FIRST_ASSUM (fn th =>
-             if can (match_term ``SND _ = func'.fn_blocks``) (concl th)
-             then FIRST [
-               ACCEPT_TAC (SYM th),
-               CONV_TAC (ONCE_REWRITE_CONV [th]) >>
-                 first_assum ACCEPT_TAC
-             ]
-             else FAIL_TAC "not snd_eq")) (asl, gl)
-        else
-          (first_assum ACCEPT_TAC) (asl, gl)))) >>
+      (* Recursive IH goal: deterministic application avoids goalfrag/no-open-goal
+         failures from FIRST/TRY after the subgoals are already closed. *)
+      FIRST_X_ASSUM (fn th =>
+        (let val (vs, body) = strip_forall (concl th)
+             val (ant, _) = dest_imp body
+         in if length vs >= 7 andalso is_conj ant
+            then MATCH_MP_TAC th
+            else NO_TAC
+         end) handle HOL_ERR _ => NO_TAC) >>
+      qexists_tac `sigma_ih` >>
+      qexists_tac `bbs1` >>
+      qexists_tac `rs0` >>
+      PURE_REWRITE_TAC [GSYM (!func'_eq_ref)] >>
+      rpt conj_tac >>
+      gvs[] >>
+      TRY (`~(v1:venom_state).vs_halted` by metis_tac[run_block_OK_not_halted] >>
+           `~(v2:venom_state).vs_halted` by metis_tac[run_block_OK_not_halted] >>
+           ASM_REWRITE_TAC[] >> strip_tac >> first_assum ACCEPT_TAC))) >>
     (* ok_ok_step concluded; strip and simplify halted ifs *)
     strip_tac >>
     `~v1.vs_halted` by metis_tac[run_block_OK_not_halted] >>

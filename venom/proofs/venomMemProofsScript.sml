@@ -2,22 +2,22 @@
  * Venom Memory Proofs
  *
  * TOP-LEVEL:
- *   alloca_inv_empty_proof                    — alloca_inv for empty allocas
- *   alloca_inv_step_inst_proof                 — alloca_inv preserved by step_inst
- *   alloca_inv_exec_block_proof                — alloca_inv preserved by exec_block
- *   alloca_inv_run_block_proof                 — alloca_inv preserved by run_block
- *   alloca_inv_run_blocks_proof                — alloca_inv preserved by run_blocks
- *   alloca_inv_run_function_proof              — alloca_inv preserved by run_function
- *   allocas_non_overlapping_empty_proof       — base case
- *   allocas_non_overlapping_step_inst_proof   — preserved by step_inst
- *   allocas_non_overlapping_exec_block_proof  — preserved by exec_block
- *   mload_mstore_disjoint_proof               — 32-byte write/read independence
- *   mload_mstore8_disjoint_proof              — 1-byte write / 32-byte read
+ *   alloca_inv_empty_proof                    — alloca_inv holds when allocas map is empty
+ *   alloca_inv_step_inst_proof                 — step_inst preserves alloca_inv
+ *   alloca_inv_exec_block_proof                — exec_block preserves alloca_inv
+ *   alloca_inv_run_block_proof                 — run_block preserves alloca_inv
+ *   alloca_inv_run_blocks_proof                — run_blocks preserves alloca_inv
+ *   alloca_inv_run_function_proof              — run_function preserves alloca_inv
+ *   allocas_non_overlapping_empty_proof       — empty allocas map is non-overlapping
+ *   allocas_non_overlapping_step_inst_proof   — step_inst preserves allocas_non_overlapping
+ *   allocas_non_overlapping_exec_block_proof  — exec_block preserves allocas_non_overlapping
+ *   mload_mstore_disjoint_proof               — 32-byte mstore doesn't affect mload on disjoint region
+ *   mload_mstore8_disjoint_proof              — 1-byte mstore8 doesn't affect 32-byte mload on disjoint region
  *)
 
 Theory venomMemProofs
 Ancestors
-  venomMemDefs venomExecSemantics venomState venomInstProofs
+  venomMemDefs venomExecSemantics venomState venomInstProofs venomExecProofs
   finite_map list rich_list words byte arithmetic divides
 Libs
   wordsLib dep_rewrite
@@ -369,7 +369,7 @@ Definition result_alloca_inv_def:
     (alloca_inv s' /\ n0 <= s'.vs_alloca_next) /\
   result_alloca_inv n0 (Abort a s') =
     (alloca_inv s' /\ n0 <= s'.vs_alloca_next) /\
-  result_alloca_inv n0 (Error e) = T
+  result_alloca_inv n0 (Error e) = T   (* Error carries no state, invariant vacuous *)
 End
 
 (* exec_alloca lifted to result *)
@@ -446,11 +446,17 @@ Proof
   metis_tac[]
 QED
 
-(* Monotonicity: weaker n0 is easier to satisfy *)
 Theorem result_alloca_inv_mono[local]:
   !n0 n1 r. n0 <= n1 /\ result_alloca_inv n1 r ==> result_alloca_inv n0 r
 Proof
   rpt gen_tac >> Cases_on `r` >> rw[result_alloca_inv_def]
+QED
+
+(* Setting vs_inst_idx preserves alloca_inv *)
+Theorem alloca_inv_set_inst_idx[local]:
+  !s n. alloca_inv s ==> alloca_inv (s with vs_inst_idx := n)
+Proof
+  rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
 
 (* Joint induction: step_inst/exec_block/run_blocks preserve alloca_inv *)
@@ -509,22 +515,19 @@ Proof
   >- (
     (* run_blocks case *)
     ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
-    rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
-    (* Recursive case: exec_block returned OK, not halted *)
-    (* Use exec_block IH to get alloca_inv on exec_block result *)
-    `alloca_inv (s with vs_inst_idx := 0)` by
-      (irule alloca_fields_eq_inv >> qexists_tac `s` >> simp[]) >>
-    `alloca_inv v` by (
-      first_x_assum drule >> strip_tac >>
-      gvs[result_alloca_inv_def, AllCaseEqs()]) >>
-    (* Use run_blocks IH *)
-    first_x_assum drule >> simp[] >> strip_tac >>
+    Cases_on `fuel` >> gvs[result_alloca_inv_def] >>
+    Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[result_alloca_inv_def] >>
+    mp_tac (Q.SPECL [`s`,`x.bb_instructions`] eval_phis_ok_or_error_defs) >>
+    Cases_on `eval_phis s x.bb_instructions` >> gvs[exec_result_distinct] >>
+    imp_res_tac eval_phis_preserves_alloca_fields >>
+    imp_res_tac alloca_fields_eq_inv >>
+    imp_res_tac alloca_inv_set_inst_idx >>
+    Cases_on `run_block_non_phis n ctx x
+      (v with vs_inst_idx := phi_prefix_length x.bb_instructions)` >>
+    gvs[result_alloca_inv_def] >>
+    Cases_on `v'.vs_halted` >> gvs[result_alloca_inv_def] >>
     irule result_alloca_inv_mono >>
-    qexists_tac `v.vs_alloca_next` >> gvs[] >>
-    (* alloca_next monotonicity from exec_block *)
-    first_x_assum (qspec_then `s with vs_inst_idx := 0` mp_tac) >>
-    simp[] >> strip_tac >>
-    gvs[result_alloca_inv_def, AllCaseEqs()]
+    qexists_tac `v'.vs_alloca_next` >> simp[]
   )
 QED
 
@@ -568,8 +571,11 @@ Theorem alloca_inv_run_block_proof:
     alloca_inv s'
 Proof
   rw[run_block_def] >> rpt strip_tac >>
-  `alloca_inv (s with vs_inst_idx := 0)` by
-    (irule alloca_fields_eq_inv >> qexists_tac `s` >> simp[]) >>
+  mp_tac (Q.SPECL [`s`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  imp_res_tac eval_phis_preserves_alloca_fields >>
+  imp_res_tac alloca_fields_eq_inv >>
+  imp_res_tac alloca_inv_set_inst_idx >>
   metis_tac[alloca_inv_exec_block_proof]
 QED
 

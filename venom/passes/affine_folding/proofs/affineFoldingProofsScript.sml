@@ -13,6 +13,8 @@ Ancestors
   affineFoldingDefs execEquivProps passSimulationDefs passSimulationProps
   passSharedDefs passSharedProps stateEquivProps venomExecProps
   venomExecSemantics venomInst venomInstProps venomState
+Libs
+  BasicProvers
 
 (* ===== Framework: function equality from block equality with invariant ===== *)
 
@@ -32,14 +34,12 @@ Triviality run_blocks_map_inv_eq:
 Proof
   ntac 3 gen_tac >> Induct_on `fuel` >> rpt gen_tac >> strip_tac
   >- simp[run_blocks_def] >>
-  simp[Once run_blocks_def, SimpLHS, function_map_transform_def,
+  simp[Once run_blocks_unfold, SimpLHS, function_map_transform_def,
        lookup_block_map] >>
-  simp[Once run_blocks_def, SimpRHS] >>
+  simp[Once run_blocks_unfold, SimpRHS] >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
   rename1 `SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  (* run_block = exec_block with idx 0, so rewrite via run_block *)
-  simp[GSYM run_block_def] >>
   `run_block fuel ctx (bt bb) s = run_block fuel ctx bb s`
     by metis_tac[] >>
   pop_assum (fn th => REWRITE_TAC[th]) >>
@@ -94,30 +94,36 @@ QED
 Definition vi_entry_consistent_def:
   vi_entry_consistent vi inst =
     case inst.inst_outputs of
-      [out_var] =>
+      [] => T
+    | [out_var] =>
         (case ALOOKUP vi out_var of
            NONE => T
          | SOME entry =>
              let out_op = Var out_var in
              if inst.inst_opcode = ADD then
                (case inst.inst_operands of
-                  [op1; op2] =>
+                  [] => T
+                | [op1] => T
+                | [op1; op2] =>
                     entry = transfer_add (vi_lookup vi op1)
                                          (vi_lookup vi op2) out_op
-                | _ => T)
+                | op1::op2::op3::rest => T)
              else if inst.inst_opcode = SUB then
                (case inst.inst_operands of
-                  [op1; op2] =>
+                  [] => T
+                | [op1] => T
+                | [op1; op2] =>
                     entry = transfer_sub (vi_lookup vi op1)
                                          (vi_lookup vi op2) out_op
-                | _ => T)
+                | op1::op2::op3::rest => T)
              else if inst.inst_opcode = ASSIGN then
                (case inst.inst_operands of
-                  [src] =>
+                  [] => T
+                | [src] =>
                     entry = transfer_assign (vi_lookup vi src)
-                | _ => T)
+                | src1::src2::rest => T)
              else entry = VarInfo (SOME out_op) 0w)
-    | _ => T
+    | out1::out2::out_rest => T
 End
 
 (* ===== vi_lookup operand soundness ===== *)
@@ -135,7 +141,6 @@ Proof
   rpt strip_tac >>
   Cases_on `op` >>
   fs[vi_lookup_def, eval_operand_def, lookup_var_def, wordsTheory.WORD_ADD_0] >>
-  (* remaining: Var case *)
   rename1 `FLOOKUP s.vs_vars v = SOME val` >>
   Cases_on `ALOOKUP vi v` >> fs[]
   >- (* ALOOKUP vi v = NONE — default entry *)
@@ -722,6 +727,12 @@ Theorem run_block_inst_transform_eq[local]:
   !P ft bb fuel ctx s.
     P s /\
     (!s n. P s ==> P (s with vs_inst_idx := n)) /\
+    (!s s_phi. P s /\ eval_phis s bb.bb_instructions = OK s_phi ==>
+       P s_phi) /\
+    (!s. eval_phis s (MAP ft bb.bb_instructions) =
+         eval_phis s bb.bb_instructions) /\
+    phi_prefix_length (MAP ft bb.bb_instructions) =
+      phi_prefix_length bb.bb_instructions /\
     (!inst. MEM inst bb.bb_instructions ==>
        is_terminator (ft inst).inst_opcode = is_terminator inst.inst_opcode) /\
     (!inst s'. P s' /\ MEM inst bb.bb_instructions ==>
@@ -734,9 +745,14 @@ Theorem run_block_inst_transform_eq[local]:
       MAP ft bb.bb_instructions) s =
     run_block fuel ctx bb s
 Proof
-  rpt strip_tac >> simp[run_block_def] >>
-  qspecl_then [`P`, `ft`, `bb`, `fuel`, `ctx`, `s with vs_inst_idx := 0`]
-    mp_tac exec_block_inst_transform_eq >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[] >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+  irule exec_block_inst_transform_eq >>
+  simp[] >>
+  `P s_phi` by metis_tac[] >>
   simp[] >> metis_tac[]
 QED
 
@@ -784,6 +800,8 @@ Theorem run_block_preserves_P[local]:
   !P bb fuel ctx s s'.
     P s /\
     (!s n. P s ==> P (s with vs_inst_idx := n)) /\
+    (!s s_phi. P s /\ eval_phis s bb.bb_instructions = OK s_phi ==>
+       P s_phi) /\
     (!inst s1 s1'.
        MEM inst bb.bb_instructions /\ P s1 /\
        step_inst fuel ctx inst s1 = OK s1' ==>
@@ -792,9 +810,19 @@ Theorem run_block_preserves_P[local]:
     P s'
 Proof
   rpt strip_tac >>
-  qspecl_then [`P`, `bb`, `fuel`, `ctx`, `s with vs_inst_idx := 0`, `s'`]
-    mp_tac exec_block_preserves_P >>
-  fs[run_block_def] >> metis_tac[]
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_THEN STRIP_ASSUME_TAC
+    (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+  strip_tac >>
+  irule exec_block_preserves_P >>
+  qexistsl_tac [`bb`, `ctx`, `fuel`,
+    `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
+  simp[] >>
+  `P s_phi` by metis_tac[] >>
+  simp[] >> metis_tac[]
 QED
 
 (* Affine transform preserves is_terminator: ADD/SUB are not terminators,
@@ -809,6 +837,56 @@ Proof
   rw[af_transform_inst_def] >>
   rpt (BasicProvers.PURE_CASE_TAC >> gvs[]) >>
   imp_res_tac af_rewrite_inst_cases >> gvs[] >> EVAL_TAC
+QED
+
+Theorem af_transform_inst_phi_identity[local]:
+  !dfg vi inst.
+    inst.inst_opcode = PHI ==>
+    af_transform_inst dfg vi inst = inst
+Proof
+  rw[af_transform_inst_def]
+QED
+
+Theorem af_rewrite_inst_not_phi[local]:
+  !dfg vi inst result.
+    af_rewrite_inst dfg vi inst = SOME result ==>
+    result.inst_opcode <> PHI
+Proof
+  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
+       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
+  rpt gen_tac >> rpt (BasicProvers.PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+QED
+
+Theorem af_transform_inst_not_phi[local]:
+  !dfg vi inst.
+    inst.inst_opcode <> PHI ==>
+    (af_transform_inst dfg vi inst).inst_opcode <> PHI
+Proof
+  rw[af_transform_inst_def] >>
+  Cases_on `af_rewrite_inst dfg vi inst` >> gvs[] >>
+  drule af_rewrite_inst_not_phi >> simp[]
+QED
+
+Theorem eval_phis_af_transform_inst[local]:
+  !dfg vi s insts.
+    eval_phis s (MAP (af_transform_inst dfg vi) insts) =
+    eval_phis s insts
+Proof
+  Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[af_transform_inst_phi_identity, af_transform_inst_not_phi]
+QED
+
+Theorem phi_prefix_length_af_transform_inst[local]:
+  !dfg vi insts.
+    phi_prefix_length (MAP (af_transform_inst dfg vi) insts) =
+    phi_prefix_length insts
+Proof
+  Induct_on `insts` >> simp[phi_prefix_length_def] >>
+  rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[af_transform_inst_phi_identity, af_transform_inst_not_phi]
 QED
 
 (* vi_sound is preserved when the variable's value and base operand
@@ -1134,6 +1212,76 @@ Proof
   rw[fn_insts_def] >> irule fn_insts_blocks_MEM >> metis_tac[]
 QED
 
+Theorem vi_alist_sound_update_output[local]:
+  !vi s out val.
+    vi_alist_sound vi s /\
+    (!v entry. ALOOKUP vi v = SOME entry /\ v <> out /\
+       vi_base entry = SOME (Var out) ==> F) /\
+    (case ALOOKUP vi out of
+       NONE => T
+     | SOME entry => vi_sound entry out (update_var out val s)) ==>
+    vi_alist_sound vi (update_var out val s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[vi_alist_sound_def] >>
+  Cases_on `v = out`
+  >- (gvs[] >> Cases_on `ALOOKUP vi out` >> gvs[]) >>
+  gvs[] >>
+  `vi_sound vi' v s` by gvs[vi_alist_sound_def] >>
+  simp[update_var_def] >>
+  irule vi_sound_after_update >> simp[] >>
+  Cases_on `vi_base vi'` >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  first_x_assum (qspecl_then [`v`, `vi'`] mp_tac) >> simp[]
+QED
+
+Theorem vi_alist_sound_phi_update[local]:
+  !vi inst s out val.
+    vi_alist_sound vi s /\
+    inst.inst_opcode = PHI /\
+    inst.inst_outputs = [out] /\
+    vi_entry_consistent vi inst /\
+    (!v entry. ALOOKUP vi v = SOME entry /\ v <> out /\
+       vi_base entry = SOME (Var out) ==> F) ==>
+    vi_alist_sound vi (update_var out val s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule vi_alist_sound_update_output >>
+  simp[] >>
+  Cases_on `ALOOKUP vi out` >> simp[] >>
+  qpat_x_assum `vi_entry_consistent vi inst` mp_tac >>
+  simp[vi_entry_consistent_def] >>
+  gvs[vi_sound_identity]
+QED
+
+Theorem eval_phis_preserves_vi_alist_sound[local]:
+  !vi fn insts s s'.
+    vi_alist_sound vi s /\
+    eval_phis s insts = OK s' /\
+    (!inst. MEM inst insts ==> MEM inst (fn_insts fn)) /\
+    (!inst. MEM inst (fn_insts fn) ==> vi_entry_consistent vi inst) /\
+    (!inst out_var v entry. MEM inst (fn_insts fn) /\
+       inst.inst_outputs = [out_var] /\
+       ALOOKUP vi v = SOME entry /\ v <> out_var /\
+       vi_base entry = SOME (Var out_var) ==> F) ==>
+    vi_alist_sound vi s'
+Proof
+  ntac 2 gen_tac >> Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[] >>
+  Cases_on `eval_one_phi s h` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  Cases_on `eval_phis s insts` >> gvs[] >>
+  rename1 `eval_phis s insts = OK s_rest` >>
+  `vi_alist_sound vi s_rest` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `h.inst_outputs = [x0]` by gvs[eval_one_phi_def, AllCaseEqs()] >>
+  irule vi_alist_sound_phi_update >>
+  simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `h` >> simp[] >> metis_tac[]
+QED
+
 (* Bridge: combines function-level SSA conditions into vi_alist_sound_step format,
    producing both vi_alist_sound vi s' and the vs_inst_idx variant in one shot.
    Used in both Goal 2 (P preservation) and Goal 3 (block equality, inner P preservation). *)
@@ -1211,9 +1359,13 @@ Proof
   qspecl_then [`vi_alist_sound vi`, `af_transform_inst dfg vi`,
                `bb`, `fuel`, `ctx`, `s`]
     mp_tac run_block_inst_transform_eq >>
-  simp[vi_alist_sound_idx_indep, af_transform_inst_terminator] >>
+  simp[vi_alist_sound_idx_indep, af_transform_inst_terminator,
+       eval_phis_af_transform_inst, phi_prefix_length_af_transform_inst] >>
   disch_then match_mp_tac >>
-  conj_tac
+  rpt conj_tac
+  >- (rpt strip_tac >>
+      irule eval_phis_preserves_vi_alist_sound >>
+      qexists_tac `fn` >> simp[Abbr `vi`] >> metis_tac[fn_insts_MEM])
   >- (rpt strip_tac >> imp_res_tac fn_insts_MEM >>
       irule af_transform_inst_step_eq >>
       simp[Abbr `vi`, Abbr `dfg`, eval_operand_def, lookup_var_def])
@@ -1248,13 +1400,14 @@ Triviality af_P_preserved_helper:
 Proof
   rpt strip_tac >>
   qabbrev_tac `vi = af_compute_fn_var_info fn` >>
-  `exec_block fuel ctx bb (s with vs_inst_idx := 0) = OK s'`
-    by fs[run_block_def] >>
-  qspecl_then [`vi_alist_sound vi`, `bb`, `fuel`, `ctx`,
-               `s with vs_inst_idx := 0`, `s'`]
-    mp_tac exec_block_preserves_P >>
+  qspecl_then [`vi_alist_sound vi`, `bb`, `fuel`, `ctx`, `s`, `s'`]
+    mp_tac run_block_preserves_P >>
   simp[vi_alist_sound_idx_indep] >>
   disch_then match_mp_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      irule eval_phis_preserves_vi_alist_sound >>
+      qexists_tac `fn` >> simp[Abbr `vi`] >> metis_tac[fn_insts_MEM]) >>
   rpt strip_tac >> imp_res_tac fn_insts_MEM >>
   drule_all vi_alist_sound_fn_step >> simp[Abbr `vi`]
 QED

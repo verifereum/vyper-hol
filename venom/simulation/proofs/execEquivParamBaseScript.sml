@@ -9,8 +9,7 @@ Theory execEquivParamBase
 Ancestors
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
   stateEquiv venomInst venomExecSemantics venomState
-Libs
-  finite_mapTheory listTheory rich_listTheory
+  finite_map list rich_list
 
 open execEquivParamLib
 
@@ -115,6 +114,24 @@ QED
 
 Theorem vsr_R_ok_refl:
   !R_ok R_term s. valid_state_rel R_ok R_term ==> R_ok s s
+Proof
+  rw[valid_state_rel_def]
+QED
+
+Theorem vsr_R_ok_halted:
+  !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted
+Proof
+  rw[valid_state_rel_def]
+QED
+
+Theorem vsr_R_ok_current_bb:
+  !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb
+Proof
+  rw[valid_state_rel_def]
+QED
+
+Theorem vsr_R_ok_prev_bb:
+  !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_prev_bb = s2.vs_prev_bb
 Proof
   rw[valid_state_rel_def]
 QED
@@ -525,4 +542,96 @@ Proof
   vsr_irule vsr_inst_idx_R_ok >> simp[]
 QED
 
-val _ = export_theory()
+Triviality vsr_eval_one_phi[local]:
+  !R_ok R_term s1 s2 inst.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2)
+    ==> eval_one_phi s1 inst = eval_one_phi s2 inst
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_outputs` >> Cases_on `s1.vs_prev_bb` >> Cases_on `s2.vs_prev_bb` >>
+  fs[eval_one_phi_def] >>
+  Cases_on `t` >> fs[eval_one_phi_def] >>
+  Cases_on `resolve_phi x' inst.inst_operands` >> fs[eval_one_phi_def] >>
+  imp_res_tac resolve_phi_MEM >>
+  `!x. x'' = Var x ==> lookup_var x s1 = lookup_var x s2` by metis_tac[] >>
+  `eval_operand x'' s1 = eval_operand x'' s2` by metis_tac[vsr_eval_operand] >>
+  fs[]
+QED
+
+Theorem eval_phis_preserves_R_ok_ind:
+  !R_ok R_term s1 s2 insts.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts ==>
+    !s1' s2'. eval_phis s1 insts = OK s1' /\ eval_phis s2 insts = OK s2' ==> R_ok s1' s2'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Induct_on `insts`
+  >- (rpt strip_tac >> gvs[eval_phis_def])
+  >> gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> fs[eval_phis_def] >>
+  Cases_on `eval_one_phi s1 h` >> fs[] >>
+  PairCases_on `x` >> fs[] >>
+  `eval_one_phi s2 h = SOME (x0,x1)` by (
+    qspecl_then [`R_ok`,`R_term`,`s1`,`s2`,`h`] mp_tac vsr_eval_one_phi >>
+    simp[] >> metis_tac[]) >>
+  fs[] >> Cases_on `eval_phis s1 insts` >> Cases_on `eval_phis s2 insts` >> gvs[] >>
+  irule vsr_update_var_R_ok >> simp[] >>
+  qexists_tac `R_term` >> metis_tac[]
+QED
+
+Theorem eval_phis_preserves_R_ok:
+  !R_ok R_term s1 s2 insts s1' s2'.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts /\
+    eval_phis s1 insts = OK s1' /\ eval_phis s2 insts = OK s2' ==>
+    R_ok s1' s2'
+Proof
+  metis_tac[eval_phis_preserves_R_ok_ind]
+QED
+
+Theorem eval_phis_agreement:
+  !R_ok R_term s1 s2 insts.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts ==>
+    !s1'. eval_phis s1 insts = OK s1' ==>
+          ?s2'. eval_phis s2 insts = OK s2'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Induct_on `insts`
+  >- (rw[eval_phis_def] >> qexists_tac `s2` >> simp[eval_phis_def])
+  >> gen_tac >> strip_tac >> rw[] >>
+  Cases_on `h.inst_opcode = PHI` >> fs[eval_phis_def] >>
+  Cases_on `eval_one_phi s1 h` >> fs[] >>
+  PairCases_on `x` >> fs[] >>
+  `eval_one_phi s2 h = SOME (x0,x1)` by metis_tac[vsr_eval_one_phi] >>
+  fs[] >>
+  Cases_on `eval_phis s1 insts` >> fs[]
+QED
+
+Theorem eval_phis_error_agreement:
+  !R_ok R_term s1 s2 insts.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts ==>
+    !e. eval_phis s1 insts = Error e ==>
+          ?e'. eval_phis s2 insts = Error e'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Induct_on `insts`
+  >- (rw[eval_phis_def]) >>
+  gen_tac >> strip_tac >> rw[] >>
+  Cases_on `h.inst_opcode = PHI` >> fs[eval_phis_def] >>
+  `eval_one_phi s2 h = eval_one_phi s1 h` by metis_tac[vsr_eval_one_phi] >>
+  Cases_on `eval_one_phi s1 h` >> fs[] >>
+  PairCases_on `x` >> fs[] >>
+  Cases_on `eval_phis s1 insts` >> fs[]
+QED
