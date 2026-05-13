@@ -32,7 +32,7 @@ End
    due to wrong operand counts, missing outputs, or wrong operand types.
 
    Runtime errors (undefined operand, phi predecessor mismatch, param OOB,
-   non-terminating ext_call) are NOT eliminated — those require state info.
+   non-terminating ext_call) are NOT eliminated - those require state info.
    ========================================================================== *)
 
 Definition inst_wf_def:
@@ -163,7 +163,19 @@ Definition fn_has_entry_def:
   fn_has_entry fn <=> fn.fn_blocks <> []
 End
 
-(* A basic block is well-formed: non-empty and ends with a terminator. *)
+(* All pseudo instructions (PHI, PARAM) form a prefix of the block.
+ * Also a conjunct of bb_well_formed; kept as a separate definition for
+ * destructuring in proofs that need only this property. *)
+Definition pseudos_prefix_def:
+  pseudos_prefix bb <=>
+    !i j. i < j /\ j < LENGTH bb.bb_instructions /\
+          is_pseudo (EL j bb.bb_instructions).inst_opcode ==>
+          is_pseudo (EL i bb.bb_instructions).inst_opcode
+End
+
+(* A basic block is well-formed: non-empty, ends with a terminator,
+   PHI instructions form a prefix, and all pseudo instructions
+   (PHI, PARAM) form a prefix. *)
 Definition bb_well_formed_def:
   bb_well_formed bb <=>
     bb.bb_instructions <> [] /\
@@ -175,26 +187,23 @@ Definition bb_well_formed_def:
     (* PHI instructions form a prefix of the block *)
     (!i j. i < j /\ j < LENGTH bb.bb_instructions /\
            (EL j bb.bb_instructions).inst_opcode = PHI ==>
-           (EL i bb.bb_instructions).inst_opcode = PHI)
+           (EL i bb.bb_instructions).inst_opcode = PHI) /\
+    (* Pseudo instructions (PHI, PARAM) form a prefix of the block *)
+    pseudos_prefix bb
 End
 
-(* All pseudo instructions (PHI, PARAM) form a prefix of the block.
- * Matches Vyper compiler output where PHIs and PARAMs are always emitted
- * first. Stronger than bb_well_formed's PHI-only prefix constraint.
- * Defined separately to avoid modifying bb_well_formed (which would cause
- * a 30+ minute rebuild of execEquivProofs). *)
-Definition pseudos_prefix_def:
-  pseudos_prefix bb <=>
-    !i j. i < j /\ j < LENGTH bb.bb_instructions /\
-          is_pseudo (EL j bb.bb_instructions).inst_opcode ==>
-          is_pseudo (EL i bb.bb_instructions).inst_opcode
-End
-
-(* All blocks in a function have pseudos as a prefix. *)
+(* All blocks in a function have pseudos as a prefix.
+ * Implied by wf_function (via bb_well_formed). *)
 Definition fn_pseudos_prefix_def:
   fn_pseudos_prefix fn <=>
     !bb. MEM bb fn.fn_blocks ==> pseudos_prefix bb
 End
+
+Theorem bb_well_formed_imp_pseudos_prefix:
+  !bb. bb_well_formed bb ==> pseudos_prefix bb
+Proof
+  simp[bb_well_formed_def]
+QED
 
 (* All successor labels of every block exist as block labels in the function. *)
 Definition fn_succs_closed_def:
@@ -222,6 +231,13 @@ Definition wf_function_def:
     fn_succs_closed fn /\
     fn_inst_ids_distinct fn
 End
+
+Theorem wf_function_imp_fn_pseudos_prefix:
+  !fn. wf_function fn ==> fn_pseudos_prefix fn
+Proof
+  simp[wf_function_def, fn_pseudos_prefix_def] >>
+  metis_tac[bb_well_formed_imp_pseudos_prefix]
+QED
 
 (* ==========================================================================
    SSA and instruction predicates (general IR concepts)
@@ -367,7 +383,7 @@ Definition fn_inst_wf_def:
 End
 
 (* ==========================================================================
-   Composed venom_wf — single precondition for high-level theorems.
+   Composed venom_wf - single precondition for high-level theorems.
 
    Level 1 (syntactic/structural): eliminates ~60 structural Error branches
    from step_inst_base.  No analysis required.

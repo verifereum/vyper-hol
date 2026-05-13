@@ -382,7 +382,7 @@ Theorem bb_well_formed_subst_label:
     bb_well_formed bb ==>
     bb_well_formed (subst_label_block old new bb)
 Proof
-  rw[bb_well_formed_def, subst_label_block_def] >>
+  rw[bb_well_formed_def, pseudos_prefix_def, subst_label_block_def] >>
   gvs[LAST_MAP, EL_MAP, subst_label_inst_fields] >>
   metis_tac[]
 QED

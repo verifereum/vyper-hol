@@ -85,6 +85,17 @@ Proof
   EVAL_TAC
 QED
 
+(* Pseudos satisfy the non-modifiable condition *)
+Triviality pseudo_not_modifiable:
+  !op. is_pseudo op ==>
+    ~is_load_fact_opcode op /\ ~is_store_opcode op /\
+    ~is_copy_opcode op /\ Eff_MEMORY NOTIN write_effects op
+Proof
+  Cases >> simp[is_pseudo_def, is_load_fact_opcode_def,
+    is_store_opcode_def, is_copy_opcode_def,
+    write_effects_def, empty_effects_def]
+QED
+
 (* ================================================================== *)
 (* Part 2: Combined FOLDL invariant                                   *)
 (* ================================================================== *)
@@ -266,6 +277,35 @@ Proof
   simp[lse_block_length] >> strip_tac >> gvs[]
 QED
 
+(* Pseudo instructions pass through unchanged *)
+Triviality lse_block_pseudo_preserved:
+  !aliases bp uc bb i.
+    i < LENGTH bb.bb_instructions /\
+    is_pseudo (EL i bb.bb_instructions).inst_opcode ==>
+    EL i (load_store_elim_block aliases bp uc bb).bb_instructions =
+    EL i bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  qspecl_then [`aliases`,`bp`,`uc`,`bb`,`i`] mp_tac
+    (REWRITE_RULE [LET_THM] lse_block_trace) >>
+  simp[lse_block_length] >> strip_tac >>
+  first_x_assum irule >> metis_tac[pseudo_not_modifiable]
+QED
+
+(* If the transformed instruction is pseudo, the original was too *)
+Triviality lse_block_pseudo_reverse:
+  !aliases bp uc bb i.
+    i < LENGTH bb.bb_instructions /\
+    is_pseudo
+      (EL i (load_store_elim_block aliases bp uc bb).bb_instructions).inst_opcode ==>
+    is_pseudo (EL i bb.bb_instructions).inst_opcode
+Proof
+  rpt strip_tac >>
+  qspecl_then [`aliases`,`bp`,`uc`,`bb`,`i`] mp_tac
+    (REWRITE_RULE [LET_THM] lse_block_trace) >>
+  simp[lse_block_length] >> strip_tac >> gvs[is_pseudo_def]
+QED
+
 (* Terminators pass through unchanged *)
 Triviality lse_block_last_eq:
   !aliases bp uc bb.
@@ -319,7 +359,7 @@ Proof
     simp[Abbr `bb'`, lse_block_length] >> strip_tac >>
     gvs[bb_well_formed_def, is_terminator_def])
   (* PHI ordering: bb'[j] = PHI /\ i<j => bb'[i] = PHI *)
-  >> (
+  >- (
     rpt strip_tac >>
     `i < LENGTH bb.bb_instructions` by simp[] >>
     (* Reverse: bb'[j].opcode = PHI => bb[j].opcode = PHI *)
@@ -333,6 +373,19 @@ Proof
     (* Forward: bb[i].opcode = PHI => bb'[i] = bb[i] *)
     `EL i bb'.bb_instructions = EL i bb.bb_instructions` by
       (simp[Abbr `bb'`] >> irule lse_block_phi_preserved >> simp[]) >>
+    gvs[])
+  (* pseudo ordering: bb'[j] pseudo /\ i<j => bb'[i] pseudo *)
+  >> (
+    PURE_ONCE_REWRITE_TAC[pseudos_prefix_def] >> simp[] >>
+    rpt strip_tac >>
+    `i < LENGTH bb.bb_instructions` by simp[] >>
+    `is_pseudo (EL j bb.bb_instructions).inst_opcode` by
+      (qspecl_then [`aliases`,`bp`,`uc`,`bb`,`j`] mp_tac lse_block_pseudo_reverse >>
+       gvs[Abbr `bb'`]) >>
+    `is_pseudo (EL i bb.bb_instructions).inst_opcode` by
+      metis_tac[bb_well_formed_imp_pseudos_prefix, pseudos_prefix_def] >>
+    `EL i bb'.bb_instructions = EL i bb.bb_instructions` by
+      (simp[Abbr `bb'`] >> irule lse_block_pseudo_preserved >> simp[]) >>
     gvs[])
 QED
 
@@ -384,9 +437,9 @@ QED
 (* ================================================================== *)
 
 Triviality copy_opcode_not_term_phi:
-  !op. is_copy_opcode op ==> ~is_terminator op /\ op <> PHI
+  !op. is_copy_opcode op ==> ~is_terminator op /\ op <> PHI /\ ~is_pseudo op
 Proof
-  Cases >> simp[is_copy_opcode_def, is_terminator_def]
+  Cases >> simp[is_copy_opcode_def, is_terminator_def, is_pseudo_def]
 QED
 
 Triviality copy_elision_inst_properties:
@@ -398,13 +451,17 @@ Triviality copy_elision_inst_properties:
   (!bp dfg v inst. inst.inst_opcode = PHI ==>
      (copy_elision_inst bp dfg v inst).inst_opcode = PHI) /\
   (!bp dfg v inst. inst.inst_opcode <> PHI ==>
-     (copy_elision_inst bp dfg v inst).inst_opcode <> PHI)
+     (copy_elision_inst bp dfg v inst).inst_opcode <> PHI) /\
+  (!bp dfg v inst. is_pseudo inst.inst_opcode ==>
+     is_pseudo (copy_elision_inst bp dfg v inst).inst_opcode) /\
+  (!bp dfg v inst. ~is_pseudo inst.inst_opcode ==>
+     ~is_pseudo (copy_elision_inst bp dfg v inst).inst_opcode)
 Proof
   rpt conj_tac >> rpt gen_tac >>
   simp[copy_elision_inst_def, LET_THM] >>
   rpt IF_CASES_TAC >> gvs[] >>
   BasicProvers.every_case_tac >>
-  gvs[mk_nop_inst_def, is_terminator_def] >>
+  gvs[mk_nop_inst_def, is_terminator_def, is_pseudo_def] >>
   metis_tac[copy_opcode_not_term_phi]
 QED
 
