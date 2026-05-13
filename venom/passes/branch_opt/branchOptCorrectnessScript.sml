@@ -8,7 +8,7 @@
  * TOP-LEVEL:
  *   branch_opt_function_correct       — main correctness theorem
  *
- * Obligations (cheated):
+ * Required preservation obligations:
  *   branch_opt_preserves_ssa_form       — SSA form preservation
  *   branch_opt_preserves_wf_function     — well-formed function preservation
  *)
