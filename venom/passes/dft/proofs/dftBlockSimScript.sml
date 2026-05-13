@@ -14,8 +14,9 @@ Ancestors
   vfmState venomWf
 
 (* ================================================================
-   1. step_inst preserves vs_allocas for non-terminator, non-alloca,
-      non-ext_call instructions (including INVOKE)
+   1. step_inst preserves vs_allocas and vs_alloca_next for
+      non-terminator, non-alloca, non-ext_call instructions
+      (including INVOKE)
    ================================================================ *)
 
 Theorem step_inst_preserves_allocas:
@@ -125,6 +126,8 @@ QED
    5. Effect field preservation from effects_independent
    ================================================================ *)
 
+(* effects_independent implies three-way disjointness of effects:
+   write(a) ∩ read(b) = ∅, write(b) ∩ read(a) = ∅, write(a) ∩ write(b) = ∅ *)
 Theorem effects_independent_write_read_disjoint:
   !op1 op2.
     effects_independent op1 op2 ==>
@@ -399,6 +402,7 @@ Proof
       metis_tac[effect_free_account_read_opcodes])
     >- (
       (* No account-reading effects: generic theorem applies *)
+      `inst_a.inst_opcode <> PHI` by (CCONTR_TAC >> gvs[step_inst_base_def]) >>
       irule step_inst_base_effect_free_output_determined_vars >>
       qexistsl_tac [`inst_a`, `ss`, `vb`] >>
       rpt conj_tac >> gvs[] >>
@@ -891,6 +895,7 @@ Triviality effect_free_output_determined[local]:
 Proof
   rpt strip_tac >>
   imp_res_tac effect_free_step_eq_base >> gvs[] >>
+  `inst.inst_opcode <> PHI` by (CCONTR_TAC >> gvs[step_inst_base_def]) >>
   qspecl_then [`inst`, `s1`, `s2`, `r1`, `r2`] mp_tac
     step_inst_base_effect_free_output_determined_vars >>
   impl_tac >- (

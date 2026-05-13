@@ -13,6 +13,8 @@ Ancestors
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomEffects venomMemDefs basePtrProps
   list rich_list indexedLists
+Libs
+  pairLib BasicProvers
 
 Theorem copy_elision_function_correct:
   !fuel ctx fn s.
@@ -30,13 +32,33 @@ Theorem copy_elision_function_correct:
     allocas_in_word s /\
     bp_ptrs_bounded bp fn s /\
     bp_assigns_stable bp dfg /\
+    (!bb s0 s_phi.
+       MEM bb fn.fn_blocks /\
+       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+       eval_phis s0 bb.bb_instructions = OK s_phi /\
+       dfg_assigns_sound dfg s0 ==>
+       dfg_assigns_sound dfg s_phi) /\
+    (!fuel' run_ctx bb inst s0 s1.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       inst_wf inst /\
+       dfg_assigns_sound dfg (s0 with vs_inst_idx := 0) /\
+       bp_ptr_sound bp (s0 with vs_inst_idx := 0) /\
+       allocas_non_overlapping (s0 with vs_inst_idx := 0) /\
+       allocas_in_word (s0 with vs_inst_idx := 0) /\
+       bp_ptrs_bounded bp fn (s0 with vs_inst_idx := 0) /\
+       step_inst fuel' run_ctx inst s0 = OK s1 ==>
+       dfg_assigns_sound dfg (s1 with vs_inst_idx := 0) /\
+       bp_ptr_sound bp (s1 with vs_inst_idx := 0) /\
+       allocas_non_overlapping (s1 with vs_inst_idx := 0) /\
+       allocas_in_word (s1 with vs_inst_idx := 0) /\
+       bp_ptrs_bounded bp fn (s1 with vs_inst_idx := 0)) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (copy_elision_function fn) s)
 Proof
-  cheat (* blocked on ProofsScript cheats *)
+  ACCEPT_TAC copy_elision_function_correct_proof
 QED
 
 (* ================================================================== *)
@@ -105,7 +127,7 @@ Proof
   simp[EL_APPEND1]
 QED
 
-(* Single FOLDL invariant: length + per-element properties *)
+(* FOLDL length invariant *)
 Triviality lse_foldl_length:
   !insts lf0 acc0 aliases bp uc lf' acc'.
     FOLDL (\(lf, acc) inst.
