@@ -1,5 +1,7 @@
 (*
- * SSA Simulation Definitions and Core Lemmas
+ * Make SSA Pass — Simulation Definitions
+ *
+ * Upstream: vyperlang/vyper@fa30658 (make_ssa pass)
  *
  * Extracted from makeSsaProofScript.sml to break circular dependencies.
  * Contains:
@@ -56,8 +58,7 @@ QED
 
 Theorem step_inst_base_var_only_preserves_non_var:
   !inst s s'.
-    (inst.inst_opcode = PHI \/ inst.inst_opcode = ASSIGN \/
-     inst.inst_opcode = NOP) /\
+    (inst.inst_opcode = ASSIGN \/ inst.inst_opcode = NOP) /\
     step_inst_base inst s = OK s' ==>
     s'.vs_memory = s.vs_memory /\
     s'.vs_transient = s.vs_transient /\
@@ -81,7 +82,6 @@ Theorem step_inst_base_var_only_preserves_non_var:
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >| [
-    gvs[step_inst_base_def, AllCaseEqs(), update_var_def],
     gvs[step_inst_base_def, AllCaseEqs(), update_var_def],
     gvs[step_inst_base_def]
   ]
@@ -165,6 +165,7 @@ Definition ssa_result_equiv_def:
      a1 = a2 /\ execution_equiv UNIV s1 s2) /\
   (ssa_result_equiv (IntRet v1 s1) (IntRet v2 s2) <=>
      execution_equiv UNIV s1 s2 /\ v1 = v2) /\
+  (* Error message is an implementation detail; any error matches any error *)
   (ssa_result_equiv (Error _) (Error _) <=> T) /\
   (ssa_result_equiv (OK _) (Halt _) <=> F) /\
   (ssa_result_equiv (OK _) (Abort _ _) <=> F) /\
@@ -458,7 +459,8 @@ QED
 
 (* Stepping a PHI on the SSA side maintains ssa_sim.
    The PHI reads the sigma-image of variable x (matched via prev_bb)
-   and writes to fresh output out. *)
+   and writes to fresh output out. Under the new semantics, PHI execution
+   goes through eval_one_phi, not step_inst_base. *)
 Theorem ssa_sim_phi_step:
   !sigma s1 s2 inst x out prev v.
     ssa_sim sigma s1 s2 /\
@@ -468,10 +470,10 @@ Theorem ssa_sim_phi_step:
     resolve_phi prev inst.inst_operands = SOME (Var (sigma x)) /\
     lookup_var x s1 = SOME v /\
     (!y. y <> x ==> sigma y <> out) ==>
-    step_inst_base inst s2 = OK (update_var out v s2) /\
+    eval_one_phi s2 inst = SOME (out, v) /\
     ssa_sim ((x =+ out) sigma) s1 (update_var out v s2)
 Proof
-  rw[step_inst_base_def] >>
+  rw[eval_one_phi_def] >>
   `lookup_var (sigma x) s2 = SOME v` by gvs[ssa_sim_def] >>
   gvs[eval_operand_def, lookup_var_def] >>
   rw[ssa_sim_def, update_var_def, lookup_var_def,
@@ -634,10 +636,4 @@ Proof
     simp[FLOOKUP_DEF])
 QED
 
-(* run_block OK implies inst_idx 0 in result *)
-Theorem run_block_OK_inst_idx_0:
-  !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  rw[run_block_def] >> metis_tac[exec_block_OK_inst_idx_0]
-QED
+(* run_block_OK_inst_idx_0 is already available from venomExecProofsTheory *)
