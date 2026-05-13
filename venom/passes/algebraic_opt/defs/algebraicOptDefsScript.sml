@@ -382,8 +382,10 @@ Definition ao_opt_muldiv_def:
     | _ => [inst]
 End
 
-(* Or: x | MAX → MAX, x | 0 → x, x | nonzero_lit → 1 (truthy context)
-   Commutative: after pre-flip, literal at op2. *)
+(* Or: x | MAX → MAX, x | 0 → x
+   Commutative: after pre-flip, literal at op2.
+   NOTE: truthy case (x | nonzero → 1) disabled — value-changing
+   optimization requires usage-level proof, not per-instruction sim *)
 Definition ao_opt_or_def:
   ao_opt_or dfg inst =
     case inst.inst_operands of
@@ -391,11 +393,6 @@ Definition ao_opt_or_def:
         if lit_eq op2 (0w - 1w) then
           [inst with <| inst_opcode := ASSIGN;
                         inst_operands := [Lit (0w - 1w)] |>]
-        (* x | nonzero_lit → 1 when all uses are truthy *)
-        else if ao_all_truthy dfg inst /\
-                is_lit_op op2 /\ ~lit_eq op2 0w then
-          [inst with <| inst_opcode := ASSIGN;
-                        inst_operands := [Lit 1w] |>]
         else if lit_eq op2 0w then
           [inst with <| inst_opcode := ASSIGN; inst_operands := [op1] |>]
         else [inst]
@@ -576,7 +573,7 @@ Definition ao_opt_comparator_def:
           let signed = (opc = SGT \/ opc = SLT) in
           (* Range-based optimization *)
           let range_result = ao_opt_cmp_range ra lbl idx inst is_gt signed in
-          case range_result of
+          (case range_result of
             SOME replacement =>
               [inst with <| inst_opcode := ASSIGN;
                             inst_operands := [replacement] |>]
@@ -632,7 +629,7 @@ Definition ao_opt_comparator_def:
                           inst_operands := [Var tmp] |>]
           (* Remaining comparators: iszero insertion/removal handled by
              ao_cmp_flip_function (separate mini-pass after peephole). *)
-          else [inst]
+          else [inst])
     | _ => [inst]
 End
 
