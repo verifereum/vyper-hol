@@ -7850,7 +7850,7 @@ QED
 
 (* TC endpoint replacement: if TC R x' y' and we can replace x'→x and y'→y
    at the endpoints of one-step relations, then TC R x y.
-   Proof: by TC induction. Base: R x' y' → R x y'. 
+   Proof: by TC induction. Base: R x' y' → R x y'.
    Step: TC R x' y' ∧ R y' z → TC R x' z, plus R y' z → R y z. *)
 (* TC left endpoint replacement: if ∀a. R x' a ⇒ R x a, then
    TC R x' y ⇒ TC R x y.

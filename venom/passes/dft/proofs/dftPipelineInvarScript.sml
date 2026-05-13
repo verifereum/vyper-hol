@@ -981,5 +981,3 @@ Proof
     simp[add_alloca_deps_def, add_chain_deps_def, LET_THM] >>
   simp[build_full_eda_def, LET_THM]
 QED
-
-

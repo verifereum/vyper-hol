@@ -637,5 +637,3 @@ Proof
   conj_tac >- metis_tac[run_function_fuel_determ] >>
   metis_tac[run_function_fuel_determ]
 QED
-
-
