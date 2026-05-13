@@ -9,10 +9,10 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperStorageBackend vyperLookup vyperEncodeDecode vyperArith vyperAssignPreservesType
   vyperTypeSystem vyperTypeValues vyperTypeDefaults
-  vyperScopePreservation vyperImmutablesPreservation
+  vyperScopePreservation vyperImmutablesPreservation vyperLookupStorage
   vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeBuiltins vyperTypeExprSoundness
 Libs
-  wordsLib
+  wordsLib markerLib
 
 (* ===== Scope operations ===== *)
 
@@ -766,6 +766,26 @@ Definition target_assignment_values_typed_def:
       value_has_type tv v) tgts gvs vs
 End
 
+Definition target_assignment_values_assignable_def:
+  target_assignment_values_assignable env cx st tgts gvs vs <=>
+    LIST_REL3 (\tgt gv v. ?ty tv.
+      target_runtime_typed env cx st tgt ty gv /\
+      assignable_type env.type_defs ty /\
+      evaluate_type env.type_defs ty = SOME tv /\
+      value_has_type tv v) tgts gvs vs
+End
+
+Theorem target_assignment_values_assignable_typed:
+  target_assignment_values_assignable env cx st tgts gvs vs ==>
+  target_assignment_values_typed env cx st tgts gvs vs
+Proof
+  rw[target_assignment_values_assignable_def, target_assignment_values_typed_def] >>
+  pop_assum mp_tac >>
+  MAP_EVERY qid_spec_tac [`vs`, `gvs`] >>
+  Induct_on `tgts` >> Cases_on `gvs` >> Cases_on `vs` >>
+  simp[LIST_REL3_def] >> metis_tac[]
+QED
+
 Theorem target_assignment_values_typed_shapes:
   target_assignment_values_typed env cx st tgts gvs vs ==>
   target_values_shape env tgts gvs
@@ -863,6 +883,48 @@ Proof
   metis_tac[target_runtime_typed_rebuild]
 QED
 
+Definition assign_operation_matches_target_shape_def:
+  assign_operation_matches_target_shape gv op <=>
+    case gv of
+    | BaseTargetV loc sbs => T
+    | TupleTargetV gvs =>
+        case op of
+        | Replace (ArrayV (TupleV vs)) => LENGTH gvs = LENGTH vs
+        | _ => F
+End
+
+Definition assign_target_assignable_def:
+  assign_target_assignable (BaseTargetV loc sbs) st =
+    (case loc of
+     | ScopedVar id =>
+         ?pre env entry rest.
+           find_containing_scope (string_to_num id) st.scopes =
+             SOME (pre, env, entry, rest) /\
+           entry.assignable
+     | _ => T) /\
+  assign_target_assignable (TupleTargetV tgts) st =
+    EVERY (\tgt. assign_target_assignable tgt st) tgts
+End
+
+Definition assign_target_assignable_context_def:
+  assign_target_assignable_context cx (BaseTargetV loc sbs) st =
+    (assign_target_assignable (BaseTargetV loc sbs) st /\
+     case loc of
+     | TopLevelVar src id =>
+         ?code p. get_module_code cx src = SOME code /\
+                  find_var_decl_by_num (string_to_num id) code = SOME p /\
+                  (case FST p of
+                   | StorageVarDecl is_transient typ =>
+                       IS_SOME (evaluate_type (get_tenv cx) typ) /\
+                       IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p))
+                   | HashMapVarDecl is_transient _ _ =>
+                       sbs <> [] /\
+                       IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p)))
+     | _ => T) /\
+  assign_target_assignable_context cx (TupleTargetV tgts) st =
+    EVERY (\tgt. assign_target_assignable_context cx tgt st) tgts
+End
+
 Theorem assign_target_preserves_state_well_typed_mutual:
   (!cx gv op st res st'.
     assign_target cx gv op st = (res, st') ==>
@@ -915,8 +977,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
   qpat_x_assum`_ = (res,_)`mp_tac >>
   reverse CASE_TAC >> gvs[raise_def, return_def]
   >- (strip_tac >> gvs[]) >>
-  rename1 `assign_subscripts entry.type entry.value (REVERSE sbs) op = INL new_value` >>
-  sg `value_has_type entry.type new_value` >- (
+  sg `value_has_type entry.type x` >- (
     gvs[place_leaf_typed_def, place_leaf_path_typed_def] >>
     irule assign_subscripts_preserves_type >> simp[] >>
     conj_asm1_tac >- (
@@ -1126,9 +1187,748 @@ QED
 
 Finalise assign_target_preserves_state_well_typed_mutual
 
+Theorem assign_result_no_type_error_from_successful_assign:
+  assign_subscripts tv old subs op = INL new /\
+  assign_result tv op old subs st = (res, st') ==>
+  no_type_error_result res
+Proof
+  Cases_on `op` >>
+  simp[assign_result_def, return_def, bind_apply, no_type_error_result_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+  qpat_x_assum `(case lift_sum (evaluate_subscripts _ _ _) _ of _ => _) = _` mp_tac >>
+  gvs[lift_sum_def, return_def, raise_def, AllCaseEqs(),
+      sum_CASE_rator, popped_value_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem lookup_global_success_get_module_code:
+  lookup_global cx src n st = (INL tv, st') ==> ?code. get_module_code cx src = SOME code
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def]
+QED
+
+Theorem top_level_Type_storage_decl:
+  runtime_consistent env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type base_ty) /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_num n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
+  typ = base_ty
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem top_level_Type_not_hashmap_decl:
+  runtime_consistent env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type base_ty) /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_num n ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==>
+  F
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem top_level_HashMap_decl:
+  runtime_consistent env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (HashMapT kt vt) /\
+  get_module_code cx src = SOME ts ==>
+  ?is_transient id_str.
+    find_var_decl_by_num n ts = SOME (HashMapVarDecl is_transient kt vt,id_str)
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem top_level_vtype_well_formed:
+  runtime_consistent env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME vt ==>
+  well_formed_vtype env.type_defs vt
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem target_runtime_typed_top_level_Type:
+  target_runtime_typed env cx st tgt ty (BaseTargetV (TopLevelVar src id) sbs) /\
+  FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type base_ty) ==>
+  target_path_type env (Type base_ty) sbs (Type ty)
+Proof
+  Cases_on `tgt` >> rw[target_runtime_typed_def, location_runtime_typed_def] >> gvs[]
+QED
+
+Theorem lookup_global_Value_not_HashMapVarDecl:
+  lookup_global cx src n st = (INL (Value v), st') /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME p /\
+  FST p = HashMapVarDecl is_t kt vt ==>
+  F
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  gvs[return_def, AllCaseEqs(), option_CASE_rator, var_decl_info_CASE_rator,
+      prod_CASE_rator] >>
+  Cases_on `lookup_var_slot_from_layout cx is_transient' src id` >>
+  gvs[return_def, raise_def, bind_def]
+QED
+
+
+Theorem lookup_global_top_level_assignable_no_type_error:
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  lookup_global cx src (string_to_num id) st =
+    (INR (Error (TypeError msg)), st') ==>
+  F
+Proof
+  strip_tac >>
+  gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
+  rename1 `get_module_code cx src = SOME code` >>
+  rename1 `find_var_decl_by_num (string_to_num id) code = SOME p` >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[lookup_global_def, bind_def, return_def, raise_def,
+       lift_option_type_def, option_CASE_rator,
+       var_decl_info_CASE_rator, prod_CASE_rator] >>
+  simp[] >>
+  Cases_on `p` >> gvs[] >>
+  Cases_on `q` >> gvs[]
+  >- (
+    rename1 `StorageVarDecl is_transient typ` >>
+    `?slot. lookup_var_slot_from_layout cx is_transient src r = SOME slot` by
+      metis_tac[optionTheory.IS_SOME_EXISTS] >>
+    `?tv. evaluate_type (get_tenv cx) typ = SOME tv` by
+      metis_tac[optionTheory.IS_SOME_EXISTS] >>
+    gvs[] >>
+    Cases_on `tv` >> gvs[bind_def, return_def, raise_def]
+    >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (BaseTV b) st` >>
+        Cases_on `q` >> gvs[] >>
+        drule read_storage_slot_error >> strip_tac >> gvs[])
+    >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (TupleTV l) st` >>
+        Cases_on `q` >> gvs[] >>
+        drule read_storage_slot_error >> strip_tac >> gvs[])
+    >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (StructTV l) st` >>
+        Cases_on `q` >> gvs[] >>
+        drule read_storage_slot_error >> strip_tac >> gvs[])
+    >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (FlagTV n) st` >>
+        Cases_on `q` >> gvs[] >>
+        drule read_storage_slot_error >> strip_tac >> gvs[]) >>
+    Cases_on `read_storage_slot cx is_transient (n2w slot) NoneTV st` >>
+    Cases_on `q` >> gvs[] >>
+    drule read_storage_slot_error >> strip_tac >> gvs[]) >>
+  rename1 `HashMapVarDecl is_transient kt vt` >>
+  `?slot. lookup_var_slot_from_layout cx is_transient src r = SOME slot` by
+    metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  gvs[]
+QED
+
+Theorem lookup_global_storage_Value_typed:
+  lookup_global cx src n st = (INL (Value old_v), st') /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tv ==>
+  value_has_type tv old_v
+Proof
+  rw[] >>
+  `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def,
+       raise_def, option_CASE_rator, var_decl_info_CASE_rator,
+       prod_CASE_rator] >>
+  Cases_on `tv` >> gvs[return_def, raise_def, bind_def]
+  >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (BaseTV b) st` >>
+      Cases_on `q` >> gvs[] >> strip_tac >> gvs[] >>
+      metis_tac[read_storage_slot_success_type])
+  >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (TupleTV l) st` >>
+      Cases_on `q` >> gvs[] >> strip_tac >> gvs[] >>
+      metis_tac[read_storage_slot_success_type])
+  >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (StructTV l) st` >>
+      Cases_on `q` >> gvs[] >> strip_tac >> gvs[] >>
+      metis_tac[read_storage_slot_success_type])
+  >- (Cases_on `read_storage_slot cx is_transient (n2w slot) (FlagTV n') st` >>
+      Cases_on `q` >> gvs[] >> strip_tac >> gvs[] >>
+      metis_tac[read_storage_slot_success_type]) >>
+  Cases_on `read_storage_slot cx is_transient (n2w slot) NoneTV st` >>
+  Cases_on `q` >> gvs[] >> strip_tac >> gvs[] >>
+  metis_tac[read_storage_slot_success_type, value_has_type_NoneTV]
+QED
+
+Theorem write_storage_slot_no_type_error_from_value_has_type:
+  value_has_type tv v ==>
+  write_storage_slot cx is_transient slot tv v st <>
+    (INR (Error (TypeError msg)), st')
+Proof
+  rw[] >>
+  `IS_SOME (encode_value tv v)` by metis_tac[value_has_type_equiv] >>
+  `?writes. encode_value tv v = SOME writes` by
+    metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  CCONTR_TAC >> gvs[] >>
+  Cases_on `is_transient` >>
+  gvs[write_storage_slot_def, bind_def, lift_option_def,
+      get_storage_backend_def, get_transient_storage_def, get_accounts_def,
+      return_def, raise_def, set_storage_backend_def, update_transient_def,
+      update_accounts_def]
+QED
+
+Theorem set_global_storage_no_type_error:
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  value_has_type tv v ==>
+  set_global cx src n v st <> (INR (Error (TypeError msg)), st')
+Proof
+  rw[set_global_def, bind_def, lift_option_type_def, raise_def, return_def,
+     AllCaseEqs(), option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator] >>
+  drule_all write_storage_slot_no_type_error_from_value_has_type >> simp[]
+QED
+
+Theorem assign_subscripts_preserves_type_runtime_typed:
+  assign_subscripts tv old_v subs op = INL new_v /\
+  value_has_type tv old_v /\
+  well_formed_type_value tv /\
+  evaluate_type env.type_defs ty = SOME (leaf_type tv subs) /\
+  assign_operation_runtime_typed env ty op ==>
+  value_has_type tv new_v
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tv`,`old_v`,`subs`,`op`,`new_v`]
+    mp_tac assign_subscripts_preserves_type >>
+  simp[] >>
+  impl_tac >- (
+    rpt strip_tac >> gvs[]
+    >- metis_tac[assign_operation_leaf_type_replace]
+    >- metis_tac[assign_operation_leaf_type_update] >>
+    metis_tac[assign_operation_leaf_type_append]) >>
+  simp[]
+QED
+
+Theorem top_level_vtype_Type_storage_decl:
+  runtime_consistent env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type root_ty) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) ==>
+  typ = root_ty
+Proof
+  strip_tac >>
+  gvs[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
+  first_x_assum $ drule_then drule >>
+  strip_tac >> first_x_assum drule >>
+  rw[]
+QED
+
+Theorem top_level_storage_value_leaf_evaluate_type:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty (BaseTargetV (TopLevelVar src id) sbs) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  evaluate_type (get_tenv cx) typ = SOME tv ==>
+  evaluate_type env.type_defs ty = SOME (leaf_type tv (REVERSE sbs))
+Proof
+  rw[] >>
+  `?loc_vt. location_runtime_typed env cx st (TopLevelVar src id) loc_vt /\
+            target_path_type env loc_vt sbs (Type ty)` by
+    (Cases_on `tgt` >> gvs[target_runtime_typed_def] >> metis_tac[]) >>
+  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME loc_vt` by
+    gvs[location_runtime_typed_def] >>
+  Cases_on `loc_vt` >> gvs[]
+  >- (
+    `typ = t` by metis_tac[top_level_vtype_Type_storage_decl] >>
+    gvs[] >>
+    `env.type_defs = get_tenv cx` by
+      gvs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+    gvs[] >>
+    `well_formed_vtype env.type_defs (Type t)` by
+      metis_tac[top_level_vtype_well_formed] >>
+    drule_all target_path_type_Type_place_leaf_typed >>
+    strip_tac >>
+    gvs[place_leaf_typed_def, place_leaf_path_typed_def]) >>
+  drule_all top_level_HashMap_decl >>
+  strip_tac >>
+  gvs[]
+QED
+
+Theorem top_level_storage_value_set_global_no_type_error:
+  lookup_global cx src n st = (INL (Value old_v), st) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  evaluate_type env.type_defs leaf_ty = SOME (leaf_type tv subs) /\
+  assign_subscripts tv old_v subs op = INL new_v /\
+  assign_operation_runtime_typed env leaf_ty op /\
+  set_global cx src n new_v st = (INR (Error (TypeError msg)), st') ==>
+  F
+Proof
+  rpt strip_tac >>
+  `value_has_type tv old_v` by
+    metis_tac[lookup_global_storage_Value_typed] >>
+  `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+  `value_has_type tv new_v` by
+    metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
+  metis_tac[set_global_storage_no_type_error]
+QED
+
+Theorem top_level_storage_value_set_global_no_type_error_pair:
+  lookup_global cx src n st = (INL (Value old_v), st) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME p /\
+  FST p = StorageVarDecl is_transient typ /\
+  lookup_var_slot_from_layout cx is_transient src (SND p) = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  evaluate_type env.type_defs leaf_ty = SOME (leaf_type tv subs) /\
+  assign_subscripts tv old_v subs op = INL new_v /\
+  assign_operation_runtime_typed env leaf_ty op /\
+  set_global cx src n new_v st = (INR (Error (TypeError msg)), st') ==>
+  F
+Proof
+  Cases_on `p` >> rw[] >>
+  metis_tac[top_level_storage_value_set_global_no_type_error]
+QED
+
+Theorem top_level_storage_value_assign_success_no_type_error:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  assign_operation_runtime_typed env ty op /\
+  lookup_global cx src (string_to_num id) st =
+    (INL (Value old_v), st) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code =
+    SOME (StorageVarDecl is_transient typ,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME root_tv /\
+  assign_subscripts root_tv old_v (REVERSE sbs) op = INL new_v /\
+  set_global cx src (string_to_num id) new_v st =
+    (INR (Error (TypeError msg)), st') ==>
+  F
+Proof
+  strip_tac >>
+  drule_all lookup_global_storage_Value_typed >> strip_tac >>
+  drule_all top_level_storage_value_leaf_evaluate_type >> strip_tac >>
+  `well_formed_type_value root_tv` by (
+    irule evaluate_type_well_formed_type_value >>
+    goal_assum drule_all ) >>
+  drule_all assign_subscripts_preserves_type_runtime_typed >> strip_tac >>
+  qhdtm_x_assum`set_global`mp_tac >> simp[] >>
+  irule set_global_storage_no_type_error >>
+  goal_assum drule_all
+QED
+
+Theorem assign_subscripts_replace_leaf_no_type_error:
+  assign_subscripts tv leaf [] (Replace nv) <> INR (TypeError msg)
+Proof
+  simp[Once assign_subscripts_def]
+QED
+
+Theorem append_element_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) arr_v /\
+  value_has_type elem_tv new_elem ==>
+  append_element (ArrayTV elem_tv (Dynamic n)) arr_v new_elem <> INR (TypeError msg)
+Proof
+  Cases_on `arr_v` >> simp[value_has_type_def, append_element_def] >>
+  Cases_on `a` >> simp[value_has_type_def, append_element_def] >>
+  rw[] >> gvs[] >>
+  drule safe_cast_well_typed >> simp[]
+QED
+
+Theorem assign_subscripts_append_leaf_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) leaf /\
+  value_has_type elem_tv nv ==>
+  assign_subscripts (ArrayTV elem_tv (Dynamic n)) leaf [] (AppendOp nv) <>
+    INR (TypeError msg)
+Proof
+  simp[Once assign_subscripts_def] >>
+  metis_tac[append_element_no_type_error]
+QED
+
+Theorem pop_element_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) arr_v ==>
+  pop_element arr_v <> INR (TypeError msg)
+Proof
+  Cases_on `arr_v` >> simp[value_has_type_def, pop_element_def] >>
+  Cases_on `a` >> simp[value_has_type_def, pop_element_def]
+QED
+
+Theorem assign_subscripts_pop_leaf_no_type_error:
+  value_has_type (ArrayTV elem_tv (Dynamic n)) leaf ==>
+  assign_subscripts (ArrayTV elem_tv (Dynamic n)) leaf [] PopOp <>
+    INR (TypeError msg)
+Proof
+  simp[Once assign_subscripts_def] >>
+  metis_tac[pop_element_no_type_error]
+QED
+
+Theorem int_typed_value_is_IntV:
+  is_int_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  ?i. v = IntV i
+Proof
+  Cases_on `ty` >> rw[is_int_type_def, evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem numeric_typed_value_is_numeric:
+  is_numeric_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  (?i. v = IntV i) \/ (?d. v = DecimalV d)
+Proof
+  rw[is_numeric_type_def] >-
+    (drule_all int_typed_value_is_IntV >> simp[]) >>
+  Cases_on `v` >> gvs[evaluate_type_def, value_has_type_def]
+QED
+
+Theorem bool_typed_value_is_BoolV:
+  is_bool_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  ?b. v = BoolV b
+Proof
+  Cases_on `ty` >> gvs[is_bool_type_def, evaluate_type_def] >>
+  Cases_on `b` >> gvs[is_bool_type_def, evaluate_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem flag_typed_value_is_FlagV:
+  is_flag_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+  ?n. v = FlagV n
+Proof
+  Cases_on `ty` >> rw[is_flag_type_def] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem well_typed_update_binop_no_type_error:
+  well_typed_binop lhs_ty bop lhs_ty rhs_ty /\
+  evaluate_type tenv lhs_ty = SOME lhs_tv /\
+  evaluate_type tenv rhs_ty = SOME rhs_tv /\
+  value_has_type lhs_tv lhs /\
+  value_has_type rhs_tv rhs /\
+  u = (case type_to_int_bound lhs_ty of NONE => Unsigned 0 | SOME u => u) ==>
+  evaluate_binop u lhs_tv bop lhs rhs <> INR (TypeError msg)
+Proof
+  (* TODO: prove directly by binop-family inversion.  This is exactly the
+     assignment-shaped instance of the existing builtin no-TypeError theorem. *)
+  metis_tac[well_typed_binop_no_type_error]
+QED
+
+Theorem assign_subscripts_update_leaf_no_type_error:
+  well_typed_binop lhs_ty bop lhs_ty rhs_ty /\
+  evaluate_type tenv lhs_ty = SOME lhs_tv /\
+  evaluate_type tenv rhs_ty = SOME rhs_tv /\
+  value_has_type lhs_tv lhs /\
+  value_has_type rhs_tv rhs ==>
+  assign_subscripts lhs_tv lhs [] (Update lhs_ty bop rhs) <>
+    INR (TypeError msg)
+Proof
+  simp[Once assign_subscripts_def, LET_THM] >>
+  metis_tac[well_typed_update_binop_no_type_error]
+QED
+
+Theorem struct_has_type_alookup_none:
+  !l al id. struct_has_type l al /\ ALOOKUP al id = NONE ==> ALOOKUP l id = NONE
+Proof
+  Induct >> Cases_on `al` >> simp[value_has_type_def] >>
+  Cases >> Cases_on `h` >> simp[value_has_type_def] >> rw[] >> gvs[] >>
+  Cases_on `id = q` >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem array_set_index_no_type_error:
+  array_index (ArrayTV elem_tv bd) av i = SOME old /\
+  value_has_type (ArrayTV elem_tv bd) (ArrayV av) ==>
+  array_set_index (ArrayTV elem_tv bd) av i v <> INR (TypeError msg)
+Proof
+  Cases_on `0 <= i` >> gvs[array_index_def, array_set_index_def, LET_THM] >>
+  Cases_on `av` >> gvs[value_has_type_def, array_set_index_def, array_index_def] >>
+  Cases_on `bd` >> gvs[value_has_type_def, array_set_index_def, array_index_def, AllCaseEqs()]
+QED
+
+Theorem assign_operation_runtime_typed_leaf_no_type_error:
+  !env leaf_ty op leaf_tv leaf msg.
+    assign_operation_runtime_typed env leaf_ty op /\
+    evaluate_type env.type_defs leaf_ty = SOME leaf_tv /\
+    value_has_type leaf_tv leaf ==>
+    assign_subscripts leaf_tv leaf [] op <> INR (TypeError msg)
+Proof
+  rpt strip_tac >>
+  Cases_on `op` >- (
+    gvs[assign_operation_runtime_typed_def, value_runtime_typed_def, Once assign_subscripts_def]) >- (
+    rename1 `Update upd_ty bop rhs` >>
+    gvs[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
+    drule_all assign_subscripts_update_leaf_no_type_error >> simp[]) >- (
+    rename1 `AppendOp v` >>
+    gvs[assign_operation_runtime_typed_def, evaluate_type_def] >>
+    drule_all assign_subscripts_append_leaf_no_type_error >> simp[]) >>
+  gvs[assign_operation_runtime_typed_def, evaluate_type_def] >>
+  drule_all assign_subscripts_pop_leaf_no_type_error >> simp[]
+QED
+
+Theorem assign_subscripts_no_type_error_from_leaf:
+  !tv a subs op.
+    value_has_type tv a /\
+    well_formed_type_value tv /\
+    leaf_type tv subs <> NoneTV /\
+    (!leaf msg.
+       value_has_type (leaf_type tv subs) leaf ==>
+       assign_subscripts (leaf_type tv subs) leaf [] op <>
+         INR (TypeError msg)) ==>
+    !msg. assign_subscripts tv a subs op <> INR (TypeError msg)
+Proof
+  Induct_on `subs` >- (
+    simp[leaf_type_def] >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `h` >> gvs[leaf_type_def] >- (
+    Cases_on `v` >> gvs[Once assign_subscripts_def, leaf_type_def] >>
+    Cases_on `a` >> gvs[Once assign_subscripts_def] >>
+    Cases_on `tv` >> gvs[value_has_type_def, well_formed_type_value_def, leaf_type_def] >>
+    Cases_on `array_index (ArrayTV t b) a' i` >> gvs[] >>
+    `value_has_type t x` by (
+      irule array_index_has_type >> simp[] >>
+      goal_assum drule >> simp[]) >>
+    qpat_x_assum `!tv a op. _` (qspecl_then [`t`,`x`,`op`] mp_tac) >>
+    impl_tac >- (
+      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+    strip_tac >>
+    Cases_on `assign_subscripts t x subs op` >> gvs[] >> rpt strip_tac >>
+    `array_set_index (ArrayTV t b) a' i x' <> INR (TypeError msg)` by (
+      irule array_set_index_no_type_error >> simp[] >>
+      goal_assum drule >> simp[]) >>
+    gvs[]) >>
+  Cases_on `a` >> gvs[Once assign_subscripts_def] >>
+  Cases_on `tv` >> gvs[value_has_type_def, well_formed_type_value_def, leaf_type_def] >>
+  reverse (Cases_on `ALOOKUP l s`) >> gvs[] >- (
+    rename1 `ALOOKUP l s = SOME fv` >>
+    `?(field_ty:type_value). ALOOKUP l' s = SOME field_ty /\ value_has_type field_ty fv` by
+      (drule_all struct_field_has_type >> simp[]) >>
+    gvs[] >>
+    `well_formed_type_value field_ty` by
+      (gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, FORALL_PROD] >>
+       drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+       first_x_assum irule >> metis_tac[]) >>
+    first_x_assum (qspecl_then [`field_ty`,`fv`,`op`] mp_tac) >>
+    impl_tac >- (
+      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+    strip_tac >>
+    Cases_on `assign_subscripts field_ty fv subs op` >> gvs[]) >>
+  drule_all struct_has_type_alookup_none >> strip_tac >> gvs[]
+QED
+
+Theorem assign_subscripts_no_type_error_runtime_typed:
+  !tv a subs op env leaf_ty msg.
+    value_has_type tv a /\
+    well_formed_type_value tv /\
+    leaf_type tv subs <> NoneTV /\
+    assign_operation_runtime_typed env leaf_ty op /\
+    evaluate_type env.type_defs leaf_ty = SOME (leaf_type tv subs) ==>
+    assign_subscripts tv a subs op <> INR (TypeError msg)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tv`,`a`,`subs`,`op`] mp_tac assign_subscripts_no_type_error_from_leaf >>
+  impl_tac >- (
+    simp[] >> rpt strip_tac >>
+    drule_all assign_operation_runtime_typed_leaf_no_type_error >> simp[]) >>
+  strip_tac >> first_x_assum (qspec_then `msg` mp_tac) >> simp[]
+QED
+
+Theorem top_level_storage_value_assign_subscripts_no_type_error:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op /\
+  lookup_global cx src (string_to_num id) st =
+    (INL (Value old_v), st) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code =
+    SOME (StorageVarDecl is_transient typ,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME root_tv ==>
+  assign_subscripts root_tv old_v (REVERSE sbs) op <> INR (TypeError msg)
+Proof
+  strip_tac >>
+  drule_all lookup_global_storage_Value_typed >> strip_tac >>
+  drule_all top_level_storage_value_leaf_evaluate_type >> strip_tac >>
+  `well_formed_type_value root_tv` by (
+    irule evaluate_type_well_formed_type_value >>
+    goal_assum drule_all ) >>
+  `leaf_type root_tv (REVERSE sbs) <> NoneTV` by (
+    drule_all assignable_type_evaluate_not_NoneTV >>
+    simp[] ) >>
+  irule assign_subscripts_no_type_error_runtime_typed >>
+  simp[] >>
+  goal_assum drule_all
+QED
+
+Theorem assign_target_sound_mutual:
+  (!cx gv op st res st'.
+    assign_target cx gv op st = (res, st') ==>
+    !env tgt ty.
+      runtime_consistent env cx st /\
+      target_runtime_typed env cx st tgt ty gv /\
+      assignable_type env.type_defs ty /\
+      assign_operation_runtime_typed env ty op /\
+      assign_operation_matches_target_shape gv op /\
+      assign_target_assignable_context cx gv st ==>
+      runtime_consistent env cx st' /\ no_type_error_result res) /\
+  (!cx gvs vs st res st'.
+    assign_targets cx gvs vs st = (res, st') ==>
+    !env tgts.
+      runtime_consistent env cx st /\
+      target_assignment_values_assignable env cx st tgts gvs vs /\
+      EVERY (\gv. assign_target_assignable_context cx gv st) gvs ==>
+      runtime_consistent env cx st' /\ no_type_error_result res)
+Proof
+  ho_match_mp_tac assign_target_ind >>
+  conj_tac >- suspend "sound_ScopedVar" >>
+  conj_tac >- suspend "sound_TopLevelVar" >>
+  conj_tac >- suspend "sound_ImmutableVar" >>
+  conj_tac >- suspend "sound_TupleTargetV" >>
+  rpt (conj_tac >- (
+    rpt strip_tac >>
+    gvs[Once assign_target_def, raise_def, no_type_error_result_def,
+        target_runtime_typed_def, target_value_shape_def,
+        assign_operation_runtime_typed_def, assign_operation_matches_target_shape_def,
+        assign_target_assignable_context_def, assign_target_assignable_def, value_runtime_typed_def,
+        value_has_type_def, evaluate_type_def, AllCaseEqs()] >>
+    Cases_on `tgt` >> gvs[target_runtime_typed_def, evaluate_type_def, AllCaseEqs()] >>
+    gvs[value_has_type_def, evaluate_type_def, AllCaseEqs()])) >>
+  conj_tac >- (
+    rpt strip_tac >>
+    gvs[Once assign_target_def, return_def, no_type_error_result_def]) >>
+  conj_tac >- suspend "sound_assign_targets_cons" >>
+  rpt strip_tac >>
+  gvs[Once assign_target_def, raise_def, no_type_error_result_def,
+      target_assignment_values_assignable_def, LIST_REL3_def]
+QED
+
+Resume assign_target_sound_mutual[sound_ScopedVar]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    goal_assum drule_all >> simp[]) >>
+  rename1 `assign_target cx (BaseTargetV (ScopedVar id) sbs) op st = (res, st')` >>
+  gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
+  reverse $
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs(), option_CASE_rator, get_scopes_def,
+      no_type_error_result_def, sum_CASE_rator, set_scopes_def]
+  >- (
+    rpt strip_tac >>
+    gvs[target_runtime_typed_def, target_value_shape_def, location_runtime_typed_def] >>
+    gvs[runtime_consistent_def] >>
+    drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
+    `runtime_consistent env cx s''` by simp[runtime_consistent_def] >>
+    `?vt final_tv. location_runtime_typed env cx s'' (ScopedVar id) vt /\
+                   target_path_type env vt sbs (Type ty) /\
+                   place_leaf_typed env vt sbs ty final_tv` by
+      metis_tac[target_runtime_typed_place_leaf_typed] >>
+    gvs[location_runtime_typed_def] >>
+    `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by (
+      irule scope_well_typed_lookup_scopes >>
+      gvs[state_well_typed_def] >>
+      goal_assum drule >> simp[]) >>
+    gvs[place_leaf_typed_def, place_leaf_path_typed_def] >>
+    Cases_on `REVERSE sbs = []` >- (
+      gvs[leaf_type_def] >>
+      qspecl_then [`env`,`ty`,`op`,`entry.type`,`entry.value`,`msg`]
+        mp_tac assign_operation_runtime_typed_leaf_no_type_error >>
+      simp[]) >>
+    qspecl_then [`entry.type`,`entry.value`,`REVERSE sbs`,`op`,`env`,`ty`,`msg`]
+      mp_tac assign_subscripts_no_type_error_runtime_typed >>
+    impl_tac >- (
+      simp[] >>
+      drule_all assignable_type_evaluate_not_NoneTV >> simp[]) >>
+    simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  drule assign_result_no_type_error_from_successful_assign >>
+  disch_then drule >>
+  simp[no_type_error_result_def]
+QED
+
+Resume assign_target_sound_mutual[sound_TopLevelVar]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    drule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    disch_then (qspecl_then [`env`, `tgt`, `ty`] mp_tac) >>
+    simp[]) >>
+  reverse $ gvs[assign_target_def, bind_apply, AllCaseEqs()]
+  >- (
+    rw[no_type_error_result_def] >> rpt strip_tac >> gvs[] >>
+    drule lookup_global_top_level_assignable_no_type_error >>
+    disch_then drule >> rw[] )
+  >- (
+    drule_at Any lookup_global_success_get_module_code >>
+    strip_tac >> gvs[lift_option_type_def,return_def] ) >>
+  gvs[lift_option_type_def,return_def,AllCaseEqs(),
+      raise_def,option_CASE_rator] >>
+  Cases_on`tv` >- (
+    gvs[assign_target_assignable_context_def] >>
+    drule_then drule lookup_global_Value_not_HashMapVarDecl >>
+    disch_then drule >> simp[] >> strip_tac >>
+    PairCases_on`p` >> Cases_on`p0` >> gvs[IS_SOME_EXISTS] >>
+    reverse(gvs[bind_apply,AllCaseEqs(),return_def]) >- (
+      gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
+          return_def, raise_def, no_type_error_result_def] >>
+      rpt strip_tac >> gvs[] >>
+      funpow 3 drule_then drule
+        top_level_storage_value_assign_subscripts_no_type_error >>
+      simp[] >>
+      imp_res_tac lookup_global_state ) >>
+    reverse $ gvs[ignore_bind_apply, AllCaseEqs(),
+                  no_type_error_result_def] >- (
+      rpt strip_tac >> gvs[] >>
+      funpow 2 drule_then drule
+        top_level_storage_value_assign_success_no_type_error >>
+      simp[] >>
+      imp_res_tac lookup_global_state >>
+      gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
+          raise_def, return_def]
+    ) >>
+    rpt strip_tac >> gvs[] >>
+    drule_at Any assign_result_no_type_error_from_successful_assign >>
+    simp[no_type_error_result_def] >>
+    gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
+        raise_def, return_def] 
+  ) >>
+  gvs[]
+  >- cheat (* HashMapRef case *)
+  >> cheat (* ArrayRef case *)
+QED
+
+Resume assign_target_sound_mutual[sound_ImmutableVar]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    goal_assum drule_all >> simp[]) >>
+  cheat
+QED
+
+Resume assign_target_sound_mutual[sound_TupleTargetV]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    goal_assum drule_all >> simp[]) >>
+  cheat
+QED
+
+Resume assign_target_sound_mutual[sound_assign_targets_cons]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[assign_target_def] >>
+  cheat
+QED
+
+Finalise assign_target_sound_mutual
+
 Theorem assign_targets_preserves_runtime_consistent:
   runtime_consistent env cx st /\
   target_assignment_values_typed env cx st tgts gvs vs /\
+  EVERY (\gv. assign_target_assignable_context cx gv st) gvs /\
   assign_targets cx gvs vs st = (INL res, st') ==>
   runtime_consistent env cx st'
 Proof
@@ -1138,6 +1938,7 @@ QED
 Theorem assign_target_preserves_runtime_consistent:
   runtime_consistent env cx st /\
   target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_operation_matches_target_shape gv op /\ assign_target_assignable_context cx gv st /\
   assign_target cx gv op st = (INL res, st') ==>
   runtime_consistent env cx st'
 Proof
@@ -1147,6 +1948,7 @@ QED
 Theorem assign_targets_preserves_state_well_typed:
   runtime_consistent env cx st /\
   target_assignment_values_typed env cx st tgts gvs vs /\
+  EVERY (\gv. assign_target_assignable_context cx gv st) gvs /\
   assign_targets cx gvs vs st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
@@ -1156,6 +1958,7 @@ QED
 Theorem assign_target_preserves_state_well_typed:
   runtime_consistent env cx st /\
   target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_operation_matches_target_shape gv op /\ assign_target_assignable_context cx gv st /\
   assign_target cx gv op st = (INL res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
@@ -1165,6 +1968,7 @@ QED
 Theorem assign_target_preserves_runtime_consistent_result:
   runtime_consistent env cx st /\
   target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_operation_matches_target_shape gv op /\ assign_target_assignable_context cx gv st /\
   assign_target cx gv op st = (res, st') ==>
   runtime_consistent env cx st'
 Proof
@@ -1174,6 +1978,7 @@ QED
 Theorem assign_target_preserves_state_well_typed_result:
   runtime_consistent env cx st /\
   target_runtime_typed env cx st tgt ty gv /\ assign_operation_runtime_typed env ty op /\
+  assign_operation_matches_target_shape gv op /\ assign_target_assignable_context cx gv st /\
   assign_target cx gv op st = (res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof

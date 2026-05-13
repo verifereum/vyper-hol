@@ -77,6 +77,231 @@ Current fresh theory stack:
 
 The aggregator `vyperSemanticsHolScript.sml` has been switched to import `vyperTypeSoundnessNew` rather than the old final theory.
 
+## Assignment target soundness progress update (2026-05-13)
+
+This section records the current state of the focused assignment-target no-TypeError work in
+`semantics/prop/vyperTypeStatePreservationScript.sml`, especially the `TopLevelVar` case of
+`assign_target_sound_mutual`.
+
+### Proof engineering discipline learned / required
+
+For this proof, broad cleanup after case explosion is not workable. In particular:
+
+- Do **not** use a large `gvs[..., AllCaseEqs(), ...]` and then try to clean up many parallel goals.
+- Split semantic cases at the point where the evaluator branches, and close each branch immediately.
+- Before using fragile tactics (`drule_all`, `metis_tac`, broad `gvs`, etc.), make sure the proof is in a single active branch.
+- Prefer branch helper lemmas that exactly match semantic branches.
+- When asking for/providing the mathematical proof of a branch, give the exact sequence of lemmas to use and the subgoals to establish; avoid extra prose.
+
+The successful pattern used by the human for storage `Value` branches was:
+
+```sml
+strip_tac >>
+drule_all some_exact_helper >> strip_tac >>
+...
+qhdtm_x_assum `set_global` mp_tac >> simp[] >>
+irule exact_no_type_error_theorem >>
+goal_assum drule_all
+```
+
+and, inside `sound_TopLevelVar`, eliminate impossible subcases early with exact lemmas such as
+`lookup_global_Value_not_HashMapVarDecl` before destructing further.
+
+### Strengthened invariants / definitions now in place
+
+- `target_path_step_type` for `HashMapT kt vt` now requires `ValueSubscript key`, `hashmap_key_type kt`, successful evaluation of the key type, and `value_has_type` for the key value.
+- `assign_operation_runtime_typed` was strengthened for `PopOp`: it now requires a dynamic array type.
+- `assignable_type` was added to `vyperTypeSystemScript.sml` and used in assignment/materialized-value statement typing rules. It excludes `NoneT` recursively through tuples/arrays/structs.
+- `assign_target_assignable_context` was added for runtime assignment validity, especially top-level writability. For `TopLevelVar`, it requires module code, a declaration, and layout-slot success; storage declarations require type evaluation, hashmap declarations require nonempty subscripts and slot success.
+
+### Important proved helper lemmas
+
+Non-None / assignability:
+
+```sml
+assignable_type_not_NoneT
+evaluate_type_not_NoneT_imp_not_NoneTV
+assignable_type_evaluate_not_NoneTV
+```
+
+Recursive assignment no-TypeError and preservation support:
+
+```sml
+assign_subscripts_no_type_error_from_leaf
+assign_operation_runtime_typed_leaf_no_type_error      (* currently inherits update-binop cheat *)
+assign_subscripts_no_type_error_runtime_typed          (* currently inherits update-binop cheat *)
+assign_subscripts_preserves_type_runtime_typed          (* currently inherits update-binop cheat through update path *)
+```
+
+Storage/top-level helpers:
+
+```sml
+lookup_global_success_get_module_code
+top_level_Type_storage_decl
+top_level_Type_not_hashmap_decl
+top_level_HashMap_decl
+top_level_vtype_well_formed
+target_runtime_typed_top_level_Type
+lookup_global_Value_not_HashMapVarDecl
+lookup_global_top_level_assignable_no_type_error
+lookup_global_storage_Value_typed
+write_storage_slot_no_type_error_from_value_has_type
+set_global_storage_no_type_error
+top_level_vtype_Type_storage_decl
+top_level_storage_value_leaf_evaluate_type
+top_level_storage_value_assign_success_no_type_error
+top_level_storage_value_assign_subscripts_no_type_error
+```
+
+Notes:
+
+- `lookup_global_top_level_assignable_no_type_error` rules out a TypeError result from `lookup_global` using only `assign_target_assignable_context`; this works because `read_storage_slot_error` says storage read errors are `RuntimeError`, not `TypeError`.
+- `top_level_storage_value_leaf_evaluate_type` is the key bridge from top-level target typing to the executable storage root type:
+
+```sml
+evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs))
+```
+
+- `top_level_storage_value_assign_success_no_type_error` closes the storage `Value` branch where `assign_subscripts` succeeds but `set_global` allegedly returns a TypeError.
+- `top_level_storage_value_assign_subscripts_no_type_error` closes the storage `Value` branch where `assign_subscripts` allegedly returns `INR (TypeError msg)`.
+
+### Current status of `assign_target_sound_mutual[sound_TopLevelVar]`
+
+The proof currently has this structure:
+
+```sml
+Resume assign_target_sound_mutual[sound_TopLevelVar]:
+  ...
+  conj_tac >- preservation theorem ...
+  reverse $ gvs[assign_target_def, bind_apply, AllCaseEqs()]
+  >- (lookup_global TypeError branch closed by lookup_global_top_level_assignable_no_type_error)
+  >- (successful lookup gives module code by lookup_global_success_get_module_code)
+  ...
+  Cases_on `tv` >- (Value branch)
+  ...
+  >- cheat (* HashMapRef case *)
+  >> cheat (* ArrayRef case *)
+QED
+```
+
+The `Value` branch is now handled by the human proof and follows this lemma sequence:
+
+1. In `Value v` branch, use:
+   ```sml
+   lookup_global_Value_not_HashMapVarDecl
+   ```
+   to eliminate `HashMapVarDecl` declaration subcase early.
+2. Destruct the declaration pair:
+   ```sml
+   PairCases_on `p` >> Cases_on `p0` >> gvs[IS_SOME_EXISTS]
+   ```
+   exposing storage declaration, evaluated type, and slot.
+3. If `assign_subscripts ... = INR (TypeError msg)`, close with:
+   ```sml
+   top_level_storage_value_assign_subscripts_no_type_error
+   ```
+4. If `assign_subscripts ... = INL new_v` but `set_global ... new_v` returns TypeError, close with:
+   ```sml
+   top_level_storage_value_assign_success_no_type_error
+   ```
+5. If write-back succeeds, close with:
+   ```sml
+   assign_result_no_type_error_from_successful_assign
+   ```
+
+Only two branches remain cheated in this `TopLevelVar` case:
+
+```sml
+>- cheat (* HashMapRef case *)
+>> cheat (* ArrayRef case *)
+```
+
+### Current build-through / handover status
+
+For handover, the development is being kept buildable with localized cheats rather than weakening the strengthened assignment invariants.
+
+`vyperTypeStatePreservationTheory` builds through the new top-level lookup and storage `Value` helper lemmas and the proved `Value` branch of `sound_TopLevelVar`. The following assignment mutual branches are intentionally still cheated/build-through scaffolding:
+
+```sml
+assign_target_sound_mutual[sound_TopLevelVar]:
+  HashMapRef case
+  ArrayRef case
+assign_target_sound_mutual[sound_ImmutableVar]
+assign_target_sound_mutual[sound_TupleTargetV]
+assign_target_sound_mutual[sound_assign_targets_cons]
+```
+
+The latter three were cheated to keep the strengthened mutual theorem available to downstream theories while preserving the useful proved work in `sound_ScopedVar` and the top-level `Value` branch.
+
+`vyperTypeStmtSoundnessScript.sml` also has temporary build-through cheats in assignment statement cases after strengthening assignment preservation to require:
+
+```sml
+assign_operation_matches_target_shape gv op
+assign_target_assignable_context cx gv st
+```
+
+Currently affected statement branches include:
+
+```sml
+eval_all_type_sound_mutual[AnnAssign]
+eval_all_type_sound_mutual[Assign]
+eval_all_type_sound_mutual[AugAssign]
+```
+
+The missing statement-level obligations are to derive the strengthened runtime assignment side conditions from statement typing/evaluation:
+
+1. `assign_operation_matches_target_shape` for the operation being performed.
+2. `assign_target_assignable_context` for the evaluated target, including scoped assignability and top-level storage/hashmap writability.
+3. For `AnnAssign`, use `assignable_type` to derive the old non-`NoneT` side conditions instead of local cheats.
+4. For tuple/list assignment, use `target_assignment_values_assignable` to feed both typedness and assignability/context side conditions.
+
+These cheats should be removed by proving the statement-level side-condition lemmas, not by weakening `assign_target_sound_mutual` or dropping `assign_target_assignable_context`.
+
+Known inherited cheats remain in the update-binop path:
+
+```sml
+well_typed_binop_no_type_error                         (* in vyperTypeBuiltinsScript.sml *)
+well_typed_update_binop_no_type_error
+assign_subscripts_update_leaf_no_type_error
+assign_operation_runtime_typed_leaf_no_type_error
+assign_subscripts_no_type_error_runtime_typed
+assign_subscripts_preserves_type_runtime_typed          (* through update leaf helper *)
+```
+
+### Next mathematical branch: `HashMapRef`
+
+The next branch to prove is:
+
+```sml
+lookup_global ... = INL (HashMapRef is_transient base_slot kt vt)
+```
+
+Expected lemma sequence / facts to use:
+
+1. Use context assignability to get `sbs <> []` and slot availability for the top-level hashmap declaration.
+2. Use successful lookup/consistency facts (`lookup_global_HashMapRef` or local equivalent, plus `top_level_HashMap_decl` if needed) to connect the returned `HashMapRef` to the declaration and `HashMapT kt vt` target vtype.
+3. Use strengthened `target_path_type` hashmap key invariant to justify hashmap prefix traversal / `compute_hashmap_slot` cannot fail with TypeError. Hashmap key typing is represented statically by `target_path_step_type` requiring `ValueSubscript key`, evaluated key type, and `value_has_type`.
+4. After hashmap prefix is consumed, the remaining suffix assignment should reduce to the same recursive assignment no-TypeError theorem:
+   ```sml
+   assign_subscripts_no_type_error_runtime_typed
+   ```
+   using a leaf bridge analogous to `top_level_storage_value_leaf_evaluate_type`, but rooted at the hashmap value type after `split_hashmap_subscripts`.
+5. Storage write/read failures for the final hashmap value should be ruled out with the same storage-read/write facts (`read_storage_slot_error` for no TypeError on read; `write_storage_slot_no_type_error_from_value_has_type` or a final set/write helper for writes).
+
+No proof script should be attempted for this branch until a focused helper lemma for the `HashMapRef` branch is stated and build-failed with `NO_TAC` for inspection.
+
+### Next mathematical branch after that: `ArrayRef`
+
+The `ArrayRef` branch must handle storage-array assignment:
+
+1. Special storage-array `AppendOp` / `PopOp` branches.
+2. Ordinary element/path assignment via `resolve_array_element` or equivalent array-reference traversal.
+3. Recursive suffix assignment no-TypeError via `assign_subscripts_no_type_error_runtime_typed`.
+4. Typed storage write-back no-TypeError via existing storage write helpers.
+
+Again, do not prove inline in `sound_TopLevelVar`; first state exact branch helper lemmas.
+
+
 ## Current status (2026-05-12)
 
 ### Completion scope

@@ -261,7 +261,11 @@ End
 
 Definition target_path_step_type_def:
   (target_path_step_type env (HashMapT kt vt) sb next_vt <=>
-    case sb of ValueSubscript _ => next_vt = vt | _ => F) /\
+    case sb of
+    | ValueSubscript key =>
+        next_vt = vt /\ hashmap_key_type kt /\
+        ?ktv. evaluate_type env.type_defs kt = SOME ktv /\ value_has_type ktv key
+    | _ => F) /\
   (target_path_step_type env (Type (ArrayT elem_ty len)) sb next_vt <=>
     case sb of ValueSubscript (IntV _) => next_vt = Type elem_ty | _ => F) /\
   (target_path_step_type env (Type (StructT s)) sb next_vt <=>
@@ -324,11 +328,14 @@ Proof
 QED
 
 Theorem target_path_type_hashmap_cons:
-  target_path_type env loc_vt sbs (HashMapT kt vt) ==>
+  target_path_type env loc_vt sbs (HashMapT kt vt) /\
+  hashmap_key_type kt /\ evaluate_type env.type_defs kt = SOME ktv /\
+  value_has_type ktv v ==>
   target_path_type env loc_vt (ValueSubscript v::sbs) vt
 Proof
   rw[target_path_type_def] >>
-  qexists_tac `HashMapT kt vt` >> simp[target_path_step_type_def]
+  qexists_tac `HashMapT kt vt` >> simp[target_path_step_type_def] >>
+  goal_assum drule
 QED
 
 Theorem target_path_type_array_cons:
@@ -343,7 +350,9 @@ Theorem target_path_type_subscript_cons:
   target_path_type env loc_vt sbs vt /\
   subscript_vtype vt idx_ty = SOME result_vt /\
   (case vt of
-   | HashMapT _ _ => ?v. sb = ValueSubscript v
+   | HashMapT kt _ => ?v ktv. sb = ValueSubscript v /\
+                              evaluate_type env.type_defs kt = SOME ktv /\
+                              value_has_type ktv v
    | Type (ArrayT _ _) => ?i. sb = ValueSubscript (IntV i)
    | _ => T) ==>
   target_path_type env loc_vt (sb::sbs) result_vt
@@ -358,7 +367,8 @@ Proof
   gvs[subscript_vtype_def] >>
   gvs[] >>
   simp[target_path_type_def] >>
-  qexists_tac `HashMapT idx_ty result_vt` >> simp[target_path_step_type_def]
+  qexists_tac `HashMapT idx_ty result_vt` >> simp[target_path_step_type_def] >>
+  goal_assum drule
 QED
 
 Theorem leaf_type_append:
@@ -656,7 +666,9 @@ Definition assign_operation_runtime_typed_def:
   (assign_operation_runtime_typed env ty (AppendOp v) <=>
      ?elem_tv elem_ty n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
        ty = ArrayT elem_ty (Dynamic n) /\ value_has_type elem_tv v) /\
-  (assign_operation_runtime_typed env ty PopOp <=> T)
+  (assign_operation_runtime_typed env ty PopOp <=>
+     ?elem_tv elem_ty n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
+       ty = ArrayT elem_ty (Dynamic n))
 End
 
 

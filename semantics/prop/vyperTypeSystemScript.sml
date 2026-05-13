@@ -217,6 +217,54 @@ Definition well_formed_type_def:
   well_formed_type tenv ty = IS_SOME (evaluate_type tenv ty)
 End
 
+Definition assignable_type_def:
+  assignable_type tenv (BaseT bt) = well_formed_type tenv (BaseT bt) /\
+  assignable_type tenv (TupleT tys) =
+    (well_formed_type tenv (TupleT tys) /\ EVERY (assignable_type tenv) tys) /\
+  assignable_type tenv (ArrayT elem bd) =
+    (well_formed_type tenv (ArrayT elem bd) /\ assignable_type tenv elem) /\
+  assignable_type tenv (StructT id) =
+    (let nid = string_to_num id in
+     case FLOOKUP tenv nid of
+     | SOME (StructArgs args) =>
+         well_formed_type tenv (StructT id) /\
+         EVERY (assignable_type (tenv \\ nid) o SND) args
+     | _ => F) /\
+  assignable_type tenv (FlagT id) = well_formed_type tenv (FlagT id) /\
+  assignable_type tenv NoneT = F
+Termination
+  WF_REL_TAC `inv_image ($< LEX $<) (\(tenv, ty). (CARD (FDOM tenv), type_size ty))` >>
+  rw[FLOOKUP_DEF] >>
+  disj1_tac >>
+  CCONTR_TAC >>
+  fs[]
+End
+
+Theorem assignable_type_not_NoneT:
+  !tenv ty. assignable_type tenv ty ==> ty <> NoneT
+Proof
+  Cases_on `ty` >> rw[assignable_type_def]
+QED
+
+Theorem evaluate_type_not_NoneT_imp_not_NoneTV:
+  evaluate_type tenv ty = SOME tv /\ ty <> NoneT ==> tv <> NoneTV
+Proof
+  Cases_on `ty` >> rw[evaluate_type_def]
+  >- (Cases_on `b` >> gvs[] >> TRY (Cases_on `b'` >> gvs[]))
+  >- (Cases_on `evaluate_types tenv l []` >> gvs[])
+  >- (Cases_on `evaluate_type tenv t` >> gvs[])
+  >- (Cases_on `FLOOKUP tenv (string_to_num s)` >> gvs[] >>
+      Cases_on `x` >> gvs[] >>
+      Cases_on `evaluate_types (tenv \\ string_to_num s) (MAP SND l) []` >> gvs[])
+  >- (Cases_on `FLOOKUP tenv (string_to_num s)` >> gvs[] >> Cases_on `x` >> gvs[])
+QED
+
+Theorem assignable_type_evaluate_not_NoneTV:
+  assignable_type tenv ty /\ evaluate_type tenv ty = SOME tv ==> tv <> NoneTV
+Proof
+  metis_tac[assignable_type_not_NoneT, evaluate_type_not_NoneT_imp_not_NoneTV]
+QED
+
 Definition hashmap_key_type_def:
   hashmap_key_type (BaseT (UintT _)) = T /\
   hashmap_key_type (BaseT (IntT _)) = T /\
@@ -591,20 +639,23 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Log id es) =
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
-    (if well_typed_expr env e /\ well_formed_type env.type_defs typ /\ typ <> NoneT /\
+    (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
         expr_type e = typ /\ string_to_num id NOTIN FDOM env.var_types
      then SOME (extend_local env (string_to_num id) typ T)
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
-         if well_typed_expr env e /\ expr_type e = elem_ty /\ elem_ty <> NoneT then SOME env else NONE
+         if well_typed_expr env e /\ expr_type e = elem_ty /\
+            assignable_type env.type_defs elem_ty then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
-    (if well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e /\ expr_type e <> NoneT then SOME env else NONE) /\
+    (if well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e /\
+        assignable_type env.type_defs (expr_type e) then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
-    (if well_typed_target env bt ty /\ well_typed_expr env e /\ well_formed_type env.type_defs ty /\
-        ty <> NoneT /\ expr_type e <> NoneT /\
+    (if well_typed_target env bt ty /\ well_typed_expr env e /\
+        assignable_type env.type_defs ty /\
+        assignable_type env.type_defs (expr_type e) /\
         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
@@ -612,7 +663,7 @@ Definition type_stmt_def:
         IS_SOME (type_stmts env ret_ty ss1) /\ IS_SOME (type_stmts env ret_ty ss2)
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
-    (if well_formed_type env.type_defs typ /\ typ <> NoneT /\ well_typed_iterator env typ it /\
+    (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
         string_to_num id NOTIN FDOM env.var_types /\
         IS_SOME (type_stmts (extend_local env (string_to_num id) typ F) ret_ty body)
      then SOME env else NONE) /\

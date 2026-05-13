@@ -149,18 +149,7 @@ QED
 
 (* ===== Dynamic assignability side condition ===== *)
 
-Definition assign_target_assignable_def:
-  assign_target_assignable (BaseTargetV loc sbs) st =
-    (case loc of
-     | ScopedVar id =>
-         ?pre env entry rest.
-           find_containing_scope (string_to_num id) st.scopes =
-             SOME (pre, env, entry, rest) /\
-           entry.assignable
-     | _ => T) /\
-  assign_target_assignable (TupleTargetV tgts) st =
-    EVERY (\tgt. assign_target_assignable tgt st) tgts
-End
+(* assign_target_assignable moved to vyperTypeStatePreservationScript.sml. *)
 
 Theorem lookup_scopes_find_containing_scope:
   !scopes id entry.

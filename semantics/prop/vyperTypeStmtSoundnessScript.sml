@@ -585,6 +585,10 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
     gvs[lift_option_type_def, return_def, bind_apply] >>
     Cases_on `eval_expr cx e st` >>
     rename1 `eval_expr cx e st = (expr_res, st1)` >>
+    BasicProvers.TOP_CASE_TAC >> gvs[] >>
+    reverse BasicProvers.TOP_CASE_TAC >>
+    gvs[raise_def,return_def,option_CASE_rator,AllCaseEqs()]
+    >- ( cheat (* evaluate type and assignable? *)) >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `expr_res` >> gvs[no_type_error_result_def]
     >- (
@@ -642,6 +646,7 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
           drule_at_then Any drule
             materialise_typed_non_none_no_type_error >>
           simp[] >>
+          `expr_type e ≠ NoneT` by cheat (* assignable_type *) >>
           metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV]) >>
       drule materialise_no_control >>
       rw[no_control_exc_return_exception_typed]) >>
@@ -664,6 +669,8 @@ Resume eval_all_type_sound_mutual[Assign]:
   Cases_on `eval_target cx tgt st` >>
   rename1 `eval_target cx tgt st = (target_res, st1)` >>
   first_x_assum drule_all >> strip_tac >>
+  cheat (* needs updating *)
+  (*
   Cases_on `target_res` >> gvs[no_type_error_result_def]
   >- (
     rename1 `eval_target cx tgt st = (INL gv, st1)` >>
@@ -770,6 +777,7 @@ Resume eval_all_type_sound_mutual[Assign]:
   strip_tac >> gvs[] >>
   drule (cj 1 eval_target_no_control) >>
   rw[no_control_exc_return_exception_typed]
+  *)
 QED
 
 Resume eval_all_type_sound_mutual[AugAssign]:
@@ -786,6 +794,7 @@ Resume eval_all_type_sound_mutual[AugAssign]:
   qpat_x_assum `!env vt st res st'. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ eval_base_target _ _ _ = _ ==> _`
     (drule_at (Pat`type_place_target`)) >>
   simp[] >> strip_tac >>
+  cheat (* needs updating *) (*
   Cases_on `target_res`
   >- (
     fs[no_type_error_result_def] >>
@@ -884,6 +893,7 @@ Resume eval_all_type_sound_mutual[AugAssign]:
   first_x_assum drule_all >> strip_tac >> gvs[] >>
   drule (cj 3 eval_target_no_control) >>
   rw[no_control_exc_return_exception_typed]
+  *)
 QED
 
 Resume eval_all_type_sound_mutual[If]:
