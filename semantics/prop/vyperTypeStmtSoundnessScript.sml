@@ -588,7 +588,12 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
     BasicProvers.TOP_CASE_TAC >> gvs[] >>
     reverse BasicProvers.TOP_CASE_TAC >>
     gvs[raise_def,return_def,option_CASE_rator,AllCaseEqs()]
-    >- ( cheat (* evaluate type and assignable? *)) >>
+    >- (
+      (* Vacuous: assignable_type implies well_formed_type = IS_SOME (evaluate_type ...),
+         contradicting evaluate_type = NONE *)
+      `well_formed_type env.type_defs (expr_type e)` by (
+        gs[assignable_type_well_formed]) >>
+      gvs[well_formed_type_def]) >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `expr_res` >> gvs[no_type_error_result_def]
     >- (
@@ -646,7 +651,7 @@ Resume eval_all_type_sound_mutual[AnnAssign]:
           drule_at_then Any drule
             materialise_typed_non_none_no_type_error >>
           simp[] >>
-          `expr_type e ≠ NoneT` by cheat (* assignable_type *) >>
+          `expr_type e ≠ NoneT` by metis_tac[assignable_type_not_NoneT] >>
           metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV]) >>
       drule materialise_no_control >>
       rw[no_control_exc_return_exception_typed]) >>
@@ -669,8 +674,6 @@ Resume eval_all_type_sound_mutual[Assign]:
   Cases_on `eval_target cx tgt st` >>
   rename1 `eval_target cx tgt st = (target_res, st1)` >>
   first_x_assum drule_all >> strip_tac >>
-  cheat (* needs updating *)
-  (*
   Cases_on `target_res` >> gvs[no_type_error_result_def]
   >- (
     rename1 `eval_target cx tgt st = (INL gv, st1)` >>
@@ -692,6 +695,8 @@ Resume eval_all_type_sound_mutual[Assign]:
           imp_res_tac materialise_state >> gvs[] >>
           simp[bind_apply, ignore_bind_apply, return_def] >>
           strip_tac >> gvs[] >>
+          `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
+          `assign_target_assignable_context cx gv st3` by cheat >>
           drule_at(Pat`assign_target`)
             assign_target_preserves_state_well_typed >>
           simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
@@ -712,6 +717,8 @@ Resume eval_all_type_sound_mutual[Assign]:
           first_x_assum drule >> strip_tac >>
           conj_tac >- simp[] >>
           conj_tac >- simp[] >>
+          `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
+          `assign_target_assignable_context cx gv st3` by cheat >>
           drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent >>
           simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
           disch_then drule >>
@@ -724,8 +731,8 @@ Resume eval_all_type_sound_mutual[Assign]:
         strip_tac >> gvs[] >>
         strip_tac >> gvs[] >>
         imp_res_tac materialise_state >> gvs[] >>
-        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
-              value_has_type tv v /\ well_formed_type_value tv` by (
+        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /|
+              value_has_type tv v /| well_formed_type_value tv` by (
           gvs[expr_result_typed_def, expr_runtime_typed_def] >>
           drule evaluate_type_well_formed_type_value >> strip_tac >>
           drule_at(Pat`materialise`) materialise_preserves_value_type >>
@@ -733,6 +740,8 @@ Resume eval_all_type_sound_mutual[Assign]:
         `target_runtime_typed env cx st2 tgt (expr_type e) gv` by (
           irule target_runtime_typed_rebuild >>
           simp[runtime_consistent_def] >> goal_assum drule) >>
+        `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
+        `assign_target_assignable_context cx gv st3` by cheat >>
         drule_at(Pat`assign_target`)
           assign_target_preserves_state_well_typed_result >>
         disch_then(drule_at Any) >>
@@ -754,6 +763,8 @@ Resume eval_all_type_sound_mutual[Assign]:
             disch_then drule >>
             strip_tac >>
             simp[]) >>
+        `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
+        `assign_target_assignable_context cx gv st3` by cheat >>
         drule_at(Pat`assign_target`)
           assign_target_preserves_runtime_consistent_result >>
         simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
@@ -777,7 +788,6 @@ Resume eval_all_type_sound_mutual[Assign]:
   strip_tac >> gvs[] >>
   drule (cj 1 eval_target_no_control) >>
   rw[no_control_exc_return_exception_typed]
-  *)
 QED
 
 Resume eval_all_type_sound_mutual[AugAssign]:

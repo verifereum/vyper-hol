@@ -246,6 +246,14 @@ Proof
   Cases_on `ty` >> rw[assignable_type_def]
 QED
 
+Theorem assignable_type_well_formed:
+  !tenv ty. assignable_type tenv ty ==> well_formed_type tenv ty
+Proof
+  recInduct assignable_type_ind >> rw[assignable_type_def, well_formed_type_def] >>
+  Cases_on `FLOOKUP tenv (string_to_num id)` >> gvs[] >>
+  Cases_on `x` >> gvs[]
+QED
+
 Theorem evaluate_type_not_NoneT_imp_not_NoneTV:
   evaluate_type tenv ty = SOME tv /\ ty <> NoneT ==> tv <> NoneTV
 Proof
@@ -426,16 +434,20 @@ Definition well_typed_type_builtin_args_def:
     (ts <> [] /\ target_ty = TupleT ts)
 End
 
+Definition abi_encode_size_ok_def:
+  abi_encode_size_ok tenv target_ty n = (vyper_abi_size_bound tenv target_ty <= n)
+End
+
 Definition type_builtin_result_ok_def:
-  type_builtin_result_ok (AbiEncode _) result_ty target_ty arg_tys =
-    ((?n. result_ty = BaseT (BytesT (Dynamic n))) /\ target_ty = TupleT arg_tys) /\
-  type_builtin_result_ok Empty result_ty target_ty arg_tys = (result_ty = target_ty) /\
-  type_builtin_result_ok MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) /\
-  type_builtin_result_ok MinValue result_ty target_ty arg_tys = (result_ty = target_ty) /\
-  type_builtin_result_ok Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) /\
-  type_builtin_result_ok Convert result_ty target_ty arg_tys = (result_ty = target_ty) /\
-  type_builtin_result_ok Extract32 result_ty target_ty arg_tys = (result_ty = target_ty) /\
-  type_builtin_result_ok (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
+  type_builtin_result_ok tenv (AbiEncode _) result_ty target_ty arg_tys =
+    (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧ abi_encode_size_ok tenv target_ty n) ∧
+  type_builtin_result_ok tenv Empty result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  type_builtin_result_ok tenv MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  type_builtin_result_ok tenv MinValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  type_builtin_result_ok tenv Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  type_builtin_result_ok tenv Convert result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  type_builtin_result_ok tenv Extract32 result_ty target_ty arg_tys = (result_ty = target_ty) ∧
+  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
 End
 
 Definition raw_call_return_type_def:
@@ -486,7 +498,7 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
-     type_builtin_result_ok tb ty target_ty (MAP expr_type es) /\
+     type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
     (?bd. type_place_target env tgt = SOME (Type (ArrayT ty bd))) /\

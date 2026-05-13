@@ -363,3 +363,20 @@ Theorem assign_target_append_no_type_error:
 Proof
   cheat
 QED
+
+
+(* ===== Side-condition lemmas for statement assignment branches ===== *)
+
+Theorem assign_operation_matches_target_shape_BaseTargetV:
+  !loc sbs op. assign_operation_matches_target_shape (BaseTargetV loc sbs) op
+Proof
+  rw[assign_operation_matches_target_shape_def]
+QED
+
+Theorem assign_operation_matches_target_shape_Replace_TupleTargetV:
+  !gvs vs.
+    assign_operation_matches_target_shape (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) <=>
+    LENGTH gvs = LENGTH vs
+Proof
+  rw[assign_operation_matches_target_shape_def]
+QED

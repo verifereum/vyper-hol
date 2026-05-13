@@ -564,22 +564,22 @@ Proof
 QED
 
 Theorem well_typed_type_builtin_no_type_error:
-  type_builtin_result_ok tb result_ty target_ty ts /\
-  well_typed_type_builtin_args tb target_ty ts /\
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
-  evaluate_type (get_tenv cx) result_ty = SOME result_tv /\
-  LIST_REL value_has_type tvs vs /\ context_well_typed cx ==>
+  type_builtin_result_ok (get_tenv cx) tb result_ty target_ty ts ∧
+  well_typed_type_builtin_args tb target_ty ts ∧
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
+  evaluate_type (get_tenv cx) result_ty = SOME result_tv ∧
+  LIST_REL value_has_type tvs vs ∧ context_well_typed cx ==>
   !msg. evaluate_type_builtin cx tb target_ty vs <> INR (TypeError msg)
 Proof
   cheat
 QED
 
 Theorem well_typed_type_builtin_success_type:
-  type_builtin_result_ok tb result_ty target_ty ts /\
-  well_typed_type_builtin_args tb target_ty ts /\
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
-  evaluate_type (get_tenv cx) result_ty = SOME result_tv /\
-  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\
+  type_builtin_result_ok (get_tenv cx) tb result_ty target_ty ts ∧
+  well_typed_type_builtin_args tb target_ty ts ∧
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
+  evaluate_type (get_tenv cx) result_ty = SOME result_tv ∧
+  LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
   evaluate_type_builtin cx tb target_ty vs = INL v ==>
   value_has_type result_tv v
 Proof
@@ -627,10 +627,8 @@ Resume well_typed_type_builtin_success_type[abi_decode]:
   drule well_formed_type_value_slot_size >> simp[]
 QED
 
-(* TODO: these 3 cheats: type system needs to be fixed to constrain
-encoding bound, possibly adding a condition to
-type_builtin_result_ok involving a new
-abi_encoded_bound definition *)
+(* ABI encode success typing: type_builtin_result_ok now has vyper_abi_size_bound condition.
+   The 3 resumed branches below need to be proved using the bound. *)
 
 Resume well_typed_type_builtin_success_type[abi_encode]:
   cheat
@@ -698,3 +696,33 @@ Proof
   Cases_on `fsig` >> Cases_on `r` >> rw[well_typed_expr_def]
 QED
 
+
+
+(* ===== ABI encode result-bound gap (RESOLVED) ===== *)
+(* type_builtin_result_ok now includes vyper_abi_size_bound condition.
+   Old probes confirmed the gap; repair adds the bound.
+   New probe below verifies the repair correctly rejects the too-small bound. *)
+
+(* Probe: with the repaired definition, n=1 is correctly REJECTED for uint256 encoding
+   because vyper_abi_size_bound FEMPTY (TupleT [BaseT (UintT 256)]) = 32 > 1 *)
+Theorem abi_encode_probe_result_ok_rejects_small_bound:
+  ~type_builtin_result_ok FEMPTY (AbiEncode T) (BaseT (BytesT (Dynamic 1)))
+    (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
+Proof
+  simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
+QED
+
+(* Probe: with n=32, the result_ok predicate is satisfied *)
+Theorem abi_encode_probe_result_ok_accepts_correct_bound:
+  type_builtin_result_ok FEMPTY (AbiEncode T) (BaseT (BytesT (Dynamic 32)))
+    (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
+Proof
+  simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
+QED
+
+(* Probe: vyper_abi_size_bound gives the correct minimum bound (32) *)
+Theorem abi_encode_probe_size_bound:
+  vyper_abi_size_bound FEMPTY (TupleT [BaseT (UintT 256)]) = 32
+Proof
+  EVAL_TAC
+QED
