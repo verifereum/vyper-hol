@@ -628,6 +628,37 @@ Proof
   simp[place_vtype_path_typed_def]
 QED
 
+Theorem target_path_type_Type_evaluate_leaf:
+  !env t sbs ty root_tv.
+    well_formed_vtype env.type_defs (Type t) ==>
+    target_path_type env (Type t) sbs (Type ty) ==>
+    evaluate_type env.type_defs t = SOME root_tv ==>
+    evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs))
+Proof
+  rpt strip_tac >>
+  drule target_path_type_Type_place_leaf_typed >>
+  simp[] >>
+  strip_tac >>
+  pop_assum mp_tac >>
+  simp[place_leaf_typed_def, place_leaf_path_typed_def] >>
+  strip_tac >>
+  gvs[]
+QED
+
+Theorem target_path_type_Type_evaluate_leaf_not_NoneTV:
+  !env t sbs ty root_tv tenv.
+    well_formed_vtype env.type_defs (Type t) ==>
+    target_path_type env (Type t) sbs (Type ty) ==>
+    evaluate_type env.type_defs t = SOME root_tv ==>
+    assignable_type env.type_defs ty ==>
+    leaf_type root_tv (REVERSE sbs) <> NoneTV
+Proof
+  rpt strip_tac >>
+  drule target_path_type_Type_evaluate_leaf >>
+  simp[] >>
+  metis_tac[assignable_type_evaluate_not_NoneTV]
+QED
+
 Definition target_runtime_typed_def:
   (target_runtime_typed env cx st (BaseTarget bt) ty (BaseTargetV loc sbs) <=>
     well_typed_atarget env (BaseTarget bt) ty /\
@@ -673,3 +704,11 @@ End
 
 
 
+
+
+Theorem assign_target_TopLevelVar_lookup_global_INR_propagate:
+  lookup_global cx src (string_to_num id) st = (INR e, st) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src id) is) op st = (INR e, st)
+Proof
+  simp[assign_target_def, bind_def, return_def, LET_THM, pairTheory.PAIR]
+QED

@@ -1202,6 +1202,21 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem assign_result_no_type_error_from_successful_assign_split:
+  assign_subscripts tv old subs op = INL new ==>
+  assign_result tv op old subs st = (res, st') ==>
+  no_type_error_result res
+Proof
+  Cases_on `op` >>
+  simp[assign_result_def, return_def, bind_apply, no_type_error_result_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule assign_subscripts_PopOp_assign_result >> strip_tac >>
+  qpat_x_assum `(case lift_sum (evaluate_subscripts _ _ _) _ of _ => _) = _` mp_tac >>
+  gvs[lift_sum_def, return_def, raise_def, AllCaseEqs(),
+      sum_CASE_rator, popped_value_def] >>
+  strip_tac >> gvs[]
+QED
+
 Theorem lookup_global_success_get_module_code:
   lookup_global cx src n st = (INL tv, st') ==> ?code. get_module_code cx src = SOME code
 Proof
@@ -1285,6 +1300,36 @@ Proof
       prod_CASE_rator, type_value_CASE_rator] >>
   Cases_on `lookup_var_slot_from_layout cx is_transient'' src id` >>
   gvs[return_def, raise_def, bind_def]
+QED
+
+Theorem lookup_global_ArrayRef_not_StorageVarDecl:
+  lookup_global cx src n st = (INL (ArrayRef is_t bs etv ebd), st') ==>
+  get_module_code cx src = SOME code ==>
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient' typ, id) ==>
+  evaluate_type (get_tenv cx) typ = SOME root_tv ==>
+  root_tv ≠ ArrayTV etv ebd ==>
+  F
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+       option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
+       type_value_CASE_rator, toplevel_value_CASE_rator, LET_THM, AllCaseEqs()] >>
+  rpt CASE_TAC >> gvs[]
+QED
+
+Theorem lookup_global_HashMapRef_not_StorageVarDecl:
+  lookup_global cx src n st = (INL (HashMapRef is_t bs kt vt), st') ==>
+  get_module_code cx src = SOME code ==>
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient' typ, id) ==>
+  F
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+       option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
+       type_value_CASE_rator, toplevel_value_CASE_rator, LET_THM, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem lookup_global_top_level_assignable_no_type_error:
@@ -1820,6 +1865,25 @@ Proof
   simp[]
 QED
 
+Theorem compute_hashmap_slot_prefix_some:
+  !base_slot kt kts first_sub rest_subs remaining.
+    LENGTH kts + LENGTH remaining = LENGTH rest_subs ==>
+    EVERY ((<>) NONE o subscript_to_value)
+      (first_sub :: TAKE (LENGTH kts) rest_subs) ==>
+    compute_hashmap_slot base_slot (kt::kts)
+      (first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining) rest_subs) <> NONE
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `LENGTH rest_subs - LENGTH remaining = LENGTH kts` by decide_tac >>
+  `LENGTH rest_subs - LENGTH remaining <= LENGTH rest_subs` by decide_tac >>
+  irule compute_hashmap_slot_subscripts_to_values >>
+  conj_tac >- (
+    `LENGTH (TAKE (LENGTH rest_subs - LENGTH remaining) rest_subs) = LENGTH rest_subs - LENGTH remaining` by
+      metis_tac[LENGTH_TAKE_EQ] >>
+    fs[LENGTH] >> decide_tac) >>
+  asm_rewrite_tac[]
+QED
+
 Theorem target_path_step_type_HashMapT_ValueSubscript:
   !env kt vt sb next_vt.
     target_path_step_type env (HashMapT kt vt) sb next_vt ==>
@@ -1921,6 +1985,14 @@ Proof
   rpt strip_tac >>
   qsuff_tac `REVERSE l = LAST l :: REVERSE (FRONT l)` >- simp[] >>
   metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq]
+QED
+
+Theorem REVERSE_CONS_IMP_LENGTH:
+  !l h t. REVERSE l = h :: t ==> LENGTH l = SUC (LENGTH t)
+Proof
+  rpt strip_tac >>
+  qsuff_tac `LENGTH l = LENGTH (h :: t)` >- simp[] >>
+  metis_tac[LENGTH_REVERSE]
 QED
 
 Theorem target_path_type_HashMapT_hashmap_prefix_ValueSubscript:
@@ -2142,6 +2214,508 @@ Proof
   gvs[]
 QED
 
+Theorem target_path_type_HashMapT_assign_target_decomp:
+  !env kt vt sbs ty.
+    well_formed_vtype env.type_defs (HashMapT kt vt) ==>
+    target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
+    ?first_sub rest_subs final_type kts remaining.
+      REVERSE sbs = first_sub :: rest_subs ∧
+      first_sub = LAST sbs ∧
+      rest_subs = TL (REVERSE sbs) ∧
+      split_hashmap_subscripts vt rest_subs = SOME (final_type, kts, remaining) ∧
+      LENGTH kts + LENGTH remaining = LENGTH rest_subs ∧
+      EVERY ((<>) NONE o subscript_to_value)
+        (first_sub :: TAKE (LENGTH kts) rest_subs)
+Proof
+  rpt strip_tac >>
+  `sbs <> []` by metis_tac[target_path_type_HashMapT_not_nil] >>
+  `split_hashmap_subscripts vt (TL (REVERSE sbs)) <> NONE` by (
+    drule_all target_path_type_HashMapT_split_hashmap_subscripts >> simp[]) >>
+  Cases_on `split_hashmap_subscripts vt (TL (REVERSE sbs))` >- gvs[] >>
+  PairCases_on `x` >>
+  `LENGTH x1 + LENGTH x2 = LENGTH (TL (REVERSE sbs))` by (
+    drule split_hashmap_subscripts_some_imp >> simp[]) >>
+  `EVERY ((<>) NONE o subscript_to_value)
+    (LAST sbs :: TAKE (LENGTH x1) (TL (REVERSE sbs)))` by (
+    drule_all target_path_type_HashMapT_hashmap_prefix_ValueSubscript >> simp[]) >>
+  `REVERSE sbs = LAST sbs :: TL (REVERSE sbs)` by (
+    `REVERSE sbs = LAST sbs :: REVERSE (FRONT sbs)` by
+      metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq] >>
+    `TL (REVERSE sbs) = REVERSE (FRONT sbs)` by
+      metis_tac[TL_REVERSE_eq_REVERSE_FRONT] >>
+    simp[]) >>
+  qexistsl [`LAST sbs`, `TL (REVERSE sbs)`, `x0`, `x1`, `x2`] >>
+  simp[]
+QED
+
+Theorem target_path_type_HashMapT_split_leaf_runtime:
+  !env cx st kt vt sbs ty rest_subs final_type kts remaining.
+    runtime_consistent env cx st ==>
+    well_formed_vtype (get_tenv cx) (HashMapT kt vt) ==>
+    target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
+    rest_subs = TL (REVERSE sbs) ==>
+    split_hashmap_subscripts vt rest_subs = SOME (final_type, kts, remaining) ==>
+    assignable_type (get_tenv cx) ty ==>
+    ?final_tv.
+      evaluate_type (get_tenv cx) final_type = SOME final_tv ∧
+      evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ∧
+      leaf_type final_tv remaining ≠ NoneTV ∧
+      well_formed_type_value final_tv
+Proof
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+  `well_formed_vtype env.type_defs (HashMapT kt vt)` by metis_tac[] >>
+  `sbs ≠ []` by metis_tac[target_path_type_HashMapT_not_nil] >>
+  (* Get place_leaf_typed from target_path_type, then unfold to place_leaf_path_typed *)
+  `?pl_tv. place_leaf_typed env (HashMapT kt vt) sbs ty pl_tv` by (
+    irule target_path_type_Type_place_leaf_typed >> simp[]) >>
+  gvs[place_leaf_typed_def] >>
+  (* Now: place_leaf_path_typed env (HashMapT kt vt) (REVERSE sbs) ty pl_tv *)
+  (* Case-split REVERSE sbs: [] contradicts sbs ≠ []; h::t gives the HashMapT case *)
+  Cases_on `REVERSE sbs` >- gvs[] >>
+  gvs[place_leaf_path_typed_def] >>
+  (* Now: place_leaf_path_typed env vt t ty pl_tv, rest_subs = t *)
+  (* Apply place_leaf_path_typed_split_leaf_type *)
+  drule_all place_leaf_path_typed_split_leaf_type >>
+  strip_tac >>
+  qexists_tac `base_tv` >>
+  (* Conjunct 1: evaluate_type (get_tenv cx) final_type = SOME base_tv *)
+  conj_tac >- metis_tac[] >>
+  (* Conjunct 2: evaluate_type (get_tenv cx) ty = SOME (leaf_type base_tv remaining) *)
+  conj_tac >- metis_tac[] >>
+  (* Conjunct 3: leaf_type base_tv remaining <> NoneTV *)
+  conj_tac >- (
+    irule assignable_type_evaluate_not_NoneTV >>
+    metis_tac[]) >>
+  (* Conjunct 4: well_formed_type_value base_tv *)
+  irule evaluate_type_well_formed_type_value >>
+  metis_tac[]
+QED
+
+Theorem assign_target_HashMapRef_branch_no_type_error:
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (HashMapRef is_transient (n2w slot) kt vt), st) ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  env.type_defs = get_tenv cx ==>
+  REVERSE sbs = first_sub :: rest_subs ==>
+  split_hashmap_subscripts vt rest_subs = SOME (final_type, kts, remaining) ==>
+  compute_hashmap_slot (n2w slot) (kt::kts)
+    (first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining) rest_subs) = SOME final_slot ==>
+  evaluate_type (get_tenv cx) final_type = SOME final_tv ==>
+  well_formed_type_value final_tv ==>
+  leaf_type final_tv remaining <> NoneTV ==>
+  assign_operation_runtime_typed env ty op ==>
+  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, option_CASE_rator,
+      sum_CASE_rator, pairTheory.PAIR,
+      toplevel_value_CASE_rator, LET_THM,
+      AllCaseEqs()] >-
+  (* Goal 1: Full success path - assign_result *)
+  (`value_has_type final_tv current_val` by
+     (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
+   `evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
+   `value_has_type final_tv new_val` by
+     metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
+   drule assign_result_no_type_error_from_successful_assign >>
+   disch_then drule >>
+   simp[no_type_error_result_def])
+  >-
+  (* Goal 2: write_storage_slot INR - TypeError impossible when value typed *)
+  (`value_has_type final_tv current_val` by
+     (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
+   `evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
+   `value_has_type final_tv new_val` by
+     metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
+   simp[no_type_error_result_def] >>
+   CCONTR_TAC >> gvs[] >>
+   metis_tac[write_storage_slot_no_type_error_from_value_has_type])
+  >-
+  (* Goal 3: assign_subscripts INR - TypeError impossible by runtime typing *)
+  (`value_has_type final_tv current_val` by
+     (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
+   `evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
+   drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
+   simp[no_type_error_result_def] >>
+   metis_tac[])
+  >-
+  (* Goal 4: read_storage_slot INR - always RuntimeError, never TypeError *)
+  (drule read_storage_slot_error >>
+   rpt strip_tac >>
+   simp[no_type_error_result_def])
+QED
+
+
+Theorem lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef:
+  get_module_code cx src_id_opt = SOME code ==>
+  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd) ==>
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st)
+Proof
+  rpt strip_tac >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+       LET_THM, var_decl_info_CASE_rator, prod_CASE_rator, option_CASE_rator,
+       type_value_CASE_rator, AllCaseEqs()]
+QED
+
+Theorem lookup_global_StorageVarDecl_non_ArrayTV_no_TypeError:
+  get_module_code cx src_id_opt = SOME code ==>
+  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  evaluate_type (get_tenv cx) typ = SOME root_tv ==>
+  root_tv ≠ ArrayTV elem_tv bd ==>
+  lookup_global cx src_id_opt n st = (INR (Error (TypeError msg)), st') ==>
+  F
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+       LET_THM, option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
+       type_value_CASE_rator, AllCaseEqs()] >>
+  rpt CASE_TAC >> gvs[] >>
+  (* For each non-ArrayTV subtype, read_storage_slot cannot return TypeError *)
+  rpt strip_tac >>
+  Cases_on `read_storage_slot cx is_transient (n2w slot) root_tv st` >> gvs[] >>
+  imp_res_tac read_storage_slot_error >> gvs[]
+QED
+Theorem resolve_array_element_error_sc:
+  !a b c d e f g h. resolve_array_element a b c d e f = (INR g, h) ==> ?m. g = Error m
+Proof
+  ho_match_mp_tac resolve_array_element_ind >>
+  rw[resolve_array_element_def, bind_apply, ignore_bind_apply, check_def,
+     assert_def, return_def, raise_def, AllCaseEqs(), bound_CASE_rator] >>
+  gvs[] >- (
+    first_x_assum irule >>
+    qexists_tac`0` >> simp[] >>
+    goal_assum drule
+  )
+  >- (
+    first_x_assum irule >>
+    qexists_tac`1` >> simp[] >>
+    goal_assum drule
+  ) >>
+  gvs[oneline get_storage_backend_def, COND_RATOR, AllCaseEqs(),
+      bind_apply, return_def, get_transient_storage_def,
+      get_accounts_def]
+QED
+
+Theorem resolve_array_element_leaf_type_sc[local]:
+  !cx b base tv subs st.
+    !slot final_tv rsubs st'.
+    resolve_array_element cx b base tv subs st = (INL (slot, final_tv, rsubs), st') ==>
+    leaf_type tv subs = leaf_type final_tv rsubs
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  qpat_x_assum `resolve_array_element _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, type_check_def, assert_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac get_storage_backend_state >> gvs[] >>
+  gvs[leaf_type_def] >>
+  FIRST [
+    first_x_assum (qspec_then `0` mp_tac) >> simp[] >> disch_then drule >> simp[],
+    first_x_assum (qspec_then `1` mp_tac) >> simp[] >> disch_then drule >> simp[]
+  ]
+QED
+
+Theorem resolve_array_element_ArrayTV_empty_rsubs_sc[local]:
+  !cx b base tv subs st.
+    !slot final_tv rsubs st'.
+    resolve_array_element cx b base tv subs st = (INL (slot, final_tv, rsubs), st') ==>
+    !etv ebd. final_tv = ArrayTV etv ebd ==> rsubs = []
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  qpat_x_assum `resolve_array_element _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, type_check_def, assert_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac get_storage_backend_state >> gvs[] >>
+  gvs[] >>
+  FIRST [
+    first_x_assum (qspec_then `0` mp_tac) >> simp[] >> disch_then drule >> simp[],
+    first_x_assum (qspec_then `1` mp_tac) >> simp[] >> disch_then drule >> simp[]
+  ]
+QED
+
+Theorem resolve_array_element_well_formed_sc[local]:
+  !cx b base tv subs st.
+    !slot final_tv rsubs st'.
+    resolve_array_element cx b base tv subs st = (INL (slot, final_tv, rsubs), st') ==>
+    well_formed_type_value tv ==> well_formed_type_value final_tv
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  qpat_x_assum `resolve_array_element _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, check_def, type_check_def, assert_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac get_storage_backend_state >> gvs[] >>
+  gvs[well_formed_type_value_def] >>
+  FIRST [
+    first_x_assum (qspec_then `0` mp_tac) >> simp[] >> disch_then drule >> simp[],
+    first_x_assum (qspec_then `1` mp_tac) >> simp[] >> disch_then drule >> simp[]
+  ]
+QED
+
+Theorem assign_target_TopLevelVar_ArrayRef_branch_ntr_v2:
+  runtime_consistent env cx st ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  target_path_type env (Type t) sbs (Type ty) ==>
+  assignable_type (get_tenv cx) ty ==>
+  assign_operation_runtime_typed env ty op ==>
+  env.type_defs = get_tenv cx ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd) ==>
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  all_tac >>
+  rpt strip_tac >>
+  `well_formed_vtype env.type_defs (Type t)` by metis_tac[top_level_vtype_well_formed] >>
+  `typ = t` by metis_tac[top_level_Type_storage_decl] >>
+  fs[] >>
+  `well_formed_type_value (ArrayTV elem_tv bd)`
+    by metis_tac[evaluate_type_well_formed_type_value] >>
+  `evaluate_type env.type_defs ty = SOME (leaf_type (ArrayTV elem_tv bd) (REVERSE sbs))`
+    by metis_tac[target_path_type_Type_evaluate_leaf] >>
+  `leaf_type (ArrayTV elem_tv bd) (REVERSE sbs) <> NoneTV`
+    by metis_tac[target_path_type_Type_evaluate_leaf_not_NoneTV] >>
+  qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
+  simp[Once assign_target_def, bind_def, lift_option_type_def, return_def, raise_def,
+       LET_THM, pairTheory.PAIR, option_CASE_rator, prod_CASE_rator,
+       type_value_CASE_rator, toplevel_value_CASE_rator, var_decl_info_CASE_rator,
+       sum_CASE_rator, ignore_bind_def, type_check_def] >>
+  Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
+  Cases_on `q` >> gvs[] >-
+  (* INL: resolve_array_element succeeds *)
+  (PairCases_on `x` >> gvs[] >>
+   (* Derive typing facts about final_tv (x1) and remaining (x2) *)
+   `well_formed_type_value x1`
+     by metis_tac[resolve_array_element_well_formed_sc] >>
+   `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
+     by metis_tac[resolve_array_element_leaf_type_sc] >>
+   `leaf_type x1 x2 <> NoneTV`
+     by (fs[resolve_array_element_leaf_type_sc] >> NO_TAC) >>
+   (* When final_tv is ArrayTV, remaining is empty *)
+   `!etv ebd. x1 = ArrayTV etv ebd ==> x2 = []`
+     by metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
+   (* Split on type_value then on operation to avoid AllCaseEqs explosion *)
+   Cases_on `x1` >>
+   (* 6 constructors: BaseTV, TupleTV, ArrayTV, StructTV, FlagTV, NoneTV *)
+   TRY (
+     (* Ordinary path: non-ArrayTV or ArrayTV without special ops *)
+     gvs[bind_def, lift_sum_def, return_def, raise_def,
+         get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+         no_type_error_result_def] >-
+     (* Goal 1: success — read INL, assign INL, write INL *)
+     (irule read_storage_slot_success_type >> simp[] >>
+      TRY (irule assign_subscripts_preserves_type_runtime_typed >> simp[]) >>
+      TRY (irule assign_result_no_type_error_from_successful_assign_split >> simp[]))
+     >-
+     (* Goal 2: write INR — contradiction *)
+     (irule read_storage_slot_success_type >> simp[] >>
+      irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
+      CCONTR_TAC >> gvs[] >>
+      metis_tac[write_storage_slot_no_type_error_from_value_has_type])
+     >-
+     (* Goal 3: assign INR *)
+     (irule read_storage_slot_success_type >> simp[] >>
+      drule_all assign_subscripts_no_type_error_runtime_typed >> simp[])
+     >-
+     (* Goal 4: read INR *)
+     (drule read_storage_slot_error >> simp[])
+   ) >>
+   (* ArrayTV: need to split on bound then on operation *)
+   Cases_on `b'` >> gvs[well_formed_type_value_def] >-
+   (* ArrayTV Fixed: ordinary path *)
+   (gvs[bind_def, lift_sum_def, return_def, raise_def,
+        get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+        no_type_error_result_def] >-
+    (irule read_storage_slot_success_type >> simp[] >>
+     irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
+     irule assign_result_no_type_error_from_successful_assign_split >> simp[])
+    >-
+    (irule read_storage_slot_success_type >> simp[] >>
+     irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
+     CCONTR_TAC >> gvs[] >>
+     metis_tac[write_storage_slot_no_type_error_from_value_has_type])
+    >-
+    (irule read_storage_slot_success_type >> simp[] >>
+     drule_all assign_subscripts_no_type_error_runtime_typed >> simp[])
+    >-
+    (drule read_storage_slot_error >> simp[])
+   ) >>
+   (* ArrayTV Dynamic: split on op *)
+   Cases_on `op` >>
+   (* Replace/Update: ordinary *)
+   TRY (
+     gvs[bind_def, lift_sum_def, return_def, raise_def,
+         get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+         no_type_error_result_def] >-
+     (irule read_storage_slot_success_type >> simp[] >>
+      irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
+      irule assign_result_no_type_error_from_successful_assign_split >> simp[])
+     >-
+     (irule read_storage_slot_success_type >> simp[] >>
+      irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
+      CCONTR_TAC >> gvs[] >>
+      metis_tac[write_storage_slot_no_type_error_from_value_has_type])
+     >-
+     (irule read_storage_slot_success_type >> simp[] >>
+      drule_all assign_subscripts_no_type_error_runtime_typed >> simp[])
+     >-
+     (drule read_storage_slot_error >> simp[])
+   ) >>
+   (* AppendOp: check + 2 writes + return NONE *)
+   gvs[assign_operation_runtime_typed_def] >>
+   gvs[bind_def, lift_sum_def, return_def, raise_def,
+       get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+       no_type_error_result_def,
+       type_slot_size_def, default_value_def,
+       vfmStateTheory.lookup_storage_def] >-
+   (* All writes succeed *)
+   simp[no_type_error_result_def]
+   >-
+   (* Second write INR: write length BaseTV(UintT 256) IntV *)
+   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_append_write2")
+   >-
+   (* First write INR: write element app_elem_tv v *)
+   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_append_write1")
+   >-
+   (* Check fails - RuntimeError *)
+   simp[no_type_error_result_def]
+   >>
+   (* PopOp: check + read + 2 writes + ret *)
+   gvs[assign_operation_runtime_typed_def] >>
+   gvs[bind_def, lift_sum_def, return_def, raise_def,
+       get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+       no_type_error_result_def,
+       type_slot_size_def, default_value_def,
+       vfmStateTheory.lookup_storage_def] >-
+   (* All succeed + return SOME popped *)
+   simp[no_type_error_result_def]
+   >-
+   (* Last write INR: length BaseTV(UintT 256) IntV *)
+   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_pop_write2")
+   >-
+   (* Default write INR: write default_value pop_elem_tv *)
+   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_pop_write1")
+   >-
+   (* Read INR: always RuntimeError *)
+   (drule read_storage_slot_error >> simp[no_type_error_result_def])
+   >-
+   (* Check fails: RuntimeError *)
+   simp[no_type_error_result_def]
+  ) >>
+  (* INR: resolve_array_element error - always RuntimeError, never TypeError *)
+  drule resolve_array_element_error_sc >> rpt strip_tac >>
+  Cases_on `g` >> gvs[no_type_error_result_def]
+QED
+
+Theorem assign_target_TopLevelVar_Value_branch_ntr:
+  (* Boundary lemma for TopLevelVar when lookup_global returns Value.
+     This is the only non-contradictory branch for StorageVarDecl + non-ArrayTV.
+     After gvs with AllCaseEqs(), 3 goals remain:
+       1) assign_subscripts INL + set_global INL + assign_result: success path
+       2) assign_subscripts INL + set_global INR: TypeError from set_global
+       3) assign_subscripts INR: error from assign_subscripts *)
+  lookup_global cx src_id_opt (string_to_num id) st = (INL (Value v), st0) ==>
+  value_has_type root_tv v ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  env.type_defs = get_tenv cx ==>
+  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  evaluate_type (get_tenv cx) typ = SOME root_tv ==>
+  well_formed_type_value root_tv ==>
+  assign_operation_runtime_typed env ty op ==>
+  evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs)) ==>
+  leaf_type root_tv (REVERSE sbs) <> NoneTV ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  all_tac >>
+  rw[] >>
+  gvs[Once assign_target_def, pairTheory.PAIR, AllCaseEqs(), bind_def, ignore_bind_def,
+      lift_option_type_def, return_def, raise_def, lift_sum_def, type_check_def,
+      assert_def, check_def, LET_THM, option_CASE_rator, var_decl_info_CASE_rator,
+      prod_CASE_rator, type_value_CASE_rator, toplevel_value_CASE_rator,
+      sum_CASE_rator] >-
+  (* Goal 1: assign_subscripts INL + set_global INL + assign_result *)
+  (metis_tac[assign_result_no_type_error_from_successful_assign_split]) >-
+  (* Goal 2: set_global returns INR - derive value_has_type for v'' then close *)
+  (`value_has_type root_tv v''` by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
+   simp[no_type_error_result_def] >> gen_tac >>
+   spose_not_then strip_assume_tac >>
+   (* Now: e = Error (TypeError msg), goal is F *)
+   `set_global cx src_id_opt (string_to_num id) v'' s'' =
+     (INR (Error (TypeError msg)),s'³')` by simp[] >>
+   metis_tac[set_global_storage_no_type_error]) >-
+  (* Goal 3: assign_subscripts returns INR *)
+  (simp[no_type_error_result_def] >> gen_tac >>
+   spose_not_then strip_assume_tac >>
+   (* Now: e = TypeError msg, goal is F *)
+   `assign_subscripts root_tv v (REVERSE sbs) op = INR (TypeError msg)` by simp[] >>
+   metis_tac[assign_subscripts_no_type_error_runtime_typed])
+QED
+
+Theorem assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error:
+  runtime_consistent env cx st ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  target_path_type env (Type t) sbs (Type ty) ==>
+  assignable_type (get_tenv cx) ty ==>
+  assign_operation_runtime_typed env ty op ==>
+  assign_operation_matches_target_shape (BaseTargetV (TopLevelVar src_id_opt id) sbs) op ==>
+  env.type_defs = get_tenv cx ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  evaluate_type (get_tenv cx) typ = SOME root_tv ==>
+  well_formed_type_value root_tv ==>
+  (!elem_tv bd. root_tv <> ArrayTV elem_tv bd) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  all_tac >> rpt strip_tac >>
+  `well_formed_vtype env.type_defs (Type t)` by metis_tac[top_level_vtype_well_formed] >>
+  `typ = t` by metis_tac[top_level_Type_storage_decl] >>
+  fs[] >>
+  `evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs))`
+    by metis_tac[target_path_type_Type_evaluate_leaf] >>
+  `leaf_type root_tv (REVERSE sbs) <> NoneTV`
+    by metis_tac[assignable_type_evaluate_not_NoneTV, target_path_type_Type_evaluate_leaf_not_NoneTV] >>
+  Cases_on `lookup_global cx src_id_opt (string_to_num id) st` >>
+  Cases_on `q` >> gvs[] >-
+  (* INL: toplevel_value *)
+  (Cases_on `x` >> gvs[] >-
+   (* Value v: apply boundary lemma via metis *)
+   (metis_tac[assign_target_TopLevelVar_Value_branch_ntr, lookup_global_storage_Value_typed]) >-
+   (* HashMapRef: contradiction *)
+   (metis_tac[lookup_global_HashMapRef_not_StorageVarDecl]) >>
+   (* ArrayRef: contradiction with non-ArrayTV root *)
+   metis_tac[lookup_global_ArrayRef_not_StorageVarDecl]) >>
+  (* INR: no TypeError possible for StorageVarDecl + non-ArrayTV *)
+  imp_res_tac lookup_global_state >>
+  gvs[] >>
+  imp_res_tac assign_target_TopLevelVar_lookup_global_INR_propagate >>
+  gvs[] >>
+  CCONTR_TAC >>
+  gvs[no_type_error_result_def, sumTheory.INR_11] >>
+  metis_tac[lookup_global_StorageVarDecl_non_ArrayTV_no_TypeError]
+QED
+
 Theorem top_level_HashMapRef_assign_no_type_error:
   runtime_consistent env cx st ==>
   FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (HashMapT kt vt) ==>
@@ -2156,191 +2730,27 @@ Theorem top_level_HashMapRef_assign_no_type_error:
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
-Proof cheat
+Proof
+  cheat
 QED
-
 Resume assign_target_sound_mutual[sound_TopLevelVar]:
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  conj_tac >- (
-    drule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
-    disch_then (qspecl_then [`env`, `tgt`, `ty`] mp_tac) >>
-    simp[]) >>
-  reverse $ gvs[assign_target_def, bind_apply, AllCaseEqs()]
-  >- (
-    rw[no_type_error_result_def] >> rpt strip_tac >> gvs[] >>
-    drule lookup_global_top_level_assignable_no_type_error >>
-    disch_then drule >> rw[] )
-  >- (
-    drule_at Any lookup_global_success_get_module_code >>
-    strip_tac >> gvs[lift_option_type_def,return_def] ) >>
-  gvs[lift_option_type_def,return_def,AllCaseEqs(),
-      raise_def,option_CASE_rator] >>
-  Cases_on`tv` >- (
-    gvs[assign_target_assignable_context_def] >>
-    drule_then drule lookup_global_Value_not_HashMapVarDecl >>
-    disch_then drule >> simp[] >> strip_tac >>
-    PairCases_on`p` >> Cases_on`p0` >> gvs[IS_SOME_EXISTS] >>
-    reverse(gvs[bind_apply,AllCaseEqs(),return_def]) >- (
-      gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
-          return_def, raise_def, no_type_error_result_def] >>
-      rpt strip_tac >> gvs[] >>
-      funpow 3 drule_then drule
-        top_level_storage_value_assign_subscripts_no_type_error >>
-      simp[] >>
-      imp_res_tac lookup_global_state ) >>
-    reverse $ gvs[ignore_bind_apply, AllCaseEqs(),
-                  no_type_error_result_def] >- (
-      rpt strip_tac >> gvs[] >>
-      funpow 2 drule_then drule
-        top_level_storage_value_assign_success_no_type_error >>
-      simp[] >>
-      imp_res_tac lookup_global_state >>
-      gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
-          raise_def, return_def]
-    ) >>
-    rpt strip_tac >> gvs[] >>
-    drule_at Any assign_result_no_type_error_from_successful_assign >>
-    simp[no_type_error_result_def] >>
-    gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
-        raise_def, return_def] 
-  ) >>
-  gvs[assign_target_assignable_context_def]
-  >- (
-    (* HashMapRef branch *)
-    (* First: FST p must be HashMapVarDecl since lookup_global returns HashMapRef *)
-    `?is_transient' id_str. p = (HashMapVarDecl is_transient' t v, id_str)` by (
-      Cases_on `p` >> Cases_on `q` >> gvs[] >>
-      Cases_on `r` >> gvs[] >>
-      (* StorageVarDecl case: impossible, lookup_global would return Value/ArrayRef *)
-      qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-      simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
-           option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
-           toplevel_value_CASE_rator, type_value_CASE_rator, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[]) >>
-    gvs[IS_SOME_EXISTS] >>
-    `is <> []` by gvs[] >>
-    (* Extract location type and path type from target_runtime_typed *)
-    Cases_on `tgt` >> gvs[target_runtime_typed_def, location_runtime_typed_def] >>
-    (* Connect vt to HashMapT t v from runtime consistency *)
-    `vt = HashMapT t v` by (
-      Cases_on `vt` >> gvs[] >-
-      (* Type case: impossible, contradicts top_level_Type_not_hashmap_decl *)
-      (drule_all top_level_Type_not_hashmap_decl >> strip_tac >> gvs[]) >>
-      (* HashMapT case: from env consistency + find_var_decl_by_num injectivity *)
-      drule_all top_level_HashMap_decl >> strip_tac >>
-      gvs[var_decl_info_11]) >>
-    gvs[target_path_type_HashMapT_not_nil] >>
-    (* Derive well_formed_vtype for HashMapT t v from location_runtime_typed *)
-    `well_formed_vtype env.type_defs (HashMapT t v)` by (
-      `location_runtime_typed env cx st (TopLevelVar src_id_opt id) (HashMapT t v)` by
-        (simp[location_runtime_typed_def] >> gvs[]) >>
-      irule location_runtime_typed_well_formed_vtype >>
-      goal_assum drule_all >> simp[]) >>
-    (* split_hashmap_subscripts succeeds *)
-    `split_hashmap_subscripts v (TL (REVERSE is)) <> NONE` by (
-      drule_all target_path_type_HashMapT_split_hashmap_subscripts >> simp[]) >>
-    rw[no_type_error_result_def] >> rpt strip_tac >>
-    imp_res_tac lookup_global_state >> gvs[] >>
-    (* Step 1: REVERSE is <> [] so first_sub/rest_subs split succeeds *)
-    `REVERSE is <> []` by (Cases_on `is` >> gvs[]) >>
-    (* Extract split_hashmap_subscripts result BEFORE expanding the do-block *)
-    `?final_type' key_types' remaining_subs'.
-      split_hashmap_subscripts v (TL (REVERSE is)) = SOME (final_type', key_types', remaining_subs')` by (
-      qpat_x_assum `split_hashmap_subscripts v (TL (REVERSE is)) ≠ NONE` mp_tac >>
-      simp[option_neq_none_imp_is_some, optionTheory.IS_SOME_EXISTS] >>
-      rpt strip_tac >>
-      qexistsl [`FST x'`, `FST (SND x')`, `SND (SND x')`] >>
-      Cases_on `x'` >> Cases_on `r` >>
-      simp[pairTheory.PAIR]) >>
-    gvs[] >>
-    (* Step 2: Length facts from split_hashmap_subscripts *)
-    `LENGTH key_types' + LENGTH remaining_subs' = LENGTH (TL (REVERSE is))` by (
-      drule split_hashmap_subscripts_some_imp >> simp[]) >>
-    (* Step 3: compute_hashmap_slot succeeds *)
-    `EVERY ((<>) NONE o subscript_to_value)
-      (LAST is :: TAKE (LENGTH key_types') (TL (REVERSE is)))` by (
-      drule_all target_path_type_HashMapT_hashmap_prefix_ValueSubscript >> simp[]) >>
-    (* Step 3b: compute_hashmap_slot succeeds *)
-    (* First derive LENGTH key_types' <= LENGTH (TL (REVERSE is)) from the length sum *)
-    `LENGTH key_types' <= LENGTH (TL (REVERSE is))` by (
-      qpat_x_assum `LENGTH key_types' + LENGTH remaining_subs' = LENGTH (TL (REVERSE is))` mp_tac >>
-      DECIDE_TAC) >>
-    (* Now prove compute_hashmap_slot <> NONE directly *)
-    `compute_hashmap_slot c (t :: key_types')
-      (LAST is :: TAKE (LENGTH key_types') (TL (REVERSE is))) <> NONE` by (
-      irule compute_hashmap_slot_subscripts_to_values >> conj_tac >- (
-        simp[LENGTH, LENGTH_TAKE_EQ] >> DECIDE_TAC) >>
-      simp[]) >>
-    (* Step 4: evaluate_type succeeds from well_formed_vtype through split *)
-    `well_formed_vtype env.type_defs v` by gvs[well_formed_vtype_def] >>
-    `well_formed_type env.type_defs final_type'` by (
-      qpat_x_assum `well_formed_vtype env.type_defs v` mp_tac >>
-      qpat_x_assum `split_hashmap_subscripts v (TL (REVERSE is)) = SOME (final_type',key_types',remaining_subs')` mp_tac >>
-      metis_tac[well_formed_vtype_split_hashmap_subscripts_well_formed_type]) >>
-    `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
-    `well_formed_type (get_tenv cx) final_type'` by metis_tac[] >>
-    `evaluate_type (get_tenv cx) final_type' <> NONE` by (
-      Cases_on `evaluate_type (get_tenv cx) final_type'` >> gvs[well_formed_type_def]) >>
-    (* Step 5: Expand the do-block. Goal is F: derive contradiction from
-       do-block TypeError equation vs typing facts in assumptions.
-       Use gvs to expand bind/case structure in assumptions. *)
-    gvs[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
-        AllCaseEqs(), option_CASE_rator, sum_CASE_rator, pairTheory.PAIR]
-    (* 4 subgoals remain after gvs expansion. Handle each in turn with >- *)
-    >-
-    (* Subgoal 1: compute_hashmap_slot NONE contradicts ≠ NONE.
-       Bridge x' = LAST is via HD_REVERSE_EQ_LAST. Then derive TAKE length equality
-       from LENGTH xs = LENGTH is - 1 + LENGTH key_types' = LENGTH is - 1 - LENGTH remaining_subs'. *)
-    (`x' = LAST is` by (
-       `HD (REVERSE is) = LAST is` by metis_tac[HD_REVERSE_EQ_LAST] >>
-       gvs[]) >>
-     `LENGTH xs = LENGTH is − 1` by (
-      Cases_on `is` >> gvs[LENGTH_REVERSE]) >>
-     gvs[])
-    >-
-    (* Subgoal 2: compute_hashmap_slot SOME, then read/assign/write+result *)
-    (FAIL_TAC "probe subg2")
-    >-
-    (* Subgoal 3: read_storage_slot TypeError *)
-    (drule read_storage_slot_error >> simp[])
-    >>
-    (* Subgoal 4: assign_subscripts TypeError *)
-    qpat_x_assum `assign_subscripts _ _ _ _ = INR (Error (TypeError _))` mp_tac >>
-    drule_all assign_subscripts_no_type_error_runtime_typed >>
-    simp[]
-  ) >>
   cheat
 QED
 
 Resume assign_target_sound_mutual[sound_ImmutableVar]:
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  conj_tac >- (
-    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
-    goal_assum drule_all >> simp[]) >>
   cheat
 QED
 
 Resume assign_target_sound_mutual[sound_TupleTargetV]:
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  conj_tac >- (
-    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
-    goal_assum drule_all >> simp[]) >>
   cheat
 QED
 
 Resume assign_target_sound_mutual[sound_assign_targets_cons]:
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  gvs[assign_target_def] >>
   cheat
 QED
 
 Finalise assign_target_sound_mutual
+
 
 Theorem assign_targets_preserves_runtime_consistent:
   runtime_consistent env cx st /\
