@@ -1474,15 +1474,6 @@ evidence:
 - source:semantics/vyperStateScript.sml:906-938
 - source:semantics/prop/vyperTypeStatePreservationScript.sml:2388-2405
 
-## L0152 scope='' tags=
-shape: ArrayRef branch assign_target gvs expansion produces too many subgoals
-pattern: For the ArrayRef branch of assign_target TopLevelVar, gvs[Once assign_target_def, AllCaseEqs()] creates >4KB goal with unapplied lambda-case on type_value (final_tv). Fix: (1) Push assign_target equation to goal with mp_tac, (2) simp[Once assign_target_def] for TopLevelVar, (3) Cases_on resolve_array_element result type instead of AllCaseEqs, (4) PairCases_on to destructure (elem_slot, final_tv, remaining_subs), (5) Cases_on final_tv + Cases_on bd for ArrayTV sub-cases, (6) dispatch each sub-case individually. OR split into separate boundary sub-lemmas for ordinary/PopOp/AppendOp.
-works_when: Proving no_type_error_result for assign_target TopLevelVar ArrayRef branch where the evaluator does case (ao, final_tv) of PopOp/AppendOp/ordinary
-evidence:
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m5993_t001
-- source:semantics/vyperStateScript.sml:906-938
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2407-2451 - working Value branch as contrast with only 3 subgoals from AllCaseEqs
-
 ## L0153 scope='' tags=
 shape: resolve_array_element no-TypeError under target_path_step_type ArrayT constraint
 pattern: resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) sbs st cannot return INR(TypeError) when the subscripts at ArrayTV levels are all ValueSubscript(IntV _). target_path_step_type env (Type (ArrayT elem_ty len)) sb next_vt forces sb = ValueSubscript(IntV _). So under target_path_type env (Type t) sbs (Type ty) where t contains ArrayT, resolve_array_element's TypeError clause (line 833-834 of vyperStateScript.sml) is unreachable. The check/assert calls for bounds only raise RuntimeError.
@@ -1702,20 +1693,6 @@ evidence:
 - episode:E0058
 - source:semantics/prop/vyperTypeStatePreservationScript.sml:2520-2621 - current failing irule-based proof that needs conversion to metis_tac pattern
 
-## L0179 scope='' tags=
-shape: Monadic do-block proof for assign_target with nested bind/lift_sum/write_storage_slot
-pattern: Do NOT use gvs[AllCaseEqs()] on monadic do-block goals after Cases_on a type_value variable. Instead: (1) extract boundary lemma for standard read+write+assign_result path modeled on assign_target_TopLevelVar_Value_branch_ntr, (2) handle special operations (AppendOp/PopOp) in separate boundary sub-lemmas with targeted Cases_on per intermediate result + drule/simp.
-works_when: Proving no_type_error_result for assign_target where the goal contains case x1 of ... with nested monadic binds after simp[Once assign_target_def]
-evidence:
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m6609_t001
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2604-2646
-- episode:E0059
-- episode:E0058
-- episode:E0057
-- episode:E0056
-- episode:E0054
-- episode:E0031 (original 'NEVER use irule after gvs[AllCaseEqs()]' learning)
-
 ## L0180 scope='' tags=
 shape: value_has_type for UintT 256 IntV of array length (append/pop count)
 pattern: After gvs[assign_operation_runtime_typed_def, AllCaseEqs(), ...], the AppendOp length write needs: value_has_type (BaseTV (UintT 256)) (IntV &(w2n k + 1)). Derive from: w2n k < n (from check), n < dimword(:256) (from well_formed_type_value_def ArrayTV Dynamic case), so w2n k + 1 < 2^256. For IntV: 0 <= &(w2n k + 1) and Num(&(w2n k + 1)) = w2n k + 1 < 2^256 by integer_arith. PopOp is similar with w2n k - 1.
@@ -1746,21 +1723,521 @@ evidence:
 - source:semantics/prop/vyperBuiltinTypingScript.sml:1100-1106
 - source:semantics/prop/vyperTypeStatePreservationScript.sml:2475-2500 - proved storage_array_append/pop_len_value_has_type lemmas
 
-## L0183 scope='' tags=
-shape: ArrayRef ordinary boundary lemma for assign_target TopLevelVar
-pattern: The ordinary ArrayRef boundary lemma MUST use strong exclusion hypotheses: op <> PopOp /\ (!v. op <> AppendOp v). With these, the case (op, final_tv) in assign_target_def resolves entirely to the _ branch (ordinary read+write+assign_result path), producing exactly 4 subgoals from gvs[AllCaseEqs()]: (1) assign_result success, (2) write_storage_slot INR, (3) assign_subscripts INR, (4) read_storage_slot INR. This matches the HashMapRef pattern. Weak conditional exclusions (op=PopOp => final_tv<>ArrayTV Dynamic) do NOT work because AllCaseEqs/Cases_on must still split on both op and final_tv.
-works_when: Proving no_type_error_result for the ordinary (non-PopOp/non-AppendOp) branch of assign_target TopLevelVar ArrayRef where the _ branch in assign_target_def fires
+## L0188 scope='' tags=
+shape: ArrayRef assign_target branch: case (ao, final_tv) pair pattern requires Cases_on op before definition expansion
+pattern: For assign_target TopLevelVar ArrayRef branch, the definition uses case (ao, final_tv) of (PopOp, ArrayTV _ Dynamic) => pop | (AppendOp _, ArrayTV _ Dynamic _) => append | _ => ordinary. This nested pair-case pattern cannot be handled by single gvs[AllCaseEqs()] blast. Instead: Cases_on op FIRST to separate Replace/Update/AppendOp/PopOp, then within each op case, expand assign_target_def and use Cases_on final_tv + gvs[AllCaseEqs()] for the remaining type split. Replace/Update produce 4 standard monadic subgoals. AppendOp/PopOp need separate ArrayTV Dynamic sub-lemmas.
+works_when: Proving no_type_error_result or preservation for assign_target TopLevelVar ArrayRef branch where the evaluator uses a pair-case (ao, final_tv) pattern
 evidence:
-- source:semantics/vyperStateScript.sml:906-938 - ArrayRef branch showing case (ao, final_tv) of PopOp+Dynamic/AppendOp+Dynamic/_
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2295-2351 - HashMapRef 4-subgoal pattern as model
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m6760_t001 - weak exclusion timeout
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m6762_t001 - Cases_on explosion timeout
-
-## L0184 scope='' tags=
-shape: ArrayRef assign_target gvs expansion produces too many subgoals from nested case (op, final_tv)
-pattern: For ArrayRef branches: use Cases_on `final_tv` >> gvs[CaseEq "type_value", bind_def, lift_sum_def, return_def, raise_def, AllCaseEqs(), no_type_error_result_def] to split into ~21 goals. Then for each goal, derive assign_subscripts = INL new_val via Cases_on `assign_subscripts ...` >> gvs[return_def, raise_def], then chain through read_storage_slot_success_type, assign_subscripts_preserves_type_runtime_typed, etc.
-works_when: Proving ArrayRef branch of assign_target, where case (ao, final_tv) of ... creates nested 2D case split. Strong exclusion hypotheses (op<>PopOp / !v.op<>AppendOp v) prevent Dynamic-array special branches.
-evidence:
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m6808_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002
 - source:semantics/vyperStateScript.sml:906-938
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2311-2351
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2590-2873
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2507-2554 - failed boundary lemma showing the wrong approach
+
+## L0189 scope='' tags=
+shape: HOL4 pair-case (ao, final_tv) pattern in monadic do-blocks cannot be handled by single gvs[AllCaseEqs()] blast
+pattern: When an evaluator definition uses case (ao, final_tv) of (PopOp, ArrayTV _ Dynamic) => pop | (AppendOp _, ArrayTV _ Dynamic _) => append | _ => ordinary, a single gvs[AllCaseEqs()] creates N*M goals across the two case axes. Instead: Cases_on op FIRST to separate operation constructors, then within each op case use targeted Cases_on final_tv + gvs[AllCaseEqs()] for the remaining type split. This is the ArrayRef-specific pattern; HashMapRef/Value branches need only a single case split.
+works_when: Proving no_type_error_result or similar for assign_target TopLevelVar ArrayRef branch where evaluator uses pair-case (operation, type_value) pattern
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2590-2873
+- source:semantics/vyperStateScript.sml:906-938
+
+## L0190 scope='' tags=
+shape: HOL4 exclusion hypotheses with universal quantifiers don't fire in gvs[AllCaseEqs()]
+pattern: When a theorem has hypotheses like (!v. op <> AppendOp v) and op is free (not yet case-split), gvs[AllCaseEqs()] cannot instantiate the universal quantifier to eliminate branches. The universal exclusion remains unspecialized, so branches with final_tv = ArrayTV _ Dynamic + op = AppendOp survive as contradiction goals that FIRST cannot close. Fix: case-split on op BEFORE expanding the definition, so the exclusion hypotheses become trivial or unnecessary.
+works_when: Proving theorems with exclusion hypotheses (op != X, forall v. op != Y v) where the excluded constructors would be eliminated by AllCaseEqs but the universal quantifier blocks auto-instantiation
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002
+
+## L0191 scope='' tags=
+shape: HOL4 pair-case (ao, final_tv) in monadic do-block definitions
+pattern: When an evaluator definition uses case (ao, final_tv) of (PopOp, ArrayTV _ Dynamic) => pop | (AppendOp _, ArrayTV _ Dynamic _) => append | _ => ordinary, a single gvs[AllCaseEqs()] creates N*M goals. Instead: Cases_on op FIRST to separate operation constructors, then within each op case use targeted Cases_on final_tv + gvs[AllCaseEqs()].
+works_when: Proving no_type_error_result or preservation for assign_target ArrayRef branch where the evaluator uses pair-case (operation, type_value) pattern
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2616-2873
+- source:semantics/vyperStateScript.sml:906-938
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6953_t001
+
+## L0192 scope='' tags=
+shape: HOL4 universal exclusion hypotheses dont fire in gvs[AllCaseEqs()]
+pattern: When a theorem has hypotheses like (!v. op <> AppendOp v) and op is free (not yet case-split), gvs[AllCaseEqs()] cannot instantiate the universal quantifier to eliminate branches. The universal exclusion remains unspecialized, so branches survive as contradiction goals that FIRST cannot close. Fix: case-split on op BEFORE expanding the definition.
+works_when: Proving theorems with exclusion hypotheses where the excluded constructors would be eliminated by AllCaseEqs but the universal quantifier blocks auto-instantiation
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6953_t001
+
+## L0193 scope='' tags=
+shape: Dynamic array append/pop no-TypeError proof in assign_target
+pattern: For AppendOp on ArrayTV elem_tv (Dynamic n): check(stored_len < n) failure => RuntimeError not TypeError; success => write element (value_has_type elem_tv v from assign_operation_runtime_typed_def), write length (value_has_type BaseTV(UintT 256) IntV(&(w2n(stored_len)+1)) from storage_array_append_len_value_has_type + well_formed_type_value Dynamic n < 2^256), return NONE. For PopOp: check(stored_len > 0), read last, write default (default_value_has_type), write decremented length (storage_array_pop_len_value_has_type), return SOME popped. All check failures produce RuntimeError. All write failures ruled out by value_has_type + write_storage_slot_no_type_error_from_value_has_type.
+works_when: Proving no_type_error_result for AppendOp/PopOp dynamic array storage branches in assign_target
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2556-2588
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2475-2498
+- source:semantics/vyperStateScript.sml:906-938
+- source:semantics/vyperStateScript.sml:177
+
+## L0194 scope='' tags=
+shape: assign_operation_runtime_typed env ty (AppendOp v) + evaluate_type env.type_defs ty = SOME (ArrayTV elem_tv (Dynamic n)) => value_has_type elem_tv v
+pattern: Use append_operation_runtime_typed_ArrayTV_value[local] (line 371) to derive value_has_type for the appended element from assign_operation_runtime_typed + evaluate_type result. For PopOp, use pop_operation_runtime_typed_ArrayTV_exists[local] (line 384) to extract the element type evaluation and ty=ArrayT decomposition.
+works_when: Proving no_type_error for ArrayRef dynamic AppendOp/PopOp branches where assign_operation_runtime_typed and evaluate_type are available
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7116_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:371-396
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2543-2546
+
+## L0195 scope='' tags=
+shape: Monadic do-block expansion for assign_target TopLevelVar ArrayRef
+pattern: To prove no_type_error_result for assign_target ArrayRef branches, expand assign_target_def THEN use AllCaseEqs() to reduce all case/bind pairs at once. Do NOT interleave Cases_on with partial simp expansion. Pattern from working proofs: mp_tac eqn >> simp[Once assign_target_def, monadic_defs, AllCaseEqs()] >> Cases_on outer_results >> gvs[bind_def, ..., AllCaseEqs()] inside each branch.
+works_when: When assign_target_def monadic do-block has nested case/bind that needs full expansion. The key: let AllCaseEqs+gvs handle the monadic chain after structural splits are done.
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2616-2647
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7128_t001
+
+## L0196 scope='' tags=
+shape: Unicode safe theorem statement syntax
+pattern: Always use ==> chains in theorem statement hypotheses instead of /\ conjunctions. The Anthropic API corrupts /\ to non-ASCII characters that break HOL4 parsing.
+works_when: Writing theorem statements via the Anthropic API
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7098_t001
+
+## L0197 scope='' tags=
+shape: Monadic do-block with get_storage_backend bind - AllCaseEqs cannot resolve inequality-based elimination
+pattern: When a monadic do-block contains `x <- get_storage_backend cx is_transient`, after once_rewrite_tac[def] the bind creates existential quantifers for the pair result. AllCaseEqs cannot use get_storage_backend_no_error (an INEQUALITY) to eliminate the INR branch. Fix: (1) add get_storage_backend cx is_transient st = (INL storage, s') as an EQUATION premise to the boundary lemma so AllCaseEqs can resolve it, or (2) use rpt strip_tac after once_rewrite_tac to Skolemize existentials, then handle cases individually.
+works_when: Proving no_type_error_result or similar for assign_target TopLevelVar ArrayRef branch AppendOp/PopOp do-blocks where get_storage_backend creates the first bind
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7146_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7148_t001
+- source:semantics/vyperStateScript.sml:906-931
+- source:semantics/prop/vyperTypeExprSoundnessScript.sml:119-124
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2529-2560
+
+## L0198 scope='' tags=
+shape: HOL4 monadic bind with get_storage_backend expansion in AllCaseEqs
+pattern: When a monadic do-block includes `storage <- get_storage_backend cx is_transient;`, AllCaseEqs cannot resolve the bind because get_storage_backend_no_error is an INEQUALITY not an equation. Fix: Cases_on `get_storage_backend cx is_transient st` BEFORE expanding the definition, then gvs[get_storage_backend_no_error] eliminates INR, leaving an equation `(INL x, r)` in assumptions that AllCaseEqs CAN match.
+works_when: Proving no-TypeError for monadic do-blocks containing get_storage_backend (AppendOp/PopOp in assign_target, or similar)
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7196_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7186_t001 - old failed proof without Cases_on approach
+- source:semantics/vyperStateScript.sml:922-931 - AppendOp branch definition with get_storage_backend bind
+- source:semantics/prop/vyperTypeExprSoundnessScript.sml:119-124 - get_storage_backend_no_error is inequality not equation
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2529-2586 - working AppendOp boundary lemma proof
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2588-2632 - ordinary path boundary lemma (new)
+
+## L0199 scope='' tags=
+shape: ArrayRef assign_target monadic do-block proof pattern
+pattern: For AppendOp/PopOp dynamic array branches: (1) Derive remaining_subs=[] via resolve_array_element_ArrayTV_empty_rsubs_sc, (2) Cases_on get_storage_backend BEFORE expanding assign_target_def (get_storage_backend_no_error eliminates INR), (3) mp_tac assign_target equation then simp[Once assign_target_def, AllCaseEqs()] to expand, (4) Each subgoal: check failures→simp[no_type_error_result_def] (RuntimeError), write INR→derive value_has_type then metis_tac[write_storage_slot_no_type_error_from_value_has_type], read INR→drule read_storage_slot_error, success→simp[no_type_error_result_def]
+works_when: Proving no_type_error_result for assign_target TopLevelVar ArrayRef AppendOp/PopOp dynamic array branches where the do-block contains get_storage_backend bind
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2529-2586
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7196_t001
+- source:semantics/vyperStateScript.sml:906-938
+
+## L0200 scope='' tags=
+shape: Proving w2n (lookup_storage slot storage) < 2^256 in storage operation soundness proofs
+pattern: Use ASSUME_TAC (INST_TYPE [``:'a`` |-> ``:256``] wordsTheory.w2n_lt) >> POP_ASSUM mp_tac >> simp[] instead of simp[wordsTheory.w2n_lt]. simp alone cannot compute dimword(:256) to 2^256.
+works_when: Goal shape is w2n (lookup_storage ... x) < 2^256 or similar word-bound goal in storage soundness context
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7370_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7357_t001
+
+## L0201 scope='' tags=
+shape: DISCH_THEN instrumentation blocks qpat_x_assum/first_assum callbacks in vyperTypeStatePreservationScript.sml
+pattern: In vyperTypeStatePreservationScript.sml, qpat_x_assum `pattern` (fn th => drule (MATCH_MP lemma th)) fails with HOL_ERR at proof_runtime.sml:749. Replace with simple drule lemma >> strip_tac >> gvs[] which avoids the callback entirely. drule matches the first assumption with the right pattern automatically.
+works_when: Need to apply evaluate_type_ArrayT_cases or similar implicational lemma to an assumption in vyperTypeStatePreservationScript.sml proofs
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7380_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7386_t001
+
+## L0202 scope='' tags=
+shape: env.type_defs vs get_tenv cx bridging in by-subgoals after fs[] rewrites
+pattern: After fs[top_level_vtype_well_formed, top_level_Type_storage_decl] rewrites env.type_defs to get_tenv cx via variable elimination, any by-subgoal or metis_tac that needs evaluate_type env.type_defs must use evaluate_type (get_tenv cx) instead. The old env.type_defs form no longer exists in assumptions. When deriving evaluate_type facts for resolve_array_element_leaf_type_sc or other lemmas that use env.type_defs, write `evaluate_type (get_tenv cx) ty = SOME (leaf_type x1 x2)` not `evaluate_type env.type_defs ty = ...`.
+works_when: Proving assignment boundary/branch theorems in vyperTypeStatePreservationScript.sml where fs[] has already rewritten env.type_defs to get_tenv cx
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7411_t001
+
+## L0203 scope='' tags=
+shape: Monadic do-block expansion in assign_target TopLevelVar ArrayRef branch - ordinary path (Replace/Update on any non-Dynamic type_value)
+pattern: The ordinary ArrayRef branch (all non-Dynamic type_values, all Replace/Update operations) follows a 4-subgoal pattern after gvs[AllCaseEqs()]: (1) assign_result success: irule read_storage_slot_success_type >> simp[] for value_has_type x1 current_val, then metis_tac[assign_subscripts_preserves_type_runtime_typed] for value_has_type x1 new_val, then drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def]. (2) write INR: same value_has_type derivations, then CCONTR_TAC >> gvs[] >> metis_tac[write_storage_slot_no_type_error_from_value_has_type]. (3) assign_subscripts INR: irule read_storage_slot_success_type >> drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >> simp[no_type_error_result_def] >> metis_tac[]. (4) read INR: drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]. CRITICAL: Cases_on resolve_array_element BEFORE expanding assign_target_def. After expansion, use mp_tac to push assign_target eqn to goal position.
+works_when: Proving no_type_error_result for assign_target TopLevelVar ArrayRef ordinary branch after resolve_array_element succeeds with (elem_slot, final_tv, remaining) where final_tv is NOT ArrayTV _ Dynamic (or op is not AppendOp/PopOp)
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7430_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2660-2753
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2529-2586 - AppendOp boundary lemma model
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2589-2643 - PopOp boundary lemma model
+- episode:E0067
+
+## L0205 scope='' tags=
+shape: drule_all_then assume_tac vs irule for value_has_type in by-subgoals with stale checkpoints
+pattern: When irule read_storage_slot_success_type generates existential witnesses that by cannot close (especially with stale holbuild checkpoints), use drule_all_then assume_tac read_storage_slot_success_type >> simp[] instead. drule matches assumptions and adds the result directly without generating existential subgoals.
+works_when: Proving value_has_type from read_storage_slot_success_type in by-subgoals or after gvs[AllCaseEqs()] expansion where irule creates unresolved existential witnesses
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7438_t002
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2767-2769 - working drule_all_then pattern in AppendOp case
+
+## L0207 scope='' tags=
+shape: Splitting conjunctive boundary lemmas into separate theorems for API safety
+pattern: When a boundary lemma needs two conclusions (e.g. op=Replace=>no_type_error AND op=Update=>no_type_error), split into TWO separate theorems with single ==> conclusions. The Anthropic API corrupts /\ in term quotations. Separate theorems also make drule/metis_tac application simpler since each has a single focused conclusion.
+works_when: Writing boundary lemmas where multiple operation cases need the same do-block proof but different conclusions
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2645-2725
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7464_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6196_t001
+
+## L0211 scope='' tags=
+shape: Boundary lemma for assign_target ArrayRef ordinary branch - 4 subgoals after gvs[AllCaseEqs()]
+pattern: For assign_target TopLevelVar ArrayRef ordinary branch (_ case in evaluator's case(ao,final_tv)): use operation-specific boundary lemma with premises: lookup_global=INL(ArrayRef...), get_module_code=SOME code, resolve_array_element=INL(elem_slot,final_tv,remaining), well_formed_type_value final_tv, evaluate_type env.type_defs ty=SOME(leaf_type final_tv remaining), leaf_type final_tv remaining <> NoneTV, assign_operation_runtime_typed env ty op, assign_target equation. Proof: all_tac >> rpt strip_tac >> qpat_x_assum assign_target equation mp_tac >> simp[Once assign_target_def, assign_operation_11, assign_operation_distinct, bind_def, return_def, raise_def, ignore_bind_def, lift_option_def, lift_option_type_def, lift_sum_def, type_check_def, assert_def, check_def, LET_THM, pairTheory.PAIR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator, type_value_CASE_rator, toplevel_value_CASE_rator, var_decl_info_CASE_rator, AllCaseEqs(), no_type_error_result_def] >> rpt strip_tac >> gvs[] then dispatch 4 subgoals: (1) metis_tac[assign_result_no_type_error_from_successful_assign_split], (2) drule_all_then assume_tac read_storage_slot_success_type >> simp[] >> metis_tac[assign_subscripts_preserves_type_runtime_typed, write_storage_slot_no_type_error_from_value_has_type], (3) drule_all_then assume_tac read_storage_slot_success_type >> simp[] >> metis_tac[assign_subscripts_no_type_error_runtime_typed, no_type_error_result_def], (4) drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]. CRITICAL: no by-subgoals referencing final_tv after AllCaseEqs substitution.
+works_when: Proving no_type_error_result for assign_target TopLevelVar ArrayRef branch where the evaluator falls into the _ ordinary case (read_storage_slot + assign_subscripts + write_storage_slot + assign_result). One lemma per operation constructor (Replace, Update, AppendOp, PopOp).
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2781
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7501_t001
+- episode:E0070
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2855-2899 - working Value branch model with spose_not_then pattern for INR goals
+- source:semantics/vyperStateScript.sml:906-938 - assign_target_def ArrayRef showing get_module_code (line 876) and _ ordinary branch (lines 932-937)
+
+## L0212 scope='' tags=
+shape: HOL4 pair-case (ao, final_tv) in monadic do-block definitions - avoid AllCaseEqs()
+pattern: When an evaluator definition uses case (ao, final_tv) of (PopOp, ArrayTV _ Dynamic) => pop | (AppendOp _, ArrayTV _ Dynamic _) => append | _ => ordinary, NEVER use simp/gvs with AllCaseEqs() which creates N*M goals by independently splitting on ao and final_tv constructors. Instead: (1) For known ao (e.g., Replace v): use simp[Once assign_target_def, assign_operation_11, assign_operation_distinct, ...] WITHOUT AllCaseEqs or type_value_CASE_rator. assign_operation_distinct resolves the pair-case to the _ branch. (2) If ao is free: Cases_on op FIRST to separate operation constructors, then within each op case expand and handle remaining binds. (3) For dynamic array cases (AppendOp/PopOp + ArrayTV Dynamic): use Cases_on get_storage_backend BEFORE expanding, then expand and dispatch.
+works_when: Proving no_type_error_result or preservation for assign_target TopLevelVar ArrayRef branch where the evaluator uses a pair-case (operation, type_value) pattern
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7527_t002 - 21 subgoal explosion from AllCaseEqs on pair-case
+- source:semantics/vyperStateScript.sml:906-938 - assign_target_def showing case(ao,final_tv) pair pattern
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2896-2940 - working Value branch proof (no pair-case, 3 goals)
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2529-2586 - working AppendOp dynamic proof (Cases_on get_storage_backend first)
+
+## L0213 scope='' tags=
+shape: ArrayRef ordinary branch in assign_target (case(ao, final_tv) pair pattern)
+pattern: For assign_target TopLevelVar ArrayRef ordinary branch (_ case in evaluator's case(ao,final_tv)): use step-by-step Cases_on on each monadic result (read_storage_slot, assign_subscripts, write_storage_slot) WITHOUT AllCaseEqs. Add (!etv n. final_tv ≠ ArrayTV etv (Dynamic n)) premise for AppendOp/PopOp ordinary lemmas. Proof: all_tac >> rpt strip_tac >> qpat_x_assum assign_target mp_tac >> simp[Once assign_target_def, assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11, toplevel_value_CASE_rator, LET_THM, pairTheory.PAIR, type_value_CASE_rator, bound_CASE_rator, bound_distinct] >> Cases_on read_storage_slot >> ...
+works_when: Proving no_type_error_result for ArrayRef ordinary branch where assign_target_def has case(ao, final_tv) pair pattern that AllCaseEqs explosively case-splits on type_value and bound constructors
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7527_t002
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2835
+- source:semantics/vyperStateScript.sml:906-937
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2529-2586
+- source:semantics/prop/LEARNINGS_type_system_rewrite.md:1861-1889
+
+## L0214 scope='' tags=
+shape: Proof of lemma involving assign_target ArrayRef ordinary (_ wildcard) branch
+pattern: Use once_rewrite_tac[assign_target_def] then simp[bind_def, ignore_bind_def, return_def, raise_def, lift_option_def, lift_option_type_def, lift_sum_def, type_check_def, assert_def, check_def, LET_THM, pairTheory.PAIR, option_CASE_rator, sum_CASE_rator, prod_CASE_rator, toplevel_value_CASE_rator, var_decl_info_CASE_rator, assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11] — with NO type_value_CASE_rator, NO bound_CASE_rator, NO AllCaseEqs. Then explicit Cases_on on each monadic result (read_storage_slot, assign_subscripts, write_storage_slot). assign_operation_distinct eliminates the non-matching pair-case arms before the _ wildcard is expanded.
+works_when: The assign_operation (ao) is concrete (Replace, Update, etc.) so assign_operation_distinct can eliminate all other arms of the case(ao, final_tv) pair, leaving only the _ wildcard body. For AppendOp/PopOp ordinary where one pair-arm matches, need additional Cases_on final_tv + bound for the remaining case.
+evidence:
+- source:semantics/vyperStateScript.sml:906-937
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2713
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7636_t001 - shows type_value_CASE_rator expanding _ into 7 identical branches
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7527_t002 - shows AllCaseEqs explosion on pair-case
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7594_t001 - shows two-phase still explodes
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m7614_t002 - shows simp without bind_def doesn't expand monads
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2322-2378 - working HashMapRef lemma for comparison (NO pair-case)
+
+## L0215 scope='' tags=
+shape: Goal has type_value_case tv with identical branches after partial pair-case resolution
+pattern: After once_rewrite_tac[def_with_case(ao,tv)_pair] + simp[CASE_rator,distinct,11], the _ wildcard arm compiles to type_value_case tv with identical branches. Use Cases_on `tv` >> gvs[type_value_case_def, bound_case_def] to resolve concretely, then TRY (Cases_on `b` >> gvs[bound_case_def]) for ArrayTV sub-cases. This produces N goals with identical structure that can be dispatched uniformly.
+works_when: The definition uses case(ao,tv) of ... | _ => body where all type_value constructors lead to the same body. The initial simp eliminates the matching arms, leaving only the _ wildcard compiled as type_value_case.
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7727_t001
+- source:semantics/vyperStateScript.sml:909-937
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2663-2676
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2914-3062 (AppendOp working proof using Cases_on before expand)
+
+## L0216 scope='' tags=
+shape: Excl case_eq theorems doesn't prevent case expression when case_def is in simpset
+pattern: Excl type_value_case_eq only removes the case_eq theorem from AllCaseEqs expansion, but the type_value_case expression in the goal still needs type_value_case_def or Cases_on to resolve. Excluding the case_eq without providing an alternative resolution mechanism leaves the case expression unreduced. Use Cases_on the variable instead.
+works_when: The simplifier has type_value_case_def in the background (from TypeBase) and AllCaseEqs adds the case_eq. Excl removes the case_eq but the case expression persists.
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7713_t001
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7695_t001
+
+## L0217 scope='' tags=
+shape: ArrayRef ordinary branch boundary lemma with known operation (Replace/Update)
+pattern: For assign_target TopLevelVar ArrayRef branch where operation is Replace or Update (falls into _ wildcard of case(ao,final_tv) pair): use simp[Once assign_target_def, bind_def, ..., AllCaseEqs(), Excl "type_value_case_eq", Excl "bound_case_eq"] then step-by-step Cases_on on each monadic result (read_storage_slot, assign_subscripts, write_storage_slot). The AllCaseEqs resolves option/sum/pair case-eqs from bind expansion. The Excl prevents type_value_case/bound_case explosion. Cases_on finds monadic calls inside the type_value_case wrapper. 4 subgoals result: (1) read_storage INR -> drule read_storage_slot_error, (2) assign_subscripts INR -> value_has_type + assign_subscripts_no_type_error_runtime_typed, (3) write_storage INR -> value_has_type + write_storage_slot_no_type_error_from_value_has_type, (4) success -> assign_result_no_type_error_from_successful_assign.
+works_when: Proving no_type_error_result for ArrayRef ordinary branch (Replace/Update operations) in assign_target. The operation is concrete and falls into the _ wildcard of the pair-case.
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2680-2729
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2696
+- source:semantics/vyperStateScript.sml:906-938
+
+## L0218 scope='' tags=
+shape: HOL4 Vyper state monad return type is (α + exception) # evaluation_state, a PAIR where FST is the sum and SND is the state. NOT (α # evaluation_state) + exception.
+pattern: When writing lemma hypotheses about read_storage_slot/write_storage_slot/assign_result monadic results, use pair-of-sum syntax: (INL val, st) or (INR e, st). The monadic bind_def expands to case (result, state) of (INL (v,s'), ...) | (INR (e,s'), ...).
+works_when: Any lemma about Vyper state monad operations (read_storage_slot, write_storage_slot, assign_result, etc.)
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7834_t001
+- source:semantics/vyperStateScript.sml:373-378 - read_storage_slot_def showing bind_def expansion pattern
+- source:semantics/vyperStateScript.sml:850-857 - assign_result_def showing return type is value option + exception in state monad pair format
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2721 - 4 proven helper lemmas with correct pair-of-sum syntax in antecedents
+
+## L0219 scope='' tags=
+shape: Pair-case on (ao, type_value) in assign_target_def leaves case final_tv of wrapper
+pattern: When simp[Once assign_target_def,...,AllCaseEqs()] expands the case (ao, final_tv) of ... pair-match in assign_target_def, a case final_tv of ... wrapper with 7 identical branches persists. The simplifier cannot eliminate redundant case wrappers even when all branches are identical. Use Cases_on final_tv BEFORE expanding assign_target_def to avoid this wrapper entirely (the AppendOp_ordinary_ntr pattern), or use Excl type_value_case_eq to keep final_tv abstract and pair-case undestructed.
+works_when: Proving theorems about assign_target for the ArrayRef branch's _ (ordinary) sub-case
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7897_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2808-2860
+- source:semantics/vyperStateScript.sml:906-938
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7930_t001
+
+## L0220 scope='' tags=
+shape: Monadic return type is (value + exception) # evaluation_state
+pattern: The monadic return type in the Vyper interpreter is (value + exception) # evaluation_state: a pair where the first component is a sum. Correct syntax for pattern matching: (INL current_val, s1) not (INL (current_val, s1)). When writing helper lemma hypotheses, use the pair-of-sum form.
+works_when: Writing helper lemma hypotheses about monadic operations (read_storage_slot, assign_subscripts, write_storage_slot, assign_result)
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7834_t001
+
+## L0221 scope='' tags=
+shape: drule_all_then strip_assume_tac fails on negation theorems
+pattern: When a theorem has a negated conclusion (e.g., no_type_error_result res or e <> TypeError msg), strip_assume_tac fails. Use drule_all + CCONTR_TAC + gvs + simp instead of drule_all_then strip_assume_tac.
+works_when: Forward-chaining with theorems whose conclusion is a negation or inequality
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7856_t001
+
+## L0222 scope='' tags=
+shape: ArrayRef assign_target case(ao,final_tv) pair-case expansion in simp
+pattern: For assign_target_def's case(ao,final_tv) pair-match: when ao is concretely known (e.g. Replace v, Update t0 b0 v0), use simp WITHOUT type_value_CASE_rator or bound_CASE_rator. Include AllCaseEqs() with Excl 'type_value_case_eq' and Excl 'bound_case_eq' to prevent over-expansion. The Update_ntr simp set is the proven working pattern. Alternative: full gvs[AllCaseEqs()] without Excl works when all ao-specific branches are eliminated by distinctness, as in PopOp_ordinary_ntr.
+works_when: Proving no_type_error_result for assign_target ArrayRef ordinary-branch cases where ao is concrete and falls through to the _ wildcard arm
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2795-2831
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3052-3114
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7969_t001
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7882_t001
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7967_t001
+- episode:E0071
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2721
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2833-2950
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3039-3114
+
+## L0223 scope='' tags=
+shape: ArrayRef ordinary branch proof in assign_target using gvs blast + 4 generic helpers
+pattern: For assign_target TopLevelVar ArrayRef ordinary-branch proofs (Replace, Update, PopOp ordinary, AppendOp ordinary): use PopOp_ordinary_ntr gvs-blast pattern: gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def, lift_option_def, lift_option_type_def, lift_sum_def, type_check_def, assert_def, check_def, option_CASE_rator, sum_CASE_rator, pairTheory.PAIR, toplevel_value_CASE_rator, LET_THM, assign_operation_distinct, assign_operation_11, type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator, AllCaseEqs()] then dispatch 4 subgoals with metis_tac[array_ref_ordinary_branch_success, array_ref_ordinary_branch_write_error, array_ref_ordinary_branch_assign_error, array_ref_ordinary_branch_no_type_error]. For operations that need it (like PopOp), add (!etv n. final_tv <> ArrayTV etv (Dynamic n)) premise. NEVER use type_value_CASE_rator+bound_CASE_rator+AllCaseEqs+Excl approach.
+works_when: Proving no_type_error_result for assign_target ArrayRef ordinary-branch cases where the operation falls through the pair-case (ao, final_tv) to the _ wildcard
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3039-3087
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2721
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7977_t002
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7969_t001
+- episode:E0070
+- episode:E0071
+
+## L0224 scope='' tags=
+shape: Simplifying pair pattern match case(x,y) of (C1,D1) => ... | (C2,D2) => ... | _ => WILDCARD where x doesn't match C1 or C2
+pattern: Use pairTheory.pair_case_eq + datatype_case_eq (e.g. assign_operation_case_eq) to convert pair case to equalities, then gvs with distinctness/11 theorems simplifies F equality tests leaving just the _ wildcard body. NEVER use prod_CASE_rator + AllCaseEqs() when _ wildcard covers multiple constructors with identical bodies - it expands to all constructors creating N identical branches that don't collapse.
+works_when: The pair case has specific patterns matching only some constructors, and the _ wildcard covers the rest. assign_operation_distinct/11 can eliminate specific pattern branches as F equalities.
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8034_t001
+- source:semantics/prop/vyperTypeSoundnessScript.sml:2035
+- source:semantics/vyperStateScript.sml:906-938
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2723-2777
+- episode:E0072
+- episode:E0071
+- episode:E0070
+
+## L0225 scope='' tags=
+shape: Fixing assign_target ArrayRef pair-case (ao, final_tv) no-TypeError proofs for Replace/Update operations
+pattern: For Replace/Update operations in assign_target ArrayRef branch: the pair case (ao, final_tv) routes to the _ wildcard body (read_storage_slot + assign_subscripts + write_storage_slot + assign_result) for ALL type_value constructors. Use same gvs[AllCaseEqs()] blast as PopOp_ordinary_ntr (lines 3041-3095) but: (1) add all_tac >> to break stale checkpoint, (2) do NOT add Dynamic exclusion premise (not needed since Replace/Update never match PopOp+Dynamic or AppendOp+Dynamic pair arms), (3) replace by-subgoals (`value_has_type final_tv current_val` by ...) with direct drule chains (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) that don't reference final_tv by name. The 4 resulting subgoals match the 4 generic array_ref_ordinary_branch_* helpers.
+works_when: Proving assign_target_ArrayRef_Replace_ntr or assign_target_ArrayRef_Update_ntr where the operation falls through to the _ wildcard body and AllCaseEqs expansion creates by-subgoal variable name mismatches
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3041-3095
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2721
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8052_t003
+- source:semantics/vyperStateScript.sml:906-938
+
+## L0226 scope='' tags=
+shape: HOL4 AllCaseEqs blast with by-subgoals on post-expansion variables
+pattern: After gvs[AllCaseEqs()] expands variables (e.g., final_tv → BaseTV v11), NEVER use by-subgoals that reference the original variable name (e.g., `value_has_type final_tv current_val` by ...). The by-subgoal creates a fresh variable that differs from the substituted one. Instead: use direct drule/metis chains (e.g., drule_all_then assume_tac read_storage_slot_success_type >> simp[]) that match regardless of variable names. The PopOp_ordinary_ntr pattern (gvs blast + 4 subgoal dispatch with drule chains) is the reliable template.
+works_when: gvs[AllCaseEqs()] blast that expands type_value/bound constructors in assign_target or similar monadic do-block proofs where by-subgoals would reference pre-expansion variable names
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3041-3095
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8062_t003
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2721
+- source:semantics/vyperStateScript.sml:906-938
+
+## L0227 scope='' tags=
+shape: Stale holbuild checkpoint breaks by-subgoal variable names in resumed proofs
+pattern: When holbuild reports 'matched proof prefix through line N' and replays stale state, by-subgoals that reference auto-generated or expansion-substituted variable names fail because the checkpoint has different bindings. Fix: (1) add all_tac >> prefix to break prefix match, (2) do NOT use by-subgoals referencing any variable that AllCaseEqs might rename - use drule/metis_tac chains instead.
+works_when: HOL4 proofs using holbuild where gvs[AllCaseEqs()] blast changes variable names and the proof is being resumed from a stale checkpoint
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8062_t003
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3041-3095
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2723-2770
+
+## L0229 scope='' tags=
+shape: HOL4 variable name clash when Cases_on type_value introduces v:base_type alongside v:value from theorem constructor
+pattern: When a theorem has `Replace v` (v:value) and you do `Cases_on final_tv` which introduces `BaseTV v` (v:base_type), the two v variables of different types can clash in the HOL4 term parser. Fix: rename the theorem variable before Cases_on, e.g. `rename1 Replace v'` or use `qx_gen_tac v'` to introduce a fresh variable. The AppendOp_ordinary_ntr proof works because v:base_type from BaseTV and v:value from AppendOp v are treated as separate bindings by HOL4'sCases_on on fresh variables, but explicit rename1 is safer.
+works_when: Proving ArrayRef ordinary branch boundary lemmas using Cases_on final_tv before definition expansion, where the assign operation constructor carries a variable named v that could clash with Cases_on-generated variables
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m7967_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2835-2841
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2723-2734
+- source:semantics/prop/DOSSIER_type_system_rewrite.md:E0071
+
+## L0230 scope='' tags=
+shape: HOL4 pair-case (ao, final_tv) in assign_target_def ordinary branch — how to expand without disjunction explosion
+pattern: For assign_target TopLevelVar ArrayRef ordinary-branch proofs (Replace, Update): assign_operation_distinct eliminates PopOp/AppendOp pair-arms, leaving only _ wildcard body. The _ body does NOT case-split on final_tv. Use the SAME gvs blast as PopOp_ordinary_ntr (with type_value_CASE_rator + bound_CASE_rator + prod_CASE_rator + AllCaseEqs()) but WITHOUT Dynamic exclusion premise. If gvs produces 4 clean subgoals, dispatch with 4 generic array_ref_ordinary_branch_* helpers. If gvs produces big disjunction, switch to Cases_on final_tv BEFORE expand approach. ALWAYS use all_tac >> to break stale checkpoints, and direct drule chains (not by-subgoals) for value_has_type derivations.
+works_when: Proving no_type_error_result for assign_target ArrayRef ordinary-branch (Replace/Update operations that fall through _ wildcard) where the gvs blast should work if assign_operation_distinct resolves the pair-case
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3034-3088
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2788-2835
+- source:semantics/vyperStateScript.sml:906-938
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2651-2721
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8107_t002
+
+## L0231 scope='' tags=
+shape: assign_target_def expansion with (ao, final_tv) pair case where _ wildcard body identical for all type_value constructors
+pattern: Cases_on `final_tv` BEFORE expanding assign_target_def. Then per constructor: mp_tac assign_target equation, simp[Once assign_target_def, monadic combinators, assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11, type_value_CASE_rator, bound_CASE_rator], then gvs[AllCaseEqs()] producing 4 clean subgoals. For ArrayTV, also Cases_on `b` first. Without Cases_on, gvs blast produces massive disjunction because prod_CASE_rator expands the pair into nested case on final_tv with identical-but-variably-named branches.
+works_when: Proving no-TypeError or preservation for assign_target where operation falls through to _ wildcard body (Replace, Update, ordinary AppendOp/PopOp)
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2842-3042
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8136_t001
+- episode:E0073
+
+## L0232 scope='' tags=
+shape: Holbuild stale failed-prefix checkpoint workaround
+pattern: When holbuild replays a stale checkpoint with wrong variable bindings (e.g., Cases_on 'q' fails because q isn't free), you MUST rewrite the proof to not reference auto-generated variable names. Use gvs[AllCaseEqs()] blast approaches instead of step-by-step Cases_on on intermediate results. The gvs blast resolves all case splits internally without creating fragile variable name dependencies. Adding all_tac/>> prefix, renaming the theorem, or inserting dummy local theorems does NOT break the checkpoint association.
+works_when: Any holbuild proof where Cases_on on intermediate monadic results creates variable names that differ between checkpoint replay and fresh execution
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8202_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3289-3343
+- episode:E0073
+- episode:E0070
+- episode:E0058
+- episode:E0051
+- episode:E0049
+- episode:E0047
+- episode:E0045
+
+## L0233 scope='' tags=
+shape: assign_target ArrayRef ordinary branch gvs blast proof pattern (PopOp_ordinary_ntr)
+pattern: For assign_target TopLevelVar ArrayRef ordinary-branch proofs where the operation (Replace, Update, PopOp ordinary, AppendOp ordinary) falls through to the _ wildcard of case(ao,final_tv): use single gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def, lift_option_def, lift_option_type_def, lift_sum_def, type_check_def, assert_def, check_def, option_CASE_rator, sum_CASE_rator, pairTheory.PAIR, toplevel_value_CASE_rator, LET_THM, assign_operation_distinct, assign_operation_11, type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator, AllCaseEqs()] blast. This typically produces 4 subgoals: success (assign_result), write INR, assign INR, read INR. Dispatch with direct drule/metis chains that don't reference auto-gen variables. For PopOp/AppendOp, add Dynamic exclusion premise (!etv n. final_tv <> ArrayTV etv (Dynamic n)). For Replace/Update, no exclusion needed since they never match PopOp/AppendOp pair arms.
+works_when: Proving no_type_error_result for assign_target ArrayRef ordinary branch where the operation falls through to the _ wildcard of the evaluator's case(ao, final_tv) pair-match
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3289-3343
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3303-3342
+- episode:E0073
+
+## L0234 scope='' tags=
+shape: ArrayRef assign_target ordinary branch gvs blast proof (no stale checkpoint)
+pattern: For assign_target TopLevelVar ArrayRef ordinary-branch proofs (Replace, Update, PopOp ordinary, AppendOp ordinary) where the operation falls through the _ wildcard of case(ao, final_tv): use single gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def, lift_option_def, lift_option_type_def, lift_sum_def, type_check_def, assert_def, check_def, option_CASE_rator, sum_CASE_rator, pairTheory.PAIR, toplevel_value_CASE_rator, LET_THM, assign_operation_distinct, assign_operation_11, type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator, AllCaseEqs()] blast. For Replace/Update: assign_operation_distinct eliminates both PopOp and AppendOp pair-arms, leaving only _ wildcard. For AppendOp/PopOp: add (!etv n. final_tv <> ArrayTV etv (Dynamic n)) premise. CRITICAL: prod_CASE_rator is needed for pair-case beta-reduction. Without it, the pair-case stays opaque and AllCaseEqs creates N*M goals.
+works_when: Proving no_type_error_result for assign_target ArrayRef ordinary branch where the operation falls through to the _ wildcard of the evaluator's case(ao, final_tv) pair-match. Avoids all Cases_on intermediate results, eliminating stale holbuild checkpoint risk.
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3289-3343
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3303-3342
+- episode:E0074
+- episode:E0073
+- episode:E0070
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8216_t002
+
+## L0235 scope='' tags=
+shape: assign_target ArrayRef ordinary branch gvs blast proof (Replace/Update/PopOp/AppendOp ordinary)
+pattern: For assign_target TopLevelVar ArrayRef ordinary-branch proofs where the operation falls through the _ wildcard of case(ao,final_tv): use single gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def, lift_option_def, lift_option_type_def, lift_sum_def, type_check_def, assert_def, check_def, option_CASE_rator, sum_CASE_rator, pairTheory.PAIR, toplevel_value_CASE_rator, LET_THM, assign_operation_distinct, assign_operation_11, type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator, AllCaseEqs()]. For Replace/Update: assign_operation_distinct eliminates both PopOp and AppendOp pair-arms. For AppendOp/PopOp ordinary: add (!etv n. final_tv <> ArrayTV etv (Dynamic n)) premise. If gvs produces >4 subgoals (disjunction explosion), add Dynamic exclusion as WEAKENING premise to all 4 ordinary branch lemmas. CRITICAL: prod_CASE_rator is needed for pair-case beta-reduction. Dispatch 4 subgoals with direct drule/metis chains (never by-subgoals referencing post-expansion variable names).
+works_when: Proving no_type_error_result for assign_target ArrayRef ordinary branch where the operation falls through to _ wildcard of evaluator's case(ao, final_tv) pair-match
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3289-3343
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2735-2773
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2921-2959
+- episode:E0074
+- episode:E0073
+- episode:E0070
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8216_t002
+
+## L0236 scope='' tags=
+shape: ArrayRef ordinary branch proof: assign_target on TopLevelVar with ArrayRef lookup, Replace/Update operation going through _ wildcard branch
+pattern: Use gvs[Once assign_target_def,...,assign_operation_CASE_rator,...,AllCaseEqs()] to resolve pair-case (ao,final_tv) in one step. The assign_operation_CASE_rator is CRITICAL - without it AllCaseEqs expands the case into all final_tv constructors producing massive disjunctions. Produces 4 clean subgoals: success, write INR, assign INR, read INR. Close each with drule/metis chains (read_storage_slot_success_type, assign_subscripts_preserves_type_runtime_typed, assign_result_no_type_error_from_successful_assign, write_storage_slot_no_type_error_from_value_has_type, assign_subscripts_no_type_error_runtime_typed, read_storage_slot_error).
+works_when: Assign target on TopLevelVar with ArrayRef lookup, any operation that routes through _ wildcard in case(ao,final_tv)
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3046-3087
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2735-2773
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2787-2825
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8240_t001
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8293_t001
+- episode:E0075
+- episode:E0074
+- episode:E0072
+- episode:E0071
+- episode:E0070
+- episode:E0064
+- episode:E0058
+- episode:E0053
+- episode:E0048
+- episode:E0042
+- episode:E0036
+- episode:E0030
+- episode:E0022
+
+## L0237 scope='' tags=
+shape: Stale holbuild checkpoint + by-subgoals after gvs[AllCaseEqs()] expansion in assign_target ArrayRef ordinary branch proofs
+pattern: When a proof uses gvs[Once assign_target_def,...,AllCaseEqs()] blast and holbuild replays a stale failed-prefix checkpoint, by-subgoals referencing variables that AllCaseEqs substitutes (like final_tv) fail with DISCH_THEN assertion at proof_runtime.sml:749. Fix: (1) rename theorem to _v3 or insert dummy [local] theorem before it to break checkpoint association, then (2) add all_tac >> prefix before first real tactic. The same gvs blast pattern then works cleanly from fresh state. PopOp_ordinary_ntr (line 3033) proves this pattern works - the only difference was it had no stale checkpoint.
+works_when: Proving assign_target ArrayRef ordinary-branch boundary lemmas where gvs[AllCaseEqs()] blast should produce 4 clean subgoals but stale holbuild checkpoint causes DISCH_THEN failures in by-subgoals
+evidence:
+- tool_output:TO_type_system_rewrite-20260514T195458Z_m8323_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:3033-3087
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2723-2773
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2775-2825
+- episode:E0076
+- episode:E0075
+- episode:E0070
+- episode:E0069
+- episode:E0068
+- episode:E0067
+- episode:E0066
+- episode:E0065
+- episode:E0064
+- episode:E0074
+- episode:E0073
+- episode:E0072
+- episode:E0071
+- episode:E0070
+- episode:E0058
+- episode:E0055
+- episode:E0051
+- episode:E0049
+- episode:E0047
+- episode:E0045
+- episode:E0050
+- episode:E0052
+- episode:E0057
+- episode:E0056
+- episode:E0054
+- episode:E0053
+- episode:E0059
+- episode:E0060
+- episode:E0061
+- episode:E0062
+- episode:E0063
+- episode:E0031
+- episode:E0038
+- episode:E0039
+- episode:E0041
+- episode:E0042
+- episode:E0043
+- episode:E0044
+- episode:E0045
+- episode:E0046
+- episode:E0047
+- episode:E0048
+- episode:E0049
+- episode:E0050
+- episode:E0051
+- episode:E0052
+- episode:E0053
+- episode:E0054
+- episode:E0055
+- episode:E0056
+- episode:E0057
+- episode:E0058
+- episode:E0059
+- episode:E0060
+- episode:E0061
+- episode:E0062
+- episode:E0063
+- episode:E0064
+- episode:E0065
+- episode:E0066
+- episode:E0067
+- episode:E0068
+- episode:E0069
+- episode:E0070
+- episode:E0071
+- episode:E0072
+- episode:E0073
+- episode:E0074
+- episode:E0075
+- episode:E0076

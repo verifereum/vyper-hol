@@ -19,7 +19,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.1.7.1.3.1 | progressed | other | E0052 |  |
 | C3.1.7.1.3.2 | proved | other | E0053 |  |
 | C3.1.7.3 | stuck | plan_incomplete | E0059 | Write boundary lemma assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error for the standard read+write+assign_result path (all non-ArrayTV-Dynamic cases), modeled on assign_target_TopLevelVar_Value_branch_ntr. Then handle AppendOp/PopOp separately." |
+| C3.1.7.3.1 | stuck | wrong_statement | E0063 |  |
 | C3.1.7.3.2 | proved | other | E0060 |  |
+| C3.2 | progressed | other | E0076 | Rewrite Replace_ntr_v2 and Update_ntr_v2 using AppendOp_ordinary_ntr pattern: Cases_on final_tv before expand, per-constructor simp+gvs[AllCaseEqs()], then 4 standard drule subgoals per constructor. This breaks stale checkpoint and avoids variable name mismatches. |
 
 ## C0.1
 
@@ -453,6 +455,32 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260513T211025Z_m6609_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260513T211025Z_m6615_t001` (use `read_tool_output` for exact output)
 
+## C3.1.7.3.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `wrong_statement`
+- latest episode: `E0063`
+- blocker: "Confirmed: assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error is structurally wrong for ArrayRef. gvs[AllCaseEqs()] on case(ao,final_tv) creates 32 goals. The Cases_on op approach in _branch_no_type_error (line 2590) already works for Replace/Update. Plan oracle confirmed: neutralize this helper, prove AppendOp/PopOp dynamic boundary lemmas instead."
+
+### Attempts / Evidence
+
+- `E0061` (progressed, other)
+  - gvs[Once assign_target_def,...,AllCaseEqs()] directly (like HashMapRef) -> Fails: AllCaseEqs expands compiled pair case, creates too many subgoals ()
+  - Cases_on op then per-op gvs[AllCaseEqs()] -> Fails: same pair case explosion, predicate not true error ()
+  - 2-phase: gvs outer bind, then Cases_on final_tv + gvs inner chain -> Works! gvs with type_value_CASE_rator+assign_operation_CASE_rator+well_formed_type_value_def fully decomposes all 32 goals into 4 standard patterns. But FIRST[4 alternatives] fails on contradiction goals. ()
+  - FIRST with 4 monadic path alternatives after gvs expansion -> All 32 goals unsolved: contradiction goals from ArrayTV Dynamic + PopOp/AppendOp branches not handled by any of the 4 path alternatives ()
+- `E0062` (stuck, wrong_statement)
+  - gvs[Once assign_target_def,...,AllCaseEqs()] with exclusion hypotheses op≠PopOp/∀v.op≠AppendOp v, then FIRST[4 monadic alternatives] -> 32 goals instead of 4; FIRST fails on contradiction goals where gvs instantiated final_tv=ArrayTV Dynamic but universal exclusion ∀v. op≠AppendOp v wasn't instantiated by gvs (`tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002`)
+- `E0063` (stuck, wrong_statement)
+  - gvs[Once assign_target_def,...,AllCaseEqs()] with exclusion hypotheses op!=PopOp/forall v. op!=AppendOp v, then FIRST[4 monadic alternatives] -> 32 goals instead of 4; FIRST fails on contradiction goals where universal exclusion wasn't instantiated (`tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002`)
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260513T211025Z_m6953_t001` (use `read_tool_output` for exact output)
+
 ## C3.1.7.3.2
 
 ### Current Status
@@ -470,3 +498,64 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `tool_output:TO_type_system_rewrite-20260513T211025Z_m6707_t001` (use `read_tool_output` for exact output)
+
+## C3.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0076`
+- blocker: assign_target_ArrayRef_Replace_ntr_v2 and Update_ntr_v2 fail at by-subgoal referencing final_tv after AllCaseEqs expansion + stale holbuild checkpoint replay. The gvs blast pattern works for PopOp_ordinary_ntr (proven) but Replace/Update have stale checkpoints replaying old variable bindings. Must rewrite both lemmas using the PROVEN AppendOp_ordinary_ntr pattern (Cases_on final_tv BEFORE expanding assign_target_def) which produces per-constructor subgoals with concrete type names in by-subgoals, and breaks the stale checkpoint by having a different proof structure.
+- next: Rewrite Replace_ntr_v2 and Update_ntr_v2 using AppendOp_ordinary_ntr pattern: Cases_on final_tv before expand, per-constructor simp+gvs[AllCaseEqs()], then 4 standard drule subgoals per constructor. This breaks stale checkpoint and avoids variable name mismatches.
+
+### Attempts / Evidence
+
+- `E0064` (progressed, other)
+  - Cases_on get_storage_backend BEFORE expanding assign_target_def, then simp[Once assign_target_def, ..., AllCaseEqs()] resolves the monadic binds correctly for AppendOp -> AppendOp boundary lemma PROVED successfully with 4 subgoals (success, 2x write INR, check fail). Key: Cases_on before simp creates equation in assumptions that AllCaseEqs matches. (`TO_type_system_rewrite-20260513T211025Z_m7196_t001`)
+  - Wrote assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error boundary lemma for the _ branch (read_storage_slot + assign_subscripts + write_storage_slot + assign_result) -> Written but not yet build-tested. Uses bind_def + AllCaseEqs in one blast which should work since the _ branch has no get_storage_backend. ()
+  - Rewriting _branch_no_type_error to use boundary lemmas via irule -> Identified correct structure: Cases_on op, then Cases_on resolve_array_element, then irule appropriate boundary lemma. Currently half-rewritten - file won't build. (`TO_type_system_rewrite-20260513T211025Z_m7228_t001`)
+- `E0065` (progressed, other)
+  - Delete broken ordinary_no_type_error lemma (AllCaseEqs destructures final_tv creating N*M goals), prove PopOp by modeling on AppendOp proof pattern: Cases_on get_storage_backend BEFORE expanding assign_target_def, then AllCaseEqs -> ordinary_no_type_error deleted successfully. PopOp proof Goals 1 and 2 now pass. Goal 3 (default_value write INR) fails because gvs[assign_operation_runtime_typed_def] renames pop_elem_tv to elem_tv', breaking metis_tac chain of default_value_has_type_thm + write_storage_slot_no_type_error_from_value_has_type ()
+  - Pre-derive value_has_type pop_elem_tv (default_value pop_elem_tv) before AllCaseEqs expansion using drule evaluate_type_ArrayT_cases then drule default_value_has_type_thm -> gvs renames pop_elem_tv to elem_tv' after assign_operation_runtime_typed_def expansion, making backtick terms with pop_elem_tv not match ()
+  - Goal 2 w2n < 2^256: simp[wordsTheory.w2n_lt] fails because dimword(:256) not computed to 2^256 by simp alone -> Fixed with ASSUME_TAC (INST_TYPE [...]] wordsTheory.w2n_lt) >> POP_ASSUM mp_tac >> simp[] ()
+  - Goal 3 metis_tac[default_value_has_type_thm, write_storage_slot_no_type_error_from_value_has_type] -> Fails because elem_tv' != pop_elem_tv in assumption context after gvs; metis can't unify them without evaluate_type_ArrayT_cases ()
+- `E0066` (progressed, other)
+  - Replace qpat_x_assum callback with drule evaluate_type_ArrayT_cases in PopOp Goal 3 -> PopOp proof now passes all 5 goals. Key fix: drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] unifies elem_tv' with pop_elem_tv, then drule default_value_has_type_thm >> simp[] gives value_has_type (`tool_output:TO_type_system_rewrite-20260513T211025Z_m7380_t001`, `tool_output:TO_type_system_rewrite-20260513T211025Z_m7386_t001`)
+  - Fix branch_no_type_error Replace case: change drule_all_then to metis_tac, change evaluate_type env.type_defs to get_tenv cx -> Stale holbuild checkpoint replays old gvs[AllCaseEqs()] expansion, creating 5 subgoals with huge goal state (>4KB). metis_tac times out. Need to break stale checkpoint first (insert all_tac >> or dummy local theorem before the proof). (`tool_output:TO_type_system_rewrite-20260513T211025Z_m7411_t001`)
+- `E0067` (progressed, other)
+  - Restructure assign_target_TopLevelVar_ArrayRef_branch_no_type_error: add all_tac >> prefix to break stale checkpoint, use evaluate_type (get_tenv cx) after fs[] rewrites, Cases_on resolve_array_element BEFORE expanding assign_target_def, use irule read_storage_slot_success_type + drule chains instead of metis_tac on >4KB goal state -> Edit made to Replace/Update cases (lines 2660-2753). AppendOp/PopOp cases (lines 2754+) still need restructuring. Not yet build-tested. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m7421_t001`)
+- `E0068` (progressed, other)
+  - Create assign_target_TopLevelVar_ArrayRef_ordinary_branch_ntr[local] boundary lemma for the ordinary read+assign+write+assign_result path (handles ALL type_value constructors for Replace/Update via resolve_array_element result as premise). Uses drule_all_then assume_tac read_storage_slot_success_type instead of irule read_storage_slot_success_type to avoid existential witness issues. -> Boundary lemma written and inserted into file, but conjunction syntax corrupted by API (/¥/ instead of /\). Must rewrite statement to use ==> chains. Also inserted assign_target_ArrayRef_checkpoint_break3[local] dummy theorem to break stale holbuild checkpoint. Main theorem NOT yet rewritten to use the boundary lemma. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m7446_t001`)
+- `E0069` (progressed, other)
+  - Replace corrupted /\ boundary lemma with two separate theorems (Replace_ntr, Update_ntr) using ==> chains, rewrite main theorem to use metis_tac[boundary_lemma] -> Boundary lemmas written and main theorem simplified from 280 to 100 lines. Build failed: assign_target_ArrayRef_Replace_ntr missing get_module_code premise. After AllCaseEqs() expansion, get_module_code = NONE subgoal has no facts to resolve. Added get_module_code premise to Replace_ntr but not yet Update_ntr. Also realized AppendOp/PopOp ordinary sub-branches in main theorem incorrectly reference Replace-specific boundary lemma. (`TO_type_system_rewrite-20260513T211025Z_m7491_t001`)
+- `E0070` (progressed, other)
+  - Replace two operation-specific boundary lemmas with single polymorphic assign_target_ArrayRef_ordinary_ntr -> Build fails: by-subgoals reference final_tv after AllCaseEqs substitution. AllCaseEqs substitutes final_tv -> BaseTV v11, then by-subgoal value_has_type final_tv current_val creates a FRESH final_tv that differs. Also, polymorphic op with AllCaseEqs on case(ao,final_tv) pair creates N*M subgoals. ()
+  - Fix by-subgoals to avoid referencing final_tv -> Not yet implemented. The fix: use drule_all_then assume_tac read_storage_slot_success_type >> simp[] instead of by-subgoals. ()
+- `E0071` (progressed, other)
+  - AllCaseEqs() without Excl (PopOp pattern): gvs[Once assign_target_def,...,AllCaseEqs()] - creates big disjunction over all final_tv constructors plus ArrayTV Dynamic branches that gvs cannot reduce. Over 13 subgoals remain unsolved. -> Big disjunction over final_tv constructors created by AllCaseEqs expanding type_value_case and bound_case inside case(ao,final_tv) pair. assign_operation_distinct doesn't prevent this expansion because AllCaseEqs expands everything together. (`tool_output:TO_type_system_rewrite-20260514T195458Z_m7882_t001`)
+  - AllCaseEqs()+Excl type_value_case_eq+bound_case_eq (Update_ntr pattern) WITH type_value_CASE_rator+bound_CASE_rator in simp: produced big disjunction over final_tv constructors in goal after Cases_on read_storage_slot -> type_value_CASE_rator pre-creates case final_tv of ... expression that AllCaseEqs()+Excl cannot prevent expansion of. Excl only prevents adding type_value_case_eq to simp set, but the CASE_rator already introduced the case form. (`tool_output:TO_type_system_rewrite-20260514T195458Z_m7969_t001`)
+  - Cases_on final_tv BEFORE simp (AppendOp pattern): variable name clash between v:base_type from Cases_on and v:value from Replace v -> Type error: BaseTV v where v:base_type conflicts with Replace v where v:value. gvs[AllCaseEqs()] then further expands base_type creating UintT n sub-cases. (`tool_output:TO_type_system_rewrite-20260514T195458Z_m7967_t001`)
+- `E0072` (progressed, other)
+  - Replace_ntr: PopOp pattern full gvs[...type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator, AllCaseEqs()] -> Fails: AllCaseEqs expands _ wildcard to 7 final_tv constructors creating huge disjunction. drule on 4KB goal fails. ()
+  - Replace_ntr: simp without type_value_CASE_rator/bound_CASE_rator, then Cases_on monadic operations -> Fails: even without explicit CASE_rator, the pair case (ao,final_tv) produces case final_tv of 7 constructors after prod_CASE_rator or built-in pair case handling. ()
+  - Replace_ntr: avoid prod_CASE_rator, use pair_case_eq + assign_operation_case_eq + assign_operation_distinct to resolve pair case to equalities -> Not yet tested. pairTheory.pair_case_eq exists (grep confirms). assign_operation_case_eq exists in vyperStateTheory. This should convert the pair case to if-then-else with equality tests that assign_operation_distinct simplifies to F, leaving just the _ wildcard body. ()
+- `E0073` (progressed, other)
+  - gvs blast with type_value_CASE_rator+bound_CASE_rator+AllCaseEqs() (Update_ntr pattern) -> Produces massive disjunction for Replace/Update because no exclusion premise to collapse identical-but-variably-named branches (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8136_t001`)
+  - Excl type_value_case_eq + bound_case_eq to prevent AllCaseEqs re-expansion -> prod_CASE_rator already creates case expressions before Excl runs; Excl cannot undo (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8153_t001`)
+  - Cases_on intermediate read_storage_slot/assign_subscripts results after simp expansion -> Cases_on 'q' fails because q not free in goal - it's bound inside nested case expression within implication antecedent (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8171_t001`)
+  - metis_tac with array_ref_ordinary_branch_success/write_error/assign_error/no_type_error helpers after Cases_on final_tv -> metis can't match because the assumption is a nested case expression, not individual function-result assumptions (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8168_t001`)
+- `E0074` (progressed, other)
+  - Replace_ntr_v2 uses Cases_on final_tv + per-constructor mp_tac+simp+Cases_on read_storage_slot+Cases_on q -> Stale holbuild checkpoint replays wrong variable bindings for Cases_on q (q not free in replayed goal). all_tac prefix doesn't break checkpoint match. ()
+  - PopOp_ordinary_ntr uses single gvs[Once assign_target_def, ..., prod_CASE_rator, AllCaseEqs()] blast producing 4 clean subgoals -> PROVED successfully. This pattern avoids Cases_on intermediate results entirely. ()
+- `E0075` (progressed, other)
+  - gvs[Once assign_target_def,...,AllCaseEqs()] WITHOUT assign_operation_CASE_rator or Dynamic exclusion premise -> massive disjunction on final_tv constructors (>4KB goal) -> AllCaseEqs expands pair case (ao,final_tv) into N final_tv constructors because without assign_operation_CASE_rator the case(ao,final_tv) expression isn't resolved by assign_operation_distinct (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8240_t001`)
+  - Added (!etv n. final_tv ≠ ArrayTV etv (Dynamic n)) premise + gvs blast -> still massive disjunction, same root cause -> Dynamic exclusion helps with PopOp-specific pair arms but doesn't prevent AllCaseEqs from expanding final_tv constructors in the _ wildcard branch (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8293_t001`)
+  - Cases_on intermediate results (read_storage_slot etc.) after simp without AllCaseEqs -> type errors -> Cases_on q after Cases_on read_storage_slot produces wrong variable bindings (r=state not r=value), causing type mismatch in assign_subscripts (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8309_t001`)
+  - Final approach: gvs[...assign_operation_CASE_rator,...AllCaseEqs()] without Dynamic exclusion -> NOT YET TESTED -> PopOp_ordinary_ntr (PROVED) includes assign_operation_CASE_rator in its simp set. Replace/Update previous attempts were missing it. This is the likely key difference. ()
+- `E0076` (progressed, other)
+  - gvs[Once assign_target_def,...,assign_operation_CASE_rator,...,AllCaseEqs()] blast matching PopOp_ordinary_ntr pattern -> Fails at by-subgoal with DISCH_THEN assertion - stale checkpoint replays old variable bindings for final_tv after AllCaseEqs substitution assigns final_tv -> BaseTV v11 but by-subgoal creates FRESH final_tv (`TO_type_system_rewrite-20260514T195458Z_m8323_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260514T195458Z_m8323_t001` (use `read_tool_output` for exact output)
