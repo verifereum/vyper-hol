@@ -4761,7 +4761,7 @@ Triviality store_step_ok_or_error[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_store_opcode_def, step_inst_non_invoke] >>
-  gvs[step_inst_base_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
   metis_tac[exec_write2_ok_or_error]
 QED
 

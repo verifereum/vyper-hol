@@ -2348,7 +2348,9 @@ Theorem step_inst_base_ok_terminator_jump[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  term_ok_jump_tac
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 (* Non-jump terminators never return OK *)

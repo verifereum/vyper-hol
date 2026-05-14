@@ -599,6 +599,8 @@ Proof
 QED
 
 val base_frame_tac =
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[] >>
   gvs all_rwts2 >>
   TRY (gvs(all_rwts2 @ custom_defs) >>
        rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
@@ -612,10 +614,7 @@ Theorem step_inst_base_frame:
   map_result_state (update_var x v) (step_inst_base inst s)
 Proof
   rpt strip_tac >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-  CONV_TAC (RAND_CONV (RAND_CONV (ONCE_REWRITE_CONV [step_inst_base_def]))) >>
-  Cases_on `inst.inst_opcode` >>
-  simp[]
+  Cases_on `inst.inst_opcode`
   >- base_frame_tac (* ADD *)
   >- base_frame_tac (* SUB *)
   >- base_frame_tac (* MUL *)

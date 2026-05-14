@@ -2350,12 +2350,6 @@ QED
 (* Helper: step_inst_base preserves call/tx/block context for ANY instruction
    that returns OK. Unlike step_inst_base_preserves_inst_idx, we don't need
    ~is_terminator because jump_to only modifies vs_prev_bb/vs_current_bb/vs_inst_idx. *)
-val term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
-       AllCaseEqs()] >>
-  rpt CASE_TAC >> gvs[];
-
 Theorem step_inst_base_ok_terminator_jump[local]:
   !inst s s'.
     is_terminator inst.inst_opcode /\
@@ -2365,7 +2359,9 @@ Theorem step_inst_base_ok_terminator_jump[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  term_ok_jump_tac
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 Theorem step_inst_base_ok_jmp_ctxs[local]:

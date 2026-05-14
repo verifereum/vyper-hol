@@ -338,8 +338,19 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `ac_sim_precond _ _ _ _ _ _` mp_tac >>
   simp[ac_sim_precond_def] >> strip_tac >>
-  rpt conj_tac >> TRY (metis_tac[]) >>
-  precond_alookup_ext_tac
+  rpt conj_tac >> TRY (metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
 QED
 
 (* Head-drop + mp extension: compose transfer_same + extend_mp *)

@@ -2143,15 +2143,15 @@ Theorem opcode_has_output_single[local]:
     step_inst_base inst s = OK s' ==>
     ?h. inst.inst_outputs = [h]
 Proof
-  rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  rw[opcode_has_output_def, is_terminator_def] >>
+  gvs[opcode_has_output_def, is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >> strip_tac >>
   gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM]
+      exec_read0_def, exec_read1_def, exec_alloca_def,
+      exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+      extract_venom_result_def, AllCaseEqs(), LET_THM]
 QED
 
 (* Pure sigma bridge: the if-then-else sigma from step simulation

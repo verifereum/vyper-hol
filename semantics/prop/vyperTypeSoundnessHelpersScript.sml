@@ -975,7 +975,10 @@ Proof
   (* var_types conjunct *)
   >- (
     rpt strip_tac >>
-    `id <> nm` by (strip_tac >> gvs[finite_mapTheory.FLOOKUP_DEF]) >>
+    `id IN FDOM env.var_types` by
+      (qpat_x_assum `FLOOKUP env.var_types id = SOME ty` mp_tac >>
+       simp[finite_mapTheory.FLOOKUP_DEF]) >>
+    `id <> nm` by (strip_tac >> gvs[]) >>
     Cases_on `id IN FDOM (HD st.scopes)`
     >- (first_x_assum drule >> simp[] >> strip_tac >> gvs[]) >>
     last_x_assum irule >>

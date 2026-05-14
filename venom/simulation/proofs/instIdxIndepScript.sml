@@ -446,7 +446,8 @@ Proof
   >- opcode_idx_tac  (* SHA3 *)
   >- opcode_idx_tac  (* CALL *)
   >- opcode_idx_tac  (* STATICCALL *)
-  >- opcode_idx_tac  (* DELEGATECALL *)
+  >- (simp[step_inst_base_def, eval_op_inst_idx, exec_delegatecall_idx] >>
+      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* DELEGATECALL *)
   >- opcode_idx_tac  (* CREATE *)
   >- opcode_idx_tac  (* CREATE2 *)
   >- opcode_idx_tac  (* LOG *)

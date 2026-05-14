@@ -212,9 +212,17 @@ val wmwe_update_var = prove(
     update_var x w (write_memory_with_expansion off dat s)``,
   rw[write_memory_with_expansion_def, update_var_def]);
 
+Triviality mcopy_update_var[local]:
+  !x w dst src sz st.
+    mcopy dst src sz (update_var x w st) =
+    update_var x w (mcopy dst src sz st)
+Proof
+  simp[mcopy_def, wmwe_update_var, update_var_def]
+QED
+
 val exec_call_var_thms =
   [exec_ext_call_update_var, exec_delegatecall_update_var,
-   exec_create_update_var, wmwe_update_var];
+   exec_create_update_var, wmwe_update_var, mcopy_update_var];
 
 Definition var_frame_result_def:
   var_frame_result x w (OK st) = OK (update_var x w st) /\
@@ -463,42 +471,42 @@ Proof
   gvs(exec_frame_thms @
       (update_var_def :: finite_mapTheory.FUPDATE_COMMUTES ::
        mload_def :: mstore_def :: mstore8_def :: sload_def :: sstore_def ::
-       tload_def :: tstore_def :: mcopy_def :: read_memory_def ::
+       tload_def :: tstore_def :: read_memory_def ::
        contract_storage_def :: contract_transient_def ::
        revert_state_def :: halt_state_def :: set_returndata_def ::
        var_frame_result_def :: exec_call_var_thms)) >>
   fs[eval_operands_def] >>
   RULE_ASSUM_TAC (SIMP_RULE list_ss []) >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
-  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
   gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   gvs(update_var_def :: finite_mapTheory.FUPDATE_COMMUTES ::
       mload_def :: mstore_def :: mstore8_def :: sload_def :: sstore_def ::
-      tload_def :: tstore_def :: mcopy_def :: read_memory_def ::
+      tload_def :: tstore_def :: read_memory_def ::
       contract_storage_def :: contract_transient_def ::
       revert_state_def :: halt_state_def :: set_returndata_def ::
       var_frame_result_def :: venom_state_component_equality ::

@@ -53,7 +53,9 @@ Theorem step_iszero_value:
                  inst_operands := [cond_op]; inst_outputs := [out] |> s =
     OK (update_var out (bool_to_word (cond = 0w)) s)
 Proof
-  rw[step_inst_base_def, exec_pure1_def]
+  rpt strip_tac >>
+  simp[step_inst_base_def] >>
+  simp[exec_pure1_def]
 QED
 
 Theorem step_assert_behavior:
@@ -227,30 +229,7 @@ Theorem step_inst_preserves_prev_bb:
     ~is_terminator inst.inst_opcode ==>
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- ((* INVOKE: step_inst unfolds to run_blocks + bind_outputs + merge_callee *)
-      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-      simp[Once step_inst_def] >>
-      gvs[AllCaseEqs()] >> rw[] >>
-      imp_res_tac bind_outputs_prev_bb >>
-      gvs[merge_callee_state_def])
-  >> (* non-INVOKE: step_inst = step_inst_base *)
-     `step_inst fuel ctx inst s = step_inst_base inst s`
-       by metis_tac[step_inst_non_invoke] >>
-     gvs[] >>
-     qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def] >>
-     Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-     simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
-          exec_read0_def, exec_read1_def, exec_write2_def,
-          exec_ext_call_def, exec_delegatecall_def,
-          exec_create_def, exec_alloca_def,
-          extract_venom_result_def] >>
-     strip_tac >> gvs[AllCaseEqs()] >>
-     rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
-     gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-         write_memory_with_expansion_def, mcopy_def, revert_state_def]
+  metis_tac[step_preserves_control_flow]
 QED
 
 (* step_inst_base returns Error for INVOKE *)
@@ -1430,16 +1409,16 @@ Theorem step_inst_base_fdom:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  metis_tac[step_inst_base_fdom_pure2,
-            step_inst_base_fdom_pure1,
-            step_inst_base_fdom_read0,
-            step_inst_base_fdom_read1,
-            step_inst_base_fdom_write2,
-            step_inst_base_fdom_no_output,
-            step_inst_base_fdom_custom1,
-            step_inst_base_fdom_external,
-            step_inst_base_fdom_invoke,
-            MEM]
+  FIRST [
+    metis_tac[step_inst_base_fdom_pure2, MEM],
+    metis_tac[step_inst_base_fdom_pure1, MEM],
+    metis_tac[step_inst_base_fdom_read0, MEM],
+    metis_tac[step_inst_base_fdom_read1, MEM],
+    metis_tac[step_inst_base_fdom_write2, MEM],
+    metis_tac[step_inst_base_fdom_no_output, MEM],
+    metis_tac[step_inst_base_fdom_custom1, MEM],
+    metis_tac[step_inst_base_fdom_external, MEM],
+    metis_tac[step_inst_base_fdom_invoke]]
 QED
 
 (* bind_outputs FDOM: outputs added to vs_vars *)

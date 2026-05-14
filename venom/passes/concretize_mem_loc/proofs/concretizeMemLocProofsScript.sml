@@ -23,7 +23,7 @@ Theory concretizeMemLocProofs
 Ancestors
   concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs
   passSimulationProps passSimulationDefs passSharedProps passSharedDefs
-  venomWf venomExecSemantics venomExecProofs
+  venomWf venomExecSemantics venomExecProofs opcodeClass
   venomMemDefs venomMemProofs stateEquiv
   venomInst venomState
   list finite_map pair arithmetic sorting enumeral toto
@@ -1848,6 +1848,37 @@ in
      exec_read0_def, exec_read1_def]
 end;
 
+Triviality exec_result_helpers_not_intret_cml[simp]:
+  (!f inst s vals s'. exec_pure1 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_pure2 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_pure3 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_read0 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_read1 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_write2 f inst s <> IntRet vals s') /\
+  (!inst s alloc_size vals s'. exec_alloca inst s alloc_size <> IntRet vals s') /\
+  (!inst s g a v ao as_ ro rs is_s vals s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vals s') /\
+  (!inst s g a ao as_ ro rs vals s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vals s') /\
+  (!inst s v off sz salt vals s'.
+     exec_create inst s v off sz salt <> IntRet vals s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality step_inst_base_intret_terminator[local]:
+  !inst s vals s'.
+    step_inst_base inst s = IntRet vals s' ==>
+    is_terminator inst.inst_opcode
+Proof
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_terminator_def]
+QED
+
 (* Effect-free ops only return OK or Error *)
 Triviality effect_free_step_not_halt_abort_intret:
   !inst s. is_effect_free_op inst.inst_opcode ==>
@@ -1856,10 +1887,17 @@ Triviality effect_free_step_not_halt_abort_intret:
   (!l w. step_inst_base inst s <> IntRet l w)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_effect_free_op_def] >>
-  asm_rewrite_tac[step_inst_base_def] >>
-  simp exec_ok_or_error_thms >>
-  BasicProvers.every_case_tac >> simp[]
+  `~is_terminator inst.inst_opcode` by
+    metis_tac[is_effect_free_op_classes] >>
+  rpt conj_tac
+  >- (spose_not_then strip_assume_tac >>
+      drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+      strip_tac >> gvs[is_effect_free_op_def])
+  >- (spose_not_then strip_assume_tac >>
+      drule opcodeClassTheory.step_inst_base_abort_opcodes >>
+      strip_tac >> gvs[is_effect_free_op_def]) >>
+  spose_not_then strip_assume_tac >>
+  drule step_inst_base_intret_terminator >> gvs[]
 QED
 
 (* Common effect-free non-pv simulation: given that ALL Var operands
@@ -2003,6 +2041,18 @@ Proof
   rw[phi_well_formed_def, resolve_phi_def] >> gvs[] >> metis_tac[]
 QED
 
+Triviality pointer_preserving_no_mem_ops[local]:
+  !inst.
+    is_pointer_preserving_op inst.inst_opcode ==>
+    mem_write_ops inst = NONE /\ mem_read_ops inst = NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_pointer_preserving_op_def,
+      memLocDefsTheory.mem_write_ops_def,
+      memLocDefsTheory.mem_read_ops_def]
+QED
+
 (* pp op + pv output + pointer_confined → outputs ⊆ pv *)
 Triviality pp_pv_outputs_subset_pv:
   !fn (amap : alloc_map) bb inst.
@@ -2017,19 +2067,14 @@ Triviality pp_pv_outputs_subset_pv:
          v' IN pointer_derived_vars fn (FDOM amap)
 Proof
   rpt strip_tac
-  >- (
-    `?v'. MEM (Var v') inst.inst_operands /\
-          v' IN pointer_derived_vars fn (FDOM amap)` by
-      metis_tac[pp_pv_output_has_pv_operand] >>
-    fs[concretize_pointer_confined_def, pointer_confined_def, LET_THM] >>
-    first_x_assum (qspecl_then [`bb`, `inst`, `v'`] mp_tac) >> simp[] >>
-    strip_tac >> gvs[SUBSET_DEF]
-    >- (Cases_on `inst.inst_opcode` >>
-        fs[is_pointer_preserving_op_def, memLocDefsTheory.mem_write_ops_def])
-    >- (Cases_on `inst.inst_opcode` >>
-        fs[is_pointer_preserving_op_def, memLocDefsTheory.mem_read_ops_def])
-  )
-  >> metis_tac[pp_pv_output_has_pv_operand]
+  >- (drule_all pp_pv_output_has_pv_operand >> strip_tac >>
+      fs[concretize_pointer_confined_def, pointer_confined_def, LET_THM] >>
+      qpat_x_assum `!bb inst v. _`
+        (qspecl_then [`bb`, `inst`, `v'`] mp_tac) >>
+      simp[] >> strip_tac >>
+      drule pointer_preserving_no_mem_ops >> strip_tac >>
+      gvs[]) >>
+  drule_all pp_pv_output_has_pv_operand >> simp[]
 QED
 
 (* Word displacement preserved by addition *)
@@ -2679,7 +2724,7 @@ Proof
     `!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2` by
       metis_tac[cr_non_mem_eval_operand_agree] >>
-    simp[step_inst_base_def] >>
+    ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
     rpt (BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def]) >>
     irule concretize_rel_jump_to >> metis_tac[]
   )

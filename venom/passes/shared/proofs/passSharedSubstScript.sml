@@ -307,15 +307,33 @@ Proof
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[])
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
-  >- opcode_cases_tac
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
+  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
 QED
 
 Triviality step_inst_base_jnz_map[local]:
@@ -622,10 +640,11 @@ Proof
 QED
 
 val call_long_finish_tac =
-  drule_all step_inst_base_CALL_pos >> simp[];
+  qpat_x_assum `inst.inst_opcode = CALL` assume_tac >>
+  irule step_inst_base_CALL_pos >> simp[];
 
 val long_or_call_finish_tac =
-  (long_safe_finish_tac >> NO_TAC) ORELSE call_long_finish_tac;
+  call_long_finish_tac ORELSE long_safe_finish_tac;
 
 Triviality step_inst_base_pos_safe_long[local]:
   !inst new_ops st.
@@ -649,7 +668,10 @@ Triviality step_inst_base_pos_safe_long[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  fs[inst_wf_def, is_alloca_op_def]
+  gvs[is_alloca_op_def] >>
+  qpat_x_assum `inst_wf inst` mp_tac >>
+  simp[inst_wf_def] >>
+  strip_tac >> gvs[]
   >- long_safe_finish_tac
   >- long_safe_finish_tac
   >- long_safe_finish_tac
@@ -715,7 +737,10 @@ Proof
   Cases_on `6 < LENGTH inst.inst_operands` >-
    (irule step_inst_base_pos_safe_long >> simp[]) >>
   Cases_on `inst.inst_opcode` >>
-  fs[inst_wf_def, is_alloca_op_def] >>
+  gvs[is_alloca_op_def] >>
+  qpat_x_assum `inst_wf inst` mp_tac >>
+  simp[inst_wf_def] >>
+  strip_tac >> gvs[] >>
   gvs[listTheory.LENGTH_EQ_NUM_compute] >>
   inst_eval_tac >> gvs[]
   >- pos_opcode_finish_tac

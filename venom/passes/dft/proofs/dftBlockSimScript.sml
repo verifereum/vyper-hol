@@ -635,6 +635,16 @@ Proof
     gvs[AllCaseEqs()] >> metis_tac[]]
 QED
 
+Triviality empty_effect_non_effect_free_opcode_cases[local]:
+  !op.
+    ~is_terminator op /\ ~is_alloca_op op /\ ~is_ext_call_op op /\
+    op <> INVOKE /\ write_effects op = {} /\ read_effects op = {} /\
+    ~is_effect_free_op op ==>
+    op = ASSERT \/ op = ASSERT_UNREACHABLE
+Proof
+  Cases >> EVAL_TAC
+QED
+
 (* Output agreement for pure, empty-effect, non-INVOKE opcodes.
    Generalizes step_inst_base_effect_free_output_determined_vars to
    also cover ASSERT, ASSERT_UNREACHABLE, NOP (which are not effect_free). *)
@@ -656,19 +666,29 @@ Theorem pure_step_output_agree[local]:
     s1.vs_block_ctx = s2.vs_block_ctx /\
     s1.vs_data_section = s2.vs_data_section /\
     s1.vs_code = s2.vs_code /\
+    s1.vs_labels = s2.vs_labels /\
     s1.vs_prev_hashes = s2.vs_prev_hashes ==>
     !w. MEM w inst.inst_outputs ==> lookup_var w r1 = lookup_var w r2
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
-      write_effects_def, read_effects_def] >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, AllCaseEqs()] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  (* PHI: resolve_phi gives MEM val_op operands, so eval_operand agrees *)
-  imp_res_tac resolve_phi_MEM >> res_tac >> gvs[]
+  Cases_on `inst.inst_opcode = NOP`
+  >- (gvs[] >>
+      qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+      qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
+      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      rpt strip_tac >> gvs[] >>
+      first_x_assum irule >> simp[]) >>
+  Cases_on `is_effect_free_op inst.inst_opcode`
+  >- (irule step_inst_base_effect_free_output_determined_vars >>
+      MAP_EVERY qexists_tac [`inst`, `s1`, `s2`] >>
+      gvs[empty_effects_def]) >>
+  drule_all empty_effect_non_effect_free_opcode_cases >> strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+  qpat_x_assum `step_inst_base inst s2 = OK r2` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* effects_independent INVOKE op ==> op is pure with empty effects *)

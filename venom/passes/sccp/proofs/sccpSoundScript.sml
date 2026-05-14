@@ -225,10 +225,11 @@ Proof
     CASE_TAC >> gvs[] >>
     CASE_TAC >> gvs[] >>
     CASE_TAC >> gvs[] >>
-    TRY (CASE_TAC >> gvs[] >> CASE_TAC >> gvs[] >> NO_TAC) >>
-    CASE_TAC >> gvs[] >>
-    CASE_TAC >> gvs[] >>
-    simp[jnz_const_fold_correct])
+    Cases_on `h` >> gvs[] >>
+    TRY (Cases_on `h'` >> gvs[]) >>
+    simp[jnz_const_fold_correct] >>
+    first_x_assum (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+    simp[])
   >>
   Cases_on `inst.inst_opcode = ASSERT \/
             inst.inst_opcode = ASSERT_UNREACHABLE`

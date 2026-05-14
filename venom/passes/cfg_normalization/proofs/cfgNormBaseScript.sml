@@ -4736,6 +4736,20 @@ Proof
 QED
 
 (* One step of insert_split simulation for pred_bb *)
+Triviality bb_well_formed_non_term_prefix[local]:
+  !bb i.
+    bb_well_formed bb /\
+    i < LENGTH bb.bb_instructions - 1 ==>
+    ~is_terminator (EL i bb.bb_instructions).inst_opcode
+Proof
+  rw[bb_well_formed_def] >>
+  spose_not_then strip_assume_tac >>
+  `i < LENGTH bb.bb_instructions` by DECIDE_TAC >>
+  `i = PRE (LENGTH bb.bb_instructions)` by (
+    first_x_assum match_mp_tac >> simp[]) >>
+  DECIDE_TAC
+QED
+
 Theorem insert_split_pred_step[local]:
   !func pred_bb target_bb id_base func' split_lbl n ctx s cur_bb.
     wf_function_no_ids func /\
@@ -4848,8 +4862,8 @@ Proof
     (strip_tac >> fs[]) >>
   `pred_bb.bb_instructions <> []` by metis_tac[exec_block_ok_nonempty] >>
   `!i. i < LENGTH pred_bb.bb_instructions - 1 ==>
-       ~is_terminator (EL i pred_bb.bb_instructions).inst_opcode` by (
-    rpt strip_tac >> fs[bb_well_formed_def] >> res_tac >> fs[]) >>
+       ~is_terminator (EL i pred_bb.bb_instructions).inst_opcode` by
+    metis_tac[bb_well_formed_non_term_prefix] >>
   `v1.vs_prev_bb = SOME pred_bb.bb_label` by (
     drule_all run_block_ok_prev_bb >> simp[]) >>
   Cases_on `v1.vs_current_bb = target_bb.bb_label` >-

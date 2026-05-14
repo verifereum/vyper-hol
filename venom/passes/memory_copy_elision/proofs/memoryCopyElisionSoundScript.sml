@@ -23,7 +23,7 @@ Ancestors
   memoryCopyElisionDefs analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomInstProps venomState venomExecSemantics
-  venomEffects venomMemDefs
+  venomEffects venomMemDefs venomMemProofs
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   dfgAnalysisProps dfgDefs dfAnalyzeDefs
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
@@ -1253,35 +1253,12 @@ Triviality step_preserves_allocas[local]:
     s'.vs_allocas = s.vs_allocas
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> ALLOCA` by (
-    Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
   `step_inst_base inst s = OK s'` by
     metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  fs[venomExecSemanticsTheory.step_inst_base_def, AllCaseEqs()] >>
-  gvs[AllCaseEqs(),
-      venomExecSemanticsTheory.exec_pure1_def,
-      venomExecSemanticsTheory.exec_pure2_def,
-      venomExecSemanticsTheory.exec_pure3_def,
-      venomExecSemanticsTheory.exec_read0_def,
-      venomExecSemanticsTheory.exec_read1_def,
-      venomExecSemanticsTheory.exec_write2_def,
-      venomExecSemanticsTheory.exec_ext_call_def,
-      venomExecSemanticsTheory.exec_delegatecall_def,
-      venomExecSemanticsTheory.exec_create_def,
-      venomExecSemanticsTheory.extract_venom_result_def,
-      venomExecSemanticsTheory.exec_alloca_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  gvs[venomStateTheory.update_var_def, venomStateTheory.mstore_def,
-      venomStateTheory.mstore8_def, venomStateTheory.sstore_def,
-      venomStateTheory.tstore_def,
-      venomStateTheory.write_memory_with_expansion_def,
-      venomExecSemanticsTheory.mcopy_def,
-      venomStateTheory.revert_state_def,
-      venomStateTheory.eval_operands_def,
-      venomStateTheory.jump_to_def,
-      venomStateTheory.lookup_var_def, FLOOKUP_UPDATE,
-      venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def]
+  irule venomMemProofsTheory.step_inst_base_preserves_allocas >>
+  qexists_tac `inst` >> simp[]
 QED
 
 (* cf_sound is preserved by DRESTRICT (subset of entries) *)

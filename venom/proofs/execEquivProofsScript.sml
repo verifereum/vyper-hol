@@ -442,19 +442,37 @@ Triviality step_inst_ssa_equiv:
     MEM inst.inst_opcode [PHI; ASSIGN; NOP] ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> simp[step_inst_base_def] >>
-  imp_res_tac eval_operand_equiv >>
-  `s1.vs_prev_bb = s2.vs_prev_bb` by
-    fs[state_equiv_def, execution_equiv_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
-  TRY (irule update_var_preserves >> simp[] >> NO_TAC) >>
-  TRY (simp[state_equiv_refl] >> NO_TAC) >>
-  (* PHI: resolved operand must be in inst_operands *)
-  imp_res_tac resolve_phi_MEM >>
-  rename1 `resolve_phi _ _ = SOME phi_op` >>
-  `eval_operand phi_op s1 = eval_operand phi_op s2` by (
-    first_x_assum irule >> rw[] >> metis_tac[]) >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  rpt strip_tac >> gvs[]
+  >- (simp[step_inst_base_def] >>
+      `s1.vs_prev_bb = s2.vs_prev_bb` by
+        fs[state_equiv_def, execution_equiv_def] >>
+      ASM_REWRITE_TAC[] >>
+      Cases_on `inst.inst_outputs` >> gvs[result_equiv_def, revert_equiv_def] >>
+      Cases_on `TL inst.inst_outputs` >> gvs[result_equiv_def, revert_equiv_def] >>
+      Cases_on `s2.vs_prev_bb` >> gvs[result_equiv_def, revert_equiv_def] >>
+      Cases_on `resolve_phi x inst.inst_operands` >> gvs[result_equiv_def, revert_equiv_def] >>
+      rename1 `resolve_phi _ _ = SOME phi_op` >>
+      `MEM phi_op inst.inst_operands` by metis_tac[resolve_phi_MEM] >>
+      `eval_operand phi_op s1 = eval_operand phi_op s2` by (
+        qspecl_then [`vars`, `phi_op`, `inst.inst_operands`, `s1`, `s2`]
+          mp_tac eval_operand_mem_equiv >> simp[]) >>
+      ASM_REWRITE_TAC[] >>
+      Cases_on `eval_operand phi_op s2` >> gvs[result_equiv_def, revert_equiv_def] >>
+      irule update_var_preserves >> simp[])
+  >- (simp[step_inst_base_def] >>
+      Cases_on `inst.inst_operands` >> gvs[result_equiv_def, revert_equiv_def] >>
+      Cases_on `TL inst.inst_operands` >> gvs[result_equiv_def, revert_equiv_def] >>
+      Cases_on `inst.inst_outputs` >> gvs[result_equiv_def, revert_equiv_def] >>
+      Cases_on `TL inst.inst_outputs` >> gvs[result_equiv_def, revert_equiv_def] >>
+      rename1 `inst.inst_operands = [assign_op]` >>
+      `eval_operand assign_op s1 = eval_operand assign_op s2` by (
+        qspecl_then [`vars`, `assign_op`, `s1`, `s2`]
+          mp_tac eval_operand_equiv >> simp[]) >>
+      ASM_REWRITE_TAC[] >>
+      Cases_on `eval_operand assign_op s2` >>
+      gvs[result_equiv_def, revert_equiv_def] >>
+      irule update_var_preserves >> simp[]) >>
+  simp[step_inst_base_def, result_equiv_def]
 QED
 
 (* Assertions: ASSERT, ASSERT_UNREACHABLE *)
