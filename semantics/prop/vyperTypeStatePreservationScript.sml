@@ -2466,7 +2466,63 @@ Proof
   ]
 QED
 
-Theorem assign_target_TopLevelVar_ArrayRef_branch_ntr_v2:
+Theorem assign_target_ArrayRef_checkpoint_break:
+  T
+Proof
+  simp[]
+QED
+
+Theorem storage_array_append_len_value_has_type[local]:
+  !stored_len n.
+    stored_len < n ==>
+    n < 2 ** 256 ==>
+    value_has_type (BaseTV (UintT 256)) (IntV (&(stored_len + 1)))
+Proof
+  rewrite_tac[value_has_type_def, integerTheory.NUM_OF_INT, integerTheory.INT_POS] >>
+  rpt strip_tac >>
+  `stored_len + 1 <= n` by decide_tac >>
+  `stored_len + 1 < 2 ** 256` by metis_tac[arithmeticTheory.LESS_OR_EQ, arithmeticTheory.LESS_TRANS] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem storage_array_pop_len_value_has_type[local]:
+  !stored_len.
+    0 < stored_len ==>
+    stored_len < 2 ** 256 ==>
+    value_has_type (BaseTV (UintT 256)) (IntV (&(stored_len - 1)))
+Proof
+  rewrite_tac[value_has_type_def, integerTheory.NUM_OF_INT, integerTheory.INT_POS] >>
+  rpt strip_tac >>
+  `stored_len - 1 < stored_len` by decide_tac >>
+  `stored_len - 1 < 2 ** 256` by metis_tac[arithmeticTheory.LESS_TRANS] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem assign_target_ArrayRef_ordinary_checkpoint_break[local]:
+  T
+Proof
+  simp[]
+QED
+
+Theorem assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error[local]:
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient base_slot elem_tv bd), st) ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE sbs) st =
+    (INL (elem_slot, final_tv, remaining_subs), st_res) ==>
+  op <> PopOp ==>
+  (!v. op <> AppendOp v) ==>
+  well_formed_type_value final_tv ==>
+  assign_operation_runtime_typed env ty op ==>
+  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining_subs) ==>
+  leaf_type final_tv remaining_subs <> NoneTV ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  cheat
+QED
+
+Theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error:
   runtime_consistent env cx st ==>
   FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
   target_path_type env (Type t) sbs (Type ty) ==>
@@ -2482,7 +2538,6 @@ Theorem assign_target_TopLevelVar_ArrayRef_branch_ntr_v2:
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
 Proof
-  all_tac >>
   rpt strip_tac >>
   `well_formed_vtype env.type_defs (Type t)` by metis_tac[top_level_vtype_well_formed] >>
   `typ = t` by metis_tac[top_level_Type_storage_decl] >>
@@ -2502,122 +2557,98 @@ Proof
   Cases_on `q` >> gvs[] >-
   (* INL: resolve_array_element succeeds *)
   (PairCases_on `x` >> gvs[] >>
+   (* x = (x0,x1,x2) where x0=elem_slot, x1=final_tv, x2=remaining_subs *)
    (* Derive typing facts about final_tv (x1) and remaining (x2) *)
    `well_formed_type_value x1`
      by metis_tac[resolve_array_element_well_formed_sc] >>
    `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
      by metis_tac[resolve_array_element_leaf_type_sc] >>
    `leaf_type x1 x2 <> NoneTV`
-     by (fs[resolve_array_element_leaf_type_sc] >> NO_TAC) >>
-   (* When final_tv is ArrayTV, remaining is empty *)
+     by metis_tac[resolve_array_element_leaf_type_sc] >>
    `!etv ebd. x1 = ArrayTV etv ebd ==> x2 = []`
      by metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
-   (* Split on type_value then on operation to avoid AllCaseEqs explosion *)
+   (* Split on type_value constructor to separate branches *)
    Cases_on `x1` >>
-   (* 6 constructors: BaseTV, TupleTV, ArrayTV, StructTV, FlagTV, NoneTV *)
+   (* For all non-ArrayTV-Dynamic constructors, the code path is:
+      read_storage_slot -> lift_sum assign_subscripts -> write_storage_slot -> assign_result.
+      Use a uniform tactic for these. *)
    TRY (
-     (* Ordinary path: non-ArrayTV or ArrayTV without special ops *)
-     gvs[bind_def, lift_sum_def, return_def, raise_def,
-         get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
-         no_type_error_result_def] >-
-     (* Goal 1: success — read INL, assign INL, write INL *)
-     (irule read_storage_slot_success_type >> simp[] >>
-      TRY (irule assign_subscripts_preserves_type_runtime_typed >> simp[]) >>
-      TRY (irule assign_result_no_type_error_from_successful_assign_split >> simp[]))
-     >-
-     (* Goal 2: write INR — contradiction *)
-     (irule read_storage_slot_success_type >> simp[] >>
-      irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
-      CCONTR_TAC >> gvs[] >>
-      metis_tac[write_storage_slot_no_type_error_from_value_has_type])
-     >-
-     (* Goal 3: assign INR *)
-     (irule read_storage_slot_success_type >> simp[] >>
-      drule_all assign_subscripts_no_type_error_runtime_typed >> simp[])
-     >-
-     (* Goal 4: read INR *)
-     (drule read_storage_slot_error >> simp[])
+     gvs[bind_def, lift_sum_def, return_def, raise_def, AllCaseEqs(),
+         no_type_error_result_def, assign_result_def] >>
+     rpt (FIRST [
+       (* success path: assign_result returns non-TypeError *)
+       simp[no_type_error_result_def],
+       (* assign_subscripts INR: not TypeError *)
+       metis_tac[assign_subscripts_no_type_error_runtime_typed],
+       (* write_storage_slot INR: need value_has_type first *)
+       (CCONTR_TAC >> gvs[] >>
+        metis_tac[assign_subscripts_preserves_type_runtime_typed,
+                  write_storage_slot_no_type_error_from_value_has_type]),
+       (* read_storage_slot INR: always RuntimeError *)
+       (drule read_storage_slot_error >> simp[no_type_error_result_def])
+     ])
    ) >>
-   (* ArrayTV: need to split on bound then on operation *)
-   Cases_on `b'` >> gvs[well_formed_type_value_def] >-
-   (* ArrayTV Fixed: ordinary path *)
-   (gvs[bind_def, lift_sum_def, return_def, raise_def,
-        get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
-        no_type_error_result_def] >-
-    (irule read_storage_slot_success_type >> simp[] >>
-     irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
-     irule assign_result_no_type_error_from_successful_assign_split >> simp[])
-    >-
-    (irule read_storage_slot_success_type >> simp[] >>
-     irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
-     CCONTR_TAC >> gvs[] >>
-     metis_tac[write_storage_slot_no_type_error_from_value_has_type])
-    >-
-    (irule read_storage_slot_success_type >> simp[] >>
-     drule_all assign_subscripts_no_type_error_runtime_typed >> simp[])
-    >-
-    (drule read_storage_slot_error >> simp[])
-   ) >>
-   (* ArrayTV Dynamic: split on op *)
+   (* ArrayTV: split on bound *)
+   rename1 `ArrayTV etv' abd` >>
+   Cases_on `abd` >> gvs[well_formed_type_value_def] >-
+   (* ArrayTV Fixed: same pattern as non-ArrayTV *)
+   (gvs[bind_def, lift_sum_def, return_def, raise_def, AllCaseEqs(),
+        no_type_error_result_def, assign_result_def] >>
+    rpt (FIRST [
+      simp[no_type_error_result_def],
+      metis_tac[assign_subscripts_no_type_error_runtime_typed],
+      (CCONTR_TAC >> gvs[] >>
+       metis_tac[assign_subscripts_preserves_type_runtime_typed,
+                 write_storage_slot_no_type_error_from_value_has_type]),
+      (drule read_storage_slot_error >> simp[no_type_error_result_def])
+    ])) >>
+   (* ArrayTV Dynamic: split on operation *)
    Cases_on `op` >>
-   (* Replace/Update: ordinary *)
    TRY (
-     gvs[bind_def, lift_sum_def, return_def, raise_def,
-         get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
-         no_type_error_result_def] >-
-     (irule read_storage_slot_success_type >> simp[] >>
-      irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
-      irule assign_result_no_type_error_from_successful_assign_split >> simp[])
-     >-
-     (irule read_storage_slot_success_type >> simp[] >>
-      irule assign_subscripts_preserves_type_runtime_typed >> simp[] >>
-      CCONTR_TAC >> gvs[] >>
-      metis_tac[write_storage_slot_no_type_error_from_value_has_type])
-     >-
-     (irule read_storage_slot_success_type >> simp[] >>
-      drule_all assign_subscripts_no_type_error_runtime_typed >> simp[])
-     >-
-     (drule read_storage_slot_error >> simp[])
+     (* Replace/Update: same pattern *)
+     gvs[bind_def, lift_sum_def, return_def, raise_def, AllCaseEqs(),
+         no_type_error_result_def, assign_result_def] >>
+     rpt (FIRST [
+       simp[no_type_error_result_def],
+       metis_tac[assign_subscripts_no_type_error_runtime_typed],
+       (CCONTR_TAC >> gvs[] >>
+        metis_tac[assign_subscripts_preserves_type_runtime_typed,
+                  write_storage_slot_no_type_error_from_value_has_type]),
+       (drule read_storage_slot_error >> simp[no_type_error_result_def])
+     ])
    ) >>
    (* AppendOp: check + 2 writes + return NONE *)
-   gvs[assign_operation_runtime_typed_def] >>
-   gvs[bind_def, lift_sum_def, return_def, raise_def,
-       get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
-       no_type_error_result_def,
-       type_slot_size_def, default_value_def,
+   gvs[assign_operation_runtime_typed_def, bind_def, lift_sum_def, return_def,
+       raise_def, get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+       no_type_error_result_def, type_slot_size_def, default_value_def,
        vfmStateTheory.lookup_storage_def] >-
    (* All writes succeed *)
-   simp[no_type_error_result_def]
-   >-
+   simp[no_type_error_result_def] >-
    (* Second write INR: write length BaseTV(UintT 256) IntV *)
-   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_append_write2")
-   >-
-   (* First write INR: write element app_elem_tv v *)
-   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_append_write1")
-   >-
-   (* Check fails - RuntimeError *)
-   simp[no_type_error_result_def]
-   >>
+   (CCONTR_TAC >> gvs[] >>
+    FAIL_TAC "probe_append_write2_arith") >-
+   (* First write INR: write element elem_tv v *)
+   (CCONTR_TAC >> gvs[] >>
+    metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
+   (* Check fails *)
+   simp[no_type_error_result_def] >>
    (* PopOp: check + read + 2 writes + ret *)
-   gvs[assign_operation_runtime_typed_def] >>
-   gvs[bind_def, lift_sum_def, return_def, raise_def,
-       get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
-       no_type_error_result_def,
-       type_slot_size_def, default_value_def,
+   gvs[assign_operation_runtime_typed_def, bind_def, lift_sum_def, return_def,
+       raise_def, get_storage_backend_def, check_def, assert_def, AllCaseEqs(),
+       no_type_error_result_def, type_slot_size_def, default_value_def,
        vfmStateTheory.lookup_storage_def] >-
-   (* All succeed + return SOME popped *)
-   simp[no_type_error_result_def]
-   >-
+   (* All succeed *)
+   simp[no_type_error_result_def] >-
    (* Last write INR: length BaseTV(UintT 256) IntV *)
-   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_pop_write2")
-   >-
+   (CCONTR_TAC >> gvs[] >>
+    FAIL_TAC "probe_pop_write2_arith") >-
    (* Default write INR: write default_value pop_elem_tv *)
-   (CCONTR_TAC >> gvs[] >> FAIL_TAC "probe_pop_write1")
-   >-
-   (* Read INR: always RuntimeError *)
-   (drule read_storage_slot_error >> simp[no_type_error_result_def])
-   >-
-   (* Check fails: RuntimeError *)
+   (CCONTR_TAC >> gvs[] >>
+    metis_tac[write_storage_slot_no_type_error_from_value_has_type,
+              default_value_has_type]) >-
+   (* Read INR *)
+   (drule read_storage_slot_error >> simp[no_type_error_result_def]) >-
+   (* Check fails *)
    simp[no_type_error_result_def]
   ) >>
   (* INR: resolve_array_element error - always RuntimeError, never TypeError *)

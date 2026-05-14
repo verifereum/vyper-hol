@@ -2067,3 +2067,257 @@ For `root_tv = BaseTV/TupleTV/StructTV/FlagTV/NoneTV`, call `assign_target_TopLe
 
 #### Not to try
 Do not use `gvs[assign_target_def]` in the parent after the vtype split. If a goal survives a boundary theorem call, it means a boundary hypothesis was not explicitly derived; derive that hypothesis rather than expanding the evaluator.
+
+---
+
+## PLAN AUGMENT: C3.1.7.3 @ 2026-05-14T16:02:35+00:00
+
+# PLAN: C3.1.7.3 — finish the TopLevelVar ArrayRef no-TypeError branch
+
+## Argument
+
+The ArrayRef case of top-level assignment is sound because `resolve_array_element` reduces the surface top-level array target to a concrete storage slot, a concrete leaf type `final_tv`, and the remaining subscripts. The already-proved local facts `resolve_array_element_leaf_type_sc`, `resolve_array_element_ArrayTV_empty_rsubs_sc`, and `resolve_array_element_well_formed_sc` provide the needed consumer boundary: static target-path typing agrees with `leaf_type final_tv remaining_subs`, dynamic-array leaves have no remaining subscripts, and the resolved leaf type is well formed.
+
+Once resolution succeeds, there are only three semantic shapes:
+
+1. Ordinary assignment path: read current storage value, apply `assign_subscripts`, write back the typed new value, then call `assign_result`. Existing lemmas rule out TypeError at each stage.
+2. AppendOp on storage dynamic array: check capacity, write the new element, write the incremented length, return `NONE`. Element typing comes from `assign_operation_runtime_typed`; length typing is the small `UintT 256` arithmetic fact below.
+3. PopOp on storage dynamic array: check non-empty, read last element, write default value, write decremented length, return `SOME popped`. Existing read/default/write helpers plus the length arithmetic fact rule out TypeError.
+
+If `resolve_array_element` fails, `resolve_array_element_error_sc` says the error is an `Error _`; case analysis and `no_type_error_result_def` close it.
+
+The escalation shows not to use one broad `gvs[AllCaseEqs()]`: generated names destroy the equation shapes expected by the helper lemmas. Factor the proof into boundary lemmas that keep intermediate equations named.
+
+## Definition Design
+
+No definition changes are needed.
+
+- `assign_target_def` has the right computational split. Unfold it once only inside focused branch lemmas.
+- `resolve_array_element_def` is already abstracted by the three `_sc` lemmas. Consumers should not unfold it.
+- `assign_operation_runtime_typed_def` gives element typing for `AppendOp` and identifies dynamic-array target types for `AppendOp`/`PopOp`.
+- `value_has_type_def` gives the concrete `UintT 256` arithmetic obligation for storage-array length writes.
+
+Boundary lemmas to add/use: ordinary ArrayRef no-TypeError, AppendOp dynamic ArrayRef no-TypeError, PopOp dynamic ArrayRef no-TypeError, and local `UintT 256` length-value facts.
+
+Definition probe: C3.1.7.3.2 is the empirical probe. If append length typing cannot be proved from current well-formedness/bounds hypotheses, stop and escalate with the exact residual goal.
+
+Failure signs: if the ordinary boundary lemma still needs generated names from `gvs[AllCaseEqs()]`, its statement is too weak; add explicit named hypotheses. If AppendOp length typing lacks a bound implying `stored_len + 1 < 2 ** 256`, escalate rather than assuming it.
+
+## Code Structure
+
+All edits stay in `semantics/prop/vyperTypeStatePreservationScript.sml`, immediately above `assign_target_TopLevelVar_ArrayRef_branch_no_type_error`. Mark new helper lemmas `[local]` unless export/signature constraints require otherwise. Do not move anything to a shared library.
+
+Keep the existing `resolve_array_element_*_sc` lemmas. Replace the failing inline `TRY (...)` and the two `FAIL_TAC` probes in `assign_target_TopLevelVar_ArrayRef_branch_no_type_error` with dispatch to the new boundary lemmas.
+
+## Components
+
+### C3.1.7.3: Finish ArrayRef TopLevelVar no-TypeError branch
+- Statement: prove current `assign_target_TopLevelVar_ArrayRef_branch_no_type_error`.
+- Approach: derive existing resolver facts, split on resolved `final_tv`/operation shape, and call ordinary/append/pop boundary lemmas; keep resolve-error path via `resolve_array_element_error_sc`.
+- Dependencies: C3.1.7.3.1, C3.1.7.3.2, C3.1.7.3.3, C3.1.7.3.4
+- Risk: 2
+- Checkpoint: yes
+- Not to try: broad `gvs[AllCaseEqs()]`; weakening assignment soundness.
+
+### C3.1.7.3.1: Ordinary ArrayRef boundary lemma
+- Statement: prove a local lemma for non-special read/assign_subscripts/write/assign_result path after successful `resolve_array_element`.
+- Approach: unfold `assign_target_def` once, preserve named equations, split read/subassign/write in order, and apply existing no-TypeError/type-preservation lemmas.
+- Dependencies: none
+- Risk: 2
+- Checkpoint: no
+
+### C3.1.7.3.2: UintT-256 length-value lemmas
+- Statement: prove local `value_has_type (BaseTV (UintT 256))` facts for `IntV &(stored_len + 1)` and `IntV &(stored_len - 1)` under branch hypotheses.
+- Approach: unfold `value_has_type_def`; use check hypotheses plus word bounds/well-formed dynamic-array bounds.
+- Dependencies: none
+- Risk: 1
+- Checkpoint: no
+
+### C3.1.7.3.3: AppendOp dynamic ArrayRef boundary lemma
+- Statement: prove local lemma for storage dynamic-array AppendOp branch.
+- Approach: use `assign_operation_runtime_typed_def` for element typing; C3.1.7.3.2 for length typing; close write errors with `write_storage_slot_no_type_error_from_value_has_type`.
+- Dependencies: C3.1.7.3.2
+- Risk: 2
+- Checkpoint: no
+
+### C3.1.7.3.4: PopOp dynamic ArrayRef boundary lemma
+- Statement: prove local lemma for storage dynamic-array PopOp branch.
+- Approach: use `read_storage_slot_error`, `default_value_has_type`, C3.1.7.3.2, and `write_storage_slot_no_type_error_from_value_has_type`.
+- Dependencies: C3.1.7.3.2
+- Risk: 2
+- Checkpoint: no
+
+## Dependency Graph
+
+C3.1.7.3.2 → C3.1.7.3.3 and C3.1.7.3.4. C3.1.7.3.1, C3.1.7.3.3, and C3.1.7.3.4 → C3.1.7.3.
+
+## Notes
+
+Stay inside this subtree. Do not edit `sound_TopLevelVar`, `top_level_HashMapRef_assign_no_type_error`, `sound_ImmutableVar`, `sound_TupleTargetV`, or `sound_assign_targets_cons` as part of this component. If append length typing is false under current definitions, report the exact checked residual; that would require broader redesign and should not be patched locally.
+
+## Structured Components
+
+### C3: C3
+- Kind: `proof`
+- Risk: 2
+- Rationale: Derived from child component C3.1.7.3.1 risk 2. This is the same semantic pattern already proved for `assign_target_TopLevelVar_Value_branch_ntr` and `assign_target_HashMapRef_branch_no_type_error`: read a typed value, assign_subscripts preserves type/no-TypeError, write typed value, then assign_result no-TypeError. The main risk is only statement-shaping to keep named equations.
+- Required for completion: yes
+
+### C3.1: C3.1
+- Kind: `proof`
+- Risk: 2
+- Rationale: Derived from child component C3.1.7.3.1 risk 2. This is the same semantic pattern already proved for `assign_target_TopLevelVar_Value_branch_ntr` and `assign_target_HashMapRef_branch_no_type_error`: read a typed value, assign_subscripts preserves type/no-TypeError, write typed value, then assign_result no-TypeError. The main risk is only statement-shaping to keep named equations.
+
+### C3.1.7: C3.1.7
+- Kind: `proof`
+- Risk: 2
+- Rationale: Derived from child component C3.1.7.3.1 risk 2. This is the same semantic pattern already proved for `assign_target_TopLevelVar_Value_branch_ntr` and `assign_target_HashMapRef_branch_no_type_error`: read a typed value, assign_subscripts preserves type/no-TypeError, write typed value, then assign_result no-TypeError. The main risk is only statement-shaping to keep named equations.
+
+### C3.1.7.3: Finish ArrayRef TopLevelVar no-TypeError branch
+- Kind: `proof_subtree`
+- Risk: 2
+- Rationale: The remaining failure is proof-structural, not mathematical: successful resolve_array_element already yields leaf/remaining-subscript facts; storage read/write helpers already rule out TypeError; AppendOp/PopOp only need small UintT-256 length-value facts. Boundary lemmas avoid the auto-generated-variable matching failure seen after broad gvs[AllCaseEqs()].
+- Dependencies: C3.1.7.3.1, C3.1.7.3.2, C3.1.7.3.3, C3.1.7.3.4
+- Checkpoint: yes
+
+#### Description
+Replace the current failing inline proof of `assign_target_TopLevelVar_ArrayRef_branch_no_type_error` in `vyperTypeStatePreservationScript.sml` with calls to focused ArrayRef boundary lemmas. This component remains strictly within the existing ArrayRef branch helper theorem and its local prerequisites.
+
+#### Statement
+```sml
+Theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error:
+  runtime_consistent env cx st ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  target_path_type env (Type t) sbs (Type ty) ==>
+  assignable_type (get_tenv cx) ty ==>
+  assign_operation_runtime_typed env ty op ==>
+  env.type_defs = get_tenv cx ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd) ==>
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+```
+
+#### Approach
+Keep the existing front matter: derive `typ = t`, `well_formed_type_value (ArrayTV elem_tv bd)`, `evaluate_type env.type_defs ty = SOME (leaf_type (ArrayTV elem_tv bd) (REVERSE sbs))`, and non-None leaf. Then case-split `resolve_array_element`. For `INL (elem_slot, final_tv, remaining_subs)`, derive the existing `_sc` facts and dispatch to: ordinary read/assign_subscripts/write/assign_result boundary; AppendOp dynamic-array boundary; PopOp dynamic-array boundary. For the `INR` resolve case, retain `resolve_array_element_error_sc`.
+
+#### Not to try
+Do not continue expanding the whole `assign_target` branch with `gvs[AllCaseEqs()]` and then try positional `metis_tac`/`irule`; the escalated evidence shows generated names lose the expected equation shape. Do not weaken assignment soundness side conditions.
+
+### C3.1.7.3.1: Ordinary ArrayRef read/write/assign_result boundary lemma
+- Kind: `boundary_lemma`
+- Risk: 2
+- Rationale: This is the same semantic pattern already proved for `assign_target_TopLevelVar_Value_branch_ntr` and `assign_target_HashMapRef_branch_no_type_error`: read a typed value, assign_subscripts preserves type/no-TypeError, write typed value, then assign_result no-TypeError. The main risk is only statement-shaping to keep named equations.
+
+#### Statement
+Add a local/helper theorem just above `assign_target_TopLevelVar_ArrayRef_branch_no_type_error`, named for example:
+
+```sml
+Theorem assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error[local]:
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient base_slot elem_tv bd), st) ==>
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE sbs) st =
+    (INL (elem_slot, final_tv, remaining_subs), st_res) ==>
+  (op = PopOp ==> !pop_elem_tv n. final_tv <> ArrayTV pop_elem_tv (Dynamic n)) ==>
+  (!v app_elem_tv n. op = AppendOp v ==> final_tv <> ArrayTV app_elem_tv (Dynamic n)) ==>
+  well_formed_type_value final_tv ==>
+  assign_operation_runtime_typed env ty op ==>
+  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining_subs) ==>
+  leaf_type final_tv remaining_subs <> NoneTV ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+```
+
+#### Approach
+Unfold `assign_target_def` once only far enough to expose the assumed successful `lookup_global` and `resolve_array_element`. Case-split named calls in order: `read_storage_slot`, `assign_subscripts`, `write_storage_slot`. Use `read_storage_slot_error`, `read_storage_slot_success_type`, `assign_subscripts_no_type_error_runtime_typed`, `assign_subscripts_preserves_type_runtime_typed`, `write_storage_slot_no_type_error_from_value_has_type`, and `assign_result_no_type_error_from_successful_assign` or `_split`. The exclusion hypotheses ensure special dynamic-array Append/Pop branches are not selected.
+
+#### Not to try
+Do not use a `TRY (gvs[AllCaseEqs()] >> rpt FIRST [...])` block here; keep intermediate equations named.
+
+### C3.1.7.3.2: UintT-256 length values for storage dynamic-array length writes
+- Kind: `infrastructure_lemma`
+- Risk: 1
+- Rationale: Both facts reduce directly to `value_has_type_def` for `BaseTV (UintT 256)` plus arithmetic from the storage-array checks and word bounds/well-formed dynamic-array bounds.
+
+#### Statement
+Add one or two small local lemmas, choosing the exact hypotheses that match the branch context:
+
+```sml
+Theorem storage_array_append_len_value_has_type[local]:
+  stored_len < n ==>
+  n <= 2 ** 256 ==>
+  value_has_type (BaseTV (UintT 256)) (IntV (&(stored_len + 1)))
+
+Theorem storage_array_pop_len_value_has_type[local]:
+  stored_len > 0 ==>
+  stored_len < 2 ** 256 ==>
+  value_has_type (BaseTV (UintT 256)) (IntV (&(stored_len - 1)))
+```
+
+If the branch has `stored_len = w2n (lookup_storage elem_slot storage)`, the pop bound can be derived using word `w2n` bounds rather than passed as a hypothesis.
+
+#### Approach
+Prove by `simp[value_has_type_def]` and arithmetic. For append, derive `stored_len + 1 < 2 ** 256` from `stored_len < n` plus the dynamic-array bound present after unfolding `well_formed_type_value_def` for `ArrayTV app_elem_tv (Dynamic n)`. For pop, use `stored_len > 0` and the word-bound/source bound to show `stored_len - 1 < 2 ** 256`.
+
+#### Not to try
+Do not prove these by unfolding `write_storage_slot`; they are value-typing facts needed before applying `write_storage_slot_no_type_error_from_value_has_type`. If append lacks any bound implying `stored_len + 1 < 2 ** 256`, escalate with the exact residual goal.
+
+### C3.1.7.3.3: AppendOp dynamic ArrayRef no-TypeError boundary lemma
+- Kind: `boundary_lemma`
+- Risk: 2
+- Rationale: After resolving to a dynamic array leaf, the AppendOp branch performs a bounds check and two writes. The append value is typed by `assign_operation_runtime_typed`; the length write is typed by C3.1.7.3.2; check failure is not TypeError.
+- Dependencies: C3.1.7.3.2
+
+#### Statement
+Add a local/helper theorem, for example:
+
+```sml
+Theorem assign_target_TopLevelVar_ArrayRef_append_no_type_error[local]:
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient base_slot elem_tv bd), st) ==>
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE sbs) st =
+    (INL (elem_slot, ArrayTV app_elem_tv (Dynamic n), []), st_res) ==>
+  well_formed_type_value (ArrayTV app_elem_tv (Dynamic n)) ==>
+  assign_operation_runtime_typed env ty (AppendOp v) ==>
+  evaluate_type env.type_defs ty = SOME (ArrayTV app_elem_tv (Dynamic n)) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) (AppendOp v) st = (res, st') ==>
+  no_type_error_result res
+```
+
+#### Approach
+Unfold to the resolved ArrayRef AppendOp branch. Expose `get_storage_backend`, `lookup_storage`, and the `check (stored_len < n)` result. If the check fails, close by `no_type_error_result_def`. If it succeeds, case-split the first `write_storage_slot`; contradict TypeError using `write_storage_slot_no_type_error_from_value_has_type` and `value_has_type app_elem_tv v` from `assign_operation_runtime_typed_def`. For the second length write, use C3.1.7.3.2 and `write_storage_slot_no_type_error_from_value_has_type`. Successful writes close by simplification.
+
+#### Not to try
+Do not use `assign_subscripts_no_type_error_runtime_typed`; storage dynamic-array AppendOp bypasses `assign_subscripts`.
+
+### C3.1.7.3.4: PopOp dynamic ArrayRef no-TypeError boundary lemma
+- Kind: `boundary_lemma`
+- Risk: 2
+- Rationale: The PopOp branch performs a non-empty check, typed read, default-value write, and length write. Existing helpers cover read errors, default-value typing, and typed writes; C3.1.7.3.2 covers the decremented length value.
+- Dependencies: C3.1.7.3.2
+
+#### Statement
+Add a local/helper theorem, for example:
+
+```sml
+Theorem assign_target_TopLevelVar_ArrayRef_pop_no_type_error[local]:
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient base_slot elem_tv bd), st) ==>
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE sbs) st =
+    (INL (elem_slot, ArrayTV pop_elem_tv (Dynamic n), []), st_res) ==>
+  well_formed_type_value (ArrayTV pop_elem_tv (Dynamic n)) ==>
+  assign_operation_runtime_typed env ty PopOp ==>
+  evaluate_type env.type_defs ty = SOME (ArrayTV pop_elem_tv (Dynamic n)) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) PopOp st = (res, st') ==>
+  no_type_error_result res
+```
+
+#### Approach
+Unfold to the PopOp branch. If `check (stored_len > 0)` fails, simplify. If it succeeds, case-split `read_storage_slot`; `INR` closes via `read_storage_slot_error`. On read success, case-split the default-value write; contradict TypeError using `default_value_has_type` and `write_storage_slot_no_type_error_from_value_has_type`. Then case-split the length write; use C3.1.7.3.2 and `write_storage_slot_no_type_error_from_value_has_type`. Successful path returns `SOME popped`, so `simp[no_type_error_result_def]` closes.
+
+#### Not to try
+Do not prove broader preservation or popped-value typing here; this subtree only needs no-TypeError.

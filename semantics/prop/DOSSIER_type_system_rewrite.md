@@ -18,7 +18,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.1.7.1.3 | progressed | plan_incomplete | E0044 | "Prove adapter facts: (1) well_formed_vtype (get_tenv cx) (Type t) from runtime_consistent assumptions, (2) evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs)) via target_path_type_Type_place_leaf_typed + place_leaf_typed_evaluate_type, (3) leaf_type root_tv (REVERSE sbs) <> NoneTV via assignable_type_evaluate_not_NoneTV. Then caller proof uses r=st (lookup_global_state) + these adapter facts to satisfy drule_all of the boundary theorem." |
 | C3.1.7.1.3.1 | progressed | other | E0052 |  |
 | C3.1.7.1.3.2 | proved | other | E0053 |  |
-| C3.1.7.3 | progressed | other | E0057 | 1) Build to test if renaming theorem to _v2 breaks stale checkpoint. 2) If yes, replace FAIL_TAC probes with explicit value_has_type derivation using arithmetic + well_formed_type_value. 3) For AppendOp write2: derive n < dimword(:256) from well_formed_type_value_def ArrayTV Dynamic case, combine with w2n(lookup_storage...) < n from check, get w2n(...)+1 < 2^256. 4) For PopOp write2: check gives stored_len > 0, well_formed gives stored_len <= n < 2^256, so stored_len-1 < 2^256 and stored_len-1 >= 0. 5) Rename theorem back to _ntr after proof works if callers need the original name. |
+| C3.1.7.3 | stuck | plan_incomplete | E0059 | Write boundary lemma assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error for the standard read+write+assign_result path (all non-ArrayTV-Dynamic cases), modeled on assign_target_TopLevelVar_Value_branch_ntr. Then handle AppendOp/PopOp separately." |
+| C3.1.7.3.2 | proved | other | E0060 |  |
 
 ## C0.1
 
@@ -416,11 +417,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `other`
-- latest episode: `E0057`
-- blocker: Stale holbuild checkpoint still matches despite all_tac >> prefix. Renamed theorem to _v2 to break checkpoint but not yet tested. The FAIL_TAC probes are inserted but haven't been reached because the checkpoint replays old state. After checkpoint is broken, AppendOp/PopOp value_has_type derivation for UintT 256 IntV of modified array length needs explicit arithmetic.
-- next: 1) Build to test if renaming theorem to _v2 breaks stale checkpoint. 2) If yes, replace FAIL_TAC probes with explicit value_has_type derivation using arithmetic + well_formed_type_value. 3) For AppendOp write2: derive n < dimword(:256) from well_formed_type_value_def ArrayTV Dynamic case, combine with w2n(lookup_storage...) < n from check, get w2n(...)+1 < 2^256. 4) For PopOp write2: check gives stored_len > 0, well_formed gives stored_len <= n < 2^256, so stored_len-1 < 2^256 and stored_len-1 >= 0. 5) Rename theorem back to _ntr after proof works if callers need the original name.
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0059`
+- blocker: "gvs[AllCaseEqs()] after Cases_on x1 creates auto-generated variable names that prevent metis_tac/irule from matching against known lemmas. Writing a boundary lemma for the standard read+write+assign_result pattern (analogous to assign_target_TopLevelVar_Value_branch_ntr) would cleanly factor out all non-ArrayTV-Dynamic cases. AppendOp/PopOp length writes still need UintT 256 range derivation."
+- next: Write boundary lemma assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error for the standard read+write+assign_result path (all non-ArrayTV-Dynamic cases), modeled on assign_target_TopLevelVar_Value_branch_ntr. Then handle AppendOp/PopOp separately."
 
 ### Attempts / Evidence
 
@@ -436,8 +437,36 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Added all_tac >> before rpt strip_tac to break stale holbuild checkpoint in assign_target_TopLevelVar_ArrayRef_branch_ntr -> Checkpoint STILL matches through line 2486 despite added all_tac >>. Holbuild says 'matched proof prefix through line 2486:3' (`tool_output:TO_type_system_rewrite-20260513T211025Z_m6460_t001`)
   - Inserted FAIL_TAC probes at AppendOp write2, AppendOp write1, PopOp write2, PopOp write1 branches to inspect exact goal state after CCONTR_TAC >> gvs[] -> Probes not reached because checkpoint replays old state. Instrumented log confirms proof reaches the large lambda-case goal but the PairCases_on hasn't been applied yet in the failed fragment. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m6461_t001`)
   - Renamed theorem from assign_target_TopLevelVar_ArrayRef_branch_ntr to assign_target_TopLevelVar_ArrayRef_branch_ntr_v2 to break checkpoint by changing the theorem name key -> Not yet tested - this was the last edit before handoff ()
+- `E0058` (progressed, other)
+  - Inserted dummy theorem assign_target_ArrayRef_checkpoint_break between _sc helpers and main theorem to force fresh theory-context checkpoint -> Holbuild now resumes from after the _sc helpers, building the dummy theorem fresh ()
+  - Renamed theorem from _ntr_v3 back to original assign_target_TopLevelVar_ArrayRef_branch_no_type_error (matching .sig reference) -> Theorem name now matches what callers expect, no dangling _v3 references ()
+  - Changed proof prefix from rw[] >> fs[top_level_vtype_well_formed, top_level_Type_storage_decl] to rpt strip_tac >> explicit metis_tac subgoals >> fs[] -> fs[] still eliminates env.type_defs = get_tenv cx which breaks subsequent lemma matching per L0175. irule calls in the expanded goal fail with 'No match' ()
+- `E0059` (stuck, plan_incomplete)
+  - Replace all irule calls with metis_tac following Value branch pattern -> metis_tac[assign_result_no_type_error_from_successful_assign_split] fails with 'no solution found' - the goal after gvs[AllCaseEqs()] has auto-generated state names that don't match lemma antecedent pattern (`TO_type_system_rewrite-20260513T211025Z_m6607_t001`)
+  - Explicit Cases_on read_storage_slot/write_storage_slot/assign_subscripts before gvs -> Same fundamental problem - gvs[AllCaseEqs()] still creates unfathomable goal state with auto-generated names (`TO_type_system_rewrite-20260513T211025Z_m6615_t001`)
+  - Use rpt(FIRST[simp,metis_tac,CCONTR_TAC,drule]) after gvs -> Not yet built - latest approach that avoids positional dispatch ()
+  - Insert FAIL_TAC probes to diagnose exact goal structure -> Confirmed: after Cases_on x1, gvs produces multiple subgoals with auto-named variables. The success path goal has no 'assign_subscripts = INL' assumption in the form the lemma expects (`TO_type_system_rewrite-20260513T211025Z_m6609_t001`)
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260513T211025Z_m6460_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260513T211025Z_m6461_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260513T211025Z_m6607_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260513T211025Z_m6609_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260513T211025Z_m6615_t001` (use `read_tool_output` for exact output)
+
+## C3.1.7.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `other`
+- latest episode: `E0060`
+- blocker: ""
+
+### Attempts / Evidence
+
+- `E0060` (proved, other)
+  - Added storage_array_append_len_value_has_type and storage_array_pop_len_value_has_type local lemmas using rewrite_tac[value_has_type_def, NUM_OF_INT, INT_POS] + decide_tac/metis_tac pattern from vht_uint_bound -> Both lemmas build successfully (confirmed by checkpoint after storage_array_pop_len_value_has_type). Proof uses integerTheory.NUM_OF_INT + integerTheory.INT_POS to handle Num (&n) rewriting, with metis_tac[LESS_TRANS] for the 2^256 transitivity step that decide_tac cannot handle. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260513T211025Z_m6707_t001` (use `read_tool_output` for exact output)

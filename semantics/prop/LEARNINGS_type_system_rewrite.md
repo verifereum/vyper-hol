@@ -1627,20 +1627,6 @@ evidence:
 - source:semantics/vyperStateScript.sml:906-938
 - source:semantics/prop/vyperTypeStatePreservationScript.sml:2581-2627
 
-## L0171 scope='' tags=
-shape: Stale holbuild checkpoint - all_tac >> is unreliable, rename theorem instead
-pattern: Adding all_tac >> before the first real tactic does NOT reliably break stale holbuild checkpoints. The holbuild checkpoint may match on proof content beyond just prefix text. RENAME THEOREM instead (add _v2 suffix) to change the checkpoint key. After proving the renamed theorem, rename it back if callers need the original name.
-works_when: Encountering stale holbuild checkpoints where proof has been edited but holbuild keeps replaying old state from checkpoint
-evidence:
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m6460_t001
-- episode:E0057
-- episode:E0056
-- episode:E0051
-- episode:E0049
-- episode:E0047
-- episode:E0045
-- source:semantics/prop/LEARNINGS_type_system_rewrite.md:L0113,L0127,L0149,L0154,L0161 - previous checkpoint-breaking entries now superseded
-
 ## L0172 scope='' tags=
 shape: value_has_type (BaseTV (UintT 256)) (IntV i) for dynamic array length writes
 pattern: To prove value_has_type (BaseTV (UintT 256)) (IntV &(stored_len +/- 1)) for AppendOp/PopOp: (1) From well_formed_type_value (ArrayTV elem_tv (Dynamic n)): n < dimword(:256) = 2^256. (2) From check: stored_len < n (AppendOp) or 0 < stored_len (PopOp). (3) AppendOp: stored_len + 1 <= n < 2^256, so simp[value_has_type_def, integerTheory.INT_OF_NUM] >> decide_tac. (4) PopOp: stored_len >= 1 means stored_len - 1 >= 0 and stored_len - 1 < 2^256, so simp[value_has_type_def] >> decide_tac. Then metis_tac[write_storage_slot_no_type_error_from_value_has_type].
@@ -1650,3 +1636,131 @@ evidence:
 - source:semantics/prop/vyperTypingScript.sml:41-44 - well_formed_type_value_def: Dynamic n gives n < dimword(:256)
 - tool_output:TO_type_system_rewrite-20260513T211025Z_m6414_t001 - metis failure for UintT 256 value_has_type
 - episode:E0057
+
+## L0173 scope='' tags=
+shape: Deriving leaf_type <> NoneTV after resolve_array_element via equality chaining
+pattern: When resolve_array_element_leaf_type_sc gives leaf_type tv subs = leaf_type final_tv rsubs and you already have leaf_type tv subs <> NoneTV in assumptions, use metis_tac[resolve_array_element_leaf_type_sc] (NOT fs[resolve_array_element_leaf_type_sc] >> NO_TAC) to chain the equalities and derive leaf_type final_tv rsubs <> NoneTV.
+works_when: Proving leaf_type final_tv rsubs <> NoneTV inside ArrayRef branch of assign_target where leaf_type(ArrayTV...)(REVERSE sbs) <> NoneTV is available from target_path_type_Type_evaluate_leaf_not_NoneTV
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6476_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2509-2511
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2409-2427
+
+## L0174 scope='' tags=
+shape: Holbuild stale theory-context checkpoint workaround: insert dummy local theorem
+pattern: When holbuild reports 'theorem-context checkpoint after X' and replays stale variable names, insert a trivial dummy [local] theorem AFTER theorem X but BEFORE the failing theorem. This forces holbuild to create a fresh theory-context checkpoint after the dummy. Renaming the failing theorem does NOT work because checkpoints are at theory-context level not theorem-name level.
+works_when: Stale holbuild checkpoint at theory-context boundary causing auto-generated variable name mismatches in resumed proofs
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6488_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6506_t001
+- episode:E0057
+- episode:E0056
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2449-2469
+- episode:E0051
+- episode:E0049
+- episode:E0047
+- episode:E0045
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6517_t001
+- episode:E0050
+- episode:E0052
+
+## L0175 scope='' tags=
+shape: fs[top_level_vtype_well_formed, top_level_Type_storage_decl] corrupts env.type_defs matching in assignment proofs
+pattern: Using fs[top_level_vtype_well_formed, top_level_Type_storage_decl] at proof start rewrites env.type_defs to get_tenv cx in ALL assumptions via variable elimination. This destroys matching for downstream lemmas like target_path_type_Type_evaluate_leaf that use env.type_defs in their antecedent pattern. Solution: use rpt strip_tac + individual metis_tac calls to derive intermediate facts BEFORE gvs/fs rewrites env.type_defs. Or use single fs[] call that processes all needed lemmas sequentially before elimination per L0140.
+works_when: Proving assignment boundary lemmas where env.type_defs = get_tenv cx is in assumptions and upstream adapter lemmas use env.type_defs in their antecedent
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6517_t001
+- episode:E0049
+- source:semantics/prop/vyperTypeExprSoundnessScript.sml:631-660
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2484-2491
+
+## L0176 scope='' tags=
+shape: ArrayRef branch proof: use rename1 before Cases_on on auto-generated constructor components
+pattern: After Cases_on x1 where x1 is a type_value, the ArrayTV constructor introduces auto-generated names (e.g. b' for the bound component). Use rename1 ArrayTV etv' abd >> Cases_on abd instead of Cases_on b' to avoid dependency on auto-generated names that differ between checkpoint replays and fresh execution.
+works_when: Proving ArrayRef branch assignment target theorems where Cases_on on type_value constructors introduces auto-generated variable names
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6488_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2531-2533
+
+## L0177 scope='' tags=
+shape: Dummy local theorem breaks holbuild stale theory-context checkpoint
+pattern: When holbuild replays stale state from a theory-context checkpoint, insert a trivial Theorem dummy: T Proof simp[] QED AFTER the last proved theorem but BEFORE the failing theorem. This forces holbuild to create a fresh theory-context checkpoint. Renaming the failing theorem does NOT work (checkpoints are theory-level not theorem-level).
+works_when: Holbuild shows 'theorem-context checkpoint after X' and replays stale variable bindings despite proof edits
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6547_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6506_t001
+- episode:E0058
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2469-2473 - dummy theorem assign_target_ArrayRef_checkpoint_break
+
+## L0178 scope='' tags=
+shape: ArrayRef branch assign_target no-TypeError proof after gvs[AllCaseEqs()] expansion
+pattern: For each subgoal from gvs[AllCaseEqs()] in the ArrayRef branch: (1) success path: metis_tac[assign_result_no_type_error_from_successful_assign_split], (2) write_storage INR: metis_tac[assign_subscripts_preserves_type_runtime_typed] to get value_has_type then metis_tac[write_storage_slot_no_type_error_from_value_has_type], (3) assign_subscripts INR: spose_not_then strip_assume_tac >> metis_tac[assign_subscripts_no_type_error_runtime_typed, ...], (4) read_storage_slot INR: metis_tac[read_storage_slot_error]. NEVER use irule after gvs expansion.
+works_when: Proving no_type_error_result for assign_target ArrayRef branch where gvs[AllCaseEqs()] has expanded the monadic do-block into 4 subgoals per type_value/operation case
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2648-2668
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6558_t001
+- episode:E0058
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2520-2621 - current failing irule-based proof that needs conversion to metis_tac pattern
+
+## L0179 scope='' tags=
+shape: Monadic do-block proof for assign_target with nested bind/lift_sum/write_storage_slot
+pattern: Do NOT use gvs[AllCaseEqs()] on monadic do-block goals after Cases_on a type_value variable. Instead: (1) extract boundary lemma for standard read+write+assign_result path modeled on assign_target_TopLevelVar_Value_branch_ntr, (2) handle special operations (AppendOp/PopOp) in separate boundary sub-lemmas with targeted Cases_on per intermediate result + drule/simp.
+works_when: Proving no_type_error_result for assign_target where the goal contains case x1 of ... with nested monadic binds after simp[Once assign_target_def]
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6609_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2604-2646
+- episode:E0059
+- episode:E0058
+- episode:E0057
+- episode:E0056
+- episode:E0054
+- episode:E0031 (original 'NEVER use irule after gvs[AllCaseEqs()]' learning)
+
+## L0180 scope='' tags=
+shape: value_has_type for UintT 256 IntV of array length (append/pop count)
+pattern: After gvs[assign_operation_runtime_typed_def, AllCaseEqs(), ...], the AppendOp length write needs: value_has_type (BaseTV (UintT 256)) (IntV &(w2n k + 1)). Derive from: w2n k < n (from check), n < dimword(:256) (from well_formed_type_value_def ArrayTV Dynamic case), so w2n k + 1 < 2^256. For IntV: 0 <= &(w2n k + 1) and Num(&(w2n k + 1)) = w2n k + 1 < 2^256 by integer_arith. PopOp is similar with w2n k - 1.
+works_when: ArrayTV (Dynamic n) with AppendOp/PopOp length write branches
+evidence:
+- episode:E0056
+- episode:E0057
+- source:semantics/prop/vyperTypingScript.sml:34-52 (well_formed_type_value_def)
+
+## L0181 scope='' tags=
+shape: ArrayRef assign_target branch has 3 evaluator sub-cases requiring separate boundary lemmas
+pattern: After resolve_array_element succeeds, ArrayRef branch of assign_target_def does case (ao, final_tv): (1) PopOp + ArrayTV Dynamic => pop do-block, (2) AppendOp v + ArrayTV Dynamic n => append do-block, (3) _ => ordinary read+write+assign_result. Extract separate boundary lemmas for each: ordinary_ntr (like Value branch), append_ntr, pop_ntr. Do NOT use single gvs[AllCaseEqs()] blast across all cases.
+works_when: Proving no_type_error_result for assign_target TopLevelVar ArrayRef branch
+evidence:
+- source:semantics/vyperStateScript.sml:906-938
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2609-2653
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6653_t001
+- episode:E0059
+- episode:E0054
+- episode:E0031
+
+## L0182 scope='' tags=
+shape: value_has_type (BaseTV (UintT 256)) (IntV (&n)) for storage array length writes
+pattern: Use rewrite_tac[value_has_type_def, integerTheory.NUM_OF_INT, integerTheory.INT_POS] >> rpt strip_tac >> decide_tac for sub-range reasoning + metis_tac[arithmeticTheory.LESS_TRANS] for the 2^256 bound. decide_tac alone cannot handle 2^256 as a concrete number. Pattern from vht_uint_bound in vyperBuiltinTypingScript.sml.
+works_when: Proving value_has_type (BaseTV (UintT 256)) (IntV (&(stored_len +/- 1))) for dynamic array AppendOp/PopOp length writes where stored_len < n and n < dimword(:256) = 2^256
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6707_t001
+- source:semantics/prop/vyperBuiltinTypingScript.sml:1100-1106
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2475-2500 - proved storage_array_append/pop_len_value_has_type lemmas
+
+## L0183 scope='' tags=
+shape: ArrayRef ordinary boundary lemma for assign_target TopLevelVar
+pattern: The ordinary ArrayRef boundary lemma MUST use strong exclusion hypotheses: op <> PopOp /\ (!v. op <> AppendOp v). With these, the case (op, final_tv) in assign_target_def resolves entirely to the _ branch (ordinary read+write+assign_result path), producing exactly 4 subgoals from gvs[AllCaseEqs()]: (1) assign_result success, (2) write_storage_slot INR, (3) assign_subscripts INR, (4) read_storage_slot INR. This matches the HashMapRef pattern. Weak conditional exclusions (op=PopOp => final_tv<>ArrayTV Dynamic) do NOT work because AllCaseEqs/Cases_on must still split on both op and final_tv.
+works_when: Proving no_type_error_result for the ordinary (non-PopOp/non-AppendOp) branch of assign_target TopLevelVar ArrayRef where the _ branch in assign_target_def fires
+evidence:
+- source:semantics/vyperStateScript.sml:906-938 - ArrayRef branch showing case (ao, final_tv) of PopOp+Dynamic/AppendOp+Dynamic/_
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2295-2351 - HashMapRef 4-subgoal pattern as model
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6760_t001 - weak exclusion timeout
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6762_t001 - Cases_on explosion timeout
+
+## L0184 scope='' tags=
+shape: ArrayRef assign_target gvs expansion produces too many subgoals from nested case (op, final_tv)
+pattern: For ArrayRef branches: use Cases_on `final_tv` >> gvs[CaseEq "type_value", bind_def, lift_sum_def, return_def, raise_def, AllCaseEqs(), no_type_error_result_def] to split into ~21 goals. Then for each goal, derive assign_subscripts = INL new_val via Cases_on `assign_subscripts ...` >> gvs[return_def, raise_def], then chain through read_storage_slot_success_type, assign_subscripts_preserves_type_runtime_typed, etc.
+works_when: Proving ArrayRef branch of assign_target, where case (ao, final_tv) of ... creates nested 2D case split. Strong exclusion hypotheses (op<>PopOp / !v.op<>AppendOp v) prevent Dynamic-array special branches.
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m6808_t001
+- source:semantics/vyperStateScript.sml:906-938
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2311-2351
