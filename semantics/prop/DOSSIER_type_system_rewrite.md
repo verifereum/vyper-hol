@@ -9,7 +9,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1 | stuck | other | E0004 | "Escalate to plan_oracle for C0 resolution: authorize type_builtin_result_ok repair for AbiEncode branch, adding vyper_abi_size_bound condition" |
 | C1 | progressed | plan_incomplete | E0005 | Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable. |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
-| C3.1 | progressed | missing_helper | E0017 | Complete top_level_HashMapRef_assign_no_type_error: fill in compute_hashmap_slot <> NONE, evaluate_type <> NONE, read_storage_slot/assign_subscripts/write_storage_slot/assign_result no-TypeError dispatches. Then rewrite the resume to call this lemma instead of the broken inline expansion. |
+| C3.1 | progressed | missing_helper | E0022 | Build-verify subgoal 1 (LENGTH xs = LENGTH is - 1 via Cases_on is >> gvs[LENGTH_REVERSE], then gvs[] closure). Then fix subgoal 2: replace FAIL_TAC probe with actual write_storage_slot/assign_result/assign_subscripts dispatch. |
 
 ## C0.1
 
@@ -77,9 +77,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `progressed`
 - diagnosis: `missing_helper`
-- latest episode: `E0017`
-- blocker: HashMapRef branch: boundary lemma top_level_HashMapRef_assign_no_type_error compiles with cheat. Proof progresses through Step 1 (expand assign_target through lookup_global), Step 2 (get_module_code), Step 3 (toplevel_value dispatch + Value case contradiction), split_hashmap_subscripts NONE case contradiction. Remaining: compute_hashmap_slot <> NONE, evaluate_type <> NONE, read_storage_slot/assign_subscripts/write_storage_slot/assign_result no-TypeError dispatches. The resume also has a parallel approach that derives all facts before expansion but still needs the do-block expansion or boundary lemma call.
-- next: Complete top_level_HashMapRef_assign_no_type_error: fill in compute_hashmap_slot <> NONE, evaluate_type <> NONE, read_storage_slot/assign_subscripts/write_storage_slot/assign_result no-TypeError dispatches. Then rewrite the resume to call this lemma instead of the broken inline expansion.
+- latest episode: `E0022`
+- blocker: "HashMapRef branch subgoal 1 (compute_hashmap_slot NONE): `x' = LAST is` bridge now works via HD_REVERSE_EQ_LAST + gvs variable elimination. Remaining: derive `LENGTH xs = LENGTH is - 1` (from REVERSE is = LAST is::xs + LENGTH_REVERSE via Cases_on is >> gvs[LENGTH_REVERSE]), then gvs[] should close via contradiction with compute_hashmap_slot NONE vs ≠ NONE. After subgoal 1, subgoals 2-4 need handling: (2) write_storage_slot/assign_result do-block (FAIL_TAC probe currently), (3) read_storage_slot TypeError via drule read_storage_slot_error, (4) assign_subscripts TypeError via drule_all assign_subscripts_no_type_error_runtime_typed."
+- next: Build-verify subgoal 1 (LENGTH xs = LENGTH is - 1 via Cases_on is >> gvs[LENGTH_REVERSE], then gvs[] closure). Then fix subgoal 2: replace FAIL_TAC probe with actual write_storage_slot/assign_result/assign_subscripts dispatch.
 
 ### Attempts / Evidence
 
@@ -137,9 +137,31 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Fix evaluate_type <> NONE by Cases_on instead of rw[well_formed_type_def]>>metis_tac[] -> SUCCEEDED: Cases_on evaluate_type result >> gvs[well_formed_type_def] works. NONE case contradicts IS_SOME, SOME case trivial. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m2420_t001`)
   - gvs[bind_apply, AllCaseEqs(), lift_option_type_def, ...] expansion of do-block in resume -> FAILED: gvs doesn't expand the monadic do-block. The do-block remains in the assumption unchanged. Also qpat_x_assum with assign_target pattern doesn't match. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m2428_t001`)
   - Create boundary lemma top_level_HashMapRef_assign_no_type_error -> PARTIAL: Lemma statement compiles, placed after all helper dependencies. Proof skeleton works through lookup_global/expansion/Value-contradiction/split_hashmap_subscripts. Remaining cheats at compute_hashmap_slot and beyond. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m2506_t001`)
+- `E0018` (progressed, missing_helper)
+  - Boundary lemma approach: push assign_target equation to goal (mp_tac), simp[Once assign_target_def], then expand binds in goal position -> Advances through lookup_global/get_module_code/IS_SOME_EXISTS/expands first set of binds. All typing facts derive. Stuck at expand of toplevel_value case split - need further gvs expansion to reach HashMapRef branch. (`TO_type_system_rewrite-20260513T211025Z_m2552_t001`)
+  - Resume inline approach: qpat_x_assum `_ = (INR (Error (TypeError _)),_)` mp_tac after initial gvs[assign_target_def,...] -> Finds the equation but big simp only partially expands do-block - inner binds are behind lambdas and stay unexpanded. Dead end. (`TO_type_system_rewrite-20260513T211025Z_m2547_t001`)
+- `E0019` (progressed, missing_helper)
+  - Phase 1/Phase 2 restructure: derive all typing facts BEFORE expanding assign_target, then Cases_on tv to handle Value/HashMapRef/ArrayRef separately -> Phase 1 works (metis_tac closes split_hashmap_subscripts, etc.). Phase 2 structure works - Cases_on tv creates 3 subgoals, Value case contradiction via lookup_global_Value_not_HashMapVarDecl works. But existential extraction and ArrayRef case still have cheats. (`TO_type_system_rewrite-20260513T211025Z_m2632_t001`)
+  - drule/irule for target_path_type_HashMapT_split_hashmap_subscripts: fails because well_formed_vtype env.type_defs vs well_formed_vtype (get_tenv cx) don't unify in drule despite env.type_defs = get_tenv cx being in assumptions -> Switched to metis_tac which handles the unification. SUCCEEDED. (`TO_type_system_rewrite-20260513T211025Z_m2632_t001`)
+  - qexistsl [FST x', FST (SND x'), SND (SND x')] with Cases_on x' >> Cases_on r for existential extraction from IS_SOME_EXISTS -> FAILED: type error - FST applied to SND x' where x' doesn't have right pair decomposition. Need simpler approach: Cases_on the option result directly. (`TO_type_system_rewrite-20260513T211025Z_m2632_t001`)
+- `E0020` (progressed, missing_helper)
+  - Phase 1: derive typing facts (sbs <> [], split_hashmap_subscripts, compute_hashmap_slot <> NONE, evaluate_type <> NONE). Phase 2: prove lookup_global_HashMapVarDecl_returns_HashMapRef. Phase 3: expand assign_target do-block and dispatch TypeErrors. -> Phase 1 + 2 complete. Phase 3: the AllCaseEqs blast creates quantified v/s'' from bind decomposition; Cases_on `v` works but subsequent Cases_on `a` fails because gvs already resolved v = INL (HashMapRef ...) from lookup_global assumption. ()
+  - lookup_global_HashMapVarDecl_returns_HashMapRef: get_module_code + find_var_decl_by_num HashMapVarDecl + lookup_var_slot_from_layout => lookup_global returns (INL (HashMapRef is_t (n2w slot) kt vt), st) -> Succeeded: lemma builds clean with rw[lookup_global_def] + gvs[] (`tool_output:TO_type_system_rewrite-20260513T211025Z_m2763_t001`)
+  - Cases_on `v` >> gvs[] to split lookup_global result into INL/INR, then Cases_on `a` for toplevel_value -> Cases_on `v` >> gvs[] works and puts us in HashMapRef branch. But Cases_on `a` fails because gvs already substituted v = INL (HashMapRef ...) from assumption, eliminating `a`. ()
+- `E0021` (progressed, missing_helper)
+  - probe: FAIL_TAC at HashMapRef branch after Phase 1 typing facts -> Goal is F with do-block equation in assumptions + all typing facts. Do-block = do ... od s'' = (INR (Error (TypeError msg)), st') (`TO_type_system_rewrite-20260513T211025Z_m2808_t001`)
+  - gvs[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def, AllCaseEqs(), option_CASE_rator, sum_CASE_rator, pairTheory.PAIR] to expand do-block in assumptions -> SUCCESS: gvs expands the do-block AND auto-resolves some NONE/TypeError branches. Creates 4 remaining subgoals. (`TO_type_system_rewrite-20260513T211025Z_m2810_t001`)
+  - probe with FAIL_TAC after gvs expansion to see all 4 subgoals -> 4 subgoals identified: (1) compute_hashmap_slot NONE - needs bridge x'=LAST is, TAKE length, (2) write+result bind after read/assign success, (3) read_storage_slot TypeError, (4) assign_subscripts TypeError (`TO_type_system_rewrite-20260513T211025Z_m2818_t001`)
+  - >- for each subgoal with bridge lemmas but >> >- syntax error -> SYNTAX ERROR: >> >- has wrong precedence. gvs[...] >> >- tac1 fails to type-check. Must use gvs[...] >- (tac1) >- (tac2) directly. (`TO_type_system_rewrite-20260513T211025Z_m2820_t001`)
+- `E0022` (progressed, missing_helper)
+  - Fix >> >- syntax: replace gvs >> >- tac with gvs >- tac >- tac >- tac >> tac for alternating subgoal handling -> SYNTAX FIX: >> and >- have same precedence, left-associative. Must use gvs >- (tac1) >- (tac2) pattern, not gvs >> >- tac1. Build now passes syntax check. (`TO_type_system_rewrite-20260514T090000Z_m2838_t001`)
+  - x' = LAST is by Cases_on is >> gvs[REVERSE_DEF, LAST_DEF, HD] -> FAILED: gvs renames is to h::t' but the by-subgoal still references is. The Cases_on creates h::t' decomposition but the by-subgoal variable context has is already destructed. (`TO_type_system_rewrite-20260514T090000Z_m2860_t001`)
+  - metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq] for x' = LAST is -> FAILED: metis cannot find solution. The SNOC decomposition creates circular equation is = SNOC(LAST is)(FRONT is). (`TO_type_system_rewrite-20260514T090000Z_m2864_t001`)
+  - drule SNOC_LAST_FRONT_eq >> strip_tac >> gvs[REVERSE_SNOC_eq] -> PARTIAL: drule gives is = SNOC(LAST is)(FRONT is) which is circular. gvs[REVERSE_SNOC_eq] can't eliminate circular variable. (`TO_type_system_rewrite-20260514T090000Z_m2870_t001`)
+  - Prove HD_REVERSE_EQ_LAST helper lemma, then use it: `HD(REVERSE is) = LAST is` by metis_tac[HD_REVERSE_EQ_LAST] >> gvs[] -> SUCCEEDED: HD_REVERSE_EQ_LAST bridges x' = LAST is. After gvs, x' is eliminated. Still need LENGTH xs = LENGTH is - 1 for TAKE equality. (`TO_type_system_rewrite-20260514T090000Z_m2878_t001`)
+  - After x' = LAST is bridge: `LENGTH xs = LENGTH is - 1` by Cases_on is >> gvs[LENGTH_REVERSE] >> gvs[] -> NOT YET BUILD-VERIFIED. Current code at lines 2295-2300. ()
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260513T211025Z_m2420_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260513T211025Z_m2428_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260513T211025Z_m2506_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260514T090000Z_m2878_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260514T090000Z_m2860_t001` (use `read_tool_output` for exact output)

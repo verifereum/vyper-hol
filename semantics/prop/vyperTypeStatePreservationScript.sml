@@ -1273,6 +1273,19 @@ Proof
   gvs[return_def, raise_def, bind_def]
 QED
 
+Theorem lookup_global_ArrayRef_not_HashMapVarDecl:
+  lookup_global cx src n st = (INL (ArrayRef is_t bs etv ebd), st') ==>
+  get_module_code cx src = SOME code ==>
+  find_var_decl_by_num n code = SOME p ==>
+  FST p = HashMapVarDecl is_transient' kt vt ==>
+  F
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  gvs[return_def, AllCaseEqs(), option_CASE_rator, var_decl_info_CASE_rator,
+      prod_CASE_rator, type_value_CASE_rator] >>
+  Cases_on `lookup_var_slot_from_layout cx is_transient'' src id` >>
+  gvs[return_def, raise_def, bind_def]
+QED
 
 Theorem lookup_global_top_level_assignable_no_type_error:
   assign_target_assignable_context cx
@@ -1902,6 +1915,14 @@ Proof
   metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq]
 QED
 
+Theorem HD_REVERSE_EQ_LAST:
+  !l. l <> [] ==> (HD (REVERSE l) = LAST l)
+Proof
+  rpt strip_tac >>
+  qsuff_tac `REVERSE l = LAST l :: REVERSE (FRONT l)` >- simp[] >>
+  metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq]
+QED
+
 Theorem target_path_type_HashMapT_hashmap_prefix_ValueSubscript:
   !env kt vt sbs ty final_type kts remaining.
     target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
@@ -2109,6 +2130,18 @@ Resume assign_target_sound_mutual[sound_ScopedVar]:
   simp[no_type_error_result_def]
 QED
 
+Theorem lookup_global_HashMapVarDecl_returns_HashMapRef:
+  get_module_code cx src = SOME code ==>
+  find_var_decl_by_num n code = SOME (HashMapVarDecl is_t kt vt, id) ==>
+  lookup_var_slot_from_layout cx is_t src id = SOME slot ==>
+  lookup_global cx src n st = (INL (HashMapRef is_t (n2w slot) kt vt), st)
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+     var_decl_info_CASE_rator, prod_CASE_rator, option_CASE_rator,
+     type_value_CASE_rator, AllCaseEqs(), LET_THM] >>
+  gvs[]
+QED
+
 Theorem top_level_HashMapRef_assign_no_type_error:
   runtime_consistent env cx st ==>
   FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (HashMapT kt vt) ==>
@@ -2123,30 +2156,7 @@ Theorem top_level_HashMapRef_assign_no_type_error:
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
-Proof
-  rpt gen_tac >> rpt disch_tac >>
-  rw[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-  (* Step 1: Expand assign_target up through lookup_global only *)
-  qpat_x_assum `assign_target _ _ _ _ = (INR _, _)` mp_tac >>
-  simp[Once assign_target_def] >>
-  simp[bind_def, lift_option_type_def, return_def, raise_def,
-       AllCaseEqs(), option_CASE_rator] >>
-  rpt strip_tac >> gvs[] >>
-  (* Step 2: get_module_code success follows from lookup_global success *)
-  drule_at Any lookup_global_success_get_module_code >> strip_tac >> gvs[] >>
-  (* Step 3: Expand further to see toplevel_value dispatch *)
-  gvs[bind_def, lift_option_type_def, return_def, raise_def,
-      AllCaseEqs(), option_CASE_rator, var_decl_info_CASE_rator,
-      prod_CASE_rator, toplevel_value_CASE_rator] >>
-  (* Value case: contradicts HashMapVarDecl *)
-  drule_all lookup_global_Value_not_HashMapVarDecl >> gvs[] >>
-  (* HashMapRef branch *)
-  gvs[assign_target_assignable_context_def, IS_SOME_EXISTS] >>
-  `sbs <> []` by gvs[] >>
-  (* split_hashmap_subscripts: NONE case contradicts target_path_type *)
-  drule_all target_path_type_HashMapT_split_hashmap_subscripts >> simp[] >>
-  (* compute_hashmap_slot: need to show it's not NONE *)
-  cheat
+Proof cheat
 QED
 
 Resume assign_target_sound_mutual[sound_TopLevelVar]:
@@ -2272,39 +2282,33 @@ Resume assign_target_sound_mutual[sound_TopLevelVar]:
     `well_formed_type (get_tenv cx) final_type'` by metis_tac[] >>
     `evaluate_type (get_tenv cx) final_type' <> NONE` by (
       Cases_on `evaluate_type (get_tenv cx) final_type'` >> gvs[well_formed_type_def]) >>
-    (* Step 5: Expand the do-block step by step.
-       Push the offending assumption to the goal so we can expand it there. *)
-    qpat_x_assum
-      `assign_target _ _ _ _ = (INR (Error (TypeError msg)),st')`
-      mp_tac >>
-    simp[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
-         AllCaseEqs(), option_CASE_rator, sum_CASE_rator, pairTheory.PAIR] >>
-    rpt strip_tac >> gvs[] >>
-    (* TypeError subgoals: each corresponds to a step in the do-block *)
-    TRY (
-      (* lift_option_type from REVERSE is split: NONE case contradicts is <> [] *)
-      gvs[] >> NO_TAC) >>
-    TRY (
-      (* split_hashmap_subscripts NONE: contradicts split_hashmap_subscripts <> NONE *)
-      gvs[] >> NO_TAC) >>
-    TRY (
-      (* compute_hashmap_slot NONE: contradicts compute_hashmap_slot <> NONE *)
-      gvs[] >> NO_TAC) >>
-    TRY (
-      (* evaluate_type NONE: contradicts evaluate_type <> NONE *)
-      gvs[] >> NO_TAC) >>
-    TRY (
-      (* read_storage_slot TypeError *)
-      drule read_storage_slot_error >> simp[] >> NO_TAC) >>
-    TRY (
-      (* assign_subscripts TypeError: use C2 lemma *)
-      qpat_x_assum `assign_subscripts _ _ _ _ = INR (Error (TypeError _))` mp_tac >>
-      drule_all assign_subscripts_no_type_error_runtime_typed >> simp[] >> NO_TAC) >>
-    TRY (
-      (* write_storage_slot TypeError *)
-      drule_all write_storage_slot_no_type_error_from_value_has_type >> simp[] >> NO_TAC) >>
-    (* assign_result TypeError: must come from a successful assign path *)
-    drule_all assign_result_no_type_error_from_successful_assign >> simp[no_type_error_result_def]
+    (* Step 5: Expand the do-block. Goal is F: derive contradiction from
+       do-block TypeError equation vs typing facts in assumptions.
+       Use gvs to expand bind/case structure in assumptions. *)
+    gvs[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
+        AllCaseEqs(), option_CASE_rator, sum_CASE_rator, pairTheory.PAIR]
+    (* 4 subgoals remain after gvs expansion. Handle each in turn with >- *)
+    >-
+    (* Subgoal 1: compute_hashmap_slot NONE contradicts ≠ NONE.
+       Bridge x' = LAST is via HD_REVERSE_EQ_LAST. Then derive TAKE length equality
+       from LENGTH xs = LENGTH is - 1 + LENGTH key_types' = LENGTH is - 1 - LENGTH remaining_subs'. *)
+    (`x' = LAST is` by (
+       `HD (REVERSE is) = LAST is` by metis_tac[HD_REVERSE_EQ_LAST] >>
+       gvs[]) >>
+     `LENGTH xs = LENGTH is − 1` by (
+      Cases_on `is` >> gvs[LENGTH_REVERSE]) >>
+     gvs[])
+    >-
+    (* Subgoal 2: compute_hashmap_slot SOME, then read/assign/write+result *)
+    (FAIL_TAC "probe subg2")
+    >-
+    (* Subgoal 3: read_storage_slot TypeError *)
+    (drule read_storage_slot_error >> simp[])
+    >>
+    (* Subgoal 4: assign_subscripts TypeError *)
+    qpat_x_assum `assign_subscripts _ _ _ _ = INR (Error (TypeError _))` mp_tac >>
+    drule_all assign_subscripts_no_type_error_runtime_typed >>
+    simp[]
   ) >>
   cheat
 QED

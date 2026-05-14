@@ -347,22 +347,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260513T211025Z_m2231_t001
 - episode:E0014
 
-## L0046 scope='' tags=
-shape: HOL4 existential witness from option pair result in by-subgoal
-pattern: When proving exists x y z. f a = SOME (x,y,z) from f a <> NONE + Cases_on f a >> gvs[], the SOME case gives f a = SOME x' where x' is a pair. Need PairCases_on x' >> gvs[] then explicitly witness: qexistsl [x0,x1,x2] >> simp[]. Do NOT rely on metis_tac[] or gvs[] alone to close the existential goal.
-works_when: Extracting components from an option-wrapped pair result in a by-subgoal, especially split_hashmap_subscripts results
-evidence:
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m2272_t001
-
-## L0047 scope='' tags=
-shape: HOL4 existential witness from option pair result in by-subgoal
-pattern: When proving ?x y z. f a = SOME (x,y,z) from f a ≠ NONE in a by-subgoal: qpat_x_assum `f a ≠ NONE` mp_tac >> simp[option_neq_none_imp_is_some, optionTheory.IS_SOME_EXISTS] >> rpt strip_tac >> qexistsl [`FST x'`, `FST (SND x')`, `SND (SND x')`] >> Cases_on `x'` >> Cases_on `r` >> simp[pairTheory.PAIR]. Do NOT use Cases_on the option result directly - it fails to substitute the ≠ NONE in assumptions.
-works_when: Extracting components from an option-wrapped pair/triple result where the NONE case contradicts a ≠ NONE assumption. The IS_SOME_EXISTS bridge converts ≠ NONE to ∃, making the existential trivial.
-evidence:
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m2318_t001
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:1760-1764
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2197-2205
-
 ## L0048 scope='' tags=
 shape: well_formed_type => evaluate_type <> NONE
 pattern: Cases_on `evaluate_type tenv ty` >> gvs[well_formed_type_def]. NONE case: IS_SOME NONE = F contradicts well_formed_type assumption. SOME case: evaluate_type tenv ty <> NONE trivially. Do NOT use simp/metis - they cannot connect IS_SOME assumption to <> NONE goal.
@@ -381,3 +365,99 @@ evidence:
 - episode:E0012
 - episode:E0017
 - source:semantics/prop/vyperTypeStatePreservationScript.sml:2112-2176 - boundary lemma approach
+
+## L0050 scope='' tags=
+shape: HOL4 monadic do-block expansion in type soundness proofs
+pattern: When proving no-TypeError for a monadic do-block (from assign_target_def, evaluate_def, etc.), ALWAYS use a boundary lemma where the equation is the conclusion (in goal position). simp[bind_def, AllCaseEqs()] can expand binds in the goal but NOT in assumptions. In the boundary lemma: (1) push assign_target equation to goal with mp_tac, (2) simp[Once assign_target_def] to unfold one level, (3) derive all typing facts (compute_hashmap_slot <> NONE, evaluate_type <> NONE, etc.) as by-subgoals, (4) then simp[bind_def, AllCaseEqs(), ...] fully expands the do-block in goal position, creating TypeError subgoals for each NONE/INR branch. Then resume simply calls drule boundary_lemma.
+works_when: Proving no_type_error_result for any monadic evaluator do-block where the equation ends up as an assumption (typically after gvs[def, bind_apply, ...] in a mutual theorem resume)
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2547_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2552_t001
+- episode:E0018
+- episode:E0007
+- episode:E0012
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2112-2171 - boundary lemma approach
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2253-2285 - dead inline approach in resume
+
+## L0051 scope='' tags=
+shape: drule/irule failing for lemma with env.type_defs when hypothesis has (get_tenv cx)
+pattern: When env.type_defs = get_tenv cx is in assumptions but a lemma antecedent uses env.type_defs directly, drule/irule fails because (get_tenv cx) and env.type_defs are syntactically different. Use metis_tac which handles unification through equality. Or explicitly derive well_formed_vtype env.type_defs (HashMapT kt vt) by fs[] first, then drule works on the env.type_defs form.
+works_when: Applying typing lemmas (target_path_type_HashMapT_split_hashmap_subscripts, etc.) when runtime_consistent provides env.type_defs = get_tenv cx
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2620_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2632_t001
+- episode:E0019
+
+## L0052 scope='' tags=
+shape: Existential extraction from option pair/triple result in by-subgoal
+pattern: When proving ?x y z. f a = SOME (x,y,z) from f a <> NONE: use Cases_on `f a` >> gvs[] instead of IS_SOME_EXISTS + qexistsl. NONE case contradicts <> NONE assumption. SOME case gives the result directly. Then PairCases_on the pair to extract components if needed. Do NOT use IS_SOME_EXISTS + qexistsl[FST x', FST(SND x'), SND(SND x')] which has fragile type decomposition.
+works_when: Extracting components from option-wrapped pair/triple results where <> NONE assumption is available
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2632_t001
+- episode:E0019
+- episode:E0015
+
+## L0053 scope='' tags=
+shape: Monadic do-block no-TypeError proof: case-split on lookup result before expanding body
+pattern: When proving no_TypeError for assign_target TopLevelVar branch: (1) Case-split on lookup_global cx src n st result FIRST, getting INR/INL(Value)/INL(HashMapRef)/INL(ArrayRef) subgoals. (2) Contradict INR/Value/ArrayRef cases. (3) Only expand the HashMapRef do-block for the HashMapRef subgoal, using pre-derived typing facts for each TypeError step. Do NOT use AllCaseEqs on the full assign_target body before case-splitting.
+works_when: Proving no_type_error_result for TopLevelVar branches where lookup_global determines the tv constructor
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2721_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2708_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2714_t001
+- episode:E0019
+- episode:E0018
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:1262-1274 - lookup_global_Value_not_HashMapVarDecl
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:1276-1288 - lookup_global_ArrayRef_not_HashMapVarDecl
+- source:semantics/vyperStateScript.sml:413-439 - lookup_global_def showing HashMapVarDecl+slot returns HashMapRef
+- source:semantics/vyperStateScript.sml:863-939 - assign_target_def showing tv <- lookup_global bind
+
+## L0054 scope='' tags=
+shape: lookup_global ArrayRef contradicts HashMapVarDecl hypothesis
+pattern: When lookup_global returns INL(ArrayRef is_t bs etv ebd) but find_var_decl_by_num returns SOME(HashMapVarDecl...), the result is F. Proved via rw[lookup_global_def, bind_def, etc.] >> gvs[AllCaseEqs(), var_decl_info_CASE_rator, type_value_CASE_rator] >> Cases_on lookup_var_slot_from_layout. Symmetric to lookup_global_Value_not_HashMapVarDecl.
+works_when: Proving contradiction when lookup_global result shape doesn't match the declaration type
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:1276-1288 - lookup_global_ArrayRef_not_HashMapVarDecl lemma
+
+## L0055 scope='' tags=
+shape: lookup_global with HashMapVarDecl declaration returns HashMapRef toplevel_value
+pattern: lookup_global_HashMapVarDecl_returns_HashMapRef: get_module_code cx src = SOME code => find_var_decl_by_num n code = SOME (HashMapVarDecl is_t kt vt, id) => lookup_var_slot_from_layout cx is_t src id = SOME slot => lookup_global cx src n st = (INL (HashMapRef is_t (n2w slot) kt vt), st). Proof: rw[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs(), var_decl_info_CASE_rator, prod_CASE_rator, option_CASE_rator, type_value_CASE_rator, LET_THM] >> gvs[].
+works_when: Proving that lookup_global returns a HashMapRef when the declaration is HashMapVarDecl. Used to eliminate Value/ArrayRef/INR branches in assign_target no-TypeError proofs for TopLevelVar HashMapRef.
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:2125-2135
+- episode:E0020
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2763_t001
+
+## L0056 scope='' tags=
+shape: AllCaseEqs blast on assign_target TopLevelVar do-block + Cases_on v resolves branches
+pattern: For proving no_type_error_result of assign_target TopLevelVar: (1) Pre-derive ALL typing facts (split_hashmap_subscripts, compute_hashmap_slot, evaluate_type success, well_formed_type). (2) Derive lookup_global result via lookup_global_HashMapVarDecl_returns_HashMapRef. (3) rw[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >> push assign_target equation to goal >> simp[Once assign_target_def + full AllCaseEqs blast] >> rpt strip_tac >> gvs[]. (4) Cases_on `v` >> gvs[] - gvs auto-resolves v from lookup_global assumption. INR case: gvs[] resolves s''=st. INL case: already in the right toplevel_value branch (HashMapRef if that's the declared type). (5) Expand remaining binds in goal position, dispatch TypeErrors.
+works_when: Proving no_type_error_result for TopLevelVar branches of assign_target where lookup_global determines the toplevel_value constructor
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2773_t001
+- episode:E0020
+
+## L0057 scope='' tags=
+shape: gvs expansion of monadic do-block in assumptions after case split
+pattern: When a monadic do-block result is in assumptions (from prior gvs[def, bind_apply, AllCaseEqs()]), use a SECOND gvs[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def, AllCaseEqs(), option_CASE_rator, sum_CASE_rator, pairTheory.PAIR] to expand the remaining do-block IN assumptions. This creates subgoals for each TypeError branch. The NONE/TypeError branches are auto-resolved if contradicted by typing facts already in assumptions. Use >- to handle remaining subgoals individually.
+works_when: Proving no_TypeError for a monadic do-block branch after a case split, where typing facts are already derived as assumptions. The do-block equation must be in assumptions (not goal position).
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2810_t001
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2818_t001
+- episode:E0021
+
+## L0058 scope='' tags=
+shape: Bridge gvs-expansion variables to typing-fact variables via REVERSE decomposition
+pattern: After gvs[AllCaseEqs()] expands a do-block containing REVERSE sbs = x'::xs (from lift_option_type case REVERSE sbs), the variables x' and xs don't match typing facts that use LAST sbs and TL(REVERSE sbs). Bridge with: `x' = LAST sbs` by (qpat_x_assum `REVERSE sbs = _ :: _` mp_tac >> Cases_on `sbs` >> gvs[REVERSE_DEF, LAST_DEF, HD]) and `TAKE (LENGTH xs - LENGTH remaining) xs = TAKE (LENGTH key_types) xs` by (DECIDE_TAC after deriving LENGTH xs = LENGTH key_types + LENGTH remaining from the length sum assumption).
+works_when: Proving compute_hashmap_slot or similar function is not NONE after gvs expansion where the expansion introduces x'/xs but typing facts use LAST/TL(REVERSE)
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2818_t001
+- episode:E0021
+
+## L0059 scope='' tags=
+shape: Bridge gvs-expansion variable x' to LAST is via helper lemma
+pattern: When gvs expands REVERSE is = x'::xs in assumptions, bridge x' = LAST is by proving HD_REVERSE_EQ_LAST helper: !l. l <> [] ==> HD(REVERSE l) = LAST l. Proof: qsuff_tac REVERSE l = LAST l :: REVERSE(FRONT l) >- simp[] >> metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq]. Then use `HD(REVERSE is) = LAST is` by metis_tac[HD_REVERSE_EQ_LAST] >> gvs[] which eliminates x' = LAST is via variable elimination.
+works_when: Proving x' = LAST is when REVERSE is = x'::xs is in assumptions and is ≠ [] is available. gvs expansion creates x'/xs but typing facts reference LAST is.
+evidence:
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2878_t001
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:1918-1924
+- episode:E0022

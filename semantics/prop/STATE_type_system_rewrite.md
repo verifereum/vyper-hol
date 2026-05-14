@@ -5,47 +5,47 @@ Updated: 2026-05-14
 - component: C3.1
 - status: in_progress
 - active_file: semantics/prop/vyperTypeStatePreservationScript.sml
-- next_action: Build top_level_HashMapRef_assign_no_type_error to see goal at first cheat (compute_hashmap_slot). Fill in: derive hashmap_prefix ValueSubscript facts + compute_hashmap_slot_subscripts_to_values for compute_hashmap_slot <> NONE, Cases_on evaluate_type for evaluate_type <> NONE, then dispatch read/assign_subscripts/write/assign_result no-TypeError subgoals. Then rewrite sound_TopLevelVar resume to call the boundary lemma.
-- expected_goal_shape: After split_hashmap_subscripts SOME case: goals at compute_hashmap_slot <> NONE and subsequent monadic steps. Each step has separate NONE/INR subgoals that contradict derived facts.
+- next_action: Build-verify subgoal 1 close (add LENGTH xs = LENGTH is - 1 by Cases_on is >> gvs[LENGTH_REVERSE], then gvs[] should contradict compute_hashmap_slot NONE vs ≠ NONE). Then fix subgoal 2 (currently FAIL_TAC probe - needs write_storage_slot/assign_result/assign_subscripts dispatch).
+- expected_goal_shape: Subgoal 1: F with compute_hashmap_slot NONE vs ≠ NONE after bridging. Subgoal 2: do-block with write_storage_slot/assign_result/assign_subscripts TypeError branches. Subgoals 3-4: read_storage_slot/assign_subscripts TypeError.
 - verify_with: holbuild(targets=['vyperTypeStatePreservationTheory'])
 
 ## If This Fails
-- If boundary lemma goal explosion >4KB: add intermediate helper lemmas for each monadic step. If compute_hashmap_slot alignment fails: check split_hashmap_subscripts_some_imp length agreement + hashmap_prefix_ValueSubscript.
+- If subgoal 1 LENGTH derivation fails: try qpat_x_assum REVERSE eq + LENGTH + DECIDE_TAC. If subgoal 2 doesn't close: insert FAIL_TAC probe to see exact residual goal shape, add targeted drule lemmas.
 
 ## Do Not Retry
-- gvs[bind_apply, AllCaseEqs(), lift_option_type_def, ...] to expand monadic do-block inside an assumption in the resume: gvs cannot expand bind chains inside assumptions. The do-block MUST be pushed to the goal first (mp_tac) or handled in a standalone lemma where the equation is the conclusion. 7+ episodes confirm this.
-  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m2428_t001
-  - evidence: episode:E0007
-  - evidence: episode:E0012
-- rw[well_formed_type_def] >> metis_tac[] to derive evaluate_type <> NONE from well_formed_type assumption: simp/metis cannot connect IS_SOME in assumption to <> NONE in goal. Use Cases_on evaluate_type result instead.
-  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m2393_t001
+- Inline x' = LAST is by Cases_on is >> gvs[REVERSE_DEF, LAST_DEF, HD]: gvs renames is to h::t' making the by-subgoal reference to is fail. Use HD_REVERSE_EQ_LAST helper lemma instead.
+  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m2860_t001
+- metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq] for x' = LAST is inline: metis cannot solve directly because SNOC_LAST_FRONT_eq creates circular equation. Use HD_REVERSE_EQ_LAST helper lemma instead.
+  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m2864_t001
+- drule SNOC_LAST_FRONT_eq >> gvs[REVERSE_SNOC_eq] to bridge x' = LAST is: drule gives circular is = SNOC(LAST is)(FRONT is) which gvs cannot eliminate. Use HD_REVERSE_EQ_LAST instead.
+  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m2870_t001
+- gvs >> >- tac for subgoal handling after gvs expansion: >> and >- have same precedence, left-associative. gvs >> >- tac is a type error. Use gvs >- tac or gvs >- (tac1) >- (tac2) pattern.
+  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m2820_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- After 6+ episodes failing on inline do-block expansion with gvs[bind_apply, AllCaseEqs(), ...], I finally switched to boundary lemma approach but didn't complete it before context ran out. The boundary lemma IS the right approach.
-- The resume also has a parallel inline approach (lines 2240-2310) that derives all typing facts before expansion - this should be simplified to just call the boundary lemma once proved.
-- I did not consider: can the entire resume sound_TopLevelVar branch be replaced by a call to top_level_HashMapRef_assign_no_type_error + existing Value branch code?
+- The gvs-in-assumptions + SNOC/HD bridge pattern works - the key insight is that REVERSE is = x'::xs + is ≠ [] gives x' = HD(REVERSE is) = LAST is via the HD_REVERSE_EQ_LAST helper, and gvs then eliminates x'.
+- Could the entire HashMapRef branch be proved more simply via a boundary lemma instead of the inline do-block expansion? Consider whether finishing inline vs switching to boundary lemma is the right call.
+- Is the PLAN decomposition still right? C3.1 is a named branch with specific approach - the remaining proof work is mechanical (bridge variables, dispatch TypeError subgoals with existing C2/drule lemmas). No architectural issue.
 
 ### What Went Wrong
-- evaluate_type <> NONE fix (Cases_on) was known from STATE for multiple sessions but took most of this session to apply
-- The gvs[bind_apply, AllCaseEqs()] approach for expanding the HashMapRef do-block has NEVER worked across 7+ episodes - gvs cannot expand bind chains inside assumptions
-- I created the boundary lemma too late - should have done it immediately after the first gvs failure
+- 5+ attempts to bridge x' = LAST is because gvs renames is to h::t' making direct variable references fail. The solution was adding HD_REVERSE_EQ_LAST as a helper lemma.
+- The >> >- syntax error wasted one full iteration.
+- Circular SNOC equation (is = SNOC(LAST is)(FRONT is)) blocked gvs elimination. HD_REVERSE_EQ_LAST avoids this by providing the non-circular fact HD(REVERSE is) = LAST is.
 
 ### Ignored Signals
-- STATE and prior episodes repeatedly recommended the boundary lemma fallback - I spent too long on inline approach
-- The Cases_on pattern for IS_SOME <> NONE was solved in prior episodes but I kept trying simp/metis variants first
-- LEARNING L0041 says: derive all typing facts BEFORE gvs expansion - works for facts but not for expansion itself
+- HD_REVERSE_EQ_LAST pattern was available from the start - metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq] works inside a lemma proof but not inline.
+- The Value branch pattern (reverse $ gvs[bind_apply,AllCaseEqs(),return_def]) was the model all along.
 
 ### Strategy Adjustments
-- For the boundary lemma: use staged simp approach (Once assign_target_def then expand bind by bind)
-- After the boundary lemma is proved, SIMPLIFY the resume: replace all inline HashMapRef proof code with a single drule call
-- For ANY goal where gvs expansion of a monadic do-block in an assumption fails: immediately switch to boundary lemma
+- Always add small helper lemmas for list identity facts that metis can prove but inline by-subgoals cannot.
+- For gvs-expanded do-block branches: derive typing facts before gvs, then use specific variable-bridge lemmas.
+- When encountering >> >- syntax errors, always use >- (tac) >> tac or >- tac >- tac pattern.
 
 ### Oracle Feedback
-- PLAN C3.1 approach is correct: boundary lemma pattern works. Holdup was tactical (HOL4 monad expansion) not architectural
-- The existing resume's parallel approach also works for fact derivation but the expansion step is still broken - boundary lemma solves this
+- PLAN C3.1 approach is correct. The variable-bridging issue is standard proof-engineering the strategist didn't anticipate.
+- The gvs-in-assumptions approach for expanding do-blocks is the right one (confirmed by 4-subgoal creation after gvs).
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m2420_t001 - evaluate_type <> NONE fix with Cases_on works
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m2428_t001 - gvs FAIL probe: do-block remains unexpanded in assumption
-- tool_output:TO_type_system_rewrite-20260513T211025Z_m2506_t001 - boundary lemma static error fixed by moving after helpers
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2878_t001 - x' = LAST is bridge works via HD_REVERSE_EQ_LAST + gvs elimination
+- tool_output:TO_type_system_rewrite-20260513T211025Z_m2860_t001 - gvs renames is to h::t', inline Cases_on approach fails
