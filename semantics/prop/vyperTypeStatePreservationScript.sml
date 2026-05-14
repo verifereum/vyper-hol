@@ -1757,6 +1757,270 @@ Proof
   goal_assum drule_all
 QED
 
+Theorem option_neq_none_imp_is_some:
+  !x. x ≠ NONE ⇔ IS_SOME x
+Proof
+  Cases_on `x` >> simp[optionTheory.IS_SOME_DEF]
+QED
+
+Theorem well_formed_vtype_split_hashmap_subscripts_well_formed_type:
+  !tenv vt subs final_type kts remaining.
+    well_formed_vtype tenv vt ==>
+    split_hashmap_subscripts vt subs = SOME (final_type, kts, remaining) ==>
+    well_formed_type tenv final_type
+Proof
+  Induct_on `vt` >> rw[split_hashmap_subscripts_def] >-
+  gvs[well_formed_vtype_def] >>
+  Cases_on `subs` >> gvs[split_hashmap_subscripts_def] >>
+  gvs[well_formed_vtype_def] >>
+  Cases_on `split_hashmap_subscripts vt t'` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`t'`, `final_type`, `x1`, `remaining`] mp_tac) >>
+  impl_tac >- (simp[]) >>
+  strip_tac >> gvs[well_formed_vtype_def]
+QED
+
+Theorem compute_hashmap_slot_subscripts_to_values:
+  !slot kts ks.
+    LENGTH kts = LENGTH ks ==>
+    EVERY ((<>) NONE o subscript_to_value) ks ==>
+    compute_hashmap_slot slot kts ks <> NONE
+Proof
+  Induct_on `kts` >> Cases_on `ks` >> rw[] >>
+  gvs[compute_hashmap_slot_def] >>
+  Cases_on `subscript_to_value h` >> gvs[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem split_hashmap_subscripts_some_imp:
+  !vt subs final_type kts remaining.
+    split_hashmap_subscripts vt subs = SOME (final_type, kts, remaining) ==>
+    LENGTH kts + LENGTH remaining = LENGTH subs
+Proof
+  gen_tac >> Induct_on `vt` >- rw[split_hashmap_subscripts_def] >>
+  rw[split_hashmap_subscripts_def] >>
+  Cases_on `subs` >> gvs[split_hashmap_subscripts_def] >>
+  Cases_on `split_hashmap_subscripts vt t'` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  first_x_assum (qspecl_then [`t'`, `final_type`, `x1`, `remaining`] mp_tac) >>
+  simp[]
+QED
+
+Theorem target_path_step_type_HashMapT_ValueSubscript:
+  !env kt vt sb next_vt.
+    target_path_step_type env (HashMapT kt vt) sb next_vt ==>
+    subscript_to_value sb <> NONE
+Proof
+  Cases_on `sb` >> rw[target_path_step_type_def, subscript_to_value_def]
+QED
+
+Theorem target_path_step_type_HashMapT_next_vt:
+  !env kt vt sb next_vt.
+    target_path_step_type env (HashMapT kt vt) sb next_vt ==>
+    next_vt = vt
+Proof
+  Cases_on `sb` >> rw[target_path_step_type_def]
+QED
+
+Theorem target_path_type_HashMapT_not_nil:
+  !env kt vt sbs ty.
+    target_path_type env (HashMapT kt vt) sbs (Type ty) ==> sbs <> []
+Proof
+  Cases_on `sbs` >> simp[target_path_type_def]
+QED
+
+Theorem place_leaf_path_typed_imp_split_hashmap_subscripts:
+  !env vt path ty final_tv.
+    place_leaf_path_typed env vt path ty final_tv ==>
+    split_hashmap_subscripts vt path <> NONE
+Proof
+  ho_match_mp_tac place_leaf_path_typed_ind >> rw[] >>
+  gvs[place_leaf_path_typed_def, split_hashmap_subscripts_def] >>
+  Cases_on `split_hashmap_subscripts vt path` >> gvs[] >>
+  PairCases_on `x` >> gvs[]
+QED
+
+Theorem target_path_type_HashMapT_last_step:
+  !env kt vt sbs final_vt.
+    target_path_type env (HashMapT kt vt) sbs final_vt ==>
+    sbs <> [] ==>
+    target_path_step_type env (HashMapT kt vt) (LAST sbs) vt
+Proof
+  Induct_on `sbs` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[target_path_type_def] >>
+  Cases_on `sbs` >> gvs[LAST_DEF] >-
+    (gvs[target_path_type_def] >>
+     drule target_path_step_type_HashMapT_next_vt >> rw[] >>
+     fs[target_path_step_type_def]) >>
+  first_x_assum drule >> disch_then irule >> simp[]
+QED
+
+Theorem target_path_type_HashMapT_front_path:
+  !env kt vt sbs final_vt.
+    target_path_type env (HashMapT kt vt) sbs final_vt ==>
+    sbs <> [] ==>
+    target_path_type env vt (FRONT sbs) final_vt
+Proof
+  Induct_on `sbs` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[target_path_type_def] >>
+  Cases_on `sbs` >> gvs[] >-
+    (gvs[target_path_type_def] >>
+     drule target_path_step_type_HashMapT_next_vt >> rw[]) >>
+  first_x_assum (qspecl_then [`env`,`kt`,`vt`,`mid_vt`] mp_tac) >>
+  simp[] >>
+  metis_tac[target_path_type_def]
+QED
+
+Theorem SNOC_LAST_FRONT_eq:
+  !l. l <> [] ==> (l = SNOC (LAST l) (FRONT l))
+Proof
+  Induct >- simp[] >>
+  rpt strip_tac >>
+  Cases_on `l` >> simp[]
+QED
+
+Theorem REVERSE_SNOC_eq:
+  !x xs. REVERSE (SNOC x xs) = x :: REVERSE xs
+Proof
+  gen_tac >> Induct_on `xs` >> simp[]
+QED
+
+Theorem TL_REVERSE_SNOC:
+  !x xs. TL (REVERSE (SNOC x xs)) = REVERSE xs
+Proof
+  simp[REVERSE_SNOC_eq]
+QED
+
+Theorem TL_REVERSE_eq_REVERSE_FRONT:
+  !l. l <> [] ==> (TL (REVERSE l) = REVERSE (FRONT l))
+Proof
+  rpt strip_tac >>
+  qsuff_tac `REVERSE l = LAST l :: REVERSE (FRONT l)` >- simp[] >>
+  metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq]
+QED
+
+Theorem target_path_type_HashMapT_hashmap_prefix_ValueSubscript:
+  !env kt vt sbs ty final_type kts remaining.
+    target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
+    split_hashmap_subscripts vt (TL (REVERSE sbs)) = SOME (final_type, kts, remaining) ==>
+    EVERY ((<>) NONE o subscript_to_value)
+      (LAST sbs :: TAKE (LENGTH kts) (TL (REVERSE sbs)))
+Proof
+  Induct_on `vt` >- (
+  (* Base: vt = Type t, so split_hashmap_subscripts gives kts = [] *)
+    rpt strip_tac >>
+    gvs[split_hashmap_subscripts_def] >>
+    `sbs <> []` by metis_tac[target_path_type_HashMapT_not_nil] >>
+    drule target_path_type_HashMapT_last_step >> simp[] >> strip_tac >>
+    metis_tac[target_path_step_type_HashMapT_ValueSubscript]) >>
+  (* Step: vt = HashMapT t vt' *)
+  rpt strip_tac >>
+  `sbs <> []` by metis_tac[target_path_type_HashMapT_not_nil] >>
+  `TL (REVERSE sbs) = REVERSE (FRONT sbs)` by
+    metis_tac[TL_REVERSE_eq_REVERSE_FRONT] >>
+  drule target_path_type_HashMapT_last_step >> simp[] >> strip_tac >>
+  `subscript_to_value (LAST sbs) <> NONE` by
+    metis_tac[target_path_step_type_HashMapT_ValueSubscript] >>
+  `FRONT sbs <> []` by (
+    CCONTR_TAC >> gvs[] >>
+    Cases_on `REVERSE (FRONT sbs)` >> gvs[split_hashmap_subscripts_def]) >>
+  `target_path_type env (HashMapT t vt) (FRONT sbs) (Type ty)` by (
+    drule target_path_type_HashMapT_front_path >> simp[]) >>
+  `subscript_to_value (LAST (FRONT sbs)) <> NONE` by
+    metis_tac[target_path_type_HashMapT_last_step,
+              target_path_step_type_HashMapT_ValueSubscript] >>
+  `TL (REVERSE (FRONT sbs)) = REVERSE (FRONT (FRONT sbs))` by
+    metis_tac[TL_REVERSE_eq_REVERSE_FRONT] >>
+  (* Expand split_hashmap_subscripts (HashMapT t vt) ... using the def.
+     We have: split_hashmap_subscripts (HashMapT t vt) (TL (REVERSE sbs)) = SOME (...)
+     and: TL (REVERSE sbs) = REVERSE (FRONT sbs) and REVERSE (FRONT sbs) ≠ []
+     So: split_hashmap_subscripts (HashMapT t vt) (REVERSE (FRONT sbs)) = SOME (...)
+     By def: split_hashmap_subscripts (HashMapT t vt) (h::t') = case split_hashmap_subscripts vt t' of ...
+     Cases_on the inner to resolve. *)
+  `REVERSE (FRONT sbs) ≠ []` by simp[] >>
+  (* Rewrite: replace TL (REVERSE sbs) with REVERSE (FRONT sbs) in assumption 2 *)
+  `split_hashmap_subscripts (HashMapT t vt) (REVERSE (FRONT sbs)) = SOME (final_type, kts, remaining)` by (
+    qpat_x_assum `split_hashmap_subscripts (HashMapT t vt) _ = SOME _` mp_tac >>
+    simp[TL_REVERSE_eq_REVERSE_FRONT]) >>
+  (* Now case-split on the inner recursive call *)
+  Cases_on `split_hashmap_subscripts vt (REVERSE (FRONT (FRONT sbs)))` >-
+    (* NONE case: by def, REVERSE (FRONT sbs) = h::t means outer = NONE (since inner = NONE).
+       This contradicts assumption 12 saying it's SOME. *)
+    (Cases_on `REVERSE (FRONT sbs)` >> gvs[split_hashmap_subscripts_def]) >>
+  (* SOME case: derive components from the SOME result *)
+  PairCases_on `x` >> gvs[split_hashmap_subscripts_def] >>
+  (* Now: kts = t :: x1, final_type = x0, remaining = x2 *)
+  (* split_hashmap_subscripts vt (REVERSE (FRONT (FRONT sbs))) = SOME (x0, x1, x2) *)
+  (* Apply IH with sbs' = FRONT sbs.
+     The IH needs: target_path_type env (HashMapT t vt) (FRONT sbs) (Type ty)
+     and: split_hashmap_subscripts vt (TL (REVERSE (FRONT sbs))) = SOME (x0,x1,x2)
+     Both are derivable from current assumptions. *)
+  `split_hashmap_subscripts vt (TL (REVERSE (FRONT sbs))) = SOME (x0,x1,x2)` by (
+    simp[TL_REVERSE_eq_REVERSE_FRONT]) >>
+  first_x_assum (qspecl_then [
+    `env`, `t`, `FRONT sbs`, `ty`,
+    `x0`, `x1`, `x2`] drule_all) >>
+  strip_tac >>
+  (* Derive kts = t :: x1 from the split_hashmap_subscripts definition.
+     From assumptions: split_hashmap_subscripts (HashMapT t vt) (REVERSE (FRONT sbs)) = SOME (final_type,kts,remaining)
+     and: REVERSE (FRONT sbs) ≠ [], and split_hashmap_subscripts vt (TL ...) = SOME (x0,x1,x2)
+     By def: result = SOME (x0, t::x1, x2), so kts = t :: x1. *)
+  `kts = t :: x1` by (
+    qpat_x_assum `split_hashmap_subscripts (HashMapT t vt) _ = SOME _` mp_tac >>
+    simp[split_hashmap_subscripts_def] >>
+    Cases_on `REVERSE (FRONT sbs)` >> gvs[split_hashmap_subscripts_def] >>
+    metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+  (* Now kts = t :: x1, so the goal EVERY ... (TAKE (LENGTH (t::x1)) (REVERSE (FRONT sbs)))
+     = EVERY ... (TAKE (SUC (LENGTH x1)) (REVERSE (FRONT sbs))) *)
+  `REVERSE (FRONT sbs) = LAST (FRONT sbs) :: REVERSE (FRONT (FRONT sbs))` by
+    metis_tac[SNOC_LAST_FRONT_eq, REVERSE_SNOC_eq] >>
+  (* TAKE (SUC n) (h :: t) = h :: TAKE n t, and EVERY f (h :: t) = f h ∧ EVERY f t *)
+  simp[] >>
+  (* subscript_to_value (LAST (FRONT sbs)) ≠ NONE from assumption,
+     and EVERY ... (TAKE (LENGTH x1) (REVERSE (FRONT (FRONT sbs)))) from IH
+     after rewriting TL (REVERSE (FRONT sbs)) = REVERSE (FRONT (FRONT sbs)) *)
+  metis_tac[TL_REVERSE_eq_REVERSE_FRONT]
+QED
+
+Theorem target_path_type_HashMapT_split_hashmap_subscripts:
+  !env kt vt sbs ty.
+    well_formed_vtype env.type_defs (HashMapT kt vt) ==>
+    target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
+    split_hashmap_subscripts vt (TL (REVERSE sbs)) <> NONE
+Proof
+  rpt strip_tac >>
+  `sbs <> []` by metis_tac[target_path_type_HashMapT_not_nil] >>
+  drule_all target_path_type_Type_place_leaf_typed >>
+  strip_tac >>
+  gvs[place_leaf_typed_def] >>
+  Cases_on `REVERSE sbs` >> gvs[place_leaf_path_typed_def] >>
+  metis_tac[place_leaf_path_typed_imp_split_hashmap_subscripts]
+QED
+
+Theorem place_leaf_path_typed_split_leaf_type:
+  !env vt path ty final_tv final_type key_types remaining.
+    place_leaf_path_typed env vt path ty final_tv ==>
+    split_hashmap_subscripts vt path = SOME (final_type, key_types, remaining) ==>
+    ?base_tv.
+      evaluate_type env.type_defs final_type = SOME base_tv ∧
+      final_tv = leaf_type base_tv remaining ∧
+      evaluate_type env.type_defs ty = SOME final_tv
+Proof
+  Induct_on `vt` >> rpt strip_tac >- (
+    gvs[place_leaf_path_typed_def, split_hashmap_subscripts_def] >>
+    qexists_tac `base_tv` >> simp[]) >>
+  Cases_on `path` >> gvs[place_leaf_path_typed_def, split_hashmap_subscripts_def] >>
+  rename1 `split_hashmap_subscripts vt t'` >>
+  Cases_on `split_hashmap_subscripts vt t'` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  first_x_assum (qspecl_then [`env`,`t'`,`ty`,`final_tv`,`final_type`,`x1`,`remaining`] drule_all) >>
+  strip_tac >>
+  qexists_tac `base_tv` >> simp[]
+QED
+
 Theorem assign_target_sound_mutual:
   (!cx gv op st res st'.
     assign_target cx gv op st = (res, st') ==>
@@ -1845,6 +2109,46 @@ Resume assign_target_sound_mutual[sound_ScopedVar]:
   simp[no_type_error_result_def]
 QED
 
+Theorem top_level_HashMapRef_assign_no_type_error:
+  runtime_consistent env cx st ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (HashMapT kt vt) ==>
+  target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
+  assignable_type (get_tenv cx) ty ==>
+  assign_operation_runtime_typed env ty op ==>
+  assign_operation_matches_target_shape (BaseTargetV (TopLevelVar src_id_opt id) sbs) op ==>
+  assign_target_assignable (BaseTargetV (TopLevelVar src_id_opt id) sbs) st ==>
+  well_formed_vtype (get_tenv cx) (HashMapT kt vt) ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  find_var_decl_by_num (string_to_num id) code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
+  lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  rpt gen_tac >> rpt disch_tac >>
+  rw[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
+  (* Step 1: Expand assign_target up through lookup_global only *)
+  qpat_x_assum `assign_target _ _ _ _ = (INR _, _)` mp_tac >>
+  simp[Once assign_target_def] >>
+  simp[bind_def, lift_option_type_def, return_def, raise_def,
+       AllCaseEqs(), option_CASE_rator] >>
+  rpt strip_tac >> gvs[] >>
+  (* Step 2: get_module_code success follows from lookup_global success *)
+  drule_at Any lookup_global_success_get_module_code >> strip_tac >> gvs[] >>
+  (* Step 3: Expand further to see toplevel_value dispatch *)
+  gvs[bind_def, lift_option_type_def, return_def, raise_def,
+      AllCaseEqs(), option_CASE_rator, var_decl_info_CASE_rator,
+      prod_CASE_rator, toplevel_value_CASE_rator] >>
+  (* Value case: contradicts HashMapVarDecl *)
+  drule_all lookup_global_Value_not_HashMapVarDecl >> gvs[] >>
+  (* HashMapRef branch *)
+  gvs[assign_target_assignable_context_def, IS_SOME_EXISTS] >>
+  `sbs <> []` by gvs[] >>
+  (* split_hashmap_subscripts: NONE case contradicts target_path_type *)
+  drule_all target_path_type_HashMapT_split_hashmap_subscripts >> simp[] >>
+  (* compute_hashmap_slot: need to show it's not NONE *)
+  cheat
+QED
+
 Resume assign_target_sound_mutual[sound_TopLevelVar]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -1891,9 +2195,118 @@ Resume assign_target_sound_mutual[sound_TopLevelVar]:
     gvs[lift_sum_def, sum_CASE_rator, AllCaseEqs(),
         raise_def, return_def] 
   ) >>
-  gvs[]
-  >- cheat (* HashMapRef case *)
-  >> cheat (* ArrayRef case *)
+  gvs[assign_target_assignable_context_def]
+  >- (
+    (* HashMapRef branch *)
+    (* First: FST p must be HashMapVarDecl since lookup_global returns HashMapRef *)
+    `?is_transient' id_str. p = (HashMapVarDecl is_transient' t v, id_str)` by (
+      Cases_on `p` >> Cases_on `q` >> gvs[] >>
+      Cases_on `r` >> gvs[] >>
+      (* StorageVarDecl case: impossible, lookup_global would return Value/ArrayRef *)
+      qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+      simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+           option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
+           toplevel_value_CASE_rator, type_value_CASE_rator, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+    gvs[IS_SOME_EXISTS] >>
+    `is <> []` by gvs[] >>
+    (* Extract location type and path type from target_runtime_typed *)
+    Cases_on `tgt` >> gvs[target_runtime_typed_def, location_runtime_typed_def] >>
+    (* Connect vt to HashMapT t v from runtime consistency *)
+    `vt = HashMapT t v` by (
+      Cases_on `vt` >> gvs[] >-
+      (* Type case: impossible, contradicts top_level_Type_not_hashmap_decl *)
+      (drule_all top_level_Type_not_hashmap_decl >> strip_tac >> gvs[]) >>
+      (* HashMapT case: from env consistency + find_var_decl_by_num injectivity *)
+      drule_all top_level_HashMap_decl >> strip_tac >>
+      gvs[var_decl_info_11]) >>
+    gvs[target_path_type_HashMapT_not_nil] >>
+    (* Derive well_formed_vtype for HashMapT t v from location_runtime_typed *)
+    `well_formed_vtype env.type_defs (HashMapT t v)` by (
+      `location_runtime_typed env cx st (TopLevelVar src_id_opt id) (HashMapT t v)` by
+        (simp[location_runtime_typed_def] >> gvs[]) >>
+      irule location_runtime_typed_well_formed_vtype >>
+      goal_assum drule_all >> simp[]) >>
+    (* split_hashmap_subscripts succeeds *)
+    `split_hashmap_subscripts v (TL (REVERSE is)) <> NONE` by (
+      drule_all target_path_type_HashMapT_split_hashmap_subscripts >> simp[]) >>
+    rw[no_type_error_result_def] >> rpt strip_tac >>
+    imp_res_tac lookup_global_state >> gvs[] >>
+    (* Step 1: REVERSE is <> [] so first_sub/rest_subs split succeeds *)
+    `REVERSE is <> []` by (Cases_on `is` >> gvs[]) >>
+    (* Extract split_hashmap_subscripts result BEFORE expanding the do-block *)
+    `?final_type' key_types' remaining_subs'.
+      split_hashmap_subscripts v (TL (REVERSE is)) = SOME (final_type', key_types', remaining_subs')` by (
+      qpat_x_assum `split_hashmap_subscripts v (TL (REVERSE is)) ≠ NONE` mp_tac >>
+      simp[option_neq_none_imp_is_some, optionTheory.IS_SOME_EXISTS] >>
+      rpt strip_tac >>
+      qexistsl [`FST x'`, `FST (SND x')`, `SND (SND x')`] >>
+      Cases_on `x'` >> Cases_on `r` >>
+      simp[pairTheory.PAIR]) >>
+    gvs[] >>
+    (* Step 2: Length facts from split_hashmap_subscripts *)
+    `LENGTH key_types' + LENGTH remaining_subs' = LENGTH (TL (REVERSE is))` by (
+      drule split_hashmap_subscripts_some_imp >> simp[]) >>
+    (* Step 3: compute_hashmap_slot succeeds *)
+    `EVERY ((<>) NONE o subscript_to_value)
+      (LAST is :: TAKE (LENGTH key_types') (TL (REVERSE is)))` by (
+      drule_all target_path_type_HashMapT_hashmap_prefix_ValueSubscript >> simp[]) >>
+    (* Step 3b: compute_hashmap_slot succeeds *)
+    (* First derive LENGTH key_types' <= LENGTH (TL (REVERSE is)) from the length sum *)
+    `LENGTH key_types' <= LENGTH (TL (REVERSE is))` by (
+      qpat_x_assum `LENGTH key_types' + LENGTH remaining_subs' = LENGTH (TL (REVERSE is))` mp_tac >>
+      DECIDE_TAC) >>
+    (* Now prove compute_hashmap_slot <> NONE directly *)
+    `compute_hashmap_slot c (t :: key_types')
+      (LAST is :: TAKE (LENGTH key_types') (TL (REVERSE is))) <> NONE` by (
+      irule compute_hashmap_slot_subscripts_to_values >> conj_tac >- (
+        simp[LENGTH, LENGTH_TAKE_EQ] >> DECIDE_TAC) >>
+      simp[]) >>
+    (* Step 4: evaluate_type succeeds from well_formed_vtype through split *)
+    `well_formed_vtype env.type_defs v` by gvs[well_formed_vtype_def] >>
+    `well_formed_type env.type_defs final_type'` by (
+      qpat_x_assum `well_formed_vtype env.type_defs v` mp_tac >>
+      qpat_x_assum `split_hashmap_subscripts v (TL (REVERSE is)) = SOME (final_type',key_types',remaining_subs')` mp_tac >>
+      metis_tac[well_formed_vtype_split_hashmap_subscripts_well_formed_type]) >>
+    `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+    `well_formed_type (get_tenv cx) final_type'` by metis_tac[] >>
+    `evaluate_type (get_tenv cx) final_type' <> NONE` by (
+      Cases_on `evaluate_type (get_tenv cx) final_type'` >> gvs[well_formed_type_def]) >>
+    (* Step 5: Expand the do-block step by step.
+       Push the offending assumption to the goal so we can expand it there. *)
+    qpat_x_assum
+      `assign_target _ _ _ _ = (INR (Error (TypeError msg)),st')`
+      mp_tac >>
+    simp[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
+         AllCaseEqs(), option_CASE_rator, sum_CASE_rator, pairTheory.PAIR] >>
+    rpt strip_tac >> gvs[] >>
+    (* TypeError subgoals: each corresponds to a step in the do-block *)
+    TRY (
+      (* lift_option_type from REVERSE is split: NONE case contradicts is <> [] *)
+      gvs[] >> NO_TAC) >>
+    TRY (
+      (* split_hashmap_subscripts NONE: contradicts split_hashmap_subscripts <> NONE *)
+      gvs[] >> NO_TAC) >>
+    TRY (
+      (* compute_hashmap_slot NONE: contradicts compute_hashmap_slot <> NONE *)
+      gvs[] >> NO_TAC) >>
+    TRY (
+      (* evaluate_type NONE: contradicts evaluate_type <> NONE *)
+      gvs[] >> NO_TAC) >>
+    TRY (
+      (* read_storage_slot TypeError *)
+      drule read_storage_slot_error >> simp[] >> NO_TAC) >>
+    TRY (
+      (* assign_subscripts TypeError: use C2 lemma *)
+      qpat_x_assum `assign_subscripts _ _ _ _ = INR (Error (TypeError _))` mp_tac >>
+      drule_all assign_subscripts_no_type_error_runtime_typed >> simp[] >> NO_TAC) >>
+    TRY (
+      (* write_storage_slot TypeError *)
+      drule_all write_storage_slot_no_type_error_from_value_has_type >> simp[] >> NO_TAC) >>
+    (* assign_result TypeError: must come from a successful assign path *)
+    drule_all assign_result_no_type_error_from_successful_assign >> simp[no_type_error_result_def]
+  ) >>
+  cheat
 QED
 
 Resume assign_target_sound_mutual[sound_ImmutableVar]:
