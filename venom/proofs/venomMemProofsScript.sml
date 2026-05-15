@@ -17,8 +17,8 @@
 
 Theory venomMemProofs
 Ancestors
-  venomMemDefs venomExecSemantics venomState venomInstProofs
-  finite_map list rich_list words byte arithmetic divides
+  venomMemDefs venomExecSemantics venomState venomInst venomInstProofs
+  stateEquiv finite_map list rich_list words byte arithmetic divides
 Libs
   wordsLib dep_rewrite
 
@@ -291,59 +291,582 @@ Proof
   simp[]
 QED
 
-(* Non-ALLOCA, non-INVOKE step_inst_base preserves vs_allocas *)
-Theorem step_inst_base_preserves_allocas:
-  !inst (s:venom_state) s'.
-    (step_inst_base inst s = OK s' \/
-     step_inst_base inst s = Halt s' \/
-     (?a. step_inst_base inst s = Abort a s') \/
-     (?v. step_inst_base inst s = IntRet v s')) /\
-    inst.inst_opcode <> INVOKE /\
-    inst.inst_opcode <> ALLOCA ==>
-    s'.vs_allocas = s.vs_allocas
-Proof
-  rpt strip_tac >>
-  fs[step_inst_base_def, AllCaseEqs()] >>
-  gvs[AllCaseEqs(),
-      exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def, exec_alloca_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-      write_memory_with_expansion_def, mcopy_def,
-      revert_state_def, eval_operands_def, jump_to_def,
-      lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def]
-QED
-
-(* Same for vs_alloca_next *)
-Theorem step_inst_base_preserves_alloca_next:
-  !inst (s:venom_state) s'.
-    (step_inst_base inst s = OK s' \/
-     step_inst_base inst s = Halt s' \/
-     (?a. step_inst_base inst s = Abort a s') \/
-     (?v. step_inst_base inst s = IntRet v s')) /\
-    inst.inst_opcode <> INVOKE /\
-    inst.inst_opcode <> ALLOCA ==>
+Triviality exec_ext_call_preserves_alloca_fields[local]:
+  !inst s s' gas addr value ao asz ro rs is_static.
+    exec_ext_call inst s gas addr value ao asz ro rs is_static = OK s' ==>
+    s'.vs_allocas = s.vs_allocas /\
     s'.vs_alloca_next = s.vs_alloca_next
 Proof
-  rpt strip_tac >>
-  fs[step_inst_base_def, AllCaseEqs()] >>
-  gvs[AllCaseEqs(),
-      exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def, exec_alloca_def] >>
+  rw[exec_ext_call_def, extract_venom_result_def, update_var_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+QED
+
+Triviality exec_delegatecall_preserves_alloca_fields[local]:
+  !inst s s' gas addr ao asz ro rs.
+    exec_delegatecall inst s gas addr ao asz ro rs = OK s' ==>
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rw[exec_delegatecall_def, extract_venom_result_def, update_var_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+QED
+
+Triviality exec_create_preserves_alloca_fields[local]:
+  !inst s s' value offset sz salt.
+    exec_create inst s value offset sz salt = OK s' ==>
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rw[exec_create_def, extract_venom_result_def, update_var_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+QED
+
+Triviality exec_pure1_result_alloca_fields[local]:
+  !f inst (s:venom_state) r.
+    exec_pure1 f inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_pure1_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_pure2_result_alloca_fields[local]:
+  !f inst (s:venom_state) r.
+    exec_pure2 f inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_pure2_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_pure3_result_alloca_fields[local]:
+  !f inst (s:venom_state) r.
+    exec_pure3 f inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_pure3_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_read0_result_alloca_fields[local]:
+  !f inst (s:venom_state) r.
+    exec_read0 f inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_read0_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_read1_result_alloca_fields[local]:
+  !f inst (s:venom_state) r.
+    exec_read1 f inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_read1_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_pure1_not_terminal[local,simp]:
+  (!f inst (s:venom_state) s'. exec_pure1 f inst s <> Halt s') /\
+  (!f inst (s:venom_state) a s'. exec_pure1 f inst s <> Abort a s') /\
+  (!f inst (s:venom_state) v s'. exec_pure1 f inst s <> IntRet v s')
+Proof
+  rw[exec_pure1_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_pure2_not_terminal[local,simp]:
+  (!f inst (s:venom_state) s'. exec_pure2 f inst s <> Halt s') /\
+  (!f inst (s:venom_state) a s'. exec_pure2 f inst s <> Abort a s') /\
+  (!f inst (s:venom_state) v s'. exec_pure2 f inst s <> IntRet v s')
+Proof
+  rw[exec_pure2_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_pure3_not_terminal[local,simp]:
+  (!f inst (s:venom_state) s'. exec_pure3 f inst s <> Halt s') /\
+  (!f inst (s:venom_state) a s'. exec_pure3 f inst s <> Abort a s') /\
+  (!f inst (s:venom_state) v s'. exec_pure3 f inst s <> IntRet v s')
+Proof
+  rw[exec_pure3_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_read0_not_terminal[local,simp]:
+  (!f inst (s:venom_state) s'. exec_read0 f inst s <> Halt s') /\
+  (!f inst (s:venom_state) a s'. exec_read0 f inst s <> Abort a s') /\
+  (!f inst (s:venom_state) v s'. exec_read0 f inst s <> IntRet v s')
+Proof
+  rw[exec_read0_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_read1_not_terminal[local,simp]:
+  (!f inst (s:venom_state) s'. exec_read1 f inst s <> Halt s') /\
+  (!f inst (s:venom_state) a s'. exec_read1 f inst s <> Abort a s') /\
+  (!f inst (s:venom_state) v s'. exec_read1 f inst s <> IntRet v s')
+Proof
+  rw[exec_read1_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_write2_not_terminal[local,simp]:
+  (!f inst (s:venom_state) s'. exec_write2 f inst s <> Halt s') /\
+  (!f inst (s:venom_state) a s'. exec_write2 f inst s <> Abort a s') /\
+  (!f inst (s:venom_state) v s'. exec_write2 f inst s <> IntRet v s')
+Proof
+  rw[exec_write2_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_ext_call_not_terminal[local,simp]:
+  (!inst (s:venom_state) gas addr value ao asz ro rs is_static s'.
+     exec_ext_call inst s gas addr value ao asz ro rs is_static <> Halt s') /\
+  (!inst (s:venom_state) gas addr value ao asz ro rs is_static a s'.
+     exec_ext_call inst s gas addr value ao asz ro rs is_static <> Abort a s') /\
+  (!inst (s:venom_state) gas addr value ao asz ro rs is_static v s'.
+     exec_ext_call inst s gas addr value ao asz ro rs is_static <> IntRet v s')
+Proof
+  rw[exec_ext_call_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+QED
+
+Triviality exec_delegatecall_not_terminal[local,simp]:
+  (!inst (s:venom_state) gas addr ao asz ro rs s'.
+     exec_delegatecall inst s gas addr ao asz ro rs <> Halt s') /\
+  (!inst (s:venom_state) gas addr ao asz ro rs a s'.
+     exec_delegatecall inst s gas addr ao asz ro rs <> Abort a s') /\
+  (!inst (s:venom_state) gas addr ao asz ro rs v s'.
+     exec_delegatecall inst s gas addr ao asz ro rs <> IntRet v s')
+Proof
+  rw[exec_delegatecall_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+QED
+
+Triviality exec_create_not_terminal[local,simp]:
+  (!inst (s:venom_state) value offset sz salt s'.
+     exec_create inst s value offset sz salt <> Halt s') /\
+  (!inst (s:venom_state) value offset sz salt a s'.
+     exec_create inst s value offset sz salt <> Abort a s') /\
+  (!inst (s:venom_state) value offset sz salt v s'.
+     exec_create inst s value offset sz salt <> IntRet v s')
+Proof
+  rw[exec_create_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])))
+QED
+
+Triviality exec_alloca_not_terminal[local,simp]:
+  (!inst (s:venom_state) alloc_size s'.
+     exec_alloca inst s alloc_size <> Halt s') /\
+  (!inst (s:venom_state) alloc_size a s'.
+     exec_alloca inst s alloc_size <> Abort a s') /\
+  (!inst (s:venom_state) alloc_size v s'.
+     exec_alloca inst s alloc_size <> IntRet v s')
+Proof
+  rw[exec_alloca_def] >> gvs[AllCaseEqs()]
+QED
+
+val alloca_field_solve_tac =
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
       write_memory_with_expansion_def, mcopy_def,
       revert_state_def, eval_operands_def, jump_to_def,
-      lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def]
+      lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def];
+
+val effect_free_alloca_tac =
+  fs[step_inst_base_def] >>
+  FIRST [
+    drule exec_pure1_result_alloca_fields >> simp[],
+    drule exec_pure2_result_alloca_fields >> simp[],
+    drule exec_pure3_result_alloca_fields >> simp[],
+    drule exec_read0_result_alloca_fields >> simp[],
+    drule exec_read1_result_alloca_fields >> simp[],
+    alloca_field_solve_tac
+  ];
+
+val alloca_field_finish_tac =
+  FIRST [
+    qpat_x_assum `(_ \/ _ \/ _ \/ _) /\ _` mp_tac,
+    qpat_x_assum `step_inst_base inst s = _` mp_tac
+  ] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  FIRST [
+    rw[exec_pure1_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_pure2_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_pure3_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_read0_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_read1_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_write2_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[] >>
+      imp_res_tac exec_ext_call_preserves_alloca_fields >>
+      imp_res_tac exec_delegatecall_preserves_alloca_fields >>
+      imp_res_tac exec_create_preserves_alloca_fields >>
+      alloca_field_solve_tac >> NO_TAC
+  ];
+
+val effect_free_not_terminal_tac =
+  rpt strip_tac >>
+  gvs[] >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp[exec_pure1_not_terminal, exec_pure2_not_terminal,
+       exec_pure3_not_terminal, exec_read0_not_terminal,
+       exec_read1_not_terminal] >>
+  BasicProvers.every_case_tac >>
+  simp[exec_pure1_not_terminal, exec_pure2_not_terminal,
+       exec_pure3_not_terminal, exec_read0_not_terminal,
+       exec_read1_not_terminal];
+
+Triviality effect_free_pure1_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = ISZERO \/ inst.inst_opcode = NOT) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
 QED
 
-(* Combined *)
+Triviality effect_free_pure2_arith_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+     inst.inst_opcode = MUL \/ inst.inst_opcode = Div \/
+     inst.inst_opcode = SDIV \/ inst.inst_opcode = Mod \/
+     inst.inst_opcode = SMOD \/ inst.inst_opcode = Exp) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_pure2_cmp_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/
+     inst.inst_opcode = GT \/ inst.inst_opcode = SLT \/
+     inst.inst_opcode = SGT) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_pure2_bits_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
+     inst.inst_opcode = XOR \/ inst.inst_opcode = SHL \/
+     inst.inst_opcode = SHR \/ inst.inst_opcode = SAR \/
+     inst.inst_opcode = SIGNEXTEND \/ inst.inst_opcode = BYTE \/
+     inst.inst_opcode = OFFSET) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_pure3_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = ADDMOD \/ inst.inst_opcode = MULMOD) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_read0_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = CALLER \/ inst.inst_opcode = ADDRESS \/
+     inst.inst_opcode = CALLVALUE \/ inst.inst_opcode = GAS \/
+     inst.inst_opcode = ORIGIN \/ inst.inst_opcode = GASPRICE \/
+     inst.inst_opcode = CHAINID \/ inst.inst_opcode = COINBASE \/
+     inst.inst_opcode = TIMESTAMP \/ inst.inst_opcode = NUMBER \/
+     inst.inst_opcode = PREVRANDAO \/ inst.inst_opcode = GASLIMIT \/
+     inst.inst_opcode = BASEFEE \/ inst.inst_opcode = BLOBBASEFEE \/
+     inst.inst_opcode = SELFBALANCE \/ inst.inst_opcode = CALLDATASIZE \/
+     inst.inst_opcode = RETURNDATASIZE \/ inst.inst_opcode = MEMTOP \/
+     inst.inst_opcode = CODESIZE) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_read1_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = MLOAD \/ inst.inst_opcode = SLOAD \/
+     inst.inst_opcode = TLOAD \/ inst.inst_opcode = ILOAD \/
+     inst.inst_opcode = DLOAD \/ inst.inst_opcode = BLOCKHASH \/
+     inst.inst_opcode = BLOBHASH \/ inst.inst_opcode = BALANCE \/
+     inst.inst_opcode = CALLDATALOAD \/
+     inst.inst_opcode = EXTCODESIZE \/
+     inst.inst_opcode = EXTCODEHASH) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_direct_not_terminal[local]:
+  !inst (s:venom_state).
+    (inst.inst_opcode = SHA3 \/ inst.inst_opcode = PHI \/
+     inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PARAM \/
+     inst.inst_opcode = NOP) ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  effect_free_not_terminal_tac
+QED
+
+Triviality effect_free_opcode_cases[local]:
+  !op. is_effect_free_op op ==>
+    (op = ISZERO \/ op = NOT) \/
+    (op = ADD \/ op = SUB \/ op = MUL \/ op = Div \/
+     op = SDIV \/ op = Mod \/ op = SMOD \/ op = Exp) \/
+    (op = EQ \/ op = LT \/ op = GT \/ op = SLT \/ op = SGT) \/
+    (op = AND \/ op = OR \/ op = XOR \/ op = SHL \/
+     op = SHR \/ op = SAR \/ op = SIGNEXTEND \/ op = BYTE \/
+     op = OFFSET) \/
+    (op = ADDMOD \/ op = MULMOD) \/
+    (op = CALLER \/ op = ADDRESS \/ op = CALLVALUE \/ op = GAS \/
+     op = ORIGIN \/ op = GASPRICE \/ op = CHAINID \/
+     op = COINBASE \/ op = TIMESTAMP \/ op = NUMBER \/
+     op = PREVRANDAO \/ op = GASLIMIT \/ op = BASEFEE \/
+     op = BLOBBASEFEE \/ op = SELFBALANCE \/ op = CALLDATASIZE \/
+     op = RETURNDATASIZE \/ op = MEMTOP \/ op = CODESIZE) \/
+    (op = MLOAD \/ op = SLOAD \/ op = TLOAD \/ op = ILOAD \/
+     op = DLOAD \/ op = BLOCKHASH \/ op = BLOBHASH \/ op = BALANCE \/
+     op = CALLDATALOAD \/ op = EXTCODESIZE \/ op = EXTCODEHASH) \/
+    (op = SHA3 \/ op = PHI \/ op = ASSIGN \/ op = PARAM \/ op = NOP)
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Triviality effect_free_step_not_terminal[local]:
+  !inst (s:venom_state).
+    is_effect_free_op inst.inst_opcode ==>
+    (!s'. step_inst_base inst s <> Halt s') /\
+    (!a s'. step_inst_base inst s <> Abort a s') /\
+    (!v s'. step_inst_base inst s <> IntRet v s')
+Proof
+  rpt strip_tac >>
+  drule_all effect_free_opcode_cases >> strip_tac >>
+  FIRST [
+    qspecl_then [`inst`, `s`] mp_tac effect_free_pure1_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_pure2_arith_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_pure2_cmp_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_pure2_bits_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_pure3_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_read0_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_read1_not_terminal >> gvs[] >> NO_TAC,
+    qspecl_then [`inst`, `s`] mp_tac effect_free_direct_not_terminal >> gvs[] >> NO_TAC
+  ]
+QED
+
+Triviality opcode_alloca_field_class[local]:
+  !op. op <> INVOKE /\ op <> ALLOCA ==>
+    is_effect_free_op op \/
+    is_mem_write_op op \/
+    is_ext_call_op op \/
+    op = SSTORE \/ op = TSTORE \/ op = ISTORE \/ op = LOG \/
+    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ is_terminator op
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Triviality step_inst_base_effect_free_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    is_effect_free_op inst.inst_opcode ==>
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
+        venomInstProofsTheory.step_inst_base_effect_free_state_equiv >>
+      simp[] >> rw[state_equiv_def, execution_equiv_def])
+  >- (qspecl_then [`inst`, `s`] mp_tac effect_free_step_not_terminal >> gvs[])
+  >- (qspecl_then [`inst`, `s`] mp_tac effect_free_step_not_terminal >> gvs[])
+  >- (qspecl_then [`inst`, `s`] mp_tac effect_free_step_not_terminal >> gvs[])
+QED
+
+Triviality step_inst_base_mem_write_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    is_mem_write_op inst.inst_opcode ==>
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt gen_tac >> DISCH_TAC >>
+  Cases_on `inst.inst_opcode` >> gvs[is_mem_write_op_def] >>
+  alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_ext_call_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    is_ext_call_op inst.inst_opcode ==>
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt gen_tac >> DISCH_TAC >>
+  Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def] >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp[exec_ext_call_not_terminal, exec_delegatecall_not_terminal,
+       exec_create_not_terminal] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac exec_ext_call_preserves_alloca_fields >>
+  imp_res_tac exec_delegatecall_preserves_alloca_fields >>
+  imp_res_tac exec_create_preserves_alloca_fields >>
+  gvs[]
+QED
+
+Triviality step_inst_base_sstore_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = SSTORE ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_tstore_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = TSTORE ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_istore_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = ISTORE ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_log_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = LOG ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_assert_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = ASSERT ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_assert_unreachable_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = ASSERT_UNREACHABLE ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
+Triviality step_inst_base_terminator_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    is_terminator inst.inst_opcode ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt gen_tac >> DISCH_TAC >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  alloca_field_finish_tac
+QED
+
+(* Combined non-ALLOCA, non-INVOKE step_inst_base alloca-field preservation. *)
 Theorem step_inst_base_preserves_alloca_fields:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/
@@ -355,8 +878,50 @@ Theorem step_inst_base_preserves_alloca_fields:
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_alloca_next = s.vs_alloca_next
 Proof
-  metis_tac[step_inst_base_preserves_allocas,
-            step_inst_base_preserves_alloca_next]
+  rpt gen_tac >> DISCH_TAC >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `inst.inst_opcode <> ALLOCA` by gvs[] >>
+  drule_all opcode_alloca_field_class >> strip_tac
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_effect_free_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_mem_write_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_ext_call_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_sstore_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_tstore_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_istore_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_log_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_assert_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_assert_unreachable_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_terminator_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+QED
+
+Theorem step_inst_base_preserves_allocas:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> ALLOCA ==>
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt strip_tac >>
+  qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_preserves_alloca_fields >>
+  impl_tac >- gvs[] >> gvs[]
+QED
+
+Theorem step_inst_base_preserves_alloca_next:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/
+     step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> ALLOCA ==>
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_preserves_alloca_fields >>
+  impl_tac >- gvs[] >> gvs[]
 QED
 
 (* Result predicate: alloca_inv + monotonicity *)

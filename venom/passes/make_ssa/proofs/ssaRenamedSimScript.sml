@@ -10,7 +10,7 @@
 
 Theory ssaRenamedSim
 Ancestors
-  ssaSimDefs venomExecSemantics venomInst venomState
+  ssaSimDefs venomExecSemantics venomInst venomState opcodeClass
   list rich_list finite_map pred_set
 Libs
   ssaRenamedSimLib
@@ -77,8 +77,17 @@ Triviality exec_pure3_renamed:
                   s1' s2'
 Proof
   rw[exec_pure3_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
+  Cases_on `inst1.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `eval_operand h s1` >> gvs[] >>
+  Cases_on `eval_operand h' s1` >> gvs[] >>
+  Cases_on `eval_operand h'' s1` >> gvs[] >>
   imp_res_tac eval_operand_renamed >> gvs[] >>
+  Cases_on `inst1.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
   irule ssa_sim_update_var >> gvs[]
 QED
 
@@ -386,21 +395,10 @@ Proof
        simp[opcode_has_output_def] >> NO_TAC) >>
   TRY (drule_all exec_create_renamed >>
        simp[opcode_has_output_def] >> NO_TAC) >>
-  (* Phase 4: resolve conclusion-side case expressions *)
+  (* Phase 4: normalize mapped operands before exposing singleton outputs. *)
   gvs[EL_MAP, GSYM MAP_DROP] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  (* Phase 5a: destructure inst2.inst_outputs where LENGTH is concrete *)
-  TRY (
-    `?h. inst2.inst_outputs = [h]` by
-      (Cases_on `inst2.inst_outputs` >> gvs[] >>
-       Cases_on `t` >> gvs[]) >>
-    gvs[]) >>
-  (* Phase 5b: destructure inst1.inst_outputs similarly *)
-  TRY (
-    `?h1. inst1.inst_outputs = [h1]` by
-      (Cases_on `inst1.inst_outputs` >> gvs[] >>
-       Cases_on `t` >> gvs[]) >>
-    gvs[]) >>
+  (* Phase 5: use output lengths to expose singleton outputs. *)
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >>
   (* Resolve opcode_has_output for remaining opcodes *)
   gvs[opcode_has_output_def] >>
   (* Phase 6a: ALLOCA — needs combined allocas + var update *)
@@ -416,7 +414,17 @@ Proof
   gvs[mcopy_def, write_memory_with_expansion_def,
       mload_def, mstore_def, mstore8_def, sload_def, sstore_def, tload_def, tstore_def,
       contract_storage_def, contract_transient_def,
-      ssa_sim_def, update_var_def, lookup_var_def]
+      ssa_sim_def, update_var_def, lookup_var_def,
+      GSYM MAP_APPEND, rich_listTheory.MAP_HD] >>
+  qmatch_goalsub_abbrev_tac `s2.vs_logs ++ [log_entry] = _` >>
+  qexists_tac `s2 with vs_logs := s2.vs_logs ++ [log_entry]` >>
+  simp[Abbr`log_entry`] >>
+  qexists_tac `off` >>
+  `MAP (renamed_operand sigma) l1 ++
+     [renamed_operand sigma h; renamed_operand sigma h'] =
+   MAP (renamed_operand sigma) (l1 ++ [h; h'])` by simp[] >>
+  ASM_REWRITE_TAC[] >>
+  simp[rich_listTheory.MAP_HD, ssa_sim_def, lookup_var_def]
 QED
 
 (* ==========================================================================
@@ -625,15 +633,11 @@ Theorem step_base_abort_sim:
           execution_equiv UNIV s1' s2'
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[inst_renamed_def] >>
+  drule step_inst_base_abort_opcodes >> strip_tac >>
+  gvs[inst_renamed_def, is_terminator_def] >>
   imp_res_tac ssa_sim_fields >>
-  Cases_on `inst1.inst_opcode` >> gvs[is_terminator_def] >>
   gvs step_base_reduces >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM, renamed_operand_def] >>
+  gvs[exec_write2_def, AllCaseEqs(), LET_THM, renamed_operand_def] >>
   TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>
   TRY (imp_res_tac eval_operands_renamed >> gvs[]) >>
   irule ssa_sim_implies_exec_equiv_UNIV >>

@@ -104,6 +104,110 @@ Proof
   w2n_sign_tac
 QED
 
+Triviality signed_bounds_imply_w2n_lt[local]:
+  ∀lo1 hi1 lo2 hi2 (w1:256 word) (w2:256 word).
+    lo1 ≤ w2i w1 ∧ w2i w1 ≤ hi1 ∧
+    lo2 ≤ w2i w2 ∧ w2i w2 ≤ hi2 ∧
+    ¬(lo1 < 0 ∧ hi1 >= 0) ∧
+    ¬(lo2 < 0 ∧ hi2 >= 0) ∧
+    ¬(hi1 < 0 ∧ lo2 >= 0) ∧
+    ¬(lo1 >= 0 ∧ hi2 < 0) ∧
+    hi1 < lo2 ⇒
+    w2n w1 < w2n w2
+Proof
+  rpt strip_tac >>
+  Cases_on `w2i w1 < 0`
+  >- (`w2i w2 < 0` by intLib.ARITH_TAC >>
+      mp_tac (Q.SPECL [`w1`,`w2`] same_sign_w2n) >>
+      impl_tac >- simp[] >>
+      intLib.ARITH_TAC) >>
+  `0 <= w2i w1` by intLib.ARITH_TAC >>
+  `0 <= w2i w2` by intLib.ARITH_TAC >>
+  mp_tac (Q.SPECL [`w1`,`w2`] same_sign_w2n) >>
+  impl_tac >- simp[] >>
+  intLib.ARITH_TAC
+QED
+
+Triviality signed_bounds_w2n_lt_contra[local]:
+  ∀lo1 hi1 lo2 hi2 (w1:256 word) (w2:256 word).
+    lo1 ≤ w2i w1 ∧ w2i w1 ≤ hi1 ∧
+    lo2 ≤ w2i w2 ∧ w2i w2 ≤ hi2 ∧
+    ¬(lo1 < 0 ∧ hi1 >= 0 ∨ lo2 < 0 ∧ hi2 >= 0) ∧
+    ¬(hi1 < 0 ∧ lo2 >= 0) ∧
+    ¬(lo1 >= 0 ∧ hi2 < 0) ∧
+    hi1 < lo2 ∧
+    ¬(w2n w1 < w2n w2) ⇒
+    F
+Proof
+  rpt strip_tac >>
+  `¬(lo1 < 0 ∧ hi1 >= 0)` by (strip_tac >> gvs[]) >>
+  `¬(lo2 < 0 ∧ hi2 >= 0)` by (strip_tac >> gvs[]) >>
+  qspecl_then [`lo1`,`hi1`,`lo2`,`hi2`,`w1`,`w2`] mp_tac
+    signed_bounds_imply_w2n_lt >>
+  impl_tac >- gvs[] >>
+  simp[]
+QED
+
+Triviality signed_bounds_w2n_lt_false[local]:
+  ∀lo1 hi1 lo2 hi2 (w1:256 word) (w2:256 word).
+    lo1 ≤ w2i w1 ∧ w2i w1 ≤ hi1 ∧
+    lo2 ≤ w2i w2 ∧ w2i w2 ≤ hi2 ∧
+    ¬(lo1 < 0 ∧ hi1 >= 0 ∨ lo2 < 0 ∧ hi2 >= 0) ∧
+    ¬(hi1 < 0 ∧ lo2 >= 0) ∧
+    ¬(lo1 >= 0 ∧ hi2 < 0) ∧
+    lo1 >= hi2 ∧
+    w2n w1 < w2n w2 ⇒
+    F
+Proof
+  rpt strip_tac >>
+  Cases_on `w2i w1 < 0`
+  >- (`w2i w2 < 0` by intLib.ARITH_TAC >>
+      mp_tac (Q.SPECL [`w1`,`w2`] same_sign_w2n) >>
+      impl_tac >- simp[] >>
+      intLib.ARITH_TAC) >>
+  `0 <= w2i w1` by intLib.ARITH_TAC >>
+  `0 <= w2i w2` by intLib.ARITH_TAC >>
+  mp_tac (Q.SPECL [`w1`,`w2`] same_sign_w2n) >>
+  impl_tac >- simp[] >>
+  intLib.ARITH_TAC
+QED
+
+Triviality signed_bounds_w2n_gt_contra[local]:
+  ∀lo1 hi1 lo2 hi2 (w1:256 word) (w2:256 word).
+    lo1 ≤ w2i w1 ∧ w2i w1 ≤ hi1 ∧
+    lo2 ≤ w2i w2 ∧ w2i w2 ≤ hi2 ∧
+    ¬(lo1 < 0 ∧ hi1 >= 0 ∨ lo2 < 0 ∧ hi2 >= 0) ∧
+    ¬(hi1 < 0 ∧ lo2 >= 0) ∧
+    ¬(lo1 >= 0 ∧ hi2 < 0) ∧
+    lo1 > hi2 ∧
+    ¬(w2n w1 > w2n w2) ⇒
+    F
+Proof
+  rpt strip_tac >>
+  qspecl_then [`lo2`,`hi2`,`lo1`,`hi1`,`w2`,`w1`] mp_tac
+    signed_bounds_w2n_lt_contra >>
+  impl_tac >- (gvs[arithmeticTheory.GREATER_DEF] >> intLib.ARITH_TAC) >>
+  simp[arithmeticTheory.GREATER_DEF]
+QED
+
+Triviality signed_bounds_w2n_gt_false[local]:
+  ∀lo1 hi1 lo2 hi2 (w1:256 word) (w2:256 word).
+    lo1 ≤ w2i w1 ∧ w2i w1 ≤ hi1 ∧
+    lo2 ≤ w2i w2 ∧ w2i w2 ≤ hi2 ∧
+    ¬(lo1 < 0 ∧ hi1 >= 0 ∨ lo2 < 0 ∧ hi2 >= 0) ∧
+    ¬(hi1 < 0 ∧ lo2 >= 0) ∧
+    ¬(lo1 >= 0 ∧ hi2 < 0) ∧
+    hi1 <= lo2 ∧
+    w2n w1 > w2n w2 ⇒
+    F
+Proof
+  rpt strip_tac >>
+  qspecl_then [`lo2`,`hi2`,`lo1`,`hi1`,`w2`,`w1`] mp_tac
+    signed_bounds_w2n_lt_false >>
+  impl_tac >- (gvs[arithmeticTheory.GREATER_DEF] >> intLib.ARITH_TAC) >>
+  simp[arithmeticTheory.GREATER_DEF]
+QED
+
 (* Boolean result is always in [0,1] *)
 Theorem in_range_bool_result[local]:
   ∀b:bool. in_range vr_bool_range (if b then (1w:256 word) else 0w)
@@ -143,14 +247,14 @@ Proof
   IF_CASES_TAC
   >- (
     `(n + M) % D = n + M` by (irule integerTheory.INT_LESS_MOD >> intLib.ARITH_TAC) >>
-    intLib.ARITH_TAC)
+    gvs[] >> intLib.COOPER_TAC)
   >- (
     `n + M = 1 * D + (n - M)` by intLib.ARITH_TAC >>
     `(n + M) % D = (n - M) % D` by (
       pop_assum (fn th => REWRITE_TAC[th]) >>
       simp[integerTheory.INT_MOD_ADD_MULTIPLES]) >>
     `(n - M) % D = n - M` by (irule integerTheory.INT_LESS_MOD >> intLib.ARITH_TAC) >>
-    intLib.ARITH_TAC)
+    gvs[] >> intLib.COOPER_TAC)
 QED
 
 (* Corollaries: wrap256_signed models word +, -, * *)
@@ -402,13 +506,14 @@ Proof
   >> TRY (
     mp_tac (Q.SPECL [`w2`,`w1`] cross_sign_w2n) >>
     (impl_tac >- intLib.ARITH_TAC) >> intLib.ARITH_TAC)
-  (* (c) Same-sign: w2n order = w2i order, then integer contradiction *)
+  (* (c) Same-sign interval separation implies unsigned order. *)
   >> TRY (
-    mp_tac (Q.SPECL [`w1`,`w2`] same_sign_w2n) >>
-    (impl_tac >- intLib.ARITH_TAC) >> intLib.ARITH_TAC)
-  >> TRY (
-    mp_tac (Q.SPECL [`w2`,`w1`] same_sign_w2n) >>
-    (impl_tac >- intLib.ARITH_TAC) >> intLib.ARITH_TAC)
+    FIRST [
+      drule_all signed_bounds_w2n_lt_contra,
+      drule_all signed_bounds_w2n_lt_false,
+      drule_all signed_bounds_w2n_gt_contra,
+      drule_all signed_bounds_w2n_gt_false] >>
+    simp[])
   (* (d) Constant bounds: UINT256_MAX vs INT256_MIN/MAX *)
   >> assume_tac int256_min_neg >> assume_tac int256_max_pos
   >> assume_tac uint256_gt_int256

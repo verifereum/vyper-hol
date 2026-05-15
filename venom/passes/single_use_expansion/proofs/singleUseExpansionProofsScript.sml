@@ -1705,9 +1705,15 @@ Proof
     (* R_term idx change — first conjunct *)
     rpt strip_tac >>
     fs[execEquivParamDefsTheory.valid_state_rel_def] >>
+    qpat_x_assum `!s1 s2. execution_equiv (sue_fresh_vars_fn fn) s1 s2 ==> _`
+      (fn fields => mp_tac (Q.SPECL [`v1`, `v2`] fields)) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
     first_x_assum (qspecl_then [`v1`, `v2`,
         `v1 with vs_inst_idx := m1`, `v2 with vs_inst_idx := m2`] mp_tac) >>
-    simp[])
+    disch_then match_mp_tac >>
+    PURE_REWRITE_TAC (CONJUNCTS venomStateTheory.venom_state_accfupds @
+      [combinTheory.K_THM]) >>
+    rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >> ASM_REWRITE_TAC[])
   >>
   (* OK/OK continuation — second conjunct *)
   rpt strip_tac >>
@@ -2428,25 +2434,30 @@ Triviality filter_flat_at_most_one[local]:
     LENGTH (FILTER P (FLAT (MAP f l))) <= 1
 Proof
   gen_tac >> gen_tac >> Induct >- simp[] >>
-  rpt strip_tac >> fs[ALL_DISTINCT] >>
-  simp[FILTER_APPEND_DISTRIB, LENGTH_APPEND] >>
-  `LENGTH (FILTER P (f h)) <= 1` by metis_tac[] >>
-  Cases_on `FILTER P (f h)` >- simp[] >>
-  fs[] >>
-  `LENGTH t = 0` by DECIDE_TAC >>
-  `t = []` by metis_tac[LENGTH_NIL] >>
-  gvs[] >>
-  `FILTER P (FLAT (MAP f l)) = []` suffices_by simp[] >>
-  rw[FILTER_EQ_NIL, EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   rpt strip_tac >>
-  `FILTER P (f y) <> []` by (
-    simp[FILTER_NEQ_NIL, EXISTS_MEM] >> metis_tac[]
-  ) >>
-  `h = y` by (
-    qpat_x_assum `!a b. _ /\ _ /\ FILTER _ _ <> [] /\ _ ==> _`
-      (qspecl_then [`h`, `y`] mp_tac) >> simp[]
-  ) >>
-  metis_tac[]
+  qpat_x_assum `ALL_DISTINCT (h::l)` mp_tac >>
+  simp[ALL_DISTINCT] >> strip_tac >>
+  `(!x. MEM x l ==> LENGTH (FILTER P (f x)) <= 1)` by metis_tac[MEM] >>
+  `(!x y. MEM x l /\ MEM y l /\
+          FILTER P (f x) <> [] /\ FILTER P (f y) <> [] ==> x = y)`
+    by metis_tac[MEM] >>
+  simp[FILTER_APPEND_DISTRIB, LENGTH_APPEND] >>
+  `LENGTH (FILTER P (f h)) <= 1` by metis_tac[MEM] >>
+  Cases_on `FILTER P (f h)`
+  >- (qpat_x_assum `ALL_DISTINCT l /\ _ ==>
+          LENGTH (FILTER P (FLAT (MAP f l))) <= 1` mp_tac >> simp[]) >>
+  Cases_on `t` >- (
+    simp[] >>
+    `FILTER P (FLAT (MAP f l)) = []` suffices_by simp[] >>
+    rw[FILTER_EQ_NIL, EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+    spose_not_then strip_assume_tac >>
+    `FILTER P (f y) <> []` by
+      (simp[FILTER_NEQ_NIL, EXISTS_MEM] >> metis_tac[]) >>
+    `h = y` by (
+      qpat_x_assum `!a b. _ /\ _ /\ FILTER _ _ <> [] /\ _ ==> _`
+        (qspecl_then [`h`, `y`] mp_tac) >> simp[]) >>
+    metis_tac[]) >>
+  gvs[]
 QED
 
 (* If Var v passes the filter in sue_expand_inst, the inst must be non-skipped

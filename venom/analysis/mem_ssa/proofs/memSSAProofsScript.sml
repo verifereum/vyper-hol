@@ -1335,8 +1335,10 @@ Proof
   strip_tac >> gvs[] >>
   first_x_assum match_mp_tac >>
   qexistsl_tac [`ms1`, `cfg`, `dom`, `fuel`] >> simp[] >>
-  metis_tac[insert_phi_at_preserves_ids_valid, insert_phi_at_preserves_fresh,
-            insert_phi_at_preserves_phi_ops_valid]
+  rpt conj_tac
+  >- metis_tac[insert_phi_at_preserves_ids_valid]
+  >- metis_tac[insert_phi_at_preserves_fresh]
+  >- metis_tac[insert_phi_at_preserves_phi_ops_valid]
 QED
 
 (* insert_phis preserves phi_ops validity *)
@@ -1364,7 +1366,17 @@ Proof
      rd = 0 ∨ rd ∈ FDOM ms'.ms_nodes` by
     metis_tac[process_frontiers_preserves_phi_ops_valid] >>
   (* Apply IH *)
-  res_tac >> gvs[]
+  sg `∀phi_id' ops' rd' blk'.
+        FLOOKUP (mem_ssa_insert_phis ms' cfg dom ef fuel (new_wl ++ wl)).ms_phi_ops phi_id' =
+        SOME ops' ∧ MEM (rd', blk') ops' ⇒
+        rd' = 0 ∨ rd' ∈ FDOM (mem_ssa_insert_phis ms' cfg dom ef fuel (new_wl ++ wl)).ms_nodes`
+  >- (qpat_x_assum `mem_ssa_ids_valid ms' /\ nodes_fresh ms' /\ _ ==> _` match_mp_tac >>
+      ASM_REWRITE_TAC[]) >>
+  qpat_x_assum `∀phi_id' ops' rd' blk'.
+        FLOOKUP (mem_ssa_insert_phis ms' cfg dom ef fuel (new_wl ++ wl)).ms_phi_ops phi_id' =
+        SOME ops' ∧ MEM (rd', blk') ops' ⇒ _`
+    (qspecl_then [`phi_id`, `ops`, `rd`, `blk`] mp_tac) >>
+  simp[]
 QED
 
 (* ==========================================================================
@@ -3444,8 +3456,9 @@ Proof
   strip_tac >> gvs[] >>
   first_x_assum match_mp_tac >>
   qexistsl_tac [`ms1`, `cfg`, `dom`, `fuel`] >> simp[] >>
-  metis_tac[insert_phi_at_block_phis_correct,
-            insert_phi_at_preserves_fresh]
+  conj_tac
+  >- metis_tac[insert_phi_at_preserves_fresh]
+  >- metis_tac[insert_phi_at_block_phis_correct]
 QED
 
 Triviality insert_phis_block_phis_correct:

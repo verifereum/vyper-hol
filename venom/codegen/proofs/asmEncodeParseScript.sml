@@ -348,11 +348,97 @@ QED
 (* General opcode injectivity: well-formed opnames with equal opcodes are equal.
    Proof: first byte of opcode determines the constructor family, then
    parameters are determined by remaining bytes + wf_opname constraints. *)
+val opcode_wf_inj_tac =
+  Cases_on `op2` >>
+  gvs[opcode_def, wf_opname_def, word_add_n2w, n2w_11, dimword_8];
+
 Theorem opcode_wf_inj:
   ∀op1 op2. wf_opname op1 ∧ wf_opname op2 ∧ opcode op1 = opcode op2 ⇒
             op1 = op2
 Proof
-  Cases >> simp[opcode_def, wf_opname_def] >> rpt strip_tac >>
-  Cases_on `op2` >>
-  gvs[opcode_def, wf_opname_def, word_add_n2w, n2w_11, dimword_8]
+  Cases >> simp[opcode_def, wf_opname_def] >> rpt strip_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
+  >- opcode_wf_inj_tac
 QED

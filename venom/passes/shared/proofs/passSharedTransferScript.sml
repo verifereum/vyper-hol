@@ -86,6 +86,131 @@ val transfer_close_tac =
   res_tac >> gvs (update_var_def :: lookup_var_def ::
                   finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs);
 
+Triviality exec_pure1_ok_transfer[local]:
+  !f inst s v s'.
+    exec_pure1 f inst s = OK v /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s' = eval_operand op s) ==>
+    ?v'. exec_pure1 f inst s' = OK v'
+Proof
+  rw[exec_pure1_def] >> gvs[AllCaseEqs()] >> res_tac >> gvs[]
+QED
+
+Triviality exec_pure2_ok_transfer[local]:
+  !f inst s v s'.
+    exec_pure2 f inst s = OK v /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s' = eval_operand op s) ==>
+    ?v'. exec_pure2 f inst s' = OK v'
+Proof
+  rw[exec_pure2_def] >> gvs[AllCaseEqs()] >> res_tac >> gvs[]
+QED
+
+Triviality exec_pure3_ok_transfer[local]:
+  !f inst s v s'.
+    exec_pure3 f inst s = OK v /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s' = eval_operand op s) ==>
+    ?v'. exec_pure3 f inst s' = OK v'
+Proof
+  rw[exec_pure3_def] >> gvs[AllCaseEqs()] >> res_tac >> gvs[]
+QED
+
+Triviality exec_read0_ok_transfer[local]:
+  !f inst s v s'.
+    exec_read0 f inst s = OK v ==>
+    ?v'. exec_read0 f inst s' = OK v'
+Proof
+  rw[exec_read0_def] >> gvs[AllCaseEqs()]
+QED
+
+Triviality exec_read1_ok_transfer[local]:
+  !f inst s v s'.
+    exec_read1 f inst s = OK v /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s' = eval_operand op s) ==>
+    ?v'. exec_read1 f inst s' = OK v'
+Proof
+  rw[exec_read1_def] >> gvs[AllCaseEqs()] >> res_tac >> gvs[]
+QED
+
+Triviality exec_write2_ok_transfer[local]:
+  !f inst s v s'.
+    exec_write2 f inst s = OK v /\
+    (!op. MEM op inst.inst_operands ==> eval_operand op s' = eval_operand op s) ==>
+    ?v'. exec_write2 f inst s' = OK v'
+Proof
+  rw[exec_write2_def] >> gvs[AllCaseEqs()] >> res_tac >> gvs[]
+QED
+
+val exec_ok_transfer_thms =
+  [exec_pure1_ok_transfer, exec_pure2_ok_transfer, exec_pure3_ok_transfer,
+   exec_read0_ok_transfer, exec_read1_ok_transfer, exec_write2_ok_transfer];
+
+val exec_ok_transfer_tac =
+  FIRST (map (fn th => drule_all th >> simp[]) exec_ok_transfer_thms);
+
+val ok_transfer_finish_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  rpt strip_tac >>
+  TRY (exec_ok_transfer_tac >> NO_TAC) >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >> NO_TAC) >>
+  TRY (res_tac >> gvs[] >> NO_TAC) >>
+  `eval_operands (DROP 2 rest) s' = eval_operands (DROP 2 rest) s` by (
+    irule eval_operands_agree_lem >> rpt strip_tac >>
+    first_x_assum irule >>
+    imp_res_tac mem_drop_subset >> gvs[]) >>
+  `eval_operand (HD rest) s' = eval_operand (HD rest) s` by (
+    first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
+  `eval_operand (EL 1 rest) s' = eval_operand (EL 1 rest) s` by (
+    first_x_assum irule >>
+    Cases_on `rest` >> gvs[] >>
+    Cases_on `t` >> gvs[]) >>
+  gvs[];
+
+val transfer_determined_finish_tac =
+  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  transfer_close_tac;
+
+val output_vars_finish_tac =
+  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >>
+       gvs[update_var_def, lookup_var_def,
+            finite_mapTheory.FLOOKUP_UPDATE] >> NO_TAC) >>
+  TRY (gvs (update_var_def :: lookup_var_def ::
+            finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs) >>
+       NO_TAC) >>
+  TRY (
+    `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2` by (
+      irule eval_operands_agree_lem >> rpt strip_tac >>
+      first_x_assum irule >>
+      imp_res_tac mem_drop_subset >> gvs[]) >>
+    `eval_operand (HD rest) s1 = eval_operand (HD rest) s2` by (
+      first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
+    `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2` by (
+      first_x_assum irule >>
+      Cases_on `rest` >> gvs[] >>
+      Cases_on `t` >> gvs[]) >>
+    gvs[] >> NO_TAC) >>
+  res_tac >> gvs (update_var_def :: lookup_var_def ::
+                  finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs);
+
 (* OK transfer: if step_inst_base returns OK on s, it also returns OK on s'
    when operands and relevant context fields agree. *)
 Theorem step_inst_base_ok_transfer:
@@ -106,29 +231,84 @@ Proof
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s' = eval_operand op s` by
     (rpt strip_tac >> res_tac >> gvs[]) >>
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >> NO_TAC) >>
-  TRY (res_tac >> gvs[] >> NO_TAC) >>
-  (* LOG case *)
-  `eval_operands (DROP 2 rest) s' = eval_operands (DROP 2 rest) s` by (
-    irule eval_operands_agree_lem >> rpt strip_tac >>
-    first_x_assum irule >>
-    imp_res_tac mem_drop_subset >> gvs[]) >>
-  `eval_operand (HD rest) s' = eval_operand (HD rest) s` by (
-    first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
-  `eval_operand (EL 1 rest) s' = eval_operand (EL 1 rest) s` by (
-    first_x_assum irule >>
-    Cases_on `rest` >> gvs[] >>
-    Cases_on `t` >> gvs[]) >>
-  gvs[]
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
 QED
 
 (* Per-field output determinism: each field conclusion has only the
@@ -200,19 +380,24 @@ Theorem step_inst_base_output_determined_fields:
        v1.vs_logs = v2.vs_logs)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  transfer_close_tac
+      all_effects_def, empty_effects_def]
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
 QED
 
 (* Combined scalar field agreement: given matching inputs (operands,
@@ -269,19 +454,86 @@ Theorem step_inst_base_scalar_agree:
     v1.vs_prev_hashes = v2.vs_prev_hashes
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  transfer_close_tac
+      all_effects_def, empty_effects_def]
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
 QED
 
 
@@ -328,40 +580,86 @@ Theorem step_inst_base_output_vars_agree:
     !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  (* For effect-free ops: transfer_close_tac handles via computation.
-     For write-only ops: lookup falls through to input, use res_tac. *)
-  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >>
-       gvs[update_var_def, lookup_var_def,
-            finite_mapTheory.FLOOKUP_UPDATE] >> NO_TAC) >>
-  TRY (gvs (update_var_def :: lookup_var_def ::
-            finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs) >>
-       NO_TAC) >>
-  TRY (
-    `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2` by (
-      irule eval_operands_agree_lem >> rpt strip_tac >>
-      first_x_assum irule >>
-      imp_res_tac mem_drop_subset >> gvs[]) >>
-    `eval_operand (HD rest) s1 = eval_operand (HD rest) s2` by (
-      first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
-    `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2` by (
-      first_x_assum irule >>
-      Cases_on `rest` >> gvs[] >>
-      Cases_on `t` >> gvs[]) >>
-    gvs[] >> NO_TAC) >>
-  res_tac >> gvs (update_var_def :: lookup_var_def ::
-                  finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs)
+      all_effects_def, empty_effects_def]
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
 QED
 
 (* Output variable determinism for effect-free ops: if operands and
@@ -404,19 +702,70 @@ Theorem step_inst_base_effect_free_output_determined_vars:
     !v. MEM v inst.inst_outputs ==> lookup_var v v1 = lookup_var v v2
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-       exec_pure3_def, exec_read0_def, exec_read1_def,
-       exec_write2_def] >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_effect_free_op_def, is_terminator_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  transfer_close_tac
+      all_effects_def, empty_effects_def]
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
 QED
 
 

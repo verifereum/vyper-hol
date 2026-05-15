@@ -574,8 +574,21 @@ Proof
   (* Case split on exec_block result *)
   Cases_on `exec_block fuel run_ctx bb s1` >>
   Cases_on `exec_block fuel run_ctx (bt bb) s2` >>
-  gvs[lift_result_def]
-  (* Only OK-OK survives after gvs *)
+  fs[lift_result_def]
+  (* Only OK-OK survives after fs *)
+  >- (
+    rename1 `R_ok v1 v2` >>
+    `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
+    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
+    simp[lift_result_def] >>
+    imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0 >>
+    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
+    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+     sound (df_at bottom result v1.vs_current_bb 0) v1` by
+      metis_tac[] >>
+    REWRITE_TAC [GSYM function_map_transform_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     rename1 `R_ok v1 v2` >>
     `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
@@ -592,7 +605,8 @@ Proof
   (* Non-OK cases: Halt, Abort, IntRet *)
   >> (
     Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def])
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* ===== Non-widen variant with state_inv + transfer_sound_wf ===== *)
@@ -782,8 +796,21 @@ Proof
   (* Case split on exec_block result *)
   Cases_on `exec_block fuel run_ctx bb s1` >>
   Cases_on `exec_block fuel run_ctx (bt bb) s2` >>
-  gvs[lift_result_def]
-  (* Only OK-OK survives after gvs *)
+  fs[lift_result_def]
+  (* Only OK-OK survives after fs *)
+  >- (
+    rename1 `R_ok v1 v2` >>
+    `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
+    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
+    simp[lift_result_def] >>
+    imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0 >>
+    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
+    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+     sound (df_at bottom result v1.vs_current_bb 0) v1 /\
+     state_inv v1` by metis_tac[] >>
+    REWRITE_TAC [GSYM function_map_transform_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     rename1 `R_ok v1 v2` >>
     `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
@@ -800,7 +827,8 @@ Proof
   (* Non-OK cases: Halt, Abort, IntRet *)
   >> (
     Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def])
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* Variant of inv2 with block-restricted transfer soundness.
@@ -987,8 +1015,21 @@ Proof
   (* Case split on exec_block result *)
   Cases_on `exec_block fuel run_ctx bb s1` >>
   Cases_on `exec_block fuel run_ctx (bt bb) s2` >>
-  gvs[lift_result_def]
-  (* Only OK-OK survives after gvs *)
+  fs[lift_result_def]
+  (* Only OK-OK survives after fs *)
+  >- (
+    rename1 `R_ok v1 v2` >>
+    `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
+    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
+    simp[lift_result_def] >>
+    imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0 >>
+    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
+    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+     sound (df_at bottom result v1.vs_current_bb 0) v1 /\
+     state_inv v1` by metis_tac[] >>
+    REWRITE_TAC [GSYM function_map_transform_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     rename1 `R_ok v1 v2` >>
     `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
@@ -1005,7 +1046,8 @@ Proof
   (* Non-OK cases: Halt, Abort, IntRet *)
   >> (
     Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def])
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* ===== Widening variant with soundness ===== *)
@@ -1207,7 +1249,21 @@ Proof
     conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `exec_block fuel run_ctx bb s1` >>
   Cases_on `exec_block fuel run_ctx (bt bb) s2` >>
-  gvs[lift_result_def]
+  fs[lift_result_def]
+  >- (
+    rename1 `R_ok v1 v2` >>
+    `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
+    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
+    simp[lift_result_def] >>
+    imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0 >>
+    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
+    (* Successor soundness: already in df_at form thanks to initial simp *)
+    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+     sound (df_at bottom result v1.vs_current_bb 0) v1` by
+      metis_tac[] >>
+    REWRITE_TAC [GSYM function_map_transform_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     rename1 `R_ok v1 v2` >>
     `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
@@ -1224,7 +1280,8 @@ Proof
     rpt conj_tac >> first_assum ACCEPT_TAC)
   >> (
     Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def])
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* ===== Generic function-level correctness, parameterized by block sim =====
@@ -1386,7 +1443,21 @@ Proof
     conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `exec_block fuel run_ctx bb s1` >>
   Cases_on `exec_block fuel run_ctx (bt bb) s2` >>
-  gvs[lift_result_def]
+  fs[lift_result_def]
+  >- (
+    rename1 `R_ok v1 v2` >>
+    `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
+    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
+    simp[lift_result_def] >>
+    imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0 >>
+    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
+    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+     sound (df_at bottom result v1.vs_current_bb 0) v1 /\
+     state_inv v1` by
+      metis_tac[] >>
+    REWRITE_TAC [GSYM function_map_transform_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     rename1 `R_ok v1 v2` >>
     `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
@@ -1403,7 +1474,8 @@ Proof
     rpt conj_tac >> first_assum ACCEPT_TAC)
   >> (
     Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def])
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* Non-widen block-level simulation: like widen_block_sim but for df_analyze.
@@ -1552,7 +1624,21 @@ Proof
     conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `exec_block fuel run_ctx bb s1` >>
   Cases_on `exec_block fuel run_ctx (bt bb) s2` >>
-  gvs[lift_result_def]
+  fs[lift_result_def]
+  >- (
+    rename1 `R_ok v1 v2` >>
+    `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
+    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
+    simp[lift_result_def] >>
+    imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0 >>
+    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
+    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+     sound (df_at bottom result v1.vs_current_bb 0) v1 /\
+     state_inv v1` by
+      metis_tac[] >>
+    REWRITE_TAC [GSYM function_map_transform_def] >>
+    first_x_assum irule >> simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     rename1 `R_ok v1 v2` >>
     `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted] >>
@@ -1569,7 +1655,8 @@ Proof
     rpt conj_tac >> first_assum ACCEPT_TAC)
   >> (
     Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def])
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* Widening + state_inv: uses transfer_sound + analysis_inst_simulates *)
@@ -2001,7 +2088,7 @@ Proof
   (* Case split on exec_block results for IH *)
   \\ Cases_on `exec_block fuel run_ctx bb s1`
   \\ Cases_on `exec_block fuel run_ctx (btp bb) s2`
-  \\ gvs[lift_result_def]
+  \\ fs[lift_result_def]
   >- (
     rename1 `R_ok v1 v2`
     \\ `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted]
@@ -2015,7 +2102,23 @@ Proof
     \\ REWRITE_TAC [GSYM function_map_transform_def]
     \\ first_x_assum irule \\ simp[]
     \\ rpt conj_tac >> first_assum ACCEPT_TAC)
-  >> gvs[lift_result_def]
+  >- (
+    rename1 `R_ok v1 v2`
+    \\ `~v1.vs_halted` by metis_tac[venomExecProofsTheory.exec_block_OK_not_halted]
+    \\ `~v2.vs_halted` by metis_tac[vsr_R_ok_fields]
+    \\ simp[lift_result_def]
+    \\ imp_res_tac venomExecProofsTheory.exec_block_OK_inst_idx_0
+    \\ `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields]
+    \\ `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+        sound (df_at bottom result v1.vs_current_bb 0) v1` by
+         metis_tac[]
+    \\ REWRITE_TAC [GSYM function_map_transform_def]
+    \\ first_x_assum irule \\ simp[]
+    \\ rpt conj_tac >> first_assum ACCEPT_TAC)
+  >> (
+    Cases_on `exec_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
+    Cases_on `exec_block fuel run_ctx (bt bb) s2` >> gvs[lift_result_def] >>
+    gvs[])
 QED
 
 (* ===== Transform comparison ===== *)
