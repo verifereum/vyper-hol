@@ -61,7 +61,7 @@ jobs:
           git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
           cd vyper-src
           git fetch --unshallow --tags
-          pip install .[test]
+          pip install . --group test
           pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
 
   vyper-tests:
