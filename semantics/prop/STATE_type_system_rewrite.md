@@ -1,53 +1,45 @@
 # STATE_type_system_rewrite
-Updated: 2026-05-14
+Updated: 2026-05-15
 
 ## Cursor
-- component: C3.2
+- component: C3.1
 - status: in_progress
 - active_file: semantics/prop/vyperTypeStatePreservationScript.sml
-- next_action: Rewrite assign_target_ArrayRef_Replace_ntr_v2 (line 2723) and assign_target_ArrayRef_Update_ntr_v2 (line 2775) using the PROVEN AppendOp_ordinary_ntr pattern (lines 2827-3031): Cases_on final_tv BEFORE expanding assign_target_def, then per-constructor mp_tac+simp+gvs[AllCaseEqs()] producing 4 subgoals each. Rename to _v3 to break stale holbuild checkpoint. Update caller assign_target_TopLevelVar_ArrayRef_branch_no_type_error (line 3089) to use _v3 names.
-- expected_goal_shape: Per constructor (BaseTV, TupleTV, StructTV, FlagTV, NoneTV, ArrayTV Fixed/Dynamic): 4 subgoals after gvs[AllCaseEqs()] - success (assign_result), write INR, assign INR, read INR. ArrayTV Dynamic case contradicts Replace/Update (no Dynamic exclusion needed). Dispatch with drule chains for value_has_type + lemma application.
-- verify_with: holbuild(targets=['vyperTypeStatePreservationTheory'])
+- next_action: Fix sound_TopLevelVar resume proof: replace assign_target_preserves_runtime_consistent_result (not yet defined at that point in file) with imp_res_tac (cj 1 assign_target_preserves_state_well_typed_mutual). Then build vyperTypeStatePreservationTheory to verify.
+- expected_goal_shape: runtime_consistent env cx st' /\ no_type_error_result res after Cases_on vt splits into Type (StorageVarDecl/HashMapVarDecl) and HashMapT subcases
+- verify_with: holbuild(targets=['vyperTypeStatePreservationTheory'], tactic_timeout=120)
 
 ## If This Fails
-- If Cases_on approach also fails from stale checkpoint: insert dummy [local] theorem BEFORE both _v3 lemmas to force fresh theory-context checkpoint. If gvs[AllCaseEqs()] still explodes per constructor: fall back to step-by-step Cases_on monadic results (read_storage_slot etc.) after Cases_on final_tv + mp_tac + simp WITHOUT AllCaseEqs.
+- If gvs[assign_target_assignable_context_def] doesn't destruct correctly after target_runtime_typed_def expansion, insert FAIL_TAC probe to see exact goal state. If metis_tac[branch_lemma] fails to match premises, check which specific premise is missing and add by-subgoal to derive it.
 
 ## Do Not Retry
-- gvs blast pattern with by-subgoals referencing final_tv UNDER stale holbuild checkpoint: Stale checkpoint replays old variable bindings where final_tv was substituted differently by AllCaseEqs. The by-subgoal creates a FRESH final_tv that triggers DISCH_THEN assertion failure at proof_runtime.sml:749. Must break stale checkpoint first (rename theorem + all_tac >> prefix or dummy [local] theorem insertion).
-  - evidence: tool_output:TO_type_system_rewrite-20260514T195458Z_m8323_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260514T195458Z_m8062_t003
-- Cases_on intermediate monadic result variables (q, x) after partial gvs expansion: Variable names from Cases_on depend on checkpoint replay bindings. Stale checkpoints give wrong names. Also, intermediate results are nested inside case expressions that Cases_on cannot reach directly.
-  - evidence: tool_output:TO_type_system_rewrite-20260514T195458Z_m8309_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260514T195458Z_m8171_t001
+- Using assign_target_preserves_runtime_consistent_result inside sound_TopLevelVar resume: This theorem is defined AFTER assign_target_sound_mutual in the same file (line ~3472) and depends on it - circular dependency. Use cj 1 assign_target_preserves_state_well_typed_mutual instead.
+  - evidence: tool_output:TO_type_system_rewrite-20260515T192259Z_m10927_t001
+- gvs[AllCaseEqs()] blast inline in Resume blocks for TopLevelVar: Creates 30+ subgoals with auto-generated variable names that prevent lemma matching. Use boundary lemma + metis_tac instead (L0335).
+  - evidence: tool_output:TO_type_system_rewrite-20260513T211025Z_m6966_t002
+- drule_all assign_target_HashMapRef_branch_no_type_error after gvs that substitutes first_sub/rest_subs: gvs substitutes first_sub->LAST sbs, rest_subs->TL(REVERSE sbs), making drule_all unable to match. Use metis_tac instead or apply drule before gvs (L0334).
+  - evidence: tool_output:TO_type_system_rewrite-20260515T192259Z_m10877_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- The AppendOp_ordinary_ntr proof (lines 2827-3031) is ALREADY PROVEN with the exact Cases_on final_tv approach that I need. I spent zero time actually implementing this fix - should have immediately rewritten Replace/Update on turn 1 instead of re-reading code.
-- Consider merging all 4 ordinary branch lemmas (Replace, Update, AppendOp_ordinary, PopOp_ordinary) into a SINGLE parameterized lemma taking arbitrary op. The AppendOp proof is ~200 lines of near-identical per-constructor boilerplate. A single lemma would eliminate ~600 lines of duplication and make future fixes a single-point change.
-- The gvs blast approach (PopOp_ordinary_ntr pattern) technically works too - the only blocker is stale holbuild checkpoints. If renaming to _v3 doesn't break the checkpoint, try the compact 40-line gvs blast version FIRST since it's much shorter.
+- The sound_TopLevelVar resume is the LAST cheat in vyperTypeStatePreservationScript.sml. Completing it finishes both C3.1 and C3.6 in one step. But I'm writing a complex inline proof in a Resume block - should I prove a standalone top_level_TopLevelVar_assign_no_type_error boundary lemma instead, like the pattern that worked for HashMapRef and ArrayRef?
+- Is there a structural or ArrayTV/HashMapT type_value case I'm missing? The type_value nchotomy includes BaseTV, TupleTV, ArrayTV, StructTV, NoneTV - but for TopLevelVar, location_runtime_typed maps to FLOOKUP env.toplevel_vtypes which should only produce Type or HashMapT based on the well_typed_atarget typing. Need to verify this.
+- The preservation part (runtime_consistent) should close easily from the already-proved preservation mutual theorem (cj 1). The no_type_error part needs the branch lemmas. This decomposition is correct.
 
 ### What Went Wrong
-- This entire session was wasted re-reading context that STATE already summarized. STATE explicitly said 'Rewrite using PopOp_ordinary_ntr gvs blast pattern' from E0075. I should have edited and built immediately.
-- The stale checkpoint issue is the real blocker, not the proof approach. The Replace/Update proofs ARE structurally identical to PopOp_ordinary_ntr. If I had renamed the theorems to _v3 FIRST then built, the gvs blast would likely work.
-- Did not attempt any edits this session - just read and built. The fix is straightforward: rename, maybe add all_tac >> prefix, and the PopOp pattern should work.
+- Referenced assign_target_preserves_runtime_consistent_result which is defined LATER in the same file (line ~3472), causing a static error. This theorem depends on assign_target_sound_mutual itself - circular dependency. Must use the earlier preservation mutual theorem (assign_target_preserves_state_well_typed_mutual, finalized at line 1316) instead.
 
 ### Ignored Signals
-- STATE said 'Build vyperTypeStatePreservationTheory to test the rewritten Replace_ntr_v2 and Update_ntr_v2 proofs' as the very first action. I did this but didn't follow up with edits.
-- E0075 already identified assign_operation_CASE_rator as the key difference between failing and working proofs. The PopOp_ordinary_ntr proof has it and works. Replace/Update v2 now also have it. The remaining issue is purely the stale checkpoint.
-- Previous sessions added many [local] dummy theorems to break checkpoints (L0174, L0177). Should have inserted one before Replace_ntr_v2 to break the stale checkpoint.
+- The DOSSIER episode E0052 confirms assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error builds successfully using imp_res_tac + metis_tac pattern. This same pattern should work in the resume.
 
 ### Strategy Adjustments
-- IMMEDIATELY rename and rewrite failing proofs on first action next session. Stop re-reading proven working code.
-- Try the compact gvs blast (PopOp pattern, ~40 lines) FIRST with fresh theorem names (_v3) + all_tac >> prefix to break checkpoint. Only fall back to verbose Cases_on approach if blast fails.
-- Insert dummy [local] theorems aggressively when holbuild reports stale checkpoint matching.
+- For the resume, derive runtime_consistent first via imp_res_tac (cj 1 assign_target_preserves_state_well_typed_mutual) or similar, then prove no_type_error_result by splitting on vt type_value and calling the appropriate boundary lemma for each branch.
+- Consider using a standalone boundary lemma (like top_level_TopLevelVar_assign_no_type_error) to keep the resume body minimal. This follows L0335 pattern.
 
 ### Oracle Feedback
-- Oracle decomposition (split by operation, ordinary for rest) is correct. The proofs DO work - PopOp_ordinary_ntr proves it.
-- Oracle suggestion to merge 4 lemmas into one parameterized lemma is still the right cleanup after individual proofs work.
+- PLAN C3.1/C3.6 approach (boundary lemma then resume integration) is correct. The HashMapRef branch boundary lemma is proved. The ArrayRef branch boundary lemma is proved. The Type_StorageVarDecl boundary lemma is proved. All that remains is wiring them together in the resume.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260514T195458Z_m8323_t001 - Replace_ntr_v2 build failure: stale checkpoint + by-subgoal DISCH_THEN assertion on final_tv after AllCaseEqs expansion
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:3033-3087 - PROVEN PopOp_ordinary_ntr with gvs blast pattern
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2827-3031 - PROVEN AppendOp_ordinary_ntr with Cases_on final_tv pattern
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2723-2773 - FAILING Replace_ntr_v2
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2775-2825 - FAILING Update_ntr_v2
+- tool_output:TO_type_system_rewrite-20260515T192259Z_m10893_t001 - top_level_HashMapRef_assign_no_type_error builds clean after >- gvs[] + metis_tac fix
+- tool_output:TO_type_system_rewrite-20260515T192259Z_m10899_t001 - sound_TopLevelVar resume goal shape: runtime_consistent + no_type_error_result with target_runtime_typed + assign_target_assignable_context hypotheses
+- tool_output:TO_type_system_rewrite-20260515T192259Z_m10927_t001 - static error: assign_target_preserves_runtime_consistent_result not yet declared at resume point

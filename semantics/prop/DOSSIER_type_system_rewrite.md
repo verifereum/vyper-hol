@@ -9,7 +9,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1 | stuck | other | E0004 | "Escalate to plan_oracle for C0 resolution: authorize type_builtin_result_ok repair for AbiEncode branch, adding vyper_abi_size_bound condition" |
 | C1 | progressed | plan_incomplete | E0005 | Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable. |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
-| C3.1 | progressed | missing_helper | E0026 | Fix C3.1.3: after irule target_path_type_Type_place_leaf_typed, get place_leaf_typed in assumptions, then gvs[place_leaf_typed_def] to expose place_leaf_path_typed, then rest_subs = TL(REVERSE sbs) rewriting + place_leaf_path_typed_def HashMapT case strips first element giving place_leaf_path_typed env vt rest_subs ty pl_tv. Then drule_all place_leaf_path_typed_split_leaf_type works. |
+| C3.1 | progressed | missing_helper | E0091 | Fix sound_TopLevelVar resume: replace assign_target_preserves_runtime_consistent_result with imp_res_tac (cj 1 assign_target_preserves_state_well_typed_mutual). Also test that gvs[assign_target_assignable_context_def] destructs the TopLevelVar case correctly after target_runtime_typed_def expansion. |
 | C3.1.2 | proved | unknown | E0025 |  |
 | C3.1.3 | proved | other | E0027 |  |
 | C3.1.6 | progressed | other | E0034 |  |
@@ -21,7 +21,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.1.7.3 | stuck | plan_incomplete | E0059 | Write boundary lemma assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error for the standard read+write+assign_result path (all non-ArrayTV-Dynamic cases), modeled on assign_target_TopLevelVar_Value_branch_ntr. Then handle AppendOp/PopOp separately." |
 | C3.1.7.3.1 | stuck | wrong_statement | E0063 |  |
 | C3.1.7.3.2 | proved | other | E0060 |  |
-| C3.2 | progressed | other | E0076 | Rewrite Replace_ntr_v2 and Update_ntr_v2 using AppendOp_ordinary_ntr pattern: Cases_on final_tv before expand, per-constructor simp+gvs[AllCaseEqs()], then 4 standard drule subgoals per constructor. This breaks stale checkpoint and avoids variable name mismatches. |
+| C3.2 | progressed | other | E0085 |  |
+| C3.3 | proved | unknown | E0086 |  |
+| C3.4 | proved | unknown | E0087 |  |
+| C3.5 | proved | unknown | E0089 |  |
 
 ## C0.1
 
@@ -89,9 +92,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `progressed`
 - diagnosis: `missing_helper`
-- latest episode: `E0026`
-- blocker: C3.1.3 (target_path_type_HashMapT_split_leaf_runtime) failed: drule_all place_leaf_path_typed_split_leaf_type doesn't work because assumption has place_leaf_typed not place_leaf_path_typed. Fix: unfold place_leaf_typed_def first (= place_leaf_path_typed env loc_vt (REVERSE sbs) ty final_tv), then use REVERSE sbs = first_sub::rest_subs + place_leaf_path_typed_def HashMapT case to get place_leaf_path_typed env vt rest_subs ty pl_tv, THEN apply place_leaf_path_typed_split_leaf_type. Also main theorem proof uses once_rewrite_tac[assign_target_def] instead of simp[Once assign_target_def, bind_def] to avoid timeout.
-- next: Fix C3.1.3: after irule target_path_type_Type_place_leaf_typed, get place_leaf_typed in assumptions, then gvs[place_leaf_typed_def] to expose place_leaf_path_typed, then rest_subs = TL(REVERSE sbs) rewriting + place_leaf_path_typed_def HashMapT case strips first element giving place_leaf_path_typed env vt rest_subs ty pl_tv. Then drule_all place_leaf_path_typed_split_leaf_type works.
+- latest episode: `E0091`
+- blocker: "sound_TopLevelVar resume proof has wrong reference to assign_target_preserves_runtime_consistent_result (not yet defined at that point in file). Need to use cj 1 assign_target_preserves_state_well_typed_mutual instead. Also need to verify the Cases_on vt / gvs assign_target_assignable_context_def structure matches the actual goal state after the resume."
+- next: Fix sound_TopLevelVar resume: replace assign_target_preserves_runtime_consistent_result with imp_res_tac (cj 1 assign_target_preserves_state_well_typed_mutual). Also test that gvs[assign_target_assignable_context_def] destructs the TopLevelVar case correctly after target_runtime_typed_def expansion.
 
 ### Attempts / Evidence
 
@@ -184,10 +187,17 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0026` (progressed, missing_helper)
   - Added C3.1.3 helper target_path_type_HashMapT_split_leaf_runtime with irule target_path_type_Type_place_leaf_typed + drule_all place_leaf_path_typed_split_leaf_type -> FAILED: drule_all place_leaf_path_typed_split_leaf_type can't match because assumption has place_leaf_typed env (HashMapT kt vt) sbs ty pl_tv, but lemma expects place_leaf_path_typed env vt path ty final_tv. Need intermediate unfolding of place_leaf_typed_def and place_leaf_path_typed_def for HashMapT case. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m3108_t001`)
   - Rewrote main theorem (C3.1.6) proof: replaced simp[Once assign_target_def, bind_def] with once_rewrite_tac[assign_target_def] + rewrite_tac[bind_def,...] + CCONTR_TAC approach -> NOT YET TESTED: C3.1.3 must succeed first before the main theorem proof can be attempted ()
+- `E0090` (progressed, missing_helper)
+  - Prove top_level_HashMapRef_assign_no_type_error by deriving branch lemma premises: env.type_defs=get_tenv cx, lookup_global=HashMapRef, decomp, split_leaf_runtime, compute_hashmap_slot, then drule_all branch lemma -> First attempt: drule_all split_leaf_runtime AFTER Cases_on/gvs failed because gvs substituted first_sub→LAST sbs, rest_subs→TL(REVERSE sbs), making the rest_subs variable unavailable for drule_all. Second attempt: reordered split_leaf_runtime BEFORE Cases_on/gvs, not yet build-verified. ()
+- `E0091` (progressed, missing_helper)
+  - Fix drule_all in top_level_HashMapRef_assign_no_type_error: change >> gvs[] >> drule_all to >- gvs[] >> metis_tac -> SUCCEEDED: top_level_HashMapRef_assign_no_type_error now builds clean. Key fix: (1) use >- gvs[] instead of >> gvs[] to scope substitution to NONE case, (2) use metis_tac instead of drule_all to avoid DISCH_THEN instrumentation assertion. ()
+  - Write sound_TopLevelVar resume proof with Cases_on vt + branch lemmas -> FAILED at static error: assign_target_preserves_runtime_consistent_result not yet declared (defined later in file). Need to use cj 1 assign_target_preserves_state_well_typed_mutual instead. ()
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260513T211025Z_m3108_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10893_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10899_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10927_t001` (use `read_tool_output` for exact output)
 
 ## C3.1.2
 
@@ -505,9 +515,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `progressed`
 - diagnosis: `other`
-- latest episode: `E0076`
-- blocker: assign_target_ArrayRef_Replace_ntr_v2 and Update_ntr_v2 fail at by-subgoal referencing final_tv after AllCaseEqs expansion + stale holbuild checkpoint replay. The gvs blast pattern works for PopOp_ordinary_ntr (proven) but Replace/Update have stale checkpoints replaying old variable bindings. Must rewrite both lemmas using the PROVEN AppendOp_ordinary_ntr pattern (Cases_on final_tv BEFORE expanding assign_target_def) which produces per-constructor subgoals with concrete type names in by-subgoals, and breaks the stale checkpoint by having a different proof structure.
-- next: Rewrite Replace_ntr_v2 and Update_ntr_v2 using AppendOp_ordinary_ntr pattern: Cases_on final_tv before expand, per-constructor simp+gvs[AllCaseEqs()], then 4 standard drule subgoals per constructor. This breaks stale checkpoint and avoids variable name mismatches.
+- latest episode: `E0085`
+- blocker: "C3.2 ArrayRef branch helper lemmas all proved. Remaining sound_TopLevelVar cheat is a broader C3 obligation needing all sub-branch lemmas (Value, HashMapRef, ImmutableVar) in addition to ArrayRef."
 
 ### Attempts / Evidence
 
@@ -555,7 +564,92 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Final approach: gvs[...assign_operation_CASE_rator,...AllCaseEqs()] without Dynamic exclusion -> NOT YET TESTED -> PopOp_ordinary_ntr (PROVED) includes assign_operation_CASE_rator in its simp set. Replace/Update previous attempts were missing it. This is the likely key difference. ()
 - `E0076` (progressed, other)
   - gvs[Once assign_target_def,...,assign_operation_CASE_rator,...,AllCaseEqs()] blast matching PopOp_ordinary_ntr pattern -> Fails at by-subgoal with DISCH_THEN assertion - stale checkpoint replays old variable bindings for final_tv after AllCaseEqs substitution assigns final_tv -> BaseTV v11 but by-subgoal creates FRESH final_tv (`TO_type_system_rewrite-20260514T195458Z_m8323_t001`)
+- `E0077` (progressed, other)
+  - Renamed Replace_ntr_v2 to _v3 and Update_ntr_v2 to _v3 with all_tac >> prefix to break stale holbuild checkpoint. Removed assign_operation_CASE_rator from gvs set to match proven PopOp_ordinary_ntr pattern. Updated one caller reference (Replace) but Update caller at line 3140 still needs v2->v3 update. -> Edits made but not yet build-tested. Two key changes: (1) all_tac >> prefix breaks stale checkpoint, (2) removed assign_operation_CASE_rator which was not present in the proven PopOp proof. ()
+- `E0078` (progressed, other)
+  - Replace_ntr_v4: gvs[Once assign_target_def, ..., prod_CASE_rator, AllCaseEqs(), Excl type_value_case_eq, Excl bound_case_eq, Excl int_bound_case_eq] then by-subgoals with value_has_type final_tv current_val -> FAILS: Excl prevents AllCaseEqs from expanding case final_tv expression, leaving case final_tv of BaseTV v11 => ... | TupleTV v12 => ... in goal conclusion. By-subgoal value_has_type final_tv current_val cannot match because current_val is bound inside each case branch. The drule_all_then assume_tac read_storage_slot_success_type can't find read_storage_slot in assumptions (it's inside the case body). (`TO_type_system_rewrite-20260514T195458Z_m8500_t002`)
+- `E0079` (progressed, other)
+  - Reviewed build output for assign_target_ArrayRef_Replace_ntr: gvs blast with type_value_CASE_rator+bound_CASE_rator+prod_CASE_rator+AllCaseEqs() produces big disjunction over final_tv constructors. by-subgoals like value_has_type final_tv current_val fail because AllCaseEqs substitutes final_tv to BaseTV v11 in assumptions but by-subgoal creates fresh final_tv. -> Identified root cause: prod_CASE_rator creates nested pair case that AllCaseEqs expands to N*M constructor cross-product. assign_operation_distinct eliminates PopOp/AppendOp pair-arms but gvs still expands type_value case creating disjunction. by-subgoals referencing final_tv after this expansion are impossible. ()
+- `E0080` (progressed, other)
+  - Rewrite all 4 ArrayRef ordinary-branch lemmas to use simp[AllCaseEqs()] + rpt strip_tac + gvs[] + TRY(metis_tac[helper]) pattern -> Replace_ntr and Update_ntr_v4 passed build. AppendOp_ordinary_ntr and PopOp_ordinary_ntr rewritten but not independently tested (build reached main theorem first). ()
+  - Rewrite main theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error to use gvs[sum_CASE_rator, pairTheory.PAIR] instead of Cases_on q to avoid auto-generated variable names -> FAILED: gvs[sum_CASE_rator, pairTheory.PAIR] does not split sum assumptions into subgoals. PairCases_on a fails because a doesn't exist after gvs consumes the equality. The sum_CASE_rator only rewrites case expressions, not bare sum-typed variables. ()
+  - Fix stale checkpoint by changing Cases_on g to Cases_on y -> PARTIAL: Fixed one occurrence but stale checkpoint at different point mismatched variables. Need to use all_tac >> prefix to break stale checkpoint matching. ()
+- `E0081` (progressed, other)
+  - Unified 4 boundary lemmas (Replace_ntr, Update_ntr_v4, AppendOp_ordinary_ntr, PopOp_ordinary_ntr) with identical proof bodies into one parameterized assign_target_ArrayRef_ordinary_ntr[local] taking op as universally quantified variable + Dynamic exclusion premise -> Edit made, NOT build-tested. Main theorem still references old lemma names. ()
+- `E0082` (progressed, other)
+  - Cases_on resolve + gvs[sum_CASE_rator, pairTheory.PAIR] + PairCases_on a -> PairCases_on fails: gvs consumes variable 'a' so it's not free. Checkpoint replays with different names (q,r instead of a). (`TO_type_system_rewrite-20260514T195458Z_m8731_t002`)
+  - Unified boundary lemma assign_target_ArrayRef_ordinary_ntr with gvs blast + metis_tac[4 helpers] pattern -> PROVEN. The boundary lemma works when resolve_array_element result is given as premise. But main theorem can't connect without Cases_on. ()
+  - Attempts to avoid Cases_on by metis_tac[boundary_lemma] from main theorem premises -> metis_tac cannot bridge because boundary lemma needs resolve_array_element triple result which isn't in main theorem assumptions ()
+- `E0083` (progressed, other)
+  - Proved resolve_array_element_error_not_TypeError: leaf_type tv subs <> NoneTV => resolve_array_element ... = (INR (Error e), st') => e <> TypeError msg. Used resolve_array_element_ind with bind_apply/AllCaseEqs expansion. IH instantiations with qspec_then `0`/`1` for elem_offset witnesses. get_storage_backend always returns INL. -> PROVED. Lemma compiles successfully after adding missing QED. (`tool_output:TO_type_system_rewrite-20260514T195458Z_m8997_t001`)
+  - Created assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error boundary lemma that handles the INR resolve_array_element case in the ArrayRef branch. Expands assign_target_def once, then uses drule resolve_array_element_error_not_TypeError + simp[no_type_error_result_def]. -> Not yet build-verified; the lemma is written but the 4th INR branch (PopOp) still has the old drule pattern ()
+  - Replace INR branches in main theorem: metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error] instead of drule+gvs approach. Replaced 3 of 4 branches (Replace, Update, AppendOp). -> PopOp branch at line 2987-2989 still has old drule resolve_array_element_error_sc >> drule resolve_array_element_error_not_TypeError >> simp pattern ()
+- `E0084` (progressed, other)
+  - Fixed assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error: added Cases_on e before drule to destruct exception ADT, then drule_all resolves both antecedents -> Lemma now proves clean (`TO_type_system_rewrite-20260514T195458Z_m9089_t001`)
+  - Fixed assign_target_TopLevelVar_ArrayRef_branch_no_type_error: replaced metis_tac with explicit Cases_on x1 per type_value constructor; used IMP_RES_TAC + metis_tac[] for Dynamic cases -> Main theorem now builds clean, vyperTypeStatePreservationTheory succeeds (`TO_type_system_rewrite-20260514T195458Z_m9151_t001`)
+- `E0085` (progressed, other)
+  - Fixed assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error by adding Cases_on e to destruct exception ADT, then drule_all resolves both antecedents -> Lemma proved clean (`TO_type_system_rewrite-20260514T195458Z_m9089_t001`)
+  - Fixed assign_target_TopLevelVar_ArrayRef_branch_no_type_error with explicit Cases_on x1 per type_value constructor + IMP_RES_TAC + metis_tac[] for Dynamic cases -> Main theorem builds clean, vyperTypeStatePreservationTheory succeeds (`TO_type_system_rewrite-20260514T195458Z_m9151_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260514T195458Z_m8323_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260514T195458Z_m9151_t001` (use `read_tool_output` for exact output)
+
+## C3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `unknown`
+- latest episode: `E0086`
+- blocker: ""
+
+### Attempts / Evidence
+
+- `E0086` (proved, unknown)
+  - reverse $ gvs[Once assign_target_def, bind_def, ..., AllCaseEqs(), get_immutables_def, set_immutable_def, set_address_immutables_def, LET_THM, no_type_error_result_def] >- (rpt strip_tac >> mp_tac assign_subscripts_no_type_error_runtime_typed >> impl_tac >- simp[] >> simp[]) >> rpt strip_tac >> drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def] -> Build succeeded. Adding set_address_immutables_def+LET_THM to the gvs blast resolved the set_address_immutables INR subgoal (turns out it always returns INL via return()). The blast produces exactly 2 subgoals: (1) assign_subscripts INR TypeError, closed by mp_tac assign_subscripts_no_type_error_runtime_typed + impl_tac >- simp[] + simp[]; (2) success path, closed by drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def]. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260514T195458Z_m9545_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260514T195458Z_m9556_t001` (use `read_tool_output` for exact output)
+
+## C3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `unknown`
+- latest episode: `E0087`
+- blocker: ""
+
+### Attempts / Evidence
+
+- `E0087` (proved, unknown)
+  - rpt gen_tac >> strip_tac x3 >> conj for preservation via irule cj 1 >> unfold assign_target_def + monads + assign_operation_matches_target_shape_def, Cases_on tgt >> drule IH for assign_targets >> impl_tac with LIST_REL3 construction via evaluate_type_TupleT_cases + values_have_types_LIST_REL + LIST_REL3_from_LIST_REL2 >> qexists_tac EL n tys + EL n tvs -> Fixed type error: EL n l (assignment_target) → EL n tys (type). Build succeeds, sound_TupleTargetV proved. (`TO_type_system_rewrite-20260514T195458Z_m9729_t002`, `TO_type_system_rewrite-20260514T195458Z_m9731_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260514T195458Z_m9729_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260514T195458Z_m9731_t001` (use `read_tool_output` for exact output)
+
+## C3.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `unknown`
+- latest episode: `E0089`
+- blocker: ""
+
+### Attempts / Evidence
+
+- `E0088` (progressed, unknown)
+  - INL branch: qpat_x_assum kill head IH, drule tail IH, disch_tac, pop_assum qspecl_then env/t, metis_tac[target_assignment_values_assignable_def, no_type_error_result_def] -> INL branch SOLVED. Key: kill head IH via qpat_x_assum, then first_x_assum finds tail IH, drule matches equation, disch_tac pops result, qspecl_then specializes env/t, metis_tac closes with target_assignment_values_assignable_def + no_type_error_result_def (`tool_output:TO_type_system_rewrite-20260515T171247Z_m10775_t001`)
+  - INR branch: various approaches to apply head IH (first_x_assum qspecl_then, qpat_x_assum drule, qhdtm_x_assum) -> All fail: first_x_assum picks wrong IH, qpat_x_assum with drule gets No match from MATCH_MP, qhdtm_x_assum fails Q_TAC for assign_targets constant. Root cause: both IHs have same universal structure (∀3vars. f args = result ⟹ ∀... ⟹ ...) so first_x_assum/first_assum pick the wrong one. (`tool_output:TO_type_system_rewrite-20260515T171247Z_m10784_t001`)
+- `E0089` (proved, unknown)
+  - INR branch of sound_assign_targets_cons: kill tail IH with qpat_x_assum kall_tac, specialize head IH with qspecl_then st/INR exc/s1 then env/h/ty, impl_tac with metis_tac[Replace_from_value_has_type, Replace_from_typed], strip_tac, gvs do-block expansion -> SOLVED. Key insight: do NOT use `by` block for the INR IH application — inline the tactic directly. The `by` block caused stale checkpoint interference where the goal state showed the outer `no_type_error_result res` instead of the inner `no_type_error_result (INR exc)`. Also, use metis_tac directly in impl_tac instead of explicit conj_tac chains which mismatched the conjunction structure. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m10834_t001`)
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10834_t001` (use `read_tool_output` for exact output)

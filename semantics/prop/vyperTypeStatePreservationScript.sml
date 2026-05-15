@@ -10,7 +10,7 @@ Ancestors
   vyperStorageBackend vyperLookup vyperEncodeDecode vyperArith vyperAssignPreservesType
   vyperTypeSystem vyperTypeValues vyperTypeDefaults
   vyperScopePreservation vyperImmutablesPreservation vyperLookupStorage
-  vyperStatePreservation vyperTypeEnv vyperTypeABI vyperTypeBuiltins vyperTypeExprSoundness
+  vyperStatePreservation vyperTypeEnv vyperTypeEnvPreservation vyperTypeABI vyperTypeBuiltins vyperTypeExprSoundness vyperEvalPreservesScopes
 Libs
   wordsLib markerLib
 
@@ -910,6 +910,19 @@ Proof
   metis_tac[target_runtime_typed_rebuild]
 QED
 
+Theorem target_assignment_values_assignable_rebuild:
+  runtime_consistent env cx st' ==>
+  target_assignment_values_assignable env cx st tgts gvs vs ==>
+  target_assignment_values_assignable env cx st' tgts gvs vs
+Proof
+  rw[target_assignment_values_assignable_def] >>
+  pop_assum mp_tac >>
+  MAP_EVERY qid_spec_tac [`vs`, `gvs`] >>
+  Induct_on `tgts` >> Cases_on `gvs` >> Cases_on `vs` >>
+  simp[LIST_REL3_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[target_runtime_typed_rebuild]
+QED
+
 Definition assign_operation_matches_target_shape_def:
   assign_operation_matches_target_shape gv op <=>
     case gv of
@@ -951,6 +964,94 @@ Definition assign_target_assignable_context_def:
   assign_target_assignable_context cx (TupleTargetV tgts) st =
     EVERY (\tgt. assign_target_assignable_context cx tgt st) tgts
 End
+
+Theorem lookup_scopes_find_containing_scope[local]:
+  !scopes id entry.
+    lookup_scopes id scopes = SOME entry ==>
+    ?pre env rest.
+      find_containing_scope id scopes = SOME (pre, env, entry, rest)
+Proof
+  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >> simp[]
+QED
+
+Theorem find_containing_scope_preserved_under_preserves_tv[local]:
+  preserves_tv cx st st' ==>
+  MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
+  find_containing_scope id st.scopes = SOME (pre, env, entry, rest) ==>
+  ?pre' env' entry' rest'.
+    find_containing_scope id st'.scopes = SOME (pre', env', entry', rest')
+Proof
+  rpt strip_tac >>
+  `lookup_scopes id st.scopes = SOME entry` by metis_tac[find_containing_scope_lookup] >>
+  `IS_SOME (lookup_scopes id st'.scopes)` by metis_tac[lookup_scopes_same_fdoms_some] >>
+  Cases_on `lookup_scopes id st'.scopes` >> gvs[] >>
+  metis_tac[lookup_scopes_find_containing_scope]
+QED
+
+Theorem find_containing_scope_assignable_of_preserved[local]:
+  !pre' env' entry' rest'.
+    preserves_tv cx st st' ==>
+    MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
+    find_containing_scope id st.scopes = SOME (pre, env, entry, rest) ==>
+    entry.assignable ==>
+    find_containing_scope id st'.scopes = SOME (pre', env', entry', rest') ==>
+    entry'.assignable
+Proof
+  rpt strip_tac >>
+  `lookup_scopes id st.scopes = SOME entry` by metis_tac[find_containing_scope_lookup] >>
+  drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> strip_tac >>
+  `lookup_scopes id st'.scopes = SOME entry'` by metis_tac[find_containing_scope_lookup] >>
+  metis_tac[SOME_11]
+QED
+
+Theorem base_target_assignable_context_rebuild[local]:
+  !cx st st' loc sbs.
+    preserves_tv cx st st' ==>
+    MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
+    assign_target_assignable_context cx (BaseTargetV loc sbs) st ==>
+    assign_target_assignable_context cx (BaseTargetV loc sbs) st'
+Proof
+  rpt strip_tac >>
+  gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
+  Cases_on `loc` >> gvs[]
+  >- metis_tac[find_containing_scope_preserved_under_preserves_tv,
+              find_containing_scope_assignable_of_preserved]
+QED
+
+Theorem assignment_value_size_MEM[local]:
+  !tgt l. MEM tgt l ==> assignment_value_size tgt < list_size assignment_value_size l + 1
+Proof
+  Induct_on `l` >> simp[assignment_value_size_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  res_tac >> decide_tac
+QED
+
+Theorem assign_target_assignable_context_rebuild:
+  !cx st st' gv.
+    preserves_tv cx st st' ==>
+    MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
+    assign_target_assignable_context cx gv st ==>
+    assign_target_assignable_context cx gv st'
+Proof
+  rpt strip_tac >>
+  measureInduct_on `assignment_value_size gv` >>
+  rpt strip_tac >>
+  Cases_on `gv`
+  >- (* BaseTargetV *)
+  (gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
+   Cases_on `l` >> gvs[]
+   >- metis_tac[find_containing_scope_preserved_under_preserves_tv,
+               find_containing_scope_assignable_of_preserved])
+  >- (* TupleTargetV *)
+  (gvs[assign_target_assignable_context_def, assign_target_assignable_def, EVERY_MEM] >>
+   rpt strip_tac >>
+   drule assignment_value_size_MEM >> simp[] >>
+   first_x_assum drule >> simp[] >>
+   first_x_assum drule >> simp[])
+QED
 
 Theorem assign_target_preserves_state_well_typed_mutual:
   (!cx gv op st res st'.
@@ -2141,6 +2242,35 @@ Proof
   qexists_tac `base_tv` >> simp[]
 QED
 
+Theorem assign_operation_runtime_typed_Replace_from_value_has_type:
+  !env ty tv v.
+    evaluate_type env.type_defs ty = SOME tv ∧ value_has_type tv v ==>
+    assign_operation_runtime_typed env ty (Replace v)
+Proof
+  rw[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem assign_operation_matches_target_shape_Replace_from_typed:
+  !env cx st tgt ty gv tv v.
+    target_runtime_typed env cx st tgt ty gv ∧
+    evaluate_type env.type_defs ty = SOME tv ∧ value_has_type tv v ==>
+    assign_operation_matches_target_shape gv (Replace v)
+Proof
+  rpt gen_tac >> Cases_on `gv` >>
+  simp[assign_operation_matches_target_shape_def] >>
+  rw[target_runtime_typed_def, target_value_shape_def] >>
+  Cases_on `tgt` >> gvs[target_runtime_typed_def, target_value_shape_def] >>
+  drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+  gvs[value_has_type_def, values_have_types_length, LIST_REL_LENGTH] >>
+  imp_res_tac target_values_runtime_typed_LIST_REL3 >>
+  imp_res_tac LIST_REL3_LENGTHS >>
+  Cases_on `v` >> gvs[value_has_type_def, values_have_types_length] >>
+  Cases_on `a` >> gvs[value_has_type_def, values_have_types_length] >>
+  metis_tac[values_have_types_length, LIST_REL_LENGTH]
+QED
+
+
 Theorem assign_target_sound_mutual:
   (!cx gv op st res st'.
     assign_target cx gv op st = (res, st') ==>
@@ -2433,6 +2563,33 @@ Proof
       get_accounts_def]
 QED
 
+Theorem resolve_array_element_error_not_TypeError[local]:
+  !cx is_transient base_slot tv subs st e st'.
+    leaf_type tv subs <> NoneTV ==>
+    resolve_array_element cx is_transient base_slot tv subs st = (INR (Error e), st') ==>
+    !msg. e <> TypeError msg
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  pop_assum mp_tac >>
+  simp[Once resolve_array_element_def, bind_apply, ignore_bind_apply, check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), bound_CASE_rator] >>
+  rpt strip_tac >> gvs[leaf_type_def] >-
+  (* Goal 1: Fixed case - check succeeds, recursive call returns TypeError.
+     IH with elem_offset=0 says recursive call error is not TypeError.
+     Provide witnesses for the existential goal. *)
+   (first_x_assum (qspec_then `0` mp_tac) >> simp[] >>
+    qexistsl [`s''`, `TypeError msg`, `st'`] >> simp[]) >-
+  (* Goal 2: Dynamic case - storage + length checks succeed, recursive call TypeError.
+     IH with elem_offset=1 says recursive call error is not TypeError. *)
+   (first_x_assum (qspec_then `1` mp_tac) >> simp[] >>
+    qexistsl [`s''`, `TypeError msg`, `st'`] >> simp[]) >>
+  (* Goal 3: Dynamic case - get_storage_backend returns INR (TypeError). Impossible:
+     get_storage_backend always returns INL (it just reads state). *)
+  gvs[oneline get_storage_backend_def, COND_RATOR, AllCaseEqs(),
+      bind_apply, return_def, get_transient_storage_def,
+      get_accounts_def]
+QED
+
 Theorem resolve_array_element_leaf_type_sc[local]:
   !cx b base tv subs st.
     !slot final_tv rsubs st'.
@@ -2720,7 +2877,47 @@ Proof
   disch_then drule >> simp[]
 QED
 
-Theorem assign_target_ArrayRef_Replace_ntr_v2[local]:
+Theorem assign_target_ArrayRef_ordinary_ntr[local]:
+  (* Unified ordinary-branch boundary lemma for assign_target TopLevelVar ArrayRef.
+     Handles the _ wildcard in the evaluator's case(ao,final_tv) pair-match.
+     The Dynamic exclusion premise eliminates the AppendOp/PopOp+Dynamic pair-arms;
+     for Replace/Update it is trivially satisfied since those ops go through _ anyway. *)
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
+  get_module_code cx src_id_opt = SOME code ==>
+  resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
+    (INL (elem_slot, final_tv, remaining), st_res) ==>
+  well_formed_type_value final_tv ==>
+  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ==>
+  leaf_type final_tv remaining <> NoneTV ==>
+  assign_operation_runtime_typed env ty op ==>
+  (!etv n. final_tv ≠ ArrayTV etv (Dynamic n)) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  all_tac >>
+  rpt strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+       assert_def, check_def, option_CASE_rator,
+       sum_CASE_rator, pairTheory.PAIR,
+       toplevel_value_CASE_rator, LET_THM,
+       assign_operation_distinct, assign_operation_11,
+       type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (metis_tac[array_ref_ordinary_branch_success]) >>
+  TRY (metis_tac[array_ref_ordinary_branch_write_error]) >>
+  TRY (metis_tac[array_ref_ordinary_branch_assign_error]) >>
+  metis_tac[array_ref_ordinary_branch_no_type_error]
+QED
+
+Theorem assign_target_ArrayRef_Replace_ordinary_ntr[local]:
+  (* Ordinary-branch boundary lemma for assign_target TopLevelVar ArrayRef,
+     specialized to Replace v. Without Dynamic exclusion: when op = Replace v,
+     assign_operation_distinct eliminates PopOp/AppendOp pair-arms in gvs blast,
+     so the _ wildcard handles ALL final_tv constructors including ArrayTV Dynamic. *)
   lookup_global cx src_id_opt (string_to_num id) st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
@@ -2733,304 +2930,27 @@ Theorem assign_target_ArrayRef_Replace_ntr_v2[local]:
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) (Replace v) st = (res, st') ==>
   no_type_error_result res
 Proof
+  all_tac >>
   rpt strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-      assert_def, check_def, option_CASE_rator,
-      sum_CASE_rator, pairTheory.PAIR,
-      toplevel_value_CASE_rator, LET_THM,
-      assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-      type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
-      AllCaseEqs()] >-
-  (* Goal 1: Full success path - assign_result *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type final_tv new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   drule assign_result_no_type_error_from_successful_assign >>
-   disch_then drule >>
-   simp[no_type_error_result_def]) >-
-  (* Goal 2: write_storage_slot INR *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type final_tv new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-   metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-  (* Goal 3: assign_subscripts INR *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-   simp[no_type_error_result_def] >> metis_tac[]) >>
-  (* Goal 4: read_storage_slot INR *)
-  drule read_storage_slot_error >>
-  rpt strip_tac >>
-  simp[no_type_error_result_def]
-QED
-
-Theorem assign_target_ArrayRef_Update_ntr_v2[local]:
-  lookup_global cx src_id_opt (string_to_num id) st =
-    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
-  get_module_code cx src_id_opt = SOME code ==>
-  resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
-    (INL (elem_slot, final_tv, remaining), st_res) ==>
-  well_formed_type_value final_tv ==>
-  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ==>
-  leaf_type final_tv remaining <> NoneTV ==>
-  assign_operation_runtime_typed env ty (Update t0 b0 v0) ==>
-  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) (Update t0 b0 v0) st = (res, st') ==>
-  no_type_error_result res
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-      assert_def, check_def, option_CASE_rator,
-      sum_CASE_rator, pairTheory.PAIR,
-      toplevel_value_CASE_rator, LET_THM,
-      assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-      type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
-      AllCaseEqs()] >-
-  (* Goal 1: Full success path - assign_result *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type final_tv new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   drule assign_result_no_type_error_from_successful_assign >>
-   disch_then drule >>
-   simp[no_type_error_result_def]) >-
-  (* Goal 2: write_storage_slot INR *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type final_tv new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-   metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-  (* Goal 3: assign_subscripts INR *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-   simp[no_type_error_result_def] >> metis_tac[]) >>
-  (* Goal 4: read_storage_slot INR *)
-  drule read_storage_slot_error >>
-  rpt strip_tac >>
-  simp[no_type_error_result_def]
-QED
-
-Theorem assign_target_ArrayRef_AppendOp_ordinary_ntr[local]:
-  lookup_global cx src_id_opt (string_to_num id) st =
-    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
-  get_module_code cx src_id_opt = SOME code ==>
-  resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
-    (INL (elem_slot, final_tv, remaining), st_res) ==>
-  well_formed_type_value final_tv ==>
-  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ==>
-  leaf_type final_tv remaining <> NoneTV ==>
-  assign_operation_runtime_typed env ty (AppendOp v) ==>
-  (!etv n. final_tv ≠ ArrayTV etv (Dynamic n)) ==>
-  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) (AppendOp v) st = (res, st') ==>
-  no_type_error_result res
-Proof
-  rpt strip_tac >>
-  (* Case-split on final_tv BEFORE expanding assign_target_def so that
-     the case(ao,final_tv) pair in the definition resolves concretely.
-     AllCaseEqs on final_tv would create N*M goals; manual Cases_on gives ~6.
-     The Dynamic subcase is contradiction by premise. *)
-  Cases_on `final_tv` >-
-  (* BaseTV: _ ordinary branch *)
-  (qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-   simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-        lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-        assert_def, check_def, option_CASE_rator,
-        sum_CASE_rator, pairTheory.PAIR,
-        toplevel_value_CASE_rator, LET_THM,
-        assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-        type_value_CASE_rator, bound_CASE_rator] >>
-   gvs[AllCaseEqs()] >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (BaseTV v) remaining)` by metis_tac[] >>
-    `value_has_type (BaseTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type (BaseTV v) new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    drule assign_result_no_type_error_from_successful_assign >>
-    disch_then drule >> simp[no_type_error_result_def]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (BaseTV v) remaining)` by metis_tac[] >>
-    `value_has_type (BaseTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type (BaseTV v) new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-    metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (BaseTV v) remaining)` by metis_tac[] >>
-    `value_has_type (BaseTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-    simp[no_type_error_result_def] >> metis_tac[]) >>
-   drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]) >-
-  (* TupleTV: _ ordinary branch *)
-  (qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-   simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-        lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-        assert_def, check_def, option_CASE_rator,
-        sum_CASE_rator, pairTheory.PAIR,
-        toplevel_value_CASE_rator, LET_THM,
-        assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-        type_value_CASE_rator, bound_CASE_rator] >>
-   gvs[AllCaseEqs()] >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (TupleTV v) remaining)` by metis_tac[] >>
-    `value_has_type (TupleTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type (TupleTV v) new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    drule assign_result_no_type_error_from_successful_assign >>
-    disch_then drule >> simp[no_type_error_result_def]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (TupleTV v) remaining)` by metis_tac[] >>
-    `value_has_type (TupleTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type (TupleTV v) new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-    metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (TupleTV v) remaining)` by metis_tac[] >>
-    `value_has_type (TupleTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-    simp[no_type_error_result_def] >> metis_tac[]) >>
-   drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]) >-
-  (* ArrayTV: need to split on bound (Fixed vs Dynamic) *)
-  (Cases_on `b` >-
-   (* Fixed: _ ordinary branch *)
-   (qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-    simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-         lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-         assert_def, check_def, option_CASE_rator,
-         sum_CASE_rator, pairTheory.PAIR,
-         toplevel_value_CASE_rator, LET_THM,
-         assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-         type_value_CASE_rator, bound_CASE_rator] >>
-    gvs[AllCaseEqs()] >-
-    (`evaluate_type env.type_defs ty = SOME (leaf_type (ArrayTV a (Fixed v')) remaining)` by metis_tac[] >>
-     `value_has_type (ArrayTV a (Fixed v')) current_val`
-       by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-     `value_has_type (ArrayTV a (Fixed v')) new_val`
-       by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-     drule assign_result_no_type_error_from_successful_assign >>
-     disch_then drule >> simp[no_type_error_result_def]) >-
-    (`evaluate_type env.type_defs ty = SOME (leaf_type (ArrayTV a (Fixed v')) remaining)` by metis_tac[] >>
-     `value_has_type (ArrayTV a (Fixed v')) current_val`
-       by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-     `value_has_type (ArrayTV a (Fixed v')) new_val`
-       by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-     simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-     metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-    (`evaluate_type env.type_defs ty = SOME (leaf_type (ArrayTV a (Fixed v')) remaining)` by metis_tac[] >>
-     `value_has_type (ArrayTV a (Fixed v')) current_val`
-       by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-     drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-     simp[no_type_error_result_def] >> metis_tac[]) >>
-    drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]) >>
-   (* Dynamic: contradiction by premise *)
-   first_x_assum (qspecl_then [`a`, `n`] assume_tac) >> gvs[]) >-
-  (* StructTV: _ ordinary branch *)
-  (qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-   simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-        lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-        assert_def, check_def, option_CASE_rator,
-        sum_CASE_rator, pairTheory.PAIR,
-        toplevel_value_CASE_rator, LET_THM,
-        assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-        type_value_CASE_rator, bound_CASE_rator] >>
-   gvs[AllCaseEqs()] >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (StructTV v) remaining)` by metis_tac[] >>
-    `value_has_type (StructTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type (StructTV v) new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    drule assign_result_no_type_error_from_successful_assign >>
-    disch_then drule >> simp[no_type_error_result_def]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (StructTV v) remaining)` by metis_tac[] >>
-    `value_has_type (StructTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type (StructTV v) new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-    metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type (StructTV v) remaining)` by metis_tac[] >>
-    `value_has_type (StructTV v) current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-    simp[no_type_error_result_def] >> metis_tac[]) >>
-   drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]) >-
-  (* FlagTV: _ ordinary branch *)
-  (qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-   simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-        lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-        assert_def, check_def, option_CASE_rator,
-        sum_CASE_rator, pairTheory.PAIR,
-        toplevel_value_CASE_rator, LET_THM,
-        assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-        type_value_CASE_rator, bound_CASE_rator] >>
-   gvs[AllCaseEqs()] >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type FlagTV remaining)` by metis_tac[] >>
-    `value_has_type FlagTV current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type FlagTV new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    drule assign_result_no_type_error_from_successful_assign >>
-    disch_then drule >> simp[no_type_error_result_def]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type FlagTV remaining)` by metis_tac[] >>
-    `value_has_type FlagTV current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    `value_has_type FlagTV new_val`
-      by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-    simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-    metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-   (`evaluate_type env.type_defs ty = SOME (leaf_type FlagTV remaining)` by metis_tac[] >>
-    `value_has_type FlagTV current_val`
-      by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-    drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-    simp[no_type_error_result_def] >> metis_tac[]) >>
-   drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]) >>
-  (* NoneTV: _ ordinary branch *)
   qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
   simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
        lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
        assert_def, check_def, option_CASE_rator,
        sum_CASE_rator, pairTheory.PAIR,
        toplevel_value_CASE_rator, LET_THM,
-       assign_operation_CASE_rator, assign_operation_distinct, assign_operation_11,
-       type_value_CASE_rator, bound_CASE_rator] >>
-  gvs[AllCaseEqs()] >-
-  (`evaluate_type env.type_defs ty = SOME (leaf_type NoneTV remaining)` by metis_tac[] >>
-   `value_has_type NoneTV current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type NoneTV new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   drule assign_result_no_type_error_from_successful_assign >>
-   disch_then drule >> simp[no_type_error_result_def]) >-
-  (`evaluate_type env.type_defs ty = SOME (leaf_type NoneTV remaining)` by metis_tac[] >>
-   `value_has_type NoneTV current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type NoneTV new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-   metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-  (`evaluate_type env.type_defs ty = SOME (leaf_type NoneTV remaining)` by metis_tac[] >>
-   `value_has_type NoneTV current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-   simp[no_type_error_result_def] >> metis_tac[]) >>
-  drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]
+       assign_operation_distinct, assign_operation_11,
+       type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (metis_tac[array_ref_ordinary_branch_success]) >>
+  TRY (metis_tac[array_ref_ordinary_branch_write_error]) >>
+  TRY (metis_tac[array_ref_ordinary_branch_assign_error]) >>
+  metis_tac[array_ref_ordinary_branch_no_type_error]
 QED
 
-Theorem assign_target_ArrayRef_PopOp_ordinary_ntr[local]:
+Theorem assign_target_ArrayRef_Update_ordinary_ntr[local]:
+  (* Same as Replace variant but for Update. assign_operation_distinct eliminates
+     PopOp/AppendOp pair-arms, so _ wildcard handles all final_tv. *)
   lookup_global cx src_id_opt (string_to_num id) st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
@@ -3039,51 +2959,54 @@ Theorem assign_target_ArrayRef_PopOp_ordinary_ntr[local]:
   well_formed_type_value final_tv ==>
   evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ==>
   leaf_type final_tv remaining <> NoneTV ==>
-  assign_operation_runtime_typed env ty PopOp ==>
-  (!etv n. final_tv ≠ ArrayTV etv (Dynamic n)) ==>
-  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) PopOp st = (res, st') ==>
+  assign_operation_runtime_typed env ty (Update upd_ty bop nv) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) (Update upd_ty bop nv) st = (res, st') ==>
   no_type_error_result res
 Proof
+  all_tac >>
   rpt strip_tac >>
   qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-  (* Full expansion; assign_operation_distinct eliminates AppendOp arm;
-     final_tv ≠ ArrayTV etv (Dynamic n) eliminates PopOp+Dynamic arm,
-     leaving only the _ ordinary branch *)
-  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-      assert_def, check_def, option_CASE_rator,
-      sum_CASE_rator, pairTheory.PAIR,
-      toplevel_value_CASE_rator, LET_THM,
-      assign_operation_distinct, assign_operation_11,
-      type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
-      AllCaseEqs()] >-
-  (* Goal 1: Full success path - assign_result *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type final_tv new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   drule assign_result_no_type_error_from_successful_assign >>
-   disch_then drule >>
-   simp[no_type_error_result_def]) >-
-  (* Goal 2: write_storage_slot INR *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   `value_has_type final_tv new_val`
-     by metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-   simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-   metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-  (* Goal 3: assign_subscripts INR *)
-  (`evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by metis_tac[] >>
-   `value_has_type final_tv current_val`
-     by (drule_all_then assume_tac read_storage_slot_success_type >> simp[]) >>
-   drule_all_then strip_assume_tac assign_subscripts_no_type_error_runtime_typed >>
-   simp[no_type_error_result_def] >> metis_tac[]) >>
-  (* Goal 4: read_storage_slot INR *)
-  drule read_storage_slot_error >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+       assert_def, check_def, option_CASE_rator,
+       sum_CASE_rator, pairTheory.PAIR,
+       toplevel_value_CASE_rator, LET_THM,
+       assign_operation_distinct, assign_operation_11,
+       type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (metis_tac[array_ref_ordinary_branch_success]) >>
+  TRY (metis_tac[array_ref_ordinary_branch_write_error]) >>
+  TRY (metis_tac[array_ref_ordinary_branch_assign_error]) >>
+  metis_tac[array_ref_ordinary_branch_no_type_error]
+QED
+
+Theorem assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error[local]:
+  (* When resolve_array_element returns INR in the ArrayRef branch,
+     the monadic bind propagates the error, so assign_target returns
+     the same INR. Combined with the typing lemma that the error
+     is never TypeError under well-typed subscripts, we get
+     no_type_error_result. *)
+  get_module_code cx src_id_opt = SOME code ==>
+  lookup_global cx src_id_opt (string_to_num id) st =
+    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
+  leaf_type (ArrayTV elem_tv bd) (REVERSE sbs) <> NoneTV ==>
+  resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
+    (INR e, r) ==>
+  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
+  no_type_error_result res
+Proof
+  all_tac >>
   rpt strip_tac >>
-  simp[no_type_error_result_def]
+  qpat_x_assum `assign_target _ _ _ _ = (_, _)` mp_tac >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, lift_sum_def,
+       type_check_def, check_def, assert_def, LET_THM,
+       option_CASE_rator, sum_CASE_rator, pairTheory.PAIR,
+       toplevel_value_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >>
+  Cases_on `e` >> gvs[no_type_error_result_def, exception_distinct] >>
+  drule_all resolve_array_element_error_not_TypeError >> simp[]
 QED
 
 Theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error:
@@ -3102,7 +3025,8 @@ Theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error:
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
 Proof
-  all_tac >> rpt strip_tac >>
+  all_tac >>
+  rpt strip_tac >>
   `well_formed_vtype env.type_defs (Type t)` by metis_tac[top_level_vtype_well_formed] >>
   `typ = t` by metis_tac[top_level_Type_storage_decl] >>
   fs[] >>
@@ -3115,89 +3039,100 @@ Proof
   Cases_on `op` >-
   (* Replace v *)
   (Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
-   Cases_on `q` >> gvs[] >-
+   Cases_on `q` >-
    (* INL: resolve_array_element succeeds *)
-   (PairCases_on `x` >> gvs[sum_CASE_rator, pairTheory.PAIR] >>
+   (PairCases_on `x` >> gvs[] >>
     `well_formed_type_value x1` by metis_tac[resolve_array_element_well_formed_sc] >>
     `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
       by metis_tac[resolve_array_element_leaf_type_sc] >>
     `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
-    metis_tac[assign_target_ArrayRef_Replace_ntr_v2]
+    metis_tac[assign_target_ArrayRef_Replace_ordinary_ntr]
    ) >>
    (* INR: resolve_array_element error *)
-   drule resolve_array_element_error_sc >> rpt strip_tac >>
-   Cases_on `g` >> gvs[no_type_error_result_def]
+   metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error]
   ) >-
   (* Update t b v *)
   (Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
-   Cases_on `q` >> gvs[] >-
+   Cases_on `q` >-
    (* INL: resolve succeeds *)
-   (PairCases_on `x` >> gvs[sum_CASE_rator, pairTheory.PAIR] >>
+   (PairCases_on `x` >> gvs[] >>
     `well_formed_type_value x1` by metis_tac[resolve_array_element_well_formed_sc] >>
     `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
       by metis_tac[resolve_array_element_leaf_type_sc] >>
     `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
-    metis_tac[assign_target_ArrayRef_Update_ntr_v2]
+    metis_tac[assign_target_ArrayRef_Update_ordinary_ntr]
    ) >>
-   drule resolve_array_element_error_sc >> rpt strip_tac >>
-   Cases_on `g` >> gvs[no_type_error_result_def]
+   (* INR: resolve_array_element error *)
+   metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error]
   ) >-
   (* AppendOp v *)
   (Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
-   Cases_on `q` >> gvs[] >-
+   Cases_on `q` >-
    (* INL: resolve succeeds *)
-   (PairCases_on `x` >> gvs[sum_CASE_rator, pairTheory.PAIR] >>
+   (PairCases_on `x` >> gvs[] >>
     `well_formed_type_value x1` by metis_tac[resolve_array_element_well_formed_sc] >>
     `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
       by metis_tac[resolve_array_element_leaf_type_sc] >>
     `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
-    Cases_on `x1` >-
-    (* BaseTV/TupleTV/StructTV/FlagTV/NoneTV: _ ordinary branch *)
-    metis_tac[assign_target_ArrayRef_AppendOp_ordinary_ntr, type_value_11] >-
-    (* ArrayTV: split on bound *)
-    rename1 `ArrayTV etv' abd` >>
-    Cases_on `abd` >-
-     (* Fixed: _ ordinary branch; final_tv ≠ ArrayTV _ (Dynamic _) by bound_distinct *)
-     metis_tac[assign_target_ArrayRef_AppendOp_ordinary_ntr, type_value_11, bound_distinct] >>
-     (* Dynamic: AppendOp dynamic array case *)
-    `!etv n. x1 = ArrayTV etv (Dynamic n) ==> x2 = []`
-      by metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
-    irule assign_target_TopLevelVar_ArrayRef_AppendOp_dynamic_no_type_error >>
-    simp[type_value_11, well_formed_type_value_def] >>
-    metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc]
-   ) >>
-   (* INR: resolve_array_element error *)
-   drule resolve_array_element_error_sc >> rpt strip_tac >>
-   Cases_on `g` >> gvs[no_type_error_result_def]
-  ) >>
-  (* PopOp *)
-  (Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
-   Cases_on `q` >> gvs[] >-
-   (* INL: resolve succeeds *)
-   (PairCases_on `x` >> gvs[sum_CASE_rator, pairTheory.PAIR] >>
-    `well_formed_type_value x1` by metis_tac[resolve_array_element_well_formed_sc] >>
-    `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
-      by metis_tac[resolve_array_element_leaf_type_sc] >>
-    `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
-    Cases_on `x1` >-
-    (* BaseTV/TupleTV/StructTV/FlagTV/NoneTV: _ ordinary branch *)
-    metis_tac[assign_target_ArrayRef_PopOp_ordinary_ntr, type_value_11] >-
-    (* ArrayTV: split on bound *)
-    rename1 `ArrayTV etv' abd` >>
-    Cases_on `abd` >-
-     (* Fixed: _ ordinary branch; final_tv ≠ ArrayTV _ (Dynamic _) by bound_distinct *)
-     metis_tac[assign_target_ArrayRef_PopOp_ordinary_ntr, type_value_11, bound_distinct] >>
-     (* Dynamic: PopOp dynamic array case *)
-    `!etv n. x1 = ArrayTV etv (Dynamic n) ==> x2 = []`
-      by metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
-    irule assign_target_TopLevelVar_ArrayRef_PopOp_dynamic_no_type_error >>
-    simp[type_value_11, well_formed_type_value_def] >>
-    metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc]
-   ) >>
-   (* INR: resolve_array_element error *)
-   drule resolve_array_element_error_sc >> rpt strip_tac >>
-   Cases_on `g` >> gvs[no_type_error_result_def]
-  )
+	    Cases_on `x1` >-
+	    (* BaseTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >-
+	    (* TupleTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >-
+	    (* ArrayTV: split on bound *)
+		    (rename1 `ArrayTV etv' abd` >>
+		    Cases_on `abd` >-
+		     (* Fixed: ordinary branch *)
+		     metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_11, bound_distinct] >>
+			     (* Dynamic: AppendOp dynamic array case *)
+			    `!etv n. x1 = ArrayTV etv (Dynamic n) ==> x2 = []`
+			      by metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
+			    IMP_RES_TAC assign_target_TopLevelVar_ArrayRef_AppendOp_dynamic_no_type_error >>
+			    metis_tac[]) >-
+	    (* StructTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >-
+	    (* FlagTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >>
+	    (* NoneTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct]
+	   ) >>
+	   (* INR: resolve_array_element error *)
+	   metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error]
+	  ) >>
+	  (* PopOp *)
+	  (Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
+	   Cases_on `q` >-
+	   (* INL: resolve succeeds *)
+	   (PairCases_on `x` >> gvs[] >>
+	    `well_formed_type_value x1` by metis_tac[resolve_array_element_well_formed_sc] >>
+	    `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
+	      by metis_tac[resolve_array_element_leaf_type_sc] >>
+	    `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
+	    Cases_on `x1` >-
+	    (* BaseTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >-
+	    (* TupleTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >-
+	    (* ArrayTV: split on bound *)
+	    (rename1 `ArrayTV etv' abd` >>
+	    Cases_on `abd` >-
+	     (* Fixed: ordinary branch *)
+	     metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_11, bound_distinct] >>
+			     (* Dynamic: PopOp dynamic array case *)
+			    `!etv n. x1 = ArrayTV etv (Dynamic n) ==> x2 = []`
+			      by metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
+			    IMP_RES_TAC assign_target_TopLevelVar_ArrayRef_PopOp_dynamic_no_type_error >>
+			    metis_tac[]) >-
+	    (* StructTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >-
+	    (* FlagTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct] >>
+	    (* NoneTV: ordinary branch *)
+	    metis_tac[assign_target_ArrayRef_ordinary_ntr, type_value_distinct]
+	   ) >>
+	   (* INR: resolve_array_element error *)
+	   metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error]
+	  )
 QED
 
 Theorem assign_target_TopLevelVar_Value_branch_ntr:
@@ -3306,22 +3241,221 @@ Theorem top_level_HashMapRef_assign_no_type_error:
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
 Proof
-  cheat
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+  `lookup_global cx src_id_opt (string_to_num id) st = (INL (HashMapRef is_transient (n2w slot) kt vt), st)` by
+    metis_tac[lookup_global_HashMapVarDecl_returns_HashMapRef] >>
+  `well_formed_vtype env.type_defs (HashMapT kt vt)` by metis_tac[] >>
+  drule_all target_path_type_HashMapT_assign_target_decomp >> strip_tac >>
+  (* Derive leaf typings BEFORE any gvs that would substitute first_sub/rest_subs *)
+  drule_all target_path_type_HashMapT_split_leaf_runtime >> strip_tac >>
+  `compute_hashmap_slot (n2w slot) (kt::kts) (first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining) rest_subs) <> NONE` by
+    metis_tac[compute_hashmap_slot_prefix_some] >>
+  Cases_on `compute_hashmap_slot (n2w slot) (kt::kts) (first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining) rest_subs)` >- gvs[] >>
+  metis_tac[assign_target_HashMapRef_branch_no_type_error]
 QED
 Resume assign_target_sound_mutual[sound_TopLevelVar]:
-  cheat
-QED
-
-Resume assign_target_sound_mutual[sound_ImmutableVar]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* Destruct target_runtime_typed for TopLevelVar *)
+  gvs[target_runtime_typed_def] >>
+  (* env.type_defs = get_tenv cx *)
+  `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
+  (* Preservation follows from the general preservation theorem *)
+  `runtime_consistent env cx st'` by metis_tac[assign_target_preserves_runtime_consistent_result] >>
+  (* No type error: split on the toplevel type vt *)
+  Cases_on `vt` >-
+  (* Type t: StorageVarDecl path *)
+  (gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
+   PairCases_on `p` >> gvs[] >>
+   Cases_on `p0` >-
+   (* StorageVarDecl: non-ArrayTV or ArrayTV *)
+   (gvs[IS_SOME_EXISTS] >>
+   Cases_on `r` >-
+    (* ArrayTV elem_tv bd: use ArrayRef branch lemma *)
+    (rename1 `ArrayTV atv abd` >>
+     `lookup_global cx src_id_opt (string_to_num id) st =
+       (INL (ArrayRef is_transient' (n2w x') atv abd), st)`
+       by metis_tac[lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef] >>
+     metis_tac[assign_target_TopLevelVar_ArrayRef_branch_no_type_error]) >>
+    (* Non-ArrayTV: use Type_StorageVarDecl lemma *)
+    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error]) >-
+   (* HashMapVarDecl: contradiction with vt = Type *)
+   (metis_tac[lookup_global_HashMapRef_not_StorageVarDecl,
+              lookup_global_HashMapVarDecl_returns_HashMapRef])) >-
+  (* HashMapT kt vt': use HashMapRef branch lemma *)
+  (gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
+   PairCases_on `p` >> gvs[] >>
+   `well_formed_vtype env.type_defs (HashMapT kt vt')` by metis_tac[top_level_vtype_well_formed] >>
+   metis_tac[top_level_HashMapRef_assign_no_type_error])
 QED
 
 Resume assign_target_sound_mutual[sound_TupleTargetV]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    goal_assum drule_all >> simp[]) >>
+  rename1 `assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) st = (res, st')` >>
+  gvs[assign_target_assignable_context_def] >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs(), no_type_error_result_def,
+      assign_operation_matches_target_shape_def] >>
+  Cases_on `tgt` >> gvs[target_runtime_typed_def, target_value_shape_def,
+      well_typed_atarget_def] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  first_x_assum (drule_at Any) >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `l` mp_tac) >>
+  impl_tac >- (
+    simp[target_assignment_values_assignable_def] >>
+    gvs[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
+    drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+    gvs[value_has_type_def, values_have_types_LIST_REL] >>
+    irule LIST_REL3_from_LIST_REL2 >> simp[] >>
+    gvs[LIST_REL_EL_EQN] >> rw[] >>
+    pairarg_tac >> gvs[EL_ZIP] >>
+    first_x_assum drule >> strip_tac >>
+    first_x_assum drule >> strip_tac >> gvs[] >>
+    qexists_tac `EL n tys` >>
+    qexists_tac `EL n tvs` >>
+    simp[] >>
+    gvs[target_values_runtime_typed_LIST_REL3] >>
+    drule LIST_REL3_EL >> simp[] >>
+    gvs[assignable_type_def, EVERY_EL] >>
+    first_x_assum drule >> simp[]) >>
+  simp[]
+QED
+
+Resume assign_target_sound_mutual[sound_ImmutableVar]:
+  all_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    goal_assum drule_all >> simp[]) >>
+  rename1 `assign_target cx (BaseTargetV (ImmutableVar id) is) op st = (res, st')` >>
+  gvs[target_runtime_typed_def, assign_target_assignable_context_def,
+      assign_target_assignable_def] >>
+  drule_all target_runtime_typed_place_leaf_typed >> strip_tac >>
+  gvs[location_runtime_typed_def] >>
+  `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+  `value_has_type tv v` by (
+    imp_res_tac evaluate_type_well_formed_type_value >>
+    fs[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
+    first_x_assum drule >>
+    gvs[get_immutables_def, bind_apply, return_def, AllCaseEqs()] >>
+    gvs[get_address_immutables_def, AllCaseEqs(),
+        option_CASE_rator, lift_option_def, raise_def, return_def] >>
+    `current_module cx = env.current_src` by
+      gvs[current_module_def, env_context_consistent_def] >>
+    gvs[env_context_consistent_def] >>
+    drule_all state_well_typed_immutables_ALOOKUP >> strip_tac >>
+    drule_all imms_well_typed_get_source_immutables >> simp[]) >>
+  `well_formed_vtype env.type_defs (Type ty')` by
+    simp[well_formed_vtype_def, well_formed_type_def] >>
+  `evaluate_type env.type_defs ty = SOME (leaf_type tv (REVERSE is))` by
+    metis_tac[target_path_type_Type_evaluate_leaf] >>
+  `leaf_type tv (REVERSE is) <> NoneTV` by
+    metis_tac[target_path_type_Type_evaluate_leaf_not_NoneTV] >>
+  reverse $
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs(), option_CASE_rator, sum_CASE_rator,
+      get_immutables_def, set_immutable_def, set_address_immutables_def, LET_THM,
+      no_type_error_result_def]
+  >- (
+    rpt strip_tac >>
+    qspecl_then [`tv`,`v`,`REVERSE is`,`op`,`env`,`ty`,`msg`]
+      mp_tac assign_subscripts_no_type_error_runtime_typed >>
+    impl_tac >- simp[] >>
+    simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  drule assign_result_no_type_error_from_successful_assign >>
+  disch_then drule >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem assign_target_assignable_context_rebuild_EVERY[local]:
+  !cx st st' gvs.
+    preserves_tv cx st st' ==>
+    MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
+    EVERY (λgv. assign_target_assignable_context cx gv st) gvs ==>
+    EVERY (λgv. assign_target_assignable_context cx gv st') gvs
+Proof
+  rpt strip_tac >> Induct_on `gvs` >> simp[] >>
+  rpt strip_tac >> drule_all assign_target_assignable_context_rebuild >> simp[]
 QED
 
 Resume assign_target_sound_mutual[sound_assign_targets_cons]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (
+    (* preservation: derive from already-proved preservation theorem *)
+    drule target_assignment_values_assignable_typed >>
+    drule (cj 2 assign_target_preserves_state_well_typed_mutual) >>
+    metis_tac[]) >>
+  (* no_type_error_result: decompose LIST_REL3, then expand assign_targets do-block *)
+  gvs[target_assignment_values_assignable_def] >>
+  Cases_on `tgts` >> gvs[LIST_REL3_def] >>
+  (* tgts=[] case auto-solved (vacuous from LIST_REL3 F); now tgts=h::t *)
+  (* Save tail assignable fact for later use with rebuild (before further expansion destroys it) *)
+  `target_assignment_values_assignable env cx st t gvs vs` by
+    simp[target_assignment_values_assignable_def] >>
+  (* Case-split on assign_target cx gv (Replace v) st result *)
+  Cases_on `assign_target cx gv (Replace v) st` >>
+  Cases_on `q` >-
+  (* INL: head assign_target succeeds, continue with tail *)
+  (rename1 `assign_target cx gv (Replace v) st = (INL ar, s1)` >>
+   (* Head succeeded: derive runtime_consistent s1 + no_type_error_result (INL ar) from head IH *)
+   `runtime_consistent env cx s1 ∧ no_type_error_result (INL ar)` by
+     (first_x_assum (qspecl_then [`st`,`INL ar`,`s1`] mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`env`,`h`,`ty`] mp_tac) >>
+      impl_tac >- (
+        conj_tac >- simp[] >>
+        conj_tac >- simp[] >>
+        conj_tac >- simp[] >>
+        conj_tac >- (
+          irule assign_operation_runtime_typed_Replace_from_value_has_type >> metis_tac[]) >>
+        irule assign_operation_matches_target_shape_Replace_from_typed >>
+        metis_tac[]) >>
+      simp[]) >>
+   (* Rebuild tail premises for new state s1 *)
+   `target_assignment_values_assignable env cx s1 t gvs vs` by
+     metis_tac[target_assignment_values_assignable_rebuild] >>
+   `preserves_tv cx st s1 ∧ MAP FDOM s1.scopes = MAP FDOM st.scopes` by
+     metis_tac[assign_target_preserves_tv, assign_target_preserves_scopes_dom] >>
+   `EVERY (λgv. assign_target_assignable_context cx gv s1) gvs` by
+     metis_tac[assign_target_assignable_context_rebuild_EVERY] >>
+   (* Expand assign_targets do-block and apply tail IH *)
+   gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs()] >>
+   (* Remove head IH (assign_target) so first_x_assum finds only tail IH (assign_targets) *)
+   qpat_x_assum `∀a b c. assign_target _ _ _ _ = _ ==> _` kall_tac >>
+   (* drule: match tail IH first antecedent assign_targets cx gvs vs st'' = (res',st''') against assumption *)
+   first_x_assum drule >>
+   (* Result: ∀env' tgts'. runtime_consistent env' cx s1 ∧ target_assignment_values_assignable env' cx s1 tgts' gvs vs ∧ EVERY ... ⇒ ... *)
+   (* Specialize env'=env, tgts'=t and discharge all antecedents with metis *)
+   disch_tac >>
+   pop_assum (qspecl_then [`env`,`t`] mp_tac) >>
+   metis_tac[target_assignment_values_assignable_def, no_type_error_result_def]) >>
+  (* INR: head assign_target returns error vyper_exc *)
+  rename1 `assign_target cx gv (Replace v) st = (INR exc, s1)` >>
+  (* Kill tail IH so first_x_assum finds head IH *)
+  qpat_x_assum `∀a b c. assign_targets _ _ _ _ = _ ==> _` kall_tac >>
+  (* Apply head IH: specialize with st/INR exc/s1, then env/h/ty *)
+  first_x_assum (qspecl_then [`st`,`INR exc`,`s1`] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`env`,`h`,`ty`] mp_tac) >>
+  impl_tac >- metis_tac[assign_operation_runtime_typed_Replace_from_value_has_type,
+                        assign_operation_matches_target_shape_Replace_from_typed] >>
+  strip_tac >>
+  (* Expand do-block: assign_target returned INR, so bind short-circuits with INR *)
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(),
+      no_type_error_result_def]
 QED
 
 Finalise assign_target_sound_mutual
@@ -3409,3 +3543,4 @@ QED
 (* eval_for preservation depends on statement-list soundness and therefore lives
    in vyperTypeStmtSoundnessScript.sml to avoid a StatePreservation ->
    StmtSoundness -> StatePreservation cycle. *)
+
