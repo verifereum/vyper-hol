@@ -1,0 +1,48 @@
+name: 'Setup holbuild'
+description: 'Builds holbuild and adds it to PATH'
+
+inputs:
+  holbuild-repo:
+    required: false
+    default: 'https://github.com/charles-cooper/holbuild.git'
+    description: 'holbuild repository URL'
+  holbuild-ref:
+    required: false
+    default: 'master'
+    description: 'holbuild git ref'
+
+outputs:
+  holbuild-rev:
+    description: 'Resolved holbuild revision'
+    value: ${{ steps.version.outputs.holbuild-rev }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve holbuild version
+      id: version
+      shell: bash
+      run: |
+        rev=$(git ls-remote ${{ inputs.holbuild-repo }} ${{ inputs.holbuild-ref }} | cut -f1)
+        echo "holbuild-rev=$rev" >> "$GITHUB_OUTPUT"
+
+    - name: Cache holbuild checkout/build
+      uses: actions/cache@v4
+      id: cache-holbuild
+      with:
+        path: ~/holbuild
+        key: holbuild-tool-${{ runner.os }}-${{ steps.version.outputs.holbuild-rev }}
+
+    - name: Clone/build holbuild
+      if: steps.cache-holbuild.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone --depth 1 "${{ inputs.holbuild-repo }}" "$HOME/holbuild"
+        cd "$HOME/holbuild"
+        git fetch --depth 1 origin "${{ inputs.holbuild-ref }}"
+        git checkout --detach FETCH_HEAD
+        make HOLDIR="$HOLDIR"
+
+    - name: Add holbuild to PATH
+      shell: bash
+      run: echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"

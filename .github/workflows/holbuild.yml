@@ -14,50 +14,51 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  HOLBUILD_REPO: https://github.com/charles-cooper/holbuild.git
-  HOLBUILD_REF: ${{ inputs.holbuild-ref || 'master' }}
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/deps
-        id: deps
+      - uses: ./.github/actions/setup-polyml
+        id: polyml
+      - uses: ./.github/actions/setup-hol4
+        id: hol4
+        with:
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
+        with:
+          holbuild-ref: ${{ inputs.holbuild-ref || 'master' }}
+      - uses: ./.github/actions/setup-vyper-test-exports
+        id: vyper-test-exports
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
 
-      - name: Restore holbuild action cache
+      - name: Restore holbuild global cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/holbuild
-          key: holbuild-actions-${{ runner.os }}-${{ steps.deps.outputs.deps-hash }}-${{ github.sha }}
+          key: holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-${{ github.sha }}
           restore-keys: |
-            holbuild-actions-${{ runner.os }}-${{ steps.deps.outputs.deps-hash }}-
-            holbuild-actions-${{ runner.os }}-
-
-      - name: Build holbuild
-        run: |
-          git clone --depth 1 "$HOLBUILD_REPO" "$HOME/holbuild"
-          cd "$HOME/holbuild"
-          git fetch --depth 1 origin "$HOLBUILD_REF"
-          git checkout --detach FETCH_HEAD
-          make HOLDIR="$HOLDIR"
-          echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"
+            holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-
+            holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-
+            holbuild-global-${{ runner.os }}-
 
       - name: Run holbuild
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose --holdir "$HOLDIR" -j"$(nproc)" build --skip-checkpoints --skip-goalfrag
+          holbuild --verbose --holdir "$HOLDIR" -j"$(nproc)" build --skip-checkpoints --skip-goalfrag \
+            vyperHolTheory vyperTestAllTheory
 
       - name: Verify no successful-build checkpoints remain
         run: |
-          if find .holbuild/checkpoints -name '*.save' -o -name '*.save.ok' 2>/dev/null | grep -q .; then
+          if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then
             echo "checkpoint files remained after holbuild run" >&2
-            find .holbuild/checkpoints -name '*.save' -o -name '*.save.ok' 2>/dev/null | head -50 >&2
+            find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
             exit 1
           fi

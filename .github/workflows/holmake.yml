@@ -1,4 +1,4 @@
-name: CI
+name: Holmake
 
 on:
   workflow_dispatch:
@@ -6,8 +6,6 @@ on:
   merge_group:
 
 concurrency:
-  # Cancel older in-progress runs from same PR/workflow.
-  # Push-triggered and merge-group runs use unique run_id so they never cancel each other.
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
@@ -18,12 +16,24 @@ jobs:
       build-cache-key: ${{ steps.build-key.outputs.key }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/deps
-        id: deps
+      - uses: ./.github/actions/setup-polyml
+        id: polyml
+      - uses: ./.github/actions/setup-hol4
+        id: hol4
+        with:
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/holmake-verifereum
+        with:
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+          hol4-rev: ${{ steps.hol4.outputs.hol4-rev }}
+          verifereum-rev: ${{ steps.verifereum.outputs.verifereum-rev }}
       - name: Compute build cache key
         id: build-key
         run: |
-          echo "key=vyper-hol-${{ runner.os }}-${{ steps.deps.outputs.deps-hash }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          deps_hash=$(echo "${{ steps.polyml.outputs.polyml-rev }}${{ steps.hol4.outputs.hol4-rev }}${{ steps.verifereum.outputs.verifereum-rev }}" | sha256sum | cut -d' ' -f1)
+          echo "key=vyper-holmake-${{ runner.os }}-$deps_hash-${{ github.sha }}" >> "$GITHUB_OUTPUT"
       - name: Restore build cache
         id: build-cache
         uses: actions/cache@v4
@@ -38,31 +48,11 @@ jobs:
   export-vyper-tests:
     runs-on: ubuntu-latest
     outputs:
-      export-cache-key: ${{ steps.vyper-rev.outputs.cache-key }}
+      export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Get Vyper revision
-        id: vyper-rev
-        run: |
-          sha=$(git ls-remote https://github.com/vyperlang/vyper.git HEAD | cut -f1)
-          echo "cache-key=vyper-tests-${{ runner.os }}-$sha" >> "$GITHUB_OUTPUT"
-      - name: Cache exported Vyper tests
-        id: cache-vyper-tests
-        uses: actions/cache@v4
-        with:
-          path: tests/vyper-test-exports
-          key: ${{ steps.vyper-rev.outputs.cache-key }}
-      - name: Export Vyper tests
-        if: steps.cache-vyper-tests.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
-          cd vyper-src
-          git fetch --unshallow --tags
-          pip install . --group test
-          pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+      - uses: ./.github/actions/setup-vyper-test-exports
+        id: exports
 
   vyper-tests:
     needs: [build, export-vyper-tests]
@@ -73,7 +63,19 @@ jobs:
         group: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/deps
+      - uses: ./.github/actions/setup-polyml
+        id: polyml
+      - uses: ./.github/actions/setup-hol4
+        id: hol4
+        with:
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/holmake-verifereum
+        with:
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+          hol4-rev: ${{ steps.hol4.outputs.hol4-rev }}
+          verifereum-rev: ${{ steps.verifereum.outputs.verifereum-rev }}
       - name: Restore build cache
         uses: actions/cache/restore@v4
         with:
@@ -107,7 +109,7 @@ jobs:
           echo "Building: $targets"
           Holmake --qof $targets
 
-  ci-success:
+  holmake-success:
     if: always()
     runs-on: ubuntu-latest
     needs: [build, vyper-tests]
