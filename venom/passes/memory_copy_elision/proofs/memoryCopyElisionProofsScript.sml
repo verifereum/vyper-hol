@@ -1447,8 +1447,59 @@ Proof
 QED
 
 (* Output ptrs after bp_handle_inst depend only on bp_get_ptrs, not on the
-   concrete fmap representation.  Keep bp_get_ptrs abstract; only simplify the
-   output FUPDATE. *)
+   concrete fmap representation.  Keep bp_get_ptrs abstract; split only the
+   operand shapes that the pointer opcodes inspect. *)
+Triviality bp_handle_inst_add_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    inst.inst_opcode = ADD ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
+  Cases_on `inst.inst_operands` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t'` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h'` >> gvs[bp_get_ptrs_update_same] >>
+  rpt (IF_CASES_TAC >> gvs[bp_get_ptrs_update_same])
+QED
+
+Triviality bp_handle_inst_sub_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    inst.inst_opcode = SUB ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
+  Cases_on `inst.inst_operands` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t'` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h'` >> gvs[bp_get_ptrs_update_same] >>
+  rpt (IF_CASES_TAC >> gvs[bp_get_ptrs_update_same])
+QED
+
+Triviality bp_handle_inst_assign_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    inst.inst_opcode = ASSIGN ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
+  Cases_on `inst.inst_operands` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h` >> gvs[bp_get_ptrs_update_same]
+QED
+
 Triviality bp_handle_inst_snd_output_ext[local]:
   !bp1 bp2 inst out.
     (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
@@ -1463,13 +1514,10 @@ Proof
     (irule MAP_CONG >> simp[]) >>
   gvs[is_ptr_opcode_def]
   >- simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same]
-  >- (simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
-      rpt (CASE_TAC >> gvs[bp_get_ptrs_update_same]))
-  >- (simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
-      rpt (CASE_TAC >> gvs[bp_get_ptrs_update_same]))
-  >- (simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same])
-  >- (simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
-      rpt (CASE_TAC >> gvs[bp_get_ptrs_update_same]))
+  >- (irule bp_handle_inst_add_snd_output_ext >> simp[])
+  >- (irule bp_handle_inst_sub_snd_output_ext >> simp[])
+  >- simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same]
+  >- (irule bp_handle_inst_assign_snd_output_ext >> simp[])
 QED
 
 (* FST of bp_handle_inst depends only on bp_get_ptrs *)
