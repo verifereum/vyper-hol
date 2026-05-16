@@ -1382,7 +1382,8 @@ Theorem top_level_HashMap_decl:
     find_var_decl_by_num n ts = SOME (HashMapVarDecl is_transient kt vt,id_str)
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
-  metis_tac[]
+  qpat_x_assum `(!src id kt vt. FLOOKUP _ _ = SOME (HashMapT kt vt) ==> _)` drule >>
+  rw[] >> fs[]
 QED
 
 Theorem top_level_vtype_well_formed:
@@ -3226,6 +3227,20 @@ Proof
   metis_tac[lookup_global_StorageVarDecl_non_ArrayTV_no_TypeError]
 QED
 
+Theorem top_level_HashMapT_not_storage_decl:
+  runtime_consistent env cx st ==>
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (HashMapT kt vt) ==>
+  get_module_code cx src = SOME ts ==>
+  find_var_decl_by_num n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
+  F
+Proof
+  rpt strip_tac >>
+  `?is_tr ids. find_var_decl_by_num n ts = SOME (HashMapVarDecl is_tr kt vt, ids)`
+    by metis_tac[top_level_HashMap_decl] >>
+  pop_assum strip_assume_tac >>
+  gvs[optionTheory.SOME_11, pairTheory.PAIR_EQ, var_decl_info_distinct]
+QED
+
 Theorem top_level_HashMapRef_assign_no_type_error:
   runtime_consistent env cx st ==>
   FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (HashMapT kt vt) ==>
@@ -3257,36 +3272,69 @@ QED
 Resume assign_target_sound_mutual[sound_TopLevelVar]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  (* Destruct target_runtime_typed for TopLevelVar *)
-  gvs[target_runtime_typed_def] >>
-  (* env.type_defs = get_tenv cx *)
+  conj_tac >- (
+    irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
+    goal_assum drule_all >> simp[]) >>
+  Cases_on `tgt` >> gvs[target_runtime_typed_def, location_runtime_typed_def] >>
   `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
-  (* Preservation follows from the general preservation theorem *)
-  `runtime_consistent env cx st'` by metis_tac[assign_target_preserves_runtime_consistent_result] >>
-  (* No type error: split on the toplevel type vt *)
   Cases_on `vt` >-
-  (* Type t: StorageVarDecl path *)
-  (gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
-   PairCases_on `p` >> gvs[] >>
-   Cases_on `p0` >-
-   (* StorageVarDecl: non-ArrayTV or ArrayTV *)
-   (gvs[IS_SOME_EXISTS] >>
-   Cases_on `r` >-
-    (* ArrayTV elem_tv bd: use ArrayRef branch lemma *)
-    (rename1 `ArrayTV atv abd` >>
-     `lookup_global cx src_id_opt (string_to_num id) st =
-       (INL (ArrayRef is_transient' (n2w x') atv abd), st)`
+  (* Type t: use context to get Stable witnesses, dispatch by root_tv *)
+  (qpat_x_assum `assign_target_assignable_context _ _ _` mp_tac >>
+   simp[assign_target_assignable_context_def, assign_target_assignable_def,
+        PULL_EXISTS, FORALL_PROD] >>
+   rpt strip_tac >>
+   rename1 `find_var_decl_by_num _ _ = SOME (vi, id_str)` >>
+   Cases_on `vi` >> gvs[] >-
+   (* StorageVarDecl: resolve IS_SOME facts then dispatch by root_tv *)
+   (rename1 `StorageVarDecl is_transient typ` >>
+    `?root_tv. evaluate_type (get_tenv cx) typ = SOME root_tv`
+      by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+    `?slot. lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot`
+      by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+    `typ = t` by metis_tac[top_level_Type_storage_decl] >>
+    `well_formed_type_value root_tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+    Cases_on `root_tv` >-
+    (* BaseTV: non-ArrayTV *)
+    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error,
+              type_value_distinct] >-
+    (* TupleTV: non-ArrayTV *)
+    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error,
+              type_value_distinct] >-
+    (* ArrayTV: derive lookup_global then use ArrayRef boundary lemma *)
+    (`lookup_global cx src_id_opt (string_to_num id) st =
+       (INL (ArrayRef is_transient (n2w slot) t' b'),st)`
        by metis_tac[lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef] >>
-     metis_tac[assign_target_TopLevelVar_ArrayRef_branch_no_type_error]) >>
-    (* Non-ArrayTV: use Type_StorageVarDecl lemma *)
-    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error]) >-
+     metis_tac[assign_target_TopLevelVar_ArrayRef_branch_no_type_error]) >-
+    (* StructTV: non-ArrayTV *)
+    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error,
+              type_value_distinct] >-
+    (* FlagTV: non-ArrayTV *)
+    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error,
+              type_value_distinct] >>
+    (* NoneTV: non-ArrayTV *)
+    metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error,
+              type_value_distinct]) >>
    (* HashMapVarDecl: contradiction with vt = Type *)
-   (metis_tac[lookup_global_HashMapRef_not_StorageVarDecl,
-              lookup_global_HashMapVarDecl_returns_HashMapRef])) >-
-  (* HashMapT kt vt': use HashMapRef branch lemma *)
-  (gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
-   PairCases_on `p` >> gvs[] >>
-   `well_formed_vtype env.type_defs (HashMapT kt vt')` by metis_tac[top_level_vtype_well_formed] >>
+   metis_tac[top_level_Type_not_hashmap_decl]) >-
+  (* HashMapT: derive facts from assignable_context and consistency,
+     then apply HashMapRef boundary lemma *)
+  (qpat_x_assum `assign_target_assignable_context _ _ _` mp_tac >>
+   simp[assign_target_assignable_context_def, assign_target_assignable_def,
+        PULL_EXISTS, FORALL_PROD] >>
+   rpt strip_tac >>
+   rename1 `find_var_decl_by_num _ _ = SOME (vi, id_str)` >>
+   Cases_on `vi` >> gvs[] >-
+   (* StorageVarDecl: contradiction with vt = HashMapT *)
+   metis_tac[top_level_HashMapT_not_storage_decl] >>
+   (* HashMapVarDecl: derive slot, well_formed, then use boundary lemma *)
+   rename1 `HashMapVarDecl is_transient kt vt''` >>
+   `?slot. lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot`
+     by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+   `well_formed_vtype env.type_defs (HashMapT t v)` by metis_tac[top_level_vtype_well_formed] >>
+   drule_all top_level_HashMap_decl >> strip_tac >>
+   gvs[optionTheory.SOME_11, pairTheory.PAIR_EQ, var_decl_info_11] >>
+   `assign_target_assignable (BaseTargetV (TopLevelVar src_id_opt id) is) st` by
+     simp[assign_target_assignable_def] >>
    metis_tac[top_level_HashMapRef_assign_no_type_error])
 QED
 
@@ -3544,3 +3592,31 @@ QED
    in vyperTypeStmtSoundnessScript.sml to avoid a StatePreservation ->
    StmtSoundness -> StatePreservation cycle. *)
 
+
+
+(* Weak wrappers without shape/context premises - derived directly from the
+   mutual theorem.  C5 statement branches that only need preservation can use
+   these without deriving assign_operation_matches_target_shape or
+   assign_target_assignable_context. *)
+
+Theorem assign_target_preserves_runtime_consistent_no_ctx:
+  !cx gv op st res st' env tgt ty.
+    assign_target cx gv op st = (res, st') ==>
+    runtime_consistent env cx st ==>
+    target_runtime_typed env cx st tgt ty gv ==>
+    assign_operation_runtime_typed env ty op ==>
+    runtime_consistent env cx st'
+Proof
+  metis_tac[assign_target_preserves_state_well_typed_mutual]
+QED
+
+Theorem assign_target_preserves_state_well_typed_no_ctx:
+  !cx gv op st res st' env tgt ty.
+    assign_target cx gv op st = (res, st') ==>
+    runtime_consistent env cx st ==>
+    target_runtime_typed env cx st tgt ty gv ==>
+    assign_operation_runtime_typed env ty op ==>
+    state_well_typed st' ∧ accounts_well_typed st'.accounts
+Proof
+  metis_tac[assign_target_preserves_runtime_consistent_no_ctx, runtime_consistent_def]
+QED

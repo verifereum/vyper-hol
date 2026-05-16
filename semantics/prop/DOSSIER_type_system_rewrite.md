@@ -9,22 +9,38 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1 | stuck | other | E0004 | "Escalate to plan_oracle for C0 resolution: authorize type_builtin_result_ok repair for AbiEncode branch, adding vyper_abi_size_bound condition" |
 | C1 | progressed | plan_incomplete | E0005 | Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable. |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
-| C3.1 | progressed | missing_helper | E0091 | Fix sound_TopLevelVar resume: replace assign_target_preserves_runtime_consistent_result with imp_res_tac (cj 1 assign_target_preserves_state_well_typed_mutual). Also test that gvs[assign_target_assignable_context_def] destructs the TopLevelVar case correctly after target_runtime_typed_def expansion. |
-| C3.1.2 | proved | unknown | E0025 |  |
-| C3.1.3 | proved | other | E0027 |  |
+| C3.1 | stuck | other | E0099 | "Rewrite assign_target_TopLevelVar_no_type_error Type branch using irule approach: (1) Save env.type_defs=get_tenv cx with pop_assum mk_asm before any fs/gvs, (2) expand assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on (getting code, p, p0=StorageVarDecl/HashMapVarDecl), (3) Cases_on evaluate_type/Cases_on lookup_var_slot for witnesses, (4) For each Cases_on x subgoal: FIRST use irule boundary_theorem to see exact required premises, then derive each individually. If irule produces a premise gap, prove an adapter lemma." |
+| C3.1.2 | proved |  | E0025 |  |
+| C3.1.3 | proved |  | E0027 |  |
+| C3.1.4 | proved |  | E0100 |  |
+| C3.1.5 | proved |  | E0101 |  |
 | C3.1.6 | progressed | other | E0034 |  |
 | C3.1.7 | stuck | other | E0041 | Fix the vt=Type contradiction proof at line 2419-2424. Replace PairCases_on p + Cases_on p0 + metis_tac with mp_tac of lookup_global equation + simp[lookup_global_def,...] blast approach. Also verify the HashMapT case (lines 2426-2438) metis_tac[top_level_HashMapRef_assign_no_type_error] works for premise matching. |
 | C3.1.7.1 | progressed | tool_limit | E0043 | Test holbuild DISCH_THEN issue by editing 5 cheats and building. If metis_tac works inside Resume blocks, simple replacement will close component. |
 | C3.1.7.1.3 | progressed | plan_incomplete | E0044 | "Prove adapter facts: (1) well_formed_vtype (get_tenv cx) (Type t) from runtime_consistent assumptions, (2) evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs)) via target_path_type_Type_place_leaf_typed + place_leaf_typed_evaluate_type, (3) leaf_type root_tv (REVERSE sbs) <> NoneTV via assignable_type_evaluate_not_NoneTV. Then caller proof uses r=st (lookup_global_state) + these adapter facts to satisfy drule_all of the boundary theorem." |
 | C3.1.7.1.3.1 | progressed | other | E0052 |  |
-| C3.1.7.1.3.2 | proved | other | E0053 |  |
+| C3.1.7.1.3.2 | proved |  | E0053 |  |
 | C3.1.7.3 | stuck | plan_incomplete | E0059 | Write boundary lemma assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error for the standard read+write+assign_result path (all non-ArrayTV-Dynamic cases), modeled on assign_target_TopLevelVar_Value_branch_ntr. Then handle AppendOp/PopOp separately." |
 | C3.1.7.3.1 | stuck | wrong_statement | E0063 |  |
-| C3.1.7.3.2 | proved | other | E0060 |  |
+| C3.1.7.3.2 | proved |  | E0060 |  |
 | C3.2 | progressed | other | E0085 |  |
-| C3.3 | proved | unknown | E0086 |  |
-| C3.4 | proved | unknown | E0087 |  |
-| C3.5 | proved | unknown | E0089 |  |
+| C3.3 | proved |  | E0086 |  |
+| C3.4 | proved |  | E0087 |  |
+| C3.5 | proved |  | E0089 |  |
+| C3.6 | proved |  | E0106 |  |
+| C4 | progressed | unknown | E0105 |  |
+| C5.2 | stuck | plan_incomplete | E0113 |  |
+| C5.2.1 | proved |  | E0114 |  |
+| C5.2.2 | proved |  | E0115 |  |
+| C5.2.3 | proved |  | E0116 |  |
+| C5.2.4 | proved |  | E0120 |  |
+| C5.2.6 | progressed | plan_incomplete | E0121 | Move to C5.2.7 checkpoint then C5.3 |
+| C5.2.7 | progressed | plan_incomplete | E0122 | Move to C5.3 (AnnAssign lemmas, Risk 1, no dependency on TopLevelVar gap). Then escalate C5 architectural gap via plan_oracle. |
+| C5.3 | proved |  | E0123 |  |
+| C5.4 | stuck | risk_mismatch | E0124 |  |
+| C5.4.1 | proved |  | E0125 |  |
+| C5.4.2 | proved |  | E0126 |  |
+| C5.4.3 | proved |  | E0130 |  |
 
 ## C0.1
 
@@ -90,11 +106,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `missing_helper`
-- latest episode: `E0091`
-- blocker: "sound_TopLevelVar resume proof has wrong reference to assign_target_preserves_runtime_consistent_result (not yet defined at that point in file). Need to use cj 1 assign_target_preserves_state_well_typed_mutual instead. Also need to verify the Cases_on vt / gvs assign_target_assignable_context_def structure matches the actual goal state after the resume."
-- next: Fix sound_TopLevelVar resume: replace assign_target_preserves_runtime_consistent_result with imp_res_tac (cj 1 assign_target_preserves_state_well_typed_mutual). Also test that gvs[assign_target_assignable_context_def] destructs the TopLevelVar case correctly after target_runtime_typed_def expansion.
+- result: `stuck`
+- diagnosis: `other`
+- latest episode: `E0099`
+- blocker: "assign_target_TopLevelVar_no_type_error Type branch: metis_tac on boundary theorems fails after expanding assign_target_assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on. The boundary theorems (assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error, top_level_HashMapRef_assign_no_type_error) are fully proved. The problem is pure proof-engineering: after expanding assignable_context, variable names change and/or fs[] eliminates env.type_defs=get_tenv cx, breaking metis matching. The irule diagnostic approach (identified in STATE/L0398) has NEVER been executed despite being the most promising approach across 10+ sessions."
+- next: "Rewrite assign_target_TopLevelVar_no_type_error Type branch using irule approach: (1) Save env.type_defs=get_tenv cx with pop_assum mk_asm before any fs/gvs, (2) expand assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on (getting code, p, p0=StorageVarDecl/HashMapVarDecl), (3) Cases_on evaluate_type/Cases_on lookup_var_slot for witnesses, (4) For each Cases_on x subgoal: FIRST use irule boundary_theorem to see exact required premises, then derive each individually. If irule produces a premise gap, prove an adapter lemma."
 
 ### Attempts / Evidence
 
@@ -192,25 +208,49 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0091` (progressed, missing_helper)
   - Fix drule_all in top_level_HashMapRef_assign_no_type_error: change >> gvs[] >> drule_all to >- gvs[] >> metis_tac -> SUCCEEDED: top_level_HashMapRef_assign_no_type_error now builds clean. Key fix: (1) use >- gvs[] instead of >> gvs[] to scope substitution to NONE case, (2) use metis_tac instead of drule_all to avoid DISCH_THEN instrumentation assertion. ()
   - Write sound_TopLevelVar resume proof with Cases_on vt + branch lemmas -> FAILED at static error: assign_target_preserves_runtime_consistent_result not yet declared (defined later in file). Need to use cj 1 assign_target_preserves_state_well_typed_mutual instead. ()
+- `E0092` (progressed, missing_helper)
+  - gvs[assign_target_assignable_context_def, assign_target_assignable_def, IS_SOME_EXISTS, FORALL_AND_THM, pairTheory.FORALL_PROD, PULL_EXISTS] in sound_TopLevelVar resume block to expand predicate and dispatch to boundary theorems -> FAILED: gvs cannot expand assign_target_assignable_context in assumptions - it remains opaque (assumption 6 unchanged). Without expansion, get_module_code/find_var_decl_by_num facts never appear, and metis_tac[top_level_Type_storage_decl] fails with FOL_FIND no solution. Confirmed across 5+ attempts and 3 sessions. ()
+  - Rebuild to confirm boundary theorem top_level_HashMapRef_assign_no_type_error is proved -> Build failed at sound_TopLevelVar resume. The boundary theorem IS proved but the resume cannot invoke it because gvs destroys the equation needed for premise matching. ()
+- `E0093` (progressed, other)
+  - fs[assign_target_assignable_context_def, assign_target_assignable_def, GSYM EXISTS_PROD, PULL_EXISTS] >> FAIL_TAC probe (Type branch) -> SUCCEEDED: fs expands assign_target_assignable_context in assumptions. Goal shows get_module_code, find_var_decl_by_num with case expression, etc. FIRST_ASSAM issue was from pairarg_tac, NOT from fs. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m11231_t001`)
+  - fs[...] >> Cases_on `p` >> gvs[] >> FAIL_TAC probe -> SUCCEEDED: Cases_on p >> gvs[] destructures the pair (q=FST p, r=SND p) without triggering FIRST_ASSAM error. Pairarg_tac was the FIRST_ASSAM trigger. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m11233_t001`)
+  - UNDISCH_TAC `assign_target_assignable_context cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) st` >> simp[...] -> FAILED: UNDISCH_TAC takes term not frag list, holbuild quotation parsing can't handle it. Type error: Can't unify term with 'a frag list. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m11229_t001`)
+  - fs[...] >> Cases_on `p` >> gvs[] >> Cases_on `q` >> fs[IS_SOME_EXISTS] >> metis_tac[top_level_Type_storage_decl] >> ... full Type+HashMapT branch proof -> PARTIALLY FAILED: fs+Cases_on approach works for expansion. Full proof compiles further but FOL_FIND 'no solution found' at a metis_tac call inside the Type/StorageVarDecl branch. Likely env.type_defs rewritten to get_tenv cx by fs[IS_SOME_EXISTS] or variable name mismatches after Cases_on p. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m11235_t001`)
+- `E0094` (progressed, missing_helper)
+  - fs[assign_target_assignable_context_def, assign_target_assignable_def, GSYM EXISTS_PROD, PULL_EXISTS] >> Cases_on p >> fs[] >> Cases_on q >> imp_res_tac top_level_Type_storage_decl >> fs[IS_SOME_EXISTS] >> metis_tac[boundary_theorems] -> metis_tac fails with FOL_FIND 'no solution found' after fs expansion changes assumption variable names/shapes (`TO_type_system_rewrite-20260515T192259Z_m11275_t001`)
+  - Same approach but with FAIL_TAC probe at StorageVarDecl branch -> FAIL_TAC probe confirmed proof reaches the right branch but holbuild instrumented log doesn't show intermediate goal state (`TO_type_system_rewrite-20260515T192259Z_m11266_t002`)
+- `E0095` (progressed, missing_helper)
+  - fs[assign_target_assignable_context_def, assign_target_assignable_def, GSYM EXISTS_PROD, PULL_EXISTS] >> Cases_on p >> fs[] >> Cases_on q >> imp_res_tac top_level_Type_storage_decl >> fs[IS_SOME_EXISTS] >> metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error, type_value_distinct, assign_target_TopLevelVar_ArrayRef_branch_no_type_error, lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef] -> fs expands assign_target_assignable_context in assumptions correctly. Cases_on p >> fs[] destructures pair (q=FST p, r=SND p). Cases_on q splits StorageVarDecl/HashMapVarDecl. But after fs[IS_SOME_EXISTS], metis_tac fails with FOL_FIND 'no solution found' because the expansion changed variable names/assumption shapes, breaking metis matching with boundary theorems. The boundary theorems are ALL proved - this is purely a tactic-matching issue. (`TO_type_system_rewrite-20260515T192259Z_m11275_t001`, `TO_type_system_rewrite-20260515T192259Z_m11231_t001`)
+  - For HashMapT branch: fs[assign_target_assignable_context_def, ...] >> Cases_on p >> fs[] >> Cases_on q >> fs[IS_SOME_EXISTS] >> simp[assign_target_assignable_def] >> metis_tac[top_level_HashMapRef_assign_no_type_error] -> Same FOL_FIND failure - fs expansion changes assumption shapes making metis_tac unable to match top_level_HashMapRef_assign_no_type_error premises. (`TO_type_system_rewrite-20260515T192259Z_m11235_t001`)
+- `E0096` (progressed, missing_helper)
+  - Wrote adapter bridge lemmas TopLevelVar_Type_assignable_context_imp_StorageVarDecl_facts and TopLevelVar_HashMapT_assignable_context_imp_HashMapVarDecl_facts to isolate fs[assign_target_assignable_context_def] expansion damage inside their proofs, outputting clean existential witnesses. Rewrote wrapper assign_target_TopLevelVar_no_type_error to use drule_all bridge_lemma >> strip_tac instead of fs expansion in body. -> Bridge lemma approach is correct per STATE/L0359. Wrapper structure compiles ( Cases_on vt, drule_all, strip_tac, metis_tac pattern). BUT // conjunction in bridge lemma conclusions got corrupted to /@ by API (lines 3270-3272, 3296-3299) - syntax error prevents build. ()
+- `E0097` (progressed, missing_helper)
+  - Cases_on evaluate_type + Cases_on lookup_var_slot + gvs[IS_SOME_EXISTS] to extract witnesses -> Cases_on introduces witnesses but gvs[IS_SOME_EXISTS] over-destructures type_value (e.g. BaseTV b'), then Cases_on x fails because x was eliminated. The variable x from the option decomposition gets resolved by gvs. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m11479_t001`)
+  - mp_tac to push IS_SOME assumptions to goal position, then simp[IS_SOME_EXISTS] + strip_tac to introduce witnesses -> Written to file but NOT build-verified. Key insight: simp[IS_SOME_EXISTS] is a goal-position rewrite that converts IS_SOME(P) to ?x. P = SOME x. Must push IS_SOME facts to goal via qhdtm_x_assum IS_SOME mp_tac first. ()
+- `E0098` (progressed, missing_helper)
+  - Current proof: Cases_on vt >- (mp_tac assignable_context + simp[assign_target_assignable_context_def, assign_target_assignable_def] + rpt strip_tac + PairCases_on p + gvs[FST,SND] + Cases_on p0 + gvs[] + Cases_on evaluate_type + gvs[IS_SOME_DEF] + Cases_on lookup_var_slot + gvs[IS_SOME_DEF] + by metis_tac derived facts + fs[] + Cases_on type_value + metis_tac[boundary_theorems]) -> Build fails at THEN1 first subgoal not solved. After expansion through assignable_context and gvs/fs, metis_tac cannot match boundary theorem premises (env.type_defs vs get_tenv cx, variable name changes after Cases_on). The error is: HOL_ERR first subgoal not solved by second tactic. (`TO_type_system_rewrite-20260515T192259Z_m11950_t002`)
+  - Previous sessions tried: (1) fs[gvs] expansion in wrapper body - variable names break metis; (2) adapter bridge lemmas with /\ conclusions - API corrupts /\ to /&; (3) IS_SOME_EXISTS goal-position rewrite - over-destructures type_value; (4) mp_tac+simp[IS_SOME_EXISTS] for witness extraction - not yet build-verified -> All approaches fail at the same point: after expanding assignable_context, the derived witnesses have variable names that don't match boundary theorem premises. The CORRECT approach (adapter bridge lemma with ==> chain conclusion) was identified in L0394 but never properly executed due to API /\ corruption and stale checkpoints. (`TO_type_system_rewrite-20260515T192259Z_m11275_t001`, `TO_type_system_rewrite-20260515T192259Z_m11333_t001`)
+- `E0099` (stuck, other)
+  - mp_tac assignable_context + simp[assign_target_assignable_context_def, assign_target_assignable_def] + strip_tac + PairCases_on p + gvs[FST,SND] + Cases_on p0 + gvs[] + Cases_on evaluate_type + gvs[IS_SOME_DEF] + Cases_on lookup_var_slot + gvs[IS_SOME_DEF] + by metis_tac derived facts + fs[] + Cases_on x + metis_tac[boundary_theorems] -> THEN1 first subgoal not solved: metis_tac cannot match boundary theorem premises after expansion changes variable names. fs[] at line 3301 may eliminate env.type_defs=get_tenv cx. ()
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10893_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10899_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260515T192259Z_m10927_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260515T192259Z_m11981_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260515T192259Z_m11275_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260515T192259Z_m11231_t001` (use `read_tool_output` for exact output)
 
 ## C3.1.2
 
 ### Current Status
 
 - result: `proved`
-- diagnosis: `unknown`
+- diagnosis: `n/a`
 - latest episode: `E0025`
-- blocker: ""
+- blocker: 
 
 ### Attempts / Evidence
 
-- `E0025` (proved, unknown)
+- `E0025` (proved, )
   - target_path_type_HashMapT_assign_target_decomp: fix /= syntax with ∧, then prove decomp lemma using metis_tac[target_path_type_HashMapT_not_nil, target_path_type_HashMapT_split_hashmap_subscripts, etc.] -> Decomp lemma proved and builds clean. All existential facts derived from existing lemmas via metis_tac. (`tool_output:TO_type_system_rewrite-20260513T211025Z_m3011_t001`)
 
 ### Evidence refs
@@ -222,18 +262,57 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `proved`
-- diagnosis: `other`
+- diagnosis: `n/a`
 - latest episode: `E0027`
-- blocker: "none"
+- blocker: 
 
 ### Attempts / Evidence
 
-- `E0027` (proved, other)
+- `E0027` (proved, )
   - rpt strip_tac >> derive env.type_defs = get_tenv cx >> get place_leaf_typed via target_path_type_Type_place_leaf_typed >> gvs[place_leaf_typed_def] >> Cases_on REVERSE sbs >> gvs[place_leaf_path_typed_def] >> drule_all place_leaf_path_typed_split_leaf_type >> strip_tac >> qexists_tac base_tv >> conj_tac >- metis_tac (bridge env.type_defs/get_tenv cx) >> conj_tac >- irule assignable_type_evaluate_not_NoneTV >> metis_tac >> irule evaluate_type_well_formed_type_value >> metis_tac -> C3.1.3 proved. Key fix: gvs[place_leaf_typed_def] then Cases_on REVERSE sbs to expose place_leaf_path_typed, then gvs[place_leaf_path_typed_def] for HashMapT case strips head element giving place_leaf_path_typed env vt t ty pl_tv. Then drule_all place_leaf_path_typed_split_leaf_type works. Also fixed type error in C3.1.6: disch_then (drule_all o write_storage_slot...) to disch_then assume_tac >> drule_all ... (`tool_output:TO_type_system_rewrite-20260513T211025Z_m3162_t001`)
 
 ### Evidence refs
 
 - `tool_output:TO_type_system_rewrite-20260513T211025Z_m3162_t001` (use `read_tool_output` for exact output)
+
+## C3.1.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0100`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0100` (proved, )
+  - Expanded assign_target_assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on, then used gvs[IS_SOME_EXISTS] to resolve slot witness, then derived variable-name consistency (t=kt, v=vt) between context-expansion witnesses and FLOOKUP witnesses using drule_all top_level_HashMap_decl + metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ, var_decl_info_11], and finally called metis_tac[top_level_HashMapRef_assign_no_type_error] -> HashMapT branch proved. Key insight: after expanding assignable_context, the find_var_decl witnesses (b,t,v,p1) from context expansion differ from FLOOKUP's (kt,vt). Use top_level_HashMap_decl to get consistent find_var_decl (with kt,vt matching FLOOKUP), then prove variable equality via option/pair/datatype injectivity. After fs[] substitution, metis_tac correctly matches boundary theorem premises. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m12256_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m12258_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m12261_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m12265_t001` (use `read_tool_output` for exact output)
+
+## C3.1.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0101`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0101` (proved, )
+  - Cases_on vt dispatch to Type and HashMapT specialized wrappers -> Built successfully. Proof: rpt strip_tac >> Cases_on vt >- metis_tac[assign_target_TopLevelVar_Type_no_type_error] >> metis_tac[assign_target_TopLevelVar_HashMapT_no_type_error] ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m12265_t001` (use `read_tool_output` for exact output)
 
 ## C3.1.6
 
@@ -411,13 +490,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `proved`
-- diagnosis: `other`
+- diagnosis: `n/a`
 - latest episode: `E0053`
-- blocker: Lemma target_path_type_Type_evaluate_leaf_not_NoneTV already proved in vyperTypeExprSoundnessScript.sml (lines 648-660) per episode E0046. It is consumed by assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error which now builds successfully.
+- blocker: 
 
 ### Attempts / Evidence
 
-- `E0053` (proved, other)
+- `E0053` (proved, )
   - target_path_type_Type_evaluate_leaf_not_NoneTV was added to vyperTypeExprSoundnessScript.sml in episode E0046. It builds and is consumed by the StorageVarDecl boundary theorem. -> Already proved. The lemma exists at vyperTypeExprSoundnessScript.sml:648-660 and is consumed by metis_tac in assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error line 2477. ()
 
 ### Evidence refs
@@ -496,13 +575,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `proved`
-- diagnosis: `other`
+- diagnosis: `n/a`
 - latest episode: `E0060`
-- blocker: ""
+- blocker: 
 
 ### Attempts / Evidence
 
-- `E0060` (proved, other)
+- `E0060` (proved, )
   - Added storage_array_append_len_value_has_type and storage_array_pop_len_value_has_type local lemmas using rewrite_tac[value_has_type_def, NUM_OF_INT, INT_POS] + decide_tac/metis_tac pattern from vht_uint_bound -> Both lemmas build successfully (confirmed by checkpoint after storage_array_pop_len_value_has_type). Proof uses integerTheory.NUM_OF_INT + integerTheory.INT_POS to handle Num (&n) rewriting, with metis_tac[LESS_TRANS] for the 2^256 transitivity step that decide_tac cannot handle. ()
 
 ### Evidence refs
@@ -600,13 +679,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `proved`
-- diagnosis: `unknown`
+- diagnosis: `n/a`
 - latest episode: `E0086`
-- blocker: ""
+- blocker: 
 
 ### Attempts / Evidence
 
-- `E0086` (proved, unknown)
+- `E0086` (proved, )
   - reverse $ gvs[Once assign_target_def, bind_def, ..., AllCaseEqs(), get_immutables_def, set_immutable_def, set_address_immutables_def, LET_THM, no_type_error_result_def] >- (rpt strip_tac >> mp_tac assign_subscripts_no_type_error_runtime_typed >> impl_tac >- simp[] >> simp[]) >> rpt strip_tac >> drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def] -> Build succeeded. Adding set_address_immutables_def+LET_THM to the gvs blast resolved the set_address_immutables INR subgoal (turns out it always returns INL via return()). The blast produces exactly 2 subgoals: (1) assign_subscripts INR TypeError, closed by mp_tac assign_subscripts_no_type_error_runtime_typed + impl_tac >- simp[] + simp[]; (2) success path, closed by drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def]. ()
 
 ### Evidence refs
@@ -619,13 +698,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `proved`
-- diagnosis: `unknown`
+- diagnosis: `n/a`
 - latest episode: `E0087`
-- blocker: ""
+- blocker: 
 
 ### Attempts / Evidence
 
-- `E0087` (proved, unknown)
+- `E0087` (proved, )
   - rpt gen_tac >> strip_tac x3 >> conj for preservation via irule cj 1 >> unfold assign_target_def + monads + assign_operation_matches_target_shape_def, Cases_on tgt >> drule IH for assign_targets >> impl_tac with LIST_REL3 construction via evaluate_type_TupleT_cases + values_have_types_LIST_REL + LIST_REL3_from_LIST_REL2 >> qexists_tac EL n tys + EL n tvs -> Fixed type error: EL n l (assignment_target) → EL n tys (type). Build succeeds, sound_TupleTargetV proved. (`TO_type_system_rewrite-20260514T195458Z_m9729_t002`, `TO_type_system_rewrite-20260514T195458Z_m9731_t001`)
 
 ### Evidence refs
@@ -638,18 +717,340 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `proved`
-- diagnosis: `unknown`
+- diagnosis: `n/a`
 - latest episode: `E0089`
-- blocker: ""
+- blocker: 
 
 ### Attempts / Evidence
 
 - `E0088` (progressed, unknown)
   - INL branch: qpat_x_assum kill head IH, drule tail IH, disch_tac, pop_assum qspecl_then env/t, metis_tac[target_assignment_values_assignable_def, no_type_error_result_def] -> INL branch SOLVED. Key: kill head IH via qpat_x_assum, then first_x_assum finds tail IH, drule matches equation, disch_tac pops result, qspecl_then specializes env/t, metis_tac closes with target_assignment_values_assignable_def + no_type_error_result_def (`tool_output:TO_type_system_rewrite-20260515T171247Z_m10775_t001`)
   - INR branch: various approaches to apply head IH (first_x_assum qspecl_then, qpat_x_assum drule, qhdtm_x_assum) -> All fail: first_x_assum picks wrong IH, qpat_x_assum with drule gets No match from MATCH_MP, qhdtm_x_assum fails Q_TAC for assign_targets constant. Root cause: both IHs have same universal structure (∀3vars. f args = result ⟹ ∀... ⟹ ...) so first_x_assum/first_assum pick the wrong one. (`tool_output:TO_type_system_rewrite-20260515T171247Z_m10784_t001`)
-- `E0089` (proved, unknown)
+- `E0089` (proved, )
   - INR branch of sound_assign_targets_cons: kill tail IH with qpat_x_assum kall_tac, specialize head IH with qspecl_then st/INR exc/s1 then env/h/ty, impl_tac with metis_tac[Replace_from_value_has_type, Replace_from_typed], strip_tac, gvs do-block expansion -> SOLVED. Key insight: do NOT use `by` block for the INR IH application — inline the tactic directly. The `by` block caused stale checkpoint interference where the goal state showed the outer `no_type_error_result res` instead of the inner `no_type_error_result (INR exc)`. Also, use metis_tac directly in impl_tac instead of explicit conj_tac chains which mismatched the conjunction structure. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m10834_t001`)
 
 ### Evidence refs
 
 - `tool_output:TO_type_system_rewrite-20260515T192259Z_m10834_t001` (use `read_tool_output` for exact output)
+
+## C3.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0106`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0102` (proved, )
+  - Verified assign_target_sound_mutual fully built: all 5 Resume blocks proved (sound_ScopedVar, sound_TopLevelVar, sound_TupleTargetV, sound_ImmutableVar, sound_assign_targets_cons), Finalise present, vyperTypeStatePreservationTheory builds successfully, assign_target_sound_mutual exported in .sig -> C3.6 TopLevelVar resume integration is complete - all resume blocks proved, no cheats in file ()
+- `E0106` (proved, )
+  - Inline expand assign_target_assignable_context in Resume proof with gvs/Cases_on -> Failed: auto-generated variable names (b', t') from gvs destructuring prevent metis_tac from matching universally-quantified variables in top_level_Type_storage_decl ()
+  - Add rename1 after gvs[IS_SOME_EXISTS] to fix variable names -> Still failed: Cases_on root_tv had wrong constructor routing (>- targeted BaseTV not ArrayTV) ()
+  - Use metis_tac for ArrayTV case combined with boundary lemma -> Timeout: metis combining assign_target_TopLevelVar_ArrayRef_branch_no_type_error with lookup_global lemma timed out ()
+  - Derive lookup_global fact as subgoal then metis with single boundary lemma -> Worked for ArrayTV case ()
+  - Use drule_all top_level_HashMap_decl + gvs with injectivity for HashMapT branch, derive assign_target_assignable explicitly -> Succeeded: vyperTypeStatePreservationTheory builds clean with zero cheats ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13447_t003` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13481_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13509_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13520_t001` (use `read_tool_output` for exact output)
+
+## C4
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `unknown`
+- latest episode: `E0105`
+- blocker: "C4 wrappers all proved (assign_target_no_type_error, assign_targets_no_type_error, assign_target_update_no_type_error, assign_target_append_no_type_error). Downstream vyperTypeStmtSoundnessTheory fails at Assign branch because C5 bridge lemmas (assign_operation_matches_target_shape, assign_target_assignable_context, assign_operation_runtime_typed) are needed to connect statement-level assumptions to C4 premises."
+
+### Attempts / Evidence
+
+- `E0103` (progressed, unknown)
+  - Read vyperTypeAssignSoundnessScript.sml cheats (lines 313-365): assign_target_no_type_error, assign_target_update_no_type_error, assign_target_append_no_type_error. These are legacy wrappers with old-style premises (assign_target_assignable, well_typed_atarget) that need bridging to C3's strengthened premises (assign_operation_matches_target_shape, assign_target_assignable_context). -> C4 cheats identified but not the build blocker. Build fails at stmt soundness assignment branches which need C5 bridge lemmas first. ()
+- `E0104` (progressed, unknown)
+  - Rewrote assign_target_no_type_error with C3 premises, proved with imp_res_tac (cj 1 assign_target_sound_mutual) >> gvs[] -> Works - direct projection from C3 mutual theorem ()
+  - Rewrote assign_targets_no_type_error with EVERY (assign_target_assignable_context cx st) gvs - WRONG: arg order is cx gv st, partial application cx st misplaces gv -> Type error: EVERY expects (alpha -> bool) but assign_target_assignable_context cx st has wrong type ()
+  - Tried MEM form (!gv. MEM gv gvs => ...) with REWRITE_RULE/GSYM EVERY_MEM conversion -> REWRITE_RULE and SIMP_RULE couldn't convert the universal+implication form to EVERY ()
+  - Proved assign_target_update_no_type_error by building assign_operation_runtime_typed from well_typed_binop + value_runtime_typed, then imp_res_tac -> Should work - builds assign_operation_runtime_typed internally from decomposed premises ()
+  - Proved assign_target_append_no_type_error similarly by building assign_operation_runtime_typed from evaluate_type + value_has_type -> Should work - same pattern as update wrapper ()
+- `E0105` (progressed, unknown)
+  - Fixed assign_targets_no_type_error EVERY lambda: EVERY (λgv. assign_target_assignable_context cx gv st) gvs matching C3 arg order cx gv st -> Build passes for vyperTypeAssignSoundnessTheory (`tool_output:TO_type_system_rewrite-20260515T192259Z_m13043_t002`, `tool_output:TO_type_system_rewrite-20260515T192259Z_m13049_t001`)
+  - Verified all 4 C4 theorems build: assign_target_no_type_error, assign_targets_no_type_error, assign_target_update_no_type_error, assign_target_append_no_type_error -> vyperTypeAssignSoundnessTheory built, no cheats in file (`tool_output:TO_type_system_rewrite-20260515T192259Z_m13049_t001`, `tool_output:TO_type_system_rewrite-20260515T192259Z_m13050_t001`)
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13043_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13049_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13050_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m13050_t002` (use `read_tool_output` for exact output)
+
+## C5.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0113`
+- blocker: Cannot derive assign_target_assignable_context for TopLevelVar in Assign INR sub-case because env_context_consistent does not provide get_module_code from FLOOKUP toplevel_vtypes. This is an architectural gap in env_context_consistent_def that needs to be fixed before the assignable context can be derived for TopLevelVar targets.
+
+### Attempts / Evidence
+
+- `E0107` (progressed, unknown)
+  - recInduct base_target_value_shape_ind >> rw[] >> gvs[base_target_value_shape_def] >> metis_tac[type_place_target_NameTarget/AttributeTarget/SubscriptTarget] -> Helper lemma well_typed_target_ScopedVar_imp_var_assignable compiles. Build progresses past it into assign_target_INL_imp_assign_target_assignable_context. Output keeps truncating at TopLevelVar case - build may be timing out or just taking long. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m13850_t001`, `tool_output:TO_type_system_rewrite-20260515T192259Z_m13855_t001`)
+- `E0108` (progressed, unknown)
+  - CCONTR_TAC >> strip_tac >> assign_target expansion >> gvs[AllCaseEqs()] >> simp[optionTheory.IS_SOME_EXISTS] >> metis_tac[optionTheory.IS_SOME_EXISTS] -> metis_tac[optionTheory.IS_SOME_EXISTS] failed with 'no solution found' in both StorageVarDecl and HashMapVarDecl branches. The issue is that after simp[IS_SOME_EXISTS] converts IS_SOME constraints to existentials, metis_tac cannot figure out the witness instantiation. (`tool_output:TO_type_system_rewrite-20260515T192259Z_m13863_t001`)
+  - Edited: replace IS_SOME by ?slot witness extraction with CCONTR_TAC >> gvs[optionTheory.IS_SOME_EXISTS] + assign_target expansion, then simp[] to close -> Edited both StorageVarDecl and HashMapVarDecl branches. NOT YET BUILD-TESTED. ()
+- `E0109` (progressed, unknown)
+  - metis_tac[well_typed_target_ScopedVar_imp_var_assignable] in ScopedVar case after gvs[target_runtime_typed_def, well_typed_atarget_def, location_runtime_typed_def] -> metis_tac fails with 'no solution found' - probably variable name/pattern mismatch between goal state and lemma, not a logical issue since type_place_target_NameTarget biconditional provides var_assignable directly (`tool_output:TO_type_system_rewrite-20260515T192259Z_m13938_t002`)
+  - CCONTR_TAC + gvs[optionTheory.IS_SOME_EXISTS] pattern for IS_SOME goals in TopLevelVar StorageVarDecl/HashMapVarDecl lookup_var_slot_from_layout branches -> Edited but not build-tested due to broken file from FAIL_TAC probe edit ()
+- `E0110` (progressed, other)
+  - irule well_typed_target_ScopedVar_imp_var_assignable >> simp[] inside backtick subgoal for FLOOKUP env.var_assignable (string_to_num v) = SOME T -> irule produces subgoals but simp[] cannot close the first one. Likely variable name mismatch after gvs destructures assumptions. (`TO_type_system_rewrite-20260515T192259Z_m14025_t001`)
+  - metis_tac[well_typed_target_ScopedVar_imp_var_assignable] after gvs[target_runtime_typed_def, well_typed_atarget_def, location_runtime_typed_def] -> metis_tac fails with 'no solution found' - pattern instantiation issue, not a logical gap (`TO_type_system_rewrite-20260515T192259Z_m13938_t002`)
+- `E0111` (progressed, other)
+  - Replace FAIL_TAC probe + metis_tac[well_typed_target_ScopedVar_imp_var_assignable] with fs[] instead of gvs[] then metis_tac; add env_scopes_consistent intermediate step; use drule chain through env_scopes_consistent_var_assignable_imp + lookup_scopes_find_containing_scope -> metis_tac still fails with 'no solution found' after fs[target_runtime_typed_def, target_value_shape_def, well_typed_atarget_def, well_typed_target_def]. Replaced with cheat for FLOOKUP step. Build result unclear - output truncated, found FIRST_ASSUM error from TopLevelVar branch. ()
+  - Build vyperTypeAssignSoundnessTheory to check after removing FAIL_TAC probe -> Build output too large to see full result. Error at FIRST_ASSUM in TopLevelVar HashMapVarDecl branch likely. ScopedVar proof still has cheat for FLOOKUP step. ()
+- `E0112` (progressed, other)
+  - irule target_runtime_typed_ScopedVar_imp_assignable_context >> conj_tac -> conj_tac fails - irule produces 2 subgoals not a conjunction (`TO_type_system_rewrite-20260515T192259Z_m14274_t001`)
+  - metis_tac[target_runtime_typed_ScopedVar_imp_assignable_context] after fs[runtime_consistent_def] -> FIRST_ASSAM exception - metis_tac cannot match lemma antecedents against post-fs assumptions (`TO_type_system_rewrite-20260515T192259Z_m14276_t001`)
+  - drule_all_then assume_tac target_runtime_typed_ScopedVar_imp_assignable_context after fs[runtime_consistent_def] -> FIRST_ASSAM exception - drule_all cannot find matching assumption after fs restructured env_consistent (`TO_type_system_rewrite-20260515T192259Z_m14278_t001`)
+  - qpat_x_assum + MATCH_MP target_runtime_typed_ScopedVar_imp_assignable_context (latest edit, untested) -> Not yet build-tested ()
+- `E0113` (stuck, plan_incomplete)
+  - Use assign_operation_matches_target_shape_Replace_from_typed for shape (works for both BaseTargetV and TupleTargetV) -> Shape can be derived - this lemma takes target_runtime_typed + evaluate_type + value_has_type, all available in the goal ()
+  - Try assign_target_INL_imp_assignable_context_stmt for context -> Wrong: INR sub-case has assign_target returning INR, and the bridge lemma requires INL success ()
+  - Try irule assign_operation_matches_target_shape_BaseTargetV -> Fails: gv might be TupleTargetV ()
+  - Derive get_module_code from env_context_consistent + FLOOKUP toplevel_vtypes -> Impossible: env_context_consistent only has implications requiring get_module_code as precondition, never concluding it. All clauses go: get_module_code + bare_globals => toplevel_vtypes, or get_module_code + toplevel_vtypes => declaration_facts ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m14656_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260515T192259Z_m14754_t001` (use `read_tool_output` for exact output)
+
+## C5.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0114`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0114` (proved, )
+  - Define assignment_value_static_assignable_context using case + if-then-else to avoid /\ corruption -> Definition compiles successfully via holbuild. The /\ corruption issue was worked around by using single-equation case expression with if-then-else encoding of conjunction instead of multi-clause pattern matching with /\. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T092459Z_m14874_t001` (use `read_tool_output` for exact output)
+
+## C5.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0115`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0115` (proved, )
+  - Add ScopedVar, ImmutableVar, TupleTargetV simp lemmas for assignment_value_static_assignable_context -> All three lemmas proved. Key issues: (1) had to change definition from case-expression to multi-clause ∧ form to get proper rewrite rules, (2) TupleTargetV lemma needed metis_tac[ETA_AX] because simp eta-expands the function in EVERY ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T092459Z_m14906_t001` (use `read_tool_output` for exact output)
+
+## C5.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0116`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0116` (proved, )
+  - ho_match_mp_tac target_runtime_typed_ind >> rpt strip_tac then Cases_on `loc` with ScopedVar using metis, ImmutableVar using simp, TopLevelVar using irule/iffLR on assignment_value_static_assignable_context_TopLevelVar -> Proof succeeds. Key: (1) changed definition from if-then-else to conjunction form matching assign_target_assignable_context, (2) added iff-based TopLevelVar rewrite lemma, (3) Cases_on loc BEFORE expanding assign_target_assignable_context so ScopedVar boundary lemma can match intact target_runtime_typed assumption, (4) used iffLR for biconditional TopLevelVar lemma, (5) impossible goals close by gvs[target_runtime_typed_def], (6) list goals use metis_tac[] with IHs. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T092459Z_m15317_t001` (use `read_tool_output` for exact output)
+
+## C5.2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0120`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0119` (progressed, other)
+  - Restore build by replacing failing Assign INR sub-proofs with cheat. Then identify C5.2.4 proof approach: prove INL => assignment_value_static_assignable_context first, then use iff with assign_target_assignable_context for TopLevelVar. Key insight: assign_target_assignable for TopLevelVar is trivially T, so assign_target_assignable_context reduces to just the static context existential. -> Build restored for both vyperTypeStmtSoundnessTheory and vyperTypeAssignSoundnessTheory. C5.2.4 approach validated but not yet executed. Next session should add assign_target_TopLevelVar_INL_imp_static_context lemma and prove it via controlled expansion of assign_target_def (NOT global). (`TO_type_system_rewrite-20260516T092459Z_m15707_t001`, `TO_type_system_rewrite-20260516T092459Z_m15708_t001`)
+- `E0120` (proved, )
+  - Prove assign_target_TopLevelVar_INL_imp_assignable_context: INL success implies assignable context for TopLevelVar -> Proved. Key tactic insights: (1) Use metis_tac for existential witnesses from universally-quantified helper theorems (irule/drule leave unresolved quantifiers). (2) Use PairCases_on p instead of Cases_on FST p to preserve pair structure for drule/irule matching. (3) Use metis_tac for IS_SOME facts from specialized helper lemmas instead of drule+simp which leaves ∀ implications. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16077_t001` (use `read_tool_output` for exact output)
+
+## C5.2.6
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `plan_incomplete` C5.2.6 wrapper lemma is unnecessary - assign_operation_matches_target_shape_Replace_from_typed already has the exact signature needed and is already imported. Adding a duplicate would violate no-duplicate principle.
+- latest episode: `E0121`
+- blocker: 
+- next: Move to C5.2.7 checkpoint then C5.3
+
+### Attempts / Evidence
+
+- `E0117` (progressed, plan_incomplete)
+  - irule assign_operation_matches_target_shape_Replace_from_typed for shape derivation in Assign branches; simplified state_well_typed subgoal using no_ctx preservation theorem -> Shape derivation works for Replace via assign_operation_matches_target_shape_Replace_from_typed. Preservation uses no_ctx variants without shape/context. The no-TypeError subgoal for INR case needs assign_target_no_type_error which requires both shape AND assignable_context. Shape is derivable; context is the blocker. ()
+- `E0118` (progressed, plan_incomplete)
+  - Simplified Assign INR branch preservation using no_ctx theorems (L0491/L0492/L0496). Added shape derivation via irule assign_operation_matches_target_shape_Replace_from_typed for Replace. For no-TypeError subgoal: needs assign_target_assignable_context which is not available for TopLevelVar in INR case. -> Preservation subgoal fixed. Shape derivation confirmed working. No-TypeError subgoal blocked by architectural gap: env_context_consistent does not derive get_module_code from FLOOKUP toplevel_vtypes. ()
+- `E0121` (progressed, plan_incomplete)
+  - Verified assign_operation_matches_target_shape_Replace_from_typed (vyperTypeStatePreservationScript.sml:2254) has exact signature needed by C6 assignment branches. Works for both BaseTargetV and TupleTargetV. Already imported via vyperTypeStatePreservation ancestor. -> Existing theorem suffices directly. No new lemma needed. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16619_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16637_t001` (use `read_tool_output` for exact output)
+
+## C5.2.7
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `plan_incomplete` C5.2.7 checkpoint: INR no-TypeError branches with TopLevelVar targets need assign_target_assignable_context but env_context_consistent doesn't provide get_module_code. Need architectural fix in env_context_consistent_def or static context premise addition to statement soundness theorem.
+- latest episode: `E0122`
+- blocker: 
+- next: Move to C5.3 (AnnAssign lemmas, Risk 1, no dependency on TopLevelVar gap). Then escalate C5 architectural gap via plan_oracle.
+
+### Attempts / Evidence
+
+- `E0122` (progressed, plan_incomplete)
+  - C5.2.7 audit: verified build passes, all C5.2 boundary lemmas compile. C5.2.3 (static+runtime bridge) proved. C5.2.4 (TopLevelVar INL context) proved. C5.2.5 (generic bridge) has TupleTargetV cheat but compiles via metis. C5.2.6 (shape) satisfied by existing assign_operation_matches_target_shape_Replace_from_typed. Inspected Assign INR branch (lines 944-978): no-TypeError cheat at line 978 needs assign_target_no_type_error which requires assign_target_assignable_context. For INR branches (assignment failed), C5.2.5 (INL-success bridge) does NOT apply. C5.2.3 needs assignment_value_static_assignable_context which needs get_module_code facts not derivable from env_context_consistent. -> Checkpoint confirms: INR no-TypeError branches with TopLevelVar targets blocked by env_context_consistent architectural gap. INL-success branches unblocked. Shape derivation unblocked. Must either fix env_context_consistent or add static context premise to statement soundness. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16643_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16642_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16646_t001` (use `read_tool_output` for exact output)
+
+## C5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0123`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0123` (proved, )
+  - Audit existing NoneT/NoneTV lemmas and their usage in AnnAssign branch -> C5.3 is already covered: assignable_type_not_NoneT, evaluate_type_not_NoneT_imp_not_NoneTV, and assignable_type_evaluate_not_NoneTV already exist and are used directly in the AnnAssign branch (lines 873-874). No additional helper lemmas needed. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16657_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16666_t001` (use `read_tool_output` for exact output)
+
+## C5.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0124`
+- blocker: env_context_consistent_def gap: FLOOKUP env.toplevel_vtypes (src,id) = SOME vt only yields well_formed_vtype, not get_module_code/find_var_decl_by_num/lookup_var_slot_from_layout. Need definition fix or alternative invariant to derive assign_target_assignable_context for TopLevelVar in INR branches
+
+### Attempts / Evidence
+
+- `E0124` (stuck, risk_mismatch)
+  - Audit C5.4 scope and dependencies: checked what tuple/list assignment packaging needs, whether existing lemmas cover it, and what blocks progress -> C5.4 tuple/list packaging is secondary to the critical blocker: env_context_consistent_def does not derive get_module_code/find_var_decl_by_num/lookup_var_slot_from_layout from FLOOKUP env.toplevel_vtypes entries. This gap blocks ALL INR no-TypeError branches for TopLevelVar targets across C5.4, C5.2.3 (partial), C6, and beyond. Must escalate to plan_oracle for definition fix. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16687_t001` (use `read_tool_output` for exact output)
+
+## C5.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0125`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0125` (proved, )
+  - Edited type_place_target for TopLevelNameTarget to reject bare-global entries (IS_SOME guard). Proved type_place_target_TopLevelNameTarget_IS_SOME and type_place_target_TopLevelNameTarget_NOT_BARE using simp[well_typed_expr_def], then proved main biconditional by Cases_on + simp. Fixed top_level_HashMap_decl proof (env_context_consistent strengthening made old metis_tac fail; replaced with targeted qpat_x_assum drule). -> Both definition changes compile. vyperTypeEnvTheory, vyperTypeStatePreservationTheory, vyperTypeStmtSoundnessTheory, and vyperSemanticsHolTheory all build successfully. (`tool_output:TO_type_system_rewrite-20260516T153850Z_m16799_t001`, `tool_output:TO_type_system_rewrite-20260516T153850Z_m16803_t001`, `tool_output:TO_type_system_rewrite-20260516T153850Z_m16824_t001`, `tool_output:TO_type_system_rewrite-20260516T153850Z_m16826_t001`)
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16799_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16803_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16824_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16826_t001` (use `read_tool_output` for exact output)
+
+## C5.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0126`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0126` (proved, )
+  - Add env_consistent_toplevel_storage_static and env_consistent_toplevel_hashmap_static projection lemmas to vyperTypeEnvScript.sml -> Both lemmas proved by gvs[env_consistent_def, env_context_consistent_def] followed by qpat_x_assum drule to target the new Type/HashMapT conjuncts. Full build vyperSemanticsHolTheory passes. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16853_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m16854_t001` (use `read_tool_output` for exact output)
+
+## C5.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0130`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0127` (progressed, tool_limit)
+  - Added env_consistent_toplevel_storage_static and env_consistent_toplevel_hashmap_static projection lemmas (C5.4.2 completed). Started C5.4.3 but context burned on excessive grep calls before writing the lemma statements. -> C5.4.2 completed and built. C5.4.3 not started - need to find target_path_type_def and target_runtime_typed_ind then write/prove the mutual bridge lemma. ()
+- `E0128` (progressed, tool_limit)
+  - Prove standalone TopLevelVar helper target_runtime_typed_TopLevelVar_imp_static_context using sequential fs, then use in mutual theorem via metis_tac -> Standalone lemma approach is correct. After sequential fs[target_runtime_typed_def, target_value_shape_def, well_typed_atarget_def, well_typed_target_def], assumptions are intact: type_place_target env bt = SOME (Type ty), base_target_value_shape env bt (TopLevelVar src id) sbs, location_runtime_typed, target_path_type, env_consistent. BUT irule base_target_value_shape_TopLevelVar_imp_bare_globals_none_spec fails because the spec lemma has universally-quantified vt that appears only in antecedents, so irule cannot determine instantiation. Need metis_tac or explicit instantiation instead. (`TO_type_system_rewrite-20260516T153850Z_m17255_t001`)
+- `E0129` (progressed, tool_limit)
+  - metis_tac[base_target_value_shape_TopLevelVar_imp_bare_globals_none_spec] for bare_globals, fs[location_runtime_typed_def] to expose FLOOKUP, then metis_tac[env_consistent_toplevel_storage_static, assignment_value_static_assignable_context_TopLevelVar, IS_SOME_EXISTS] for Type branch -> bare_globals proof works with metis_tac. fs[location_runtime_typed_def] successfully exposes FLOOKUP. But metis_tac with 4 lemmas times out on Type branch. Need explicit drule_all + rw/qexists instead of metis_tac. ()
+- `E0130` (proved, )
+  - Replaced metis_tac timeout in target_runtime_typed_TopLevelVar_imp_static_context with drule_all + rw/qexists_tac for Type branch and drule_all + rw + metis_tac[target_path_type_HashMapT_not_nil] for HashMapT branch -> Standalone lemma proved: drule_all gets existential witnesses, rw rewrites goal to matching form, qexists_tac supplies concrete witnesses ()
+  - Fixed mutual theorem target_runtime_typed_imp_static_assignable_context_mutual Goal 4 (TupleTarget/TupleTargetV) using fs + simp + metis_tac -> Mutual theorem proved with all 9 goals discharged ()
+  - Added C5.4.4 theorems: target_runtime_typed_imp_assignable_context and target_values_runtime_typed_imp_EVERY_assignable_context -> Both proved by metis_tac composing C5.4.3 static context with C5.2.3 bridge ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m17311_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T17326_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T17336_t001` (use `read_tool_output` for exact output)

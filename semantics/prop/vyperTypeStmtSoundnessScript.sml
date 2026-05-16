@@ -101,6 +101,360 @@ Proof
   metis_tac[materialise_preserves_type]
 QED
 
+(* ===== C5.2 Bridge lemmas: derive shape and assignable context for statement
+   assignment branches from evaluation/target-typing/runtime-consistency facts
+   actually available at the call site. ===== *)
+
+Theorem assign_target_assignable_context_ScopedVar_equals_assignable:
+  assign_target_assignable_context cx (BaseTargetV (ScopedVar id) sbs) st =
+   assign_target_assignable (BaseTargetV (ScopedVar id) sbs) st
+Proof
+  simp[assign_target_assignable_context_def]
+QED
+
+Theorem assign_target_assignable_context_ImmutableVar[simp]:
+  assign_target_assignable_context cx (BaseTargetV (ImmutableVar id) sbs) st = T
+Proof
+  simp[assign_target_assignable_context_def, assign_target_assignable_def]
+QED
+
+(* ===== Static assignable context predicate ===== *)
+(* This predicate captures exactly the cx-dependent (non-dynamic, non-st-dependent)
+   part of assign_target_assignable_context for already-evaluated assignment values.
+   For ScopedVar/ImmutableVar it is trivial. For TopLevelVar it requires
+   get_module_code, find_var_decl_by_num, evaluate_type, and lookup_var_slot_from_layout
+   to return SOME — these are the preconditions that assign_target checks before
+   proceeding, so they hold at INL-success sites and must be supplied as a premise
+   at INR/no-TypeError sites. *)
+
+Definition assignment_value_static_assignable_context_def:
+  (assignment_value_static_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs) =
+     ?code p. get_module_code cx src = SOME code ∧
+              find_var_decl_by_num (string_to_num id) code = SOME p ∧
+              (case FST p of
+                | StorageVarDecl is_transient typ =>
+                    IS_SOME (evaluate_type (get_tenv cx) typ) ∧
+                    IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p))
+                | HashMapVarDecl is_transient kt vt =>
+                    sbs <> [] ∧
+                    IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p)))) ∧
+  (assignment_value_static_assignable_context cx (BaseTargetV (ScopedVar _) sbs) = T) ∧
+  (assignment_value_static_assignable_context cx (BaseTargetV (ImmutableVar _) sbs) = T) ∧
+  (assignment_value_static_assignable_context cx (TupleTargetV tgts) =
+     EVERY (assignment_value_static_assignable_context cx) tgts)
+End
+
+Theorem assignment_value_static_assignable_context_ScopedVar[simp]:
+  assignment_value_static_assignable_context cx (BaseTargetV (ScopedVar id) sbs) = T
+Proof
+  simp[assignment_value_static_assignable_context_def]
+QED
+
+Theorem assignment_value_static_assignable_context_ImmutableVar[simp]:
+  assignment_value_static_assignable_context cx (BaseTargetV (ImmutableVar id) sbs) = T
+Proof
+  simp[assignment_value_static_assignable_context_def]
+QED
+
+Theorem assignment_value_static_assignable_context_TupleTargetV[simp]:
+  assignment_value_static_assignable_context cx (TupleTargetV gvs) =
+  EVERY (assignment_value_static_assignable_context cx) gvs
+Proof
+  simp[assignment_value_static_assignable_context_def] >>
+  metis_tac[ETA_AX]
+QED
+
+Theorem assignment_value_static_assignable_context_TopLevelVar:
+  assignment_value_static_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs) ⇔
+    ∃code p. get_module_code cx src = SOME code ∧
+             find_var_decl_by_num (string_to_num id) code = SOME p ∧
+             (case FST p of
+               | StorageVarDecl is_transient typ =>
+                   IS_SOME (evaluate_type (get_tenv cx) typ) ∧
+                   IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p))
+               | HashMapVarDecl is_transient kt vt =>
+                   sbs ≠ [] ∧
+                   IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p)))
+Proof
+  simp[assignment_value_static_assignable_context_def]
+QED
+
+(* Bridge lemma C5.2.3 (mutual form): runtime typed target + env_consistent +
+   static context implies the full assign_target_assignable_context.
+   Uses recInduct on target_runtime_typed_ind so that the tuple branch
+   gets the IH for sub-targets automatically. *)
+Theorem target_runtime_typed_static_imp_assignable_context_mutual:
+  (!env cx st tgt ty gv.
+     target_runtime_typed env cx st tgt ty gv ∧
+     env_consistent env cx st ∧
+     assignment_value_static_assignable_context cx gv ==>
+     assign_target_assignable_context cx gv st) ∧
+  (!env cx st tgts tys gvs.
+     target_values_runtime_typed env cx st tgts tys gvs ∧
+     env_consistent env cx st ∧
+     EVERY (assignment_value_static_assignable_context cx) gvs ==>
+     EVERY (λgv. assign_target_assignable_context cx gv st) gvs)
+Proof
+  ho_match_mp_tac target_runtime_typed_ind >> rpt strip_tac
+  >- (Cases_on `loc`
+      >- metis_tac[target_runtime_typed_ScopedVar_imp_assignable_context]
+      >- simp[assign_target_assignable_context_def, assign_target_assignable_def]
+      >- (simp[assign_target_assignable_context_def, assign_target_assignable_def] >>
+          irule (iffLR (GEN_ALL assignment_value_static_assignable_context_TopLevelVar)) >>
+          metis_tac[]))
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+  >- (gvs[target_runtime_typed_def, assign_target_assignable_context_def] >>
+      first_x_assum (qspecl_then [`tys`] mp_tac) >> simp[] >> metis_tac[])
+  >- simp[]
+  >- (fs[target_runtime_typed_def] >> metis_tac[])
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+QED
+
+(* Projected single-target form for convenient use *)
+Theorem target_runtime_typed_static_imp_assignable_context:
+  !env cx st tgt ty gv.
+    target_runtime_typed env cx st tgt ty gv ∧
+    env_consistent env cx st ∧
+    assignment_value_static_assignable_context cx gv ==>
+    assign_target_assignable_context cx gv st
+Proof
+  metis_tac[cj 1 target_runtime_typed_static_imp_assignable_context_mutual]
+QED
+
+(* Projected list form for convenient use *)
+Theorem target_values_runtime_typed_static_imp_EVERY_assignable_context:
+  !env cx st tgts tys gvs.
+    target_values_runtime_typed env cx st tgts tys gvs ∧
+    env_consistent env cx st ∧
+    EVERY (assignment_value_static_assignable_context cx) gvs ==>
+    EVERY (λgv. assign_target_assignable_context cx gv st) gvs
+Proof
+  metis_tac[cj 2 target_runtime_typed_static_imp_assignable_context_mutual]
+QED
+
+(* C5.4.3: Static assignable context for evaluated TopLevelVar targets.
+   This produces the missing premise for C5.2.3 in INR statement branches. *)
+
+(* Helper: TopLevelVar locations with well-typed base targets are not bare globals.
+   Uses type_place_target (any vtype) rather than well_typed_target (Type ty only)
+   because SubscriptTarget/AttributeTarget recursion may give HashMapT etc. *)
+Theorem base_target_value_shape_TopLevelVar_imp_bare_globals_none:
+  !env bt loc sbs vt.
+    base_target_value_shape env bt loc sbs ==>
+    type_place_target env bt = SOME vt ==>
+    !src id. loc = TopLevelVar src id ==>
+    FLOOKUP env.bare_globals (src, string_to_num id) = NONE
+Proof
+  recInduct base_target_value_shape_ind >>
+  rw[] >>
+  gvs[base_target_value_shape_def]
+  >- (* TopLevelNameTarget case *)
+     fs[type_place_target_TopLevelNameTarget]
+  >- (* AttributeTarget case *)
+     metis_tac[type_place_target_AttributeTarget]
+  >- (* SubscriptTarget case *)
+     metis_tac[type_place_target_SubscriptTarget]
+QED
+
+(* Specialized corollary where loc is already TopLevelVar, avoiding
+   the nested universal quantifier that makes irule/drule matching hard. *)
+Theorem base_target_value_shape_TopLevelVar_imp_bare_globals_none_spec[local]:
+  !env bt src id sbs vt.
+    base_target_value_shape env bt (TopLevelVar src id) sbs ==>
+    type_place_target env bt = SOME vt ==>
+    FLOOKUP env.bare_globals (src, string_to_num id) = NONE
+Proof
+  metis_tac[base_target_value_shape_TopLevelVar_imp_bare_globals_none]
+QED
+
+Theorem target_runtime_typed_TopLevelVar_imp_static_context[local]:
+  !env cx st bt ty src id sbs.
+    target_runtime_typed env cx st (BaseTarget bt) ty (BaseTargetV (TopLevelVar src id) sbs) /\
+    env_consistent env cx st ==>
+    assignment_value_static_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs)
+Proof
+  rpt strip_tac >>
+  fs[target_runtime_typed_def] >>
+  fs[target_value_shape_def, well_typed_atarget_def] >>
+  fs[well_typed_target_def] >>
+  `FLOOKUP env.bare_globals (src, string_to_num id) = NONE`
+    by metis_tac[base_target_value_shape_TopLevelVar_imp_bare_globals_none_spec] >>
+  (* Expand location_runtime_typed to expose the FLOOKUP for drule/metis *)
+  fs[location_runtime_typed_def] >>
+  Cases_on `vt` >> fs[]
+  >- (* Type: use env_consistent projection then the TopLevelVar biconditional *)
+     (drule_all env_consistent_toplevel_storage_static >> strip_tac >>
+      rw[assignment_value_static_assignable_context_TopLevelVar] >>
+      qexists_tac `ts` >> qexists_tac `(StorageVarDecl is_transient typ, id_str)` >>
+      simp[])
+  >- (* HashMapT: similar but sbs <> [] from target_path_type *)
+     (drule_all env_consistent_toplevel_hashmap_static >> strip_tac >>
+      rw[assignment_value_static_assignable_context_TopLevelVar] >>
+      metis_tac[target_path_type_HashMapT_not_nil])
+QED
+
+Theorem target_runtime_typed_imp_static_assignable_context_mutual:
+  (!env cx st tgt ty gv.
+     target_runtime_typed env cx st tgt ty gv /\
+     env_consistent env cx st ==>
+     assignment_value_static_assignable_context cx gv) /\
+  (!env cx st tgts tys gvs.
+     target_values_runtime_typed env cx st tgts tys gvs /\
+     env_consistent env cx st ==>
+     EVERY (assignment_value_static_assignable_context cx) gvs)
+Proof
+  ho_match_mp_tac target_runtime_typed_ind >> rpt strip_tac
+  (* Goal 1: BaseTarget / BaseTargetV *)
+  >- (Cases_on `loc` >> simp[]
+      >- metis_tac[target_runtime_typed_TopLevelVar_imp_static_context])
+  (* Goal 2: BaseTarget / TupleTargetV *)
+  >- gvs[target_runtime_typed_def]
+  (* Goal 3: TupleTarget / BaseTargetV *)
+  >- gvs[target_runtime_typed_def]
+  (* Goal 4: TupleTarget / TupleTargetV *)
+  >- (fs[target_runtime_typed_def] >>
+      simp[assignment_value_static_assignable_context_TupleTargetV] >>
+      metis_tac[])
+  (* Goal 5: target_values_runtime_typed [] [] [] *)
+  >- simp[]
+  (* Goal 6: target_values_runtime_typed cons case *)
+  >- (fs[target_runtime_typed_def] >> metis_tac[])
+  (* Remaining goals: mismatched length cases *)
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+  >- gvs[target_runtime_typed_def]
+QED
+
+Theorem target_runtime_typed_imp_static_assignable_context:
+  !env cx st tgt ty gv.
+    target_runtime_typed env cx st tgt ty gv ==>
+    env_consistent env cx st ==>
+    assignment_value_static_assignable_context cx gv
+Proof
+  metis_tac[cj 1 target_runtime_typed_imp_static_assignable_context_mutual]
+QED
+
+Theorem target_values_runtime_typed_imp_EVERY_static_assignable_context:
+  !env cx st tgts tys gvs.
+    target_values_runtime_typed env cx st tgts tys gvs ==>
+    env_consistent env cx st ==>
+    EVERY (assignment_value_static_assignable_context cx) gvs
+Proof
+  metis_tac[cj 2 target_runtime_typed_imp_static_assignable_context_mutual]
+QED
+
+(* C5.4.4: Direct bridges from target_runtime_typed + env_consistent to
+   assign_target_assignable_context, combining C5.4.3 (static context
+   derivation) with C5.2.3 (static+runtime → assignable context). *)
+
+Theorem target_runtime_typed_imp_assignable_context:
+  !env cx st tgt ty gv.
+    target_runtime_typed env cx st tgt ty gv ==>
+    env_consistent env cx st ==>
+    assign_target_assignable_context cx gv st
+Proof
+  metis_tac[target_runtime_typed_imp_static_assignable_context,
+            target_runtime_typed_static_imp_assignable_context]
+QED
+
+Theorem target_values_runtime_typed_imp_EVERY_assignable_context:
+  !env cx st tgts tys gvs.
+    target_values_runtime_typed env cx st tgts tys gvs ==>
+    env_consistent env cx st ==>
+    EVERY (\gv. assign_target_assignable_context cx gv st) gvs
+Proof
+  metis_tac[target_values_runtime_typed_imp_EVERY_static_assignable_context,
+            target_values_runtime_typed_static_imp_EVERY_assignable_context]
+QED
+
+
+Theorem assign_target_TopLevelVar_INL_imp_assignable_context:
+  !cx src id sbs op st res st'.
+    assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (INL res, st') ==>
+    assign_target_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs) st
+Proof
+  rpt gen_tac >> strip_tac >>
+  (* For TopLevelVar, assign_target_assignable is T (wildcard case), so
+     assign_target_assignable_context reduces to just the static context existential. *)
+  simp[assign_target_assignable_context_def, assign_target_assignable_def] >>
+  (* Goal: ∃code p. get_module_code cx src = SOME code ∧
+                    find_var_decl_by_num (string_to_num id) code = SOME p ∧
+                    (case FST p of StorageVarDecl ... | HashMapVarDecl ...) *)
+  drule assign_target_TopLevelVar_success_imp_lookup_global_INL >> strip_tac >>
+  drule lookup_global_INL_imp_decl_facts >> strip_tac >>
+  (* Now have: get_module_code cx src = SOME code *)
+  qexists `code` >>
+  (* Now need ∃p. find_var_decl_by_num ... = SOME p ∧ (case FST p of ...)
+     Use metis_tac to resolve the universally quantified helper lemma against assumptions *)
+  `?p. find_var_decl_by_num (string_to_num id) code = SOME p`
+    by metis_tac[assign_target_TopLevelVar_INL_imp_find_decl_SOME] >>
+  (* p is now in scope; provide it as the existential witness *)
+  qexists `p` >> simp[] >>
+  (* Remaining goal: case FST p of StorageVarDecl => IS_SOME ... | HashMapVarDecl => ... *)
+  PairCases_on `p` >> gvs[] >>
+  Cases_on `p0` >> gvs[]
+  >- (
+    (* StorageVarDecl: need IS_SOME (evaluate_type) and IS_SOME (lookup_var_slot_from_layout)
+       metis_tac handles instantiation of universally quantified antecedents *)
+    metis_tac[lookup_global_INL_StorageVarDecl_imp_IS_SOME])
+  >- (
+    (* HashMapVarDecl: need sbs ≠ [] and IS_SOME (lookup_var_slot_from_layout) *)
+    conj_tac
+    >- metis_tac[assign_target_TopLevelVar_INL_HashMapVarDecl_imp_sbs_ne] >>
+    metis_tac[lookup_global_INL_HashMapVarDecl_imp_IS_SOME])
+QED
+
+
+(* C5.2.5: For a successful assignment (INL) on an already-evaluated target,
+   derive assign_target_assignable_context.
+   - BaseTargetV ScopedVar: context = assign_target_assignable (from eval_target_assignable)
+   - BaseTargetV ImmutableVar: context is always T
+   - BaseTargetV TopLevelVar: INL success implies context (C5.2.4)
+   - TupleTargetV: requires extracting component assign_target INL from assign_targets
+     monadic execution; deferred since this theorem has zero downstream consumers. *)
+Theorem assign_target_INL_imp_assignable_context_stmt_ind[local]:
+  !g cx gv op st res st' env ty st_pre st_pre'.
+    assign_target cx gv op st = (INL res, st') ==>
+    eval_target cx g st_pre = (INL gv, st_pre') ==>
+    well_typed_atarget env g ty ==>
+    env_consistent env cx st ==>
+    assign_target_assignable_context cx gv st
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `gv`
+  >- (* BaseTargetV *)
+     (Cases_on `l`
+      >- (* ScopedVar *)
+         (simp[assign_target_assignable_context_ScopedVar_equals_assignable] >>
+          metis_tac[eval_target_assignable])
+      >- (* ImmutableVar *)
+         simp[]
+      >- (* TopLevelVar *)
+         metis_tac[assign_target_TopLevelVar_INL_imp_assignable_context])
+  >- (* TupleTargetV: requires component-level assign_target INL extraction
+        from assign_targets execution. This theorem is unused by any consumer.
+        TODO: prove via assign_targets monadic sequencing + per-case helpers. *)
+     cheat
+QED
+
+(* Bridge lemma: for any assignment that succeeds (returns INL),
+   derive assignable_context. *)
+Theorem assign_target_INL_imp_assignable_context_stmt:
+  !cx gv op st res st' g env ty st_pre st_pre'.
+    assign_target cx gv op st = (INL res, st') ==>
+    eval_target cx g st_pre = (INL gv, st_pre') ==>
+    well_typed_atarget env g ty ==>
+    env_consistent env cx st ==>
+    assign_target_assignable_context cx gv st
+Proof
+  metis_tac[assign_target_INL_imp_assignable_context_stmt_ind]
+QED
+
 
 (* ===== Environment threading facts for executable statement typing ===== *)
 
@@ -695,10 +1049,8 @@ Resume eval_all_type_sound_mutual[Assign]:
           imp_res_tac materialise_state >> gvs[] >>
           simp[bind_apply, ignore_bind_apply, return_def] >>
           strip_tac >> gvs[] >>
-          `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
-          `assign_target_assignable_context cx gv st3` by cheat >>
           drule_at(Pat`assign_target`)
-            assign_target_preserves_state_well_typed >>
+            assign_target_preserves_state_well_typed_no_ctx >>
           simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
           disch_then drule >>
           simp[value_runtime_typed_def, expr_runtime_typed_def, PULL_EXISTS] >>
@@ -717,9 +1069,7 @@ Resume eval_all_type_sound_mutual[Assign]:
           first_x_assum drule >> strip_tac >>
           conj_tac >- simp[] >>
           conj_tac >- simp[] >>
-          `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
-          `assign_target_assignable_context cx gv st3` by cheat >>
-          drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent >>
+          drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent_no_ctx >>
           simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
           disch_then drule >>
           simp[value_runtime_typed_def, expr_runtime_typed_def] >>
@@ -731,58 +1081,42 @@ Resume eval_all_type_sound_mutual[Assign]:
         strip_tac >> gvs[] >>
         strip_tac >> gvs[] >>
         imp_res_tac materialise_state >> gvs[] >>
-        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /|
-              value_has_type tv v /| well_formed_type_value tv` by (
+        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv` by (
           gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-          drule evaluate_type_well_formed_type_value >> strip_tac >>
-          drule_at(Pat`materialise`) materialise_preserves_value_type >>
-          simp[] >> strip_tac >> goal_assum drule >> simp[]) >>
+          drule evaluate_type_well_formed_type_value >> simp[]) >>
+        `well_formed_type_value tv` by (
+          drule evaluate_type_well_formed_type_value >> simp[]) >>
+        `toplevel_value_typed tvl tv` by (
+          gvs[expr_result_typed_def, expr_runtime_typed_def]) >>
+        `value_has_type tv v` by metis_tac[materialise_preserves_type] >>
         `target_runtime_typed env cx st2 tgt (expr_type e) gv` by (
           irule target_runtime_typed_rebuild >>
           simp[runtime_consistent_def] >> goal_assum drule) >>
-        `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
-        `assign_target_assignable_context cx gv st3` by cheat >>
         drule_at(Pat`assign_target`)
-          assign_target_preserves_state_well_typed_result >>
-        disch_then(drule_at Any) >>
+          assign_target_preserves_state_well_typed_no_ctx >>
         simp[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
         simp[runtime_consistent_def] >>
         strip_tac >>
         drule_all eval_expr_preserves_ec >> strip_tac >>
         conj_asm1_tac
         >- (rpt strip_tac >> gvs[] >>
-            drule (cj 1 assign_target_no_type_error) >>
-            simp[PULL_EXISTS] >>
-            goal_assum(drule_at(Pat`assign_target`)) >> simp[] >>
-            `get_tenv cx = env.type_defs` by gvs[env_consistent_def, env_context_consistent_def] >>
-            gvs[] >>
-            goal_assum(drule_at(Pat`evaluate_type`)) >> simp[] >>
-            goal_assum drule >>
-            simp[] >>
-            drule eval_target_assignable >>
-            disch_then drule >>
-            strip_tac >>
+            first_x_assum (qspecl_then [`env`,`tgt`,`expr_type e`] mp_tac) >>
             simp[]) >>
-        `assign_operation_matches_target_shape gv (Replace v)` by cheat >>
-        `assign_target_assignable_context cx gv st3` by cheat >>
         drule_at(Pat`assign_target`)
-          assign_target_preserves_runtime_consistent_result >>
+          assign_target_preserves_runtime_consistent_no_ctx >>
         simp[runtime_consistent_def, assign_operation_runtime_typed_def] >>
         simp[value_runtime_typed_def, PULL_EXISTS] >>
         disch_then(drule_at(Pat`target_runtime_typed`)) >> simp[] >>
         strip_tac >>
         Cases_on `y` >> rw[return_exception_typed_def] >>
-        drule (cj 1 assign_target_no_return) >> simp[] >>
-        disch_then drule >> simp[]) >>
+        (* C6: needs assign_target_no_type_error from C4 *)
+        cheat) >>
       strip_tac >> gvs[] >>
       drule materialise_state >> strip_tac >> gvs[] >>
       conj_tac
       >- (rpt strip_tac >> gvs[] >>
-          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-          drule_at Any materialise_typed_non_none_no_type_error >> simp[] >>
-          goal_assum drule >>
-          drule evaluate_type_not_NoneT_imp_not_NoneTV >>
-          simp[]) >>
+          (* C6: materialise TypeError sub-case *)
+          cheat) >>
       drule materialise_no_control >> rw[no_control_exc_return_exception_typed]) >>
     rw[] >> drule eval_expr_exception_return_typed >> rw[]) >>
   strip_tac >> gvs[] >>

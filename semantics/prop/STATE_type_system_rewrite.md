@@ -2,53 +2,46 @@
 Updated: 2026-05-16
 
 ## Cursor
-- component: C5
+- component: C5.4.5
 - status: in_progress
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: Investigate whether env_context_consistent can derive get_module_code cx src = SOME code when FLOOKUP env.toplevel_vtypes (src,id) = SOME vt. If not, either strengthen env_context_consistent or prove per-target-type bridge lemmas for assign_target_assignable_context. Start with ScopedVar/ImmutableVar (trivial), then TopLevelVar (the hard case), then TupleTargetV. After bridge lemmas, update Assign branch (line 799+) to use them.
-- expected_goal_shape: assign_target_assignable_context cx gv st2 from target_runtime_typed + runtime_consistent + well_typed_atarget
+- next_action: 1) Delete or replace assign_target_INL_imp_assignable_context_stmt_ind (line 420) + assign_target_INL_imp_assignable_context_stmt (line 447) - grep confirmed zero consumers per LEARNINGS. 2) Patch Assign resume line 1113 cheat: use assign_target_no_type_error from C4, deriving assign_operation_matches_target_shape via assign_operation_matches_target_shape_Replace_from_typed and assign_target_assignable_context via target_runtime_typed_imp_assignable_context. 3) Patch Assign resume line 1119 cheat: materialise TypeError sub-case. 4) Patch AugAssign resume line 1141 cheat: rewrite using base-target IH and new bridges. 5) Audit remaining cheats in other Resume blocks within C5 scope.
+- expected_goal_shape: Assign INL-success branch after assign_target: need assign_target_no_type_error premises (assign_operation_matches_target_shape + assign_target_assignable_context) derivable from target_runtime_typed + env_consistent. AugAssign needs similar plus update-binop typing.
 - verify_with: holbuild(targets=['vyperTypeStmtSoundnessTheory'])
 
 ## If This Fails
-- If TopLevelVar bridge is impossible from current invariant, escalate to plan_oracle: env_context_consistent may need strengthening with FLOOKUP env.toplevel_vtypes (src,id) = SOME vt => get_module_code cx src = SOME code
+- If assignable_context bridge fails in Assign branch, check that env_consistent is preserved at the right state (st3 for assign_target call). If AugAssign proof structure is wrong, escalate to plan_oracle for C5.4.5 restructuring.
 
 ## Do Not Retry
-- Derive assign_target_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs) st from target_runtime_typed + runtime_consistent alone: IMPOSSIBLE: target_runtime_typed gives only FLOOKUP env.toplevel_vtypes = SOME vt. env_context_consistent uses get_module_code as antecedent condition only. No existing invariant derives get_module_code from FLOOKUP toplevel_vtypes.
-  - evidence: source:semantics/prop/vyperTypeExprSoundnessScript.sml:258-259
-  - evidence: source:semantics/prop/vyperTypeSystemScript.sml:713-731
-- Use assign_target_TopLevelVar_no_type_error_imp_get_module_code contrapositive to derive no-TypeError for TopLevelVar: Contrapositive gives NOT get_module_code => TypeError. Cant use this to prove no-TypeError because it is consistent with TypeError occurring when get_module_code = NONE
-  - evidence: source:semantics/prop/vyperTypeAssignSoundnessScript.sml:407-419
-- EVERY (assign_target_assignable_context cx st) gvs partial application: Wrong argument order: assign_target_assignable_context takes cx gv st, not cx st gv. Must use lambda form EVERY (\gv. assign_target_assignable_context cx gv st) gvs
-  - evidence: tool_output:TO_type_system_rewrite-20260515T192259Z_m13043_t002
+- metis_tac[env_consistent_toplevel_storage_static, assignment_value_static_assignable_context_TopLevelVar, IS_SOME_EXISTS] for Type branch of target_runtime_typed_TopLevelVar_imp_static_context: 4 lemmas with existential quantifiers + compound FLOOKUP keys (string_to_num id) + variable name overlap (lemma ty vs goal t from Cases_on) creates search space too large for metis. Times out.
+  - evidence: episode:E0129
+- irule (iffLR (GEN_ALL assignment_value_static_assignable_context_TopLevelVar)) after drule + strip_tac + gvs: irule cannot instantiate the universally-quantified variables in GEN_ALL of the biconditional to match goal assumptions.
+  - evidence: episode:E0128
 
 ## Reflection
 ### Tunnel Vision Check
-- Spent too much time reading definitions serially instead of identifying the CORE GAP: assign_target_assignable_context for TopLevelVar needs get_module_code which CANNOT be derived from target_runtime_typed or runtime_consistent. Should have identified this gap immediately and either found a workaround or escalated.
-- The PLAN C5.2 correctly identifies deriving assign_target_assignable_context as the key bridge, but underestimates the TopLevelVar gap. The existing invariants provide get_module_code facts only conditionally (as antecedents), never as unconditional conclusions.
-- Alternative approach not tried: Could the Assign branch proof avoid assign_target_no_type_error entirely for the TypeError contradiction case, and instead directly unfold assign_target_def for each gv constructor and use case-specific reasoning? This might bypass the assignable_context requirement.
+- The cheat at line 442 (assign_target_INL_imp_assignable_context_stmt_ind TupleTargetV) has been known unused since E0122. Multiple sessions have skipped actually deleting it. Do it now - it's blocking zero-CHEAT.
+- C5.4.5 scope is narrow: only side-condition call sites in Assign/AugAssign. Don't get drawn into broader builtin/call cheats.
+- The Assign branch already has target_runtime_typed rebuilt at line 1065 and 1092. The missing link is assign_operation_matches_target_shape (from Replace_from_typed) and assign_target_assignable_context (from target_runtime_typed_imp_assignable_context). These should be mechanical to derive.
 
 ### What Went Wrong
-- C4 completed successfully (just lambda form fix). C5 analysis revealed a fundamental gap: assign_target_assignable_context for TopLevelVar requires get_module_code cx src = SOME code + find_var_decl_by_num facts, but env_context_consistent only uses get_module_code as a CONDITION in implications (line 718: FLOOKUP bare_globals ... /\ get_module_code cx src = SOME ts => ...), never derives it as a conclusion.
-- target_runtime_typed for TopLevelVar only provides FLOOKUP env.toplevel_vtypes = SOME vt (line 259 of vyperTypeExprSoundnessScript.sml). It does NOT provide get_module_code or declaration/slot facts.
-- assign_target_TopLevelVar_no_type_error_imp_get_module_code (line 407 of vyperTypeAssignSoundnessScript) uses a CONTRAPOSITIVE but can't help prove no-TypeError - it only says if no TypeError then get_module_code exists
+- Previous sessions on C5.4.3 correctly identified the metis_tac timeout issue but took multiple attempts to find the right tactical (drule_all + rw + qexists). The drule_all approach should be the first choice for existentials + compound FLOOKUP keys from now on.
+- The mutual theorem Goal 4 fix was simple (fs + simp + metis_tac) but required a FAIL_TAC probe to understand the goal shape after ho_match_mp_tac.
 
 ### Ignored Signals
-- LEARNING L0425 explicitly states the circular dependency: runtime_consistent does NOT provide get_module_code for TopLevelVar. Should have focused on this gap immediately instead of reading more definitions.
-- LEARNING L0423 suggests using assign_target_preserves_state_well_typed_mutual directly for preservation (weaker premises). For no-TypeError, a similar approach may be needed - use a weaker no-TypeError theorem or a direct execution-based proof.
+- The holbuild output showed the standalone lemma proving but mutual theorem failing - should have immediately done a FAIL_TAC probe on Goal 4 instead of guessing.
 
 ### Strategy Adjustments
-- For C5, prove bridge lemmas for ScopedVar (possible via eval_target_assignable + env_scopes_consistent) and ImmutableVar (trivially T) first, then tackle TopLevelVar.
-- TopLevelVar approach options: (A) Add FLOOKUP env.toplevel_vtypes => get_module_code to env_context_consistent or a consequence lemma, (B) Extract get_module_code from the execution result in statement branches via case analysis, (C) Prove a direct no-TypeError for TopLevelVar that doesn't need assignable_context but instead does execution-level reasoning inside the statement proof.
-- Start with the easy cases (ScopedVar, ImmutableVar, TupleTargetV componentwise) to make partial progress, then resolve the TopLevelVar gap.
+- Always use drule_all for projection lemmas with existential conclusions and compound keys; never start with metis_tac for these.
+- After proving a standalone lemma and a mutual theorem, do a full build immediately to confirm both compile before moving on.
+- C5.4.5 should prioritize deleting the unused cheat theorems first (quick win) before patching statement branches.
 
 ### Oracle Feedback
-- PLAN C5.2 correctly identifies the assignable_context bridge as essential, but the dependency on get_module_code for TopLevelVar is a genuine architectural gap not addressed by the current invariants. This may need either definition repair (add to env_context_consistent) or a different proof strategy for the TopLevelVar case.
-- The PLAN says If a lemma needs to assume a top-level slot/layout fact not derivable from runtime consistency and target typing, thats a failure sign requiring escalation. This IS that failure sign for TopLevelVar.
+- C5.4.3 architecture (standalone TopLevelVar lemma then use in mutual) was validated as the correct approach.
+- The oracle correctly predicted that drule_all would work but underestimated the metis_tac difficulty even for HashMapT branch (where rw already solved existentials).
+- C5.4.4 composition of C5.4.3 + C5.2.3 was as straightforward as predicted - simple metis_tac sufficed.
 
 ## Evidence Pointers
-- source:semantics/prop/vyperTypeSystemScript.sml:713-731 - env_context_consistent_def: get_module_code only appears as antecedent condition, never as conclusion
-- source:semantics/prop/vyperTypeExprSoundnessScript.sml:258-259 - location_runtime_typed TopLevelVar: only FLOOKUP env.toplevel_vtypes, no get_module_code
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:949-966 - assign_target_assignable_context_def: TopLevelVar case needs get_module_code + find_var_decl_by_num + evaluate_type/lookup_var_slot IS_SOME
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:798-810 - Assign branch failing proof tries drule assign_target_no_type_error but cant derive assign_target_assignable_context cx gv st2
-- tool_output:TO_type_system_rewrite-20260515T192259Z_m13050_t002 - Build failure showing exact goal shape at line 801
-- tool_output:TO_type_system_rewrite-20260515T192259Z_m13049_t001 - C4 theorems all build clean
+- episode:E0130 - C5.4.3 proved with drule_all approach
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:420-456 - unused cheat theorems to delete
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:1113,1119,1141 - Assign/AugAssign cheats to patch

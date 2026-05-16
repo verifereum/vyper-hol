@@ -85,12 +85,29 @@ Proof
   metis_tac[]
 QED
 
+Theorem type_place_target_TopLevelNameTarget_IS_SOME:
+  FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME x ==>
+  type_place_target env (TopLevelNameTarget (src_id_opt, id)) = NONE
+Proof
+  simp[well_typed_expr_def]
+QED
+
+Theorem type_place_target_TopLevelNameTarget_NOT_BARE:
+  FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = NONE ==>
+  type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
+  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id)
+Proof
+  simp[well_typed_expr_def]
+QED
+
 Theorem type_place_target_TopLevelNameTarget:
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME vt <=>
+  FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = NONE /\
   FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt
 Proof
-  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
-  simp[]
+  Cases_on `FLOOKUP env.bare_globals (src_id_opt,string_to_num id)` >-
+  simp[type_place_target_TopLevelNameTarget_NOT_BARE] >>
+  simp[type_place_target_TopLevelNameTarget_IS_SOME]
 QED
 
 Theorem type_place_target_AttributeTarget:
@@ -267,4 +284,41 @@ Theorem flag_member_sound:
   ?members. ty = FlagT (SND nsid) /\ FLOOKUP env.flag_members nsid = SOME members /\ MEM mid members
 Proof
   Cases_on `nsid` >> rw[well_typed_expr_def]
+QED
+
+
+(* ===== C5.4.2 Projection lemmas: extract storage/hashmap code/declaration/layout
+   witnesses from env_consistent for writable top-level entries ===== *)
+
+Theorem env_consistent_toplevel_storage_static:
+  !env cx st src id ty.
+    env_consistent env cx st /\
+    FLOOKUP env.toplevel_vtypes (src, id) = SOME (Type ty) /\
+    FLOOKUP env.bare_globals (src, id) = NONE ==>
+    ?ts is_transient typ id_str.
+      get_module_code cx src = SOME ts /\
+      find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ, id_str) /\
+      typ = ty /\
+      IS_SOME (evaluate_type (get_tenv cx) typ) /\
+      IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)
+Proof
+  rpt strip_tac >>
+  gvs[env_consistent_def, env_context_consistent_def] >>
+  qpat_x_assum `!src id ty. FLOOKUP _ _ _ = SOME (Type ty) /\ _ ==> _` drule >>
+  gvs[]
+QED
+
+Theorem env_consistent_toplevel_hashmap_static:
+  !env cx st src id kt vt.
+    env_consistent env cx st /\
+    FLOOKUP env.toplevel_vtypes (src, id) = SOME (HashMapT kt vt) ==>
+    ?ts is_transient id_str.
+      get_module_code cx src = SOME ts /\
+      find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt, id_str) /\
+      IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)
+Proof
+  rpt strip_tac >>
+  gvs[env_consistent_def, env_context_consistent_def] >>
+  qpat_x_assum `!src id kt vt. FLOOKUP _ _ _ = SOME (HashMapT kt vt) ==> _` drule >>
+  gvs[]
 QED

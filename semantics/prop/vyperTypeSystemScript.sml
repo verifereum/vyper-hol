@@ -561,7 +561,9 @@ Definition well_typed_expr_def:
     (case FLOOKUP env.bare_globals (env.current_src, string_to_num id) of
      | SOME ty => SOME (Type ty) | NONE => NONE) /\
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
-    FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) /\
+    (let n = string_to_num id in
+     if IS_SOME (FLOOKUP env.bare_globals (src_id_opt,n)) then NONE
+     else FLOOKUP env.toplevel_vtypes (src_id_opt,n)) /\
   type_place_target env (SubscriptTarget tgt e) =
     (if well_typed_expr env e then
        case type_place_target env tgt of
@@ -720,10 +722,21 @@ Definition env_context_consistent_def:
        is_immutable_decl id ts /\ ty <> NoneT) /\
     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
        well_formed_vtype env.type_defs vt) /\
-    (!src id kt vt ts.
-       FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) /\ get_module_code cx src = SOME ts ==>
-       ?is_transient id_str.
-          find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str)) /\
+    (!src id ty.
+       FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+       FLOOKUP env.bare_globals (src,id) = NONE ==>
+       ?ts is_transient typ id_str.
+         get_module_code cx src = SOME ts /\
+         find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
+         typ = ty /\
+         IS_SOME (evaluate_type (get_tenv cx) typ) /\
+         IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)) /\
+    (!src id kt vt.
+       FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==>
+       ?ts is_transient id_str.
+         get_module_code cx src = SOME ts /\
+         find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
+         IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)) /\
     (!src fid ls.
        FLOOKUP env.flag_members (src, fid) = SOME ls ==>
        ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
