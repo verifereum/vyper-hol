@@ -311,57 +311,68 @@ Proof
 QED
 
 Theorem assign_target_no_type_error:
-  (!g. !cx tgt st0 st1 v st res st' env ty.
-    eval_target cx g st0 = (INL tgt, st1) /\
-    well_typed_atarget env g ty /\
-    assign_target_assignable tgt st /\
-    assign_target cx tgt (Replace v) st = (res, st') /\
-    state_well_typed st /\
-    env_consistent env cx st /\
-    (?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
-           value_has_type tyv v) ==>
-    !s. res <> INR (Error (TypeError s))) /\
-  (!gs. !cx gvs st0 st1 vs st res st' env tys.
-    eval_targets cx gs st0 = (INL gvs, st1) /\
-    LIST_REL (well_typed_atarget env) gs tys /\
-    EVERY (\tgt. assign_target_assignable tgt st) gvs /\
-    assign_targets cx gvs vs st = (res, st') /\
-    state_well_typed st /\
-    env_consistent env cx st /\
-    LIST_REL (\ty v. ?tyv. evaluate_type (get_tenv cx) ty = SOME tyv /\
-              value_has_type tyv v) tys vs ==>
-    !s. res <> INR (Error (TypeError s)))
+  !cx gv op st res st' env tgt ty.
+    assign_target cx gv op st = (res, st') ==>
+    runtime_consistent env cx st ==>
+    target_runtime_typed env cx st tgt ty gv ==>
+    assignable_type env.type_defs ty ==>
+    assign_operation_runtime_typed env ty op ==>
+    assign_operation_matches_target_shape gv op ==>
+    assign_target_assignable_context cx gv st ==>
+    no_type_error_result res
 Proof
-  cheat
+  rpt strip_tac >>
+  imp_res_tac (cj 1 assign_target_sound_mutual) >> gvs[]
 QED
 
-Theorem assign_target_update_no_type_error:
-  !cx bt loc sbs st0 st1 target_ty ty bop v st res st' env et.
-    eval_base_target cx bt st0 = (INL (loc,sbs), st1) /\
-    well_typed_target env bt target_ty /\
-    assign_target_assignable (BaseTargetV loc sbs) st /\
-    assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st = (res, st') /\
-    state_well_typed st /\
-    env_consistent env cx st /\
-    well_typed_binop ty bop ty et /\
-    bop <> In /\ bop <> NotIn ==>
-    !s. res <> INR (Error (TypeError s))
+Theorem assign_targets_no_type_error:
+  !cx gvs vs st res st' env tgts.
+    assign_targets cx gvs vs st = (res, st') ==>
+    runtime_consistent env cx st ==>
+    target_assignment_values_assignable env cx st tgts gvs vs ==>
+    EVERY (λgv. assign_target_assignable_context cx gv st) gvs ==>
+    no_type_error_result res
 Proof
-  cheat
+  rpt strip_tac >>
+  imp_res_tac (cj 2 assign_target_sound_mutual) >> gvs[]
+QED
+Theorem assign_target_update_no_type_error:
+  !cx gv st res st' env tgt ty bop rhs_ty v.
+    assign_target cx gv (Update ty bop v) st = (res, st') ==>
+    runtime_consistent env cx st ==>
+    target_runtime_typed env cx st tgt ty gv ==>
+    assignable_type env.type_defs ty ==>
+    well_typed_binop ty bop ty rhs_ty ==>
+    value_runtime_typed env rhs_ty v ==>
+    assign_operation_matches_target_shape gv (Update ty bop v) ==>
+    assign_target_assignable_context cx gv st ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `assign_operation_runtime_typed env ty (Update ty bop v)` by (
+    simp[assign_operation_runtime_typed_def] >>
+    qexists_tac `rhs_ty` >> simp[]) >>
+  imp_res_tac (cj 1 assign_target_sound_mutual) >> gvs[]
 QED
 
 Theorem assign_target_append_no_type_error:
-  !cx bt loc sbs st0 st1 v st res st' env elem_ty n.
-    eval_base_target cx bt st0 = (INL (loc,sbs), st1) /\
-    well_typed_target env bt (ArrayT elem_ty (Dynamic n)) /\
-    assign_target cx (BaseTargetV loc sbs) (AppendOp v) st = (res, st') /\
-    state_well_typed st /\
-    env_consistent env cx st /\
-    (?tyv. evaluate_type (get_tenv cx) elem_ty = SOME tyv /\
-           value_has_type tyv v) ==>
-    !s. res <> INR (Error (TypeError s))
+  !cx gv st res st' env tgt elem_ty elem_tv n v.
+    assign_target cx gv (AppendOp v) st = (res, st') ==>
+    runtime_consistent env cx st ==>
+    target_runtime_typed env cx st tgt (ArrayT elem_ty (Dynamic n)) gv ==>
+    assignable_type env.type_defs (ArrayT elem_ty (Dynamic n)) ==>
+    evaluate_type env.type_defs elem_ty = SOME elem_tv ==>
+    value_has_type elem_tv v ==>
+    assign_operation_matches_target_shape gv (AppendOp v) ==>
+    assign_target_assignable_context cx gv st ==>
+    no_type_error_result res
 Proof
-  cheat
+  rpt strip_tac >>
+  `assign_operation_runtime_typed env (ArrayT elem_ty (Dynamic n)) (AppendOp v)` by (
+    simp[assign_operation_runtime_typed_def] >>
+    qexists_tac `elem_tv` >>
+    simp[] >> qexists_tac `elem_ty` >> qexists_tac `n` >> simp[]) >>
+  imp_res_tac (cj 1 assign_target_sound_mutual) >> gvs[]
 QED
 
 
@@ -380,3 +391,46 @@ Theorem assign_operation_matches_target_shape_Replace_TupleTargetV:
 Proof
   rw[assign_operation_matches_target_shape_def]
 QED
+
+
+(* ===== Bridge lemmas: execution success => shape and assignable context ===== *)
+
+(* When get_module_code is NONE, lookup_global returns TypeError
+   because lookup_global calls lift_option_type (get_module_code ...) FIRST. *)
+Theorem get_module_code_NONE_lookup_global_TypeError[local]:
+  get_module_code cx src = NONE ==>
+  lookup_global cx src n st = (INR (Error (TypeError "lookup_global get_module_code")), st)
+Proof
+  rw[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def]
+QED
+
+Theorem assign_target_TopLevelVar_no_type_error_imp_get_module_code:
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (res, st') ==>
+  no_type_error_result res ==>
+  ?code. get_module_code cx src = SOME code
+Proof
+  rw[no_type_error_result_def] >>
+  CCONTR_TAC >> fs[] >>
+  Cases_on `get_module_code cx src` >> gvs[] >>
+  drule get_module_code_NONE_lookup_global_TypeError >> strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[assign_target_def, bind_def, LET_THM] >>
+  gvs[]
+QED
+
+(* If assign_target for TopLevelVar returns INL, lookup_global must have returned INL.
+   This follows because assign_target starts with bind (lookup_global ...) and
+   if lookup_global returns INR, bind passes it through as INR. *)
+Theorem assign_target_TopLevelVar_success_imp_lookup_global_INL[local]:
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (INL res, st') ==>
+  ?tv r. lookup_global cx src (string_to_num id) st = (INL tv, r)
+Proof
+  rpt gen_tac >> CCONTR_TAC >> fs[] >>
+  Cases_on `lookup_global cx src (string_to_num id) st` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[assign_target_def, bind_def, LET_THM] >>
+  gvs[]
+QED
+
+
