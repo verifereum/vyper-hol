@@ -1,0 +1,48 @@
+name: 'Setup HOL4'
+description: 'Builds/restores HOL4 and sets HOLDIR'
+
+inputs:
+  hol4-ref:
+    description: 'HOL4 git ref to use'
+    required: false
+    default: 'master'
+  polyml-rev:
+    description: 'Resolved Poly/ML revision, used in cache key'
+    required: true
+
+outputs:
+  hol4-rev:
+    description: 'Resolved HOL4 git revision'
+    value: ${{ steps.version.outputs.hol4-rev }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve HOL4 version
+      id: version
+      shell: bash
+      run: |
+        rev=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git ${{ inputs.hol4-ref }} | cut -f1)
+        echo "hol4-rev=$rev" >> "$GITHUB_OUTPUT"
+
+    - name: Cache HOL4
+      uses: actions/cache@v4
+      id: cache-hol4
+      with:
+        path: ~/HOL
+        key: hol-${{ runner.os }}-${{ inputs.polyml-rev }}-${{ steps.version.outputs.hol4-rev }}
+
+    - name: Build HOL4
+      if: steps.cache-hol4.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone -b "${{ inputs.hol4-ref }}" https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
+        cd ~/HOL
+        poly < tools/smart-configure.sml
+        bin/build
+
+    - name: Add HOL4 to PATH and set HOLDIR
+      shell: bash
+      run: |
+        echo "$HOME/HOL/bin" >> "$GITHUB_PATH"
+        echo "HOLDIR=$HOME/HOL" >> "$GITHUB_ENV"
