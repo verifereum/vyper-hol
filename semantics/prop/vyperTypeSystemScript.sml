@@ -22,6 +22,10 @@ Definition is_int_type_def[simp]:
   is_int_type (BaseT (IntT _)) = T /\
   is_int_type _ = F
 End
+Definition is_uint_type_def[simp]:
+  is_uint_type t <=> ?n. t = BaseT (UintT n)
+End
+
 
 Definition is_uint256_type_def[simp]:
   is_uint256_type (BaseT (UintT 256)) = T /\
@@ -161,7 +165,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =
-    (LENGTH ts = 1 /\ HD ts = ty /\ (is_bool_type ty \/ is_int_type ty \/ is_flag_type ty)) /\
+    (LENGTH ts = 1 ∧ HD ts = ty ∧ (is_bool_type ty ∨ is_uint_type ty ∨ is_flag_type ty)) ∧
   well_typed_builtin_app ty Neg ts = (ts = [ty] /\ is_numeric_type ty) /\
   well_typed_builtin_app ty Keccak256 ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_bytes_or_string_type (HD ts)) /\
@@ -210,7 +214,7 @@ Definition well_typed_builtin_app_def:
      EL 1 ts = BaseT (UintT 256)) /\
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\ ty = BaseT (UintT 256)) /\
-  well_typed_builtin_app ty Abs ts = (ts = [ty] /\ is_numeric_type ty)
+  well_typed_builtin_app ty Abs ts = F
 End
 
 Definition well_formed_type_def:

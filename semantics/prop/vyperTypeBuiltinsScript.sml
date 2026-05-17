@@ -204,10 +204,10 @@ Proof
 QED
 
 Theorem well_typed_builtin_app_no_type_error:
-  well_typed_builtin_app ty blt ts /\ blt <> Len /\
-  MAP (evaluate_type tenv) ts = MAP SOME tvs /\
-  evaluate_type tenv ty = SOME tv /\
-  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\ accounts_well_typed acc /\
+  well_typed_builtin_app ty blt ts ∧ blt <> Len ∧
+  MAP (evaluate_type tenv) ts = MAP SOME tvs ∧
+  evaluate_type tenv ty = SOME tv ∧
+  LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧ accounts_well_typed acc ∧
   (!item. blt = Env item ==> item <> MsgGas) ==>
   !msg. evaluate_builtin cx acc ty blt vs <> INR (TypeError msg)
 Proof
@@ -226,7 +226,7 @@ Proof
   gvs[well_typed_builtin_app_def, evaluate_builtin_def, AllCaseEqs(), LET_THM,
       LENGTH_EQ_NUM_compute, evaluate_type_def]
   >- (rename1`Not` >> suspend "Not_bool")
-  >- (rename1`Not` >> suspend "Not_int")
+  >- (rename1`Not` >> suspend "Not_uint")
   >- (rename1`Not` >> suspend "Not_flag")
   >- (rename1`Neg` >> suspend "Neg_int")
   >- (rename1`Neg` >> suspend "Neg_decimal")
@@ -279,23 +279,14 @@ Resume well_typed_builtin_app_success_type[Not_bool]:
       evaluate_type_def, is_bool_type_def, AllCaseEqs()]
 QED
 
-Resume well_typed_builtin_app_success_type[Not_int]:
+Resume well_typed_builtin_app_success_type[Not_uint]:
   rename1`evaluate_builtin _ _ _ _ [v1]` >>
-  rename1`is_int_type bt` >> Cases_on`bt` >>
   Cases_on`v1` >>
   gvs[evaluate_builtin_def, evaluate_type_def,
-      value_has_type_def, AllCaseEqs(), type_to_int_bound_def] >>
-  qmatch_goalsub_abbrev_tac `Num rr < NN` >>
-  `0 < NN` by simp[Abbr`NN`] >>
-  `Num i <= NN - 1` by simp[] >>
-  `i = &Num i` by simp[integerTheory.INT_OF_NUM] >>
-  `&(NN - 1) = &NN - 1i` by simp[integerTheory.INT_SUB] >>
-  gvs[Abbr`rr`] >>
+      value_has_type_def, AllCaseEqs(), type_to_int_bound_def,
+      is_Unsigned_def, int_bound_bits_def] >>
   conj_tac >- intLib.ARITH_TAC >>
-  `0 <= &(NN - 1) - &Num i` by intLib.ARITH_TAC >>
-  `Num (&(NN - 1) - i) <= NN - 1` by
-    (simp[integerTheory.INT_OF_NUM] >> intLib.ARITH_TAC) >>
-  gvs[]
+  simp[integerTheory.INT_OF_NUM] >> intLib.ARITH_TAC
 QED
 
 Resume well_typed_builtin_app_success_type[Not_flag]:
@@ -337,11 +328,13 @@ Resume well_typed_builtin_app_success_type[Sha256]:
 QED
 
 Resume well_typed_builtin_app_success_type[AsWeiValue_int]:
-  cheat
+  gvs[evaluate_builtin_def, evaluate_as_wei_value_def,
+      LET_THM, AllCaseEqs(), value_has_type_def, within_int_bound_def]
 QED
 
 Resume well_typed_builtin_app_success_type[AsWeiValue_decimal]:
-  cheat
+  gvs[evaluate_builtin_def, evaluate_as_wei_value_def,
+      LET_THM, AllCaseEqs(), value_has_type_def, within_int_bound_def]
 QED
 
 Resume well_typed_builtin_app_success_type[Concat_bytes]:
