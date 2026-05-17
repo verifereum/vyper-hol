@@ -705,25 +705,9 @@ in
   ()
 end
 
-fun generate_test_all_script () = let
-  val () = check_generate_dirs ()
-  val files = test_files ()
-  val thyname = "vyperTestAll"
-  val fname = OS.Path.concat(generated_dir, thyname ^ "Script.sml")
-  val header = String.concat [
-    "Theory ", thyname, "[no_sig_docs]\nAncestors\n"] 
-  val out = TextIO.openOut(fname)
-  val () = TextIO.output(out, header)
-  fun output_ancestor id = TextIO.output(out,
-        String.concat["  vyperTest_", id, "\n"])
-  val () = List.app (fn (id, _) => output_ancestor id) files
-  val () = TextIO.closeOut out
-in () end
-
 fun generate_tests () = (
   generate_defn_scripts ();
-  generate_test_scripts ();
-  generate_test_all_script ()
+  generate_test_scripts ()
 )
 
 end
