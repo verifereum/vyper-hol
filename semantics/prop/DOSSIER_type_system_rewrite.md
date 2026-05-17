@@ -41,6 +41,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C5.4.1 | proved |  | E0125 |  |
 | C5.4.2 | proved |  | E0126 |  |
 | C5.4.3 | proved |  | E0130 |  |
+| C5.4.5 | proved |  | E0132 |  |
 
 ## C0.1
 
@@ -1054,3 +1055,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `tool_output:TO_type_system_rewrite-20260516T153850Z_m17311_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260516T17326_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260516T17336_t001` (use `read_tool_output` for exact output)
+
+## C5.4.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0132`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0131` (progressed, other)
+  - Fixed Assign materialise TypeError sub-case: reordered gvs[expr_result_typed_def, expr_runtime_typed_def] before drule_at_then Any drule materialise_typed_non_none_no_type_error, matching the AnnAssign pattern. Build verified. -> Assign resume proof now builds successfully. (`TO_type_system_rewrite-20260516T153850Z_m17452_t001`)
+  - Wrote complete AugAssign proof replacing cheat+commented-out code. Uses: target_runtime_typed_imp_assignable_context for assignable context, assign_operation_matches_target_shape_def (BaseTargetV+Update is T), assign_target_update_no_type_error for no-TypeError Error sub-case, assign_target_no_return for ReturnException sub-case, well_typed_binop_not_In_second_type + evaluate_type_not_ArrayT_imp_not_ArrayTV + evaluate_type_not_NoneT_imp_not_NoneTV + get_Value_no_type_error for INR get_Value sub-case. -> Written but NOT yet build-verified. Next session must build vyperTypeStmtSoundnessTheory to confirm AugAssign proof compiles. ()
+- `E0132` (proved, )
+  - Fixed parenthesis mismatch in AugAssign proof and verified build -> AugAssign resume proof now builds successfully with 30s timeout. The proof uses target_runtime_typed_imp_assignable_context for assignable context, assign_operation_matches_target_shape_def (BaseTargetV+Update is T), assign_target_update_no_type_error for INR Error sub-case, assign_target_no_return for INR ReturnException sub-case, and get_Value_no_type_error for INR get_Value sub-case. (`TO_type_system_rewrite-20260516T153850Z_m17494_t001`)
+  - Previously fixed Assign materialise TypeError sub-case ordering -> Assign proof verified building in prior session (`TO_type_system_rewrite-20260516T153850Z_m17452_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260516T153850Z_m17494_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260516T153850Z_m17452_t001` (use `read_tool_output` for exact output)

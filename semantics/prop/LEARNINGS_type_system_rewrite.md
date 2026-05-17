@@ -720,3 +720,98 @@ pattern: Goal 4 (TupleTarget/TupleTargetV) after ho_match_mp_tac target_runtime_
 works_when: Proving mutual theorems by target_runtime_typed_ind where TupleTarget/TupleTargetV case needs the list induction hypothesis
 evidence:
 - episode:E0130
+
+## L0591 scope='C5.4.5' tags=assign_target,INR_result,no_type_error,no_return,pattern
+shape: Assign/AugAssign INR-result branches after assign_target: use assign_target_no_type_error + assign_target_no_return
+pattern: For assign_target cx gv op st = (INR (Error e'), st'): derive runtime_consistent, assign_operation_runtime_typed, assign_operation_matches_target_shape, assign_target_assignable_context at the call state, then drule assign_target_no_type_error + simp[no_type_error_result_def]. For INR (ReturnException v'): drule (cj 1 assign_target_no_return) >> simp[] eliminates it since assign_target never returns ReturnException.
+works_when: Statement assignment branches where assign_target returns INR; both Error and ReturnException sub-cases
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17380_t001
+
+## L0592 scope='C5.4.5' tags=materialise,TypeError,contradiction,assignable_type,pattern
+shape: materialise INR (Error (TypeError msg)) is contradictory under typed non-None expression
+pattern: When materialise cx tvl st' = (INR (Error (TypeError msg)),st') and expr_result_typed env e tvl and assignable_type env.type_defs (expr_type e): derive expr_type e ≠ NoneT via assignable_type_not_NoneT, then drule_all materialise_typed_non_none_no_type_error with evaluate_type_not_NoneT_imp_not_NoneTV. This gives contradiction (F).
+works_when: Assign/AnnAssign branches where materialise returns TypeError on a typed expression with assignable type
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17416_t001
+
+## L0593 scope='C5' tags=unused_cheat,delete,zero_consumers
+shape: Unused theorems with cheat branches should be deleted immediately, not deferred
+pattern: When LEARNINGS or grep confirms a theorem has zero consumers and contains a cheat, delete both the _ind theorem and its wrapper immediately. Do not defer deletion across sessions - it blocks zero-CHEAT goals and is a quick win.
+works_when: Cleaning up bridge lemma blocks; zero-CHEAT audit preparation
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:413-416
+
+## L0594 scope='C5.4.5' tags=materialise,TypeError,contradiction,expr_result_typed,drule_ordering
+shape: materialise INR (Error (TypeError msg)) contradiction: must unfold expr_result_typed BEFORE applying materialise_typed_non_none_no_type_error
+pattern: When proving materialise cx tvl st' = (INR (Error (TypeError msg)),st') is contradictory under typed expression: FIRST gvs[expr_result_typed_def, expr_runtime_typed_def] to expose toplevel_value_typed, THEN drule_at_then Any drule materialise_typed_non_none_no_type_error. Only after that, derive expr_type e ≠ NoneT and apply evaluate_type_not_NoneT_imp_not_NoneTV. The old drule_all pattern fails because toplevel_value_typed is hidden inside the expr_result_typed conjunction.
+works_when: Any assign/AnnAssign/AugAssign branch where materialise returns TypeError on a typed expression
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17432_t002
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17452_t001
+
+## L0595 scope='C5.4.5' tags=AugAssign,update_assignment,bridge_lemma,no_TypeError,pattern
+shape: AugAssign INR assign_target Error sub-case: use assign_target_update_no_type_error + bridges
+pattern: For assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st2 = (INR (Error e'), st4): (1) derive runtime_consistent env cx st2, (2) derive well_typed_binop ty bop ty (expr_type e) from gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def, toplevel_value_typed_def], (3) derive value_runtime_typed env (expr_type e) v similarly, (4) assign_operation_matches_target_shape for BaseTargetV+Update is T by simp[assign_operation_matches_target_shape_def], (5) assign_target_assignable_context via metis_tac[target_runtime_typed_imp_assignable_context], (6) drule assign_target_update_no_type_error >> simp[no_type_error_result_def, assign_operation_matches_target_shape_def] >> disch_then drule twice >> simp[] >> metis_tac[]. For ReturnException: drule (cj 1 assign_target_no_return) >> simp[] >> disch_then drule >> simp[].
+works_when: AugAssign branches where assign_target returns INR; both Error and ReturnException sub-cases
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17380_t001
+
+## L0596 scope='C5.4.5' tags=materialise,TypeError,contradiction,assignable_type,AugAssign,AnnAssign
+shape: materialise INR (Error (TypeError msg)) is contradictory under typed non-None expression
+pattern: When materialise returns TypeError on a well-typed expression with assignable_type: FIRST gvs[expr_result_typed_def, expr_runtime_typed_def] to expose toplevel_value_typed, THEN drule_at_then Any drule materialise_typed_non_none_no_type_error. Then derive expr_type e ≠ NoneT via assignable_type_not_NoneT, then apply evaluate_type_not_NoneT_imp_not_NoneTV for the final contradiction.
+works_when: Any assign/AnnAssign/AugAssign branch where materialise returns TypeError on a typed expression
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17432_t002
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17452_t001
+
+## L0597 scope='C5.4.5' tags=assign_target,INR_result,no_type_error,no_return,runtime_consistent
+shape: Assign/AugAssign INR-result branches after assign_target: use assign_target_no_type_error + assign_target_no_return
+pattern: For assign_target returning INR: derive runtime_consistent + target_runtime_typed + assignable_type + shape + assignable_context at the call state, then project no_type_error and runtime_consistent preservation. For INR(Error): drule assign_target_no_type_error (or assign_target_update_no_type_error for Update) + simp[no_type_error_result_def]. For INR(ReturnException): drule (cj 1 assign_target_no_return) + simp[] - assign_target never returns ReturnException.
+works_when: Statement assignment branches where assign_target returns INR; both Error and ReturnException sub-cases
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17380_t001
+
+## L0598 scope='C7' tags=switch_BoolV,assert,state_preservation,template
+shape: AssertBare/AssertUnreachable proof template using switch_BoolV_post
+pattern: For Assert e AssertBare/AssertUnreachable: (1) simp_tac(srw_ss())[evaluate_def, bind_def, return_def, raise_def, AllCaseEqs(), PULL_EXISTS] to expand, (2) split on eval_expr result (INL/INR), (3) INR: drule eval_expr_exception_return_typed, (4) INL: unfold expr_result_typed_def/expr_runtime_typed_def, then drule_then drule_then irule switch_BoolV_post, (5) conj_tac for return case (rw[return_def] then rw[no_type_error_result_def]), (6) for raise case: simp[bind_def,AllCaseEqs(),raise_def] then metis_tac[switch_BoolV_state, return_state, raise_state]. NEVER irule switch_BoolV_state - it has universally-quantified continuations.
+works_when: Assert statement branches using switch_BoolV with concrete return()/raise() continuations
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:854-879
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:881-906
+
+## L0599 scope='C7' tags=RaiseReason,get_Value,dest_StringV,lift_option_type,raise
+shape: RaiseReason proof template through get_Value + dest_StringV + lift_option_type + raise pipeline
+pattern: For Raise (RaiseReason e): (1) expand evaluate_def with AllCaseEqs(), (2) split INL/INR on eval_expr result, (3) INR: drule eval_expr_exception_return_typed, (4) INL: unfold expr_result_typed_def, drule toplevel_value_typed_StringTV to get StringV witness, (5) simp[get_Value_def, bind_def, AllCaseEqs(), PULL_EXISTS, lift_option_type_def, dest_StringV_def] to expand get_Value/lift_option_type, (6) imp_res_tac get_Value_state, lift_option_type_state, raise_state for state preservation, (7) gvs[no_type_error_result_def] for no-TypeError. Do NOT use AllCaseEqs on get_Value/lift_option_type separately - they are expanded inline.
+works_when: RaiseReason branch and any branch with get_Value + dest_StringV + lift_option_type + raise pipeline under StringT typing
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:827-852
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:907-946
+
+## L0600 scope='C7' tags=Expr_resume,expression_soundness,template,consumer
+shape: Expression-level resume branches consume eval_expr/evel_exprs IH from the mutual theorem
+pattern: For expression-level Resume branches (e.g. Expr_Name, Expr_Literal, Expr_Builtin): the proved Expr resume (line 1509-1525) is the template. Pattern: (1) simp_tac[evaluate_def, bind_def, AllCaseEqs()] to expand, (2) Cases_on eval_expr result, (3) INL: use expr_result_typed from IH, (4) INR: drule eval_expr_exception_return_typed. Most expression sub-cases will additionally need to expand the specific expression constructor definition (e.g. well_typed_expr_def clauses for Name/BareGlobal/etc.) to derive the required target_runtime_typed or expr_result_typed facts.
+works_when: All expression-level Resume branches in eval_all_type_sound_mutual
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:1509-1525
+
+## L0601 scope='C7' tags=AssertReason,switch_BoolV,monadic_pipeline,Cases_on
+shape: Assert/AssertReason: eval_expr -> switch_BoolV -> bind pipeline with get_Value/dest_StringV/raise
+pattern: For Assert/AssertReason branches: (1) Cases_on eval_expr cx e st, (2) Cases_on expr_res (INL/INR), (3) INR: drule eval_expr_exception_return_typed, (4) INL: drule toplevel_value_typed_BoolTV >> Cases_on b, (5) True branch: gvs[no_type_error_result_def, return_exception_typed_def] >> metis_tac[return_state, raise_state], (6) False branch (AssertReason only): Cases_on eval_expr cx e' st1 >> Cases_on reason_res >> repeat for string pipeline
+works_when: Assert/AssertReason statement branches in eval_all_type_sound_mutual
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17698_t001
+
+## L0602 scope='C7' tags=RaiseReason,get_Value,dest_StringV,lift_option_type,boundary_lemma
+shape: RaiseReason proof through get_Value + dest_StringV + lift_option_type + raise pipeline
+pattern: For Raise (RaiseReason e): (1) Cases_on eval_expr result, (2) INR: drule eval_expr_exception_return_typed >> simp[], (3) INL: unfold expr_result_typed_def, expr_runtime_typed_def, evaluate_type_def, (4) drule toplevel_value_typed_StringTV to get StringV witness, (5) gvs[get_Value_def, return_def, dest_StringV_def, lift_option_type_def, no_type_error_result_def, return_exception_typed_def], (6) imp_res_tac raise_state >> gvs[]
+works_when: RaiseReason branch and any branch with get_Value + dest_StringV pipeline under StringT typing
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17698_t001
+
+## L0603 scope='C7' tags=qho_match_abbrev_tac,switch_BoolV_post,anti-pattern
+shape: Avoid qho_match_abbrev_tac when switch_BoolV_post needs to match assumptions
+pattern: Do NOT use qho_match_abbrev_tac`P res st'` before drule_then switch_BoolV_post. The abbreviation hides the switch_BoolV equation from first_assum/drule resolution, causing FIRST_ASSUM to fail. Instead: use drule toplevel_value_typed_BoolTV >> Cases_on b directly, then gvs[switch_BoolV_def, return_def] + metis_tac[return_state, raise_state].
+works_when: Any branch using switch_BoolV_post after evaluating a boolean expression
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17676_t001
