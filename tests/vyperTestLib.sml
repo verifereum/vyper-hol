@@ -628,6 +628,8 @@ in
   ()
 end
 
+fun holbuild_extra_deps (_ : string list) = ()
+
 fun make_definitions_for_file (id, json_path) = let
   val (tests, decode_fails) = read_test_json json_path
   val () =
@@ -672,6 +674,7 @@ fun generate_defn_scripts () = let
     val jsonp_from_generated = OS.Path.concat("..", jsonp)
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
+      "val () = holbuild_extra_deps [\"", jsonp_from_generated, "\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
