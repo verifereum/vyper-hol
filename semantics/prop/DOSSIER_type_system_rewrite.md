@@ -8,6 +8,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 |---|---|---|---|---|
 | C0.1 | stuck | other | E0004 | "Escalate to plan_oracle for C0 resolution: authorize type_builtin_result_ok repair for AbiEncode branch, adding vyper_abi_size_bound condition" |
 | C1 | progressed | plan_incomplete | E0005 | Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable. |
+| C1.1 | proved |  | E0151 |  |
+| C1.2 | stuck | unknown | E0156 |  |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
 | C3.1 | stuck | other | E0099 | "Rewrite assign_target_TopLevelVar_no_type_error Type branch using irule approach: (1) Save env.type_defs=get_tenv cx with pop_assum mk_asm before any fs/gvs, (2) expand assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on (getting code, p, p0=StorageVarDecl/HashMapVarDecl), (3) Cases_on evaluate_type/Cases_on lookup_var_slot for witnesses, (4) For each Cases_on x subgoal: FIRST use irule boundary_theorem to see exact required premises, then derive each individually. If irule produces a premise gap, prove an adapter lemma." |
 | C3.1.2 | proved |  | E0025 |  |
@@ -29,6 +31,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.5 | proved |  | E0089 |  |
 | C3.6 | proved |  | E0106 |  |
 | C4 | progressed | unknown | E0105 |  |
+| C4.2 | stuck | missing_helper | E0160 | "Rewrite ecrecover_no_type_error proof using EL-index approach or BuiltinTyping simp pattern. All boundary lemmas are proved. Consumer just needs correct variable connection." |
+| C4.2.1 | proved |  | E0161 |  |
+| C4.2.2 | progressed | other | E0162 |  |
 | C5.2 | stuck | plan_incomplete | E0113 |  |
 | C5.2.1 | proved |  | E0114 |  |
 | C5.2.2 | proved |  | E0115 |  |
@@ -82,6 +87,113 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `tool_output:TO_type_system_rewrite-20260513Tm0832_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260513Tm0826_t001` (use `read_tool_output` for exact output)
+
+## C1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0151`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0133` (progressed, plan_incomplete)
+  - Proved [local,simp] iff rewrite lemmas for value_has_type at all BaseTV/FlagTV constructors. Also proved is_int_type_imp_IntV. Main theorem proof still uses one-shot gvs which explodes. -> Boundary lemmas proved. Main theorem proof structure wrong - needs per-bop-case handling. ()
+- `E0134` (progressed, plan_incomplete)
+  - Tried multiple proof structures for well_typed_binop_no_type_error: (1) gvs[type predicates] then mp_tac + simp[evaluate_binop_def] + IF_CASES_TAC - closes 52/56 goals, 4 remain with msg ≠ 'binop'. (2) gvs then fs[evaluate_binop_def] - fs can't split if-then-else in assumptions. (3) simp instead of gvs for type predicates - doesn't eliminate impossible cases. -> 52/56 goals closed by mp_tac+simp+IF_CASES_TAC; 4 remaining goals have 'msg ≠ binop' conclusion suggesting possible counterexamples or proof-engineering artifacts from gvs variable elimination ()
+- `E0135` (progressed, plan_incomplete)
+  - Rewrote well_typed_binop_no_type_error to use structured type/value resolution then simp[evaluate_binop_def] instead of gvs+fs approach. Key insight: error = RuntimeError string | TypeError string, so INR(RuntimeError _) ≠ INR(TypeError msg) automatically. After gvs resolves type constructors from well_typed_binop_def and value constructors from value_has_type iff lemmas, simp[evaluate_binop_def] on the ∀msg conclusion directly rewrites if-then-else in the conclusion (not stuck in assumption like fs). IF_CASES_TAC splits remaining conditionals. Build not yet verified. -> Proof rewritten but not yet verified by holbuild - session ended before build test. ()
+  - Previous approach: gvs[type predicates] >> fs[evaluate_binop_def] >> rpt(IF_CASES_TAC >> fs[]) -> Closed 52/56 goals. 4 remaining with msg ≠ 'binop' conclusion - gvs variable elimination moves ≠ to assumption, creating F-goal; fs cannot split if-then-else in assumptions; IF_CASES_TAC only works on conclusion. ()
+  - Proved [local,simp] iff lemmas for value_has_type at BaseTV/FlagTV constructors (vht_BaseTV_UintT, etc.) -> Helpers proved and in source. These let gvs derive value constructors from value_has_type when type_value is known. ()
+- `E0136` (progressed, plan_incomplete)
+  - FAIL_TAC probe after Cases_on bop >> gvs[well_typed_binop_def] >> TRY type resolution -> 31 remaining goals; base_type b still free; need per-operator approach (`TO_type_system_rewrite-20260516T153850Z_m18171_t001`)
+- `E0137` (progressed, plan_incomplete)
+  - Tried multiple proof structures for well_typed_binop_no_type_error: (1) gvs[well_typed_binop_def] then Cases_on for type resolution then simp[evaluate_binop_def] - gvs variable elimination creates F-goals from ∀msg inequality, (2) TRY block chains with gvs - rpt(TRY...) loops/times out, Cases_on is_int_type ty doesn't work when some bop cases don't have is_int_type, (3) Current broken attempt: Cases_on is_int_type ty forces case split on all 31 subgoals but many don't have is_int_type ty -> None of these approaches work because gvs with the ∀msg. ... ≠ INR(TypeError msg) conclusion does variable elimination creating F-goals that can't be simplified. The fundamental issue is: gvs strips ∀msg, creates equation from negation, moves to assumption, sets goal to F. Then evaluate_binop_def with if-then-else in assumptions can't be split by simp/fs. Must avoid gvs for the final evaluate_binop step. ()
+  - Per-operator approach using vyperEvalBinopScript lemmas (22 proved lemmas giving INL results) - NEVER ATTEMPTED despite 4+ sessions of L0613/L0621/L0624 explicitly recommending it -> Not attempted - tunnel vision on one-shot gvs/simp approaches instead ()
+- `E0138` (progressed, plan_incomplete)
+  - disch_tac + gvs[well_typed_binop_def] + type resolution TRY Cases_on + gen_tac >> simp[evaluate_binop_def] -> Major progress: disch_tac prevents gvs variable elimination on ∀msg. After Cases_on bop >> gvs[well_typed_binop_def] >> gvs[evaluate_type_def, type_to_int_bound_def, is_int_type_def, ...] >> TRY Cases_on t1/t2/ty/b/b' for type resolution >> TRY Cases_on result_tv/tv1/tv2 for value resolution via vht_* lemmas >> gen_tac >> simp[evaluate_binop_def, binop_negate_def], 42 of 56 goals close. 14 remaining goals have if-then-else in conclusion (Div/Mod/UnsafeDiv with divisor=0 check). simp cannot split these conditionals. (`tool_output:TO_type_system_rewrite-20260516T153850Z_m18372_t001`, `tool_output:TO_type_system_rewrite-20260516T153850Z_m18367_t001`)
+  - gvs-based approach with Cases_on v1/v2 -> Cases_on v1 >> gvs[] caused 2031-goal explosion because v1 has many constructors and gvs expands every case. Must resolve type variables first, then let vht_* lemmas determine value constructors. (`tool_output:TO_type_system_rewrite-20260516T153850Z_m18339_t001`)
+- `E0139` (progressed, plan_incomplete)
+  - fs[value_has_type_def] for value resolution (instead of gvs[value_has_type_def, evaluate_binop_def]) then gvs[evaluate_binop_def, binop_negate_def] at end -> Key fix: fs preserves forall-msg in conclusion, avoiding unsolvable msg!=binop goals. But gvs at end cannot split if-then-else under forall-msg. 14 remaining goals: forall-msg. (if i'=0 then INR(RuntimeError) else bounded_int_op...) != INR(TypeError msg). Both branches trivially != TypeError. ()
+  - rpt strip_tac >> CASE_TAC >> simp[] after gvs -> strip_tac strips forall-msg and does variable elimination creating F-goal - the L0629 pitfall confirmed again ()
+  - COND_CASES_TAC >> simp[] after gvs (not yet tested) -> Not yet tested - handoff came before build completed. COND_CASES_TAC should split if-then-else in conclusion even under forall-msg. ()
+- `E0140` (progressed, plan_incomplete)
+  - CCONTR_TAC approach: gen_tac >> disch_tac >> gen_tac >> CCONTR_TAC >> Cases_on bop >> gvs[well_typed_binop_def] >> gvs[evaluate_type_def,...] >> TRY Cases_on type vars >> gvs >> fs[value_has_type_def] for value resolution >> gvs[evaluate_binop_def, binop_negate_def, AllCaseEqs()] -> FAIL_TAC probe confirmed 56 goals with correct shape (all value constructors resolved, goal is F with evaluate_binop = INR(TypeError msg) assumption). But gvs[evaluate_binop_def, binop_negate_def, AllCaseEqs()] fails with 'no theorem proved' - likely tactic timeout or AllCaseEqs() blowup on 56 goals. (`TO_type_system_rewrite-20260516T153850Z_m18467_t001`, `TO_type_system_rewrite-20260516T153850Z_m18480_t001`)
+- `E0141` (progressed, plan_incomplete)
+  - CCONTR_TAC + gvs[evaluate_binop_def, binop_negate_def] (with and without AllCaseEqs()) -> FAIL_TAC probe confirmed 56 correct goals after CCONTR_TAC + type/value resolution. gvs[evaluate_binop_def] on 56 goals fails - likely tactic timeout. AllCaseEqs() made it worse. Without AllCaseEqs() still failed. (`TO_type_system_rewrite-20260516T153850Z_m18502_t001`, `TO_type_system_rewrite-20260516T153850Z_m18498_t001`)
+  - pop_assum (mp_tac o REWRITE_RULE[evaluate_binop_def]) approach -> Never actually tested - replace_text failed due to whitespace mismatch in the same session. Approach is theoretically sound: rewrite evaluate_binop_def in the specific assumption, push to goal, split conditionals. ()
+- `E0142` (progressed, plan_incomplete)
+  - disch_tac+gen_tac + simp[evaluate_binop_def, binop_negate_def] + rpt(COND_CASES_TAC >- simp[]) + pairarg_tac + COND_CASES_TAC + simp[] -> Closes 42/56 goals after initial simp. After COND_CASES_TAC, splits conditionals for Div/Mod/UnsafeDiv/Exp. Remaining 14 goals: 10 are bounded_int_op/wrapped_int_op/bounded_decimal_op ≠ INR(TypeError msg) (should close by [local,simp] helpers) and 4 are msg ≠ 'binop' from ShL/ShR let-binding residue. Final simp[] does NOT close all 14 goals. (`tool_output:TO_type_system_rewrite-20260516T153850Z_m18545_t001`, `tool_output:TO_type_system_rewrite-20260516T153850Z_m18546_t001`, `tool_output:TO_type_system_rewrite-20260516T153850Z_m18555_t001`)
+  - Added int_bound_bits_def to simp set -> Same 14 goals remain - int_bound_bits_def doesn't help (`tool_output:TO_type_system_rewrite-20260516T153850Z_m18545_t001`)
+  - Added pairarg_tac + simp[] between COND_CASES_TAC rounds for ShL/ShR let bindings -> Still 14 goals remain - pairarg_tac doesn't eliminate all let issues, final build still fails (`tool_output:TO_type_system_rewrite-20260516T153850Z_m18557_t001`)
+- `E0143` (progressed, plan_incomplete)
+  - Inversion lemma + Excl + vht_ArrayTV_exists + binop_negate_INL/INR approach for well_typed_binop_no_type_error -> Fixed broken vht_ArrayTV (was wrong iff, now correct forward-only). Fixed broken binop_negate_no_type_error (was FALSE, replaced with binop_negate_INL/INR). Fixed is_bool_type_inv proof. Main theorem still fails to close - proof structure with one-shot simp[evaluate_binop_def] + COND_CASES_TAC leaves residual goals. (`TO_type_system_rewrite-20260516T153850Z_m18824_t001`)
+  - Same one-shot approach from E0138-E0142 with Excl + inversion lemmas -> Same fundamental issue: after type+value resolution, expanding evaluate_binop_def across all bop cases simultaneously leaves residual conditional goals that simp cannot close. Need per-operator decomposition. (`TO_type_system_rewrite-20260516T153850Z_m18816_t001`)
+- `E0144` (progressed, plan_incomplete)
+  - Read full evaluate_binop_def (413 lines), all 22 evaluate_binop_* lemmas in vyperEvalBinopScript.sml, well_typed_binop_def (21 bop cases), is_Unsigned_def (has [simp]), and current well_typed_binop_no_type_error proof attempt. Confirmed build fails. Did NOT implement per-operator helper approach - session used for investigation only. -> Full source read completed. Confirmed is_Unsigned_def has [simp] so it should resolve. Confirmed 22 evaluate_binop_* lemmas exist. The per-operator helper approach is the correct next step but was not attempted this session. ()
+- `E0145` (progressed, plan_incomplete)
+  - Implemented per-operator no-TypeError helper approach for well_typed_binop_no_type_error: added ~40 [local] helpers (binop_no_type_error_Add, binop_no_type_error_Div, etc.), each trivially provable by simp[evaluate_binop_def] (+ COND_CASES_TAC for conditional branches). Main theorem dispatches by irule to matching helper after type/value resolution. -> Helpers written and main theorem rewritten. Build attempted but output truncated/unclear - many holbuild parse warnings about 'expected QED' from single-line Proof...QED format. Need to verify build result and potentially reformat Proof/QED to separate lines. ()
+  - Also confirmed: ShL/ShR return INR(RuntimeError) for negative shift, NOT TypeError. L0651 potential counterexample was wrong - the theorem IS true. All TypeError in evaluate_binop comes from value-mismatch fallback branches only. -> Key insight: TypeError in evaluate_binop_def ONLY appears in value-mismatch fallback branches (| _ => INR(TypeError 'binop')). All real-error branches (div-by-zero, shift-negative, overflow) return INR(RuntimeError _). Since RuntimeError != TypeError by constructor distinctness, the theorem is unconditionally true for all well-typed inputs. ()
+- `E0146` (progressed, plan_incomplete)
+  - Fixed single-line Proof/QED format (replace_all Proof simp[evaluate_binop_def] QED -> multi-line). Fixed conditional helpers needing rpt gen_tac before COND_CASES_TAC. All per-operator helpers now compile. Main theorem still fails: irule approach has 62 unresolved goals because inversion lemmas were in TRY(fs[inv] >> NO_TAC) which reverts their effect; CCONTR_TAC approach with gvs[evaluate_binop_def] also fails - 'no theorem proved'. -> Per-operator helpers compile; root cause of main theorem failure identified: inversion lemmas (is_int_type_inv etc.) are applied inside TRY that reverts them, leaving type variables unresolved. ()
+- `E0147` (progressed, other)
+  - Replaced simp[evaluate_binop_def] with gvs[evaluate_binop_def, Excl bounded_int_op_def, Excl bounded_decimal_op_def, Excl wrapped_int_op_def, AllCaseEqs(), LET_THM] to expand evaluate_binop in assumptions without expanding bounded/wrapped ops -> Reduced remaining goals from 86 to 37 after excluding bounded/wrapped definitions from gvs. The equation bounded_int_op (Unsigned n) (i+i') = INL v now appears in assumptions correctly. But imp_res_tac bounded_int_op_INL still leaves 37 goals unsolved - the inversion lemma matching or subsequent gvs[] closure needs investigation. (`TO_type_system_rewrite-20260516T153850Z_m19481_t001`)
+  - Used FAIL_TAC probe to see remaining goals after TRY blocks for bounded_int_op_INL/bounded_decimal_op_INL/wrapped_int_op_INL -> 37 remaining goals with shape: assumptions include bounded_int_op/wrapped_int_op/bounded_decimal_op equations, goal is value_has_type for the result. Typical case: bounded_int_op (Unsigned n) (i+i') = INL v with goal exists i. v = IntV i / 0 <= i / Num i < 2**n (`TO_type_system_rewrite-20260516T153850Z_m19479_t001`)
+- `E0148` (progressed, other)
+  - Ported helper lemmas from vyperTypeSoundnessHelpersScript.sml: int_div_lt_imp (mangled statement), decimal_mul_word_bound, int_shift_right_nonneg/neg_bounds/within_bound/unsigned_within_bound, int_bitwise_eq_BITWISE/nat_bound, int_shift_left_unsigned/signed_within_bound (references nonexistent int_bitwiseTheory.int_shift_left_bound), wrapped_int_op_INL_Unsigned/Signed. Inserted 270 lines at lines 728-999. -> Helpers inserted but have CRITICAL syntax bug: / used instead of /\ for conjunction in all theorem statements and some SML tactic terms. Also int_div_lt_imp has wrong statement, int_shift_left helpers reference nonexistent theorem. Build not tested. ()
+- `E0149` (progressed, other)
+  - Fixed all / vs /\ syntax bugs in helper lemmas lines 728-999: replaced / with /\ in theorem statements, fixed int_div_lt_imp to match original statement, deleted int_div_lt_imp_simple, deleted broken int_shift_left_unsigned_within_bound and int_shift_left_signed_within_bound (referenced nonexistent int_bitwiseTheory.int_shift_left_bound), fixed wrapped_int_op_INL_Unsigned/Signed statements -> All syntax fixes applied. Most helpers compile (int_div_lt_imp, decimal_mul_word_bound, shift_right helpers, int_bitwise helpers all proved). But wrapped_int_op_INL_Unsigned proof fails: drule wrapped_int_op_INL >> simp >> disch_then approach doesn't work correctly for getting the existential result out of the INL inversion. (`TO_type_system_rewrite-20260516T153850Z_m20076_t001`)
+- `E0150` (progressed, plan_incomplete)
+  - Fixed wrapped_int_op_INL_Unsigned/Signed proofs: replaced drule wrapped_int_op_INL >> simp >> disch_then with imp_res_tac wrapped_int_op_INL >> gvs[within_int_bound_def]. Both now compile. -> INL inversion helpers now compile. Main well_typed_binop_success_type proof still has 26 remaining goals at FAIL_TAC probe. Rewrote TRY blocks with per-family dispatch: wrapped_int_op specialized lemmas, decimal_mul_word_bound, ExpMod via w2n_lt, flag bitwise via int_bitwise_nat_bound, ShL via int_mod/signed_int_mod, ShR via int_shift_right bounds. (`TO_type_system_rewrite-20260516T153850Z_m20089_t001`)
+  - Replaced after-gvs TRY blocks for well_typed_binop_success_type with per-family handlers for: bounded_int_op_INL, bounded_decimal_op_INL, wrapped_int_op_INL_Unsigned/Signed, decimal_mul_word_bound, ExpMod w2n_lt, flag bitwise (int_and/or/xor via int_bitwise_nat_bound), ShL (int_mod/signed_int_mod_within_bound), ShR (int_shift_right_within_bound/unsigned_within_bound). -> Edit applied but NOT yet built. Known syntax issues: flag bitwise term quotations for $/\, $\/, and XOR lambda need proper HOL4 backtick syntax. ShL/ShR irule approach may fail because gvs already expanded within_int_bound_def in the goals, so goals are 0 <= expr /\ Num expr < 2**n rather than within_int_bound form. ()
+- `E0151` (proved, )
+  - Fix int_shift_right_unsigned_Num_bound (gvs resolved conjunction, conj_tac failed) then use Num_int_lt + INT_LT_LE for Num monotonicity; fix w2n_word_exp_lt_256 (irule match failure with 2**256 vs dimword) by changing lemma to use dimword(:256); remove FAIL_TAC probe from well_typed_binop_success_type -> All three C1.1 theorems proved cheat-free: well_typed_binop_no_type_error, well_typed_binop_success_type, well_typed_update_binop_no_type_error. Build passes. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20217_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20238_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20264_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20269_t001` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20290_t001` (use `read_tool_output` for exact output)
+
+## C1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `unknown`
+- latest episode: `E0156`
+- blocker: fs[]/gvs[] consume value_has_type (BaseTV (UintT 256)) sv/lv via [local,simp] iff lemma vht_BaseTV_UintT before boundary lemma evaluate_slice_BytesT_no_type_error can use them. Need Excl approach or proof restructuring.
+
+### Attempts / Evidence
+
+- `E0152` (progressed, missing_helper)
+  - slice_no_type_error: Cases_on vs/ts decomposition + evaluate_type_BaseT + gvs resolves types + Cases_on fv + gvs[value_has_type_def] + expand evaluate_slice with AllCaseEqs/dest_NumV_def -> All type resolution works. Stuck on closing dest_NumV(IntV i)=NONE branch: AllCaseEqs splits dest_NumV into NONE/SOME but NONE branch has 0≤i ∧ i<0 contradiction that neither gvs nor intLib.ARITH_TAC closes (`TO_type_system_rewrite-20260516T153850Z_m21673_t001`, `TO_type_system_rewrite-20260516T153850Z_m21669_t001`, `TO_type_system_rewrite-20260516T153850Z_m21660_t001`)
+  - Tried simp[dest_NumV_def] after imp_res_tac vht_BaseTV_UintT instead of gvs to avoid case split -> simp resolves if-then-else using 0≤i assumption but still leaves dest_NumV(IntV i)=NONE from prior AllCaseEqs expansion - ordering issue (`TO_type_system_rewrite-20260516T153850Z_m21671_t001`)
+- `E0153` (progressed, missing_helper)
+  - dest_NumV_IntV_SOME boundary lemma: 0 <= i ==> dest_NumV (IntV i) = SOME (Num i), proved with intLib.ARITH_TAC for ~(i<0) then simp[dest_NumV_def] -> Proved successfully as local simp lemma. Key: intLib.ARITH_TAC closes ~(i < 0:int) from 0 <= i, then simp resolves the if-then-else in dest_NumV_def (`TO_type_system_rewrite-20260516T153850Z_m21708_t001`)
+  - value_has_type_UintT_imp_dest_NumV_SOME: boundary lemma deriving dest_NumV = SOME from value_has_type (BaseTV (UintT n)) sv, uses vht_BaseTV_UintT + gvs[] -> Added but not yet build-tested. Should work since vht_BaseTV_UintT gives sv=IntV i, 0<=i and dest_NumV_IntV_SOME [simp] closes dest_NumV ()
+  - slice_no_type_error: Cases_on all 3 values then gvs[vht_*] then simp[gvs evaluate_slice_def] -> 1458 subgoal case explosion from Cases_on value constructors. gvs with vht iff lemmas doesn't close impossible cases properly. Probe at tool_output:TO_type_system_rewrite-20260516T153850Z_m21746_t001 shows goal with [NoneV; NoneV; NoneV] - impossible values (`TO_type_system_rewrite-20260516T153850Z_m21746_t001`)
+  - slice_no_type_error: imp_res_tac vht_BaseTV_UintT then gvs[] then simp[evaluate_builtin_def, evaluate_slice_def, ...] -> gvs[] leaves fv/sv/lv as free variables because vht iff rewrites create existential equations that gvs doesn't substitute. simp then can't resolve case patterns in evaluate_slice_def (`TO_type_system_rewrite-20260516T153850Z_m21730_t001`)
+  - slice_no_type_error: imp_res_tac value_has_type_UintT_imp_dest_NumV_SOME then gvs[] then Cases_on fv only -> Not fully tested yet - this approach adds dest_NumV facts before expanding evaluate_slice, and only case-splits the first value (BytesV), avoiding the 1458-subgoal explosion ()
+- `E0154` (progressed, missing_helper)
+  - Prove evaluate_slice boundary lemmas taking concrete constructor args (BytesV bs, IntV i, IntV j), then use irule in consumer proofs -> Both boundary lemmas evaluate_slice_BytesV_no_type_error and evaluate_slice_StringV_no_type_error PROVED successfully using rw[evaluate_slice_def, LET_THM] + Cases_on. Consumer proofs still failing at witness extraction step - drule on vht iff lemmas fails because prior gvs[] consumed the value_has_type assumptions by [local,simp] vht rule rewrites. (`TO_type_system_rewrite-20260516T153850Z_m21828_t001`, `TO_type_system_rewrite-20260516T153850Z_m21834_t001`)
+  - Cases_on fv >> gvs[vht_BaseTV_BytesT_Dynamic] to extract BytesV witness in consumer proof -> gvs fires vht iff for value_has_type, partially resolves to existential witnesses (bs, i, i' appear in assumptions) but does NOT substitute fv -> BytesV bs into evaluate_builtin assumption. fv remains as free variable. Subsequent gvs/rules can't close the evaluate_builtin assumption pattern. (`TO_type_system_rewrite-20260516T153850Z_m21828_t001`)
+  - drule vht_BaseTV_BytesT_Dynamic >> strip_tac after gvs steps for witness extraction -> Fails with FIRST_ASSUM error - the value_has_type assumption was already consumed/rewritten by prior gvs[] which fired the [local,simp] vht rule. drule can't find a matching assumption. (`TO_type_system_rewrite-20260516T153850Z_m21834_t001`)
+- `E0155` (progressed, missing_helper)
+  - slice_no_type_error: gvs[evaluate_type_def, LET_THM, AllCaseEqs()] then drule vht_BaseTV_BytesT_Dynamic then irule evaluate_slice_BytesV_no_type_error -> drule fails because gvs consumed value_has_type assumptions via [local,simp] vht iff lemmas. fv/sv/lv remain as free variables in evaluate_builtin assumption. FIRST_ASSAM error. (`TO_type_system_rewrite-20260516T153850Z_m21857_t002`, `TO_type_system_rewrite-20260516T153850Z_m21843_t002`)
+  - slice_no_type_error: gvs[Excl vht_BaseTV_BytesT_Dynamic, Excl vht_BaseTV_UintT, Excl vht_BaseTV_BytesT_Fixed] to preserve value_has_type, then Cases_on fv >> gvs[vht_BaseTV_BytesT_Dynamic] for witness extraction -> Fixed n' case survives because Excl prevents gvs from firing vht_BaseTV_BytesT_Fixed to close impossible cases. Two subgoals remain after Cases_on bd but only one handled by >-. (`TO_type_system_rewrite-20260516T153850Z_m21937_t001`)
+  - slice_no_type_error: simp[evaluate_type_def, LET_THM, AllCaseEqs()] instead of gvs to avoid consuming value_has_type, then Cases_on fv >> gvs[vht_BaseTV_BytesT_Dynamic] -> simp doesn't resolve evaluate_type to concrete typed_values (x, x' remain as abstract Skolem variables). Cases_on fv >> gvs[vht_BaseTV_BytesT_Dynamic] can't match because value_has_type has abstract type argument, not concrete BaseTV (BytesT (Dynamic n)). First subgoal not solved. (`TO_type_system_rewrite-20260516T153850Z_m21942_t001`)
+  - slice_no_type_error: after gvs[evaluate_type_def, LET_THM, AllCaseEqs()] let gvs fully consume value_has_type, then manually substitute fv/sv/lv and irule boundary lemma -> gvs DOES resolve types to concrete typed_values AND fires vht iff lemmas on value_has_type. bs/i/i' witnesses appear as assumptions. BUT gvs does NOT substitute fv=BytesV bs into evaluate_builtin assumption. fv/sv/lv remain free. irule evaluate_slice_BytesV_no_type_error fails because goal has [fv;sv;lv] not [BytesV bs;IntV i;IntV i']. (`TO_type_system_rewrite-20260516T153850Z_m21940_t001`)
+- `E0156` (stuck, unknown)
+  - Fix slice_no_type_error proof: resolve abstract type variables from evaluate_type_BaseT_SOME, then use boundary lemma evaluate_slice_BytesT_no_type_error to derive contradiction on F goal -> 6+ attempts failed. Core issue: fs[]/gvs[] with [local,simp] iff lemmas (vht_BaseTV_UintT, vht_BaseTV_BytesT_Fixed/Dynamic) consume value_has_type assumptions needed as boundary lemma premises. After fs[], UintT value_has_type is decomposed to sv=IntV i + bounds, and metis_tac cannot reconstruct it because 2^256 vs literal 11579...936 is opaque to FOL. Also tried: irule (fails on F goal shape), metis_tac[vht_BaseTV_UintT] (times out due to 2^256 gap), direct Cases_on (combinatorial explosion 729 subgoals). (`TO_type_system_rewrite-20260516T153850Z_m22074_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260516T153850Z_m22074_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.a
 
@@ -790,6 +902,75 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `tool_output:TO_type_system_rewrite-20260515T192259Z_m13049_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260515T192259Z_m13050_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260515T192259Z_m13050_t002` (use `read_tool_output` for exact output)
+
+## C4.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `missing_helper` "List destruct with gvs[LIST_REL_CONS1] for 4+ element lists produces unpredictable tail variable names. Need either: (1) EL-index approach using LIST_REL_EL_EQN, or (2) single-pass Cases_on on values with simp (not gvs), matching the working BuiltinTyping pattern at lines 253-261."
+- latest episode: `E0160`
+- blocker: "ecrecover_no_type_error list destruct: after Cases_on vs >> gvs[LIST_REL_CONS1] for 4-element lists, auto-generated variable names for tails are unpredictable. Need EL-index approach (LIST_REL_EL_EQN) or single-pass value-destruct approach (Cases_on vs >> Cases_on h >> simp, like BuiltinTyping file pattern) instead of trying to predict gvs-generated tail names."
+- next: "Rewrite ecrecover_no_type_error proof using EL-index approach or BuiltinTyping simp pattern. All boundary lemmas are proved. Consumer just needs correct variable connection."
+
+### Attempts / Evidence
+
+- `E0157` (progressed, missing_helper)
+  - Fix slice_no_type_error BytesT case using Excl approach: fs[evaluate_builtin_def, Excl "vht_BaseTV_UintT"] then metis_tac[evaluate_slice_BytesT_no_type_error] -> BytesT slice proof works. Excl prevents vht_BaseTV_UintT from consuming value_has_type assumptions, preserving them for the boundary lemma. This was the key insight that unblocked the 6+ attempt stalemate. (`TO_type_system_rewrite-20260516T153850Z_m22112_t001`)
+  - Add evaluate_slice_StringT_no_type_error boundary lemma and fix slice_string_no_type_error with same Excl pattern: fs[evaluate_builtin_def, Excl "vht_BaseTV_UintT", Excl "vht_BaseTV_StringT"] then metis_tac[evaluate_slice_StringT_no_type_error] -> StringT slice proof works after adding the boundary lemma and using evaluate_type_BaseT_SOME instead of evaluate_type_BaseT. The old proof used imp_res_tac + gvs + Cases_on + irule pattern but gvs consumed assumptions. (`TO_type_system_rewrite-20260516T153850Z_m22120_t001`)
+  - Fix make_array_no_type_error: Cases_on o' + gvs[evaluate_builtin_def] handles NONE case. SOME x case needs Cases_on evaluate_type + evaluate_type_ArrayT_cases for NONE contradiction. -> Currently being fixed. NONE case of MakeArray works. SOME x case with evaluate_type NONE needs imp_res_tac evaluate_type_ArrayT_cases >> gvs[] to derive contradiction from ty = ArrayT x bd. Build not yet verified after latest edit. (`TO_type_system_rewrite-20260516T153850Z_m22144_t001`)
+- `E0158` (progressed, missing_helper)
+  - make_array_no_type_error: Cases_on o' >> gvs[evaluate_builtin_def] auto-solves NONE branch. SOME x branch: Cases_on evaluate_type (get_tenv cx) x >> gvs[] + gvs[evaluate_type_def, AllCaseEqs()] for NONE contradiction from ty = ArrayT x bd -> make_array_no_type_error fully proved. Key: gvs[well_typed_builtin_app_def] expands ty = ArrayT x bd; Cases_on o' splits; gvs[evaluate_builtin_def] solves NONE; for SOME x, Cases_on evaluate_type + gvs[evaluate_type_def, AllCaseEqs()] derives contradiction from evaluate_type NONE when ty = ArrayT x bd implies evaluate_type exists (`TO_type_system_rewrite-20260516T153850Z_m22198_t001`)
+  - ecrecover_no_type_error: Tried direct Cases_on vs with >> (wrong subgoal control); tried boundary lemma evaluate_ecrecover_no_type_error with hardcoded [BaseTV (UintT 256)] (too narrow - BECAUSE last 3 args can be BytesT Fixed 32 OR UintT 256); tried Cases_on v/v'/h/h' (wrong auto-generated variable names after gvs/fs) -> Failed 5+ attempts. Root causes: (1) gvs destroys != INR(TypeError) goal via variable elimination; (2) ECRecover typing has disjunction EVERY (UintT 256 OR BytesT Fixed 32) for last 3 args, making simple boundary lemma too narrow; (3) list destruct with >> is fragile since variable names differ across subgoals; (4) auto-generated variable names from gvs/fs expansion are unreliable; (5) The evaluate_ecrecover_no_type_error boundary lemma I added needs to handle BOTH UintT and BytesT patterns (`TO_type_system_rewrite-20260516T153850Z_m22189_t001`, `TO_type_system_rewrite-20260516T153850Z_m22244_t001`, `TO_type_system_rewrite-20260516T153850Z_m22257_t001`, `TO_type_system_rewrite-20260516T153850Z_m22262_t001`, `TO_type_system_rewrite-20260516T153850Z_m22279_t001`)
+- `E0159` (progressed, missing_helper)
+  - Fix ecrecover_no_type_error: rewrote boundary lemma evaluate_ecrecover_no_type_error using ecrecover_arg_to_num abstraction (handles both UintT 256 and BytesT Fixed 32). Added ecrecover_arg_Uint256_not_none and ecrecover_arg_BytesT32_not_none helper lemmas. All three boundary lemmas proved successfully. -> Boundary lemmas for ECRecover proved and working. Consumer proof ecrecover_no_type_error failed 8+ times trying to connect LIST_REL value_has_type + well_typed_builtin_app to boundary lemma assumptions. (`TO_type_system_rewrite-20260516T153850Z_m22329_t001`, `TO_type_system_rewrite-20260516T153850Z_m22331_t001`, `TO_type_system_rewrite-20260516T153850Z_m22333_t001`, `TO_type_system_rewrite-20260516T153850Z_m22335_t001`, `TO_type_system_rewrite-20260516T153850Z_m22337_t001`)
+  - Fix ecadd_no_type_error: replaced stale Cases_on v' with explicit list destruct (LENGTH + Cases_on vs/ts elements) -> Code written but build never reached ecadd due to ecrecover blocking first ()
+  - Fix ecmul_no_type_error: same pattern as ecadd fix -> Code written but build never reached ecmul due to ecrecover blocking first ()
+- `E0160` (stuck, missing_helper)
+  - ecrecover_no_type_error: tried Cases_on vs >> gvs[LIST_REL_CONS1] >> Cases_on t >> gvs[LIST_REL_CONS1] >> ... for 4-element list. After 3 levels of destruct, auto-generated tail variable names (t, t', t'') from gvs don't match expected pattern. gvs renames tails unpredictably based on assumption simplification. Tried explicit variable names t, t', t'', t''' but actual names after gvs are different (t, xs, etc.) -> 8+ attempts across 2 sessions. Root cause: gvs[LIST_REL_CONS1] auto-generates variable names for list tails that depend on full assumption state, making them unpredictable. Cases_on `t''` fails because gvs renamed the tail to something else. (`TO_type_system_rewrite-20260516T153850Z_m22390_t001`, `TO_type_system_rewrite-20260516T153850Z_m22395_t001`)
+  - Rewrote ecrecover_no_type_error to take typing predicates directly (like slice_no_type_error) instead of well_typed_builtin_app_def. Avoids gvs[well_typed_builtin_app_def] destroying the ≠ TypeError goal. -> Consumer proof rewritten. List destruct still fails: Cases_on `t''` cannot find t'' free in goal after gvs[LIST_REL_CONS1] renamed tails. (`TO_type_system_rewrite-20260516T153850Z_m22395_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260516T153850Z_m22390_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260516T153850Z_m22395_t001` (use `read_tool_output` for exact output)
+
+## C4.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0161`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0161` (proved, )
+  - Carry forward existing boundary lemmas at lines 1511-1539 -> All three lemmas already present and proved in source ()
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260516T153850Z_m22429_t002` (use `read_tool_output` for exact output)
+
+## C4.2.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other` C4.2.2 ECRecover target is proved but downstream ecadd/ecmul need boundary lemma extraction for value_has_type ArrayTV decomposition
+- latest episode: `E0162`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0162` (progressed, other)
+  - Added list_el_decomp_4 local helper + fixed ecrecover_no_type_error inline proof using simp[list_el_decomp_4] instead of match_mp_tac LIST_EQ >> simp[]. Derived per-element EL-index typing facts, converter non-NONE facts before list decomposition, then fs[EL] + Cases_on v0 + metis_tac[evaluate_ecrecover_no_type_error]. -> ecrecover_no_type_error proved successfully (list_el_decomp_4 + list_el_decomp_2 helpers added). ecadd_no_type_error proof still needs fixing. ()
+
+### Evidence refs
+
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m22675_t002` (use `read_tool_output` for exact output)
+- `tool_output:TO_type_system_rewrite-20260516T153850Z_m22730_t001` (use `read_tool_output` for exact output)
 
 ## C5.2
 

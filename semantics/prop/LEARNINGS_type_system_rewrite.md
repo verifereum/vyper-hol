@@ -89,22 +89,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260515T192259Z_m11231_t001
 - tool_output:TO_type_system_rewrite-20260515T192259Z_m11233_t001
 
-## L0365 scope='global' tags=API,corruption,conjunction,workaround
-shape: Writing HOL4 conjunction /\ in tool call content parameters
-pattern: The Anthropic API consistently corrupts /\ by stripping the backslash when it appears in replace_text/edit_lines/write_file content parameters. Produces /@, /&e, /&#92; etc. Workarounds: (1) Avoid /\ in new theorem statements entirely - use nested implications, separate single-existential theorems, or inline proof. (2) Use mp_tac + simp[definition] + strip_tac to expand definitions in goal position, getting clean Skolemized witnesses without writing /\ to file. (3) For existing theorems, copy /\ from working parts of existing file content (pre-existing /\ survives because it was written before this API limitation).
-works_when: Need to write HOL4 term quotations containing /\ conjunction to .sml files via tool calls
-evidence:
-- tool_output:TO_type_system_rewrite-20260515T192259Z_m11333_t001
-- tool_output:TO_type_system_rewrite-20260515T192259Z_m11275_t001
-
-## L0405 scope='global' tags=API,conjunction,corruption,workaround
-shape: NEVER write /\ in new theorem statements via tool calls - use alternative proof structures
-pattern: The Anthropic API consistently strips the backslash from /\ when writing via replace_text/edit_lines/write_file, corrupting /\ to /@, /&e, etc. Workarounds: (1) Use irule in proof body instead of adapter lemmas with /\ conclusions. (2) Split into separate single-existential/drive lemmas. (3) Use inline proof expansion (mp_tac+simp+strip_tac) to get Skolemized witnesses without writing /\ to file. (4) Copy /\ from EXISTING working file content (pre-existing /\ survived before this API limitation).
-works_when: Any HOL4/SML theorem statement or term quotation needing conjunction in new text written via tool calls
-evidence:
-- tool_output:TO_type_system_rewrite-20260515T192259Z_m11333_t001
-- tool_output:TO_type_system_rewrite-20260515T192259Z_m11275_t001
-
 ## L0406 scope='C3.1' tags=holbuild,nested_proof,goal_state_visibility,local_lemma,suspend
 shape: Nested >- chain failures show only top-level goals in holbuild instrumented log
 pattern: When a proof fails inside a deeply nested >- chain and holbuild only shows the outermost input goals (not the inner state after expansion), extract the failing branch as a SEPARATE [local] Theorem. This makes holbuild show the full goal state at the failure point. Alternatively, use suspend/Resume to lift the branch to a top-level block. This is the single最重要的 debugging technique for nested-prefixed checkpoint proofs.
@@ -198,22 +182,6 @@ pattern: For statement branches with monadic pipelines (get_Value, switch_BoolV,
 works_when: Statement branches with monadic pipeline: eval_expr -> get_Value/switch_BoolV/lift_option_type -> raise/return
 evidence:
 - tool_output:TO_type_system_rewrite-20260515T192259Z_m12873_t001
-
-## L0434 scope='C4' tags=assign_target_sound_mutual,corollary,EVERY,arg_order
-shape: Projecting no_type_error_result from assign_target_sound_mutual cj 1/cj 2
-pattern: Use imp_res_tac (cj N assign_target_sound_mutual) >> gvs[] to project no_type_error_result from C3. For EVERY premises, the arg order is assign_target_assignable_context cx gv st (NOT cx st gv). Use EVERY (\gv. assign_target_assignable_context cx gv st) gvs matching C3 line 2290 exactly. For update/append wrappers, build assign_operation_runtime_typed from component facts first (well_typed_binop+value_runtime_typed for Update; evaluate_type+value_has_type for AppendOp).
-works_when: Proving C4 wrapper theorems as projections from C3 assign_target_sound_mutual
-evidence:
-- source:semantics/prop/vyperTypeAssignSoundnessScript.sml:313-376
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2274-2291
-
-## L0437 scope='C4' tags=EVERY,arg_order,assign_target_assignable_context
-shape: EVERY for assign_target_assignable_context must use lambda form
-pattern: assign_target_assignable_context takes args (cx, gv, st) in that order. EVERY (assign_target_assignable_context cx st) gvs is WRONG type error because cx st is not a valid prefix - st is evaluation_state not assignment_value. Must use EVERY (\gv. assign_target_assignable_context cx gv st) gvs matching C3 line 2290. Both \ syntax and lambda character work in HOL4 definitions.
-works_when: Writing theorem statements with EVERY over assign_target_assignable_context
-evidence:
-- source:semantics/prop/vyperTypeAssignSoundnessScript.sml:333
-- source:semantics/prop/vyperTypeStatePreservationScript.sml:2290
 
 ## L0445 scope='C3' tags=TopLevelVar,Type,ArrayTV,dispatch,boundary_theorem,root_type_value
 shape: Dispatching TopLevelVar Type branch by root type_value to correct boundary theorem
@@ -815,3 +783,737 @@ pattern: Do NOT use qho_match_abbrev_tac`P res st'` before drule_then switch_Boo
 works_when: Any branch using switch_BoolV_post after evaluating a boolean expression
 evidence:
 - tool_output:TO_type_system_rewrite-20260516T153850Z_m17676_t001
+
+## L0607 scope='global' tags=audit,cheat,grep,verification
+shape: Always run fresh grep audits before claiming completion
+pattern: Never trust stale observations about cheat counts. Before proposing task completion: (1) grep 'cheat' in all in-scope .sml files, (2) grep 'suspend' in same, (3) grep '\[oracles:' in .Theory.txt files, (4) holbuild full target, (5) check for 'CHEAT' in holbuild output warnings. The semantics/prop/ directory has ~80+ cheats across 3 in-scope files (vyperTypeBuiltinsScript.sml, vyperTypeStmtSoundnessScript.sml, vyperTypeCallSoundnessScript.sml).
+works_when: Auditing for task completeness before end_session proposal
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m17769_t002
+
+## L0623 scope='C1.1' tags=value_has_type,type_value,iff,simp,boundary_lemma
+shape: value_has_type at known type_value iff rewrite constrains value constructor
+pattern: When the type_value is concretely known (from evaluate_type_def simplification), iff lemmas constrain the value constructor: value_has_type (BaseTV (UintT n)) v ⇔ ∃i. v = IntV i ∧ 0 ≤ i ∧ Num i < 2**n, value_has_type (BaseTV (IntT n)) v ⇔ ∃i. v = IntV i ∧ within_int_bound (Signed n) i, value_has_type (BaseTV DecimalT) v ⇔ ∃d. v = DecimalV d ∧ within_int_bound (Signed 168) d, value_has_type (BaseTV BoolT) v ⇔ ∃b. v = BoolV b, value_has_type (FlagTV m) v ⇔ ∃k. v = FlagV k ∧ k < 2**m. These are already [local,simp] in vyperTypeBuiltinsScript.sml as vht_BaseTV_* and vht_FlagTV. They let gvs derive value constructors from value_has_type assumptions.
+works_when: Type_value is concretely known after evaluate_type_def simplifies; need to derive value constructors for evaluate_binop matching
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:68-123
+
+## L0657 scope='global' tags=gvs,variable_elimination,forall,disequation,no_type_error
+shape: gvs eliminates universally-quantified variables from ≠ INR(TypeError msg) disequations, creating unsolvable goals
+pattern: For theorems with conclusion !msg. f x <> INR(TypeError msg), gvs variable elimination can substitute msg from other equalities/hypotheses, turning the disequation into a ground equation that becomes unsolvable (F-goal with contradictory but not obviously contradictory equations). NEVER use gvs when goal has forall-msg disequation. Use fs instead (preserves forall) or disch_tac+gen_tac to strip before expanding.
+works_when: Proving no-TypeError theorems with forall-msg disequations in conclusion
+evidence:
+- episode:E0138
+- episode:E0139
+
+## L0661 scope='C1.1' tags=value_has_type,ArrayTV,forward-only,not_iff
+shape: value_has_type (ArrayTV tv bd) v is NOT iff v = ArrayV av
+pattern: value_has_type (ArrayTV tv bd) v requires v to be ArrayV with specific inner variant: SArrayV for Fixed, DynArrayV for Dynamic, and additional conditions (sparse_has_type, all_have_type, LENGTH bounds). The iff lemma exists only for specific bounds: vht_ArrayTV_Fixed and vht_ArrayTV_Dynamic in vyperBuiltinTypingScript. A forward-only vht_ArrayTV_exists: value_has_type (ArrayTV tv bd) v ⇒ ∃av. v = ArrayV av is provable. ArrayV(TupleV vs) matches TupleTV not ArrayTV.
+works_when: Need to extract ArrayV constructor from value_has_type (ArrayTV tv bd) v assumption; DO NOT claim iff with just ArrayV
+evidence:
+- source:semantics/prop/vyperTypingScript.sml:107-111
+- source:semantics/prop/vyperBuiltinTypingScript.sml:556-568
+
+## L0675 scope='C1.1' tags=COND_CASES_TAC,THEN1,subgoal,mp_tac,assumption_to_conclusion
+shape: Use >> (THEN) not >- (THEN1) for tactics after COND_CASES_TAC when both branches need simp
+pattern: CRITICAL: After COND_CASES_TAC creates two subgoals, >- simp[] only applies simp to the FIRST subgoal. The second subgoal never gets simplified. This means goals like `bounded_int_op ... ≠ INR(TypeError msg)` that should be closed by [local,simp] helpers remain unsolved. FIX: Use >> simp[] to apply simp to ALL subgoals, or add >> simp[] after the rpt block. This applies when conditionals in the conclusion need splitting and both branches are independently solvable by simp.
+works_when: Any proof using COND_CASES_TAC or CASE_TAC where both branches should be solvable by simp, especially after mp_tac moves an assumption equation to the conclusion
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m18957_t001
+
+## L0679 scope='global' tags=Datatype,constructor_name,stale_definition,Cases_on,mismatch
+shape: Goal msg ≠ constructor_fallback_string after Cases_on and definition expansion
+pattern: CRITICAL: Before thrashing on case-split proofs, verify that all constructor names used in definitions/theorem statements match the actual Datatype definition. Well_typed_binop_def used UAdd/USub/UMul/UDiv but the bop Datatype has UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv. After Cases_on bop, the stale names create impossible branches that fall to the catch-all | _ => INR(TypeError 'binop'), producing unprovable msg ≠ 'binop' goals. Grepping the Datatype definition first would have prevented 14+ episodes of tactic thrashing.
+works_when: Any case-split proof that produces unexpected catch-all results where msg or string equality with a fallback error constant appears as a residual goal; always check that the constructor names in typing predicates match the actual Datatype constructors
+evidence:
+- source:syntax/vyperASTScript.sml:56-82
+- source:semantics/prop/vyperTypeSystemScript.sml:89-92
+- episode:E0146
+
+## L0680 scope='C1.1' tags=COND_CASES_TAC,THEN1,THEN,subgoal,simp
+shape: After COND_CASES_TAC, use >> simp[] not >- simp[] when both branches should be solved
+pattern: After COND_CASES_TAC creates two subgoals, >> simp[] applies simp to ALL subgoals. Using >- simp[] (THEN1) only solves the FIRST subgoal, leaving the second unsolved. This is critical when the second subgoal (e.g., bounded_int_op ≠ TypeError) should be closed by [local,simp] helpers. The >> simp[] fix closed 10 of 14 remaining goals in well_typed_binop_no_type_error.
+works_when: Any proof using COND_CASES_TAC or case splits where both branches are independently solvable by simp, especially after mp_tac moves an equation to the conclusion
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m18957_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19031_t001
+
+## L0681 scope='C1.1' tags=TypeError,RuntimeError,binop,error_type,catch_all,diagnostic
+shape: msg ≠ 'binop' goal after expanding evaluate_binop_def with well-typed inputs
+pattern: If after expanding evaluate_binop_def with well-typed inputs you see a goal like msg ≠ 'binop', it means evaluate_binop produced INR(TypeError 'binop') - the catch-all fallback. This ONLY happens when the bop constructor or value constructors don't match any pattern in evaluate_binop_def. Do NOT try to prove msg ≠ 'binop' by tactics - instead find WHICH pattern didn't match and fix it (usually a stale constructor name in the typing definition).
+works_when: Diagnosing residual goals in case-split proofs of no-TypeError theorems for evaluate_binop or similar functions with catch-all | _ => INR(TypeError msg) branches
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19031_t001
+- source:syntax/vyperASTScript.sml:56-82
+- source:semantics/prop/vyperTypeSystemScript.sml:89-92
+
+## L0686 scope='global' tags=
+shape: replace_text failure: use edit_lines with line numbers instead of retrying
+pattern: When replace_text fails to match, stop immediately. Use git diff to check state, read_file for exact line content, then edit_lines with explicit start/end line numbers for the replacement. Never retry replace_text more than once with same text.
+works_when: Tool call text matching fails in source files
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml
+
+## L0689 scope='global' tags=gvs,AllCaseEqs,evaluate_binop,explosion
+shape: Goal with evaluate_binop_def assumption that needs resolution
+pattern: Use gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] to resolve both assumptions and conclusion simultaneously. NEVER use simp[evaluate_binop_def] alone which creates 86+ goals. The gvs pattern plus subsequent Cases_on v1/v2 + COND_CASES_TAC closes all cases.
+works_when: Any theorem involving evaluate_binop in assumptions that must be resolved against a goal
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:553-577
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19210_t002
+
+## L0690 scope='C1.1' tags=within_int_bound,signed_int_mod,int_mod,Num_int_lt,boundary_lemma
+shape: signed_int_mod and integer % preserve within_int_bound; Num/int bridge via Num_int_lt
+pattern: Three [local] helpers proved in vyperTypeBuiltinsScript.sml: within_int_bound_signed_int (iff rewrite for Signed bound), signed_int_mod_within_bound (0<m => within_int_bound(Signed m)(signed_int_mod m i)), int_mod_unsigned_within_bound (0<m => within_int_bound(Unsigned m)(i % &(2**m))). Num/int bridge: for goals Num(int_expr) < nat, use irule vyperArithTheory.Num_int_lt then simp[integerTheory.INT_OF_NUM]. int_mod is NOT a HOL definition - it is built-in integer %, no int_mod_def.
+works_when: Proving value_has_type for wrapped/shift binop results where evaluate_binop produces signed_int_mod or int_mod
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:579-666
+
+## L0695 scope='C1.1' tags=TRY,gen_tac,gvs,AllCaseEqs,forall_elimination
+shape: After gvs with AllCaseEqs, some goals may lose their leading forall, so gen_tac fails
+pattern: When using gvs with AllCaseEqs() and type/value inversion lemmas, some goals have all their variables resolved by simplification, leaving no leading universal quantifier. Then gen_tac fails with 'not a forall'. Fix: use TRY gen_tac >> instead. This is safe because gen_tac is only needed when there are remaining foralls.
+works_when: After aggressive gvs in case-split proofs where some subgoals have fully-resolved type variables
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19446_t006
+
+## L0696 scope='C1.1' tags=gvs,Excl,evaluate_binop,bounded_int_op,inversion_lemma,assumption_expansion
+shape: gvs expands definitions in assumptions; use Excl to prevent over-expansion so inversion lemmas can match
+pattern: When using gvs[evaluate_binop_def, ...] to expose bounded_int_op/wrapped_int_op calls in assumptions for inversion lemma matching, MUST use Excl 'bounded_int_op_def', Excl 'bounded_decimal_op_def', Excl 'wrapped_int_op_def' to prevent gvs from expanding those definitions too (which would prevent the inversion lemma from matching). Without Excls: 86 goals remain. With Excls: 37 goals remain.
+works_when: Proving theorems about evaluate_binop results where you need to apply inversion lemmas like bounded_int_op_INL, bounded_decimal_op_INL, wrapped_int_op_INL
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19481_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:699-703
+
+## L0700 scope='C1.1' tags=builtin_app,success_type,direct_proof,suspend_broken
+shape: well_typed_builtin_app_success_type: 38 subgoals after Cases_on blt + gvs[well_typed_builtin_app_def, AllCaseEqs(), evaluate_type_def]
+pattern: well_typed_builtin_app_success_type produces 38 subgoals (including Abs_int/Abs_decimal cases not in original suspend list). Direct proof with >- dispatch: for each subgoal, use simp[evaluate_builtin_def, value_has_type_def] (NOT gvs with AllCaseEqs inside >-). Not_bool: gvs[is_bool_type_def, evaluate_type_def] >> Cases_on y >> simp[evaluate_builtin_def, value_has_type_def]. Neg/Abs_decimal: imp_res_tac bounded_decimal_op_INL >> gvs[]. Env: drule Env_builtin_success_type. Acc: drule_all Acc_builtin_sound. Bop: irule well_typed_binop_success_type after gvs[evaluate_builtin_def]. Cheats remain for: AsWeiValue, Concat, Slice, MakeArray, ECRecover, ECAdd, ECMul.
+works_when: Proving well_typed_builtin_app_success_type or similar multi-constructor builtin result-typing theorem
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19586_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:841-992
+
+## L0702 scope='C1.1' tags=gvs,AllCaseEqs,subgoal_count,direct_proof
+shape: gvs with AllCaseEqs() inside >- subgoal handler creates unexpected subgoals
+pattern: When using >- (THEN1) to solve a single subgoal, do NOT use gvs[AllCaseEqs()] inside it - AllCaseEqs splits case expressions creating multiple subgoals that >- cannot handle. Instead: use simp (conclusion only), or use targeted Cases_on before gvs, or use gvs without AllCaseEqs. If AllCaseEqs is needed, handle ALL resulting subgoals with >> (applies to all) rather than >- (requires exactly one solved).
+works_when: Writing direct proof with >- dispatch per subgoal where definitions contain case expressions
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19591_t001
+
+## L0703 scope='C1.1' tags=two-phase,gvs,AllCaseEqs,evaluate_type_def,evaluate_builtin_def,type_classifier
+shape: Two-phase gvs for per-Constructor proofs: Phase1 classify + Phase2 resolve
+pattern: For proofs with Cases_on constructor then per-branch resolution of evaluate_*_def: Phase1 gvs[well_typed_*_def, Excl type_classifier_catch_alls, is_*_type_inv lemmas] WITHOUT AllCaseEqs, evaluate_type_def, or evaluate_builtin_def. This produces clean goals with value_has_type tv v conclusion. Phase2: per-branch gvs[evaluate_type_def, evaluate_builtin_def] which case-splits value constructors against evaluate_builtin patterns, and the local [simp] vht_BaseTV_* iff lemmas auto-close many goals. AllCaseEqs in Phase1 creates misaligned >- chains and huge goals from evaluate_type expansion.
+works_when: Proving well_typed_builtin_app_success_type, well_typed_builtin_app_no_type_error, or any theorem where well_typed_*_def constrains types but evaluate_*_def needs per-branch value constructor case analysis
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19668_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19675_t001
+
+## L0704 scope='C1.1' tags=is_bytes_or_string_type,inversion_lemma,Excl,type_classifier
+shape: is_bytes_or_string_type_def has [simp] catch-all; use Excl + inversion lemma
+pattern: is_bytes_or_string_type_def has [simp] catch-all: is_bytes_or_string_type _ = F. Like all other type classifiers, this incorrectly fires on free variables. Add Excl is_bytes_or_string_type_def to gvs, and use inversion lemma is_bytes_or_string_type_inv: is_bytes_or_string_type ty <=> (?m. ty = BaseT (StringT m)) ∨ (?bd. ty = BaseT (BytesT bd)). Already added to vyperTypeBuiltinsScript.sml as [local] lemma.
+works_when: Any proof where is_bytes_or_string_type has a free variable argument (e.g., after well_typed_builtin_app_def expands to give is_bytes_or_string_type h where h is free)
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:209-216
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19668_t001
+
+## L0705 scope='C1.1' tags=builtin_app,success_type,two_phase_gvs,per_branch
+shape: well_typed_builtin_app_success_type: two-phase gvs with per-branch TRY dispatch
+pattern: For well_typed_builtin_app_success_type and similar multi-constructor proofs: Phase1 = Cases_on blt >> gvs[well_typed_builtin_app_def, Excl type_classifier_catch_all_defs, inversion lemmas] (NO AllCaseEqs, NO evaluate_type_def, NO evaluate_builtin_def). This produces clean value_has_type tv v goals. Phase2 = gvs[evaluate_type_def] resolves type_values. Phase3 = per-branch gvs[evaluate_builtin_def] + TRY dispatch: Not_bool (simp), Not_int_unsigned (gvs[type_to_int_bound_def,is_Unsigned_def]+arithmetic), Not_flag (w2n_and_low_mask_lt), Neg_int (bounded_int_op_INL), Neg_decimal (bounded_decimal_op_INL), Keccak256/Sha256 (LENGTH lemmas), Bop (irule well_typed_binop_success_type), Env (irule Env_builtin_success_type), Acc (drule_all Acc_builtin_sound), Floor/Ceil (floor/ceil helpers), AsWeiValue (evaluate_as_wei_value_def). Remaining hard: Concat, Slice, MakeArray, EC ops.
+works_when: Proving well_typed_builtin_app_success_type or no_type_error with many builtin constructors that need different per-branch proof strategies
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19668_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19675_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:859-897
+
+## L0706 scope='C1.1' tags=builtin_app,Abs,missing_constructor
+shape: Abs builtin constructor exists in well_typed_builtin_app_def and evaluate_builtin_def but was missing from early PLAN estimates
+pattern: The Abs builtin constructor is defined: well_typed_builtin_app ty Abs ts = (ts = [ty] /\ is_numeric_type ty). evaluate_builtin for Abs is NOT in evaluate_builtin_def - it falls through to the catch-all INR(TypeError 'builtin'). This means either (1) Abs has no evaluate_builtin clause yet and should be excluded from the success_type theorem via blt <> Abs, or (2) Abs evaluation needs adding. Check if Abs is actually implemented before proving its success_type. If not implemented, the well_typed_builtin_app_success_type theorem needs blt <> Abs premise like it already has blt <> Len.
+works_when: Proving well_typed_builtin_app_success_type or no_type_error when encountering Abs constructor goals
+evidence:
+- source:semantics/prop/vyperTypeSystemScript.sml:213
+- source:semantics/vyperContextScript.sml:365-451
+
+## L0711 scope='C1.1' tags=decimal,word_arithmetic,word_quot,w2i,floor_division
+shape: Decimal Mul/Div/Mod inline word operations in evaluate_binop_def
+pattern: evaluate_binop_def has inline word-level operations for decimal arithmetic: Decimal Mul uses w2i(word_quot(i2w p) 0x2540BE400w) where 0x2540BE400w = 10000000000w, Decimal Div uses bounded_decimal_op(w2i(word_quot(i2w(i1*10000000000)) (i2w i2))), Decimal Mod uses bounded_decimal_op(w2i(word_rem(i2w i1)(i2w i2))). These create word-level goals that need dedicated boundary lemmas relating w2i(word_quot/word_rem ...) to integer floor_div/mod. Existing helpers: floor_decimal_in_int256_bounds, ceil_decimal_in_int256_bounds (in vyperTypeBuiltinsScript.sml ~line 832). Need a lemma: within_int_bound (Signed 168) (ABS p / 10000000000) ==> within_int_bound (Signed 168) (w2i (word_quot (i2w p) (10000000000w:bytes32))).
+works_when: Proving success-typing for decimal Mul/Div/Mod binop results where evaluate_binop_def inline word ops need to be connected to within_int_bound
+evidence:
+- source:semantics/vyperValueOperationScript.sml:234-236
+- source:semantics/vyperValueOperationScript.sml:251-254
+- source:semantics/vyperValueOperationScript.sml:286-289
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:832-854
+
+## L0714 scope='C1.1' tags=decimal,word_quot,within_int_bound,boundary_lemma,int_div_lt_imp
+shape: decimal_mul_word_bound: within_int_bound(Signed 168)(ABS p / 10^10) ==> within_int_bound(Signed 168)(w2i(i2w p / 10^10w))
+pattern: decimal_mul_word_bound bridges the gap between integer-level within_int_bound and word-level w2i(word_quot...) that evaluate_binop_def uses for Decimal Mul. The proof chain: (1) ABS p / 10^10 < 2^167 (from Signed 168 bound), (2) ABS p < 2^167 * 10^10 < 2^255 (via int_div_lt_imp), (3) within_int_bound(Signed 256) p so w2i(i2w p) = p, (4) integer_wordTheory.word_quot gives i2w(p quot 10^10), (5) ABS(p quot 10^10) = ABS p / 10^10 (integer division properties), (6) within_int_bound(Signed 168)(p quot 10^10) from hypothesis, (7) w2i(i2w(p quot 10^10)) = p quot 10^10. This lemma exists in vyperTypeSoundnessHelpersScript.sml:6185 as [local]. Must be ported to vyperTypeBuiltinsScript.sml before the binop proof. Also needs int_div_lt_imp (same file, line 6164).
+works_when: Bridging w2i(word_quot(i2w p)(10^10w:bytes32)) to integer-level ABS p / 10^10 in success-typing proofs for Decimal Mul binop
+evidence:
+- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:6185-6240
+- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:6164
+
+## L0715 scope='C1.1' tags=wrapped_int_op,int_bound_bits,0_less,premise_order,AllCaseEqs
+shape: wrapped_int_op_INL requires 0 < int_bound_bits u derived BEFORE gvs[AllCaseEqs()] that resolves u
+pattern: wrapped_int_op_INL[local]: 0 < int_bound_bits u /\ wrapped_int_op u r = INL v ==> ?i. v = IntV i /\ within_int_bound u i. After gvs[AllCaseEqs()] inside the binop proof, the type variable u gets resolved by Cases_on from the unsigned/signed split, but the required 0 < int_bound_bits u premise may be lost because gvs performs variable elimination. FIX: derive 0 < int_bound_bits u BEFORE expanding evaluate_binop_def, or handle wrapped-op bop cases in separate TRY blocks where u is still available. For well_typed types: evaluate_type returns well-formed type_values with n > 0 for int types, so int_bound_bits u > 0 follows from well_typed_binop premises.
+works_when: Proving success_type for wrapped operations (UnsafeAdd/Sub/Mul/Div) where AllCaseEqs() variable elimination removes the bound variable needed by wrapped_int_op_INL
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:718-726
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m19940_t002
+
+## L0719 scope='C1.1' tags=well_typed_binop_success_type,per-family,26_goals,helper_map
+shape: well_typed_binop_success_type 26 remaining goals map to 7 helper families
+pattern: After Cases_on bop + gvs[well_typed_binop_def, is_*_inv, evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] resolves type/value, the 26 remaining goals split into: (1) Decimal Mul (1 goal): decimal_mul_word_bound bridges w2i(word_quot(i2w p)/10^10w) to within_int_bound(Signed 168). (2) Wrapped UAdd/USub/UMul (6 goals): wrapped_int_op_INL_Unsigned/Signed gives existential i with bound. (3) Wrapped UForceDiv/SForceDiv (2 goals): same + word_quot/word_rem bridge. (4) ExpMod (1 goal): w2n(word_exp...) < 2^256 via w2n_lt. (5) Flag And/Or/Xor (3 goals): int_bitwise_nat_bound gives Num result < 2^m. (6) ShL (3+ goals): evaluate_binop uses int_mod r &(2^n) for unsigned and signed_int_mod b r for signed - use int_mod_unsigned_within_bound and signed_int_mod_within_bound (already [local]). (7) ShR (3+ goals): int_shift_right_within_bound (Signed) and int_shift_right_unsigned_within_bound.
+works_when: Proving well_typed_binop_success_type or any per-operator integer arithmetic result-typing where evaluate_binop has inline word ops or wrapping
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20020_t002
+- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:6185-6242
+- source:semantics/vyperValueOperationScript.sml:303-317
+
+## L0723 scope='C1.1' tags=imp_res_tac,drule,wrapped_int_op_INL,existential_conclusion
+shape: imp_res_tac not drule for multi-antecedent theorem with existential conclusion
+pattern: When a theorem has multiple antecedents and an existential conclusion (e.g., !u r v. 0 < int_bound_bits u /\ wrapped_int_op u r = INL v ==> ?i. v = IntV i /\ within_int_bound u i), use imp_res_tac not drule. drule matches only one antecedent and pushes a residual implication that simp cannot discharge through the existential. imp_res_tac resolves ALL antecedents simultaneously and adds the conclusion to assumptions, then gvs can unfold and close.
+works_when: Proving inversion lemmas where the base theorem has /\-joined antecedents and ?-quantified conclusion
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20076_t001
+
+## L0724 scope='C1.1' tags=ShL,shift_left,int_mod,signed_int_mod,evaluate_binop
+shape: ShL evaluate_binop uses int_mod/signed_int_mod, not shift_left_bound
+pattern: evaluate_binop_def for ShL: r = int_shift_left (Num i2) i1; then if is_Unsigned u then IntV (int_mod r &(2**b)) else IntV (signed_int_mod b r). NO int_bitwiseTheory.int_shift_left_bound exists. For unsigned, use int_mod_unsigned_within_bound; for signed, use signed_int_mod_within_bound. Both are already [local] in vyperTypeBuiltinsScript.sml.
+works_when: Proving value_has_type for ShL binop results
+evidence:
+- source:semantics/vyperValueOperationScript.sml:303-309
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:699-715
+
+## L0725 scope='C1.1' tags=conjunction,syntax,API,term_quotation
+shape: Use /\ not / for HOL4 conjunction in term quotations; /\ works reliably through API
+pattern: In HOL4 term quotations, /\ is conjunction and / is integer division. Through the API, both /\ and the Unicode /\ work but /\ is more reliable. The original bug was using / instead of /\ throughout all helper lemma statements. Always verify: after editing theorem statements, build immediately to catch parse errors.
+works_when: Writing any HOL4 theorem statement or term quotation via tool calls
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:728-957
+
+## L0727 scope='C1.1' tags=flag_bitwise,int_bitwise_nat_bound,PURE_REWRITE_TAC,qspecl_then
+shape: Proving Num(int_and/or/xor(&k)(&k')) < 2**m from k<2**m /\ k'<2**m
+pattern: For flag bitwise operator goals (And/Or/Xor on FlagV), unfold int_and/int_or/int_xor to BITWISE via PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def/int_or_def/int_xor_def], then apply int_bitwise_nat_bound with the boolean function as first argument via qspecl_then. For And: qspecl_then [`$/\\`,k,k',m]. For Or: qspecl_then [`$\\/`,k,k',m]. For Xor: qspecl_then [`\\x y:bool. x <> y`,k,k',m]. The OLD helpers script (vyperTypeSoundnessHelpersScript.sml:6277-6288) has the working pattern.
+works_when: Proving value_has_type for FlagV bitwise results where evaluate_binop produces Num(int_and/or/xor(&k)(&k')) from k < 2**m and k' < 2**m
+evidence:
+- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:6277-6288
+
+## L0728 scope='C1.1' tags=irule,conjunction,partial_match,mp_tac,int_bitwise
+shape: irule fails when lemma concludes A/\B but goal only has B; use mp_tac+strip_tac instead
+pattern: When a boundary lemma concludes a conjunction (e.g., `0 <= X /\ Num X < 2**k`) but the goal only has one conjunct (e.g., `Num X < 2**m`), irule cannot match. Fix: (1) use `mp_tac lemma >> strip_tac >> asm_rewrite_tac[]` instead, (2) prove a separate lemma for just the needed conjunct (e.g., `int_bitwise_nat_bound_lt`), or (3) use `drule` if antecedents match assumptions. The reference implementation in vyperTypeSoundnessHelpersScript.sml:6277-6288 uses `qspecl_then [..] mp_tac int_bitwise_nat_bound >> ASM_REWRITE_TAC[] >> strip_tac >> ASM_REWRITE_TAC[]`.
+works_when: Proving value_has_type for flag/binop results where the bound lemma concludes both 0<=... and Num...<2**k but only the < part remains in the goal
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20154_t001 - Goals 2-4: Num(int_bitwise $/\ ...) < 2**m only
+- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:6277-6288
+
+## L0729 scope='C1.1' tags=within_int_bound,GSYM,simp_folding,value_has_type,expanded_form
+shape: simp[GSYM within_int_bound_def] does NOT re-abstract 0<=i/\Num i<2**n back to within_int_bound form
+pattern: After gvs[AllCaseEqs(), value_has_type_def], within_int_bound gets expanded to 0<=i/\Num i<2**n (for Unsigned) or to int_bound form (for Signed). Adding Excl 'within_int_bound_def' does NOT prevent this because the expansion comes from value_has_type_def, not directly. simp[GSYM within_int_bound_def] also fails to fold back because within_int_bound_def is a multi-clause conditional definition that simp cannot match backwards when the bound constructor is known. Work with the expanded form directly: prove bridge lemmas that conclude in the exact expanded goal shape, or use irule/apply_tac on lemmas that match the expanded conjunction.
+works_when: Any proof where gvs[value_has_type_def] or similar expands within_int_bound and you want to re-abstract or apply with_int_bound-concluding lemmas
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20153_t001 - ShR goals 5-6 remain expanded despite simp[GSYM within_int_bound_def]
+
+## L0730 scope='C1.1' tags=ExpMod,w2n_lt,word_exponentiation,dimword
+shape: w2n(word_exp) < 2**256: use irule w2n_lt then simp[dimword_def], may need type instantiation
+pattern: For ExpMod goal `w2n (i2w i ** i2w i') < 2**256`: this is `w2n w < dimword(:256)` for any `:256` word `w`. Use `irule wordsTheory.w2n_lt` then `simp[wordsTheory.dimword_def]`. If irule fails due to type ambiguity, try `irule_at Any wordsTheory.w2n_lt` or `simp[wordsTheory.w2n_lt, wordsTheory.dimword_def]` directly. The word exponentiation `**` on `:256` words always produces a `:256` word, so `w2n` of the result is < `dimword(:256)` = 2^256.
+works_when: Proving w2n of a word operation result bounded by dimword, especially for ExpMod/modexp
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20154_t001 - Goal 1: w2n(i2w i ** i2w i') < 2^256
+
+## L0731 scope='C1.1' tags=Min,Max,within_int_bound,IF_CASES_TAC,min_max,binop
+shape: Min/Max binop success: case split on i<i' then qexists the smaller/larger value
+pattern: Goals of form `∃i''. (i < i' ∧ i = i'' ∨ ¬(i < i') ∧ i' = i'') ∧ within_int_bound (Signed n) i''` (Min) or `∃i''. (i < i' ∧ i' = i'' ∨ ¬(i < i') ∧ i = i'') ∧ within_int_bound (Signed n) i''` (Max) need: `IF_CASES_TAC 'i < i'' >> qexists_tac 'i' >> simp[] >- qexists_tac 'i' >> simp[]`. Both witnesses are within_int_bound since either i or i' is chosen, and both come from within_int_bound assumptions. For decimal Min/Max, same pattern with d/d'.
+works_when: Proving Min/Max result typing in well_typed_binop_success_type or similar
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20154_t001 - Goals 8-11
+
+## L0732 scope='C1.1' tags=Num,int,INT_OF_NUM,nonnegative,bridge_lemma
+shape: Goal: Num (int_expr) < 2 ** n with assumptions 0 <= int_expr and int_expr <= i and Num i < 2 ** n
+pattern: Prove Num (int_expr) < 2 ** n by converting int_expr = &(Num int_expr) and i = &(Num i) via INT_OF_NUM (since both are non-negative), then use GSYM INT_OF_NUM_LE to turn <= into Num ... <= Num ..., then decide_tac/arithmetic.
+works_when: Both int_expr and i are non-negative integers (type :int) and you need to convert int inequality to Num inequality
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:938-951
+
+## L0733 scope='C1.1' tags=gvs,conjunct,side_effect,conjunction
+shape: Goal after gvs[]: conjunction partially resolved when one conjunct was already an assumption
+pattern: After gvs[] with assumptions like 0 <= X already present, gvs may remove the first conjunct from 0 <= X /\ Num X < bound, leaving just Num X < bound. Do NOT follow with conj_tac; proceed directly to the remaining subgoal.
+works_when: gvs[] or similar simplification that can match and eliminate conjuncts against existing assumptions
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20203_t001
+
+## L0734 scope='C1.1' tags=w2n,dimword,2^256,large_number,word
+shape: Goal: w2n (word_expr) < LARGE_CONSTANT where LARGE_CONSTANT = 2 ** 256 already computed
+pattern: w2n_lt concludes w2n w < dimword(:a), but dimword(:256) = 2 ** dimindex(:256) = 2 ** 256. If the goal has the explicit computed constant for 2**256 (e.g., 115792089237316195423570985008687907853269984665640564039457584007913129639936), you need simp[numLib.NUMERAL, numLib.ARITH_ss, wordsTheory.dimword_def] or EVAL_TAC to unify. Simpler: prove the bridge lemma with dimword(:256) and use CONV_TAC in the main proof, OR just use repeat CASE_TAC with simp[w2n_lt, dimword_def].
+works_when: The goal contains a 2^256-sized constant from value_has_type_def expansion that must match a lemma concluding 2 ** 256 or dimword(:256)
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20174_t002
+
+## L0735 scope='global' tags=dimword,w2n_lt,irule
+shape: Proving w2n (word_expr) < 2 ** 256 using w2n_lt
+pattern: When proving w2n (w:256 word) < 2**256, irule w2n_lt fails because 2**256 is a computed numeral. Fix: state the lemma as w2n w < dimword(:256) and prove via irule w2n_lt. If the consumer needs 2**256, add dimword_def + EVAL dimindex(:256) at the call site.
+works_when: Word size bounds where 2**n would be computed to a large numeral
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20266_t001
+
+## L0736 scope='global' tags=gvs,conjunction,conj_tac
+shape: Goal is non-conjunctive after gvs[] that was originally a conjunction
+pattern: After gvs[] with assumptions, gvs may resolve one conjunct from a conjunction in the goal, leaving only the other. Always add a FAIL_TAC probe after gvs to inspect the actual goal before using conj_tac or other structural tactics. If gvs already split the conjunction, proceed directly.
+works_when: gvs[] in proofs that simplify goal conjunctions using assumptions
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20217_t002
+
+## L0737 scope='global' tags=Num_int_lt,integer,monotonicity
+shape: Proving Num i < bound from 0 <= i and i < j and Num j < bound
+pattern: Use vyperArithTheory.Num_int_lt: 0 <= a /\ a < b ==> Num a < Num b. Combined with int_shift_right_nonneg_bounds (gives 0<= and <=), this bridges integer ordering to nat ordering for non-negative integers.
+works_when: Converting integer < to Num < for non-negative integers, especially in within_int_bound unsigned range proofs
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20238_t001
+
+## L0738 scope='global' tags=tool_limitation,backslash,SML,write_file
+shape: Editing HOL4 SML files containing /\ operator
+pattern: The replace_text and edit_lines tools strip backslashes from /\ (HOL4 ASCII conjunction), turning /\ into /. Always use write_file to rewrite the complete file when editing lines containing /\ or \/. This also affects \ within string literals.
+works_when: Any SML file edit involving HOL4 logical operators /\, \/, ==>, or other backslash-containing syntax
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20368_t001 - edit_lines stripping /\ to /
+
+## L0742 scope='C1.2' tags=
+shape: Helper theorems from vyperBuiltinTyping are [local] and inaccessible from vyperTypeBuiltins
+pattern: vyperBuiltinTypingScript.sml has proved helpers: evaluate_concat_typed, evaluate_slice_typed, evaluate_as_wei_value_typed, evaluate_ecrecover_typed, evaluate_ecadd_typed, evaluate_ecmul_typed - but ALL are marked [local]. vyperTypeBuiltinsScript.sml cannot import them. Must re-prove in vyperTypeBuiltins or add non-local versions to an intermediate theory. The success_type Resume cheats needing these: AsWeiValue_int, AsWeiValue_decimal, Concat_bytes, Concat_string, Slice_bytes, Slice_string, ECAdd, ECMul, MakeArray_tuple, MakeArray, and the ECRecover catch-all.
+works_when: Proving success_type Resume branches that depend on evaluate_concat/evaluate_slice/evaluate_as_wei_value/EC helper typing
+evidence:
+- source:semantics/prop/vyperBuiltinTypingScript.sml:203-262
+
+## L0744 scope='C1.2' tags=builtin,resume,FAIL_TAC,goal_state
+shape: Resume block proofs after gvs in main theorem
+pattern: Before writing tactics in Resume blocks, insert FAIL_TAC "probe" to see exact goal state. Variables get renamed by gvs in main Cases_on proof, so names from main context won't match. Work with actual variable names from probed goal.
+works_when: Proving suspended Resume blocks where main proof does significant gvs simplification before suspending
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20641_t001
+
+## L0745 scope='C1.1' tags=binop,priority,blocking
+shape: well_typed_binop proofs block entire assignment chain
+pattern: well_typed_binop_no_type_error and well_typed_binop_success_type (C1.1) are strict prerequisites for C2 assignment subscript soundness, blocking C3, C4, C6. Prioritize binop proofs over remaining builtin success_type branches. Binop proofs need Cases_on bop plus inversion lemmas like bounded_int_op_INL (in old vyperBuiltinTypingScript.sml as [local], needs re-proving in new stack).
+works_when: Deciding what to prove next in C1 cluster
+evidence:
+- source:semantics/prop/vyperTypeStatePreservationScript.sml:1795
+
+## L0746 scope='C1.1' tags=binop,TypeError,evaluate_binop,no_type_error
+shape: well_typed_binop + value_has_type implies evaluate_binop never hits TypeError
+pattern: evaluate_binop ONLY returns TypeError when value constructors don't match (e.g. IntV+BoolV). bounded_int_op/bounded_decimal_op return RuntimeError on overflow not TypeError. So if well_typed_binop constrains types and value_has_type constrains constructors, then both values match evaluate_binop patterns - no TypeError. Case-split on bop, use value_has_type_def to derive constructors, simplify evaluate_binop_def.
+works_when: Proving well_typed_binop_no_type_error or binop soundness where TypeError must be ruled out
+evidence:
+- source:semantics/vyperValueOperationScript.sml:214-340
+- source:semantics/prop/vyperTypeSystemScript.sml:85-125
+
+## L0747 scope='C1.1' tags=binop,success_type,vyperEvalBinop
+shape: Use vyperEvalBinopTheory per-constructor theorems for success_type
+pattern: vyperEvalBinopTheory exports per-operator theorems: evaluate_binop_add/sub/mul, mod_unsigned/div_unsigned/div_signed/mod_signed, exp, and_int/or_int/xor_int, and_bool/or_bool/xor_bool, uadd/usub/umul/udiv, shl/shr, expmod, min/max, eq_int/eq_bool/noteq_int/noteq_bool, lt/lte/gt/gte. These give exact result shapes for success_type proofs.
+works_when: Proving well_typed_binop_success_type or evaluate_binop result typing
+evidence:
+- source:semantics/prop/vyperEvalBinopScript.sml:1-413
+
+## L0749 scope='C1.1' tags=definition_fix,constructor_names,well_typed_binop,UAdd,UnsafeAdd
+shape: well_typed_binop_def stale constructor names UAdd/USub/UMul/UDiv must be fixed to UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv
+pattern: well_typed_binop_def in vyperTypeSystemScript.sml lines 93-96 uses UAdd/USub/UMul/UDiv but the bop Datatype (vyperASTScript.sml line 60-63) has UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv. These MUST match for Cases_on bop to work. Fix the Definition before attempting any proof. After the fix, downstream proofs that pattern-match on UAdd/USub/UMul/UDiv may also need updating.
+works_when: Any proof involving well_typed_binop_def after Cases_on bop
+evidence:
+- source:semantics/prop/vyperTypeSystemScript.sml:93-96
+- source:syntax/vyperASTScript.sml:60-63
+- episode:E0151
+
+## L0750 scope='C1.1' tags=binop,per-operator,evaluate_binop,vyperEvalBinop,INL
+shape: Use vyperEvalBinopTheory per-operator theorems for binop success/no-TypeError proofs
+pattern: vyperEvalBinopTheory exports evaluate_binop_add/sub/mul/div_unsigned/div_signed/mod_unsigned/mod_signed/exp/and_bool/or_bool/xor_bool/and_int/or_int/xor_int/uadd/usub/umul/udiv/shl/shr/expmod/min/max etc. These give INL(result) facts directly. For no-TypeError: after type/value resolution, each bop case matches a vyperEvalBinop lemma giving INL result, then INL ≠ INR(TypeError msg) is trivial. For success_type: each lemma gives the exact result value for value_has_type reasoning. This avoids expanding the 413-line evaluate_binop_def.
+works_when: Proving well_typed_binop_no_type_error or well_typed_binop_success_type after type/value constructors are resolved from well_typed_binop_def and value_has_type iff lemmas
+evidence:
+- source:semantics/prop/vyperEvalBinopScript.sml
+- episode:E0144
+- episode:E0151
+
+## L0751 scope='C1.1' tags=binop,no_type_error,proof_structure,disch_tac,forall_msg
+shape: well_typed_binop_no_type_error proof: disch_tac preserves forall-msg, then Cases_on bop + gvs + gen_tac + per-operator dispatch
+pattern: Correct proof structure for !msg. evaluate_binop ... ≠ INR(TypeError msg): (1) disch_tac to move antecedents to assumptions preserving the !msg quantifier (gvs would eliminate it incorrectly), (2) Cases_on bop >> gvs[well_typed_binop_def, is_*_type_inv, evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] for type/value resolution, (3) gen_tac to strip the !msg, (4) per-operator: irule matching evaluate_binop_* lemma giving INL, then INL ≠ INR(TypeError msg) by constructor distinctness. For conditional branches (Div/Mod zero-check): COND_CASES_TAC >> simp[].
+works_when: Proving no-TypeError theorems with universally-quantified error message disequations
+evidence:
+- episode:E0138
+- episode:E0139
+- episode:E0151
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:68-84
+
+## L0752 scope='global' tags=file_corruption,write_file,restore,git
+shape: Accidental write_file truncation of large HOL4 source files
+pattern: When write_file overwrites a HOL4 source file, it destroys ALL content. Recovery: use git show HEAD:path to get committed version, then write_file to restore. If uncommitted changes existed, check git stash or reflog. ALWAYS read current file state before write_file. Prefer replace_text/edit_lines for targeted edits to avoid accidental truncation.
+works_when: HOL4 source file accidentally truncated or overwritten
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml
+
+## L0753 scope='C1.1' tags=binop,well_typed_binop_def,constructor_names,UnsafeAdd
+shape: well_typed_binop_def stale constructor names vs bop Datatype
+pattern: well_typed_binop_def had UAdd/USub/UMul/UDiv but bop Datatype uses UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv. After Cases_on bop, the Unsafe* cases dont match any well_typed_binop clause, falling to evaluate_binop catch-all INR(TypeError binop). Fix: replace UAdd->UnsafeAdd etc. in well_typed_binop_def. This was already fixed in vyperTypeSystemScript.sml:93-96 and builds successfully.
+works_when: Cases_on bop produces unexpected INR(TypeError) goals for Unsafe* operators
+evidence:
+- source:semantics/prop/vyperTypeSystemScript.sml:93-96
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20746_t001
+
+## L0754 scope='C1.1' tags=evaluate_binop,TypeError,RuntimeError,no_type_error
+shape: evaluate_binop TypeError vs RuntimeError distinction
+pattern: In evaluate_binop_def, TypeError ONLY appears in value-mismatch fallback branches (e.g. | _ => INR(TypeError binop)). All semantic errors (overflow, div-by-zero, negative shift) return INR(RuntimeError _). Since RuntimeError != TypeError by constructor distinctness, after type resolution ensures correct value constructors, no TypeError is reachable. This means well_typed_binop + value_has_type => no TypeError is structurally true without reasoning about arithmetic bounds.
+works_when: Proving well_typed_binop_no_type_error or any lemma about evaluate_binop not returning TypeError
+evidence:
+- source:semantics/vyperValueOperationScript.sml:214-405
+
+## L0755 scope='C1.1' tags=binop,inversion_lemma,simp,catch_all,is_int_type
+shape: Type classifier [simp] catch-all rules lose cases when argument is a free variable
+pattern: Add local inversion lemmas (is_int_type_inv, is_numeric_type_inv, is_bool_type_inv, is_flag_type_inv, is_comparable_type_inv) that expand classifiers to disjunctions of constructors. Use with Excl to suppress the catch-all [simp] rules: gvs[well_typed_binop_def, Excl "is_int_type_def", is_int_type_inv, ...]. Without these, gvs on e.g. is_int_type (BaseT b) fires the catch-all is_int_type _ = F and discards the correct UintT/IntT cases.
+works_when: Any proof using type classifier predicates (is_int_type, is_numeric_type, is_bool_type, is_flag_type, is_comparable_type) where the argument is not yet fully resolved, especially after Cases_on bop where the type variable is still free.
+evidence:
+- episode:E0151
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:620-660
+
+## L0756 scope='C1.1' tags=value_has_type,iff,simp,constraint,type_value
+shape: value_has_type with known type_value constrains value constructor via iff lemma
+pattern: Add local [simp] iff lemmas that directly rewrite value_has_type (BaseTV (UintT n)) v to ∃i. v = IntV i ∧ 0 ≤ i ∧ Num i < 2**n (and similarly for IntT, DecimalT, BoolT, FlagTV, StringT, BytesT, AddressT). These avoid the need for Cases_on v >> gvs[value_has_type_inv] which creates 10+ subgoals from value constructor split. The iff lemmas match the specific type and constrain value directly.
+works_when: The type_value is concretely known (from evaluate_type_def simplification or assumption). Used before expanding evaluate_binop_def so that value constructors are resolved by the time fallback branches are checked.
+evidence:
+- episode:E0151
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:620-660
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:vht_BaseTV_*
+
+## L0757 scope='C1.1' tags=Excl,gvs,bounded_int_op,wrapped_int_op,within_int_bound,opaque
+shape: Keep bounded/wrapped/within_int_bound opaque during gvs then re-abstract for inversion lemmas
+pattern: In well_typed_binop_success_type and similar proofs: gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def, Excl "bounded_int_op_def", Excl "bounded_decimal_op_def", Excl "wrapped_int_op_def", Excl "within_int_bound_def", LET_THM] keeps these operations as opaque equation assumptions. Then simp[GSYM within_int_bound_def] re-abstracts the expanded within_int_bound goals so imp_res_tac bounded_int_op_INL / wrapped_int_op_INL can match. Without the Excls, gvs expands everything and the INL inversion lemmas cannot match.
+works_when: Proofs that need to invert INL results from bounded_int_op, bounded_decimal_op, wrapped_int_op where the result type depends on within_int_bound.
+evidence:
+- episode:E0147
+- episode:E0151
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:well_typed_binop_success_type proof
+
+## L0758 scope='global' tags=git_stash,lost_edits,file_recovery
+shape: When dossier says proved but source has cheat, check git stash for lost edits
+pattern: If a dossier episode claims a component was proved (result='proved') but the current source still has cheat for that theorem, the edits may be in a git stash. Run: git stash list, git show stash@{N}:path/to/file | wc -l (compare line count). If the stash has a larger file with the proved version, use git show stash@{N}:path > content then write_file to restore. This recovers entire proved file contents in one step instead of reproving from scratch.
+works_when: Previous session proved theorems but edits were lost due to context clear, failed commit, accidental overwrite, or git reset.
+evidence:
+- episode:E0151
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20876_t001
+
+## L0763 scope='C1.2' tags=builtin,helper_lemma,irule,decomposition
+shape: Per-constructor helper lemmas for well_typed_builtin_app proofs
+pattern: For well_typed_builtin_app_no_type_error and success_type: decompose into per-constructor helper lemmas (flag_Not_no_type_error, as_wei_value_uint_no_type_error, concat_bytes/string_no_type_error, slice_bytes/string_no_type_error, make_array_no_type_error, ecrecover/ecadd/ecmul_no_type_error). Each helper takes specific well_typed_builtin_app premises + evaluate_type/value_has_type assumptions and proves the no-TypeError conclusion. Main theorem uses irule with these helpers after Cases_on blt. Avoid broad gvs[evaluate_type_def] in the main theorem.
+works_when: Proving multi-constructor builtin soundness theorems where each constructor has different proof structure
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m20999_t002
+
+## L0764 scope='C1.2' tags=builtin,Not,flag,value_has_type_iff
+shape: Flag Not no-TypeError proof: value_has_type iff lemma resolves tv then evaluate_builtin_def simplifies
+pattern: For flag_Not_no_type_error: first derive tv = FlagTV m from value_has_type tv y (using the FlagTV iff lemma), then expand evaluate_builtin_def which uses evaluate_type ... = SOME tv to resolve the case expression to INL (FlagV ...). The FlagV result is trivially not INR (TypeError msg). Use context_well_typed to get FLOOKUP (get_tenv cx) facts if needed for evaluate_type_def expansion.
+works_when: Proving flag Not/AsWeiValue/other builtin cases where evaluate_type result constrains the branch
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21029_t001
+
+## L0765 scope='C1.2' tags=builtin,evaluate_type,evaluate_builtin,simplification_order,joint_expansion
+shape: Joint expansion of evaluate_type_def with evaluate_builtin_def for case-elimination
+pattern: When evaluate_builtin_def contains 'case evaluate_type ... of' and there is an assumption 'evaluate_type ... = SOME tv': expand evaluate_type_def and evaluate_builtin_def IN THE SAME simp/gvs call so the simplifier resolves the case expression using the SOME assumption. For helper lemmas where ty constrains tv: (1) gvs[evaluate_type_def] to resolve tv, (2) gvs[vht_*] to constrain value from value_has_type, (3) simp/expand evaluate_builtin_def (optionally with evaluate_type_def again if case evaluate_type remains).
+works_when: Proving helper lemmas where evaluate_builtin_def has case evaluate_type and the evaluate_type result is available as an assumption
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21069_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21034_t002
+
+## L0766 scope='C1.2' tags=builtin,value_has_type,vht,iff,constructor_constraint
+shape: Use vht_* iff lemmas to constrain value constructors from value_has_type before expanding builtin defs
+pattern: When a helper has 'value_has_type tv v' where tv is resolved to a concrete typed_value (e.g. BaseTV (UintT n)), use gvs[vht_BaseTV_UintT] to reduce 'value_has_type (BaseTV (UintT n)) v' to exists i. v = IntV i /\ 0 <= i /\ Num i < 2 ** n. This eliminates impossible Cases_on v subgoals. Available: vht_BaseTV_UintT, vht_BaseTV_IntT, vht_BaseTV_DecimalT, vht_BaseTV_BoolT, vht_FlagTV, vht_BaseTV_StringT, vht_BaseTV_BytesT_Fixed, vht_BaseTV_BytesT_Dynamic, vht_BaseTV_AddressT.
+works_when: Proving builtin helpers where value_has_type with known typed_value constrains the value constructor
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21034_t002
+
+## L0767 scope='C1.2' tags=denomination,case_expression_in_goal,AsWeiValue,ARITH_TAC
+shape: Case expressions on free variables in goal block ARITH_TAC
+pattern: When goal contains case dn of Wei => 1 | Kwei => 1000 | ... (case on free variable), intLib.ARITH_TAC fails. Fix: Cases_on the free variable first to resolve case expression to concrete number.
+works_when: Proving builtin helpers with evaluate_as_wei_value or similar case expressions on denomination/type-name variables
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21034_t002
+
+## L0768 scope='C1.2' tags=list,Cases_on,empty_case
+shape: List case split needs >- for empty case before Cases_on head
+pattern: After Cases_on vs (list variable), two subgoals: vs=[] and vs=h::t. If subsequent tactics reference h, fails on empty subgoal. Fix: use >- (gvs[LIST_REL_NIL] or similar) to dispatch empty case, then continue on cons case.
+works_when: Proving builtin helpers that case-split on list variables before working on list elements
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21034_t002
+
+## L0769 scope='C1.2' tags=LIST_REL,value_has_type,BytesV,StringV,constructor_constraining
+shape: LIST_REL value_has_type tvs vs + EVERY (?bd. t = BaseT (BytesT bd)) ts => EVERY (?bs. v = BytesV bs) vs
+pattern: When proving ALL list elements have a specific value constructor from LIST_REL value_has_type + EVERY type constraint, first prove the EVERY constructor lemma as a separate helper BEFORE doing Cases_on any value variable. This avoids impossible subgoals where value_has_type tv v has tv unconstrained. Pattern: Induct >> rw[LIST_REL_CONS1, LIST_REL_NIL] >> Cases_on type variant (e.g. bd for BytesT Fixed/Dynamic) >> gvs[evaluate_type_def, AllCaseEqs()] >> Cases_on value >> gvs[value_has_type_def].
+works_when: Proving ALL list elements have a specific value constructor when LIST_REL value_has_type constrains types.
+evidence:
+- source:semantics/prop/vyperBuiltinTypingScript.sml:755-779
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21146_t001
+
+## L0770 scope='C1.2' tags=Concat,evaluate_concat,LENGTH,well_typed_builtin_app
+shape: concat_no_type_error with 2 <= LENGTH vs
+pattern: well_typed_builtin_app for Concat n requires 2 <= LENGTH ts. evaluate_concat_def checks NULL vs OR NULL (TL vs) returning TypeError if true. Therefore concat helper theorems MUST include 2 <= LENGTH vs premise. Main theorem derives this via irule concat_no_type_error >> gvs[] which resolves LENGTH from LIST_REL_LENGTH.
+works_when: Concat builtin soundness proofs where static typing guarantees minimum 2 arguments.
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21146_t001
+- source:semantics/prop/vyperTypeSystemScript.sml:176-179
+
+## L0771 scope='C1.2' tags=LIST_REL,bridge_lemma,interface_mismatch,drule
+shape: LIST_REL value_has_type tvs vs + MAP evaluate_type ts = MAP SOME tvs
+pattern: When consumer interface uses LIST_REL value_has_type tvs vs with separate MAP equality, but helper theorems use combined LIST_REL (λv t. ∃tyv. evaluate_type tenv t = SOME tyv ∧ value_has_type tyv v) vs tys, add a bridge lemma LIST_REL_value_has_type_imp_combined and use forward reasoning: drule bridge >> disch_then (qspecl_then [...]) mp_tac >> simp[] >> strip_tac, then apply helper via drule (REWRITE_RULE[AND_IMP_INTRO] helper) >> simp[].
+works_when: Consumer has LIST_REL value_has_type tvs vs + MAP (evaluate_type tenv) ts = MAP SOME tvs and helper needs combined LIST_REL relation
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21246_t001
+
+## L0772 scope='C1.2' tags=evaluate_concat_loop,TypeError,helper_extraction,EVERY
+shape: evaluate_concat_loop n (BytesV/BytesV b1) sa ba vs ≠ INR (TypeError msg)
+pattern: Extract evaluation loop no-TypeError as a separate helper lemma by induction on the value list. The hypothesis EVERY (λv. ∃bs. v = BytesV bs) vs rules out the TypeError 'concat types' branch. The base and step cases close by rw[evaluate_concat_loop_def] + gvs[] + IH application via drule. Use this helper in concat wrapper proofs via irule + gvs[EVERY_DEF].
+works_when: Proving evaluate_builtin concat no-TypeError when all input values are known to have BytesV or StringV kind
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21286_t001
+
+## L0773 scope='C1.2' tags=LIST_REL,LENGTH,induction,length_equality
+shape: LIST_REL R l1 l2 implies LENGTH l1 = LENGTH l2
+pattern: To prove LENGTH l2 = n from LIST_REL R l1 l2 and LENGTH l1 = n: first derive LENGTH l1 = n via LENGTH_MAP or assumption, then prove LENGTH l2 = LENGTH l1 by Induct_on `l1` >> gvs[LIST_REL_CONS1]. The base case closes by LIST_REL_NIL; the step case closes by LIST_REL_CONS1 decomposing both lists.
+works_when: Need to derive list length equality from LIST_REL relation to enable case-splitting on the list
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21389_t001
+
+## L0774 scope='C1.2' tags=Induct,universally_quantified_IH,qspecl_then,drule
+shape: Universally-quantified IH from Induct_on cannot be used with drule
+pattern: After Induct_on `vs` >> rw[def], the IH has form !vars. P vars ==> Q vars. first_x_assum drule fails because drule matches implications, not universally-quantified facts. Fix: use first_x_assum $ qspecl_then [`arg1`,`arg2`,...] mp_tac >> simp[] to specialize the IH to the exact arguments of the recursive call. The simp[] then closes the resulting goal.
+works_when: Applying an induction hypothesis generated by Induct_on where the recursive call changes the accumulator arguments
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21290_t001
+
+## L0775 scope='C1.2' tags=Cases_on,variable_shadowing,rename1,list_destructuring
+shape: Cases_on list produces auto-named h/t that may shadow premise variables
+pattern: After Cases_on `list_var`, HOL4 auto-names the head 'h' and tail 't'. If a variable named 't' or 'h' already exists in the goal (from theorem premises), subsequent Cases_on `t` resolves the premise variable instead of the list tail. Fix: always use rename1 after list Cases_on to give stable names, e.g. Cases_on `vs` >> rename1 `v1 :: vs2'.
+works_when: Case-splitting on a list variable when other short-named variables (t, h, etc.) are in scope from the theorem statement
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21303_t001
+
+## L0776 scope='C1.2' tags=builtin,LIST_REL,value_has_type,evaluate_type,case_simplification
+shape: value_has_type <type_var> <value> with LIST_REL + MAP evaluate_type
+pattern: When proving builtin no-TypeError/success-type theorems with LIST_REL value_has_type tvs vs and MAP (evaluate_type tenv) ts = MAP SOME tvs: (1) Derive LENGTH vs = n via LIST_REL_LENGTH + LENGTH_MAP. (2) Decompose lists via Cases_on vs >> gvs[LIST_REL_CONS1] (iterate for length n). (3) Resolve TYPE VARIABLES via Cases_on tvs >> gvs[evaluate_type_def, AllCaseEqs()] BEFORE case-splitting any values. (4) Only THEN case-split values - the [local,simp] boundary lemmas (vht_BaseTV_BytesT_Dynamic etc.) will fire once types are concrete. (5) NEVER use gvs[value_has_type_def] - it creates massive case explosions.
+works_when: Proving builtin/operator well-typedness theorems where value_has_type assumptions have type variables that need resolving via evaluate_type
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21522_t001
+- source:semantics/prop/vyperBuiltinTypingScript.sml:952-962
+
+## L0778 scope='C1.2' tags=evaluate_type_BaseT,BytesT,bytes_bound,eval_type
+shape: evaluate_type tenv (BaseT bt) = SOME (BaseTV bt) when IS_SOME
+pattern: evaluate_type_BaseT: !tenv bt. IS_SOME (evaluate_type tenv (BaseT bt)) ==> evaluate_type tenv (BaseT bt) = SOME (BaseTV bt). Proof requires Cases_on bt >> rw[evaluate_type_def, LET_THM], then for the BytesT sub-case: Cases_on b (bytes_bound: Fixed/Dynamic) >> gvs[]. The BytesT branch has conditional structure that rw alone doesn't fully decompose. Also need IS_SOME_cond[simp]: IS_SOME(if c then SOME x else NONE) <=> c to help simp handle the conditional IS_SOME goals.
+works_when: Need to resolve evaluate_type (BaseT bt) = SOME (BaseTV bt) from IS_SOME assumption. This is stronger than imported evaluate_type_BaseT_cases which only gives ?btv. tv = BaseTV btv.
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21575_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21583_t001
+
+## L0780 scope='C1.2' tags=Slice,reference_proof,builtin_typing,decompose_list_rel
+shape: Reference Slice proof pattern from vyperBuiltinTypingScript.sml for success-typing
+pattern: Reference proof (line 952-962): gvs[well_typed_builtin_app_def] >> imp_res_tac evaluate_type_BaseT >> gvs[] >> decompose_list_rel_tac >> TRY(Cases_on bd) >> gvs[evaluate_type_def, LET_THM, AllCaseEqs()] >> rename1 evaluate_builtin _ _ _ _ [fv; _; _] >> Cases_on fv >> gvs[value_has_type_def] >> gvs[evaluate_builtin_def, evaluate_slice_def, AllCaseEqs(), LET_THM] >> simp[vht_BytesV_Dynamic, vht_StringV, LENGTH_TAKE]. For no-TypeError, adapt by NOT using AllCaseEqs with evaluate_slice_def, instead resolving dest_NumV first.
+works_when: Proving builtin Slice soundness (no-TypeError or success-typing)
+evidence:
+- source:semantics/prop/vyperBuiltinTypingScript.sml:952-962
+
+## L0781 scope='C1.2' tags=dest_NumV,integer_arithmetic,boundary_lemma,simp_rule
+shape: dest_NumV (IntV i) = SOME (Num i) when 0 <= i
+pattern: dest_NumV_def has 'if i < 0 then NONE else SOME (Num i)'. Neither gvs nor intLib.ARITH_TAC can close F from 0<=i ∧ i<0 as integer inequalities. Fix: prove boundary lemma !i. 0<=i ==> dest_NumV(IntV i) = SOME(Num i) via `~(i<0:int)` by intLib.ARITH_TAC >> simp[dest_NumV_def]. Mark [local,simp] so it fires automatically. Then any case split on dest_NumV result is resolved by simp without creating NONE branches.
+works_when: Any proof where dest_NumV is applied to IntV i with 0<=i assumption from value_has_type UintT
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21708_t001
+
+## L0782 scope='C1.2' tags=evaluate_slice,TypeError,boundary_lemma,abstraction_level
+shape: evaluate_slice defined value cannot produce TypeError for well-typed inputs
+pattern: evaluate_slice_def contains 'case dest_NumV sv of NONE => INR(TypeError)'. Expanding evaluate_slice_def in a no-TypeError consumer proof creates unresolvable case splits. Fix: Prove a boundary lemma at the implementation level: for BytesV/StringV + IntV(0<=i) inputs, evaluate_slice never returns INR(TypeError). Consumers use irule on this boundary lemma instead of unfolding evaluate_slice_def. The boundary lemma proof can safely Cases_on the value constructors since it's a small focused lemma.
+works_when: Proving no-TypeError theorems about functions that call evaluate_slice, where expanding evaluate_slice_def in the consumer proof would create dest_NumV case-split issues
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21746_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21730_t001
+
+## L0783 scope='C1.2' tags=value_has_type,iff_rewrite,Cases_on,existential,gvs_substitution
+shape: vht iff lemmas produce existential equations that gvs cannot substitute into goals
+pattern: vht_BaseTV_UintT etc. are iff lemmas: value_has_type (BaseTV (UintT n)) v <=> ?i. v = IntV i /\ 0 <= i /\ .... When imp_res_tac adds these, gvs[] applies the rewrite to the assumption but leaves v as a free variable with existential quantifier. gvs does NOT substitute v = IntV i into the goal. Fix: either (1) Cases_on v first then gvs[vht_*] to close impossible cases, or (2) drule vht lemma to get concrete existential witnesses, or (3) prove boundary lemma that takes value_has_type as input and produces the conclusion without needing intermediate variable substitution.
+works_when: Using vht iff lemmas to constrain value variables in proofs where the goal contains the variable in a pattern-match position
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21730_t001
+
+## L0786 scope='C1.2' tags=dest_NumV,intLib.ARITH_TAC,if-then-else,integer_comparison
+shape: dest_NumV_def if-then-else on i<0 not resolved by fs/simp with 0<=i assumption
+pattern: dest_NumV_def has 'if i < 0 then NONE else SOME (Num i)'. Neither fs nor simp resolves this if-then-else using 0 <= i assumption because the integer comparison involves intLib arithmetic that fs can't simplify. Fix: use rw[] which does COND_CASES_TAC internally, or explicitly resolve with `~(i < 0:int)` by intLib.ARITH_TAC before expanding the definition. The [local,simp] lemma dest_NumV_IntV_SOME (!i. 0<=i ==> dest_NumV (IntV i) = SOME (Num i)) handles this provided 0<=i appears BEFORE the definition expansion.
+works_when: Expanding definitions containing dest_NumV or similar if-then-else on integer comparisons, where the goal has 0 <= i assumptions
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21828_t001
+
+## L0787 scope='global' tags=neq,INR,TypeError,gvs,disequation
+shape: gvs destroys != INR(TypeError msg) goals by variable elimination across assumptions
+pattern: When goal is X ≠ INR(TypeError msg), gvs strips the ≠ into an = assumption, then does variable elimination that can eliminate universally-quantified variables incorrectly, creating unsolvable goals. For boundary lemmas with ≠ INR(TypeError), use rw[] (which preserves the rewrite shape) or CCONTR_TAC + directed assumption resolution, NOT gvs. Better: use the concrete-args pattern so the disequation resolves directly after definition expansion.
+works_when: Proving boundary lemmas or small theorems of the form f args ≠ INR(TypeError msg)
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21816_t001
+
+## L0790 scope='C1.2' tags=dest_NumV,intLib.ARITH_TAC,integer_arithmetic,boundary_lemma
+shape: dest_NumV(IntV i) = SOME(Num i) when 0 <= i - prove as [local,simp] boundary lemma
+pattern: dest_NumV_def has 'if i < 0 then NONE else SOME (Num i)'. Neither gvs nor intLib.ARITH_TAC can close F from 0<=i /\ i<0 as integer inequalities after AllCaseEqs case split. Fix: prove !i. 0<=i ==> dest_NumV(IntV i) = SOME(Num i) via `~(i<0:int)` by intLib.ARITH_TAC >> simp[dest_NumV_def]. Mark [local,simp] so it automatically resolves dest_NumV case splits.
+works_when: Any proof where dest_NumV is applied to IntV i with 0<=i assumption from value_has_type UintT
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21708_t001
+
+## L0791 scope='C1.2' tags=gvs,vht,iff,value_has_type,Excl,two_phase
+shape: gvs fires [local,simp] vht iff lemmas consuming value_has_type before witness extraction; two-phase approach needed
+pattern: When gvs[evaluate_type_def, LET_THM, AllCaseEqs()] resolves evaluate_type to concrete typed_values, the [local,simp] vht iff lemmas (e.g. vht_BaseTV_BytesT_Dynamic) fire on value_has_type assumptions, rewriting them to existential form and often eliminating the fv=Constructor witness WITHOUT substituting into other assumptions. Fix: use gvs[Excl "vht_BaseTV_BytesT_Dynamic", Excl "vht_BaseTV_BytesT_Fixed", Excl "vht_BaseTV_UintT"] to resolve types while preserving value_has_type, then extract witnesses manually via Cases_on + gvs[specific vht lemma]. For proofs with Cases_on bd (Fixed/Dynamic variant), handle each branch with >- syntax separately since Excl prevents closing impossible cases.
+works_when: Proving builtin no-TypeError theorems where value_has_type assumptions AND evaluate_builtin/evaluate_slice assumptions reference the same value variables, and gvs would consume the former before the latter can be resolved
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21937_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21940_t001
+
+## L0792 scope='global' tags=edit_lines,Unicode,API,corruption,replace_text
+shape: edit_lines corrupts Unicode characters in HOL4 SML files; use replace_text with Unicode input instead
+pattern: NEVER use edit_lines for HOL4 SML files. edit_lines converts ∧ to /&#39;, ∨ to similar entities, ≠ to &lt;&gt;, >> to &gt;&gt;, etc. replace_text and write_file correctly preserve Unicode characters ∧ ∨ ≠ ∀ ∃ ≤ ≥ when provided as Unicode input. For targeted small edits, use replace_text matching exact existing text (without line numbers).
+works_when: Any edit to HOL4 SML files containing Unicode mathematical symbols
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21884_t001
+
+## L0793 scope='C1.2' tags=vht,wrapper_lemma,witness_extraction,boundary_lemma,evaluate_slice
+shape: Add vht-level wrapper lemma that takes value_has_type directly to isolate witness extraction
+pattern: When consumer proofs can't extract witnesses because gvs/expansion ordering issues prevent matching vht iff lemmas, add a vht-level wrapper lemma that takes value_has_type assumptions directly and proves the no-TypeError conclusion. The wrapper lemma's proof can safely Cases_on the value variable and use gvs[specific vht iff lemma] because it's an isolated focused lemma. Consumer proofs then apply irule on the wrapper lemma. For BytesT Slice, need two wrappers: one for Fixed and one for Dynamic bytes.
+works_when: Consumer proofs have complex type resolution that interferes with witness extraction from value_has_type assumptions
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21937_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21942_t001
+
+## L0794 scope='C1.2' tags=gvs,negation,irule,noteq,F_goal,metis_tac
+shape: gvs transforms ≠ goal into F with equality assumption; irule fails on F goal
+pattern: When a goal is 'x ≠ INR(TypeError msg)' (aka ¬(x = INR(TypeError msg))), gvs may convert it to goal F with assumption 'x = INR(TypeError msg)'. After this transformation, irule cannot match a lemma conclusion 'x ≠ INR(TypeError msg)' against goal F. Fix: use metis_tac[boundary_lemma] which derives F from the contradictory combination of the boundary lemma + the equality assumption + the bound assumptions. Alternative: use simp instead of gvs to preserve the ≠ goal form, then irule works.
+works_when: Proving no-TypeError wrapper lemmas where gvs simplifies the negation goal to F with equality assumption, and a boundary lemma provides the ≠ conclusion
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21978_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21992_t001
+
+## L0795 scope='C1.2' tags=wrapper_lemma,value_has_type,evaluate_slice,boundary_abstraction
+shape: Wrapper lemma taking value_has_type assumptions isolates witness extraction from consumer proofs
+pattern: For consumer proofs that need to relate value_has_type assumptions to evaluate_builtin/evaluate_slice calls, prove a wrapper lemma that takes value_has_type directly and proves the no-TypeError/success-typing conclusion. The wrapper handles the Fixed/Dynamic bytes_bound case split and value constructor witness extraction internally. Consumer proofs just irule/metis_tac the wrapper after deriving value_has_type. This avoids gvs/consumer proof interference where vht iff lemmas fire unexpectedly.
+works_when: Consumer proofs have value_has_type assumptions that need to be connected to evaluate_builtin/evaluate_slice without expanding internal definitions
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m21978_t001
+
+## L0796 scope='C1.2' tags=imp_res_tac,evaluate_type_BaseT,StringT,proof_pattern
+shape: imp_res_tac evaluate_type_BaseT >> gvs[] then simp[evaluate_builtin_def] pattern for builtin no-TypeError
+pattern: For builtin no-TypeError theorems where evaluate_type returns BaseTV: use imp_res_tac evaluate_type_BaseT >> gvs[] to resolve type variables, then simp[evaluate_builtin_def] to expand the builtin call. Do NOT use Cases_on bytes_bound BEFORE simp - the Fixed/Dynamic split should happen inside a wrapper lemma, not in the consumer.
+works_when: Proving builtin no-TypeError theorems after list decomposition (Cases_on vs/ts)
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1438-1460
+
+## L0797 scope='C1' tags=Excl,vht_BaseTV,iff,simp,fs,gvs,value_has_type,boundary_lemma
+shape: [local,simp] iff lemmas consuming value_has_type assumptions needed as boundary lemma premises
+pattern: When value_has_type (BaseTV (UintT n)) v (and similar) assumptions are needed as premises for a boundary lemma (e.g. evaluate_slice_BytesT_no_type_error), use Excl "vht_BaseTV_UintT" (and Excl for BytesT iff lemmas) in fs/gvs calls between type-variable resolution and boundary lemma application. Without Excl, fs/gvs decompose these assumptions into sv=IntV i + bounds, making them match neither the boundary lemma premises nor reconstructible via metis (2**n vs literal gap blocks FOL).
+works_when: A boundary lemma requires value_has_type premises but intermediate fs/gvs steps would decompose those premises via [local,simp] iff rules
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22074_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22076_t001
+
+## L0798 scope='C1' tags=evaluate_type_BaseT_SOME,type_variable,resolution
+shape: Resolving abstract type variables from evaluate_type = SOME x assumptions
+pattern: Add a lemma evaluate_type_BaseT_SOME: !tenv bt tv. evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt. This directly resolves x = BaseTV (BytesT bd) etc from evaluate_type (get_tenv cx) (BaseT bt) = SOME x assumptions. Better than evaluate_type_BaseT which needs IS_SOME. Use imp_res_tac evaluate_type_BaseT_SOME >> fs[Excl ...] to substitute type variables while preserving other value_has_type assumptions.
+works_when: After LIST_REL value_has_type + MAP (evaluate_type tenv) ts = MAP SOME tvs, the tvs variables are abstract and need resolution to concrete BaseTV/ArrayTV/TupleTV form
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22074_t001
+
+## L0811 scope='C4.2' tags=ecrecover,list_destruct,EL-index,simp
+shape: Proving ecrecover_no_type_error without gvs list destruct
+pattern: For ecrecover_no_type_error (4-element list), use either: (1) EL-index approach: witness EL 0/1/2/3 vs, use LIST_REL_EL_EQN + EVERY_EL + EL_MAP to connect typing predicates, then irule boundary lemma; or (2) simp-based element destruct matching vyperBuiltinTypingScript.sml pattern (Cases_on vs >> simp then Cases_on h >> simp ...). Do NOT use gvs[LIST_REL_CONS1] as it produces unpredictable tail names. All needed boundary lemmas are already proved at lines 1511-1539.
+works_when: Proving ECRecover or similar builtins with fixed-arity argument lists that need list destruct
+evidence:
+- episode:E0160
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22429_t002
+
+## L0812 scope='global' tags=Unicode,API,write_corruption,workaround
+shape: API corrupts Unicode logical connectives in Theorem statements
+pattern: The API corrupts Unicode conjunction and disjunction when writing NEW Theorem statements. Workaround: (1) only edit EXISTING theorem text where Unicode is already on disk; (2) for proof bodies, Unicode in backtick term quotations appears to survive; (3) if new lemma statements are truly needed, use HOL4 ASCII alternatives /\ and \/ which the API handles correctly. Always grep for /¥ after writing to detect corruption.
+works_when: Any situation requiring new HOL4 theorem statements with Unicode logical connectives through the API
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22459_t002
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22492_t001
+
+## L0814 scope='C4' tags=binop,type_value_inversion,no_type_error,value_has_type
+shape: value_has_type inversion lemmas for type_value constructors
+pattern: The vht_BaseTV_* lemmas (vht_BaseTV_UintT, vht_BaseTV_IntT, vht_BaseTV_BoolT, vht_BaseTV_BytesT_Fixed, etc.) decompose value_has_type into value constructor + arithmetic constraints. They enable fs[vht_BaseTV_BytesT_Fixed] to instantly derive v0 = BytesV hash_bytes and LENGTH hash_bytes = 32 from value_has_type (BaseTV (BytesT (Fixed 32))) v0. Use these as simp hints when value_has_type assumptions need to be reified into constructor form.
+works_when: Proving no-TypeError for builtins/binops where value_has_type assumptions must be decomposed to value constructors
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:132-178
+
+## L0817 scope='C4.2' tags=ecrecover,EL-index,EL_MAP,fs-failure,metis
+shape: Deriving evaluate_type (EL i ts) = SOME (EL i tvs) from MAP equality plus EL_MAP
+pattern: When deriving per-element facts from MAP equalities using EL_MAP: do NOT use fs[] to bridge the transitivity chain (EL(MAP f ts) = f(EL i ts)), (EL(MAP g tvs) = g(EL i tvs)), and (MAP f ts = MAP g tvs). Instead use metis_tac[EL_MAP] which handles the transitive chain. The two intermediate `by simp[EL_MAP]` steps produce assumptions that metis_tac can connect via the MAP equality.
+works_when: Proving element-wise evaluation type equalities from MAP evaluate_type ts = MAP SOME tvs with known list lengths
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22526_t002
+
+## L0818 scope='C4.2' tags=vht,BytesT,value_destruct,simp
+shape: vht_BaseTV_BytesT_Fixed requires concrete BytesV constructor, not variable
+pattern: The [local,simp] lemma vht_BaseTV_BytesT_Fixed (value_has_type (BaseTV(BytesT(Fixed 32))) (BytesV bs) <=> LENGTH bs = 32) only fires in simp when the value argument IS a BytesV constructor. For a variable v0 with value_has_type (BaseTV(BytesT(Fixed 32))) v0, must Cases_on `v0` first, then fs[vht_BaseTV_BytesT_Fixed] in the BytesV branch. Other vht lemmas (vht_BaseTV_UintT etc.) have the same pattern.
+works_when: Using vht_BaseTV_* lemmas to decompose value_has_type when the value is a universally quantified variable, not a concrete constructor
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:191
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1637
+
+## L0820 scope='C4.2' tags=EL_MAP,metis,MAP_equality
+shape: Deriving evaluate_type(EL i ts) = SOME(EL i tvs) from MAP equality
+pattern: From MAP (evaluate_type tenv) ts = MAP SOME tvs with LENGTH ts = n, derive: !i. i < n ==> evaluate_type tenv (EL i ts) = SOME (EL i tvs). Use metis_tac[EL_MAP] which handles full transitivity chain. Do NOT use fs[] - it cannot bridge two EL_MAP results plus MAP equality.
+works_when: Deriving element-wise evaluation type equalities from MAP equalities with known list lengths
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22600_t001
+
+## L0821 scope='C4' tags=HOL4_lemma_names,EL,rich_list
+shape: Verifying HOL4 standard library lemma names before using them
+pattern: Non-existent HOL4 lemma names causing build failures: EL0_HD (use simp[EL] since EL 0 = HD), rich_listTheory.EL_TL (does not exist; derive via Cases_on i >> fs[EL]), LIST_EQ_EL_EQN (does not exist; prove local helper). Always verify lemma names against listTheory.txt before first build.
+works_when: Writing proofs using list/EL operations possibly assumed from other theorem provers
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22547_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22557_t001
+
+## L0823 scope='C4.2' tags=res_tac,EL_index,metis_tac,quantified_facts
+shape: Specializing quantified EL-index list facts to concrete indices and type arguments
+pattern: When you have !i. i < n ==> value_has_type (EL i tvs) (EL i vs) but need value_has_type (BaseTV (BytesT (Fixed 32))) (EL 0 vs): res_tac CANNOT bridge the gap because the type argument mismatch (EL i tvs vs BaseTV(BytesT(Fixed 32))) requires substitution via a separately proved EL 0 tvs = BaseTV(BytesT(Fixed 32)) fact. Instead: use `value_has_type (EL 0 tvs) (EL 0 vs)` by metis_tac[] (instantiates i=0), then metis_tac[] with the EL 0 tvs = BaseTV(...) fact to do the type substitution. For converter non-NONE: same pattern, derive value_has_type (EL i tvs) (EL i vs) first, then compose with type disjunction.
+works_when: Proving properties from quantified list-rel EL-index facts where the desired type argument differs from the EL-index form
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22640_t002
+
+## L0824 scope='C4.2' tags=Unicode,API_corruption,disjunction,Theorem_statement
+shape: Avoiding Unicode disjunction in new Theorem statements written through API
+pattern: When adding new Theorem statements through the API that need logical disjunction: use ASCII \/ instead of Unicode ∨, /\ instead of ∧, ! instead of ∀, ? instead of ∃, \t. instead of λt.. The API corrupts Unicode logical connectives (L0812). As an alternative, reformulate to avoid disjunction entirely: e.g., use ecrecover_arg_to_num v <> NONE (derived property) instead of value_has_type (BaseTV(UintT 256)) v \/ value_has_type (BaseTV(BytesT(Fixed 32))) v (structural disjunction).
+works_when: Writing new Theorem statements in HOL4 SML files through the replace_text/write_file API
+evidence:
+- source:semantics/prop/LEARNINGS_type_system_rewrite.md L0812
+
+## L0825 scope='C4.2' tags=list_el_decomp,EL,list_decomposition,fixed_length
+shape: Proving l = [EL 0 l; EL 1 l; ...; EL (n-1) l] from LENGTH l = n
+pattern: For fixed-length list decomposition (n=2,3,4), prove a local helper list_el_decomp_n: !l. LENGTH l = n => l = [EL 0 l; ..., EL (n-1) l]. Proof: iterated Cases_on >> fs[] >> simp[EL]. Use: simp[list_el_decomp_4] with assumption LENGTH vs = 4 closes existential ?v0 v1 v2 v3. vs = [v0;v1;v2;v3] in one step with witnesses EL 0..3 vs. Do NOT use match_mp_tac LIST_EQ >> simp[] (universal EL subgoal unsolved by simp) or LIST_EQ_EL_EQN (nonexistent).
+works_when: Decomposing a list of known finite length into named elements for builtin argument lists of fixed arity
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22670_t001
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22642_t002
+
+## L0826 scope='C4.2' tags=metis_tac,decide_tac,arithmetic,EL_index
+shape: metis_tac[] fails on goals requiring nat arithmetic facts like i < 4
+pattern: When metis_tac[] needs to specialize a quantified lemma (!i. i < 4 => P i) but also needs to prove an arithmetic side condition (i < 4), metis cannot do nat arithmetic. Fix: prove arithmetic explicitly first ('0 < 4:num' by decide_tac >> metis_tac[]) or use res_tac for direct assumption matching only when no type-argument bridging is needed.
+works_when: Specializing quantified EL-index facts in ecrecover and similar builtin proofs where both arithmetic and type reasoning needed
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22668_t001
+
+## L0827 scope='C4.2' tags=extract_ec_point,boundary_lemma,ArrayTV,uint256,ecadd,ecmul
+shape: extract_ec_point succeeds on typed uint256[2] array values
+pattern: For ECAdd/ECMul no-TypeError proofs: prove extract_ec_point_uint256_2_not_none boundary lemma (!av. value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) (ArrayV av) ==> extract_ec_point (ArrayV av) != NONE). Then in consumer: derive value_has_type via EL-index, do Cases_on 'EL i vs' >> metis_tac[extract_ec_point_uint256_2_not_none], then fs[evaluate_builtin_def, evaluate_ecadd/ecmul_def, extract_ec_point_def, AllCaseEqs()].
+works_when: Proving ECAdd/ECMul no-TypeError where both args are uint256[2] arrays and extract_ec_point must succeed
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22730_t001
+
+## L0828 scope='C4' tags=EL-index,fixed_arity,builtin,list_decomposition,value_has_type
+shape: EL-index approach for fixed-arity builtin argument lists
+pattern: For builtin proofs with fixed-arity argument lists (n=2,3,4): (1) Derive LENGTH vs = n and LENGTH tvs = n. (2) Derive !i. i < n => value_has_type (EL i tvs) (EL i vs) via LIST_REL_EL_EQN. (3) Derive !i. i < n => evaluate_type ... (EL i ts) = SOME (EL i tvs) via EL_MAP. (4) Derive specific EL i tvs = ... from EL i ts + evaluate_type. (5) Derive value_has_type specific_type (EL k vs) with decide_tac + metis_tac. (6) Cases_on 'EL k vs' >> fs[value_has_type_def] for each value. (7) Apply boundary lemmas. NEVER use gvs[LIST_REL_CONS1] + Cases_on 't' pattern.
+works_when: Proving no-TypeError for builtins with fixed-arity typed argument lists where list decomposition is needed
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22675_t002
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22730_t001
+
+## L0829 scope='C4' tags=ArrayTV,type_value,evaluate_type,ArrayT
+shape: evaluate_type ArrayT produces ArrayTV not BaseTV
+pattern: evaluate_type env (ArrayT elem_t bd) = SOME (ArrayTV (evaluate_type env elem_t) bd), NOT SOME (BaseTV (ArrayTV ...)). ArrayTV is a direct type_value constructor. Similarly, TupleTV, StructTV, FlagTV, NoneTV are direct constructors. Only BaseT produces BaseTV.
+works_when: Deriving type_value from evaluate_type for compound type constructors
+evidence:
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m22728_t001
