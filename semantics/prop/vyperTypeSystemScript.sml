@@ -90,10 +90,10 @@ Definition well_typed_binop_def:
   well_typed_binop ty Mod t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty Exp t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
   well_typed_binop ty ExpMod t1 t2 = (t1 = ty /\ t2 = ty /\ ty = BaseT (UintT 256)) /\
-  well_typed_binop ty UAdd t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty USub t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty UMul t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
-  well_typed_binop ty UDiv t1 t2 = (t1 = ty /\ t2 = ty /\ is_int_type ty) /\
+  well_typed_binop ty UnsafeAdd t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
+  well_typed_binop ty UnsafeSub t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
+  well_typed_binop ty UnsafeMul t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
+  well_typed_binop ty UnsafeDiv t1 t2 = (t1 = ty ∧ t2 = ty ∧ is_int_type ty) ∧
   well_typed_binop ty ShL t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
   well_typed_binop ty ShR t1 t2 = (t1 = ty /\ is_int_type ty /\ is_int_type t2) /\
   well_typed_binop ty And t1 t2 =
@@ -172,7 +172,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty Sha256 ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_bytes_or_string_type (HD ts)) /\
   well_typed_builtin_app ty (AsWeiValue _) ts =
-    (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_numeric_type (HD ts)) /\
+    (LENGTH ts = 1 ∧ ty = BaseT (UintT 256) ∧ is_uint_type (HD ts)) ∧
   well_typed_builtin_app ty (Concat n) ts =
     (2 <= LENGTH ts /\
      ((ty = BaseT (BytesT (Dynamic n)) /\ EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts) \/
