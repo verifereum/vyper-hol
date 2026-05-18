@@ -1,6 +1,6 @@
 Theory algebraicOptCorrectness
 Ancestors
-  algebraicOptProofs venomWf
+  algebraicOptProofs algebraicOptWf venomWf
 
 (* Algebraic optimization preserves function execution semantics:
    running a function before and after the transform produces
@@ -41,24 +41,11 @@ QED
 
 (* ===== Structural Preservation ===== *)
 
-(* ao_fresh_id produces IDs > fn_max_inst_id, so they are distinct from
-   all original IDs and from each other (injective).  The other wf_function
-   components (labels, entry, bb_well_formed, succs_closed) are preserved
-   by the MAP-based block transform structure. *)
-Theorem ao_preserves_wf_function:
-  !fn. wf_function fn ==> wf_function (ao_transform_function fn)
-Proof
-  cheat
-QED
+Theorem ao_preserves_wf_function =
+  algebraicOptWfTheory.ao_preserves_wf_function
 
-(* Fresh output variables (ao_fresh_var) are distinct from original outputs
-   and written exactly once.  Requires ao_fresh_var injectivity and
-   non-collision with existing variable names. *)
-Theorem ao_preserves_ssa_form:
-  !fn. ssa_form fn /\ wf_function fn ==> ssa_form (ao_transform_function fn)
-Proof
-  cheat
-QED
+Theorem ao_preserves_ssa_form =
+  algebraicOptWfTheory.ao_preserves_ssa_form
 
 (* ===== Remaining Semantic Obligations =====
 
@@ -71,14 +58,19 @@ QED
    2. aoRangeObligationScript.sml — range_analyze_sound
       Range analysis produces correct bounds.
 
-   IN PROGRESS:
-   3. aoCmpFlipObligationScript.sml — ao_cmp_flip_block_sim
-      Cmp_flip preserves block execution up to dead variables.
+   DONE (0 cheats):
    4. aoStepInvObligationScript.sml — step-level invariant obligations:
       in_range_state/sinv compat with state_equiv, sinv step preservation,
       chain variable freshness.
+
+   IN PROGRESS:
+   3. aoCmpFlipObligationScript.sml — ao_cmp_flip_block_sim
+      Cmp_flip preserves block execution up to dead variables.
    5. aoBlockInvObligationScript.sml — block-level invariant obligations:
       chain_inv/chains_defined through exec_block, range_sound + cfg at
       successor, initial state establishment.
+   6. algebraicOptProofsScript.sml — chain_inv transfer_sound:
+      ao_iszero_chain_inv step-preservation via SSA output freshness.
+      Requires adding freshness tracking to the sound condition.
 
    ===== *)

@@ -15,49 +15,350 @@
  * The ao_dfg_inv preservation is already proved inline via
  * ao_dfg_inv_exec_block_preserved. These obligations handle the
  * remaining components.
- *
- * Proof strategy:
- *   chain_inv/chains_defined through exec_block:
- *     Induct on exec_block (following ao_dfg_inv_exec_block_preserved).
- *     At each step, use ao_iszero_chain_inv_step_preserved /
- *     ao_chains_defined_step_preserved with SSA side condition.
- *   range_sound + cfg at successor:
- *     Use range_successor_obligation from assertElimProofs, which
- *     provides both range_sound and cfg membership at the successor.
- *     Requires dfg_sound — either track it in block_inv or prove a
- *     specialized version.
- *   Initial state:
- *     chain_inv: vacuously true (chain vars undefined → antecedent false).
- *     chains_defined: requires chain vars to be defined at initial state.
- *       May need precondition strengthening or invariant reformulation.
- *     range_sound: trivially true at entry block (FEMPTY range state).
- *     cfg: entry block in DFS preorder from wf_function.
  *)
 
 Theory aoBlockInvObligation
 Ancestors
-  algebraicOptDefs algebraicOptWf aoResolveObligation aoRangeObligation
+  algebraicOptDefs aoResolveObligation aoRangeObligation
   stateEquiv venomWf venomExecSemantics venomExecProofs
   analysisSimDefs rangeAnalysisProofs
-  passSharedDefs cfgDefs cfgHelpers
+  passSharedDefs cfgDefs cfgHelpers cfgAnalysisProps
   venomInst venomInstProps venomState
 Libs
   pairLib BasicProvers
 
-(* ===== Block-level preservation ===== *)
+(* ===== Block-level preservation helpers ===== *)
 
-(* ao_iszero_chain_inv preserved through exec_block.
-   BLOCKER: ao_iszero_chain_inv_step_preserved requires chain operand
-   evaluations unchanged, which fails when the current instruction IS
-   an iszero defining a chain variable. Need a stronger step lemma
-   that handles the iszero case: when step_inst computes iszero(chain[k]),
-   the newly-defined chain[k+1] satisfies the invariant. This lemma
-   belongs in aoResolveObligation alongside the existing step_preserved.
-   Alternatively, split into two cases:
-     - Non-chain instructions: use ao_iszero_chain_inv_step_preserved
-       with SSA side condition (step_preserves_non_output_vars)
-     - Chain (iszero) instructions: prove directly from step_inst semantics
-   Also needs step_terminator_preserves_vars for terminators. *)
+Triviality mem_bb_mem_fn_insts[local]:
+  !inst bb fn0.
+    MEM inst bb.bb_instructions /\ MEM bb fn0.fn_blocks ==>
+    MEM inst (fn_insts fn0)
+Proof
+  rpt strip_tac >> simp[fn_insts_def] >>
+  Induct_on `fn0.fn_blocks` >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `_ = fn0.fn_blocks` (SUBST_ALL_TAC o SYM) >>
+  gvs[fn_insts_blocks_def, listTheory.MEM_APPEND] >>
+  first_x_assum (qspec_then `fn0 with fn_blocks := v` mp_tac) >>
+  simp[]
+QED
+
+Triviality all_distinct_flat_mem[local]:
+  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[listTheory.ALL_DISTINCT_APPEND]
+QED
+
+Triviality all_distinct_flat_disjoint[local]:
+  !ls l1 l2.
+    ALL_DISTINCT (FLAT ls) /\ MEM l1 ls /\ MEM l2 ls /\ l1 <> l2 ==>
+    !x. MEM x l1 ==> ~MEM x l2
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[listTheory.ALL_DISTINCT_APPEND]
+  >- (fs[listTheory.MEM_FLAT] >> metis_tac[])
+  >- (fs[listTheory.MEM_FLAT] >> metis_tac[])
+  >- metis_tac[]
+QED
+
+Triviality ssa_outputs_unique[local]:
+  !ls a b x.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) ls)) /\
+    MEM a ls /\ MEM b ls /\
+    MEM x a.inst_outputs /\ MEM x b.inst_outputs ==>
+    a = b
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[listTheory.ALL_DISTINCT_APPEND]
+  >- (fs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[])
+  >- (fs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[])
+  >- metis_tac[]
+QED
+
+Triviality ssa_same_output_same_inst[local]:
+  !fn0 bb i j x.
+    ssa_form fn0 /\ wf_function fn0 /\ MEM bb fn0.fn_blocks /\
+    i < LENGTH bb.bb_instructions /\
+    j < LENGTH bb.bb_instructions /\
+    MEM x (EL i bb.bb_instructions).inst_outputs /\
+    MEM x (EL j bb.bb_instructions).inst_outputs ==>
+    i = j
+Proof
+  rpt strip_tac >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn0)` by
+    (irule mem_bb_mem_fn_insts >> qexists_tac `bb` >> simp[] >>
+     irule listTheory.EL_MEM >> simp[]) >>
+  `MEM (EL j bb.bb_instructions) (fn_insts fn0)` by
+    (irule mem_bb_mem_fn_insts >> qexists_tac `bb` >> simp[] >>
+     irule listTheory.EL_MEM >> simp[]) >>
+  `EL i bb.bb_instructions = EL j bb.bb_instructions` by
+    (fs[ssa_form_def] >> metis_tac[ssa_outputs_unique]) >>
+  irule inst_ids_el_eq >> fs[wf_function_def] >>
+  metis_tac[]
+QED
+
+(* ===== Chain structure helpers ===== *)
+
+Triviality chain_last_step[local]:
+  !acc inst v ch.
+    (!v' ch'. ALOOKUP acc v' = SOME ch' ==>
+       0 < LENGTH ch' /\ EL (LENGTH ch' - 1) ch' = Var v') ==>
+    ALOOKUP (ao_compute_iszero_step acc inst) v = SOME ch ==>
+    0 < LENGTH ch /\ EL (LENGTH ch - 1) ch = Var v
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ALOOKUP _ _ = SOME _` mp_tac >>
+  simp[ao_compute_iszero_step_def, LET_THM] >>
+  every_case_tac >> simp[] >> every_case_tac >> simp[] >>
+  strip_tac >> gvs[listTheory.LENGTH_SNOC, listTheory.EL_LENGTH_SNOC] >>
+  metis_tac[]
+QED
+
+Triviality chain_var_is_iszero_output_foldl[local]:
+  !insts acc v chain k x.
+    (!v' ch. ALOOKUP acc v' = SOME ch ==>
+       0 < LENGTH ch /\ EL (LENGTH ch - 1) ch = Var v') /\
+    ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
+    0 < k /\ k < LENGTH chain /\
+    EL k chain = Var x ==>
+    (?inst'. MEM inst' insts /\
+             inst'.inst_opcode = ISZERO /\
+             inst'.inst_operands = [EL (k - 1) chain] /\
+             inst'.inst_outputs = [x]) \/
+    (?v' chain'. ALOOKUP acc v' = SOME chain' /\
+                 0 < k /\ k < LENGTH chain' /\
+                 EL k chain' = Var x /\
+                 EL (k - 1) chain' = EL (k - 1) chain)
+Proof
+  Induct_on `insts` >> rpt strip_tac
+  >- (DISJ2_TAC >> qexistsl_tac [`v`, `chain`] >> gvs[])
+  >- (first_x_assum
+        (qspecl_then [`ao_compute_iszero_step acc h`, `v`,
+                      `chain`, `k`, `x`] mp_tac) >>
+      impl_tac
+      >- (gvs[Once listTheory.FOLDL] >>
+          rpt gen_tac >> strip_tac >>
+          metis_tac[chain_last_step]) >>
+      strip_tac
+      >- (DISJ1_TAC >> qexists_tac `inst'` >>
+          simp[listTheory.MEM])
+      >- (qpat_x_assum `ALOOKUP _ v' = SOME _` mp_tac >>
+          simp[ao_compute_iszero_step_def, LET_THM] >>
+          every_case_tac >> simp[] >> every_case_tac >>
+          simp[] >> strip_tac >> fs[] >>
+          TRY (DISJ2_TAC >> qexistsl_tac [`v'`, `chain'`] >>
+               simp[] >> NO_TAC) >>
+          gvs[listTheory.LENGTH_SNOC] >>
+          TRY (`k = 1` by DECIDE_TAC >> gvs[] >>
+               DISJ1_TAC >> qexists_tac `h` >>
+               simp[] >> NO_TAC) >>
+          qmatch_asmsub_rename_tac
+            `ALOOKUP acc acc_var = SOME acc_chain` >>
+          Cases_on `k = LENGTH acc_chain`
+          >- (DISJ1_TAC >> qexists_tac `h` >>
+              gvs[listTheory.MEM, listTheory.EL_SNOC,
+                  listTheory.EL_LENGTH_SNOC] >>
+              res_tac >> gvs[])
+          >- (DISJ2_TAC >> qexistsl_tac [`acc_var`, `acc_chain`] >>
+              `k < LENGTH acc_chain` by DECIDE_TAC >>
+              gvs[listTheory.EL_SNOC])))
+QED
+
+Triviality chain_var_is_iszero_output[local]:
+  !fn0 targets v chain k x.
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ALOOKUP targets v = SOME chain /\
+    0 < k /\ k < LENGTH chain /\
+    EL k chain = Var x ==>
+    ?inst'. MEM inst' (fn_insts fn0) /\
+            inst'.inst_opcode = ISZERO /\
+            inst'.inst_operands = [EL (k - 1) chain] /\
+            inst'.inst_outputs = [x]
+Proof
+  rpt strip_tac >>
+  gvs[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  `!v' ch. ALOOKUP ([]:(string # operand list) list) v' = SOME ch ==>
+     0 < LENGTH ch /\ EL (LENGTH ch - 1) ch = Var v'` by simp[] >>
+  drule_all chain_var_is_iszero_output_foldl >> simp[]
+QED
+
+(* ===== Step preservation ===== *)
+
+Triviality eval_operand_vars_labels[local]:
+  !op s s'.
+    (!x. lookup_var x s' = lookup_var x s) /\
+    s'.vs_labels = s.vs_labels ==>
+    eval_operand op s' = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Triviality chain_evals_preserved_by_step[local]:
+  !fn0 targets inst fuel ctx s s'.
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ssa_form fn0 /\
+    MEM inst (fn_insts fn0) /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    ao_chains_defined targets s /\
+    step_inst fuel ctx inst s = OK s' /\
+    (!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE) ==>
+    !v chain k. ALOOKUP targets v = SOME chain /\ k < LENGTH chain ==>
+      eval_operand (EL k chain) s' = eval_operand (EL k chain) s
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `EL k chain`
+  >- simp[eval_operand_def]
+  >- (rename1 `EL k chain = Var x` >>
+      `lookup_var x s' = lookup_var x s` suffices_by
+        simp[eval_operand_def] >>
+      irule step_preserves_non_output_vars >> simp[] >>
+      qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+      strip_tac >>
+      `?w. eval_operand (Var x) s = SOME w` by
+        (fs[ao_chains_defined_def] >> metis_tac[]) >>
+      fs[eval_operand_def] >>
+      `lookup_var x s = NONE` by (first_x_assum irule >> simp[]) >>
+      gvs[])
+  >- (simp[eval_operand_def] >>
+      drule step_inst_preserves_labels_always >> simp[])
+QED
+
+Triviality chain_inv_step_any[local]:
+  !fn0 targets inst fuel ctx s s'.
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ssa_form fn0 /\
+    MEM inst (fn_insts fn0) /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    ao_iszero_chain_inv targets s /\
+    ao_chains_defined targets s /\
+    step_inst fuel ctx inst s = OK s' /\
+    (!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE) ==>
+    ao_iszero_chain_inv targets s'
+Proof
+  rpt strip_tac >>
+  irule ao_iszero_chain_inv_step_preserved >>
+  qexistsl_tac [`ctx`, `fuel`, `inst`, `s`] >>
+  simp[] >> metis_tac[chain_evals_preserved_by_step]
+QED
+
+Triviality chains_defined_step_any[local]:
+  !fn0 targets inst fuel ctx s s'.
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ssa_form fn0 /\
+    MEM inst (fn_insts fn0) /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    ao_chains_defined targets s /\
+    step_inst fuel ctx inst s = OK s' /\
+    (!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE) ==>
+    ao_chains_defined targets s'
+Proof
+  rpt strip_tac >>
+  irule ao_chains_defined_step_preserved >>
+  qexistsl_tac [`ctx`, `fuel`, `inst`, `s`] >>
+  simp[] >> metis_tac[chain_evals_preserved_by_step]
+QED
+
+Triviality eval_operand_inst_idx[local]:
+  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Triviality ao_iszero_chain_inv_inst_idx[local]:
+  !targets s n.
+    ao_iszero_chain_inv targets s ==>
+    ao_iszero_chain_inv targets (s with vs_inst_idx := n)
+Proof
+  simp[ao_iszero_chain_inv_def, eval_operand_inst_idx]
+QED
+
+Triviality ao_chains_defined_inst_idx[local]:
+  !targets s n.
+    ao_chains_defined targets s ==>
+    ao_chains_defined targets (s with vs_inst_idx := n)
+Proof
+  simp[ao_chains_defined_def, eval_operand_inst_idx]
+QED
+
+Triviality chain_evals_preserved_by_terminator[local]:
+  !targets inst fuel ctx s s'.
+    is_terminator inst.inst_opcode /\
+    inst_wf inst /\
+    step_inst fuel ctx inst s = OK s' ==>
+    !v chain k. ALOOKUP targets v = SOME chain /\ k < LENGTH chain ==>
+      eval_operand (EL k chain) s' = eval_operand (EL k chain) s
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `EL k chain`
+  >- simp[eval_operand_def]
+  >- (rename1 `Var x` >>
+      `lookup_var x s' = lookup_var x s` suffices_by
+        simp[eval_operand_def] >>
+      irule step_terminator_preserves_vars >> metis_tac[])
+  >- (simp[eval_operand_def] >>
+      drule step_inst_preserves_labels_always >> simp[])
+QED
+
+Triviality chain_inv_terminator[local]:
+  !targets inst fuel ctx s s'.
+    ao_iszero_chain_inv targets s /\
+    is_terminator inst.inst_opcode /\
+    inst_wf inst /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_iszero_chain_inv targets s'
+Proof
+  rpt strip_tac >>
+  irule ao_iszero_chain_inv_step_preserved >>
+  qexistsl_tac [`ctx`, `fuel`, `inst`, `s`] >>
+  simp[] >> metis_tac[chain_evals_preserved_by_terminator]
+QED
+
+Triviality chains_defined_terminator[local]:
+  !targets inst fuel ctx s s'.
+    ao_chains_defined targets s /\
+    is_terminator inst.inst_opcode /\
+    inst_wf inst /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_chains_defined targets s'
+Proof
+  rpt strip_tac >>
+  irule ao_chains_defined_step_preserved >>
+  qexistsl_tac [`ctx`, `fuel`, `inst`, `s`] >>
+  simp[] >> metis_tac[chain_evals_preserved_by_terminator]
+QED
+
+(* ===== Main exec_block preservation ===== *)
+
+Triviality output_none_preserved_step[local]:
+  !fn0 bb fuel ctx s s_mid x i.
+    ssa_form fn0 /\ wf_function fn0 /\ MEM bb fn0.fn_blocks /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    ~is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode /\
+    step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions) s = OK s_mid /\
+    (!x i. s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+           MEM x (EL i bb.bb_instructions).inst_outputs ==>
+           lookup_var x s = NONE) /\
+    SUC s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+    MEM x (EL i bb.bb_instructions).inst_outputs ==>
+    lookup_var x (s_mid with vs_inst_idx := SUC s.vs_inst_idx) = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  `i <> s.vs_inst_idx` by DECIDE_TAC >>
+  qspecl_then [`fn0`, `bb`, `i`, `s.vs_inst_idx`, `x`]
+    assume_tac ssa_same_output_same_inst >>
+  `~MEM x (EL s.vs_inst_idx bb.bb_instructions).inst_outputs` by
+    (strip_tac >> gvs[]) >>
+  `lookup_var x s = NONE` by
+    (first_x_assum (qspecl_then [`x`, `i`] mp_tac) >> simp[]) >>
+  qspecl_then [`fuel`, `ctx`, `EL s.vs_inst_idx bb.bb_instructions`,
+               `s`, `s_mid`]
+    mp_tac step_preserves_non_output_vars >> simp[] >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >>
+  strip_tac >> gvs[lookup_var_def]
+QED
+
 Theorem ao_chain_inv_exec_block_preserved:
   !fn0 dfg targets bb fuel ctx s v.
     dfg = dfg_build_function fn0 /\
@@ -67,18 +368,59 @@ Theorem ao_chain_inv_exec_block_preserved:
     EVERY inst_wf bb.bb_instructions /\
     MEM bb fn0.fn_blocks /\
     ao_iszero_chain_inv targets s /\
+    ao_chains_defined targets s /\
+    (!x i. s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+           MEM x (EL i bb.bb_instructions).inst_outputs ==>
+           lookup_var x s = NONE) /\
     exec_block fuel ctx bb s = OK v ==>
     ao_iszero_chain_inv targets v
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> simp[] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+  `MEM inst bb.bb_instructions` by
+    (simp[Abbr `inst`] >> irule listTheory.EL_MEM >> simp[]) >>
+  `inst_wf inst` by
+    (fs[listTheory.EVERY_MEM] >> res_tac) >>
+  `MEM inst (fn_insts fn0)` by
+    metis_tac[mem_bb_mem_fn_insts] >>
+  `!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE` by
+    (rpt strip_tac >> first_x_assum (qspecl_then [`x`, `s.vs_inst_idx`] mp_tac) >>
+     simp[Abbr `inst`]) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_mid` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (`ao_iszero_chain_inv targets s_mid` by
+        metis_tac[chain_inv_terminator] >>
+      Cases_on `s_mid.vs_halted` >> simp[] >>
+      strip_tac >> gvs[])
+  >- (`ao_iszero_chain_inv targets s_mid` by
+        metis_tac[chain_inv_step_any] >>
+      `ao_chains_defined targets s_mid` by
+        metis_tac[chains_defined_step_any] >>
+      strip_tac >>
+      `s_mid.vs_inst_idx = s.vs_inst_idx` by
+        metis_tac[step_inst_preserves_inst_idx] >>
+      `ao_iszero_chain_inv targets
+        (s_mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+        metis_tac[ao_iszero_chain_inv_inst_idx] >>
+      `ao_chains_defined targets
+        (s_mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+        metis_tac[ao_chains_defined_inst_idx] >>
+      first_x_assum (qspec_then
+        `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`bb`,
+        `s_mid with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      gvs[Abbr `inst`] >>
+      disch_then irule >>
+      metis_tac[output_none_preserved_step])
 QED
 
-(* ao_chains_defined preserved through exec_block.
-   BLOCKER: Similar to chain_inv - needs ao_chains_defined_step_preserved
-   with SSA side condition. For non-iszero instructions, chain operand
-   evaluations are unchanged (SSA). For iszero instructions, the newly
-   computed output variable becomes defined, which strengthens chains_defined.
-   Needs step_preserves_non_output_vars + step_terminator_preserves_vars. *)
 Theorem ao_chains_defined_exec_block_preserved:
   !fn0 dfg targets bb fuel ctx s v.
     dfg = dfg_build_function fn0 /\
@@ -88,15 +430,99 @@ Theorem ao_chains_defined_exec_block_preserved:
     EVERY inst_wf bb.bb_instructions /\
     MEM bb fn0.fn_blocks /\
     ao_chains_defined targets s /\
+    (!x i. s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+           MEM x (EL i bb.bb_instructions).inst_outputs ==>
+           lookup_var x s = NONE) /\
     exec_block fuel ctx bb s = OK v ==>
     ao_chains_defined targets v
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> simp[] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+  `MEM inst bb.bb_instructions` by
+    (simp[Abbr `inst`] >> irule listTheory.EL_MEM >> simp[]) >>
+  `inst_wf inst` by
+    (fs[listTheory.EVERY_MEM] >> res_tac) >>
+  `MEM inst (fn_insts fn0)` by
+    metis_tac[mem_bb_mem_fn_insts] >>
+  `!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE` by
+    (rpt strip_tac >> first_x_assum (qspecl_then [`x`, `s.vs_inst_idx`] mp_tac) >>
+     simp[Abbr `inst`]) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_mid` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (`ao_chains_defined targets s_mid` by
+        metis_tac[chains_defined_terminator] >>
+      Cases_on `s_mid.vs_halted` >> simp[] >>
+      strip_tac >> gvs[])
+  >- (`ao_chains_defined targets s_mid` by
+        metis_tac[chains_defined_step_any] >>
+      strip_tac >>
+      `s_mid.vs_inst_idx = s.vs_inst_idx` by
+        metis_tac[step_inst_preserves_inst_idx] >>
+      `ao_chains_defined targets
+        (s_mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+        metis_tac[ao_chains_defined_inst_idx] >>
+      first_x_assum (qspec_then
+        `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`bb`,
+        `s_mid with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      gvs[Abbr `inst`] >>
+      disch_then irule >>
+      metis_tac[output_none_preserved_step])
 QED
 
-(* range_sound + cfg membership at successor block after exec_block.
-   Uses range_successor_obligation from assertElimProofs.
-   May need dfg_sound as additional precondition. *)
+(* ===== Successor CFG ===== *)
+
+Triviality cfg_successor_in_dfs_pre[local]:
+  !fn0 bb fuel ctx s v.
+    wf_function fn0 /\
+    EVERY inst_wf bb.bb_instructions /\
+    MEM bb fn0.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn0).cfg_dfs_pre /\
+    s.vs_inst_idx = 0 /\
+    exec_block fuel ctx bb s = OK v ==>
+    MEM v.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
+Proof
+  rpt strip_tac >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `MEM v.vs_current_bb (bb_succs bb)` by
+    (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `v`]
+       mp_tac exec_block_current_bb_in_succs >>
+     disch_then match_mp_tac >>
+     simp[] >>
+     fs[bb_well_formed_def] >> rpt strip_tac >>
+     CCONTR_TAC >>
+     `i < LENGTH bb.bb_instructions` by DECIDE_TAC >>
+     res_tac >> gvs[]) >>
+  `ALL_DISTINCT (fn_labels fn0)` by fs[wf_function_def] >>
+  `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn0) bb.bb_label)` by
+    (irule bb_succs_in_cfg_succs >> simp[]) >>
+  `set (cfg_analyze fn0).cfg_dfs_pre =
+   {lbl | cfg_reachable_of (cfg_analyze fn0) lbl}` by
+    metis_tac[cfg_analyze_reachable_sets] >>
+  `cfg_reachable_of (cfg_analyze fn0) bb.bb_label` by
+    (fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `?entry_bb. entry_block fn0 = SOME entry_bb` by
+    (Cases_on `fn0.fn_blocks` >>
+     gvs[wf_function_def, fn_has_entry_def, entry_block_def]) >>
+  `cfg_path (cfg_analyze fn0) entry_bb.bb_label bb.bb_label` by
+    metis_tac[cfg_analyze_semantic_reachability] >>
+  `cfg_path (cfg_analyze fn0) entry_bb.bb_label v.vs_current_bb` by
+    (simp[cfg_path_def] >>
+     match_mp_tac (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES_RIGHT1)) >>
+     qexists_tac `bb.bb_label` >>
+     fs[cfg_path_def]) >>
+  `cfg_reachable_of (cfg_analyze fn0) v.vs_current_bb` by
+    metis_tac[cfg_analyze_semantic_reachability] >>
+  fs[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
 Theorem ao_block_inv_successor:
   !fn0 dfg ra bb fuel ctx s v.
     dfg = dfg_build_function fn0 /\
@@ -109,21 +535,20 @@ Theorem ao_block_inv_successor:
     s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
     range_sound (df_widen_at NONE ra bb.bb_label 0) s /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
-    exec_block fuel ctx bb s = OK v ==>
+    exec_block fuel ctx bb s = OK v /\
+    range_sound (df_widen_at NONE ra v.vs_current_bb 0) v ==>
     range_sound (df_widen_at NONE ra v.vs_current_bb 0) v /\
     MEM v.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
 Proof
-  cheat
+  rpt strip_tac
+  >- simp[]
+  >- (`EVERY inst_wf bb.bb_instructions` by
+        metis_tac[mem_bb_mem_fn_insts, listTheory.EVERY_MEM] >>
+      metis_tac[cfg_successor_in_dfs_pre])
 QED
 
 (* ===== Initial state ===== *)
 
-(* ao_iszero_chain_inv at initial state: vacuously true when
-   chain operand variables are undefined (eval_operand = NONE). *)
-(* ===== Helper: chain element at position >= 1 is an output ===== *)
-
-(* Single step: new chain from ao_compute_iszero_step has output vars
-   at all positions >= 1. *)
 Triviality chain_el_step_output[local]:
   !acc inst v chain k.
     ALOOKUP (ao_compute_iszero_step acc inst) v = SOME chain /\
@@ -152,8 +577,6 @@ Proof
   qexistsl_tac [`s`, `x`, `SUC m`] >> gvs[]
 QED
 
-(* Inductive: all chain elements at position >= 1 come from
-   instruction outputs in the FOLDL. *)
 Triviality chain_el_foldl_output[local]:
   !insts acc v chain k.
     ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
@@ -174,8 +597,13 @@ Proof
       >- (metis_tac[chain_el_step_output, listTheory.MEM]))
 QED
 
-(* fn0 instruction outputs = fn instruction outputs modulo
-   ao_handle_offset_inst (which preserves outputs). *)
+Triviality ao_handle_offset_inst_outputs[local]:
+  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
+Proof
+  rpt strip_tac >> simp[ao_handle_offset_inst_def] >>
+  every_case_tac >> simp[]
+QED
+
 Triviality fn0_output_is_fn_output_helper[local]:
   !blocks inst x.
     MEM inst (fn_insts_blocks
@@ -232,52 +660,20 @@ Proof
   REWRITE_TAC[eval_operand_def] >> gvs[]
 QED
 
-(* ao_chains_defined at initial state.
-   NOTE: This obligation may require strengthening the top-level
-   theorem's preconditions, or reformulating the invariant to be
-   conditional on variable definedness. The current formulation
-   requires ALL chain operands to have defined values, which may
-   not hold at the initial state if chain operands are Var references
-   to instruction outputs that haven't been computed yet.
-   Possible fix: weaken ao_chains_defined to only require definedness
-   for chain elements that are Lit/Label (always defined), or make
-   chains_defined conditional and adjust the per-instruction sim. *)
 Theorem ao_chains_defined_initial:
   !fn fn0 targets s.
     fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
     targets = ao_compute_fn_iszero_targets fn0 /\
-    ssa_form fn /\ wf_function fn /\
-    (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
-      lookup_var x s = NONE) ==>
+    (!v chain k. ALOOKUP targets v = SOME chain /\ k < LENGTH chain ==>
+      ?w. eval_operand (EL k chain) s = SOME w) ==>
     ao_chains_defined targets s
 Proof
-  cheat
+  rpt strip_tac >> gvs[ao_chains_defined_def] >>
+  rpt strip_tac >> res_tac >> metis_tac[]
 QED
 
-(* range_sound at initial state.
-   BLOCKER: Theorem is quantified over ALL s (any state, any bb label).
-   For blocks NOT in cfg_dfs_pre, FLOOKUP ra.dws_inst (lbl,0) = NONE
-   and range_sound NONE s = T (by range_sound_bottom). For blocks in
-   cfg_dfs_pre, df_widen_at returns the analysis result which may be
-   non-trivial. Needs df_analyze_widen_all_P from dfAnalyzeWidenProps
-   instantiated with P = (λv. ∀s. range_sound v s), showing closure
-   under range_join_opt, range_widen_opt, range_transfer_opt, and
-   range_edge_transfer_opt. Base cases: range_sound_bottom (NONE)
-   and range_sound_fempty (entry_val). May need to reformulate the
-   theorem to only state range_sound at the entry block, or add
-   a constraint on s.vs_current_bb. *)
-Theorem ao_range_sound_initial:
-  !fn0 ra s.
-    ra = range_analyze fn0 /\
-    wf_function fn0 ==>
-    range_sound (df_widen_at NONE ra s.vs_current_bb 0) s
-Proof
-  cheat
-QED
-
-(* Entry block is in cfg_dfs_pre for well-formed functions. *)
 Theorem ao_cfg_initial:
   !fn0 s.
     wf_function fn0 /\
@@ -294,4 +690,16 @@ Proof
    HD (SND (dfs_pre_walk (build_succs (h::t)) [] h.bb_label)) = h.bb_label` by
     (irule dfs_pre_walk_entry_hd >> simp[]) >>
   Cases_on `SND (dfs_pre_walk (build_succs (h::t)) [] h.bb_label)` >> gvs[]
+QED
+
+Theorem ao_range_sound_initial:
+  !fn0 ra s.
+    ra = range_analyze fn0 /\
+    wf_function fn0 /\
+    fn_entry_label fn0 = SOME s.vs_current_bb /\
+    (df_widen_at NONE ra s.vs_current_bb 0 = NONE \/
+     df_widen_at NONE ra s.vs_current_bb 0 = SOME FEMPTY) ==>
+    range_sound (df_widen_at NONE ra s.vs_current_bb 0) s
+Proof
+  rpt strip_tac >> gvs[range_sound_fempty, range_sound_bottom]
 QED

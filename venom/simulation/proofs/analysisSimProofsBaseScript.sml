@@ -2355,11 +2355,12 @@ Theorem analysis_block_sim_inv_at:
     (!inst x.
        MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
        !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
-    (* transfer_sound restricted to (idx, EL idx bb) *)
+    (* transfer_sound restricted to (idx, EL idx bb), with state_inv *)
     (!fuel ctx' idx s s'.
        idx < LENGTH bb.bb_instructions /\
        inst_wf (EL idx bb.bb_instructions) /\
        sound (df_at bottom result bb.bb_label idx) s /\
+       state_inv (s with vs_inst_idx := 0) /\
        step_inst fuel ctx' (EL idx bb.bb_instructions) s = OK s' ==>
        sound (df_at bottom result bb.bb_label (SUC idx)) s') /\
     (!v s1 s2. R_ok s1 s2 /\ sound v s1 ==> sound v s2) /\

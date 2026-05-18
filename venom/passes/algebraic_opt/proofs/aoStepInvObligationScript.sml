@@ -16,7 +16,8 @@ Ancestors
   algebraicOptWf
   stateEquiv venomWf venomExecSemantics venomExecProofs venomState
   venomInst venomInstProofs venomInstProps
-  analysisSimDefs rangeAnalysisProofs rangeEvalDefs dfgAnalysisProps
+  analysisSimDefs rangeAnalysisProofs rangeAnalysisDefs rangeEvalDefs
+  dfgAnalysisProps dfAnalyzeWidenDefs
 Libs
   pairLib BasicProvers
 
@@ -166,7 +167,21 @@ Proof
        fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
      `FLOOKUP s1.vs_vars v = SOME w` by gvs[] >>
      metis_tac[]) >>
-  cheat
+  `v IN FDOM (range_at_inst ra lbl n)` by
+    fs[finite_mapTheory.FLOOKUP_DEF] >>
+  `?inst0. MEM inst0 (fn_insts fn0) /\
+           (MEM v inst0.inst_outputs \/ MEM (Var v) inst0.inst_operands)` by
+    (irule range_at_inst_fdom_outputs >> qexists_tac `lbl` >>
+     qexists_tac `n` >> gvs[]) >>
+  `?inst_orig. MEM inst_orig (fn_insts fn) /\
+               inst0 = ao_handle_offset_inst inst_orig` by
+    (gvs[fn_insts_def] >> metis_tac[fn_insts_blocks_map_offset]) >>
+  gvs[]
+  >- (`MEM v inst_orig.inst_outputs` by gvs[ao_handle_offset_inst_outputs] >>
+      metis_tac[])
+  >- (qspecl_then [`inst_orig`] strip_assume_tac
+        handle_offset_preserves_operands >> gvs[] >>
+      metis_tac[])
 QED
 
 (* ===== sinv step preservation ===== *)
@@ -363,26 +378,33 @@ Proof
       gvs[])
 QED
 
-(* Chain eval_operand preservation under step_inst.
-   Cheated: the chain invariant design has known soundness issues with
-   ao_chains_defined at initial state (see aoBlockInvObligationScript.sml).
-   The full proof requires showing that either:
-   - x NOTIN inst.inst_outputs (non-ISZERO case), or
-   - inst IS the ISZERO that produced x, and the pre-invariant ensures
-     the value doesn't change (ISZERO re-establishes same value).
-   However, the case where a non-ISZERO instruction redefines a chain INPUT
-   variable may genuinely break the invariant, suggesting the invariant
-   structure needs reworking. *)
-Triviality chain_var_not_in_outputs:
-  !fn0 targets bb inst v chain k.
-    ssa_form fn0 /\
-    targets = ao_compute_fn_iszero_targets fn0 /\
-    MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
-    ~is_terminator inst.inst_opcode /\
-    ALOOKUP targets v = SOME chain /\ k < LENGTH chain ==>
-    !x. EL k chain = Var x ==> ~MEM x inst.inst_outputs
+Triviality step_inst_fdom_subset:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' /\ inst_wf inst ==>
+    FDOM s.vs_vars SUBSET FDOM s'.vs_vars
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (drule is_terminator_cases >> strip_tac >> gvs[] >>
+      qpat_x_assum `_ = OK _` mp_tac >>
+      simp[step_inst_def, step_inst_base_def, AllCaseEqs(),
+           jump_to_def] >>
+      rpt strip_tac >> gvs[])
+  >- (drule_all step_inst_fdom >> strip_tac >>
+      simp[pred_setTheory.SUBSET_DEF])
+QED
+
+Triviality eval_operand_fdom_mono:
+  !op s s'.
+    FDOM s.vs_vars SUBSET FDOM s'.vs_vars /\
+    s'.vs_labels = s.vs_labels /\
+    (?w. eval_operand op s = SOME w) ==>
+    ?w'. eval_operand op s' = SOME w'
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def] >>
+  rpt strip_tac >>
+  fs[finite_mapTheory.FLOOKUP_DEF, pred_setTheory.SUBSET_DEF] >>
+  metis_tac[]
 QED
 
 Theorem ao_sinv_step_preserved:
@@ -397,11 +419,9 @@ Theorem ao_sinv_step_preserved:
     idx < LENGTH bb.bb_instructions /\
     inst_wf (EL idx bb.bb_instructions) /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s /\
     ao_chains_defined targets s /\
     step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
     ao_dfg_inv dfg (s' with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s' /\
     ao_chains_defined targets s'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -412,8 +432,13 @@ Proof
   >- (`ao_dfg_inv dfg s` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
       `ao_dfg_inv dfg s'` by metis_tac[ao_dfg_inv_step_any] >>
       metis_tac[ao_dfg_inv_inst_idx_irrel])
-  >- cheat
-  >- cheat
+  >- (fs[ao_chains_defined_def] >> rpt strip_tac >>
+      `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
+        metis_tac[step_inst_fdom_subset] >>
+      `s'.vs_labels = s.vs_labels` by
+        metis_tac[step_inst_preserves_labels_always] >>
+      `?w. eval_operand (EL k chain) s = SOME w` by metis_tac[] >>
+      metis_tac[eval_operand_fdom_mono])
 QED
 
 (* ===== sinv state_equiv compatibility ===== *)
@@ -469,10 +494,8 @@ Theorem ao_sinv_state_equiv_compat:
               MEM v inst.inst_outputs ==> v NOTIN fv) /\
     state_equiv fv s1 s2 /\
     ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s1 /\
     ao_chains_defined targets s1 ==>
     ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s2 /\
     ao_chains_defined targets s2
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
@@ -483,10 +506,6 @@ Proof
       `!x inst'. dfg_get_def dfg x = SOME inst' ==> x NOTIN fv` by
         metis_tac[ao_dfg_outputs_not_in_fv] >>
       metis_tac[ao_dfg_inv_state_equiv_compat])
-  >- (irule ao_iszero_chain_inv_state_equiv_compat >>
-      qexistsl_tac [`fv`, `s1`] >> simp[] >>
-      rpt strip_tac >>
-      metis_tac[ao_chain_vars_not_in_fv])
   >- (irule ao_chains_defined_state_equiv_compat >>
       qexistsl_tac [`fv`, `s1`] >> simp[] >>
       rpt strip_tac >>
@@ -520,5 +539,28 @@ Proof
        fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
      `FLOOKUP s1.vs_vars v = SOME w` by gvs[] >>
      metis_tac[]) >>
-  cheat
+  `v IN FDOM (range_at_inst
+    (range_analyze
+      (fn with fn_blocks :=
+        MAP (\bb. bb with bb_instructions :=
+          MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks))
+    lbl 0)` by
+    (simp[range_at_inst_def, range_unwrap_def] >>
+     fs[finite_mapTheory.FLOOKUP_DEF]) >>
+  `?inst0. MEM inst0 (fn_insts
+    (fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks)) /\
+    (MEM v inst0.inst_outputs \/ MEM (Var v) inst0.inst_operands)` by
+    (irule range_at_inst_fdom_outputs >> qexists_tac `lbl` >>
+     qexists_tac `0` >> simp[]) >>
+  `?inst_orig. MEM inst_orig (fn_insts fn) /\
+               inst0 = ao_handle_offset_inst inst_orig` by
+    (gvs[fn_insts_def] >> metis_tac[fn_insts_blocks_map_offset]) >>
+  gvs[]
+  >- (`MEM v inst_orig.inst_outputs` by gvs[ao_handle_offset_inst_outputs] >>
+      metis_tac[])
+  >- (qspecl_then [`inst_orig`] strip_assume_tac
+        handle_offset_preserves_operands >> gvs[] >>
+      metis_tac[])
 QED

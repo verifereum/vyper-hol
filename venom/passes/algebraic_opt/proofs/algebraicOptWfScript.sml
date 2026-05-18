@@ -1382,7 +1382,230 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* Phase 3 preserves wf_function (modulo fn_inst_ids_distinct) *)
+(* ===== Phase 3 ID distinctness ===== *)
+
+Triviality ao_post_flip_inst_id[local]:
+  !inst. (ao_post_flip_inst inst).inst_id = inst.inst_id
+Proof
+  rw[ao_post_flip_inst_def] >> every_case_tac >> simp[]
+QED
+
+Triviality ao_pre_flip_inst_id[local]:
+  !inst. (ao_pre_flip_inst inst).inst_id = inst.inst_id
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
+QED
+
+Triviality ao_peephole_inst_ids_char[local]:
+  !mid dfg ra lbl idx inst j.
+    MEM j (ao_peephole_inst mid dfg ra lbl idx inst) ==>
+    j.inst_id = inst.inst_id \/
+    ?slot. slot < 2 /\ j.inst_id = ao_fresh_id mid inst.inst_id slot
+Proof
+  rpt gen_tac >>
+  simp[ao_peephole_inst_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def,
+       ao_opt_or_def, ao_opt_eq_def, ao_opt_comparator_def, LET_THM,
+       ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+       ao_cmp_prefer_iz_general_def,
+       ao_unsigned_boundaries_def, ao_signed_boundaries_def] >>
+  every_case_tac >> gvs[] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
+  ((DISJ1_TAC >> simp[] >> NO_TAC) ORELSE
+   (DISJ2_TAC >> qexists_tac `0` >> simp[] >> NO_TAC) ORELSE
+   (DISJ2_TAC >> qexists_tac `1` >> simp[]))
+QED
+
+Triviality ao_opt_producer_id[local]:
+  !dfg inst j.
+    ao_opt_producer dfg inst = SOME result /\ MEM j result ==>
+    j.inst_id = inst.inst_id
+Proof
+  rw[ao_opt_producer_def] >>
+  every_case_tac >> gvs[]
+QED
+
+Triviality ao_transform_inst_ids_char[local]:
+  !mid dfg ra lbl idx targets inst j.
+    MEM j (ao_transform_inst mid dfg ra lbl idx targets inst) ==>
+    j.inst_id = inst.inst_id \/
+    ?slot. slot < 2 /\ j.inst_id = ao_fresh_id mid inst.inst_id slot
+Proof
+  rpt gen_tac >>
+  simp[ao_transform_inst_def, LET_THM] >>
+  IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[ao_resolve_iszero_inst_id]) >>
+  IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[ao_resolve_iszero_inst_id]) >>
+  Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)` >>
+  simp[listTheory.MEM_MAP] >> rpt strip_tac >>
+  gvs[ao_post_flip_inst_id] >>
+  imp_res_tac ao_peephole_inst_ids_char >>
+  imp_res_tac ao_opt_producer_id >>
+  gvs[ao_pre_flip_inst_id, ao_resolve_iszero_inst_id] >>
+  DISJ2_TAC >> qexists_tac `slot` >> simp[]
+QED
+
+Triviality ao_opt_producer_singleton[local]:
+  !dfg inst result.
+    ao_opt_producer dfg inst = SOME result ==> ?v. result = [v]
+Proof
+  rw[ao_opt_producer_def] >> every_case_tac >> gvs[]
+QED
+
+Triviality ao_transform_inst_single_distinct[local]:
+  !mid dfg ra lbl idx targets inst.
+    inst.inst_id <= mid ==>
+    ALL_DISTINCT (MAP (\j. j.inst_id)
+      (ao_transform_inst mid dfg ra lbl idx targets inst))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ao_transform_inst_def, LET_THM] >>
+  every_case_tac >>
+  gvs[ao_resolve_iszero_inst_id, ao_pre_flip_inst_id,
+      listTheory.ALL_DISTINCT, listTheory.MAP_MAP_o,
+      combinTheory.o_DEF, ao_post_flip_inst_id] >>
+  TRY (imp_res_tac ao_opt_producer_singleton >> gvs[] >> NO_TAC) >>
+  simp[ao_peephole_inst_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def,
+       ao_opt_or_def, ao_opt_eq_def, ao_opt_comparator_def, LET_THM,
+       ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+       ao_cmp_prefer_iz_general_def,
+       ao_unsigned_boundaries_def, ao_signed_boundaries_def,
+       ao_post_flip_inst_id, ao_pre_flip_inst_id, ao_resolve_iszero_inst_id,
+       listTheory.ALL_DISTINCT, ao_fresh_id_def, lit_eq_def] >>
+  rpt IF_CASES_TAC >>
+  simp[ao_post_flip_inst_id, ao_pre_flip_inst_id,
+       ao_resolve_iszero_inst_id, ao_fresh_id_def] >>
+  rpt (TOP_CASE_TAC >>
+       simp[ao_fresh_id_def, ao_pre_flip_inst_id, ao_resolve_iszero_inst_id]) >>
+  gvs[]
+QED
+
+Triviality ao_transform_block_ids_flat[local]:
+  !mid dfg ra targets bb.
+    MAP (\j. j.inst_id)
+      (FLAT (MAPi (\idx inst.
+        ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+        bb.bb_instructions)) =
+    FLAT (MAPi (\idx inst.
+      MAP (\j. j.inst_id)
+        (ao_transform_inst mid dfg ra bb.bb_label idx targets inst))
+      bb.bb_instructions)
+Proof
+  simp[listTheory.MAP_FLAT, indexedListsTheory.MAP_MAPi, combinTheory.o_DEF]
+QED
+
+Triviality ao_phase3_ids_all_distinct[local]:
+  !insts n mid dfg ra lbl targets.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!inst. MEM inst insts ==> inst.inst_id <= mid) ==>
+    ALL_DISTINCT (FLAT (MAPi (\idx inst.
+      MAP (\j. j.inst_id)
+        (ao_transform_inst mid dfg ra lbl (n + idx) targets inst)) insts))
+Proof
+  Induct >> simp[combinTheory.o_DEF] >> rpt strip_tac >>
+  simp[listTheory.ALL_DISTINCT_APPEND, arithmeticTheory.ADD_CLAUSES] >>
+  rpt conj_tac
+  >- (irule ao_transform_inst_single_distinct >> gvs[])
+  >- (first_x_assum (qspec_then `SUC n` mp_tac) >>
+      PURE_REWRITE_TAC [arithmeticTheory.ADD_CLAUSES] >>
+      disch_then irule >> gvs[])
+  >- (rpt strip_tac >> CCONTR_TAC >>
+      gvs[listTheory.MEM_MAP, listTheory.MEM_FLAT,
+          indexedListsTheory.MEM_MAPi] >>
+      `MEM (EL x insts) insts` by simp[listTheory.EL_MEM] >>
+      `(EL x insts).inst_id <= mid` by res_tac >>
+      `h.inst_id <= mid` by gvs[] >>
+      imp_res_tac ao_transform_inst_ids_char >>
+      gvs[ao_fresh_id_def] >>
+      gvs[listTheory.MEM_MAP] >> metis_tac[])
+QED
+
+Triviality ao_phase3_ids_all_distinct_0[local]:
+  !insts mid dfg ra lbl targets.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!inst. MEM inst insts ==> inst.inst_id <= mid) ==>
+    ALL_DISTINCT (FLAT (MAPi (\idx inst.
+      MAP (\j. j.inst_id)
+        (ao_transform_inst mid dfg ra lbl idx targets inst)) insts))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`insts`, `0`] mp_tac ao_phase3_ids_all_distinct >>
+  simp[]
+QED
+
+Triviality ao_phase3_ids_char_flat[local]:
+  !blocks mid dfg ra targets id.
+    MEM id (FLAT (MAP (\bb.
+      FLAT (MAPi (\idx inst.
+        MAP (\j. j.inst_id)
+          (ao_transform_inst mid dfg ra bb.bb_label idx targets inst))
+        bb.bb_instructions)) blocks)) ==>
+    (?bb inst. MEM bb blocks /\ MEM inst bb.bb_instructions /\
+       id = inst.inst_id) \/
+    (?bb inst slot. MEM bb blocks /\ MEM inst bb.bb_instructions /\
+       slot < 2 /\ id = ao_fresh_id mid inst.inst_id slot)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[listTheory.MEM_FLAT, listTheory.MEM_APPEND,
+      indexedListsTheory.MEM_MAPi]
+  >- (imp_res_tac ao_transform_inst_ids_char >> gvs[] >>
+      metis_tac[])
+  >- (first_x_assum drule >> strip_tac >> metis_tac[])
+QED
+
+Triviality ao_phase3_fn_ids_all_distinct[local]:
+  !blocks mid dfg ra targets.
+    ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id)
+      bb.bb_instructions) blocks)) /\
+    (!bb inst. MEM bb blocks /\ MEM inst bb.bb_instructions ==>
+      inst.inst_id <= mid) ==>
+    ALL_DISTINCT (FLAT (MAP (\bb.
+      FLAT (MAPi (\idx inst.
+        MAP (\j. j.inst_id)
+          (ao_transform_inst mid dfg ra bb.bb_label idx targets inst))
+        bb.bb_instructions)) blocks))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[listTheory.ALL_DISTINCT_APPEND] >> rpt conj_tac
+  >- (irule ao_phase3_ids_all_distinct_0 >> rpt conj_tac
+      >- (rpt strip_tac >> first_x_assum irule >> simp[])
+      >- gvs[])
+  >- (rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+      imp_res_tac ao_transform_inst_ids_char >>
+      drule ao_phase3_ids_char_flat >> strip_tac >> gvs[]
+      >- (`inst'.inst_id <= mid` by (first_x_assum irule >> simp[]) >>
+          `h.inst_id <= mid` by (first_x_assum irule >> simp[]) >>
+          `h.inst_id <> inst'.inst_id` by
+            (gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+             CCONTR_TAC >> gvs[] >>
+             first_x_assum (qspec_then `h.inst_id` mp_tac) >>
+             simp[] >> metis_tac[]) >>
+          gvs[])
+      >- (`ao_fresh_id mid inst'.inst_id slot' > mid` by
+            simp[ao_fresh_id_gt] >>
+          `h.inst_id <= mid` by (first_x_assum irule >> simp[]) >>
+          gvs[])
+      >- (`inst'.inst_id <= mid` by (first_x_assum irule >> simp[]) >>
+          `ao_fresh_id mid h.inst_id slot > mid` by
+            simp[ao_fresh_id_gt] >> gvs[])
+      >- (`ao_fresh_id mid h.inst_id slot = ao_fresh_id mid inst'.inst_id slot'`
+            by gvs[] >>
+          `h.inst_id = inst'.inst_id` by
+            (imp_res_tac ao_fresh_id_inj >> gvs[]) >>
+          `h.inst_id <= mid` by (first_x_assum irule >> simp[]) >>
+          gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+          first_x_assum (qspec_then `h.inst_id` mp_tac) >>
+          simp[] >> metis_tac[]))
+QED
+
+(* Phase 3 preserves wf_function *)
 Triviality ao_phase3_eq_fmt[local]:
   !mid dfg ra targets fn.
     fn with fn_blocks :=
@@ -1427,6 +1650,7 @@ QED
 Triviality ao_phase3_preserves_wf[local]:
   !mid dfg ra targets fn.
     wf_function fn /\
+    fn_max_inst_id fn <= mid /\
     EVERY (\bb. EVERY inst_wf bb.bb_instructions) fn.fn_blocks /\
     (!k chain. ALOOKUP targets k = SOME chain ==>
        EVERY (\e. get_label e = NONE) chain) ==>
@@ -1454,7 +1678,15 @@ Proof
       match_mp_tac ao_phase3_succs_closed >>
       rpt conj_tac >> first_assum ACCEPT_TAC)
   (* 4. fn_inst_ids_distinct *)
-  >- cheat
+  >- (simp[venomWfTheory.fn_inst_ids_distinct_def, Abbr `bt`,
+           ao_transform_block_def, listTheory.MAP_MAP_o,
+           combinTheory.o_DEF, ao_transform_block_ids_flat] >>
+      irule ao_phase3_fn_ids_all_distinct >> rpt conj_tac
+      >- (rpt strip_tac >>
+          `MEM inst (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
+          `inst.inst_id <= fn_max_inst_id fn` by
+            metis_tac[fn_max_inst_id_bound] >> gvs[])
+      >- gvs[GSYM fn_insts_blocks_map_id, fn_insts_def])
 QED
 
 (* Phase 1 preserves the ISZERO-no-label property *)
@@ -1727,7 +1959,31 @@ Triviality ao_cmp_flip_scan_no_term[local]:
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE
 Proof
-  cheat
+  rpt strip_tac >> rpt conj_tac
+  >- (CCONTR_TAC >>
+      `?v. ALOOKUP flips inst.inst_id = SOME v` by
+        (Cases_on `ALOOKUP flips inst.inst_id` >> gvs[]) >>
+      drule_all ao_cmp_flip_scan_flips_domain >> strip_tac >>
+      rename1 `is_comparator cinst.inst_opcode` >>
+      `cinst = inst` by
+        (match_mp_tac all_distinct_id_eq >> qexists_tac `insts` >> simp[]) >>
+      gvs[is_terminator_def, is_comparator_def])
+  >- (CCONTR_TAC >> gvs[] >>
+      drule_all ao_cmp_flip_scan_removes_from_dfg >> strip_tac >>
+      rename1 `MEM rinst (dfg_get_uses dfg _)` >>
+      `MEM rinst insts` by res_tac >>
+      `rinst = inst` by
+        (match_mp_tac all_distinct_id_eq >> qexists_tac `insts` >> simp[]) >>
+      gvs[is_terminator_def])
+  >- (CCONTR_TAC >>
+      `?v. ALOOKUP inserts inst.inst_id = SOME v` by
+        (Cases_on `ALOOKUP inserts inst.inst_id` >> gvs[]) >>
+      drule_all ao_cmp_flip_scan_inserts_from_dfg >> strip_tac >>
+      rename1 `MEM iinst (dfg_get_uses dfg _)` >>
+      `MEM iinst insts` by res_tac >>
+      `iinst = inst` by
+        (match_mp_tac all_distinct_id_eq >> qexists_tac `insts` >> simp[]) >>
+      gvs[is_terminator_def])
 QED
 
 Triviality ao_cmp_flip_scan_no_phi[local]:
@@ -1741,7 +1997,31 @@ Triviality ao_cmp_flip_scan_no_phi[local]:
     ~MEM inst.inst_id removes /\
     ALOOKUP inserts inst.inst_id = NONE
 Proof
-  cheat
+  rpt strip_tac >> rpt conj_tac
+  >- (CCONTR_TAC >>
+      `?v. ALOOKUP flips inst.inst_id = SOME v` by
+        (Cases_on `ALOOKUP flips inst.inst_id` >> gvs[]) >>
+      drule_all ao_cmp_flip_scan_flips_domain >> strip_tac >>
+      rename1 `is_comparator cinst.inst_opcode` >>
+      `cinst = inst` by
+        (match_mp_tac all_distinct_id_eq >> qexists_tac `insts` >> simp[]) >>
+      gvs[is_comparator_def])
+  >- (CCONTR_TAC >> gvs[] >>
+      drule_all ao_cmp_flip_scan_removes_from_dfg >> strip_tac >>
+      rename1 `MEM rinst (dfg_get_uses dfg _)` >>
+      `MEM rinst insts` by res_tac >>
+      `rinst = inst` by
+        (match_mp_tac all_distinct_id_eq >> qexists_tac `insts` >> simp[]) >>
+      gvs[])
+  >- (CCONTR_TAC >>
+      `?v. ALOOKUP inserts inst.inst_id = SOME v` by
+        (Cases_on `ALOOKUP inserts inst.inst_id` >> gvs[]) >>
+      drule_all ao_cmp_flip_scan_inserts_from_dfg >> strip_tac >>
+      rename1 `MEM iinst (dfg_get_uses dfg _)` >>
+      `MEM iinst insts` by res_tac >>
+      `iinst = inst` by
+        (match_mp_tac all_distinct_id_eq >> qexists_tac `insts` >> simp[]) >>
+      gvs[])
 QED
 
 (* ao_cmp_flip_apply_inst preserves terminator singleton *)
@@ -1771,11 +2051,375 @@ Proof
   CCONTR_TAC >> gvs[]
 QED
 
+Triviality mem_fn_insts_blocks[local]:
+  !blocks inst bb.
+    MEM bb blocks /\ MEM inst bb.bb_instructions ==>
+    MEM inst (fn_insts_blocks blocks)
+Proof
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[listTheory.MEM_APPEND]
+QED
+
+Triviality mem_bb_fn_insts[local]:
+  !inst bb fn.
+    MEM inst bb.bb_instructions /\ MEM bb fn.fn_blocks ==>
+    MEM inst (fn_insts fn)
+Proof
+  metis_tac[fn_insts_def, mem_fn_insts_blocks]
+QED
+
+Triviality fn_insts_blocks_map_id[local]:
+  !blocks.
+    FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) blocks) =
+    MAP (\i. i.inst_id) (fn_insts_blocks blocks)
+Proof
+  Induct >> simp[fn_insts_blocks_def, listTheory.MAP_APPEND]
+QED
+
+Triviality fn_inst_ids_as_fn_insts[local]:
+  !fn. fn_inst_ids_distinct fn <=>
+    ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))
+Proof
+  simp[venomWfTheory.fn_inst_ids_distinct_def, fn_insts_def,
+       GSYM fn_insts_blocks_map_id]
+QED
+
+Triviality ao_cmp_flip_apply_inst_id[local]:
+  !mid flips removes inserts inst.
+    ~MEM inst.inst_id (MAP FST flips) /\
+    ~MEM inst.inst_id removes /\
+    ~MEM inst.inst_id (MAP FST inserts) ==>
+    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
+Proof
+  rpt strip_tac >>
+  `ALOOKUP flips inst.inst_id = NONE` by simp[alistTheory.ALOOKUP_NONE] >>
+  `ALOOKUP inserts inst.inst_id = NONE` by simp[alistTheory.ALOOKUP_NONE] >>
+  simp[ao_cmp_flip_apply_inst_def]
+QED
+
+Triviality ao_phase4_bb_succs[local]:
+  !mid flips removes inserts bb.
+    bb_well_formed bb /\
+    (!inst. MEM inst bb.bb_instructions /\ is_terminator inst.inst_opcode ==>
+      ~MEM inst.inst_id (MAP FST flips) /\
+      ~MEM inst.inst_id removes /\
+      ~MEM inst.inst_id (MAP FST inserts)) ==>
+    bb_succs (bb with bb_instructions :=
+      FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
+                bb.bb_instructions)) = bb_succs bb
+Proof
+  rpt strip_tac >>
+  fs[bb_well_formed_def] >>
+  `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `ao_cmp_flip_apply_inst mid flips removes inserts (LAST bb.bb_instructions) =
+   [LAST bb.bb_instructions]` by
+    (match_mp_tac ao_cmp_flip_apply_inst_id >>
+     qpat_x_assum `!inst. _ /\ is_terminator _ ==> _`
+       (qspec_then `LAST bb.bb_instructions` mp_tac) >>
+     simp[rich_listTheory.MEM_LAST_NOT_NIL]) >>
+  simp[bb_succs_def] >>
+  `FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
+             bb.bb_instructions) <> []` by
+    (Cases_on `bb.bb_instructions` >> gvs[ao_cmp_flip_apply_ne]) >>
+  simp[] >>
+  `LAST (FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
+                   bb.bb_instructions)) =
+   LAST (ao_cmp_flip_apply_inst mid flips removes inserts
+           (LAST bb.bb_instructions))` by
+    (irule last_flat_map >> simp[ao_cmp_flip_apply_ne]) >>
+  every_case_tac >> gvs[]
+QED
+
+Triviality ao_phase4_bb_wf[local]:
+  !mid dfg fn bb flips removes inserts.
+    ao_cmp_flip_scan dfg (fn_insts fn) = (flips, removes, inserts) /\
+    MEM bb fn.fn_blocks /\ bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i (fn_insts fn)) ==>
+    bb_well_formed (bb with bb_instructions :=
+      FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
+                bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  irule flat_map_preserves_bb_wf >> rpt conj_tac
+  (* 1. non-term => non-term outputs *)
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
+      `EVERY (\r. ~is_terminator r.inst_opcode)
+        (ao_cmp_flip_apply_inst mid flips removes inserts inst)` by
+        (match_mp_tac ao_cmp_flip_apply_non_term >> simp[] >>
+         rpt strip_tac >>
+         drule_all ao_cmp_flip_scan_flips_non_term >> simp[]) >>
+      gvs[listTheory.EVERY_MEM])
+  (* 2. non-PHI => non-PHI outputs *)
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
+      `EVERY (\r. r.inst_opcode <> PHI)
+        (ao_cmp_flip_apply_inst mid flips removes inserts inst)` by
+        (match_mp_tac ao_cmp_flip_apply_non_phi >> simp[] >>
+         rpt strip_tac >>
+         drule_all ao_cmp_flip_scan_flips_non_term >> simp[]) >>
+      gvs[listTheory.EVERY_MEM])
+  (* 3. terminator => [inst] *)
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
+      drule_all ao_cmp_flip_scan_no_term >> strip_tac >>
+      irule ao_cmp_flip_apply_term >> simp[])
+  (* 4. PHI => [inst] *)
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
+      drule_all ao_cmp_flip_scan_no_phi >> strip_tac >>
+      irule ao_cmp_flip_apply_term >> simp[])
+  (* 5. non-empty *)
+  >- simp[ao_cmp_flip_apply_ne]
+  (* 6. bb_well_formed *)
+  >- simp[]
+QED
+
+Triviality ao_phase4_succs_closed[local]:
+  !mid dfg fn flips removes inserts.
+    wf_function fn /\
+    ao_cmp_flip_scan dfg (fn_insts fn) = (flips, removes, inserts) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i (fn_insts fn)) ==>
+    fn_succs_closed (fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
+                  bb.bb_instructions)) fn.fn_blocks)
+Proof
+  rpt strip_tac >>
+  simp[fn_succs_closed_def] >>
+  rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
+  rename1 `MEM bb0 fn.fn_blocks` >>
+  `bb_well_formed bb0` by
+    (fs[wf_function_def] >> res_tac) >>
+  `!inst. MEM inst bb0.bb_instructions /\
+          is_terminator inst.inst_opcode ==>
+          ~MEM inst.inst_id (MAP FST flips) /\
+          ~MEM inst.inst_id removes /\
+          ~MEM inst.inst_id (MAP FST inserts)` by
+    (rpt strip_tac >> gvs[alistTheory.ALOOKUP_NONE] >>
+     drule_all mem_bb_fn_insts >> strip_tac >>
+     drule_all ao_cmp_flip_scan_no_term >> gvs[alistTheory.ALOOKUP_NONE]) >>
+  `bb_succs (bb0 with bb_instructions :=
+     FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
+               bb0.bb_instructions)) = bb_succs bb0` by
+    (match_mp_tac ao_phase4_bb_succs >> simp[]) >>
+  gvs[] >>
+  simp[fn_labels_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  fs[wf_function_def, fn_succs_closed_def, fn_labels_def] >>
+  res_tac
+QED
+
+(* cmp_ids in inserts are instruction IDs from the scanned list *)
+Triviality ao_cmp_flip_scan_inserts_cmp_id_mem[local]:
+  !dfg insts flips removes inserts k co fv cid.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    MEM (k, co, fv, cid) inserts ==>
+    ?inst. MEM inst insts /\ inst.inst_id = cid /\ is_comparator inst.inst_opcode
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `ao_cmp_flip_scan dfg insts = (flips', removes', inserts')` >>
+  drule_all ao_cmp_flip_scan_inserts_shape >>
+  strip_tac
+  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
+      qexists_tac `inst` >> simp[])
+  >- (`is_comparator h.inst_opcode` by
+        (CCONTR_TAC >>
+         drule_all ao_cmp_flip_scan_non_comp_unchanged >> gvs[]) >>
+      gvs[listTheory.MEM]
+      >- (qexists_tac `h` >> simp[])
+      >- (first_x_assum drule_all >> strip_tac >>
+          qexists_tac `inst` >> simp[]))
+QED
+
+(* cmp_ids in inserts are distinct when instruction IDs are distinct *)
+Triviality ao_cmp_flip_scan_inserts_cmp_ids_distinct[local]:
+  !dfg insts flips removes inserts.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) ==>
+    ALL_DISTINCT (MAP (\(k, co, fv, cid). cid) inserts)
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `ao_cmp_flip_scan dfg insts = (flips', removes', inserts')` >>
+  drule_all ao_cmp_flip_scan_inserts_shape >>
+  strip_tac
+  >- (gvs[] >> first_x_assum match_mp_tac >>
+      qexists_tac `dfg` >> qexists_tac `flips'` >>
+      qexists_tac `removes'` >> gvs[])
+  >- (gvs[] >>
+      `ALL_DISTINCT (MAP (\(k,co,fv,cid). cid) inserts')` by
+        (first_x_assum match_mp_tac >>
+         qexists_tac `dfg` >> qexists_tac `flips'` >>
+         qexists_tac `removes'` >> gvs[]) >>
+      `~MEM h.inst_id (MAP (\(k,co,fv,cid). cid) inserts')` by
+        (simp[listTheory.MEM_MAP, pairTheory.FORALL_PROD] >>
+         rpt strip_tac >>
+         drule_all ao_cmp_flip_scan_inserts_cmp_id_mem >> strip_tac >>
+         gvs[listTheory.ALL_DISTINCT, listTheory.MEM_MAP] >>
+         metis_tac[]) >>
+      gvs[listTheory.ALL_DISTINCT])
+QED
+
+(* IDs produced by ao_cmp_flip_apply_inst *)
+Triviality ao_cmp_flip_apply_inst_ids_char[local]:
+  !mid flips removes inserts inst id.
+    MEM id (MAP (\j. j.inst_id)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst)) ==>
+    id = inst.inst_id \/
+    ?cmp_id. ALOOKUP inserts inst.inst_id = SOME (cmp_id) /\
+             id = ao_fresh_id mid (SND (SND cmp_id)) 0
+Proof
+  rpt gen_tac >>
+  simp[ao_cmp_flip_apply_inst_def] >>
+  every_case_tac >> gvs[]
+QED
+
+(* Generic: ALL_DISTINCT of MAP f implies f is injective on list elements *)
+Triviality all_distinct_map_inj_mem[local]:
+  !f l x y. ALL_DISTINCT (MAP f l) /\ MEM x l /\ MEM y l /\ f x = f y ==> x = y
+Proof
+  Induct_on `l` >> rpt strip_tac >>
+  gvs[listTheory.ALL_DISTINCT, listTheory.MEM] >>
+  metis_tac[listTheory.MEM_MAP_f]
+QED
+
+(* Characterization of IDs in the FLAT MAP result *)
+Triviality ao_cmp_flip_flat_map_ids_char[local]:
+  !insts id mid flips removes inserts.
+    MEM id (FLAT (MAP (\inst. MAP (\j. j.inst_id)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst)) insts)) ==>
+    (?inst. MEM inst insts /\ id = inst.inst_id) \/
+    (?inst co fv cid. MEM inst insts /\
+       ALOOKUP inserts inst.inst_id = SOME (co,fv,cid) /\
+       id = ao_fresh_id mid cid 0)
+Proof
+  Induct_on `insts` >> simp[] >> rpt strip_tac >>
+  fs[listTheory.MEM_APPEND]
+  >- (imp_res_tac ao_cmp_flip_apply_inst_ids_char >> gvs[]
+      >- (DISJ1_TAC >> metis_tac[])
+      >- (DISJ2_TAC >> qexists_tac `h` >>
+          Cases_on `cmp_id` >> Cases_on `r` >> gvs[]))
+  >- (first_x_assum drule >> strip_tac >> metis_tac[])
+QED
+
+(* IDs from a single instruction application are distinct *)
+Triviality ao_cmp_flip_apply_single_distinct[local]:
+  !inst mid flips removes inserts.
+    inst.inst_id <= mid ==>
+    ALL_DISTINCT (MAP (\j. j.inst_id)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst))
+Proof
+  rpt strip_tac >>
+  simp[ao_cmp_flip_apply_inst_def] >>
+  every_case_tac >>
+  gvs[listTheory.ALL_DISTINCT, ao_fresh_id_def]
+QED
+
+(* If ALL_DISTINCT cids and two ALOOKUP entries have different keys, cids differ *)
+Triviality alookup_cid_neq[local]:
+  !inserts k1 k2 co1 fv1 cid1 co2 fv2 cid2.
+    ALOOKUP inserts k1 = SOME (co1,fv1,cid1) /\
+    ALOOKUP inserts k2 = SOME (co2,fv2,cid2) /\
+    ALL_DISTINCT (MAP (\(k,co,fv,cid). cid) inserts) /\
+    k1 <> k2 ==> cid1 <> cid2
+Proof
+  Induct_on `inserts` >> simp[] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[listTheory.ALL_DISTINCT, listTheory.MEM_MAP,
+       pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >>
+  Cases_on `h0 = k1` >> Cases_on `h0 = k2` >> gvs[] >>
+  metis_tac[alistTheory.ALOOKUP_MEM]
+QED
+
+(* Equating the block-level and instruction-level ID lists *)
+Triviality fn_inst_ids_flat_map_eq[local]:
+  !f blocks.
+    FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+          (MAP (\bb. bb with bb_instructions :=
+            FLAT (MAP f bb.bb_instructions)) blocks)) =
+    FLAT (MAP (\inst. MAP (\j. j.inst_id) (f inst))
+          (fn_insts_blocks blocks))
+Proof
+  Induct_on `blocks` >>
+  gvs[venomInstTheory.fn_insts_blocks_def, listTheory.MAP_FLAT,
+      listTheory.MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+(* Main: FLAT MAP of apply produces ALL_DISTINCT IDs *)
+Triviality ao_cmp_flip_ids_all_distinct[local]:
+  !insts mid flips removes inserts.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!inst. MEM inst insts ==> inst.inst_id <= mid) /\
+    ALL_DISTINCT (MAP (\(k,co,fv,cid). cid) inserts) ==>
+    ALL_DISTINCT (FLAT (MAP (\inst. MAP (\j. j.inst_id)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst)) insts))
+Proof
+  Induct_on `insts` >> simp[] >> rpt strip_tac >>
+  simp[listTheory.ALL_DISTINCT_APPEND] >> rpt conj_tac
+  >- (irule ao_cmp_flip_apply_single_distinct >> gvs[])
+  >- (rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+      drule ao_cmp_flip_flat_map_ids_char >> strip_tac >>
+      drule ao_cmp_flip_apply_inst_ids_char >> strip_tac >> gvs[]
+      >- (`inst.inst_id <= mid` by res_tac >>
+          `h.inst_id <= mid` by gvs[] >>
+          gvs[listTheory.ALL_DISTINCT, listTheory.MEM_MAP] >>
+          metis_tac[])
+      >- (`ao_fresh_id mid (SND (SND cmp_id)) 0 > mid` by
+            simp[ao_fresh_id_gt] >>
+          `inst.inst_id <= mid` by res_tac >> gvs[])
+      >- (`ao_fresh_id mid cid 0 > mid` by simp[ao_fresh_id_gt] >>
+          `h.inst_id <= mid` by gvs[] >> gvs[])
+      >- (`SND (SND cmp_id) = cid` by gvs[ao_fresh_id_def] >>
+          `h.inst_id <> inst.inst_id` by
+            (gvs[listTheory.ALL_DISTINCT, listTheory.MEM_MAP] >>
+             metis_tac[]) >>
+          Cases_on `cmp_id` >> Cases_on `r` >> gvs[] >>
+          drule_all alookup_cid_neq >> gvs[]))
+QED
+
 Triviality ao_phase4_preserves_wf[local]:
-  !mid dfg fn. wf_function fn ==>
+  !mid dfg fn.
+    wf_function fn /\
+    fn_max_inst_id fn <= mid /\
+    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i (fn_insts fn)) ==>
     wf_function (ao_cmp_flip_function mid dfg fn)
 Proof
-  cheat
+  rpt strip_tac >>
+  simp[ao_cmp_flip_function_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >>
+  qpat_x_assum `wf_function fn` mp_tac >>
+  simp_tac std_ss [wf_function_def] >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
+    metis_tac[fn_inst_ids_as_fn_insts] >>
+  simp[wf_function_def] >> rpt conj_tac
+  >- fs[fn_labels_def, listTheory.MAP_MAP_o, combinTheory.o_DEF]
+  >- fs[fn_has_entry_def]
+  >- (rpt strip_tac >> gvs[listTheory.MEM_MAP] >>
+      rename1 `MEM bb0 fn.fn_blocks` >>
+      `bb_well_formed bb0` by res_tac >>
+      irule ao_phase4_bb_wf >>
+      simp[] >>
+      qexists_tac `dfg` >> qexists_tac `fn` >>
+      simp[] >> first_assum ACCEPT_TAC)
+  >- (`wf_function fn` by simp[wf_function_def] >>
+      drule_all ao_phase4_succs_closed >> simp[])
+  >- (simp[venomWfTheory.fn_inst_ids_distinct_def,
+           fn_inst_ids_flat_map_eq, GSYM fn_insts_def] >>
+      irule ao_cmp_flip_ids_all_distinct >> rpt conj_tac
+      >- (rpt strip_tac >>
+          `inst.inst_id <= fn_max_inst_id fn` by
+            metis_tac[fn_max_inst_id_bound] >> gvs[])
+      >- gvs[]
+      >- metis_tac[ao_cmp_flip_scan_inserts_cmp_ids_distinct])
 QED
 
 Theorem ao_preserves_wf_function:
@@ -1788,19 +2432,23 @@ Proof
   rpt strip_tac >>
   simp[ao_transform_function_def, LET_THM,
        GSYM function_map_transform_def] >>
-  irule ao_phase4_preserves_wf >>
-  irule ao_phase3_preserves_wf >>
-  simp[GSYM block_map_transform_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  rpt conj_tac
-  >- (simp[ao_compute_fn_iszero_targets_def,
-           ao_compute_iszero_targets_def] >>
-      match_mp_tac ao_compute_targets_no_label >> simp[] >>
-      irule phase1_preserves_iszero_no_label >> simp[])
-  >- (irule ao_phase1_preserves_wf >> simp[])
-  >- (simp[function_map_transform_def] >>
-      irule phase1_preserves_inst_wf >>
-      fs[fn_insts_def, fn_insts_blocks_every])
+  irule ao_phase4_preserves_wf >> conj_tac
+  >- (rpt strip_tac >>
+      imp_res_tac dfgAnalysisPropsTheory.dfg_build_function_uses_sound)
+  >- (conj_tac
+      >- (irule ao_phase3_preserves_wf >>
+          simp[GSYM block_map_transform_def] >>
+          CONV_TAC (DEPTH_CONV ETA_CONV) >>
+          rpt conj_tac
+          >- (simp[ao_compute_fn_iszero_targets_def,
+                   ao_compute_iszero_targets_def] >>
+              match_mp_tac ao_compute_targets_no_label >> simp[] >>
+              irule phase1_preserves_iszero_no_label >> simp[])
+          >- (irule ao_phase1_preserves_wf >> simp[])
+          >- (simp[function_map_transform_def] >>
+              irule phase1_preserves_inst_wf >>
+              fs[fn_insts_def, fn_insts_blocks_every]))
+      >- simp[])
 QED
 
 (* ao_fresh_var is injective on our suffixes *)
