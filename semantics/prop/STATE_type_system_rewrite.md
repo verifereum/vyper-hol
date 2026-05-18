@@ -1,56 +1,56 @@
 # STATE_type_system_rewrite
-Updated: 2026-05-17
+Updated: 2026-05-18
 
 ## Cursor
-- component: C4.2
+- component: C4.1
 - status: in_progress
-- active_file: semantics/prop/vyperTypeBuiltinsScript.sml
-- next_action: Run holbuild(targets=['vyperTypeBuiltinsTheory']) to verify ecadd_no_type_error + extract_ec_point_uint256_2_not_none boundary lemma, then fix ecmul_no_type_error similarly (EL-index + boundary lemma). After that, fix any remaining build failures in well_typed_builtin_app_no_type_error dispatcher and remaining builtin theorems.
-- expected_goal_shape: ecadd/ecmul should close via extract_ec_point_uint256_2_not_none boundary. If boundary lemma proof fails, the issue will be in Cases_on av >> fs[value_has_type_def] step or extract_ec_point_def/array_index_def simplification.
-- verify_with: holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=60, timeout=300)
+- active_file: semantics/prop/vyperTypeSystemScript.sml
+- next_action: Fix well_typed_binop_def lines 93-96: replace UAdd->UnsafeAdd, USub->UnsafeSub, UMul->UnsafeMul, UDiv->UnsafeDiv. This is the ROOT CAUSE of the 4 unprovable msg≠'binop' goals. Then restore the well_typed_binop_no_type_error proof in vyperTypeBuiltinsScript.sml to: strip_tac >> gen_tac >> Cases_on `bop` >> gvs[well_typed_binop_def, Excl is_*_type_def, is_*_type_inv, evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >> TRY (drule vht_ArrayTV_exists >> strip_tac) >> simp[evaluate_binop_def] >> TRY (rpt (COND_CASES_TAC >> simp[]))
+- expected_goal_shape: After fix + gvs: ~56 goals resolved to concrete evaluate_binop calls. After simp[evaluate_binop_def]: ~14 goals with conditionals (Div/Mod/Exp) or bounded_int_op. After COND_CASES_TAC: all close. No more msg≠'binop' goals.
+- verify_with: holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=120, timeout=600)
 
 ## If This Fails
-- Close episode with diagnosis, then continue to ecmul fix. If boundary lemma is wrong, probe with EVAL on extract_ec_point(ArrayV(SArrayV[])). If ecadd approach doesn't close, try adding LENGTH_word_to_bytes or more array_index details.
+- If msg≠'binop' goals persist after fixing well_typed_binop_def, grep the bop Datatype for ALL constructors and verify each one appears in well_typed_binop_def. If new constructor-name mismatches found, fix those too. If no more mismatches but proof still fails, FAIL_TAC probe to inspect remaining goals.
 
 ## Do Not Retry
-- gvs[LIST_REL_CONS1] followed by Cases_on 't' for list decomposition in builtin proofs: gvs generates unpredictable variable names for list tails; after 2+ levels of Cases_on, 't' no longer exists. 8+ attempts across 3 sessions (E0160).
-  - evidence: episode:E0160
-- match_mp_tac LIST_EQ >> simp[] for list decomposition: LIST_EQ produces conjunction (LENGTH equality AND universal EL equality). >> applies simp to both subgoals but simp cannot solve the universal EL equality subgoal.
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m22670_t001
-- Using BaseTV(ArrayTV...) as type_value for ArrayT types: ArrayTV is a type_value constructor directly, not wrapped in BaseTV. evaluate_type(ArrayT ...) = SOME(ArrayTV ...), not SOME(BaseTV(ArrayTV...)).
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m22728_t001
-- fs[AllCaseEqs()] + definition unfolding directly in consumer proofs for extract_ec_point/array_index: Leaves many subgoals about array_index internals. Use boundary lemma extract_ec_point_uint256_2_not_none instead.
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m22730_t001
+- gvs[evaluate_binop_def, AllCaseEqs()] after initial gvs: AllCaseEqs() does case splits that create spurious msg≠'binop' goals from TypeError catch-all branches. Use simp[evaluate_binop_def] instead.
+  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m24329_t001
+- fs instead of gvs for well_typed_binop_def expansion: fs without variable elimination creates 112 goals (double gvs). Use gvs with Excl for type classifiers.
+  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m24179_t001
+- gen_tac AFTER gvs to strip ∀msg: After gvs creates goals with ∀msg, gen_tac strips msg. But impossible In/NotIn/NotEq-int goals become unprovable since simp reduces to 'binop'≠msg which can't be discharged without F from assumptions. Must handle special cases BEFORE or use irule approach.
+  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m24144_t001
+- Attempting tactics before verifying definition constructor names: The UAdd/UnsafeAdd mismatch made the theorem false for 4 constructors. 14+ prior episodes of tactic thrashing could have been avoided by fixing the definition first.
+  - evidence: source:semantics/prop/vyperTypeSystemScript.sml:93-96
 
 ## Reflection
 ### Tunnel Vision Check
-- Spent entire session on C4.2 builtin theorems (ecrecover + ecadd). Should have stepped back sooner when ecadd/ecmul both have the same gvs variable-naming problem - this is a pattern, not a one-off.
-- The PLAN decomposition into C4.2.1-C4.2.4 was correct but I did the ecadd work inline instead of as separate boundary lemmas. Eventually converged to boundary lemma approach for extract_ec_point (the RIGHT approach per §3 abstraction levels).
-- ecmul still has the old broken gvs-based proof - need to apply same EL-index + boundary lemma pattern.
-- Other C4 components (C4.3 ABI, C4.4 Env/Acc, C4.5 type-builtin dispatcher) haven't been touched yet.
+- The UAdd/UnsafeAdd naming mismatch was already documented in LEARNINGS L0749 and claimed fixed, but was NEVER actually fixed. I should have checked this FIRST before any tactic work. 14+ prior episodes of tactic thrashing could have been avoided.
+- The stale holbuild checkpoint made iterative proof development very slow - every edit silently replayed the old prefix. I should have known that FAIL_TAC probes bypass this by forcing fresh goal display.
+- The CASE-EXPLOSION approach (gvs with AllCaseEqs() on evaluate_binop_def) creates msg≠'binop' goals because it resolves the case expressions including the catch-all TypeError branch. simp[evaluate_binop_def] is better than gvs for the second pass.
 
 ### What Went Wrong
-- ecrecover_no_type_error: match_mp_tac LIST_EQ >> simp[] failed because >> applies simp to both LIST_EQ subgoals. Fixed with list_el_decomp_4 local helper. Took 2 attempts to get the helper proof right (variable naming after Cases_on).
-- ecadd_no_type_error: 10+ failed attempts across multiple approaches: (1) gvs destroys ≠ TypeError goals (L0787); (2) Cases_on 't' after gvs[LIST_REL_CONS1] generates unpredictable variable names; (3) Wrong type_value constructor BaseTV(ArrayTV...) instead of ArrayTV; (4) rename1 syntax error with '=>' arrow; (5) Tried multiple proof structures before converging on boundary lemma + EL-index.
-- Wasted time renaming variables instead of using EL-index approach from the start. The EL-index pattern from ecrecover should have been immediately applied to ecadd/ecmul.
+- ROOT CAUSE: well_typed_binop_def uses constructor names UAdd/USub/UMul/UDiv which don't exist in the bop Datatype (those are UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv). After Cases_on bop, the 4 Unsafe* cases have no well_typed_binop clause, so gvs can't resolve them, and evaluate_binop_def's catch-all produces unprovable msg≠'binop' goals.
+- LEARNINGS L0749 documents this exact bug but claims it was already fixed - it wasn't. I should have verified the actual file state.
+- Spent most of the session fighting holbuild checkpoints that replay old proof prefixes. Adding trivial tactical differences (all_tac, whitespace) failed to break the checkpoint. Only FAIL_TAC probes produced informative goal state.
 
 ### Ignored Signals
-- L0787 (gvs destroys ≠ TypeError goals) was in global learnings but I kept trying gvs-based proofs for ecadd
-- L0825 (list_el_decomp_n pattern) was already proved for n=4 before I started on ecadd, but didn't use it for ecadd's 2-element case immediately
-- The PLAN's C4.2.2/C4.2.3 decomposition explicitly prescribes boundary lemmas - I should have extracted extract_ec_point boundary lemma immediately instead of trying inline expansion
+- LEARNINGS entry L0749 explicitly says UAdd->UnsafeAdd fix is needed but claims done - I didn't verify
+- The 4 remaining msg≠'binop' goals have EXACTLY the UintT/IntT assumptions that the Unsafe* operators cover - this should have immediately pointed to constructor name mismatch
+- grep results showed UnsafeAdd in vyperASTScript.sml but I kept trying tactics instead of fixing the definition
 
 ### Strategy Adjustments
-- Always use EL-index approach + boundary lemmas for fixed-arity builtin argument lists. Never use gvs[LIST_REL_CONS1] + Cases_on 't' pattern.
-- When a proof pattern works (EL-index + boundary for ecrecover), immediately apply it to similar theorems (ecadd, ecmul) rather than trying approaches that are known to fail.
-- For value decomposition, always use Cases_on 'EL i vs' >> fs[value_has_type_def] rather than decomposing the whole list first.
-- ArrayTV is a type_value, not BaseTV(base_type). Use evaluate_type_def to derive ArrayTV from ArrayT.
+- ALWAYS verify definition constructor names match before attempting case-split proofs. grep the Datatype and compare.
+- When getting unprovable goals like msg≠X, immediately suspect constructor name mismatches between Definitions.
+- Don't trust LEARNINGS entries that claim something was 'already fixed' - verify in the actual source
+- When holbuild checkpoint interferes, use FAIL_TAC probes to get goal state - they force fresh evaluation
 
 ### Oracle Feedback
-- Strategist's C4.2 boundary lemma approach was correct - extract_ec_point_uint256_2_not_none is exactly the kind of boundary lemma prescribed.
-- The C4.2.2/3/4 decomposition into runtime boundary + extraction + composition would have been faster if I had implemented it from the start rather than trying inline proofs.
+- PLAN C4.1 architecture (case analysis over binop constructors) is sound. The issue is purely a definition constructor name mismatch that makes the theorem false for 4 of the 26 constructors.
+- The per-operator boundary lemma approach is correct - once the definition fix is applied, simp[evaluate_binop_def] + COND_CASES_TAC should close all goals.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260516T153850Z_m22675_t002 - ecrecover_no_type_error build failure showing match_mp_tac LIST_EQ >> simp[] fails
-- tool_output:TO_type_system_rewrite-20260516T153850Z_m22683_t001 - list_el_decomp_4 proof correct (Cases_on t' not t)
-- tool_output:TO_type_system_rewrite-20260516T153850Z_m22730_t001 - ecadd probe showing remaining goal: value_has_type ArrayTV facts + evaluate_ecadd vs = INR(TypeError msg)
-- tool_output:TO_type_system_rewrite-20260516T153850Z_m22728_t001 - ecadd wrong type BaseTV(ArrayTV...) causing type unification error
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m24328_t001 - probe2: 56 goals after first gvs, concrete evaluate_binop calls resolved
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m24329_t001 - probe3: 4 msg≠'binop' goals remain after gvs[evaluate_binop_def,AllCaseEqs()], these are the unprovable ones from Unsafe* mismatch
+- tool_output:TO_type_system_rewrite-20260516T153850Z_m24333_t001 - probe4: 14 goals remain after simp[evaluate_binop_def], 10 conditionals + 4 msg≠'binop'
+- source:syntax/vyperASTScript.sml:60-63 - bop Datatype uses UnsafeAdd/UnsafeSub/UnsafeMul/UnsafeDiv
+- source:semantics/prop/vyperTypeSystemScript.sml:93-96 - well_typed_binop_def STILL uses UAdd/USub/UMul/UDiv (NEVER FIXED despite L0749 claiming it was)
