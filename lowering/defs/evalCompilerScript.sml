@@ -18,6 +18,22 @@ val result_lengths =
         | SOME (deploy_bs, runtime_bs) =>
             SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
 
+val noop_program =
+  ``[FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) NoneT [Pass]]
+    : toplevel list``
+
+val noop_result =
+  EVAL ``compile_vyper ^noop_program
+           (concretize_context_fuel 4) Linear``
+
+val noop_result_lengths =
+  EVAL ``case compile_vyper ^noop_program
+             (concretize_context_fuel 4) Linear of
+          NONE => NONE
+        | SOME (deploy_bs, runtime_bs) =>
+            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
+
 (*
 EVAL ``
 let tops = [];
