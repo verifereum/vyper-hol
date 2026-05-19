@@ -70,39 +70,30 @@ Proof
   EVAL_TAC
 QED
 
-(* These return-value examples compute through the current ABI-size equations
-   in compileEnv, whose termination is still cheat-tagged. Keep them as exact
-   build-time checks until those definitions have clean termination proofs. *)
-fun assert_eval_result name tm expected =
-  let
-    val th = EVAL tm
-    val got = boolSyntax.rhs (concl th)
-  in
-    if Term.aconv got expected then th
-    else raise Fail (name ^ ": expected " ^ term_to_string expected ^
-                     ", got " ^ term_to_string got)
-  end
+Theorem return_uint_result_lengths:
+  compile_vyper_eval_lengths 16 return_uint_program
+    (concretize_context_fuel 4) Linear = SOME (37, 21)
+Proof
+  EVAL_TAC
+QED
 
-val return_uint_result_lengths =
-  assert_eval_result "return_uint_result_lengths"
-    ``compile_vyper_eval_lengths 16 return_uint_program
-        (concretize_context_fuel 4) Linear``
-    ``SOME (37, 21) : (num # num) option``
+Theorem return_arg_result_lengths:
+  compile_vyper_eval_lengths 16 return_arg_program
+    (concretize_context_fuel 4) Linear = SOME (55, 39)
+Proof
+  EVAL_TAC
+QED
 
-val return_arg_result_lengths =
-  assert_eval_result "return_arg_result_lengths"
-    ``compile_vyper_eval_lengths 16 return_arg_program
-        (concretize_context_fuel 4) Linear``
-    ``SOME (55, 39) : (num # num) option``
+Theorem local_uint_result_lengths:
+  compile_vyper_eval_lengths 16 local_uint_program
+    (concretize_context_fuel 4) Linear = SOME (43, 27)
+Proof
+  EVAL_TAC
+QED
 
-val local_uint_result_lengths =
-  assert_eval_result "local_uint_result_lengths"
-    ``compile_vyper_eval_lengths 16 local_uint_program
-        (concretize_context_fuel 4) Linear``
-    ``SOME (43, 27) : (num # num) option``
-
-val add_arg_result_lengths =
-  assert_eval_result "add_arg_result_lengths"
-    ``compile_vyper_eval_lengths 16 add_arg_program
-        (concretize_context_fuel 4) Linear``
-    ``SOME (69, 53) : (num # num) option``
+Theorem add_arg_result_lengths:
+  compile_vyper_eval_lengths 16 add_arg_program
+    (concretize_context_fuel 4) Linear = SOME (69, 53)
+Proof
+  EVAL_TAC
+QED

@@ -27,7 +27,7 @@ Theory compileEnv
 Ancestors
   valueEncoding venomExecSemantics venomInst
   vyperState vyperContext vyperValue vyperABI contractABI
-  byte keccak
+  byte keccak finite_map pred_set
 Libs
   monadsyntax
 
@@ -148,20 +148,31 @@ End
 (* ===== ABI Type Properties ===== *)
 
 (* Whether a Vyper type has dynamic ABI encoding (requires tail section).
-   sft: struct field types lookup (string → type list).
+   sfields: finite struct field map.
    Mirrors Python: VyperType.abi_type.is_dynamic()
    StructT: dynamic iff any field type is dynamic.
    Terminates for acyclic struct definitions (Vyper guarantees no recursive structs). *)
 Definition is_abi_dynamic_def:
-  is_abi_dynamic sft (BaseT (BytesT (Dynamic _))) = T ∧
-  is_abi_dynamic sft (BaseT (StringT _)) = T ∧
-  is_abi_dynamic sft (ArrayT _ (Dynamic _)) = T ∧
-  is_abi_dynamic sft (ArrayT elem (Fixed _)) = is_abi_dynamic sft elem ∧
-  is_abi_dynamic sft (TupleT tys) = EXISTS (is_abi_dynamic sft) tys ∧
-  is_abi_dynamic sft (StructT name) = EXISTS (is_abi_dynamic sft) (sft name) ∧
-  is_abi_dynamic sft _ = F
+  is_abi_dynamic sfields (BaseT (BytesT (Dynamic _))) = T ∧
+  is_abi_dynamic sfields (BaseT (StringT _)) = T ∧
+  is_abi_dynamic sfields (ArrayT _ (Dynamic _)) = T ∧
+  is_abi_dynamic sfields (ArrayT elem (Fixed _)) =
+    is_abi_dynamic sfields elem ∧
+  is_abi_dynamic sfields (TupleT tys) =
+    EXISTS (is_abi_dynamic sfields) tys ∧
+  is_abi_dynamic sfields (StructT name) =
+    (case FLOOKUP sfields name of
+       SOME fields =>
+         EXISTS (is_abi_dynamic (sfields \\ name))
+                (MAP (FST o SND) fields)
+     | NONE => F) ∧
+  is_abi_dynamic sfields _ = F
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, pred_setTheory.CARD_DELETE]
+  >- (Cases_on `CARD (FDOM sfields)` \\ gvs[])
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* Type depth: used as termination measure for recursive typed copy. *)
@@ -177,60 +188,86 @@ Termination
 End
 
 (* ABI static section size (in bytes). For dynamic types this is 0.
-   sft: struct field types lookup (string → type list).
+   sfields: finite struct field map.
    Mirrors Python: ABIType.static_size()
    StructT: sum of embedded_static_size of each field (same as tuple).
    Terminates for acyclic struct definitions. *)
 Definition abi_static_size_def:
-  abi_static_size sft (BaseT (BytesT (Dynamic _))) = 0 ∧
-  abi_static_size sft (BaseT (StringT _)) = 0 ∧
-  abi_static_size sft (BaseT _) = 32 ∧
-  abi_static_size sft (FlagT _) = 32 ∧
-  abi_static_size sft NoneT = 0 ∧
-  abi_static_size sft (ArrayT elem (Fixed n)) =
-    n * (if is_abi_dynamic sft elem then 32 else abi_static_size sft elem) ∧
-  abi_static_size sft (ArrayT _ (Dynamic _)) = 0 ∧
-  abi_static_size sft (TupleT tys) =
-    SUM (MAP (λt. if is_abi_dynamic sft t then 32
-                  else abi_static_size sft t) tys) ∧
-  abi_static_size sft (StructT name) =
-    SUM (MAP (λt. if is_abi_dynamic sft t then 32
-                  else abi_static_size sft t) (sft name))
+  abi_static_size sfields (BaseT (BytesT (Dynamic _))) = 0 ∧
+  abi_static_size sfields (BaseT (StringT _)) = 0 ∧
+  abi_static_size sfields (BaseT _) = 32 ∧
+  abi_static_size sfields (FlagT _) = 32 ∧
+  abi_static_size sfields NoneT = 0 ∧
+  abi_static_size sfields (ArrayT elem (Fixed n)) =
+    n * (if is_abi_dynamic sfields elem then 32
+         else abi_static_size sfields elem) ∧
+  abi_static_size sfields (ArrayT _ (Dynamic _)) = 0 ∧
+  abi_static_size sfields (TupleT tys) =
+    SUM (MAP (λt. if is_abi_dynamic sfields t then 32
+                  else abi_static_size sfields t) tys) ∧
+  abi_static_size sfields (StructT name) =
+    (case FLOOKUP sfields name of
+       SOME fields =>
+         SUM (MAP (λt. if is_abi_dynamic (sfields \\ name) t then 32
+                       else abi_static_size (sfields \\ name) t)
+                  (MAP (FST o SND) fields))
+     | NONE => 0)
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, pred_setTheory.CARD_DELETE]
+  >- (Cases_on `CARD (FDOM sfields)` \\ gvs[])
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* ABI embedded static size: 32 for dynamic types, static_size otherwise.
    Mirrors Python: ABIType.embedded_static_size() *)
 Definition abi_embedded_static_size_def:
-  abi_embedded_static_size sft ty =
-    if is_abi_dynamic sft ty then 32
-    else abi_static_size sft ty
+  abi_embedded_static_size sfields ty =
+    if is_abi_dynamic sfields ty then 32
+    else abi_static_size sfields ty
 End
 
 (* ABI size bound (static + dynamic sections).
-   sft: struct field types lookup (string → type list).
+   sfields: finite struct field map.
    Mirrors Python: ABIType.size_bound()
    StructT: same as tuple (sum of field size bounds). *)
 Definition abi_size_bound_def:
-  abi_size_bound sft (BaseT (BytesT (Dynamic n))) = 32 + ((n + 31) DIV 32) * 32 ∧
-  abi_size_bound sft (BaseT (StringT n)) = 32 + ((n + 31) DIV 32) * 32 ∧
-  abi_size_bound sft (ArrayT elem (Dynamic n)) =
-    32 + n * (abi_embedded_static_size sft elem +
-              (if is_abi_dynamic sft elem then abi_size_bound sft elem else 0)) ∧
-  abi_size_bound sft (ArrayT elem (Fixed n)) =
-    n * (abi_embedded_static_size sft elem +
-         (if is_abi_dynamic sft elem then abi_size_bound sft elem else 0)) ∧
-  abi_size_bound sft (TupleT tys) =
-    SUM (MAP (λt. abi_embedded_static_size sft t +
-                  (if is_abi_dynamic sft t then abi_size_bound sft t else 0)) tys) ∧
-  abi_size_bound sft (StructT name) =
-    SUM (MAP (λt. abi_embedded_static_size sft t +
-                  (if is_abi_dynamic sft t then abi_size_bound sft t else 0))
-         (sft name)) ∧
-  abi_size_bound sft ty = abi_static_size sft ty
+  abi_size_bound sfields (BaseT (BytesT (Dynamic n))) =
+    32 + ((n + 31) DIV 32) * 32 ∧
+  abi_size_bound sfields (BaseT (StringT n)) =
+    32 + ((n + 31) DIV 32) * 32 ∧
+  abi_size_bound sfields (ArrayT elem (Dynamic n)) =
+    32 + n * (abi_embedded_static_size sfields elem +
+              (if is_abi_dynamic sfields elem
+               then abi_size_bound sfields elem
+               else 0)) ∧
+  abi_size_bound sfields (ArrayT elem (Fixed n)) =
+    n * (abi_embedded_static_size sfields elem +
+         (if is_abi_dynamic sfields elem
+          then abi_size_bound sfields elem
+          else 0)) ∧
+  abi_size_bound sfields (TupleT tys) =
+    SUM (MAP (λt. abi_embedded_static_size sfields t +
+                  (if is_abi_dynamic sfields t
+                   then abi_size_bound sfields t
+                   else 0)) tys) ∧
+  abi_size_bound sfields (StructT name) =
+    (case FLOOKUP sfields name of
+       SOME fields =>
+         SUM (MAP (λt. abi_embedded_static_size (sfields \\ name) t +
+                       (if is_abi_dynamic (sfields \\ name) t
+                        then abi_size_bound (sfields \\ name) t
+                        else 0))
+                  (MAP (FST o SND) fields))
+     | NONE => 0) ∧
+  abi_size_bound sfields ty = abi_static_size sfields ty
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, pred_setTheory.CARD_DELETE]
+  >- (Cases_on `CARD (FDOM sfields)` \\ gvs[])
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* ===== Compilation Environment ===== *)
@@ -876,7 +913,7 @@ End
 (* ===== Type Classification ===== *)
 
 (* Struct field types function from compile_env.
-   Used as the sft parameter for is_abi_dynamic/abi_static_size/abi_size_bound.
+   Used by definitions that still take a struct-name lookup function.
    Extracts just the type from (name, type, byte_size) triples. *)
 Definition cenv_sft_def:
   cenv_sft cenv name = MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)

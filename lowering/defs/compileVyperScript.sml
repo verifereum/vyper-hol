@@ -295,8 +295,8 @@ End
 Definition build_positional_arg_def:
   build_positional_arg cenv ((name, ty) : string # type) =
     let is_prim = is_word_type ty in
-    let is_dyn = is_abi_dynamic (cenv_sft cenv) ty in
-    let abi_sz = abi_embedded_static_size (cenv_sft cenv) ty in
+    let is_dyn = is_abi_dynamic cenv.ce_struct_fields ty in
+    let abi_sz = abi_embedded_static_size cenv.ce_struct_fields ty in
     let dec = type_to_abi_dec_info cenv.ce_struct_fields cenv ty in
     (name, is_prim, is_dyn, abi_sz, dec)
 End
@@ -311,7 +311,7 @@ End
 Definition min_calldata_size_def:
   min_calldata_size cenv (args : (string # type) list) (n_defaults : num) =
     let required = TAKE (LENGTH args - n_defaults) args in
-    let sizes = MAP (λ(_,ty). abi_embedded_static_size (cenv_sft cenv) ty)
+    let sizes = MAP (λ(_,ty). abi_embedded_static_size cenv.ce_struct_fields ty)
                     required in
     4 + SUM sizes
 End
@@ -402,7 +402,7 @@ Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =
     let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
     let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
-    let max_ret = abi_size_bound (cenv_sft cenv) ret_type in
+    let max_ret = abi_size_bound cenv.ce_struct_fields ret_type in
     cenv with <| ce_ret_enc_info := enc_info;
                  ce_ret_dec_info := dec_info;
                  ce_max_return_size := max_ret |>
