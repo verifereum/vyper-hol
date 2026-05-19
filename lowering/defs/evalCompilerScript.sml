@@ -86,6 +86,19 @@ Definition storage_write_program_def:
           (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]]
 End
 
+Definition deploy_storage_program_def:
+  deploy_storage_program =
+    [VariableDecl Private Storage "stored" (BaseT (UintT 256)) (SOME 0);
+     FunctionDecl Deploy Nonpayable F F "__init__"
+       ([] : (string # type) list) ([] : expr list) NoneT
+       [Assign (BaseTarget (TopLevelNameTarget (NONE, "stored")))
+          (Literal (BaseT (UintT 256)) (IntL 5))];
+     FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME
+          (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]]
+End
+
 Definition hashmap_read_program_def:
   hashmap_read_program =
     [HashMapDecl Private F "stored" (BaseT (UintT 256))
@@ -296,6 +309,13 @@ QED
 Theorem storage_write_result_lengths:
   compile_vyper_lengths storage_write_program
     concretize_context_eval Linear = SOME (95, 76)
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_storage_result_lengths:
+  compile_vyper_lengths deploy_storage_program
+    concretize_context_eval Linear = SOME (102, 72)
 Proof
   EVAL_TAC
 QED
