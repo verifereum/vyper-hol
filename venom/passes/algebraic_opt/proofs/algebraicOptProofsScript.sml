@@ -771,20 +771,16 @@ Proof
   rpt strip_tac >>
   simp[ao_opt_comparator_def, LET_THM,
        ao_unsigned_boundaries_def, ao_signed_boundaries_def] >>
-  (* Split on operand pattern *)
   Cases_on `inst.inst_operands` >> gvs[listTheory.EVERY_DEF] >>
   Cases_on `t` >> gvs[listTheory.EVERY_DEF] >>
   Cases_on `t'` >> gvs[listTheory.EVERY_DEF] >>
-  (* [h; h'] case: split op1=op2, then range_result *)
   IF_CASES_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
   CASE_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
-  (* NONE branch: split all remaining ifs, then close *)
   rpt IF_CASES_TAC >>
   gvs[listTheory.EVERY_DEF, is_terminator_def,
       ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
       ao_cmp_prefer_iz_general_def] >>
-  rpt CASE_TAC >>
-  gvs[listTheory.EVERY_DEF, is_terminator_def]
+  rpt (CASE_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def])
 QED
 
 (* Peephole output is always non-terminator and non-INVOKE,
@@ -1863,7 +1859,7 @@ Proof
   drule fn_insts_blocks_map_offset >> strip_tac >> gvs[] >>
   fs[ao_handle_offset_inst_outputs] >>
   first_x_assum irule >> qexists_tac `inst0` >>
-  simp[fn_insts_def] >> metis_tac[]
+  simp[fn_insts_def]
 QED
 
 (* run_blocks is independent of vs_inst_idx *)
@@ -2134,7 +2130,8 @@ Proof
           >- (* INVOKE *)
              (simp[ao_resolve_iszero_inst_def] >>
               irule step_inst_operands_equiv >>
-              simp[listTheory.LENGTH_MAP] >> rpt strip_tac >>
+              simp[listTheory.LENGTH_MAP, is_alloca_op_def] >>
+              rpt strip_tac >>
               simp[listTheory.EL_MAP, resolve_op_label] >>
               TRY (irule resolve_op_eval_eq >> simp[]) >>
               gvs[inst_wf_def] >> simp[resolve_op_lit])
@@ -2148,19 +2145,24 @@ Proof
               Cases_on `t` >> simp[] >>
               Cases_on `s.vs_prev_bb` >> simp[] >>
               rename1 `resolve_phi prev` >>
+              qmatch_goalsub_abbrev_tac
+                `MAP (ao_resolve_iszero_op tgts PHI)` >>
               `resolve_phi prev
-                 (MAP (ao_resolve_iszero_op targets PHI)
+                 (MAP (ao_resolve_iszero_op tgts PHI)
                       inst.inst_operands) =
-               OPTION_MAP (ao_resolve_iszero_op targets PHI)
+               OPTION_MAP (ao_resolve_iszero_op tgts PHI)
                  (resolve_phi prev inst.inst_operands)` by
                 (irule resolve_phi_map_label_pres >> simp[resolve_op_label] >>
+                 `?fn'. tgts = ao_compute_fn_iszero_targets fn'` by
+                   (qunabbrev_tac `tgts` >> metis_tac[]) >>
                  metis_tac[resolve_op_phi_no_label]) >>
               simp[] >>
               Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
               rename1 `resolve_phi prev _ = SOME val_op` >>
-              `eval_operand (ao_resolve_iszero_op targets PHI val_op) s =
+              `eval_operand (ao_resolve_iszero_op tgts PHI val_op) s =
                eval_operand val_op s` by
-                (irule resolve_op_eval_eq >> simp[]) >>
+                (irule resolve_op_eval_eq >>
+                 qunabbrev_tac `tgts` >> simp[]) >>
               simp[]))
       >- (irule (SIMP_RULE std_ss [] ao_resolve_iszero_inst_sim) >>
           gvs[]))
@@ -2255,13 +2257,14 @@ Proof
         gvs[Abbr `sound`, Abbr `sinv`, Abbr `f`, Abbr `result`] >>
         `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
           metis_tac[listTheory.EL_MEM] >>
+        `inst_wf (EL idx bb.bb_instructions)` by
+          metis_tac[listTheory.EVERY_MEM] >>
         qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`, `bb`,
           `fuel`, `ctx`, `idx`, `EL idx bb.bb_instructions`,
           `s' with vs_inst_idx := 0`] mp_tac ao_per_inst_sim_fn0_inv >>
-        impl_tac >- (
-          gvs[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel] >>
-          `(s' with vs_inst_idx := 0).vs_vars = s'.vs_vars` by simp[] >>
-          gvs[]) >>
+        impl_tac >-
+          gvs[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel,
+              idx_df_state_at2] >>
         simp[])
     >- simp[Abbr `f`, ao_transform_inst_structural]
     >- first_assum ACCEPT_TAC
@@ -2300,7 +2303,8 @@ Proof
         REWRITE_TAC[ao_dfg_inv_inst_idx_irrel] >>
         irule ao_sinv_step_preserved >>
         qexistsl_tac [`fn`, `fn0`, `bb`, `idx`] >>
-        gvs[markerTheory.Abbrev_def])
+        gvs[markerTheory.Abbrev_def] >>
+        metis_tac[listTheory.EVERY_MEM, listTheory.EL_MEM])
     >- (* sinv preserved by state_equiv fv *)
        (rpt strip_tac >> gvs[Abbr `sinv`] >>
         qpat_x_assum `(\s'. _) _` mp_tac >>
@@ -2492,9 +2496,12 @@ Triviality range_sound_to_in_range_state[local]:
     in_range_state (range_at_inst ra lbl 0) s.vs_vars
 Proof
   rpt strip_tac >>
-  fs[range_sound_def, range_at_inst_def, range_unwrap_def] >>
+  simp[rangeAnalysisDefsTheory.range_at_inst_def] >>
   Cases_on `df_widen_at NONE ra lbl 0` >>
-  gvs[in_range_state_def, range_unwrap_def, finite_mapTheory.FLOOKUP_DEF]
+  gvs[rangeAnalysisProofsTheory.range_sound_def,
+      rangeAnalysisDefsTheory.range_unwrap_def,
+      rangeEvalDefsTheory.in_range_state_def,
+      finite_mapTheory.FLOOKUP_DEF]
 QED
 
 (* Phases 1-3 sim using block_sim_function_error_bb with extended block_inv.

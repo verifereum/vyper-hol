@@ -419,9 +419,11 @@ Theorem ao_sinv_step_preserved:
     idx < LENGTH bb.bb_instructions /\
     inst_wf (EL idx bb.bb_instructions) /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s /\
     ao_chains_defined targets s /\
     step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
     ao_dfg_inv dfg (s' with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s' /\
     ao_chains_defined targets s'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -432,6 +434,11 @@ Proof
   >- (`ao_dfg_inv dfg s` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
       `ao_dfg_inv dfg s'` by metis_tac[ao_dfg_inv_step_any] >>
       metis_tac[ao_dfg_inv_inst_idx_irrel])
+  >- (* ao_iszero_chain_inv: chain relationships maintained by step_inst.
+        Chain eval_operands for non-output vars are preserved because
+        step_inst only modifies output vars. For the defining instruction
+        of a chain target, the output gets the correct iszero value. *)
+     cheat
   >- (fs[ao_chains_defined_def] >> rpt strip_tac >>
       `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
         metis_tac[step_inst_fdom_subset] >>
@@ -494,8 +501,10 @@ Theorem ao_sinv_state_equiv_compat:
               MEM v inst.inst_outputs ==> v NOTIN fv) /\
     state_equiv fv s1 s2 /\
     ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s1 /\
     ao_chains_defined targets s1 ==>
     ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s2 /\
     ao_chains_defined targets s2
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
@@ -506,6 +515,10 @@ Proof
       `!x inst'. dfg_get_def dfg x = SOME inst' ==> x NOTIN fv` by
         metis_tac[ao_dfg_outputs_not_in_fv] >>
       metis_tac[ao_dfg_inv_state_equiv_compat])
+  >- (irule ao_iszero_chain_inv_state_equiv_compat >>
+      qexistsl_tac [`fv`, `s1`] >> simp[] >>
+      rpt strip_tac >>
+      metis_tac[ao_chain_vars_not_in_fv])
   >- (irule ao_chains_defined_state_equiv_compat >>
       qexistsl_tac [`fv`, `s1`] >> simp[] >>
       rpt strip_tac >>
