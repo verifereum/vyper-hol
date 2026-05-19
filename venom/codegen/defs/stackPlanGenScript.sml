@@ -7,6 +7,7 @@
  *
  * TOP-LEVEL:
  *   generate_context_plan — plan for entire venom_context
+ *   generate_context_plan_fuel — bounded dataflow variant for evaluator use
  *)
 
 Theory stackPlanGen
@@ -784,6 +785,20 @@ Definition generate_fn_plan_def:
         | SOME (ops, _, ps') => SOME (ops, ps')
 End
 
+Definition generate_fn_plan_fuel_def:
+  generate_fn_plan_fuel fuel fn fn_eom (lbl_ctr : num) =
+    let liveness = liveness_analyze_fuel fuel fn in
+    let dfg = dfg_build_function fn in
+    let cfg = cfg_analyze fn in
+    let ps = (init_plan_state fn_eom) with ps_label_counter := lbl_ctr in
+    case fn_entry_label fn of
+      NONE => SOME ([] : stack_op list, ps)
+    | SOME lbl =>
+        case generate_fn_plan_aux liveness dfg cfg fn [lbl] [] ps of
+          NONE => NONE
+        | SOME (ops, _, ps') => SOME (ops, ps')
+End
+
 Definition revert_postamble_def:
   revert_postamble =
     [SOLabel "revert"; SOPush (Lit 0w); SOEmit "DUP1"; SOEmit "REVERT"]
@@ -799,6 +814,25 @@ Definition generate_context_plan_def:
           let eom = case FLOOKUP fn_eom_map fn.fn_name of
             SOME v => v | NONE => 0 in
           case generate_fn_plan fn eom lbl_ctr of
+            NONE => NONE
+          | SOME (fn_ops, ps) =>
+              SOME (ops ++ fn_ops, ps.ps_label_counter))
+      (SOME ([] : stack_op list, 0)) ctx.ctx_functions in
+    case result of
+      NONE => NONE
+    | SOME (all_ops, _) => SOME (all_ops ++ revert_postamble)
+End
+
+Definition generate_context_plan_fuel_def:
+  generate_context_plan_fuel fuel ctx fn_eom_map =
+    let result =
+      FOLDL (λacc fn.
+        case acc of
+          NONE => NONE
+        | SOME (ops, lbl_ctr) =>
+          let eom = case FLOOKUP fn_eom_map fn.fn_name of
+            SOME v => v | NONE => 0 in
+          case generate_fn_plan_fuel fuel fn eom lbl_ctr of
             NONE => NONE
           | SOME (fn_ops, ps) =>
               SOME (ops ++ fn_ops, ps.ps_label_counter))

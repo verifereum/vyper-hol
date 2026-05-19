@@ -10,6 +10,7 @@
  *
  * TOP-LEVEL:
  *   compile_vyper          -- toplevel list → byte list option
+ *   compile_vyper_eval     -- bounded-dataflow evaluator variant
  *
  * The storage/transient layout (variable name → slot) comes from the
  * Python compiler's annotated AST, NOT recomputed here.
@@ -625,6 +626,74 @@ Definition compile_vyper_def:
       [<| ds_label := "runtime_begin";
           ds_items := [DataBytes runtime_bytecode] |>] in
     case codegen deploy_ctx' FEMPTY deploy_data of
+      NONE => NONE
+    | SOME deploy_bytecode =>
+      SOME (deploy_bytecode, runtime_bytecode)
+End
+
+Definition compile_vyper_eval_def:
+  compile_vyper_eval fuel (tops : toplevel list)
+                     (pipeline : venom_context -> venom_context)
+                     dispatch_strategy =
+    let tenv = type_env tops in
+    let sft = make_struct_fields_map tops in
+    let sft_fn = get_struct_fields sft in
+    let immutables_len = compute_immutables_len sft_fn tops in
+    let nkey_map = assign_nkeys tops 0 in
+    let use_trans = F in
+    let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
+    let selectors = build_selectors tenv ext_fns in
+    let external_fns = MAP (package_external_fn tops use_trans nkey_map)
+                           ext_fns in
+    let runtime_int_fns = MAP (package_internal_fn tops use_trans nkey_map F)
+                              int_fns in
+    let fallback_fn = package_fallback_fn tops use_trans nkey_map fb_fn in
+    let entry_label = "__entry" in
+    let method_ids = MAP FST selectors in
+    let entry_info = build_dense_entry_info selectors external_fns in
+    let (bucket_count, fn_meta_bytes, dense_buckets) =
+      (case dispatch_strategy of
+         Dense =>
+           let min_cds_values = MAP (λ(_, _, _, min_cds, _, _, _, _, _, _, _).
+                                      min_cds) external_fns in
+           let fn_mb = compute_fn_metadata_bytes min_cds_values in
+           (case generate_dense_jumptable_info method_ids of
+              NONE => (1, fn_mb, ([] : dense_bucket list))
+            | SOME (nb, buckets) => (nb, fn_mb, buckets))
+       | Sparse =>
+           let (nb, _) = generate_sparse_jumptable_buckets method_ids in
+           (nb, 0, [])
+       | Linear =>
+           (0, 0, [])) in
+    let (runtime_ctx, runtime_data) =
+      run_lowering selectors external_fns runtime_int_fns
+        fallback_fn dispatch_strategy bucket_count fn_meta_bytes
+        dense_buckets entry_info entry_label in
+    let runtime_ctx' = pipeline runtime_ctx in
+    case codegen_fuel fuel runtime_ctx' FEMPTY runtime_data of
+      NONE => NONE
+    | SOME runtime_bytecode =>
+    let has_constructor = IS_SOME ctor_fn in
+    let deploy_int_fns = MAP (package_internal_fn tops use_trans nkey_map T)
+                             int_fns in
+    let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
+         ctor_trans, ctor_body, ctor_ret) =
+      case ctor_fn of
+        SOME cf => package_constructor tops use_trans nkey_map cf
+      | NONE => (ARB, ([] : (string # bool # bool # num # abi_dec_info) list),
+                 F, F, 0n, F, ([] : stmt list), NoneT) in
+    let (deploy_ctx, deploy_data_base) =
+      run_deploy_lowering has_constructor
+        (LENGTH runtime_bytecode) immutables_len
+        ctor_args 0 deploy_int_fns
+        ctor_cenv ctor_body ctor_payable ctor_nr
+        ctor_nkey ctor_trans "__deploy" in
+    let deploy_ctx' = pipeline deploy_ctx in
+    let deploy_data =
+      deploy_data_base ++
+      [<| ds_label := "runtime_begin";
+          ds_items := [DataBytes runtime_bytecode] |>] in
+    case codegen_fuel fuel deploy_ctx' FEMPTY deploy_data of
       NONE => NONE
     | SOME deploy_bytecode =>
       SOME (deploy_bytecode, runtime_bytecode)

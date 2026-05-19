@@ -9,7 +9,7 @@ val () = the_compset := computeLib.add_thms [i2w_pos] (!the_compset)
 val () = Globals.max_print_depth := 20
 
 val empty_result_lengths =
-  EVAL ``case compile_vyper ([] : toplevel list)
+  EVAL ``case compile_vyper_eval 16 ([] : toplevel list)
              (concretize_context_fuel 4) Linear of
           NONE => NONE
         | SOME (deploy_bs, runtime_bs) =>
@@ -21,7 +21,7 @@ val noop_program =
     : toplevel list``
 
 val noop_result_lengths =
-  EVAL ``case compile_vyper ^noop_program
+  EVAL ``case compile_vyper_eval 16 ^noop_program
              (concretize_context_fuel 4) Linear of
           NONE => NONE
         | SOME (deploy_bs, runtime_bs) =>
@@ -34,7 +34,7 @@ val return_uint_program =
     : toplevel list``
 
 val return_uint_result_lengths =
-  EVAL ``case compile_vyper ^return_uint_program
+  EVAL ``case compile_vyper_eval 16 ^return_uint_program
              (concretize_context_fuel 4) Linear of
           NONE => NONE
         | SOME (deploy_bs, runtime_bs) =>
@@ -47,7 +47,7 @@ val return_arg_program =
     : toplevel list``
 
 val return_arg_result_lengths =
-  EVAL ``case compile_vyper ^return_arg_program
+  EVAL ``case compile_vyper_eval 16 ^return_arg_program
              (concretize_context_fuel 4) Linear of
           NONE => NONE
         | SOME (deploy_bs, runtime_bs) =>

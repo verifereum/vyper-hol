@@ -13,6 +13,7 @@
  *
  * TOP-LEVEL:
  *   codegen — venom_context → (string, num) fmap → data_section list → byte list option
+ *   codegen_fuel — bounded dataflow variant for evaluator use
  *)
 
 Theory codegen
@@ -28,6 +29,18 @@ Definition codegen_def:
           (fn_eom_map : (string, num) fmap)
           (data_seg : data_section list) : byte list option =
     case generate_context_plan ctx fn_eom_map of
+      NONE => NONE
+    | SOME plan =>
+        let code_asm = execute_plan plan in
+        let data_asm = data_segment_asm data_seg in
+        SOME (assemble (code_asm ++ data_asm))
+End
+
+Definition codegen_fuel_def:
+  codegen_fuel fuel (ctx : venom_context)
+               (fn_eom_map : (string, num) fmap)
+               (data_seg : data_section list) : byte list option =
+    case generate_context_plan_fuel fuel ctx fn_eom_map of
       NONE => NONE
     | SOME plan =>
         let code_asm = execute_plan plan in
