@@ -79,6 +79,18 @@ Definition if_join_program_def:
         Return (SOME (Name (BaseT (UintT 256)) "y"))]]
 End
 
+Definition for_pass_program_def:
+  for_pass_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [For "i" (BaseT (UintT 256))
+          (Range (Literal (BaseT (UintT 256)) (IntL 0))
+                 (Literal (BaseT (UintT 256)) (IntL 2)))
+          0
+          [Pass];
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]]
+End
+
 Theorem empty_result_lengths:
   compile_vyper_eval_lengths 16 ([] : toplevel list)
     concretize_context_eval Linear = SOME (53, 34)
@@ -131,6 +143,13 @@ QED
 Theorem if_join_result_lengths:
   compile_vyper_eval_lengths 16 if_join_program
     concretize_context_eval Linear = SOME (155, 136)
+Proof
+  EVAL_TAC
+QED
+
+Theorem for_pass_result_lengths:
+  compile_vyper_eval_lengths 32 for_pass_program
+    concretize_context_eval Linear = SOME (128, 109)
 Proof
   EVAL_TAC
 QED
