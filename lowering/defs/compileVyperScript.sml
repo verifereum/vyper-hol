@@ -226,8 +226,8 @@ Definition collect_locals_def:
     collect_locals then_stmts ++
     collect_locals else_stmts ++
     collect_locals rest ∧
-  collect_locals (For _ _ _ _ for_body :: rest) =
-    collect_locals for_body ++ collect_locals rest ∧
+  collect_locals (For id ty _ _ for_body :: rest) =
+    (id, ty) :: collect_locals for_body ++ collect_locals rest ∧
   collect_locals (_ :: rest) = collect_locals rest
 End
 

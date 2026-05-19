@@ -91,6 +91,23 @@ Definition for_pass_program_def:
         Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]]
 End
 
+Definition for_accum_program_def:
+  for_accum_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [AnnAssign "y" (BaseT (UintT 256))
+          (Literal (BaseT (UintT 256)) (IntL 0));
+        For "i" (BaseT (UintT 256))
+          (Range (Literal (BaseT (UintT 256)) (IntL 0))
+                 (Literal (BaseT (UintT 256)) (IntL 2)))
+          0
+          [Assign (BaseTarget (NameTarget "y"))
+             (Builtin (BaseT (UintT 256)) (Bop Add)
+                [Name (BaseT (UintT 256)) "y";
+                 Name (BaseT (UintT 256)) "i"])];
+        Return (SOME (Name (BaseT (UintT 256)) "y"))]]
+End
+
 Theorem empty_result_lengths:
   compile_vyper_eval_lengths 16 ([] : toplevel list)
     concretize_context_eval Linear = SOME (53, 34)
@@ -149,7 +166,14 @@ QED
 
 Theorem for_pass_result_lengths:
   compile_vyper_eval_lengths 32 for_pass_program
-    concretize_context_eval Linear = SOME (128, 109)
+    concretize_context_eval Linear = SOME (131, 112)
+Proof
+  EVAL_TAC
+QED
+
+Theorem for_accum_result_lengths:
+  compile_vyper_eval_lengths 32 for_accum_program
+    concretize_context_eval Linear = SOME (157, 138)
 Proof
   EVAL_TAC
 QED
