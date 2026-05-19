@@ -1,17 +1,14 @@
 Theory evalCompiler
-Ancestors compileVyper concretizeMemLocDefs alist
+Ancestors compileVyper concretizeMemLocDefs alist integer_word
 Libs finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
 val () = the_compset := computeLib.add_thms [fmap_to_alist_FEMPTY] (!the_compset)
+val () = the_compset := computeLib.add_thms [i2w_pos] (!the_compset)
 
 val () = Globals.max_print_depth := 20
 
-val result =
-  EVAL ``compile_vyper ([] : toplevel list)
-           (concretize_context_fuel 4) Linear``
-
-val result_lengths =
+val empty_result_lengths =
   EVAL ``case compile_vyper ([] : toplevel list)
              (concretize_context_fuel 4) Linear of
           NONE => NONE
@@ -23,12 +20,21 @@ val noop_program =
        ([] : (string # type) list) ([] : expr list) NoneT [Pass]]
     : toplevel list``
 
-val noop_result =
-  EVAL ``compile_vyper ^noop_program
-           (concretize_context_fuel 4) Linear``
-
 val noop_result_lengths =
   EVAL ``case compile_vyper ^noop_program
+             (concretize_context_fuel 4) Linear of
+          NONE => NONE
+        | SOME (deploy_bs, runtime_bs) =>
+            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
+
+val return_uint_program =
+  ``[FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]]
+    : toplevel list``
+
+val return_uint_result_lengths =
+  EVAL ``case compile_vyper ^return_uint_program
              (concretize_context_fuel 4) Linear of
           NONE => NONE
         | SOME (deploy_bs, runtime_bs) =>
