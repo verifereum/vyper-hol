@@ -19,7 +19,7 @@ Ancestors
   aoResolveObligation aoRangeObligation aoCmpFlipObligation
   aoStepInvObligation aoBlockInvObligation
   algebraicOptWf
-  passSimulationProps passSimulationDefs passSharedDefs venomExecSemantics stateEquiv
+  passSimulationProps passSimulationDefs passSharedDefs passSharedSubst venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
   execEquivParamProofs venomWf
@@ -2136,7 +2136,7 @@ Proof
               irule step_inst_operands_equiv >>
               simp[listTheory.LENGTH_MAP] >> rpt strip_tac >>
               simp[listTheory.EL_MAP, resolve_op_label] >>
-              TRY (irule resolve_op_eval_all >> simp[]) >>
+              TRY (irule resolve_op_eval_eq >> simp[]) >>
               gvs[inst_wf_def] >> simp[resolve_op_lit])
           >- (* PHI *)
              (simp[step_inst_def] >>
@@ -2160,7 +2160,7 @@ Proof
               rename1 `resolve_phi prev _ = SOME val_op` >>
               `eval_operand (ao_resolve_iszero_op targets PHI val_op) s =
                eval_operand val_op s` by
-                (irule resolve_op_eval_all >> simp[]) >>
+                (irule resolve_op_eval_eq >> simp[]) >>
               simp[]))
       >- (irule (SIMP_RULE std_ss [] ao_resolve_iszero_inst_sim) >>
           gvs[]))
