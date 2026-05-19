@@ -66,6 +66,26 @@ Definition two_external_program_def:
        [Return (SOME (Literal (BaseT (UintT 256)) (IntL 2)))]]
 End
 
+Definition storage_read_program_def:
+  storage_read_program =
+    [VariableDecl Private Storage "stored" (BaseT (UintT 256)) (SOME 0);
+     FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME
+          (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]]
+End
+
+Definition storage_write_program_def:
+  storage_write_program =
+    [VariableDecl Private Storage "stored" (BaseT (UintT 256)) (SOME 0);
+     FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Assign (BaseTarget (TopLevelNameTarget (NONE, "stored")))
+          (Literal (BaseT (UintT 256)) (IntL 5));
+        Return (SOME
+          (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]]
+End
+
 Definition if_bool_program_def:
   if_bool_program =
     [FunctionDecl External Nonpayable F F "foo"
@@ -234,6 +254,20 @@ QED
 Theorem two_external_result_lengths:
   compile_vyper_eval_lengths 16 two_external_program
     concretize_context_eval Linear = SOME (129, 110)
+Proof
+  EVAL_TAC
+QED
+
+Theorem storage_read_result_lengths:
+  compile_vyper_eval_lengths 16 storage_read_program
+    concretize_context_eval Linear = SOME (91, 72)
+Proof
+  EVAL_TAC
+QED
+
+Theorem storage_write_result_lengths:
+  compile_vyper_eval_lengths 16 storage_write_program
+    concretize_context_eval Linear = SOME (95, 76)
 Proof
   EVAL_TAC
 QED

@@ -216,6 +216,23 @@ Definition allocate_internal_special_vars_def:
     (vars1 |+ ("__return_pc__", MemLoc off1 32), off1 + 32)
 End
 
+Definition add_module_var_locations_def:
+  add_module_var_locations ([] : toplevel list) vars = vars ∧
+  add_module_var_locations (top :: rest) vars =
+    let vars' =
+      case top of
+        VariableDecl _ Storage name _ (SOME slot) =>
+          vars |+ (name, StorageLoc (n2w slot))
+      | VariableDecl _ Transient name _ (SOME slot) =>
+          vars |+ (name, TransientLoc (n2w slot))
+      | HashMapDecl _ transient name _ _ (SOME slot) =>
+          vars |+ (name,
+            if transient then TransientLoc (n2w slot)
+            else StorageLoc (n2w slot))
+      | _ => vars in
+    add_module_var_locations rest vars'
+End
+
 (* ===== Local Variable Collection ===== *)
 
 Definition collect_locals_def:
@@ -354,7 +371,8 @@ Definition build_compile_env_def:
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
-    let (arg_vars, args_end) = allocate_args sft_fn args 0 FEMPTY in
+    let module_vars = add_module_var_locations tops FEMPTY in
+    let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
     let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
     let (all_vars, total_mem) =
