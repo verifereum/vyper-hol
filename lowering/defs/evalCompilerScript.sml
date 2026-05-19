@@ -8,127 +8,101 @@ val () = the_compset := computeLib.add_thms [i2w_pos] (!the_compset)
 
 val () = Globals.max_print_depth := 20
 
-val empty_result_lengths =
-  EVAL ``case compile_vyper_eval 16 ([] : toplevel list)
-             (concretize_context_fuel 4) Linear of
-          NONE => NONE
-        | SOME (deploy_bs, runtime_bs) =>
-            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
+Definition compile_vyper_eval_lengths_def:
+  compile_vyper_eval_lengths fuel (tops : toplevel list)
+                             pipeline dispatch_strategy =
+    case compile_vyper_eval fuel tops pipeline dispatch_strategy of
+      NONE => NONE
+    | SOME (deploy_bs, runtime_bs) =>
+        SOME (LENGTH deploy_bs, LENGTH runtime_bs)
+End
 
-val noop_program =
-  ``[FunctionDecl External Nonpayable F F "foo"
+Definition noop_program_def:
+  noop_program =
+    [FunctionDecl External Nonpayable F F "foo"
        ([] : (string # type) list) ([] : expr list) NoneT [Pass]]
-    : toplevel list``
+End
 
-val noop_result_lengths =
-  EVAL ``case compile_vyper_eval 16 ^noop_program
-             (concretize_context_fuel 4) Linear of
-          NONE => NONE
-        | SOME (deploy_bs, runtime_bs) =>
-            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
-
-val return_uint_program =
-  ``[FunctionDecl External Nonpayable F F "foo"
+Definition return_uint_program_def:
+  return_uint_program =
+    [FunctionDecl External Nonpayable F F "foo"
        ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
        [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]]
-    : toplevel list``
+End
 
-val return_uint_result_lengths =
-  EVAL ``case compile_vyper_eval 16 ^return_uint_program
-             (concretize_context_fuel 4) Linear of
-          NONE => NONE
-        | SOME (deploy_bs, runtime_bs) =>
-            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
-
-val return_arg_program =
-  ``[FunctionDecl External Nonpayable F F "foo"
+Definition return_arg_program_def:
+  return_arg_program =
+    [FunctionDecl External Nonpayable F F "foo"
        [("x", BaseT (UintT 256))] ([] : expr list) (BaseT (UintT 256))
        [Return (SOME (Name (BaseT (UintT 256)) "x"))]]
-    : toplevel list``
+End
+
+Definition local_uint_program_def:
+  local_uint_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [AnnAssign "y" (BaseT (UintT 256))
+          (Literal (BaseT (UintT 256)) (IntL 1));
+        Return (SOME (Name (BaseT (UintT 256)) "y"))]]
+End
+
+Definition add_arg_program_def:
+  add_arg_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       [("x", BaseT (UintT 256))] ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME
+          (Builtin (BaseT (UintT 256)) (Bop Add)
+             [Name (BaseT (UintT 256)) "x";
+              Literal (BaseT (UintT 256)) (IntL 1)]))]]
+End
+
+Theorem empty_result_lengths:
+  compile_vyper_eval_lengths 16 ([] : toplevel list)
+    (concretize_context_fuel 4) Linear = SOME (36, 20)
+Proof
+  EVAL_TAC
+QED
+
+Theorem noop_result_lengths:
+  compile_vyper_eval_lengths 16 noop_program
+    (concretize_context_fuel 4) Linear = SOME (30, 14)
+Proof
+  EVAL_TAC
+QED
+
+(* These return-value examples compute through the current ABI-size equations
+   in compileEnv, whose termination is still cheat-tagged. Keep them as exact
+   build-time checks until those definitions have clean termination proofs. *)
+fun assert_eval_result name tm expected =
+  let
+    val th = EVAL tm
+    val got = boolSyntax.rhs (concl th)
+  in
+    if Term.aconv got expected then th
+    else raise Fail (name ^ ": expected " ^ term_to_string expected ^
+                     ", got " ^ term_to_string got)
+  end
+
+val return_uint_result_lengths =
+  assert_eval_result "return_uint_result_lengths"
+    ``compile_vyper_eval_lengths 16 return_uint_program
+        (concretize_context_fuel 4) Linear``
+    ``SOME (37, 21) : (num # num) option``
 
 val return_arg_result_lengths =
-  EVAL ``case compile_vyper_eval 16 ^return_arg_program
-             (concretize_context_fuel 4) Linear of
-          NONE => NONE
-        | SOME (deploy_bs, runtime_bs) =>
-            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
+  assert_eval_result "return_arg_result_lengths"
+    ``compile_vyper_eval_lengths 16 return_arg_program
+        (concretize_context_fuel 4) Linear``
+    ``SOME (55, 39) : (num # num) option``
 
-(*
-EVAL ``
-let tops = [];
-    pipeline = I;
-    dispatch_strategy = Linear;
-       tenv = type_env tops;
-       sft = make_struct_fields_map tops;
-       sft_fn = get_struct_fields sft;
-       immutables_len = compute_immutables_len sft_fn tops;
-       nkey_map = assign_nkeys tops 0;
-       use_trans = F;
-       (ext_fns,int_fns,fb_fn,ctor_fn) = classify_functions tops;
-       selectors = build_selectors tenv ext_fns;
-       external_fns =
-         MAP (package_external_fn tops use_trans nkey_map) ext_fns;
-       runtime_int_fns =
-         MAP (package_internal_fn tops use_trans nkey_map F) int_fns;
-       fallback_fn = package_fallback_fn tops use_trans nkey_map fb_fn;
-       entry_label = "__entry";
-       method_ids = MAP FST selectors;
-       entry_info = build_dense_entry_info selectors external_fns;
-       (bucket_count,fn_meta_bytes,dense_buckets) =
-         case dispatch_strategy of
-           Linear => (0,0,[])
-         | Sparse =>
-           (let
-              (nb,_10) = generate_sparse_jumptable_buckets method_ids
-            in
-              (nb,0,[]))
-         | Dense =>
-           (let
-              min_cds_values =
-                MAP (λ(_0,_1,_2,min_cds,_3,_4,_5,_6,_7,_8,_9). min_cds)
-                  external_fns;
-              fn_mb = compute_fn_metadata_bytes min_cds_values
-            in
-              case generate_dense_jumptable_info method_ids of
-                NONE => (1,fn_mb,[])
-              | SOME (nb,buckets) => (nb,fn_mb,buckets));
-       (runtime_ctx,runtime_data) =
-         run_lowering selectors external_fns runtime_int_fns fallback_fn
-           dispatch_strategy bucket_count fn_meta_bytes dense_buckets
-           entry_info entry_label;
-       runtime_ctx' = pipeline runtime_ctx;
-       codegen_result = codegen runtime_ctx' FEMPTY runtime_data;
-       runtime_bytecode = THE codegen_result;
-       has_constructor = IS_SOME ctor_fn;
-            deploy_int_fns =
-              MAP (package_internal_fn tops use_trans nkey_map T) int_fns;
-            (ctor_cenv,ctor_args,ctor_payable,ctor_nr,ctor_nkey,ctor_trans,
-               ctor_body,ctor_ret) =
-              case ctor_fn of
-                NONE => (ARB,[],F,F,0,F,[],NoneT)
-              | SOME cf => package_constructor tops use_trans nkey_map cf;
-            (deploy_ctx,deploy_data_base) =
-              run_deploy_lowering has_constructor (LENGTH runtime_bytecode)
-                immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
-                ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy";
-            deploy_ctx' = pipeline deploy_ctx;
-            deploy_data =
-              deploy_data_base ⧺
-              [<|ds_label := "runtime_begin";
-                 ds_items := [DataBytes runtime_bytecode]|>];
-            codegen_deploy_result = codegen deploy_ctx' FEMPTY deploy_data;
-       (*
-            | SOME deploy_bytecode => SOME (deploy_bytecode,runtime_bytecode)))
-       ctx = runtime_ctx';
-       fn_eom_map = FEMPTY;
-       data_seg = runtime_data;
-       plan_result = generate_context_plan ctx fn_eom_map;
-       plan = THE plan_result;
-       reduced_plan = TAKE 2 plan;
-       code_asm = execute_plan reduced_plan;
-       *)
-in
-(("deploy_ctx'", deploy_ctx'),
- ("deploy_data", deploy_data))
-``
-*)
+val local_uint_result_lengths =
+  assert_eval_result "local_uint_result_lengths"
+    ``compile_vyper_eval_lengths 16 local_uint_program
+        (concretize_context_fuel 4) Linear``
+    ``SOME (43, 27) : (num # num) option``
+
+val add_arg_result_lengths =
+  assert_eval_result "add_arg_result_lengths"
+    ``compile_vyper_eval_lengths 16 add_arg_program
+        (concretize_context_fuel 4) Linear``
+    ``SOME (69, 53) : (num # num) option``
