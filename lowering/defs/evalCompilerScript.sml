@@ -40,6 +40,19 @@ val return_uint_result_lengths =
         | SOME (deploy_bs, runtime_bs) =>
             SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
 
+val return_arg_program =
+  ``[FunctionDecl External Nonpayable F F "foo"
+       [("x", BaseT (UintT 256))] ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME (Name (BaseT (UintT 256)) "x"))]]
+    : toplevel list``
+
+val return_arg_result_lengths =
+  EVAL ``case compile_vyper ^return_arg_program
+             (concretize_context_fuel 4) Linear of
+          NONE => NONE
+        | SOME (deploy_bs, runtime_bs) =>
+            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
+
 (*
 EVAL ``
 let tops = [];
