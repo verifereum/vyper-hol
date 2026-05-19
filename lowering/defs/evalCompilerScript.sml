@@ -1,5 +1,5 @@
 Theory evalCompiler
-Ancestors compileVyper alist
+Ancestors compileVyper concretizeMemLocDefs alist
 Libs finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
@@ -7,7 +7,16 @@ val () = the_compset := computeLib.add_thms [fmap_to_alist_FEMPTY] (!the_compset
 
 val () = Globals.max_print_depth := 20
 
-val result = EVAL ``compile_vyper [] I Linear``
+val result =
+  EVAL ``compile_vyper ([] : toplevel list)
+           (concretize_context_fuel 4) Linear``
+
+val result_lengths =
+  EVAL ``case compile_vyper ([] : toplevel list)
+             (concretize_context_fuel 4) Linear of
+          NONE => NONE
+        | SOME (deploy_bs, runtime_bs) =>
+            SOME (LENGTH deploy_bs, LENGTH runtime_bs)``
 
 (*
 EVAL ``
