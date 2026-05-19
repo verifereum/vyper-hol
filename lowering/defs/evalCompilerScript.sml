@@ -86,6 +86,34 @@ Definition storage_write_program_def:
           (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]]
 End
 
+Definition hashmap_read_program_def:
+  hashmap_read_program =
+    [HashMapDecl Private F "stored" (BaseT (UintT 256))
+       (Type (BaseT (UintT 256))) (SOME 0);
+     FunctionDecl External Nonpayable F F "foo"
+       [("k", BaseT (UintT 256))] ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME
+          (Subscript (BaseT (UintT 256))
+             (TopLevelName NoneT (NONE, "stored"))
+             (Name (BaseT (UintT 256)) "k")))]]
+End
+
+Definition hashmap_write_program_def:
+  hashmap_write_program =
+    [HashMapDecl Private F "stored" (BaseT (UintT 256))
+       (Type (BaseT (UintT 256))) (SOME 0);
+     FunctionDecl External Nonpayable F F "foo"
+       [("k", BaseT (UintT 256))] ([] : expr list) (BaseT (UintT 256))
+       [Assign (BaseTarget
+          (SubscriptTarget (TopLevelNameTarget (NONE, "stored"))
+             (Name (BaseT (UintT 256)) "k")))
+          (Literal (BaseT (UintT 256)) (IntL 5));
+        Return (SOME
+          (Subscript (BaseT (UintT 256))
+             (TopLevelName NoneT (NONE, "stored"))
+             (Name (BaseT (UintT 256)) "k")))]]
+End
+
 Definition if_bool_program_def:
   if_bool_program =
     [FunctionDecl External Nonpayable F F "foo"
@@ -268,6 +296,20 @@ QED
 Theorem storage_write_result_lengths:
   compile_vyper_eval_lengths 16 storage_write_program
     concretize_context_eval Linear = SOME (95, 76)
+Proof
+  EVAL_TAC
+QED
+
+Theorem hashmap_read_result_lengths:
+  compile_vyper_eval_lengths 16 hashmap_read_program
+    concretize_context_eval Linear = SOME (123, 104)
+Proof
+  EVAL_TAC
+QED
+
+Theorem hashmap_write_result_lengths:
+  compile_vyper_eval_lengths 16 hashmap_write_program
+    concretize_context_eval Linear = SOME (143, 124)
 Proof
   EVAL_TAC
 QED

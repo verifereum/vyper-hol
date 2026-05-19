@@ -1855,6 +1855,7 @@ Definition compile_subscript_def:
     let var_name = (case base_e of
                       Name _ id => id
                     | Attribute _ (Name _ "self") fld => fld
+                    | TopLevelName _ nsid => nsid_to_string nsid
                     | _ => "") in
     if cenv.ce_is_hashmap var_name then
       let base_slot = (case FLOOKUP cenv.ce_vars var_name of
