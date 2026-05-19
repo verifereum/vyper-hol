@@ -65,6 +65,20 @@ Definition if_bool_program_def:
           [Return (SOME (Literal (BaseT (UintT 256)) (IntL 2)))]]]
 End
 
+Definition if_join_program_def:
+  if_join_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       [("x", BaseT BoolT)] ([] : expr list) (BaseT (UintT 256))
+       [AnnAssign "y" (BaseT (UintT 256))
+          (Literal (BaseT (UintT 256)) (IntL 1));
+        If (Name (BaseT BoolT) "x")
+          [Assign (BaseTarget (NameTarget "y"))
+             (Literal (BaseT (UintT 256)) (IntL 2))]
+          [Assign (BaseTarget (NameTarget "y"))
+             (Literal (BaseT (UintT 256)) (IntL 3))];
+        Return (SOME (Name (BaseT (UintT 256)) "y"))]]
+End
+
 Theorem empty_result_lengths:
   compile_vyper_eval_lengths 16 ([] : toplevel list)
     concretize_context_eval Linear = SOME (53, 34)
@@ -110,6 +124,13 @@ QED
 Theorem if_bool_result_lengths:
   compile_vyper_eval_lengths 16 if_bool_program
     concretize_context_eval Linear = SOME (137, 118)
+Proof
+  EVAL_TAC
+QED
+
+Theorem if_join_result_lengths:
+  compile_vyper_eval_lengths 16 if_join_program
+    concretize_context_eval Linear = SOME (155, 136)
 Proof
   EVAL_TAC
 QED
