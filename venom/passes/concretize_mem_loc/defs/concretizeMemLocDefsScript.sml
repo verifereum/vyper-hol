@@ -11,6 +11,7 @@
  *   compute_alloc_map     — first-fit allocator with liveness-aware reservation
  *   concretize_inst       — per-instruction transform
  *   concretize_function   — function-level transform (allocate + rewrite)
+ *   concretize_context_eval — evaluator-friendly sequential allocation
  *)
 
 Theory concretizeMemLocDefs
@@ -563,6 +564,25 @@ Definition fn_has_alloca_def:
     EXISTS (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)
 End
 
+(* Evaluator path: concrete non-overlapping offsets without MemLiveness. *)
+Definition compute_alloc_map_linear_def:
+  compute_alloc_map_linear ([] : instruction list) pos = FEMPTY ∧
+  compute_alloc_map_linear (inst :: rest) pos =
+    if is_alloca_op inst.inst_opcode then
+      let sz = case inst_alloca_size inst of SOME n => n | NONE => 0 in
+      let amap = compute_alloc_map_linear rest (pos + sz) in
+      case inst.inst_outputs of
+        [out] => amap |+ (out, n2w pos)
+      | _ => amap
+    else
+      compute_alloc_map_linear rest pos
+End
+
+Definition compute_function_alloc_map_eval_def:
+  compute_function_alloc_map_eval fn =
+    compute_alloc_map_linear (fn_insts fn) 0
+End
+
 Definition concretize_function_fuel_def:
   concretize_function_fuel fuel fn =
     if fn_has_alloca fn then
@@ -570,8 +590,21 @@ Definition concretize_function_fuel_def:
     else fn
 End
 
+Definition concretize_function_eval_def:
+  concretize_function_eval fn =
+    if fn_has_alloca fn then
+      concretize_function (compute_function_alloc_map_eval fn) fn
+    else fn
+End
+
 Definition concretize_context_fuel_def:
   concretize_context_fuel fuel ctx =
     ctx with ctx_functions :=
       MAP (concretize_function_fuel fuel) ctx.ctx_functions
+End
+
+Definition concretize_context_eval_def:
+  concretize_context_eval ctx =
+    ctx with ctx_functions :=
+      MAP concretize_function_eval ctx.ctx_functions
 End

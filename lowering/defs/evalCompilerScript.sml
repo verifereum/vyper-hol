@@ -56,44 +56,60 @@ Definition add_arg_program_def:
               Literal (BaseT (UintT 256)) (IntL 1)]))]]
 End
 
+Definition if_bool_program_def:
+  if_bool_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       [("x", BaseT BoolT)] ([] : expr list) (BaseT (UintT 256))
+       [If (Name (BaseT BoolT) "x")
+          [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]
+          [Return (SOME (Literal (BaseT (UintT 256)) (IntL 2)))]]]
+End
+
 Theorem empty_result_lengths:
   compile_vyper_eval_lengths 16 ([] : toplevel list)
-    (concretize_context_fuel 4) Linear = SOME (36, 20)
+    concretize_context_eval Linear = SOME (53, 34)
 Proof
   EVAL_TAC
 QED
 
 Theorem noop_result_lengths:
   compile_vyper_eval_lengths 16 noop_program
-    (concretize_context_fuel 4) Linear = SOME (30, 14)
+    concretize_context_eval Linear = SOME (82, 63)
 Proof
   EVAL_TAC
 QED
 
 Theorem return_uint_result_lengths:
   compile_vyper_eval_lengths 16 return_uint_program
-    (concretize_context_fuel 4) Linear = SOME (37, 21)
+    concretize_context_eval Linear = SOME (89, 70)
 Proof
   EVAL_TAC
 QED
 
 Theorem return_arg_result_lengths:
   compile_vyper_eval_lengths 16 return_arg_program
-    (concretize_context_fuel 4) Linear = SOME (55, 39)
+    concretize_context_eval Linear = SOME (107, 88)
 Proof
   EVAL_TAC
 QED
 
 Theorem local_uint_result_lengths:
   compile_vyper_eval_lengths 16 local_uint_program
-    (concretize_context_fuel 4) Linear = SOME (43, 27)
+    concretize_context_eval Linear = SOME (95, 76)
 Proof
   EVAL_TAC
 QED
 
 Theorem add_arg_result_lengths:
   compile_vyper_eval_lengths 16 add_arg_program
-    (concretize_context_fuel 4) Linear = SOME (69, 53)
+    concretize_context_eval Linear = SOME (121, 102)
+Proof
+  EVAL_TAC
+QED
+
+Theorem if_bool_result_lengths:
+  compile_vyper_eval_lengths 16 if_bool_program
+    concretize_context_eval Linear = SOME (137, 118)
 Proof
   EVAL_TAC
 QED

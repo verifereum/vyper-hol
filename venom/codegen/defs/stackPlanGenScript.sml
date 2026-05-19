@@ -7,7 +7,7 @@
  *
  * TOP-LEVEL:
  *   generate_context_plan — plan for entire venom_context
- *   generate_context_plan_fuel — bounded dataflow variant for evaluator use
+ *   generate_context_plan_fuel — bounded evaluator variant
  *)
 
 Theory stackPlanGen
@@ -767,6 +767,67 @@ Theorem generate_fn_plan_aux_visited_mono =
 Theorem generate_succs_plan_visited_mono =
   REWRITE_RULE [GSYM fn_plan_aux_def] fn_plan_mono_inr
 
+Definition generate_fn_plan_aux_fuel_def:
+  generate_fn_plan_aux_fuel 0 liveness dfg cfg fn worklist visited ps =
+    NONE ∧
+  generate_fn_plan_aux_fuel (SUC fuel) liveness dfg cfg fn [] visited ps =
+    SOME ([] : stack_op list, visited, ps) ∧
+  generate_fn_plan_aux_fuel (SUC fuel) liveness dfg cfg fn
+      (lbl :: rest) visited ps =
+    (if MEM lbl visited then
+       generate_fn_plan_aux_fuel fuel liveness dfg cfg fn rest visited ps
+     else
+       let visited' = lbl :: visited in
+       case lookup_block lbl fn.fn_blocks of
+         NONE =>
+           generate_fn_plan_aux_fuel fuel liveness dfg cfg fn
+             rest visited' ps
+       | SOME bb =>
+           case generate_block_plan liveness dfg cfg fn bb ps of
+             NONE => NONE
+           | SOME (block_ops, ps') =>
+               let succs = cfg_succs_of cfg lbl in
+               case generate_succs_plan_fuel fuel liveness dfg cfg fn
+                      ps'.ps_stack ps'.ps_spilled succs visited' ps' of
+                 NONE => NONE
+               | SOME (succ_ops, visited'', ps'') =>
+                   case generate_fn_plan_aux_fuel fuel liveness dfg cfg fn
+                          rest visited'' ps'' of
+                     NONE => NONE
+                   | SOME (rest_ops, visited_final, ps_final) =>
+                       SOME (block_ops ++ succ_ops ++ rest_ops,
+                             visited_final, ps_final)) ∧
+  generate_succs_plan_fuel 0 liveness dfg cfg fn
+      saved_stack saved_spilled succs visited ps_g =
+    NONE ∧
+  generate_succs_plan_fuel (SUC fuel) liveness dfg cfg fn
+      saved_stack saved_spilled [] visited ps_g =
+    SOME ([] : stack_op list, visited, ps_g) ∧
+  generate_succs_plan_fuel (SUC fuel) liveness dfg cfg fn
+      saved_stack saved_spilled (succ :: rest) visited ps_g =
+    (let ps_branch = ps_g with <|
+       ps_stack := saved_stack;
+       ps_spilled := saved_spilled |> in
+     case generate_fn_plan_aux_fuel fuel liveness dfg cfg fn
+            [succ] visited ps_branch of
+       NONE => NONE
+     | SOME (s_ops, visited_after, ps_after) =>
+         let ps_g' = ps_g with <|
+           ps_alloc := ps_after.ps_alloc;
+           ps_label_counter := ps_after.ps_label_counter |> in
+         case generate_succs_plan_fuel fuel liveness dfg cfg fn
+                saved_stack saved_spilled rest visited_after ps_g' of
+           NONE => NONE
+         | SOME (rest_ops, visited_final, ps_final) =>
+             SOME (s_ops ++ rest_ops, visited_final, ps_final))
+Termination
+  WF_REL_TAC `measure (λx. case x of
+      INL (fuel, liveness, dfg, cfg, fn, worklist, visited, ps) => fuel
+    | INR (fuel, liveness, dfg, cfg, fn, saved_stack, saved_spilled,
+           succs, visited, ps_g) => fuel)`
+  \\ rw[]
+End
+
 (* =========================================================================
    Top-Level Entry Points
    ========================================================================= *)
@@ -794,7 +855,7 @@ Definition generate_fn_plan_fuel_def:
     case fn_entry_label fn of
       NONE => SOME ([] : stack_op list, ps)
     | SOME lbl =>
-        case generate_fn_plan_aux liveness dfg cfg fn [lbl] [] ps of
+        case generate_fn_plan_aux_fuel fuel liveness dfg cfg fn [lbl] [] ps of
           NONE => NONE
         | SOME (ops, _, ps') => SOME (ops, ps')
 End

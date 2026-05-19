@@ -358,8 +358,8 @@ Datatype:
     cs_next_label : num;
     cs_next_id : num;
     cs_current_bb : string;
-    cs_current_insts : instruction list;   (* reversed *)
-    cs_blocks : basic_block list;            (* completed blocks *)
+    cs_current_insts : instruction list;   (* emission order *)
+    cs_blocks : basic_block list;          (* completed blocks, newest first *)
     cs_data_sections : data_section list    (* reversed; data segment for codegen *)
   |>
 End
