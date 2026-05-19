@@ -56,6 +56,16 @@ Definition add_arg_program_def:
               Literal (BaseT (UintT 256)) (IntL 1)]))]]
 End
 
+Definition two_external_program_def:
+  two_external_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))];
+     FunctionDecl External Nonpayable F F "bar"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME (Literal (BaseT (UintT 256)) (IntL 2)))]]
+End
+
 Definition if_bool_program_def:
   if_bool_program =
     [FunctionDecl External Nonpayable F F "foo"
@@ -217,6 +227,13 @@ QED
 Theorem add_arg_result_lengths:
   compile_vyper_eval_lengths 16 add_arg_program
     concretize_context_eval Linear = SOME (121, 102)
+Proof
+  EVAL_TAC
+QED
+
+Theorem two_external_result_lengths:
+  compile_vyper_eval_lengths 16 two_external_program
+    concretize_context_eval Linear = SOME (129, 110)
 Proof
   EVAL_TAC
 QED
