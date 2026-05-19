@@ -1,8 +1,9 @@
 Theory evalCompiler
-Ancestors compileVyper
+Ancestors compileVyper alist
 Libs finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
+val () = the_compset := computeLib.add_thms [fmap_to_alist_FEMPTY] (!the_compset)
 
 val () = Globals.max_print_depth := 20
 
