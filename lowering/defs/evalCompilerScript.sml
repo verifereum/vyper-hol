@@ -152,6 +152,18 @@ Definition for_break_program_def:
         Return (SOME (Name (BaseT (UintT 256)) "y"))]]
 End
 
+Definition internal_call_program_def:
+  internal_call_program =
+    [FunctionDecl Internal Nonpayable F F "bar"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME (Literal (BaseT (UintT 256)) (IntL 7)))];
+     FunctionDecl External Nonpayable F F "foo"
+       ([] : (string # type) list) ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME
+          (Call (BaseT (UintT 256)) (IntCall (NONE, "bar"))
+             ([] : expr list) NONE))]]
+End
+
 Theorem empty_result_lengths:
   compile_vyper_eval_lengths 16 ([] : toplevel list)
     concretize_context_eval Linear = SOME (53, 34)
@@ -232,6 +244,13 @@ QED
 Theorem for_break_result_lengths:
   compile_vyper_eval_lengths 32 for_break_program
     concretize_context_eval Linear = SOME (182, 163)
+Proof
+  EVAL_TAC
+QED
+
+Theorem internal_call_result_lengths:
+  compile_vyper_eval_lengths 16 internal_call_program
+    concretize_context_eval Linear = SOME (96, 77)
 Proof
   EVAL_TAC
 QED
