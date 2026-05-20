@@ -2,1335 +2,1171 @@
 
 ## Structured Components
 
-### C0: Confirm reachable fresh-stack proof frontier
-- Kind: `checkpoint`
+### C0: Build and CHEAT-audit the current fresh-stack baseline
+- Kind: `source_audit`
 - Risk: 1
-- Rationale: Mechanical holbuild/grep audit requested by the task handover; it does not require mathematical design and only records the exact current frontier before editing.
+- Work priority: 0
+- Work units: 2
+- Rationale: Mechanical holbuild/audit step; it records current source reality before proof edits and prevents work against stale handover notes.
 - Checkpoint: yes
+- Progress transition: `refinement`
 
 #### Progress note
-This is an executable audit checkpoint added to keep the PLAN task-scoped against current source. It does not replace any proof component; if it reveals extra reachable cheats in the named fresh theories, escalate for plan augmentation before broad cleanup.
+Preserves the previous baseline/audit component. It is not a proof obligation itself, but downstream components must use its current list of reachable CHEAT warnings as coverage evidence.
 
 #### Summary
-- Run the current fresh-stack builds enough to identify the actual reachable CHEAT/suspend frontier.
-- Start with `vyperTypeStatePreservationTheory`, then later use `vyperSemanticsHolTheory` for final reachability.
-- Grep only the in-scope fresh theories listed in the TASK, not retired old theories.
-- Treat current SML theorem statements as authoritative except for the frozen public behavior in the TASK.
+Run `holbuild build vyperTypeStatePreservationTheory` and `holbuild build vyperSemanticsHolTheory` or the closest permitted audit commands. Record every reachable `cheat`/unfinished `suspend` in the fresh stack. Use this only to refine exact work sites; do not expand scope to retired theories unless they are imported by `vyperSemanticsHolTheory`.
+
+#### Description
+The task’s source of truth is current SML source, with frozen public behavior only at the final wrapper surface. This component establishes the concrete remaining warnings and confirms whether the For_cons source already contains the helper-based patch or still has the old existential tail.
 
 #### Statement
-```sh
-holbuild build vyperTypeStatePreservationTheory
-holbuild build vyperSemanticsHolTheory   # may fail/warn initially; record reachable fresh-stack cheats only
-```
+No theorem statement. Output is an audit list of reachable CHEAT/suspend warnings and first failing holbuild target, if any.
 
 #### Approach
-Use build logs plus targeted grep for `cheat`, `suspend`, and `CHEAT` in the fresh-stack theories. This checkpoint should not trigger edits by itself except to select the next already-planned component.
+Use `holbuild`, not direct HOL. Prefer `vyperTypeStatePreservationTheory` first because the handover-focused assignment proof lives there, then `vyperSemanticsHolTheory` for full reachability. If current source differs from handover notes, treat source/audit as authoritative and close already-fixed leaves with evidence instead of re-editing.
 
 #### Not to try
-Do not chase retired `vyperTypeSoundnessDefs/Helpers/Soundness` obligations unless the build proves they are still imported by `vyperSemanticsHolTheory`. Do not declare a theorem false from inspection alone; create a probe/escalation if a mismatch appears.
+Do not start broad repository cleanup from grep output alone. Suspends in old retired theories or non-imported experiments are notes only unless the audit shows they are reachable from `vyperSemanticsHolTheory`.
 
-### C1: Finish assignment-target joint soundness in `vyperTypeStatePreservationScript.sml`
-- Kind: `proof_subtree`
+### C1: Assignment-target state preservation and joint soundness
+- Kind: `proof_group`
 - Risk: 2
-- Rationale: The strengthened theorem and most branch-local helpers already exist in current source. The remaining named branches are finite evaluator branches under the existing mutual induction; risk is standard proof integration, not architectural uncertainty.
+- Work priority: 10
+- Work units: 0
+- Rationale: The strengthened assignment interfaces already exist in source and the remaining work is split by evaluator branch. The hardest top-level storage cases are isolated to exact branch helpers rather than a new induction architecture.
 - Required for completion: yes
 - Dependencies: C0
 - Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C1, TYPE_SYSTEM_REWRITE_PLAN.md assignment target update
+- Carries progress/evidence from: pre-collapse C1, TYPE_SYSTEM_REWRITE_PLAN assignment update 2026-05-13
 
 #### Progress note
-Carries forward the focused handover scope: `TopLevelVar` HashMapRef/ArrayRef, `ImmutableVar`, `TupleTargetV`, and `assign_targets_cons`. The theorem must keep the strengthened side conditions named in the TASK.
+Carries forward the strengthened `assign_target_sound_mutual` architecture; no prior proof progress is invalidated. The old high-risk gate is replaced by branch-local low-risk leaves.
 
 #### Summary
-- Prove the five remaining branches of `assign_target_sound_mutual` in `vyperTypeStatePreservationScript.sml`.
-- Do not weaken `assignable_type`, `assign_operation_runtime_typed`, `assign_operation_matches_target_shape`, or `assign_target_assignable_context` premises.
-- Use the existing all-result preservation theorem for the runtime-consistency/state part; branch work is mainly no-TypeError.
-- Complete with a state-preservation build/audit checkpoint before statement soundness uses the theorem.
-
-#### Description
-This component covers exactly the TASK’s focused state-preservation obligations: `sound_TopLevelVar` HashMapRef, `sound_TopLevelVar` ArrayRef, `sound_ImmutableVar`, `sound_TupleTargetV`, and `sound_assign_targets_cons`. Helpers may be added locally when a semantic branch needs a precise boundary lemma, but do not start a second assignment no-TypeError induction.
-
-#### Statement
-```sml
-Theorem assign_target_sound_mutual:
-  (!cx gv op st res st'.
-    assign_target cx gv op st = (res, st') ==>
-    !env tgt ty.
-      runtime_consistent env cx st /\
-      target_runtime_typed env cx st tgt ty gv /\
-      assignable_type env.type_defs ty /\
-      assign_operation_runtime_typed env ty op /\
-      assign_operation_matches_target_shape gv op /\
-      assign_target_assignable_context cx gv st ==>
-      runtime_consistent env cx st' /\ no_type_error_result res) /\
-  (!cx gvs vs st res st'.
-    assign_targets cx gvs vs st = (res, st') ==>
-    !env tgts.
-      runtime_consistent env cx st /\
-      target_assignment_values_assignable env cx st tgts gvs vs /\
-      EVERY (\gv. assign_target_assignable_context cx gv st) gvs ==>
-      runtime_consistent env cx st' /\ no_type_error_result res)
-```
+Finish the reachable assignment-target proofs in `vyperTypeStatePreservationScript.sml`. Do not weaken `assign_target_sound_mutual` or drop `assign_operation_matches_target_shape` / `assign_target_assignable_context`. Prove branch helpers that exactly match evaluator branches, then discharge compatibility wrappers in `vyperTypeAssignSoundnessScript.sml`.
 
 #### Approach
-Use the existing `assign_target_ind`/resume structure. In each branch, first split off preservation and solve it with `assign_target_preserves_state_well_typed_mutual`, then expand only the semantic branch needed to expose impossible `TypeError` cases and discharge them with exact branch helpers.
+Work branch-by-branch, closing each branch immediately after splitting on the evaluator result. Follow the proven `TopLevelVar` storage `Value` branch style from the handover: exact helper, narrow branch, then final no-TypeError/preservation theorem. Use C3 lemmas as theorem dependencies but do not re-prove the update-binop path inside this component.
 
 #### Not to try
-Do not use a broad `gvs[..., AllCaseEqs(), ...]` before isolating the branch; the handover identifies this as the cause of case explosion. Do not replace the joint theorem with legacy wrapper proofs or remove strengthened side conditions.
+Do not weaken the strengthened side conditions to make callers easier. Do not use broad `gvs[..., AllCaseEqs()]` across the whole `TopLevelVar` proof and then try to repair dozens of goals; this was identified as unworkable.
 
 #### Argument
-The mutual theorem follows the recursion of `assign_target` and `assign_targets`. `target_runtime_typed` identifies the runtime location and leaf path; `assignable_type` excludes `None` leaves; `assign_operation_runtime_typed` proves the leaf operation is accepted; `assign_operation_matches_target_shape` prevents tuple/non-tuple operation mismatches; and `assign_target_assignable_context` supplies writability/static lookup facts for scoped variables, storage, hashmaps, arrays, and immutables. The preservation half is already provided all-result by the state-preservation theorem, so the open proof obligations are only to rule out `TypeError` in the remaining branches. Storage/hashmap/array branches reduce to lookup/layout/subscript/write boundary lemmas; tuple assignment reduces to the second mutual conjunct; list sequencing reduces to head IH then tail IH under the updated runtime consistency.
+The assignment proof is by the existing mutual recursion over `assign_target` and `assign_targets`. The invariant is joint/all-result where needed: state/accounts typing are preserved and TypeError is excluded under runtime target typing, runtime operation typing, shape matching, and assignable context. For top-level targets, `assign_target_assignable_context` supplies the static module/declaration/layout facts that prevent lookup/storage/hashmap shape errors from becoming TypeError; `target_runtime_typed` supplies the leaf type for recursive subscript assignment. Tuple/list targets consume the list IH and target/value assignability relation elementwise.
 
 #### Definition design
-No new core definitions should be introduced here. The proof interface should be branch-local boundary lemmas matching evaluator branches: HashMapRef branch consumes split subscripts, computed slot, leaf typing, and operation typing; ArrayRef branch separates resolver failure, append, pop, and ordinary assign/update; ImmutableVar branch consumes immutable target typing plus subscript/leaf operation facts; TupleTargetV consumes shape and list assignment facts. Failure signs: needing to unfold storage backend, `compute_hashmap_slot`, or array resolution deeply inside the mutual proof means a local boundary lemma is missing.
+Use the current definitions as proof interfaces, not rewrite targets. `assign_operation_matches_target_shape` prevents applying append/pop/update to the wrong target shape. `assign_target_assignable_context` is the runtime writability/context boundary: scoped assignability, top-level module existence, declaration shape, storage slot/hashmap slot availability, and nonempty hashmap subscript path. `target_assignment_values_assignable` is the tuple/list boundary and should supply both runtime typedness and assignability/context facts for each component. Failure sign: if a branch needs to inspect unrelated evaluator cases, add a small branch helper matching the semantic branch instead of broad `AllCaseEqs()` cleanup.
 
 #### Code structure
-All helpers and resumes for this component belong in `semantics/prop/vyperTypeStatePreservationScript.sml`, near the `assign_target_sound_mutual` section. Keep branch helpers `[local]` unless statement soundness must import them. Do not move env-extension, env-preservation, or scope-pop facts into this file.
+Primary edits belong in `semantics/prop/vyperTypeStatePreservationScript.sml`, near existing storage/top-level helpers and the `Resume assign_target_sound_mutual[...]` blocks. Compatibility corollaries belong in `semantics/prop/vyperTypeAssignSoundnessScript.sml` only after the mutual theorem is cheat-free. Do not move static env-extension facts into this file; keep environment weakening in the existing env theories.
 
-### C1.1: Close `TopLevelVar` HashMapRef branch
+### C1.1: Finish preservation-only assignment branches
 - Kind: `proof`
 - Risk: 2
-- Rationale: The handover names existing decomposition/leaf helper facts for this exact branch; remaining work is applying them at the resumed branch.
+- Work priority: 0
+- Work units: 5
+- Rationale: These branches only require state/accounts preservation and are direct consumers of existing update/storage preservation lemmas.
 - Dependencies: C0
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C1.1
-
-#### Progress note
-Continue from the existing resumed `sound_TopLevelVar` proof; preserve the already-completed storage `Value` subcase.
-
-#### Summary
-- Close the `HashMapRef` subcase in `sound_TopLevelVar`.
-- Derive hashmap declaration, nonempty subscripts, slot, split-prefix, and final leaf typing facts from target typing and assignable context.
-- Apply the local HashMapRef no-TypeError branch lemma.
-- Keep the proof branch-local.
-
-#### Statement
-```sml
-Resume assign_target_sound_mutual[sound_TopLevelVar]:
-  ... (* HashMapRef case *)
-```
-
-#### Approach
-After the successful `lookup_global = INL (HashMapRef ...)` split, derive module/declaration/slot facts from `assign_target_assignable_context`. Use the target-path decomposition lemmas to obtain the leaf type and split-subscript premises required by `assign_target_HashMapRef_branch_no_type_error`.
-
-#### Not to try
-Do not inline `compute_hashmap_slot` or redo declaration lookup reasoning after the branch is identified. Do not destruct unrelated storage `Value` subcases again.
-
-### C1.2: Close `TopLevelVar` ArrayRef branch
-- Kind: `proof`
-- Risk: 2
-- Rationale: ArrayRef proof is finite once resolver error/success and append/pop/ordinary operation branches are separated; current source already contains focused branch lemmas by handover.
-- Dependencies: C1.1
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C1.2
-
-#### Progress note
-Uses existing ArrayRef helper layer where present; if a helper is missing, add the narrow local lemma instead of expanding storage backend internals.
-
-#### Summary
-- Close the `ArrayRef` subcase in `sound_TopLevelVar`.
-- Split resolver failure from resolver success.
-- In success, handle dynamic append, dynamic pop, and ordinary assign/update/write separately.
-- Use existing typed resolver and write-back no-TypeError boundary lemmas.
-
-#### Statement
-```sml
-Resume assign_target_sound_mutual[sound_TopLevelVar]:
-  ... (* ArrayRef case *)
-```
-
-#### Approach
-From `ArrayRef`, obtain the root array value/type and call-site path. If `resolve_array_element` fails, use the resolver error-not-TypeError lemma. If it succeeds, combine leaf typing/well-formedness with operation/runtime typing and dispatch to the append, pop, or ordinary ArrayRef branch helper.
-
-#### Not to try
-Do not prove dynamic append/pop through the ordinary branch helper; the evaluator has special dynamic-array arms. Do not unfold storage backend operations if a typed write/helper lemma applies.
-
-### C1.3: Close `ImmutableVar` branch
-- Kind: `proof`
-- Risk: 2
-- Rationale: Immutable assignment has simpler lookup/layout structure; subscript and leaf operation no-TypeError lemmas already provide the hard recursion boundary.
-- Dependencies: C1.2
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C1.3
-
-#### Progress note
-Continue the existing suspended `sound_ImmutableVar` proof.
-
-#### Summary
-- Resume `sound_ImmutableVar`.
-- Use immutable target runtime typing to obtain leaf/path typing.
-- Rule out leaf and recursive subscript TypeErrors through assignment-operation/subscript lemmas.
-- Use immutable setter preservation only for the preservation conjunct.
-
-#### Statement
-```sml
-Resume assign_target_sound_mutual[sound_ImmutableVar]:
-  ...
-```
-
-#### Approach
-Split preservation first. For no-TypeError, expand the immutable evaluator branch, distinguish empty from nonempty path, and apply `assign_operation_runtime_typed_leaf_no_type_error` or `assign_subscripts_no_type_error_runtime_typed`; successful writes close by the generic assign-result no-TypeError lemma.
-
-#### Not to try
-Do not rewrite immutable variables into scoped variables; the evaluator uses a separate immutable setter path. Do not ignore `assignable_type`, because it provides non-`None` side conditions for recursive subscript assignment.
-
-### C1.4: Close `TupleTargetV` branch
-- Kind: `proof`
-- Risk: 2
-- Rationale: The strengthened shape predicate and second mutual conjunct are designed for this branch; any missing list projection is a small local lemma.
-- Dependencies: C1.3
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C1.4
-
-#### Progress note
-Do not manually expand each subtarget; make the list predicate fit `assign_targets`.
-
-#### Summary
-- Resume `sound_TupleTargetV`.
-- Use `assign_operation_matches_target_shape` to force the tuple `Replace` shape.
-- Convert tuple target/value typing into `target_assignment_values_assignable`.
-- Invoke the `assign_targets` mutual IH.
-
-#### Statement
-```sml
-Resume assign_target_sound_mutual[sound_TupleTargetV]:
-  ...
-```
-
-#### Approach
-Unfold only the tuple-target evaluator branch. From tuple runtime target typing and tuple value typing, derive the list relation required by `target_assignment_values_assignable`, project the `EVERY assign_target_assignable_context` premise, and apply the second mutual IH.
-
-#### Not to try
-Do not destruct every tuple element inside the statement branch. If the needed list fact is absent, prove a projection lemma from tuple `target_runtime_typed` plus `value_has_type`, not a case-by-case proof in the resume.
-
-### C1.5: Close `assign_targets_cons` branch
-- Kind: `proof`
-- Risk: 2
-- Rationale: This branch follows the mutual recursion exactly: head assignment then tail assignment under the head IH’s runtime consistency.
-- Dependencies: C1.4
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C1.5
-
-#### Progress note
-Uses the mutual IH as the abstraction boundary for head assignment.
-
-#### Summary
-- Resume `sound_assign_targets_cons`.
-- Project head and tail facts from `target_assignment_values_assignable` and `EVERY`.
-- Apply head `assign_target` IH; if head errors, no-TypeError is already known.
-- If head succeeds, apply tail `assign_targets` IH in the updated state.
-
-#### Statement
-```sml
-Resume assign_target_sound_mutual[sound_assign_targets_cons]:
-  ...
-```
-
-#### Approach
-Split on the head assignment result. In the success branch, use the head IH’s `runtime_consistent env cx st'` as the precondition for the tail IH and use list-predicate projections for the tail assignability facts.
-
-#### Not to try
-Do not unfold `assign_target_def` for the head inside this branch. Do not assume assignable context is state-invariant unless the projected theorem/premise establishes exactly what the tail IH needs.
-
-### C1.6: State-preservation build/audit checkpoint
-- Kind: `checkpoint`
-- Risk: 1
-- Rationale: Mechanical verification once all state-preservation resumes are completed.
-- Dependencies: C1.5
-- Checkpoint: yes
-
-#### Progress note
-This checkpoint gates downstream statement proof work on a non-cheated assignment-target theorem in the state-preservation theory.
-
-#### Summary
-- Build `vyperTypeStatePreservationTheory`.
-- Confirm no `cheat` or unresolved `suspend` remains in `vyperTypeStatePreservationScript.sml`.
-- Record any remaining warnings from imported theories separately.
-- Escalate if new state-preservation cheats are found.
-
-#### Statement
-```sh
-holbuild build vyperTypeStatePreservationTheory
-```
-
-#### Approach
-Use the build log as source of truth, then targeted grep for active `cheat`/`suspend` in the file. Imported builtin warnings are handled by C4, not by altering C1.
-
-#### Not to try
-Do not proceed to statement assignment cases while `assign_target_sound_mutual` is still suspended or cheated.
-
-### C2: Finish statement/evaluator joint soundness in `vyperTypeStmtSoundnessScript.sml`
-- Kind: `proof_subtree`
-- Risk: 2
-- Rationale: The theorem architecture is already the required strongest joint invariant following evaluator recursion. Remaining work is case resumption and assignment side-condition bridging using C1 and C4 outputs.
-- Required for completion: yes
-- Dependencies: C1, C4
 - Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2
+- Carries progress/evidence from: pre-collapse C1.1
 
 #### Progress note
-Carries forward the existing plan’s statement-soundness structure. Assignment branches must be repaired for the strengthened assignment premises; do not weaken C1.
+Same obligation as prior preservation branch component, now authorized as a leaf.
 
 #### Summary
-- Prove all remaining suspended/cheated cases in `eval_all_type_sound_mutual`.
-- Assignment cases must derive `assign_operation_matches_target_shape` and `assign_target_assignable_context`.
-- Non-assignment cases should use the mutual IH, expression/builtin/call boundaries, and scope/frame helper layers.
-- This component supplies the statement/expression wrapper facts consumed by call and final soundness.
+Remove remaining preservation-only suspends/cheats for assignment target recursion if the C0 audit reports them reachable. Use `sound_ScopedVar` as the local model and mirror the evaluator recursion for top-level, immutable, tuple target, and target-list cons branches.
 
 #### Statement
-```sml
-Theorem eval_all_type_sound_mutual:
-  (* current source statement over eval_stmt/eval_stmts/eval_target/eval_expr/... *)
-```
+Current-source preservation mutual theorem(s) in `vyperTypeStatePreservationScript.sml` around the first assignment-target mutual proof, including suspended cases named `TopLevelVar`, `ImmutableVar`, `TupleTargetV`, and `assign_targets_cons` if still present.
 
 #### Approach
-Continue the single evaluator mutual induction. In each evaluator case, apply sub-IHs in execution order, thread runtime consistency/state/env/account facts, and call lower-layer soundness theorems instead of unfolding their evaluators.
+Unfold only the relevant `assign_target`/`assign_targets` branch and use existing preservation lemmas for `set_var`, storage read/write, immutable operations, and recursive subscript assignment. For tuple/list targets, induct through the existing mutual IH rather than starting a new list induction outside the theorem.
 
 #### Not to try
-Do not split no-TypeError and preservation into parallel proof trees. Do not add assumptions to assignment statement theorem statements; derive them from typing, target runtime typing, value typing, env consistency, and C2 bridge lemmas.
+Do not prove a separate preservation theorem by re-inducting over targets. Do not touch no-TypeError branches here except where the source theorem combines them.
 
-#### Argument
-Statement soundness is by mutual induction over evaluator recursion. Each case either returns a control result directly, evaluates subterms covered by IHs, enters a scoped body covered by env-extension/scope-pop lemmas, or calls a lower soundness layer. Assignment branches are the strengthened call sites: target evaluation gives `target_runtime_typed`; expression/materialisation gives `value_has_type`; static typing gives `assignable_type`; bridge lemmas derive `assign_operation_runtime_typed`, `assign_operation_matches_target_shape`, and `assign_target_assignable_context`; C1 then proves assignment no-TypeError and runtime consistency for all results. Tuple/list assignment uses the second assignment theorem through `target_assignment_values_assignable`. Builtin/update and call expression cases delegate to C4/C5 rather than duplicating evaluator analysis.
-
-#### Definition design
-The important local interface is `assignment_value_static_assignable_context` and its bridge lemmas from runtime-typed target values plus `env_consistent` to full `assign_target_assignable_context`/`EVERY` context. Operation bridges should have conclusions that unify exactly with C1 premises for `Replace`, `Update`, append, and pop. Failure signs: statement cases inspect top-level storage/hashmap layout directly, tuple assignment manually recurses over targets, or AugAssign unfolds binop internals instead of using C4.
-
-#### Code structure
-Place statement-side bridges and resumes in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near `eval_all_type_sound_mutual`. Consume assignment theorem from `vyperTypeStatePreservation`; do not move C1 helpers here. Public wrappers remain in `vyperTypeSoundnessNewScript.sml` unless current source already exports compatibility lemmas from statement soundness.
-
-### C2.1: Assignment assignable-context bridge lemmas
-- Kind: `infrastructure_lemma`
-- Risk: 1
-- Rationale: The current source reportedly already contains these predicates/lemmas; this is an audit or mechanical repair of direct projections.
-- Dependencies: C1.6
-- Checkpoint: yes
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2.1
-
-#### Progress note
-Reuse existing `assignment_value_static_assignable_context` and bridge lemmas where they build.
-
-#### Summary
-- Ensure `assignment_value_static_assignable_context` and simplification lemmas build.
-- Prove/reuse single-target context bridge from `target_runtime_typed` and `env_consistent`.
-- Prove/reuse list bridge for `target_values_runtime_typed` and `EVERY assign_target_assignable_context`.
-- Strengthen here if a statement branch lacks context facts.
-
-#### Statement
-```sml
-Theorem target_runtime_typed_imp_assignable_context:
-  !env cx st tgt ty gv.
-    target_runtime_typed env cx st tgt ty gv ==>
-    env_consistent env cx st ==>
-    assign_target_assignable_context cx gv st
-
-Theorem target_values_runtime_typed_imp_EVERY_assignable_context:
-  !env cx st tgts tys gvs.
-    target_values_runtime_typed env cx st tgts tys gvs ==>
-    env_consistent env cx st ==>
-    EVERY (\gv. assign_target_assignable_context cx gv st) gvs
-```
-
-#### Approach
-Use the existing mutual runtime-typed induction/projection. Top-level cases draw storage/hashmap writability from env consistency and static declarations; scoped cases simplify directly.
-
-#### Not to try
-Do not derive assignable context from assignment success; assignment soundness needs it before execution, including for failing assignments.
-
-### C2.2: Assignment operation runtime/shape bridge lemmas
-- Kind: `infrastructure_lemma`
+### C1.2: Prove `assign_target_sound_mutual[sound_TopLevelVar]` HashMapRef branch
+- Kind: `proof`
 - Risk: 2
-- Rationale: Finite proofs from operation typing/value typing and C4 update-binop theorem; statements should be narrow and match C1 premises.
-- Dependencies: C4.1
-- Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2.2
-
-#### Progress note
-Existing Replace bridges can be carried forward; add exact append/pop/update bridges only for current call sites.
-
-#### Summary
-- Prove/reuse `Replace` runtime-typed and shape bridges from `value_has_type`.
-- Add exact bridges for `Update`, append, and pop used by statement cases.
-- Use `assignable_type_evaluate_not_NoneTV` for annotated assignment non-None facts.
-- Conclusions must directly satisfy C1 premises.
-
-#### Statement
-```sml
-Theorem assign_operation_runtime_typed_Replace_from_value_has_type: ...
-Theorem assign_operation_matches_target_shape_Replace_from_typed: ...
-(* plus exact Update/Append/Pop bridge lemmas required by current source *)
-```
-
-#### Approach
-For `Replace`, split target value shape; tuple cases use tuple value typing and list lengths. For `Update`, use `well_typed_update_binop_no_type_error`/runtime typing from C4.1 and prove shape from the evaluated target shape.
-
-#### Not to try
-Do not hide missing update-binop proofs by cheating bridges. Do not use a large metis over full statement contexts when a two- or three-premise local lemma would be stable.
-
-### C2.3: Prove assignment statement cases
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: After C1 and C2.1-C2.2, AnnAssign/Assign/AugAssign are linear compositions of target/value IHs and assignment soundness.
-- Dependencies: C2.1, C2.2
-- Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2.3, PLAN_type_system_rewrite.md C2.4, PLAN_type_system_rewrite.md C2.5
-
-#### Progress note
-Merges the three assignment statement branches into one task-focused batch while preserving their distinct proof interfaces.
-
-#### Summary
-- Resume `AnnAssign`, `Assign`, and `AugAssign` cases.
-- Derive assignable context from evaluated targets, not from assignment execution.
-- Derive operation runtime typing and shape for `Replace`/tuple replace/update.
-- Tuple/list assignment must call `cj 2 assign_target_sound_mutual` via `target_assignment_values_assignable`.
-
-#### Statement
-```sml
-Resume eval_all_type_sound_mutual[AnnAssign]: ...
-Resume eval_all_type_sound_mutual[Assign]: ...
-Resume eval_all_type_sound_mutual[AugAssign]: ...
-```
-
-#### Approach
-Follow evaluator order: evaluate target(s), evaluate value expression(s), materialise if necessary, form assignment operation premises, then apply C1. `AnnAssign` uses annotated `assignable_type`; `Assign` splits single vs tuple/list paths; `AugAssign` delegates update-binop safety to C4.1 through C2.2.
-
-#### Not to try
-Do not resurrect old `ty <> NoneT` side conditions; use `assignable_type`. Do not handle tuple assignment by repeated single-target proofs in the statement case. Do not unfold binop cases inside AugAssign.
-
-### C2.4: Prove non-assignment and structured statement cases
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: These cases are standard mutual-IH and scope/frame applications once assignment is settled.
-- Dependencies: C2.3
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2.6, PLAN_type_system_rewrite.md C2.7
-
-#### Progress note
-Covers remaining statement/list/loop/iterator resumes not specifically assignment, builtin, or call.
-
-#### Summary
-- Resume literal control/result cases such as Pass, Break, Continue, Return, Raise, Assert, Log, and Expr.
-- Resume sequence, if, loop, for-body, and iterator cases.
-- Use env-extension, frame, and scope-pop lemmas for scoped execution.
-- Use expression IHs only at their evaluator boundaries.
-
-#### Statement
-```sml
-Resume eval_all_type_sound_mutual[Pass]: ...
-Resume eval_all_type_sound_mutual[Return_*]: ...
-Resume eval_all_type_sound_mutual[If/For/Stmts/Iterator_*]: ...
-```
-
-#### Approach
-For direct controls, simplify evaluator and typing definitions. For sequencing, destruct the first result and apply the next IH only in the success branch. For loops/scopes, use existing scope-bracket/pop preservation lemmas rather than raw scope-list reasoning.
-
-#### Not to try
-Do not inspect expression evaluator internals in these cases. Do not force block-success env consistency to be the extended body env when the theorem restores caller env after scope pop.
-
-### C2.5: Prove target/base-target evaluation cases
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: These cases are included in the mutual theorem to feed assignment soundness; they use path/place typing helpers and list IHs.
-- Dependencies: C2.1
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2.8
-
-#### Progress note
-Keep target runtime typing separate from assignment context; context is derived later by C2.1.
-
-#### Summary
-- Resume target tuple/list/base-target cases.
-- Successful targets produce `target_runtime_typed` or list runtime typing.
-- Base targets produce shape/location/path facts required by later assignment branches.
-- Subscript/attribute extend paths using existing type/path lemmas.
-
-#### Statement
-```sml
-Resume eval_all_type_sound_mutual[Target_Base/Target_Tuple/Targets_*]: ...
-Resume eval_all_type_sound_mutual[BaseTarget_Name/BareGlobal/TopLevel/Subscript/Attribute]: ...
-```
-
-#### Approach
-For base targets, apply subexpression/base-target IHs in evaluator order, then use static place-target, subscript, or attribute typing lemmas to extend `target_path_type`. For target lists, use structural list reasoning and the mutual IH to build `LIST_REL3`/list runtime typing.
-
-#### Not to try
-Do not prove top-level writability or layout-slot assignability here; this component proves runtime target typing only.
-
-### C2.6: Prove expression/expression-list delegated cases inside statement mutual theorem
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: Expression cases should be wrappers around the expression/builtin/call soundness layers; remaining work is projection and `expr_result_typed` reconstruction.
-- Dependencies: C4, C5
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C2.9
-
-#### Progress note
-If current source keeps expression soundness in a separate theory, use its exported theorem rather than redoing evaluator recursion.
-
-#### Summary
-- Resume expression and expression-list cases still in `eval_all_type_sound_mutual`.
-- Delegate builtin/type-builtin subcases to C4 theorems.
-- Delegate call expression subcases to C5 wrappers.
-- Preserve `expr_result_typed`, including place/hashmap reference invariants.
-
-#### Statement
-```sml
-Resume eval_all_type_sound_mutual[Expr_*]: ...
-Resume eval_all_type_sound_mutual[Exprs_*]: ...
-```
-
-#### Approach
-Apply exported expression soundness where available; otherwise apply the expression IH in evaluator order and reconstruct `expr_result_typed_def`. Builtin and call cases should stop at their soundness theorem boundaries.
-
-#### Not to try
-Do not reintroduce retired helper statements from the old stack. Do not unfold builtin or call evaluators after their boundary theorem applies.
-
-### C2.7: Statement soundness build/audit checkpoint
-- Kind: `checkpoint`
-- Risk: 1
-- Rationale: Mechanical build and warning audit after all statement mutual resumes are completed.
-- Dependencies: C2.3, C2.4, C2.5, C2.6
-- Checkpoint: yes
-
-#### Progress note
-Gates call/final soundness on a non-cheated statement/evaluator joint theorem.
-
-#### Summary
-- Build `vyperTypeStmtSoundnessTheory`.
-- Confirm no unresolved `cheat` or `suspend` remains in `vyperTypeStmtSoundnessScript.sml`.
-- Record remaining imported warnings from builtin/call layers separately.
-- Escalate if theorem shape lacks a needed postcondition.
-
-#### Statement
-```sh
-holbuild build vyperTypeStmtSoundnessTheory
-```
-
-#### Approach
-Use build output and targeted grep. If multiple cases need the same missing invariant, strengthen the mutual theorem and callers rather than proving duplicate case-local facts.
-
-#### Not to try
-Do not claim statement soundness complete if it builds only by importing cheated builtin/call facts; final zero-CHEAT is C6’s criterion.
-
-### C3: Audit/prove assignment compatibility wrappers
-- Kind: `compatibility_wrappers`
-- Risk: 1
-- Rationale: The wrappers named by the TASK should be corollaries of C1. If current source already proves them, this is a mechanical audit; otherwise projection from C1 is standard.
-- Required for completion: yes
-- Dependencies: C1.6
-- Checkpoint: yes
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C3
-
-#### Progress note
-These wrappers are public/compatibility surface only. Internal proofs should use `assign_target_sound_mutual`.
-
-#### Summary
-- Verify or reprove `assign_target_no_type_error`, `assign_target_update_no_type_error`, and `assign_target_append_no_type_error` in `vyperTypeAssignSoundnessScript.sml`.
-- Prove wrappers as projections of the joint assignment theorem where needed.
-- Keep wrapper statements compatible with current callers.
-- Build/audit `vyperTypeAssignSoundnessTheory` with no fresh-file cheats.
-
-#### Statement
-```sml
-Theorem assign_target_no_type_error: ...
-Theorem assign_target_update_no_type_error: ...
-Theorem assign_target_append_no_type_error: ...
-```
-
-#### Approach
-First audit current proofs. If any wrapper is cheated or broken, instantiate `cj 1 assign_target_sound_mutual` with the wrapper’s operation-specific premises and simplify `no_type_error_result`.
-
-#### Not to try
-Do not restore standalone recursive assignment-wrapper proofs. Do not weaken wrapper behavior; the stronger internal theorem is already available.
-
-#### Argument
-The compatibility wrappers expose legacy no-TypeError names but should not drive the architecture. Since C1 proves all-result runtime consistency and `no_type_error_result` for any well-typed/assignable assignment operation, each wrapper follows by supplying operation-specific runtime/shape/context premises and projecting the no-TypeError conclusion.
-
-#### Definition design
-No new definitions. If a wrapper lacks a premise needed by C1, use an existing operation/context bridge or prove a narrow wrapper-side bridge; do not alter C1.
-
-#### Code structure
-All wrapper work stays in `semantics/prop/vyperTypeAssignSoundnessScript.sml`. Keep any helper local unless imported by statement/call soundness.
-
-### C4: Finish builtin/binop/type-builtin no-TypeError layer
-- Kind: `proof_subtree`
-- Risk: 3
-- Rationale: Derived from child component C4.1 risk 3. ">~ is an infix operator that pairs a tactic with a quotation list, not a standalone filtering step. Cannot use >~ after >>. Need different goal routing architecture. Also need to handle Not case for bool/uint (not just flag), and Keccak256/Sha256 need evaluate_type_def expansion with Cases_on bd for abstract bd variable."
-- Required for completion: yes
+- Work priority: 10
+- Work units: 8
+- Rationale: The handover identifies the exact branch and required facts; the proof should be a focused helper plus local branch discharge.
 - Dependencies: C0
-- Supersedes: prior slice-only builtin PLAN C1, PLAN_type_system_rewrite.md C4 risk-3 formulation
-- Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4, E0158, E0159, E0160
-
-#### Progress note
-Refines the earlier C4 risk-3 note by making ECRecover list extraction a checkpoint helper and keeping all children risk 1-2. Supersedes old slice-only builtin work by treating it as one branch under the builtin layer.
-
-#### Summary
-- Prove `well_typed_binop_no_type_error`, update-binop facts, and assignment-subscript update path lemmas.
-- Prove remaining builtin/type-builtin no-TypeError dispatcher cases, including ECRecover, ABI encode/decode, Env/MsgGas, and simple projections.
-- Keep all fixes localized to `vyperTypeBuiltinsScript.sml` unless a checked probe proves executable typing/runtime mismatch.
-- Export only dispatcher/update lemmas consumed downstream.
-
-#### Statement
-```sml
-Theorem well_typed_binop_no_type_error: ...
-Theorem well_typed_update_binop_no_type_error: ...
-Theorem assign_subscripts_update_leaf_no_type_error: ...
-Theorem assign_operation_runtime_typed_leaf_no_type_error: ...
-Theorem assign_subscripts_no_type_error_runtime_typed: ...
-Theorem assign_subscripts_preserves_type_runtime_typed: ...
-Theorem well_typed_builtin_app_no_type_error: ...
-Theorem well_typed_type_builtin_app_no_type_error: ...
-```
-
-#### Approach
-Use per-constructor boundary lemmas, then prove dispatcher theorems by case analysis over typing/evaluator constructors. For update assignment, prove binop/update-binop no-TypeError once and reuse it in recursive subscript lemmas.
-
-#### Not to try
-Do not unfold ABI/crypto/bytes arithmetic in the global dispatcher; isolate it behind branch lemmas. Do not patch assignment or AugAssign with local cheats if update-binop facts are missing. Do not silently change Env/MsgGas behavior without a probe.
-
-#### Argument
-Builtin soundness is finite case analysis. Static typing fixes arity, result type, and evaluated argument type values; `LIST_REL value_has_type` fixes runtime value constructors. Each branch must show that evaluator failures are either normal results or non-TypeError runtime errors. Binop soundness is the shared boundary for update assignment: typed update binops cannot raise TypeError and preserve the expected type, so recursive assignment-subscript update lemmas inherit both no-TypeError and preservation. ABI/crypto/env/type-builtin details remain hidden behind branch lemmas consumed by expression/statement soundness.
-
-#### Definition design
-No broad new framework. Add small local boundary lemmas named after evaluator operations. Use probes only for suspected typing/runtime mismatches such as Env/MsgGas or ABI bounds. A branch lemma is too weak if the dispatcher proof still needs to destruct ABI encodings or cryptographic internals.
-
-#### Code structure
-All work belongs in `semantics/prop/vyperTypeBuiltinsScript.sml`. Keep per-branch helpers `[local]` except update/subscript lemmas imported by state preservation. Edit lower typing/evaluator files only after a checked probe establishes mismatch and the TASK permits internal repair.
-
-### C4.1: Close the binop/update-binop no-TypeError path and its builtin dispatcher prerequisite
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: The false AsWeiValue typing issue was already repaired in source (AsWeiValue now uses uint-only typing per prior evidence), and the remaining blocker is proof-organization/syntax in `well_typed_builtin_app_no_type_error`, not a mathematical unknown. The assignment-subscript lemmas in `vyperTypeStatePreservationScript.sml` now have direct statements and proof skeletons that reduce to the already-proved `well_typed_binop_no_type_error`; this makes the remaining work a standard dispatcher rebuild plus build/audit.
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0168, E0169, E0170, E0171, E0172, E0173, E0174, E0175, E0176, E0177
+- Carries progress/evidence from: pre-collapse C1.2, TYPE_SYSTEM_REWRITE_PLAN lines 271-292
 
 #### Progress note
-This refines the stuck C4.1 rather than replacing its obligation. Prior episodes established the binop proof direction, repaired the AsWeiValue typing definition, proved EC point boundary helpers, and identified the exact final blocker: invalid `>~` routing and mixed builtin categories in `well_typed_builtin_app_no_type_error`. Those results still support the revised component; the executable plan is narrowed to a syntactically valid per-category dispatcher and an audit of the update-binop assignment-subscript chain. Because this is an augment inside dotted component C4.1, `required_for_completion` is false here and inherited from the existing top-level component in the broader plan.
+Refines the old `TopLevelVar` high-risk case into the single HashMapRef branch with a branch-helper boundary.
 
 #### Summary
-- Prove/build the C4.1 no-TypeError chain that supports update assignment through `assign_subscripts`.
-- First repair the strict prerequisite `well_typed_builtin_app_no_type_error` proof in `vyperTypeBuiltinsScript.sml`; do not use `>~` as a standalone tactic.
-- Then audit/build the state-preservation update-binop lemmas: `well_typed_update_binop_no_type_error`, `assign_subscripts_update_leaf_no_type_error`, `assign_operation_runtime_typed_leaf_no_type_error`, `assign_subscripts_no_type_error_runtime_typed`, and `assign_subscripts_preserves_type_runtime_typed`.
-- The core mathematical invariant is that the static binop/update typing judgment gives evaluator arguments with constructors expected by `evaluate_binop`, so no `TypeError` branch can be reached.
-- Finish with a checkpoint build sufficient to show this subtree no longer blocks downstream assignment-target work.
+Close the `lookup_global ... = INL (HashMapRef is_transient base_slot kt vt)` branch in `sound_TopLevelVar`. Add a narrowly stated helper if needed before editing the large `Resume` proof. The helper should bridge top-level hashmap declaration/context facts to recursive subscript no-TypeError/preservation after the hashmap prefix.
 
-#### Description
-C4.1 owns the inherited binop/update-binop no-TypeError path and the strict builtin-file proof prerequisite needed before `vyperTypeStatePreservationTheory` can build. Stay within `vyperTypeBuiltinsScript.sml` and `vyperTypeStatePreservationScript.sml` at the named theorems/helpers only. Do not attempt the later builtin success-type cheats, ABI encode branches, raw-call bound cheat, or assignment-target mutual suspended branches; those are siblings/cousins outside this subtree unless they become build blockers for these exact theorems.
+#### Statement
+Inside `Theorem assign_target_sound_mutual`, `Resume assign_target_sound_mutual[sound_TopLevelVar]`: prove the `HashMapRef` semantic branch without `cheat`. Any helper must preserve the current theorem’s strengthened hypotheses, especially `assign_target_assignable_context cx gv st` and `assign_operation_matches_target_shape gv op`.
 
 #### Approach
-First make the builtin dispatcher syntactically valid and category-directed, because the state-preservation file imports `vyperTypeBuiltins`. Then build/audit the update-binop assignment-subscript chain. Use theorem statements already in source as authoritative and only strengthen local helpers if the exact named statement cannot be proved directly.
+First isolate the branch by `lookup_global`. Use `assign_target_assignable_context` to obtain nonempty `sbs` and slot/declaration availability. Use `top_level_HashMap_decl` or equivalent lookup consistency to connect the returned `HashMapRef` with `HashMapT kt vt`, then use the strengthened `target_path_step_type` key invariant to traverse the hashmap prefix and call `assign_subscripts_no_type_error_runtime_typed` on the value-type suffix.
 
 #### Not to try
-Do not resurrect the invalid `>> >~ [...]` style: `>~` is an infix routing combinator and cannot be used as a standalone tactic after `>>`. Do not use one large `gvs[evaluate_builtin_def]` catch-all before delegation; it destroys the shape of Concat/Slice goals and leaves crypto hash goals blocked on abstract bounds. Do not start proving later builtin success typing or ABI encode cheats under this component.
+Do not attempt the branch inside a large unexplained `AllCaseEqs()` split. Do not treat hashmap key evaluation as an untyped runtime fact; the strengthened `target_path_step_type` is the intended source of key well-typedness.
 
-#### Argument
-The path has two layers. At the builtin/binop layer, `well_typed_builtin_app_no_type_error` is a dispatcher over builtin constructors. Most builtin constructors are already covered by local boundary lemmas (`well_typed_binop_no_type_error`, `flag_Not_no_type_error`, `as_wei_value_uint_no_type_error`, `make_array_no_type_error`, `ecadd_no_type_error`, `ecmul_no_type_error`, `ecrecover_no_type_error`, `concat_no_type_error`, `slice_no_type_error`, and string variants). The proof must preserve the conclusion shape expected by those helpers: apply `irule` before expanding `evaluate_builtin_def` for Concat/Slice/EC helpers, and expand/evaluate only after the helper is no longer needed. Crypto hash cases require destructing the abstract bytes bound (`Cases_on bd`) before simplifying `evaluate_type_def`, because otherwise simplification leaves a blocked case expression.
-
-At the assignment-subscript layer, update assignment reduces at the leaf to `evaluate_binop`; the static predicate `assign_operation_runtime_typed env leaf_ty op` gives an evaluated leaf type and RHS runtime type matching the update binop judgment. The leaf no-TypeError theorem proves each operation constructor separately; the non-leaf theorem is structural induction over `subs`, preserving a value typing fact down through array indices and struct fields until the leaf theorem applies. Preservation is analogous but uses `assign_subscripts_preserves_type` plus the existing operation leaf-type lemmas, rather than redoing subscript recursion.
-
-#### Definition design
-No new semantic definitions should be introduced. The proof interface should stay theorem-based:
-
-- `evaluate_type_BaseT_SOME` and `evaluate_type_ArrayT_SOME` are inversion boundaries from source types to runtime type values. Use these to avoid unfolding all of `evaluate_type_def` in large goals.
-- Constructor-shape lemmas such as `vht_BaseTV_*` and `vht_ArrayTV_exists` are the value-inversion boundary. Use them to convert `value_has_type` into the exact value constructor expected by the evaluator.
-- Builtin helper lemmas should consume the unexpanded `evaluate_builtin ... blt ...` conclusion where possible. This is especially important for Concat/Slice: expanding `evaluate_builtin_def` changes the head symbol to `evaluate_concat`/`evaluate_slice` and breaks `irule` matching.
-- Failure signs: a proof that creates dozens of unrelated builtin subgoals after `Cases_on blt`, a goal containing a stuck `case bd of ...` after simplification, or a Concat/Slice goal whose conclusion no longer mentions `evaluate_builtin` indicates that expansion happened too early.
-
-#### Code structure
-Make only localized edits.
-
-- In `semantics/prop/vyperTypeBuiltinsScript.sml`, repair/prove helper lemmas immediately above `well_typed_builtin_app_no_type_error` if needed, then replace only that theorem's proof body. Prefer local helper theorems for category dispatch if the monolithic proof remains brittle.
-- In `semantics/prop/vyperTypeStatePreservationScript.sml`, only touch the named update-binop/subscript lemmas if the build shows they are not accepted. The current source already contains direct proofs for these statements; preserve their theorem names because downstream assignment proofs call them.
-- Do not edit `vyperTypeSoundnessScript.sml` old retired proofs, later builtin success-type theorems, ABI encode resumed branches, or the assignment-target mutual theorem in this component.
-
-### C4.1.1: Repair the no-TypeError builtin dispatcher without standalone `>~` routing
+### C1.3: Prove `assign_target_sound_mutual[sound_TopLevelVar]` ArrayRef branch
 - Kind: `proof`
 - Risk: 2
-- Rationale: Prior episodes identified all remaining builtin categories and the exact syntactic blocker. A constructor case split on `blt` plus valid per-case `>-` branches or local category helper theorems is a standard HOL4 proof organization issue.
+- Work priority: 20
+- Work units: 8
+- Rationale: ArrayRef is localized to storage-array assignment operations and can be split into append/pop versus ordinary element/path update.
+- Dependencies: C0
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0174, E0175, E0176, E0177
+- Carries progress/evidence from: pre-collapse C1.2, TYPE_SYSTEM_REWRITE_PLAN lines 293-300
 
 #### Progress note
-Carries forward the diagnosis that the theorem itself is plausible after the AsWeiValue source repair, but the previous proof architecture was invalid due to standalone `>~` and over-eager expansion.
+Splits the previous combined top-level residual into the ArrayRef branch after HashMapRef.
 
 #### Summary
-- Replace the proof body of `well_typed_builtin_app_no_type_error` in `vyperTypeBuiltinsScript.sml`.
-- Keep the theorem statement unchanged.
-- Route builtin constructors using valid HOL4 structure: either explicit `Cases_on blt` branches with `>-`, or local per-constructor/per-category helper theorems consumed by `irule`.
-- Handle Bop, Not, AsWeiValue, EC, MakeArray, Env, Acc, crypto hashes, Concat/Slice, and remaining simple builtins separately.
-- Checkpoint when `vyperTypeBuiltinsTheory` gets past this theorem.
+Close the `ArrayRef` top-level branch in `sound_TopLevelVar`. Handle storage-array `AppendOp`/`PopOp` separately from ordinary subscript assignment. Reuse existing array traversal and storage write/read no-TypeError helpers rather than unfolding storage internals in the mutual proof.
 
 #### Statement
-Theorem well_typed_builtin_app_no_type_error:
-  well_typed_builtin_app ty blt ts ∧ blt ≠ Len ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  evaluate_type (get_tenv cx) ty = SOME tv ∧
-  LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧ accounts_well_typed acc ∧
-  (!item. blt = Env item ==> item ≠ MsgGas) ==>
-  !msg. evaluate_builtin cx acc ty blt vs <> INR (TypeError msg)
+Inside `Theorem assign_target_sound_mutual`, `Resume assign_target_sound_mutual[sound_TopLevelVar]`: prove the `ArrayRef` semantic branch without `cheat`.
 
 #### Approach
-After `strip_tac >> Cases_on blt`, simplify only `well_typed_builtin_app_def`, length facts, and classifier inversion lemmas. For cases with existing helper lemmas, apply `irule` before expanding `evaluate_builtin_def`; solve premises with the existing MAP/LIST_REL/evaluate_type assumptions. For remaining direct cases, use `evaluate_type_BaseT_SOME`, value constructor inversions, and only then simplify `evaluate_builtin_def`.
+Split on the assignment operation before destructing storage details. For append/pop use `assign_operation_runtime_typed` shape facts to get dynamic-array requirements. For ordinary element/path assignment, resolve the array element/reference, establish the recursive leaf type, invoke `assign_subscripts_no_type_error_runtime_typed`, and finish with the storage write no-TypeError/value typing helper.
 
 #### Not to try
-Do not write `>> >~ [...]`; it is syntactically invalid in this position. Do not make helper theorems with antecedents like `blt = Concat ∨ blt = Slice` and then `Cases_on blt` inside them; that creates every builtin constructor subgoal and repeats the original problem. Do not expand `evaluate_builtin_def` before trying `concat_no_type_error` or `slice_no_type_error`.
+Do not conflate `ArrayRef` with the already-proved storage `Value` branch; array references have distinct append/pop and element-resolution paths. Do not bypass operation-shape side conditions.
 
-### C4.1.1.1: Optionally introduce exact local crypto-hash no-TypeError helpers
-- Kind: `infrastructure_lemma`
-- Risk: 1
-- Rationale: The crypto hash cases are direct definition/value-shape proofs once the argument type is known to be bytes or string. They are isolated and prevent the dispatcher from depending on fragile goal routing.
-- Carries progress/evidence from: E0175, E0176
-
-#### Progress note
-This child is optional but owned by C4.1.1; use it if the main dispatcher remains cumbersome. Prior evidence identified `Cases_on bd` before `evaluate_type_def` as the key step.
-
-#### Summary
-- If useful, prove local helper(s) for `Keccak256` and `Sha256` before the main dispatcher.
-- The helpers should have concrete builtin constructors in the conclusion/assumptions, not a variable `blt` plus disjunction.
-- Split the well-typed argument type into `BytesT bd` vs `StringT m`; for `BytesT`, `Cases_on bd` before simplifying `evaluate_type_def`.
-- Conclude by expanding `evaluate_builtin_def` after value constructors are known.
-
-#### Statement
-Suggested local shape, either duplicated or parameterized by the two concrete constructors:
-
-Theorem keccak256_no_type_error[local]:
-  well_typed_builtin_app ty Keccak256 ts ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  evaluate_type (get_tenv cx) ty = SOME tv ∧
-  LIST_REL value_has_type tvs vs ==> 
-  !msg. evaluate_builtin cx acc ty Keccak256 vs <> INR (TypeError msg)
-
-Theorem sha256_no_type_error[local]:
-  same shape with `Sha256`.
-
-#### Approach
-Simplify `well_typed_builtin_app_def` to get the single argument and its bytes/string typing. For bytes, destruct the bound variable with `Cases_on bd` before `gvs[evaluate_type_def]`; for string, `gvs[evaluate_type_def]` is enough. Then destruct `vs` and the argument value and finish with `simp[evaluate_builtin_def]`.
-
-#### Not to try
-Do not leave the constructor abstract as `blt` in these helpers. Do not simplify `evaluate_type_def` on `BytesT bd` before splitting `bd`, or the goal may contain a stuck case expression.
-
-### C4.1.1.2: Optionally introduce exact local Concat/Slice no-TypeError dispatcher helpers
-- Kind: `infrastructure_lemma`
-- Risk: 1
-- Rationale: Existing `concat_no_type_error`, `concat_string_no_type_error`, `slice_no_type_error`, and `slice_string_no_type_error` already contain the evaluator reasoning. Exact dispatcher helpers merely preserve conclusion shape and package length/type premises.
-- Carries progress/evidence from: E0176, E0177
-
-#### Progress note
-This child is optional and refines the prior failed disjunction-helper idea into exact constructor helpers that do not case split over all builtins.
-
-#### Summary
-- If direct dispatcher branches are brittle, add local exact helpers for `Concat` and `Slice`.
-- Each helper should name one concrete builtin constructor and internally choose bytes vs string branch from `well_typed_builtin_app_def`.
-- Apply the existing Concat/Slice evaluator lemmas before unfolding `evaluate_builtin_def`.
-- Use LIST_REL/MAP length facts and `evaluate_type_def` only for side conditions such as size bounds.
-
-#### Statement
-Suggested local shapes:
-
-Theorem concat_builtin_no_type_error[local]:
-  well_typed_builtin_app ty Concat ts ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  evaluate_type (get_tenv cx) ty = SOME tv ∧
-  LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty Concat vs <> INR (TypeError msg)
-
-Theorem slice_builtin_no_type_error[local]:
-  same shape with `Slice`.
-
-#### Approach
-Open `well_typed_builtin_app_def` just enough to obtain the bytes/string disjunction and argument length. In each branch, immediately `irule concat_no_type_error`/`concat_string_no_type_error` or `slice_no_type_error`/`slice_string_no_type_error`, then discharge premises using `LIST_REL_LENGTH`, `LENGTH_MAP`, and type evaluation facts. Only unfold `evaluate_type_def` for arithmetic/size premises after the helper is applied.
-
-#### Not to try
-Do not unfold `evaluate_builtin_def` first. Do not create a combined `Concat ∨ Slice` helper that internally performs `Cases_on blt`; it recreates all constructor subgoals.
-
-### C4.1.1.3: Handle Not and simple builtin cases explicitly in the dispatcher
-- Kind: `proof_slice`
+### C1.4: Finish `sound_ImmutableVar` and `sound_TupleTargetV` branches
+- Kind: `proof`
 - Risk: 2
-- Rationale: Prior evidence notes that `Not` has bool and flag/int-like cases, not just flag. The simple builtins are direct constructor/value-shape computations once the type evaluator and value typing assumptions are inverted.
+- Work priority: 30
+- Work units: 5
+- Rationale: Both branches are structurally simpler than top-level storage: immutable assignment is ruled out by assignability/context, and tuple targets follow the existing target-list relation.
+- Dependencies: C0
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0174, E0177
+- Carries progress/evidence from: pre-collapse C1.2
 
 #### Progress note
-Refines the old catch-all direct-simplification phase by making explicit that `Not` may need more than `flag_Not_no_type_error`, and simple cases should be handled after type/value inversion.
+Keeps the two named TASK residuals together because they are small non-storage branches of the same mutual theorem.
 
 #### Summary
-- In `well_typed_builtin_app_no_type_error`, do not rely solely on `flag_Not_no_type_error` for the `Not` constructor.
-- Add an explicit bool `Not` branch by deriving `BoolV` from `is_bool_type`/`evaluate_type`/`value_has_type` and simplifying `evaluate_builtin_def`.
-- For simple numeric/hash/method builtins, derive `BaseTV` via `evaluate_type_BaseT_SOME`, destruct the relevant runtime values, then simplify evaluator definitions.
-- Keep this work in the main theorem proof unless a local helper makes the proof clearer.
+Remove cheats from `sound_ImmutableVar` and `sound_TupleTargetV` in `assign_target_sound_mutual`. Immutable writes should be impossible or no-TypeError by context; tuple target assignment should delegate to the target-list mutual conjunct.
 
 #### Statement
-No separate public theorem required. This is the `Not`, `Neg`, `Ceil`, `Floor`, `AddMod`, `MulMod`, `PowMod256`, `BlockHash`, `BlobHash`, `MethodId`, `Uint2Str`, and similar direct-computation cases inside `well_typed_builtin_app_no_type_error`.
+`Resume assign_target_sound_mutual[sound_ImmutableVar]` and `Resume assign_target_sound_mutual[sound_TupleTargetV]` in current source.
 
 #### Approach
-For `Not`, split the static type alternatives exposed by classifier inversion; use `flag_Not_no_type_error` only in the flag branch and direct `BoolV` inversion in the bool branch. For simple cases, repeatedly apply type inversion (`evaluate_type_BaseT_SOME`) and value inversion (`Cases_on v` plus `value_has_type_def` or local `vht_*` lemmas) before expanding the evaluator. Use `intLib.ARITH_TAC` only for residual arithmetic side conditions.
+For `ImmutableVar`, unfold the assignment target evaluator enough to expose the impossible writable assignment/context contradiction or the non-TypeError lookup path. For `TupleTargetV`, use the mutual theorem’s target-list conjunct and `target_assignment_values_assignable` to supply per-element value typing and assignability.
 
 #### Not to try
-Do not hide these cases under a `TRY` catch-all that silently backtracks; failures then fall into inappropriate expansions. Do not assume `Not` is flag-only.
+Do not introduce a special-purpose tuple assignment induction outside the mutual theorem. Do not weaken immutable assignability assumptions; immutable writes must be ruled out by the existing context predicate.
 
-### C4.1.2: Audit and build the update-binop assignment-subscript no-TypeError chain
-- Kind: `proof_audit`
-- Risk: 1
-- Rationale: The current source already contains direct proofs for the named state-preservation theorems, and their dependency on `well_typed_binop_no_type_error` is explicit. Once the builtin theory builds, this is a mechanical build/audit rather than theorem design.
-- Dependencies: C4.1.1
-- Checkpoint: yes
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: E0168, E0169, E0170, E0171
-
-#### Progress note
-Carries forward prior binop proof progress and the current source evidence showing these lemmas are no longer cheated. The component exists to confirm the chain under `holbuild` and make only localized fixes if the accepted source differs from the displayed context.
-
-#### Summary
-- Build/audit the five update-binop/subscript theorems in `vyperTypeStatePreservationScript.sml`.
-- Preserve their names and statements because downstream assignment preservation calls them.
-- Expected proof chain: update leaf delegates to `well_typed_update_binop_no_type_error`; operation leaf cases split on `op`; recursive subscript no-TypeError inducts on `subs`; preservation delegates to `assign_subscripts_preserves_type`.
-- If any proof fails, fix only the local proof, not the statement, unless HOL shows the current statement is false.
-
-#### Statement
-Named obligations in `vyperTypeStatePreservationScript.sml`:
-
-- `assign_subscripts_preserves_type_runtime_typed`
-- `well_typed_update_binop_no_type_error`
-- `assign_subscripts_update_leaf_no_type_error`
-- `assign_operation_runtime_typed_leaf_no_type_error`
-- `assign_subscripts_no_type_error_runtime_typed`
-
-#### Approach
-Run the build after C4.1.1. If these theorems are already accepted, record the checkpoint and do not edit them. If a local failure appears, follow the current proof architecture: `well_typed_update_binop_no_type_error` is the assignment-shaped instance of `well_typed_binop_no_type_error`; leaf update unfolds `assign_subscripts_def`; recursive no-TypeError uses induction over `subs` and value typing preservation for array/struct descent.
-
-#### Not to try
-Do not start a second evaluator induction or duplicate the binop case analysis here. Do not weaken `assign_operation_runtime_typed`; downstream assignment soundness depends on the stronger runtime-typed operation invariant. Do not touch assignment-target mutual suspended branches in this component.
-
-### C4.1.3: Checkpoint build for the C4.1 subtree
-- Kind: `build_checkpoint`
-- Risk: 1
-- Rationale: This is a mechanical validation step after the dispatcher and update-subscript chain have been handled. It determines whether C4.1 can be marked unblocked without planning unrelated cheats.
-- Dependencies: C4.1.1, C4.1.2
-- Checkpoint: yes
-
-#### Progress note
-New validation child added to ensure the refined subtree has objective build evidence before control returns to sibling components.
-
-#### Summary
-- Run `holbuild build vyperTypeBuiltinsTheory` first to validate the repaired dispatcher.
-- Then run `holbuild build vyperTypeStatePreservationTheory` or the nearest target that reaches the update-binop/subscript lemmas.
-- Success means C4.1's scoped obligations are discharged, even if later unrelated cheats in the same files still warn.
-- If the build stops at a later theorem outside C4.1 (e.g. builtin success-type ABI encode or assignment-target mutual branches), report that as outside-subtree blockage rather than editing it here.
-
-#### Statement
-Build evidence obligations:
-
-```sh
-holbuild build vyperTypeBuiltinsTheory
-holbuild build vyperTypeStatePreservationTheory
-```
-
-#### Approach
-Use the first build to catch syntax/proof issues in `well_typed_builtin_app_no_type_error`. Use the second to verify that imports and the named update-subscript lemmas are accepted in their actual dependency context. Treat CHEAT warnings from later unrelated theorems as notes, not C4.1 failures, unless they are one of the named C4.1 obligations.
-
-#### Not to try
-Do not chase every CHEAT warning from these builds under C4.1. Do not edit old `vyperTypeSoundnessScript.sml` even if grep reports cheats there; it is outside this component and retired unless the broader task plan says otherwise.
-
-### C4.2: Prove ECRecover no-TypeError via runtime boundary and robust list extraction
-- Kind: `proof_subtree`
+### C1.5: Finish `sound_assign_targets_cons` target-list branch
+- Kind: `proof`
 - Risk: 2
-- Rationale: Prior evidence proved semantic converter boundaries; the hard part is isolated to standard fixed-length list extraction with EL-index reasoning.
+- Work priority: 40
+- Work units: 5
+- Rationale: The cons case follows the recursive structure of `assign_targets`; the IHs correspond to head target and tail target-list assignments.
+- Dependencies: C0, C1.4
 - Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4.2, E0158, E0159, E0160
-- Invalidates prior progress/evidence: fragile inline ECRecover list destruct proof attempt
+- Carries progress/evidence from: pre-collapse C1.2
 
 #### Progress note
-Replaces the brittle proof pattern that depended on `gvs`-generated tail names. The theorem statement remains current-source exact.
+Covers the TASK-named `sound_assign_targets_cons` residual.
 
 #### Summary
-- Keep `ecrecover_no_type_error` statement unchanged.
-- Reuse converter and `evaluate_ecrecover` boundary lemmas.
-- Add a runtime four-argument ECRecover safety lemma.
-- Add a static/list extraction lemma using EL-index or disciplined fixed-length destruct.
-- Compose those helpers for the final local theorem.
-
-#### Description
-This subtree is limited to ECRecover in `vyperTypeBuiltinsScript.sml`. It must not re-plan unrelated builtin branches.
+Remove the cheat from the cons case of the assignment target-list soundness conjunct. Split on head assignment result, then tail assignment result, preserving all-result state/account invariants and excluding TypeError in each branch.
 
 #### Statement
-```sml
-Theorem ecrecover_no_type_error[local]:
-  LENGTH ts = 4 /\ ty = BaseT AddressT /\
-  HD ts = BaseT (BytesT (Fixed 32)) /\
-  EVERY (\t. t = BaseT (UintT 256) \/ t = BaseT (BytesT (Fixed 32))) (TL ts) /\
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
-  LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty ECRecover vs <> INR (TypeError msg)
-```
+`Resume assign_target_sound_mutual[sound_assign_targets_cons]` in current source.
 
 #### Approach
-First prove runtime ECRecover safety for `[v0;v1;v2;v3]`. Then prove the list extraction lemma from `LENGTH`, `HD`, `EVERY (TL ...)`, `MAP evaluate_type`, and `LIST_REL`. The final theorem only extracts witnesses, rewrites `ty`, and applies runtime safety.
+Use the head-target IH under the head value/type/assignability facts, then use the tail-list IH on the post-head state. The context predicate for target lists should be consumed elementwise; if missing in the local context, prove a small projection lemma for `target_assignment_values_assignable` rather than destructing the full typing relation repeatedly.
 
 #### Not to try
-Do not repeat `Cases_on vs >> gvs[LIST_REL_CONS1]` with references to generated tail names. Do not unfold `evaluate_builtin_def` before extracting the four runtime values.
+Do not assume the state is unchanged after the head assignment. Assignment soundness is all-result precisely because partial updates may occur before later failure.
+
+### C1.6: Refresh assignment compatibility wrappers
+- Kind: `proof`
+- Risk: 1
+- Work priority: 50
+- Work units: 3
+- Rationale: Once the mutual theorem has no local cheats, these wrapper theorems are direct projections/corollaries.
+- Dependencies: C1.2, C1.3, C1.4, C1.5
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C1.3
+
+#### Progress note
+Same wrapper obligation as before; no architecture change.
+
+#### Summary
+Prove or repair `assign_target_no_type_error`, `assign_target_update_no_type_error`, and `assign_target_append_no_type_error` in `vyperTypeAssignSoundnessScript.sml` as compatibility corollaries. They should not drive internal proof structure.
+
+#### Statement
+Current-source theorems in `semantics/prop/vyperTypeAssignSoundnessScript.sml`: `assign_target_no_type_error`, `assign_target_update_no_type_error`, `assign_target_append_no_type_error`.
+
+#### Approach
+Import/use the appropriate conjunct of `assign_target_sound_mutual`; instantiate operation and side conditions, then project `no_type_error_eval` or result no-TypeError. If a wrapper lacks a hypothesis now required by the strengthened theorem, either derive it from existing wrapper premises or make it a compatibility theorem for the corrected stronger internal theorem, updating only callers permitted by the task.
+
+#### Not to try
+Do not duplicate target evaluator case analysis in these wrappers. Do not keep old weaker wrappers with cheats if their callers actually need the stronger side conditions.
+
+### C2: Statement soundness For-cons repair path
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 20
+- Work units: 0
+- Rationale: The overall For-cons repair architecture remains valid; only the scheduler gate needs refinement so the helper subtree completes before the caller patch.
+- Required for completion: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0547, E0549
+
+#### Progress note
+Refines the prior C2 plan after TO_type_system_rewrite-20260520T182357Z_m34610_t001/11 showed the scheduler selected C2.0.2.3 too early. Prior proof evidence is preserved.
+
+#### Summary
+Statement soundness repair remains focused on the For-cons exception tail. Keep the helper-first architecture: prove reusable suffix helpers, then patch the core theorem. The current update fixes dependency metadata that let the caller patch appear before the needed helper artifacts. No mathematical obligation is changed.
+
+#### Approach
+Proceed through the C2.0.2 helper chain before any caller proof patch. This component only refines scheduling and carries forward prior proof progress.
+
+#### Not to try
+Do not begin the core For-cons patch while the helper region is still broken or while `for_cons_non_loop_exception_suffix` is unproved. Do not solve this by editing unrelated statement-soundness branches.
 
 #### Argument
-ECRecover can produce TypeError only if the wrapper sees the wrong argument shape or `evaluate_ecrecover` rejects the four runtime arguments. The typing hypotheses force a four-element value list: first value has fixed bytes32 type, and each of the last three values has either uint256 or bytes32 type, both accepted by `ecrecover_arg_to_num`. Therefore `evaluate_ecrecover` is called with a bytes32 hash and three convertible arguments, ruling out TypeError.
+The For-cons branch should be repaired by isolating the propagated non-loop exception suffix as a local helper boundary before touching the evaluator mutual proof. The body IH supplies no-TypeError and return-exception typing for the body result; pushed/pop-scope helper assumptions supply the final invariants. Once the suffix lemma exists, the core theorem branch should instantiate it directly instead of destructing exceptions in the caller.
 
 #### Definition design
-Use local helper theorems only: converter-not-none facts, `evaluate_ecrecover_no_type_error`, `ecrecover_runtime_args_no_type_error`, and `ecrecover_args_typed_from_lists`. No semantic definition change.
+No new definitions are introduced in C2. The proof interface is theorem-based: children under C2.0.2 establish For-cons helper lemmas with conclusions matching the caller's final conjunction. Failure signs are attempts to duplicate evaluator case analysis or to re-enter the old `Cases_on y`/`suspend` proof shape in the core theorem before the suffix boundary is closed.
 
 #### Code structure
-Place helpers immediately above existing `ecrecover_no_type_error[local]` in `vyperTypeBuiltinsScript.sml`; keep them `[local]`.
+All edits in this subtree are local to `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Helper lemmas go near the existing `for_cons_*` helper block; the core mutual theorem patch is a later component and must not be edited before the helper boundary closes.
 
-### C4.2.1: Carry forward ECRecover converter/evaluator boundaries
+### C2.0: For-cons helper and caller repair staging
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: This parent remains the staging node for helper-first For-cons repair. The only change is making the child dependency chain explicit enough for scheduling.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0547, E0549
+
+#### Progress note
+Scheduler-only refinement; existing mathematical strategy and prior closure evidence are carried forward.
+
+#### Summary
+Stage the For-cons repair so helper lemmas are completed before the core theorem patch. Carry forward the proved ReturnException suffix helper. Require the non-loop suffix helper child to close before `eval_for_cons_type_sound_core` is edited.
+
+#### Approach
+Use terminal child dependencies rather than relying on grouping-node progress. The actual artifact needed by the caller is the theorem proved by C2.0.2.2.2.
+
+#### Not to try
+Do not assume a dependency on the C2.0.2 grouping node blocks C2.0.2.3; the schedule evidence shows it does not.
+
+#### Argument
+The caller proof has a hostile validation context for exact-looking endpoints. Moving the body-IH specialization and popped-scope assembly into helpers avoids this context. Therefore the staging invariant is: all helper artifacts must be available before the core theorem branch is patched.
+
+#### Definition design
+No definitions. Boundary theorems should package existential return-typing evidence and expose the final suffix conjunction directly to the caller.
+
+#### Code structure
+Keep helper theorem edits in the local helper block and keep caller edits in the later C2.0.2.3 component. Do not mix cleanup/projection/suffix work with the core mutual theorem patch.
+
+### C2.0.1: Carry forward the case-shaped ReturnException weakening corollary
 - Kind: `boundary_lemma`
 - Risk: 1
-- Rationale: These are direct value case splits and were already reported proved in prior episodes.
+- Work priority: 0
+- Work units: 0
+- Rationale: This support lemma/corollary was already proved before the failed caller patch and remains the mathematical kernel: it converts the body-IH case package for `INR (ReturnException v)` into return typing in the outer environment.
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: E0158, E0159
+- Carries progress/evidence from: E0541, C2.0.1@old
 
 #### Progress note
-Only adjust if current source names/statements drift.
+No new executor work is intended here. Retain the proved case-shaped weakening result and use it inside the new consumer lemma when convenient.
 
 #### Summary
-- Reuse/prove converter lemmas for uint256 and bytes32 arguments.
-- Reuse/prove `evaluate_ecrecover_no_type_error`.
-- Keep these independent of static argument lists.
-- They feed the runtime four-argument lemma.
+- Keep the already proved ReturnException weakening support fact.
+- It justifies weakening from an environment extending `extend_local env id ty F` back to `env` for ReturnException typing.
+- It is support for the new consumer lemma, not a place for further caller tactics.
 
 #### Statement
-```sml
-Theorem ecrecover_arg_Uint256_not_none[local]: ...
-Theorem ecrecover_arg_BytesT32_not_none[local]: ...
-Theorem evaluate_ecrecover_no_type_error[local]: ...
-```
+Use the existing proved case-shaped corollary in `vyperTypeStmtSoundnessScript.sml`; if the current source name is available, prefer `for_cons_body_result_return_exception_typed_case_spec` or the earlier E0541 equivalent.
 
 #### Approach
-Case split on values for converter lemmas. For `evaluate_ecrecover`, rewrite its definition and use non-`NONE` converter hypotheses to eliminate bad branches.
+No proof work unless the source was damaged by failed edits. If necessary, restore the already proved lemma exactly as it replayed before E0542's caller suffix attempts.
 
 #### Not to try
-Do not mention `ts`, `tvs`, or `well_typed_builtin_app` in these semantic boundaries.
+Do not re-open the large `eval_for_cons_type_sound_core` proof from this component. Do not try to strengthen or rename this support lemma unless the new consumer lemma genuinely cannot use it.
 
-### C4.2.2: Runtime ECRecover arguments rule out builtin TypeError
-- Kind: `infrastructure_lemma`
+### C2.0.2: For-cons non-loop exception helper sequence
+- Kind: `boundary_lemma_group`
 - Risk: 2
-- Rationale: Small wrapper over C4.2.1 plus one first-argument shape split.
-- Dependencies: C4.2.1
+- Work priority: 20
+- Work units: 0
+- Rationale: The previous mathematical decomposition remains sound: prove the For-cons helper boundary before patching the core theorem. This refinement only makes the scheduling gate explicit so the helper children complete before the downstream proof patch begins.
 - Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4.2.2
+- Carries progress/evidence from: E0547, E0549
 
 #### Progress note
-Packages ECRecover internals so the final theorem does no evaluator reasoning.
+Refines the prior C2.0.2 plan after scheduler evidence TO_type_system_rewrite-20260520T182357Z_m34610_t001/11 showed C2.0.2.3 was incorrectly next. Prior proof progress for C2.0.2.1 and the C2.0.2.2 decomposition is preserved.
 
 #### Summary
-- Prove local lemma for concrete list `[v0;v1;v2;v3]`.
-- First arg has bytes32 type.
-- Last three args have uint256-or-bytes32 type.
-- Conclusion is directly `evaluate_builtin ... ECRecover ... <> INR (TypeError msg)`.
+Local For-cons exception-tail work remains a helper-first sequence. The proved ReturnException suffix helper is carried forward. The repaired non-loop suffix boundary is decomposed into cleanup, packaged projection, and suffix assembly. Only after the suffix assembly checkpoint closes may the core theorem patch begin.
+
+#### Approach
+Execute the helper-child chain in order: cleanup, packaged projection, suffix assembly. Treat C2.0.2.3 as blocked until C2.0.2.2.2 is proved and reviewed because the core proof requires the concrete theorem artifact `for_cons_non_loop_exception_suffix`, not merely the grouping intention.
+
+#### Not to try
+Do not begin C2.0.2.3 while the helper region is still broken or while `for_cons_non_loop_exception_suffix` is unproved. Do not rely on a dependency on the grouping node C2.0.2 to gate a descendant proof patch; use the terminal child dependency explicitly.
+
+#### Argument
+The final For-cons propagated non-loop exception branch should not be solved by splitting the exception inside `eval_for_cons_type_sound_core`. The body IH already gives, for the concrete body evaluation returning `INR exn`, both `no_type_error_result (INR exn)` and an environment under which `return_exception_typed` holds. The popped-scope assumptions already give the final state/accounts/env invariants after leaving the loop scope. Therefore the proof boundary is: package the body-IH exception projection, assemble `for_cons_non_loop_exception_suffix`, then invoke that lemma in the core proof. The dependency chain must be terminal-child based because the grouping component `C2.0.2.2` has no direct proof artifact; its child `C2.0.2.2.2` is the actual lemma needed downstream.
+
+#### Definition design
+No new definitions are introduced. The proof interface is theorem-based: `for_cons_body_ih_exception_projection` must expose the body-IH facts without destructing the existential in the caller, and `for_cons_non_loop_exception_suffix` must expose the exact final conjunction shape needed by the core For-cons branch. A failure sign is any proof attempt that re-enters the old endpoint-validation pattern with exact assumptions after `mp_tac`/`strip_tac`; in that case the projection interface should be adjusted rather than patching the core theorem.
+
+#### Code structure
+All work in this subtree is local to `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place projection/suffix helpers in the helper block near the existing `for_cons_body_ih_*` and `for_cons_return_exception_suffix` theorems. Do not edit `eval_for_cons_type_sound_core` until `C2.0.2.2.2` is closed. The downstream core patch remains in C2.0.2.3 and should only call the completed suffix helper.
+
+### C2.0.2.1: Carry forward proved ReturnException branch-suffix helper
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 0
+- Work units: 0
+- Rationale: E0545 proved this helper and E0546 confirms it remains present and useful after correcting the final case shape to `unit + exception`. No additional executor work is needed unless later edits accidentally break it.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C2.0.2.1, E0545
+
+#### Progress note
+This is carried forward unchanged as the ReturnException subcase engine for the new non-loop-exception suffix lemma.
+
+#### Summary
+- Keep the proved `for_cons_return_exception_suffix` theorem.
+- It should have final case type `unit + exception`, matching the core theorem residual.
+- The new non-loop helper will use it internally for `ReturnException v`.
+- Do not try to apply this helper directly at the old caller residual again.
 
 #### Statement
+Existing theorem to preserve:
 ```sml
-Theorem ecrecover_runtime_args_no_type_error[local]:
-  !cx acc v0 v1 v2 v3 msg.
-    value_has_type (BaseTV (BytesT (Fixed 32))) v0 /\
-    (value_has_type (BaseTV (UintT 256)) v1 \/ value_has_type (BaseTV (BytesT (Fixed 32))) v1) /\
-    (value_has_type (BaseTV (UintT 256)) v2 \/ value_has_type (BaseTV (BytesT (Fixed 32))) v2) /\
-    (value_has_type (BaseTV (UintT 256)) v3 \/ value_has_type (BaseTV (BytesT (Fixed 32))) v3) ==>
-    evaluate_builtin cx acc (BaseT AddressT) ECRecover [v0; v1; v2; v3] <> INR (TypeError msg)
+Theorem for_cons_return_exception_suffix:
+  !env env_after cx id ty ret_ty body stp st_body v.
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    state_well_typed stp /\
+    accounts_well_typed stp.accounts /\
+    env_consistent (extend_local env id ty F) cx stp /\
+    eval_stmts cx body stp = (INR (ReturnException v), st_body) /\
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body, st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL u => env_consistent env_after cx st_body0
+        | INR exn =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn)) ==>
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR (ReturnException v)) /\
+    (case (INR (ReturnException v) : unit + exception) of
+     | INL _ => T
+     | INR exn => return_exception_typed env ret_ty exn)
 ```
 
 #### Approach
-Use converter lemmas to prove the last three converter calls are not `NONE`. Split the first value or use a bytes-fixed value typing lemma to obtain `BytesV hash_bytes` with length 32, then rewrite the ECRecover branch and apply `evaluate_ecrecover_no_type_error`.
+No proof work should be performed for this component unless the source has regressed. If regression occurs, restore the E0545 shape and proof before attempting downstream components.
 
 #### Not to try
-Do not destruct static type lists here. Avoid simplification that consumes the `value_has_type` hypotheses before converter lemmas are applied.
+Do not reintroduce identity/projection helper variants for `return_exception_typed`; they did not address the caller-context problem.
 
-### C4.2.3: Extract ECRecover runtime argument typing from list hypotheses
+### C2.0.2.2: Repair and prove For-cons non-loop-exception suffix boundary
+- Kind: `boundary_lemma_group`
+- Risk: 2
+- Work priority: 22
+- Work units: 0
+- Rationale: The logical facts are present in the body IH and popped-scope assumptions; E0549 shows the old proof interface, not the statement, was brittle. Factoring a packaged projection theorem before suffix assembly makes the remaining work standard.
+- Supersedes: C2.0.2.2@E0546, C2.0.2.2@E0548, C2.0.2.2@E0549
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0549, E0548, E0546
+- Invalidates prior progress/evidence: old C2.0.2.2 leaf strategy: inline/body-IH specialization followed by exact endpoint acceptance
+
+#### Progress note
+E0549 is accepted as design evidence: prior proof attempts do not close this component, but they identify the interface to avoid.
+
+#### Summary
+Replace the failed single helper proof with a three-step local repair. First clean the broken helper region left by E0549. Then prove a body-IH projection lemma that keeps the exception existential packaged. Finally prove `for_cons_non_loop_exception_suffix` from that projection, the popped invariants, and the existing ReturnException weakening helper.
+
+#### Description
+This component remains the boundary needed before patching the downstream `eval_for_cons_type_sound_core` suspend. It owns only helper theorems around `for_cons_body_ih_*` and `for_cons_non_loop_exception_suffix` in `semantics/prop/vyperTypeStmtSoundnessScript.sml`; do not edit the core mutual theorem here.
+
+#### Statement
+Target helper family in `semantics/prop/vyperTypeStmtSoundnessScript.sml`: a new `for_cons_body_ih_exception_projection` theorem followed by the existing intended `for_cons_non_loop_exception_suffix` statement, with the suffix proof using the projection lemma rather than inline body-IH specialization.
+
+#### Approach
+The body IH yields a conjunction for exactly `(stp, INR exn, st_body)`; the projection lemma should instantiate that IH and keep the existential packaged in the theorem conclusion. In the suffix helper, split the final conjunction first; assumptions solve the popped invariant conjuncts, the projection solves no-TypeError, and exception case analysis plus the existing ReturnException helper solves the return-typing conjunct.
+
+#### Not to try
+Do not repeat the E0546/E0548/E0549 shape: `mp_tac` the body IH, `strip_tac`, `gvs[]`, then solve an exact-looking endpoint with `first_assum ACCEPT_TAC`, `qpat_assum ACCEPT_TAC`, or a local `by` block. Do not use unparenthesized `Cases_on exn >> ...`. Do not edit `eval_for_cons_type_sound_core` or the old `suspend "ReturnException_tail"` in this component.
+
+#### Argument
+For the For-cons non-loop-exception tail, the recursive body IH is stronger than needed. Specialized to the actual body evaluation `(stp, INR exn, st_body)`, it yields no type error for `INR exn` and, for an exception result, an existential environment extending the loop-body environment in which the exception is return-typed. The suffix theorem additionally assumes that popping the loop scope has restored `state_well_typed`, `accounts_well_typed`, and `env_consistent env cx`; therefore only no-TypeError and outer-env return typing need proof. Continue and Break are excluded; ordinary non-return exceptions are handled by definitions; ReturnException is weakened back to `env` by the existing return-specific helper path.
+
+#### Definition design
+No semantic definitions should change. The proof interface change is to introduce a projection lemma whose conclusion keeps the body-IH exception facts packaged, especially the existential `env_exn`, instead of opening the existential and then trying to close exact assumptions. If the executor sees a fresh free `env_exn` from destructing the body-IH existential before the theorem boundary, that is a failure sign.
+
+#### Code structure
+All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near the existing For-cons helper block after `for_cons_return_exception_suffix` and before the downstream `eval_for_cons_type_sound_core`. Place the new projection lemma before `for_cons_non_loop_exception_suffix`.
+
+### C2.0.2.2.0: Clean up failed C2.0.2.2 helper edits
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: This is mechanical source hygiene: remove or overwrite the partial failed proof text left by E0549 so the next helper statements start from a known clean region.
+- Carries progress/evidence from: E0549
+- Invalidates prior progress/evidence: partial failed source around for_cons_body_ih_no_type_error_result / for_cons_non_loop_exception_suffix from E0549
+
+#### Progress note
+The cleanup preserves successful preceding helpers and discards only unproved/broken tactics introduced during stuck attempts.
+
+#### Summary
+Restore the helper block after `for_cons_return_exception_suffix` to a clean state. Keep all already-proved preceding theorems. Remove failed proof fragments for `for_cons_body_ih_no_type_error_result` and the modified `for_cons_non_loop_exception_suffix` if they do not build. Verify no obsolete failed theorem remains before adding the new projection lemma.
+
+#### Description
+The source is currently partial/broken around line ~1693. This component is not a semantic refactor; it only prevents stale failed tactics from confusing the projection proof.
+
+#### Approach
+Edit only the local helper region in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. It is acceptable that the theory still fails later until the new helper components are completed, but there should be no leftover failed proof fragment from E0549 in this region.
+
+#### Not to try
+Do not delete successful earlier helper theorems such as `for_cons_body_ih_return_exception_typed` or `for_cons_return_exception_suffix`. Do not move to the downstream core theorem as part of cleanup.
+
+### C2.0.2.2.1: Prove packaged body-IH exception projection for For-cons
 - Kind: `infrastructure_lemma`
 - Risk: 2
-- Rationale: The previously fragile step is now isolated; EL-index reasoning over fixed length lists is standard and name-stable.
+- Work priority: 10
+- Work units: 2
+- Rationale: This is a direct specialization of the body IH at the actual evaluation triple. Keeping the existential packaged avoids the exact-endpoint validation pattern that defeated the no-TypeError-only projection.
+- Dependencies: C2.0.2.2.0
+- Checkpoint: yes
+- Supersedes: failed for_cons_body_ih_no_type_error_result from E0549
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0549
+- Invalidates prior progress/evidence: standalone no-TypeError-only projection proof that destructed the body-IH result
+
+#### Progress note
+This replaces the failed no-TypeError-only projection with a stronger packaged projection that downstream code can consume without reopening the body IH.
+
+#### Summary
+Prove `for_cons_body_ih_exception_projection`. It specializes the body IH once and returns both `no_type_error_result (INR exn)` and the exception existential. The existential must remain in the conclusion, not be destructed into the proof context before the theorem boundary. This checkpoint validates the repaired interface.
+
+#### Description
+The theorem should be placed after the existing return-specific body-IH helper/`for_cons_return_exception_suffix` block. It intentionally has all antecedents in the same shape as the body IH consumer so callers can use it without recreating the fragile `mp_tac` endpoint pattern.
+
+#### Statement
+```sml
+Theorem for_cons_body_ih_exception_projection:
+  !env env_after cx id ty ret_ty body stp st_body exn.
+    state_well_typed stp /\
+    accounts_well_typed stp.accounts /\
+    env_consistent (extend_local env id ty F) cx stp /\
+    eval_stmts cx body stp = (INR exn, st_body) /\
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body, st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL u => env_consistent env_after cx st_body0
+        | INR exn0 =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn0)) ==>
+    no_type_error_result (INR exn) /\
+    ?env_exn.
+      env_extends (extend_local env id ty F) env_exn /\
+      env_consistent env_exn cx st_body /\
+      return_exception_typed env_exn ret_ty exn
+```
+
+#### Approach
+Use the universally quantified body-IH assumption with the four actual antecedents. A robust proof should specialize the IH, simplify the `case` for `INR exn`, and immediately project the no-TypeError conjunct and the existential conjunct. If opening the existential, use its witness immediately for the theorem's existential conclusion; do not leave an exact assumption/goal endpoint as the final proof step.
+
+#### Not to try
+Do not prove only `no_type_error_result (INR exn)` by destructing the full IH result and ending at an exact assumption; that is precisely the E0549 failure. Do not introduce a free `env_exn` in hypotheses unless it is immediately used as the witness for the theorem's existential conclusion.
+
+### C2.0.2.2.2: Prove full non-loop-exception suffix helper using the projection
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: Once the packaged projection lemma exists, the suffix theorem is small assembly: assumptions solve popped invariants, the projection solves no-TypeError, and exception cases plus the existing ReturnException helper solve return typing.
+- Dependencies: C2.0.2.2.1
+- Checkpoint: yes
+- Supersedes: old for_cons_non_loop_exception_suffix proof attempt from E0548/E0549
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0548, E0549
+- Invalidates prior progress/evidence: inline body-IH specialization inside for_cons_non_loop_exception_suffix
+
+#### Progress note
+This keeps the intended helper theorem but changes its implementation dependency to the packaged projection lemma, so downstream C2.0.2.3 can use the same boundary idea without re-entering the old brittle proof context.
+
+#### Summary
+Prove `for_cons_non_loop_exception_suffix` after `for_cons_body_ih_exception_projection`. Split the final conjunction explicitly. Use assumptions for popped state/accounts/env, the projection lemma for no-TypeError, and safe parenthesized exception case analysis for return typing. This closes the C2.0.2.2 boundary and unblocks the downstream core-theorem patch.
+
+#### Description
+The theorem statement should remain equivalent to the previous intended suffix helper from source/plan: it consumes popped-scope invariants, original body preconditions, actual body evaluation, and body IH, and concludes popped invariants, no-TypeError for the propagated exception, and return typing at `env`.
+
+#### Statement
+Use the existing intended statement of `for_cons_non_loop_exception_suffix` in the source/plan:
+
+```sml
+Theorem for_cons_non_loop_exception_suffix:
+  !env env_after cx id ty ret_ty body stp st_body exn.
+    exn <> ContinueException /\
+    exn <> BreakException /\
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    state_well_typed stp /\
+    accounts_well_typed stp.accounts /\
+    env_consistent (extend_local env id ty F) cx stp /\
+    eval_stmts cx body stp = (INR exn, st_body) /\
+    (!stp0 res_body st_body0. ...body IH as in the projection lemma...) ==>
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR exn) /\
+    (case (INR exn : unit + exception) of
+     | INL _ => T
+     | INR exn0 => return_exception_typed env ret_ty exn0)
+```
+
+#### Approach
+After `rpt gen_tac >> strip_tac`, isolate each output conjunct with explicit conjunction splitting. For no-TypeError, apply `for_cons_body_ih_exception_projection` and project its first conjunct. For the final return-typing conjunct, simplify the sum case, then perform carefully scoped `Cases_on exn`; Continue/Break close by contradiction hypotheses, ReturnException uses `for_cons_body_ih_return_exception_typed`, and non-return exception constructors should close from `return_exception_typed_def` plus `no_type_error_result_def` as appropriate.
+
+#### Not to try
+Do not put `>>` after `Cases_on exn` unless each branch is parenthesized; E0548 showed this leaks impossible Continue/Break branches into ordinary exception proof paths. Do not use a local `by` proof for no-TypeError against the whole final conjunction. Do not touch or remove the downstream `suspend "ReturnException_tail"` yet; that is owned by the next component.
+
+### C2.0.2.3: Patch `eval_for_cons_type_sound_core` to call the non-loop suffix lemma
+- Kind: `proof_patch`
+- Risk: 2
+- Work priority: 30
+- Work units: 3
+- Rationale: This proof patch is standard only after the terminal suffix helper child has produced `for_cons_non_loop_exception_suffix`. The explicit dependency fixes the scheduler error without changing the mathematical obligation.
+- Dependencies: C2.0.2.2.2
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0160
-- Invalidates prior progress/evidence: inline ECRecover `gvs[LIST_REL_CONS1]` tail-name proof
+- Carries progress/evidence from: C2.0.2.3
 
 #### Progress note
-This checkpoint confirms the replacement for the known stuck proof-engineering issue.
+Refines only the dependency/priority metadata for the existing C2.0.2.3 obligation. No source-level proof progress for C2.0.2.3 has occurred, so there is no invalidated proof evidence.
 
 #### Summary
-- Prove `vs` is a four-element list from `MAP` and `LIST_REL` lengths.
-- Extract values `v0..v3` and their runtime typing predicates.
-- Use `HD ts` for index 0 and `EVERY_EL` over `TL ts` for indices 1-3.
-- Avoid generated tail names entirely.
+Patch the final propagated non-loop exception branch in `eval_for_cons_type_sound_core`. This component is blocked until `C2.0.2.2.2` proves the suffix helper. Once unblocked, instantiate `for_cons_non_loop_exception_suffix` with the propagated exception and delete the old `suspend "ReturnException_tail"` path. Keep normal/continue/break branches unchanged.
 
 #### Statement
+Target theorem remains the existing source theorem:
 ```sml
-Theorem ecrecover_args_typed_from_lists[local]:
-  !cx ts tvs vs.
-    LENGTH ts = 4 /\
-    HD ts = BaseT (BytesT (Fixed 32)) /\
-    EVERY (\t. t = BaseT (UintT 256) \/ t = BaseT (BytesT (Fixed 32))) (TL ts) /\
-    MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
-    LIST_REL value_has_type tvs vs ==>
-    ?v0 v1 v2 v3.
-      vs = [v0; v1; v2; v3] /\
-      value_has_type (BaseTV (BytesT (Fixed 32))) v0 /\
-      (value_has_type (BaseTV (UintT 256)) v1 \/ value_has_type (BaseTV (BytesT (Fixed 32))) v1) /\
-      (value_has_type (BaseTV (UintT 256)) v2 \/ value_has_type (BaseTV (BytesT (Fixed 32))) v2) /\
-      (value_has_type (BaseTV (UintT 256)) v3 \/ value_has_type (BaseTV (BytesT (Fixed 32))) v3)
+Theorem eval_for_cons_type_sound_core:
+  evaluate_type env.type_defs ty = SOME tyv /\
+  EVERY (value_has_type tyv) (v::vs) /\
+  id NOTIN FDOM env.var_types /\
+  type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  ... /\
+  eval_for cx tyv id body (v::vs) st = (res, st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts /\ env_consistent env cx st' /\
+  no_type_error_result res /\
+  case res of
+  | INR exn => return_exception_typed env ret_ty exn
+  | INL _ => T
 ```
 
 #### Approach
-Preferred: derive `LENGTH tvs = 4` and `LENGTH vs = 4`, instantiate witnesses with `EL 0..3 vs`, and use `LIST_REL_EL_EQN`, `EL_MAP`, and `EVERY_EL`. Fallback: fixed-length destruct `ts/tvs/vs` with immediate renaming and conservative `fs/simp`, not broad `gvs`.
+After the existing proof derives `loop_res = INR y`, rewrites `st_after`, and obtains the final equation `(res,st') = (INR y, st_body with scopes := TL st_body.scopes)`, instantiate `for_cons_non_loop_exception_suffix` with `exn = y`. Supply `y <> ContinueException` and `y <> BreakException` from the preceding branch splits and pass the body-IH/evaluation/state assumptions directly. The proof should be a local replacement of the failing suspended branch.
 
 #### Not to try
-Do not prove raw constructors for the last three args; the disjunctive `value_has_type` predicate is the intended abstraction. Do not unfold `evaluate_builtin_def` here.
+Do not split `Cases_on y` in the core theorem. Do not call `for_cons_return_exception_suffix` directly from the core theorem. Do not begin this component before C2.0.2.2.2 is proved; doing so would violate the helper-first strategy and re-enter the known brittle caller context.
 
-### C4.2.4: Prove exact `ecrecover_no_type_error`
+### C2.0.2.4: Clean up obsolete For-cons ReturnException scaffolding after the core proof builds
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 30
+- Work units: 1
+- Rationale: After the wider suffix lemma and core patch build, removing unused failed scaffolding is mechanical and prevents the next executor from following the abandoned strategy.
+- Dependencies: C2.0.2.3
+- Supersedes: C2.0.2.3@prior
+- Progress transition: `replacement`
+- Invalidates prior progress/evidence: C2.0.2.3@prior
+
+#### Progress note
+The prior cleanup leaf is replaced by this cleanup after the new patch, because the set of obsolete scaffolding is now determined by the non-loop suffix refactor.
+
+#### Summary
+- Remove the failed `suspend "ReturnException_tail"` and any unused helper/projection experiments introduced for the old direct patch.
+- Keep `for_cons_return_exception_suffix` and `for_cons_non_loop_exception_suffix` if both are used.
+- Build `vyperTypeStmtSoundnessTheory` after cleanup.
+- Do not perform broad formatting or unrelated statement-soundness cleanup.
+
+#### Approach
+Search locally around the For-cons helper block and `eval_for_cons_type_sound_core` for unused identity/projection lemmas or commented/failed proof fragments from the direct ReturnException strategy. Delete only code that is unused after the successful build; if a helper is still referenced by the new non-loop suffix theorem, keep it.
+
+#### Not to try
+Do not remove general For-cons decomposition lemmas or scope-pop preservation helpers. Do not touch assignment/builtin/call obligations in this cleanup component.
+
+### C2.1: Derive assignment statement side conditions for AnnAssign/Assign/AugAssign
 - Kind: `proof`
-- Risk: 1
-- Rationale: Immediate composition after runtime and list-extraction helpers.
-- Dependencies: C4.2.2, C4.2.3
-- Progress transition: `refinement`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4.2.4
-
-#### Progress note
-Only replaces the proof body; statement remains current-source exact.
-
-#### Summary
-- Use list extraction to get `vs = [v0;v1;v2;v3]` and runtime typing.
-- Rewrite `ty = BaseT AddressT`.
-- Apply `ecrecover_runtime_args_no_type_error`.
-- Avoid any further list destruct.
-
-#### Statement
-```sml
-Theorem ecrecover_no_type_error[local]: ...
-```
-
-#### Approach
-Strip the theorem assumptions, call `ecrecover_args_typed_from_lists`, destruct witnesses, simplify `ty` and `vs`, then apply the runtime ECRecover lemma.
-
-#### Not to try
-Do not start with `gvs[evaluate_builtin_def]`; it reintroduces the fragile proof shape.
-
-### C4.3: Prove ABI encode/decode builtin branches
-- Kind: `proof_batch`
 - Risk: 2
-- Rationale: The TASK identifies ABI bound issues as localized; branch boundary lemmas under typing-derived size facts should suffice, with probe-before-repair if not.
-- Dependencies: C4.2
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4.3
-
-#### Progress note
-Any previously proved slice/ABI helper may be reused here.
-
-#### Summary
-- Close ABI decode, ABI encode, tuple encode, and nowrap encode builtin dispatcher cases.
-- Prove local no-TypeError boundaries under exact typing-derived bounds.
-- If a bound is missing, create a small probe before changing internal typing/runtime.
-- Keep ABI arithmetic out of statement/expression proofs.
-
-#### Statement
-```sml
-Resume well_typed_builtin_app_no_type_error[abi_decode]: ...
-Resume well_typed_builtin_app_no_type_error[abi_encode]: ...
-Resume well_typed_builtin_app_no_type_error[encode_tuple]: ...
-Resume well_typed_builtin_app_no_type_error[encode_tuple_nowrap]: ...
-```
-
-#### Approach
-Normalize arity/type-list assumptions from executable typing, then apply or add ABI boundary lemmas whose hypotheses are exactly those normalized facts plus `value_has_type`. Use `vyperTypeABI` helper theorems where available.
-
-#### Not to try
-Do not add arbitrary numeric assumptions to dispatcher theorems unless they are derivable from executable typing or justified by a checked repair.
-
-### C4.4: Prove Env/Acc and remaining ordinary builtin branches
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: Most remaining branches are finite projections from context/account well-typedness or constructor simplification; MsgGas is handled by the required probe-before-repair discipline.
-- Dependencies: C4.2
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4.4
-
-#### Progress note
-Scope is all current remaining ordinary builtin dispatcher suspends/cheats after C4.1-C4.3.
-
-#### Summary
-- Close Env, Acc, block/blob hash, method id, crypto, arithmetic utility, make-array, ceil/floor, slice, and other simple builtin cases present in current source.
-- For `Env MsgGas`, inspect/probe executable typing/evaluator agreement before proof or repair.
-- Use context/account invariants for projections.
-- Keep each nontrivial constructor behind a local boundary lemma.
-
-#### Statement
-```sml
-Resume well_typed_builtin_app_no_type_error[Env]: ...
-Resume well_typed_builtin_app_no_type_error[Acc]: ...
-(* plus remaining current ordinary builtin constructor cases *)
-```
-
-#### Approach
-For projection builtins, unfold the branch and use `context_well_typed`/`accounts_well_typed` fields to show returned values have the expected constructor and no TypeError branch fires. For MsgGas, first check a concrete typing/evaluation branch; repair only if the executable definitions disagree.
-
-#### Not to try
-Do not make MsgGas unreachable by assumption unless executable typing rejects it. Do not change public semantics; only internal alignment repairs are allowed after probe evidence.
-
-### C4.5: Prove type-builtin no-TypeError dispatcher
-- Kind: `proof_batch`
-- Risk: 2
-- Rationale: Type-builtin cases are finite and self-contained once conversion/default/ABI helper facts are available.
-- Dependencies: C4.3, C4.4
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C4.5
-
-#### Progress note
-Keep ordinary builtin and type-builtin dispatchers separate if current source does so.
-
-#### Summary
-- Prove remaining cases in `well_typed_type_builtin_app_no_type_error` or current equivalent.
-- Use conversion/default/ABI helper theories.
-- Ensure successful values fit expression-result typing consumers.
-- Add local branch helpers for nontrivial conversions.
-
-#### Statement
-```sml
-Theorem well_typed_type_builtin_app_no_type_error: ...
-```
-
-#### Approach
-Case split on type-builtin constructor and evaluated type value. Defaults/constructors simplify directly; conversions use existing conversion no-TypeError/value typing lemmas.
-
-#### Not to try
-Do not merge type-builtin proofs into the ordinary dispatcher if source keeps them separate. Do not unfold conversion internals in statement soundness.
-
-### C4.6: Builtin theory build/audit checkpoint
-- Kind: `checkpoint`
-- Risk: 1
-- Rationale: Mechanical build/warning audit after all builtin branch proofs.
-- Dependencies: C4.1, C4.2.4, C4.3, C4.4, C4.5
+- Work priority: 10
+- Work units: 8
+- Rationale: The TASK lists the missing side conditions and their intended sources; this is a standard consumer proof once assignment target soundness is available.
+- Dependencies: C1.6, C3.3
 - Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C2.1, TYPE_SYSTEM_REWRITE_PLAN lines 236-258
 
 #### Progress note
-Confirms the imported builtin layer no longer contributes CHEAT warnings to assignment/statement/final builds.
+Refines the previous statement-assignment repair component into the exact strengthened-side-condition work.
 
 #### Summary
-- Build `vyperTypeBuiltinsTheory`.
-- Confirm no cheat/suspend remains in `vyperTypeBuiltinsScript.sml`.
-- Confirm update-binop/subscript exported lemmas are trusted.
-- Escalate with probe output if any typing/runtime mismatch remains.
+Repair `eval_all_type_sound_mutual[AnnAssign]`, `[Assign]`, and `[AugAssign]` after strengthened assignment preservation. Derive `assign_operation_matches_target_shape gv op` and `assign_target_assignable_context cx gv st` from statement typing/evaluated target facts, and feed them into assignment soundness.
 
 #### Statement
-```sh
-holbuild build vyperTypeBuiltinsTheory
-```
+Current-source resumed branches of `eval_all_type_sound_mutual` for `AnnAssign`, `Assign`, and `AugAssign` in `vyperTypeStmtSoundnessScript.sml`.
 
 #### Approach
-Use build log and targeted grep. Remaining failures should be localized to named constructors before downstream theories are rebuilt.
+For ordinary assignment, operation shape is the plain assignment constructor and should simplify from the definition. For `AugAssign`, derive update-operation shape from target kind and static operator typing. For `AnnAssign`, use `assignable_type` plus `assignable_type_evaluate_not_NoneTV` / `assignable_type_not_NoneT` to replace old non-None side-condition cheats.
 
 #### Not to try
-Do not proceed to final `vyperSemanticsHolTheory` zero-CHEAT audit with builtin warnings still present.
+Do not call assignment soundness with missing side conditions and patch by weakening it. Do not use old local non-None cheats now subsumed by `assignable_type`.
 
-### C5: Prove call soundness wrappers in `vyperTypeCallSoundnessScript.sml`
-- Kind: `proof_subtree`
+### C2.2: Feed tuple/list assignment values through `target_assignment_values_assignable`
+- Kind: `proof`
 - Risk: 2
-- Rationale: The task names four call wrappers; they should be projections of statement/body soundness and finite external/special call boundaries, not a new evaluator induction.
+- Work priority: 20
+- Work units: 5
+- Rationale: Tuple/list assignment is an elementwise projection of an existing relation, not a new evaluator proof.
+- Dependencies: C2.1
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C2.1
+
+#### Progress note
+Covers the tuple/list part of the task’s statement-level assignment obligations.
+
+#### Summary
+For tuple/list assignment branches in statement soundness, use `target_assignment_values_assignable` to supply typedness, assignability, and context side conditions to target-list assignment soundness. Add projection lemmas if the relation is awkward to destruct in the large theorem.
+
+#### Statement
+Tuple/list assignment subcases inside the current `AnnAssign`/`Assign` statement proof branches, plus any small projection lemmas for `target_assignment_values_assignable`.
+
+#### Approach
+Prove small projections such as head target runtime typed, head assignable context, head value type, and tail relation preservation if repeated destructing is brittle. Then the large statement proof should split only on evaluated target/value list shapes and invoke the target-list conjunct of `assign_target_sound_mutual`.
+
+#### Not to try
+Do not manually rebuild per-element assignability from expression typing in every tuple/list branch. Do not assume list lengths by arithmetic alone; use the relation’s length/zip facts.
+
+### C2.3: Close non-assignment statement mutual residuals reported by audit
+- Kind: `proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 8
+- Rationale: After the explicit For_cons and assignment repairs, any remaining statement cheats are localized resumed evaluator branches with existing IHs.
+- Dependencies: C2.0, C2.2, C4.4
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C2.4
+
+#### Progress note
+This is scoped only to C0-reported reachable residuals in `vyperTypeStmtSoundnessScript.sml`; it is not a license for broad statement refactoring.
+
+#### Summary
+Remove any remaining reachable cheats/suspends inside `eval_all_type_sound_mutual` not covered by C2.0-C2.2. Expected cases are loop/control-flow or expression/builtin consumer branches, each closed by existing mutual IH and subsystem soundness lemmas.
+
+#### Statement
+Any C0-reported reachable `cheat`/unfinished `suspend` in `semantics/prop/vyperTypeStmtSoundnessScript.sml` within `eval_all_type_sound_mutual` or its strict helper lemmas, excluding assignment branches already covered above.
+
+#### Approach
+For each residual, first identify the evaluator branch and the exact IH conjunct needed. If an existential/env-extension package appears, create a small boundary helper consuming the whole IH result rather than reconstructing it inside the large theorem. Build after each branch or small cluster.
+
+#### Not to try
+Do not solve multiple suspended branches with one giant `gvs[AllCaseEqs()]`. Do not add downstream call-wrapper dependencies to statement soundness.
+
+### C3: Update-binop and assignment-subscript runtime-typed path
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 30
+- Work units: 0
+- Rationale: The inherited cheats form a localized dependency chain from binop no-TypeError through update assignment leaf and recursive subscript preservation.
+- Required for completion: yes
+- Dependencies: C0
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C3
+
+#### Progress note
+Replaces the old high-risk inherited path gate with an explicit linear chain of low-risk theorem families.
+
+#### Summary
+Prove the known inherited update-binop path: `well_typed_binop_no_type_error`, `well_typed_update_binop_no_type_error`, `assign_subscripts_update_leaf_no_type_error`, `assign_operation_runtime_typed_leaf_no_type_error`, `assign_subscripts_no_type_error_runtime_typed`, and `assign_subscripts_preserves_type_runtime_typed`. Keep the work localized to builtin/binop and assignment-subscript lemmas.
+
+#### Approach
+Prove bottom-up: binop, update-binop, leaf assignment operation, then structural/recursion induction over subscript assignment. Use the induction principles generated for recursive functions where available.
+
+#### Not to try
+Do not treat the inherited cheats as statement-level issues. Do not duplicate all binop cases inside `assign_subscripts`; delegate to the binop/update leaf theorem.
+
+#### Argument
+Update assignment reaches a leaf operation that evaluates a typed binary operation on the old leaf value and RHS value. The binop theorem excludes TypeError for statically well-typed operands; the update-binop theorem packages that for assignment update operations. Recursive subscript assignment preserves no-TypeError and type by induction over the subscript path: prefix traversal preserves the leaf type, the leaf operation is sound, and the result is reinserted into a value of the original type.
+
+#### Definition design
+The proof interface should remain: static binop typing + runtime operand typing -> no TypeError/success type; assignment operation runtime typed + leaf typed -> operation no TypeError/success type; target path typed + root value typed -> recursive subscript no TypeError/preservation. If a recursive subscript proof needs an operation-specific fact, add it at the leaf-operation boundary, not by special-casing every subscript constructor.
+
+#### Code structure
+Binop lemmas belong in `vyperTypeBuiltinsScript.sml` near existing `well_typed_binop_*`. Assignment-subscript and operation leaf lemmas belong in `vyperTypeStatePreservationScript.sml` near existing `assign_subscripts_*` helpers. Do not move these into statement soundness.
+
+### C3.1: Close binop no-TypeError lemmas
+- Kind: `proof`
+- Risk: 2
+- Work priority: 0
+- Work units: 5
+- Rationale: Case analysis over binop/type constructors is finite and already supported by success typing lemmas.
+- Dependencies: C0
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C3.1
+
+#### Progress note
+Same theorem family as prior C3.1, now explicitly first in the update path.
+
+#### Summary
+Prove `well_typed_binop_no_type_error` and use it to prove `well_typed_update_binop_no_type_error` in `vyperTypeBuiltinsScript.sml`.
+
+#### Statement
+`Theorem well_typed_binop_no_type_error` and `Theorem well_typed_update_binop_no_type_error` in current source.
+
+#### Approach
+Split on the binop and the well-typed-binop relation. Use existing evaluator definitions, integer bound lemmas, decimal/wrapped operation no-error facts, and `well_typed_binop_success_type` where it supplies inversions. Keep arithmetic goals local with existing bound lemmas.
+
+#### Not to try
+Do not prove success typing and no-TypeError by separate exhaustive duplicated scripts if one helper can share case analysis. Do not leave update-binop as a wrapper over a cheated binop theorem.
+
+### C3.2: Close assignment operation leaf no-TypeError for update/append/pop/plain assign
+- Kind: `proof`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: Leaf operation soundness is a small case split on assignment operation, with C3.1 handling update-binop.
+- Dependencies: C3.1
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C3.2
+
+#### Progress note
+First assignment-side consumer of the binop theorem.
+
+#### Summary
+Prove `assign_subscripts_update_leaf_no_type_error` and `assign_operation_runtime_typed_leaf_no_type_error` without cheats. These exclude TypeError at the leaf operation under `assign_operation_runtime_typed` and operation-shape hypotheses.
+
+#### Statement
+Current-source theorems named `assign_subscripts_update_leaf_no_type_error` and `assign_operation_runtime_typed_leaf_no_type_error` in `vyperTypeStatePreservationScript.sml`.
+
+#### Approach
+Case split on the assignment operation. Plain assignment is direct from value typing; update uses C3.1; append/pop use the strengthened dynamic-array requirement in `assign_operation_runtime_typed` to rule out wrong-shape TypeError. Keep success typing facts available for the preservation component.
+
+#### Not to try
+Do not hide append/pop shape requirements in simplification. If pop/append fail, inspect `assign_operation_runtime_typed` first rather than weakening the theorem.
+
+### C3.3: Close recursive assignment-subscript no-TypeError and preservation
+- Kind: `proof`
+- Risk: 2
+- Work priority: 20
+- Work units: 8
+- Rationale: This is the structural recursive consumer of C3.2 and existing target-path typing lemmas.
+- Dependencies: C3.2
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C3.2
+
+#### Progress note
+Completes the task-listed inherited update-binop path.
+
+#### Summary
+Prove `assign_subscripts_no_type_error_runtime_typed` and `assign_subscripts_preserves_type_runtime_typed` without inherited cheats. Use recursive subscript/path induction and the leaf operation theorem at the base.
+
+#### Statement
+Current-source theorems named `assign_subscripts_no_type_error_runtime_typed` and `assign_subscripts_preserves_type_runtime_typed` in `vyperTypeStatePreservationScript.sml`.
+
+#### Approach
+Use the induction principle for `assign_subscripts`/path recursion if available; otherwise induct on the subscript list in the direction matching the function. At each path step, use `target_path_step_type` to prove the traversal cannot raise TypeError and preserves the expected leaf type. At the base, invoke C3.2.
+
+#### Not to try
+Do not unfold all storage/top-level target cases here; this theorem is about recursive value subscript assignment, not top-level lookup.
+
+### C4: Builtin, type-builtin, and builtin-typing soundness residuals
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 40
+- Work units: 0
+- Rationale: Current source isolates builtin residuals to a finite set of constructor branches and small arithmetic/ABI facts. The ABI encode bound has already been added to the typing predicate, removing the old spec gap.
+- Required for completion: yes
+- Dependencies: C0
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C4
+
+#### Progress note
+Keeps all task-listed builtin/binop/type-builtin cheats in one subsystem, with binop update path delegated to C3.
+
+#### Summary
+Remove reachable cheats in `vyperTypeBuiltinsScript.sml` and strict prerequisite fresh builtin-typing theories. This includes generic builtin no-TypeError/success typing residuals, type-builtin no-TypeError, ABI encode success branches, raw-call return type well-formedness, and Env/MsgGas-related issues if still reachable.
+
+#### Approach
+Close static typing prerequisites first if C0 shows them reachable, then generic builtin cases, then type-builtin no-TypeError/success branches. Use existing specialized lemmas such as bytes/crypto/ABI helpers instead of unfolding encoders deeply in every case.
+
+#### Not to try
+Do not re-open the old ABI encode unprovability gate unless current source lacks the `vyper_abi_size_bound` repair. Do not treat binop update-assignment cheats here; those are C3.
+
+#### Argument
+Builtin soundness is by constructor case analysis: the static typing predicate constrains argument lengths/types and result type; runtime argument typing plus specialized evaluator lemmas show no TypeError and success value typing. Type-builtins are similar but use `type_builtin_result_ok`; ABI encode branches now rely on its `vyper_abi_size_bound` condition to prove bytes length bounds. Raw-call return type well-formedness is arithmetic over `word_size`, `type_slot_size`, and the max-outsize bound.
+
+#### Definition design
+Use existing static predicates (`well_typed_builtin_app`, `well_typed_type_builtin_args`, `type_builtin_result_ok`) as the boundary. Do not add ad hoc side conditions in the final wrappers unless the source theorem is demonstrably underspecified; if underspecified, prove a small probe/counterexample before changing a theorem. Failure sign: ABI encode success typing cannot prove bytes length; this should be solved from `vyper_abi_size_bound`, not by weakening `value_has_type`.
+
+#### Code structure
+Builtin proofs stay in `semantics/prop/vyperTypeBuiltinsScript.sml`. If C0 shows reachable suspends in `vyperBuiltinTypingScript.sml`, close them there as static typing prerequisites only. Do not mix builtin proofs into statement or call soundness files.
+
+### C4.1: Close reachable `vyperBuiltinTyping` suspended cases
+- Kind: `proof`
+- Risk: 2
+- Work priority: 0
+- Work units: 5
+- Rationale: These are static constructor cases over builtin typing and only required if C0 proves they are reachable.
+- Dependencies: C0
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C4.1
+
+#### Progress note
+Conditional leaf: execute only for C0-reported reachable suspends in `vyperBuiltinTypingScript.sml`.
+
+#### Summary
+If `vyperBuiltinTypingScript.sml` suspended builtin typing cases are reachable from `vyperSemanticsHolTheory`, prove exactly those cases. Cases include Len/Not/Neg/Abs/crypto/Env/Acc/etc. as reported by audit.
+
+#### Statement
+C0-reported reachable suspended cases in `semantics/prop/vyperBuiltinTypingScript.sml`, especially the large builtin typing case split around `suspend "Len"` etc.
+
+#### Approach
+For each constructor, unfold the static typing definition and prove the required result type/argument constraints. Prefer one constructor per edit/build cycle. If a case depends on a runtime semantic fact, that is a sign it belongs in `vyperTypeBuiltinsScript.sml`, not this static layer.
+
+#### Not to try
+Do not prove all grep-reported suspends if the theory is not reachable. Do not import runtime soundness theories into static builtin typing.
+
+### C4.2: Close generic builtin no-TypeError and success typing residuals
+- Kind: `proof`
+- Risk: 2
+- Work priority: 10
+- Work units: 8
+- Rationale: The current proof skeleton already closes most constructors and has explicit fallback points for remaining branches.
+- Dependencies: C4.1
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C4.2
+
+#### Progress note
+Covers the cheat near the end of the generic builtin success/no-error proof skeleton, excluding type-builtins handled by C4.3-C4.4.
+
+#### Summary
+Remove the generic builtin proof cheat in `vyperTypeBuiltinsScript.sml` around the large builtin soundness case split. Close Env/Acc/crypto/bytes/arithmetic residuals with existing specialized lemmas.
+
+#### Statement
+Current-source generic builtin theorem(s) around line ~2380-2411 of `vyperTypeBuiltinsScript.sml`, including any C0-reported cheat in the proof of builtin success typing/no-TypeError before `Len_result_fits_uint256`.
+
+#### Approach
+Identify the exact constructor left by the final `cheat` by temporarily replacing it with `NO_TAC` if needed. Then add a branch-specific lemma or direct call to existing helpers (`Env_builtin_success_type`, `Acc_builtin_sound`, bytes/crypto length lemmas, bounded/wrapped op inversions). Keep arithmetic to small subgoals.
+
+#### Not to try
+Do not leave a catch-all `cheat` after many `TRY` tactics; each remaining constructor must be named and closed. Do not use broad `metis_tac` over all builtin lemmas if it obscures a missing side condition.
+
+### C4.3: Prove type-builtin no-TypeError
+- Kind: `proof`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: No-TypeError follows by constructor case analysis using argument length/type constraints and context well-typedness.
+- Dependencies: C4.1
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C4.3
+
+#### Progress note
+Covers `well_typed_type_builtin_no_type_error` specifically.
+
+#### Summary
+Remove the cheat from `well_typed_type_builtin_no_type_error` in `vyperTypeBuiltinsScript.sml`. Use `well_typed_type_builtin_args_length` and the same constructor split as success typing.
+
+#### Statement
+`Theorem well_typed_type_builtin_no_type_error` in current source.
+
+#### Approach
+Split on `tb`, unfold `evaluate_type_builtin_def`, `type_builtin_result_ok_def`, and `well_typed_type_builtin_args_def` only for the active constructor. For conversions/extract/ABI cases, use existing no-error facts from conversion/ABI helper theories; if only success-typing helpers exist, prove a small no-TypeError analogue locally.
+
+#### Not to try
+Do not rely on success typing theorem alone to prove no-TypeError unless the evaluator equation is already known to be `INL`. Do not add assumptions beyond current theorem without a checked false-statement probe.
+
+### C4.4: Prove ABI encode type-builtin success branches
+- Kind: `proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 5
+- Rationale: The old ABI bound gap is repaired in `type_builtin_result_ok`, so the three suspended/cheated branches are now finite consumers of ABI bound lemmas.
+- Dependencies: C4.3
+- Checkpoint: yes
+- Supersedes: old ABI encode result-bound gap
+- Progress transition: `refinement`
+- Carries progress/evidence from: TYPE_SYSTEM_REWRITE_PLAN ABI bound repair note
+
+#### Progress note
+Supersedes the stale unprovability concern by using the current source’s `vyper_abi_size_bound` side condition.
+
+#### Summary
+Finish `well_typed_type_builtin_success_type[abi_encode]`, `[encode_tuple]`, and `[encode_tuple_nowrap]`. Prove the result `BytesT`/ABI value typing from encoder success and the bound carried by `type_builtin_result_ok`.
+
+#### Statement
+`Resume well_typed_type_builtin_success_type[abi_encode]`, `[encode_tuple]`, and `[encode_tuple_nowrap]` in current `vyperTypeBuiltinsScript.sml`.
+
+#### Approach
+Unfold the active type-builtin case, extract `vyper_abi_size_bound` from `type_builtin_result_ok`, and use ABI encode length/success typing lemmas to prove the returned bytes/string value fits the result type. If a length lemma is missing, add it next to existing ABI helper lemmas as a strict prerequisite.
+
+#### Not to try
+Do not weaken the result type to dynamic bytes without checking the theorem statement. Do not ignore the bound side condition; it is the intended repair.
+
+### C4.5: Close raw-call return type well-formedness and Env/MsgGas support
+- Kind: `proof`
+- Risk: 2
+- Work priority: 40
+- Work units: 5
+- Rationale: The remaining raw-call theorem is arithmetic over `word_size` and type slot size; Env/MsgGas issues are local builtin constructor facts.
+- Dependencies: C4.2
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C4.4
+
+#### Progress note
+Covers task-mentioned Env MsgGas issues and the visible `raw_call_return_type_well_formed` cheat.
+
+#### Summary
+Remove the cheat from `raw_call_return_type_well_formed` and close any remaining Env/MsgGas builtin support theorem reported by C0. These support special-call and builtin soundness wrappers.
+
+#### Statement
+`Theorem raw_call_return_type_well_formed` in `vyperTypeBuiltinsScript.sml`, plus any C0-reported reachable Env/MsgGas builtin helper cheat in the same file.
+
+#### Approach
+For raw-call, case split on flags and reduce to `word_size_le`, `type_slot_size_def`, and simple natural arithmetic under `flags.rcf_max_outsize < dimword(:256)`. For Env/MsgGas, unfold the relevant builtin evaluator/static typing branch and use context well-typedness fields that type gas/message values.
+
+#### Not to try
+Do not solve raw-call by assuming `word_size n < n`; the source already has the split and needs the equality case closed correctly. Do not add global context assumptions to special-call wrappers unless current Env builtin theorem is false and a probe confirms it.
+
+### C5: Call wrapper soundness
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 50
+- Work units: 0
+- Rationale: Call wrappers are downstream consumers of expression/statement/builtin soundness and function signature consistency; they do not require a new evaluator induction.
 - Required for completion: yes
 - Dependencies: C2, C4
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C5
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C5
 
 #### Progress note
-Current SML wrapper statements are authoritative unless they conflict with frozen public behavior; if a wrapper is too strong, escalate with evidence before changing it.
+Keeps the task-listed call wrapper cheats explicit and downstream of statement/builtin soundness.
 
 #### Summary
-- Prove `internal_call_no_type_error`, `internal_call_type_preservation`, `external_call_no_type_error`, and `special_call_no_type_error`.
-- Use a joint internal-call body lemma if wrappers share setup proof.
-- External/special calls use builtin/ABI/context/account boundaries from C4.
-- Complete with a call theory zero-cheat audit.
-
-#### Statement
-```sml
-Theorem internal_call_no_type_error: ...
-Theorem internal_call_type_preservation: ...
-Theorem external_call_no_type_error: ...
-Theorem special_call_no_type_error: ...
-```
+Prove `internal_call_no_type_error`, `internal_call_type_preservation`, `external_call_no_type_error`, and `special_call_no_type_error` in `vyperTypeCallSoundnessScript.sml`. These are wrappers around existing argument/default/body/special-target soundness facts.
 
 #### Approach
-For internal calls, unfold setup only until a typed callable body/list of statements is evaluated, apply C2, and project. For external/special calls, unfold the finite call branch and dispatch ABI/builtin runtime checks via C4.
+Prove external/special wrappers first because they avoid body recursion. Then internal no-TypeError and preservation using the same decomposition. Keep no-TypeError and preservation wrappers as projections from statement/expression joint results rather than duplicating call evaluator case analysis.
 
 #### Not to try
-Do not duplicate statement evaluator induction in call soundness. Do not prove internal no-TypeError and preservation by two separate setup proofs if a joint lemma can project both.
+Do not unfold the full statement evaluator inside call wrappers. Do not create an import cycle by making statement soundness depend on call soundness.
 
 #### Argument
-Calls enter the same typed runtime world as statements. Argument/default binding and local scope setup preserve env/state/account invariants; the body is typed under the extended environment; C2 covers body evaluation and return/exception typing; scope/frame lemmas restore caller invariants. External/special calls do not run Vyper statements, so their no-TypeError properties are finite branch boundary facts under context/account/ABI/builtin typing. Public wrappers remain split, but internal proof should use the strongest joint body-call invariant where current source permits.
+For internal calls, static expression typing gives a function signature and argument bounds; `fn_sigs_consistent` and `functions_well_typed_body` recover the callable body typing environment, defaults typing, parameter types, and return type. Argument and default evaluation soundness establish the call-entry state/env invariants; statement soundness for the body excludes TypeError and preserves state/return typing. External and special calls do not recurse into a Vyper body, so they reduce to argument/driver expression soundness and builtin/special-target no-TypeError facts.
 
 #### Definition design
-Introduce a local joint internal-call lemma only if both internal wrappers otherwise duplicate setup. Its conclusion should include no-TypeError, preservation, and return/exception typing. Boundary probes: argument/default binding preserves env consistency; body `ReturnException` matches declared return type. Failure sign: wrappers unfold identical setup independently.
+The call proof boundary is wrapper-level: `well_typed_expr ... Call ...` plus `env_consistent`, `state_well_typed`, `context_well_typed`, `accounts_well_typed`, and for internal calls `functions_well_typed`. Do not strengthen public call wrappers unless a checked false-statement probe shows a missing prerequisite. If internal preservation needs return-value typing not exported by statement soundness, add a statement corollary projection rather than re-inducting over statements here.
 
 #### Code structure
-All call-specific helpers belong in `semantics/prop/vyperTypeCallSoundnessScript.sml`. Consume `vyperTypeStmtSoundness` and `vyperTypeBuiltins`; keep default/ABI helper work in dedicated theories only if local proof cannot handle it.
+All call wrapper edits belong in `semantics/prop/vyperTypeCallSoundnessScript.sml`. Helper lemmas about function signatures/defaults can live near existing `fn_sig_argument_bounds`, `defaults_env_erases_locals`, and `functions_well_typed_body`. Do not create imports from call soundness back into statement soundness.
 
-### C5.1: Joint internal-call body soundness lemma
-- Kind: `infrastructure_lemma`
+### C5.1: External and special call no-TypeError wrappers
+- Kind: `proof`
 - Risk: 2
-- Rationale: Shared call setup facts are standard applications of statement soundness plus scope/frame helper layers.
-- Dependencies: C2.7
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C5.1
+- Work priority: 0
+- Work units: 5
+- Rationale: These wrappers avoid internal function body recursion and reduce to argument/driver and builtin/special-target facts.
+- Dependencies: C4.5
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C5.1
 
 #### Progress note
-Prove only if current wrappers are not already one-line projections from an existing joint theorem.
+Same external/special wrapper obligation as pre-collapse plan.
 
 #### Summary
-- Prove a local joint lemma for internal callable body evaluation.
-- Include no-TypeError, state/account/env preservation, and return value/exception typing.
-- Apply C2 after argument/default/local-scope setup.
-- Use this lemma for both internal call wrappers.
+Prove `external_call_no_type_error` and `special_call_no_type_error` in `vyperTypeCallSoundnessScript.sml`. Use expression argument soundness, optional driver soundness, and special-target builtin support.
 
 #### Statement
-```sml
-(* Shape follows current eval_internal_call parameters *)
-... eval_internal_call ... = (res, st') ==>
-  state_well_typed st' /\ accounts_well_typed st'.accounts /\
-  no_type_error_result res /\ (* preservation and return/exception typing facts *)
-  ...
-```
+`Theorem external_call_no_type_error` and `Theorem special_call_no_type_error` in current source.
 
 #### Approach
-Unfold internal-call setup to the point where the body statements are evaluated under an extended env/scope. Apply statement soundness, then use scope-pop/frame lemmas to restore caller invariants and translate body returns to call results.
+Case split on the call target only as much as the theorem statement already distinguishes. Use `ext_call_args_typed` for external calls and current special-call/static builtin facts for the rest. Project `no_type_error_eval` from the expression/builtin soundness theorem used by the evaluator branch.
 
 #### Not to try
-Do not choose a lemma proving only no-TypeError; preservation wrapper would repeat the setup proof.
+Do not try to prove internal call facts in the special-call theorem; the hypotheses explicitly exclude `IntCall` and `ExtCall` for `special_call_no_type_error`.
 
-### C5.2: Derive internal call wrappers
-- Kind: `compatibility_wrappers`
-- Risk: 1
-- Rationale: Projections from C5.1 or an existing equivalent joint theorem.
-- Dependencies: C5.1
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C5.2
-
-#### Progress note
-Keep current theorem names and caller-compatible statements.
-
-#### Summary
-- Prove `internal_call_no_type_error`.
-- Prove `internal_call_type_preservation`.
-- Use the joint internal-call lemma, not body-evaluation unfolding.
-- Preserve wrapper strength required by the public surface.
-
-#### Statement
-```sml
-Theorem internal_call_no_type_error: ...
-Theorem internal_call_type_preservation: ...
-```
-
-#### Approach
-Instantiate the joint internal-call theorem with the evaluation equation and wrapper premises, then project the desired no-TypeError or preservation/result typing fields.
-
-#### Not to try
-Do not weaken wrapper statements or duplicate call setup reasoning.
-
-### C5.3: Prove external and special call no-TypeError wrappers
-- Kind: `proof_batch`
+### C5.2: Internal call no-TypeError wrapper
+- Kind: `proof`
 - Risk: 2
-- Rationale: Finite call-entry branches under context/account/ABI/builtin facts; no recursive statement proof needed.
-- Dependencies: C4.6
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C5.3
-
-#### Progress note
-Keep ABI arithmetic delegated to C4 helpers.
-
-#### Summary
-- Prove `external_call_no_type_error`.
-- Prove `special_call_no_type_error`.
-- Use context/account well-typedness and C4 no-TypeError boundaries.
-- Runtime failures may remain possible, but not TypeError.
-
-#### Statement
-```sml
-Theorem external_call_no_type_error: ...
-Theorem special_call_no_type_error: ...
-```
-
-#### Approach
-Unfold only the top-level external/special branch. Dispatch ABI encode/decode and builtin-like checks using C4 theorems; use account/context invariants to rule out TypeError-specific failures.
-
-#### Not to try
-Do not prove external failure impossible. Do not move ABI bound proofs into the call file.
-
-### C5.4: Call theory build/audit checkpoint
-- Kind: `checkpoint`
-- Risk: 1
-- Rationale: Mechanical verification after call wrappers.
-- Dependencies: C5.2, C5.3
+- Work priority: 10
+- Work units: 8
+- Rationale: Existing helper lemmas recover function body typing and argument/default alignment; statement soundness supplies body no-TypeError.
+- Dependencies: C2.3, C5.1
 - Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C5.2
 
 #### Progress note
-Ensures `vyperTypeSoundnessNew` can import trusted call wrappers.
+Same theorem as source; proof is authorized after statement soundness is stable.
 
 #### Summary
-- Build `vyperTypeCallSoundnessTheory`.
-- Confirm no cheats remain in `vyperTypeCallSoundnessScript.sml`.
-- Confirm wrapper names are available to final public surface.
-- Escalate if a wrapper statement appears stronger than executable semantics.
+Prove `internal_call_no_type_error`. Decompose call evaluation into argument evaluation, defaults/parameter setup, body evaluation, and return handling; each phase consumes existing soundness/preservation projections.
 
 #### Statement
-```sh
-holbuild build vyperTypeCallSoundnessTheory
-```
+`Theorem internal_call_no_type_error` in `vyperTypeCallSoundnessScript.sml`.
 
 #### Approach
-Use build log and grep. If failure arises from body theorem shape, revisit C5.1 instead of patching wrappers separately.
+Use `fn_sig_argument_bounds`, `internal_call_signature_sound`, and `functions_well_typed_body` to obtain body typing and parameter/default facts. Evaluate arguments/defaults with expression/default soundness. Invoke the statement/body no-TypeError theorem for the function body and propagate through call-return wrapper code.
 
 #### Not to try
-Do not claim final public soundness while call wrappers import or contain cheats.
+Do not reconstruct `functions_well_typed` internals manually in the large proof if `functions_well_typed_body` applies. Do not weaken the theorem to omit `functions_well_typed cx`.
 
-### C6: Final public wrappers and zero-CHEAT reachable build
-- Kind: `final_integration`
+### C5.3: Internal call success preservation wrapper
+- Kind: `proof`
 - Risk: 2
-- Rationale: After C1-C5, remaining work is wrapper projection in `vyperTypeSoundnessNewScript.sml` and a mechanical reachable-build audit.
+- Work priority: 20
+- Work units: 8
+- Rationale: It reuses the internal-call decomposition and projects the success state/value typing facts.
+- Dependencies: C5.2
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C5.3
+
+#### Progress note
+Completes the task-listed internal call wrapper pair.
+
+#### Summary
+Prove `internal_call_type_preservation`. On successful internal call evaluation, show the final state remains well typed and the returned value is `expr_runtime_typed` for the call expression.
+
+#### Statement
+`Theorem internal_call_type_preservation` in `vyperTypeCallSoundnessScript.sml`.
+
+#### Approach
+Follow the same evaluator decomposition as C5.2, but retain the final success equation. Use statement body preservation/return typing to prove returned value type and state/accounts invariants. Then simplify `expr_runtime_typed` for the call expression using the signature return type equality from static typing.
+
+#### Not to try
+Do not prove this independently from C5.2 by a separate large case split; factor or reuse the same helper decomposition where possible.
+
+### C6: Public fresh soundness wrapper surface
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 60
+- Work units: 0
+- Rationale: The frozen public behaviors are projections of the subsystem joint invariants once assignment/statement/call/builtin layers are cheat-free.
 - Required for completion: yes
-- Dependencies: C2, C3, C4, C5
-- Checkpoint: yes
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: PLAN_type_system_rewrite.md C6
+- Dependencies: C1, C2, C3, C4, C5
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C6
 
 #### Progress note
-This component implements the TASK completion criterion and frozen public behavior. Wrapper names may remain source-specific but must be equivalent in strength to the six named obligations.
+Preserves public theorem names/equivalent strength while allowing internal helper statements to have changed.
 
 #### Summary
-- Ensure `vyperTypeSoundnessNewScript.sml` exposes wrappers equivalent to the six public obligations named in the TASK.
-- Public behavior: no well-typed evaluation returns `Error (TypeError s)` and successful/exceptional results preserve required invariants.
-- Build `vyperSemanticsHolTheory`.
-- Confirm zero CHEAT warnings reachable from that theory.
-
-#### Statement
-```sml
-Theorem typed_stmts_no_type_error: ...
-Theorem typed_stmts_success_preserves_state_env: ...
-Theorem typed_stmts_exception_preserves_state_and_return_type: ...
-Theorem typed_expr_no_type_error: ...
-Theorem typed_expr_success_preserves_type: ...
-Theorem typed_callable_body_no_type_error: ...
-
-# Final criterion
-holbuild build vyperSemanticsHolTheory
-```
+Ensure `vyperTypeSoundnessNewScript.sml` exposes wrappers equivalent in strength to the six frozen public obligations. Prove/repair only wrapper projections; missing facts should be exported from subsystem layers, not reproved here.
 
 #### Approach
-Derive public wrappers as projections/corollaries of C2 statement/expression soundness and C5 callable-body/call facts. Then run the final build and inspect warning provenance; any reachable CHEAT in fresh stack must be traced to one of C1-C5 or escalated as an uncovered current-source obligation.
+Prove each wrapper by applying the relevant subsystem theorem and simplifying the result projection. Keep theorem names and strength equivalent to the task list. After wrappers, build the aggregator to ensure all dependencies are reachable and clean.
 
 #### Not to try
-Do not change frozen public behavior or weaken wrapper conclusions. Do not count a clean build with CHEAT warnings as done. Do not chase unrelated retired-theory cheats unless they are reachable from `vyperSemanticsHolTheory`.
+Do not copy old retired proof scripts wholesale. Do not change frozen public behavior to match an easier internal theorem.
 
 #### Argument
-The final public surface is a corollary layer over the strongest joint invariants. C2 supplies no-TypeError and preservation for statements/expressions/evaluator cases; C5 supplies callable body/call wrappers; C3 supplies assignment compatibility wrappers for any legacy callers; C4 removes builtin/update-binop cheat dependencies. Therefore the named public theorems follow by instantiation and projection, and the aggregator build is trusted once the reachable import graph has no CHEAT warnings.
+The final fresh surface has no new semantic induction. Statement and expression no-TypeError wrappers project the `no_type_error_result` conjuncts. Success preservation wrappers project state/env/accounts/result typing from statement/expression joint soundness. Exception preservation projects the return-exception typing and state invariants. Callable-body no-TypeError composes call-entry/function-body soundness with statement soundness.
 
 #### Definition design
-No new semantics/type-system definitions should be introduced at final integration. If a public wrapper needs a missing projection, add a small corollary over existing joint theorems. Failure sign: a public wrapper proof unfolds evaluator definitions directly; the appropriate joint theorem/wrapper is missing upstream.
+The public interface should hide strengthened internal side conditions by deriving them from public well-typedness/context hypotheses. If a public wrapper cannot be proved, that indicates a missing subsystem corollary or an underspecified public hypothesis; because public behavior is frozen, add/export the missing internal corollary rather than weakening public behavior.
 
 #### Code structure
-Public wrappers and final compatibility names belong in `semantics/prop/vyperTypeSoundnessNewScript.sml`. The aggregator `vyperSemanticsHolScript.sml` should only import the fresh final theory; do not re-enable old retired theories.
+Wrapper edits belong only in `semantics/prop/vyperTypeSoundnessNewScript.sml` and, if absolutely necessary, small projection corollaries in subsystem files. Do not import retired old soundness theories unless C0 proves they are still in the fresh dependency chain.
+
+### C6.1: Prove/repair the six public wrapper theorems
+- Kind: `proof`
+- Risk: 2
+- Work priority: 0
+- Work units: 8
+- Rationale: Wrapper projection is standard after subsystem theorems are complete; any failure is evidence of a missing projection lemma, not new architecture.
+- Dependencies: C5.3, C2.3, C1.6
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C6.1
+
+#### Progress note
+Same public wrapper obligation as pre-collapse plan.
+
+#### Summary
+Close wrappers equivalent to `typed_stmts_no_type_error`, `typed_stmts_success_preserves_state_env`, `typed_stmts_exception_preserves_state_and_return_type`, `typed_expr_no_type_error`, `typed_expr_success_preserves_type`, and `typed_callable_body_no_type_error`.
+
+#### Statement
+Current-source public wrapper theorems in `semantics/prop/vyperTypeSoundnessNewScript.sml`, equivalent in strength to the six names listed in the TASK file.
+
+#### Approach
+For each wrapper, instantiate the strongest available subsystem theorem and destruct only the final conjunction/case result needed. If the subsystem theorem statement changed, add a compatibility corollary with the public wrapper name/strength. Keep all public hypotheses derivable from the source typing/context assumptions.
+
+#### Not to try
+Do not weaken public theorem conclusions or add visible public preconditions without user approval; these behaviors are frozen by the TASK.
+
+### C7: Final `vyperSemanticsHolTheory` zero-CHEAT validation
+- Kind: `validation`
+- Risk: 1
+- Work priority: 70
+- Work units: 2
+- Rationale: Mechanical final build/audit; any remaining warning is concrete evidence for a small follow-up replan.
+- Required for completion: yes
+- Dependencies: C6.1
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: pre-collapse C7
+
+#### Progress note
+Final validation component is carried forward unchanged in purpose.
+
+#### Summary
+Run `holbuild build vyperSemanticsHolTheory` and confirm success with zero CHEAT warnings reachable from the theory. If any warning remains, report the exact theorem/file and request a scoped replan rather than declaring completion.
+
+#### Description
+This is the task done-definition check. It must be performed after all proof components, because HOL can build through cheated theorems while still emitting warnings.
+
+#### Statement
+Command-level obligation: `holbuild build vyperSemanticsHolTheory` succeeds with zero reachable CHEAT warnings.
+
+#### Approach
+Use holbuild only. Capture the full warning summary and, if clean, close the task. If not clean, map each remaining warning to an existing component if possible; if it is uncovered, escalate PLAN_INCOMPLETE with the exact warning list.
+
+#### Not to try
+Do not ignore CHEAT warnings because the build exit code is zero. Do not clean unrelated warnings outside the dependency cone unless they are reachable from `vyperSemanticsHolTheory`.

@@ -721,9 +721,10 @@ Definition env_context_consistent_def:
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
-    (!src id ty ts. FLOOKUP env.bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
-       FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-       is_immutable_decl id ts /\ ty <> NoneT) /\
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+       ?ts. get_module_code cx src = SOME ts /\
+            FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+            is_immutable_decl id ts /\ ty <> NoneT) /\
     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
        well_formed_vtype env.type_defs vt) /\
     (!src id ty.
@@ -746,6 +747,17 @@ Definition env_context_consistent_def:
        ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
             FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls)))
 End
+
+Theorem env_context_consistent_bare_global_old:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
+  get_module_code cx src = SOME ts ==>
+    FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+    is_immutable_decl id ts /\ ty <> NoneT
+Proof
+  rw[env_context_consistent_def] >>
+  first_x_assum drule >> rw[] >> gvs[]
+QED
 
 Definition env_scopes_consistent_def:
   env_scopes_consistent env cx (st:evaluation_state) <=>
@@ -798,9 +810,10 @@ Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !fn_sigs bare_globals toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
-      (!src id ty ts. FLOOKUP bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
-         FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl id ts /\ ty <> NoneT) /\
+      (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+         ?ts. get_module_code cx src = SOME ts /\
+              FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+              is_immutable_decl id ts /\ ty <> NoneT) /\
       (!src id vt ts.
          FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
          ((?ty. vt = Type ty /\

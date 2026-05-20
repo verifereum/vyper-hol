@@ -6,11 +6,178 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
+| C0 | proved |  | E0530 | Review C0 closure with strategist. The next scheduled proof should remain C2.0 but its guidance must account for the current failure: `MATCH_MP for_cons_body_result_return_exception_typed th` is being attempted before discharging the implication body, so the tail likely needs `disch_then (fn th => ... )` over the whole implication/result or a small full-tail helper, not just direct MATCH_MP on the antecedent theorem. |
 | C0.1 | stuck | other | E0004 | "Escalate to plan_oracle for C0 resolution: authorize type_builtin_result_ok repair for AbiEncode branch, adding vyper_abi_size_bound condition" |
 | C1 | progressed | plan_incomplete | E0005 | Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable. |
-| C1.1 | proved |  | E0151 |  |
-| C1.2 | stuck | unknown | E0156 |  |
+| C1.0 | proved |  | E0186 |  |
+| C1.1 | proved |  | E0531 | Review C1.1 closure, then proceed to the next assignment-target soundness branch component in the scheduled frontier. |
+| C1.1.1 | proved |  | E0187 |  |
+| C1.1.2 | proved |  | E0188 |  |
+| C1.2 | proved |  | E0532 | Review C1.2 closure, then proceed to C1.3 ArrayRef branch if accepted. |
+| C1.3 | proved |  | E0533 | Review C1.3 closure, then proceed to C1.4 if accepted. |
+| C1.4 | proved |  | E0534 | Review C1.4 closure with strategist, then begin C1.5 if accepted. |
+| C1.5 | proved |  | E0535 | Review C1.5 closure with strategist, then begin C1.6 if accepted. |
+| C1.6 | proved |  | E0536 | Review C1.6 closure with strategist, then proceed to the next scheduled component (expected C2.0). |
+| C1.6.1 | stuck | plan_incomplete | E0194 | Call plan_oracle(mode='review', component_id='C1.6.1', evidence_ids=[...]) so the strategist can accept partial Concat progress and schedule/decompose the newly exposed Slice bytes dispatcher prerequisite. |
+| C1.6.1.1 | proved |  | E0196 |  |
+| C1.6.1.2 | proved |  | E0197 |  |
+| C1.6.1.3 | proved |  | E0198 |  |
+| C1.6.1.4 | stuck | plan_incomplete | E0199 | Call plan_oracle review for C1.6.1.4 with the MakeArray failed-goal evidence so the strategist can decompose the next builtin dispatcher prerequisite. |
+| C1.6.1.4.1 | proved |  | E0200 | Review closure, then run/close the planned C1.6.1.4.2 checkpoint with the new AddMod failed-goal evidence if scheduled. |
+| C1.6.1.4.2 | stuck | plan_incomplete | E0201 | Call plan_oracle(mode='review', component_id='C1.6.1.4.2') so the strategist can accept the checkpoint and add/decompose an AddMod repair leaf before any edits. |
+| C1.6.1.4.2.1 | proved |  | E0216 |  |
+| C1.6.1.4.2.2 | proved |  | E0217 |  |
+| C1.6.1.4.2.3 | proved |  | E0219 | Review closure, then follow scheduler to ECRecover leaves. |
+| C1.6.2 | stuck | plan_incomplete | E0202 | Call plan_oracle review for C1.6.2; likely schedule the already-planned C1.6.1.4.2.1 AddMod helper before retrying this checkpoint. |
+| C1.6.2.1 | proved |  | E0203 | Review closure, then begin C1.6.2.2 to integrate the helper into well_typed_builtin_app_no_type_error. |
+| C1.6.2.2 | proved |  | E0204 | Review C1.6.2.2 closure, then follow the PLAN frontier. The next visible residual is MulMod in the same dispatcher, so do not patch it ad hoc unless a component authorizes that branch. |
+| C1.6.2.3 | stuck | plan_incomplete | E0205 | Call plan_oracle review/augmentation for C1.6.2.3 with the MulMod residual evidence. Likely need a sibling prerequisite leaf analogous to AddMod for MulMod, but do not create or edit it without strategist authorization. |
+| C1.6.2.3.1 | proved |  | E0206 | Review C1.6.2.3.1 closure, then begin the planned C1.6.2.3.2 checkpoint. The visible next residual is Bop, but do not patch it unless authorized by the checkpoint/plan. |
+| C1.6.2.3.2 | stuck | plan_incomplete | E0207 | Call plan_oracle review/augmentation for C1.6.2.3.2 with the Bop residual evidence. Likely need to repair the Bop dispatch into `well_typed_binop_no_type_error`, but do not edit without strategist authorization. |
+| C1.6.2.3.2.1 | proved |  | E0208 | Review C1.6.2.3.2.1 closure, then begin C1.6.2.3.2.2 to replace the brittle Bop TRY block in well_typed_builtin_app_no_type_error with the new helper. |
+| C1.6.2.3.2.2 | proved |  | E0209 | Review C1.6.2.3.2.2 closure, then begin the scheduled next component for the new BlockHash/builtin residual rather than broadening this Bop integration leaf. |
+| C1.6.2.3.2.3 | proved |  | E0211 | Review this duplicate scheduler-clearing closure, then begin C1.6.2.3.2.4 for the BlockHash helper/integration if it becomes Oracle next. |
+| C1.6.2.3.2.4 | proved |  | E0212 |  |
+| C1.6.2.3.2.5 | proved |  | E0214 | Review this duplicate checkpoint-cleanup closure; then begin C1.6.2.3.2.6 for ECRecover bridge if it becomes Oracle next. |
+| C1.6.2.3.2.6 | stuck | risk_mismatch | E0215 |  |
+| C1.6.2.3.2.6.1 | proved |  | E0221 |  |
+| C1.6.2.3.2.6.2 | proved |  | E0222 |  |
+| C1.6.2.3.2.6.3 | proved |  | E0223 |  |
+| C1.6.2.3.2.7 | proved |  | E0224 | Review checkpoint closure with strategist; request/expect a PLAN component for the newly exposed ECAdd residual before editing further. |
+| C1.6.2.4 | abandoned | plan_incomplete | E0225 | Review this deferral with strategist and add/schedule a component for the ECAdd residual before retrying state preservation. |
+| C1.6.2.4.1 | proved |  | E0226 | Review closure, then begin C1.6.2.4.2 to integrate `ecadd_dispatch_no_type_error` into `well_typed_builtin_app_no_type_error`. |
+| C1.6.2.4.2 | proved |  | E0227 | Review closure with strategist; request/schedule a new low-risk ECMul residual bridge/checkpoint before retrying state preservation. |
+| C1.6.2.4.3 | abandoned | plan_incomplete | E0228 | Review with strategist and add/schedule a low-risk ECMul residual bridge/checkpoint before retrying state preservation. |
+| C1.6.2.4.3.1 | proved |  | E0229 | Review closure, then begin C1.6.2.4.3.2 to integrate `ecmul_dispatch_no_type_error` into `well_typed_builtin_app_no_type_error`. |
+| C1.6.2.4.3.2 | proved |  | E0230 | Review closure with strategist; the next planned builtin checkpoint should classify the newly exposed PowMod256 residual before any state-preservation retry. |
+| C1.6.2.4.3.3 | abandoned | plan_incomplete | E0231 | Call `plan_oracle(mode='review', component_id='C1.6.2.4.3.3', evidence_ids=[...])` so the strategist can accept the checkpoint and schedule/decompose a PowMod256 dispatch bridge before any further builds/edits. |
+| C1.6.2.4.3.3.1 | proved |  | E0232 | Review closure with strategist, then begin C1.6.2.4.3.3.2 to add the narrow PowMod256 dispatch attempt in `well_typed_builtin_app_no_type_error`. |
+| C1.6.2.4.3.3.2 | proved |  | E0233 | Review closure with strategist. If accepted, begin the scheduled post-PowMod256 checkpoint C1.6.2.4.3.3.3 or whatever Oracle next reports. |
+| C1.6.2.4.3.3.3 | proved |  | E0234 | Review closure with strategist. If accepted, follow Oracle next, expected to be the broader post-builtin/state-preservation checkpoint C1.6.2.4.3.4 or another scheduled frontier. |
+| C1.6.2.4.3.4 | proved |  | E0235 | Review closure with strategist, then follow Oracle next (likely assignment wrapper audit or next scheduled fresh-stack component). |
+| C2.0 | stuck | risk_mismatch | E0538 | Call plan_oracle(mode='review', component_id='C2.0') for revised decomposition/interface. Consider a tiny helper theorem/corollary with no existential validation brittleness, or a different statement for the body-result helper that produces the exact final postcondition directly. |
+| C2.0.1 | proved |  | E0543 | Review closure, then begin C2.0.2 replacement helper/caller patch. |
+| C2.0.2 | stuck | risk_mismatch | E0544 | Call plan_oracle review for C2.0.2 with this evidence. Recommend a stronger structural repair: avoid proving the final ReturnException branch inside this large theorem context entirely, e.g. extract a full caller-suffix lemma that includes the tail goal shape, or restructure `eval_for_cons_type_sound_core` with `suspend`/`Resume` so the problematic branch is a top-level proof with clean assumptions. |
+| C2.0.2.1 | proved |  | E0547 | Review closure, then begin C2.0.2.2 to add `for_cons_non_loop_exception_suffix`. |
+| C2.0.2.2 | stuck | risk_mismatch | E0549 | Call `plan_oracle(mode="review", component_id="C2.0.2.2")` with this evidence for a replacement strategy; do not continue tactic retries or patch the core theorem. |
+| C2.0.2.2.0 | proved |  | E0550 | Review closure, then begin C2.0.2.2.1 to add/prove `for_cons_body_ih_exception_projection`. |
+| C2.0.2.2.1 | progressed | risk_mismatch | E0551 | Handoff: next session should not keep trying endpoint variants. Consider changing the projection theorem to return the exact full body-IH conjunction specialized to `(stp, INR exn, st_body)` (state/accounts/no_type_error/existential) as a whole using `assume_tac`/`gvs` so the theorem closes by simplification, or escalate if that still leaves exact endpoints. Alternatively use an even lower-level projection that does not open/reconstruct the existential at all. |
+| C2.1 | proved |  | E0441 | Review closure, then begin the scheduled extraction-helper component and prove the standalone case-premise extraction lemma near the For_cons helper cluster. |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
+| C2.2 | proved |  | E0278 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
+| C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
+| C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
+| C2.3 | stuck | risk_mismatch | E0446 | Call plan_oracle(mode='review', component_id='C2.3') with the CHOOSE evidence. Likely need a stronger standalone helper whose invocation does not create a case-premise side goal inside the Resume, or a different factoring of the whole suffix. |
+| C2.3.1 | proved |  | E0447 | Review closure, then begin C2.3.2 to audit/reuse the explicit-witness helper before patching the suffix. |
+| C2.3.2 | proved |  | E0448 | Review closure, then begin C2.3.3 and replace the For_cons suffix placeholder by extracting the IH existential and applying this explicit-witness helper. |
+| C2.3.3 | stuck | risk_mismatch | E0450 | Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale. |
+| C2.4 | proved |  | E0280 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
+| C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
+| C2.5.1 | proved |  | E0281 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
+| C2.5.2 | proved |  | E0282 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.5.3 | proved |  | E0283 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.5.4.1 | proved |  | E0284 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.5.4.2 | proved |  | E0285 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.5.5 | proved |  | E0286 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.6 | progressed | wrong_statement | E0260 | Escalate C2.6 to strategist before continuing: either strengthen the expr-list mutual clause with a materialisable/non-hashmap condition and update callers, or add/prove a boundary lemma showing well_typed_exprs callers already exclude HashMapRef heads. |
+| C2.6.1 | proved |  | E0287 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.6.2 | proved |  | E0288 | Review closure with strategist, then follow Oracle next frontier. |
+| C2.6.3 | proved |  | E0289 | Review closure with strategist, then follow Oracle next frontier. |
+| C2.7 | stuck | plan_incomplete | E0264 | Strategist must decide whether to decompose the remaining expression Resume cheats inside C2/C2.7 or classify them under later builtin/call components; executor must not edit them until PLAN coverage exists. |
+| C2.7.1 | progressed | other | E0267 | Run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600)` immediately on the current source. If it still fails in `Expr_TopLevelName`, do not add more broad definitions; factor a local boundary lemma for well-typed top-level lookup/no-TypeError/result-typing or split the inline proof by `find_var_decl_by_num` branch. |
+| C2.7.1.0 | proved |  | E0290 | Review closure with strategist, then follow Oracle next frontier. |
+| C2.7.1.1 | stuck | plan_incomplete | E0269 | Ask the strategist to add a low-risk prefix performance repair for the AugAssign branch before retrying C2.7.1.1. |
+| C2.7.1.1.0 | proved |  | E0291 | Review closure with strategist, then follow Oracle next frontier. |
+| C2.7.1.1.1.a | proved |  | E0292 | Review closure with strategist, then follow Oracle next frontier. |
+| C2.7.1.1.1.a2 | proved |  | E0293 | Review this carry-forward closure with strategist, then begin C2.7.1.1.1.b.1 for the actual line-2193 `well_formed_type` projection repair. |
+| C2.7.1.1.1.b | stuck | plan_incomplete | E0276 | Call plan_oracle in review mode for this stuck closure. Ask it to add/schedule a local For-prefix line-2193 performance leaf before retrying `Expr_TopLevelName`. |
+| C2.7.1.1.1.b.1 | proved |  | E0294 | Review closure with strategist. A new plan component or schedule update is needed for the distinct later line-2209 For-prefix timeout before proceeding to Expr_TopLevelName. |
+| C2.7.1.1.1.b.1.a | proved |  | E0295 | Review closure with strategist, then begin C2.7.1.1.1.b.1.b for the newly exposed line-2209 iterator-result split timeout. |
+| C2.7.1.1.1.b.1.b | proved |  | E0297 |  |
+| C2.7.1.1.1.b.2 | stuck | plan_incomplete | E0298 | Ask strategist to insert/decompose a prerequisite component for the `For_cons` line-2274 proof-performance timeout before retrying `Expr_TopLevelName`. |
+| C2.7.1.1.1.b.2.a | proved |  | E0299 |  |
+| C2.7.1.1.1.b.2.b | stuck | plan_incomplete | E0300 | Ask strategist to insert/decompose a prerequisite component for the `For_cons` lines 2275-2298 witness-extraction timeout before retrying `Expr_TopLevelName`. |
+| C2.7.1.1.1.b.2.b.1 | stuck | risk_mismatch | E0302 | Call plan_oracle review for this stuck closure and request a revised low-risk leaf before further edits. |
+| C2.7.1.1.1.b.2.b.1.a | proved |  | E0304 |  |
+| C2.7.1.1.1.b.2.b.2 | stuck | plan_incomplete | E0305 | Call plan_oracle(mode='review') for C2.7.1.1.1.b.2.b.2 with evidence and request replacement/augmentation of C2/C2.7 descendant schedule to insert a low-risk For_cons script-performance repair for `state_well_typed stp` before Expr_TopLevelName. |
+| C2.7.1.1.1.b.2.b.2.1 | proved |  | E0306 |  |
+| C2.7.1.1.1.b.2.b.2.2 | proved |  | E0307 |  |
+| C2.7.1.1.1.b.2.b.2.3 | proved |  | E0308 | Call plan_oracle review; likely add a local source-order repair for `accounts_well_typed stp.accounts` before returning to Expr work. |
+| C2.7.1.2 | stuck | plan_incomplete | E0309 | Call plan_oracle review to replace/decompose the schedule with a component covering the newly exposed For_cons `accounts_well_typed stp.accounts` proof-performance blocker before returning to Expr work. |
+| C2.7.1.2.1 | proved |  | E0310 | Review with strategist; next source-order blocker is still before Expr_FlagMember, at the body-IH selection after establishing `env_consistent ... stp`. |
+| C2.7.1.2.2 | stuck | plan_incomplete | E0311 | Call plan_oracle review to add/replace with a local For_cons IH-selection repair before returning to Expr_FlagMember. |
+| C2.7.1.2.2.1 | proved |  | E0313 | Review this administrative closure if required, then begin C2.7.1.2.2.3 and repair the local For_cons env-consistency-after-pop assertion. |
+| C2.7.1.2.2.2 | stuck | plan_incomplete | E0318 | Strategist should add/schedule a new source-order repair leaf for the For_cons `INR y` branch env-consistency-after-pop assertion (and likely analogous ContinueException recursive-IH selector) before Expr_FlagMember. |
+| C2.7.1.2.2.2.1 | proved |  | E0319 |  |
+| C2.7.1.2.2.2.2 | proved |  | E0320 | Request strategist review; next visible source-order blocker is a timeout at `Cases_on `y = BreakException` >> gvs[return_def, no_type_error_result_def]` in the following BreakException branch. |
+| C2.7.1.2.2.2.3 | stuck | plan_incomplete | E0321 | Strategist should review and likely replace/augment C2.7.1.2.2.2 with a new low-risk For_cons BreakException local repair before rescheduling Expr_FlagMember. |
+| C2.7.1.2.2.2.3.1 | stuck | risk_mismatch | E0325 | Call plan_oracle review to replace/decompose this leaf. Suggested direction: prove a helper that packages the entire ordinary-exception final conjunct/five-conjunct goal outside the mutual context, or restructure before the final `case INR y` so no tautological assumption goal is generated locally. |
+| C2.7.1.2.2.2.3.1.1 | proved |  | E0326 |  |
+| C2.7.1.2.2.2.3.1.2 | proved |  | E0327 |  |
+| C2.7.1.2.2.2.3.1.3 | stuck | risk_mismatch | E0329 | Call plan_oracle review for this stuck closure and request a redesigned proof interface that avoids all caller-side local premise/conjunct closure in the large mutual context. |
+| C2.7.1.2.2.2.3.1.3.1 | proved |  | E0331 | Call plan_oracle review for the closed helper component, then begin the scheduled caller patch component if authorized. |
+| C2.7.1.2.2.2.3.1.3.2 | stuck | risk_mismatch | E0333 | Ask strategist to redesign the For_cons ordinary-exception caller interface so the resume does not construct or consume local theorem packages/conjuncts at all, or to authorize a different factoring such as moving the entire ordinary-exception tail into a Resume-specific subproof/lemma with exact caller assumptions and no `ASSUME`/`LIST_CONJ` construction in the mutual context. |
+| C2.7.1.2.2.2.3.1.3.2.1 | proved |  | E0334 |  |
+| C2.7.1.2.2.2.3.1.3.2.2 | stuck | risk_mismatch | E0335 | Call plan_oracle review for E0335 and ask for a redesign/decomposition of the caller patch. |
+| C2.7.1.2.2.2.3.1.3.2.2.1 | stuck | risk_mismatch | E0336 | Ask the strategist to review/decompose this leaf. Likely redesign: factor the ordinary-exception conclusion into a helper theorem or other proof boundary that avoids residual exact-assumption subgoals inside the Resume fragment. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.1 | proved |  | E0337 | Review closure, then begin dependency component C2.7.1.2.2.2.3.1.3.2.2.1.2 to patch the Resume caller to use `for_cons_ordinary_exception_tail_exists`. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2 | stuck | risk_mismatch | E0340 | Call plan_oracle(mode='review') for this closed stuck component. Ask whether to revert experimental helpers and add a full post-`return_exception_typed_INR_case_eq` helper whose conclusion matches the entire Resume goal, or to replace the proof boundary another way. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.1 | proved |  | E0348 | Review closure with strategist so canonical schedule advances to C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.1, the conjunction-antecedent helper leaf. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2 | stuck | risk_mismatch | E0343 | Call plan_oracle review for this closed stuck/risk_mismatch episode and request a redesigned For_cons caller/helper boundary. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1 | stuck | risk_mismatch | E0344 | Call plan_oracle review. Likely redesign should move the entire existential package proof (including exact `return_exception_typed env_exn ret_ty y`) into a top-level helper/corollary outside the Resume fragment, or produce a helper whose conclusion leaves no exact-assumption subgoals in Resume. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.1 | proved |  | E0349 | Review closure with strategist, then begin C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.1 to add `for_cons_ordinary_exception_tail_context_conj`. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2 | stuck | risk_mismatch | E0347 | Request plan_oracle review to redesign this caller patch, likely by adding a top-level helper whose assumptions match the current Resume context and whose conclusion is the final five-conjunct branch goal, so the Resume tail has no residual exact-premise subgoals. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.1 | proved |  | E0350 | Review closure, then begin caller patch component C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2 to replace the fragile Resume tail with an atomic use of `for_cons_ordinary_exception_tail_context_conj`. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2 | stuck | risk_mismatch | E0352 | Call plan_oracle(mode='review') for this stuck component. Ask for a stronger helper whose conclusion includes the existential package or the whole post-rewrite Resume tail so no exact/pass-through subgoals are left inside the Resume proof. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.1 | proved |  | E0354 | Proceed to the scheduled caller-patch component: replace the old explicit final witness/exact-assumption block in `Resume eval_all_type_sound_mutual[For_cons]` with an application of the newly proved helper preserving the IH existential package. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2 | stuck | risk_mismatch | E0357 | Call plan_oracle(mode='review') for this component with the stuck evidence. Do not continue local Resume tactic patching without a redesigned helper/caller boundary. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.1 | proved |  | E0358 | Review closure, then begin C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.2 to add the exact full-context helper. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.2 | proved |  | E0359 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3 | stuck | risk_mismatch | E0362 | Ask strategist to replace/augment this leaf, likely authorizing an exact wrapper helper outside the Resume body or a tactic that avoids metis CHOOSE failure without manual existential reconstruction. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.1 | proved |  | E0363 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2 | stuck | risk_mismatch | E0366 | Ask plan_oracle to review and replace/augment this leaf, likely with a helper whose conclusion exactly matches the whole post-context goal (`no_type_error_result (INR exn) /\ existential`) and whose proof is outside the suspended Resume, or another deterministic non-Resume packaging approach. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1 | stuck | risk_mismatch | E0370 | Ask plan_oracle to augment/replace this leaf with a top-level wrapper/helper decomposition, or another approach that avoids proving residual/exact-premise subgoals inside the suspended Resume. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1 | stuck | risk_mismatch | E0376 | Ask strategist to decompose/replace the helper boundary. Likely need a theorem/application style that avoids `irule`/`drule_all` splitting in the Resume entirely, perhaps a single antecedent package or pre-specialized implication that can be consumed without local exact subgoals. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.1 | proved |  | E0377 | Review closure, then begin sibling component C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2 to replace the failed call-site block with an atomic use of `for_cons_ordinary_exception_tail_resume_site_from_stp`. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2 | stuck | risk_mismatch | E0378 | Call plan_oracle review for a replacement boundary (likely an even more source-order theorem or direct theorem for just `return_exception_typed env ret_ty y` avoiding existential CHOOSE/metis inside Resume). |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.1 | proved |  | E0379 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2 | stuck | risk_mismatch | E0380 | Call plan_oracle review/redesign. Need a boundary that avoids exact assumption closure inside the Resume suffix, perhaps by proving a source-order theorem whose conclusion is the full final conjunction from only assumptions that can be consumed before entering the fragile exact-goal state, or by restructuring the suspended proof boundary. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.1 | proved |  | E0381 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2 | stuck | risk_mismatch | E0383 | Strategist should redesign this leaf: likely move a larger conjunctive postcondition packaging outside the suspended Resume or otherwise avoid any exact-assumption/premise-closing steps inside this Resume suffix. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.1 | proved |  | E0384 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2 | stuck | risk_mismatch | E0386 | Call plan_oracle(mode="review") for this component. Likely redesign: close a larger full ordinary-exception postcondition before `return_exception_typed_INR_case_eq` splitting, or add/use a source-ordered boundary lemma whose conclusion matches the full use site without Resume-side premise splitting. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.1 | proved |  | E0387 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2 | stuck | risk_mismatch | E0388 | Call plan_oracle(mode='review') for this stuck closure; likely replacement should avoid residual no-error theorem subgoals entirely, perhaps by proving a stronger bundle/case theorem with a different interface or moving more of the For_cons branch into a standalone helper. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.1 | proved |  | E0389 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2 | stuck | risk_mismatch | E0390 | Call plan_oracle(mode='review') for this stuck closure. Likely replacement should avoid HOL CHOOSE/metis on existential packages and avoid exposing `no_type_error_result`; perhaps prove a non-existential helper over a named `env_exn` with conclusion only the full final conjunction and a proof that handles no-error internally without instrumentation-sensitive assumption tactics, or normalize to a non-predicate no-TypeError interface. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.1 | proved |  | E0392 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2 | stuck | risk_mismatch | E0396 | Ask plan_oracle for review/replacement of the suffix proof boundary. A viable redesign likely must avoid any residual helper-consumption goal inside the suspended Resume, or move the entire For_cons branch/suspended proof boundary differently. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1 | stuck | risk_mismatch | E0397 | Call plan_oracle(mode='review') for this component with the holbuild residual evidence; do not continue local tactic search in this suffix. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.1 | proved |  | E0399 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2 | stuck | risk_mismatch | E0402 | Call plan_oracle review for a replacement/decomposition of this leaf, likely proving an external boundary/corollary whose conclusion exactly matches the full residual and avoids local visible-assumption closure inside Resume. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.1 | proved |  | E0403 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.2 | stuck | risk_mismatch | E0405 | Ask strategist to review/decompose an exact-shape suffix consumer, likely a single theorem whose conclusion matches the generalized residual or whose full conclusion exactly matches the final post-`return_exception_typed_INR_case_eq` goal. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.2.1 | stuck | risk_mismatch | E0407 | Call plan_oracle(mode='review') for this component and request a revised exact-shape final-conclusion boundary theorem/proof interface; do not continue local tactic variants in the Resume body. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.a | proved |  | E0408 | Review closure with strategist, then begin component b to patch the For_cons suffix to use the new boundary theorem. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b | stuck | risk_mismatch | E0409 | Strategist should provide an even more exact theorem/interface or different Resume suffix mechanism that avoids both theorem-antecedent validation and local visible-assumption discharge. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1 | stuck | risk_mismatch | E0411 | Call plan_oracle review for this stuck leaf. The new plan should avoid leaving a suspended Resume `P ==> P` implication-identity goal, e.g. by changing theorem/application form or proof interface rather than asking for more local implication closers. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a | stuck | risk_mismatch | E0412 | Call plan_oracle review/augment. Need revised theorem/application form that either preserves the specific `id`, `ty`, `st_body` variables in the antecedent or includes a proven packaging bridge, rather than relying on simplification to solve the generalized existential. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1 | stuck | risk_mismatch | E0415 | Ask strategist to replace this leaf with a tighter boundary theorem or suspend-style exact final branch goal whose conclusion matches the current postcondition and whose antecedents avoid existential/conjunction reconstruction in the nested Resume suffix. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.1 | proved |  | E0416 | Review closure with strategist, then begin queued component .1.2 to patch the For_cons suffix to use the new exact boundary theorem. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2 | stuck | risk_mismatch | E0420 | Call plan_oracle review for this stuck closure; request a micro-factorization or alternative suffix that avoids assumption-selection/direct tautology projection in the problematic helper/Resume context. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.1 | stuck | risk_mismatch | E0422 | Review with plan_oracle; likely need a different theorem formulation/proof boundary or a HOL4 primitive theorem proof pattern that avoids goalfrag assumption-continuation fragility. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.1.1 | stuck | risk_mismatch | E0423 | Call `plan_oracle(mode="review")` with the failed metis/PROVE evidence for a revised proof interface; do not retry forbidden manual assumption scripts unless the strategist explicitly replans. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.1.1.1 | proved |  | E0424 |  |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2 | stuck | risk_mismatch | E0426 | Call plan_oracle in review mode. Likely next plan should authorize factoring the exact residual into a local helper theorem or an explicit subgoal boundary outside the fragile suspended Resume suffix. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.1 | proved |  | E0427 | Next session should follow PLAN: begin sibling component C...1.2.2.2 and patch the For_cons suffix from `first_x_assum drule >> strip_tac` to `irule for_cons_noerr_return_projection_conj >> simp[]`, then run holbuild. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2 | stuck | risk_mismatch | E0432 | Call plan_oracle(mode='review') for this stuck closure; likely need a different local helper/factoring that proves the full final conjunction before entering the suspended suffix, or a non-existential projection theorem whose conclusion/antecedent exactly matches without existential manipulation in the Resume fragment. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1 | stuck | risk_mismatch | E0433 | Call plan_oracle review for a new decomposition/proof interface; likely needs a helper whose conclusion exactly matches the final residual and whose premises are not discharged inside the suspended Resume by exact-assumption tactics, or a different earlier prefix that avoids this instrumentation pathology. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1.a | stuck | risk_mismatch | E0435 | Call plan_oracle review/replace. Need a new proof interface avoiding existential theorem application inside the Resume entirely, perhaps a non-existential assumption produced earlier or a helper with a fully instantiated/conjunctive premise that can be applied before existential packaging. |
+| C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1.a.1 | stuck | risk_mismatch | E0436 | Call plan_oracle review/replace. Need a proof interface that avoids producing the final direct fact by a local `by` subproof whose validation depends on stripping the existential package in this Resume, perhaps destruct the body package before suspension/at a higher level, or redesign the suspended branch to not require using a theorem derived from existential validation at the final step. |
+| C2.7.1.2.2.3 | proved |  | E0315 | Review this administrative closure, then begin C2.7.1.2.2.4 to repair the recursive For_cons IH selector. |
+| C2.7.1.2.2.4 | proved |  | E0317 |  |
+| C2.7.2 | stuck | plan_incomplete | E0272 | Call plan_oracle review for C2.7.2 and request schedule/decomposition change to prioritize the existing For prefix-performance patch (`C2.7.1.1.1.a`) before C2.7.2. |
+| C3 | proved |  | E0236 | Review C3 closure with strategist, then follow the scheduled next component. |
 | C3.1 | stuck | other | E0099 | "Rewrite assign_target_TopLevelVar_no_type_error Type branch using irule approach: (1) Save env.type_defs=get_tenv cx with pop_assum mk_asm before any fs/gvs, (2) expand assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on (getting code, p, p0=StorageVarDecl/HashMapVarDecl), (3) Cases_on evaluate_type/Cases_on lookup_var_slot for witnesses, (4) For each Cases_on x subgoal: FIRST use irule boundary_theorem to see exact required premises, then derive each individually. If irule produces a premise gap, prove an adapter lemma." |
 | C3.1.2 | proved |  | E0025 |  |
 | C3.1.3 | proved |  | E0027 |  |
@@ -32,6 +199,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.6 | proved |  | E0106 |  |
 | C4 | progressed | unknown | E0105 |  |
 | C4.1 | stuck | bad_definition | E0177 | "Rewrite main theorem using ALLGOALS(FIRST [irule helper >> gvs[] >> NO_TAC, ...]) to dispatch easy cases, then individual >- blocks for remaining cases. Or prove Keccak256/Sha256 as local sub-theorems with specific constructor names (not variable blt), consumed via irule." |
+| C4.1.1.1 | proved |  | E0178 |  |
+| C4.1.1.2 | proved |  | E0180 | Call plan_oracle(mode='review', component_id='C4.1.1.2', evidence_ids=[...]) and then follow the scheduled next frontier, likely the Keccak256/Sha256 dispatcher case component. |
+| C4.1.1.3 | proved |  | E0181 | Call plan_oracle(mode='review', component_id='C4.1.1.3', evidence_ids=[...]); then follow the scheduled next component. Current build frontier is a Concat bytes dispatcher goal in `well_typed_builtin_app_no_type_error`. |
+| C4.1.2 | proved |  | E0238 | Review C4.1.2 closure with strategist, then follow Oracle next. |
+| C4.1.3 | proved |  | E0239 | Review C4.1.3 closure with strategist, then follow Oracle next. |
 | C4.2 | stuck | missing_helper | E0160 | "Rewrite ecrecover_no_type_error proof using EL-index approach or BuiltinTyping simp pattern. All boundary lemmas are proved. Consumer just needs correct variable connection." |
 | C4.2.1 | proved |  | E0161 |  |
 | C4.2.2 | progressed | other | E0162 |  |
@@ -48,6 +220,79 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C5.4.2 | proved |  | E0126 |  |
 | C5.4.3 | proved |  | E0130 |  |
 | C5.4.5 | proved |  | E0132 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree | stuck | risk_mismatch | E0438 | Strategist should redesign the final tail interface so the Resume does not have to prove any case-premise/existential residual. Likely need a helper whose conclusion and all antecedents match visible non-existential assumptions exactly, or a pre-specialized theorem/corollary usable without `irule` residuals. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.ExtractCasePremise | proved |  | E0442 | Review closure, then begin `ForConsOrdinaryExceptionCaseHelperSubtree.PackageTailGoal` to add the package helper using this extraction lemma. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix | stuck | risk_mismatch | E0491 | Call plan_oracle(mode='review') for this stuck Risk 2 leaf; request a rebased local proof boundary or permission to replace the helper cluster with one exact suffix lemma. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddBodyExceptionProjectionHelper | proved |  | E0527 | Begin the next scheduled helper component. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddBodyResultReturnExceptionProjectionHelper | proved |  | E0529 | Begin the dependent patch component and replace the failing `eval_for_cons_type_sound_core` tail to consume the whole specialized body-IH result with this helper. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddPoppedBodyBoundaryLemma | proved |  | E0497 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddPushedOriginalReturnExceptionBoundary | proved |  | E0528 | Begin the new bundled body-result return-exception projection helper component. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddReturnExceptionSuffixBoundaryHelper | proved |  | E0526 | Begin the next scheduled helper component. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddVisibleBundleBoundaryLemma | proved |  | E0498 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTail | stuck | risk_mismatch | E0500 | Call plan_oracle(mode='review') for this component. Ask for replacement/augmentation that authorizes a witness-triple popped-body boundary helper, or another exact post-context helper, because the current visible-bundle-tail statement is not enough. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailDirectBodySoundness | stuck | risk_mismatch | E0524 | Request strategist review/replacement for a bundled helper or full-tail boundary that consumes the specialized body-IH result and concludes `return_exception_typed env ret_ty (ReturnException v')` without local existential/conjunct endpoints. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithBodyProjection | stuck | risk_mismatch | E0515 | Request strategist review for a more bundled full-tail helper or a helper whose conclusion consumes the existing `stp` equality and pushed `env_consistent ... stp` internally, so the large theorem has no final exact-assumption/substitution endpoint. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithResidualWitness | stuck | risk_mismatch | E0503 | Ask strategist to replace/decompose this tail component. Likely need a helper outside the large theorem that packages the exact ReturnException/case-premise transport, or a tactic that avoids assumption extraction in the large context altogether. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithSpecializedHelper | stuck | risk_mismatch | E0507 | Call plan_oracle review to replace/decompose this tail patch. Likely need a stronger boundary before the `Cases_on y` point or to alter the upstream proof to derive a non-existential return-typing fact before entering the hostile tail context. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.RetainExistingBoundaryHelpers | proved |  | E0525 | Begin the next scheduled carry-forward/helper component. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.UseBundledCasePremiseTail | stuck | risk_mismatch | E0493 | Call plan_oracle(mode='review') for this component with the cited evidence and request a helper/boundary component or subtree replacement that avoids the large-context existential endpoint fragility. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.UseDirectCaseBundleTail | stuck | risk_mismatch | E0492 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix | stuck | risk_mismatch | E0451 | Call plan_oracle review/replace scheduling so execution can proceed with C2.3.3.1-.4 (stabilize source, add packaged full final-case helper, patch suffix) rather than the stale ForConsOrdinaryExceptionCaseHelperSubtree integration. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.AddFullFinalCaseBoundary | proved |  | E0452 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix | stuck | risk_mismatch | E0453 | Call plan_oracle review for this stuck component; likely redesign needs a no-side-condition consumer theorem or refactor out of Resume. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.1 | proved |  | E0454 | Review closure, then begin PatchResumeSuffix.2 to replace the suffix with the narrow helper consumer. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2 | stuck | risk_mismatch | E0456 | Request strategist redesign. Likely needed boundary lemma should conclude the actual existential package (plus no_type_error_result) from the visible `case INR y` premise, so the Resume suffix can use a whole-goal helper without local destructing. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.1 | proved |  | E0457 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2 | stuck | risk_mismatch | E0458 | Request strategist review/redesign. Likely integration should either use `for_cons_ordinary_exception_final_case_from_case_premise` as the top-level `irule` and then use `for_cons_ordinary_exception_residual_from_case_premise` to discharge its residual premise, or introduce a new full-goal helper that combines popped preservation premises with the residual helper. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1 | stuck | risk_mismatch | E0460 | Request oracle redesign toward a standalone full-goal/boundary helper or other non-Resume packaging of the residual/final case. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.1 | proved |  | E0461 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2 | stuck | risk_mismatch | E0463 | Call plan_oracle(mode='review') for a redesigned full-suffix helper/call-site patch that avoids exposing or consuming the final atomic `return_exception_typed` fact inside the Resume. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.1 | proved |  | E0464 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2 | stuck | risk_mismatch | E0466 | Call plan_oracle(mode='review') for a replacement exact full-goal helper or source-level patch; do not continue local destruct/ACCEPT/simp/metis variants inside the Resume. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1 | stuck | risk_mismatch | E0467 | Call plan_oracle(mode='review') for a different design; likely needs a helper that avoids selecting the existential witness fact inside the Resume entirely or a source-level tactic that uses labelled theorem/assumption before destructing. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1 | stuck | risk_mismatch | E0468 | Call plan_oracle(mode='review') for a stronger redesign. Likely need a helper theorem whose conclusion does not leave any case-premise subgoal to discharge inside Resume, or a patch earlier in the branch before the suspended proof boundary creates problematic assumptions. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.1 | proved |  | E0469 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2 | stuck | risk_mismatch | E0470 | Call plan_oracle review; likely redesign to prove/package the whole suffix outside the Resume using a broader theorem that consumes all needed assumptions as theorem inputs without leaving any residual subgoal discharged by local assumption selection. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.1 | proved |  | E0471 | Review closure, then begin the selector-free patch component `.2.2` to replace lines 3842-3846 with closed theorem construction rather than residual subgoals. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2 | stuck | risk_mismatch | E0473 | Call plan_oracle review. Likely need broader factoring (e.g. suspend/resume subpart, patch by moving more of suffix outside hostile Resume, or theorem/helper whose conclusion is used before the problematic goal boundary) rather than more local theorem-acceptance variants. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1 | stuck | risk_mismatch | E0474 | Call plan_oracle review. Need a broader redesign/factoring that avoids this suspended proof boundary altogether or changes where the suffix is proved; do not continue local endpoint variants. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.1 | proved |  | E0477 | Review closure, then begin the queued boundary-lemma component to add `eval_for_cons_type_sound_core` before the For_cons Resume block. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1.1 | proved |  | E0478 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1.2 | proved |  | E0479 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1.3 | proved |  | E0480 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.1 | proved |  | E0481 |  |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2 | stuck | risk_mismatch | E0486 | Call plan_oracle in review mode for this component with the new evidence; do not retry exact-assumption endpoint tactics or destruct the case premise without a replacement plan. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.1 | proved |  | E0487 | Call plan_oracle review for this proved helper component, then begin the dependent tail-patch component if accepted. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.2 | progressed | other | E0489 | Run holbuild on vyperTypeStmtSoundnessTheory immediately. If latest `qpat_assum` edit works, expect either `eval_for_cons_type_sound_core` to complete or a new downstream Resume obligation. If it still fails at the final full case premise, use a helper that duplicates/extracts the witness while retaining the case premise, or checkpoint/escalate if another exact CHOOSE endpoint remains. |
+| ForConsOrdinaryExceptionCaseHelperSubtree.PackageTailGoal | proved |  | E0443 | Review closure, then follow Oracle next (likely C2.2.a/C2.2.b or integration) to replace the For_cons suffix placeholder with helper calls. |
+| RetireDirectLocalAssertionForConsPatch | proved |  | E0439 |  |
+| RetiredDirectLocalAssertionForConsPatch_E0436 | proved |  | E0440 |  |
+
+## C0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0530`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 6 tools, 3 holbuild, 199,471 tok (198,301 in, 1,170 out, 188,928 cached), 39.4s, $0.17642900
+- next: Review C0 closure with strategist. The next scheduled proof should remain C2.0 but its guidance must account for the current failure: `MATCH_MP for_cons_body_result_return_exception_typed th` is being attempted before discharging the implication body, so the tail likely needs `disch_then (fn th => ... )` over the whole implication/result or a small full-tail helper, not just direct MATCH_MP on the antecedent theorem.
+
+### Attempts / Evidence
+
+- `E0183` (proved, )
+  - Ran the C0 fresh-stack audit build and targeted grep over in-scope fresh theories for `cheat`, `suspend`, and `CHEAT`. -> The current build frontier is still the prerequisite `vyperTypeBuiltinsTheory` failure in `well_typed_builtin_app_no_type_error` on a Concat bytes dispatcher goal. Targeted greps list remaining fresh-stack cheats/suspends in `vyperTypeBuiltinsScript.sml`, `vyperTypeStatePreservationScript.sml`, `vyperTypeStmtSoundnessScript.sml`, and `vyperTypeCallSoundnessScript.sml`; `vyperTypeAssignSoundnessScript.sml` only matched a comment. (`TO_type_system_rewrite-20260518T204229Z_m25738_t002`, `TO_type_system_rewrite-20260518T204229Z_m25739_t001`, `TO_type_system_rewrite-20260518T204229Z_m25739_t004`, `TO_type_system_rewrite-20260518T204229Z_m25739_t005`, `TO_type_system_rewrite-20260518T204229Z_m25739_t003`, `TO_type_system_rewrite-20260518T204229Z_m25739_t002`)
+- `E0530` (proved, , actual effort: 1 sessions, 3 steps, 6 tools, 3 holbuild, 199,471 tok (198,301 in, 1,170 out, 188,928 cached), 39.4s, $0.17642900)
+  - Run baseline holbuild/audit per C0: full `vyperSemanticsHolTheory` build, targeted `vyperTypeStatePreservationTheory` build after lock contention, and grep for cheats/suspends in fresh prop sources. -> `vyperTypeStatePreservationTheory` currently builds. Full `vyperSemanticsHolTheory` reaches `vyperTypeStmtSoundnessTheory` and fails in `eval_for_cons_type_sound_core` at the already-patched helper tail; the failing input goal is an implication from the specialized body IH result to `return_exception_typed env ret_ty (ReturnException v')`. Grep still reports cheats/suspends in builtin typing/builtins, state preservation, call soundness, and retired/out-of-scope old `vyperTypeSoundnessScript.sml`; call file has four cheats. Source around lines 4224-4231 confirms the helper-based tail is present, not the old `for_cons_return_exception_typed_from_body_ex` tail. (`TO_type_system_rewrite-20260520T182357Z_m34107_t003`, `TO_type_system_rewrite-20260520T182357Z_m34108_t003`, `TO_type_system_rewrite-20260520T182357Z_m34107_t001`, `TO_type_system_rewrite-20260520T182357Z_m34108_t001`, `TO_type_system_rewrite-20260520T182357Z_m34108_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34107_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34108_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34107_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34108_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34108_t002` (use `read_tool_output` for exact output)
 
 ## C0.1
 
@@ -89,14 +334,42 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `tool_output:TO_type_system_rewrite-20260513Tm0832_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260513Tm0826_t001` (use `read_tool_output` for exact output)
 
+## C1.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0186`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0186` (proved, )
+  - Record external prerequisite gate using existing E0185 and plan-oracle review evidence; no source edits. -> Established C1-local dependency fact: holbuild for vyperTypeStatePreservationTheory currently stops in imported vyperTypeBuiltinsTheory at well_typed_builtin_app_no_type_error Concat bytes before checking state preservation; C1.1--C1.5 are source-completion/audit tasks and final build verification is deferred to C1.6. (`TO_type_system_rewrite-20260518T204229Z_m25746_t002`, `TO_type_system_rewrite-20260518T204229Z_m25759_t001`, `TO_type_system_rewrite-20260518T204229Z_m25760_t001`, `TO_type_system_rewrite-20260518T204229Z_m25761_t001`)
+
+### Ruled Out
+
+- Editing vyperTypeBuiltinsScript.sml under C1.0
+- Rerunning long state-preservation build to reproduce known imported failure
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25746_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25759_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25760_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25761_t001` (use `read_tool_output` for exact output)
+
 ## C1.1
 
 ### Current Status
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0151`
+- latest episode: `E0531`
 - blocker: 
+- actual effort: 1 sessions, 4 steps, 8 tools, 1 holbuild, 341,132 tok (339,735 in, 1,397 out, 321,536 cached), 39.4s, $0.29367300
+- next: Review C1.1 closure, then proceed to the next assignment-target soundness branch component in the scheduled frontier.
 
 ### Attempts / Evidence
 
@@ -151,23 +424,83 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Replaced after-gvs TRY blocks for well_typed_binop_success_type with per-family handlers for: bounded_int_op_INL, bounded_decimal_op_INL, wrapped_int_op_INL_Unsigned/Signed, decimal_mul_word_bound, ExpMod w2n_lt, flag bitwise (int_and/or/xor via int_bitwise_nat_bound), ShL (int_mod/signed_int_mod_within_bound), ShR (int_shift_right_within_bound/unsigned_within_bound). -> Edit applied but NOT yet built. Known syntax issues: flag bitwise term quotations for $/\, $\/, and XOR lambda need proper HOL4 backtick syntax. ShL/ShR irule approach may fail because gvs already expanded within_int_bound_def in the goals, so goals are 0 <= expr /\ Num expr < 2**n rather than within_int_bound form. ()
 - `E0151` (proved, )
   - Fix int_shift_right_unsigned_Num_bound (gvs resolved conjunction, conj_tac failed) then use Num_int_lt + INT_LT_LE for Num monotonicity; fix w2n_word_exp_lt_256 (irule match failure with 2**256 vs dimword) by changing lemma to use dimword(:256); remove FAIL_TAC probe from well_typed_binop_success_type -> All three C1.1 theorems proved cheat-free: well_typed_binop_no_type_error, well_typed_binop_success_type, well_typed_update_binop_no_type_error. Build passes. ()
+- `E0184` (progressed, plan_incomplete)
+  - holbuild(targets=["vyperTypeStatePreservationTheory"], tactic_timeout=120, timeout=600) -> Build does not reach C1.1; it stops in prerequisite vyperTypeBuiltinsTheory at well_typed_builtin_app_no_type_error Concat bytes goal. (`TO_type_system_rewrite-20260518T204229Z_m25746_t002`)
+  - Read/grep HashMapRef helper and Resume assign_target_sound_mutual[sound_TopLevelVar]. -> C1.1 source-side proof appears already written: helper assign_target_HashMapRef_branch_no_type_error, top_level_HashMapRef_assign_no_type_error, and HashMapT branch dispatch via top_level_HashMapRef_assign_no_type_error are present; verification still unavailable because of prerequisite build failure. (`TO_type_system_rewrite-20260518T204229Z_m25748_t002`, `TO_type_system_rewrite-20260518T204229Z_m25749_t001`, `TO_type_system_rewrite-20260518T204229Z_m25751_t001`)
+- `E0185` (stuck, plan_incomplete)
+  - holbuild(targets=["vyperTypeStatePreservationTheory"], tactic_timeout=120, timeout=600) -> Build stops in imported vyperTypeBuiltinsTheory at Concat bytes dispatcher goal before reaching C1.1. (`TO_type_system_rewrite-20260518T204229Z_m25746_t002`)
+  - Inspect C1.1 source around helpers and Resume assign_target_sound_mutual[sound_TopLevelVar]. -> Found assign_target_HashMapRef_branch_no_type_error, top_level_HashMapRef_assign_no_type_error, and the HashMapT branch in sound_TopLevelVar dispatching via that helper. No C1.1 edits made. (`TO_type_system_rewrite-20260518T204229Z_m25749_t001`, `TO_type_system_rewrite-20260518T204229Z_m25751_t001`)
+  - Disprove-first/source audit for branch assumptions. -> The HashMapT branch explicitly excludes StorageVarDecl via top_level_HashMapT_not_storage_decl, derives HashMapVarDecl via top_level_HashMap_decl, requires sbs <> [] via assignable_context, and uses target_path_type_HashMapT_* lemmas to feed the no-TypeError branch helper. No concrete counterexample path was found in the source-level branch audit, but executable/EVAL probing is unavailable because prerequisites do not build. (`TO_type_system_rewrite-20260518T204229Z_m25749_t001`, `TO_type_system_rewrite-20260518T204229Z_m25756_t001`)
+- `E0531` (proved, , actual effort: 1 sessions, 4 steps, 8 tools, 1 holbuild, 341,132 tok (339,735 in, 1,397 out, 321,536 cached), 39.4s, $0.29367300)
+  - Audit current preservation-only assignment mutual theorem and verify `vyperTypeStatePreservationTheory`. -> `assign_target_preserves_state_well_typed_mutual` has all suspended branches followed by corresponding `Resume` blocks for `ScopedVar`, `TopLevelVar`, `ImmutableVar`, `TupleTargetV`, and `assign_targets_cons`, with `Finalise assign_target_preserves_state_well_typed_mutual`. `holbuild` for `vyperTypeStatePreservationTheory` succeeds, so the preservation-only branch theorem is discharged in current source. (`TO_type_system_rewrite-20260520T182357Z_m34114_t003`, `TO_type_system_rewrite-20260520T182357Z_m34112_t001`, `TO_type_system_rewrite-20260520T182357Z_m34112_t002`, `TO_type_system_rewrite-20260520T182357Z_m34112_t003`)
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20217_t002` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20238_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20264_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20269_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m20290_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34114_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34112_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34112_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34112_t003` (use `read_tool_output` for exact output)
+
+## C1.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0187`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0187` (proved, )
+  - Grep/read HashMapRef helper interface statements and wrapper tail in vyperTypeStatePreservationScript.sml; no build because C1.0 records imported builtin blocker. -> Confirmed all expected helper/interface facts exist: lookup_global_HashMapVarDecl_returns_HashMapRef, target_path_type_HashMapT_assign_target_decomp, target_path_type_HashMapT_split_leaf_runtime, assign_target_HashMapRef_branch_no_type_error, and top_level_HashMapRef_assign_no_type_error. The branch helper concludes no_type_error_result res and has premises for lookup, path split, computed slot, leaf type evaluation/well-formedness, operation runtime typing, and the assign_target equation; the wrapper consumes the helper stack and concludes no_type_error_result res for the TopLevelVar HashMapT assignment. (`TO_type_system_rewrite-20260518T204229Z_m25768_t003`, `TO_type_system_rewrite-20260518T204229Z_m25768_t001`, `TO_type_system_rewrite-20260518T204229Z_m25768_t002`)
+
+### Ruled Out
+
+- Building vyperTypeStatePreservationTheory during this source audit; C1.0 records known imported builtin blocker
+- Editing helper statements; audit found no mismatch
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25768_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25768_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25768_t002` (use `read_tool_output` for exact output)
+
+## C1.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0188`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0188` (proved, )
+  - Read the HashMapT subcase of Resume assign_target_sound_mutual[sound_TopLevelVar] and grep for key dispatch lemmas. -> Confirmed the HashMapT branch destructs assign_target_assignable_context, rules out StorageVarDecl with top_level_HashMapT_not_storage_decl, derives a layout slot via optionTheory.IS_SOME_EXISTS, derives well_formed_vtype via top_level_vtype_well_formed, aligns declaration fields using top_level_HashMap_decl followed by SOME/PAIR/var_decl_info simplification, rebuilds assign_target_assignable for the BaseTargetV, and finishes with metis_tac[top_level_HashMapRef_assign_no_type_error]. No source drift found and no edits made. (`TO_type_system_rewrite-20260518T204229Z_m25772_t001`, `TO_type_system_rewrite-20260518T204229Z_m25772_t002`)
+
+### Ruled Out
+
+- Broad expansion of assign_target_def in the resumed mutual branch
+- Inlining compute_hashmap_slot
+- Building during this source audit while the C1.0 builtin prerequisite blocker remains
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25772_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25772_t002` (use `read_tool_output` for exact output)
 
 ## C1.2
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `unknown`
-- latest episode: `E0156`
-- blocker: fs[]/gvs[] consume value_has_type (BaseTV (UintT 256)) sv/lv via [local,simp] iff lemma vht_BaseTV_UintT before boundary lemma evaluate_slice_BytesT_no_type_error can use them. Need Excl approach or proof restructuring.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0532`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 195,151 tok (194,471 in, 680 out, 180,224 cached), 21.2s, $0.18174700
+- next: Review C1.2 closure, then proceed to C1.3 ArrayRef branch if accepted.
 
 ### Attempts / Evidence
 
@@ -191,10 +524,1161 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - slice_no_type_error: after gvs[evaluate_type_def, LET_THM, AllCaseEqs()] let gvs fully consume value_has_type, then manually substitute fv/sv/lv and irule boundary lemma -> gvs DOES resolve types to concrete typed_values AND fires vht iff lemmas on value_has_type. bs/i/i' witnesses appear as assumptions. BUT gvs does NOT substitute fv=BytesV bs into evaluate_builtin assumption. fv/sv/lv remain free. irule evaluate_slice_BytesV_no_type_error fails because goal has [fv;sv;lv] not [BytesV bs;IntV i;IntV i']. (`TO_type_system_rewrite-20260516T153850Z_m21940_t001`)
 - `E0156` (stuck, unknown)
   - Fix slice_no_type_error proof: resolve abstract type variables from evaluate_type_BaseT_SOME, then use boundary lemma evaluate_slice_BytesT_no_type_error to derive contradiction on F goal -> 6+ attempts failed. Core issue: fs[]/gvs[] with [local,simp] iff lemmas (vht_BaseTV_UintT, vht_BaseTV_BytesT_Fixed/Dynamic) consume value_has_type assumptions needed as boundary lemma premises. After fs[], UintT value_has_type is decomposed to sv=IntV i + bounds, and metis_tac cannot reconstruct it because 2^256 vs literal 11579...936 is opaque to FOL. Also tried: irule (fails on F goal shape), metis_tac[vht_BaseTV_UintT] (times out due to 2^256 gap), direct Cases_on (combinatorial explosion 729 subgoals). (`TO_type_system_rewrite-20260516T153850Z_m22074_t001`)
+- `E0189` (proved, )
+  - Source audit of Resume assign_target_sound_mutual[sound_TopLevelVar] Type/StorageVarDecl/ArrayTV branch and local ArrayRef boundary lemmas. -> Confirmed the ArrayTV branch extracts root_tv and slot from assign_target_assignable_context, aligns typ = t via top_level_Type_storage_decl, derives lookup_global ArrayRef via lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef, and dispatches to assign_target_TopLevelVar_ArrayRef_branch_no_type_error. Boundary lemma itself proves no_type_error for Replace/Update/AppendOp/PopOp using resolve_array_element and ArrayRef sublemmas. (`TO_type_system_rewrite-20260518T204229Z_m25833_t001`, `TO_type_system_rewrite-20260518T204229Z_m25833_t002`, `TO_type_system_rewrite-20260518T204229Z_m25834_t001`, `TO_type_system_rewrite-20260518T204229Z_m25834_t002`)
+  - Checked current build status for vyperTypeStatePreservationTheory per session instruction and C1 prerequisite note. -> Build still stops in imported vyperTypeBuiltinsTheory at well_typed_builtin_app_no_type_error / Concat bytes before checking state preservation, matching the known external C4 prerequisite; this does not refute C1.2 source-completion. (`TO_type_system_rewrite-20260518T204229Z_m25834_t003`)
+- `E0532` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 195,151 tok (194,471 in, 680 out, 180,224 cached), 21.2s, $0.18174700)
+  - Audit current `assign_target_sound_mutual[sound_TopLevelVar]` HashMapT/HashMapRef support and verify `vyperTypeStatePreservationTheory`. -> Current source includes the HashMapRef boundary stack (`lookup_global_HashMapVarDecl_returns_HashMapRef`, `target_path_type_HashMapT_assign_target_decomp`, `target_path_type_HashMapT_split_leaf_runtime`, `assign_target_HashMapRef_branch_no_type_error`, `top_level_HashMapRef_assign_no_type_error`) and the `sound_TopLevelVar` HashMapT branch dispatches to `top_level_HashMapRef_assign_no_type_error`. `holbuild` for `vyperTypeStatePreservationTheory` succeeds, so the HashMapRef branch is discharged in current source. (`TO_type_system_rewrite-20260520T182357Z_m34118_t001`, `TO_type_system_rewrite-20260520T182357Z_m34118_t002`, `TO_type_system_rewrite-20260520T182357Z_m34118_t003`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260516T153850Z_m22074_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34118_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34118_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34118_t003` (use `read_tool_output` for exact output)
+
+## C1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0533`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 334,229 tok (333,440 in, 789 out, 318,976 cached), 22.8s, $0.25547800
+- next: Review C1.3 closure, then proceed to C1.4 if accepted.
+
+### Attempts / Evidence
+
+- `E0190` (proved, )
+  - Source audit of Resume assign_target_sound_mutual[sound_ImmutableVar] and its supporting immutable/state-preservation facts. -> Confirmed the branch first delegates preservation to assign_target_preserves_state_well_typed_mutual, then derives target path facts via target_runtime_typed_place_leaf_typed, obtains immutable value typing from runtime_consistent/env_immutables_consistent plus state_well_typed_immutables_ALOOKUP and imms_well_typed_get_source_immutables, derives evaluated leaf type and non-None leaf, expands the local ImmutableVar evaluator branch, uses assign_subscripts_no_type_error_runtime_typed for error cases, and assign_result_no_type_error_from_successful_assign for success. (`TO_type_system_rewrite-20260518T204229Z_m25838_t001`, `TO_type_system_rewrite-20260518T204229Z_m25838_t002`, `TO_type_system_rewrite-20260518T204229Z_m25838_t003`)
+- `E0533` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 334,229 tok (333,440 in, 789 out, 318,976 cached), 22.8s, $0.25547800)
+  - Audit current `assign_target_sound_mutual[sound_TopLevelVar]` ArrayRef support and verify `vyperTypeStatePreservationTheory`. -> Current source includes the ArrayRef boundary stack (`lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef`, resolve-array helpers, append/pop dynamic helpers, ordinary Replace/Update helpers, resolve-error no-TypeError helper, and `assign_target_TopLevelVar_ArrayRef_branch_no_type_error`). The `sound_TopLevelVar` StorageVarDecl/ArrayTV branch derives `lookup_global ... ArrayRef ...` and dispatches to `assign_target_TopLevelVar_ArrayRef_branch_no_type_error`. `holbuild` for `vyperTypeStatePreservationTheory` succeeds, so the ArrayRef branch is discharged in current source. (`TO_type_system_rewrite-20260520T182357Z_m34122_t001`, `TO_type_system_rewrite-20260520T182357Z_m34122_t002`, `TO_type_system_rewrite-20260520T182357Z_m34122_t003`, `TO_type_system_rewrite-20260520T182357Z_m34123_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34122_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34122_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34122_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34123_t001` (use `read_tool_output` for exact output)
+
+## C1.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0534`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 9 tools, 2 holbuild, 226,057 tok (225,012 in, 1,045 out, 206,848 cached), 30.5s, $0.22559400
+- next: Review C1.4 closure with strategist, then begin C1.5 if accepted.
+
+### Attempts / Evidence
+
+- `E0191` (proved, )
+  - Source audit of Resume assign_target_sound_mutual[sound_TupleTargetV] and tuple/list helper interface. -> Confirmed TupleTargetV branch delegates preservation to assign_target_preserves_state_well_typed_mutual, uses assign_operation_matches_target_shape_def to force Replace(ArrayV(TupleV vs)) and matching lengths, decomposes target_runtime_typed/target_value_shape/well_typed_atarget, then builds target_assignment_values_assignable for the component list via LIST_REL3_from_LIST_REL2, target_values_runtime_typed_LIST_REL3, assignable_type EVERY_EL, and evaluate_type_TupleT/value_has_type facts. It then applies the assign_targets mutual IH rather than replaying element assignment semantics. (`TO_type_system_rewrite-20260518T204229Z_m25838_t001`, `TO_type_system_rewrite-20260518T204229Z_m25842_t001`, `TO_type_system_rewrite-20260518T204229Z_m25842_t002`, `TO_type_system_rewrite-20260518T204229Z_m25842_t003`)
+- `E0534` (proved, , actual effort: 1 sessions, 4 steps, 9 tools, 2 holbuild, 226,057 tok (225,012 in, 1,045 out, 206,848 cached), 30.5s, $0.22559400)
+  - Audit existing `Resume assign_target_sound_mutual[sound_TupleTargetV]` and `[sound_ImmutableVar]`, including `Finalise assign_target_sound_mutual`. -> Both named branches are present with proofs, not cheats; TupleTargetV delegates to target-list IH via `target_assignment_values_assignable`, and ImmutableVar derives typed immutable value/path facts then excludes TypeError through subscript/assign_result helpers. (`TO_type_system_rewrite-20260520T182357Z_m34138_t001`, `TO_type_system_rewrite-20260520T182357Z_m34138_t002`)
+  - Build `vyperTypeStatePreservationTheory`. -> Build succeeds, confirming C1.4 source compiles with the branch proofs in place. (`TO_type_system_rewrite-20260520T182357Z_m34136_t003`, `TO_type_system_rewrite-20260520T182357Z_m34138_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34136_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34138_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34138_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34138_t003` (use `read_tool_output` for exact output)
+
+## C1.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0535`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 137,809 tok (137,234 in, 575 out, 132,096 cached), 17.6s, $0.10898800
+- next: Review C1.5 closure with strategist, then begin C1.6 if accepted.
+
+### Attempts / Evidence
+
+- `E0192` (proved, )
+  - Source audit of Resume assign_target_sound_mutual[sound_assign_targets_cons] and helper interface for list-recursive assignment. -> Confirmed the cons branch is resumed and finalised, delegates preservation via target_assignment_values_assignable_typed and the second conjunct of assign_target_preserves_state_well_typed_mutual, destructs LIST_REL3 through target_assignment_values_assignable_def, applies the head assign_target IH for INL and INR cases, rebuilds tail runtime/assignability/context after head success using target_assignment_values_assignable_rebuild plus assign_target_preserves_tv/assign_target_preserves_scopes_dom and assign_target_assignable_context_rebuild_EVERY, then applies the tail assign_targets IH. Early head INR case uses the head IH no-TypeError and do-block short-circuit; no separate list induction or semantic replay is introduced. (`TO_type_system_rewrite-20260518T204229Z_m25846_t001`, `TO_type_system_rewrite-20260518T204229Z_m25846_t003`)
+  - Checked syntactic suspend/finalise status in vyperTypeStatePreservationScript.sml for active C1 assignment-target mutual proof. -> Original suspend markers remain in theorem skeletons but the sound_assign_targets_cons Resume block is present and assign_target_sound_mutual is Finalised; no local unresumed C1.5 suspension was found in source evidence. (`TO_type_system_rewrite-20260518T204229Z_m25846_t002`)
+- `E0535` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 137,809 tok (137,234 in, 575 out, 132,096 cached), 17.6s, $0.10898800)
+  - Audit current `Resume assign_target_sound_mutual[sound_assign_targets_cons]` source and finalisation. -> The cons branch is present with proof and no local cheat: preservation delegates through `target_assignment_values_assignable_typed` and the preservation mutual theorem; no-TypeError splits head assignment success/error, rebuilds tail premises after head success, and applies the tail IH. `Finalise assign_target_sound_mutual` follows the Resume block. (`TO_type_system_rewrite-20260520T182357Z_m34142_t001`, `TO_type_system_rewrite-20260520T182357Z_m34142_t002`)
+  - Build `vyperTypeStatePreservationTheory`. -> Build succeeds, confirming C1.5 source compiles in current theory. (`TO_type_system_rewrite-20260520T182357Z_m34142_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34142_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34142_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34142_t003` (use `read_tool_output` for exact output)
+
+## C1.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0536`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 264,594 tok (263,820 in, 774 out, 242,176 cached), 22.1s, $0.25252800
+- next: Review C1.6 closure with strategist, then proceed to the next scheduled component (expected C2.0).
+
+### Attempts / Evidence
+
+- `E0193` (stuck, plan_incomplete)
+  - Ran holbuild(targets=['vyperTypeStatePreservationTheory'], tactic_timeout=120, timeout=600) for C1.6 checkpoint and grepped C1 suspend/Resume/Finalise markers. -> Build stops before state preservation in imported vyperTypeBuiltinsTheory at well_typed_builtin_app_no_type_error / Concat bytes. Grep confirms the relevant assign_target_sound_mutual Resume blocks and Finalise are present in source, but kernel verification of C1 cannot proceed until C4 builtin prerequisite is repaired. (`TO_type_system_rewrite-20260518T204229Z_m25851_t002`, `TO_type_system_rewrite-20260518T204229Z_m25851_t001`)
+- `E0536` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 264,594 tok (263,820 in, 774 out, 242,176 cached), 22.1s, $0.25252800)
+  - Audit `vyperTypeAssignSoundnessScript.sml` wrappers `assign_target_no_type_error`, `assign_target_update_no_type_error`, and `assign_target_append_no_type_error`. -> All three wrappers are present without cheats and are direct projections/corollaries of `assign_target_sound_mutual`, deriving operation runtime typing for Update/Append as needed. Grep found no cheat/suspend in the wrapper file. (`TO_type_system_rewrite-20260520T182357Z_m34146_t002`, `TO_type_system_rewrite-20260520T182357Z_m34147_t001`)
+  - Build `vyperTypeAssignSoundnessTheory`. -> Build succeeds, confirming the assignment compatibility wrappers check against the strengthened assignment soundness interface. (`TO_type_system_rewrite-20260520T182357Z_m34146_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34146_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34146_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34147_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0194`
+- blocker: After adding local bytes/string Concat dispatch helpers and using them in well_typed_builtin_app_no_type_error, holbuild no longer reports the original bytes Concat goal; it advances to a bytes Slice goal in the same theorem. C1.6.1 only authorizes the Concat prerequisite and explicitly says to escalate later imported/builtin failures rather than broaden this leaf.
+- next: Call plan_oracle(mode='review', component_id='C1.6.1', evidence_ids=[...]) so the strategist can accept partial Concat progress and schedule/decompose the newly exposed Slice bytes dispatcher prerequisite.
+
+### Attempts / Evidence
+
+- `E0194` (stuck, plan_incomplete)
+  - Added local concat_bytes_dispatch_no_type_error with explicit quantifiers and direct proof from LIST_REL_value_has_type_imp_combined, list_rel_bytes_all_bytesv, evaluate_builtin/evaluate_concat unfolding, and evaluate_concat_loop_bytes_no_type_error. -> Helper proof now builds through its former loop-application failure; the original bytes Concat dispatcher goal is no longer the build frontier. (`TO_type_system_rewrite-20260518T204229Z_m25911_t001`)
+  - Added analogous local concat_string_dispatch_no_type_error and tried both dispatch helpers in the Concat section of well_typed_builtin_app_no_type_error; removed the overly-broad final fallback that applied the bytes helper to non-Concat cases. -> Build progressed past Concat/string obstruction and now fails at bytes Slice in the same dispatcher theorem, showing the C1.6.1 decomposition was too narrow for the actual theorem verification checkpoint. (`TO_type_system_rewrite-20260518T204229Z_m25926_t001`, `TO_type_system_rewrite-20260518T204229Z_m25929_t001`)
+  - Did not edit Slice proof beyond exposing the goal; left localized Concat helper/source progress in place for strategist review. -> Current source is partial: Concat helper changes are present, but vyperTypeBuiltinsTheory still fails at well_typed_builtin_app_no_type_error / Slice bytes. (`TO_type_system_rewrite-20260518T204229Z_m25929_t001`)
+
+### Ruled Out
+
+- irule concat_bytes_dispatch_no_type_error failed when helper conclusion had implicit quantification over msg; explicit quantifiers plus qspecl_then were needed.
+- A broad final fallback applying the bytes Concat helper after all other TRY blocks misapplied to string Concat and Slice goals; it was removed.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25929_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25926_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25911_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25918_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25925_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0196`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0195` (progressed, other)
+  - Added slice_bytes_dispatch_no_type_error matching the PLAN statement and attempted to delegate to slice_bytes_no_type_error using literal ts = [BaseT (BytesT bd); BaseT (UintT 256); BaseT (UintT 256)]. -> Statement parses/build reaches the new helper, but the proof currently fails after irule slice_bytes_no_type_error; qexistsl was attempted too early and then after side-condition simplification the remaining goal is the existential package for ts/tvs. (`TO_type_system_rewrite-20260518T204229Z_m25935_t001`, `TO_type_system_rewrite-20260518T204229Z_m25951_t001`)
+- `E0196` (proved, )
+  - Removed premature conj_tac steps after irule slice_bytes_no_type_error; after gvs discharged numeric/type side conditions, supplied the literal three-element ts and tvs witnesses, and included evaluate_type_def/LET_THM in final simplification. -> slice_bytes_dispatch_no_type_error now proves; holbuild advances past the helper to well_typed_builtin_app_no_type_error, exposing the expected bytes Slice integration branch. (`TO_type_system_rewrite-20260518T204229Z_m25960_t001`, `TO_type_system_rewrite-20260518T204229Z_m25959_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25960_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25959_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0197`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0197` (proved, )
+  - Added local `slice_string_dispatch_no_type_error` immediately after `slice_string_builtin_no_type_error`, mirroring the proven bytes dispatch helper with literal `ts = [BaseT (StringT m); BaseT (UintT 256); BaseT (UintT 256)]` and `tvs` witnesses. -> The new string Slice dispatch helper proves; holbuild advances to the planned main-theorem Slice integration obligation in `well_typed_builtin_app_no_type_error`. (`TO_type_system_rewrite-20260518T204229Z_m25969_t001`, `TO_type_system_rewrite-20260518T204229Z_m25970_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25970_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25969_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0198`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0198` (proved, )
+  - Inserted guarded Slice dispatch TRY blocks before generic slice wrapper fallbacks, using qspecl_then ... mp_tac with `slice_bytes_dispatch_no_type_error` and `slice_string_dispatch_no_type_error`. -> Slice bytes/string goals are discharged; holbuild advances to a later `MakeArray` branch in `well_typed_builtin_app_no_type_error`, confirming the Slice integration component is complete. (`TO_type_system_rewrite-20260518T204229Z_m25975_t001`, `TO_type_system_rewrite-20260518T204229Z_m25976_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25976_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25975_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0199`
+- blocker: After the completed Slice dispatch integration, `holbuild vyperTypeBuiltinsTheory` still fails inside `well_typed_builtin_app_no_type_error` on a later `MakeArray o' b` branch. This branch is outside the C1.6.1 Slice-specific refinement and needs strategist decomposition or classification before further edits.
+- next: Call plan_oracle review for C1.6.1.4 with the MakeArray failed-goal evidence so the strategist can decompose the next builtin dispatcher prerequisite.
+
+### Attempts / Evidence
+
+- `E0199` (stuck, plan_incomplete)
+  - Ran the authorized checkpoint build after Slice dispatch helpers and integration were installed. -> Build advanced past Concat and Slice but did not store `well_typed_builtin_app_no_type_error`; first remaining goal is `well_typed_builtin_app ty (MakeArray o' b) ts` plus MAP/evaluate_type/LIST_REL/context/accounts assumptions, conclusion `evaluate_builtin cx acc ty (MakeArray o' b) vs <> INR (TypeError msg)`. Per checkpoint instructions, this is a later exposed branch requiring replanning rather than ad-hoc broadening. (`TO_type_system_rewrite-20260518T204229Z_m25976_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25976_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0200`
+- blocker: 
+- next: Review closure, then run/close the planned C1.6.1.4.2 checkpoint with the new AddMod failed-goal evidence if scheduled.
+
+### Attempts / Evidence
+
+- `E0200` (proved, )
+  - Added local exact-branch corollary `make_array_dispatch_no_type_error` immediately after `make_array_no_type_error`, proved by `drule_all make_array_no_type_error` and specializing `msg`; replaced the brittle MakeArray `irule` attempt in the dispatcher with an explicit `qspecl_then ... mp_tac make_array_dispatch_no_type_error >> simp[]`. -> The MakeArray branch is eliminated: holbuild advances past MakeArray and now fails later in `well_typed_builtin_app_no_type_error` on an `AddMod` branch, confirming this component's target is complete. (`TO_type_system_rewrite-20260518T204229Z_m25990_t001`, `TO_type_system_rewrite-20260518T204229Z_m25988_t001`, `TO_type_system_rewrite-20260518T204229Z_m25989_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25990_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25988_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25989_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.4.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` Checkpoint after MakeArray repair advanced past MakeArray but fails later in well_typed_builtin_app_no_type_error on AddMod branch. Per component instructions, this later builtin branch is outside current MakeArray checkpoint repair and should be decomposed before edits.
+- latest episode: `E0201`
+- blocker: First failed remaining goal is AddMod no-TypeError: assumptions include `[SOME tv; SOME tv; SOME tv] = MAP SOME tvs`, `evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME tv`, `LIST_REL value_has_type tvs vs`, `context_well_typed cx`, `accounts_well_typed acc`; conclusion `evaluate_builtin cx acc (BaseT (UintT 256)) AddMod vs ≠ INR (TypeError msg)`.
+- next: Call plan_oracle(mode='review', component_id='C1.6.1.4.2') so the strategist can accept the checkpoint and add/decompose an AddMod repair leaf before any edits.
+
+### Attempts / Evidence
+
+- `E0201` (stuck, plan_incomplete)
+  - holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600) after MakeArray dispatcher repair -> Build resumed at well_typed_builtin_app_no_type_error and failed at QED with AddMod as first remaining goal; MakeArray is no longer the exposed blocker. (`TO_type_system_rewrite-20260518T204229Z_m26000_t001`)
+
+### Ruled Out
+
+- Residual MakeArray blocker: current first failed goal is AddMod, so MakeArray branch was eliminated.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26000_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.4.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0216`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0216` (proved, )
+  - Audited existing local addmod_no_type_error helper in vyperTypeBuiltinsScript.sml and used subsequent holbuild evidence that replay advanced well past this helper to the ECRecover dispatcher residual. -> The AddMod helper exists with the planned statement shape and is accepted by holbuild; later build failures occur in the ECRecover bridge, not AddMod. (`TO_type_system_rewrite-20260518T204229Z_m26328_t001`, `TO_type_system_rewrite-20260518T204229Z_m26400_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26400_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26328_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.4.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0217`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0217` (proved, )
+  - Audited existing source integration line for AddMod helper and used prior holbuild replay evidence that passed AddMod and exposed ECRecover later. -> AddMod branch is no longer the current blocker; the dedicated helper call is integrated in the dispatcher proof. (`TO_type_system_rewrite-20260518T204229Z_m26411_t001`, `TO_type_system_rewrite-20260518T204229Z_m26400_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26411_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26400_t001` (use `read_tool_output` for exact output)
+
+## C1.6.1.4.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0219`
+- blocker: 
+- next: Review closure, then follow scheduler to ECRecover leaves.
+
+### Attempts / Evidence
+
+- `E0218` (stuck, plan_incomplete)
+  - Ran `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` after AddMod integration. -> Build resumes in `ecrecover_dispatch_no_type_error` and fails with 8 ECRecover residual goals; AddMod is past the failure point. (`TO_type_system_rewrite-20260518T204229Z_m26420_t001`)
+- `E0219` (proved, )
+  - Retired checkpoint per augmented PLAN; no proof edits. Used recorded holbuild result and strategist augmentation that reclassifies the checkpoint as accepted handoff. -> Checkpoint complete: AddMod no longer blocks; ECRecover residual is explicitly handed off to ECRecover components. (`TO_type_system_rewrite-20260518T204229Z_m26420_t001`, `TO_type_system_rewrite-20260518T204229Z_m26423_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26420_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26423_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` State-preservation checkpoint cannot proceed because build still stops in imported vyperTypeBuiltinsTheory at well_typed_builtin_app_no_type_error AddMod branch. This confirms C1.6.1 builtin dispatcher prerequisite is not complete despite C1.6.2 being scheduled first.
+- latest episode: `E0202`
+- blocker: holbuild(targets=["vyperTypeStatePreservationTheory"]) resumes vyperTypeBuiltinsTheory and fails at QED of well_typed_builtin_app_no_type_error. First remaining goal is AddMod no-TypeError under assumptions `[SOME tv; SOME tv; SOME tv] = MAP SOME tvs`, `evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME tv`, `LIST_REL value_has_type tvs vs`, `context_well_typed cx`, `accounts_well_typed acc`.
+- next: Call plan_oracle review for C1.6.2; likely schedule the already-planned C1.6.1.4.2.1 AddMod helper before retrying this checkpoint.
+
+### Attempts / Evidence
+
+- `E0202` (stuck, plan_incomplete)
+  - Run authorized checkpoint holbuild(targets=["vyperTypeStatePreservationTheory"], tactic_timeout=120, timeout=600) -> Checkpoint fails before reaching state-preservation source, in imported vyperTypeBuiltinsTheory AddMod branch; no source edits made. (`TO_type_system_rewrite-20260518T204229Z_m26006_t001`)
+
+### Ruled Out
+
+- State-preservation local failure: build does not reach vyperTypeStatePreservationScript.sml.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26006_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0203`
+- blocker: 
+- next: Review closure, then begin C1.6.2.2 to integrate the helper into well_typed_builtin_app_no_type_error.
+
+### Attempts / Evidence
+
+- `E0203` (proved, )
+  - Added local theorem addmod_no_type_error before well_typed_builtin_app_no_type_error; proof decomposes MAP/LIST_REL branch, uses evaluate_type_BaseT_SOME and gvs[evaluate_builtin_def]. -> holbuild(targets=["vyperTypeBuiltinsTheory"]) replayed addmod_no_type_error successfully and advanced to the later dispatcher theorem failure, showing the local helper itself is proved. (`TO_type_system_rewrite-20260518T204229Z_m26023_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26023_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0204`
+- blocker: 
+- next: Review C1.6.2.2 closure, then follow the PLAN frontier. The next visible residual is MulMod in the same dispatcher, so do not patch it ad hoc unless a component authorizes that branch.
+
+### Attempts / Evidence
+
+- `E0204` (proved, )
+  - Added narrow AddMod proof step in well_typed_builtin_app_no_type_error using local addmod_no_type_error via mp_tac/simp after the initial irule TRY did not match. -> holbuild(targets=["vyperTypeBuiltinsTheory"]) advanced from AddMod residual to MulMod residual, confirming AddMod case is discharged. (`TO_type_system_rewrite-20260518T204229Z_m26174_t001`, `TO_type_system_rewrite-20260518T204229Z_m26175_t001`, `TO_type_system_rewrite-20260518T204229Z_m26176_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26175_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26176_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0205`
+- blocker: The post-AddMod builtin checkpoint does advance past the previous AddMod residual, but `holbuild(targets=["vyperTypeBuiltinsTheory"])` still fails in `well_typed_builtin_app_no_type_error` on the next analogous `MulMod` no-TypeError branch. The active checkpoint explicitly says to escalate on a new first residual branch rather than patching unrelated cases without a plan update.
+- next: Call plan_oracle review/augmentation for C1.6.2.3 with the MulMod residual evidence. Likely need a sibling prerequisite leaf analogous to AddMod for MulMod, but do not create or edit it without strategist authorization.
+
+### Attempts / Evidence
+
+- `E0205` (stuck, plan_incomplete)
+  - Ran the authorized checkpoint `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` after AddMod integration. -> Build got past AddMod but failed at QED of `well_typed_builtin_app_no_type_error` with first residual `evaluate_builtin cx acc (BaseT (UintT 256)) MulMod vs <> INR (TypeError msg)` under the same three-uint typedness premises. (`TO_type_system_rewrite-20260518T204229Z_m26181_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26181_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0206`
+- blocker: 
+- next: Review C1.6.2.3.1 closure, then begin the planned C1.6.2.3.2 checkpoint. The visible next residual is Bop, but do not patch it unless authorized by the checkpoint/plan.
+
+### Attempts / Evidence
+
+- `E0206` (proved, )
+  - Copied the AddMod local proof pattern for `mulmod_no_type_error` and added a narrow `mp_tac mulmod_no_type_error >> simp[] >> NO_TAC` dispatcher TRY immediately after AddMod. -> holbuild(targets=["vyperTypeBuiltinsTheory"]) replayed through the new helper and no longer reports MulMod; the first remaining residual is a later Bop branch. (`TO_type_system_rewrite-20260518T204229Z_m26187_t001`, `TO_type_system_rewrite-20260518T204229Z_m26188_t001`, `TO_type_system_rewrite-20260518T204229Z_m26189_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26187_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26188_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26189_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0207`
+- blocker: The post-MulMod builtin checkpoint advances past the previous MulMod residual, but `holbuild(targets=["vyperTypeBuiltinsTheory"])` still fails in `well_typed_builtin_app_no_type_error` on a later `Bop` no-TypeError branch. The active checkpoint explicitly authorizes only verification/escalation for a new first residual, not speculative patching.
+- next: Call plan_oracle review/augmentation for C1.6.2.3.2 with the Bop residual evidence. Likely need to repair the Bop dispatch into `well_typed_binop_no_type_error`, but do not edit without strategist authorization.
+
+### Attempts / Evidence
+
+- `E0207` (stuck, plan_incomplete)
+  - Ran the authorized checkpoint `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` after MulMod integration. -> Build got past MulMod but failed at QED of `well_typed_builtin_app_no_type_error` with first residual `evaluate_builtin cx acc ty (Bop b) vs <> INR (TypeError msg)` under `well_typed_binop ty b h h'`, type-evaluation map equality, runtime LIST_REL typedness, and context/account well-typedness. (`TO_type_system_rewrite-20260518T204229Z_m26193_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26193_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0208`
+- blocker: 
+- next: Review C1.6.2.3.2.1 closure, then begin C1.6.2.3.2.2 to replace the brittle Bop TRY block in well_typed_builtin_app_no_type_error with the new helper.
+
+### Attempts / Evidence
+
+- `E0208` (proved, )
+  - Added suggested local Bop bridge theorem; initial over-explicit list destruct and qspecl attempts failed due variable naming/specialization issues; simplified proof to `Cases_on tvs >> gvs[evaluate_builtin_def] >> metis_tac[well_typed_binop_no_type_error]`. -> holbuild(targets=["vyperTypeBuiltinsTheory"]) replayed past `well_typed_builtin_bop_no_type_error` and failed at the main `well_typed_builtin_app_no_type_error` Bop residual, confirming the local bridge theorem itself is proved and ready for integration. (`TO_type_system_rewrite-20260518T204229Z_m26201_t001`, `TO_type_system_rewrite-20260518T204229Z_m26203_t001`, `TO_type_system_rewrite-20260518T204229Z_m26205_t001`, `TO_type_system_rewrite-20260518T204229Z_m26207_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26200_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26206_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26207_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0209`
+- blocker: 
+- next: Review C1.6.2.3.2.2 closure, then begin the scheduled next component for the new BlockHash/builtin residual rather than broadening this Bop integration leaf.
+
+### Attempts / Evidence
+
+- `E0209` (proved, )
+  - First tried PLAN's direct `irule well_typed_builtin_bop_no_type_error >> gvs[]` integration. -> Build still failed at the original Bop residual, indicating `irule` did not instantiate helper antecedents adequately in this dispatcher context. (`TO_type_system_rewrite-20260518T204229Z_m26229_t001`)
+  - Replaced Bop TRY with confined `metis_tac[well_typed_builtin_bop_no_type_error] >> NO_TAC`. -> Build advanced to later BlockHash residual; original Bop branch no longer appears as first failure. (`TO_type_system_rewrite-20260518T204229Z_m26230_t001`, `TO_type_system_rewrite-20260518T204229Z_m26231_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26229_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26231_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26230_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0211`
+- blocker: 
+- next: Review this duplicate scheduler-clearing closure, then begin C1.6.2.3.2.4 for the BlockHash helper/integration if it becomes Oracle next.
+
+### Attempts / Evidence
+
+- `E0210` (proved, )
+  - Ran the authorized post-Bop `holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=120, timeout=600)` checkpoint after integrating the Bop bridge. -> Build failed later in `well_typed_builtin_app_no_type_error` at a new BlockHash residual, confirming the Bop repair was validated in isolation and identifying the next first residual for planning. (`TO_type_system_rewrite-20260518T204229Z_m26231_t001`)
+- `E0211` (proved, )
+  - Re-began C1.6.2.3.2.3 only because the scheduler still made it the sole beginable component after E0210 review; no source edits or builds were performed under the duplicate active episode. -> The same checkpoint evidence applies: holbuild advanced past the Bop branch and exposed BlockHash as the next first residual. This closure exists to terminate the accidentally re-opened active component so the planned BlockHash component can be scheduled. (`TO_type_system_rewrite-20260518T204229Z_m26231_t001`, `TO_type_system_rewrite-20260518T204229Z_m26237_t001`, `TO_type_system_rewrite-20260518T204229Z_m26241_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26231_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26237_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26241_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0212`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0212` (proved, )
+  - Added local evaluate_block_hash_no_type_error and blockhash_no_type_error helper in vyperTypeBuiltinsScript.sml, then rebuilt vyperTypeBuiltinsTheory. -> Initial helper with simp[evaluate_builtin_def] left an assumption equating evaluate_builtin to TypeError; switched helper finish to gvs[evaluate_builtin_def], which uses the defining equation and the local evaluate_block_hash no-TypeError simp lemma. (`TO_type_system_rewrite-20260518T204229Z_m26273_t001`, `TO_type_system_rewrite-20260518T204229Z_m26274_t001`, `TO_type_system_rewrite-20260518T204229Z_m26275_t001`)
+  - Ran holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=120, timeout=600) after the fix. -> Build advanced past the BlockHash residual; first remaining failure is now a later ECRecover dispatcher branch, satisfying this component's local repair objective. (`TO_type_system_rewrite-20260518T204229Z_m26276_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26270_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26273_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26274_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26275_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26276_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0214`
+- blocker: 
+- next: Review this duplicate checkpoint-cleanup closure; then begin C1.6.2.3.2.6 for ECRecover bridge if it becomes Oracle next.
+
+### Attempts / Evidence
+
+- `E0213` (proved, )
+  - Ran the required checkpoint build holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=120, timeout=600) after the BlockHash repair. -> Build advanced past the previous BlockHash residual and exposed the next first residual in well_typed_builtin_app_no_type_error: ECRecover with MAP/evaluate_type assumptions for [bytes32; uint256; uint256; uint256], return AddressT, LIST_REL value_has_type, and conclusion evaluate_builtin ... ECRecover vs <> INR (TypeError msg). Per checkpoint instructions no opportunistic edit was made. (`TO_type_system_rewrite-20260518T204229Z_m26276_t001`)
+- `E0214` (proved, )
+  - Re-began the only legal Oracle-next component C1.6.2.3.2.5 after scheduler kept it beginable despite E0213 being reviewed/accepted. -> No new build/edit was required or performed; query_dossier confirms E0213 already proved this checkpoint and the active PLAN text says the checkpoint closes and motivates ECRecover. This duplicate closure is only to clear the stale active checkpoint gate after review/replace/augment scheduler correction attempts failed. (`TO_type_system_rewrite-20260518T204229Z_m26291_t001`, `TO_type_system_rewrite-20260518T204229Z_m26294_t001`, `TO_type_system_rewrite-20260518T204229Z_m26295_t001`, `TO_type_system_rewrite-20260518T204229Z_m26296_t001`)
+  - Original checkpoint build after BlockHash repair. -> holbuild advanced past BlockHash and exposed ECRecover as the next residual in well_typed_builtin_app_no_type_error, satisfying the checkpoint objective. (`TO_type_system_rewrite-20260518T204229Z_m26276_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26276_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26291_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26294_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26295_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26296_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.6
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0215`
+- blocker: The planned ECRecover bridge shape is not de-risked enough. Existing ecrecover_no_type_error can prove fixed concrete tails only when the dispatcher residual tail exactly matches the instantiation; but well_typed_builtin_app_no_type_error exposes multiple ECRecover residual variants where tail args may be Uint256 or Bytes32. Attempts to prove a polymorphic bridge over a,b,c ∈ {Uint256,Bytes32} leave existential/list instantiation goals or require per-case MAP equalities that the current proof shape does not discharge. Repeated direct irule/mp_tac/metis/HINT_EXISTS attempts failed.
+
+### Attempts / Evidence
+
+- `E0215` (stuck, risk_mismatch)
+  - Added local ecrecover_dispatch_no_type_error for the exact [Bytes32; Uint256; Uint256; Uint256] residual and integrated it in the dispatcher. -> Bridge proved for that one exact shape, and holbuild advanced past the original all-Uint256 ECRecover residual to a later ECRecover variant with last argument Bytes32, showing the component plan under-covered the actual residual family. (`TO_type_system_rewrite-20260518T204229Z_m26340_t001`)
+  - Generalized bridge to a,b,c with each either Uint256 or Bytes32 and tried case-splitting plus metis_tac[ecrecover_no_type_error]. -> Failed after case split; metis could not instantiate the existential/list shape of ecrecover_no_type_error from the concrete MAP/LIST_REL assumptions. (`TO_type_system_rewrite-20260518T204229Z_m26383_t001`)
+  - Tried unfolding evaluate_builtin_def in the generalized bridge to see whether the lower-level evaluate_ecrecover goal was simpler. -> The residual became evaluate_ecrecover vs <> INR(TypeError msg), confirming the proof needs value/list decomposition or a stronger lower-level bridge, not just builtin dispatcher rewriting. (`TO_type_system_rewrite-20260518T204229Z_m26390_t001`)
+  - Tried mp_tac/Q.INST and irule/Q.INST variants of ecrecover_no_type_error with explicit ts/tvs instantiations. -> Still left implication/existential goals tying a,b,c and tvs to the MAP equality; simplification did not discharge them robustly. (`TO_type_system_rewrite-20260518T204229Z_m26400_t001`)
+
+### Ruled Out
+
+- Single exact [Bytes32;Uint256;Uint256;Uint256] bridge is insufficient because the next residual has a Bytes32 tail argument.
+- Direct irule/metis on ecrecover_no_type_error is still brittle for generalized ECRecover argument lists.
+- Unfolding evaluate_builtin_def at dispatcher/bridge level reduces to evaluate_ecrecover vs but does not close without value/list decomposition.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26340_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26383_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26390_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26400_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0221`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0221` (proved, )
+  - Insert runtime value-list ECRecover lemma using tail converter facts from the universal tail typing hypothesis, decompose 4-element list with list_el_decomp_4, split head BytesV case, and finish via evaluate_ecrecover_no_type_error. -> holbuild accepted the new helper and proceeded to the next theorem ecrecover_dispatch_no_type_error. (`TO_type_system_rewrite-20260518T204229Z_m26454_t001`, `TO_type_system_rewrite-20260518T204229Z_m26459_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26454_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26459_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.6.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0222`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0222` (proved, )
+  - Replace ecrecover_dispatch_no_type_error proof: strip/case-simplify the MAP/LIST_REL assumptions, destruct tvs, call ecrecover_value_list_no_type_error, discharge finite tail predicate by i=1/2/3 arithmetic and LIST_REL_EL_EQN/evaluate_type simplification. -> holbuild replayed past ecrecover_dispatch_no_type_error; next failure is ECAdd in well_typed_builtin_app_no_type_error, so the dispatcher-shape ECRecover bridge is proved. (`TO_type_system_rewrite-20260518T204229Z_m26482_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26475_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26482_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.6.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0223`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0223` (proved, )
+  - Run `holbuild(targets=["vyperTypeBuiltinsTheory"])` after the ECRecover bridge repair to validate integration in `well_typed_builtin_app_no_type_error`. -> Build advanced past ECRecover and now fails at an ECAdd residual with `[SOME tv; SOME tv] = MAP SOME tvs`, `ArrayT (BaseT (UintT 256)) (Fixed 2)`, and `LIST_REL value_has_type tvs vs`; this is the next constructor residual, not an ECRecover failure. (`TO_type_system_rewrite-20260518T204229Z_m26487_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26482_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26487_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.3.2.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0224`
+- blocker: 
+- next: Review checkpoint closure with strategist; request/expect a PLAN component for the newly exposed ECAdd residual before editing further.
+
+### Attempts / Evidence
+
+- `E0224` (proved, )
+  - Run `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` after ECRecover bridge integration. -> Build failed later at ECAdd residual with assumptions `[SOME tv; SOME tv] = MAP SOME tvs`, array uint256[2] evaluate_type, `LIST_REL value_has_type tvs vs`, `context_well_typed cx`, and `accounts_well_typed acc`; this confirms the ECRecover residual disappeared and identifies the next local builtin bridge needed. (`TO_type_system_rewrite-20260518T204229Z_m26492_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26492_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4
+
+### Current Status
+
+- result: `abandoned`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0225`
+- blocker: `vyperTypeStatePreservationTheory` still cannot reach state-preservation obligations because imported prerequisite `vyperTypeBuiltinsTheory` now fails at a later ECAdd residual in `well_typed_builtin_app_no_type_error`. ECRecover is cleared, but the builtin prerequisite is not complete; this checkpoint was scheduled before the full builtin theory build passed.
+- next: Review this deferral with strategist and add/schedule a component for the ECAdd residual before retrying state preservation.
+
+### Attempts / Evidence
+
+- `E0220` (abandoned, plan_incomplete)
+  - Inspected active component context after begin and compared it to current build evidence; called strategist for schedule/dependency repair instead of rerunning state-preservation through known builtin failure. -> Confirmed this component must wait until `C1.6.2.3.2.7` closes successfully; no local proof/build work is appropriate now. (`TO_type_system_rewrite-20260518T204229Z_m26420_t001`, `TO_type_system_rewrite-20260518T204229Z_m26430_t001`)
+- `E0225` (abandoned, plan_incomplete)
+  - Run `holbuild(targets=["vyperTypeStatePreservationTheory"], tactic_timeout=120, timeout=600)` as the downstream checkpoint after ECRecover closure. -> Build did not reach state-preservation source; it imported/replayed `vyperTypeBuiltinsTheory` and failed at the ECAdd branch of `well_typed_builtin_app_no_type_error`, proving that a new builtin prerequisite residual must be planned before this checkpoint can be meaningful. (`TO_type_system_rewrite-20260518T204229Z_m26497_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26497_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0226`
+- blocker: 
+- next: Review closure, then begin C1.6.2.4.2 to integrate `ecadd_dispatch_no_type_error` into `well_typed_builtin_app_no_type_error`.
+
+### Attempts / Evidence
+
+- `E0226` (proved, )
+  - Added residual-shaped `ecadd_dispatch_no_type_error` consuming `[SOME tv; SOME tv] = MAP SOME tvs`, evaluated `uint256[2]` array type, and `LIST_REL` runtime typing; proof destructs `tvs`, uses `gvs[evaluate_type_def]`, applies `extract_ec_point_uint256_2_not_none` to both arguments, then unfolds only `evaluate_builtin_def`/`evaluate_ecadd_def`. -> Accepted by `holbuild`; build advanced to the later integration target in `well_typed_builtin_app_no_type_error`. (`TO_type_system_rewrite-20260518T204229Z_m26541_t001`)
+  - Earlier proof tried destructing already-simplified list variables `t`/`vs`; corrected after holbuild showed they were no longer free. -> Avoided stale variable case splits and simplified proof to match the actual post-`gvs[]` goal shape. (`TO_type_system_rewrite-20260518T204229Z_m26534_t001`, `TO_type_system_rewrite-20260518T204229Z_m26536_t001`, `TO_type_system_rewrite-20260518T204229Z_m26539_t001`)
+
+### Ruled Out
+
+- Do not case split list variables after `gvs[]` has already specialized them away.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26541_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26540_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26537_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0227`
+- blocker: 
+- next: Review closure with strategist; request/schedule a new low-risk ECMul residual bridge/checkpoint before retrying state preservation.
+
+### Attempts / Evidence
+
+- `E0227` (proved, )
+  - Added `TRY (metis_tac[ecadd_dispatch_no_type_error] >> NO_TAC)` before the older fragile `irule ecadd_no_type_error` attempt in `well_typed_builtin_app_no_type_error`. -> `vyperTypeBuiltinsTheory` replay advanced past the ECAdd residual and exposed a later ECMul residual: `[SOME tv; evaluate_type ... (BaseT (UintT 256))] = MAP SOME tvs` with `evaluate_type ... (ArrayT ... Fixed 2) = SOME tv` and `LIST_REL value_has_type tvs vs`. (`TO_type_system_rewrite-20260518T204229Z_m26548_t001`)
+
+### Ruled Out
+
+- The first remaining builtin blocker is no longer ECAdd; do not keep editing ECAdd bridge tactics under this component.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26548_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26547_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3
+
+### Current Status
+
+- result: `abandoned`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0228`
+- blocker: `vyperTypeStatePreservationTheory` still cannot reach state-preservation obligations because imported prerequisite `vyperTypeBuiltinsTheory` now fails at a later ECMul residual in `well_typed_builtin_app_no_type_error`. ECAdd is cleared, but the builtin prerequisite is not complete; this checkpoint was authorized only to classify the next blocker and must not continue past a new builtin residual without strategist review.
+- next: Review with strategist and add/schedule a low-risk ECMul residual bridge/checkpoint before retrying state preservation.
+
+### Attempts / Evidence
+
+- `E0228` (abandoned, plan_incomplete)
+  - Ran `holbuild(targets=["vyperTypeStatePreservationTheory"], tactic_timeout=120, timeout=600)` as the corrected post-ECAdd state-preservation checkpoint. -> Build failed before state preservation, while importing `vyperTypeBuiltinsTheory`, at an ECMul residual: `[SOME tv; evaluate_type (get_tenv cx) (BaseT (UintT 256))] = MAP SOME tvs`, `evaluate_type ... (ArrayT ... Fixed 2) = SOME tv`, `LIST_REL value_has_type tvs vs`, conclusion `evaluate_builtin ... ECMul vs <> INR (TypeError msg)`. (`TO_type_system_rewrite-20260518T204229Z_m26552_t001`)
+
+### Ruled Out
+
+- Do not proceed to state-preservation source edits while builtin theory fails at ECMul.
+- Do not continue ad hoc ECMul editing under C1.6.2.4.3; this child was build-only and the plan says to escalate new builtin residuals.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26552_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0229`
+- blocker: 
+- next: Review closure, then begin C1.6.2.4.3.2 to integrate `ecmul_dispatch_no_type_error` into `well_typed_builtin_app_no_type_error`.
+
+### Attempts / Evidence
+
+- `E0229` (proved, )
+  - Added residual-shaped `ecmul_dispatch_no_type_error` consuming `[SOME tv; evaluate_type ... (BaseT (UintT 256))] = MAP SOME tvs`, evaluated point-array result type, and `LIST_REL` runtime typing; proof destructs `tvs`, simplifies `evaluate_type_def`, applies `extract_ec_point_uint256_2_not_none` to the point argument, and unfolds only `evaluate_builtin_def`/`evaluate_ecmul_def`. -> Accepted by `holbuild`; build advanced to the later integration target in `well_typed_builtin_app_no_type_error`. (`TO_type_system_rewrite-20260518T204229Z_m26562_t001`)
+  - Initial proof tried `Cases_on y'` after simplification had already forced the scalar to `IntV i`; removed the stale case split. -> The simplified proof matches the actual post-`gvs[evaluate_type_def]` goal shape and closes the helper. (`TO_type_system_rewrite-20260518T204229Z_m26560_t001`, `TO_type_system_rewrite-20260518T204229Z_m26561_t001`)
+
+### Ruled Out
+
+- Do not case split the scalar argument after `gvs[evaluate_type_def]` has already rewritten it to `IntV i`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26562_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26561_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26559_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0230`
+- blocker: 
+- next: Review closure with strategist; the next planned builtin checkpoint should classify the newly exposed PowMod256 residual before any state-preservation retry.
+
+### Attempts / Evidence
+
+- `E0230` (proved, )
+  - Added `TRY (metis_tac[ecmul_dispatch_no_type_error] >> NO_TAC)` before the older `irule ecmul_no_type_error` fallback in `well_typed_builtin_app_no_type_error`. -> `vyperTypeBuiltinsTheory` replay advanced past ECMul and exposed a later PowMod256 residual: `[SOME tv; SOME tv] = MAP SOME tvs`, `evaluate_type ... (BaseT (UintT 256)) = SOME tv`, `LIST_REL value_has_type tvs vs`, conclusion `evaluate_builtin ... PowMod256 vs <> INR (TypeError msg)`. (`TO_type_system_rewrite-20260518T204229Z_m26568_t001`)
+
+### Ruled Out
+
+- The first remaining builtin blocker is no longer ECMul; do not keep editing ECMul bridge tactics under this component.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26568_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26567_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.3
+
+### Current Status
+
+- result: `abandoned`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0231`
+- blocker: `vyperTypeBuiltinsTheory` does not pass after ECMul bridge; first new residual is PowMod256 in `well_typed_builtin_app_no_type_error` with `[SOME tv; SOME tv] = MAP SOME tvs`, uint256 evaluate-type equation, `LIST_REL value_has_type tvs vs`, and conclusion `evaluate_builtin ... PowMod256 vs <> INR (TypeError msg)`. This checkpoint was only authorized to classify the first residual, not to edit/chase PowMod256.
+- next: Call `plan_oracle(mode='review', component_id='C1.6.2.4.3.3', evidence_ids=[...])` so the strategist can accept the checkpoint and schedule/decompose a PowMod256 dispatch bridge before any further builds/edits.
+
+### Attempts / Evidence
+
+- `E0231` (abandoned, plan_incomplete)
+  - Ran the planned narrow checkpoint `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` after E0230 review was accepted. -> Build replay advanced through the ECMul integration and failed at the expected later PowMod256 dispatcher residual in `well_typed_builtin_app_no_type_error`; no source edits were made. (`TO_type_system_rewrite-20260518T204229Z_m26594_t001`)
+
+### Ruled Out
+
+- Retrying state-preservation while builtin import fails
+- Chasing PowMod256 under this checkpoint without strategist scheduling
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26594_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0232`
+- blocker: 
+- next: Review closure with strategist, then begin C1.6.2.4.3.3.2 to add the narrow PowMod256 dispatch attempt in `well_typed_builtin_app_no_type_error`.
+
+### Attempts / Evidence
+
+- `E0232` (proved, )
+  - Added local residual-shaped `powmod256_no_type_error` beside AddMod/MulMod. Initial clone had a stale `Cases_on `t`` after `gvs[]`; holbuild showed `t` was no longer free and the goal had already specialized both values to `IntV i`/`IntV i'`. Removed the stale case split and kept the proof to strip assumptions, `imp_res_tac evaluate_type_BaseT_SOME`, destruct `tvs`, and simplify `evaluate_builtin_def`. -> `holbuild(targets=["vyperTypeBuiltinsTheory"])` replayed past `powmod256_no_type_error` and reached the expected caller integration residual in `well_typed_builtin_app_no_type_error`, so the local helper is accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m26601_t001`, `TO_type_system_rewrite-20260518T204229Z_m26602_t001`, `TO_type_system_rewrite-20260518T204229Z_m26603_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26600_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26601_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26602_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26603_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0233`
+- blocker: 
+- next: Review closure with strategist. If accepted, begin the scheduled post-PowMod256 checkpoint C1.6.2.4.3.3.3 or whatever Oracle next reports.
+
+### Attempts / Evidence
+
+- `E0233` (proved, )
+  - Inserted the planned narrow PowMod256 dispatch clause in `well_typed_builtin_app_no_type_error` immediately after the MulMod clause: `TRY (mp_tac powmod256_no_type_error >> simp[] >> NO_TAC)`. -> `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` built `vyperTypeBuiltinsTheory`, confirming the integration closes the PowMod256 residual and does not expose another builtin residual in this target. (`TO_type_system_rewrite-20260518T204229Z_m26609_t001`, `TO_type_system_rewrite-20260518T204229Z_m26610_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26609_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26610_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0234`
+- blocker: 
+- next: Review closure with strategist. If accepted, follow Oracle next, expected to be the broader post-builtin/state-preservation checkpoint C1.6.2.4.3.4 or another scheduled frontier.
+
+### Attempts / Evidence
+
+- `E0234` (proved, )
+  - Ran the planned post-PowMod256 checkpoint `holbuild(targets=["vyperTypeBuiltinsTheory"], tactic_timeout=120, timeout=600)` after helper and integration were in place. -> `vyperTypeBuiltinsTheory` completed successfully, confirming the PowMod256 residual is discharged and no further builtin residual is exposed in this target. (`TO_type_system_rewrite-20260518T204229Z_m26615_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26615_t001` (use `read_tool_output` for exact output)
+
+## C1.6.2.4.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0235`
+- blocker: 
+- next: Review closure with strategist, then follow Oracle next (likely assignment wrapper audit or next scheduled fresh-stack component).
+
+### Attempts / Evidence
+
+- `E0235` (proved, )
+  - Ran the planned state-preservation checkpoint `holbuild(targets=["vyperTypeStatePreservationTheory"], tactic_timeout=120, timeout=600)` after `vyperTypeBuiltinsTheory` passed. -> `vyperTypeStatePreservationTheory` built successfully, so builtin prerequisites no longer block state-preservation and this checkpoint did not expose a new imported prerequisite or assignment-target blocker in this target. (`TO_type_system_rewrite-20260518T204229Z_m26620_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26620_t001` (use `read_tool_output` for exact output)
+
+## C2.0
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The strategist's intended helper `for_cons_body_result_return_exception_typed` is useful: `match_mp_tac` reduces to the expected body-IH existential package. The mismatch is in the final proof-interface/tactic shape for consuming that existential package under goalfrag/checkpointed validation; the component was risk 1 but exceeded the tiny-patch budget and the STATE explicitly said to escalate after 1-2 focused suffix failures.
+- latest episode: `E0538`
+- blocker: The low-risk tail patch still fails at the final existential endpoint despite focused suffix edits. After reducing the case assumption to an identical existential assumption/goal, HOL validation still raises CHOOSE when trying to accept or re-use the existential theorem via qpat_x_assum/ACCEPT_TAC, disch_then ACCEPT_TAC, metis_tac, and related narrow variants. The current source is partial at lines ~4233-4241.
+- actual effort: 1 sessions, 2 msgs, 23 steps, 24 tools, 9 holbuild, 1,379,122 tok (1,372,210 in, 6,912 out, 1,332,736 cached), 267.4s, $1.07109800
+- next: Call plan_oracle(mode='review', component_id='C2.0') for revised decomposition/interface. Consider a tiny helper theorem/corollary with no existential validation brittleness, or a different statement for the body-result helper that produces the exact final postcondition directly.
+
+### Attempts / Evidence
+
+- `E0537` (progressed, other, actual effort: 1 sessions, 4 msgs, 40 steps, 45 tools, 17 holbuild, 4,646,941 tok (4,633,432 in, 13,509 out, 4,561,920 cached), 553.7s, $3.04379000)
+  - Initial C2.0 build of existing source with `disch_then (fn th => ACCEPT_TAC (MATCH_MP for_cons_body_result_return_exception_typed th))`. -> Failed because `DISCH_THEN` was applied when the goal was already an implication to `return_exception_typed`; `MATCH_MP` on the body-IH result theorem was attempted at the wrong goal shape. (`TO_type_system_rewrite-20260520T182357Z_m34152_t003`)
+  - Replaced tail with `strip_tac >> match_mp_tac for_cons_body_result_return_exception_typed` variants using `simp[]`, `gvs[]`, `first_assum`, explicit `qexists_tac`, and mp/simp of the case assumption. -> These attempts consistently reduced the goal to the body-IH existential package for `ReturnException v'`, but simplification/assumption selection either timed out or failed to rewrite/consume the case assumption cleanly. (`TO_type_system_rewrite-20260520T182357Z_m34155_t001`, `TO_type_system_rewrite-20260520T182357Z_m34163_t001`, `TO_type_system_rewrite-20260520T182357Z_m34180_t001`, `TO_type_system_rewrite-20260520T182357Z_m34186_t001`)
+  - Current source suffix after final edit: `match_mp_tac for_cons_body_result_return_exception_typed >> simp[no_type_error_result_def] >> qpat_x_assum ... (fn th => mp_tac th) >> rewrite_tac[] >> strip_tac >> first_assum ACCEPT_TAC`. -> This exact current suffix has not been built due handoff. It tries to move the case assumption, rewrite the case, strip the existential, and accept the existential goal from the stripped assumption. (`TO_type_system_rewrite-20260520T182357Z_m34190_t001`)
+- `E0538` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 23 steps, 24 tools, 9 holbuild, 1,379,122 tok (1,372,210 in, 6,912 out, 1,332,736 cached), 267.4s, $1.07109800)
+  - Verified current suffix from handoff: `match_mp_tac for_cons_body_result_return_exception_typed >> simp[no_type_error_result_def] >> qpat_x_assum ... mp_tac >> rewrite_tac[] >> strip_tac >> first_assum ACCEPT_TAC`. -> Failed at final existential goal; identical-looking case assumption remained but `first_assum ACCEPT_TAC` could not consume it. (`TO_type_system_rewrite-20260520T182357Z_m34195_t001`)
+  - Tried targeted conversion of the single `case INR (ReturnException v')` assumption using `SIMP_RULE`, then `mp_tac >> simp[]`, then `pure_rewrite_tac[sum_case_def] >> BETA_TAC`. -> All variants reduced to or exposed an implication/assumption whose conclusion was the desired existential, but accepting/stripping it triggered CHOOSE validation failures rather than closing the goal. (`TO_type_system_rewrite-20260520T182357Z_m34198_t001`, `TO_type_system_rewrite-20260520T182357Z_m34200_t001`, `TO_type_system_rewrite-20260520T182357Z_m34206_t001`, `TO_type_system_rewrite-20260520T182357Z_m34208_t001`)
+  - Tried FOL/propositional/simple assumption variants (`metis_tac[]`, explicit `disch_tac` followed by `qpat_x_assum` matching the exact existential and `ACCEPT_TAC`). -> Still failed with CHOOSE at an identical existential assumption/goal. Current source contains the explicit `qpat_x_assum` partial suffix, not a verified proof. (`TO_type_system_rewrite-20260520T182357Z_m34210_t001`, `TO_type_system_rewrite-20260520T182357Z_m34216_t001`)
+
+### Ruled Out
+
+- Broad gvs/simp over the full For_cons context (timeouts/CHOOSE failures).
+- Old `for_cons_return_exception_typed_from_body_ex` existential reconstruction path, forbidden by PLAN.
+- More exact-assumption variants on the endpoint without revised guidance.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34195_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34198_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34200_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34206_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34208_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34210_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34216_t001` (use `read_tool_output` for exact output)
+
+## C2.0.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0543`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 126,796 tok (126,319 in, 477 out, 122,368 cached), 11.7s, $0.09524900
+- next: Review closure, then begin C2.0.2 replacement helper/caller patch.
+
+### Attempts / Evidence
+
+- `E0539` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 6 holbuild, 1,235,157 tok (1,230,643 in, 4,514 out, 1,206,784 cached), 228.2s, $0.85810700)
+  - Added `for_cons_body_result_return_exception_typed_case` immediately after `for_cons_body_result_return_exception_typed`; proved by routing through existing helper, instantiating the existential bridge premises, and only in the small lemma rewriting the `case INR (ReturnException v)` premise with `sum_case_def`/`BETA_TAC` to extract the witness. -> `holbuild` progressed past the new lemma and resumed/fails later in `eval_for_cons_type_sound_core`, confirming the boundary lemma is accepted. (`TO_type_system_rewrite-20260520T182357Z_m34233_t001`)
+- `E0541` (proved, , actual effort: 1 sessions, 1 steps, 125,594 tok (125,175 in, 419 out, 121,344 cached), 10.9s, $0.09239700)
+  - Reviewed carry-forward component after oracle refinement: `for_cons_body_result_return_exception_typed_case` remains present and already proved; no source drift/removal requiring rework. -> Carry-forward leaf is complete; prior holbuild evidence shows replay proceeded past the theorem and failed only at downstream caller. (`TO_type_system_rewrite-20260520T182357Z_m34233_t001`, `TO_type_system_rewrite-20260520T182357Z_m34257_t001`)
+- `E0543` (proved, , actual effort: 1 sessions, 1 steps, 126,796 tok (126,319 in, 477 out, 122,368 cached), 11.7s, $0.09524900)
+  - Reviewed current source after E0542 edits; `for_cons_body_result_return_exception_typed_case` and explicit spec wrapper remain in the helper section. Recent holbuild replays progressed past this helper section and failed only in downstream `eval_for_cons_type_sound_core` caller suffix. -> Carry-forward boundary lemma/support component remains proved; no new source work required for C2.0.1. (`TO_type_system_rewrite-20260520T182357Z_m34336_t001`, `TO_type_system_rewrite-20260520T182357Z_m34339_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34336_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34339_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0544`
+- blocker: The body-IH consumer helper was inserted and proved, but the caller patch remains blocked by HOL4/holbuild CHOOSE validation failures even after reducing the caller to trivial implication or exact-assumption subgoals. Attempts to use the helper via `mp_tac`/`impl_tac`, `drule_all`, `suffices_by`, direct body-IH specialization, and exact `ACCEPT_TAC`/`first_assum`/`POP_ASSUM_LIST` all leave or reduce to goals such as `return_exception_typed env ret_ty (ReturnException v') ==> return_exception_typed env ret_ty (ReturnException v')` or exact assumption/goal equality, yet holbuild raises `Thm.CHOOSE`. This repeats the E0542 symptom despite moving much work into the helper, so the PLAN decomposition/interface is still not robust enough for the instrumented large caller context.
+- actual effort: 1 sessions, 6 msgs, 76 steps, 77 tools, 33 holbuild, 6,597,993 tok (6,571,269 in, 26,724 out, 6,445,056 cached), 1053.5s, $4.65531300
+- next: Call plan_oracle review for C2.0.2 with this evidence. Recommend a stronger structural repair: avoid proving the final ReturnException branch inside this large theorem context entirely, e.g. extract a full caller-suffix lemma that includes the tail goal shape, or restructure `eval_for_cons_type_sound_core` with `suspend`/`Resume` so the problematic branch is a top-level proof with clean assumptions.
+
+### Attempts / Evidence
+
+- `E0540` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 26 steps, 26 tools, 10 holbuild, 2,673,718 tok (2,663,868 in, 9,850 out, 2,618,880 cached), 343.4s, $1.82988000)
+  - Replaced caller suffix with `irule for_cons_body_result_return_exception_typed_case >> simp[no_type_error_result_def] >> qpat_x_assum ... ACCEPT_TAC`. -> `irule` instantiated only conclusion variables and left an existential package over antecedent-only variables (`∃cx' id' st_body' ty' ...`), not the exact case premise. (`TO_type_system_rewrite-20260520T182357Z_m34239_t001`)
+  - Tried `Q.INST` on antecedent-only variables and then explicitly supplied witnesses to the generated existential package, reconstructing the package from the case assumption. -> Reached the same brittle existential/conjunct endpoint; even exact assumptions for final conjunct failed with CHOOSE validation in the large caller. (`TO_type_system_rewrite-20260520T182357Z_m34241_t001`, `TO_type_system_rewrite-20260520T182357Z_m34243_t001`, `TO_type_system_rewrite-20260520T182357Z_m34247_t001`, `TO_type_system_rewrite-20260520T182357Z_m34249_t001`)
+  - Tried specializing the corollary directly with `Q.SPECL`/`qspecl_then` and using `match_mp_tac`; also tried plain `match_mp_tac for_cons_body_result_return_exception_typed_case`. -> `Q.SPECL`/`qspecl_then` failed because the theorem has no explicit leading forall; plain `match_mp_tac` failed with `No match`. (`TO_type_system_rewrite-20260520T182357Z_m34251_t001`, `TO_type_system_rewrite-20260520T182357Z_m34256_t001`, `TO_type_system_rewrite-20260520T182357Z_m34261_t001`)
+- `E0542` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 66 steps, 65 tools, 30 holbuild, 5,748,596 tok (5,723,645 in, 24,951 out, 5,608,448 cached), 1088.0s, $4.12873900)
+  - Added explicit `for_cons_body_result_return_exception_typed_case_spec` wrapper and replaced caller suffix with specialized `irule`/`mp_tac` variants. -> Specialization eliminated the original theorem's lack of leading forall, but the caller still generated/needed existential/case-premise subgoals and exact assumption use hit CHOOSE failures. (`TO_type_system_rewrite-20260520T182357Z_m34278_t001`, `TO_type_system_rewrite-20260520T182357Z_m34301_t001`)
+  - Tried to consume the body-IH case premise by pushing it with `mp_tac`, simplifying `sum_case_def`, and using `DISCH_TAC`/`first_assum`/`qpat_assum`/abbreviations to prove identical existential or case goals. -> Even goals of the form `g (ReturnException v') ==> g (ReturnException v')` or an identical existential assumption vs goal triggered CHOOSE validation or assumption-selection failures in the large context. (`TO_type_system_rewrite-20260520T182357Z_m34313_t001`, `TO_type_system_rewrite-20260520T182357Z_m34324_t001`, `TO_type_system_rewrite-20260520T182357Z_m34334_t001`)
+  - Added smaller exn-oriented helper theorems (`for_cons_body_result_return_exception_case_exn`, `..._typed_exn_spec`) and attempted to apply them in the caller, plus an ML-level `MATCH_MP`/`ACCEPT_TAC` route using exact assumptions. -> The helper theorem itself builds, but caller still fails when converting/accepting the existential result; ML-level ACCEPT_TAC fragment failed to compile, and qpat selection of the case premise remained fragile. (`TO_type_system_rewrite-20260520T182357Z_m34330_t001`, `TO_type_system_rewrite-20260520T182357Z_m34332_t001`, `TO_type_system_rewrite-20260520T182357Z_m34338_t001`)
+- `E0544` (stuck, risk_mismatch, actual effort: 1 sessions, 6 msgs, 76 steps, 77 tools, 33 holbuild, 6,597,993 tok (6,571,269 in, 26,724 out, 6,445,056 cached), 1053.5s, $4.65531300)
+  - Proved/simplified new `for_cons_body_ih_return_exception_typed` helper locally by specializing the body IH, extracting the case result, and applying `return_exception_typed_extend_local_env_extends`. -> Helper gets past its own theorem checkpoint; subsequent failures are in `eval_for_cons_type_sound_core` caller suffix. (`TO_type_system_rewrite-20260520T182357Z_m34356_t001`, `TO_type_system_rewrite-20260520T182357Z_m34409_t001`)
+  - Replaced old ML-level caller fragment with applications of the new helper via `irule`, `mp_tac` with five `impl_tac`s, `drule_all(_then)`, and local `by` fact. -> Either matching failed or the proof reduced to a trivial implication/exact-assumption goal that still failed with `Thm.CHOOSE`. (`TO_type_system_rewrite-20260520T182357Z_m34359_t001`, `TO_type_system_rewrite-20260520T182357Z_m34361_t001`, `TO_type_system_rewrite-20260520T182357Z_m34381_t001`, `TO_type_system_rewrite-20260520T182357Z_m34419_t001`)
+  - Tried direct body-IH specialization in the caller, extracting the ReturnException existential and avoiding the helper; also tried explicit theorem/assumption selection with `POP_ASSUM_LIST` to bypass `first_assum`/`simp`. -> The final exact assumption subgoal `return_exception_typed env_exn ret_ty (ReturnException v')` still failed with `Thm.CHOOSE`; even reduced goal `P ==> P` fails under the large/instrumented context. (`TO_type_system_rewrite-20260520T182357Z_m34387_t001`, `TO_type_system_rewrite-20260520T182357Z_m34391_t001`, `TO_type_system_rewrite-20260520T182357Z_m34423_t001`, `TO_type_system_rewrite-20260520T182357Z_m34425_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34356_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34359_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34361_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34381_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34387_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34391_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34423_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34425_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34419_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0547`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 1 steps, 133,219 tok (132,728 in, 491 out, 126,464 cached), 13.1s, $0.10928200
+- next: Review closure, then begin C2.0.2.2 to add `for_cons_non_loop_exception_suffix`.
+
+### Attempts / Evidence
+
+- `E0545` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 3 holbuild, 298,328 tok (295,771 in, 2,557 out, 282,112 cached), 116.5s, $0.28606100)
+  - Inserted full branch-suffix theorem `for_cons_return_exception_suffix`; first conjuncts discharged from antecedents, no-type-error by simplification, final return typing by explicit specialization of `for_cons_body_ih_return_exception_typed`. -> After replacing failed `match_mp_tac` with explicit `qspecl_then ... mp_tac`/`impl_tac`, holbuild passed the helper and resumed to the existing caller failure in `eval_for_cons_type_sound_core`. (`TO_type_system_rewrite-20260520T182357Z_m34434_t001`, `TO_type_system_rewrite-20260520T182357Z_m34435_t001`, `TO_type_system_rewrite-20260520T182357Z_m34436_t001`, `TO_type_system_rewrite-20260520T182357Z_m34437_t001`)
+- `E0547` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 133,219 tok (132,728 in, 491 out, 126,464 cached), 13.1s, $0.10928200)
+  - Checked source shape of `for_cons_return_exception_suffix` and corrected/preserved final result as `case (INR (ReturnException v) : unit + exception) ...`; holbuild replayed past this helper and reached the downstream `eval_for_cons_type_sound_core` caller failure. -> Helper is carried forward as required for the new non-loop-exception suffix plan. (`TO_type_system_rewrite-20260520T182357Z_m34459_t001`, `TO_type_system_rewrite-20260520T182357Z_m34461_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34461_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34459_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Tried factoring the no-TypeError extraction into `for_cons_body_ih_no_type_error_result` before proving the full suffix helper. Holbuild reaches assumptions containing `no_type_error_result (INR exn)` and the identical goal, after specializing the body IH, but QED fails. Per STATE and PLAN guidance, stop tactic retries and request strategist review/replacement.
+- latest episode: `E0549`
+- blocker: The instructed smaller body-IH projection helper still reduces to an exact `no_type_error_result (INR exn)` assumption/goal endpoint but HOL4/holbuild validation fails with no theorem proved. This repeats the C2.0.2.2 exact/trivial endpoint failure pattern inside a standalone projection helper, so the Risk 2 decomposition is not executable as planned.
+- actual effort: 1 sessions, 1 msgs, 12 steps, 13 tools, 4 holbuild, 806,476 tok (800,795 in, 5,681 out, 769,024 cached), 139.2s, $0.71379700
+- next: Call `plan_oracle(mode="review", component_id="C2.0.2.2")` with this evidence for a replacement strategy; do not continue tactic retries or patch the core theorem.
+
+### Attempts / Evidence
+
+- `E0546` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 41 steps, 42 tools, 16 holbuild, 3,950,534 tok (3,936,295 in, 14,239 out, 3,854,848 cached), 596.6s, $2.76182900)
+  - Changed `for_cons_return_exception_suffix` conclusion to match the caller's final `case INR ... of INL _ => T | INR exn => return_exception_typed ...` shape with `unit + exception`, then tried `match_mp_tac`/`irule` against the whole residual conjunction before splitting. -> Type-shape correction allowed matching progress, but proof left antecedent/body-IH subgoals; simple `simp[]`, `qpat_assum ACCEPT_TAC`, and `metis_tac[]` endpoints still failed with `Thm.CHOOSE` or no theorem proved. (`TO_type_system_rewrite-20260520T182357Z_m34461_t001`, `TO_type_system_rewrite-20260520T182357Z_m34467_t001`, `TO_type_system_rewrite-20260520T182357Z_m34473_t001`)
+  - Applied the plan's fallback: replace the ReturnException residual branch with `suspend "ReturnException_tail"` at the whole residual conjunction before destructing the existential/case premise. -> Even `suspend` at the exact residual conjunction failed with `Thm.CHOOSE`, so the planned cleaner Resume-context fallback cannot be reached from this large theorem context. (`TO_type_system_rewrite-20260520T182357Z_m34481_t001`)
+- `E0548` (progressed, risk_mismatch, actual effort: 1 sessions, 8 msgs, 103 steps, 108 tools, 44 holbuild, 9,777,092 tok (9,746,147 in, 30,945 out, 9,587,200 cached), 1134.9s, $6.51668500)
+  - Inserted `for_cons_non_loop_exception_suffix` after `for_cons_return_exception_suffix` with the PLAN statement shape, then tried to derive `no_type_error_result (INR exn)` via the body IH before splitting the final conjunction. -> Holbuild shows the `by` subproof fails because the top input goal is the entire final conjunction; the attempted branch only solves no-TypeError and not the full conjunction. This indicates the tactic structure is wrong and the helper proof is not yet complete. (`TO_type_system_rewrite-20260520T182357Z_m34591_t001`)
+  - Tried splitting `Cases_on exn` and proving ordinary Error/Assert cases with body-IH no-TypeError and `return_exception_typed_def`; tried ReturnException using `for_cons_return_exception_suffix`, `for_cons_body_ih_return_exception_typed`, exact assumptions, `metis_tac`, and direct env-static reasoning. -> Ordinary cases were derailed by tactic associativity/branching (`>>` after `Cases_on exn` allowed impossible Continue branch into the Error IH specialization). ReturnException repeatedly reduced to exact/trivial goals such as `value_runtime_typed env_exn ret_ty v ==> value_runtime_typed env_exn ret_ty v` or exact `return_exception_typed` but holbuild reported `Thm.GEN`/`Thm.CHOOSE` validation failures. Current source is partial and does not build. (`TO_type_system_rewrite-20260520T182357Z_m34585_t001`, `TO_type_system_rewrite-20260520T182357Z_m34587_t001`, `TO_type_system_rewrite-20260520T182357Z_m34591_t001`)
+- `E0549` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 12 steps, 13 tools, 4 holbuild, 806,476 tok (800,795 in, 5,681 out, 769,024 cached), 139.2s, $0.71379700)
+  - Inserted a smaller body-IH projection theorem `for_cons_body_ih_no_type_error_result` that specializes the body IH at `(stp, INR exn, st_body)` and should return only `no_type_error_result (INR exn)`. -> Holbuild reduced the proof to assumptions including `no_type_error_result (INR exn)` and the identical goal, then failed QED/no theorem proved. This confirms the exact-endpoint validation brittleness persists even in the smaller projection helper. (`TO_type_system_rewrite-20260520T182357Z_m34607_t001`)
+  - Before projection factoring, refactored `for_cons_non_loop_exception_suffix` to split the final conjunction first and derive the no-TypeError conjunct from the body IH in the specific branch. -> Holbuild again reached an exact-looking `no_type_error_result (INR exn)` endpoint after body-IH specialization and failed to accept it, demonstrating the full helper proof remains structurally brittle. (`TO_type_system_rewrite-20260520T182357Z_m34604_t001`)
+
+### Ruled Out
+
+- Continuing exact-assumption endpoint variations for `no_type_error_result (INR exn)`
+- Patching `eval_for_cons_type_sound_core` before the helper/interface is replaced
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34607_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34604_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34597_t003` (use `read_tool_output` for exact output)
+
+## C2.0.2.2.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0550`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 5 tools, 1 holbuild, 378,567 tok (377,424 in, 1,143 out, 366,592 cached), 82.4s, $0.27174600
+- next: Review closure, then begin C2.0.2.2.1 to add/prove `for_cons_body_ih_exception_projection`.
+
+### Attempts / Evidence
+
+- `E0550` (proved, , actual effort: 1 sessions, 4 steps, 5 tools, 1 holbuild, 378,567 tok (377,424 in, 1,143 out, 366,592 cached), 82.4s, $0.27174600)
+  - Deleted lines 1693-1780 containing the failed no-TypeError-only projection and modified suffix helper from E0549, preserving preceding proven helpers including `for_cons_body_ih_return_exception_typed` and `for_cons_return_exception_suffix`. -> Grep shows no obsolete failed helper names remain; holbuild replays past the cleaned region and fails later at the existing core theorem suspend, so cleanup succeeded for this component. (`TO_type_system_rewrite-20260520T182357Z_m34616_t001`, `TO_type_system_rewrite-20260520T182357Z_m34617_t001`, `TO_type_system_rewrite-20260520T182357Z_m34617_t002`, `TO_type_system_rewrite-20260520T182357Z_m34617_t003`)
+
+### Ruled Out
+
+- Editing `eval_for_cons_type_sound_core` during cleanup
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34617_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34617_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34617_t003` (use `read_tool_output` for exact output)
+
+## C2.0.2.2.1
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `risk_mismatch` The packaged projection idea is semantically right but the current HOL4 proof shape still hits exact-assumption/GEN validation failures after destructing the existential. The most promising next action is to change the projection theorem statement so the body-IH's full conjunction is returned directly (or use that full-conjunction form as the boundary), avoiding reconstruction of an existential conjunction from a fresh `env_exn` witness in tactic context.
+- latest episode: `E0551`
+- blocker: After body-IH specialization with `assume_tac` and `gvs[sum_case_def]`, the goal becomes `no_type_error_result (INR exn) /\ ?env_exn. ...` with assumptions containing exactly `no_type_error_result (INR exn)` and the three existential-witness facts. Attempts to split/reconstruct the conjunction with `metis_tac[]`, `qexists_tac`, explicit `ASSUME`/`LIST_CONJ`, and exact accept patterns fail, including `Thm.GEN variable occurs free in hypotheses`.
+- actual effort: 1 sessions, 3 msgs, 38 steps, 40 tools, 17 holbuild, 4,553,361 tok (4,538,239 in, 15,122 out, 4,478,976 cached), 544.7s, $2.98946300
+- next: Handoff: next session should not keep trying endpoint variants. Consider changing the projection theorem to return the exact full body-IH conjunction specialized to `(stp, INR exn, st_body)` (state/accounts/no_type_error/existential) as a whole using `assume_tac`/`gvs` so the theorem closes by simplification, or escalate if that still leaves exact endpoints. Alternatively use an even lower-level projection that does not open/reconstruct the existential at all.
+
+### Attempts / Evidence
+
+- `E0551` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 38 steps, 40 tools, 17 holbuild, 4,553,361 tok (4,538,239 in, 15,122 out, 4,478,976 cached), 544.7s, $2.98946300)
+  - Inserted `for_cons_body_ih_exception_projection` per PLAN and tried direct `mp_tac`/`impl_tac` plus simplification to the desired packaged conclusion. -> Simplification left implication/exact endpoints such as `A ==> no_type_error_result (INR exn)` or exact assumptions; `metis_tac[]`, `rw`, `strip_tac >> simp[]`, and `disch_then ACCEPT_TAC` did not close. (`TO_type_system_rewrite-20260520T182357Z_m34623_t001`, `TO_type_system_rewrite-20260520T182357Z_m34627_t001`, `TO_type_system_rewrite-20260520T182357Z_m34644_t001`)
+  - Strengthened the projection conclusion to include the first two body-IH conjuncts so the post-specialization theorem matched more directly, then used `assume_tac` + `gvs[sum_case_def]` and attempted to assemble only the final no-TypeError/existential pair. -> Goal after simplification contains exact no-TypeError and witness facts, but splitting/reconstructing the existential with `metis_tac[]`, `qexists_tac`, or explicit `ASSUME`/`LIST_CONJ` still fails; explicit reconstruction hit `Thm.GEN variable occurs free in hypotheses`. (`TO_type_system_rewrite-20260520T182357Z_m34648_t001`, `TO_type_system_rewrite-20260520T182357Z_m34650_t001`, `TO_type_system_rewrite-20260520T182357Z_m34657_t001`)
+
+### Ruled Out
+
+- More exact endpoint variants using `first_assum ACCEPT_TAC`, `metis_tac[]`, `rw`, `disch_then ACCEPT_TAC`, or explicit `ASSUME`/`LIST_CONJ` after destructing the existential
+- Editing `eval_for_cons_type_sound_core` before C2.0.2.2.1 and C2.0.2.2.2 close
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T182357Z_m34657_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34650_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T182357Z_m34648_t001` (use `read_tool_output` for exact output)
+
+## C2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0441`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 172,941 tok (171,739 in, 1,202 out, 159,232 cached), 33.2s, $0.17821100
+- next: Review closure, then begin the scheduled extraction-helper component and prove the standalone case-premise extraction lemma near the For_cons helper cluster.
+
+### Attempts / Evidence
+
+- `E0237` (proved, )
+  - Built `vyperTypeStmtSoundnessTheory` with C2.1 active. -> Target built successfully; bridge infrastructure compiles in context of statement soundness. (`TO_type_system_rewrite-20260518T204229Z_m26649_t001`)
+  - Audited `vyperTypeStmtSoundnessScript.sml` for C2.1 bridge definitions/theorems. -> Source contains `assignment_value_static_assignable_context`, static/context projection lemmas, and the direct bridges `target_runtime_typed_imp_assignable_context` and `target_values_runtime_typed_imp_EVERY_assignable_context`, proved by combining runtime-typed-to-static and static-to-full assignable-context lemmas. (`TO_type_system_rewrite-20260518T204229Z_m26650_t001`, `TO_type_system_rewrite-20260518T204229Z_m26651_t001`)
+  - Checked unfinished proof markers in `vyperTypeStmtSoundnessScript.sml`. -> Remaining `cheat`/`suspend` markers are in later evaluator Resume cases, not in the C2.1 bridge infrastructure; they are covered by later C2 components in the PLAN. (`TO_type_system_rewrite-20260518T204229Z_m26650_t002`)
+- `E0277` (proved, , actual effort: 1 sessions, 1 steps, 87,727 tok (87,222 in, 505 out, 83,456 cached), 9.8s, $0.07570800)
+  - Re-began C2.1 only because the repaired PLAN frontier incorrectly scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0237 evidence show the bridge lemmas already compile and have no remaining C2.1-local cheats. (`TO_type_system_rewrite-20260519T080936Z_m28066_t001`, `TO_type_system_rewrite-20260518T204229Z_m26649_t001`, `TO_type_system_rewrite-20260518T204229Z_m26650_t001`, `TO_type_system_rewrite-20260518T204229Z_m26651_t001`)
+- `E0441` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 172,941 tok (171,739 in, 1,202 out, 159,232 cached), 33.2s, $0.17821100)
+  - Inspected current failing For_cons tail and deleted the direct `irule ... >> mp_tac (ASSUME case-premise) >> simp[]` residual-discharge block, replacing it with a temporary placeholder for the planned helper-boundary patch. -> The CHOOSE-sensitive direct local assertion/residual approach is retired from source; the unsimplified case-premise assumption remains available immediately before the placeholder for later helper integration. (`TO_type_system_rewrite-20260519T123242Z_m32058_t001`, `TO_type_system_rewrite-20260519T123242Z_m32059_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32058_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32059_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.a
 
@@ -215,6 +1699,3126 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260513T175918Z_m0140_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260513T175918Z_m0142_t001` (use `read_tool_output` for exact output)
+
+## C2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0278`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 109,993 tok (109,570 in, 423 out, 105,984 cached), 6.0s, $0.08361200
+- next: Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next.
+
+### Attempts / Evidence
+
+- `E0240` (proved, )
+  - Audited `vyperTypeStmtSoundnessTheory` and current statement assignment bridge area; build already reached/passed the file, and source had existing Replace/context bridges plus ad-hoc Update premises in assignment resumes. -> Confirmed component could be handled as local infrastructure: no build failure, but exact exported bridge lemmas for Update/Append/Pop were missing from `vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260518T204229Z_m26672_t003`, `TO_type_system_rewrite-20260518T204229Z_m26673_t001`, `TO_type_system_rewrite-20260518T204229Z_m26673_t002`, `TO_type_system_rewrite-20260518T204229Z_m26673_t003`)
+  - Added C2.2 local/exported bridge lemmas: `stmt_assign_operation_runtime_typed_Update_from_value_runtime_typed_binop`, `stmt_assign_operation_runtime_typed_Append_from_value_has_type`, `stmt_assign_operation_runtime_typed_Pop_from_dynamic_array`, and BaseTargetV shape lemmas for generic/Update/Append/Pop. -> The new lemmas have conclusions matching assignment theorem premises (`assign_operation_runtime_typed` and `assign_operation_matches_target_shape`) and prove by unfolding the definitions / simple metis. `vyperTypeStmtSoundnessTheory` rebuilt successfully. (`TO_type_system_rewrite-20260518T204229Z_m26677_t001`, `TO_type_system_rewrite-20260518T204229Z_m26678_t001`)
+  - Grep/diff audit after build plus source check of `assignable_type_evaluate_not_NoneTV` prerequisite. -> Verified the new theorem names are present in `vyperTypeStmtSoundnessScript.sml`; existing AnnAssign/Assign code already uses the non-None consequence via `assignable_type_not_NoneT`, while `assignable_type_evaluate_not_NoneTV` is available from `vyperTypeSystem` for later refactors. (`TO_type_system_rewrite-20260518T204229Z_m26679_t001`, `TO_type_system_rewrite-20260518T204229Z_m26679_t002`, `TO_type_system_rewrite-20260518T204229Z_m26680_t001`)
+- `E0278` (proved, , actual effort: 1 sessions, 1 steps, 109,993 tok (109,570 in, 423 out, 105,984 cached), 6.0s, $0.08361200)
+  - Re-began C2.2 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0240 evidence show the operation runtime/shape bridge lemmas are present, compile, and require no edits. (`TO_type_system_rewrite-20260519T085316Z_m28100_t001`, `TO_type_system_rewrite-20260518T204229Z_m26678_t001`, `TO_type_system_rewrite-20260518T204229Z_m26679_t001`, `TO_type_system_rewrite-20260518T204229Z_m26679_t002`, `TO_type_system_rewrite-20260518T204229Z_m26680_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26678_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26679_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26679_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26680_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28100_t001` (use `read_tool_output` for exact output)
+
+## C2.2.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0444`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 236,112 tok (235,448 in, 664 out, 228,352 cached), 15.6s, $0.16957600
+- next: Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper.
+
+### Attempts / Evidence
+
+- `E0444` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 236,112 tok (235,448 in, 664 out, 228,352 cached), 15.6s, $0.16957600)
+  - Audited existing helper `for_cons_popped_env_consistent_from_stmt_case` and checked prior holbuild replay that advanced beyond it. -> C2.2.a obligation is already discharged in source: the helper consumes the case premise outside the Resume and provides popped env consistency; no new edit needed. (`TO_type_system_rewrite-20260519T123242Z_m32133_t001`, `TO_type_system_rewrite-20260519T123242Z_m32129_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32133_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32129_t001` (use `read_tool_output` for exact output)
+
+## C2.2.b
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0445`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 385,546 tok (384,870 in, 676 out, 375,296 cached), 25.4s, $0.25579800
+- next: Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application.
+
+### Attempts / Evidence
+
+- `E0445` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 385,546 tok (384,870 in, 676 out, 375,296 cached), 25.4s, $0.25579800)
+  - Audited `for_cons_ordinary_exception_tail_from_stmt_case` and ran `holbuild` for `vyperTypeStmtSoundnessTheory`. -> The C2.2.b final-tail helper is present/proved; build advances beyond the helper cluster and stops only at the explicit integration placeholder. (`TO_type_system_rewrite-20260519T123242Z_m32138_t001`, `TO_type_system_rewrite-20260519T123242Z_m32139_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32138_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32139_t001` (use `read_tool_output` for exact output)
+
+## C2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0446`
+- blocker: Applying the case-premise helper inside `Resume eval_all_type_sound_mutual[For_cons]` still leaves/proves the unsimplified `case (INR y ...)` premise by matching an existing assumption, and holbuild raises HOL_ERR CHOOSE during validation. This is exactly the CHOOSE-sensitive failure the component was meant to avoid; the helper interface still requires passing an existential-bearing assumption inside the Resume.
+- actual effort: 1 sessions, 1 msgs, 24 steps, 24 tools, 11 holbuild, 1,709,091 tok (1,701,010 in, 8,081 out, 1,651,712 cached), 238.1s, $1.31477600
+- next: Call plan_oracle(mode='review', component_id='C2.3') with the CHOOSE evidence. Likely need a stronger standalone helper whose invocation does not create a case-premise side goal inside the Resume, or a different factoring of the whole suffix.
+
+### Attempts / Evidence
+
+- `E0251` (proved, )
+  - Audited `Resume eval_all_type_sound_mutual[AnnAssign]`, `[Assign]`, and `[AugAssign]` in `vyperTypeStmtSoundnessScript.sml`; grep shows the three assignment resumes and remaining cheats are in other suspended branches (`Log`, `Append`, later expression/call branches), not within these assignment cases. -> Assignment statement cases are already proved in source and `vyperTypeStmtSoundnessTheory` builds successfully. (`TO_type_system_rewrite-20260518T204229Z_m26988_t002`, `TO_type_system_rewrite-20260518T204229Z_m26990_t001`)
+- `E0279` (proved, , actual effort: 1 sessions, 1 steps, 115,560 tok (115,221 in, 339 out, 112,128 cached), 5.1s, $0.08169900)
+  - Re-began C2.3 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0251 evidence show AnnAssign/Assign/AugAssign statement cases are already proved and audited. (`TO_type_system_rewrite-20260519T085316Z_m28104_t001`, `TO_type_system_rewrite-20260518T204229Z_m26990_t001`, `TO_type_system_rewrite-20260518T204229Z_m26988_t002`)
+- `E0446` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 24 steps, 24 tools, 11 holbuild, 1,709,091 tok (1,701,010 in, 8,081 out, 1,651,712 cached), 238.1s, $1.31477600)
+  - Replaced placeholder with backward `irule for_cons_ordinary_exception_tail_from_stmt_case`, using existing invariant assumptions and trying to pass the visible case premise to the helper without simplifying/destructing it. -> Build progressed to the side condition for the helper's case premise but validating `ACCEPT_TAC`/assumption matching on that premise inside the suspended Resume raises HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m32171_t001`)
+  - Tried several normal tactic shapes (`irule` with invariant side goals, packaging helper `for_cons_ordinary_exception_tail_goal_from_case_premise`, explicit witnesses) to avoid local existential destructing. -> All variants either left residual side goals with the same case premise or failed to instantiate; the last localized failure is CHOOSE on closing the visible case-premise side goal by assumption. (`TO_type_system_rewrite-20260519T123242Z_m32153_t001`, `TO_type_system_rewrite-20260519T123242Z_m32157_t001`, `TO_type_system_rewrite-20260519T123242Z_m32165_t001`, `TO_type_system_rewrite-20260519T123242Z_m32171_t001`)
+
+### Ruled Out
+
+- Passing the unsimplified case premise to the helper by `qpat_assum ... ACCEPT_TAC` inside the Resume
+- Backward `irule for_cons_ordinary_exception_tail_from_stmt_case` that leaves a residual case-premise subgoal inside the Resume
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32149_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32171_t001` (use `read_tool_output` for exact output)
+
+## C2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0447`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 396,042 tok (395,131 in, 911 out, 387,072 cached), 29.4s, $0.26116100
+- next: Review closure, then begin C2.3.2 to audit/reuse the explicit-witness helper before patching the suffix.
+
+### Attempts / Evidence
+
+- `E0447` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 396,042 tok (395,131 in, 911 out, 387,072 cached), 29.4s, $0.26116100)
+  - Removed the failed E0446 suffix chain (`irule for_cons_ordinary_exception_tail_from_stmt_case` / `for_cons_inr_case_premise_extract` / `qpat_assum ... ACCEPT_TAC`) and restored a placeholder at the same residual ordinary-exception goal. -> Source now contains only a C2.3.1 cleanup placeholder at the For_cons suffix. holbuild reaches that placeholder and prints the intended residual goal; no failed helper chain remains active. (`TO_type_system_rewrite-20260519T123242Z_m32178_t001`, `TO_type_system_rewrite-20260519T123242Z_m32179_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32178_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32179_t001` (use `read_tool_output` for exact output)
+
+## C2.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0448`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 210,194 tok (209,644 in, 550 out, 203,776 cached), 13.2s, $0.14772800
+- next: Review closure, then begin C2.3.3 and replace the For_cons suffix placeholder by extracting the IH existential and applying this explicit-witness helper.
+
+### Attempts / Evidence
+
+- `E0448` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 210,194 tok (209,644 in, 550 out, 203,776 cached), 13.2s, $0.14772800)
+  - Audited existing explicit-witness helper `for_cons_ordinary_exception_tail_conclusion_premises` near the For_cons helper block. -> The theorem already has the exact explicit-witness interface requested by C2.3.2: it consumes the pushed-scope body evaluation, `env_maps_wf`, original `env_consistent`, `id NOTIN`, body state/account typing, `no_type_error_result`, and explicit `env_exn` extension/consistency/return-typing premises, and concludes the popped ordinary-exception tail. No new helper is needed. (`TO_type_system_rewrite-20260519T123242Z_m32183_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32183_t001` (use `read_tool_output` for exact output)
+
+## C2.3.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk estimate mismatch: the mathematical residual remains simple, but the suspended Resume/proof-runtime validation boundary is brittle for assumptions produced around existential extraction. The decomposition likely needs a different boundary, e.g. factor the whole residual into a standalone theorem that consumes all facts at once or avoid generating side goals for already-present noerr/existential premises.
+- latest episode: `E0450`
+- blocker: C2.3.3's planned local extraction/helper interface is still CHOOSE-sensitive: even a tautological `no_type_error_result (INR y) ==> no_type_error_result (INR y)` or the same fact as an assumption cannot be validated inside this Resume after existential extraction/helper application.
+- actual effort: 1 sessions, 3 msgs, 47 steps, 48 tools, 18 holbuild, 3,280,881 tok (3,264,193 in, 16,688 out, 3,191,296 cached), 559.5s, $2.46077300
+- next: Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale.
+
+### Attempts / Evidence
+
+- `E0449` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 46 steps, 47 tools, 18 holbuild, 3,193,329 tok (3,177,216 in, 16,113 out, 3,105,792 cached), 546.3s, $2.39340600)
+  - Extracted the IH existential and added a `noerr_first` helper to avoid exact acceptance of the noerr conjunct; then attempted to close the remaining `no_type_error_result (INR y)` premise by converting both sides of the implication to `!msg. y <> Error (TypeError msg)` and stripping. -> The proof still fails with HOL_ERR CHOOSE at a tautological noerr implication inside the suspended For_cons Resume. Source currently contains partial helper and suffix edits but the component is not closed. (`TO_type_system_rewrite-20260519T123242Z_m32263_t001`)
+- `E0450` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 47 steps, 48 tools, 18 holbuild, 3,280,881 tok (3,264,193 in, 16,688 out, 3,191,296 cached), 559.5s, $2.46077300)
+  - Implemented a shape-compatible `for_cons_ordinary_exception_final_case_noerr_first` helper and rewrote the For_cons suffix to extract the IH existential, keep the noerr fact separate, and apply the helper. -> The helper itself proves, but the Resume suffix still fails. After the helper application, a residual noerr premise remains; multiple ways of closing the trivial implication/assumption (`simp`, exact acceptance, expansion to `!msg`, stripping) triggered CHOOSE/extract_thm failures in the suspended proof validation. (`TO_type_system_rewrite-20260519T123242Z_m32263_t001`)
+
+### Ruled Out
+
+- Exact assumption acceptance for noerr/existential facts inside Resume
+- mp_tac + strip + simp on no_type_error_result side goal inside Resume
+- expanding both sides of the noerr implication with no_type_error_result_def inside Resume
+- Direct helper application that leaves side goals for existing facts
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32263_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32264_t001` (use `read_tool_output` for exact output)
+
+## C2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0280`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 125,450 tok (125,004 in, 446 out, 118,272 cached), 7.3s, $0.10617600
+- next: Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next.
+
+### Attempts / Evidence
+
+- `E0252` (progressed, other)
+  - Replaced `Resume eval_all_type_sound_mutual[Log]` cheat with proof by unfolding `type_stmt_def`/`evaluate_def`, applying eval_exprs IH, and using `env_consistent_preserved_by_frame` with `preserves_tv_eq` for `push_log` logs-only update. -> Verified by `holbuild(targets=["vyperTypeStmtSoundnessTheory"])`; build proceeded past Log and existing cheats. (`TO_type_system_rewrite-20260518T204229Z_m27018_t001`)
+  - Added local helper `eval_iterator_no_control` for C2.4 For error branch; after adding `option_CASE_rator`/`sum_CASE_rator` and direct simplification it proved, and build advanced into `Resume ...[For]`. -> Helper proof passed far enough that later failures are in the For resume, not the helper. (`TO_type_system_rewrite-20260518T204229Z_m27039_t001`, `TO_type_system_rewrite-20260518T204229Z_m27051_t001`)
+  - Started `Resume eval_all_type_sound_mutual[For]`: established `env.type_defs = get_tenv cx`, extracted `env_after`, used `assignable_type_well_formed`, applied iterator IH via explicit specialization, and applied eval_for IH via explicit specialization after successful bound check. -> Partial progress; current source fails after eval_for success/exception branch because the do-block equality remains to simplify/connect to `res,st'`. (`TO_type_system_rewrite-20260518T204229Z_m27056_t001`)
+- `E0253` (progressed, other)
+  - Finished `Resume eval_all_type_sound_mutual[For]` by simplifying both outer and inner do-blocks with `bind_def`, `ignore_bind_def`, `return_def`, `assert_def`, then using `eval_iterator_no_control` for the iterator error case. -> Verified: `vyperTypeStmtSoundnessTheory` built after this proof (remaining cheats still present). (`TO_type_system_rewrite-20260518T204229Z_m27079_t001`)
+  - Replaced `Resume eval_all_type_sound_mutual[For_nil]` cheat with direct one-step evaluator rewrite (`Once evaluate_def`, `return_def`) and no-TypeError simplification. -> Verified after holbuild discarded stale context checkpoints; build succeeded with remaining cheats before starting For_cons. (`TO_type_system_rewrite-20260518T204229Z_m27117_t001`)
+  - Started `Resume eval_all_type_sound_mutual[For_cons]` by unfolding one step through `eval_for`, `push_scope_with_var`, `bind`, and `ignore_bind`, then probing the residual goal. -> Probe showed the exact branch shape: split on `finally (try do eval_stmts ...; return F od handle_loop_exception) pop_scope stp`, then handle `INR`, `INL T` (break), and `INL F` (recursive eval_for). (`TO_type_system_rewrite-20260518T204229Z_m27126_t001`, `TO_type_system_rewrite-20260518T204229Z_m27128_t001`)
+- `E0254` (progressed, other)
+  - Inserted local `for_body_decompose` copied/adapted from retired helper, decomposing `finally (try do eval_stmts; return F od handle_loop_exception) pop_scope (st with scopes updated_by CONS sc)` into body result/state, popped state, and break/continue/exception result relations. -> Helper proof passed far enough for holbuild to resume at For_cons; later failures are in For_cons, not the helper. (`TO_type_system_rewrite-20260518T204229Z_m27162_t001`)
+  - In `Resume eval_all_type_sound_mutual[For_cons]`, unfolded one step, destructed finally, manually decomposed body/finally, derived `state_well_typed stp`, `accounts_well_typed stp.accounts`, and `env_consistent (extend_local env id ty F) cx stp`, then applied statement-list IH to `eval_stmts cx body stp`. -> Build advanced to the body-success/loop-continue branch with body IH facts available (`state_well_typed st_body`, `accounts_well_typed st_body.accounts`, `env_consistent env_after cx st_body`). (`TO_type_system_rewrite-20260518T204229Z_m27188_t001`)
+  - Tried to restore caller env after pop using `scope_bracket_preserves_ec` directly and via metis with the singleton scope condition. -> Still failing; the current obstacle is instantiation/proof of `env_consistent env cx (st_body with scopes := TL st_body.scopes)` in the INL body-success branch. Need a targeted instantiation of `scope_bracket_preserves_ec` or a local singleton-scope helper rather than more raw simplification. (`TO_type_system_rewrite-20260518T204229Z_m27195_t001`, `TO_type_system_rewrite-20260518T204229Z_m27199_t001`)
+- `E0255` (progressed, other)
+  - Factored `extend_local_F_env_extends` and singleton loop-body pop helpers `for_body_env_extends_consistent_after_pop` / `for_body_env_consistent_after_pop`; used them in For_cons body-success and body-exception branches. -> For_cons now proves; `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` succeeds despite remaining known cheats. (`TO_type_system_rewrite-20260518T204229Z_m27279_t001`)
+  - Inspected post-For_cons source and remaining C2.4 frontier; next visible cheated cases are `Iterator_Array` and `Iterator_Range`. -> Handoff cursor should move from For_cons to iterator resumes. (`TO_type_system_rewrite-20260518T204229Z_m27280_t001`)
+- `E0256` (progressed, other)
+  - Added C2.4-local helpers `extract_elements_well_typed`, `Num_pos_le`, `within_int_bound_convex`, and `range_values_well_typed`, plus `intLib` and `vyperAssignPreservesType` imports. -> Verified `vyperTypeStmtSoundnessTheory` built after helper additions while iterator resumes were still cheated; helper layer is sound and can be reused for Iterator_Array/Range. (`TO_type_system_rewrite-20260518T204229Z_m27324_t001`)
+  - Started replacing `Resume eval_all_type_sound_mutual[Iterator_Array]` with one-step evaluator proof: apply eval_expr IH, materialise success/no-TypeError facts, decompose `evaluate_type_ArrayT_cases`, and use `extract_elements_well_typed` on success. -> Build advanced into Iterator_Array success branch; failure is at a misplaced `qexists_tac elem_tv` because the current goal is the final conjunction, not an existential. Need simplify the outer `lift_option_type (SOME ...)` equality first, then prove `EVERY` via the helper. (`TO_type_system_rewrite-20260518T204229Z_m27331_t001`)
+- `E0257` (progressed, other)
+  - Repaired `Resume eval_all_type_sound_mutual[Iterator_Array]` by simplifying the monadic `lift_option_type`/`return` equalities before applying `extract_elements_well_typed`; handled array-shape and materialise TypeError branches directly. -> Verified: `vyperTypeStmtSoundnessTheory` built after Iterator_Array proof. (`TO_type_system_rewrite-20260518T204229Z_m27372_t001`)
+  - Replaced `Resume eval_all_type_sound_mutual[Iterator_Range]` cheat with evaluator sequencing over first expr/get_Value, second expr/get_Value, `lift_sum (get_range_limits ...)`, and used `range_values_well_typed` in the success branch. Error branches use `get_Value_no_type_error` or direct `get_range_limits` integer-shape contradiction. -> Verified: `vyperTypeStmtSoundnessTheory` built after Iterator_Range proof. (`TO_type_system_rewrite-20260518T204229Z_m27417_t001`)
+  - Audited `vyperTypeStmtSoundnessScript.sml` for remaining cheats and ran downstream build. -> Remaining visible cheats are `Append` and expression/expression-list resumes; downstream build currently reaches `vyperTypeCallSoundnessTheory` and fails at `functions_well_typed_body`, so iterator proofs are not the current build blocker. (`TO_type_system_rewrite-20260518T204229Z_m27418_t001`, `TO_type_system_rewrite-20260518T204229Z_m27418_t002`)
+- `E0258` (progressed, other)
+  - In Append materialise-success branch, replaced the masked TRY block with explicit ArrayT assignability proof using target_runtime_typed_place_leaf_typed and place_leaf_typed_evaluate_type, then explicit qspecl_then of assign_target_append_no_type_error for the TypeError contradiction. -> Verified by holbuild progress: materialise-success branch is solved; build moves to later Append branches. (`TO_type_system_rewrite-20260518T204229Z_m27583_t001`)
+  - For materialise-error branch, simplified the residual append do-block equality with bind_apply/bind_def/return_def/ignore_bind_apply before using materialise_state and materialise no-control/typed-non-None facts. -> Verified by holbuild progress: materialise-error branch is solved; build moves to eval_expr-error branch. (`TO_type_system_rewrite-20260518T204229Z_m27590_t001`)
+  - Attempted to continue eval_expr-error branch without decomposing the append do-block first. -> Current failure: goal still has do-block equality and needs st'=st2/state_well_typed st' from eval_expr error; next step should simplify the do-block equality in that branch before applying eval_expr_exception_return_typed. (`TO_type_system_rewrite-20260518T204229Z_m27590_t001`)
+- `E0259` (proved, )
+  - Repaired `Resume eval_all_type_sound_mutual[Append]` eval_expr-error branch by simplifying the residual append monadic do-block (`bind_apply`, `bind_def`, `return_def`, `ignore_bind_apply`) before applying `eval_expr_exception_return_typed`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600)` now builds; Append proof closes. (`TO_type_system_rewrite-20260518T204229Z_m27600_t001`)
+  - Audited `vyperTypeStmtSoundnessScript.sml` resumes/finalisation for C2.4-owned statement/list/loop/iterator cases. -> All suspended cases in `eval_all_type_sound_mutual` have Resume blocks and a `Finalise eval_all_type_sound_mutual`; remaining downstream failure is in call soundness, not C2.4 statement case proof. (`TO_type_system_rewrite-20260518T204229Z_m27602_t002`, `TO_type_system_rewrite-20260518T204229Z_m27602_t001`, `TO_type_system_rewrite-20260518T204229Z_m27602_t003`)
+- `E0280` (proved, , actual effort: 1 sessions, 1 steps, 125,450 tok (125,004 in, 446 out, 118,272 cached), 7.3s, $0.10617600)
+  - Re-began C2.4 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0259 evidence show non-assignment/structured statement cases, including Append/loop/iterator work, are already proved and audited. (`TO_type_system_rewrite-20260519T085316Z_m28108_t001`, `TO_type_system_rewrite-20260518T204229Z_m27600_t001`, `TO_type_system_rewrite-20260518T204229Z_m27601_t002`, `TO_type_system_rewrite-20260518T204229Z_m27602_t002`, `TO_type_system_rewrite-20260518T204229Z_m27602_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27600_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27601_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27602_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27602_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28108_t001` (use `read_tool_output` for exact output)
+
+## C2.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `wrong_statement` After proving Target_Base/Target_Tuple/Targets_nil/Targets_cons and reaching BaseTarget_BareGlobal, the direct proof appears blocked by an underspecified invariant: fresh `env_context_consistent_def` only says `FLOOKUP env.bare_globals ...` implies `is_immutable_decl` when `get_module_code cx src = SOME ts` is already known, while `eval_base_target (BareGlobalNameTarget id)` can raise `TypeError` if `get_module_code cx (current_module cx) = NONE`. The retired helper theorem assumed an env invariant that provided code existence for bare globals, but the fresh theorem premises do not visibly provide it. Continuing unfolded-tactic attempts would be repeating the same proof without the missing fact.
+- latest episode: `E0243`
+- blocker: C2.5 BaseTarget_BareGlobal needs strategist review: add/derive code-existence for bare_globals/current_src, strengthen fresh env consistency/mutual theorem premises, or identify an existing helper that supplies the missing fact.
+- next: Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed.
+
+### Attempts / Evidence
+
+- `E0241` (progressed, missing_helper)
+  - Replaced cheats for Target_Base, Target_Tuple, Targets_nil, Targets_cons with IH-based proof attempts following evaluator recursion. -> Target_Base initially failed because `well_typed_atarget` did not expose `type_place_target`; after adding `well_typed_target_def` and explicit stripping, Target_Base was accepted enough for build to progress to Target_Tuple. (`TO_type_system_rewrite-20260518T204229Z_m26702_t001`, `TO_type_system_rewrite-20260518T204229Z_m26706_t001`)
+  - Added local helpers `target_runtime_typed_imp_shape` and `target_values_runtime_typed_imp_shape` near `attribute_type_evaluates`. -> The first helper needed `rw` rather than `simp` for the tuple case; after repair both helpers were admitted and build reached Target_Tuple. (`TO_type_system_rewrite-20260518T204229Z_m26711_t001`, `TO_type_system_rewrite-20260518T204229Z_m26713_t001`, `TO_type_system_rewrite-20260518T204229Z_m26715_t001`)
+  - Current Target_Tuple proof uses `gvs[target_runtime_typed_def, target_value_shape_def, target_values_shape_LIST_REL] >> metis_tac[]` in the successful eval_targets branch. -> Build fails there; goal still includes implication/equality wrapper and has LIST_REL3 runtime typing. Needs explicit `strip_tac >> gvs[]`, then simplify `target_runtime_typed_def` and use shape helper / LIST_REL3 equivalence. (`TO_type_system_rewrite-20260518T204229Z_m26715_t001`, `TO_type_system_rewrite-20260518T204229Z_m26716_t002`)
+- `E0242` (progressed, wrong_statement)
+  - Replaced C2.5 Target_Tuple successful branch with explicit return equality stripping and target_values_runtime_typed/list shape boundary proof; patched INR branch similarly. -> Build progressed past Target_Tuple to Targets_cons. (`TO_type_system_rewrite-20260518T204229Z_m26734_t001`, `TO_type_system_rewrite-20260518T204229Z_m26736_t001`)
+  - Repaired Targets_cons by using the correct head variable (`tgt`) after evaluator unfolding, specializing the guarded list IH, and rebuilding the head runtime target at st2 via target_runtime_typed_rebuild/runtime_consistent_def. -> vyperTypeStmtSoundnessTheory built through Targets_cons and BaseTarget_Name; current failure is later BaseTarget_BareGlobal. (`TO_type_system_rewrite-20260518T204229Z_m26749_t001`)
+  - Attempted direct BaseTarget_BareGlobal proof by unfolding type_place_target_BareGlobalNameTarget and eval_base_target. -> Failure exposes missing proof of state_well_typed st' for unfolded eval expression because evaluator may raise TypeError when get_module_code current_module is NONE; available fresh invariants shown in env_context_consistent_def lack code-existence from bare_globals without a get_module_code premise. (`TO_type_system_rewrite-20260518T204229Z_m26760_t001`, `TO_type_system_rewrite-20260518T204229Z_m26762_t001`, `TO_type_system_rewrite-20260518T204229Z_m26774_t001`)
+- `E0243` (stuck, wrong_statement)
+  - Patched Target_Tuple success and error branches by stripping evaluator return equalities, using target_values_runtime_typed_LIST_REL3 and target_values_runtime_typed_imp_shape. -> Build progressed past Target_Tuple. (`TO_type_system_rewrite-20260518T204229Z_m26734_t001`, `TO_type_system_rewrite-20260518T204229Z_m26736_t001`)
+  - Patched Targets_cons by matching unfolded evaluator variables, specializing the guarded list IH, and using target_runtime_typed_rebuild/runtime_consistent_def to move the head target typing from st1 to st2. -> vyperTypeStmtSoundnessTheory built through Targets_cons and then failed at BaseTarget_BareGlobal. (`TO_type_system_rewrite-20260518T204229Z_m26749_t001`)
+  - Tried direct BaseTarget_BareGlobal proof from `type_place_target_BareGlobalNameTarget` plus unfolded evaluator. -> Failure exposed missing code-existence/immutable-declaration facts needed to rule out TypeError and preserve state invariants; fresh definitions and old helper evidence indicate an invariant mismatch rather than a simple tactic gap. (`TO_type_system_rewrite-20260518T204229Z_m26760_t001`, `TO_type_system_rewrite-20260518T204229Z_m26762_t001`, `TO_type_system_rewrite-20260518T204229Z_m26774_t001`)
+
+### Ruled Out
+
+- More `simp`/`gvs`/`metis_tac` on the unfolded BareGlobalNameTarget evaluator without a code-existence fact.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26749_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26760_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26762_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26774_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26783_t001` (use `read_tool_output` for exact output)
+
+## C2.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0281`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 129,680 tok (129,309 in, 371 out, 126,464 cached), 5.3s, $0.08858700
+- next: Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next.
+
+### Attempts / Evidence
+
+- `E0244` (proved, )
+  - Edited vyperTypeSystemScript.sml definitions per C2.5.1, then built smallest target. -> vyperTypeSystemTheory built after definition repair and compatibility lemma. (`TO_type_system_rewrite-20260518T204229Z_m26804_t001`)
+  - Built immediate dependent env theories to check fallout from env_context_consistent_def change. -> vyperTypeEnvTheory and vyperTypeEnvPreservationTheory built cleanly. (`TO_type_system_rewrite-20260518T204229Z_m26805_t002`, `TO_type_system_rewrite-20260518T204229Z_m26806_t001`)
+- `E0281` (proved, , actual effort: 1 sessions, 1 steps, 129,680 tok (129,309 in, 371 out, 126,464 cached), 5.3s, $0.08858700)
+  - Re-began C2.5.1 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0244 evidence show the definition repair and immediate dependent env theories already build cleanly. (`TO_type_system_rewrite-20260519T085316Z_m28111_t001`, `TO_type_system_rewrite-20260518T204229Z_m26804_t001`, `TO_type_system_rewrite-20260518T204229Z_m26805_t002`, `TO_type_system_rewrite-20260518T204229Z_m26806_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26804_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26805_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26806_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28111_t001` (use `read_tool_output` for exact output)
+
+## C2.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0282`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 49,234 tok (48,855 in, 379 out, 45,568 cached), 6.7s, $0.05058900
+- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+
+### Attempts / Evidence
+
+- `E0245` (proved, )
+  - Proved env_consistent_bare_global_ready by unfolding env_consistent_def, env_context_consistent_def, and env_immutables_consistent_def; used strengthened bare_globals conjunct from C2.5.1. -> vyperTypeEnvTheory built with new boundary lemma. (`TO_type_system_rewrite-20260518T204229Z_m26813_t001`)
+  - Built vyperTypeStmtSoundnessTheory as a dependent check. -> Build imports the new env theory and then fails at existing BaseTarget_BareGlobal proof, which is the next planned component rather than a C2.5.2 lemma failure. (`TO_type_system_rewrite-20260518T204229Z_m26814_t001`)
+- `E0282` (proved, , actual effort: 1 sessions, 1 steps, 49,234 tok (48,855 in, 379 out, 45,568 cached), 6.7s, $0.05058900)
+  - Duplicate carry-forward closure for already-proved bare-global readiness boundary lemma; no source edits required. -> Scoped dossier shows E0245 proved env_consistent_bare_global_ready and dependent build reached the next planned component rather than a lemma failure. (`TO_type_system_rewrite-20260518T204229Z_m26813_t001`, `TO_type_system_rewrite-20260518T204229Z_m26814_t001`, `TO_type_system_rewrite-20260519T085316Z_m28118_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26813_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26814_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28118_t001` (use `read_tool_output` for exact output)
+
+## C2.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0283`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 53,919 tok (53,646 in, 273 out, 50,688 cached), 4.7s, $0.04832400
+- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+
+### Attempts / Evidence
+
+- `E0246` (proved, )
+  - Replaced raw BareGlobal branch proof with readiness-boundary proof plus existing evaluator preservation/no-TypeError lemmas; used targeted simplification of get_immutables/get_source_immutables only for success shape/runtime typing. -> vyperTypeStmtSoundnessTheory built, so BaseTarget_BareGlobal is closed and downstream statement target compilation proceeds past it. (`TO_type_system_rewrite-20260518T204229Z_m26864_t001`)
+  - Intermediate builds exposed remaining obligations: first state preservation st'=st, then no-TypeError, then ImmutableVar location runtime typing via immutable map lookup/evaluate_type. Addressed each using planned lemmas and env_immutables_consistent_def rather than broad raw unfolding. -> Failure sequence converged without weakening statements or importing retired helper theories. (`TO_type_system_rewrite-20260518T204229Z_m26826_t001`, `TO_type_system_rewrite-20260518T204229Z_m26829_t001`, `TO_type_system_rewrite-20260518T204229Z_m26835_t001`, `TO_type_system_rewrite-20260518T204229Z_m26856_t001`)
+- `E0283` (proved, , actual effort: 1 sessions, 1 steps, 53,919 tok (53,646 in, 273 out, 50,688 cached), 4.7s, $0.04832400)
+  - Duplicate carry-forward closure for already-proved BaseTarget_BareGlobal resume proof; no source edits required. -> Scoped dossier shows E0246 proved the BaseTarget_BareGlobal branch and `vyperTypeStmtSoundnessTheory` built past it; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m26864_t001`, `TO_type_system_rewrite-20260519T085316Z_m28122_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26864_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28122_t001` (use `read_tool_output` for exact output)
+
+## C2.5.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0284`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 59,466 tok (59,215 in, 251 out, 55,808 cached), 4.1s, $0.05246900
+- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+
+### Attempts / Evidence
+
+- `E0247` (proved, )
+  - Added two local helper lemmas near statement-soundness preliminaries: `subscript_vtype_index_get_Value_no_type_error` uses `expr_result_typed_def`, `expr_runtime_typed_def`, `get_Value_no_type_error`, and cases on `subscript_vtype_def`; `subscript_vtype_value_step_type` uses `target_path_type_subscript_cons`, runtime expression typing, and cases on `get_Value`/`value_has_type_def` to recover `IntV` array indexes and hashmap key typing. -> Helpers build in `vyperTypeStmtSoundnessTheory`; C2.5.4.1 bridge is available for the later BaseTarget_Subscript branch. (`TO_type_system_rewrite-20260518T204229Z_m26904_t001`)
+- `E0284` (proved, , actual effort: 1 sessions, 1 steps, 59,466 tok (59,215 in, 251 out, 55,808 cached), 4.1s, $0.05246900)
+  - Duplicate carry-forward closure for already-proved subscript index extraction/path-step helper; no source edits required. -> Scoped dossier shows E0247 added and built the subscript helper lemmas in `vyperTypeStmtSoundnessTheory`; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m26904_t001`, `TO_type_system_rewrite-20260519T085316Z_m28126_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26904_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28126_t001` (use `read_tool_output` for exact output)
+
+## C2.5.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0285`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 64,682 tok (64,448 in, 234 out, 60,928 cached), 3.7s, $0.05508400
+- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+
+### Attempts / Evidence
+
+- `E0248` (progressed, unknown)
+  - Unfolded `type_place_target_SubscriptTarget` and one step of `evaluate_def`; initially split on the wrong recursive target variable (`tgt`), then fixed to `bt`. Applied base-target IH; probe showed `bt_res`, preservation facts for `st1`, and expression IH guarded by successful base-target evaluation. -> Probe confirmed plan shape: on `INL (loc,sbs)` need to evaluate expression at `st1`, apply expression IH, split `get_Value`, then use C2.5.4.1 helpers. Latest source has a candidate continuation but no verifying build yet. (`TO_type_system_rewrite-20260518T204229Z_m26946_t001`, `TO_type_system_rewrite-20260518T204229Z_m26948_t002`)
+- `E0249` (proved, )
+  - Repaired `BaseTarget_Subscript` success branch by rebuilding `location_runtime_typed` at the expression-result state and applying `subscript_vtype_value_step_type` with explicit witnesses after `get_Value` success. -> `vyperTypeStmtSoundnessTheory` builds, so the `eval_all_type_sound_mutual[BaseTarget_Subscript]` Resume proof is closed. (`TO_type_system_rewrite-20260518T204229Z_m26979_t001`)
+- `E0285` (proved, , actual effort: 1 sessions, 1 steps, 64,682 tok (64,448 in, 234 out, 60,928 cached), 3.7s, $0.05508400)
+  - Duplicate carry-forward closure for already-proved BaseTarget_Subscript resume proof; no source edits required. -> Scoped dossier shows E0249 proved the BaseTarget_Subscript branch and `vyperTypeStmtSoundnessTheory` built; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m26979_t001`, `TO_type_system_rewrite-20260519T085316Z_m28130_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26979_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28130_t001` (use `read_tool_output` for exact output)
+
+## C2.5.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0286`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 70,822 tok (70,569 in, 253 out, 67,072 cached), 5.8s, $0.05861100
+- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+
+### Attempts / Evidence
+
+- `E0250` (proved, )
+  - Ran the planned build audit for the C2.5 target/base-target slice with `holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600)`. -> Build completed successfully; no remaining target/base-target failure in `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260518T204229Z_m26984_t001`)
+- `E0286` (proved, , actual effort: 1 sessions, 1 steps, 70,822 tok (70,569 in, 253 out, 67,072 cached), 5.8s, $0.05861100)
+  - Duplicate carry-forward closure for already-completed C2.5 target/base-target build audit; no source edits required. -> Scoped dossier shows E0250 ran the planned build audit and `vyperTypeStmtSoundnessTheory` completed successfully through the target/base-target slice; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m26984_t001`, `TO_type_system_rewrite-20260519T085316Z_m28134_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26984_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28134_t001` (use `read_tool_output` for exact output)
+
+## C2.6
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `wrong_statement` Exprs_cons exposes a possible statement-strength gap: `well_typed_exprs env (e::es)` only gives `well_typed_expr env e`, but `eval_exprs` immediately materialises the head. If `eval_expr` succeeds with a HashMapRef, `materialise` returns TypeError. The Expr statement case separately excludes `type_place_expr env e = SOME (HashMapT kt vt)`, but the expr-list mutual clause has no analogous non-hashmap/materialisable premise. Current proof gets stuck exactly on the materialise-error branch needing `∀msg. y <> Error (TypeError msg)` from only `expr_result_typed env e x`; the side condition there implies HashMapRef corresponds to a HashMap place, not that it is impossible.
+- latest episode: `E0260`
+- blocker: Exprs_cons no-TypeError appears under-specified for materialisation of head expressions that may be HashMapRef.
+- next: Escalate C2.6 to strategist before continuing: either strengthen the expr-list mutual clause with a materialisable/non-hashmap condition and update callers, or add/prove a boundary lemma showing well_typed_exprs callers already exclude HashMapRef heads.
+
+### Attempts / Evidence
+
+- `E0260` (progressed, wrong_statement)
+  - Proved `Expr_Literal` by unfolding only the literal evaluator equation and reconstructing `expr_result_typed` with `literal_toplevel_value_typed`; build passed. -> Verified local literal resume proof. (`TO_type_system_rewrite-20260518T204229Z_m27634_t001`)
+  - Proved `Exprs_nil` by unfolding the eval_exprs nil equation and `exprs_runtime_typed_def`; build passed through that resume. -> Verified local nil expression-list proof. (`TO_type_system_rewrite-20260518T204229Z_m27642_t001`)
+  - Attempted `Exprs_cons` by using head expression IH, materialising the head, then using tail exprs IH. Success materialise branch can reconstruct `exprs_runtime_typed`; materialise-error branch fails. -> Stuck on materialise-error branch: current assumptions only include `expr_result_typed env e x` and `materialise cx x st1 = (INR y,st')`, insufficient to prove no TypeError if `x` is a HashMapRef. (`TO_type_system_rewrite-20260518T204229Z_m27665_t001`)
+  - Checked `type_stmt` expression case: standalone statement `Expr e` explicitly excludes hashmap place expressions, suggesting an analogous materialisability/non-hashmap premise may be missing for the mutual expr-list clause. -> Evidence that the proof gap is statement/invariant shape, not a tactic issue. (`TO_type_system_rewrite-20260518T204229Z_m27660_t002`)
+
+### Ruled Out
+
+- A direct `materialise_runtime_typed_no_type_error` application: it needs the evaluated type value to be non-NoneTV; HashMapRef results are typed as NoneTV via `vtype_annotation_ok` and `toplevel_value_typed_not_hashmap_material`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27634_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27642_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27665_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27660_t002` (use `read_tool_output` for exact output)
+
+## C2.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0287`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 74,790 tok (74,556 in, 234 out, 71,168 cached), 3.8s, $0.05954400
+- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+
+### Attempts / Evidence
+
+- `E0261` (proved, )
+  - Structural induction on expr with targeted simplification of well_typed_expr_def/type_place_expr/vtype_annotation_ok_def; split TopLevelName pair and Subscript runtime/static branches using subscript_type_ok_def and subscript_vtype_def. -> holbuild advanced past well_typed_expr_not_hashmap_place to the pre-existing Exprs_cons failure, so the static boundary lemma is accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m27708_t001`)
+- `E0287` (proved, , actual effort: 1 sessions, 1 steps, 74,790 tok (74,556 in, 234 out, 71,168 cached), 3.8s, $0.05954400)
+  - Duplicate carry-forward closure for already-proved static boundary that well-typed expressions are not HashMap places; no source edits required. -> Scoped dossier shows E0261 proved the boundary by structural induction and holbuild advanced past the lemma to the next pre-existing Exprs_cons failure; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m27708_t001`, `TO_type_system_rewrite-20260519T085316Z_m28138_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27708_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28138_t001` (use `read_tool_output` for exact output)
+
+## C2.6.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0288`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 50,477 tok (50,259 in, 218 out, 46,592 cached), 4.2s, $0.04817100
+- next: Review closure with strategist, then follow Oracle next frontier.
+
+### Attempts / Evidence
+
+- `E0262` (proved, )
+  - Added expr_result_typed_materialise_no_type_error near expr_result_typed_def. Proof assumes TypeError by contradiction, preserves the materialise equality, uses materialise_type_error_imp_HashMapRef with drule_then assume_tac, unfolds expr_result_typed_def, and closes with well_typed_expr_not_hashmap_place. -> holbuild advanced past expr_result_typed_materialise_no_type_error to the planned downstream Exprs_cons branch, so the runtime bridge is accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m27722_t001`)
+- `E0288` (proved, , actual effort: 1 sessions, 1 steps, 50,477 tok (50,259 in, 218 out, 46,592 cached), 4.2s, $0.04817100)
+  - Carry-forward runtime bridge expr_result_typed_materialise_no_type_error from prior accepted C2.6.2 dossier evidence; no source edits needed this session. -> HOL4 previously accepted the bridge and advanced to downstream Exprs_cons, so this component has no remaining work. (`TO_type_system_rewrite-20260518T204229Z_m27722_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27722_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0289`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 55,923 tok (55,721 in, 202 out, 52,736 cached), 3.6s, $0.04735300
+- next: Review closure with strategist, then follow Oracle next frontier.
+
+### Attempts / Evidence
+
+- `E0263` (proved, )
+  - Replaced the Exprs_cons materialise-error branch's failed materialise_runtime_typed_no_type_error call with `materialise_state` for `st' = st1` and `expr_result_typed_materialise_no_type_error` for the `!msg` no-TypeError conjunct. -> holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600) succeeded, so the Exprs_cons resume and Finalise eval_all_type_sound_mutual are accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m27731_t001`)
+- `E0289` (proved, , actual effort: 1 sessions, 1 steps, 55,923 tok (55,721 in, 202 out, 52,736 cached), 3.6s, $0.04735300)
+  - Carry-forward completed Exprs_cons proof from prior accepted dossier E0263; no source edits needed this session. -> HOL4 previously accepted the Exprs_cons resume and Finalise eval_all_type_sound_mutual, with vyperTypeStmtSoundnessTheory succeeding under the recorded build. (`TO_type_system_rewrite-20260518T204229Z_m27731_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27731_t001` (use `read_tool_output` for exact output)
+
+## C2.7
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0264`
+- blocker: C2.7 checkpoint cannot be closed: vyperTypeStmtSoundnessTheory builds, but grep found 19 remaining `cheat` proofs in `vyperTypeStmtSoundnessScript.sml` expression Resume cases (Expr_Name through Expr_Call_CreateTarget). These cheats must be explicitly covered by PLAN components before further edits under the cheat coverage invariant.
+- next: Strategist must decide whether to decompose the remaining expression Resume cheats inside C2/C2.7 or classify them under later builtin/call components; executor must not edit them until PLAN coverage exists.
+
+### Attempts / Evidence
+
+- `E0264` (stuck, plan_incomplete)
+  - Ran the C2.7 mechanical checkpoint: holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600), plus targeted greps for `cheat` and `suspend` in vyperTypeStmtSoundnessScript.sml. -> Theory build succeeded quickly, but audit found unresolved `cheat` proofs in 19 expression Resume blocks. The original suspension list remains only as the suspended mutual theorem skeleton and is finalized, but the residual cheats are real oracle uses. (`TO_type_system_rewrite-20260518T204229Z_m27736_t002`, `TO_type_system_rewrite-20260518T204229Z_m27737_t002`, `TO_type_system_rewrite-20260518T204229Z_m27737_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27736_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27737_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27737_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27737_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other` Direct unfolding of lookup_global reduced TopLevelName to two large branch goals. Broad gvs plus unconstrained metis timed out; a missing discriminator for immutable declarations versus storage/hashmap declarations was identified and a local helper was added. The next action must be to build the current source to see whether that helper suffices.
+- latest episode: `E0267`
+- blocker: Expr_TopLevelName remains partial/unverified. The final source edit adding `is_immutable_decl_find_var_decl_by_num_NONE` and using it in `metis_tac` has not been verified.
+- next: Run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600)` immediately on the current source. If it still fails in `Expr_TopLevelName`, do not add more broad definitions; factor a local boundary lemma for well-typed top-level lookup/no-TypeError/result-typing or split the inline proof by `find_var_decl_by_num` branch.
+
+### Attempts / Evidence
+
+- `E0265` (progressed, missing_helper)
+  - Replaced `Expr_Name` cheat with evaluator unfolding and `well_typed_Name_lookup`. -> First attempt proved lookup facts but left state-preservation goals because the evaluator `do` block was not fully reduced through `lookup_scopes_val`. (`TO_type_system_rewrite-20260518T204229Z_m27803_t001`, `TO_type_system_rewrite-20260518T204229Z_m27805_t001`)
+  - Added local `lookup_scopes_val_SOME` and asserted the runtime lookup result from `lookup_scopes`; unfolded `bind_def`/`return_def`. -> Reduced `Expr_Name` to one small runtime-typing existential involving `expr_type (Name cx' id)` and `toplevel_value_typed (Value entry.value)`. (`TO_type_system_rewrite-20260518T204229Z_m27814_t001`, `TO_type_system_rewrite-20260518T204229Z_m27817_t001`)
+  - Inspected existing value/type bridge facts. -> Confirmed `toplevel_value_typed_Value` exists in `vyperTypeValuesScript.sml`; likely finish is `gvs[expr_type_def, toplevel_value_typed_def]` or `simp[expr_type_def, toplevel_value_typed_Value]`. (`TO_type_system_rewrite-20260518T204229Z_m27818_t002`)
+- `E0266` (progressed, other)
+  - Finished `Expr_Name` by adding `expr_type_def` and `toplevel_value_typed_Value` to the final simplifier. -> The statement theory built past `Expr_Name`; no remaining failure there. (`TO_type_system_rewrite-20260518T204229Z_m27831_t001`, `TO_type_system_rewrite-20260518T204229Z_m27832_t001`)
+  - Replaced `Expr_BareGlobalName` cheat. Used `bare_global_lookup_sound`, derived `env.current_src = current_module cx` and the required current-module immutable map, then unfolded the evaluator and closed with `expr_result_typed_def`/`expr_runtime_typed_def`/`toplevel_value_typed_Value`; final `metis_tac[]` discharged leftover env-context conjuncts. -> The statement theory built with `Expr_BareGlobalName` proved (later C2.7.1 cheats still present). (`TO_type_system_rewrite-20260518T204229Z_m27866_t001`, `TO_type_system_rewrite-20260518T204229Z_m27876_t001`)
+  - Started `Expr_TopLevelName` by replacing the cheat with evaluator unfolding through `lookup_global_state` and `lookup_global_def`. -> Partial source edit only; not yet built/verified. This may be too low-level and should be checked first next session. (`TO_type_system_rewrite-20260518T204229Z_m27891_t001`)
+- `E0267` (progressed, other)
+  - Built current handoff source for `Expr_TopLevelName`. -> Failed at the end of the Resume with a large lookup_global obligation: preservation was solved by `lookup_global_state`, but no-TypeError and `expr_result_typed` remained for lookup_global branches. (`TO_type_system_rewrite-20260518T204229Z_m27896_t001`)
+  - Added `gvs[expr_result_typed_def, expr_runtime_typed_def, well_typed_expr_def, expr_type_def, toplevel_value_typed_Value]`. -> Reduced the residual to two branch goals: Type-level top-level lookup must prove an `evaluate_type`/`toplevel_value_typed` witness and exclude `HashMapRef`. (`TO_type_system_rewrite-20260518T204229Z_m27918_t001`)
+  - Added broad `env_consistent_def`, `env_context_consistent_def`, `env_immutables_consistent_def`, `state_well_typed_def`, `imms_well_typed_def`, then tried `metis_tac[read_storage_slot_error, read_storage_slot_success_type,value_has_type_NoneTV]`. -> `metis_tac` timed out on a >4KB goal; the goal had useful facts showing Type-typed entries cannot be HashMapVarDecl and immutable declarations imply a NONE `find_var_decl_by_num` branch is needed. (`TO_type_system_rewrite-20260518T204229Z_m27921_t001`, `TO_type_system_rewrite-20260518T204229Z_m27923_t001`)
+  - Added local helper `is_immutable_decl_find_var_decl_by_num_NONE` near the expression helpers and included it in the final metis. -> Source edited but unverified; next session must run holbuild before any more edits. (`TO_type_system_rewrite-20260518T204229Z_m27942_t001`, `TO_type_system_rewrite-20260518T204229Z_m27943_t001`)
+
+### Ruled Out
+
+- Unconstrained `metis_tac` after broad `gvs` on the full lookup_global branch goal; it timed out and the goal is too large.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m27896_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27918_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27921_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27923_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27942_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m27943_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0290`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 62,634 tok (62,395 in, 239 out, 58,880 cached), 3.9s, $0.05418500
+- next: Review closure with strategist, then follow Oracle next frontier.
+
+### Attempts / Evidence
+
+- `E0268` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 12 tools, 5 holbuild, 1,240,517 tok (1,236,585 in, 3,932 out, 1,201,664 cached), 138.0s, $0.89339700)
+  - Explicitly split `type_place_target env bt`, `vt`, array type, and dynamic/fixed bound; replaced final `gvs[]` with targeted `SUBST_ALL_TAC` for `env = env'` and `expr_type e = elem_ty`. -> Build progressed past `Resume eval_all_type_sound_mutual[Append]`; next failure is a separate timeout in `Resume eval_all_type_sound_mutual[AugAssign]`. (`TO_type_system_rewrite-20260519T080936Z_m27979_t001`)
+- `E0290` (proved, , actual effort: 1 sessions, 1 steps, 62,634 tok (62,395 in, 239 out, 58,880 cached), 3.9s, $0.05418500)
+  - Carry-forward completed Append resume performance repair from prior dossier E0268; no source edits needed this session. -> Prior HOL4 replay progressed past Resume eval_all_type_sound_mutual[Append] to a distinct AugAssign timeout, satisfying this component's reachability criterion. (`TO_type_system_rewrite-20260519T080936Z_m27977_t001`, `TO_type_system_rewrite-20260519T080936Z_m27979_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m27977_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T080936Z_m27979_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` After accepted C2.7.1.0 Append repair, the next build progressed past Append and timed out in an older AugAssign branch tactic (`Cases_on x >> fs[] >> simp[bind_def] >> ...`) before the scheduled Expr_TopLevelName proof. This is a plan coverage/scheduling issue for prefix performance repair rather than evidence against TopLevelName soundness.
+- latest episode: `E0269`
+- blocker: Cannot verify or reach `Expr_TopLevelName` because holbuild with the operator 2.5s tactic timeout now fails earlier in `Resume eval_all_type_sound_mutual[AugAssign]`, a proof-performance prefix blocker not covered by the current C2.7.1.1 plan. No AugAssign edits were made under this component.
+- actual effort: 1 sessions, 1 steps, 108,879 tok (108,080 in, 799 out, 102,912 cached), 13.8s, $0.10126600
+- next: Ask the strategist to add a low-risk prefix performance repair for the AugAssign branch before retrying C2.7.1.1.
+
+### Attempts / Evidence
+
+- `E0269` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 108,879 tok (108,080 in, 799 out, 102,912 cached), 13.8s, $0.10126600)
+  - Ran/inspected the first build after accepted Append performance repair while starting C2.7.1.1. -> Build did not reach Expr_TopLevelName; it timed out in the preceding AugAssign resume under the 2.5s tactic timeout, revealing an uncovered prefix performance obligation. (`TO_type_system_rewrite-20260519T080936Z_m27979_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m27979_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T080936Z_m27981_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0291`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 71,883 tok (71,644 in, 239 out, 67,072 cached), 3.9s, $0.06356600
+- next: Review closure with strategist, then follow Oracle next frontier.
+
+### Attempts / Evidence
+
+- `E0270` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 9 steps, 10 tools, 1 holbuild, 1,139,979 tok (1,136,511 in, 3,468 out, 1,107,456 cached), 103.2s, $0.80304300)
+  - Replaced `Cases_on x >> fs[] >> simp[bind_def]` with `PairCases_on x >> simp[bind_def]` in the successful base-target branch of AugAssign. -> This removed the initial broad `fs[]`, but holbuild still timed out on the entire remaining branch tactic. More substantial factoring is needed. (`TO_type_system_rewrite-20260519T080936Z_m27990_t001`, `TO_type_system_rewrite-20260519T080936Z_m27991_t001`)
+- `E0271` (proved, , actual effort: 1 sessions, 1 msgs, 12 steps, 17 tools, 3 holbuild, 948,898 tok (940,072 in, 8,826 out, 890,880 cached), 169.2s, $0.95618000)
+  - Split the monolithic `Resume eval_all_type_sound_mutual[AugAssign]` successful-base-target branch by inserting `suspend` points and separate Resume blocks for base-target success, expression success, get_Value success, and assign_target result subcases. -> holbuild no longer times out in AugAssign; it progresses past AugAssign/If/Expr/Stmts and now times out later in `Resume eval_all_type_sound_mutual[For]`, satisfying this component's prefix-performance goal. (`TO_type_system_rewrite-20260519T080936Z_m28012_t001`, `TO_type_system_rewrite-20260519T080936Z_m28013_t001`)
+- `E0291` (proved, , actual effort: 1 sessions, 1 steps, 71,883 tok (71,644 in, 239 out, 67,072 cached), 3.9s, $0.06356600)
+  - Carry-forward completed AugAssign resume performance repair from prior dossier E0271; no source edits needed this session. -> Prior HOL4 replay progressed past AugAssign/If/Expr/Stmts to a distinct For timeout, satisfying this component's prefix-performance goal. (`TO_type_system_rewrite-20260519T080936Z_m28013_t001`, `TO_type_system_rewrite-20260519T080936Z_m28012_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m28013_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T080936Z_m28012_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0292`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 80,782 tok (80,519 in, 263 out, 75,264 cached), 6.1s, $0.07179700
+- next: Review closure with strategist, then follow Oracle next frontier.
+
+### Attempts / Evidence
+
+- `E0273` (proved, , actual effort: 1 sessions, 6 steps, 6 tools, 1 holbuild, 719,579 tok (718,235 in, 1,344 out, 700,416 cached), 40.7s, $0.47962300)
+  - Replaced `env.type_defs = get_tenv cx` by broad `fs[env_consistent_def, env_context_consistent_def]` in `Resume eval_all_type_sound_mutual[For]` with targeted projection from `env_consistent env cx st` using `rewrite_tac[env_consistent_def, env_context_consistent_def]`. -> holbuild no longer times out at the targeted line; it advances to the next local `For` proof-performance timeout on `?env_after...` proved by broad `gvs[optionTheory.IS_SOME_EXISTS]`. This satisfies the exact C2.7.1.1.1.a target but exposes another For prefix simplification issue. (`TO_type_system_rewrite-20260519T080936Z_m28033_t001`, `TO_type_system_rewrite-20260519T080936Z_m28034_t001`)
+- `E0274` (proved, , actual effort: 1 sessions, 1 steps, 133,334 tok (132,825 in, 509 out, 128,000 cached), 10.8s, $0.10339500)
+  - No new proof edits after E0273; component had been re-begun by gate after strategist accepted the closure. Re-closing with the same source/build evidence to clear active-component state. -> The targeted `For` line remains fixed and holbuild evidence still shows progress past it to the next `For` timeout; no additional source change was made. (`TO_type_system_rewrite-20260519T080936Z_m28033_t001`, `TO_type_system_rewrite-20260519T080936Z_m28034_t001`)
+- `E0292` (proved, , actual effort: 1 sessions, 1 steps, 80,782 tok (80,519 in, 263 out, 75,264 cached), 6.1s, $0.07179700)
+  - Carry-forward completed For-prefix env.type_defs/get_tenv projection repair from prior dossier E0273/E0274; no source edits needed this session. -> Prior HOL4 replay progressed past the targeted env.type_defs = get_tenv cx derivation and exposed a distinct next For-prefix timeout, satisfying this component's reachability criterion. (`TO_type_system_rewrite-20260519T080936Z_m28033_t001`, `TO_type_system_rewrite-20260519T080936Z_m28034_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m28033_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T080936Z_m28034_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.a2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0293`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 54,047 tok (53,730 in, 317 out, 48,640 cached), 5.6s, $0.05928000
+- next: Review this carry-forward closure with strategist, then begin C2.7.1.1.1.b.1 for the actual line-2193 `well_formed_type` projection repair.
+
+### Attempts / Evidence
+
+- `E0275` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 2 holbuild, 209,916 tok (208,976 in, 940 out, 197,632 cached), 34.4s, $0.18373600)
+  - Replace broad `gvs[optionTheory.IS_SOME_EXISTS]` with `qpat_x_assum` selecting the exact `IS_SOME (type_stmts ...)` assumption followed by `rewrite_tac[optionTheory.IS_SOME_EXISTS]`. -> The target assertion is discharged without timeout; build advances to a distinct next For-prefix timeout at line 2193. (`TO_type_system_rewrite-20260519T080936Z_m28047_t001`, `TO_type_system_rewrite-20260519T080936Z_m28048_t001`)
+- `E0293` (proved, , actual effort: 1 sessions, 1 steps, 54,047 tok (53,730 in, 317 out, 48,640 cached), 5.6s, $0.05928000)
+  - Carry forward prior targeted `env_after` extraction from `IS_SOME (type_stmts ...)` using exact-assumption projection and `optionTheory.IS_SOME_EXISTS`. -> Accepted scoped dossier evidence E0275 shows the source already contains the low-risk performance repair and holbuild advanced to the distinct later For-prefix timeout. (`TO_type_system_rewrite-20260519T080936Z_m28047_t001`, `TO_type_system_rewrite-20260519T080936Z_m28048_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m28047_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T080936Z_m28048_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` This matches the component's not_to_try guidance: if another earlier For-prefix timeout appears, escalate with exact line and goal rather than editing later expression cases. Need a new low-risk local For-prefix performance component before retrying b.
+- latest episode: `E0276`
+- blocker: The component target `Expr_TopLevelName` is still not build-reachable. holbuild fails earlier in file order inside `Resume eval_all_type_sound_mutual[For]` at line 2193, where broad `gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS]` times out in the large mutual-proof context.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 125,440 tok (124,764 in, 676 out, 117,760 cached), 21.4s, $0.11418000
+- next: Call plan_oracle in review mode for this stuck closure. Ask it to add/schedule a local For-prefix line-2193 performance leaf before retrying `Expr_TopLevelName`.
+
+### Attempts / Evidence
+
+- `E0276` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 125,440 tok (124,764 in, 676 out, 117,760 cached), 21.4s, $0.11418000)
+  - Begin C2.7.1.1.1.b as required by the PLAN gate and run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to test reachability of the expression resume. -> Build does not reach `Expr_TopLevelName`; it times out earlier in `For` at the broad `gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS]` fragment. (`TO_type_system_rewrite-20260519T080936Z_m28053_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m28053_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0294`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 10 steps, 12 tools, 4 holbuild, 670,811 tok (667,468 in, 3,343 out, 643,072 cached), 102.7s, $0.54380600
+- next: Review closure with strategist. A new plan component or schedule update is needed for the distinct later line-2209 For-prefix timeout before proceeding to Expr_TopLevelName.
+
+### Attempts / Evidence
+
+- `E0294` (proved, , actual effort: 1 sessions, 1 msgs, 10 steps, 12 tools, 4 holbuild, 670,811 tok (667,468 in, 3,343 out, 643,072 cached), 102.7s, $0.54380600)
+  - Replaced the broad line-2193 `gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS]` with exact projection of `well_formed_type env.type_defs typ`, rewrite by the selected `env.type_defs = get_tenv cx`, and localized `well_formed_type_def`/`IS_SOME_EXISTS` rewriting. -> The original line-2193 timeout was eliminated; holbuild advanced to a later For-prefix failure at the iterator IH use. (`TO_type_system_rewrite-20260519T085316Z_m28212_t001`)
+  - Adjusted the iterator IH specialization to account for the consumed `env.type_defs = get_tenv cx` equality by specializing the quantified `tenv` argument to `get_tenv cx`. -> Holbuild advanced past the IH selection failure, then exposed a broad `simp[]` timeout in discharging the iterator IH antecedent. (`TO_type_system_rewrite-20260519T085316Z_m28214_t001`)
+  - Replaced the broad `simp[]` for the iterator IH antecedent with a bounded `impl_tac >- metis_tac[]`, then stripped the derived iterator soundness fact. -> Holbuild advanced further to a distinct later timeout at `Cases_on iter_res >> gvs[no_type_error_result_def]` on line 2209. This confirms the b.1 evaluated-type extraction blocker is cleared; the new timeout is a separate For-prefix performance obligation. (`TO_type_system_rewrite-20260519T085316Z_m28216_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28212_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28214_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28216_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.1.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0295`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 85,240 tok (84,833 in, 407 out, 79,360 cached), 6.4s, $0.07925500
+- next: Review closure with strategist, then begin C2.7.1.1.1.b.1.b for the newly exposed line-2209 iterator-result split timeout.
+
+### Attempts / Evidence
+
+- `E0295` (proved, , actual effort: 1 sessions, 1 steps, 85,240 tok (84,833 in, 407 out, 79,360 cached), 6.4s, $0.07925500)
+  - Carry forward accepted E0294 line-2193 evaluated-type witness extraction: selected `well_formed_type env.type_defs typ`, rewrote only it using `env.type_defs = get_tenv cx`, `well_formed_type_def`, and `optionTheory.IS_SOME_EXISTS`. -> Strategist review accepted this as closing the original line-2193 blocker; holbuild evidence shows execution advanced to later For-prefix failures. (`TO_type_system_rewrite-20260519T085316Z_m28212_t001`, `TO_type_system_rewrite-20260519T085316Z_m28214_t001`, `TO_type_system_rewrite-20260519T085316Z_m28216_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28212_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28214_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28216_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.1.b
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0297`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 10 steps, 10 tools, 3 holbuild, 631,499 tok (629,171 in, 2,328 out, 602,112 cached), 76.8s, $0.50619100
+
+### Attempts / Evidence
+
+- `E0296` (progressed, other, actual effort: 1 sessions, 4 msgs, 43 steps, 43 tools, 15 holbuild, 4,809,035 tok (4,794,030 in, 15,005 out, 4,711,936 cached), 468.7s, $3.21658800)
+  - Replaced broad `Cases_on iter_res >> gvs[no_type_error_result_def]` with explicit `INL vs` branch projection from the iterator IH case fact, aligned `tyv = iter_tyv`, and continued through compatible-bound and eval_for branches with targeted rewrites/IH specialization. -> Holbuild advanced past the original line-2209 broad `gvs` timeout and through most of the successful iterator branch. Later failures were branch-local proof-shaping issues, not the original timeout. (`TO_type_system_rewrite-20260519T085316Z_m28231_t001`, `TO_type_system_rewrite-20260519T085316Z_m28233_t001`, `TO_type_system_rewrite-20260519T085316Z_m28257_t001`)
+  - For the `INL vs`/incompatible-bound subcase, killed the large eval_for IH before simplifying the monadic RuntimeError path and used targeted rewrites to expose only state/env/account obligations. -> Holbuild reduced that branch to `res = INR (Error (RuntimeError ...)) ∧ st1 = st' ==> state_well_typed st' ∧ accounts_well_typed st'.accounts ∧ env_consistent env cx st'`, showing only equality substitution remained. Source was then edited to add `strip_tac >> gvs[]`, but that latest edit is unverified. (`TO_type_system_rewrite-20260519T085316Z_m28260_t001`, `TO_type_system_rewrite-20260519T085316Z_m28263_t001`)
+- `E0297` (proved, , actual effort: 1 sessions, 1 msgs, 10 steps, 10 tools, 3 holbuild, 631,499 tok (629,171 in, 2,328 out, 602,112 cached), 76.8s, $0.50619100)
+  - Replaced the final `INR y` iterator-exception branch with branch-local conjunction handling: use `no_type_error_result (INR y)` only for no-TypeError, and derive return-exception typing from `eval_iterator_no_control` plus `no_control_exc_return_exception_typed`. -> `holbuild` advanced past `Resume eval_all_type_sound_mutual[For]` and the active line-2209 iterator-result split; the next failure is a distinct timeout in `Resume eval_all_type_sound_mutual[For_cons]` at line 2274. (`TO_type_system_rewrite-20260519T085316Z_m28277_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28277_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0298`
+- blocker: `Expr_TopLevelName` is scheduled and begun, but file-order build cannot reach it: `vyperTypeStmtSoundnessTheory` fails earlier in `Resume eval_all_type_sound_mutual[For_cons]` at line 2274 with a timeout on `strip_tac >> gvs[]`. This is a new prerequisite proof-performance blocker not covered by the current active component.
+- actual effort: 1 sessions, 1 steps, 77,803 tok (77,255 in, 548 out, 72,192 cached), 9.5s, $0.07785100
+- next: Ask strategist to insert/decompose a prerequisite component for the `For_cons` line-2274 proof-performance timeout before retrying `Expr_TopLevelName`.
+
+### Attempts / Evidence
+
+- `E0298` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 77,803 tok (77,255 in, 548 out, 72,192 cached), 9.5s, $0.07785100)
+  - After closing/reviewing the preceding For line-2209 component, queried the plan and began scheduled `C2.7.1.1.1.b.2` as required by the gate. -> The latest build evidence already shows `Expr_TopLevelName` remains unreachable because execution fails earlier in `For_cons`; no proof edits were made under b.2. (`TO_type_system_rewrite-20260519T085316Z_m28277_t001`, `TO_type_system_rewrite-20260519T085316Z_m28282_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28277_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28282_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0299`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 266,206 tok (265,603 in, 603 out, 255,488 cached), 23.6s, $0.19640900
+
+### Attempts / Evidence
+
+- `E0299` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 266,206 tok (265,603 in, 603 out, 255,488 cached), 23.6s, $0.19640900)
+  - Replaced the line-2274 `strip_tac >> gvs[]` in `Resume eval_all_type_sound_mutual[For_cons]` with just `strip_tac`, preserving the `finally` and continuation equations for the following controlled witness block. -> `holbuild` no longer times out at the exact line-2274 fragment; it advances into the next subproof, where a distinct timeout occurs inside the witness-extraction block at lines 2275-2298. (`TO_type_system_rewrite-20260519T085316Z_m28287_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28287_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0300`
+- blocker: `Expr_TopLevelName` is still file-order unreachable after C2.7.1.1.1.b.2.a: `vyperTypeStmtSoundnessTheory` now fails earlier in `Resume eval_all_type_sound_mutual[For_cons]`, inside the witness-extraction subproof at lines 2275-2298, with a timeout on the tactic beginning `qpat_x_assum `finally loop_body pop_scope stp = _` mp_tac >> simp_tac ...`. This is a new prerequisite blocker not covered by the current expression-case leaf.
+- actual effort: 1 sessions, 1 steps, 102,034 tok (101,434 in, 600 out, 95,744 cached), 8.2s, $0.09432200
+- next: Ask strategist to insert/decompose a prerequisite component for the `For_cons` lines 2275-2298 witness-extraction timeout before retrying `Expr_TopLevelName`.
+
+### Attempts / Evidence
+
+- `E0300` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 102,034 tok (101,434 in, 600 out, 95,744 cached), 8.2s, $0.09432200)
+  - Began scheduled `C2.7.1.1.1.b.2.b` after the line-2274 component was reviewed, then checked the latest build evidence before editing expression proof code. -> No `Expr_TopLevelName` proof code is reachable: the build is blocked earlier by a distinct `For_cons` witness-extraction timeout, so this leaf cannot be executed as scheduled. (`TO_type_system_rewrite-20260519T085316Z_m28287_t001`, `TO_type_system_rewrite-20260519T085316Z_m28291_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28287_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28291_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The plan's local helper/factoring idea was right enough to prove a helper, but the low-risk estimate was wrong: applying the helper inside the mutual proof context remains brittle/slow. Need strategist redesign: either move to a stronger source-order helper with conclusion/application exactly matching the assertion and no antecedent discharge in the large context, or authorize splitting the For_cons block differently.
+- latest episode: `E0302`
+- blocker: The local witness extraction is still not compiling after factoring attempts. A new exact helper `for_body_decompose_exact[local]` proves from `for_body_decompose`, and the For_cons context now has explicit facts for `stp = st with scopes updated_by CONS ...` and the unabbreviated `finally` equation. However applying the helper in the large mutual context via `drule_all`, `irule`, and explicit `qspecl_then ... impl_tac` either times out or fails to match/select the needed assumptions. The current source is partial/unverified and fails at the witness assertion around lines 2333-2348.
+- actual effort: 1 sessions, 4 msgs, 55 steps, 63 tools, 24 holbuild, 5,253,886 tok (5,234,043 in, 19,843 out, 5,119,488 cached), 1104.2s, $3.72780900
+- next: Call plan_oracle review for this stuck closure and request a revised low-risk leaf before further edits.
+
+### Attempts / Evidence
+
+- `E0301` (progressed, other, actual effort: 1 sessions, 2 msgs, 15 steps, 20 tools, 5 holbuild, 1,860,646 tok (1,853,193 in, 7,453 out, 1,809,920 cached), 191.2s, $1.34491500)
+  - Replaced the original one-shot existential `by` proof with an early `Cases_on eval_stmts cx body stp`, witnesses/facts separated, and a local control-flow fact following the split. -> The full one-shot tactic still timed out initially, showing the need to split the existential and auxiliary facts outside the `by` block. (`TO_type_system_rewrite-20260519T085316Z_m28299_t001`)
+  - Separated the nonempty-scope proof and avoided `drule` in the large context by deriving `LENGTH st_body.scopes = LENGTH stp.scopes` via `metis_tac[eval_stmts_preserves_scopes_len]`, then case-splitting `st_body.scopes`. -> Holbuild advanced past the nonempty-scope timeout into the later control-flow fact proof. (`TO_type_system_rewrite-20260519T085316Z_m28301_t001`, `TO_type_system_rewrite-20260519T085316Z_m28305_t001`)
+  - Added a selected rewrite from `st_body.scopes = hd::tl` before unfolding `pop_scope` in the local control-flow fact. -> The proof no longer times out, but the local `by` tactic fails with `first subgoal not solved by second tactic`; the remaining subgoal needs targeted inspection/decomposition. (`TO_type_system_rewrite-20260519T085316Z_m28307_t001`)
+- `E0302` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 55 steps, 63 tools, 24 holbuild, 5,253,886 tok (5,234,043 in, 19,843 out, 5,119,488 cached), 1104.2s, $3.72780900)
+  - Inserted `for_body_decompose_exact[local]` to specialize `for_body_decompose` to an arbitrary `stp = st with scopes updated_by CONS sc`; proved it with explicit `qspecl_then ... mp_tac for_body_decompose >> simp[]`. -> Helper theorem itself compiles; holbuild resumes to For_cons witness extraction. (`TO_type_system_rewrite-20260519T085316Z_m28463_t001`)
+  - Tried `irule for_body_decompose_exact` with explicit witnesses/conjunct proof at the For_cons witness block. -> Helper application shape was fragile: `qexists_tac` failed because `irule` had not left existential-witness subgoals as expected; subsequent `conj_tac` version still left first subgoal unsolved. (`TO_type_system_rewrite-20260519T085316Z_m28463_t001`, `TO_type_system_rewrite-20260519T085316Z_m28471_t001`)
+  - Unabbreviated `loop_body`, asserted explicit stp-shape and finally-equation facts, then tried `drule_all for_body_decompose_exact` and explicit `qspecl_then ... impl_tac`. -> `drule_all` hit a Tactical assertion failure; explicit specialization with `simp[]` timed out, and a more targeted `impl_tac` failed to select/match assumptions via `qpat_assum`. (`TO_type_system_rewrite-20260519T085316Z_m28481_t001`, `TO_type_system_rewrite-20260519T085316Z_m28483_t001`, `TO_type_system_rewrite-20260519T085316Z_m28485_t001`)
+
+### Ruled Out
+
+- Broad whole-context simplification after unfolding loop_body/finally
+- Repeated `irule`/`drule_all`/`qspecl_then` helper-application plumbing inside the large mutual context
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T085316Z_m28463_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28471_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28481_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28483_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T085316Z_m28485_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b.1.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0304`
+- blocker: 
+- actual effort: 3 sessions, 4 msgs, 52 steps, 57 tools, 22 holbuild, 4,165,367 tok (4,146,644 in, 18,723 out, 3,937,792 cached), 1318.5s, $3.57484600
+
+### Attempts / Evidence
+
+- `E0303` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 23 steps, 27 tools, 9 holbuild, 1,586,483 tok (1,576,212 in, 10,271 out, 1,513,984 cached), 659.5s, $1.37626200)
+  - Specialized for_body_decompose_any to `cx body stp loop_res st_after`; tried local antecedent discharge with `simp[Abbr`stp`]` and selected finally assumption. -> Direct proof avoids exact helper but still fails inside the by-block; assumption selection/simplification of the helper antecedent is brittle in the large For_cons context. (`TO_type_system_rewrite-20260519T085316Z_m28494_t001`, `TO_type_system_rewrite-20260519T085316Z_m28500_t001`)
+  - Tried more targeted premise discharge using `qpat_x_assum `finally _ _ stp = _` mp_tac >> simp[]`. -> Still timed out under the 2.5s tactic limit, confirming the need for the PLAN-authorized tiny exact-match helper rather than more in-context simplification. (`TO_type_system_rewrite-20260519T085316Z_m28509_t001`)
+- `E0304` (proved, , actual effort: 3 sessions, 4 msgs, 52 steps, 57 tools, 22 holbuild, 4,165,367 tok (4,146,644 in, 18,723 out, 3,937,792 cached), 1318.5s, $3.57484600)
+  - Added local helper `for_body_decompose_for_cons_pushed` proved from `for_body_decompose_any`; in the For_cons assertion, used explicit specialization and `ACCEPT_TAC (MATCH_MP th (CONJ (ASSUME ...) (ASSUME ...)))` to avoid in-context premise discharge/search. -> The existential witness fact is now available as assumptions (`eval_stmts cx body stp = ...`, `st_after = ...`, mapping facts). Holbuild then failed only after the witness block, at the later `state_well_typed stp` subproof. (`TO_type_system_rewrite-20260519T122958Z_m28537_t001`, `TO_type_system_rewrite-20260519T122958Z_m28539_t001`)
+  - Removed the old `qpat_x_assum `?res_body st_body. _` strip_assume_tac` because the prior ACCEPT_TAC/ASSUME construction already introduced the existential components as assumptions. -> Build advanced to the later state-typing assertion, confirming the witness extraction block is discharged. (`TO_type_system_rewrite-20260519T122958Z_m28539_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T122958Z_m28537_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T122958Z_m28539_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` User requested oracle replan for C2/descendant to handle script-file repair under the new 2.5s tactic timeout before proceeding. This closure is not claiming Expr_TopLevelName is mathematically stuck; it is blocked by an earlier source-order For_cons timeout not covered by the active leaf.
+- latest episode: `E0305`
+- blocker: Scheduled Expr_TopLevelName work is not file-order reachable: holbuild still fails earlier in `Resume eval_all_type_sound_mutual[For_cons]` at the `state_well_typed stp` assertion, after the previously accepted witness-extraction fix. This is a script/proof-performance repair under the For_cons prefix that must be planned before returning to Expr theorem proving.
+- actual effort: 2 sessions, 1 steps, 115,278 tok (114,359 in, 919 out, 113,152 cached), 15.0s, $0.09018100
+- next: Call plan_oracle(mode='review') for C2.7.1.1.1.b.2.b.2 with evidence and request replacement/augmentation of C2/C2.7 descendant schedule to insert a low-risk For_cons script-performance repair for `state_well_typed stp` before Expr_TopLevelName.
+
+### Attempts / Evidence
+
+- `E0305` (stuck, plan_incomplete, actual effort: 2 sessions, 1 steps, 115,278 tok (114,359 in, 919 out, 113,152 cached), 15.0s, $0.09018100)
+  - After closing witness extraction, queried plan and began scheduled `C2.7.1.1.1.b.2.b.2` (`Expr_TopLevelName`). -> Schedule expected Expr reachability, but holbuild still fails in earlier For_cons prefix, so Expr work cannot be performed safely. (`TO_type_system_rewrite-20260519T122958Z_m28542_t001`, `TO_type_system_rewrite-20260519T122958Z_m28544_t001`)
+  - Ran/inspected holbuild after accepted witness extraction source changes. -> Build advanced past witness extraction but timed out at later `state_well_typed stp` assertion: `simp[Abbr`stp`, state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE] >> rw[] >> gvs[...] >> metis_tac[...]`. This is an earlier source-order script repair requirement. (`TO_type_system_rewrite-20260519T122958Z_m28539_t001`)
+  - Attempted plan_oracle augment before beginning Expr component to add this new prerequisite. -> Harness blocked augment because no active/stuck episode existed and instructed legal actions; now closing the active component as blocked/stuck to trigger review/replan. (`TO_type_system_rewrite-20260519T122958Z_m28543_t001`)
+
+### Ruled Out
+
+- Proceeding to Expr_TopLevelName while holbuild is still blocked earlier in For_cons
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T122958Z_m28539_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T122958Z_m28541_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T122958Z_m28542_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T122958Z_m28543_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T122958Z_m28544_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0306`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 9 steps, 16 tools, 2 holbuild, 808,117 tok (803,372 in, 4,745 out, 762,368 cached), 155.9s, $0.72855400
+
+### Attempts / Evidence
+
+- `E0306` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 16 tools, 2 holbuild, 808,117 tok (803,372 in, 4,745 out, 762,368 cached), 155.9s, $0.72855400)
+  - Inserted the simple oracle-recommended local helper and proved it by `rw[state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE]`. -> Helper proof accepted; holbuild continued to the later `state_well_typed stp` inline proof in `Resume eval_all_type_sound_mutual[For_cons]`. (`TO_type_system_rewrite-20260519T123242Z_m28555_t001`, `TO_type_system_rewrite-20260519T123242Z_m28556_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28555_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28556_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0307`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 10 steps, 10 tools, 3 holbuild, 724,043 tok (720,749 in, 3,294 out, 697,344 cached), 94.6s, $0.56451700
+
+### Attempts / Evidence
+
+- `E0307` (proved, , actual effort: 1 sessions, 1 msgs, 10 steps, 10 tools, 3 holbuild, 724,043 tok (720,749 in, 3,294 out, 697,344 cached), 94.6s, $0.56451700)
+  - At the For_cons use site, derived `value_has_type tyv v` from `EVERY (value_has_type tyv) (v::vs)`, derived `well_formed_type_value tyv` by `MATCH_MP evaluate_type_well_formed_type_value`, substituted the explicit `stp = ...`, and applied `for_cons_pushed_state_well_typed`. -> The original `state_well_typed stp` timeout is eliminated; build reaches the next local assertion, where `simp[Abbr`stp`]` for accounts now times out. (`TO_type_system_rewrite-20260519T123242Z_m28568_t001`, `TO_type_system_rewrite-20260519T123242Z_m28569_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28568_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28569_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.1.1.b.2.b.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0308`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 87,905 tok (87,233 in, 672 out, 79,360 cached), 14.5s, $0.09920500
+- next: Call plan_oracle review; likely add a local source-order repair for `accounts_well_typed stp.accounts` before returning to Expr work.
+
+### Attempts / Evidence
+
+- `E0308` (proved, , actual effort: 1 sessions, 1 steps, 87,905 tok (87,233 in, 672 out, 79,360 cached), 14.5s, $0.09920500)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after the helper/use-site patch. -> Build passed the repaired `state_well_typed stp` assertion (goal now contains assumption `state_well_typed stp`) and identified a new next blocker: timeout proving `accounts_well_typed stp.accounts` with `simp[Abbr`stp`]`. (`TO_type_system_rewrite-20260519T123242Z_m28569_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28569_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0309`
+- blocker: Source-order build does not reach `Expr_FlagMember`: `vyperTypeStmtSoundnessTheory` still fails earlier in `Resume eval_all_type_sound_mutual[For_cons]` at the assertion `accounts_well_typed stp.accounts` by `simp[Abbr`stp`]`. This blocker is not covered by the active `Expr_FlagMember` component, so continuing C2.7.1.2 would violate source-order proof discipline.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 185,518 tok (184,554 in, 964 out, 179,200 cached), 32.5s, $0.14529000
+- next: Call plan_oracle review to replace/decompose the schedule with a component covering the newly exposed For_cons `accounts_well_typed stp.accounts` proof-performance blocker before returning to Expr work.
+
+### Attempts / Evidence
+
+- `E0309` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 185,518 tok (184,554 in, 964 out, 179,200 cached), 32.5s, $0.14529000)
+  - Began scheduled `Expr_FlagMember` component and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to verify source-order reachability before editing. -> Build failed before reaching `Expr_FlagMember`, at the earlier For_cons assertion `accounts_well_typed stp.accounts`; active component is not source-order reachable under the current PLAN schedule. (`TO_type_system_rewrite-20260519T123242Z_m28577_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28577_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0310`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 12 tools, 3 holbuild, 1,161,403 tok (1,158,662 in, 2,741 out, 1,139,200 cached), 94.5s, $0.74914000
+- next: Review with strategist; next source-order blocker is still before Expr_FlagMember, at the body-IH selection after establishing `env_consistent ... stp`.
+
+### Attempts / Evidence
+
+- `E0310` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 12 tools, 3 holbuild, 1,161,403 tok (1,158,662 in, 2,741 out, 1,139,200 cached), 94.5s, $0.74914000)
+  - Replaced timeout-prone `simp[Abbr`stp`]` with `qpat_x_assum `stp = _` SUBST1_TAC >> simp[NoAsms, evaluation_state_component_equality] >> first_assum ACCEPT_TAC`. -> The accounts assertion is discharged; build now reaches the next For_cons proof step, failing at IH assumption selection (`qpat_x_assum ... push_scope_with_var ...`). (`TO_type_system_rewrite-20260519T123242Z_m28589_t001`, `TO_type_system_rewrite-20260519T123242Z_m28590_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28589_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28590_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0311`
+- blocker: After the accounts assertion repair, source still does not reach `Expr_FlagMember`. `holbuild` fails earlier in `Resume eval_all_type_sound_mutual[For_cons]` at the body-IH selection tactic `qpat_x_assum `!s'' t. push_scope_with_var id tyv v s'' = (INL (),t) ==> _` ...`; the visible IH assumptions quantify `x` as `(INL x,t)`, not specifically `(INL (),t)`, so the pattern no longer matches. This source-order blocker is not covered by the active Expr_FlagMember component.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 238,102 tok (237,494 in, 608 out, 230,400 cached), 20.8s, $0.16891000
+- next: Call plan_oracle review to add/replace with a local For_cons IH-selection repair before returning to Expr_FlagMember.
+
+### Attempts / Evidence
+
+- `E0311` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 238,102 tok (237,494 in, 608 out, 230,400 cached), 20.8s, $0.16891000)
+  - Began reclassified `Expr_FlagMember` component and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to verify source-order reachability before editing expression code. -> Build fails before reaching `Expr_FlagMember`, at For_cons body-IH selection with a too-specific `qpat_x_assum` pattern. (`TO_type_system_rewrite-20260519T123242Z_m28595_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28595_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0313`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 81,775 tok (81,162 in, 613 out, 75,264 cached), 10.8s, $0.08551200
+- next: Review this administrative closure if required, then begin C2.7.1.2.2.3 and repair the local For_cons env-consistency-after-pop assertion.
+
+### Attempts / Evidence
+
+- `E0312` (proved, , actual effort: 1 sessions, 12 steps, 12 tools, 5 holbuild, 734,023 tok (731,016 in, 3,007 out, 707,584 cached), 128.7s, $0.56116200)
+  - Replace `qpat_x_assum` pattern from `!s'' t. ... = (INL (),t)` to `!s'' x t. ... = (INL x,t)` and specialize with [`st`, `()`, `stp`]. -> Former assumption-selection failure is gone; holbuild advanced to the next tactic, first timing out at a broad `simp[]`. (`TO_type_system_rewrite-20260519T123242Z_m28626_t001`)
+  - Replace broad post-IH `simp[]` with focused antecedent discharge `(impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC))`, and replace post-case `gvs[]` with `simp[NoAsms]` to avoid scanning the huge mutual context. -> Replay advanced past the patched body-IH application and case split; current failure is later at the branch-local env-consistency-after-pop proof, not the original IH selection. (`TO_type_system_rewrite-20260519T123242Z_m28634_t001`)
+- `E0313` (proved, , actual effort: 1 sessions, 1 steps, 81,775 tok (81,162 in, 613 out, 75,264 cached), 10.8s, $0.08551200)
+  - Re-began C2.7.1.2.2.1 only because the scheduler still listed it as Oracle-next after the E0312 review; no proof changes were made. -> Component remains complete per E0312/review; closing again should advance scheduling to the newly planned For_cons env-consistency repair C2.7.1.2.2.3. (`TO_type_system_rewrite-20260519T123242Z_m28635_t001`, `TO_type_system_rewrite-20260519T123242Z_m28637_t001`, `TO_type_system_rewrite-20260519T123242Z_m28641_t001`)
+
+### Ruled Out
+
+- No need to reopen the body-IH selection repair; E0312 already proved holbuild advances past it.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28635_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28637_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28641_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0318`
+- blocker: Component is source-order unreachable in current source: holbuild still fails earlier in `Resume eval_all_type_sound_mutual[For_cons]`, in the `INR y` branch env-consistency-after-pop assertion at lines ~2457-2459. The component's own not-to-try says not to start Expr_FlagMember while For_cons fails earlier.
+- actual effort: 1 sessions, 1 steps, 106,145 tok (105,398 in, 747 out, 99,840 cached), 11.7s, $0.10012000
+- next: Strategist should add/schedule a new source-order repair leaf for the For_cons `INR y` branch env-consistency-after-pop assertion (and likely analogous ContinueException recursive-IH selector) before Expr_FlagMember.
+
+### Attempts / Evidence
+
+- `E0318` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 106,145 tok (105,398 in, 747 out, 99,840 cached), 11.7s, $0.10012000)
+  - Began scheduled component C2.7.1.2.2.2 after C2.7.1.2.2.4 review, then checked existing holbuild/frontier evidence before editing Expr_FlagMember. -> The scheduled component is not reachable: holbuild evidence shows a remaining earlier For_cons `INR y` branch timeout, while query_plan scheduled Expr_FlagMember despite its own not-to-try precondition. (`TO_type_system_rewrite-20260519T123242Z_m28782_t001`, `TO_type_system_rewrite-20260519T123242Z_m28785_t001`, `TO_type_system_rewrite-20260519T123242Z_m28787_t001`)
+
+### Ruled Out
+
+- Starting Expr_FlagMember from the current source state; it remains unreachable until the earlier For_cons failure is repaired.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28782_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28785_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28787_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0319`
+- blocker: 
+- actual effort: 1 sessions, 9 steps, 10 tools, 3 holbuild, 1,099,011 tok (1,096,594 in, 2,417 out, 1,076,736 cached), 85.5s, $0.71016800
+
+### Attempts / Evidence
+
+- `E0319` (proved, , actual effort: 1 sessions, 9 steps, 10 tools, 3 holbuild, 1,099,011 tok (1,096,594 in, 2,417 out, 1,076,736 cached), 85.5s, $0.71016800)
+  - Expose the body-IH exceptional existential with `qpat_x_assum ... mp_tac >> simp[NoAsms] >> strip_tac`, then prove `env_consistent env cx (st_body with scopes := TL st_body.scopes)` by `irule for_body_env_extends_consistent_after_pop >> simp[Abbr`stp`] >> metis_tac[env_consistent_env_maps_wf]`. -> The env-consistency-after-pop assertion no longer times out; holbuild reaches the next For_cons source-order point, a timeout at `Cases_on y = ContinueException >> gvs[]`. (`TO_type_system_rewrite-20260519T123242Z_m28796_t001`, `TO_type_system_rewrite-20260519T123242Z_m28798_t001`)
+
+### Ruled Out
+
+- Leaving the original broad `metis_tac[for_body_env_extends_consistent_after_pop, env_consistent_env_maps_wf]` for the whole assertion; it timed out in TO...28782.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28796_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28798_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0320`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 5 tools, 2 holbuild, 290,373 tok (288,362 in, 2,011 out, 269,824 cached), 53.8s, $0.28793200
+- next: Request strategist review; next visible source-order blocker is a timeout at `Cases_on `y = BreakException` >> gvs[return_def, no_type_error_result_def]` in the following BreakException branch.
+
+### Attempts / Evidence
+
+- `E0320` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 2 holbuild, 290,373 tok (288,362 in, 2,011 out, 269,824 cached), 53.8s, $0.28793200)
+  - Replaced stale four-binder recursive eval_for IH selector in the For_cons INR-y/ContinueException branch with the generalized six-binder IH pattern used by the earlier success branch; explicitly derived loop_res = INL F, substituted the popped state, established the recursive eval_for equation, and discharged the IH antecedent by simplification. -> holbuild advanced past the ContinueException recursive-IH selector to the next source-order blocker at the following BreakException case simplification, so this component's local obligation is discharged. (`TO_type_system_rewrite-20260519T123242Z_m28810_t001`)
+
+### Ruled Out
+
+- old four-binder IH selector
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28807_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28809_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28810_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0321`
+- blocker: holbuild still fails in For_cons before Expr_FlagMember is reachable; active component explicitly forbids editing For_cons or beginning Expr_FlagMember while earlier branch blocks.
+- actual effort: 1 sessions, 1 msgs, 1 steps, 73,866 tok (73,311 in, 555 out, 65,024 cached), 10.1s, $0.09059700
+- next: Strategist should review and likely replace/augment C2.7.1.2.2.2 with a new low-risk For_cons BreakException local repair before rescheduling Expr_FlagMember.
+
+### Attempts / Evidence
+
+- `E0321` (stuck, plan_incomplete, actual effort: 1 sessions, 1 msgs, 1 steps, 73,866 tok (73,311 in, 555 out, 65,024 cached), 10.1s, $0.09059700)
+  - Began scheduled Expr_FlagMember component after C2.7.1.2.2.2.2 review, but prior holbuild evidence shows the proof still stops in For_cons at the BreakException case simplification timeout before Expr_FlagMember is reachable. -> Cannot work on the active Expr_FlagMember leaf under its own not-to-try/approach constraints; requires strategist to insert/authorize another For_cons source-order repair leaf. (`TO_type_system_rewrite-20260519T123242Z_m28810_t001`, `TO_type_system_rewrite-20260519T123242Z_m28815_t001`)
+
+### Ruled Out
+
+- Editing the For_cons BreakException branch under the Expr_FlagMember-only component without PLAN coverage
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28810_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28815_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The Risk-2 leaf expected a local proof-script patch. Repeated controlled factoring/helper attempts still hit holbuild CHOOSE/no-theorem-proved errors on printed tautological assumption goals inside the large mutual context, so the proof needs a revised micro-decomposition rather than more local tactic variants.
+- latest episode: `E0325`
+- blocker: For_cons ordinary-exception false branch, ReturnException constructor: final goal is printed as identical to an available assumption (`return_exception_typed env ret_ty (ReturnException rv)`) or as `P ==> P`, but direct selectors, simp/fs/metis, and helper-derived theorem application all fail under holbuild instrumentation.
+- actual effort: 1 sessions, 4 msgs, 66 steps, 67 tools, 25 holbuild, 5,914,400 tok (5,889,526 in, 24,874 out, 5,777,408 cached), 914.4s, $4.19551400
+- next: Call plan_oracle review to replace/decompose this leaf. Suggested direction: prove a helper that packages the entire ordinary-exception final conjunct/five-conjunct goal outside the mutual context, or restructure before the final `case INR y` so no tautological assumption goal is generated locally.
+
+### Attempts / Evidence
+
+- `E0322` (progressed, other, actual effort: 1 sessions, 4 msgs, 51 steps, 53 tools, 22 holbuild, 5,625,975 tok (5,612,664 in, 13,311 out, 5,522,944 cached), 612.7s, $3.60940200)
+  - Replaced `Cases_on `y = BreakException` >> gvs[...]` with explicit true/false branches. True branch now derives `loop_res = INL T`, substitutes popped state and final case equation, and avoids proving `return_exception_typed` for BreakException. -> True BreakException branch advanced; holbuild moved to the false ordinary-exception branch after the explicit branch split. (`TO_type_system_rewrite-20260519T123242Z_m28821_t001`, `TO_type_system_rewrite-20260519T123242Z_m28822_t001`, `TO_type_system_rewrite-20260519T123242Z_m28825_t001`, `TO_type_system_rewrite-20260519T123242Z_m28826_t001`)
+  - In the ordinary exception branch, made `loop_res = INR y`, substituted `st_after`/`res`/`st'`, and split final conjuncts explicitly. Added `sum` ancestor to access `sum_case_def`. Labelled derived `return_exception_typed env ret_ty y` as `ret_exn_env`. -> All ordinary-exception conjuncts except the final `case INR y ...` return-typing goal are reduced; current proof still fails at proving `return_exception_typed env ret_ty y` from labelled assumption after `rewrite_tac[sum_case_def] >> BETA_TAC`, likely due to labelled-assumption/simplifier interaction. (`TO_type_system_rewrite-20260519T123242Z_m28855_t001`, `TO_type_system_rewrite-20260519T123242Z_m28867_t001`)
+- `E0323` (progressed, other, actual effort: 1 sessions, 6 msgs, 85 steps, 91 tools, 32 holbuild, 8,167,826 tok (8,139,889 in, 27,937 out, 7,994,880 cached), 1042.2s, $5.56059500)
+  - Built current handoff source; confirmed failure at final For_cons ordinary-exception tail after adding `return_exception_typed_INR_case`. -> The final proof remained blocked by tautological return-exception/assumption goals under instrumentation, confirming STATE's warning. (`TO_type_system_rewrite-20260519T123242Z_m28955_t001`)
+  - Added `return_exception_typed_INR_case_eq` and tried rewriting final `case INR y` to `return_exception_typed env ret_ty y`, then using local assumption or re-deriving via `env_extends_return_exception_typed`. -> Rewriting succeeded but direct assumption and simple `simp`/`fs` on tautological subgoals repeatedly produced HOL CHOOSE failures; re-deriving exposed subgoals `env_maps_wf env` and `id NOTIN FDOM env.var_types` where direct closers also failed. (`TO_type_system_rewrite-20260519T123242Z_m28970_t001`, `TO_type_system_rewrite-20260519T123242Z_m28989_t001`, `TO_type_system_rewrite-20260519T123242Z_m29005_t001`)
+  - Added helper theorems `return_exception_typed_extend_local_F` and `return_exception_typed_extend_local_F_imp` near `extend_local_F_env_extends`, then tried applying them to avoid local reconstruction. -> The conjunctive helper produced an awkward existential/conjunction goal; the curried helper plus `ACCEPT_TAC` still failed on a visible identical goal, reinforcing that the local goal context/validation is brittle. (`TO_type_system_rewrite-20260519T123242Z_m29011_t001`, `TO_type_system_rewrite-20260519T123242Z_m29020_t001`)
+  - Changed to explicit exception-constructor split after `return_exception_typed_INR_case_eq`; non-return constructors solved with `EVAL_TAC`; ReturnException branch tries `return_exception_typed_env_static`. -> The ReturnException branch is now the only remaining local branch. Before last edit, the failure was that `conj_tac >- fs[env_extends_def]` left the original goal unsolved/first-subgoal mismatch; last edit adds `extend_local_def` but has not been built. (`TO_type_system_rewrite-20260519T123242Z_m29024_t001`, `TO_type_system_rewrite-20260519T123242Z_m29032_t001`, `TO_type_system_rewrite-20260519T123242Z_m29036_t001`)
+- `E0324` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 65 steps, 66 tools, 25 holbuild, 5,795,198 tok (5,771,117 in, 24,081 out, 5,660,160 cached), 899.0s, $4.10729500)
+  - Added helper theorems `return_exception_typed_ReturnException_value`, `value_runtime_typed_extend_local_F_ReturnException`, `return_exception_typed_extend_local_F_ReturnException`, and `_imp`; tried using them in the ReturnException branch instead of local unfolding. -> Helpers prove, but consumer proof still reduces to exact assumption/tautological subgoals that holbuild instrumentation rejects with CHOOSE errors. (`TO_type_system_rewrite-20260519T123242Z_m29070_t001`, `TO_type_system_rewrite-20260519T123242Z_m29078_t001`, `TO_type_system_rewrite-20260519T123242Z_m29087_t001`)
+  - Tried avoiding helper application by proving final case through `return_exception_typed_INR_case`, constructor split plus `EVAL_TAC`, and direct local assumption/forward theorem application. -> All variants still reach tautological final goals such as `return_exception_typed env ret_ty y` or `return_exception_typed env_exn ret_ty (ReturnException rv) ==> same`, rejected by instrumentation rather than mathematical mismatch. (`TO_type_system_rewrite-20260519T123242Z_m29090_t001`, `TO_type_system_rewrite-20260519T123242Z_m29094_t001`, `TO_type_system_rewrite-20260519T123242Z_m29105_t001`)
+- `E0325` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 66 steps, 67 tools, 25 holbuild, 5,914,400 tok (5,889,526 in, 24,874 out, 5,777,408 cached), 914.4s, $4.19551400)
+  - Proved boundary helpers outside the mutual proof and tried to use `return_exception_typed_extend_local_F_ReturnException(_imp)` in the ReturnException constructor subcase. -> Helpers prove, but the consumer proof still leaves tautological premise/goal subgoals that holbuild rejects with CHOOSE/no theorem proved. (`TO_type_system_rewrite-20260519T123242Z_m29078_t001`, `TO_type_system_rewrite-20260519T123242Z_m29087_t001`, `TO_type_system_rewrite-20260519T123242Z_m29105_t001`)
+  - Tried alternative final-tail shapes: `return_exception_typed_INR_case`, constructor split plus `EVAL_TAC`, direct `MATCH_MP`, forward `drule_all_then`, and moving/removing derived assumptions. -> All variants failed at the same class of tautological/assumption-goal, suggesting the local decomposition is too brittle for this mutual proof context. (`TO_type_system_rewrite-20260519T123242Z_m29090_t001`, `TO_type_system_rewrite-20260519T123242Z_m29094_t001`, `TO_type_system_rewrite-20260519T123242Z_m29098_t001`)
+
+### Ruled Out
+
+- More direct assumption selectors or tautological closers in the For_cons mutual context
+- Broad simplification over the whole context after splitting y
+- Working on Expr_FlagMember before For_cons passes
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29105_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29106_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0326`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 8 steps, 10 tools, 2 holbuild, 682,859 tok (678,299 in, 4,560 out, 641,024 cached), 157.0s, $0.64368700
+
+### Attempts / Evidence
+
+- `E0326` (proved, , actual effort: 1 sessions, 2 msgs, 8 steps, 10 tools, 2 holbuild, 682,859 tok (678,299 in, 4,560 out, 641,024 cached), 157.0s, $0.64368700)
+  - Inserted all-exception transport lemma by exception case split, rewriting return_exception_typed_def and using value_runtime_typed_env_static with env_extends_def/extend_local_def in the ReturnException case. -> Helper accepted by build; failure moved to later existing For_cons local tautology tail at line 2640. (`TO_type_system_rewrite-20260519T123242Z_m29116_t001`, `TO_type_system_rewrite-20260519T123242Z_m29117_t001`)
+
+### Ruled Out
+
+- Helper needing env_consistent/evaluator facts: not needed; build validates small-context proof.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29116_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29117_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0327`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 19 holbuild, 3,371,265 tok (3,353,137 in, 18,128 out, 3,284,992 cached), 543.0s, $2.52706100
+
+### Attempts / Evidence
+
+- `E0327` (proved, , actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 19 holbuild, 3,371,265 tok (3,353,137 in, 18,128 out, 3,284,992 cached), 543.0s, $2.52706100)
+  - Added packaged conclusion helper. Initial exact `case INR exn` shape caused conjunction/branch instrumentation issues, so used the allowed equivalent conclusion with final conjunct `return_exception_typed env ret_ty exn`; proof explicitly splits repeated conjuncts and applies `return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, `ty`. -> Helper accepted by holbuild; build resumed to existing For_cons local tautology at line 2667, indicating next queued patch component must replace that tail. (`TO_type_system_rewrite-20260519T123242Z_m29157_t001`, `TO_type_system_rewrite-20260519T123242Z_m29162_t001`)
+
+### Ruled Out
+
+- Exact `case INR exn` helper conclusion with `rw[]` or local conjunction splitting was brittle under holbuild; equivalent final `return_exception_typed env ret_ty exn` helper compiles and is intended for caller after rewriting the case.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29157_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29162_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0329`
+- blocker: The For_cons tail still cannot be closed reliably in the large mutual proof context. Even after adding an existential-packaged helper `for_cons_ordinary_exception_conclusion_exists`, applying it exposes remaining local conjunct/assumption goals (e.g. `accounts_well_typed ... /\ no_type_error_result ... /\ state_well_typed ... /\ env_consistent ...`) and exact `LIST_CONJ`/`ASSUME` closure in the mutual context fails with the same HOL `CHOOSE` instrumentation class. This is no longer just the original return-exception premise; the whole local-assumption closure interface is brittle.
+- actual effort: 1 sessions, 3 msgs, 38 steps, 38 tools, 15 holbuild, 3,058,570 tok (3,045,133 in, 13,437 out, 2,973,696 cached), 529.3s, $2.24714300
+- next: Call plan_oracle review for this stuck closure and request a redesigned proof interface that avoids all caller-side local premise/conjunct closure in the large mutual context.
+
+### Attempts / Evidence
+
+- `E0328` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 36 tools, 11 holbuild, 4,184,483 tok (4,172,003 in, 12,480 out, 4,107,264 cached), 433.1s, $2.75172700)
+  - Replaced constructor split/local ReturnException proof at For_cons ordinary-exception tail with `once_rewrite_tac[return_exception_typed_INR_case_eq]` and attempted to apply `for_cons_ordinary_exception_conclusion`. -> Rewrite progressed; the goal simplified to the packaged-helper boundary, but naive `irule ... >> qexists_tac ...` exposed premise subgoals in conjunction/existential order. (`TO_type_system_rewrite-20260519T123242Z_m29177_t001`, `TO_type_system_rewrite-20260519T123242Z_m29181_t001`)
+  - Tried exact theorem construction with `LIST_MP`/`ASSUME` to close the whole goal in one `ACCEPT_TAC`. -> Fragment did not compile in holbuild, likely due quotation/type/specialization brittleness in the large resume context; source was reverted to `irule` style. (`TO_type_system_rewrite-20260519T123242Z_m29195_t001`)
+  - Changed packaging helper so env extension and body return typing are a single conjunctive premise, hoping caller would only need one paired premise. Patched tail still discharged it by local conjunction splitting. -> Helper recompiled and build reached For_cons tail, but final local visible assumption goal `return_exception_typed env_exn ret_ty y` still failed under CHOOSE when solved with `asm_rewrite_tac[]`. (`TO_type_system_rewrite-20260519T123242Z_m29192_t001`, `TO_type_system_rewrite-20260519T123242Z_m29198_t001`)
+  - Last source edit (not yet built) changed the helper proof introducers from `ntac 5 disch_tac` to five explicit `strip_tac`s so the final paired premise should be split inside the small helper, not in the caller. -> Unverified edit; next session must run holbuild before further editing. (`TO_type_system_rewrite-20260519T123242Z_m29199_t001`)
+- `E0329` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 38 steps, 38 tools, 15 holbuild, 3,058,570 tok (3,045,133 in, 13,437 out, 2,973,696 cached), 529.3s, $2.24714300)
+  - Verified last handoff edit with holbuild; helper compiled but For_cons tail still failed at visible assumption `return_exception_typed env_exn ret_ty y`. -> Confirmed previous blocker persisted after unverified edit. (`TO_type_system_rewrite-20260519T123242Z_m29204_t001`)
+  - Tried abbreviating/package-closing the conjunctive env-extension/return premise in the caller and then exact `qpat_assum`/`CONJ` and `metis_tac[]` closures. -> All variants still exposed local assumption/conjunction goals and failed with HOL CHOOSE/FIRST_ASSUM instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m29207_t001`, `TO_type_system_rewrite-20260519T123242Z_m29210_t001`, `TO_type_system_rewrite-20260519T123242Z_m29212_t001`)
+  - Added stronger helper `for_cons_ordinary_exception_conclusion_exists` taking the body-IH existential as a single premise and patched For_cons to use it. -> Helper proof was repaired, but caller still exposed residual conjuncts; `fs` and exact `LIST_CONJ` acceptance on visible assumptions fail with the same CHOOSE class. (`TO_type_system_rewrite-20260519T123242Z_m29222_t001`, `TO_type_system_rewrite-20260519T123242Z_m29233_t001`, `TO_type_system_rewrite-20260519T123242Z_m29236_t001`, `TO_type_system_rewrite-20260519T123242Z_m29240_t001`)
+
+### Ruled Out
+
+- Further local closure of visible assumptions in For_cons using simp/fs/metis/ACCEPT_TAC/qpat_assum exact conjunctions without a stronger interface.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29204_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29212_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29222_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29240_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0331`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 19 tools, 6 holbuild, 1,164,718 tok (1,158,629 in, 6,089 out, 1,117,696 cached), 189.8s, $0.94618300
+- next: Call plan_oracle review for the closed helper component, then begin the scheduled caller patch component if authorized.
+
+### Attempts / Evidence
+
+- `E0330` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 31 steps, 35 tools, 13 holbuild, 3,793,983 tok (3,783,138 in, 10,845 out, 3,726,848 cached), 334.3s, $2.47022400)
+  - Added `for_cons_ordinary_exception_tail_conclusion` as an exact boundary lemma using structural premises, body-IH package, and existing pop-scope/return-transport helpers. -> Initial proof failed because existential body package had already been stripped by `strip_tac`; removed unnecessary existential stripping. (`TO_type_system_rewrite-20260519T123242Z_m29249_t001`)
+  - Tried direct `conj_tac` proof: state via `scope_bracket_preserves_swt`, accounts by component equality, env consistency via `for_body_env_extends_consistent_after_pop`, pass through `no_type_error_result`, return typing via `return_exception_typed_extend_local_env_extends`. -> State/env parts progressed after substituting `stp`, but pass-through `no_type_error_result` could not be closed with local assumption tactics (`first_assum`, `mp_tac`, `ACCEPT_TAC`, `metis`, `asm_rewrite_tac`, `rewrite_tac`). (`TO_type_system_rewrite-20260519T123242Z_m29253_t001`, `TO_type_system_rewrite-20260519T123242Z_m29259_t001`, `TO_type_system_rewrite-20260519T123242Z_m29265_t001`)
+  - Reordered the helper conclusion to put pass-through accounts/no-TypeError before state/env/return and tried `rw[evaluation_state_component_equality]` plus targeted TRY blocks for state/env. -> Build now fails after `rw` at a pass-through `no_type_error_result` goal, with several conjunct goals still present; the current source remains partial. (`TO_type_system_rewrite-20260519T123242Z_m29267_t001`, `TO_type_system_rewrite-20260519T123242Z_m29273_t001`)
+- `E0331` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 19 tools, 6 holbuild, 1,164,718 tok (1,158,629 in, 6,089 out, 1,117,696 cached), 189.8s, $0.94618300)
+  - Replaced partial `rw`/TRY proof of `for_cons_ordinary_exception_tail_conclusion` with theorem-level factoring: substitute the pushed-state equality, prove state/account/env transformed facts as local facts using `scope_bracket_preserves_swt`, component equality, and `for_body_env_extends_consistent_after_pop`, then let `for_cons_ordinary_exception_conclusion_exists` assemble the exact five-conjunct conclusion. -> Helper theorem now replays successfully; holbuild proceeds past `for_cons_ordinary_exception_tail_conclusion` and fails later in the downstream For_cons resume caller patch at the old `ACCEPT_TAC (LIST_CONJ ...)`, confirming active boundary lemma component is proved and next work is sibling caller patch. (`TO_type_system_rewrite-20260519T123242Z_m29292_t001`)
+
+### Ruled Out
+
+- Continuing to tweak visible-assumption pass-through closure in the helper; proof now avoids that by proving nontrivial local facts first and using the existing exact assembler lemma.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29292_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Tried direct drule_all, qspecl/MATCH_MP theorem construction, rewriting with the exact theorem, and destructing the exact theorem into conjuncts. The helper itself was repaired to avoid metis timeout and builds far enough; failure is specifically caller consumption under holbuild goalfrag/CHOOSE, not mathematical falsehood.
+- latest episode: `E0333`
+- blocker: The standalone explicit-env-exn helper proves, but every caller application style that feeds it in the resumed mutual For_cons context still leaves or triggers a CHOOSE-prone local closure, even when the helper theorem is constructed by MATCH_MP from visible assumptions and destructed into conjuncts. This indicates the caller proof interface still exposes local theorem construction/pass-through closure in a brittle instrumentation context.
+- actual effort: 1 sessions, 3 msgs, 51 steps, 53 tools, 19 holbuild, 4,522,405 tok (4,498,200 in, 24,205 out, 4,393,472 cached), 812.7s, $3.44652600
+- next: Ask strategist to redesign the For_cons ordinary-exception caller interface so the resume does not construct or consume local theorem packages/conjuncts at all, or to authorize a different factoring such as moving the entire ordinary-exception tail into a Resume-specific subproof/lemma with exact caller assumptions and no `ASSUME`/`LIST_CONJ` construction in the mutual context.
+
+### Attempts / Evidence
+
+- `E0332` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 21 steps, 21 tools, 6 holbuild, 2,095,492 tok (2,086,301 in, 9,191 out, 2,046,464 cached), 258.7s, $1.49814700)
+  - Replaced old `for_cons_ordinary_exception_conclusion_exists`/`ACCEPT_TAC (LIST_CONJ ...)` tail with `irule for_cons_ordinary_exception_tail_conclusion`, simplifying structural premises and using witnesses for body/id/st/ty/tyv/v. -> Progresses to a small premise package, but the remaining existential premise is exactly the CHOOSE-prone local closure the component was meant to avoid. (`TO_type_system_rewrite-20260519T123242Z_m29316_t001`)
+- `E0333` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 51 steps, 53 tools, 19 holbuild, 4,522,405 tok (4,498,200 in, 24,205 out, 4,393,472 cached), 812.7s, $3.44652600)
+  - Rebuilt current handoff edit `drule_all_then ACCEPT_TAC for_cons_ordinary_exception_tail_conclusion`. -> Failed with HOL assertion/CHOOSE-style instrumentation on an exact visible final conjunction goal after applying the helper. (`TO_type_system_rewrite-20260519T123242Z_m29343_t001`)
+  - Tried constructing the exact theorem with MATCH_MP/LIST_CONJ from visible assumptions and using MATCH_ACCEPT_TAC / mp_tac / rewriting / destructing conjuncts. -> Repeated failures remained in the For_cons caller: CHOOSE on theorem matching/rewrite or failure on residual `no_type_error_result (INR y)` after partial rewrite; no tactic-style consumption avoided the brittle local proof obligations. (`TO_type_system_rewrite-20260519T123242Z_m29367_t001`, `TO_type_system_rewrite-20260519T123242Z_m29382_t001`, `TO_type_system_rewrite-20260519T123242Z_m29390_t001`, `TO_type_system_rewrite-20260519T123242Z_m29392_t001`)
+  - Repaired helper proof body to use `for_cons_ordinary_exception_conclusion` with explicit witnesses instead of direct pass-through/metis. -> Helper replayed past its QED and failure moved back to caller consumption, confirming the helper is mathematically available but its current interface/application is still not robust enough for the mutual resume. (`TO_type_system_rewrite-20260519T123242Z_m29376_t001`)
+
+### Ruled Out
+
+- More local assumption-closure variants (`simp`, `ACCEPT_TAC`, `MATCH_ACCEPT_TAC`, `TAUT_TAC`, `rewrite_tac`, destructing conjuncts) in the caller tail.
+- Reintroducing existential package premise.
+- Constructor-splitting the exception.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29343_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29376_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29390_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29392_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0334`
+- blocker: 
+- actual effort: 1 sessions, 10 steps, 10 tools, 4 holbuild, 657,872 tok (655,014 in, 2,858 out, 629,760 cached), 118.7s, $0.52689000
+
+### Attempts / Evidence
+
+- `E0334` (proved, , actual effort: 1 sessions, 10 steps, 10 tools, 4 holbuild, 657,872 tok (655,014 in, 2,858 out, 629,760 cached), 118.7s, $0.52689000)
+  - Repaired theorem boundary by restoring `QED` after `for_cons_ordinary_exception_tail_conclusion`, added `for_cons_ordinary_exception_tail_forward`, and proved it by stripping curried premises, substituting `stp`, and applying `for_cons_ordinary_exception_tail_conclusion` with witnesses. -> `holbuild` replayed past `for_cons_ordinary_exception_tail_forward` and next failure is in the existing For_cons Resume caller tail, so the standalone corollary component is proved. (`TO_type_system_rewrite-20260519T123242Z_m29410_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29410_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0335`
+- blocker: The new curried forward corollary proves, but multiple caller-consumption shapes in the Resume tail still leave either tautological implication goals or CHOOSE-prone closure under holbuild instrumentation. The PLAN explicitly said to escalate if the curried corollary still leaves CHOOSE-prone residual premise goals in the Resume.
+- actual effort: 1 sessions, 2 msgs, 25 steps, 24 tools, 11 holbuild, 2,331,121 tok (2,322,836 in, 8,285 out, 2,273,792 cached), 255.9s, $1.63066600
+- next: Call plan_oracle review for E0335 and ask for a redesign/decomposition of the caller patch.
+
+### Attempts / Evidence
+
+- `E0335` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 25 steps, 24 tools, 11 holbuild, 2,331,121 tok (2,322,836 in, 8,285 out, 2,273,792 cached), 255.9s, $1.63066600)
+  - Replaced forbidden local `MATCH_MP ... LIST_CONJ [ASSUME ...]` block with `drule_all for_cons_ordinary_exception_tail_forward >> simp[]`. -> Forward theorem was applied, but `simp[]` saw a tautological `P ==> P` goal and hit the same CHOOSE-prone instrumentation failure mode. (`TO_type_system_rewrite-20260519T123242Z_m29417_t001`)
+  - Tried triggering the theorem from the visible `eval_stmts` assumption via `mp_tac o MATCH_MP for_cons_ordinary_exception_tail_forward`, then `simp[]`. -> Produced a clean curried implication-to-goal shape, but `simp[]` timed out before discharging the premise chain. (`TO_type_system_rewrite-20260519T123242Z_m29427_t001`)
+  - Tried bounded premise discharge with `rpt (impl_tac >- simp[])`/variants after pushing the matched theorem. -> The premise chain remained but repeated/bounded implication discharge was either too slow or failed on a first subgoal, indicating the caller interface is still brittle in this Resume context. (`TO_type_system_rewrite-20260519T123242Z_m29431_t001`)
+  - Tried direct `metis_tac[for_cons_ordinary_exception_tail_forward]` from the visible assumptions. -> Metis reconstructed the same mathematical fact but again failed with the CHOOSE instrumentation error, confirming the new caller patch leaf is under-decomposed or needs a different boundary/statement shape. (`TO_type_system_rewrite-20260519T123242Z_m29438_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29417_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29427_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29431_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29438_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0336`
+- blocker: The Risk-2 direct-conjunction/exact-assumption patch still fails at an exact visible assumption in the For_cons Resume tail. The latest holbuild shows the goal is syntactically identical to assumption 31 (`env_consistent env cx (st_body with scopes := TL st_body.scopes)`), yet `qpat_assum ... ACCEPT_TAC` triggers a CHOOSE exception under holbuild Resume instrumentation. This follows prior failures of other exact-assumption/tautology closers, so further local tactic variants are likely thrashing; the proof boundary likely needs factoring/redesign outside this Resume fragment.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,728 tok (116,810 in, 918 out, 104,448 cached), 20.2s, $0.14157400
+- next: Ask the strategist to review/decompose this leaf. Likely redesign: factor the ordinary-exception conclusion into a helper theorem or other proof boundary that avoids residual exact-assumption subgoals inside the Resume fragment.
+
+### Attempts / Evidence
+
+- `E0336` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,728 tok (116,810 in, 918 out, 104,448 cached), 20.2s, $0.14157400)
+  - Current source replaced the final exact assumption closer with `qpat_assum `env_consistent env cx (st_body with scopes := TL st_body.scopes)` ACCEPT_TAC` and rebuilt `vyperTypeStmtSoundnessTheory`. -> Failed at the exact visible `env_consistent` assumption goal with a CHOOSE exception from HOL4 Tactical/goalfrag Resume instrumentation, confirming the do-not-retry signal in STATE. (`TO_type_system_rewrite-20260519T123242Z_m29554_t001`)
+  - Earlier variants tried exact-assumption and tautology closers (`qpat_assum`, `ACCEPT_TAC (ASSUME ...)`, `rewrite_tac[ASSUME ...]`, `simp[NoAsms]`, `metis_tac[]`, and `P ==> P` shapes) after the same For_cons ordinary-exception reduction. -> Repeated failures showed the semantics are not missing: goals were exact assumptions or immediate tautologies, but local theorem construction/CHOOSE fails in this Resume context. (`TO_type_system_rewrite-20260519T123242Z_m29461_t001`, `TO_type_system_rewrite-20260519T123242Z_m29531_t001`, `TO_type_system_rewrite-20260519T123242Z_m29533_t001`, `TO_type_system_rewrite-20260519T123242Z_m29549_t001`)
+
+### Ruled Out
+
+- Further minor variants of exact-assumption closers in the current Resume tail
+- Reintroducing `for_cons_ordinary_exception_tail_forward` at this call site
+- Broad `metis_tac`/`simp[]` over the full final conjunction
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29554_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29461_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29531_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29533_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29549_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0337`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 6 tools, 2 holbuild, 584,892 tok (582,667 in, 2,225 out, 561,152 cached), 94.3s, $0.45490100
+- next: Review closure, then begin dependency component C2.7.1.2.2.2.3.1.3.2.2.1.2 to patch the Resume caller to use `for_cons_ordinary_exception_tail_exists`.
+
+### Attempts / Evidence
+
+- `E0337` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 6 tools, 2 holbuild, 584,892 tok (582,667 in, 2,225 out, 561,152 cached), 94.3s, $0.45490100)
+  - Added `for_cons_ordinary_exception_tail_exists` after `for_cons_ordinary_exception_tail_conclusion`; proof strips the conjunctive premise, substitutes the pushed-scope equality, applies the concrete-witness tail conclusion, and supplies the existential witness/premises by simplification. -> `holbuild` replay accepted the new theorem and advanced to the later For_cons Resume caller failure, showing the boundary lemma itself is proved. (`TO_type_system_rewrite-20260519T123242Z_m29568_t001`)
+  - Initial helper proof omitted substitution of `stp = ...`; holbuild exposed remaining eval-stmts premise mismatch. Added `qpat_x_assum `stp = _` SUBST_ALL_TAC` before applying the concrete helper. -> Resolved the only helper proof subgoal; build progressed past the theorem. (`TO_type_system_rewrite-20260519T123242Z_m29566_t001`, `TO_type_system_rewrite-20260519T123242Z_m29568_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29568_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The component's Risk-2 premise that the existing `for_cons_ordinary_exception_tail_exists`/tail-conclusion helper can be consumed directly in the Resume branch was wrong under holbuild Resume instrumentation. Need strategist redesign of a full caller-shaped boundary helper or source revert/replacement decision for experimental helpers.
+- latest episode: `E0340`
+- blocker: Repeated caller-side helper applications in `Resume eval_all_type_sound_mutual[For_cons]` leave the same residual `no_type_error_result (INR y) /\ ∃body env_exn id st ty tyv v. ...` at QED. Current holbuild confirms the source is still unbuilt at lines 2833-2835 using `irule for_cons_ordinary_exception_tail_conclusion_premises >> simp[]`. Prior helper experiments compile but do not match the full Resume boundary; continuing minor tactic variants violates the do-not-retry evidence.
+- actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 214,405 tok (213,277 in, 1,128 out, 192,000 cached), 25.2s, $0.23622500
+- next: Call plan_oracle(mode='review') for this closed stuck component. Ask whether to revert experimental helpers and add a full post-`return_exception_typed_INR_case_eq` helper whose conclusion matches the entire Resume goal, or to replace the proof boundary another way.
+
+### Attempts / Evidence
+
+- `E0338` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 18 steps, 22 tools, 7 holbuild, 2,230,404 tok (2,222,617 in, 7,787 out, 2,174,976 cached), 225.4s, $1.55930300)
+  - Replaced the residual `for_cons_ordinary_exception_conclusion_exists`/exact-assumption split with a single `metis_tac[for_cons_ordinary_exception_tail_exists]`. -> Failed with CHOOSE at the full five-conjunct goal; broad metis over helper in the Resume fragment still trips instrumentation despite all premises visible. (`TO_type_system_rewrite-20260519T123242Z_m29574_t001`)
+  - Tried `irule for_cons_ordinary_exception_tail_exists >> simp[]`, then added explicit `qexists_tac env_exn` after observing residual premise shape. -> `irule ... >> simp[]` reduced to `no_type_error_result (INR y) ∧ ∃...`; trying to witness immediately failed because the top goal was a conjunction, not an existential. (`TO_type_system_rewrite-20260519T123242Z_m29576_t001`, `TO_type_system_rewrite-20260519T123242Z_m29579_t001`)
+  - Provided explicit witnesses for the `∃body id st ty tyv v` package after a `conj_tac` for `no_type_error_result`; later substituted `stp = ...` to align the eval premise. -> Unbounded `simp[]` over the remaining package timed out, and after substitution a final `simp[]` on `id ∉ FDOM ... ∧ eval_stmts ... ∧ env_consistent ...` triggered CHOOSE. This indicates the caller still leaves conjunction residuals inside the fragile Resume fragment. (`TO_type_system_rewrite-20260519T123242Z_m29581_t001`, `TO_type_system_rewrite-20260519T123242Z_m29583_t001`)
+  - Tried bypassing the new existential wrapper and applying the concrete helper `for_cons_ordinary_exception_tail_conclusion` directly, first with `metis_tac`, then with `irule` and explicit witnesses. -> `metis_tac` again CHOOSE-failed at the full conjunction. The `irule` path reduces to `no_type_error_result (INR y) ∧ ∃body env_exn id st ty tyv v...`; current source incorrectly tries `qexists_tac body` before splitting that conjunction, so holbuild fails with `goal not an exists`. (`TO_type_system_rewrite-20260519T123242Z_m29585_t001`, `TO_type_system_rewrite-20260519T123242Z_m29588_t001`)
+- `E0339` (progressed, risk_mismatch, actual effort: 1 sessions, 6 msgs, 71 steps, 77 tools, 24 holbuild, 7,356,355 tok (7,334,440 in, 21,915 out, 7,200,256 cached), 820.1s, $4.92849800)
+  - Added `for_cons_ordinary_exception_tail_conclusion_premises`, a full five-conjunct popped-tail helper including `env_maps_wf`, then used it in the caller. -> The helper itself compiled and holbuild reached the caller, but applying it in the Resume branch with `irule ... >> simp[]` still left a residual conjunction at QED. (`TO_type_system_rewrite-20260519T123242Z_m29635_t001`, `TO_type_system_rewrite-20260519T123242Z_m29649_t001`)
+  - Added `for_cons_ordinary_exception_tail_residual`, a helper whose conclusion matches the exact post-`irule for_cons_ordinary_exception_tail_conclusion >> simp[]` residual. -> The helper compiled, but direct `irule` at the call site either did not match the surrounding final goal or left the same residual after the full helper; explicit `qspecl_then` was not viable because the theorem is not universally quantified in the expected tactic shape. (`TO_type_system_rewrite-20260519T123242Z_m29644_t001`, `TO_type_system_rewrite-20260519T123242Z_m29656_t001`)
+  - Tried proof variants for trivial `no_type_error_result` subgoals inside helpers (`simp`, `qpat_assum`, `first_assum`, `metis_tac`, `rw`, contradiction with definition). -> Most exact-assumption variants failed under instrumentation; the robust helper-local way to close `no_type_error_result` was `simp[no_type_error_result_def] >> gen_tac >> CCONTR_TAC >> gvs[no_type_error_result_def]`. This works outside Resume but does not solve the caller boundary mismatch. (`TO_type_system_rewrite-20260519T123242Z_m29607_t001`, `TO_type_system_rewrite-20260519T123242Z_m29609_t001`, `TO_type_system_rewrite-20260519T123242Z_m29625_t001`)
+- `E0340` (stuck, risk_mismatch, actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 214,405 tok (213,277 in, 1,128 out, 192,000 cached), 25.2s, $0.23622500)
+  - Verified current source status with holbuild on `vyperTypeStmtSoundnessTheory`. -> Build fails at For_cons Resume QED with the same residual conjunction/existential package after `for_cons_ordinary_exception_tail_conclusion_premises >> simp[]`. (`TO_type_system_rewrite-20260519T123242Z_m29668_t001`)
+  - Inspected helper block and caller tail in `vyperTypeStmtSoundnessScript.sml`. -> Current source contains experimental helpers `for_cons_ordinary_exception_tail_conclusion_premises` and `for_cons_ordinary_exception_tail_residual`; caller uses `for_cons_ordinary_exception_tail_conclusion_premises` and still leaves residual. This matches E0339 and STATE's warning to stop tactic variants. (`TO_type_system_rewrite-20260519T123242Z_m29669_t001`, `TO_type_system_rewrite-20260519T123242Z_m29669_t002`)
+
+### Ruled Out
+
+- Minor caller tactic variants using existing tail/residual helpers
+- Exact-assumption/no-TypeError residual closers inside the Resume fragment
+- Editing later source-order branches before For_cons builds
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29668_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29669_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29669_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29659_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29663_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0348`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 58,728 tok (58,299 in, 429 out, 49,664 cached), 7.4s, $0.08087700
+- next: Review closure with strategist so canonical schedule advances to C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.1, the conjunction-antecedent helper leaf.
+
+### Attempts / Evidence
+
+- `E0341` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 476,722 tok (474,105 in, 2,617 out, 457,216 cached), 99.4s, $0.39156300)
+  - Added `for_cons_ordinary_exception_tail_resume_goal` as a full post-`return_exception_typed_INR_case_eq` packing helper with curried premises and explicit existential witnesses. -> Initial proof used `rpt strip_tac` and accidentally stripped the conjunctive conclusion; fixed to `rpt gen_tac >> ntac 10 strip_tac`. Holbuild then replayed past the helper and failed later at the existing For_cons caller, confirming the helper compiles. (`TO_type_system_rewrite-20260519T123242Z_m29674_t001`, `TO_type_system_rewrite-20260519T123242Z_m29675_t001`, `TO_type_system_rewrite-20260519T123242Z_m29677_t001`)
+- `E0348` (proved, , actual effort: 1 sessions, 1 steps, 58,728 tok (58,299 in, 429 out, 49,664 cached), 7.4s, $0.08087700)
+  - No new edit in this session; began the scheduled leaf and scoped DOSSIER showed the leaf was already proved/carry-forward with no executor work remaining. -> Confirmed this scheduled component is already terminally proved and closed it to unblock the actual next helper/caller-patch frontier. (`TO_type_system_rewrite-20260519T123242Z_m29808_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29674_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29677_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29808_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0343`
+- blocker: The mandated one focused caller-boundary attempt replaced the fragile `drule_all for_cons_ordinary_exception_tail_resume_goal >> simp[]` with direct `irule for_cons_ordinary_exception_tail_forward`, but holbuild now leaves the known post-rewrite residual `no_type_error_result (INR y) /\ ∃body' env_exn' id' st' ty tyv v. ...` before the existential witnesses. This is exactly the boundary-shape failure the STATE/PLAN said to stop on rather than continue local tactic variants.
+- actual effort: 1 sessions, 5 steps, 6 tools, 2 holbuild, 353,990 tok (350,326 in, 3,664 out, 327,168 cached), 83.1s, $0.38929400
+- next: Call plan_oracle review for this closed stuck/risk_mismatch episode and request a redesigned For_cons caller/helper boundary.
+
+### Attempts / Evidence
+
+- `E0342` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 25 steps, 26 tools, 8 holbuild, 3,001,814 tok (2,991,185 in, 10,629 out, 2,935,296 cached), 329.1s, $2.06596300)
+  - Changed `for_cons_ordinary_exception_tail_resume_goal` to include the existential package and final `return_exception_typed env ret_ty exn` as a full helper conclusion. -> First rebuild showed the helper proof needed a `conj_tac` before existential witnesses; after adding the split and proving the final conjunct with `return_exception_typed_extend_local_env_extends`, holbuild reached the caller again. (`TO_type_system_rewrite-20260519T123242Z_m29700_t001`, `TO_type_system_rewrite-20260519T123242Z_m29701_t001`, `TO_type_system_rewrite-20260519T123242Z_m29702_t001`, `TO_type_system_rewrite-20260519T123242Z_m29703_t001`)
+  - Patched caller to use `drule_all for_cons_ordinary_exception_tail_resume_goal`; explored final implication closure using `return_exception_typed_extend_local_F` with witnesses and direct case split. -> The caller no longer leaves exactly the old `no_type_error_result /\ ∃...` residual, but `simp[]` after `drule_all` leaves an implication from the helper conclusion to the original goal. Attempts to close the final `return_exception_typed` part inside Resume by exact-assumption-like tactics CHOOSE-failed. (`TO_type_system_rewrite-20260519T123242Z_m29683_t001`, `TO_type_system_rewrite-20260519T123242Z_m29691_t001`, `TO_type_system_rewrite-20260519T123242Z_m29693_t001`, `TO_type_system_rewrite-20260519T123242Z_m29695_t001`, `TO_type_system_rewrite-20260519T123242Z_m29697_t001`, `TO_type_system_rewrite-20260519T123242Z_m29699_t001`, `TO_type_system_rewrite-20260519T123242Z_m29703_t001`)
+- `E0343` (stuck, risk_mismatch, actual effort: 1 sessions, 5 steps, 6 tools, 2 holbuild, 353,990 tok (350,326 in, 3,664 out, 327,168 cached), 83.1s, $0.38929400)
+  - Patched the For_cons ordinary-exception tail to consume a top-level helper with `irule for_cons_ordinary_exception_tail_forward >> simp[]` instead of `drule_all ... >> simp[]`, then supplied the intended witnesses. -> The previous CHOOSE-sensitive implication disappeared, but the proof stopped at the old residual shape: `no_type_error_result (INR y) /\ ∃body' env_exn' id' st' ty tyv v. ...`; the next tactic `qexists_tac body` fails because the goal is a conjunction, not an existential. This matches the do-not-retry/fallback condition. (`TO_type_system_rewrite-20260519T123242Z_m29711_t001`, `TO_type_system_rewrite-20260519T123242Z_m29712_t001`)
+  - Confirmed baseline before the edit with holbuild and source reads of the helper/caller region. -> Baseline was the E0342 failure at `drule_all for_cons_ordinary_exception_tail_resume_goal >> simp[]`, leaving helper-conclusion implication to original goal and CHOOSE-failing in Resume. (`TO_type_system_rewrite-20260519T123242Z_m29709_t003`, `TO_type_system_rewrite-20260519T123242Z_m29709_t002`, `TO_type_system_rewrite-20260519T123242Z_m29709_t001`)
+
+### Ruled Out
+
+- Broad `simp[]` after `drule_all for_cons_ordinary_exception_tail_resume_goal`
+- Direct `irule for_cons_ordinary_exception_tail_forward` caller patch under the current helper boundary
+- Local exact/case closures for `return_exception_typed` inside the Resume tail
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29712_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29709_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29711_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0344`
+- blocker: The refined residual-split patch still fails under Resume instrumentation. `conj_tac` exposes the expected residual, but the leading `no_type_error_result (INR y)` conjunct does not close by `simp[]`, `first_assum`, `qpat_assum`, `asm_rewrite_tac[]`, or bounded `metis_tac[]`; `fs[no_type_error_result_def]` closes it. After witness instantiation, the final exact conjunct `return_exception_typed env_exn ret_ty y` remains with the identical assumption visible, but exact/implication-style closures (`fs[]`, `mp_tac >> simp[]`, `ACCEPT_TAC (ASSUME ...)`) all CHOOSE-fail. The child plan's Risk 1 estimate was wrong: the residual is not purely mechanical inside this Resume fragment because exact-assumption use is CHOOSE-sensitive.
+- actual effort: 1 sessions, 2 msgs, 37 steps, 38 tools, 14 holbuild, 4,120,448 tok (4,106,355 in, 14,093 out, 4,034,048 cached), 452.7s, $2.80134900
+- next: Call plan_oracle review. Likely redesign should move the entire existential package proof (including exact `return_exception_typed env_exn ret_ty y`) into a top-level helper/corollary outside the Resume fragment, or produce a helper whose conclusion leaves no exact-assumption subgoals in Resume.
+
+### Attempts / Evidence
+
+- `E0344` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 37 steps, 38 tools, 14 holbuild, 4,120,448 tok (4,106,355 in, 14,093 out, 4,034,048 cached), 452.7s, $2.80134900)
+  - Applied the oracle patch shape: `irule for_cons_ordinary_exception_tail_forward >> simp[] >> conj_tac ...` before witness instantiation. -> The proof reached the expected residual, but the leading no-type-error conjunct did not close by the proposed `simp[]` or by direct assumption tactics under Resume instrumentation; `fs[no_type_error_result_def]` was needed. (`TO_type_system_rewrite-20260519T123242Z_m29718_t001`, `TO_type_system_rewrite-20260519T123242Z_m29721_t001`, `TO_type_system_rewrite-20260519T123242Z_m29723_t001`, `TO_type_system_rewrite-20260519T123242Z_m29725_t001`)
+  - After closing the first conjunct and supplying witnesses, tried to finish the existential package with simplification and explicit conjunct management. -> Broad/specific simplification either timed out/CHOOSE-failed or left an exact final goal `return_exception_typed env_exn ret_ty y` with the same assumption visible. (`TO_type_system_rewrite-20260519T123242Z_m29732_t001`, `TO_type_system_rewrite-20260519T123242Z_m29735_t001`, `TO_type_system_rewrite-20260519T123242Z_m29737_t001`, `TO_type_system_rewrite-20260519T123242Z_m29739_t001`)
+  - Tried to avoid the exact final conjunct by using the existing existential assumption and by exact theorem acceptance. -> Using the existential assumption leaves an implication/residual and CHOOSE-fails; `ACCEPT_TAC (ASSUME ``return_exception_typed env_exn ret_ty y``)` on the exact final goal also CHOOSE-fails. This confirms a Resume-boundary/instrumentation-sensitive exact-assumption blocker, not a semantic gap. (`TO_type_system_rewrite-20260519T123242Z_m29749_t001`, `TO_type_system_rewrite-20260519T123242Z_m29752_t001`)
+
+### Ruled Out
+
+- The exact PLAN patch with `conj_tac >- simp[]` before witnesses
+- Direct assumption tactics for the leading `no_type_error_result (INR y)` residual (`simp[]`, `first_assum`, `qpat_assum`, `asm_rewrite_tac[]`)
+- Broad metis for the leading residual (timed out)
+- Manual final exact assumption closure for `return_exception_typed env_exn ret_ty y` inside the Resume tail
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29752_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29749_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29745_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29735_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29718_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0349`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 72,119 tok (71,766 in, 353 out, 61,952 cached), 6.0s, $0.09063600
+- next: Review closure with strategist, then begin C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.1 to add `for_cons_ordinary_exception_tail_context_conj`.
+
+### Attempts / Evidence
+
+- `E0345` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 9 tools, 4 holbuild, 513,077 tok (510,541 in, 2,536 out, 485,376 cached), 113.7s, $0.44459300)
+  - Added top-level theorem `for_cons_ordinary_exception_tail_exists_forward` after `for_cons_ordinary_exception_tail_exists`; proof strips the eight non-existential premises, keeps the existential package opaque, substitutes the pushed-state equality, and delegates to `for_cons_ordinary_exception_tail_exists`. -> `holbuild vyperTypeStmtSoundnessTheory` advanced past the new helper and resumed at the pre-existing For_cons caller tail failure, showing the helper compiled/proved. (`TO_type_system_rewrite-20260519T123242Z_m29765_t001`)
+- `E0349` (proved, , actual effort: 1 sessions, 1 steps, 72,119 tok (71,766 in, 353 out, 61,952 cached), 6.0s, $0.09063600)
+  - No new source edit in this session; began the scheduled leaf and scoped DOSSIER showed it was already proved/carry-forward from E0345 with `for_cons_ordinary_exception_tail_exists_forward` compiled and holbuild replaying past the helper. -> Confirmed this scheduled component has no remaining executor work and closed it proved to unblock the conjunction-antecedent helper leaf. (`TO_type_system_rewrite-20260519T123242Z_m29812_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29765_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29812_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0347`
+- blocker: The planned caller patch still leaves CHOOSE-sensitive residuals in the Resume fragment. Applying the new existential-package helper and consuming the existential package as a whole advances to exact premise goals such as `env_consistent env cx st` or `P ==> P`, which holbuild goalfrag reports as CHOOSE failures. A single bounded `metis_tac` over either the new helper or the old explicit helper also CHOOSE-fails despite all semantic premises being visible. This indicates the caller needs a stronger top-level boundary helper matching the whole Resume context/final goal, not more local premise discharge.
+- actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 8 holbuild, 2,570,225 tok (2,557,119 in, 13,106 out, 2,498,048 cached), 315.8s, $1.93755900
+- next: Request plan_oracle review to redesign this caller patch, likely by adding a top-level helper whose assumptions match the current Resume context and whose conclusion is the final five-conjunct branch goal, so the Resume tail has no residual exact-premise subgoals.
+
+### Attempts / Evidence
+
+- `E0346` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 26 steps, 25 tools, 8 holbuild, 2,459,886 tok (2,447,594 in, 12,292 out, 2,390,016 cached), 303.2s, $1.85165800)
+  - Applied `for_cons_ordinary_exception_tail_exists_forward`, instantiated structural variables, accepted the existential package as a whole, then discharged remaining premises locally. -> Failed on residual `env_consistent env cx st` exact-assumption goal / `P ==> P` shape with CHOOSE instrumentation failure. (`TO_type_system_rewrite-20260519T123242Z_m29779_t001`, `TO_type_system_rewrite-20260519T123242Z_m29784_t001`)
+  - Tried single bounded `metis_tac[for_cons_ordinary_exception_tail_exists_forward]` and later `metis_tac[for_cons_ordinary_exception_tail_forward]` after removing existential package assumption to reduce search clutter. -> Both failed under Resume with CHOOSE while the final five-conjunct goal and all needed premises were visible. (`TO_type_system_rewrite-20260519T123242Z_m29776_t001`, `TO_type_system_rewrite-20260519T123242Z_m29794_t001`)
+  - Tried `simp[Abbr `stp`]` to discharge the remaining conjunctive premises directly after helper application. -> Failed because simplifier left the existential package/evaluation/base-consistency residual and triggered CHOOSE; the package itself could be accepted, but later exact premises still failed. (`TO_type_system_rewrite-20260519T123242Z_m29772_t001`)
+- `E0347` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 8 holbuild, 2,570,225 tok (2,557,119 in, 13,106 out, 2,498,048 cached), 315.8s, $1.93755900)
+  - Applied `for_cons_ordinary_exception_tail_exists_forward`, instantiated `body`, `id`, `st`, `ty`, `tyv`, `v`, accepted the existential package opaquely, and attempted to discharge remaining helper premises locally. -> Failed on exact residual premises (`env_consistent env cx st` / implication tautology) with CHOOSE failures under Resume. (`TO_type_system_rewrite-20260519T123242Z_m29779_t001`, `TO_type_system_rewrite-20260519T123242Z_m29784_t001`)
+  - Tried `simp[Abbr `stp`]` after helper instantiation to close the residual conjunctive premises without destructing the existential package. -> Failed with residual package/evaluation/base-consistency conjunct and CHOOSE failure. (`TO_type_system_rewrite-20260519T123242Z_m29772_t001`)
+  - Tried bounded `metis_tac[for_cons_ordinary_exception_tail_exists_forward]` and then `metis_tac[for_cons_ordinary_exception_tail_forward]` (after killing the existential package assumption to reduce clutter). -> Both failed with CHOOSE while the final five-conjunct goal and needed premises were visible. (`TO_type_system_rewrite-20260519T123242Z_m29776_t001`, `TO_type_system_rewrite-20260519T123242Z_m29794_t001`)
+
+### Ruled Out
+
+- Local premise splitting after applying `for_cons_ordinary_exception_tail_exists_forward`
+- Exact-assumption or `mp_tac >> simp[]` closure for visible `env_consistent env cx st` in this Resume branch
+- Bounded `metis_tac` over the existing helper(s) inside the Resume tail
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29772_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29779_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29784_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29794_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0350`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 7 tools, 2 holbuild, 553,013 tok (551,154 in, 1,859 out, 525,312 cached), 90.6s, $0.44763600
+- next: Review closure, then begin caller patch component C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2 to replace the fragile Resume tail with an atomic use of `for_cons_ordinary_exception_tail_context_conj`.
+
+### Attempts / Evidence
+
+- `E0350` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 7 tools, 2 holbuild, 553,013 tok (551,154 in, 1,859 out, 525,312 cached), 90.6s, $0.44763600)
+  - Added top-level theorem `for_cons_ordinary_exception_tail_context_conj` immediately after `for_cons_ordinary_exception_tail_forward`; proof strips the single conjunctive antecedent, substitutes the pushed-state equality, invokes `for_cons_ordinary_exception_tail_conclusion`, and supplies explicit witnesses. -> `holbuild vyperTypeStmtSoundnessTheory` replayed past the inserted helper and failed later at the known For_cons caller tail, confirming this helper compiles/proves. (`TO_type_system_rewrite-20260519T123242Z_m29820_t001`, `TO_type_system_rewrite-20260519T123242Z_m29821_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29820_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29821_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0352`
+- blocker: The planned atomized helper application still exposes exact/pass-through subgoals inside the For_cons Resume tail; even after explicit splitting and witnesses, the final `return_exception_typed env_exn ret_ty y` goal is present verbatim as an assumption but exact-assumption, rewrite, fs, and metis-style closers fail under Resume/holbuild instrumentation with CHOOSE errors. This matches the prior warned failure mode, so the boundary lemma interface is still not Resume-friendly enough.
+- actual effort: 1 sessions, 1 msgs, 19 steps, 18 tools, 7 holbuild, 1,524,684 tok (1,517,559 in, 7,125 out, 1,473,024 cached), 191.2s, $1.17293700
+- next: Call plan_oracle(mode='review') for this stuck component. Ask for a stronger helper whose conclusion includes the existential package or the whole post-rewrite Resume tail so no exact/pass-through subgoals are left inside the Resume proof.
+
+### Attempts / Evidence
+
+- `E0351` (progressed, other, actual effort: 1 sessions, 2 msgs, 27 steps, 30 tools, 9 holbuild, 3,300,951 tok (3,290,160 in, 10,791 out, 3,230,208 cached), 962.9s, $2.23859400)
+  - Patched For_cons Resume tail from direct `metis_tac[for_cons_ordinary_exception_tail_forward]` to `irule for_cons_ordinary_exception_tail_context_conj` after deriving `env_maps_wf env` and discarding the existential package. -> Helper application matched only after rewriting the goal with `return_exception_typed_INR_case_eq`; naive `simp[]` left residual package/`no_type_error_result` goals rather than closing the tail. (`TO_type_system_rewrite-20260519T123242Z_m29826_t001`, `TO_type_system_rewrite-20260519T123242Z_m29827_t001`)
+  - Tried avoiding the rewrite and using a `REWRITE_RULE[GSYM return_exception_typed_INR_case_eq]` view of the helper. -> Without rewriting the goal first, `irule` did not match the case-shaped return-exception conclusion; one REWRITE_RULE attempt produced an uninformative hol run failure and should not be preferred. (`TO_type_system_rewrite-20260519T123242Z_m29829_t001`, `TO_type_system_rewrite-20260519T123242Z_m29832_t001`, `TO_type_system_rewrite-20260519T123242Z_m29833_t001`)
+  - After `irule`, tried `rpt conj_tac >> simp[]`, broad `metis_tac[]`, explicit existential witnesses, and exact-assumption closers for residual `no_type_error_result (INR y)`. -> Residual shape is stable: after four easy conjuncts the remaining goal is `no_type_error_result (INR y)` plus an existential package. Broad metis timed out; witnessing before splitting failed because the goal was not existential; exact assumption closers failed under Resume instrumentation. A contradiction proof with `gvs[no_type_error_result_def]` timed out in the Resume context. (`TO_type_system_rewrite-20260519T123242Z_m29837_t001`, `TO_type_system_rewrite-20260519T123242Z_m29839_t001`, `TO_type_system_rewrite-20260519T123242Z_m29841_t001`, `TO_type_system_rewrite-20260519T123242Z_m29843_t001`, `TO_type_system_rewrite-20260519T123242Z_m29845_t001`, `TO_type_system_rewrite-20260519T123242Z_m29849_t001`)
+  - Last source edit changed the `no_type_error_result` residual closer to `qpat_x_assum `no_type_error_result (INR y)` mp_tac >> simp[no_type_error_result_def]`. -> This edit is unverified due to handoff. Next session should build from this exact source prefix; expected next failure, if any, is either at that closer or at the final existential package witness block. (`TO_type_system_rewrite-20260519T123242Z_m29850_t001`)
+- `E0352` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 19 steps, 18 tools, 7 holbuild, 1,524,684 tok (1,517,559 in, 7,125 out, 1,473,024 cached), 191.2s, $1.17293700)
+  - Built current source after prior unverified edit (`qpat_x_assum no_type_error_result ... mp_tac >> simp[no_type_error_result_def]`). -> The no-TypeError residual closed, revealing the remaining existential package; final `simp[]` on the package timed out. (`TO_type_system_rewrite-20260519T123242Z_m29856_t001`)
+  - Replaced final existential package `simp[]` with explicit witnesses and `rpt conj_tac >> metis_tac[]`. -> After splitting the package, first exact conjunct `id ∉ FDOM env.var_types` failed with CHOOSE, showing broad metis is still unsuitable inside Resume. (`TO_type_system_rewrite-20260519T123242Z_m29859_t001`)
+  - Replaced package close with explicit conjunct-by-conjunct `mp_tac >> simp[]` for all visible facts except the final return-exception fact. -> All earlier package conjuncts closed, but final goal remained exactly `return_exception_typed env_exn ret_ty y`; `mp_tac >> simp[]` failed with CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m29861_t001`)
+  - Tried `metis_tac[]`, `qpat_x_assum ... rewrite_tac`, `fs[]`, and `ACCEPT_TAC (ASSUME ...)` on the final exact return-exception fact. -> Every exact/pass-through closer failed with CHOOSE in the Resume tail despite the assumption being visible verbatim, confirming the component's Risk-2 tactic interface is wrong. (`TO_type_system_rewrite-20260519T123242Z_m29863_t001`, `TO_type_system_rewrite-20260519T123242Z_m29866_t001`, `TO_type_system_rewrite-20260519T123242Z_m29868_t001`, `TO_type_system_rewrite-20260519T123242Z_m29873_t001`)
+
+### Ruled Out
+
+- Direct metis on the final package
+- Exact-assumption tactics for visible assumptions in the Resume tail
+- Broad simplification/fs on the final pass-through fact
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29856_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29859_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29861_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29863_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29866_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29868_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m29873_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0354`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 7 tools, 3 holbuild, 608,578 tok (607,034 in, 1,544 out, 579,584 cached), 100.2s, $0.47336200
+- next: Proceed to the scheduled caller-patch component: replace the old explicit final witness/exact-assumption block in `Resume eval_all_type_sound_mutual[For_cons]` with an application of the newly proved helper preserving the IH existential package.
+
+### Attempts / Evidence
+
+- `E0353` (progressed, other, actual effort: 1 sessions, 3 msgs, 21 steps, 23 tools, 7 holbuild, 2,606,992 tok (2,599,253 in, 7,739 out, 2,543,616 cached), 205.4s, $1.78216300)
+  - Inserted the PLAN-suggested `for_cons_ordinary_exception_tail_resume_exists_context` helper, initially using earlier `for_cons_ordinary_exception_tail_context_conj`. -> Static error: helper referenced `for_cons_ordinary_exception_tail_context_conj` before its source-order declaration, so switched to existing earlier lemmas. (`TO_type_system_rewrite-20260519T123242Z_m29881_t001`, `TO_type_system_rewrite-20260519T123242Z_m29882_t001`)
+  - Changed proof to use `for_cons_ordinary_exception_tail_exists`; removed unnecessary existential destruct attempt after `strip_tac`. -> First `qexists_tac env_exn` was mis-typed because `irule` left a body witness first; replacing the subproof with `metis_tac[for_cons_ordinary_exception_tail_exists]` derived the first five-conjunct package. (`TO_type_system_rewrite-20260519T123242Z_m29884_t001`, `TO_type_system_rewrite-20260519T123242Z_m29886_t001`, `TO_type_system_rewrite-20260519T123242Z_m29888_t001`)
+  - Used `metis_tac[for_cons_ordinary_exception_tail_residual]` to derive the residual package, then tried final `metis_tac[]`, explicit conjunction assembly with `simp[]`, and `asm_rewrite_tac[]`. -> Derived residual package but final assembly failed on the standalone `no_type_error_result (INR exn)` conjunct. Latest source changes this conjunct closer to `qpat_x_assum ... ACCEPT_TAC`, but it is not verified yet. (`TO_type_system_rewrite-20260519T123242Z_m29888_t001`, `TO_type_system_rewrite-20260519T123242Z_m29890_t001`, `TO_type_system_rewrite-20260519T123242Z_m29895_t001`, `TO_type_system_rewrite-20260519T123242Z_m29896_t001`)
+- `E0354` (proved, , actual effort: 1 sessions, 8 steps, 7 tools, 3 holbuild, 608,578 tok (607,034 in, 1,544 out, 579,584 cached), 100.2s, $0.47336200)
+  - Combined helper `for_cons_ordinary_exception_tail_resume_exists_context` proved by deriving the popped/outer-return package via `for_cons_ordinary_exception_tail_exists`, deriving the residual package via `for_cons_ordinary_exception_tail_residual`, and using explicit conjunction assembly; the no-TypeError conjunct closed by unfolding `no_type_error_result_def` rather than exact-assumption selection. -> holbuild advanced past the helper to the existing `Resume eval_all_type_sound_mutual[For_cons]` caller-tail failure, so this boundary lemma component is complete. (`TO_type_system_rewrite-20260519T123242Z_m29908_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m29908_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk estimate/decomposition is wrong at the caller boundary: even with a top-level helper, applying it after return_exception_typed_INR_case_eq splits the goal and still requires exact/residual packaging in Resume. Need strategist redesign, likely a full-post-rewrite/source-order helper whose conclusion exactly matches the live goal or a different point to introduce the theorem before simplification.
+- latest episode: `E0357`
+- blocker: The active caller patch still leaves exact/residual obligations inside the suspended For_cons Resume context. Attempts to use context/residual helpers together, direct packaged helpers, metis, explicit witnesses, and exact-assumption closures all either mismatched the live five-conjunct/residual split or triggered CHOOSE/FIRST_ASSUM failures under Resume instrumentation. Current source is partial at the For_cons ordinary-exception tail and includes a new top-level residual_context helper that proves, but the Resume caller remains unverified.
+- actual effort: 1 sessions, 2 msgs, 29 steps, 30 tools, 12 holbuild, 2,603,847 tok (2,592,982 in, 10,865 out, 2,522,624 cached), 389.7s, $1.93905200
+- next: Call plan_oracle(mode='review') for this component with the stuck evidence. Do not continue local Resume tactic patching without a redesigned helper/caller boundary.
+
+### Attempts / Evidence
+
+- `E0355` (progressed, other, actual effort: 1 sessions, 3 msgs, 40 steps, 42 tools, 12 holbuild, 4,576,073 tok (4,559,922 in, 16,151 out, 4,477,952 cached), 451.4s, $3.13335600)
+  - Replaced the old explicit final For_cons ordinary-exception tail block with direct `irule for_cons_ordinary_exception_tail_resume_exists_context >> simp[]`, preserving the existential package. -> Direct application did not match the actual post-rewrite goal because `return_exception_typed_INR_case_eq` simplified away the residual existential conjunct in the local target; holbuild showed a smaller goal with only popped facts, no-TypeError, and outer return typing. (`TO_type_system_rewrite-20260519T123242Z_m29914_t001`)
+  - Asserted a stronger six-conjunct helper conclusion with `suffices_by simp[]`, then applied `for_cons_ordinary_exception_tail_resume_exists_context` and tried to manually satisfy the residual package after moving the existential IH package to assumptions. -> Made progress but residual packaging inside Resume exposed exact/pass-through subgoals again; simplification timed out on the existential package and exact `env_consistent env cx st` goals CHOOSE-failed. (`TO_type_system_rewrite-20260519T123242Z_m29917_t001`, `TO_type_system_rewrite-20260519T123242Z_m29924_t001`, `TO_type_system_rewrite-20260519T123242Z_m29935_t001`)
+  - Tried falling back to `for_cons_ordinary_exception_tail_context_conj` with explicit no-TypeError and residual witnesses to avoid the new helper's existential mismatch. -> This replayed the old fragile path: broad final `simp[]` timed out on residual conjuncts, so it was reverted to the current partial suffices/helper shape rather than kept as a fix. (`TO_type_system_rewrite-20260519T123242Z_m29940_t001`, `TO_type_system_rewrite-20260519T123242Z_m29945_t001`)
+  - Current source at lines ~2992-3008 asserts the six-conjunct helper conclusion and applies `for_cons_ordinary_exception_tail_resume_exists_context >> simp[]` without destructing the existential in Resume. -> Latest build fails at QED with a residual implication whose conclusion is `no_type_error_result (INR y) /\ ∃body' id' st' ty tyv v. (∃env_exn. ...) /\ id' ...`; this indicates the helper was partially applied but simplification/case-rewrite changed the existential packaging/order. (`TO_type_system_rewrite-20260519T123242Z_m29948_t001`)
+- `E0356` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 51 steps, 55 tools, 18 holbuild, 5,467,927 tok (5,449,664 in, 18,263 out, 5,333,504 cached), 682.1s, $3.79544200)
+  - Added `for_cons_ordinary_exception_tail_residual_nested` and proved it by `metis_tac[for_cons_ordinary_exception_tail_residual]`. Added `for_cons_ordinary_exception_tail_resume_nested_context` combining the existing popped facts with the nested residual shape by metis. -> The helper additions replayed successfully far enough for holbuild to return to the For_cons Resume caller, so the top-level nested-residual compatibility facts are likely accepted. This is useful progress outside Resume. (`TO_type_system_rewrite-20260519T123242Z_m29964_t001`, `TO_type_system_rewrite-20260519T123242Z_m29970_t001`)
+  - Tried to use the already-visible assumptions directly in the Resume tail: split the final conjunction with `conj_tac >- simp[]` and then prove `return_exception_typed env ret_ty y` using `return_exception_typed_extend_local_env_extends`. -> Splitting got down to the final return-typing obligation, confirming all earlier conjuncts are locally available, but proving the final exact implication still triggered CHOOSE/instrumentation failures in Resume. (`TO_type_system_rewrite-20260519T123242Z_m29980_t001`, `TO_type_system_rewrite-20260519T123242Z_m29982_t001`, `TO_type_system_rewrite-20260519T123242Z_m29988_t001`)
+  - Tried moving/omitting `return_exception_typed_INR_case_eq` and using `for_cons_ordinary_exception_tail_context_conj` to match the unreduced case-form goal. -> Without the case rewrite, `irule` did not match the case-form conclusion. With the rewrite, `context_conj` advanced but left the residual existential package, showing that a single helper matching the full post-rewrite goal is still needed or the caller must obtain a theorem before rewriting. (`TO_type_system_rewrite-20260519T123242Z_m29995_t001`, `TO_type_system_rewrite-20260519T123242Z_m30001_t001`)
+- `E0357` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 29 steps, 30 tools, 12 holbuild, 2,603,847 tok (2,592,982 in, 10,865 out, 2,522,624 cached), 389.7s, $1.93905200)
+  - Added `for_cons_ordinary_exception_tail_residual_context` as a top-level helper and proved it by explicit witnesses after substituting `stp`. -> Helper proof replayed; build advanced to the For_cons Resume caller, confirming the helper itself is not the blocker. (`TO_type_system_rewrite-20260519T123242Z_m30013_t001`, `TO_type_system_rewrite-20260519T123242Z_m30015_t001`)
+  - Tried to apply `for_cons_ordinary_exception_tail_resume_exists_context` directly after `return_exception_typed_INR_case_eq`. -> Did not match the live post-rewrite five-conjunct target; the residual conjunct had been split away/removed by the current proof point. (`TO_type_system_rewrite-20260519T123242Z_m30018_t001`)
+  - Tried `for_cons_ordinary_exception_tail_context_conj` followed by residual helper, then `metis_tac` combining context/residual helpers. -> Left residual existential or CHOOSE-failed in Resume; broad packaged helper reasoning still unfolds into fragile exact/residual subgoals in the suspended context. (`TO_type_system_rewrite-20260519T123242Z_m30020_t001`, `TO_type_system_rewrite-20260519T123242Z_m30030_t001`)
+  - Tried explicit residual witnesses after context helper and exact no-TypeError closures (`simp`, `qpat_assum`, `first_assum`). -> Repeated known Resume instrumentation failure pattern: simple exact no-TypeError subgoal did not close reliably or generated tautological implication/timeout/assumption selection failure. (`TO_type_system_rewrite-20260519T123242Z_m30022_t001`, `TO_type_system_rewrite-20260519T123242Z_m30024_t001`, `TO_type_system_rewrite-20260519T123242Z_m30026_t001`, `TO_type_system_rewrite-20260519T123242Z_m30028_t001`, `TO_type_system_rewrite-20260519T123242Z_m30035_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30015_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30018_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30020_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30024_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30030_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30035_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0358`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 379,719 tok (378,673 in, 1,046 out, 365,056 cached), 23.5s, $0.28199300
+- next: Review closure, then begin C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.2 to add the exact full-context helper.
+
+### Attempts / Evidence
+
+- `E0358` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 379,719 tok (378,673 in, 1,046 out, 365,056 cached), 23.5s, $0.28199300)
+  - Removed the E0357 partial Resume-local residual reconstruction and explicit witness/exact-assumption experiment from the For_cons ordinary-exception tail. -> The tail is restored to a clean helper-call boundary immediately after `return_exception_typed_INR_case_eq` and `env_maps_wf env`; no `conj_tac`, explicit witnesses, `metis_tac`, or `gvs` remain in the final Resume fragment. (`TO_type_system_rewrite-20260519T123242Z_m30040_t001`, `TO_type_system_rewrite-20260519T123242Z_m30041_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30040_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30041_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0359`
+- blocker: 
+- actual effort: 1 sessions, 9 steps, 8 tools, 3 holbuild, 750,540 tok (746,606 in, 3,934 out, 714,240 cached), 137.9s, $0.63697000
+
+### Attempts / Evidence
+
+- `E0359` (proved, , actual effort: 1 sessions, 9 steps, 8 tools, 3 holbuild, 750,540 tok (746,606 in, 3,934 out, 714,240 cached), 137.9s, $0.63697000)
+  - Inserted top-level theorem `for_cons_ordinary_exception_tail_full_context_conj` after `for_cons_ordinary_exception_tail_context_conj`. Initial `by` proof exposed precedence/scoping issue; replaced with `drule_all for_cons_ordinary_exception_tail_context_conj` and explicit residual witnesses. -> Helper theorem replayed successfully; holbuild advanced past it and failed later in the existing For_cons Resume caller, confirming the active boundary-lemma component is proved. (`TO_type_system_rewrite-20260519T123242Z_m30057_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30051_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30057_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0362`
+- blocker: The reviewed replacement tactic `irule for_cons_ordinary_exception_tail_context_conj >> simp[] >> metis_tac[for_cons_ordinary_exception_tail_residual_context]` failed. The context helper reaches exactly the residual existential package goal, but `metis_tac` raises a CHOOSE failure instead of instantiating the residual helper. This matches the anticipated fallback condition: likely need a small exact wrapper/helper or a different non-manual tactic authorized by the strategist.
+- actual effort: 1 sessions, 1 msgs, 7 steps, 7 tools, 2 holbuild, 437,309 tok (435,238 in, 2,071 out, 409,088 cached), 58.3s, $0.39742400
+- next: Ask strategist to replace/augment this leaf, likely authorizing an exact wrapper helper outside the Resume body or a tactic that avoids metis CHOOSE failure without manual existential reconstruction.
+
+### Attempts / Evidence
+
+- `E0360` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 6 holbuild, 1,703,039 tok (1,697,408 in, 5,631 out, 1,663,488 cached), 187.8s, $1.17027400)
+  - Replaced final context helper call with `irule for_cons_ordinary_exception_tail_residual_context >> simp[]`. -> Failed with `No match` because live goal first presented the five-conjunct context/return target, not residual-only package. (`TO_type_system_rewrite-20260519T123242Z_m30063_t001`)
+  - Tried `irule for_cons_ordinary_exception_tail_full_context_conj >> simp[]` at the Resume boundary. -> Failed with `No match`; despite helper containing full target, simplifier/Resume live target at that point was the five-conjunct context/return target. (`TO_type_system_rewrite-20260519T123242Z_m30066_t001`)
+  - Restored context helper first, then used `drule_all for_cons_ordinary_exception_tail_residual_context >> strip_tac >> simp[]` for the residual target. -> Context helper progressed to residual-only target and forward residual helper produced residual facts, but `simp[]` still left an existential package in the Resume proof; not terminal. (`TO_type_system_rewrite-20260519T123242Z_m30075_t001`)
+- `E0361` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 8 holbuild, 2,326,106 tok (2,317,378 in, 8,728 out, 2,276,352 cached), 268.1s, $1.60514600)
+  - Tried direct `irule for_cons_ordinary_exception_tail_residual_context >> simp[]` at caller boundary. -> Failed with No match; live goal was the five-conjunct context/return target, not residual-only. (`TO_type_system_rewrite-20260519T123242Z_m30063_t001`)
+  - Tried direct `irule for_cons_ordinary_exception_tail_full_context_conj >> simp[]` at caller boundary. -> Failed with No match against the five-conjunct live goal, despite helper containing the full conjunction. (`TO_type_system_rewrite-20260519T123242Z_m30066_t001`)
+  - Used `irule for_cons_ordinary_exception_tail_context_conj >> simp[]` to solve the first live target, then attempted residual helper by `irule ... >> simp[]` or `drule_all ... >> strip_tac >> simp[]`. -> Context helper progressed, but residual package remained in Resume and could not be discharged without local reconstruction; forward helper left witness facts but `simp[]` did not build the existential. (`TO_type_system_rewrite-20260519T123242Z_m30070_t001`, `TO_type_system_rewrite-20260519T123242Z_m30075_t001`, `TO_type_system_rewrite-20260519T123242Z_m30080_t001`)
+  - Tried `drule_all residual_context >> disch_then ACCEPT_TAC` to avoid splitting/existential reconstruction. -> Failed because the goal was not an implication in a form accepted by `DISCH_THEN`; still not a one-helper closure. (`TO_type_system_rewrite-20260519T123242Z_m30078_t001`)
+- `E0362` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 7 steps, 7 tools, 2 holbuild, 437,309 tok (435,238 in, 2,071 out, 409,088 cached), 58.3s, $0.39742400)
+  - Patched the For_cons ordinary-exception tail to context helper followed by `metis_tac[for_cons_ordinary_exception_tail_residual_context]` as directed by the reviewed PLAN. -> Build advanced to the residual package goal, but the metis residual discharge failed with CHOOSE on the exact residual existential package. (`TO_type_system_rewrite-20260519T123242Z_m30090_t001`, `TO_type_system_rewrite-20260519T123242Z_m30091_t001`)
+
+### Ruled Out
+
+- Direct residual `irule`; direct full-context `irule`; forward residual helper with `strip_tac >> simp[]`; reviewed `metis_tac[for_cons_ordinary_exception_tail_residual_context]` residual discharge.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30091_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30093_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0363`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 265,295 tok (264,172 in, 1,123 out, 250,368 cached), 76.8s, $0.22789400
+
+### Attempts / Evidence
+
+- `E0363` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 265,295 tok (264,172 in, 1,123 out, 250,368 cached), 76.8s, $0.22789400)
+  - Inserted `for_cons_ordinary_exception_tail_residual_context_exists` immediately after `for_cons_ordinary_exception_tail_residual_context`, with the same antecedents but only the residual existential conclusion; proof substitutes `stp` and supplies witnesses `body`, `env_exn`, `id`, `st`, `ty`, `tyv`, `v`. -> holbuild resumed from theorem-context checkpoint past the new helper and reached the later For_cons caller patch, showing the helper parsed and proved successfully. (`TO_type_system_rewrite-20260519T123242Z_m30098_t001`, `TO_type_system_rewrite-20260519T123242Z_m30099_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30098_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30099_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The active Risk 1 caller patch is no longer low risk. The exact residual helper exists, but the call-site target remains a full package in a suspended Resume. Direct helper use either does not match/close the full conjunction or produces an implication; manual decomposition reaches exact visible assumptions, but exact assumption tactics repeatedly fail with CHOOSE/instrumentation and PROVE_TAC is too deep. This indicates the PLAN's local patch shape is wrong; likely needs a new full-package boundary helper or different source-level factoring authorized by the strategist.
+- latest episode: `E0366`
+- blocker: Cannot close the For_cons ordinary-exception tail residual package inside the Resume with the planned exact-exists helper plus local tactic patch. Current source is partial and contains the latest failing experiment (`drule_all ... >> rw[] >- PROVE_TAC[]`).
+- actual effort: 1 sessions, 3 msgs, 55 steps, 56 tools, 22 holbuild, 5,310,714 tok (5,292,031 in, 18,683 out, 5,185,024 cached), 618.2s, $3.68803700
+- next: Ask plan_oracle to review and replace/augment this leaf, likely with a helper whose conclusion exactly matches the whole post-context goal (`no_type_error_result (INR exn) /\ existential`) and whose proof is outside the suspended Resume, or another deterministic non-Resume packaging approach.
+
+### Attempts / Evidence
+
+- `E0364` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 36 steps, 38 tools, 14 holbuild, 4,211,191 tok (4,200,559 in, 10,632 out, 4,127,744 cached), 385.2s, $2.74690700)
+  - Replaced failed metis with `irule for_cons_ordinary_exception_tail_residual_context_exists >> simp[]`. -> Failed with No match because the remaining target was the full conjunction `no_type_error_result (INR y) /\ existential`, while the helper concluded only the existential. (`TO_type_system_rewrite-20260519T123242Z_m30104_t001`)
+  - Split conjunction and tried exact-assumption/simple proof tactics for the `no_type_error_result (INR y)` conjunct (`simp[]`, `qpat_assum`, `first_assum`, `metis_tac[]`, unfolding). -> Several exact-assumption paths failed under Resume/instrumentation or timed out. `qpat_x_assum ... mp_tac >> rw[]` solved the first conjunct but unexpectedly duplicated/left implication artefacts, showing fragile branch management. (`TO_type_system_rewrite-20260519T123242Z_m30106_t001`, `TO_type_system_rewrite-20260519T123242Z_m30108_t001`, `TO_type_system_rewrite-20260519T123242Z_m30110_t001`, `TO_type_system_rewrite-20260519T123242Z_m30113_t001`, `TO_type_system_rewrite-20260519T123242Z_m30115_t001`, `TO_type_system_rewrite-20260519T123242Z_m30118_t001`)
+  - Used kernel assumption construction `ACCEPT_TAC (ASSUME ``no_type_error_result (INR y)``)` for the first conjunct, then manually supplied existential witnesses. -> The first conjunct was accepted; manual witnesses reached six simple conjuncts, but broad `simp[]` timed out. Current source replaces broad `simp[]` with explicit per-conjunct `ACCEPT_TAC (ASSUME ...)` closers; this final edit is unverified. (`TO_type_system_rewrite-20260519T123242Z_m30125_t001`, `TO_type_system_rewrite-20260519T123242Z_m30135_t001`, `TO_type_system_rewrite-20260519T123242Z_m30136_t001`)
+- `E0365` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 54 steps, 55 tools, 22 holbuild, 5,188,922 tok (5,171,097 in, 17,825 out, 5,065,728 cached), 602.6s, $3.59445900)
+  - `drule_all for_cons_ordinary_exception_tail_residual_context >> disch_then ACCEPT_TAC` / `drule_all_then ACCEPT_TAC ...` -> Failed: forward helper produced an implication from the package to the package or instrumentation assertion rather than solving the goal. (`TO_type_system_rewrite-20260519T123242Z_m30171_t001`, `TO_type_system_rewrite-20260519T123242Z_m30173_t001`)
+  - `drule_all ... >> rw[]` then close exact `no_type_error_result (INR y)` conjunct using exact assumption / simp / PROVE_TAC. -> `rw[]` exposed exact visible-assumption goals, but `ACCEPT_TAC (ASSUME ...)` failed with CHOOSE and `PROVE_TAC[]` was too deep; this reproduces Resume/instrumentation fragility. (`TO_type_system_rewrite-20260519T123242Z_m30180_t001`, `TO_type_system_rewrite-20260519T123242Z_m30182_t001`, `TO_type_system_rewrite-20260519T123242Z_m30193_t001`)
+- `E0366` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 55 steps, 56 tools, 22 holbuild, 5,310,714 tok (5,292,031 in, 18,683 out, 5,185,024 cached), 618.2s, $3.68803700)
+  - Forward apply `for_cons_ordinary_exception_tail_residual_context` with `drule_all` and discharge by `disch_then ACCEPT_TAC` / `drule_all_then ACCEPT_TAC`. -> Failed: helper application left an implication from the same package to the goal or hit instrumentation assertion; did not solve the full post-context target. (`TO_type_system_rewrite-20260519T123242Z_m30171_t001`, `TO_type_system_rewrite-20260519T123242Z_m30173_t001`)
+  - Use `drule_all ... >> rw[]` to destruct the helper result and close residual conjuncts inside the Resume. -> Progressed to exact conjunct goals, including `no_type_error_result (INR y)`, but exact visible assumptions were not closable by `ACCEPT_TAC (ASSUME ...)`, simplification, or PROVE_TAC under instrumentation/Resume. (`TO_type_system_rewrite-20260519T123242Z_m30180_t001`, `TO_type_system_rewrite-20260519T123242Z_m30182_t001`, `TO_type_system_rewrite-20260519T123242Z_m30193_t001`)
+
+### Ruled Out
+
+- Retrying metis/PROVE_TAC/broad simplification in the large Resume tail
+- More exact-assumption tactic variants for the same visible residual conjuncts
+- Direct `irule`/`drule_all` use of the existing residual-context/exact-exists helper as currently shaped
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30171_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30180_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30193_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30194_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0370`
+- blocker: The active leaf's exact-forward-helper/local residual strategy remains under-decomposed. Current source is partial at the For_cons ordinary-exception tail. The residual/exact premise inside the Resume is `return_exception_typed env_exn ret_ty y ==> return_exception_typed env_exn ret_ty y`; both `metis_tac[]` and `simp[]` trigger HOL4 CHOOSE instrumentation failures. This confirms E0369 guidance: residual package/exact premise construction must be factored into a top-level helper or the PLAN needs augmentation; continuing local tactic variants is not productive.
+- actual effort: 1 sessions, 4 steps, 5 tools, 2 holbuild, 337,130 tok (335,694 in, 1,436 out, 310,272 cached), 43.1s, $0.32532600
+- next: Ask plan_oracle to augment/replace this leaf with a top-level wrapper/helper decomposition, or another approach that avoids proving residual/exact-premise subgoals inside the suspended Resume.
+
+### Attempts / Evidence
+
+- `E0367` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 55 steps, 58 tools, 24 holbuild, 5,394,423 tok (5,376,228 in, 18,195 out, 5,266,944 cached), 627.0s, $3.72574200)
+  - `irule for_cons_ordinary_exception_tail_full_context_conj >> simp[]` -> Failed with `No match`: helper conclusion includes residual existential conjunct but current goal has only popped state/account/env/no-TypeError/return package. (`TO_type_system_rewrite-20260519T123242Z_m30207_t001`)
+  - `drule_all for_cons_ordinary_exception_tail_full_context_conj >> strip_tac >> simp[]` and explicit conjunct extraction -> Forward use produces all needed facts, but `simp[]`/exact assumption tactics in the Resume trigger CHOOSE instrumentation failures on exact visible assumptions. (`TO_type_system_rewrite-20260519T123242Z_m30209_t001`, `TO_type_system_rewrite-20260519T123242Z_m30215_t001`)
+  - Fallback attempts via `for_cons_ordinary_exception_tail_context_conj` and `return_exception_typed_extend_local_F`/case split -> Also fails on CHOOSE/implication pass-through or timeout; confirms this Resume remains hostile to local reconstruction. This fallback contradicts the do-not-retry guidance and should not be continued without strategist review. (`TO_type_system_rewrite-20260519T123242Z_m30253_t001`, `TO_type_system_rewrite-20260519T123242Z_m30255_t001`)
+- `E0368` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 56 steps, 59 tools, 24 holbuild, 5,523,686 tok (5,504,383 in, 19,303 out, 5,393,408 cached), 646.7s, $3.83066900)
+  - Direct call: `irule for_cons_ordinary_exception_tail_full_context_conj >> simp[]`. -> Failed with `No match`; actual branch goal lacks the residual existential conjunct that is present in the full helper conclusion, so this is not a mere missing explicit instantiation. (`TO_type_system_rewrite-20260519T123242Z_m30207_t001`)
+  - Forward call: `drule_all for_cons_ordinary_exception_tail_full_context_conj >> strip_tac >> simp[]` / explicit conjunct extraction. -> The helper supplies the needed facts, but closing exact visible assumptions inside the Resume triggers CHOOSE/instrumentation failures, including on exact `return_exception_typed env ret_ty y`. (`TO_type_system_rewrite-20260519T123242Z_m30209_t001`, `TO_type_system_rewrite-20260519T123242Z_m30215_t001`)
+  - Fallback via `for_cons_ordinary_exception_tail_context_conj` plus `return_exception_typed_extend_local_F` or case split. -> Also fails on tautological implication/CHOOSE or timeout; this confirms the leaf is under-decomposed and local reconstruction remains tactic-hostile. (`TO_type_system_rewrite-20260519T123242Z_m30253_t001`, `TO_type_system_rewrite-20260519T123242Z_m30255_t001`)
+- `E0369` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 64 steps, 67 tools, 24 holbuild, 6,526,732 tok (6,505,136 in, 21,596 out, 6,368,768 cached), 727.8s, $4.51410400)
+  - Probe at the branch after `return_exception_typed_INR_case_eq` and `env_maps_wf env`. -> Confirmed the live branch goal is the five-conjunct package described by the PLAN: popped state/accounts/env consistency, no TypeError, and base `return_exception_typed`. (`TO_type_system_rewrite-20260519T123242Z_m30276_t001`)
+  - `irule for_cons_ordinary_exception_tail_forward >> simp[]`. -> The helper matches the five-conjunct goal, but HOL4/irule leaves a residual packaged premise: accounts/env_maps/no_type_error/state facts plus an existential package. This residual requires explicit proof; naive `simp[]` at QED does not close. (`TO_type_system_rewrite-20260519T123242Z_m30279_t001`)
+  - Tried related already-existing helper shapes: `for_cons_ordinary_exception_tail_exists_forward`, `for_cons_ordinary_exception_tail_conclusion_premises`, and `for_cons_ordinary_exception_tail_context_conj`. -> Each helper also matches enough to reduce the main five-conjunct goal, but leaves a residual existential/conjunct package rather than closing automatically. This suggests the next proof needs a residual-package boundary helper or very controlled residual construction, not more exact-assumption tactics inside the Resume. (`TO_type_system_rewrite-20260519T123242Z_m30305_t001`, `TO_type_system_rewrite-20260519T123242Z_m30314_t001`, `TO_type_system_rewrite-20260519T123242Z_m30324_t001`, `TO_type_system_rewrite-20260519T123242Z_m30326_t001`)
+- `E0370` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 5 tools, 2 holbuild, 337,130 tok (335,694 in, 1,436 out, 310,272 cached), 43.1s, $0.32532600)
+  - Ran holbuild on current partial For_cons tail and inspected helper/call-site lines. -> Build resumes at For_cons and fails at the final residual exact implication after the experimental context_conj fragment; goal shows the CHOOSE-hostile tautological implication and all visible assumptions. (`TO_type_system_rewrite-20260519T123242Z_m30333_t003`, `TO_type_system_rewrite-20260519T123242Z_m30333_t001`, `TO_type_system_rewrite-20260519T123242Z_m30333_t002`)
+  - Replaced final `metis_tac[]` with `simp[]` on the exact implication `return_exception_typed env_exn ret_ty y ==> return_exception_typed env_exn ret_ty y`. -> Same CHOOSE instrumentation failure occurs, so even the simplest local implication closure is not viable inside this Resume under goalfrag instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m30334_t001`, `TO_type_system_rewrite-20260519T123242Z_m30335_t001`)
+
+### Ruled Out
+
+- Direct Resume-local residual construction ending in `metis_tac[]` or `simp[]` on exact visible premise/tautological implication.
+- Continuing variants of exact-assumption closure inside this Resume without a new top-level boundary helper.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30333_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30335_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30334_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The Risk-2 helper-boundary plan still leaves or triggers suspended-Resume instrumentation failures when applying the boundary. After package-order repair, `irule ...resume_from_exists` exposed standalone exact `no_type_error_result (INR y)` and CHOOSE/Q_TAC failed. A stronger local attempt using `drule_all for_cons_ordinary_exception_tail_resume_from_no_type` to consume no-type-error from assumptions failed immediately with a HOL assertion in the suspended Resume before producing usable subgoals. This indicates the current decomposition/application style is still wrong for the Resume instrumentation, not a missing semantic fact.
+- latest episode: `E0376`
+- blocker: No reliable way in this component to apply the existing helper variants without exposing exact assumptions or hitting CHOOSE/assert failures inside `Resume eval_all_type_sound_mutual[For_cons]`.
+- actual effort: 1 sessions, 1 msgs, 13 steps, 13 tools, 4 holbuild, 1,130,535 tok (1,123,360 in, 7,175 out, 1,078,784 cached), 163.6s, $0.97752200
+- next: Ask strategist to decompose/replace the helper boundary. Likely need a theorem/application style that avoids `irule`/`drule_all` splitting in the Resume entirely, perhaps a single antecedent package or pre-specialized implication that can be consumed without local exact subgoals.
+
+### Attempts / Evidence
+
+- `E0371` (progressed, other, actual effort: 1 sessions, 3 msgs, 28 steps, 29 tools, 10 holbuild, 3,379,555 tok (3,370,582 in, 8,973 out, 3,305,472 cached), 346.7s, $2.24747600)
+  - Added suggested call-site helper with stp/eval/env premises and proved it via `for_cons_ordinary_exception_tail_context_conj`; fixed proof by substituting `stp` before final `simp[]`. -> Top-level suggested helper proof passed far enough for holbuild to reach the For_cons Resume, but applying it at the Resume via `irule ... >> simp[]` left a residual package (`no_type_error_result (INR y) /\ ∃body' ...`) rather than closing. (`TO_type_system_rewrite-20260519T123242Z_m30353_t001`, `TO_type_system_rewrite-20260519T123242Z_m30359_t001`)
+  - Tried `drule_all`, `drule_all_then ACCEPT_TAC`, and `disch_then ACCEPT_TAC` call-site variants for the helper. -> All still failed inside the Resume with CHOOSE/assertion or tautological implication issues; confirms call-site helper conclusion/premise shape must match the residual package produced by `irule`, not merely the final five-conjunct goal. (`TO_type_system_rewrite-20260519T123242Z_m30355_t001`, `TO_type_system_rewrite-20260519T123242Z_m30357_t001`)
+  - Changed helper statement to the residual package shape shown after call-site `irule`, and currently have a proof attempt using `for_cons_ordinary_exception_tail_context_conj` plus explicit witnesses. -> Intermediate build showed `gvs[]`/destructing had already flattened the existentials; current source after last edit was not rebuilt, so next session must verify and repair from this exact source state. (`TO_type_system_rewrite-20260519T123242Z_m30362_t001`, `TO_type_system_rewrite-20260519T123242Z_m30364_t001`, `TO_type_system_rewrite-20260519T123242Z_m30365_t001`)
+- `E0372` (progressed, other, actual effort: 1 sessions, 5 msgs, 54 steps, 58 tools, 17 holbuild, 5,593,201 tok (5,568,339 in, 24,862 out, 5,442,560 cached), 960.3s, $4.09603500)
+  - Changed helper toward a residual-shaped premise and verified with holbuild. -> Helper no longer fails first; holbuild reaches For_cons Resume. After `irule for_cons_ordinary_exception_tail_resume_from_exists >> simp[]`, the remaining goal is an existential package `∃body id st ty tyv v. no_type_error_result ... ∧ ...`, not a conjunction. (`TO_type_system_rewrite-20260519T123242Z_m30418_t001`)
+  - Tried call-site explicit witness/conjunction variants while helper shape was being adjusted. -> Multiple variants left exact visible-assumption goals such as `no_type_error_result (INR y)` or `env_consistent env cx st` that can trigger CHOOSE in the suspended Resume; direct exact closure remains suspect unless packaged outside Resume. (`TO_type_system_rewrite-20260519T123242Z_m30408_t001`, `TO_type_system_rewrite-20260519T123242Z_m30410_t001`, `TO_type_system_rewrite-20260519T123242Z_m30414_t001`)
+- `E0373` (progressed, other, actual effort: 1 sessions, 5 msgs, 61 steps, 66 tools, 22 holbuild, 6,492,079 tok (6,469,984 in, 22,095 out, 6,345,216 cached), 725.3s, $4.45929800)
+  - Factored a smaller top-level `for_cons_ordinary_exception_tail_visible_finish` helper consuming already-visible popped state/account/env facts plus `env_extends` and body return typing; patched Resume to call this helper instead of residual-package helper. -> Helper proof progressed after switching the no-type-error conjunct to `fs[no_type_error_result_def]`; holbuild now reaches the Resume tail, so helper is not the first failure. (`TO_type_system_rewrite-20260519T123242Z_m30481_t001`, `TO_type_system_rewrite-20260519T123242Z_m30486_t002`)
+  - At the Resume call site, used explicit witnesses `env_exn`, `id`, `ty` after applying `for_cons_ordinary_exception_tail_visible_finish`. -> The remaining goal became exact conjunction `env_extends (extend_local env id ty F) env_exn /\ return_exception_typed env_exn ret_ty y`; a broad `simp[]` on this exact goal CHOOSE-failed. Source now tries targeted `qpat_assum ... mp_tac >> simp[]` for these exact facts but has not been verified. (`TO_type_system_rewrite-20260519T123242Z_m30481_t001`, `TO_type_system_rewrite-20260519T123242Z_m30486_t003`)
+- `E0374` (progressed, other, actual effort: 1 sessions, 5 msgs, 53 steps, 57 tools, 17 holbuild, 5,523,759 tok (5,497,816 in, 25,943 out, 5,377,536 cached), 842.4s, $4.06845800)
+  - Tried replacing Resume-local exact residual closure with direct `metis_tac[for_cons_ordinary_exception_tail_visible_finish]` and later explicit `irule`/witness applications of the visible helper. -> Direct metis and exact `ACCEPT_TAC` on visible facts still CHOOSE-failed in the suspended Resume; exact premise closure remains unreliable inside this Resume. (`TO_type_system_rewrite-20260519T123242Z_m30500_t001`, `TO_type_system_rewrite-20260519T123242Z_m30524_t001`)
+  - Reworked residual helper statements so `no_type_error_result (INR exn)` is included inside or around the existential package, attempting to avoid an exact no-type-error subgoal at the Resume call site. -> Helper variants prove far enough for holbuild to reach the Resume, but the current call-site tactic is still mismatched: latest build shows `irule for_cons_ordinary_exception_tail_resume_from_no_type` leaves the existential package as the first subgoal, while source tries to close `no_type_error_result` first. (`TO_type_system_rewrite-20260519T123242Z_m30535_t001`, `TO_type_system_rewrite-20260519T123242Z_m30540_t001`)
+  - Manual existential package construction without `simp[]` was attempted to avoid timeouts and exact CHOOSE issues. -> Manual package construction can close several conjuncts with `qpat_assum ... ACCEPT_TAC`, but exact assumptions such as `no_type_error_result (INR y)` still fail when surfaced as standalone Resume goals. Latest source needs either subgoal-order repair or a stronger helper that packages this premise away completely. (`TO_type_system_rewrite-20260519T123242Z_m30514_t001`, `TO_type_system_rewrite-20260519T123242Z_m30516_t001`, `TO_type_system_rewrite-20260519T123242Z_m30540_t001`)
+- `E0375` (progressed, other, actual effort: 1 sessions, 1 msgs, 10 steps, 10 tools, 3 holbuild, 846,091 tok (841,286 in, 4,805 out, 800,768 cached), 115.9s, $0.74712400)
+  - Changed call-site from wrong-order `for_cons_ordinary_exception_tail_resume_from_no_type` application to package-first `for_cons_ordinary_exception_tail_resume_from_exists` construction. -> Previous first subgoal mismatch fixed, but holbuild now fails on exact `no_type_error_result (INR y)` inside the package. (`TO_type_system_rewrite-20260519T123242Z_m30550_t001`, `TO_type_system_rewrite-20260519T123242Z_m30552_t001`)
+- `E0376` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 13 steps, 13 tools, 4 holbuild, 1,130,535 tok (1,123,360 in, 7,175 out, 1,078,784 cached), 163.6s, $0.97752200)
+  - Patched the Resume call site from wrong-order `for_cons_ordinary_exception_tail_resume_from_no_type` application to `irule for_cons_ordinary_exception_tail_resume_from_exists` and constructed the package first. -> Subgoal-order mismatch was repaired, but holbuild then failed on standalone exact `no_type_error_result (INR y)` inside the suspended Resume, matching prior CHOOSE-hostile exact-premise pattern. (`TO_type_system_rewrite-20260519T123242Z_m30552_t001`)
+  - Tried a stronger application style: `drule_all for_cons_ordinary_exception_tail_resume_from_no_type` so `no_type_error_result` would be consumed from assumptions, then manually prove only the existential package. -> HOL4 instrumentation/assertion failed immediately at `drule_all` in the suspended Resume, before the package proof, so this boundary application style is also unusable. (`TO_type_system_rewrite-20260519T123242Z_m30558_t001`)
+
+### Ruled Out
+
+- Exact visible-assumption closure for `no_type_error_result (INR y)` inside Resume
+- `drule_all for_cons_ordinary_exception_tail_resume_from_no_type` as a way to consume exact assumptions in Resume
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30552_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30558_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30556_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0377`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 364,975 tok (363,677 in, 1,298 out, 346,624 cached), 73.6s, $0.29751700
+- next: Review closure, then begin sibling component C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2 to replace the failed call-site block with an atomic use of `for_cons_ordinary_exception_tail_resume_site_from_stp`.
+
+### Attempts / Evidence
+
+- `E0377` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 364,975 tok (363,677 in, 1,298 out, 346,624 cached), 73.6s, $0.29751700)
+  - Inserted the flat call-site theorem `for_cons_ordinary_exception_tail_resume_site_from_stp` and proved it by `metis_tac[for_cons_ordinary_exception_tail_resume_from_no_type]`. -> holbuild passed the new theorem and failed later at the still-unpatched For_cons Resume call site, so this component's lemma addition is complete. (`TO_type_system_rewrite-20260519T123242Z_m30563_t001`, `TO_type_system_rewrite-20260519T123242Z_m30564_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30564_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned atomic `metis_tac[for_cons_ordinary_exception_tail_resume_site_from_stp]` at the For_cons ordinary-exception call site failed under Resume instrumentation with the same HOL_ERR CHOOSE/assertion class. The displayed goal contains the target first four conjuncts already as assumptions (25,26,31,24) plus the existential/extended return typing facts, but using the flat lemma atomically still invokes CHOOSE and fails before producing subgoals. STATE/PLAN explicitly said to checkpoint/close and escalate if CHOOSE/assertion failure reappeared rather than retry exact-closure tactics.
+- latest episode: `E0378`
+- blocker: Atomic use of the flat boundary lemma in the suspended Resume still triggers HOL_ERR CHOOSE instrumentation failure, so the proof-boundary risk remains mismatched.
+- actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 211,614 tok (210,443 in, 1,171 out, 190,976 cached), 28.6s, $0.22795300
+- next: Call plan_oracle review for a replacement boundary (likely an even more source-order theorem or direct theorem for just `return_exception_typed env ret_ty y` avoiding existential CHOOSE/metis inside Resume).
+
+### Attempts / Evidence
+
+- `E0378` (stuck, risk_mismatch, actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 211,614 tok (210,443 in, 1,171 out, 190,976 cached), 28.6s, $0.22795300)
+  - Built `vyperTypeStmtSoundnessTheory` after the final call-site edit using `metis_tac[for_cons_ordinary_exception_tail_resume_site_from_stp]`. -> Build resumes at line 3298 and fails with HOL_ERR CHOOSE from metis/Resume instrumentation; goal state shows the final five-conjunct target and all expected premises visible. (`TO_type_system_rewrite-20260519T123242Z_m30573_t001`)
+  - Inspected helper theorem and patched call-site source around lines 1414-1435 and 3296-3298. -> Confirmed source matches the refined plan: helper exists and call site uses exactly the planned atomic metis; failure is not due to missing edit. (`TO_type_system_rewrite-20260519T123242Z_m30574_t001`, `TO_type_system_rewrite-20260519T123242Z_m30574_t002`)
+
+### Ruled Out
+
+- Atomic metis use of `for_cons_ordinary_exception_tail_resume_site_from_stp` inside the Resume
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30573_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30574_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30574_t002` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0379`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 2 tools, 191,158 tok (190,675 in, 483 out, 179,200 cached), 12.0s, $0.16146500
+
+### Attempts / Evidence
+
+- `E0379` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 191,158 tok (190,675 in, 483 out, 179,200 cached), 12.0s, $0.16146500)
+  - Audited `vyperTypeStmtSoundnessScript.sml` for `return_exception_typed_extend_local_F`. -> Confirmed the theorem is present before the For_cons Resume at lines 668-681 with exactly the required non-existential premises: `env_maps_wf env`, freshness of `id`, concrete `env_extends (extend_local env id ty F) env_exn`, and `return_exception_typed env_exn ret_ty y`. No wrapper or source edit needed. (`TO_type_system_rewrite-20260519T123242Z_m30581_t001`, `TO_type_system_rewrite-20260519T123242Z_m30581_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30581_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30581_t002` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The redesigned direct-helper patch still fails inside the suspended Resume due to HOL instrumentation/CHOOSE behavior. Explicit conjunction splitting closes the first visible conjuncts, and forward-chaining `return_exception_typed_extend_local_F_imp` reduces the final goal to exact visible assumptions, but even `simp[]` and then `qpat_assum ... ACCEPT_TAC` on the exact visible assumption `return_exception_typed env_exn ret_ty y` trigger the same HOL_ERR CHOOSE class. Thus the blocker is not the existential theorem family alone; exact assumption use inside this Resume suffix is also instrumentation-fragile.
+- latest episode: `E0380`
+- blocker: After reducing the final conjunct to the exact visible assumption `return_exception_typed env_exn ret_ty y`, exact assumption closure still triggers HOL_ERR CHOOSE in the suspended Resume.
+- actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 7 holbuild, 1,795,857 tok (1,790,889 in, 4,968 out, 1,755,648 cached), 156.7s, $1.20306900
+- next: Call plan_oracle review/redesign. Need a boundary that avoids exact assumption closure inside the Resume suffix, perhaps by proving a source-order theorem whose conclusion is the full final conjunction from only assumptions that can be consumed before entering the fragile exact-goal state, or by restructuring the suspended proof boundary.
+
+### Attempts / Evidence
+
+- `E0380` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 14 tools, 7 holbuild, 1,795,857 tok (1,790,889 in, 4,968 out, 1,755,648 cached), 156.7s, $1.20306900)
+  - Replaced atomic existential-metis line with four `conj_tac >- simp[]` conjunct closures followed by `irule return_exception_typed_extend_local_F >> simp[]`. -> First four conjuncts were split, but `irule` left an existential goal `?env_exn id ty...`, showing the conjunctive theorem's antecedent variables cannot be instantiated by `irule` in this context. (`TO_type_system_rewrite-20260519T123242Z_m30586_t001`, `TO_type_system_rewrite-20260519T123242Z_m30587_t001`)
+  - Tried `metis_tac[return_exception_typed_extend_local_F]` only for the final return-typing conjunct after explicit split. -> Failed with the same HOL_ERR CHOOSE instrumentation class even though the goal and non-existential premises were visible. (`TO_type_system_rewrite-20260519T123242Z_m30588_t001`, `TO_type_system_rewrite-20260519T123242Z_m30589_t001`)
+  - Tried direct specialization/forward use through `return_exception_typed_extend_local_F_imp`: first `qspecl_then` failed because theorem is not initially forall; then `drule ... >> disch_then (qspecl_then ...)` got the instantiated implication. -> After applying the specialized implication and splitting its antecedent, the last subgoal was exactly the visible assumption `return_exception_typed env_exn ret_ty y`, but `simp[]` still triggered HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m30590_t001`, `TO_type_system_rewrite-20260519T123242Z_m30591_t001`, `TO_type_system_rewrite-20260519T123242Z_m30592_t001`, `TO_type_system_rewrite-20260519T123242Z_m30593_t001`, `TO_type_system_rewrite-20260519T123242Z_m30594_t001`, `TO_type_system_rewrite-20260519T123242Z_m30595_t001`, `TO_type_system_rewrite-20260519T123242Z_m30596_t001`, `TO_type_system_rewrite-20260519T123242Z_m30597_t001`)
+  - Tried exact assumption closure for the final exact goal with `qpat_assum `return_exception_typed env_exn ret_ty y` ACCEPT_TAC`. -> Even exact assumption closure on a displayed identical assumption triggered HOL_ERR CHOOSE. This matches prior Resume instrumentation fragility and contradicts the low-risk patch assumption. (`TO_type_system_rewrite-20260519T123242Z_m30598_t001`, `TO_type_system_rewrite-20260519T123242Z_m30599_t001`)
+
+### Ruled Out
+
+- `irule return_exception_typed_extend_local_F` at final conjunct
+- `metis_tac[return_exception_typed_extend_local_F]` at final conjunct
+- forward-specialized `return_exception_typed_extend_local_F_imp` followed by `simp[]` exact closure
+- `qpat_assum ... ACCEPT_TAC` exact closure for `return_exception_typed env_exn ret_ty y`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30587_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30589_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30595_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30597_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30599_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0381`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 2 holbuild, 235,447 tok (234,304 in, 1,143 out, 218,112 cached), 84.0s, $0.22430600
+
+### Attempts / Evidence
+
+- `E0381` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 2 holbuild, 235,447 tok (234,304 in, 1,143 out, 218,112 cached), 84.0s, $0.22430600)
+  - Inserted standalone theorem `return_exception_typed_extend_local_F_exists` with the exact existential IH package premise and proved it from `return_exception_typed_extend_local_F` by metis outside the suspended Resume. -> Build accepted helper and advanced to later planned Resume suffix failure. (`TO_type_system_rewrite-20260519T123242Z_m30608_t001`, `TO_type_system_rewrite-20260519T123242Z_m30609_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30608_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30609_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned existential-boundary helper is accepted and aligns mathematically, but the suspended `Resume eval_all_type_sound_mutual[For_cons]` proof remains fragile: after applying the helper, even exact closure of simple premises such as `id ∉ FDOM env.var_types` triggers HOL_ERR CHOOSE. This contradicts the Risk 2 expectation that the patch is a localized helper application.
+- latest episode: `E0383`
+- blocker: Suspended Resume instrumentation/proof boundary triggers HOL_ERR CHOOSE on exact-assumption closure for both the existential package path and the simple `id ∉ FDOM env.var_types` side condition, so the current local patch plan cannot be completed reliably.
+- actual effort: 1 sessions, 3 msgs, 35 steps, 34 tools, 16 holbuild, 3,203,638 tok (3,191,683 in, 11,955 out, 3,123,712 cached), 370.4s, $2.26036100
+- next: Strategist should redesign this leaf: likely move a larger conjunctive postcondition packaging outside the suspended Resume or otherwise avoid any exact-assumption/premise-closing steps inside this Resume suffix.
+
+### Attempts / Evidence
+
+- `E0382` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 34 steps, 33 tools, 16 holbuild, 3,095,020 tok (3,084,097 in, 10,923 out, 3,017,728 cached), 355.0s, $2.16839900)
+  - Replaced final suffix with `metis_tac[return_exception_typed_extend_local_F_exists]`. -> Still triggered HOL_ERR CHOOSE on the final `return_exception_typed env ret_ty y` goal inside the Resume. (`TO_type_system_rewrite-20260519T123242Z_m30615_t001`)
+  - Tried `irule return_exception_typed_extend_local_F_exists >> simp[]` and then a manually instantiated `mp_tac (Q.INST ...) ... >> simp[]`. -> `irule` introduced an existential over antecedent-only variables; explicit instantiation avoided that but `simp[]` over the implication antecedent still triggered CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m30617_t001`, `TO_type_system_rewrite-20260519T123242Z_m30621_t001`)
+  - Probed after `disch_then irule`; the helper application leaves a single conjunctive premise `(existential package) /\ env_maps_wf env /\ id ∉ FDOM env.var_types`. -> Confirmed the theorem is mathematically aligned but proof-boundary closure remains fragile. (`TO_type_system_rewrite-20260519T123242Z_m30638_t001`)
+  - Solved the existential package atomically first, killed existential/destructed witness assumptions, then solved `env_maps_wf env`; the remaining exact goal was `id ∉ FDOM env.var_types`. -> Even exact closure of the original non-existential side condition `id ∉ FDOM env.var_types` by `qpat_assum ... ACCEPT_TAC` triggers HOL_ERR CHOOSE in this suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m30646_t001`)
+- `E0383` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 34 tools, 16 holbuild, 3,203,638 tok (3,191,683 in, 11,955 out, 3,123,712 cached), 370.4s, $2.26036100)
+  - Used `metis_tac[return_exception_typed_extend_local_F_exists]` directly in the Resume suffix. -> Failed with HOL_ERR CHOOSE on the target `return_exception_typed env ret_ty y`; automation still interacted badly with the suspended proof boundary. (`TO_type_system_rewrite-20260519T123242Z_m30615_t001`)
+  - Tried direct `irule return_exception_typed_extend_local_F_exists >> simp[]` and explicit theorem instantiation via `Q.INST` followed by implication use. -> Direct `irule` left an existential over variables in antecedents; explicit instantiation avoided that, but simplification/antecedent discharge still triggered CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m30617_t001`, `TO_type_system_rewrite-20260519T123242Z_m30621_t001`)
+  - Probed after explicit-instantiated helper application with `disch_then irule`. -> The remaining goal is exactly the intended conjunctive premise `(existential IH package) ∧ env_maps_wf env ∧ id ∉ FDOM env.var_types`, confirming semantic alignment but not proof-boundary solvability. (`TO_type_system_rewrite-20260519T123242Z_m30638_t001`)
+  - Solved the existential package atomically, killed existential/destructed witness assumptions, solved `env_maps_wf env`, then attempted exact closure of `id ∉ FDOM env.var_types`. -> Still failed with HOL_ERR CHOOSE on exact closure of a simple visible non-existential assumption; the issue is not merely witness destructing. (`TO_type_system_rewrite-20260519T123242Z_m30646_t001`)
+
+### Ruled Out
+
+- Direct metis with the existential-boundary helper in the Resume suffix
+- Direct irule of the helper without explicit instantiation
+- Explicit Q.INST helper plus `simp[]` on the implication
+- Manual conjunct splitting with exact closure of the existential package or simple side-condition inside the Resume
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30615_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30617_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30638_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30646_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30647_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0384`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 2 holbuild, 390,974 tok (387,981 in, 2,993 out, 361,984 cached), 65.5s, $0.40076700
+
+### Attempts / Evidence
+
+- `E0384` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 2 holbuild, 390,974 tok (387,981 in, 2,993 out, 361,984 cached), 65.5s, $0.40076700)
+  - Changed `disch_then (fn th => mp_tac th >> strip_tac >> assume_tac th)` to `disch_then assume_tac`, and scoped any existential destructuring inside the `env_consistent env cx ...` local subproof. -> The For_cons suffix no longer has live separate assumptions `env_extends ... env_exn`, `env_consistent env_exn ...`, or `return_exception_typed env_exn ...`; holbuild failure moved to the existing final-helper premise cleanup, showing the audit condition is satisfied. (`TO_type_system_rewrite-20260519T123242Z_m30659_t001`, `TO_type_system_rewrite-20260519T123242Z_m30660_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30659_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30660_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The low-risk final helper application component was under-decomposed/wrong-shaped: helper application progressed to simple premises, but premise closure in this suspended Resume remains fragile. Evidence suggests the strategy must move the transport before splitting the full ordinary-exception postcondition or introduce a different boundary lemma/application shape, not keep tweaking the terminal tactic.
+- latest episode: `E0386`
+- blocker: Current unbuilt final edit failed at the same For_cons Resume freshness side condition. Even with no live destructed env_exn assumptions and after killing the packaged existential, the simple goal `id ∉ FDOM env.var_types` with matching assumption still triggers HOL_ERR CHOOSE under Resume/instrumentation. This exhausts the planned package-preserving final-helper tactic shape.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 177,999 tok (177,004 in, 995 out, 152,576 cached), 21.6s, $0.22827800
+- next: Call plan_oracle(mode="review") for this component. Likely redesign: close a larger full ordinary-exception postcondition before `return_exception_typed_INR_case_eq` splitting, or add/use a source-ordered boundary lemma whose conclusion matches the full use site without Resume-side premise splitting.
+
+### Attempts / Evidence
+
+- `E0385` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 32 steps, 36 tools, 11 holbuild, 3,749,577 tok (3,736,396 in, 13,181 out, 3,662,848 cached), 393.7s, $2.59459400)
+  - Tried final helper as `match_mp_tac (Q.INST ... return_exception_typed_extend_local_F_exists) >> simp[]` / `metis_tac[]`, and as a local assertion of `return_exception_typed env ret_ty y`. -> All variants still triggered HOL_ERR CHOOSE at the final helper or premise-splitting boundary despite no live destructed `env_exn` assumptions, confirming remaining fragility is premise closure inside the suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m30666_t001`, `TO_type_system_rewrite-20260519T123242Z_m30668_t001`, `TO_type_system_rewrite-20260519T123242Z_m30671_t001`)
+  - Tried using existing conjunctive helper `for_cons_ordinary_exception_conclusion_exists` after `return_exception_typed_INR_case_eq`. -> Did not match because after four `conj_tac`s the goal was only `return_exception_typed env ret_ty y`, not the full postcondition conjunction. (`TO_type_system_rewrite-20260519T123242Z_m30673_t001`)
+  - Added curried helper `return_exception_typed_extend_local_F_exists_imp` and applied it with explicit instantiation. Introduced witnesses `cx,id,st_body,ty` to satisfy irule's existentialized antecedent variables. -> Progressed to simple premise goals but `simp[]`, exact assumption, and `asm_rewrite_tac[]` still hit HOL_ERR CHOOSE on package/freshness side conditions. Killing the package before freshness did not avoid CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m30676_t001`, `TO_type_system_rewrite-20260519T123242Z_m30678_t001`, `TO_type_system_rewrite-20260519T123242Z_m30680_t001`, `TO_type_system_rewrite-20260519T123242Z_m30682_t001`, `TO_type_system_rewrite-20260519T123242Z_m30684_t001`, `TO_type_system_rewrite-20260519T123242Z_m30686_t001`)
+  - Briefly added `return_exception_typed_extend_local_exists` before its dependency `return_exception_typed_extend_local_env_extends`, causing static undeclared-identifier error, then removed it and changed final freshness tactic to `metis_tac[]`. -> The static error was fixed in source by removal, but the current source after m30694 has not been rebuilt. First next action must rebuild; if it still fails, likely close active component stuck/risk_mismatch with the accumulated CHOOSE evidence. (`TO_type_system_rewrite-20260519T123242Z_m30691_t001`, `TO_type_system_rewrite-20260519T123242Z_m30692_t001`, `TO_type_system_rewrite-20260519T123242Z_m30694_t001`)
+- `E0386` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 177,999 tok (177,004 in, 995 out, 152,576 cached), 21.6s, $0.22827800)
+  - Ran the mandated first build of current source with final `metis_tac[]` freshness closure after killing the packaged existential. -> Build failed in `Resume eval_all_type_sound_mutual[For_cons]` at line 3346 on the simple goal `id ∉ FDOM env.var_types`; matching assumption was present, but `metis_tac[]` triggered HOL_ERR CHOOSE. This is the same final premise/freshness closure blocker documented in E0385. (`TO_type_system_rewrite-20260519T123242Z_m30700_t001`)
+  - Prior package-preserving helper attempts: direct `match_mp_tac`/local assertion/curried helper with explicit witnesses and premise closure by simp/exact/asm/metis variants. -> All reached the packaged-existential/freshness premise area but triggered HOL_ERR CHOOSE inside the suspended Resume, showing the planned final-helper proof shape is unreliable rather than missing a mathematical side condition. (`TO_type_system_rewrite-20260519T123242Z_m30666_t001`, `TO_type_system_rewrite-20260519T123242Z_m30671_t001`, `TO_type_system_rewrite-20260519T123242Z_m30680_t001`, `TO_type_system_rewrite-20260519T123242Z_m30686_t001`)
+
+### Ruled Out
+
+- More terminal tactic variants for the final freshness premise inside this Resume
+- Destruct/rebuild existential witness shape
+- Direct helper application followed by simp/exact/asm/metis premise closure in the final singleton goal
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30700_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30666_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30671_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30680_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30686_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30694_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0387`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 6 tools, 2 holbuild, 738,475 tok (736,946 in, 1,529 out, 710,656 cached), 92.2s, $0.53264800
+
+### Attempts / Evidence
+
+- `E0387` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 6 tools, 2 holbuild, 738,475 tok (736,946 in, 1,529 out, 710,656 cached), 92.2s, $0.53264800)
+  - Inserted bundled corollary after the existing existential For_cons helper and first tried an `irule ... >> gvs[]` proof. -> Initial proof left an existential side goal for antecedent-only variables, showing the proof needed a more direct first-order closure outside the Resume. (`TO_type_system_rewrite-20260519T123242Z_m30706_t001`, `TO_type_system_rewrite-20260519T123242Z_m30707_t001`)
+  - Changed helper proof to `metis_tac[for_cons_ordinary_exception_conclusion_exists]` and rebuilt `vyperTypeStmtSoundnessTheory`. -> Build progressed past `for_cons_ordinary_exception_conclusion_exists_bundle` and reached the later old For_cons suffix failure, so this boundary lemma is proved in source. (`TO_type_system_rewrite-20260519T123242Z_m30709_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30706_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30709_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This was not a false theorem signal; the visible assumptions imply the goal. The failure is proof-shape/instrumentation/decomposition fragility around exact assumption extraction in this large Resume and now in a small helper. The active leaf's risk estimate was too low.
+- latest episode: `E0388`
+- blocker: The active leaf's mandated bundled-helper suffix still degenerates to the same trivial assumption/subgoal fragility, now even in a tiny source-level packaging helper: goals with an identical `no_type_error_result (INR exn)` assumption fail under `asm_rewrite_tac`, `rw`, `first_assum ACCEPT_TAC`, and related exact-assumption tactics. The decomposition's local theorem/Resume proof-boundary is not sufficiently robust under holbuild instrumentation; continued terminal tactic search is repeating the same failure mode.
+- actual effort: 1 sessions, 4 msgs, 55 steps, 57 tools, 23 holbuild, 5,928,792 tok (5,906,822 in, 21,970 out, 5,796,352 cached), 648.6s, $4.10962600
+- next: Call plan_oracle(mode='review') for this stuck closure; likely replacement should avoid residual no-error theorem subgoals entirely, perhaps by proving a stronger bundle/case theorem with a different interface or moving more of the For_cons branch into a standalone helper.
+
+### Attempts / Evidence
+
+- `E0388` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 55 steps, 57 tools, 23 holbuild, 5,928,792 tok (5,906,822 in, 21,970 out, 5,796,352 cached), 648.6s, $4.10962600)
+  - Replaced manual residual-premise split with `fs[SF CONJ_ss]` after instantiated `irule for_cons_ordinary_exception_conclusion_exists_bundle`. -> Reduced residual to package/no-error conjunction but still left `no_type_error_result (INR y)` unclosed despite visible assumption. (`TO_type_system_rewrite-20260519T123242Z_m30776_t001`, `TO_type_system_rewrite-20260519T123242Z_m30778_t001`)
+  - Tried true one-shot `qpat_assum`/`LIST_CONJ`/`MATCH_MP` application of bundled theorem. -> Failed at assumption selection/matching in the Resume despite the packaged existential and other facts being present. (`TO_type_system_rewrite-20260519T123242Z_m30783_t001`)
+  - Added source-level helper `for_cons_ordinary_exception_package_noerr` to factor the residual existential/no-error premise outside the Resume and patched the suffix to use it. -> The helper itself now fails on the identical `no_type_error_result (INR exn)` assumption under several standard tactics, showing the current decomposition has not escaped the fragility. (`TO_type_system_rewrite-20260519T123242Z_m30811_t001`, `TO_type_system_rewrite-20260519T123242Z_m30815_t001`, `TO_type_system_rewrite-20260519T123242Z_m30825_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30776_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30783_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30811_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30825_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0389`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 10 tools, 2 holbuild, 583,228 tok (579,650 in, 3,578 out, 555,008 cached), 76.7s, $0.50805400
+
+### Attempts / Evidence
+
+- `E0389` (proved, , actual effort: 1 sessions, 8 steps, 10 tools, 2 holbuild, 583,228 tok (579,650 in, 3,578 out, 555,008 cached), 76.7s, $0.50805400)
+  - Deleted the `for_cons_ordinary_exception_package_noerr` theorem block. -> Source no longer contains the experimental helper; grep found no remaining occurrences. (`TO_type_system_rewrite-20260519T123242Z_m30833_t001`, `TO_type_system_rewrite-20260519T123242Z_m30838_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory`. -> Build no longer stops at the deleted helper and instead reaches the For_cons ordinary-exception suffix proof, confirming the cleanup component is complete. (`TO_type_system_rewrite-20260519T123242Z_m30837_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30833_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30837_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30838_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0390`
+- blocker: The replacement suffix proof boundary still cannot be closed by the planned one-shot first-order approach. Direct `metis_tac[for_cons_ordinary_exception_conclusion_exists, _bundle]` on the full final conjunction fails with a HOL_ERR CHOOSE despite the premises being present. Stripping the existential and using `metis_tac[for_cons_ordinary_exception_conclusion]` also fails with CHOOSE. Applying `irule for_cons_ordinary_exception_conclusion >> simp[]` exposes the forbidden residual antecedent `no_type_error_result (INR y) /\ ∃env_exn id ty. ...`; attempting to close it with metis times out. This is exactly the PLAN's failure sign: the new proof still exposes a no-error residual rather than closing the whole boundary.
+- actual effort: 1 sessions, 10 steps, 9 tools, 3 holbuild, 972,003 tok (967,804 in, 4,199 out, 941,056 cached), 107.0s, $0.73023800
+- next: Call plan_oracle(mode='review') for this stuck closure. Likely replacement should avoid HOL CHOOSE/metis on existential packages and avoid exposing `no_type_error_result`; perhaps prove a non-existential helper over a named `env_exn` with conclusion only the full final conjunction and a proof that handles no-error internally without instrumentation-sensitive assumption tactics, or normalize to a non-predicate no-TypeError interface.
+
+### Attempts / Evidence
+
+- `E0390` (stuck, risk_mismatch, actual effort: 1 sessions, 10 steps, 9 tools, 3 holbuild, 972,003 tok (967,804 in, 4,199 out, 941,056 cached), 107.0s, $0.73023800)
+  - Replaced suffix with one-shot `metis_tac[for_cons_ordinary_exception_conclusion_exists, for_cons_ordinary_exception_conclusion_exists_bundle]` after `return_exception_typed_INR_case_eq`. -> Failed with HOL_ERR CHOOSE on the full final conjunction despite all expected premises being present. (`TO_type_system_rewrite-20260519T123242Z_m30837_t001`)
+  - Destructed the existential assumption first, then tried `metis_tac[for_cons_ordinary_exception_conclusion]`. -> Failed with the same HOL_ERR CHOOSE on the full final conjunction. (`TO_type_system_rewrite-20260519T123242Z_m30844_t001`)
+  - Applied `irule for_cons_ordinary_exception_conclusion >> simp[]` to avoid metis theorem instantiation. -> This exposed a residual antecedent containing `no_type_error_result (INR y)` conjoined with an existential package; explicit witnesses were attempted in wrong goal shape, and a final `metis_tac[]` timed out. This matches the PLAN's do-not-continue failure sign. (`TO_type_system_rewrite-20260519T123242Z_m30846_t001`, `TO_type_system_rewrite-20260519T123242Z_m30848_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30837_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30844_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30846_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30848_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0392`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 395,903 tok (395,008 in, 895 out, 370,176 cached), 82.9s, $0.33609800
+
+### Attempts / Evidence
+
+- `E0391` (progressed, other, actual effort: 1 sessions, 2 msgs, 4 steps, 6 tools, 1 holbuild, 544,225 tok (541,751 in, 2,474 out, 509,952 cached), 49.5s, $0.48819100)
+  - Added source-level boundary lemma `for_cons_ordinary_exception_conclusion_named_noerr` with normalized no-TypeError premise `!msg. exn <> Error (TypeError msg)`. -> Source now contains the planned helper statement and an initial explicit proof attempt. (`TO_type_system_rewrite-20260519T123242Z_m30855_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` to check the new helper. -> Build fails in the helper proof because `rpt strip_tac` split the final conjunction into separate goals; current first goal is `state_well_typed stpopped`, so `conj_tac` fails. This indicates only a proof-script shape issue. (`TO_type_system_rewrite-20260519T123242Z_m30856_t001`)
+- `E0392` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 395,903 tok (395,008 in, 895 out, 370,176 cached), 82.9s, $0.33609800)
+  - Replace the helper proof opener with controlled premise introduction: `rpt gen_tac >> ntac 6 strip_tac`, then split the final conjunction explicitly and use the existing return typing extension lemma. -> `vyperTypeStmtSoundnessTheory` build advanced past `for_cons_ordinary_exception_conclusion_named_noerr` into the queued For_cons suffix failure, so the helper theorem is proved in source. (`TO_type_system_rewrite-20260519T123242Z_m30864_t001`, `TO_type_system_rewrite-20260519T123242Z_m30865_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30863_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30864_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30865_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is a proof-boundary/tool-instrumentation mismatch, not evidence of semantic falsehood. The visible assumptions still contain the needed body existential, popped invariants, no-TypeError predicate, and env consistency, but the Resume boundary cannot close even trivial residual obligations. Current source is partial and should be reviewed/replanned before more edits.
+- latest episode: `E0396`
+- blocker: The suffix-patch component remains stuck after the active plan's normalized-helper strategy and two smaller helper-consumption variants. In the suspended For_cons Resume, any helper application that leaves a residual exact implication (`P ==> P`), residual normalized no-error/existential package, or residual return-exception side goal triggers HOL_ERR CHOOSE/DISCH_THEN under holbuild instrumentation. This invalidates the Risk 2 assumption that the suffix can safely consume a helper by ordinary drule/irule/simp.
+- actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 4 holbuild, 1,226,499 tok (1,218,101 in, 8,398 out, 1,166,848 cached), 227.7s, $1.09162900
+- next: Ask plan_oracle for review/replacement of the suffix proof boundary. A viable redesign likely must avoid any residual helper-consumption goal inside the suspended Resume, or move the entire For_cons branch/suspended proof boundary differently.
+
+### Attempts / Evidence
+
+- `E0393` (progressed, other, actual effort: 1 sessions, 3 msgs, 33 steps, 34 tools, 12 holbuild, 3,926,045 tok (3,913,890 in, 12,155 out, 3,835,392 cached), 345.4s, $2.67483600)
+  - Replaced old suffix `irule for_cons_ordinary_exception_conclusion >> simp[] >> metis_tac[]` with direct use of `for_cons_ordinary_exception_conclusion_named_noerr`. -> Patch correctly changes the old package goal into the new helper premises; build now reaches the new helper application area instead of the old metis call. (`TO_type_system_rewrite-20260519T123242Z_m30871_t001`, `TO_type_system_rewrite-20260519T123242Z_m30872_t001`)
+  - Tried to solve helper-generated residuals by splitting the no-error premise, explicitly witnessing `env_exn`, `id`, `ty`, and then closing exact `env_extends` / `return_exception_typed` facts from assumptions. -> No-error and env_extends parts can be handled, but the current source still fails on the final exact goal `return_exception_typed env_exn ret_ty y`; several assumption-selection/rewriting closures trigger HOL_ERR CHOOSE under instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m30885_t001`, `TO_type_system_rewrite-20260519T123242Z_m30886_t001`, `TO_type_system_rewrite-20260519T123242Z_m30894_t001`, `TO_type_system_rewrite-20260519T123242Z_m30895_t001`, `TO_type_system_rewrite-20260519T123242Z_m30896_t001`, `TO_type_system_rewrite-20260519T123242Z_m30897_t001`)
+- `E0394` (progressed, other, actual effort: 1 sessions, 4 msgs, 46 steps, 50 tools, 18 holbuild, 5,243,017 tok (5,221,348 in, 21,669 out, 5,001,728 cached), 4095.0s, $4.24903400)
+  - Tried direct `ACCEPT_TAC (ASSUME ``return_exception_typed env_exn ret_ty y``)` at the exact final conjunct after witnessing. -> Direct theorem construction still triggered HOL_ERR CHOOSE on the identical assumption; this rules out the main fallback suggested by prior STATE. (`TO_type_system_rewrite-20260519T123242Z_m30908_t001`)
+  - Added source-level helper `for_cons_ordinary_exception_conclusion_from_body_ex` consuming the existential body-IH package and normalized no-error premise, then tried using it in the For_cons suffix. -> The helper itself proved after removing redundant existential stripping, but suffix applications still exposed fragile residual implication/existential goals under goalfrag; exact/assumption/existential closure continued to trigger CHOOSE or branch-accounting failures. (`TO_type_system_rewrite-20260519T123242Z_m30911_t001`, `TO_type_system_rewrite-20260519T123242Z_m30913_t001`, `TO_type_system_rewrite-20260519T123242Z_m30924_t001`, `TO_type_system_rewrite-20260519T123242Z_m30931_t001`)
+  - Tried constructing/pushing a specialized theorem with `MATCH_MP ... for_cons_ordinary_exception_conclusion_from_body_ex` to avoid proving the existential inside the Resume. -> Unspecialized `MATCH_MP` left an antecedent-only `stpopped` implication; explicit `Q.SPECL` via `qpat_x_assum` hit Q_TAC0/FIRST_ASSUM instrumentation; direct `ASSUME``...`` inside ML fragment did not compile in holbuild instrumentation; later attempt still left a non-existential implication goal. Current source is partial and must be inspected before continuing. (`TO_type_system_rewrite-20260519T123242Z_m30939_t001`, `TO_type_system_rewrite-20260519T123242Z_m30943_t001`, `TO_type_system_rewrite-20260519T123242Z_m30945_t001`, `TO_type_system_rewrite-20260519T123242Z_m30948_t001`)
+- `E0395` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,116,896 tok (1,109,584 in, 7,312 out, 1,059,840 cached), 211.8s, $0.99800000)
+  - Replaced unverified old `irule for_cons_ordinary_exception_conclusion_exists >> simp[]` suffix with `for_cons_ordinary_exception_conclusion_from_body_ex` and no-error conversion. -> Build reached the suffix but helper application left a residual implication whose antecedent was the normalized no-error premise and whose consequent was an existential package; this repeated the residual-boundary failure shape. (`TO_type_system_rewrite-20260519T123242Z_m30958_t001`)
+  - Tried `drule for_cons_ordinary_exception_conclusion_from_body_ex >> simp[] >> disch_then irule` to forward-chain the visible body existential before applying to final goal. -> Build failed with a residual higher-order/forall implication into `return_exception_typed env ret_ty y`; `DISCH_THEN` failed under instrumentation, so this did not avoid the fragile boundary. (`TO_type_system_rewrite-20260519T123242Z_m30961_t001`)
+  - Added source helper `for_cons_return_exception_typed_from_body_ex` and split the final conjunction directly, using the helper only for the return-exception conjunct. -> Helper proof was accepted far enough for holbuild to reach the suffix, but `drule ... >> simp[]` left exact implication `return_exception_typed env ret_ty y ==> return_exception_typed env ret_ty y` and again triggered HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m30964_t001`)
+- `E0396` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 4 holbuild, 1,226,499 tok (1,218,101 in, 8,398 out, 1,166,848 cached), 227.7s, $1.09162900)
+  - Verified unverified old suffix `irule for_cons_ordinary_exception_conclusion_exists >> simp[]`. -> Confirmed it fails with the PLAN-forbidden residual package `(∃id stbody ty env_exn. ...) ∧ no_type_error_result (INR y)`, triggering goalfrag failure. (`TO_type_system_rewrite-20260519T123242Z_m30955_t001`)
+  - Replaced suffix with `irule for_cons_ordinary_exception_conclusion_from_body_ex >> simp[]` plus no-error conversion. -> Still left residual normalized no-error implication into an existential package; same boundary failure class. (`TO_type_system_rewrite-20260519T123242Z_m30958_t001`)
+  - Tried `drule for_cons_ordinary_exception_conclusion_from_body_ex >> simp[] >> disch_then irule` to use the visible body existential by forward chaining. -> Failed with residual forall/implication into `return_exception_typed env ret_ty y`; `DISCH_THEN` failed under instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m30961_t001`)
+  - Added narrower helper `for_cons_return_exception_typed_from_body_ex` and split final conjunction directly; used helper only for final return typing conjunct. -> Helper was accepted, but suffix failed on exact implication `return_exception_typed env ret_ty y ==> return_exception_typed env ret_ty y` with HOL_ERR CHOOSE, showing even the narrowed helper leaves a fatal residual closure. (`TO_type_system_rewrite-20260519T123242Z_m30964_t001`)
+
+### Ruled Out
+
+- old existential helper suffix (`for_cons_ordinary_exception_conclusion_exists`)
+- whole-conjunction helper application via `irule` plus no-error conversion
+- forward-chaining whole-conjunction helper via `drule`/`disch_then irule`
+- splitting final conjunction and using a return-only helper with `drule >> simp[]`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30955_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30958_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30961_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30964_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m30965_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The refined bundled-helper suffix still leaves the PLAN-forbidden residual existential/no-error package under holbuild instrumentation, so the Risk 2 tactic-boundary assumption is invalid. Per PLAN not_to_try, no assumption-selection variants were attempted.
+- latest episode: `E0397`
+- blocker: After `irule for_cons_ordinary_exception_conclusion_exists_bundle >> simp[]`, holbuild fails at QED of `Resume eval_all_type_sound_mutual[For_cons]` with residual `(∃id stbody ty env_exn. env_extends (extend_local env id ty F) env_exn ∧ env_consistent env_exn cx stbody ∧ return_exception_typed env_exn ret_ty y) ∧ no_type_error_result (INR y)`.
+- actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 165,453 tok (164,737 in, 716 out, 141,312 cached), 91.5s, $0.20926100
+- next: Call plan_oracle(mode='review') for this component with the holbuild residual evidence; do not continue local tactic search in this suffix.
+
+### Attempts / Evidence
+
+- `E0397` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 165,453 tok (164,737 in, 716 out, 141,312 cached), 91.5s, $0.20926100)
+  - Verified the current source suffix target shape through holbuild for `vyperTypeStmtSoundnessTheory`. No further edits/tactic variants attempted because PLAN explicitly says to escalate if bundled helper leaves residual package. -> Build still fails at the same For_cons ordinary-exception QED with residual existential/no-error package, indicating the bundled helper boundary did not close the single antecedent under instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m30976_t001`)
+
+### Ruled Out
+
+- Bundled helper suffix with plain `simp[]` antecedent closure
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m30976_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0399`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 11 tools, 4 holbuild, 1,023,069 tok (1,019,674 in, 3,395 out, 976,384 cached), 143.1s, $0.80649200
+
+### Attempts / Evidence
+
+- `E0398` (progressed, other, actual effort: 1 sessions, 2 msgs, 12 steps, 13 tools, 4 holbuild, 1,526,402 tok (1,521,674 in, 4,728 out, 1,475,584 cached), 111.8s, $1.11008200)
+  - Added PLAN-specified theorem `for_cons_body_exception_noerr_package_generalises` after `for_cons_ordinary_exception_conclusion_exists_bundle` with proof `metis_tac[]`, then built `vyperTypeStmtSoundnessTheory`. -> The theorem statement typechecked, but `metis_tac[]` failed to prove the first-order existential weakening. (`TO_type_system_rewrite-20260519T123242Z_m30983_t001`, `TO_type_system_rewrite-20260519T123242Z_m30984_t001`)
+  - Replaced with explicit `strip_tac >> strip_tac >> qpat_x_assum ... strip_assume_tac >> conj_tac ...` proof. -> After `strip_tac`, the existential was already destructed by stripping, so `qpat_x_assum` failed; holbuild showed assumptions already contained concrete `env_exn` facts plus `no_type_error_result`. (`TO_type_system_rewrite-20260519T123242Z_m30985_t001`, `TO_type_system_rewrite-20260519T123242Z_m30986_t001`)
+  - Removed redundant existential destruction and used explicit witnesses; tried closing no-error conjunct with `simp[]` then `first_assum ACCEPT_TAC`. -> Both failed on the residual no-error goal despite an identical visible assumption, showing exact-assumption closure instrumentation can be fragile even outside the Resume. Current source was then changed to `rw[] >> qexists_tac ... >> simp[]` but not verified. (`TO_type_system_rewrite-20260519T123242Z_m30988_t001`, `TO_type_system_rewrite-20260519T123242Z_m30990_t001`, `TO_type_system_rewrite-20260519T123242Z_m30991_t001`)
+- `E0399` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 11 tools, 4 holbuild, 1,023,069 tok (1,019,674 in, 3,395 out, 976,384 cached), 143.1s, $0.80649200)
+  - Changed helper proof to expand no_type_error_result_def and discharge the no-TypeError conjunct by specializing the resulting universal assumption; explicit witnesses prove the existential package. -> holbuild passed the helper theorem and advanced to the planned For_cons suffix use-site, confirming the residual-package generalisation lemma is proved. (`TO_type_system_rewrite-20260519T123242Z_m31006_t001`, `TO_type_system_rewrite-20260519T123242Z_m31007_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31007_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0402`
+- blocker: The active Risk-2 use-site patch is under-decomposed. Direct implication application of `for_cons_body_exception_noerr_package_generalises`, metis, explicit existential destruction, and explicit conjunct splitting all leave propositionally trivial visible-assumption/identity goals inside the suspended For_cons Resume; holbuild instrumentation repeatedly fails with CHOOSE/extract_thm errors or timeouts. The semantic facts are present, but this leaf's local tactic interface is not robust enough; the proof needs a redesigned boundary theorem or different package consumer.
+- actual effort: 1 sessions, 3 msgs, 44 steps, 46 tools, 17 holbuild, 4,563,473 tok (4,544,509 in, 18,964 out, 4,419,584 cached), 520.7s, $3.40333700
+- next: Call plan_oracle review for a replacement/decomposition of this leaf, likely proving an external boundary/corollary whose conclusion exactly matches the full residual and avoids local visible-assumption closure inside Resume.
+
+### Attempts / Evidence
+
+- `E0400` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 495,497 tok (494,138 in, 1,359 out, 472,064 cached), 38.4s, $0.38717200)
+  - Applied the PLAN-specified suffix edit: changed final `simp[]` after `irule for_cons_ordinary_exception_conclusion_exists_bundle` to `simp[for_cons_body_exception_noerr_package_generalises]`. -> Source patched exactly as scheduled. (`TO_type_system_rewrite-20260519T123242Z_m31013_t001`)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to verify the patch. -> Build still fails at `Resume eval_all_type_sound_mutual[For_cons]` QED with the same residual `(∃id stbody ty env_exn. ...) ∧ no_type_error_result (INR y)`, despite visible concrete body package and no-error assumptions. The helper is not consumed by `simp` in this context. (`TO_type_system_rewrite-20260519T123242Z_m31014_t001`)
+- `E0401` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 75 steps, 78 tools, 33 holbuild, 7,387,989 tok (7,364,338 in, 23,651 out, 7,077,376 cached), 732.4s, $5.68302800)
+  - Replaced `simp[for_cons_body_exception_noerr_package_generalises]` with the PLAN-suggested direct `irule for_cons_body_exception_noerr_package_generalises >> simp[]`. -> Failed because after `irule for_cons_ordinary_exception_conclusion_exists_bundle` the actual residual is not just the helper conclusion: it also includes the other bundled conjuncts (`accounts_well_typed`, `state_well_typed`, `env_consistent`). `irule helper` could not match the larger conjunction. (`TO_type_system_rewrite-20260519T123242Z_m31025_t001`)
+  - Tried splitting the bundled conclusion with `conj_tac` and using `drule for_cons_body_exception_noerr_package_generalises`, then discharging the helper-produced implication. -> Showed the helper can be introduced but leaves implication/premise-management goals; naive `strip_tac`/`gvs`/assumption-selection paths either did not close or timed out under holbuild instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m31027_t001`)
+  - Tried switching to `for_cons_ordinary_exception_conclusion_exists` instead of the bundled helper, followed by `drule for_cons_body_exception_noerr_package_generalises` and premise pushing. -> Still leaves an implication-shaped residual from the body-package helper: `no_type_error_result (INR y) ==> (...)` must be consumed explicitly; simple `simp[]` and `impl_tac` variants did not close it cleanly. (`TO_type_system_rewrite-20260519T123242Z_m31090_t001`, `TO_type_system_rewrite-20260519T123242Z_m31092_t001`)
+- `E0402` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 44 steps, 46 tools, 17 holbuild, 4,563,473 tok (4,544,509 in, 18,964 out, 4,419,584 cached), 520.7s, $3.40333700)
+  - After `irule for_cons_ordinary_exception_conclusion_exists >> simp[]`, tried `irule for_cons_body_exception_noerr_package_generalises >> simp[]`. -> Left the unchanged generalized existential/no-error conjunction at QED; helper did not consume residual in this suspended context. (`TO_type_system_rewrite-20260519T123242Z_m31147_t001`)
+  - Tried broad `metis_tac[for_cons_body_exception_noerr_package_generalises]` on the residual. -> Failed with CHOOSE exception in the large Resume context; confirms broad metis is not viable here. (`TO_type_system_rewrite-20260519T123242Z_m31149_t001`)
+  - Destructed the concrete `?env_exn` package with `qx_choose_then`, manually supplied witnesses, and tried exact assumption closure for `no_type_error_result`. -> Existential witness part worked, but exact/visible `no_type_error_result (INR y)` closure still failed under instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m31165_t001`)
+  - Reversed conjunction, proved no-error by unfolding `no_type_error_result_def`, then supplied existential witnesses and tried to close sub-conjuncts by `rpt conj_tac`. -> No-error subgoal could be handled, but the existential-package sub-conjuncts became visible-assumption goals that did not close automatically. (`TO_type_system_rewrite-20260519T123242Z_m31169_t001`)
+  - Closed package sub-conjuncts by pushing each matching assumption and rewriting, then tried final `return_exception_typed` implication closure with rewrite/simp/disch variants. -> Even the identity-shaped `return_exception_typed env_exn0 ret_ty y ==> return_exception_typed env_exn0 ret_ty y` goal failed with CHOOSE/extract_thm instrumentation errors. (`TO_type_system_rewrite-20260519T123242Z_m31172_t001`, `TO_type_system_rewrite-20260519T123242Z_m31181_t001`)
+
+### Ruled Out
+
+- Using the helper as a simp rewrite
+- Direct `irule helper >> simp[]` on the residual
+- Broad metis in the suspended Resume context
+- Local exact-assumption closures for no_type_error_result/return_exception_typed identity goals
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31147_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31149_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31165_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31169_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31172_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31181_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0403`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 393,849 tok (392,340 in, 1,509 out, 368,128 cached), 89.6s, $0.35039400
+
+### Attempts / Evidence
+
+- `E0403` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 393,849 tok (392,340 in, 1,509 out, 368,128 cached), 89.6s, $0.35039400)
+  - Inserted `for_cons_body_exception_noerr_package_generalises_bundle` and `for_cons_ordinary_exception_conclusion_from_body_package` immediately after existing For_cons package helper; proved each by existing boundary helper/metis. -> Boundary lemmas accepted by holbuild; rebuild replayed past the helper block and failed later at the known For_cons Resume suffix, so component .1 obligations are discharged. (`TO_type_system_rewrite-20260519T123242Z_m31195_t001`, `TO_type_system_rewrite-20260519T123242Z_m31196_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31195_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31196_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned one-consumer suffix replacement reduced the For_cons branch to the expected generalized package residual, but the scheduled boundary-package application did not discharge it under holbuild Resume instrumentation; per component instructions, do not proceed with local existential/conjunction packaging or minor visible-assumption closers.
+- latest episode: `E0405`
+- blocker: After replacing the suffix with `for_cons_ordinary_exception_conclusion_from_body_package`, the remaining goal is `(∃id stbody ty env_exn. env_extends (extend_local env id ty F) env_exn ∧ env_consistent env_exn cx stbody ∧ return_exception_typed env_exn ret_ty y) ∧ no_type_error_result (INR y)`. Adding `irule for_cons_body_exception_noerr_package_generalises_bundle >> simp[]` leaves that residual unchanged at QED.
+- actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 2 holbuild, 758,368 tok (755,131 in, 3,237 out, 725,504 cached), 77.6s, $0.60799700
+- next: Ask strategist to review/decompose an exact-shape suffix consumer, likely a single theorem whose conclusion matches the generalized residual or whose full conclusion exactly matches the final post-`return_exception_typed_INR_case_eq` goal.
+
+### Attempts / Evidence
+
+- `E0404` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 646,851 tok (644,866 in, 1,985 out, 616,448 cached), 56.2s, $0.50986400)
+  - Replaced the suffix after `return_exception_typed_INR_case_eq` with `irule for_cons_ordinary_exception_conclusion_from_body_package >> simp[]`. -> Patch avoided local existential destructing but left exactly the generalized body-package/no-error residual in the suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m31202_t001`, `TO_type_system_rewrite-20260519T123242Z_m31203_t001`)
+  - Added one boundary-theorem application `irule for_cons_body_exception_noerr_package_generalises_bundle >> simp[]` to the remaining residual. -> Holbuild still failed at QED with the same residual; this is a proof-interface mismatch for component .2 rather than a cue to retry local closers. (`TO_type_system_rewrite-20260519T123242Z_m31204_t001`, `TO_type_system_rewrite-20260519T123242Z_m31205_t001`)
+- `E0405` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 2 holbuild, 758,368 tok (755,131 in, 3,237 out, 725,504 cached), 77.6s, $0.60799700)
+  - Replaced the whole old local suffix after `return_exception_typed_INR_case_eq` with `irule for_cons_ordinary_exception_conclusion_from_body_package >> simp[]`. -> Build progressed to the boundary theorem's generalized package/no-error residual, confirming the direct consumer shape partly matches but does not by itself close the branch. (`TO_type_system_rewrite-20260519T123242Z_m31202_t001`, `TO_type_system_rewrite-20260519T123242Z_m31203_t001`)
+  - Tried the planned second boundary theorem application `irule for_cons_body_exception_noerr_package_generalises_bundle >> simp[]` on the remaining residual. -> Holbuild still failed at QED with the same residual; this violates the component's risk-2 expectation and should be replanned rather than patched with local destruct/visible-assumption tactics. (`TO_type_system_rewrite-20260519T123242Z_m31204_t001`, `TO_type_system_rewrite-20260519T123242Z_m31205_t001`)
+
+### Ruled Out
+
+- old local destructing/existential/conjunction packaging inside Resume
+- direct consumer without package residual theorem
+- direct consumer followed by the current bundle theorem via `irule ... >> simp[]`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31202_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31203_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31204_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31205_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0407`
+- blocker: Latest required verification of the current partial source fails in the For_cons ordinary-exception suffix at a visible-assumption identity subgoal `no_type_error_result (INR y)`, with assumption 24 exactly `no_type_error_result (INR y)`. STATE/PLAN explicitly instructed not to retry local visible-assumption closers after this case; the leaf underestimated suspended Resume matching/assumption-discharge fragility and needs an exact-shape boundary theorem or revised proof interface from the strategist.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 185,236 tok (184,409 in, 827 out, 158,720 cached), 20.7s, $0.23261500
+- next: Call plan_oracle(mode='review') for this component and request a revised exact-shape final-conclusion boundary theorem/proof interface; do not continue local tactic variants in the Resume body.
+
+### Attempts / Evidence
+
+- `E0406` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 65 steps, 69 tools, 26 holbuild, 6,811,310 tok (6,791,207 in, 20,103 out, 6,662,144 cached), 672.1s, $4.57947700)
+  - Replaced failed bundle suffix with `once_rewrite_tac[return_exception_typed_INR_case_eq] >> irule for_cons_ordinary_exception_conclusion_exists >> simp[]`. -> Build still left the generalized existential/no-error residual at QED; `irule` matched to an undesired generalized residual rather than closing from visible assumptions. (`TO_type_system_rewrite-20260519T123242Z_m31226_t001`)
+  - Tried explicit first-premise construction after the non-bundled theorem and then local closers for remaining `no_type_error_result (INR y)` (`ACCEPT_TAC`, `qpat_x_assum`, `fs`, `mp_tac`, `rw`, `metis_tac`, `disch_then`, `rewrite_tac`). -> Local visible-assumption/identity closers repeatedly failed or timed out under suspended Resume instrumentation; this confirms prior do-not-retry warnings about local closers inside Resume. (`TO_type_system_rewrite-20260519T123242Z_m31229_t001`, `TO_type_system_rewrite-20260519T123242Z_m31245_t001`, `TO_type_system_rewrite-20260519T123242Z_m31249_t001`, `TO_type_system_rewrite-20260519T123242Z_m31257_t001`)
+  - Added helper `for_cons_body_exception_named_package` to expose both `!msg. exn <> Error (TypeError msg)` and generalized existential package from body existential plus `no_type_error_result`; initial malformed proof fixed and helper itself passed prefix replay. -> Helper proof was accepted by later holbuild replay, but using helper after `for_cons_ordinary_exception_conclusion_from_body_ex` still left the old generalized residual, because theorem matching again targeted/residualized the wrong shape. (`TO_type_system_rewrite-20260519T123242Z_m31278_t001`, `TO_type_system_rewrite-20260519T123242Z_m31280_t001`)
+  - Restored strategy to `for_cons_ordinary_exception_conclusion_exists` with explicit existential construction and final `fs[no_type_error_result_def]`; this is current source. -> Current source is not yet verified after the last edit; expected remaining risk is the same no-type-error visible-assumption subgoal or original residual. (`TO_type_system_rewrite-20260519T123242Z_m31287_t002`)
+- `E0407` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 185,236 tok (184,409 in, 827 out, 158,720 cached), 20.7s, $0.23261500)
+  - Built the exact current partial source with `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` before further edits, as STATE required. -> Build resumed `eval_all_type_sound_mutual[For_cons]` and failed at line 3495 on `fs[no_type_error_result_def]`; final goal is `no_type_error_result (INR y)` while assumption 24 is the identical fact. This is the predicted visible-assumption residual and local closers are a do-not-retry path. (`TO_type_system_rewrite-20260519T123242Z_m31292_t001`)
+
+### Ruled Out
+
+- Direct non-bundled theorem plus simp
+- Local visible-assumption/identity closers in suspended Resume
+- Broad metis in full For_cons context
+- Residual-package helper path
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31292_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0408`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 1 holbuild, 517,585 tok (516,518 in, 1,067 out, 495,616 cached), 80.8s, $0.38432800
+- next: Review closure with strategist, then begin component b to patch the For_cons suffix to use the new boundary theorem.
+
+### Attempts / Evidence
+
+- `E0408` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 1 holbuild, 517,585 tok (516,518 in, 1,067 out, 495,616 cached), 80.8s, $0.38432800)
+  - Inserted `for_cons_ordinary_exception_final_from_body_noerr` after `for_cons_ordinary_exception_conclusion_exists`, proved by `metis_tac[for_cons_ordinary_exception_conclusion_exists]`, then built `vyperTypeStmtSoundnessTheory`. -> Holbuild resumed from after `for_cons_ordinary_exception_conclusion_exists`, passed the newly inserted theorem, and advanced to the existing For_cons Resume suffix failure. This verifies the boundary theorem component; remaining failure belongs to the planned suffix patch component. (`TO_type_system_rewrite-20260519T123242Z_m31304_t001`, `TO_type_system_rewrite-20260519T123242Z_m31305_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31304_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31305_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk 2 estimate was wrong: the theorem is logically sufficient, but suspended Resume/tactic instrumentation still cannot close residual assumption-identity/postcondition goals at this site.
+- latest episode: `E0409`
+- blocker: Exact-boundary suffix patch did not close under suspended Resume instrumentation. Applying `for_cons_ordinary_exception_final_from_body_noerr` after `return_exception_typed_INR_case_eq` still leaves a generalized existential/no-error residual; instantiating `stbody` and explicitly constructing the existential reduces to standalone `no_type_error_result (INR y)`, and a forward `drule_all` variant produces an identical conjunctive assumption but local acceptance still fails. This reproduces the E0407 proof-interface problem despite the new theorem.
+- actual effort: 1 sessions, 2 msgs, 33 steps, 34 tools, 12 holbuild, 2,661,931 tok (2,651,720 in, 10,211 out, 2,579,968 cached), 302.8s, $1.95507400
+- next: Strategist should provide an even more exact theorem/interface or different Resume suffix mechanism that avoids both theorem-antecedent validation and local visible-assumption discharge.
+
+### Attempts / Evidence
+
+- `E0409` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 33 steps, 34 tools, 12 holbuild, 2,661,931 tok (2,651,720 in, 10,211 out, 2,579,968 cached), 302.8s, $1.95507400)
+  - Replaced old suffix by `once_rewrite_tac[return_exception_typed_INR_case_eq] >> irule for_cons_ordinary_exception_final_from_body_noerr >> simp[]`. -> Build advanced to QED but left `(∃id stbody ty env_exn. ...) ∧ no_type_error_result (INR y)` residual; exact theorem was not exact enough for matching/antecedent instantiation at this Resume site. (`TO_type_system_rewrite-20260519T123242Z_m31315_t001`, `TO_type_system_rewrite-20260519T123242Z_m31316_t001`)
+  - Instantiated theorem with `Q.INST [`stbody` |-> `st_body`]` and applied with `irule ... >> simp[]`. -> Residual remained, with `st_body` fixed but still generalized over `id` and `ty` and conjoined with `no_type_error_result (INR y)`. (`TO_type_system_rewrite-20260519T123242Z_m31326_t001`, `TO_type_system_rewrite-20260519T123242Z_m31327_t001`)
+  - Constructed the existential antecedent explicitly after theorem application (`qexists_tac id`, `qexists_tac st_body`, `qexists_tac ty`, use visible `?env_exn`). -> Existential package discharged, but the proof again left standalone `no_type_error_result (INR y)` despite visible assumption, matching the prior stuck shape. (`TO_type_system_rewrite-20260519T123242Z_m31328_t001`, `TO_type_system_rewrite-20260519T123242Z_m31331_t001`)
+  - Tried forward theorem use: `drule_all (for_cons_ordinary_exception_final_from_body_noerr |> Q.INST ...)`, then discharge/accept the resulting exact postcondition. -> Forward theorem derived the exact five-conjunct postcondition as an assumption, but `pop_assum ACCEPT_TAC` still failed against the identical goal in the suspended context; local acceptance remains unreliable. (`TO_type_system_rewrite-20260519T123242Z_m31332_t001`, `TO_type_system_rewrite-20260519T123242Z_m31343_t001`)
+
+### Ruled Out
+
+- Bare exact-boundary `irule ... >> simp[]` at this suffix
+- `stbody`-instantiated exact-boundary `irule ... >> simp[]`
+- Explicit existential antecedent construction followed by assumption rewriting
+- Forward `drule_all` producing identical postcondition assumption followed by local `ACCEPT_TAC`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31316_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31327_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31331_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31343_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31344_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk mismatch: the PLAN estimated a one-line exact discharge, but holbuild repeatedly shows an apparently tautological implication identity that standard closers fail to validate in this Resume context.
+- latest episode: `E0411`
+- blocker: The active Risk-1 tactical patch did not close the For_cons ordinary-exception suffix. The requested theorem-directed `drule_all ... >> disch_then ACCEPT_TAC` failed on a residual `P ==> P`; `rewrite_tac[]` and one additional implication/propositional closer `metis_tac[]` also failed on the same printed implication-identity goal under Resume instrumentation. This suggests the leaf's proof-interface assumption is wrong, not just assumption-stack order.
+- actual effort: 1 sessions, 1 msgs, 5 steps, 5 tools, 2 holbuild, 456,296 tok (454,162 in, 2,134 out, 419,328 cached), 58.9s, $0.44785400
+- next: Call plan_oracle review for this stuck leaf. The new plan should avoid leaving a suspended Resume `P ==> P` implication-identity goal, e.g. by changing theorem/application form or proof interface rather than asking for more local implication closers.
+
+### Attempts / Evidence
+
+- `E0410` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 9 steps, 11 tools, 2 holbuild, 1,185,673 tok (1,182,667 in, 3,006 out, 1,145,344 cached), 80.9s, $0.84946700)
+  - Patched suffix to reviewer-preferred `once_rewrite_tac[return_exception_typed_INR_case_eq] >> drule_all (... Q.INST [`stbody` |-> `st_body`]) >> disch_then ACCEPT_TAC`. -> holbuild failed at `disch_then ACCEPT_TAC` with goal `P ==> P`, where P is the exact final five-conjunct postcondition. This is the requested evidence at the exact-discharge tactic. (`TO_type_system_rewrite-20260519T123242Z_m31350_t001`, `TO_type_system_rewrite-20260519T123242Z_m31351_t001`)
+  - Replaced the final exact discharge with `rewrite_tac[]` as a minimal implication-identity closer. -> holbuild still failed at QED with the same `P ==> P` goal; source was left in this partial non-building state at handoff. (`TO_type_system_rewrite-20260519T123242Z_m31353_t001`, `TO_type_system_rewrite-20260519T123242Z_m31354_t001`, `TO_type_system_rewrite-20260519T123242Z_m31357_t001`)
+- `E0411` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 5 steps, 5 tools, 2 holbuild, 456,296 tok (454,162 in, 2,134 out, 419,328 cached), 58.9s, $0.44785400)
+  - `once_rewrite_tac[return_exception_typed_INR_case_eq] >> drule_all (for_cons_ordinary_exception_final_from_body_noerr |> Q.INST [`stbody` |-> `st_body`]) >> disch_then ACCEPT_TAC` -> Failed exactly at `disch_then ACCEPT_TAC`; holbuild printed a single residual goal `P ==> P` for the final five-conjunct postcondition. (`TO_type_system_rewrite-20260519T123242Z_m31351_t001`)
+  - Same prefix ending in `rewrite_tac[]` -> Failed at QED with the same `P ==> P` residual; source was partial at session start. (`TO_type_system_rewrite-20260519T123242Z_m31354_t001`, `TO_type_system_rewrite-20260519T123242Z_m31362_t002`)
+  - Same prefix ending in `metis_tac[]` as one robust implication/propositional closer that avoids assumption-stack order. -> Failed with same `P ==> P` residual, child failure from theorem extraction/CHOOSE instrumentation; source currently contains this partial failed suffix. (`TO_type_system_rewrite-20260519T123242Z_m31365_t001`)
+
+### Ruled Out
+
+- stack-order recovery via `pop_assum ACCEPT_TAC`
+- `disch_then ACCEPT_TAC` exact-discharge form
+- minimal `rewrite_tac[]` implication-identity closer
+- `metis_tac[]` implication/propositional closer
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31351_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31354_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31362_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31365_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk mismatch: the refined Risk-2 plan assumed the backward bundled theorem plus simplification would close the antecedent conjunction from visible assumptions, but holbuild shows the existing helper's antecedent is generalized enough that `simp[]` leaves an existential packaging subgoal.
+- latest episode: `E0412`
+- blocker: The refined backward bundled theorem application produced exactly the PLAN's stated failure sign: after `once_rewrite_tac[return_exception_typed_INR_case_eq] >> irule (for_cons_ordinary_exception_conclusion_exists_bundle |> Q.INST [`stbody` |-> `st_body`]) >> simp[]`, holbuild left the generalized residual `(∃id st_body ty env_exn. env_extends (extend_local env id ty F) env_exn ∧ env_consistent env_exn cx st_body ∧ return_exception_typed env_exn ret_ty y) ∧ no_type_error_result (INR y)`, despite the named existential assumption being present as assumption 27 and `no_type_error_result (INR y)` as assumption 24. PLAN explicitly said to stop/escalate if this generalized existential/no-error residual appears.
+- actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 489,256 tok (488,068 in, 1,188 out, 465,920 cached), 32.7s, $0.37934000
+- next: Call plan_oracle review/augment. Need revised theorem/application form that either preserves the specific `id`, `ty`, `st_body` variables in the antecedent or includes a proven packaging bridge, rather than relying on simplification to solve the generalized existential.
+
+### Attempts / Evidence
+
+- `E0412` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 489,256 tok (488,068 in, 1,188 out, 465,920 cached), 32.7s, $0.37934000)
+  - Replace partial `drule_all ... >> metis_tac[]` suffix with `once_rewrite_tac[return_exception_typed_INR_case_eq] >> irule (for_cons_ordinary_exception_conclusion_exists_bundle |> Q.INST [`stbody` |-> `st_body`]) >> simp[]`. -> Backward bundled theorem application avoided `P ==> P` but left the generalized existential/no-error residual identified by the PLAN as a failure sign. The exact named body-exception existential and no-error assumptions are visible, but simplification did not instantiate the generalized existential. (`TO_type_system_rewrite-20260519T123242Z_m31370_t001`, `TO_type_system_rewrite-20260519T123242Z_m31371_t001`)
+
+### Ruled Out
+
+- forward `drule_all` consumption of `for_cons_ordinary_exception_final_from_body_noerr`
+- propositional closers on `P ==> P`
+- backward `irule` of `for_cons_ordinary_exception_conclusion_exists_bundle` followed only by `simp[]`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31370_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31371_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0415`
+- blocker: After the unverified explicit-cx edit, holbuild still fails in the same For_cons ordinary-exception suffix with a residual existential package over `cx id st_body ty env_exn`; the exact body-package assumption is visible, but prior episodes show direct existential/exact-assumption reconstruction in this suspended Resume context repeatedly fails with CHOOSE/extract_thm. This Risk-2 leaf's proof-interface strategy is wrong-shaped and needs a tighter exact-conclusion boundary/suspend plan rather than more local tactic variants.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 188,814 tok (187,836 in, 978 out, 157,696 cached), 24.6s, $0.25888800
+- next: Ask strategist to replace this leaf with a tighter boundary theorem or suspend-style exact final branch goal whose conclusion matches the current postcondition and whose antecedents avoid existential/conjunction reconstruction in the nested Resume suffix.
+
+### Attempts / Evidence
+
+- `E0413` (progressed, other, actual effort: 1 sessions, 4 msgs, 46 steps, 52 tools, 18 holbuild, 4,977,723 tok (4,962,656 in, 15,067 out, 4,855,808 cached), 493.8s, $3.41415400)
+  - Replaced failed generalized-bundle theorem with `for_cons_ordinary_exception_conclusion_from_body_package` plus instantiations and `simp[]`. -> After `return_exception_typed_INR_case_eq`, residual changed from generalized `∃id st_body ty env_exn ...` to smaller `∃id ty env_exn ... ∧ no_type_error_result (INR y)`, so theorem selection partly improved but did not close. (`TO_type_system_rewrite-20260519T123242Z_m31388_t001`)
+  - Tried explicit construction of package residual with `qexists_tac id/ty` and exact existential assumption, plus several direct no-error closers (`qpat_assum ACCEPT_TAC`, `first_assum ACCEPT_TAC`, `mp_tac >> simp[]`, `asm_rewrite_tac[]`, `ASSUME`, `metis_tac[]`, unfolding `no_type_error_result_def`). -> Exact-looking no-error goals and implication identities repeatedly failed under instrumentation with `FIRST_ASSUM`, `CHOOSE`, `extract_thm`, or METIS timeout; this reinforces that trivial-looking residuals in this suspended Resume context need a better boundary theorem or very controlled proof shape. (`TO_type_system_rewrite-20260519T123242Z_m31392_t001`, `TO_type_system_rewrite-20260519T123242Z_m31397_t001`, `TO_type_system_rewrite-20260519T123242Z_m31403_t001`, `TO_type_system_rewrite-20260519T123242Z_m31405_t001`, `TO_type_system_rewrite-20260519T123242Z_m31410_t001`)
+  - Tried decomposing final postcondition manually, using `for_cons_return_exception_typed_from_body_ex` only for the final return-exception conjunct, and explicitly choosing `cx/id/st_body/ty/env_exn` for its existential antecedent. -> Manual construction still hit CHOOSE/extract_thm on exact conjunction acceptance; no terminal proof. Current source was then changed to `for_cons_ordinary_exception_conclusion_from_body_ex ... >> simp[no_type_error_result_def]` but not built before handoff. (`TO_type_system_rewrite-20260519T123242Z_m31415_t001`, `TO_type_system_rewrite-20260519T123242Z_m31417_t001`, `TO_type_system_rewrite-20260519T123242Z_m31419_t001`, `TO_type_system_rewrite-20260519T123242Z_m31421_t001`, `TO_type_system_rewrite-20260519T123242Z_m31422_t001`)
+- `E0414` (progressed, other, actual effort: 1 sessions, 3 msgs, 45 steps, 49 tools, 17 holbuild, 5,104,919 tok (5,087,330 in, 17,589 out, 4,985,344 cached), 620.9s, $3.53027200)
+  - Built current handoff source using `for_cons_ordinary_exception_conclusion_from_body_ex` after `return_exception_typed_INR_case_eq`. -> It still failed with the post-rewrite residual `(!msg. y <> Error (TypeError msg)) ∧ ∃id ty env_exn ...`, confirming the helper conclusion did not match the final branch goal directly. (`TO_type_system_rewrite-20260519T123242Z_m31427_t001`)
+  - Added a new helper `for_cons_ordinary_exception_conclusion_after_inr_rewrite` with post-rewrite conclusion and tried `rw[no_type_error_result_def] >> metis_tac[]`, then used it in the suffix. -> The helper proved, but it did not match the branch goal before/after the INR rewrite as intended; irule failed with `No match`, then later reduced to the same package/no-error residual. (`TO_type_system_rewrite-20260519T123242Z_m31441_t001`, `TO_type_system_rewrite-20260519T123242Z_m31448_t001`)
+  - Added `for_cons_body_exception_noerr_package_same_body` and tried to close the residual with the helper via `metis_tac` or `irule` plus `simp[]`. -> Residual remained a conjunction of existential package and no-error; `metis_tac` hit CHOOSE, `irule`/`simp` could not solve the existential branch without manual splitting. (`TO_type_system_rewrite-20260519T123242Z_m31458_t001`, `TO_type_system_rewrite-20260519T123242Z_m31460_t001`)
+  - Changed tactic to destruct the body existential before applying a boundary theorem, manually split residual, then shifted to proving only `return_exception_typed` after deriving `!msg. y <> Error (TypeError msg)`. -> Manual destruct/splitting reached exact-looking no-error residual again; final change uses `for_cons_return_exception_typed_from_body_ex` with explicit `cx` instantiation but is unverified. (`TO_type_system_rewrite-20260519T123242Z_m31462_t001`, `TO_type_system_rewrite-20260519T123242Z_m31468_t001`, `TO_type_system_rewrite-20260519T123242Z_m31469_t001`)
+- `E0415` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 188,814 tok (187,836 in, 978 out, 157,696 cached), 24.6s, $0.25888800)
+  - Built current source after final explicit `cx` instantiation in `for_cons_return_exception_typed_from_body_ex` suffix. -> Failure remains at the active suffix: residual `∃cx id st_body ty env_exn. ... return_exception_typed ... y`, despite visible exact body exception package assumption and no-TypeError fact. This confirms the prior proof patch did not close and repeats the package reconstruction failure class. (`TO_type_system_rewrite-20260519T123242Z_m31474_t001`)
+  - Prior local helper/theorem applications and direct exact residual closures in this same Resume suffix (`simp[]`, `irule`, `metis_tac`, exact assumption tactics). -> Repeatedly left package/no-error residuals or failed with CHOOSE/extract_thm/FIRST_ASSUM, so continuing to manually instantiate the residual existential would be retrying ruled-out tactic thrash rather than executing a low-risk plan. (`TO_type_system_rewrite-20260519T123242Z_m31427_t001`, `TO_type_system_rewrite-20260519T123242Z_m31458_t001`, `TO_type_system_rewrite-20260519T123242Z_m31468_t001`)
+
+### Ruled Out
+
+- Old generalized bundle theorem and broad helper+simp residual solving
+- Direct exact-assumption/existential residual closure inside this suspended Resume context
+- More local variants of the same package/no-error reconstruction
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31474_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31427_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31458_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31468_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0416`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 11 tools, 3 holbuild, 732,632 tok (730,546 in, 2,086 out, 694,272 cached), 105.1s, $0.59108600
+- next: Review closure with strategist, then begin queued component .1.2 to patch the For_cons suffix to use the new exact boundary theorem.
+
+### Attempts / Evidence
+
+- `E0416` (proved, , actual effort: 1 sessions, 8 steps, 11 tools, 3 holbuild, 732,632 tok (730,546 in, 2,086 out, 694,272 cached), 105.1s, $0.59108600)
+  - First attempted helper proof via `irule for_cons_ordinary_exception_conclusion_from_body_noerr`; it left a generalized existential package subgoal, showing backward use was wrong-shaped for this helper too. -> Rejected reuse proof after holbuild exposed residual existential over fixed branch variables. (`TO_type_system_rewrite-20260519T123242Z_m31491_t001`)
+  - Replaced helper proof with direct `once_rewrite_tac[return_exception_typed_INR_case_eq] >> rw[no_type_error_result_def] >> metis_tac[return_exception_typed_extend_local_env_extends]`. -> Helper theorem accepted; build advanced to the pre-existing For_cons suffix failure. (`TO_type_system_rewrite-20260519T123242Z_m31492_t001`, `TO_type_system_rewrite-20260519T123242Z_m31493_t001`)
+
+### Ruled Out
+
+- Backward `irule for_cons_ordinary_exception_conclusion_from_body_noerr` for this exact helper proof; it still creates generalized existential packaging.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31490_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31493_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The PLAN-rated Risk 2 micro projection helper remains brittle/unclosed after several controlled proof shapes. Even top-level helper `for_cons_noerr_return_projection` cannot be proved by assumption search, disch_then/MATCH_MP, case splitting with simp/fs/asm_rewrite_tac, or PROVE_TAC; holbuild repeatedly leaves tautological residuals such as assumptions containing `no_type_error_result (INR exn)` with the same conclusion and reports extract_thm/FIRST_ASSUM/DISCH_THEN failures. This matches the prior CHOOSE/FIRST_ASSUM brittleness and needs strategist micro-factorization or a different proof boundary.
+- latest episode: `E0420`
+- blocker: Need a micro-factorization that avoids HOL/goalfrag assumption-selection/projection brittleness for `for_cons_noerr_return_projection`, or an alternative suffix shape that does not require projecting a tautological implication in the For_cons Resume context. Current source is partial/broken at the helper proof.
+- actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 12 holbuild, 2,871,636 tok (2,864,183 in, 7,453 out, 2,799,104 cached), 254.6s, $1.94853700
+- next: Call plan_oracle review for this stuck closure; request a micro-factorization or alternative suffix that avoids assumption-selection/direct tautology projection in the problematic helper/Resume context.
+
+### Attempts / Evidence
+
+- `E0417` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 12 steps, 13 tools, 4 holbuild, 1,550,642 tok (1,545,619 in, 5,023 out, 1,502,208 cached), 146.6s, $1.11884900)
+  - Replaced failed suffix with direct backward `irule for_cons_ordinary_exception_final_case_from_body_noerr` instantiated for `stpopped`, `stbody`, and `exn`, then `simp[]`. -> Failed: holbuild still left a package/no-error residual `(∃id ty env_exn. ...) ∧ no_type_error_result (INR y)`, indicating backward theorem use still asked HOL to reconstruct existential package details. (`TO_type_system_rewrite-20260519T123242Z_m31501_t001`, `TO_type_system_rewrite-20260519T123242Z_m31502_t001`)
+  - Added explicit `cx`, `id`, and `ty` instantiations to the backward `irule` suffix. -> Failed with same residual package/no-error goal; explicit instantiation did not change theorem application shape enough. (`TO_type_system_rewrite-20260519T123242Z_m31504_t001`, `TO_type_system_rewrite-20260519T123242Z_m31505_t001`)
+  - Tried deriving the full branch postcondition as an intermediate fact using the new helper, then finishing by `simp[]`. -> Current partial source; failed because the intermediate fact proof itself leaves the full postcondition as an unsolved subgoal (`first subgoal not solved by second tactic`). This suggests `irule` is still wrong-shaped or `Q.INST` did not specialize hidden variables as intended. (`TO_type_system_rewrite-20260519T123242Z_m31506_t001`, `TO_type_system_rewrite-20260519T123242Z_m31509_t001`)
+- `E0418` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 34 steps, 36 tools, 15 holbuild, 4,026,845 tok (4,017,060 in, 9,785 out, 3,922,944 cached), 335.4s, $2.72560200)
+  - Forward-consume full boundary theorem via `qpat_x_assum ... (mp_tac o MATCH_MP for_cons_ordinary_exception_final_case_from_body_noerr) >> simp[]`. -> Confirmed forward application consumed the body existential, but left implication `(no_type_error_result (INR y) ==> no_type_error_result (INR y) /\ return_exception_typed env ret_ty y) ==> return_exception_typed env ret_ty y`; multiple attempts to project the implication were brittle in the Resume context. (`TO_type_system_rewrite-20260519T123242Z_m31518_t001`, `TO_type_system_rewrite-20260519T123242Z_m31520_t001`, `TO_type_system_rewrite-20260519T123242Z_m31524_t001`, `TO_type_system_rewrite-20260519T123242Z_m31531_t001`)
+  - Switch to smaller forward theorem `for_cons_return_exception_typed_from_body_ex` and split the final conjunction manually. -> Better-shaped: holbuild reduced the last subgoal to `return_exception_typed env ret_ty y` with that exact assumption visible. The first four conjuncts closed with `simp[]`; the final `simp[]` failed with CHOOSE error instead of accepting the assumption. (`TO_type_system_rewrite-20260519T123242Z_m31543_t001`, `TO_type_system_rewrite-20260519T123242Z_m31545_t001`)
+  - Latest source edit replaces final `simp[]` with direct `qpat_x_assum `return_exception_typed env ret_ty y` ACCEPT_TAC`. -> Unverified due handoff. This is the next exact action to test. (`TO_type_system_rewrite-20260519T123242Z_m31546_t001`)
+- `E0419` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 43 steps, 45 tools, 18 holbuild, 4,971,241 tok (4,957,581 in, 13,660 out, 4,854,784 cached), 502.4s, $3.35117700)
+  - Verified latest direct `qpat_x_assum `return_exception_typed env ret_ty y` ACCEPT_TAC`, then tried `first_assum ACCEPT_TAC` and `ACCEPT_TAC (ASSUME ...)` on the identical visible assumption/goal. -> All direct visible-assumption acceptors still failed with HOL `CHOOSE` in the Resume context, even when the goal and assumption printed identically. (`TO_type_system_rewrite-20260519T123242Z_m31551_t001`, `TO_type_system_rewrite-20260519T123242Z_m31554_t001`, `TO_type_system_rewrite-20260519T123242Z_m31561_t001`)
+  - Tried preserving the forward-derived return theorem inside a local `fn th => let val ret_th = MATCH_MP ... in ... ACCEPT_TAC ret_th end` and via `disch_then` continuation. -> Still failed with `CHOOSE` either while selecting the existential package or while accepting/projecting the theorem. The Resume instrumentation/context is hostile to assumption-selection and direct acceptance here. (`TO_type_system_rewrite-20260519T123242Z_m31556_t001`, `TO_type_system_rewrite-20260519T123242Z_m31559_t001`)
+  - Switched back to full forward boundary theorem `for_cons_ordinary_exception_final_case_from_body_noerr` to leave a small implication projection goal, then tried `simp[]`, `metis_tac[]`, manual `strip_tac`/`drule`, and theorem-continuation projection. -> Forward full theorem consumed the existential package but left propositional residual `(no_type_error_result (INR y) ==> no_type_error_result (INR y) /\ return_exception_typed env ret_ty y) ==> return_exception_typed env ret_ty y`; generic and manual projection tactics still failed or timed out with CHOOSE/FIRST_ASSUM/extract_thm errors. (`TO_type_system_rewrite-20260519T123242Z_m31564_t001`, `TO_type_system_rewrite-20260519T123242Z_m31568_t001`, `TO_type_system_rewrite-20260519T123242Z_m31570_t001`, `TO_type_system_rewrite-20260519T123242Z_m31576_t001`, `TO_type_system_rewrite-20260519T123242Z_m31578_t001`, `TO_type_system_rewrite-20260519T123242Z_m31580_t001`, `TO_type_system_rewrite-20260519T123242Z_m31582_t001`, `TO_type_system_rewrite-20260519T123242Z_m31584_t001`)
+  - Added tiny helper theorem `for_cons_noerr_return_projection` and changed suffix to `MATCH_ACCEPT_TAC for_cons_noerr_return_projection`. -> Current source breaks earlier at the new helper proof. `metis_tac[]` could not prove it and `rpt strip_tac >> first_x_assum drule` fails with FIRST_ASSUM/CHOOSE even in the tiny helper. This is the current cursor failure. (`TO_type_system_rewrite-20260519T123242Z_m31589_t001`, `TO_type_system_rewrite-20260519T123242Z_m31591_t001`)
+- `E0420` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 12 holbuild, 2,871,636 tok (2,864,183 in, 7,453 out, 2,799,104 cached), 254.6s, $1.94853700)
+  - Changed helper proof from `first_x_assum drule` to targeted `qpat_x_assum ... mp_tac >> simp[]`. -> Failed: after stripping only first antecedent, targeted assumption selection still failed with Q_TAC0/FIRST_ASSUM because the implication remained in the goal rather than assumptions. (`TO_type_system_rewrite-20260519T123242Z_m31598_t001`)
+  - Tried `disch_then` with `MATCH_MP th (ASSUME ...)` to avoid assumption search for the second antecedent. -> Failed: DISCH_THEN itself failed in the instrumented proof context. (`TO_type_system_rewrite-20260519T123242Z_m31600_t001`)
+  - Tried purely propositional/boolean approaches: `simp[]`, case splits on `no_type_error_result` and `return_exception_typed`, `rw[]`, `PROVE_TAC[]`, `fs[]`, and `asm_rewrite_tac[]`. -> Failed: simplification/case splitting repeatedly left tautological residuals like assumption `no_type_error_result (INR exn)` with goal `no_type_error_result (INR exn)` and QED/extract_thm failed; PROVE_TAC was too deep. (`TO_type_system_rewrite-20260519T123242Z_m31604_t003`, `TO_type_system_rewrite-20260519T123242Z_m31606_t001`, `TO_type_system_rewrite-20260519T123242Z_m31609_t001`, `TO_type_system_rewrite-20260519T123242Z_m31611_t001`, `TO_type_system_rewrite-20260519T123242Z_m31613_t001`, `TO_type_system_rewrite-20260519T123242Z_m31615_t001`, `TO_type_system_rewrite-20260519T123242Z_m31617_t001`, `TO_type_system_rewrite-20260519T123242Z_m31619_t001`)
+
+### Ruled Out
+
+- direct assumption selection (`first_x_assum`, `qpat_x_assum`)
+- `disch_then`/manual MATCH_MP of antecedent
+- generic simp/rw/fs/asm_rewrite on propositional projection
+- PROVE_TAC on the helper
+- broad metis/PROVE search
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31596_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31598_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31600_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31604_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31606_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31609_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31611_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31619_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0422`
+- blocker: The replanned explicit MP/conjunction-elimination proof interface also failed under holbuild/goalfrag. Three narrow explicit attempts failed: `disch_then` after `strip_tac` rejected the implication goal, `qpat_x_assum ... drule`/`first_x_assum drule` failed with assumption-selection errors despite the implication being visible, and pushing both assumptions back with `pop_assum mp_tac` then `simp[]` left the original theorem unresolved at QED/extract_thm. This invalidates the Risk-1 decomposition for this helper proof interface. Source is partial with the last `pop_assum mp_tac` proof.
+- actual effort: 1 sessions, 1 msgs, 9 steps, 8 tools, 4 holbuild, 942,282 tok (938,778 in, 3,504 out, 908,800 cached), 106.5s, $0.70941000
+- next: Review with plan_oracle; likely need a different theorem formulation/proof boundary or a HOL4 primitive theorem proof pattern that avoids goalfrag assumption-continuation fragility.
+
+### Attempts / Evidence
+
+- `E0421` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 3 tools, 2 holbuild, 273,605 tok (272,140 in, 1,465 out, 247,808 cached), 62.3s, $0.28951400)
+  - Ran holbuild before editing to confirm current failure at case-split/asm_rewrite proof. -> Confirmed original failure in `for_cons_noerr_return_projection` leaving tautological residual `no_type_error_result (INR exn)` under assumptions. (`TO_type_system_rewrite-20260519T123242Z_m31627_t001`)
+  - Replaced only the helper proof body with `tautLib.TAUT_TAC` as scheduled. -> Edit applied locally to `vyperTypeStmtSoundnessScript.sml` lines 1058-1060. (`TO_type_system_rewrite-20260519T123242Z_m31628_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after tautology-engine patch. -> `tautLib.TAUT_TAC` failed on the exact helper statement at line 1059: `tautLib.TAUT_CONV` / `tautLib.PTAUT_PROVE` / `Drule.EQT_ELIM` failed to prove the theorem. (`TO_type_system_rewrite-20260519T123242Z_m31629_t001`)
+- `E0422` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 9 steps, 8 tools, 4 holbuild, 942,282 tok (938,778 in, 3,504 out, 908,800 cached), 106.5s, $0.70941000)
+  - Used explicit `strip_tac >> disch_then (fn th => mp_tac (MATCH_MP th (ASSUME ...))) >> simp[]`. -> Failed at `DISCH_THEN` even though the remaining goal was the second implication; holbuild showed the no-error assumption visible and the implication goal unchanged. (`TO_type_system_rewrite-20260519T123242Z_m31637_t001`)
+  - Used explicit stripping plus implication assumption selection: `qpat_x_assum ... drule >> simp[]`, then `first_x_assum drule >> simp[]`. -> Both failed with `Q_TAC0`/`FIRST_ASSUM` or `FIRST_ASSUM` despite the implication assumption being visible in the goal state. (`TO_type_system_rewrite-20260519T123242Z_m31639_t001`, `TO_type_system_rewrite-20260519T123242Z_m31641_t001`)
+  - Avoided selection by pushing the two newest assumptions back: `strip_tac >> strip_tac >> pop_assum mp_tac >> pop_assum mp_tac >> simp[]`. -> Build reached QED but failed with `extract_thm: no theorem proved`; the failed top input was the original theorem, so this explicit proof did not close under instrumentation. (`TO_type_system_rewrite-20260519T123242Z_m31643_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31637_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31639_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31641_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31643_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.1.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The Risk-1 whole-goal automation plan failed exactly as tested: `metis_tac[]` reported no solution found on the propositional helper, and the authorized fallback `PROVE_TAC[]` reported solve_goal: Too deep on the same original goal. No forbidden manual tactics or unfolding were attempted in this episode.
+- latest episode: `E0423`
+- blocker: Both PLAN-authorized whole-goal proof tactics failed on the unchanged `for_cons_noerr_return_projection` statement; active source currently contains the failing fallback `PROVE_TAC[]`.
+- actual effort: 1 sessions, 4 steps, 3 tools, 2 holbuild, 360,894 tok (359,783 in, 1,111 out, 330,752 cached), 36.4s, $0.34386100
+- next: Call `plan_oracle(mode="review")` with the failed metis/PROVE evidence for a revised proof interface; do not retry forbidden manual assumption scripts unless the strategist explicitly replans.
+
+### Attempts / Evidence
+
+- `E0423` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 3 tools, 2 holbuild, 360,894 tok (359,783 in, 1,111 out, 330,752 cached), 36.4s, $0.34386100)
+  - Built `vyperTypeStmtSoundnessTheory` with current `Proof metis_tac[] QED` for `for_cons_noerr_return_projection`. -> Failed at line 1059: `metis_tac[]` could not find a solution for the propositional goal `A ==> (A ==> A /\ B) ==> B`. (`TO_type_system_rewrite-20260519T123242Z_m31653_t001`)
+  - Replaced only `metis_tac[]` with the PLAN-authorized fallback `PROVE_TAC[]` and rebuilt `vyperTypeStmtSoundnessTheory`. -> Failed at line 1059: `PROVE_TAC[]` reported `solve_goal: Too deep` on the same goal. (`TO_type_system_rewrite-20260519T123242Z_m31654_t001`, `TO_type_system_rewrite-20260519T123242Z_m31655_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31653_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31654_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31655_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.1.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0424`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 19 steps, 18 tools, 9 holbuild, 1,841,458 tok (1,835,516 in, 5,942 out, 1,787,904 cached), 247.4s, $1.31027200
+
+### Attempts / Evidence
+
+- `E0424` (proved, , actual effort: 1 sessions, 1 msgs, 19 steps, 18 tools, 9 holbuild, 1,841,458 tok (1,835,516 in, 5,942 out, 1,787,904 cached), 247.4s, $1.31027200)
+  - Replaced assumption-selection proof with explicit opaque proposition derivation using ASSUME/MATCH_MP/CONJUNCT2 after `rpt strip_tac`, then rebuilt `vyperTypeStmtSoundnessTheory`. -> The helper `for_cons_noerr_return_projection` passed; holbuild advanced to the queued For_cons suffix at line 3584. (`TO_type_system_rewrite-20260519T123242Z_m31688_t001`)
+
+### Ruled Out
+
+- Predicate unfolding was unnecessary; theorem treated as opaque propositional projection.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31688_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0426`
+- blocker: The one authorized verification of the current unbuilt suffix failed at `first_x_assum drule`; after many prior assumption-selection/inline projection failures, this Risk-2 proof_patch needs strategist-approved factoring or an exact residual helper rather than more local tactic variants.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 187,097 tok (186,366 in, 731 out, 157,696 cached), 21.8s, $0.24412800
+- next: Call plan_oracle in review mode. Likely next plan should authorize factoring the exact residual into a local helper theorem or an explicit subgoal boundary outside the fragile suspended Resume suffix.
+
+### Attempts / Evidence
+
+- `E0425` (progressed, other, actual effort: 1 sessions, 2 msgs, 6 steps, 7 tools, 1 holbuild, 805,526 tok (803,341 in, 2,185 out, 762,880 cached), 59.7s, $0.64929500)
+  - Replaced the terminal suffix tactic with `MATCH_MP_TAC for_cons_noerr_return_projection >> simp[]`. -> Build failed at line 3584 with `MATCH_MP_TAC` No match on the residual implication goal; the goal had visible assumption `no_type_error_result (INR y)` and conclusion `(no_type_error_result (INR y) ==> no_type_error_result (INR y) /\ return_exception_typed env ret_ty y) ==> return_exception_typed env ret_ty y`. (`TO_type_system_rewrite-20260519T123242Z_m31695_t001`)
+  - Changed the suffix to explicitly pre-apply the helper theorem to the visible no-error assumption: `MATCH_ACCEPT_TAC (MATCH_MP for_cons_noerr_return_projection (ASSUME ``no_type_error_result (INR y)``))`. -> Edit applied but not built because handoff interrupted immediately afterward; next session must verify this exact current source before further edits. (`TO_type_system_rewrite-20260519T123242Z_m31696_t001`)
+- `E0426` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 187,097 tok (186,366 in, 731 out, 157,696 cached), 21.8s, $0.24412800)
+  - Verified the current unbuilt For_cons ordinary-exception suffix exactly once with `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> Build failed at line 3585: visible assumptions include `no_type_error_result (INR y)` and `no_type_error_result (INR y) ==> no_type_error_result (INR y) /\ return_exception_typed env ret_ty y`, with goal `return_exception_typed env ret_ty y`; `first_x_assum drule` failed in `FIRST_ASSUM`. This matches the handoff's warning not to retry assumption-selection variants. (`TO_type_system_rewrite-20260519T123242Z_m31749_t001`)
+
+### Ruled Out
+
+- Further local `first_x_assum`/`qpat_x_assum` assumption-selection variants in this suspended suffix
+- Broad automation on the tiny projection residual
+- Inline quoted `ASSUME`/`ACCEPT_TAC` constructions at the call site
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31749_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0427`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 6 steps, 6 tools, 1 holbuild, 790,619 tok (787,721 in, 2,898 out, 752,640 cached), 118.9s, $0.63866500
+- next: Next session should follow PLAN: begin sibling component C...1.2.2.2 and patch the For_cons suffix from `first_x_assum drule >> strip_tac` to `irule for_cons_noerr_return_projection_conj >> simp[]`, then run holbuild.
+
+### Attempts / Evidence
+
+- `E0427` (proved, , actual effort: 1 sessions, 2 msgs, 6 steps, 6 tools, 1 holbuild, 790,619 tok (787,721 in, 2,898 out, 752,640 cached), 118.9s, $0.63866500)
+  - Inserted theorem `for_cons_noerr_return_projection_conj` with conjunctive antecedent and proof `strip_tac >> irule for_cons_noerr_return_projection >> simp[]`. -> Source edit applied cleanly; subsequent holbuild replay did not fail at the new helper, instead reaching the old suffix at line ~3596. (`TO_type_system_rewrite-20260519T123242Z_m31755_t001`, `TO_type_system_rewrite-20260519T123242Z_m31756_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31755_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31756_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0432`
+- blocker: Direct body-exception lemma patch exposes the expected residual path, but HOL4/goalfrag still rejects closing exact assumption goals after existential instantiation. `irule for_cons_return_exception_typed_from_body_ex` leaves an existential package; explicit witnesses and destructing the visible body-exception existential reduce to goals identical to assumptions, yet `first_assum ACCEPT_TAC`, `qpat_assum ... ACCEPT_TAC`, `ACCEPT_TAC (ASSUME ...)`, and `asm_rewrite_tac[]` fail with CHOOSE/FIRST_ASSUM errors in the suspended Resume fragment. This exceeds routine tactic repair for the Risk-1 leaf.
+- actual effort: 1 sessions, 2 msgs, 27 steps, 27 tools, 12 holbuild, 2,857,296 tok (2,849,578 in, 7,718 out, 2,780,672 cached), 285.3s, $1.96640600
+- next: Call plan_oracle(mode='review') for this stuck closure; likely need a different local helper/factoring that proves the full final conjunction before entering the suspended suffix, or a non-existential projection theorem whose conclusion/antecedent exactly matches without existential manipulation in the Resume fragment.
+
+### Attempts / Evidence
+
+- `E0428` (stuck, risk_mismatch, actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 424,105 tok (422,863 in, 1,242 out, 395,264 cached), 43.8s, $0.37288700)
+  - Patched tail from `first_x_assum drule >> strip_tac` to `irule for_cons_noerr_return_projection_conj >> simp[]` after `simp[] >> strip_tac`, exactly as planned. -> Source patch applied at lines 3594-3598. (`TO_type_system_rewrite-20260519T123242Z_m31767_t001`)
+  - Ran `holbuild` for `vyperTypeStmtSoundnessTheory`. -> Build failed at the helper `irule` with `MATCH_MP_TAC: No match`; residual assumptions include `no_type_error_result (INR y)` and its implication to conjunction, conclusion `return_exception_typed env ret_ty y`. (`TO_type_system_rewrite-20260519T123242Z_m31768_t001`)
+- `E0429` (stuck, risk_mismatch, actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 319,988 tok (319,102 in, 886 out, 294,400 cached), 24.3s, $0.29729000)
+  - Replaced the failing `irule for_cons_noerr_return_projection_conj >> simp[]` tail with direct `fs[]` after the existing `simp[] >> strip_tac`, exactly as the revised PLAN requested. -> Source now has the direct simplification suffix at lines 3594-3597. (`TO_type_system_rewrite-20260519T123242Z_m31772_t001`)
+  - Ran `holbuild` for `vyperTypeStmtSoundnessTheory`. -> Build failed at QED/extract_thm; `fs[]` left the same propositionally trivial residual goal, so the revised Risk-2 plan did not discharge the suffix. (`TO_type_system_rewrite-20260519T123242Z_m31773_t001`)
+- `E0430` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 172,704 tok (172,049 in, 655 out, 146,432 cached), 21.0s, $0.22095100)
+  - Ran the pending verification build for the already-applied exact implication-pattern suffix: `qpat_x_assum ... mp_tac >> simp[]`. -> Build failed at QED. The assumption selector appears to have moved the implication to the goal, but the residual is `(no_type_error_result (INR y) ==> no_type_error_result (INR y) /\ return_exception_typed env ret_ty y) ==> return_exception_typed env ret_ty y` while `no_type_error_result (INR y)` is still an assumption. (`TO_type_system_rewrite-20260519T123242Z_m31781_t001`)
+- `E0431` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 4 holbuild, 1,248,730 tok (1,244,862 in, 3,868 out, 1,206,272 cached), 121.4s, $0.91212600)
+  - After the existing exact `qpat_x_assum ... mp_tac`, tried the PLAN's concrete `impl_tac >- simp[] >> simp[]` suffix. -> Build failed: the `>- simp[]` branch did not solve the antecedent in the implication subgoal; holbuild reports `first subgoal not solved by second tactic`. (`TO_type_system_rewrite-20260519T123242Z_m31787_t001`)
+  - Replaced the suffix with the PLAN's alternate `disch_then (fn th => first_x_assum (mp_tac o MATCH_MP th)) >> simp[]`. -> Build failed in DISCH_THEN/continuation; the moved implication was not consumed successfully by the visible no-error assumption. (`TO_type_system_rewrite-20260519T123242Z_m31789_t001`)
+  - Tried a more explicit antecedent proof under `impl_tac`: `qpat_assum `no_type_error_result (INR y)` ACCEPT_TAC`. -> Build failed in `qpat_assum`/FIRST_ASSUM; even exact-pattern selection/acceptance of the visible no-error assumption did not work in this fragment. (`TO_type_system_rewrite-20260519T123242Z_m31793_t001`)
+- `E0432` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 27 steps, 27 tools, 12 holbuild, 2,857,296 tok (2,849,578 in, 7,718 out, 2,780,672 cached), 285.3s, $1.96640600)
+  - Applied PLAN patch using `simp[] >> qpat_x_assum ... (ACCEPT_TAC o MATCH_MP for_cons_return_exception_typed_from_body_ex)`. -> Build reduced the goal to `return_exception_typed env ret_ty y`, but MATCH_MP/ACCEPT_TAC on the existential failed with CHOOSE in the suspended fragment. (`TO_type_system_rewrite-20260519T123242Z_m31803_t001`, `TO_type_system_rewrite-20260519T123242Z_m31804_t001`)
+  - Changed to backward `irule for_cons_return_exception_typed_from_body_ex` with explicit instantiation and witnesses for `cx`, `id`, `st_body`, `ty`, then attempted to use the visible existential/assumptions. -> The proof reduced to exact existential/assumption goals, but `first_assum ACCEPT_TAC` and qpat-based exact acceptance failed under goalfrag. (`TO_type_system_rewrite-20260519T123242Z_m31810_t001`, `TO_type_system_rewrite-20260519T123242Z_m31812_t001`, `TO_type_system_rewrite-20260519T123242Z_m31818_t001`)
+  - Destructed the visible existential with a fresh witness name and solved the first two conjuncts by exact qpat assumptions; tried exact final assumption via `qpat_assum`, `ACCEPT_TAC (ASSUME ...)`, and `asm_rewrite_tac[]`. -> All variants left/failed on the exact goal `return_exception_typed env_body_exn ret_ty y` with the identical assumption visible, suggesting the proof interface/goalfrag context needs redesign rather than more tactic variants. (`TO_type_system_rewrite-20260519T123242Z_m31824_t001`, `TO_type_system_rewrite-20260519T123242Z_m31826_t001`)
+
+### Ruled Out
+
+- Generated no-error implication projection variants from E0428-E0431
+- Direct MATCH_MP of the existential to `for_cons_return_exception_typed_from_body_ex` in this Resume suffix
+- Backward `irule` plus exact acceptance of existential/assumption subgoals inside this Resume suffix
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31804_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31810_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31812_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31818_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31826_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned definitional transfer patch was inserted, but under the suspended Resume suffix every route still reduces to either exact assumption closure or a helper-produced existential/conjunct closure that goalfrag rejects with HOL_ERR CHOOSE. Even wrapping the transfer in a helper theorem and using theorem continuations/qpat_assum failed at the final visible assumption stage. This suggests the low-risk proof-interface estimate was wrong for this suspended Resume context.
+- latest episode: `E0433`
+- blocker: For_cons ordinary-exception suffix remains stuck at visible assumptions `env_extends ... env_body_exn` and `return_exception_typed env_body_exn ret_ty (ReturnException v')`; direct/rewritten/helper exact closures raise CHOOSE in goalfrag. Source is partial and should be replanned before more edits.
+- actual effort: 1 sessions, 3 msgs, 52 steps, 54 tools, 21 holbuild, 5,146,890 tok (5,130,756 in, 16,134 out, 5,018,112 cached), 580.8s, $3.55629600
+- next: Call plan_oracle review for a new decomposition/proof interface; likely needs a helper whose conclusion exactly matches the final residual and whose premises are not discharged inside the suspended Resume by exact-assumption tactics, or a different earlier prefix that avoids this instrumentation pathology.
+
+### Attempts / Evidence
+
+- `E0433` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 52 steps, 54 tools, 21 holbuild, 5,146,890 tok (5,130,756 in, 16,134 out, 5,018,112 cached), 580.8s, $3.55629600)
+  - Replaced failed for_cons_return_exception_typed_from_body_ex block with planned `qpat_x_assum` existential choose, `Cases_on y`, `simp[return_exception_typed_def]`, `irule value_runtime_typed_env_static`, witness `env_body_exn`. -> Progressed past old reconstruction but `gvs`/`simp` timed out or left exact-assumption-style goals in ReturnException branch. (`TO_type_system_rewrite-20260519T123242Z_m31841_t001`, `TO_type_system_rewrite-20260519T123242Z_m31845_t001`)
+  - Added `value_runtime_typed_extend_local_F_ReturnException_imp` helper to package env-extension plus return-exception typing, then tried applying it in the suffix via `irule`, explicit witnesses, and `metis_tac`. -> Helper itself needed explicit existential witnesses and built, but use in Resume still reduced to existential/conjunct or visible-assumption closure and failed with CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m31873_t001`, `TO_type_system_rewrite-20260519T123242Z_m31883_t001`)
+  - Tried theorem-continuation closure from visible assumptions using nested `qpat_assum` and `MATCH_MP` for the helper theorem. -> Still failed at the same ReturnException goal with HOL_ERR CHOOSE despite visible matching assumptions, confirming the component's proof-interface risk mismatch. (`TO_type_system_rewrite-20260519T123242Z_m31887_t001`)
+
+### Ruled Out
+
+- Direct planned `gvs[return_exception_typed_def]`/`gvs[env_extends_def, extend_local_def]` suffix (timeouts under 2.5s).
+- Exact closure of `return_exception_typed env_body_exn ret_ty ...` via simp/rewrite/ACCEPT/qpat_assum in this Resume context.
+- Applying helper theorems backward if they leave existential/conjunct premises to be closed from visible assumptions.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31841_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31845_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31873_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31887_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1.a
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The replacement direct-application plan also triggers the same suspended Resume/CHOOSE pathology. `irule for_cons_return_exception_typed_from_body_ex` without explicit witnesses left a generalized existential; adding `qexistsl [cx,id,st_body,ty]` reduced to the exact existential assumption but exact-assumption discharge with `qpat_x_assum ... ACCEPT_TAC` or `qpat_assum ... simp[th]` still raised HOL_ERR CHOOSE. Forward `MATCH_MP for_cons_return_exception_typed_from_body_ex th` also raised HOL_ERR CHOOSE before closing the original goal. Thus both backward and forward applications of the existing existential-packaged theorem are unusable in this Resume fragment.
+- latest episode: `E0435`
+- blocker: Direct irule/exact-assumption and forward MATCH_MP over `for_cons_return_exception_typed_from_body_ex` fail at the same For_cons suffix with HOL_ERR CHOOSE even when the remaining subgoal exactly matches visible assumption 27.
+- actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 4 holbuild, 1,240,511 tok (1,236,918 in, 3,593 out, 1,195,008 cached), 184.6s, $0.91484400
+- next: Call plan_oracle review/replace. Need a new proof interface avoiding existential theorem application inside the Resume entirely, perhaps a non-existential assumption produced earlier or a helper with a fully instantiated/conjunctive premise that can be applied before existential packaging.
+
+### Attempts / Evidence
+
+- `E0434` (stuck, risk_mismatch, actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 360,931 tok (359,740 in, 1,191 out, 331,264 cached), 83.0s, $0.34374200)
+  - Removed temporary helper `value_runtime_typed_extend_local_F_ReturnException_imp` and replaced the For_cons suffix after `simp[] >>` with `metis_tac[for_cons_return_exception_typed_from_body_ex]` as scheduled. -> Source patched as planned; build reaches the patched tactic. (`TO_type_system_rewrite-20260519T123242Z_m31896_t001`, `TO_type_system_rewrite-20260519T123242Z_m31897_t001`)
+  - Ran `holbuild` on `vyperTypeStmtSoundnessTheory`. -> Build fails at the same For_cons suffix. Goal contains the expected existential `?env_exn. env_extends (extend_local env id ty F) env_exn /\ env_consistent env_exn cx st_body /\ return_exception_typed env_exn ret_ty y` and goal `return_exception_typed env ret_ty y`; `metis_tac` raises HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m31898_t001`)
+- `E0435` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 4 holbuild, 1,240,511 tok (1,236,918 in, 3,593 out, 1,195,008 cached), 184.6s, $0.91484400)
+  - Replaced metis suffix with `irule for_cons_return_exception_typed_from_body_ex >> qpat_x_assum ... ACCEPT_TAC`. -> Build failed after `irule`: helper instantiation left a generalized existential over `cx id stbody ty env_exn`; exact assumption pattern did not match that generalized goal. (`TO_type_system_rewrite-20260519T123242Z_m31904_t001`, `TO_type_system_rewrite-20260519T123242Z_m31905_t001`)
+  - Added explicit witnesses `qexistsl [cx,id,st_body,ty]` before exact assumption discharge. -> Build failed with goal exactly equal to the visible existential assumption, but `qpat_x_assum ... ACCEPT_TAC` raised HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m31906_t001`, `TO_type_system_rewrite-20260519T123242Z_m31907_t001`)
+  - Tried non-crossing `qpat_assum ... (fn th => simp[th])` on the exact existential subgoal, and then forward `qpat_assum ... (fn th => ACCEPT_TAC (MATCH_MP for_cons_return_exception_typed_from_body_ex th))` on the original goal. -> Both alternatives still failed with HOL_ERR CHOOSE in the same suffix; source currently contains the forward MATCH_MP variant and is not build-clean. (`TO_type_system_rewrite-20260519T123242Z_m31908_t001`, `TO_type_system_rewrite-20260519T123242Z_m31909_t001`, `TO_type_system_rewrite-20260519T123242Z_m31911_t001`, `TO_type_system_rewrite-20260519T123242Z_m31912_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31904_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31905_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31906_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31907_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31908_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31909_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31911_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31912_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1.a.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0436`
+- blocker: After applying the planned patch, the final For_cons suffix has no existential assumption and contains a visible ordinary assumption `return_exception_typed env ret_ty y`, but closing the identical goal with `qpat_assum ... ACCEPT_TAC` or `ACCEPT_TAC (ASSUME ``return_exception_typed env ret_ty y``)` still raises HOL_ERR CHOOSE. This indicates the direct local assertion produced by the earlier `by` subproof still carries CHOOSE-sensitive validation from the existential package.
+- actual effort: 1 sessions, 2 msgs, 18 steps, 19 tools, 7 holbuild, 1,804,525 tok (1,798,162 in, 6,363 out, 1,734,656 cached), 187.6s, $1.37574800
+- next: Call plan_oracle review/replace. Need a proof interface that avoids producing the final direct fact by a local `by` subproof whose validation depends on stripping the existential package in this Resume, perhaps destruct the body package before suspension/at a higher level, or redesign the suspended branch to not require using a theorem derived from existential validation at the final step.
+
+### Attempts / Evidence
+
+- `E0436` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 18 steps, 19 tools, 7 holbuild, 1,804,525 tok (1,798,162 in, 6,363 out, 1,734,656 cached), 187.6s, $1.37574800)
+  - Inserted local assertion `return_exception_typed env ret_ty y` before Continue/Break split, proved by stripping body existential inside a `by` subproof and applying `return_exception_typed_extend_local_env_extends`; replaced old final `for_cons_return_exception_typed_from_body_ex` use with direct closes. -> Patch advanced the printed goal: final suffix now has visible direct assumption `return_exception_typed env ret_ty y` and no remaining existential after killing it, but exact-assumption closes still fail with HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m31926_t001`, `TO_type_system_rewrite-20260519T123242Z_m31930_t001`, `TO_type_system_rewrite-20260519T123242Z_m31936_t001`)
+  - Tried to close final direct goal using `simp[]`, explicit conjunct splitting plus `qpat_assum`, killing the existential before final simplification, and `ACCEPT_TAC (ASSUME ``return_exception_typed env ret_ty y``)`. -> All variants leave an identical visible direct assumption/goal or exact case-reduced goal and still raise HOL_ERR CHOOSE; the issue is not simply tactic pattern selection nor the final existential assumption being present. (`TO_type_system_rewrite-20260519T123242Z_m31928_t001`, `TO_type_system_rewrite-20260519T123242Z_m31932_t001`, `TO_type_system_rewrite-20260519T123242Z_m31934_t001`, `TO_type_system_rewrite-20260519T123242Z_m31936_t001`)
+
+### Ruled Out
+
+- Old existential helper/theorem use in final suffix
+- Direct local assertion followed by exact-assumption close in final suffix
+- Killing the existential before using the direct local assertion
+- Using ASSUME quotation to avoid qpat selection
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m31926_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31928_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31930_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31932_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31934_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m31936_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0315`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 150,659 tok (150,163 in, 496 out, 141,312 cached), 19.2s, $0.12979100
+- next: Review this administrative closure, then begin C2.7.1.2.2.4 to repair the recursive For_cons IH selector.
+
+### Attempts / Evidence
+
+- `E0314` (proved, , actual effort: 1 sessions, 4 msgs, 38 steps, 41 tools, 15 holbuild, 4,252,108 tok (4,237,280 in, 14,828 out, 4,156,416 cached), 464.5s, $2.92736800)
+  - Tried direct `irule for_body_env_consistent_after_pop` with explicit conjunct discharge after deriving `env_consistent env_after cx st_body`. -> Confirmed the intended boundary lemma is appropriate, but explicit subgoal management was brittle because `irule` instantiated/resolved enough antecedents that expected conjunct subgoals did not match the hand-written order. (`TO_type_system_rewrite-20260519T123242Z_m28677_t001`)
+  - After deriving `env_consistent env_after cx st_body` and substituting `stp`, used `metis_tac[for_body_env_consistent_after_pop, env_consistent_env_maps_wf]` in the small local context. -> The env-consistency-after-pop assertion now builds; holbuild advances to the next source-order blocker at the recursive For_cons IH selection `qpat_x_assum `!s'' t s'³' t'. _``. (`TO_type_system_rewrite-20260519T123242Z_m28681_t001`)
+- `E0315` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 150,659 tok (150,163 in, 496 out, 141,312 cached), 19.2s, $0.12979100)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after strategist acceptance of E0314. -> Confirmed the component's env-consistency-after-pop assertion is still passed; holbuild fails only at the following recursive For_cons IH selector, outside this leaf. (`TO_type_system_rewrite-20260519T123242Z_m28690_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28690_t001` (use `read_tool_output` for exact output)
+
+## C2.7.1.2.2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0317`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 35 steps, 35 tools, 16 holbuild, 2,648,904 tok (2,637,615 in, 11,289 out, 2,569,728 cached), 369.9s, $1.96296900
+
+### Attempts / Evidence
+
+- `E0316` (progressed, other, actual effort: 1 sessions, 5 msgs, 52 steps, 53 tools, 21 holbuild, 5,645,678 tok (5,627,985 in, 17,693 out, 5,535,744 cached), 606.7s, $3.75986700)
+  - Replaced stale four-binder recursive eval_for IH selector with generalized `!s'' x' t s''' broke t'. _` and specialized with `st, (), stp, stp, F, st_body with scopes := TL st_body.scopes`. -> This passed the original selector failure and moved the proof into the IH antecedent, specifically the `finally ... = (INL F, popped_state)` premise; selector portion is partially repaired. (`TO_type_system_rewrite-20260519T123242Z_m28698_t001`)
+  - Tried to prove the `finally` premise by deriving `loop_res = INL F`, substituting `loop_res`, `st_after`, and sometimes `stp`, then accepting/rewriting with the existing finally assumption. -> The approach repeatedly got close but did not close the branch: either the selected assumption pattern failed after substitutions or the branch tactic left the identical finally goal unsolved. Broad `simp`/`gvs`/`metis_tac[]` on this tiny-looking equality timed out in the huge mutual context. (`TO_type_system_rewrite-20260519T123242Z_m28726_t001`, `TO_type_system_rewrite-20260519T123242Z_m28740_t001`)
+  - Inserted `FAIL_TAC` probe after substitutions. -> Probe showed that after substituting `loop_res`, `st_after`, and `stp`, assumption 10 is exactly the required `finally ... = (INL F, popped_state)` equality, but tactic selection/acceptance has not been made stable yet. (`TO_type_system_rewrite-20260519T123242Z_m28743_t001`)
+- `E0317` (proved, , actual effort: 1 sessions, 2 msgs, 35 steps, 35 tools, 16 holbuild, 2,648,904 tok (2,637,615 in, 11,289 out, 2,569,728 cached), 369.9s, $1.96296900)
+  - Repaired the success branch by deriving `loop_res = INL F`, substituting `st_after`, deriving the recursive `eval_for ... vs popped = (res,st')` equation from the outer case equation, then instantiating the generalized tail IH and discharging its antecedent with `fs[]`. -> The original stale selector and the previously blocking `finally ... = (INL F,popped)` premise are passed; holbuild reaches a later source-order failure in the `INR y` branch. (`TO_type_system_rewrite-20260519T123242Z_m28755_t001`, `TO_type_system_rewrite-20260519T123242Z_m28780_t001`, `TO_type_system_rewrite-20260519T123242Z_m28782_t001`)
+
+### Ruled Out
+
+- The old four-binder selector remains obsolete; the generalized selector and success-branch proof now advance source order.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m28755_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28780_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m28782_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0272`
+- blocker: C2.7.2 structured expression constructor resumes are not reachable: holbuild fails earlier in file order at `Resume eval_all_type_sound_mutual[For]` on a proof-performance timeout for `fs[env_consistent_def, env_context_consistent_def]`.
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 430,009 tok (427,988 in, 2,021 out, 415,232 cached), 50.9s, $0.33202600
+- next: Call plan_oracle review for C2.7.2 and request schedule/decomposition change to prioritize the existing For prefix-performance patch (`C2.7.1.1.1.a`) before C2.7.2.
+
+### Attempts / Evidence
+
+- `E0272` (stuck, plan_incomplete, actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 430,009 tok (427,988 in, 2,021 out, 415,232 cached), 50.9s, $0.33202600)
+  - Began C2.7.2 per PLAN gate and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` before editing structured expression resumes. -> Build did not reach `Expr_StructLit`, `Expr_Subscript`, or `Expr_Attribute`; it timed out earlier in `Resume eval_all_type_sound_mutual[For]` line ~2185. The active component cannot be executed until the file-order prefix blocker is repaired or the schedule is changed. (`TO_type_system_rewrite-20260519T080936Z_m28023_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T080936Z_m28023_t001` (use `read_tool_output` for exact output)
+
+## C3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0236`
+- blocker: 
+- next: Review C3 closure with strategist, then follow the scheduled next component.
+
+### Attempts / Evidence
+
+- `E0236` (proved, )
+  - Built `vyperTypeAssignSoundnessTheory` after beginning C3. -> Target theory built cleanly; no CHEAT warnings in holbuild output. (`TO_type_system_rewrite-20260518T204229Z_m26641_t001`)
+  - Audited `vyperTypeAssignSoundnessScript.sml` for wrapper names and unfinished proof markers. -> Grep found the three C3 wrappers and no lowercase `cheat`, `suspend`, or `Resume` occurrences in the file; wrapper source shows they are compatibility projections from `assign_target_sound_mutual` with operation-specific runtime facts for update/append. (`TO_type_system_rewrite-20260518T204229Z_m26642_t002`, `TO_type_system_rewrite-20260518T204229Z_m26643_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26641_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26642_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26643_t001` (use `read_tool_output` for exact output)
 
 ## C3.1
 
@@ -965,6 +5569,128 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `tool_output:TO_type_system_rewrite-20260516T153850Z_m25157_t001` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260516T153850Z_m25159_t001` (use `read_tool_output` for exact output)
 
+## C4.1.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0178`
+- blocker: 
+
+### Attempts / Evidence
+
+- `E0178` (proved, )
+  - Built vyperTypeBuiltinsTheory from the current file; holbuild resumed after concat_string_builtin_no_type_error and the next failing theorem is slice_bytes_no_type_error, so the local Keccak256/Sha256 helpers at lines 1836-1893 were accepted. -> Crypto hash helper proofs are past the build frontier; component's optional Keccak256/Sha256 infrastructure is proved in source. (`TO_type_system_rewrite-20260518T204229Z_m25686_t001`, `TO_type_system_rewrite-20260518T204229Z_m25685_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25686_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25685_t001` (use `read_tool_output` for exact output)
+
+## C4.1.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0180`
+- blocker: 
+- next: Call plan_oracle(mode='review', component_id='C4.1.1.2', evidence_ids=[...]) and then follow the scheduled next frontier, likely the Keccak256/Sha256 dispatcher case component.
+
+### Attempts / Evidence
+
+- `E0179` (progressed, other)
+  - Built vyperTypeBuiltinsTheory after C4.1.1.1; holbuild failed at slice_bytes_no_type_error line 1974 on `strip_tac >> strip_tac`. Read source around 1963-1993: both slice_bytes_no_type_error and slice_string_builtin_no_type_error use this broken pattern and irule underlying slice helpers. -> Non-terminal evidence: next edit should replace both slice helper proofs (not statements) with `strip_tac >> gen_tac >> irule slice_*_no_type_error >> ...` or a direct evaluate_slice proof; do not use a second strip_tac on the `!msg` disequation. (`TO_type_system_rewrite-20260518T204229Z_m25686_t001`, `TO_type_system_rewrite-20260518T204229Z_m25691_t001`)
+- `E0180` (proved, )
+  - Fixed split Slice dispatcher helpers in vyperTypeBuiltinsScript.sml: parenthesized existential conjuncts so the theorem antecedent strips as intended; changed proof openings to `strip_tac >> gen_tac`; supplied explicit `qexistsl [`ts`, `tvs`]` witnesses for underlying slice helper irules. -> `vyperTypeBuiltinsTheory` now builds past `slice_bytes_no_type_error` and `slice_string_builtin_no_type_error`; the next failure is later in `well_typed_builtin_app_no_type_error` at a Keccak256 dispatcher goal, outside the Concat/Slice helper component. (`TO_type_system_rewrite-20260518T204229Z_m25710_t001`)
+
+### Ruled Out
+
+- Leaving existential conjuncts unparenthesized: HOL parsed `ty = ... ∧ ?bd. ... ∧ ...` so `strip_tac` split the theorem into separate subgoals instead of a single implication antecedent.
+- Using only `irule slice_*_no_type_error >> gvs[]`: left existential metavariables for `ts` and `tvs`; explicit witnesses are needed.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25710_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25704_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25705_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25707_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25709_t001` (use `read_tool_output` for exact output)
+
+## C4.1.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0181`
+- blocker: 
+- next: Call plan_oracle(mode='review', component_id='C4.1.1.3', evidence_ids=[...]); then follow the scheduled next component. Current build frontier is a Concat bytes dispatcher goal in `well_typed_builtin_app_no_type_error`.
+
+### Attempts / Evidence
+
+- `E0181` (proved, )
+  - Added dispatcher-side direct cases before the existing AsWeiValue/remaining simple catch-alls: (1) bytes/string hash/simple one-argument branch handles abstract BytesT bounds by `Cases_on bd` before `gvs[evaluate_type_def, LET_THM]`; (2) AsWeiValue branch derives BaseTV/value shape and expands `evaluate_as_wei_value_def`, splitting denomination before arithmetic. -> `vyperTypeBuiltinsTheory` now gets past the previous Keccak256 StringT and BytesT failures and the AsWeiValue UintT failure; the current frontier is a Concat bytes dispatcher goal, which is covered by the Concat/Slice helper/dispatcher work rather than this Not/simple branch component. (`TO_type_system_rewrite-20260518T204229Z_m25727_t001`)
+
+### Ruled Out
+
+- A generic `imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >> simp[evaluate_builtin_def]` catch-all was insufficient for BytesT bd because evaluate_type leaves bound-dependent case expressions unless `bd` is split first.
+- Relying only on `irule as_wei_value_no_type_error >> gvs[]` after dispatcher simplification did not match the post-split one-element-list goal; a direct branch is needed.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m25727_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25722_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25724_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m25726_t001` (use `read_tool_output` for exact output)
+
+## C4.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0238`
+- blocker: 
+- next: Review C4.1.2 closure with strategist, then follow Oracle next.
+
+### Attempts / Evidence
+
+- `E0182` (stuck, plan_incomplete)
+  - Began scheduled C4.1.2 and ran `holbuild(targets=['vyperTypeStatePreservationTheory'], tactic_timeout=120, timeout=600)` to audit the update-binop/subscript chain as instructed. -> Build stops in the prerequisite `vyperTypeBuiltinsTheory` before any C4.1.2 theorem is checked; current failure is `well_typed_builtin_app_no_type_error` Concat bytes dispatcher goal. (`TO_type_system_rewrite-20260518T204229Z_m25732_t001`)
+- `E0238` (proved, )
+  - After builtin dispatcher prerequisite had been closed in prior episodes, built `vyperTypeStatePreservationTheory` under active C4.1.2. -> Build completed successfully, so the update-binop/subscript no-TypeError chain is reached and accepted by HOL. (`TO_type_system_rewrite-20260518T204229Z_m26657_t001`)
+  - Audited `vyperTypeStatePreservationScript.sml` for the named C4.1.2 theorem chain. -> Source contains `assign_subscripts_preserves_type_runtime_typed`, `well_typed_update_binop_no_type_error`, `assign_subscripts_update_leaf_no_type_error`, `assign_operation_runtime_typed_leaf_no_type_error`, and `assign_subscripts_no_type_error_runtime_typed`; displayed source shows this chain is proved in dependency order and consumed by later assignment helpers. (`TO_type_system_rewrite-20260518T204229Z_m26658_t002`, `TO_type_system_rewrite-20260518T204229Z_m26659_t001`)
+  - Checked unfinished proof markers in `vyperTypeStatePreservationScript.sml`. -> Remaining suspend/Resume markers are structural/resolved Resume blocks for assignment mutual theorems; grep found no lowercase `cheat` in the file. These markers are outside the named update-binop/subscript audit path or are finalized by the successful build. (`TO_type_system_rewrite-20260518T204229Z_m26658_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26657_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26658_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26659_t001` (use `read_tool_output` for exact output)
+
+## C4.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0239`
+- blocker: 
+- next: Review C4.1.3 closure with strategist, then follow Oracle next.
+
+### Attempts / Evidence
+
+- `E0239` (proved, )
+  - Ran `holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=120, timeout=600)` as the first checkpoint build. -> Builtin checkpoint build succeeded; validates repaired dispatcher for C4.1 scope. (`TO_type_system_rewrite-20260518T204229Z_m26666_t002`)
+  - Initial parallel state-preservation build hit holbuild project lock, then reran serially `holbuild(targets=['vyperTypeStatePreservationTheory'], tactic_timeout=120, timeout=600)`. -> State-preservation checkpoint build succeeded; verifies update-binop/subscript chain in dependency context. The earlier lock was just concurrent holbuild use, not a proof failure. (`TO_type_system_rewrite-20260518T204229Z_m26666_t001`, `TO_type_system_rewrite-20260518T204229Z_m26667_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260518T204229Z_m26666_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260518T204229Z_m26667_t001` (use `read_tool_output` for exact output)
+
 ## C4.2
 
 ### Current Status
@@ -1321,3 +6047,1271 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260516T153850Z_m17494_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260516T153850Z_m17452_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk estimate/decomposition was wrong: a helper whose first premise is the unsimplified case premise still forces case/existential reasoning in the Resume when used with `irule`; direct `MATCH_MP` attempt did not compile as a fragment, and `mp_tac`/`simp` reintroduced CHOOSE.
+- latest episode: `E0438`
+- blocker: The For_cons ordinary-exception suffix still triggers HOL_ERR CHOOSE when trying to discharge the statement-IH case-premise/existential package inside the suspended Resume. The env-consistency helper call was repaired, but the final tail helper application still leaves/needs a case-premise-to-existential residual; simplifying or mp_tac on the unsimplified case premise raises CHOOSE. This violates the component failure sign to stop on renewed CHOOSE.
+- actual effort: 1 sessions, 4 msgs, 60 steps, 63 tools, 26 holbuild, 5,357,380 tok (5,335,387 in, 21,993 out, 5,222,400 cached), 708.4s, $3.83592500
+- next: Strategist should redesign the final tail interface so the Resume does not have to prove any case-premise/existential residual. Likely need a helper whose conclusion and all antecedents match visible non-existential assumptions exactly, or a pre-specialized theorem/corollary usable without `irule` residuals.
+
+### Attempts / Evidence
+
+- `E0437` (progressed, other, actual effort: 1 sessions, 3 msgs, 31 steps, 36 tools, 11 holbuild, 3,610,463 tok (3,597,380 in, 13,083 out, 3,520,000 cached), 464.9s, $2.53939000)
+  - Added standalone helpers `for_cons_popped_env_consistent_from_stmt_case` and `for_cons_ordinary_exception_tail_from_stmt_case` before the For_cons Resume. -> Helper statements compile after proof adjustments; first helper moved env_maps_wf derivation inside helper to reduce call-site obligations. Tail helper currently proves directly with `rw[no_type_error_result_def]` and `metis_tac[return_exception_typed_extend_local_env_extends]`. (`TO_type_system_rewrite-20260519T123242Z_m31955_t001`, `TO_type_system_rewrite-20260519T123242Z_m31966_t002`)
+  - Patched For_cons suffix to avoid local existential stripping/direct `return_exception_typed env ret_ty y` assertion. -> Old final CHOOSE failure at `ACCEPT_TAC (ASSUME ``return_exception_typed env ret_ty y``)` was removed from source; final tail now uses `irule for_cons_ordinary_exception_tail_from_stmt_case >> simp[]`. (`TO_type_system_rewrite-20260519T123242Z_m31968_t001`, `TO_type_system_rewrite-20260519T123242Z_m31971_t001`)
+  - Build-check `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> Current failure is at `irule for_cons_popped_env_consistent_from_stmt_case >> simp[Abbr`stp`]` in the Resume. HOL shows the helper invocation as a THEN1 subproof whose top input is unexpectedly the whole For_cons postcondition; likely `irule` is matching the wrong conclusion/postcondition context or the local `by` assertion is not being isolated as expected. This is not the old final CHOOSE failure. (`TO_type_system_rewrite-20260519T123242Z_m31979_t001`)
+- `E0438` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 60 steps, 63 tools, 26 holbuild, 5,357,380 tok (5,335,387 in, 21,993 out, 5,222,400 cached), 708.4s, $3.83592500)
+  - Changed env-consistency local assertion from backward helper call variants to explicit `SUBGOAL_THEN` with instantiated `for_cons_popped_env_consistent_from_stmt_case`. -> Progress: env-consistency helper subgoal now discharges; build reaches the final ordinary-exception tail instead of failing at the earlier assertion. (`TO_type_system_rewrite-20260519T123242Z_m32017_t001`)
+  - Tried to finish final suffix with `for_cons_ordinary_exception_tail_from_stmt_case`, explicit premise discharge, and the unsimplified case-premise assumption via `ASSUME`/`mp_tac`. -> Failure: final residual is `(case INR y of ... ?env_exn ...) ==> ?env_exn ...`; `simp[]` on this residual raises HOL_ERR CHOOSE inside the suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m32035_t001`, `TO_type_system_rewrite-20260519T123242Z_m32043_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32017_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32035_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32043_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.ExtractCasePremise
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0442`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 202,471 tok (201,527 in, 944 out, 195,072 cached), 71.8s, $0.15813100
+- next: Review closure, then begin `ForConsOrdinaryExceptionCaseHelperSubtree.PackageTailGoal` to add the package helper using this extraction lemma.
+
+### Attempts / Evidence
+
+- `E0442` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 202,471 tok (201,527 in, 944 out, 195,072 cached), 71.8s, $0.15813100)
+  - Inserted `for_cons_inr_case_premise_extract` with the PLAN statement and proof `simp[]`; built `vyperTypeStmtSoundnessTheory`. -> Build replay passed the new extraction lemma and proceeded to the later For_cons suffix placeholder; extraction component is discharged. (`TO_type_system_rewrite-20260519T123242Z_m32064_t001`, `TO_type_system_rewrite-20260519T123242Z_m32065_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32064_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32065_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The local For_cons ordinary-exception suffix remains stuck after multiple boundary-helper and residual-packaging attempts. The proof now has a residual bundle in the exact order expected by the new helper, but `irule`/`simp` still leaves the same residual conjunction and endpoint extraction fails under holbuild CHOOSE/extract_thm instrumentation. This exceeds the component's Risk 2 tactical budget and likely needs strategist redesign of the local helper boundary or theorem ordering.
+- latest episode: `E0491`
+- blocker: Repeated failures at `eval_for_cons_type_sound_core` ordinary-exception tail: after `irule for_cons_ordinary_exception_full_suffix_from_residual_bundle`, both `for_cons_ordinary_exception_tail_goal_from_case_premise` and its exists-first variant leave the residual `(no_type_error_result (INR y) ∧ ∃id' st_body' ty' env_exn...)` / swapped variant; direct explicit witness extraction reaches trivial conjunct endpoints but CHOOSE/extract_thm failures persist.
+- actual effort: 1 sessions, 5 msgs, 78 steps, 80 tools, 30 holbuild, 7,246,738 tok (7,219,418 in, 27,320 out, 7,084,032 cached), 1254.7s, $5.03854600
+- next: Call plan_oracle(mode='review') for this stuck Risk 2 leaf; request a rebased local proof boundary or permission to replace the helper cluster with one exact suffix lemma.
+
+### Attempts / Evidence
+
+- `E0490` (progressed, other, actual effort: 1 sessions, 3 msgs, 32 steps, 35 tools, 10 holbuild, 3,828,222 tok (3,815,541 in, 12,681 out, 3,753,984 cached), 445.5s, $2.56520700)
+  - Built latest qpat_assum edit in eval_for_cons_type_sound_core. -> Build reached witness branch; `simp[] >> strip_tac` failed because `simp[]` left an implication from the extracted existential to the witness goal, so `strip_tac` was applied before a solvable antecedent shape. (`TO_type_system_rewrite-20260520T132249Z_m33173_t001`)
+  - Changed witness extraction to use `mp_tac o SIMP_RULE (srw_ss()) []`, preserving the case premise. -> Build advanced to final branch and exposed exact full-case/CHOOSE endpoint for popped-env consistency; direct `asm_rewrite_tac[]` on full case premise remains fragile. (`TO_type_system_rewrite-20260520T132249Z_m33176_t001`)
+  - Tried to discharge final case-premise residual by simplifying a copied premise and choosing env_exn. -> Still hit CHOOSE-sensitive implication/case endpoint after `simp[]`; this confirmed the main tail needs a higher boundary helper rather than endpoint rewriting. (`TO_type_system_rewrite-20260520T132249Z_m33178_t001`)
+  - Added/edited helper boundary `for_cons_ordinary_exception_full_suffix_from_case_bundle` and simplified the main tail to call it. -> Helper proofs required direct conjunct packaging instead of `irule` into previous helper; after fixing helper proofs, main proof reduced to no-error plus existential witness residual. Latest source edit begins explicit witness extraction but has an unbuilt typo `env_exx`. (`TO_type_system_rewrite-20260520T132249Z_m33190_t001`, `TO_type_system_rewrite-20260520T132249Z_m33194_t001`, `TO_type_system_rewrite-20260520T132249Z_m33197_t001`, `TO_type_system_rewrite-20260520T132249Z_m33199_t001`, `TO_type_system_rewrite-20260520T132249Z_m33201_t001`, `TO_type_system_rewrite-20260520T132249Z_m33202_t001`, `TO_type_system_rewrite-20260520T132249Z_m33203_t003`)
+- `E0491` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 78 steps, 80 tools, 30 holbuild, 7,246,738 tok (7,219,418 in, 27,320 out, 7,084,032 cached), 1254.7s, $5.03854600)
+  - Changed helper case-premise types from stale `unit + exception` to actual `value + exception`, then tried to close main tail with `for_cons_ordinary_exception_full_suffix_from_residual_bundle` plus `for_cons_ordinary_exception_tail_goal_from_case_premise`. -> Build advanced past earlier parse/type mismatch, but `irule` could not match because the residual helper conclusion order did not match the goal order. (`TO_type_system_rewrite-20260520T132249Z_m33368_t001`, `TO_type_system_rewrite-20260520T132249Z_m33378_t001`)
+  - Added/used exists-first residual helper to match the exact residual goal order after the residual-bundle helper. -> Build still left the exact residual conjunction unsolved at QED, indicating the local helper boundary/order is still not being consumed correctly by `irule`/`simp`. (`TO_type_system_rewrite-20260520T132249Z_m33372_t001`, `TO_type_system_rewrite-20260520T132249Z_m33380_t001`)
+  - Tried explicit witness extraction from simplified case premise and explicit conjunct proof before falling back to boundary helpers. -> Explicit extraction reached trivial assumption-shaped conjuncts, but holbuild raised CHOOSE/extract_thm failures on endpoints, confirming endpoint sensitivity persists and direct tactics are not reliable here. (`TO_type_system_rewrite-20260520T132249Z_m33345_t001`, `TO_type_system_rewrite-20260520T132249Z_m33351_t001`)
+
+### Ruled Out
+
+- Direct `qpat_x_assum`/`mp_tac` extraction in the main tail: reaches CHOOSE/instrumentation failures on trivial endpoints.
+- `metis_tac` on residual witness goals: triggers CHOOSE or timeout failures in the instrumented context.
+- Low-level residual helpers with current conclusion order: `irule`/`simp` still does not close the tail.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33368_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33372_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33378_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33380_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33376_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddBodyExceptionProjectionHelper
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0527`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 85,731 tok (85,406 in, 325 out, 80,384 cached), 6.1s, $0.07505200
+- next: Begin the next scheduled helper component.
+
+### Attempts / Evidence
+
+- `E0510` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 10 tools, 3 holbuild, 675,503 tok (673,285 in, 2,218 out, 633,344 cached), 150.3s, $0.58291700)
+  - Inserted `for_cons_body_exception_typed_from_body_soundness` after `for_cons_return_exception_typed_from_body_ex`; proof specializes the universal body soundness hypothesis at `stp`, `INR exn`, and `st_body`, simplifies the resulting exceptional case, and invokes `for_cons_return_exception_typed_from_body_ex` with explicit witnesses. -> Helper proved: holbuild resumed through the new theorem and next failure is the pre-existing `eval_for_cons_type_sound_core` consumer tail at `drule for_cons_ordinary_exception_return_exception_typed_from_case`. (`TO_type_system_rewrite-20260520T132249Z_m33840_t001`)
+  - Fixed witness order for applying `for_cons_return_exception_typed_from_body_ex` (`cx`, `id`, `st_body`, `ty`, `env_exn`) after initial type mismatch showed `qexists_tac env_exn` targeted the first existential `cx`. -> Explicit witness order discharged the projection helper; build advanced past it. (`TO_type_system_rewrite-20260520T132249Z_m33838_t001`, `TO_type_system_rewrite-20260520T132249Z_m33839_t001`)
+- `E0518` (proved, , actual effort: 1 sessions, 1 steps, 101,751 tok (101,431 in, 320 out, 96,768 cached), 8.7s, $0.08129900)
+  - Carried forward previously proved `for_cons_body_exception_typed_from_body_soundness` without modifying source. -> Prior holbuild evidence confirms the stp-boundary helper was accepted; it will be used by the direct consumer patch leaf. (`TO_type_system_rewrite-20260520T132249Z_m33840_t001`)
+- `E0522` (proved, , actual effort: 1 sessions, 1 steps, 66,158 tok (65,909 in, 249 out, 60,928 cached), 6.7s, $0.06283900)
+  - carry-forward of proved stp-boundary body exception projection helper; no source edits -> Prior holbuild evidence confirms `for_cons_body_exception_typed_from_body_soundness` was accepted; it remains the planned consumer interface for the final tail patch. (`TO_type_system_rewrite-20260520T132249Z_m33840_t001`)
+- `E0527` (proved, , actual effort: 1 sessions, 1 steps, 85,731 tok (85,406 in, 325 out, 80,384 cached), 6.1s, $0.07505200)
+  - Carry-forward of previously proved stp-boundary body exception projection helper; no source edits or builds needed for this component. -> Prior holbuild/dossier evidence confirms `for_cons_body_exception_typed_from_body_soundness` was accepted. It remains valid background infrastructure, though the refined plan will add a more bundled body-result helper for the large theorem tail. (`TO_type_system_rewrite-20260520T132249Z_m33840_t001`, `TO_type_system_rewrite-20260520T132249Z_m33837_t001`, `TO_type_system_rewrite-20260520T132249Z_m33839_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33840_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33837_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33839_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddBodyResultReturnExceptionProjectionHelper
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0529`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 418,708 tok (417,295 in, 1,413 out, 402,432 cached), 91.5s, $0.31792100
+- next: Begin the dependent patch component and replace the failing `eval_for_cons_type_sound_core` tail to consume the whole specialized body-IH result with this helper.
+
+### Attempts / Evidence
+
+- `E0529` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 418,708 tok (417,295 in, 1,413 out, 402,432 cached), 91.5s, $0.31792100)
+  - Inserted `for_cons_body_result_return_exception_typed` after `for_cons_body_exception_typed_from_body_soundness`; proof strips the bundled body-IH result, simplifies the `case INR (ReturnException v)`, and applies `return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, and `ty`. -> holbuild accepted the new helper and advanced to the known downstream `eval_for_cons_type_sound_core` tail failure, confirming this helper component is proved. (`TO_type_system_rewrite-20260520T175243Z_m34083_t001`, `TO_type_system_rewrite-20260520T175243Z_m34084_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T175243Z_m34083_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T175243Z_m34084_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddPoppedBodyBoundaryLemma
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0497`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 1 steps, 87,971 tok (87,513 in, 458 out, 82,432 cached), 15.7s, $0.08036100
+
+### Attempts / Evidence
+
+- `E0494` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 513,292 tok (511,562 in, 1,730 out, 499,200 cached), 98.6s, $0.36331000)
+  - Added `for_cons_ordinary_exception_full_suffix_for_popped_body_from_case` next to existing For_cons ordinary-exception helpers; proved by stripping premises, simplifying the suffix, and using `for_cons_ordinary_exception_return_typed_from_case_premise` with witnesses `cx`, `env_after`, `id`, `st_body`, `ty`. -> holbuild advanced past the new boundary lemma and failed later in `eval_for_cons_type_sound_core`, confirming the lemma itself is proved. (`TO_type_system_rewrite-20260520T132249Z_m33527_t001`)
+- `E0497` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 87,971 tok (87,513 in, 458 out, 82,432 cached), 15.7s, $0.08036100)
+  - Retain existing popped-body boundary lemma unchanged. -> Confirmed by source read and prior holbuild evidence that holbuild advanced past the helper; no edits required for this carry-forward component. (`TO_type_system_rewrite-20260520T132249Z_m33527_t001`, `TO_type_system_rewrite-20260520T132249Z_m33565_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33527_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33565_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddPushedOriginalReturnExceptionBoundary
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0528`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 93,794 tok (93,545 in, 249 out, 88,576 cached), 6.4s, $0.07660300
+- next: Begin the new bundled body-result return-exception projection helper component.
+
+### Attempts / Evidence
+
+- `E0513` (proved, , actual effort: 1 sessions, 1 msgs, 19 steps, 20 tools, 5 holbuild, 1,502,899 tok (1,497,103 in, 5,796 out, 1,452,544 cached), 261.0s, $1.12294700)
+  - Added theorem for_cons_return_exception_typed_from_pushed_original_body after for_cons_pushed_state_well_typed. The helper reconstructs pushed env consistency, pushed state typing, and pushed accounts internally from original loop-entry facts, then calls for_cons_body_exception_typed_from_body_soundness. -> holbuild passed the new helper and advanced to the next known failing theorem eval_for_cons_type_sound_core, confirming the boundary lemma is proved and exported in the source prefix. (`TO_type_system_rewrite-20260520T132249Z_m33911_t001`)
+  - Initially placed helper before local for_cons_pushed_state_well_typed and attempted to inline state_well_typed proof; moved helper after the local pushed-state lemma and used for_cons_pushed_state_well_typed as planned. -> Resolved static dependency and proof subgoal issues for the helper; final proof is localized and does not depend on the large eval_for_cons theorem context. (`TO_type_system_rewrite-20260520T132249Z_m33900_t001`, `TO_type_system_rewrite-20260520T132249Z_m33904_t001`, `TO_type_system_rewrite-20260520T132249Z_m33909_t001`)
+- `E0519` (proved, , actual effort: 1 sessions, 1 steps, 106,569 tok (106,295 in, 274 out, 101,888 cached), 8.3s, $0.08119900)
+  - Carried forward previously proved `for_cons_return_exception_typed_from_pushed_original_body` without modifying source. -> Prior holbuild evidence confirms the helper was accepted; refined plan marks it valid auxiliary infrastructure but not the consumer interface for `eval_for_cons_type_sound_core`. (`TO_type_system_rewrite-20260520T132249Z_m33911_t001`)
+- `E0523` (proved, , actual effort: 1 sessions, 1 steps, 72,509 tok (72,286 in, 223 out, 68,096 cached), 6.8s, $0.06168800)
+  - carry-forward of proved pushed-original ReturnException boundary helper as auxiliary; no source edits -> Prior holbuild evidence confirms `for_cons_return_exception_typed_from_pushed_original_body` was accepted; per refined PLAN it remains in source but should not be used in the large theorem tail. (`TO_type_system_rewrite-20260520T132249Z_m33911_t001`)
+- `E0528` (proved, , actual effort: 1 sessions, 1 steps, 93,794 tok (93,545 in, 249 out, 88,576 cached), 6.4s, $0.07660300)
+  - Carry-forward of previously proved pushed-original ReturnException boundary helper as auxiliary infrastructure; no source edits or builds needed for this component. -> Prior holbuild/dossier evidence confirms `for_cons_return_exception_typed_from_pushed_original_body` was accepted. It remains in source as auxiliary infrastructure but, per refined plan, should not be used in the large theorem tail. (`TO_type_system_rewrite-20260520T132249Z_m33911_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33911_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddReturnExceptionSuffixBoundaryHelper
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0526`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 77,360 tok (77,057 in, 303 out, 72,192 cached), 8.0s, $0.06951100
+- next: Begin the next scheduled helper component.
+
+### Attempts / Evidence
+
+- `E0505` (proved, , actual effort: 1 sessions, 10 steps, 10 tools, 4 holbuild, 600,946 tok (598,079 in, 2,867 out, 577,536 cached), 153.5s, $0.47749300)
+  - Inserted `for_cons_ordinary_exception_return_exception_suffix_from_env_witness` near the ordinary-exception helper block; first tactic used `rpt strip_tac >> simp[]`, which over-stripped the conclusion/premises and left scalar goals. -> Initial helper tactic failed at `irule`/conj splitting; build goal showed conclusion/premise structure required only stripping the single implication and then splitting conclusion conjuncts. (`TO_type_system_rewrite-20260520T132249Z_m33769_t001`, `TO_type_system_rewrite-20260520T132249Z_m33771_t001`)
+  - Changed proof to `strip_tac`, explicit `conj_tac` for state/account/env/no-error, and final `irule return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, `ty`. -> Helper proved; holbuild advanced past the new theorem and failed later at the known `eval_for_cons_type_sound_core` tail, confirming this component's boundary lemma is accepted. (`TO_type_system_rewrite-20260520T132249Z_m33776_t001`)
+- `E0509` (proved, , actual effort: 1 sessions, 1 steps, 50,982 tok (50,706 in, 276 out, 46,592 cached), 7.7s, $0.05214600)
+  - Carried forward previously proved `for_cons_ordinary_exception_return_exception_suffix_from_env_witness`; no new source edits required in this session. -> Dossier E0505 evidence shows the helper was accepted by holbuild and source was kept; later build failure was in `eval_for_cons_type_sound_core`, not this boundary lemma. (`TO_type_system_rewrite-20260520T132249Z_m33776_t001`)
+- `E0517` (proved, , actual effort: 1 sessions, 1 steps, 96,420 tok (96,143 in, 277 out, 91,648 cached), 8.0s, $0.07660900)
+  - Carried forward previously proved specialized ReturnException suffix boundary lemma without modifying source. -> Prior holbuild evidence confirms the helper was accepted; remaining failures are in the consumer patch, not this helper. (`TO_type_system_rewrite-20260520T132249Z_m33776_t001`)
+- `E0521` (proved, , actual effort: 1 sessions, 1 steps, 57,858 tok (57,620 in, 238 out, 52,736 cached), 6.6s, $0.05792800)
+  - carry-forward of proved specialized ReturnException suffix boundary helper; no source edits -> Prior holbuild evidence shows `for_cons_ordinary_exception_return_exception_suffix_from_env_witness` was accepted; remaining failures are consumer-tail failures, not this helper. (`TO_type_system_rewrite-20260520T132249Z_m33776_t001`)
+- `E0526` (proved, , actual effort: 1 sessions, 1 steps, 77,360 tok (77,057 in, 303 out, 72,192 cached), 8.0s, $0.06951100)
+  - Carry-forward of previously proved specialized ReturnException suffix boundary helper; no source edits or builds needed for this component. -> Prior holbuild/dossier evidence confirms `for_cons_ordinary_exception_return_exception_suffix_from_env_witness` was accepted; current failures are downstream consumer-tail failures, not this helper. (`TO_type_system_rewrite-20260520T132249Z_m33776_t001`, `TO_type_system_rewrite-20260520T132249Z_m33768_t001`, `TO_type_system_rewrite-20260520T132249Z_m33772_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33776_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33768_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33772_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddVisibleBundleBoundaryLemma
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0498`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 287,208 tok (285,751 in, 1,457 out, 279,040 cached), 97.9s, $0.21678500
+
+### Attempts / Evidence
+
+- `E0498` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 287,208 tok (285,751 in, 1,457 out, 279,040 cached), 97.9s, $0.21678500)
+  - Added visible-bundle boundary theorem with one conjunctive premise and proved it in the small helper context by `strip_tac >> simp[]`, no-error conjunct closure, then applying `for_cons_ordinary_exception_return_typed_from_case_premise` with concrete witnesses. -> holbuild advanced past the new helper and failed later at the old partial large-theorem tail, so the visible-bundle boundary lemma is accepted. (`TO_type_system_rewrite-20260520T132249Z_m33590_t001`, `TO_type_system_rewrite-20260520T132249Z_m33591_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33590_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33591_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTail
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk estimate/patch strategy is wrong or incomplete: visible-bundle helper avoids antecedent-only existentialization but not the fragile case-premise consumption in the large theorem. Need a PLAN-owned helper whose antecedent matches the post-simplified INR witness form, or another boundary that removes the case-premise subgoal entirely.
+- latest episode: `E0500`
+- blocker: The current active PLAN strategy still requires closing the bundled `case INR y of ...` premise inside `eval_for_cons_type_sound_core`. Fresh holbuild confirms the source fails exactly there: after the visible-bundle helper application, direct state/accounts/env/no-error conjuncts are handled but the final case-premise goal remains, and `fs[SF SFY_ss]` triggers the same CHOOSE/extract failure documented in prior episodes. Adding a witness-triple helper would change the boundary/interface beyond the active component's current statement, so this needs strategist replacement/augmentation.
+- actual effort: 1 sessions, 1 msgs, 2 steps, 3 tools, 1 holbuild, 114,490 tok (113,559 in, 931 out, 99,328 cached), 35.0s, $0.14874900
+- next: Call plan_oracle(mode='review') for this component. Ask for replacement/augmentation that authorizes a witness-triple popped-body boundary helper, or another exact post-context helper, because the current visible-bundle-tail statement is not enough.
+
+### Attempts / Evidence
+
+- `E0495` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 28 steps, 29 tools, 11 holbuild, 3,421,574 tok (3,410,915 in, 10,659 out, 3,358,720 cached), 454.1s, $2.26010500)
+  - Probe after `irule for_cons_ordinary_exception_full_suffix_for_popped_body_from_case` with stfinal expanded. -> Generated one bundled antecedent goal ordered as accounts/noerr/state/env plus `?env_after id ty. case INR y of ...`; confirms the boundary lemma is usable but `irule` existentializes variables that appear only in premises. (`TO_type_system_rewrite-20260520T132249Z_m33534_t001`)
+  - Close generated premises manually, instantiate `env_after`, `id`, `ty`, and use `simp[]`. -> The case premise simplified to the inner existential and hit the same CHOOSE/extract_thm endpoint; this reintroduces the forbidden large-context existential manipulation. (`TO_type_system_rewrite-20260520T132249Z_m33553_t001`)
+  - Attempt `Q.INST` on the boundary theorem to fix antecedent-only variables before applying it. -> Still left residual `no_type_error_result (INR y) /\ ?id' ty' env_exn...`, so the current source tail is not a completed patch. (`TO_type_system_rewrite-20260520T132249Z_m33555_t001`)
+- `E0496` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 21 steps, 22 tools, 9 holbuild, 1,395,464 tok (1,386,759 in, 8,705 out, 1,347,072 cached), 412.4s, $1.13312100)
+  - After applying the return-typed boundary, try `first_assum ACCEPT_TAC` for the generated case-premise subgoal. -> Failed: the visible assumption and goal differ only by bound INL variable name, but first_assum could not close it. (`TO_type_system_rewrite-20260520T132249Z_m33570_t001`)
+  - Use targeted `qpat_assum` / `qpat_x_assum` patterns for the exact `case INR y of ...` premise. -> Failed: qpat selection did not match the visible assumption in the large context, even with type annotations; the goal remained the same case premise. (`TO_type_system_rewrite-20260520T132249Z_m33573_t001`, `TO_type_system_rewrite-20260520T132249Z_m33575_t001`, `TO_type_system_rewrite-20260520T132249Z_m33581_t001`)
+  - Try exact `ACCEPT_TAC (ASSUME ``case INR y of ...``)` for the visible case premise. -> Failed under holbuild instrumentation with CHOOSE/extract_thm goal-stack error, same failure class as previous episodes. (`TO_type_system_rewrite-20260520T132249Z_m33577_t001`)
+- `E0499` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 31 steps, 33 tools, 12 holbuild, 3,688,093 tok (3,675,524 in, 12,569 out, 3,616,256 cached), 521.0s, $2.48153800)
+  - Apply new visible-bundle helper using `irule (Q.INST ...) >> simp[]`. -> Still left residual `no_type_error_result (INR y) /\ ?env_exn...`, showing generic backward application/simplification reduced the case premise to an existential in the large context. (`TO_type_system_rewrite-20260520T132249Z_m33598_t001`)
+  - Push specialized helper with `mp_tac`, try `disch_then irule` / `strip_tac` plus `first_x_assum irule` / `pop_assum irule`. -> Did not produce a stable application: either failed to consume the implication shape or selected the wrong implication/left unrelated existential goals. (`TO_type_system_rewrite-20260520T132249Z_m33600_t001`, `TO_type_system_rewrite-20260520T132249Z_m33603_t001`, `TO_type_system_rewrite-20260520T132249Z_m33607_t001`)
+  - Use `match_mp_tac (Q.INST ... visible_bundle)` and close the bundled antecedent with simplification variants (`simp[]`, `fs[]`, `fs[SF SFY_ss]`, `rpt conj_tac` with targeted direct conjunct closures). -> Direct state/accounts/env/no-error conjuncts can be isolated/closed, but the final `case INR y of ...` conjunct remains and simplification of it re-enters CHOOSE/extract failures. Current source has the last partial `rpt conj_tac` variant. (`TO_type_system_rewrite-20260520T132249Z_m33611_t001`, `TO_type_system_rewrite-20260520T132249Z_m33613_t001`, `TO_type_system_rewrite-20260520T132249Z_m33615_t001`, `TO_type_system_rewrite-20260520T132249Z_m33619_t001`, `TO_type_system_rewrite-20260520T132249Z_m33621_t001`)
+- `E0500` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 2 steps, 3 tools, 1 holbuild, 114,490 tok (113,559 in, 931 out, 99,328 cached), 35.0s, $0.14874900)
+  - Read current helper/tail and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` on the partial source. -> Build fails at line 4063 on `fs[SF SFY_ss]`; goal is exactly the residual `case INR y of ...` premise with identical-looking assumption present, and the child failure is HOL_ERR from CHOOSE. This matches the forbidden failure mode, not a routine tactic miss. (`TO_type_system_rewrite-20260520T132249Z_m33630_t001`, `TO_type_system_rewrite-20260520T132249Z_m33630_t002`, `TO_type_system_rewrite-20260520T132249Z_m33630_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33630_t003` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailDirectBodySoundness
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The component's planned direct stp-boundary patch is still under-bundled for the large theorem context. The current holbuild failure occurs exactly at the warned endpoint: after specializing the body IH and extracting the exception package, the proof has visible assumptions env_extends/env_consistent/return_exception_typed but the existential conclusion for for_cons_return_exception_typed_from_body_ex is not closed by first_assum ACCEPT_TAC, raising FIRST_ASSUM/HOL_ERR. This matches the prior CHOOSE/exact-endpoint failure class; per STATE and learning L1131, further endpoint tactic variation should stop and the proof boundary should be re-planned as a bundled helper/full-tail interface.
+- latest episode: `E0524`
+- blocker: Direct body soundness consumer leaves existential/visible-assumption endpoints in eval_for_cons_type_sound_core that holbuild instrumentation cannot discharge robustly; repeated attempts show this is a boundary mismatch, not a missing small tactic.
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 106,296 tok (105,438 in, 858 out, 97,280 cached), 28.7s, $0.11517000
+- next: Request strategist review/replacement for a bundled helper or full-tail boundary that consumes the specialized body-IH result and concludes `return_exception_typed env ret_ty (ReturnException v')` without local existential/conjunct endpoints.
+
+### Attempts / Evidence
+
+- `E0524` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 106,296 tok (105,438 in, 858 out, 97,280 cached), 28.7s, $0.11517000)
+  - Ran holbuild on the current partial direct-body-IH tail in eval_for_cons_type_sound_core without further edits. -> Build fails at line 4215 `first_assum ACCEPT_TAC`; goal has assumptions 32--34 exactly matching the existential package components but the existential conclusion remains, confirming the known CHOOSE/FIRST_ASSUM endpoint failure. (`TO_type_system_rewrite-20260520T175243Z_m34062_t002`)
+
+### Ruled Out
+
+- Further exact-assumption endpoint tactics in the large theorem tail
+- Direct consumer patch that leaves the existential package to be proved locally
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T175243Z_m34062_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T175243Z_m34062_t002` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithBodyProjection
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` After reordering premises to match the adjusted helper, the proof advanced through body-IH, env.type_defs, evaluate_type, body-eval, and value_has_type, but the final helper premise `env_consistent (extend_local env id ty F) cx (st with scopes updated_by CONS ...)` remains a hostile exact-assumption endpoint. The large context visibly contains both `stp = pushed-state` and `env_consistent ... stp`, but qpat_assum/ACCEPT_TAC, mp_tac+simp, SUBST1_TAC+metis, and SUBS [eq] h all fail or time out/raise CHOOSE instrumentation errors. This matches the do-not-retry pattern and suggests the helper is still under-bundled for this theorem tail.
+- latest episode: `E0515`
+- blocker: The active helper interface still exposes a final exact-assumption/substitution endpoint in the large theorem; holbuild reports CHOOSE failures even when constructing the theorem via SUBS from the visible assumption and equality.
+- actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 11 holbuild, 1,717,709 tok (1,707,889 in, 9,820 out, 1,658,368 cached), 429.5s, $1.37138900
+- next: Request strategist review for a more bundled full-tail helper or a helper whose conclusion consumes the existing `stp` equality and pushed `env_consistent ... stp` internally, so the large theorem has no final exact-assumption/substitution endpoint.
+
+### Attempts / Evidence
+
+- `E0511` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 44 steps, 44 tools, 17 holbuild, 4,834,026 tok (4,821,114 in, 12,912 out, 4,748,288 cached), 629.9s, $3.12563400)
+  - Changed body-IH specialization in `eval_for_cons_type_sound_core` from destructive `qpat_x_assum` to non-destructive `qpat_assum`; replaced raw `drule for_cons_ordinary_exception_return_exception_typed_from_case` with `irule for_cons_body_exception_typed_from_body_soundness`. -> This reached the intended helper application, leaving only the helper's existential/antecedent discharge subgoals, so the conceptual patch is aligned with the plan. (`TO_type_system_rewrite-20260520T132249Z_m33846_t001`)
+  - Supplied explicit helper witnesses `body`, `cx`, `env_after`, `id`, `st_body`, `stp`, `ty`, then tried to discharge body-IH and pushed-state facts using `qpat_assum`, `first_assum`, `ACCEPT_TAC`, `mp_tac`, `simp`, and rebuilding env consistency via `push_scope_with_var_env_consistent`. -> Repeatedly failed on trivial-looking large-context subgoals (`env_consistent ... stp`, `env_consistent env cx st`, or implication identity) with CHOOSE/FIRST_ASSUM instrumentation errors, or with no-match after abbreviation unfolding. This suggests the final consumer proof needs a stronger bundled boundary or different factoring rather than more local tactic variants. (`TO_type_system_rewrite-20260520T132249Z_m33856_t001`, `TO_type_system_rewrite-20260520T132249Z_m33886_t001`)
+- `E0512` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 48 steps, 53 tools, 18 holbuild, 5,207,714 tok (5,190,484 in, 17,230 out, 5,096,448 cached), 771.7s, $3.53530400)
+  - Kept non-destructive body IH specialization and patched final ReturnException branch to use for_cons_body_exception_typed_from_body_soundness with explicit witnesses body,cx,env_after,id,st_body,stp,ty. -> Build advanced to helper antecedent discharge but did not close the theorem; remaining subgoal is pushed env consistency already present in assumptions. (`TO_type_system_rewrite-20260520T132249Z_m33890_t001`, `TO_type_system_rewrite-20260520T132249Z_m33890_t003`)
+  - Tried to rebuild env_consistent (extend_local env id ty F) cx stp by irule push_scope_with_var_env_consistent after killing the existing assumption, following the partial source state from previous session. -> holbuild reports MATCH_MP_TAC No match on goal env_consistent (extend_local env id ty F) cx stp, confirming this local tactic path is not viable. (`TO_type_system_rewrite-20260520T132249Z_m33890_t003`)
+- `E0514` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 34 steps, 36 tools, 14 holbuild, 3,967,870 tok (3,952,819 in, 15,051 out, 3,881,984 cached), 776.8s, $2.74669700)
+  - Patched final ReturnException branch to call `for_cons_return_exception_typed_from_pushed_original_body` instead of `for_cons_body_exception_typed_from_body_soundness`; supplied explicit witnesses for body,cx,env_after,id,st,st_body,ty,tyv,v. -> The helper application reaches subgoals, confirming the call shape mostly matches, but direct simplification timed out on the large conjunction; explicit `conj_tac` splitting was needed. (`TO_type_system_rewrite-20260520T132249Z_m33920_t001`)
+  - Tried explicit discharge of helper premises in the large theorem. Exact endpoints for assumptions like `env_consistent env cx st` still raise CHOOSE/FIRST_ASSUM, so the helper statement was adjusted to consume already-available `env.type_defs = get_tenv cx` and pushed `env_consistent ... stp` instead of requiring original env consistency as a late endpoint. -> Current build shows the helper itself passes after the adjustment, but the tail tactic is stale: after the body-IH subgoal the next goal is `env.type_defs = get_tenv cx` while the source still tries to prove `id NOTIN FDOM env.var_types`. Reorder the final premise discharges next. (`TO_type_system_rewrite-20260520T132249Z_m33934_t001`, `TO_type_system_rewrite-20260520T132249Z_m33945_t001`)
+- `E0515` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 11 holbuild, 1,717,709 tok (1,707,889 in, 9,820 out, 1,658,368 cached), 429.5s, $1.37138900)
+  - Reordered `eval_for_cons_type_sound_core` tail premise discharge after helper application to match the adjusted helper: body IH, `env.type_defs = get_tenv cx`, `evaluate_type ... = SOME tyv`, body eval rewritten by `stp = pushed-state`, `value_has_type tyv v`, then pushed env consistency. -> Advanced past the stale premise-order failure and solved several premises, confirming the helper application shape is mostly right; `metis_tac[listTheory.EVERY_DEF]` solves the `value_has_type` projection from `EVERY`. (`TO_type_system_rewrite-20260520T132249Z_m33953_t001`, `TO_type_system_rewrite-20260520T132249Z_m33968_t001`)
+  - Tried to close final concrete `env_consistent` premise using visible assumption plus equality via qpat_assum/ACCEPT_TAC after rewriting, mp_tac+simp, SUBST1_TAC+metis, and `ACCEPT_TAC (SUBS [eq] h)`. -> All variants failed in the large context: simplification timed out or holbuild raised CHOOSE instrumentation failures on an apparently identical/substitutable assumption, reproducing the prior exact-endpoint fragility. (`TO_type_system_rewrite-20260520T132249Z_m33970_t001`, `TO_type_system_rewrite-20260520T132249Z_m33972_t001`, `TO_type_system_rewrite-20260520T132249Z_m33974_t001`)
+
+### Ruled Out
+
+- Further exact-assumption/substitution variants for the final pushed env-consistency endpoint in the large theorem
+- Unbounded simp/fs over the final conjunction
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33953_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33958_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33970_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33974_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithResidualWitness
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0503`
+- blocker: The active tail remains fragile in the large `eval_for_cons_type_sound_core` context. Direct `Cases_on y` reduces to the ReturnException branch, but attempts to consume either the extracted `return_exception_typed env_exn ret_ty (ReturnException v')` fact or the body case-premise fact fail with CHOOSE/extract_thm/ACCEPT_TAC instrumentation errors even for tautological goals. Applying existing helpers (`return_exception_typed_extend_local_F_ReturnException`, `_imp`, `for_cons_ordinary_exception_return_typed_from_case_premise`) backward leaves subgoals whose matching/assumption selection fails in the large context. Current source is partial and does not build.
+- actual effort: 1 sessions, 4 msgs, 60 steps, 61 tools, 26 holbuild, 4,892,937 tok (4,874,483 in, 18,454 out, 4,773,376 cached), 910.0s, $3.44584300
+- next: Ask strategist to replace/decompose this tail component. Likely need a helper outside the large theorem that packages the exact ReturnException/case-premise transport, or a tactic that avoids assumption extraction in the large context altogether.
+
+### Attempts / Evidence
+
+- `E0502` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 53 steps, 58 tools, 21 holbuild, 5,641,224 tok (5,621,210 in, 20,014 out, 5,526,016 cached), 828.5s, $3.83939800)
+  - Tried PLAN residual-bundle route: assert residual existential, apply `for_cons_ordinary_exception_full_suffix_from_residual_bundle`, and solve residual/no-error conjuncts. -> Residual witness could be exposed with `fs[no_type_error_result_def, SF SFY_ss]`, but applying the residual-bundle helper left `no_type_error_result (INR y)` or residual conjunction subgoals that triggered CHOOSE/extract fragility or assumption-selection failures. This suggests even the residual bundle can still generate fragile conjuncts in the large theorem unless applied in a very exact shape. (`TO_type_system_rewrite-20260520T132249Z_m33653_t001`, `TO_type_system_rewrite-20260520T132249Z_m33655_t001`, `TO_type_system_rewrite-20260520T132249Z_m33663_t001`, `TO_type_system_rewrite-20260520T132249Z_m33671_t001`, `TO_type_system_rewrite-20260520T132249Z_m33677_t001`)
+  - Tried direct conclusion proof after `simp[]`: `Cases_on y`, trivial non-return exception cases by `simp[return_exception_typed_def]`, and ReturnException branch from the body case witness plus `value_runtime_typed_env_static`. -> This avoids the final `case INR y` goal and progresses to a single ReturnException subgoal. Current source fails only because broad `gvs[env_extends_def, extend_local_def]` times out while trying to prove `env_exn.type_defs = env.type_defs /\ value_runtime_typed env_exn ret_ty v'` from assumptions including `env_extends (extend_local env id ty F) env_exn` and `value_runtime_typed env_exn ret_ty v'`. (`TO_type_system_rewrite-20260520T132249Z_m33684_t001`, `TO_type_system_rewrite-20260520T132249Z_m33689_t001`)
+- `E0503` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 60 steps, 61 tools, 26 holbuild, 4,892,937 tok (4,874,483 in, 18,454 out, 4,773,376 cached), 910.0s, $3.44584300)
+  - Direct ReturnException transport with existing helper `return_exception_typed_extend_local_F_ReturnException` / `_imp`, using explicit witnesses and then trying assumption/asm_rewrite/ACCEPT_TAC for the remaining body fact. -> Failed: after helper application, the remaining goal was exactly an available assumption (or a tautological implication), but `first_assum`, `qpat_x_assum`, `simp`, `asm_rewrite_tac`, `disch_then ACCEPT_TAC`, and even `ACCEPT_TAC (ASSUME ...)` hit CHOOSE/extract_thm/ACCEPT_TAC failures under goalfrag instrumentation. (`TO_type_system_rewrite-20260520T132249Z_m33700_t001`, `TO_type_system_rewrite-20260520T132249Z_m33704_t001`, `TO_type_system_rewrite-20260520T132249Z_m33719_t001`, `TO_type_system_rewrite-20260520T132249Z_m33723_t001`, `TO_type_system_rewrite-20260520T132249Z_m33727_t001`)
+  - Apply `for_cons_ordinary_exception_return_typed_from_case_premise` and try to discharge its single case-premise antecedent from the existing body premise, including via assumption selection, explicit witness reconstruction, and popping recent assumptions to isolate the premise. -> Failed: qpat/first assumption selection did not match the visible case premise; explicit witness reconstruction again failed on conjunction fields; isolating the case premise produced a tautological implication but `simp` and `disch_then ACCEPT_TAC` still failed with CHOOSE/DISCH_THEN errors. (`TO_type_system_rewrite-20260520T132249Z_m33730_t001`, `TO_type_system_rewrite-20260520T132249Z_m33732_t001`, `TO_type_system_rewrite-20260520T132249Z_m33736_t001`, `TO_type_system_rewrite-20260520T132249Z_m33747_t001`, `TO_type_system_rewrite-20260520T132249Z_m33751_t001`, `TO_type_system_rewrite-20260520T132249Z_m33753_t001`)
+
+### Ruled Out
+
+- Direct broad `gvs[env_extends_def, extend_local_def]` in ReturnException branch
+- Backward helper application followed by assumption selection/ACCEPT_TAC inside the large theorem
+- Selecting the visible `case INR (ReturnException v')` premise with qpat/first assumption in the large theorem
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33700_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33719_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33730_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33747_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33751_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33753_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithSpecializedHelper
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The new small ReturnException case helper theorems prove in the standalone helper block, but the large theorem cannot robustly feed them. Direct full-suffix helper use before `Cases_on y` reduced to `return_exception_typed env ret_ty y`; using ReturnException-specific helper after `Cases_on y` reduced to the scalar return-typing goal but still needed the raw case premise. `metis_tac[for_cons_ordinary_exception_return_exception_typed_from_case]` timed out; `qpat_x_assum` and `drule` on the visible case premise failed with FIRST_ASSUM/Q_TAC instrumentation errors. This suggests a stronger upstream boundary that avoids any large-context case-premise consumption is needed.
+- latest episode: `E0507`
+- blocker: The planned specialized-helper patch still requires consuming the raw `case INR (ReturnException v')` body premise or its existential witness inside `eval_for_cons_type_sound_core`. Multiple helper applications either leave a residual existential package, timeout under `metis_tac`, or fail at large-context assumption selection (`qpat_x_assum`/`drule`) despite the premise being visibly present. This reproduces the E0503 fragility, so the current component's Risk 2 decomposition is insufficient.
+- actual effort: 1 sessions, 2 msgs, 36 steps, 36 tools, 13 holbuild, 3,648,060 tok (3,632,429 in, 15,631 out, 3,572,736 cached), 726.5s, $2.55376300
+- next: Call plan_oracle review to replace/decompose this tail patch. Likely need a stronger boundary before the `Cases_on y` point or to alter the upstream proof to derive a non-existential return-typing fact before entering the hostile tail context.
+
+### Attempts / Evidence
+
+- `E0506` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 34 steps, 34 tools, 13 holbuild, 3,413,460 tok (3,399,972 in, 13,488 out, 3,343,360 cached), 668.5s, $2.35938000)
+  - Replaced old `ACCEPT_TAC (ASSUME case...)` tail with `irule for_cons_ordinary_exception_full_suffix_from_case_bundle` directly before `Cases_on`. -> Did not close: `irule` matching/simplification reduced to `return_exception_typed env ret_ty y` or a residual existential package, requiring exactly the raw case premise in the large context. (`TO_type_system_rewrite-20260520T132249Z_m33784_t001`, `TO_type_system_rewrite-20260520T132249Z_m33794_t001`)
+  - Added small ReturnException-specific case helpers `for_cons_ordinary_exception_return_exception_suffix_from_case` and `..._typed_from_case`, then patched ReturnException branch after `Cases_on y`. -> Small helpers prove, but large theorem still cannot feed their case premise robustly: `metis_tac` over helper times out; `qpat_x_assum`/`drule` on the visible case premise fail at large-context assumption selection. (`TO_type_system_rewrite-20260520T132249Z_m33800_t001`, `TO_type_system_rewrite-20260520T132249Z_m33810_t001`, `TO_type_system_rewrite-20260520T132249Z_m33814_t001`)
+- `E0507` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 36 steps, 36 tools, 13 holbuild, 3,648,060 tok (3,632,429 in, 15,631 out, 3,572,736 cached), 726.5s, $2.55376300)
+  - Patched tail with `irule for_cons_ordinary_exception_full_suffix_from_case_bundle` directly on the full suffix before/after simplification. -> Failed: matching/simplification reduced to scalar `return_exception_typed env ret_ty y` or left residual existential/case-premise subgoals; the helper could not consume the visible case premise in one robust step. (`TO_type_system_rewrite-20260520T132249Z_m33784_t001`, `TO_type_system_rewrite-20260520T132249Z_m33794_t001`)
+  - Added standalone ReturnException case helpers and patched the ReturnException branch after `Cases_on y`. -> Small helpers themselves proved, but applying them in the large theorem still required feeding the case premise; `irule` left an existential subgoal and exact assumption consumption failed. (`TO_type_system_rewrite-20260520T132249Z_m33800_t001`, `TO_type_system_rewrite-20260520T132249Z_m33807_t001`)
+  - Tried large-context consumers for the visible case premise: `metis_tac[for_cons_ordinary_exception_return_exception_typed_from_case]`, explicit `qpat_x_assum ... mp_tac`, and `drule for_cons_ordinary_exception_return_exception_typed_from_case`. -> All failed in the large theorem: metis timed out; qpat/drule failed with instrumentation/assumption-selection errors while the exact premise was visible in the goal state. (`TO_type_system_rewrite-20260520T132249Z_m33810_t001`, `TO_type_system_rewrite-20260520T132249Z_m33812_t001`, `TO_type_system_rewrite-20260520T132249Z_m33814_t001`)
+
+### Ruled Out
+
+- Direct full-suffix helper application to `for_cons_ordinary_exception_full_suffix_from_case_bundle` in the large theorem
+- Raw `qpat_x_assum`/`drule`/`metis_tac` consumption of the visible `case INR (ReturnException v')` premise in `eval_for_cons_type_sound_core`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33784_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33794_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33810_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33812_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33814_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.RetainExistingBoundaryHelpers
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0525`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 68,883 tok (68,595 in, 288 out, 64,000 cached), 6.3s, $0.06361500
+- next: Begin the next scheduled carry-forward/helper component.
+
+### Attempts / Evidence
+
+- `E0501` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 143,079 tok (142,494 in, 585 out, 135,168 cached), 13.5s, $0.12176400)
+  - Audited ordinary-exception helper block with grep/read around lines 1234-1383. -> Confirmed `for_cons_ordinary_exception_return_typed_from_INR_witness`, `for_cons_ordinary_exception_residual_from_case_premise`, and `for_cons_ordinary_exception_full_suffix_from_residual_bundle` are present in source with the expected residual-witness interface. No edits needed for helper retention. (`TO_type_system_rewrite-20260520T132249Z_m33635_t001`, `TO_type_system_rewrite-20260520T132249Z_m33635_t002`)
+- `E0504` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 256,156 tok (255,587 in, 569 out, 249,856 cached), 17.2s, $0.17065300)
+  - grep/read audit for `return_exception_typed_extend_local_env_extends`, `for_cons_ordinary_exception_return_typed_from_INR_witness`, and `for_cons_ordinary_exception_full_suffix_from_INR_witness`. -> Confirmed all requested helpers exist with usable signatures before `eval_for_cons_type_sound_core`. (`TO_type_system_rewrite-20260520T132249Z_m33759_t003`, `TO_type_system_rewrite-20260520T132249Z_m33759_t002`, `TO_type_system_rewrite-20260520T132249Z_m33759_t001`)
+- `E0508` (proved, , actual effort: 1 sessions, 1 steps, 127,191 tok (126,830 in, 361 out, 122,368 cached), 10.0s, $0.09432400)
+  - Carried forward the already-completed helper audit from E0504; no source edits were needed for this carry-forward audit leaf. -> Existing ordinary-exception helper layer remains present and usable per prior grep/read evidence; E0507 did not invalidate this audit. (`TO_type_system_rewrite-20260520T132249Z_m33759_t003`, `TO_type_system_rewrite-20260520T132249Z_m33759_t002`, `TO_type_system_rewrite-20260520T132249Z_m33759_t001`)
+- `E0516` (proved, , actual effort: 1 sessions, 1 steps, 91,355 tok (90,935 in, 420 out, 87,040 cached), 13.0s, $0.07559500)
+  - Carried forward prior audit of ordinary-exception helper block without modifying source. -> Prior grep/read evidence confirms retained helpers exist and are unaffected by the new stp-boundary patch plan. (`TO_type_system_rewrite-20260520T132249Z_m33759_t003`, `TO_type_system_rewrite-20260520T132249Z_m33759_t002`, `TO_type_system_rewrite-20260520T132249Z_m33759_t001`)
+- `E0520` (proved, , actual effort: 1 sessions, 1 steps, 50,171 tok (49,806 in, 365 out, 45,568 cached), 10.2s, $0.05492400)
+  - carry-forward audit; no source edits -> Retained ordinary-exception helper layer remains present per prior grep/read evidence and is unaffected by the current stp-boundary plan. (`TO_type_system_rewrite-20260520T132249Z_m33759_t003`, `TO_type_system_rewrite-20260520T132249Z_m33759_t002`, `TO_type_system_rewrite-20260520T132249Z_m33759_t001`)
+- `E0525` (proved, , actual effort: 1 sessions, 1 steps, 68,883 tok (68,595 in, 288 out, 64,000 cached), 6.3s, $0.06361500)
+  - Carry-forward source audit component; no edits or builds needed. Prior dossier evidence confirms the ordinary-exception helper layer remains present and the current replanning only changes downstream consumer boundary. -> Component is retained as already proved/audited; source left unchanged. (`TO_type_system_rewrite-20260520T132249Z_m33759_t003`, `TO_type_system_rewrite-20260520T132249Z_m33759_t002`, `TO_type_system_rewrite-20260520T132249Z_m33759_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33759_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33759_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33759_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.UseBundledCasePremiseTail
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The bundled theorem strategy is mathematically aligned but not robust under holbuild goalfrag/instrumentation in the large eval_for_cons_type_sound_core context. Multiple variants of using the visible case premise left trivial-looking implication/existential/conjunct goals; simplification or ACCEPT_TAC endpoints repeatedly failed with CHOOSE/extract_thm instrumentation errors. This matches the STATE warning that if explicit witnesses still fail, the leaf should become a small helper-proof component or a different boundary, not more main-theorem plumbing.
+- latest episode: `E0493`
+- blocker: Need strategist review for an exact helper/boundary or rebased local plan that avoids destructing/repackaging the case-premise existential inside eval_for_cons_type_sound_core. Current tail attempts either leave a residual existential bundle or hit holbuild CHOOSE/extract_thm failures on trivial endpoints.
+- actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 19 holbuild, 3,083,185 tok (3,071,159 in, 12,026 out, 3,000,832 cached), 487.5s, $2.21283100
+- next: Call plan_oracle(mode='review') for this component with the cited evidence and request a helper/boundary component or subtree replacement that avoids the large-context existential endpoint fragility.
+
+### Attempts / Evidence
+
+- `E0493` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 19 holbuild, 3,083,185 tok (3,071,159 in, 12,026 out, 3,000,832 cached), 487.5s, $2.21283100)
+  - Bundled theorem with explicit outer witnesses env_after/id/st_body/ty and direct case-premise simplification -> Left an implication/existential from the visible case premise; simp endpoint triggered extract_thm/CHOOSE failures instead of closing. (`TO_type_system_rewrite-20260520T132249Z_m33480_t001`, `TO_type_system_rewrite-20260520T132249Z_m33494_t001`)
+  - Push the `sum_CASE (INR y) _ _` assumption, discharge it, then fs[] to expose env_exn and solve the resulting existential by qexists_tac/env_exn and conjunct endpoints -> fs[] exposed the expected facts (env_extends, env_consistent, return_exception_typed), but the final existential/conjunct endpoints still failed under holbuild instrumentation with CHOOSE/extract_thm even when the exact assumptions were visible. (`TO_type_system_rewrite-20260520T132249Z_m33512_t001`, `TO_type_system_rewrite-20260520T132249Z_m33516_t001`)
+  - Try the existing case-premise helper `for_cons_ordinary_exception_full_suffix_from_case_premise` as a higher-level boundary in the main tail -> Still produced the old residual bundle `no_type_error_result (INR y) /\ ?id' st_body' ty' env_exn ...`, confirming this route returns to the abandoned residual interface. (`TO_type_system_rewrite-20260520T132249Z_m33520_t001`)
+
+### Ruled Out
+
+- plain bundled theorem application with simp
+- explicit outer witnesses plus direct case-premise simp in the large theorem
+- manual destruct/repackaging of env_exn in the large theorem
+- case-premise helper route that returns to residual bundle
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33480_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33494_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33512_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33516_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33520_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.UseDirectCaseBundleTail
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned direct tail `irule for_cons_ordinary_exception_full_suffix_from_case_bundle_direct >> simp[]` does not close. It still leaves the residual existential/noerr subgoal, apparently because `irule` instantiates variables appearing only in antecedents (`env_after`, `st_body`, `id`, `ty`) with fresh schematic variables rather than the visible assumptions. Attempts to manually discharge the residual from the case premise ran into CHOOSE/extract_thm failures or timeouts in the large theorem, matching the previous warning. This means the low-risk direct-tail plan is not executable as stated; needs strategist redesign of the boundary or call interface.
+- latest episode: `E0492`
+- blocker: Direct boundary lemma application leaves residual existential bundle; manual extraction paths are forbidden/fragile and reproduced CHOOSE/extract_thm failures/timeouts.
+- actual effort: 1 sessions, 5 msgs, 72 steps, 73 tools, 29 holbuild, 6,141,417 tok (6,114,153 in, 27,264 out, 6,004,224 cached), 949.8s, $4.36967700
+
+### Attempts / Evidence
+
+- `E0492` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 72 steps, 73 tools, 29 holbuild, 6,141,417 tok (6,114,153 in, 27,264 out, 6,004,224 cached), 949.8s, $4.36967700)
+  - Replaced obsolete residual-helper tail with `irule for_cons_ordinary_exception_full_suffix_from_case_bundle_direct >> simp[]`. -> Build still failed at QED with residual `no_type_error_result (INR y) /\ ?id' st_body' ty' env_exn...`, showing direct `irule` did not instantiate antecedent-only variables to visible assumptions. (`TO_type_system_rewrite-20260520T132249Z_m33389_t001`, `TO_type_system_rewrite-20260520T132249Z_m33461_t001`)
+  - Tried explicit local discharge of no-error and residual existential from the visible case premise using `qexists_tac`, `mp_tac`, `SIMP_RULE`, `goal_assum`, and assumption cleanup. -> No-error can be solved only via low-level assumption construction; residual existential extraction repeatedly left implication wrappers from unrelated assumptions or triggered CHOOSE/extract_thm failures/timeouts. This confirms the direct theorem's interface/call shape is still wrong in this large context. (`TO_type_system_rewrite-20260520T132249Z_m33413_t001`, `TO_type_system_rewrite-20260520T132249Z_m33425_t001`, `TO_type_system_rewrite-20260520T132249Z_m33437_t001`, `TO_type_system_rewrite-20260520T132249Z_m33439_t001`)
+  - Tried bypassing the direct theorem and proving the visible suffix with `simp[]` plus `for_cons_ordinary_exception_return_typed_from_INR_witness`. -> This reduced to `return_exception_typed env ret_ty y` but again required extracting the existential from the full case premise; with assumptions present the goal became implication-wrapped and did not close by simp. (`TO_type_system_rewrite-20260520T132249Z_m33450_t001`, `TO_type_system_rewrite-20260520T132249Z_m33457_t001`)
+
+### Ruled Out
+
+- Plain direct `irule ... >> simp[]` as sufficient.
+- Manual residual existential extraction in the large theorem via qexists/mp_tac/SIMP_RULE/goal_assum.
+- Bypass proof with return_typed helper without a better extraction boundary.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T132249Z_m33389_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33461_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33437_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33439_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T132249Z_m33457_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The active scheduled component appears stale relative to the accepted E0450 review: it depends on `for_cons_ordinary_exception_tail_goal_from_case_premise`, which packages only noerr+existential, not the full final residual, and metis in the suspended Resume still CHOOSEs.
+- latest episode: `E0451`
+- blocker: Scheduled old-plan integration leaves proof work to metis inside Resume and still triggers CHOOSE. It lacks the full final-case boundary lemma required by the reviewed C2.3.3 replacement.
+- actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 512,127 tok (509,598 in, 2,529 out, 497,152 cached), 59.8s, $0.38667600
+- next: Call plan_oracle review/replace scheduling so execution can proceed with C2.3.3.1-.4 (stabilize source, add packaged full final-case helper, patch suffix) rather than the stale ForConsOrdinaryExceptionCaseHelperSubtree integration.
+
+### Attempts / Evidence
+
+- `E0451` (stuck, risk_mismatch, actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 512,127 tok (509,598 in, 2,529 out, 497,152 cached), 59.8s, $0.38667600)
+  - Replaced the partial C2.3.3 suffix with the scheduled old-plan integration: `metis_tac[for_cons_ordinary_exception_tail_goal_from_case_premise, for_cons_ordinary_exception_final_case_noerr_first]` at the final For_cons ordinary-exception goal, using the visible noerr/case-premise/popped-invariant assumptions without local existential destructing. -> holbuild still fails at the Resume suffix with HOL_ERR CHOOSE. The residual is exactly the final conjunction/case goal with visible assumptions including noerr, the unsimplified `case INR y` premise, and popped invariants. This shows the old scheduled integration component is also CHOOSE-sensitive and inconsistent with the newer C2.3.3 replacement plan that requires a full outside-Resume boundary lemma. (`TO_type_system_rewrite-20260519T123242Z_m32272_t001`)
+
+### Ruled Out
+
+- metis_tac with the old tail-goal packaging helper inside Resume
+- continuing old ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix without a full final-case boundary theorem
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32272_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.AddFullFinalCaseBoundary
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0452`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 581,453 tok (579,819 in, 1,634 out, 567,808 cached), 97.0s, $0.39297900
+
+### Attempts / Evidence
+
+- `E0452` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 581,453 tok (579,819 in, 1,634 out, 567,808 cached), 97.0s, $0.39297900)
+  - Added top-level theorem `for_cons_ordinary_exception_final_case_from_case_premise` near the For_cons helpers. Proved it outside the suspended Resume by stripping the visible noerr/case-premise/popped-invariant premises, applying `for_cons_ordinary_exception_final_case_noerr_first`, simplifying the syntactic `case (INR y)` premise, and packaging witnesses `id`, `stbody`, `ty`, `env_exn`. -> `holbuild vyperTypeStmtSoundnessTheory` advanced past the new helper and failed later at the still-unpatched Resume suffix, confirming the boundary helper itself is proved and available for the next patch component. (`TO_type_system_rewrite-20260519T123242Z_m32280_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32280_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The semantic helper is already proved, but the consumer interface remains too fragile for suspended Resume. The plan underestimated that even non-metis forward/backward variants can leave validation obligations or implication shapes that fail in Resume.
+- latest episode: `E0453`
+- blocker: PatchResumeSuffix was rated Risk 2, but attempts to consume the proved boundary helper inside the suspended For_cons Resume still either create unsafe implication/side-goal shapes or require forbidden local destructing of the existential case premise. The current source is partial and fails before proof completion; further suffix-tactic variants would violate the component's not_to_try guidance.
+- actual effort: 1 sessions, 13 steps, 14 tools, 6 holbuild, 792,929 tok (787,034 in, 5,895 out, 760,832 cached), 165.9s, $0.68827600
+- next: Call plan_oracle review for this stuck component; likely redesign needs a no-side-condition consumer theorem or refactor out of Resume.
+
+### Attempts / Evidence
+
+- `E0453` (stuck, risk_mismatch, actual effort: 1 sessions, 13 steps, 14 tools, 6 holbuild, 792,929 tok (787,034 in, 5,895 out, 760,832 cached), 165.9s, $0.68827600)
+  - Forward-ish `qpat_assum no_type_error_result ... (mp_then Any mp_tac helper)` then try to consume the visible case premise with `mp_then`. -> Did not close; produced an implication theorem shape rather than a direct theorem, and `disch_then` failed before consuming the case premise. (`TO_type_system_rewrite-20260519T123242Z_m32300_t001`)
+  - Push the proved helper itself with `mp_tac ... >> simp[]`. -> Avoided immediate CHOOSE, but left a residual implication-to-return-typing goal whose consequent was not solved; `QED` failed with an unproved return_exception_typed projection. (`TO_type_system_rewrite-20260519T123242Z_m32304_t001`)
+  - After pushing/simplifying the helper, try `disch_then irule >> simp[]` to use the resulting implication for the return-typing projection. -> Failed in `DISCH_THEN`; this is still an unsafe consumer shape inside the Resume. (`TO_type_system_rewrite-20260519T123242Z_m32307_t001`)
+  - Attempted direct local use of the visible `case (INR y)` premise and existing `return_exception_typed_extend_local_env_extends` as a fallback probe. -> This violated the intended boundary direction and did not even parse robustly because the quoted `INL v` arm resolved to the wrong sum type; it confirms the suffix needs redesign rather than more local destructing. (`TO_type_system_rewrite-20260519T123242Z_m32309_t001`)
+
+### Ruled Out
+
+- metis_tac over the boundary helper in Resume
+- backward irule/side-goal application of the helper
+- mp_then/disch_then consumption variants that leave an implication projection
+- local destructing of the case premise inside Resume
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32300_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32304_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32307_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32309_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0454`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 236,735 tok (235,582 in, 1,153 out, 226,816 cached), 77.6s, $0.19182800
+- next: Review closure, then begin PatchResumeSuffix.2 to replace the suffix with the narrow helper consumer.
+
+### Attempts / Evidence
+
+- `E0454` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 236,735 tok (235,582 in, 1,153 out, 226,816 cached), 77.6s, $0.19182800)
+  - Inserted `for_cons_ordinary_exception_return_typed_from_case_premise` after the existing full final-case helper; proof simplifies the `case (INR y : unit + exception)` premise outside Resume, destructs the existential, and applies `return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, and `ty`. -> Helper compiled; holbuild resumed from theorem-context checkpoint after the previous helper and reached the later For_cons Resume suffix, so the new boundary lemma is accepted and the remaining failure belongs to PatchResumeSuffix.2. (`TO_type_system_rewrite-20260519T123242Z_m32314_t001`, `TO_type_system_rewrite-20260519T123242Z_m32315_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32314_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32315_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0456`
+- blocker: The direct `irule for_cons_ordinary_exception_final_case_from_case_premise >> simp[]` patch did not match the actual Resume residual. Holbuild shows the active residual goal is not the helper's claimed final `return_exception_typed env ret_ty y` shape, but `no_type_error_result (INR y) /\ ?id' stbody ty' env_exn. env_extends (extend_local env id' ty' F) env_exn /\ env_consistent env_exn cx stbody /\ return_exception_typed env_exn ret_ty y`. The visible case premise assumption 25 would directly provide this with witnesses `id`, `st_body`, `ty`, `env_exn`, but using it would require exactly the local case-premise destructing that the current component explicitly forbids. Therefore the Risk 1 exact full-helper consumer premise was wrong.
+- actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 211,190 tok (209,377 in, 1,813 out, 197,632 cached), 47.0s, $0.21193100
+- next: Request strategist redesign. Likely needed boundary lemma should conclude the actual existential package (plus no_type_error_result) from the visible `case INR y` premise, so the Resume suffix can use a whole-goal helper without local destructing.
+
+### Attempts / Evidence
+
+- `E0455` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 37 steps, 37 tools, 16 holbuild, 3,819,858 tok (3,806,795 in, 13,063 out, 3,743,232 cached), 485.1s, $2.58132100)
+  - Applied the planned assertion using `irule for_cons_ordinary_exception_return_typed_from_case_premise` followed by an exact `qpat_x_assum` with annotated `INL (v:unit)` / then `INL (u:unit)`. -> Failed before consuming the visible case assumption: first with a parse/type constraint issue from variable `v`, then with `Q_TAC0`/`FIRST_ASSUM` no match even with `u:unit`. (`TO_type_system_rewrite-20260519T123242Z_m32322_t001`, `TO_type_system_rewrite-20260519T123242Z_m32328_t001`)
+  - Tried broader exact-assumption patterns (`case INR y of ...`) and `first_x_assum ACCEPT_TAC` after the narrow helper; also aligned the helper statement to use `st_body` to reduce instantiation mismatch. -> The visible assumption still was not accepted as the generated helper premise. `first_x_assum` failed; changing the helper statement required fixing the helper proof but did not solve the Resume consumer. (`TO_type_system_rewrite-20260519T123242Z_m32340_t001`, `TO_type_system_rewrite-20260519T123242Z_m32347_t001`)
+  - As a diagnostic fallback, destructed the visible `case INR y` premise locally inside the `by` block and used `return_exception_typed_extend_local_env_extends` directly. -> This violates the no-local-destruct design and also failed under the `by`/THEN1 wrapper with `first subgoal not solved`; the last current source is `irule helper >> simp[]`, which also leaves the subgoal unsolved. (`TO_type_system_rewrite-20260519T123242Z_m32351_t001`, `TO_type_system_rewrite-20260519T123242Z_m32355_t001`)
+- `E0456` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 211,190 tok (209,377 in, 1,813 out, 197,632 cached), 47.0s, $0.21193100)
+  - Ran the prescribed current source patch: after substituting `res = INR y` and discarding the irrelevant IH, use `irule for_cons_ordinary_exception_final_case_from_case_premise >> simp[]`. -> Build failed at QED. The failed goal state shows the actual residual is an existential final-exception package over `extend_local env id' ty' F`, not the helper's `return_exception_typed env ret_ty y` final clause. This contradicts the plan's expected syntactic match. (`TO_type_system_rewrite-20260519T123242Z_m32364_t001`)
+  - Inspected helper statements and the patched suffix around lines 1068-1099 and 3754-3755. -> The helper currently concludes `no_type_error_result (INR y) /\ (case INR y of ... => return_exception_typed env ret_ty exn)`, whereas the Resume residual needs `no_type_error_result (INR y) /\ ?id' stbody ty' env_exn. ... return_exception_typed env_exn ret_ty y`. The source is still partial with the failed direct-helper patch in place. (`TO_type_system_rewrite-20260519T123242Z_m32365_t002`, `TO_type_system_rewrite-20260519T123242Z_m32365_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32364_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32365_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32365_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0457`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 18 holbuild, 3,320,719 tok (3,306,414 in, 14,305 out, 3,249,152 cached), 515.3s, $2.34003600
+
+### Attempts / Evidence
+
+- `E0457` (proved, , actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 18 holbuild, 3,320,719 tok (3,306,414 in, 14,305 out, 3,249,152 cached), 515.3s, $2.34003600)
+  - Added `for_cons_ordinary_exception_residual_from_case_premise` in the For_cons ordinary-exception helper cluster. Final proof uses `rw[no_type_error_result_def] >> metis_tac[]`, which handles the no-TypeError conjunct by expanding the predicate and packages the exception witness from the simplified `case (INR y)` premise. -> Holbuild advanced past the new helper and resumed the For_cons suffix, proving the boundary lemma. The remaining failure is at the old suffix still using `for_cons_ordinary_exception_final_case_from_case_premise`, which belongs to the dependent patch component 2.2. (`TO_type_system_rewrite-20260519T123242Z_m32411_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32411_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32410_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0458`
+- blocker: The planned one-line suffix patch `irule for_cons_ordinary_exception_residual_from_case_premise >> simp[]` does not match the actual goal at the application point. Holbuild shows that before applying the suffix helper, the active goal is again the full final conjunction with popped state/account/env preservation and `case INR y ... return_exception_typed env ret_ty exn`, not the residual existential package. Thus the residual helper is a premise-solver for the old final-case helper (or some similar wrapper), not a direct replacement at this source point. This contradicts the component's Risk 1 assumption and the explicit instruction that the residual helper's conclusion should unify with the suffix goal.
+- actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 300,406 tok (299,388 in, 1,018 out, 290,304 cached), 37.6s, $0.22111200
+- next: Request strategist review/redesign. Likely integration should either use `for_cons_ordinary_exception_final_case_from_case_premise` as the top-level `irule` and then use `for_cons_ordinary_exception_residual_from_case_premise` to discharge its residual premise, or introduce a new full-goal helper that combines popped preservation premises with the residual helper.
+
+### Attempts / Evidence
+
+- `E0458` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 300,406 tok (299,388 in, 1,018 out, 290,304 cached), 37.6s, $0.22111200)
+  - Replaced the old suffix call at the end of `Resume eval_all_type_sound_mutual[For_cons]` with the planned direct call: `irule for_cons_ordinary_exception_residual_from_case_premise >> simp[]`. -> Build failed immediately at the `irule`: MATCH_MP_TAC no match. Goal state shows the suffix goal is the full final conjunction, not the residual package. The new residual helper cannot be the direct top-level consumer at that point. (`TO_type_system_rewrite-20260519T123242Z_m32417_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32417_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0460`
+- blocker: Latest required build failed at the same final residual/CHOOSE point: after manually exposing residual witnesses, the remaining tautological implication `return_exception_typed env_exn ret_ty y ==> return_exception_typed env_exn ret_ty y` fails with HOL_ERR CHOOSE inside the suspended Resume. Prior local exact-assumption variants also failed, so the Risk 1 local patch plan is tactic-fragile/wrong-granularity.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 114,670 tok (113,864 in, 806 out, 104,448 cached), 27.0s, $0.12348400
+- next: Request oracle redesign toward a standalone full-goal/boundary helper or other non-Resume packaging of the residual/final case.
+
+### Attempts / Evidence
+
+- `E0459` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 27 steps, 28 tools, 11 holbuild, 3,330,807 tok (3,322,346 in, 8,461 out, 3,273,216 cached), 323.1s, $2.13608800)
+  - Restored the full final-case helper as top-level rule: `irule for_cons_ordinary_exception_final_case_from_case_premise >> simp[]`. -> This matched the full conjunction goal but left a residual package `no_type_error_result (INR y) /\ ?id' stbody ty' env_exn ...`; `simp[]` alone did not discharge the body case premise/existential. (`TO_type_system_rewrite-20260519T123242Z_m32423_t001`)
+  - After the full helper and `simp[]`, tried `rw[no_type_error_result_def] >> metis_tac[]` then `fs[no_type_error_result_def] >> metis_tac[]`. -> `rw` left a simple no-TypeError implication not solved by metis. `fs` exposed the needed witness facts, but `metis_tac` on the existential triggered HOL_ERR CHOOSE inside the suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m32430_t001`, `TO_type_system_rewrite-20260519T123242Z_m32432_t001`)
+  - Manually instantiated existential witnesses `id`, `st_body`, `ty`, `env_exn` and tried to finish conjuncts using simp/rw/qpat/first_assum/asm_rewrite_tac. -> The first two conjuncts can be accepted by qpat assumptions, but the final `return_exception_typed env_exn ret_ty y` assumption is still CHOOSE-fragile when consumed directly. Latest source now pushes it to an implication and applies `disch_then ACCEPT_TAC`, but this final edit is not yet built. (`TO_type_system_rewrite-20260519T123242Z_m32434_t001`, `TO_type_system_rewrite-20260519T123242Z_m32437_t001`, `TO_type_system_rewrite-20260519T123242Z_m32439_t001`, `TO_type_system_rewrite-20260519T123242Z_m32441_t001`, `TO_type_system_rewrite-20260519T123242Z_m32443_t001`, `TO_type_system_rewrite-20260519T123242Z_m32445_t001`)
+- `E0460` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 114,670 tok (113,864 in, 806 out, 104,448 cached), 27.0s, $0.12348400)
+  - Ran required `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` on the latest unverified suffix edit ending in `qpat_x_assum ... mp_tac >> disch_then ACCEPT_TAC`. -> Build resumes at `eval_all_type_sound_mutual[For_cons]` and fails exactly at `disch_then ACCEPT_TAC` on tautological implication due to HOL_ERR CHOOSE; confirms the do-not-retry condition. (`TO_type_system_rewrite-20260519T123242Z_m32452_t001`)
+  - Prior episode tried full helper top-level plus `simp[]`, then `rw/fs[no_type_error_result_def]`, metis, manual witnesses, and multiple direct assumption-consumption variants. -> These paths exposed the same residual witness facts but remained CHOOSE-fragile inside the suspended Resume; no local patch completed the component. (`TO_type_system_rewrite-20260519T123242Z_m32423_t001`, `TO_type_system_rewrite-20260519T123242Z_m32432_t001`, `TO_type_system_rewrite-20260519T123242Z_m32445_t001`)
+
+### Ruled Out
+
+- Top-level use of residual helper at suffix
+- Bare `irule for_cons_ordinary_exception_final_case_from_case_premise >> simp[]`
+- Metis over the residual existential inside Resume
+- Direct local assumption consumption for final `return_exception_typed` tail
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32452_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32423_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32432_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32445_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0461`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 29 steps, 30 tools, 12 holbuild, 2,447,809 tok (2,438,702 in, 9,107 out, 2,392,576 cached), 350.2s, $1.70012800
+
+### Attempts / Evidence
+
+- `E0461` (proved, , actual effort: 1 sessions, 2 msgs, 29 steps, 30 tools, 12 holbuild, 2,447,809 tok (2,438,702 in, 9,107 out, 2,392,576 cached), 350.2s, $1.70012800)
+  - Added `for_cons_ordinary_exception_final_case_from_witness` near the existing For_cons ordinary-exception helper block. Initial explicit conjunction proof had focus/precedence issues; final proof delegates to existing `for_cons_ordinary_exception_final_case_noerr_first` and instantiates the residual witnesses `id`, `st_body`, `ty`, `env_exn`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` advanced past the new helper and failed later in the old Resume suffix, confirming the helper compiles/proves. (`TO_type_system_rewrite-20260519T123242Z_m32484_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32484_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is not a semantic counterexample; the assumption needed for the conclusion is present. The failure is proof-boundary fragility in suspended Resume theorem extraction, so the component's tactic-level plan is under-decomposed/wrong granularity.
+- latest episode: `E0463`
+- blocker: The planned atomic-witness call-site patch still reduces inside the suspended `Resume eval_all_type_sound_mutual[For_cons]` to a goal exactly matching a visible assumption, `return_exception_typed env_exn ret_ty y`, but `ACCEPT_TAC (ASSUME ...)` raises HOL_ERR CHOOSE. This reproduces E0462 and shows the Risk-2 suffix patch granularity is wrong; a full-suffix helper/call-site redesign is needed rather than further local exact-assumption tactics.
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 120,213 tok (119,312 in, 901 out, 104,448 cached), 24.4s, $0.15357400
+- next: Call plan_oracle(mode='review') for a redesigned full-suffix helper/call-site patch that avoids exposing or consuming the final atomic `return_exception_typed` fact inside the Resume.
+
+### Attempts / Evidence
+
+- `E0462` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 35 steps, 38 tools, 14 holbuild, 4,131,355 tok (4,117,729 in, 13,626 out, 4,052,480 cached), 486.5s, $2.76126500)
+  - Patched suffix to destruct the visible `case (INR y : unit + exception)` body premise via `qpat_x_assum ... mp_tac >> simp[] >> strip_tac`. -> A typed pattern with `INL (v:unit)` initially failed because `v` in context had type `value`; changing the pattern variable to `u` successfully exposed atomic witness facts `env_extends`, `env_consistent env_exn cx st_body`, and `return_exception_typed env_exn ret_ty y`. (`TO_type_system_rewrite-20260519T123242Z_m32491_t001`, `TO_type_system_rewrite-20260519T123242Z_m32493_t001`)
+  - Tried applying `for_cons_ordinary_exception_final_case_from_witness` directly after destructing the case premise, then with `GSYM return_exception_typed_INR_case_eq` and state abbreviation for the popped state. -> Backward `irule` repeatedly failed to match: first the goal had collapsed to only `return_exception_typed env ret_ty y`, then after preserving the full case shape the accounts conjunct in the goal used `st_body.accounts` while the helper expected `stfinal.accounts`; even after proving an accounts equivalence, the helper no longer matched once the goal reduced to the final case conjunct. (`TO_type_system_rewrite-20260519T123242Z_m32493_t001`, `TO_type_system_rewrite-20260519T123242Z_m32505_t001`, `TO_type_system_rewrite-20260519T123242Z_m32513_t001`)
+  - After the easy preservation conjuncts were discharged, used `return_exception_typed_INR_case_eq` plus `for_cons_ordinary_exception_return_typed_from_case_premise` and explicit witnesses (`cx`, `env_after`, `id`, `st_body`, `ty`, `env_exn`). -> This reduced to the final witness package, but the last direct acceptance of `return_exception_typed env_exn ret_ty y` still fails with HOL_ERR CHOOSE in the suspended Resume, reproducing the prior fragility. (`TO_type_system_rewrite-20260519T123242Z_m32515_t001`, `TO_type_system_rewrite-20260519T123242Z_m32521_t001`)
+- `E0463` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 120,213 tok (119,312 in, 901 out, 104,448 cached), 24.4s, $0.15357400)
+  - Reproduced current source by building `vyperTypeStmtSoundnessTheory` after beginning active component. -> Build fails at the final line of the For_cons ordinary-exception suffix. The failed input goal has assumption 32 exactly `return_exception_typed env_exn ret_ty y` and conclusion exactly the same, but `ACCEPT_TAC (ASSUME ...)` raises HOL_ERR CHOOSE in the suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m32526_t003`)
+  - Inspected current helper and suffix source around lines 1040-1169 and 3770-3816. -> The atomic helper is present/proved earlier, and the current suffix has already destructed the `case INR y` premise into atomic witness facts, but the suffix still ends in a local return-typing tail, which the handoff explicitly warned not to retry. (`TO_type_system_rewrite-20260519T123242Z_m32526_t001`, `TO_type_system_rewrite-20260519T123242Z_m32526_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32526_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32526_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32526_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32521_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0464`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 484,028 tok (481,570 in, 2,458 out, 464,896 cached), 115.5s, $0.38955800
+
+### Attempts / Evidence
+
+- `E0464` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 484,028 tok (481,570 in, 2,458 out, 464,896 cached), 115.5s, $0.38955800)
+  - Inserted full-suffix helper theorem with the original `case (INR y : unit + exception)` premise, final-state facts for `stfinal`, and full five-conjunct conclusion. -> Initial thin wrapper using `irule for_cons_ordinary_exception_final_case_from_case_premise >> simp[]` left the existential residual because helper application did not instantiate `id/st_body/ty` automatically. (`TO_type_system_rewrite-20260519T123242Z_m32531_t001`, `TO_type_system_rewrite-20260519T123242Z_m32532_t001`)
+  - Reproved helper by applying `for_cons_ordinary_exception_final_case_noerr_first`, destructing the case premise inside the normal theorem proof, and explicitly witnessing `id`, `st_body`, `ty`, and `env_exn`. -> `holbuild` resumed past the new helper and failed only later in the old Resume suffix, confirming the helper theorem compiles outside the suspended proof boundary. (`TO_type_system_rewrite-20260519T123242Z_m32534_t001`, `TO_type_system_rewrite-20260519T123242Z_m32535_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32535_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32534_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0466`
+- blocker: After the one authorized suffix-only repair, the For_cons suspended Resume still fails in the same proof-boundary class: local proof reaches a visible assumption-conjunction goal `env_extends ... env_exn /\ return_exception_typed env_exn ret_ty y`, but HOL raises CHOOSE during simplification/proof extraction despite both conjuncts being visible assumptions. This confirms the active leaf's call-site/local-destruct strategy remains too fragile and needs strategist redesign with an exact full-goal helper/forward tactic.
+- actual effort: 1 sessions, 4 steps, 6 tools, 2 holbuild, 277,791 tok (276,045 in, 1,746 out, 252,928 cached), 52.7s, $0.29442900
+- next: Call plan_oracle(mode='review') for a replacement exact full-goal helper or source-level patch; do not continue local destruct/ACCEPT/simp/metis variants inside the Resume.
+
+### Attempts / Evidence
+
+- `E0465` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 41 steps, 45 tools, 16 holbuild, 4,652,836 tok (4,635,586 in, 17,250 out, 4,557,312 cached), 627.9s, $3.18752600)
+  - Probed the goal immediately before applying the full-suffix helper. -> The pre-helper goal is the expected five-conjunct final suffix at `stfinal`, with assumptions for no-type-error, the original `case INR y` body premise, and final state/account/env facts visible. (`TO_type_system_rewrite-20260519T123242Z_m32554_t001`)
+  - Tried direct `irule for_cons_ordinary_exception_full_suffix_from_case_premise`, `qspecl_then ... irule`, and forward `mp_tac ... disch_then irule` variants. -> Direct backward matching did not match the five-conjunct goal; `qspecl_then` failed because the helper theorem has no explicit outer forall; forward `disch_then irule` failed in the suspended Resume implication context. (`TO_type_system_rewrite-20260519T123242Z_m32565_t001`, `TO_type_system_rewrite-20260519T123242Z_m32561_t001`, `TO_type_system_rewrite-20260519T123242Z_m32573_t001`)
+  - Tried manually using the helper theorem forward by `mp_tac` plus sequential `impl_tac` discharges from visible assumptions. -> This got past earlier premises but failed at the account-well-typed implication due tactic/Resume fragility, despite the matching assumption being visible. (`TO_type_system_rewrite-20260519T123242Z_m32575_t001`)
+  - Tried a fallback local proof of the five final conjuncts by destructing the case premise and applying `return_exception_typed_extend_local_env_extends`. -> The `qpat_x_assum` used `INL v` in a context where `v` is a value variable; holbuild reported the known unit-vs-value parse/type error. A subsequent replace intended to change suffix `INL v` to `INL (u:unit)` matched the helper proof region instead, so source needs inspection before continuing. (`TO_type_system_rewrite-20260519T123242Z_m32577_t001`, `TO_type_system_rewrite-20260519T123242Z_m32578_t001`)
+- `E0466` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 6 tools, 2 holbuild, 277,791 tok (276,045 in, 1,746 out, 252,928 cached), 52.7s, $0.29442900)
+  - Inspected helper and suffix source, then built current `vyperTypeStmtSoundnessTheory`. -> Source already had the suffix case-premise binder corrected to `INL (u:unit)`; build reached the fallback local proof and failed because the goal was already the atomic `return_exception_typed env ret_ty y`, so the remaining `conj_tac` was invalid. (`TO_type_system_rewrite-20260519T123242Z_m32584_t001`, `TO_type_system_rewrite-20260519T123242Z_m32584_t002`, `TO_type_system_rewrite-20260519T123242Z_m32584_t004`)
+  - Removed the stale five-conjunct `conj_tac` prefix and rebuilt once, leaving the local application of `return_exception_typed_extend_local_env_extends`. -> Build still failed in the suspended Resume at the final premise-conjunction proof with HOL_ERR CHOOSE, even though both needed conjuncts are visible assumptions. This is the same suspended-proof boundary fragility the PLAN warned about. (`TO_type_system_rewrite-20260519T123242Z_m32585_t001`, `TO_type_system_rewrite-20260519T123242Z_m32586_t001`)
+
+### Ruled Out
+
+- Retrying local destruct of the `case INR y` premise inside the Resume
+- Trying to prove the visible `env_extends /\ return_exception_typed` premise conjunction with `simp[]`/local assumption extraction inside the suspended proof
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32584_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32584_t004` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32586_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0467`
+- blocker: The oracle-refined exact conjunct assumption discharge still fails in the suspended Resume. After replacing the final `simp[]` with `conj_tac` plus exact `qpat_x_assum ... ACCEPT_TAC`, holbuild reached the second conjunct goal `return_exception_typed env_exn ret_ty y` with the identical formula visible as assumption 33, but HOL still raised CHOOSE at the `qpat_x_assum ... ACCEPT_TAC` step. This falsifies the refined low-risk tactic hygiene estimate; the issue is not merely simplifier automation but assumption extraction/validation in this suspended proof boundary.
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 356,231 tok (354,978 in, 1,253 out, 343,040 cached), 35.1s, $0.26880000
+- next: Call plan_oracle(mode='review') for a different design; likely needs a helper that avoids selecting the existential witness fact inside the Resume entirely or a source-level tactic that uses labelled theorem/assumption before destructing.
+
+### Attempts / Evidence
+
+- `E0467` (stuck, risk_mismatch, actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 356,231 tok (354,978 in, 1,253 out, 343,040 cached), 35.1s, $0.26880000)
+  - Patched only the final theorem-application tail as specified: replaced `>> simp[]` after the four existential instantiations with `conj_tac` and exact `qpat_x_assum ... ACCEPT_TAC` for the extension fact and return-typing fact. -> Source edit matched the refined plan and did not alter helper definitions or other cases. (`TO_type_system_rewrite-20260519T123242Z_m32591_t001`, `TO_type_system_rewrite-20260519T123242Z_m32592_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` to verify the exact assumption discharge. -> Build still fails in `Resume eval_all_type_sound_mutual[For_cons]`: the goal and visible assumption are both `return_exception_typed env_exn ret_ty y`, but `qpat_x_assum ... ACCEPT_TAC` raises HOL_ERR CHOOSE. This is the same suspended-boundary class, now independent of `simp[]`. (`TO_type_system_rewrite-20260519T123242Z_m32593_t001`)
+
+### Ruled Out
+
+- Exact `qpat_x_assum ... ACCEPT_TAC` for the visible return-typing assumption inside this suspended Resume
+- Final conjunction discharge by `simp[]`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32591_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32592_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32593_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0468`
+- blocker: The redesigned helper-boundary patch also fails in the suspended Resume. Direct helper use reached the helper's original case-premise subgoal, but exact `qpat_x_assum ... ACCEPT_TAC` on the unchanged case premise raised HOL_ERR CHOOSE despite a visibly identical assumption. Switching the premise discharge to `mp_tac >> simp[]` also raised HOL_ERR CHOOSE on the implication between alpha-equivalent case expressions. This invalidates the assumption that applying `for_cons_ordinary_exception_return_typed_from_case_premise` and discharging the opaque case premise is safe inside this suspended proof boundary.
+- actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,204,240 tok (1,200,214 in, 4,026 out, 1,179,136 cached), 128.5s, $0.81573800
+- next: Call plan_oracle(mode='review') for a stronger redesign. Likely need a helper theorem whose conclusion does not leave any case-premise subgoal to discharge inside Resume, or a patch earlier in the branch before the suspended proof boundary creates problematic assumptions.
+
+### Attempts / Evidence
+
+- `E0468` (stuck, risk_mismatch, actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,204,240 tok (1,200,214 in, 4,026 out, 1,179,136 cached), 128.5s, $0.81573800)
+  - Replaced the local existential-destructing tail with a final five-conjunct proof using `for_cons_ordinary_exception_return_typed_from_case_premise`, selecting the original case premise unchanged. -> Initial state/account/env/no-error conjunct selection was adjusted from `ASSUME``...`` to `qpat_x_assum`; after that, helper application reached the original case-premise subgoal, but exact acceptance of the visible unchanged case premise raised CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m32598_t001`, `TO_type_system_rewrite-20260519T123242Z_m32599_t001`, `TO_type_system_rewrite-20260519T123242Z_m32600_t001`, `TO_type_system_rewrite-20260519T123242Z_m32601_t001`, `TO_type_system_rewrite-20260519T123242Z_m32602_t001`, `TO_type_system_rewrite-20260519T123242Z_m32603_t001`)
+  - Tried the plan's alternate premise discharge by pushing the original case premise with `mp_tac` and using `simp[]` instead of exact acceptance. -> This also failed with HOL_ERR CHOOSE on an implication between the visible original case premise and the helper premise, so even opaque case-premise discharge is unsafe in this suspended Resume shape. (`TO_type_system_rewrite-20260519T123242Z_m32604_t001`, `TO_type_system_rewrite-20260519T123242Z_m32605_t001`)
+
+### Ruled Out
+
+- Direct local existential destruct / witness assumption selection in the Resume
+- Exact `qpat_x_assum ... ACCEPT_TAC` on the original case premise after helper application
+- `mp_tac >> simp[]` discharge of the original case premise after helper application
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32598_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32601_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32602_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32603_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32604_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32605_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32606_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0469`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 8 tools, 2 holbuild, 438,268 tok (436,287 in, 1,981 out, 417,280 cached), 109.3s, $0.36310500
+
+### Attempts / Evidence
+
+- `E0469` (proved, , actual effort: 1 sessions, 7 steps, 8 tools, 2 holbuild, 438,268 tok (436,287 in, 1,981 out, 417,280 cached), 109.3s, $0.36310500)
+  - Inserted normalized-existential transfer helper and proved it by `strip_tac >> irule return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, `ty`. -> helper accepted; holbuild continued past helper checkpoint to the known Resume suffix failure (`TO_type_system_rewrite-20260519T123242Z_m32620_t001`, `TO_type_system_rewrite-20260519T123242Z_m32621_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32620_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32621_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0470`
+- blocker: The planned forward-materialization patch still leaves CHOOSE/selection failures inside the suspended For_cons Resume. Even after the INR-witness helper compiled, selecting the visible case premise with loose/exact qpat patterns failed, `first_assum` failed, and using boundary helpers left residual simple goals where exact assumption acceptance of `no_type_error_result (INR y)` also raises HOL_ERR CHOOSE. This indicates the suspended proof boundary remains hostile to local assumption consumption, contrary to the Risk 2 plan.
+- actual effort: 1 sessions, 4 msgs, 49 steps, 48 tools, 16 holbuild, 5,084,467 tok (5,066,192 in, 18,275 out, 4,981,248 cached), 700.0s, $3.46359400
+- next: Call plan_oracle review; likely redesign to prove/package the whole suffix outside the Resume using a broader theorem that consumes all needed assumptions as theorem inputs without leaving any residual subgoal discharged by local assumption selection.
+
+### Attempts / Evidence
+
+- `E0470` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 49 steps, 48 tools, 16 holbuild, 5,084,467 tok (5,066,192 in, 18,275 out, 4,981,248 cached), 700.0s, $3.46359400)
+  - Selected the case-premise assumption, simplified it with `SIMP_RULE`, applied `for_cons_ordinary_exception_return_typed_from_INR_witness`, then tried to close the final conjunct from the materialized `return_exception_typed env ret_ty y` assumption. -> Materialization appeared in the goal state, but exact acceptance/asm rewrite of the simple identical return-typing goal still raised HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m32629_t001`, `TO_type_system_rewrite-20260519T123242Z_m32631_t001`)
+  - Tried to avoid residual conjunct splitting by constructing/accepting a theorem via `for_cons_ordinary_exception_final_case_noerr_first` from selected/simplified case-premise theorem and existing assumptions. -> Loose/exact `qpat_assum`/`qpat_x_assum` selectors and `first_assum` all failed to select/consume the visible case premise in the suspended Resume. (`TO_type_system_rewrite-20260519T123242Z_m32639_t001`, `TO_type_system_rewrite-20260519T123242Z_m32647_t001`)
+  - Used existing boundary helper `for_cons_ordinary_exception_full_suffix_from_case_premise` to package the whole five-conjunct goal, then attempted to discharge the residual case/noerr package mechanically. -> The boundary helper reduced the goal, but residual `no_type_error_result`/existential package remained. `metis_tac[]` could not solve it, and exact acceptance of the visible no-type-error assumption raised the same CHOOSE failure. (`TO_type_system_rewrite-20260519T123242Z_m32653_t001`, `TO_type_system_rewrite-20260519T123242Z_m32669_t001`, `TO_type_system_rewrite-20260519T123242Z_m32673_t001`)
+
+### Ruled Out
+
+- Selecting the visible case premise in the Resume via loose or exact `qpat_assum`/`qpat_x_assum` patterns
+- Closing simple identical goals in this Resume by `ACCEPT_TAC` or `asm_rewrite_tac[]` after forward materialization
+- Packaging through existing `for_cons_ordinary_exception_full_suffix_from_case_premise` without a stronger boundary that avoids residual local assumption goals
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32629_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32631_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32639_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32647_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32653_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32669_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32673_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0471`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 114,703 tok (113,880 in, 823 out, 101,376 cached), 23.6s, $0.13789800
+- next: Review closure, then begin the selector-free patch component `.2.2` to replace lines 3842-3846 with closed theorem construction rather than residual subgoals.
+
+### Attempts / Evidence
+
+- `E0471` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 114,703 tok (113,880 in, 823 out, 101,376 cached), 23.6s, $0.13789800)
+  - Read helper and current suffix; build target to inspect current failing Resume goal. -> Confirmed helper `for_cons_ordinary_exception_full_suffix_from_case_premise` has the planned antecedents/conclusion and current Resume goal contains alpha-compatible visible assumptions 24-28, while source remains failing due to forbidden residual `irule >> simp[] >> conj_tac` patch. (`TO_type_system_rewrite-20260519T123242Z_m32681_t002`, `TO_type_system_rewrite-20260519T123242Z_m32681_t003`, `TO_type_system_rewrite-20260519T123242Z_m32681_t001`)
+
+### Ruled Out
+
+- No helper reproof or statement change needed for the audited boundary.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32681_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32681_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32681_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned selector-free explicit ASSUME/MATCH_MP construction compiles as an ML tactic and constructs a theorem whose conclusion can be pushed onto the goal, but closing the goal by ACCEPT_TAC fails; MATCH_ACCEPT_TAC and simp/metis variants either re-enter CHOOSE or time out. This indicates the patch component's proof-boundary design is still insufficient, not just a tactic typo.
+- latest episode: `E0473`
+- blocker: Cannot close the suspended For_cons suffix with the planned explicit theorem construction. The current source remains partial at lines ~3842-3863 with ACCEPT_TAC th6 and fails holbuild.
+- actual effort: 1 sessions, 3 msgs, 33 steps, 34 tools, 12 holbuild, 2,921,326 tok (2,909,548 in, 11,778 out, 2,848,256 cached), 394.3s, $2.08392800
+- next: Call plan_oracle review. Likely need broader factoring (e.g. suspend/resume subpart, patch by moving more of suffix outside hostile Resume, or theorem/helper whose conclusion is used before the problematic goal boundary) rather than more local theorem-acceptance variants.
+
+### Attempts / Evidence
+
+- `E0472` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 19 steps, 20 tools, 6 holbuild, 1,536,316 tok (1,528,688 in, 7,628 out, 1,488,384 cached), 231.6s, $1.17455200)
+  - Replaced residual `irule >> simp[] >> conj_tac` suffix with nested `MATCH_MP` over explicit `ASSUME` inputs. -> Initial direct nested expression did not compile as list tactic fragment; wrapping as `fn g => let ... in ... g end` compiled and reached the intended one-goal suffix. (`TO_type_system_rewrite-20260519T123242Z_m32687_t001`, `TO_type_system_rewrite-20260519T123242Z_m32695_t001`)
+  - Added `evaluation_state` annotations to final invariant assumptions to avoid accidental abstract-machine `accounts` projection, then tried `ACCEPT_TAC`, `MATCH_ACCEPT_TAC`, and beta-normalized theorem conclusion. -> The explicit theorem is constructed, but `ACCEPT_TAC` fails and `MATCH_ACCEPT_TAC` raises the same CHOOSE failure; likely theorem conclusion/hypotheses are not alpha-identical to the Resume goal despite visible similarity. (`TO_type_system_rewrite-20260519T123242Z_m32698_t001`, `TO_type_system_rewrite-20260519T123242Z_m32700_t001`, `TO_type_system_rewrite-20260519T123242Z_m32703_t001`)
+- `E0473` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 33 steps, 34 tools, 12 holbuild, 2,921,326 tok (2,909,548 in, 11,778 out, 2,848,256 cached), 394.3s, $2.08392800)
+  - Wrap explicit `ASSUME`/nested `MATCH_MP` construction in an ML tactic `(fn g => let ... in ACCEPT_TAC th5 g end)` after `qmatch_goalsub_abbrev_tac`. -> The ML tactic form compiled and reached the exact suffix, but unannotated `stfinal.accounts` parsed with the wrong record projection and failed raw matching. (`TO_type_system_rewrite-20260519T123242Z_m32695_t001`)
+  - Add `(stfinal:evaluation_state)` annotations and try `ACCEPT_TAC th5`, then `MATCH_ACCEPT_TAC th5`, then beta-normalized `ACCEPT_TAC th6`. -> `ACCEPT_TAC` still fails; `MATCH_ACCEPT_TAC` raises HOL_ERR CHOOSE, showing theorem matching also re-enters the hostile suspended proof boundary. (`TO_type_system_rewrite-20260519T123242Z_m32698_t001`, `TO_type_system_rewrite-20260519T123242Z_m32700_t001`, `TO_type_system_rewrite-20260519T123242Z_m32703_t001`)
+  - Diagnose by pushing the constructed theorem with `MP_TAC th6`, then try to close the resulting implication by simplification or FOL search. -> `MP_TAC th6` transforms the goal into a tautological implication, confirming the constructed theorem has the intended conclusion shape; however `simp[]` raises CHOOSE and `metis_tac[]` times out at the proof boundary. This violates the low-risk patch expectation. (`TO_type_system_rewrite-20260519T123242Z_m32708_t001`, `TO_type_system_rewrite-20260519T123242Z_m32710_t001`, `TO_type_system_rewrite-20260519T123242Z_m32716_t001`)
+
+### Ruled Out
+
+- Unannotated `stfinal.accounts` explicit assumption: parsed with the wrong `accounts` selector type.
+- `MATCH_ACCEPT_TAC`/`simp[]` after `MP_TAC th6`: both re-enter CHOOSE failure.
+- `metis_tac[]` after `MP_TAC th6`: times out.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32695_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32698_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32700_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32708_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32710_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32716_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The replacement endpoint mandated by the reviewed plan, `(MP_TAC th6 >> DISCH_THEN ACCEPT_TAC) g`, fails with HOL_ERR at DISCH_THEN in the suspended For_cons suffix. This contradicts the low-risk expectation that the MP_TAC diagnostic tautology could be closed by direct implication discharge; the proof boundary remains hostile even for implication introduction.
+- latest episode: `E0474`
+- blocker: Cannot close the For_cons ordinary-exception suffix via direct acceptance, match acceptance, simplification/search, or the replanned MP_TAC/DISCH_THEN endpoint. Current source remains partial/failing at lines ~3842-3863 with the explicit theorem construction and final `(MP_TAC th6 >> DISCH_THEN ACCEPT_TAC) g`.
+- actual effort: 1 sessions, 5 steps, 4 tools, 1 holbuild, 615,172 tok (614,069 in, 1,103 out, 599,552 cached), 41.7s, $0.40545100
+- next: Call plan_oracle review. Need a broader redesign/factoring that avoids this suspended proof boundary altogether or changes where the suffix is proved; do not continue local endpoint variants.
+
+### Attempts / Evidence
+
+- `E0474` (stuck, risk_mismatch, actual effort: 1 sessions, 5 steps, 4 tools, 1 holbuild, 615,172 tok (614,069 in, 1,103 out, 599,552 cached), 41.7s, $0.40545100)
+  - Applied the strategist's replacement endpoint exactly: after constructing th6, use `(MP_TAC th6 >> DISCH_THEN ACCEPT_TAC) g`. -> Build still fails at the same suspended suffix; `DISCH_THEN` raises HOL_ERR despite `MP_TAC th6` previously showing the implication-shaped goal. This invalidates the reviewed endpoint-only repair. (`TO_type_system_rewrite-20260519T123242Z_m32725_t001`)
+
+### Ruled Out
+
+- Endpoint-only repair with `MP_TAC th6 >> DISCH_THEN ACCEPT_TAC`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32725_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0477`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 316,881 tok (315,597 in, 1,284 out, 300,544 cached), 37.7s, $0.26405700
+- next: Review closure, then begin the queued boundary-lemma component to add `eval_for_cons_type_sound_core` before the For_cons Resume block.
+
+### Attempts / Evidence
+
+- `E0475` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,084,522 tok (1,078,748 in, 5,774 out, 1,044,992 cached), 186.5s, $0.86449600)
+  - Replace helper/theorem handoff with inline `conj_tac` split, destruct case premise using `strip_assume_tac o SIMP_RULE`, then `irule return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, `ty`, closing residual side conditions by `simp[]`. -> Reached final side-condition goal `env_extends ... /\ return_exception_typed ...`; `simp[]` failed with HOL_ERR CHOOSE at the suspended Resume boundary. (`TO_type_system_rewrite-20260520T084442Z_m32802_t001`, `TO_type_system_rewrite-20260520T084442Z_m32803_t001`)
+  - Keep inline split but close residual side conditions from live assumptions using `first_assum ACCEPT_TAC` after applying the environment-extension lemma. -> The first residual side condition could be closed, but the exact atomic goal `return_exception_typed env_exn ret_ty y` failed under `first_assum ACCEPT_TAC` with HOL_ERR CHOOSE despite being assumption 33. (`TO_type_system_rewrite-20260520T084442Z_m32807_t001`)
+  - Use targeted `qpat_assum`/`qpat_x_assum` and `mp_tac >> simp[]` for the final atomic assumption, avoiding broad automation. -> Targeted closure still failed with HOL_ERR CHOOSE; even the tautological implication `return_exception_typed env_exn ret_ty y ==> return_exception_typed env_exn ret_ty y` caused `simp[]` to raise CHOOSE. (`TO_type_system_rewrite-20260520T084442Z_m32810_t001`, `TO_type_system_rewrite-20260520T084442Z_m32812_t001`)
+- `E0476` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 11 steps, 14 tools, 1 holbuild, 823,573 tok (820,116 in, 3,457 out, 782,848 cached), 98.2s, $0.68147400)
+  - Replace the failing inline conjunction/return-typing endpoint with `suspend "For_cons_ordinary_exception_final_suffix"` after `qmatch_goalsub_abbrev_tac `state_well_typed stfinal`` and build `vyperTypeStmtSoundnessTheory`. -> Build fails at the `suspend` tactic itself with HOL_ERR CHOOSE. The printed goal is the expected five-conjunct suffix and contains the needed assumptions, but the proof boundary still cannot be introduced in the resumed fragment. (`TO_type_system_rewrite-20260520T094007Z_m32826_t001`, `TO_type_system_rewrite-20260520T094007Z_m32827_t001`)
+- `E0477` (proved, , actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 316,881 tok (315,597 in, 1,284 out, 300,544 cached), 37.7s, $0.26405700)
+  - Replace the invalid nested `suspend "For_cons_ordinary_exception_final_suffix"` endpoint after `qmatch_goalsub_abbrev_tac `state_well_typed stfinal`` with a non-suspend placeholder `FAIL_TAC "For_cons ordinary-exception suffix moved to eval_for_cons_type_sound_core"`. -> The failed nested suspend is removed from the For_cons Resume body; the source remains intentionally partial for the next helper/wrapper components, as the cleanup component permits. (`TO_type_system_rewrite-20260520T094007Z_m32835_t001`, `TO_type_system_rewrite-20260520T094007Z_m32836_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m32835_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32836_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0478`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 334,292 tok (332,691 in, 1,601 out, 313,856 cached), 46.7s, $0.29913300
+
+### Attempts / Evidence
+
+- `E0478` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 334,292 tok (332,691 in, 1,601 out, 313,856 cached), 46.7s, $0.29913300)
+  - Inserted local theorem `storage_assignment_update_no_control` immediately after `assign_result_no_control`, proving the repeated storage assignment do-block by simplifying monadic bind structure and using existing primitive no-control lemmas (`read_storage_slot_no_control`, `lift_sum_no_control`, `write_storage_slot_no_control`, `assign_result_no_control`). -> Helper was accepted by holbuild; rebuild advanced past the new theorem and later failed at the already-planned `int_call_no_control` timeout, confirming this leaf is complete. (`TO_type_system_rewrite-20260520T094007Z_m32889_t001`, `TO_type_system_rewrite-20260520T094007Z_m32890_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m32889_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32890_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0479`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 18 steps, 18 tools, 8 holbuild, 1,689,120 tok (1,683,630 in, 5,490 out, 1,641,472 cached), 180.7s, $1.19622600
+
+### Attempts / Evidence
+
+- `E0479` (proved, , actual effort: 1 sessions, 2 msgs, 18 steps, 18 tools, 8 holbuild, 1,689,120 tok (1,683,630 in, 5,490 out, 1,641,472 cached), 180.7s, $1.19622600)
+  - Replaced `suspend "assign_target_no_control_TopLevelVar"` with an explicit TopLevelVar branch. The branch reuses prior targeted simplification, closes the shared storage assignment do-block via `storage_assignment_update_no_control`, and handles the remaining dynamic-array append/pop storage cases with `check_no_control`, `read_storage_slot_no_control`, and `write_storage_slot_no_control` without broad final constructor expansion. -> Holbuild accepted `assign_target_no_control` and advanced to the known downstream `int_call_no_control` timeout, so the TopLevelVar suspend debt is removed and this leaf is complete. (`TO_type_system_rewrite-20260520T094007Z_m32906_t001`, `TO_type_system_rewrite-20260520T094007Z_m32910_t001`, `TO_type_system_rewrite-20260520T094007Z_m32911_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m32906_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32910_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32911_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0480`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 1 holbuild, 720,641 tok (718,747 in, 1,894 out, 700,416 cached), 70.1s, $0.49868300
+
+### Attempts / Evidence
+
+- `E0480` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 1 holbuild, 720,641 tok (718,747 in, 1,894 out, 700,416 cached), 70.1s, $0.49868300)
+  - Replaced the timed `rpt (step_tac >- helper_close)` in `int_call_no_control` with a fixed sequence of six `step_tac` decompositions: four primitive-helper closures followed by the two `eval_exprs` error branches closed from the theorem premises, preserving the existing tail handoff to `int_call_tail_no_control`. -> Holbuild advanced past `int_call_no_control`; the next failure is a later `eval_expr_no_control_with_bt[ExtCall]` timeout, outside this component's scoped obligation. (`TO_type_system_rewrite-20260520T094007Z_m32919_t001`, `TO_type_system_rewrite-20260520T094007Z_m32920_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m32919_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32920_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0481`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 5 tools, 3 holbuild, 364,327 tok (363,227 in, 1,100 out, 346,624 cached), 357.7s, $0.28932700
+
+### Attempts / Evidence
+
+- `E0481` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 3 holbuild, 364,327 tok (363,227 in, 1,100 out, 346,624 cached), 357.7s, $0.28932700)
+  - Replace `res_tac >> gvs[no_control_exc_def]` with `qpat_x_assum ... (qspecl_then [`s`,`exc`,`st'`] mp_tac) >> simp[]`. -> The targeted branch closes and focused `vyperExprNoControlTheory` builds cleanly. (`TO_type_system_rewrite-20260520T094007Z_m32936_t001`, `TO_type_system_rewrite-20260520T094007Z_m32937_t001`)
+  - Build `vyperTypeStmtSoundnessTheory` after prerequisite patch. -> Build passes the previous no-control prerequisite and reaches the planned For_cons helper failure point in `vyperTypeStmtSoundnessScript.sml`; prerequisite repair no longer blocks active subtree. (`TO_type_system_rewrite-20260520T094007Z_m32938_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m32936_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32937_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T094007Z_m32938_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The authorized intact-case-premise endpoint also fails under holbuild instrumentation: after early conjuncts are discharged, the remaining goal is exactly the full `case (INR y : unit + exception) of ...` premise and assumption 26 is syntactically identical modulo the INL branch binder, but `irule (ASSUME ...)` raises HOL_ERR CHOOSE. This extends E0485 and shows the low-risk exact/full-premise discharge strategy is not sufficient.
+- latest episode: `E0486`
+- blocker: Need strategist redesign/decomposition for the final ordinary-exception suffix endpoint, likely via a boundary helper or changed proof shape that avoids exact assumption acceptance of either the destructed return typing conjunct or the intact case premise.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 137,189 tok (136,279 in, 910 out, 118,784 cached), 28.9s, $0.17416700
+- next: Call plan_oracle in review mode for this component with the new evidence; do not retry exact-assumption endpoint tactics or destruct the case premise without a replacement plan.
+
+### Attempts / Evidence
+
+- `E0482` (progressed, other, actual effort: 1 sessions, 2 msgs, 26 steps, 30 tools, 5 holbuild, 3,061,522 tok (3,045,900 in, 15,622 out, 2,954,240 cached), 378.5s, $2.40408000)
+  - Inserted `eval_for_cons_type_sound_core` with explicit premises for the body `eval_stmts` IH and recursive tail `eval_for` IH; copied the For_cons Resume skeleton and replaced the final `FAIL_TAC` with `irule for_cons_ordinary_exception_full_suffix_from_case_premise`. -> Build reaches the new helper. First failure showed the body IH premise selected the wrong universal because `qpat_x_assum `!stp res_body st_body. _`` matched an unrelated premise, leaving a spurious `env_consistent env cx stp` subgoal. (`TO_type_system_rewrite-20260520T094007Z_m32952_t001`, `TO_type_system_rewrite-20260520T094007Z_m32953_t001`)
+  - Narrowed the body IH selection pattern to require `env_consistent (extend_local env id ty F) cx stp` and `eval_stmts cx body stp = ...`. -> Proof advanced to the final suffix. `irule for_cons_ordinary_exception_full_suffix_from_case_premise >> simp[]` left residual `no_type_error_result (INR y) ∧ ∃id' st_body' ty' env_exn ... return_exception_typed ... y`; the source has exact assumptions `no_type_error_result (INR y)` and the case premise with an existential env_exn. (`TO_type_system_rewrite-20260520T094007Z_m32955_t001`)
+  - Tried to split the final residual manually with `conj_tac` and consume `no_type_error_result (INR y)`. -> `qpat_assum` did not match; `qpat_x_assum ... mp_tac >> simp[]` left an implication and failed the `>-` solved requirement. The final suffix needs a more direct use of the existing helper or an adjusted final tactic; do not keep retrying the same branch form blindly. (`TO_type_system_rewrite-20260520T094007Z_m32958_t001`, `TO_type_system_rewrite-20260520T094007Z_m32960_t001`, `TO_type_system_rewrite-20260520T094007Z_m32962_t001`)
+- `E0483` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 11 steps, 11 tools, 5 holbuild, 806,776 tok (803,011 in, 3,765 out, 771,584 cached), 127.4s, $0.65587700)
+  - Started from the existing helper tail `qexists_tac env_exn >> simp[]`. -> holbuild confirmed the final goal is the exact conjunction `env_extends ... env_exn ∧ env_consistent env_exn cx st_body ∧ return_exception_typed env_exn ret_ty y` with exact assumptions 32-34 present, but bare `simp[]` raises HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260520T094007Z_m32999_t002`)
+  - Replaced final `simp[]` with explicit `conj_tac` branches using `qpat_x_assum ... mp_tac >> metis_tac[]` for all three conjuncts. -> First two conjuncts discharged, but the final implication subgoal `return_exception_typed env_exn ret_ty y ==> return_exception_typed env_exn ret_ty y` still raised HOL_ERR CHOOSE at `metis_tac[]`. (`TO_type_system_rewrite-20260520T094007Z_m33001_t001`)
+  - Changed final endpoint to `qpat_x_assum ... mp_tac >> strip_tac`. -> Same tautological implication endpoint raised HOL_ERR CHOOSE at `strip_tac`. (`TO_type_system_rewrite-20260520T094007Z_m33003_t001`)
+  - Avoided pushing the exact assumption and used final `metis_tac[]` directly with the exact assumption in context. -> Goal was exactly `return_exception_typed env_exn ret_ty y` with identical assumption present, yet `metis_tac[]` raised HOL_ERR CHOOSE. This rules out ordinary tactic choice as the issue and points to a boundary/instrumentation mismatch or need for a smaller helper. (`TO_type_system_rewrite-20260520T094007Z_m33008_t001`)
+- `E0484` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 492,117 tok (490,422 in, 1,695 out, 471,552 cached), 57.2s, $0.38097600)
+  - Followed the revised PLAN/review exactly: after `qexists_tac env_exn`, split conjunctions and close using `qpat_x_assum ... ACCEPT_TAC` with no `simp`, `strip_tac`, or `metis_tac`. -> First two conjuncts passed, but the final exact assumption acceptance still raised HOL_ERR CHOOSE on `return_exception_typed env_exn ret_ty y`. (`TO_type_system_rewrite-20260520T094007Z_m33015_t001`)
+  - Made the endpoint even more direct by using `ACCEPT_TAC (ASSUME ``return_exception_typed env_exn ret_ty y``)` rather than selecting an existing assumption by pattern. -> holbuild still raised HOL_ERR CHOOSE on the final exact goal with identical assumption present. This rules out pattern-selection brittleness and shows the direct-assumption-only tactic prescribed by the review is not sufficient. (`TO_type_system_rewrite-20260520T094007Z_m33017_t001`)
+- `E0485` (progressed, other, actual effort: 1 sessions, 2 msgs, 16 steps, 17 tools, 5 holbuild, 2,008,186 tok (2,001,986 in, 6,200 out, 1,955,840 cached), 195.6s, $1.39465000)
+  - Inserted `FAIL_TAC` immediately after `irule for_cons_ordinary_exception_full_suffix_from_case_premise` to inspect subgoal shape. -> Confirmed a single conjunction goal ordered `accounts_well_typed stfinal.accounts ∧ no_type_error_result (INR y) ∧ state_well_typed stfinal ∧ env_consistent env cx stfinal ∧ ∃env_after id st_body ty. full_case_premise`; the full case premise is available as assumption 26 before destructuring. (`TO_type_system_rewrite-20260520T094007Z_m33024_t001`)
+  - Tried explicit premise-by-premise discharge with `qpat_x_assum ... ACCEPT_TAC` for atomic assumptions and the full case premise. -> `qpat_x_assum` failed on the no-error premise despite exact assumption; later evidence suggested `fs[no_type_error_result_def]` is needed for that premise. (`TO_type_system_rewrite-20260520T094007Z_m33026_t001`)
+  - Tried `ACCEPT_TAC (ASSUME ...)` for atomic early conjuncts and the full case premise. -> Even the first atomic conjunct `accounts_well_typed stfinal.accounts` failed with HOL_ERR at `ACCEPT_TAC`, so direct ASSUME/ACCEPT is not robust in this instrumented subgoal. (`TO_type_system_rewrite-20260520T094007Z_m33028_t001`)
+  - Changed early conjuncts to `simp[]` and no-error to `fs[no_type_error_result_def]`, then selected the full case premise with `qpat_x_assum ... ACCEPT_TAC`. -> Advanced to the final full case premise subgoal, but `qpat_x_assum ... ACCEPT_TAC` on the intact case premise still raised HOL_ERR CHOOSE. Latest source replaces that final endpoint with `irule (ASSUME full_case_premise)` but this has not yet been built. (`TO_type_system_rewrite-20260520T094007Z_m33031_t001`, `TO_type_system_rewrite-20260520T094007Z_m33033_t001`)
+- `E0486` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 137,189 tok (136,279 in, 910 out, 118,784 cached), 28.9s, $0.17416700)
+  - Built the latest handoff source tail using `irule (ASSUME ``case (INR y : unit + exception) of ...``)` for the intact full case premise. -> holbuild reached the final full case premise goal with identical assumption available, but the tactic raised HOL_ERR CHOOSE at `Thm.CHOOSE`; the endpoint cannot be closed by this low-risk exact premise approach. (`TO_type_system_rewrite-20260520T094007Z_m33039_t001`)
+
+### Ruled Out
+
+- `irule (ASSUME full_case_premise)` for the intact case premise endpoint under holbuild instrumentation
+- Prior exact endpoint variants from E0483-E0485
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m33039_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0487`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 714,447 tok (712,180 in, 2,267 out, 690,176 cached), 130.8s, $0.52311800
+- next: Call plan_oracle review for this proved helper component, then begin the dependent tail-patch component if accepted.
+
+### Attempts / Evidence
+
+- `E0487` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 714,447 tok (712,180 in, 2,267 out, 690,176 cached), 130.8s, $0.52311800)
+  - Inserted witness-boundary helper and proved it by simplifying the suffix, splitting the residual no-error/return-typing conjunction, closing no-error with `fs[no_type_error_result_def]`, and using `for_cons_ordinary_exception_return_typed_from_INR_witness` with explicit witnesses `cx`, `id`, `st_body`, `ty`, `env_exn`. -> holbuild advanced past the new theorem into `eval_for_cons_type_sound_core`, confirming the helper proof is accepted. Build then timed out later at a separate existing prefix fact `env.type_defs = get_tenv cx` in the core proof. (`TO_type_system_rewrite-20260520T094007Z_m33049_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T094007Z_m33049_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other` This is still a local proof-shape issue, not evidence of falsehood: each failure exposed premise-order or assumption-consumption problems in the bundle-helper tail. The latest source may close after preserving the case premise for the final env-consistency subgoal.
+- latest episode: `E0489`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 47 steps, 53 tools, 18 holbuild, 4,922,618 tok (4,902,836 in, 19,782 out, 4,783,104 cached), 657.5s, $3.58367200
+- next: Run holbuild on vyperTypeStmtSoundnessTheory immediately. If latest `qpat_assum` edit works, expect either `eval_for_cons_type_sound_core` to complete or a new downstream Resume obligation. If it still fails at the final full case premise, use a helper that duplicates/extracts the witness while retaining the case premise, or checkpoint/escalate if another exact CHOOSE endpoint remains.
+
+### Attempts / Evidence
+
+- `E0488` (progressed, other, actual effort: 1 sessions, 2 msgs, 9 steps, 10 tools, 3 holbuild, 1,163,703 tok (1,160,578 in, 3,125 out, 1,129,984 cached), 114.3s, $0.81171200)
+  - Changed line 3756 from `fs[env_consistent_def, env_context_consistent_def]` to `gvs[...]`. -> Subsequent holbuild advanced past the previous timeout and reached the patched ordinary-exception suffix, so the timeout workaround is effective so far. (`TO_type_system_rewrite-20260520T110618Z_m33061_t001`)
+  - Applied `for_cons_ordinary_exception_full_suffix_from_INR_witness` in `eval_for_cons_type_sound_core` and initially discharged no-error before the witness premise. -> holbuild showed the first generated subgoal was actually the existential witness, not no-error; premise discharge order needed swapping. (`TO_type_system_rewrite-20260520T110618Z_m33061_t001`)
+  - Swapped premise order: use the full case-premise assumption via `mp_tac >> simp[]`, then no-error/final-state facts. -> holbuild simplified the case premise to an implication from the existential witness but branch tactic did not solve it; needed to strip the implication and provide existential witnesses `id`, `st_body`, `ty`, `env_exn`. (`TO_type_system_rewrite-20260520T110618Z_m33063_t001`, `TO_type_system_rewrite-20260520T110618Z_m33065_t001`)
+  - After TO...m33065, edited the witness branch to add `qexists_tac `env_exn`` after witnesses `id`, `st_body`, `ty`. -> This source edit is likely the next mechanical fix but has not yet been built due to handoff. (`TO_type_system_rewrite-20260520T110618Z_m33066_t001`)
+- `E0489` (progressed, other, actual effort: 1 sessions, 4 msgs, 47 steps, 53 tools, 18 holbuild, 4,922,618 tok (4,902,836 in, 19,782 out, 4,783,104 cached), 657.5s, $3.58367200)
+  - Added `for_cons_ordinary_exception_full_suffix_from_INR_witness_bundle` to package all five premises into one conjunctive antecedent before applying the existing witness helper. -> Initial proof failed because `irule` generated the existential witness subgoal and `simp[]` did not invent `id/st_body/ty/env_exn`; after adding explicit witnesses, holbuild advanced past the new helper theorem into `eval_for_cons_type_sound_core`. (`TO_type_system_rewrite-20260520T125121Z_m33141_t001`, `TO_type_system_rewrite-20260520T125121Z_m33142_t001`, `TO_type_system_rewrite-20260520T125121Z_m33144_t001`)
+  - Replaced tail application with bundle helper and tried premise discharge via `rpt conj_tac` branches. -> Premise order after `irule for_cons_ordinary_exception_full_suffix_from_INR_witness_bundle` is: witness existential, state_well_typed stfinal, no_type_error_result, accounts_well_typed, env_consistent. The witness branch must be first; no-error is the third branch, not first or second. (`TO_type_system_rewrite-20260520T125121Z_m33146_t001`, `TO_type_system_rewrite-20260520T125121Z_m33148_t001`)
+  - For the final env-consistency premise, reused the existing `for_cons_popped_env_consistent_from_stmt_case` application; its last residual is the full `case (INR y)` premise. -> Residual goal was exactly the full case premise while assumption 26 was still available only if not consumed by the earlier witness branch. Latest unbuilt edit changed the witness branch to `qpat_assum ... mp_tac` so the case premise remains for the env-consistency branch. (`TO_type_system_rewrite-20260520T125121Z_m33150_t001`, `TO_type_system_rewrite-20260520T125121Z_m33151_t001`)
+
+### Ruled Out
+
+- Do not use exact endpoint acceptance of state_well_typed or trivial implication goals; holbuild repeatedly raises CHOOSE/no theorem proved for syntactically trivial endpoints under instrumentation.
+- Do not consume the full `case (INR y)` premise in the witness branch if it is also needed by `for_cons_popped_env_consistent_from_stmt_case` later.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260520T125121Z_m33141_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T125121Z_m33142_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T125121Z_m33144_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T125121Z_m33146_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T125121Z_m33148_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T125121Z_m33150_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260520T125121Z_m33151_t001` (use `read_tool_output` for exact output)
+
+## ForConsOrdinaryExceptionCaseHelperSubtree.PackageTailGoal
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0443`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 61 steps, 60 tools, 28 holbuild, 5,713,657 tok (5,690,949 in, 22,708 out, 5,609,472 cached), 743.3s, $3.89336100
+- next: Review closure, then follow Oracle next (likely C2.2.a/C2.2.b or integration) to replace the For_cons suffix placeholder with helper calls.
+
+### Attempts / Evidence
+
+- `E0443` (proved, , actual effort: 1 sessions, 4 msgs, 61 steps, 60 tools, 28 holbuild, 5,713,657 tok (5,690,949 in, 22,708 out, 5,609,472 cached), 743.3s, $3.89336100)
+  - Inserted package helper, iterated proof until `simp[] >> strip_tac >> conj_tac >- fs[no_type_error_result_def] >> qexists_tac ...` closed outside the Resume. -> `holbuild vyperTypeStmtSoundnessTheory` replayed past the package helper and failed later at the explicit C2.1 placeholder, confirming this component's theorem compiles. (`TO_type_system_rewrite-20260519T123242Z_m32070_t001`, `TO_type_system_rewrite-20260519T123242Z_m32129_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32070_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32129_t001` (use `read_tool_output` for exact output)
+
+## RetireDirectLocalAssertionForConsPatch
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0439`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 129,516 tok (129,242 in, 274 out, 127,488 cached), 6.8s, $0.08073400
+
+### Attempts / Evidence
+
+- `E0439` (proved, , actual effort: 1 sessions, 1 steps, 129,516 tok (129,242 in, 274 out, 127,488 cached), 6.8s, $0.08073400)
+  - Recognized obsolete direct local-assertion For_cons patch as superseded by case-premise helper plan; no source edits required for this historical/invalidation component. -> Component terminal: direct local assertion design is retired and must not be retried; active proof work proceeds under helper components. (`TO_type_system_rewrite-20260519T123242Z_m32047_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32047_t001` (use `read_tool_output` for exact output)
+
+## RetiredDirectLocalAssertionForConsPatch_E0436
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0440`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 6 tools, 369,034 tok (365,717 in, 3,317 out, 347,136 cached), 67.0s, $0.36598300
+
+### Attempts / Evidence
+
+- `E0440` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 6 tools, 369,034 tok (365,717 in, 3,317 out, 347,136 cached), 67.0s, $0.36598300)
+  - Recorded strategist-owned retirement of the E0436 direct-local-assertion proof interface without source changes. -> Completed the zero-work retirement gate; next proof work should begin on the helper-based replacement leaves. (`TO_type_system_rewrite-20260519T123242Z_m32054_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260519T123242Z_m32054_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260519T123242Z_m32051_t001` (use `read_tool_output` for exact output)

@@ -1,55 +1,59 @@
 # STATE_type_system_rewrite
-Updated: 2026-05-18
+Updated: 2026-05-20
 
 ## Cursor
-- component: C4.1.1
+- component: C2.0.2.2.1
 - status: in_progress
-- active_file: semantics/prop/vyperTypeBuiltinsScript.sml
-- next_action: Fix remaining 3 items in vyperTypeBuiltinsScript.sml: (1) Replace concat_string_builtin_no_type_error proof body to use direct proof like concat_bytes_no_type_error (drule LIST_REL_value_has_type_imp_combined then unfold). (2) Replace slice_builtin_no_type_error with two separate helpers: slice_bytes_no_type_error (ty = BaseT(BytesT(Dynamic n)), HD ts = BaseT(BytesT bd)) and slice_string_builtin_no_type_error (ty = BaseT(StringT n), HD ts = BaseT(StringT m)), each with direct proof following slice_no_type_error pattern. (3) Update main dispatcher well_typed_builtin_app_no_type_error: change 'irule concat_builtin_no_type_error' to 'TRY (irule concat_bytes_no_type_error >> gvs[] >> NO_TAC) >> TRY (irule concat_string_builtin_no_type_error >> gvs[] >> NO_TAC)' and 'irule slice_builtin_no_type_error' to 'TRY (irule slice_bytes_no_type_error >> gvs[] >> NO_TAC) >> TRY (irule slice_string_builtin_no_type_error >> gvs[] >> NO_TAC)'. Then holbuild vyperTypeBuiltinsTheory.
-- expected_goal_shape: After gvs[well_typed_builtin_app_def] in main dispatcher, Concat/Slice each produce separate bytes/string subgoals. New helpers match each subgoal directly via irule. Build should progress past the Concat/Slice helpers and the main dispatcher.
-- verify_with: holbuild(targets=['vyperTypeBuiltinsTheory'], tactic_timeout=120, timeout=600)
+- active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
+- next_action: Stay on C2.0.2.2.1. Inspect `for_cons_body_ih_exception_projection` around line ~1693. Do not edit `eval_for_cons_type_sound_core`. Replace the current incomplete proof/statement with a safer projection boundary, preferably one that returns the exact full specialized body-IH conjunction (`state_well_typed st_body /\ accounts_well_typed st_body.accounts /\ no_type_error_result (INR exn) /\ ?env_exn. ...`) as a whole without opening/reconstructing the existential in tactic context; then rebuild.
+- expected_goal_shape: Current holbuild failure is in `for_cons_body_ih_exception_projection`: after specializing the body IH with `assume_tac` and `gvs[sum_case_def]`, source attempts `qexists_tac `env_exn` >> ACCEPT_TAC (LIST_CONJ [...])`; holbuild shows the remaining goal is `env_extends ... env_exn /\ env_consistent env_exn cx st_body /\ return_exception_typed env_exn ret_ty exn` with exact assumptions present, but validation fails with `Thm.GEN: variable occurs free in hypotheses`.
+- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
 
 ## If This Fails
-- If a helper proof fails, insert FAIL_TAC probe to see goal state. If dispatcher irule doesn't match after gvs, check whether gvs changes the conclusion shape (evaluate_builtin -> evaluate_concat). If structural issue across >3 helpers, escalate to plan_oracle.
+- If the full-conjunction projection refactor still reduces to exact-assumption/GEN/CHOOSE endpoints, do not continue endpoint tactic retries. Use `close_episode(result="stuck", diagnosis_tag="risk_mismatch", component_id="C2.0.2.2.1", evidence_ids=[...])`, then call `plan_oracle(mode="review", component_id="C2.0.2.2.1", evidence_ids=[...])` for a replacement interface.
 
 ## Do Not Retry
-- Disjunctive helper lemma premises (∨) for Concat/Slice: gvs splits disjunctions, irule can't match: gvs[well_typed_builtin_app_def] splits disjunctions into separate subgoals. Helpers with ∨ premises never match non-disjunctive post-gvs goals.
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m25561_t001
-- qpat_x_assum `_ ∨ _` DISJ_CASES_TAC in helper proofs: qpat_x_assum cannot match generic disjunction pattern. After gvs resolves ty, the ∨ is already eliminated.
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m25561_t001
-- rpt strip_tac on !msg. f ≠ INR(TypeError msg) goals: Strips the ≠ into F with negated equation in assumptions, preventing simp from rewriting evaluate_builtin_def. Use strip_tac >> gen_tac instead.
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m25409_t001
-- irule concat_no_type_error/concat_string_no_type_error after gvs[] in Concat helper wrappers: concat_no_type_error needs type_slot_size and n < dimword(:256) premises that irule can't derive from the post-gvs goal state. Must prove directly using LIST_REL_value_has_type_imp_combined + evaluate_builtin_def expansion.
-  - evidence: tool_output:TO_type_system_rewrite-20260516T153850Z_m25602_t002
+- More endpoint variations after destructing the body-IH existential, such as `first_assum ACCEPT_TAC`, `qpat_assum ACCEPT_TAC`, `metis_tac[]`, `rw`, `disch_then ACCEPT_TAC`, `qexists_tac` followed by exact assumptions, or explicit `ASSUME`/`LIST_CONJ`.: These repeatedly reduced to exact-looking assumptions/goals but failed validation (`no theorem proved`, `FOL_FIND no solution`, `Thm.GEN variable occurs free in hypotheses`). The problem is the proof boundary, not the final tactic.
+  - evidence: tool_output:TO_type_system_rewrite-20260520T182357Z_m34627_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260520T182357Z_m34644_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260520T182357Z_m34650_t001
+- Opening the existential from the body IH with `gvs[sum_case_def]` and then reconstructing `?env_exn` in the same proof context.: This creates a free `env_exn` in hypotheses and triggers GEN/validation problems when trying to prove the existential-conjunction goal. Keep the existential packaged across theorem boundaries instead.
+  - evidence: tool_output:TO_type_system_rewrite-20260520T182357Z_m34648_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260520T182357Z_m34657_t001
+- Editing `eval_for_cons_type_sound_core` or deleting `suspend "ReturnException_tail"` before the helper boundary is proved.: PLAN explicitly gates the core patch behind C2.0.2.2.2; entering the core proof re-enters the known hostile CHOOSE context.
+  - evidence: tool_output:TO_type_system_rewrite-20260520T182357Z_m34658_t004
+  - evidence: episode:E0546
 
 ## Reflection
 ### Tunnel Vision Check
-- The core problem across sessions is the same: gvs[well_typed_builtin_app_def] splits disjunctions into separate subgoals, so helper lemmas MUST NOT have disjunctive premises. This applies to any future helper lemma too - check for ∨ in premises before writing one.
-- I've been fixing helpers one at a time across multiple sessions. The next session should batch-fix ALL remaining issues (concat_string, slice split, dispatcher update) in one edit cycle, then build ONCE.
-- The irule-before-expansion pattern is correct for most helpers but WRONG for Concat/Slice where the helper does the full proof itself (not delegating to an eval-helper via irule). For Concat/Slice, the new helpers use direct proofs that expand evaluate_builtin_def themselves.
+- Outside-the-box approach: avoid any projection that splits a conjunction; instead prove a theorem whose conclusion is definitionally identical to the body-IH specialized consequent and let downstream lemmas use `cj`/rewrite on the theorem object, not in a tactic goal.
+- We may be optimizing the wrong helper: `for_cons_body_ih_exception_projection` may be unnecessary if `for_cons_non_loop_exception_suffix` can take the full specialized body-IH result as an antecedent, with a separate theorem only for ReturnException weakening.
+- The PLAN decomposition is close but C2.0.2.2.1's abstraction may still leak implementation details (existential witness reconstruction). A fresh expert should question the theorem statement before touching tactics.
+- If the next attempt again reaches exact assumptions with `env_exn` free in hypotheses, stop and escalate; do not try more variants of `ACCEPT_TAC`, `metis_tac`, or `simp`.
 
 ### What Went Wrong
-- concat_bytes_no_type_error proof attempted irule concat_no_type_error after gvs[] but this couldn't derive the required type_slot_size and n < dimword bounds from the assumptions. The fix: prove directly following the concat_no_type_error pattern (drule LIST_REL_value_has_type_imp_combined then unfold evaluate_builtin_def).
-- concat_string_builtin_no_type_error still has the old broken irule-based proof that will fail for the same reason.
-- slice_builtin_no_type_error still has disjunctive premises and uses rpt strip_tac + qpat_x_assum DISJ_CASES_TAC which are both known-broken patterns.
-- Main dispatcher references non-existent concat_builtin_no_type_error - was never updated to use the two split helpers.
+- I treated the packaged projection as a routine strengthening, but even after broadening the conclusion, the proof still destructs the body-IH existential and reconstructs a conjunction from a fresh witness; that repeats the same HOL4 validation brittleness seen in E0549.
+- I kept trying endpoint variants (`metis_tac[]`, `rw`, `disch_then ACCEPT_TAC`, `qexists_tac`, explicit `ASSUME`/`LIST_CONJ`) after the goal clearly had exact assumptions. This was tactic thrashing, not proof progress.
+- The current source is partial: `for_cons_body_ih_exception_projection` is inserted and incomplete; `vyperTypeStmtSoundnessTheory` does not build.
 
 ### Ignored Signals
-- LEARNING L0931 explicitly documented the need for non-disjunctive helper premises. I should have applied this immediately to ALL helpers (concat_string + slice) rather than fixing only concat_bytes.
-- LEARNING L0927 documents strip_tac >> gen_tac for ∀msg goals. The slice helper still uses rpt strip_tac which will break the proof.
-- The concat_string helper will likely fail for the same reason concat_bytes did (irule after gvs can't derive type_slot_size bounds). I should have fixed it proactively in the same edit.
+- Repeated `no theorem proved` / `Thm.GEN variable occurs free in hypotheses` on exact-looking goals is a proof-interface problem, not a missing final tactic.
+- The PLAN warning to keep the existential packaged was underweighted: opening it via `gvs[sum_case_def]` and then trying to rebuild `?env_exn` is exactly what causes validation trouble.
+- The older do-not-retry warning about exact-assumption endpoints applied just as much to the new projection lemma as to the old suffix helper.
 
 ### Strategy Adjustments
-- Batch-fix ALL remaining helper proof issues in a single edit cycle before building: concat_string direct proof, slice bytes/string split, dispatcher irule updates.
-- Always verify that main dispatcher irule references match actual helper theorem names before building.
-- For Concat/Slice helpers, NEVER use irule to underlying eval-helpers after gvs[]. Instead prove directly by reproducing the eval-helper's proof pattern.
+- Next session should first change the theorem boundary so the final proof does not need to split/reconstruct the existential. Candidate: prove/consume a theorem whose conclusion is exactly the full specialized body-IH result, or make the later suffix consume the full result directly.
+- Avoid `mp_tac`/`strip_tac` and avoid introducing a free `env_exn` unless it is hidden inside a theorem conclusion, not a tactic-context hypothesis.
+- Do not edit the core theorem or remove `suspend "ReturnException_tail"` until C2.0.2.2.1 and C2.0.2.2.2 are closed/reviewed.
 
 ### Oracle Feedback
-- PLAN C4.1.1.2 was exactly right: 'Each helper should name one concrete builtin constructor and internally choose bytes vs string branch'. The current source still has the disjunctive slice helper violating this.
-- PLAN correctly identified irule-before-expansion as the key pattern. This works for keccak256/sha256/as_wei_value where the eval-helper doesn't need type_slot_size bounds. But for Concat/Slice, the eval-helpers need evaluate_type-derived bounds that aren't available via simple irule delegation.
+- Strategist insight that helper-first staging is required remains correct; query_plan now properly gates C2.0.2.3 behind C2.0.2.2.2.
+- The current C2.0.2.2.1 statement may still be too low-level because it asks the proof to project and reconstruct existential evidence. A fresh review may need to replace it with a full-specialization lemma rather than another endpoint tactic.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260516T153850Z_m25602_t002 - current build failure at concat_bytes_no_type_error
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1916-1953 - current state of concat_bytes (fixed) and concat_string (still broken)
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1955-1973 - current slice helper (still has disjunction premises)
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2010-2013 - dispatcher still references non-existent concat_builtin_no_type_error
+- tool_output:TO_type_system_rewrite-20260520T182357Z_m34658_t004 - plan/frontier: active component remains C2.0.2.2.1; next work must stay there
+- tool_output:TO_type_system_rewrite-20260520T182357Z_m34659_t001 - checkpoint E0551 recorded for non-terminal progress on C2.0.2.2.1
+- tool_output:TO_type_system_rewrite-20260520T182357Z_m34657_t001 - current exact witness-conjunction endpoint fails with `Thm.GEN variable occurs free in hypotheses`
+- tool_output:TO_type_system_rewrite-20260520T182357Z_m34650_t001 - `metis_tac[]` failed on exact `no_type_error_result` assumption after body-IH specialization
+- tool_output:TO_type_system_rewrite-20260520T182357Z_m34648_t001 - after `assume_tac`/`gvs[sum_case_def]`, goal is no-TypeError plus packaged existential with exact facts in assumptions
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:1693 - inserted incomplete `for_cons_body_ih_exception_projection` theorem

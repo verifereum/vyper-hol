@@ -85,6 +85,23 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem env_consistent_bare_global_ready:
+  !env cx st id ty.
+    env_consistent env cx st /\
+    FLOOKUP env.bare_globals (env.current_src,id) = SOME ty ==>
+      env.current_src = current_module cx /\
+      ty <> NoneT /\
+      (?ts. get_module_code cx (current_module cx) = SOME ts /\
+            is_immutable_decl id ts) /\
+      IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+        (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)
+Proof
+  rpt strip_tac >>
+  gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def] >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _` drule >>
+  rw[] >> gvs[]
+QED
 Theorem type_place_target_TopLevelNameTarget_IS_SOME:
   FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME x ==>
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) = NONE
