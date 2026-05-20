@@ -115,6 +115,19 @@ Definition indexed_event_log_program_def:
        [Log (NONE, "Ping") [Name (BaseT (UintT 256)) "x"]]]
 End
 
+Definition mixed_event_log_program_def:
+  mixed_event_log_program =
+    [EventDecl "Ping"
+       [(("indexed_value", BaseT (UintT 256)), T);
+        (("data_value", BaseT (UintT 256)), F)];
+     FunctionDecl External Nonpayable F F "foo"
+       [("x", BaseT (UintT 256)); ("y", BaseT (UintT 256))]
+       ([] : expr list) NoneT
+       [Log (NONE, "Ping")
+          [Name (BaseT (UintT 256)) "x";
+           Name (BaseT (UintT 256)) "y"]]]
+End
+
 Definition hashmap_read_program_def:
   hashmap_read_program =
     [HashMapDecl Private F "stored" (BaseT (UintT 256))
@@ -346,6 +359,13 @@ QED
 Theorem indexed_event_log_result_lengths:
   compile_vyper_lengths indexed_event_log_program
     concretize_context_eval Linear = SOME (138, 119)
+Proof
+  EVAL_TAC
+QED
+
+Theorem mixed_event_log_result_lengths:
+  compile_vyper_lengths mixed_event_log_program
+    concretize_context_eval Linear = SOME (163, 144)
 Proof
   EVAL_TAC
 QED
