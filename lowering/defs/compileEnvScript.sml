@@ -295,7 +295,7 @@ Datatype:
        cannot represent it. Used by compile_subscript for dispatch.
        Mirrors Python: isinstance(base_typ, HashMapT) *)
     ce_is_hashmap : string -> bool;
-    (* Event metadata: event_nsid → SOME (event_id, arg_types, indexed_flags).
+    (* Event metadata: event_nsid → SOME (event_hash, arg_types, indexed_flags).
        NONE means the event is not declared in this compilation unit. Keeping
        absence explicit prevents unknown events from silently compiling/logging
        as hash-0/no-arg events. *)
