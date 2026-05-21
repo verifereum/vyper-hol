@@ -158,9 +158,10 @@ fun mk_JE_Name (s, tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Name_tm, [fromMLstring s,
                            lift_option (mk_option string_ty) fromMLstring tc_opt,
                            src_id_opt, ty])
-fun mk_JE_Attribute (e, attr, tc_opt, src_id_opt, ty) =
+fun mk_JE_Attribute (e, attr, tc_opt, base_ty_name_opt, src_id_opt, ty) =
   list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr,
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
+                                 lift_option (mk_option string_ty) fromMLstring base_ty_name_opt,
                                  src_id_opt, ty])
 fun mk_JE_Subscript (e1, e2, ty) = list_mk_comb(JE_Subscript_tm, [e1, e2, ty])
 fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
@@ -617,13 +618,15 @@ fun d_json_expr () : term decoder = achoose "expr" [
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Attribute - extract result typeclass, source_id, and type *)
+  (* Attribute - extract result typeclass, base_type_name, source_id, and type *)
   (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
+  (* base_type_name comes from value.type.name - used to distinguish address.code from struct.code *)
   check_ast_type "Attribute" $
-    JSONDecode.map (fn ((((e, attr), tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt, ty)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
+    JSONDecode.map (fn (((((e, attr), tc_opt), base_ty_name_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, base_ty_name_opt, src_id_opt, ty)) $
+    tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (orElse (field "type" $ field "typeclass" string,
                                 field "type" $ field "type_t" $ field "typeclass" string))),
+            try (field "value" $ field "type" $ field "name" string)),
             orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
@@ -1015,9 +1018,10 @@ fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
 
   (* Attribute - always parse as JE_Attribute, never fold *)
   check_ast_type "Attribute" $
-    JSONDecode.map (fn ((((e, attr), tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt, ty)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
+    JSONDecode.map (fn (((((e, attr), tc_opt), base_ty_name_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, base_ty_name_opt, src_id_opt, ty)) $
+    tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (field "type" $ field "typeclass" string)),
+            try (field "value" $ field "type" $ field "name" string)),
             orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                     orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
