@@ -60,8 +60,15 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.0.2 | stuck | risk_mismatch | E0544 | Call plan_oracle review for C2.0.2 with this evidence. Recommend a stronger structural repair: avoid proving the final ReturnException branch inside this large theorem context entirely, e.g. extract a full caller-suffix lemma that includes the tail goal shape, or restructure `eval_for_cons_type_sound_core` with `suspend`/`Resume` so the problematic branch is a top-level proof with clean assumptions. |
 | C2.0.2.1 | proved |  | E0547 | Review closure, then begin C2.0.2.2 to add `for_cons_non_loop_exception_suffix`. |
 | C2.0.2.2 | stuck | risk_mismatch | E0549 | Call `plan_oracle(mode="review", component_id="C2.0.2.2")` with this evidence for a replacement strategy; do not continue tactic retries or patch the core theorem. |
-| C2.0.2.2.0 | proved |  | E0550 | Review closure, then begin C2.0.2.2.1 to add/prove `for_cons_body_ih_exception_projection`. |
-| C2.0.2.2.1 | progressed | risk_mismatch | E0551 | Handoff: next session should not keep trying endpoint variants. Consider changing the projection theorem to return the exact full body-IH conjunction specialized to `(stp, INR exn, st_body)` (state/accounts/no_type_error/existential) as a whole using `assume_tac`/`gvs` so the theorem closes by simplification, or escalate if that still leaves exact endpoints. Alternatively use an even lower-level projection that does not open/reconstruct the existential at all. |
+| C2.0.2.2.0 | proved |  | E0553 | Review closure, then begin C2.0.2.2.1 and replace the whole-goal ACCEPT_TAC/LIST_CONJ endpoint with per-conjunct construction. |
+| C2.0.2.2.1 | proved |  | E0554 | Review closure, then begin C2.0.2.2.2 to prove the non-loop-exception suffix helper using the repaired projection. |
+| C2.0.2.2.2 | proved |  | E0555 | Review closure, then proceed only to the scheduled next component (likely C2.0.2.3) to patch the core For-cons tail using the proved helper. |
+| C2.0.2.3 | stuck | risk_mismatch | E0558 | Call plan_oracle review for C2.0.2.3 with this stuck evidence; ask whether to replace the suffix helper interface with a caller-shaped theorem that consumes the already-derived projected fact directly or to rebase the For-cons branch proof strategy. |
+| C2.0.2.3.1 | proved |  | E0560 |  |
+| C2.0.2.3.2 | stuck | risk_mismatch | E0562 |  |
+| C2.0.2.3.2.1 | stuck | risk_mismatch | E0571 | Call plan_oracle review for C2.0.2.3.2.1. Likely need a source cleanup/rebase: either prove a stronger boundary helper that consumes the endpoint assumptions before entering the suspended core context, or alter the endpoint to avoid any local theorem validation over the existential/case premise. |
+| C2.0.2.3.2.1.1 | proved |  | E0572 | Review closure with strategist, then begin C2.0.2.3.2.1.2 to replace endpoint-local case/existential consumption with a call to the new helper. |
+| C2.0.2.3.2.2 | stuck | risk_mismatch | E0569 | Request strategist redesign. Likely need a stronger standalone helper that consumes the suffix premises and the visible body IH before entering the suspended core endpoint, or a different theorem statement whose conclusion matches the core goal exactly without requiring local acceptance of a universally quantified body-IH fact. |
 | C2.1 | proved |  | E0441 | Review closure, then begin the scheduled extraction-helper component and prove the standalone case-premise extraction lemma near the For_cons helper cluster. |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
 | C2.2 | proved |  | E0278 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
@@ -1605,53 +1612,276 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0550`
+- latest episode: `E0553`
 - blocker: 
-- actual effort: 1 sessions, 4 steps, 5 tools, 1 holbuild, 378,567 tok (377,424 in, 1,143 out, 366,592 cached), 82.4s, $0.27174600
-- next: Review closure, then begin C2.0.2.2.1 to add/prove `for_cons_body_ih_exception_projection`.
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 109,994 tok (109,411 in, 583 out, 99,328 cached), 18.9s, $0.11756900
+- next: Review closure, then begin C2.0.2.2.1 and replace the whole-goal ACCEPT_TAC/LIST_CONJ endpoint with per-conjunct construction.
 
 ### Attempts / Evidence
 
 - `E0550` (proved, , actual effort: 1 sessions, 4 steps, 5 tools, 1 holbuild, 378,567 tok (377,424 in, 1,143 out, 366,592 cached), 82.4s, $0.27174600)
   - Deleted lines 1693-1780 containing the failed no-TypeError-only projection and modified suffix helper from E0549, preserving preceding proven helpers including `for_cons_body_ih_return_exception_typed` and `for_cons_return_exception_suffix`. -> Grep shows no obsolete failed helper names remain; holbuild replays past the cleaned region and fails later at the existing core theorem suspend, so cleanup succeeded for this component. (`TO_type_system_rewrite-20260520T182357Z_m34616_t001`, `TO_type_system_rewrite-20260520T182357Z_m34617_t001`, `TO_type_system_rewrite-20260520T182357Z_m34617_t002`, `TO_type_system_rewrite-20260520T182357Z_m34617_t003`)
-
-### Ruled Out
-
-- Editing `eval_for_cons_type_sound_core` during cleanup
+- `E0553` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 109,994 tok (109,411 in, 583 out, 99,328 cached), 18.9s, $0.11756900)
+  - Inspected the For-cons helper block and rebuilt `vyperTypeStmtSoundnessTheory`. The file is parseable and the only current failure is the known projection proof body in `for_cons_body_ih_exception_projection`, which belongs to C2.0.2.2.1 rather than cleanup. -> Cleanup gate remains satisfied; no source cleanup was required for C2.0.2.2.0. (`TO_type_system_rewrite-20260521T114716Z_m34738_t001`, `TO_type_system_rewrite-20260521T114716Z_m34738_t002`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260520T182357Z_m34617_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34617_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34617_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T114716Z_m34738_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T114716Z_m34738_t002` (use `read_tool_output` for exact output)
 
 ## C2.0.2.2.1
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `risk_mismatch` The packaged projection idea is semantically right but the current HOL4 proof shape still hits exact-assumption/GEN validation failures after destructing the existential. The most promising next action is to change the projection theorem statement so the body-IH's full conjunction is returned directly (or use that full-conjunction form as the boundary), avoiding reconstruction of an existential conjunction from a fresh `env_exn` witness in tactic context.
-- latest episode: `E0551`
-- blocker: After body-IH specialization with `assume_tac` and `gvs[sum_case_def]`, the goal becomes `no_type_error_result (INR exn) /\ ?env_exn. ...` with assumptions containing exactly `no_type_error_result (INR exn)` and the three existential-witness facts. Attempts to split/reconstruct the conjunction with `metis_tac[]`, `qexists_tac`, explicit `ASSUME`/`LIST_CONJ`, and exact accept patterns fail, including `Thm.GEN variable occurs free in hypotheses`.
-- actual effort: 1 sessions, 3 msgs, 38 steps, 40 tools, 17 holbuild, 4,553,361 tok (4,538,239 in, 15,122 out, 4,478,976 cached), 544.7s, $2.98946300
-- next: Handoff: next session should not keep trying endpoint variants. Consider changing the projection theorem to return the exact full body-IH conjunction specialized to `(stp, INR exn, st_body)` (state/accounts/no_type_error/existential) as a whole using `assume_tac`/`gvs` so the theorem closes by simplification, or escalate if that still leaves exact endpoints. Alternatively use an even lower-level projection that does not open/reconstruct the existential at all.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0554`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 6 tools, 3 holbuild, 479,600 tok (477,871 in, 1,729 out, 461,312 cached), 108.9s, $0.36532100
+- next: Review closure, then begin C2.0.2.2.2 to prove the non-loop-exception suffix helper using the repaired projection.
 
 ### Attempts / Evidence
 
 - `E0551` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 38 steps, 40 tools, 17 holbuild, 4,553,361 tok (4,538,239 in, 15,122 out, 4,478,976 cached), 544.7s, $2.98946300)
   - Inserted `for_cons_body_ih_exception_projection` per PLAN and tried direct `mp_tac`/`impl_tac` plus simplification to the desired packaged conclusion. -> Simplification left implication/exact endpoints such as `A ==> no_type_error_result (INR exn)` or exact assumptions; `metis_tac[]`, `rw`, `strip_tac >> simp[]`, and `disch_then ACCEPT_TAC` did not close. (`TO_type_system_rewrite-20260520T182357Z_m34623_t001`, `TO_type_system_rewrite-20260520T182357Z_m34627_t001`, `TO_type_system_rewrite-20260520T182357Z_m34644_t001`)
   - Strengthened the projection conclusion to include the first two body-IH conjuncts so the post-specialization theorem matched more directly, then used `assume_tac` + `gvs[sum_case_def]` and attempted to assemble only the final no-TypeError/existential pair. -> Goal after simplification contains exact no-TypeError and witness facts, but splitting/reconstructing the existential with `metis_tac[]`, `qexists_tac`, or explicit `ASSUME`/`LIST_CONJ` still fails; explicit reconstruction hit `Thm.GEN variable occurs free in hypotheses`. (`TO_type_system_rewrite-20260520T182357Z_m34648_t001`, `TO_type_system_rewrite-20260520T182357Z_m34650_t001`, `TO_type_system_rewrite-20260520T182357Z_m34657_t001`)
-
-### Ruled Out
-
-- More exact endpoint variants using `first_assum ACCEPT_TAC`, `metis_tac[]`, `rw`, `disch_then ACCEPT_TAC`, or explicit `ASSUME`/`LIST_CONJ` after destructing the existential
-- Editing `eval_for_cons_type_sound_core` before C2.0.2.2.1 and C2.0.2.2.2 close
+- `E0552` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 8 holbuild, 2,009,311 tok (2,002,626 in, 6,685 out, 1,973,760 cached), 231.4s, $1.33176000)
+  - Changed `for_cons_body_ih_exception_projection` to return the full specialized body-IH consequent, including state/accounts/no-TypeError and packaged exception case, avoiding existential reconstruction in the statement. -> Source now has the safer full-conjunction statement, but proof still reaches exact full-conjunction endpoint after body-IH specialization. (`TO_type_system_rewrite-20260521T114716Z_m34704_t001`, `TO_type_system_rewrite-20260521T114716Z_m34726_t001`)
+  - Tried closing the full-conjunction endpoint with `strip_tac >> first_assum ACCEPT_TAC` and with explicit `ACCEPT_TAC (LIST_CONJ [ASSUME ...])`. -> Both exact endpoint tactics failed despite exact matching assumptions and goal; explicit list-conjunction acceptance failed at `ACCEPT_TAC`. (`TO_type_system_rewrite-20260521T114716Z_m34728_t001`, `TO_type_system_rewrite-20260521T114716Z_m34730_t001`)
+  - Tried direct theorem-level use of the body-IH via `first_x_assum`, `drule_all_then`, and `MATCH_MP`/`mp_tac` to avoid opening the conjunction. -> Assumption selection or endpoint validation failed; the proof did not close and continued to show the same exact specialized consequent shape. (`TO_type_system_rewrite-20260521T114716Z_m34722_t001`, `TO_type_system_rewrite-20260521T114716Z_m34724_t001`)
+- `E0554` (proved, , actual effort: 1 sessions, 7 steps, 6 tools, 3 holbuild, 479,600 tok (477,871 in, 1,729 out, 461,312 cached), 108.9s, $0.36532100)
+  - Replaced the whole-goal `ACCEPT_TAC (LIST_CONJ ...)` endpoint in `for_cons_body_ih_exception_projection` with subgoal-by-subgoal construction after specializing the body IH: `strip_tac >> rpt conj_tac >- simp[] >- simp[] >- fs[no_type_error_result_def] >> simp[]`. -> Projection theorem now builds past C2.0.2.2.1; holbuild advances to the later existing `eval_for_cons_type_sound_core` suspend rather than failing at the projection helper. (`TO_type_system_rewrite-20260521T114716Z_m34742_t001`, `TO_type_system_rewrite-20260521T114716Z_m34747_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260520T182357Z_m34657_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34650_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34648_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T114716Z_m34742_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T114716Z_m34747_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0555`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 27 steps, 27 tools, 9 holbuild, 2,846,187 tok (2,835,396 in, 10,791 out, 2,768,896 cached), 353.3s, $2.04067800
+- next: Review closure, then proceed only to the scheduled next component (likely C2.0.2.3) to patch the core For-cons tail using the proved helper.
+
+### Attempts / Evidence
+
+- `E0555` (proved, , actual effort: 1 sessions, 2 msgs, 27 steps, 27 tools, 9 holbuild, 2,846,187 tok (2,835,396 in, 10,791 out, 2,768,896 cached), 353.3s, $2.04067800)
+  - Added `for_cons_non_loop_exception_suffix` immediately after the repaired projection. The theorem specializes `for_cons_body_ih_exception_projection`, uses the given popped state/account/env invariants, simplifies the packaged `INR` case only inside the helper, and weakens `return_exception_typed` through `return_exception_typed_extend_local_env_extends`. -> `holbuild` proves the new suffix helper and advances to the pre-existing `eval_for_cons_type_sound_core` `ReturnException_tail` suspend, confirming the C2.0.2.2.2 artifact is available. (`TO_type_system_rewrite-20260521T114716Z_m34757_t001`, `TO_type_system_rewrite-20260521T114716Z_m34776_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T114716Z_m34757_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T114716Z_m34776_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0558`
+- blocker: C2.0.2.3 was rated Risk 2, but the core proof remains blocked by repeated exact endpoint/validation failures even after adding caller-shaped boundary helpers. Attempts to discharge exact-looking `no_type_error_result (INR exn)` and body-IH consequent goals fail under holbuild instrumentation/validation despite assumptions printed identically, and a new projected helper also hits the same endpoint brittleness. This exceeds routine tactic repair and indicates the helper/caller interface needs strategist redesign.
+- actual effort: 1 sessions, 5 msgs, 73 steps, 72 tools, 27 holbuild, 6,638,437 tok (6,610,307 in, 28,130 out, 6,483,456 cached), 934.3s, $4.71988300
+- next: Call plan_oracle review for C2.0.2.3 with this stuck evidence; ask whether to replace the suffix helper interface with a caller-shaped theorem that consumes the already-derived projected fact directly or to rebase the For-cons branch proof strategy.
+
+### Attempts / Evidence
+
+- `E0556` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 6 steps, 8 tools, 1 holbuild, 790,847 tok (788,579 in, 2,268 out, 772,096 cached), 62.6s, $0.53650300)
+  - In `eval_for_cons_type_sound_core`, replaced the final propagated non-loop exception branch (old `Cases_on y` / `suspend "ReturnException_tail"`) with `irule for_cons_non_loop_exception_suffix`. -> Initial build reached the suffix-helper application but left an existential goal for helper parameters, showing the helper call is in the right location but needed explicit witnesses. (`TO_type_system_rewrite-20260521T114716Z_m34784_t001`)
+  - Added explicit witnesses for the suffix helper: `body`, `env_after`, `id`, the pushed state, and `ty`, followed by `simp[Abbr`stp`]`. -> Source now contains the intended explicit-instantiation patch, but it is unverified; next session must run holbuild before making further proof edits. (`TO_type_system_rewrite-20260521T114716Z_m34786_t002`)
+- `E0557` (progressed, other, actual effort: 2 sessions, 6 msgs, 86 steps, 89 tools, 38 holbuild, 8,190,513 tok (8,166,958 in, 23,555 out, 8,022,016 cached), 977.7s, $5.44236800)
+  - After `irule for_cons_non_loop_exception_suffix`, discharged the first five conjunct antecedents one by one, supplied explicit witnesses `body`, `env_after`, `id`, pushed state, and `ty`, then attempted to prove the remaining body-IH antecedent by specializing the existing body IH. -> Build progressed to the last universally quantified antecedent of `for_cons_non_loop_exception_suffix`; residual involved re-proving the body-IH consequent from the specialized IH. (`TO_type_system_rewrite-20260521T121230Z_m34862_t001`)
+  - Tried direct endpoint tactics for the specialized IH consequent (`rw[]`, `Cases_on res_body >> gvs[sum_case_def]`, explicit existential witness `env_exn'`, `first_assum ACCEPT_TAC`, `mp_tac >> simp[]`, contradiction forms). -> All failed on exact-looking goals/implications, often due to CHOOSE/acceptance brittleness. The latest source uses `goal_assum $ drule_at Any` and leaves an implication `env_consistent env_exn' cx st_body0 ==> env_consistent env_exn' cx st_body0`. (`TO_type_system_rewrite-20260521T121230Z_m34870_t001`, `TO_type_system_rewrite-20260521T121230Z_m34872_t001`)
+- `E0558` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 73 steps, 72 tools, 27 holbuild, 6,638,437 tok (6,610,307 in, 28,130 out, 6,483,456 cached), 934.3s, $4.71988300)
+  - Confirmed current residual in `eval_for_cons_type_sound_core`; exact implication/body-IH consequent remained after applying `for_cons_non_loop_exception_suffix`. -> Build showed final helper antecedent residual around body IH projection/identity implication; previous endpoint acceptance variants remained brittle. (`TO_type_system_rewrite-20260521T121230Z_m34879_t001`, `TO_type_system_rewrite-20260521T121230Z_m34895_t001`)
+  - Added local `for_cons_body_ih_same_shape` boundary lemma and attempted to use it in the core branch via `irule`, `qspecl_then`, `metis_tac`, and `match_mp_tac`. -> The helper itself proved with `metis_tac[sum_case_def]`, but using it in the core branch still left exact universal/body-IH antecedents or exact-assumption validation failures. (`TO_type_system_rewrite-20260521T121230Z_m34902_t001`, `TO_type_system_rewrite-20260521T121230Z_m34905_t001`, `TO_type_system_rewrite-20260521T121230Z_m34913_t001`, `TO_type_system_rewrite-20260521T121230Z_m34915_t001`)
+  - Added projected suffix helper `for_cons_non_loop_exception_suffix_projected` to bypass re-specializing the body IH in the caller and use the already-derived projected body-IH fact. -> The helper proof itself hit the same exact endpoint brittleness: after simplification the assumption list contains `no_type_error_result (INR exn)` but `first_assum`, `qpat_assum`, `asm_rewrite_tac`, explicit `ASSUME`, `rw`, and `simp` variants do not close reliably; `metis_tac` times out. (`TO_type_system_rewrite-20260521T121230Z_m34921_t001`, `TO_type_system_rewrite-20260521T121230Z_m34930_t001`, `TO_type_system_rewrite-20260521T121230Z_m34934_t001`, `TO_type_system_rewrite-20260521T121230Z_m34950_t001`)
+
+### Ruled Out
+
+- More endpoint acceptance/simplification variants on exact-looking assumptions
+- Inline body-IH consequent reconstruction inside the core proof
+- Using the new same-shape helper with bare irule/metis/match_mp in the core context
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T121230Z_m34879_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m34895_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m34913_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m34921_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m34950_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0560`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 7 holbuild, 1,034,571 tok (1,030,329 in, 4,242 out, 998,912 cached), 208.8s, $0.78380100
+
+### Attempts / Evidence
+
+- `E0559` (progressed, other, actual effort: 1 sessions, 1 msgs, 3 steps, 4 tools, 411,801 tok (408,967 in, 2,834 out, 392,704 cached), 45.6s, $0.36268700)
+  - Accepted oracle review E0558 and began C2.0.2.3.1, which requires proving/fixing `for_cons_non_loop_exception_suffix_projected` before any further core branch work. -> Plan now authorizes a projected actual-result helper interface; active component is C2.0.2.3.1. (`TO_type_system_rewrite-20260521T121230Z_m34952_t001`, `TO_type_system_rewrite-20260521T121230Z_m34953_t001`)
+  - Replaced the brittle direct projected-helper proof with an explicit existential-form helper `for_cons_non_loop_exception_suffix_projected_explicit` and a compatibility theorem `for_cons_non_loop_exception_suffix_projected`. -> Source edit is present but unverified; next session must build `vyperTypeStmtSoundnessTheory` before editing further. (`TO_type_system_rewrite-20260521T121230Z_m34954_t001`)
+- `E0560` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 7 holbuild, 1,034,571 tok (1,030,329 in, 4,242 out, 998,912 cached), 208.8s, $0.78380100)
+  - Replaced the explicit helper proof with a boundary call to existing `for_cons_ordinary_exception_conclusion`, avoiding brittle conjunction subgoal ordering; then proved the case-expression compatibility theorem by specializing the explicit helper after `gvs[sum_case_def]`. -> `holbuild vyperTypeStmtSoundnessTheory` passed both `for_cons_non_loop_exception_suffix_projected_explicit` and `for_cons_non_loop_exception_suffix_projected`, advancing to the next failure in `eval_for_cons_type_sound_core`. (`TO_type_system_rewrite-20260521T121230Z_m34974_t001`, `TO_type_system_rewrite-20260521T121230Z_m34973_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T121230Z_m34974_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m34973_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 caller patch is not routine: after the helper interface was specialized correctly, the residual is an exact `case (INR y)` premise already present as an assumption, yet `ACCEPT_TAC`, simplified existential destruct/rebuild, and `simp[]`/direct acceptance all fail with CHOOSE-origin validation errors in the instrumented mutual-proof context. This suggests the proof boundary still needs a lower-level micro helper or refactoring, not more endpoint tactic attempts.
+- latest episode: `E0562`
+- blocker: Cannot close the final projected-case premise in `eval_for_cons_type_sound_core` from the exact existing body-IH case assumption in this proof context.
+- actual effort: 1 sessions, 2 msgs, 24 steps, 24 tools, 7 holbuild, 1,691,176 tok (1,680,035 in, 11,141 out, 1,627,136 cached), 579.7s, $1.41229300
+
+### Attempts / Evidence
+
+- `E0561` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 23 steps, 23 tools, 7 holbuild, 1,606,343 tok (1,596,134 in, 10,209 out, 1,544,704 cached), 558.2s, $1.33577200)
+  - Added `env_after` parameter to `for_cons_non_loop_exception_suffix_projected` so the core branch final premise is exactly the existing body-IH case assumption without simplifying to an existential. -> Specialization mismatch fixed (no wrong `ty : type,num` confusion), but exact case-assumption acceptance still fails with CHOOSE-origin error. (`TO_type_system_rewrite-20260521T121230Z_m35056_t001`, `TO_type_system_rewrite-20260521T121230Z_m35060_t001`)
+  - Tried destruct/rebuild of simplified existential and then direct exact `ACCEPT_TAC (ASSUME case...)`. -> Both variants fail at tiny tautological endpoints with CHOOSE-origin errors; source presently keeps direct exact case acceptance after helper call. (`TO_type_system_rewrite-20260521T121230Z_m35044_t001`, `TO_type_system_rewrite-20260521T121230Z_m35060_t001`)
+- `E0562` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 24 steps, 24 tools, 7 holbuild, 1,691,176 tok (1,680,035 in, 11,141 out, 1,627,136 cached), 579.7s, $1.41229300)
+  - Aligned `for_cons_non_loop_exception_suffix_projected` with the caller by adding `env_after` to its statement so the helper premise matches `case INR y of INL v => env_consistent env_after cx st_body | INR exn => ...`; updated core call specialization accordingly. -> Eliminated prior wrong specialization (`env_extends (extend_local env ty ret_ty F) ...`), but left exact case-premise residual; see build failure at final ACCEPT_TAC. (`TO_type_system_rewrite-20260521T121230Z_m35056_t001`, `TO_type_system_rewrite-20260521T121230Z_m35060_t001`)
+  - Tried simplifying the case premise to an existential, destructing with `qx_choose_then`, rebuilding with `qexists_tac`, and closing conjuncts with `simp[]`/explicit `ACCEPT_TAC`. -> Still failed with CHOOSE-origin errors even on identical-looking assumptions and goals. (`TO_type_system_rewrite-20260521T121230Z_m35039_t001`, `TO_type_system_rewrite-20260521T121230Z_m35042_t001`, `TO_type_system_rewrite-20260521T121230Z_m35044_t001`)
+  - Tried exact `ACCEPT_TAC (ASSUME case...)` after the narrowed helper premise to avoid existential elimination inside the core branch. -> Exact case assumption and goal still fail with CHOOSE-origin validation error. (`TO_type_system_rewrite-20260521T121230Z_m35060_t001`)
+
+### Ruled Out
+
+- Do not retry full `for_cons_non_loop_exception_suffix` or universal body-IH reconstruction (old brittle interface).
+- Do not retry direct exact endpoint tactics (`ACCEPT_TAC`, direct `ASSUME`, `disch_then ACCEPT_TAC`) for the final case/existential premise in the core branch.
+- Do not retry simplified existential destruct/rebuild in the core branch without changing the proof interface.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T121230Z_m35056_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35060_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35061_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.3.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The projected-helper endpoint removed the universal body-IH subgoal, but the remaining concrete `case (INR y)`/existential premise still cannot be consumed inside `eval_for_cons_type_sound_core`. Multiple standard first-order completions fail with holbuild CHOOSE-origin validation: explicit witness/conj_tac, theorem-level `mp_tac >> simp`, `MATCH_MP` of existing case-premise helpers, direct qpat acceptance, and direct construction of the env_extends/return_exception_typed conjunction. The current source is a partial/failed attempt using `for_cons_ordinary_exception_return_typed_from_case_premise`, not a clean proof.
+- latest episode: `E0571`
+- blocker: Need strategist-approved refactoring or different proof boundary. The issue appears to be proof-shape/validation-sensitive in the suspended core context rather than a semantic missing fact: visible assumption 27 matches the goal up to binder names, but accepting or rewriting it repeatedly triggers CHOOSE/Q_TAC validation failures.
+- actual effort: 1 sessions, 4 msgs, 62 steps, 64 tools, 18 holbuild, 5,925,125 tok (5,899,520 in, 25,605 out, 5,706,240 cached), 843.0s, $4.58767000
+- next: Call plan_oracle review for C2.0.2.3.2.1. Likely need a source cleanup/rebase: either prove a stronger boundary helper that consumes the endpoint assumptions before entering the suspended core context, or alter the endpoint to avoid any local theorem validation over the existential/case premise.
+
+### Attempts / Evidence
+
+- `E0563` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 286,095 tok (285,314 in, 781 out, 275,968 cached), 73.4s, $0.20814400)
+  - Inserted theorem `for_cons_body_exception_case_premise_transport` with the strategist-specified `case (INR y : unit + exception)` premise/conclusion and proof `simp[sum_case_def]`. -> `holbuild` resumed after `for_cons_non_loop_exception_suffix_projected`, accepted the transport theorem, and proceeded to `eval_for_cons_type_sound_core`, where the next component's unpatched call site still fails. (`TO_type_system_rewrite-20260521T121230Z_m35065_t001`, `TO_type_system_rewrite-20260521T121230Z_m35066_t001`)
+- `E0566` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 54 steps, 54 tools, 22 holbuild, 4,607,715 tok (4,588,634 in, 19,081 out, 4,485,632 cached), 691.3s, $3.33025600)
+  - Replaced projected helper with direct `match_mp_tac (Q.SPECL [...] for_cons_non_loop_exception_suffix)` and discharged popped/pushed/eval/inequality premises explicitly. -> Build advanced to the final body-IH premise for `for_cons_non_loop_exception_suffix`; the plan's direct-helper boundary is in source. (`TO_type_system_rewrite-20260521T121230Z_m35146_t001`)
+  - Tried to prove the full body-IH premise by specializing the visible body IH and simplifying/using exact acceptance. -> Still fails with CHOOSE-origin validation on an implication whose antecedent/conclusion differ only by alpha names in the existential case branch. (`TO_type_system_rewrite-20260521T121230Z_m35146_t001`)
+- `E0567` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 55 steps, 55 tools, 22 holbuild, 4,724,813 tok (4,705,120 in, 19,693 out, 4,600,832 cached), 703.5s, $3.41264600)
+  - Directly applied `for_cons_non_loop_exception_suffix` in the non-loop exception endpoint and explicitly discharged popped invariants, pushed invariants, evaluation equality, and non-loop inequalities. -> Direct helper application works up to the final body-IH premise, confirming the visible assumptions match most helper hypotheses. (`TO_type_system_rewrite-20260521T121230Z_m35146_t001`)
+  - Specialized the visible body IH to arbitrary `stp0 res_body st_body0` and tried to pass the exact implication/conclusion via `simp[]`/acceptance. -> The remaining premise still reduces to an alpha-equivalent existential-case implication and fails with CHOOSE-origin validation in the suspended core proof context. (`TO_type_system_rewrite-20260521T121230Z_m35146_t001`)
+- `E0568` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 11 tools, 5 holbuild, 633,469 tok (629,993 in, 3,476 out, 608,768 cached), 175.9s, $0.51478900)
+  - Added explicit existential witness in `for_cons_body_ih_conclusion_transport` after splitting `res_body`. -> `holbuild` accepted the conclusion transport lemma and advanced to the full-IH wrapper. (`TO_type_system_rewrite-20260521T121230Z_m35160_t001`, `TO_type_system_rewrite-20260521T121230Z_m35168_t001`)
+  - Simplified `for_cons_body_ih_premise_transport` to specialize the input IH and close using `metis_tac[for_cons_body_ih_conclusion_transport]`. -> `holbuild` advanced past both standalone transport lemmas and now fails later in `eval_for_cons_type_sound_core`, so this boundary-lemma component is complete. (`TO_type_system_rewrite-20260521T121230Z_m35167_t001`, `TO_type_system_rewrite-20260521T121230Z_m35168_t001`)
+- `E0570` (progressed, other, actual effort: 1 sessions, 3 msgs, 23 steps, 24 tools, 8 holbuild, 2,775,645 tok (2,766,713 in, 8,932 out, 2,713,088 cached), 300.1s, $1.89262900)
+  - Changed endpoint from `for_cons_non_loop_exception_suffix` plus universal transport to `for_cons_non_loop_exception_suffix_projected`, discharging popped state/account/env and no-type-error premises. -> Build advanced to only the concrete projected `case (INR y)` body-IH premise, eliminating the full universal IH subgoal as desired. (`TO_type_system_rewrite-20260521T121230Z_m35195_t001`)
+  - Tried selecting/accepting or transporting the concrete `case (INR y)` premise by `qpat_x_assum`, `ACCEPT_TAC`, and `for_cons_body_exception_case_premise_transport`. -> Selection/acceptance of the identical-looking concrete case premise still hit parser/CHOOSE issues; direct `gvs[sum_case_def]` timed out. (`TO_type_system_rewrite-20260521T121230Z_m35195_t001`, `TO_type_system_rewrite-20260521T121230Z_m35197_t001`, `TO_type_system_rewrite-20260521T121230Z_m35199_t001`, `TO_type_system_rewrite-20260521T121230Z_m35205_t001`, `TO_type_system_rewrite-20260521T121230Z_m35207_t001`)
+  - Used `qpat_x_assum ... (strip_assume_tac o SIMP_RULE (srw_ss()) [sum_case_def])` to destruct the concrete case premise outside the tactic goal, yielding assumptions `env_extends ... env_exn`, `env_consistent env_exn ...`, and `return_exception_typed env_exn ...`. -> This avoided the earlier case-premise selection problem and reduced the remaining goal to an existential whose witness is `env_exn`; final `qexists env_exn >> simp[]` still failed by CHOOSE validation on the three conjuncts. (`TO_type_system_rewrite-20260521T121230Z_m35209_t001`, `TO_type_system_rewrite-20260521T121230Z_m35211_t001`)
+- `E0571` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 62 steps, 64 tools, 18 holbuild, 5,925,125 tok (5,899,520 in, 25,605 out, 5,706,240 cached), 843.0s, $4.58767000)
+  - Replaced final `qexists env_exn >> simp[]` with explicit `conj_tac`/`ACCEPT_TAC` on the three destructed assumptions. -> Still failed with CHOOSE-origin validation, even when reduced to `return_exception_typed env_exn ret_ty y` matching a visible assumption. (`TO_type_system_rewrite-20260521T121230Z_m35220_t001`, `TO_type_system_rewrite-20260521T121230Z_m35230_t001`)
+  - Tried bypassing the projected helper's final concrete premise by using the explicit helper/then by proving `return_exception_typed` via `return_exception_typed_extend_local_env_extends` and the witness assumptions. -> Subgoals again reduced to visually trivial conjunctions/implications and failed with CHOOSE-origin validation under `simp[]`, `disch_then ACCEPT_TAC`, or `LIST_CONJ`. (`TO_type_system_rewrite-20260521T121230Z_m35251_t001`, `TO_type_system_rewrite-20260521T121230Z_m35255_t001`, `TO_type_system_rewrite-20260521T121230Z_m35259_t001`)
+  - Tried factoring through existing case-premise boundary `for_cons_ordinary_exception_return_typed_from_case_premise` instead of destructing the existential locally. -> Applying the helper leaves a case-premise goal alpha-equivalent to visible assumption 27; `mp_tac >> simp[sum_case_def]`, `MATCH_MP`, and qpat acceptance still fail with CHOOSE/Q_TAC validation. (`TO_type_system_rewrite-20260521T121230Z_m35270_t001`, `TO_type_system_rewrite-20260521T121230Z_m35275_t001`, `TO_type_system_rewrite-20260521T121230Z_m35277_t001`)
+
+### Ruled Out
+
+- universal body-IH transport path (obsolete)
+- direct acceptance of concrete case/existential premise
+- destructed existential followed by explicit conjunct acceptance
+- return_exception_typed_extend_local_env_extends inside the endpoint
+- existing case-premise helper applied inside the endpoint
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T121230Z_m35217_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35230_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35255_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35270_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35275_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35277_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.3.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0572`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 8 tools, 3 holbuild, 436,878 tok (434,074 in, 2,804 out, 411,648 cached), 122.3s, $0.40207400
+- next: Review closure with strategist, then begin C2.0.2.3.2.1.2 to replace endpoint-local case/existential consumption with a call to the new helper.
+
+### Attempts / Evidence
+
+- `E0572` (proved, , actual effort: 1 sessions, 7 steps, 8 tools, 3 holbuild, 436,878 tok (434,074 in, 2,804 out, 411,648 cached), 122.3s, $0.40207400)
+  - Added standalone helper immediately after `for_cons_ordinary_exception_return_typed_from_case_premise`; specialized the body IH at `stp`, `INR y`, `st_body`, discharged pushed-state/eval premises with `simp[]`, then fed the resulting concrete case premise into `for_cons_ordinary_exception_return_typed_from_case_premise` outside the suspended endpoint. -> Helper proof accepted; subsequent build failure is later in `eval_for_cons_type_sound_core` at the old endpoint tactic, confirming this component's boundary lemma is available for the next planned patch. (`TO_type_system_rewrite-20260521T121230Z_m35289_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T121230Z_m35289_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35288_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.3.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0569`
+- blocker: Applying `for_cons_body_ih_premise_transport` inside `eval_for_cons_type_sound_core` still triggers the same CHOOSE-origin validation failure, even when avoiding manual specialization/simplification and using the wrapper theorem directly against the visible body IH assumption.
+- actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 5 holbuild, 920,130 tok (915,696 in, 4,434 out, 887,808 cached), 133.5s, $0.71636400
+- next: Request strategist redesign. Likely need a stronger standalone helper that consumes the suffix premises and the visible body IH before entering the suspended core endpoint, or a different theorem statement whose conclusion matches the core goal exactly without requiring local acceptance of a universally quantified body-IH fact.
+
+### Attempts / Evidence
+
+- `E0564` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 6 holbuild, 1,798,713 tok (1,791,301 in, 7,412 out, 1,759,744 cached), 220.7s, $1.26001700)
+  - Used `ACCEPT_TAC (MATCH_MP (Q.SPECL ... for_cons_body_exception_case_premise_transport) (ASSUME case_assumption))`. -> Failed with CHOOSE-origin validation despite printed assumption matching the helper antecedent. (`TO_type_system_rewrite-20260521T121230Z_m35071_t001`)
+  - Changed to tactic-level `match_mp_tac for_cons_body_exception_case_premise_transport`, then attempted to discharge its antecedent with `qpat_x_assum ... mp_tac >> simp[]`. -> After binder/type fixes, reduced to a tautological implication from the case premise to itself, but `simp[]` still failed with CHOOSE-origin validation. (`TO_type_system_rewrite-20260521T121230Z_m35073_t001`, `TO_type_system_rewrite-20260521T121230Z_m35075_t001`, `TO_type_system_rewrite-20260521T121230Z_m35077_t001`)
+  - Tried using `for_cons_body_ih_exception_projection` directly to avoid selecting the local case assumption. -> Left implication from body-IH conjunction to the same case premise and failed with CHOOSE-origin validation; source currently reflects this partial attempt. (`TO_type_system_rewrite-20260521T121230Z_m35080_t001`, `TO_type_system_rewrite-20260521T121230Z_m35084_t001`)
+- `E0565` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 17 steps, 16 tools, 6 holbuild, 1,922,951 tok (1,914,625 in, 8,326 out, 1,880,064 cached), 240.1s, $1.36261700)
+  - Applied `for_cons_body_exception_case_premise_transport` via `MATCH_MP` to an `ASSUME` of the local case premise. -> Failed with CHOOSE-origin validation error at exact endpoint. (`TO_type_system_rewrite-20260521T121230Z_m35071_t001`)
+  - Used tactic-level `match_mp_tac for_cons_body_exception_case_premise_transport`; tried to select the local case premise with `qpat_x_assum ... mp_tac >> simp[]`. -> After correcting qpat binder/type issues, residual was a tautological implication from the case premise to itself, but simplification still failed with CHOOSE-origin validation. (`TO_type_system_rewrite-20260521T121230Z_m35073_t001`, `TO_type_system_rewrite-20260521T121230Z_m35075_t001`, `TO_type_system_rewrite-20260521T121230Z_m35077_t001`)
+  - Tried avoiding local premise selection by invoking `for_cons_body_ih_exception_projection` directly with existing body IH/evaluation assumptions. -> Still produced an implication whose consequent is the case premise needed by the projected suffix helper; `simp[]` failed with CHOOSE-origin validation. (`TO_type_system_rewrite-20260521T121230Z_m35080_t001`, `TO_type_system_rewrite-20260521T121230Z_m35084_t001`)
+- `E0569` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 5 holbuild, 920,130 tok (915,696 in, 4,434 out, 887,808 cached), 133.5s, $0.71636400)
+  - Replaced the final local body-IH premise proof with `match_mp_tac for_cons_body_ih_premise_transport` followed by selecting the visible body IH via `qpat_assum ... ACCEPT_TAC`. -> The generated goal was exactly the original visible body-IH shape, but selecting/accepting it failed with the same CHOOSE-origin validation error in the suspended core proof context. (`TO_type_system_rewrite-20260521T121230Z_m35175_t001`)
+  - Tried `match_mp_tac for_cons_body_ih_premise_transport >> metis_tac[]` to avoid explicit assumption selection. -> Failed on the same goal with the same CHOOSE-origin validation error, confirming this is not just `qpat_assum` syntax. (`TO_type_system_rewrite-20260521T121230Z_m35177_t001`)
+  - Tried exact `ACCEPT_TAC (ASSUME ``...``)` for the full visible body IH after `match_mp_tac for_cons_body_ih_premise_transport`. -> Failed with the same CHOOSE-origin validation error despite the printed assumption matching the goal modulo binder names. (`TO_type_system_rewrite-20260521T121230Z_m35179_t001`)
+  - Tried applying `MATCH_MP (Q.SPECL [...] for_cons_body_ih_premise_transport)` directly to the visible body IH theorem and accepting/pushing the resulting transported theorem. -> Both theorem-level application variants still failed with CHOOSE-origin validation in the core proof; one produced a tautological implication from the transported premise to itself before failing, the other failed at direct acceptance. (`TO_type_system_rewrite-20260521T121230Z_m35181_t001`, `TO_type_system_rewrite-20260521T121230Z_m35183_t001`)
+
+### Ruled Out
+
+- Local use of `match_mp_tac for_cons_body_ih_premise_transport` followed by `qpat_assum` or exact `ACCEPT_TAC`
+- `metis_tac[]` for the wrapper premise
+- Theorem-level `MATCH_MP` on the wrapper and visible body IH inside the suspended core proof
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T121230Z_m35175_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35177_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35179_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35181_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T121230Z_m35183_t001` (use `read_tool_output` for exact output)
 
 ## C2.1
 

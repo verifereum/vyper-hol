@@ -403,12 +403,68 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260520T182357Z_m34483_t001
 - episode:E0547
 
-## L1139 scope='C2.0.2.2' tags=For_cons,body-IH,projection-helper,existential,GEN,CHOOSE,boundary-lemma
-shape: A helper specializes the For-cons body IH at `(stp, INR exn, st_body)` and then tries to prove `no_type_error_result (INR exn) /\ ?env_exn. ...` after `gvs[sum_case_def]`.
-pattern: Do not open the body-IH existential and reconstruct it from a fresh `env_exn` in tactic context. In this area, exact assumptions plus `qexists_tac`/`ACCEPT_TAC`/`metis_tac` can fail validation (`Thm.GEN`/`CHOOSE`). Prefer a boundary theorem that keeps the specialized body-IH consequent packaged as a theorem/conclusion, or pass the full specialized conjunction to the suffix helper instead of projecting/rebuilding existential components.
-works_when: Use while proving C2.0.2.2.1/C2.0.2.2.2 For-cons helper lemmas after body-IH specialization. If the goal state shows exact no-TypeError and witness facts but the proof cannot close, change the helper statement rather than trying another final tactic.
+## L1140 scope='C2.0.2.2' tags=For_cons,body-IH,projection-helper,conjunction,existential,CHOOSE,GEN,boundary-lemma
+shape: For-cons helper specializes body IH at `(stp, INR exn, st_body)` and the goal is the full specialized conjunction, while its conjuncts appear as assumptions after `strip_tac`.
+pattern: Do not close this area by whole-goal theorem acceptance (`first_assum ACCEPT_TAC`, explicit `ASSUME`/`LIST_CONJ`, `MATCH_MP`) and do not open/rebuild the exception existential. Specialize the body IH, discharge antecedents, `strip_tac`, then construct the final conjunction subgoal-by-subgoal (`rpt conj_tac` with per-conjunct assumption closure), keeping the case/existential branch packaged.
+works_when: Applies to C2.0.2.2.1/C2.0.2.2.2 For-cons helper lemmas after body-IH specialization. If exact whole-conjunction endpoints fail, use subgoal-level construction; if even per-conjunct construction fails, escalate for a direct suffix-consumes-IH interface.
 evidence:
-- tool_output:TO_type_system_rewrite-20260520T182357Z_m34648_t001
-- tool_output:TO_type_system_rewrite-20260520T182357Z_m34657_t001
-- tool_output:TO_type_system_rewrite-20260520T182357Z_m34659_t001
 - episode:E0551
+- episode:E0552
+- tool_output:TO_type_system_rewrite-20260521T114716Z_m34732_t001
+- tool_output:TO_type_system_rewrite-20260521T114716Z_m34730_t001
+
+## L1141 scope='C2.0.2.3' tags=For_cons,irule,existential-witness,suffix-helper,core-patch
+shape: Core proof applies a helper whose conclusion matches but whose variables (`body`, `env_after`, `id`, `stp`, `ty`) appear mainly in antecedents, leaving existential helper-parameter goals after bare `irule`.
+pattern: When applying `for_cons_non_loop_exception_suffix` in `eval_for_cons_type_sound_core`, do not rely on `irule` to infer all parameters. Immediately supply explicit witnesses for caller-only parameters, especially `body`, `env_after`, `id`, the pushed state, and `ty`, then simplify `Abbr`stp`` and discharge remaining local assumptions from the existing core context.
+works_when: Use after the core branch has substituted `res = INR y`, `st' = st_body with scopes := TL st_body.scopes`, and has assumptions for pushed `stp`, body evaluation, popped invariants, and `y <> ContinueException/BreakException`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T114716Z_m34784_t001
+- tool_output:TO_type_system_rewrite-20260521T114716Z_m34786_t002
+- episode:E0556
+
+## L1142 scope='C2.0.2.3' tags=For_cons,body-IH,endpoint-validation,helper-interface
+shape: Core proof must prove a helper antecedent identical to a universally quantified body-IH consequent, but exact acceptance/simplification fails in the mutual-proof context.
+pattern: When `for_cons_non_loop_exception_suffix` is applied in `eval_for_cons_type_sound_core`, proving the final body-IH antecedent inline by specializing the existing IH can enter a brittle endpoint-validation state. If exact-looking goals remain after `mp_tac`/`strip_tac` or `goal_assum $ drule_at Any`, factor the antecedent into a caller-shaped helper/corollary instead of retrying local acceptance tactics.
+works_when: Applies after the core branch has derived `res = INR y`, supplied explicit witnesses to `for_cons_non_loop_exception_suffix`, and the remaining goal is the helper's universal body-IH antecedent for arbitrary `stp0 res_body st_body0`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m34860_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m34870_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m34872_t001
+- episode:E0557
+
+## L1143 scope='C2.0.2.3.1' tags=For_cons,projected-helper,sum_case_def,existential,return_exception_typed
+shape: Projected helper with premise `case (INR exn) of ... => ?env_exn. ...` and conclusion requiring `return_exception_typed env ret_ty exn`.
+pattern: If direct proof of a case-expression projected helper is brittle after `sum_case_def`, first prove an explicit existential-form helper taking `env_exn` and the three existential conjuncts as separate premises, then prove the case-expression compatibility theorem by `rpt strip_tac >> gvs[sum_case_def] >> irule explicit_helper >> qexists_tac ...`. This avoids reconstructing universal body-IH facts in the core proof.
+works_when: Use for the For-cons non-loop exception suffix after body IH has produced an actual exceptional projection and the only semantic step is `return_exception_typed_extend_local_env_extends`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m34952_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m34954_t001
+- episode:E0559
+
+## L1144 scope='C2.0.2.3.2' tags=For_cons,existential,CHOOSE,sum_case_def,projected-helper
+shape: Goal/assumption are identical-looking existential facts after simplifying `case (INR y : unit + exception) of ...`, but `ACCEPT_TAC`, `disch_then ACCEPT_TAC`, `metis_tac[]`, or direct `ASSUME` fail with CHOOSE-origin errors.
+pattern: In the For-cons core branch, avoid exact existential endpoint acceptance. After reducing the helper premise with `simp[sum_case_def]`, move/simplify the body-IH case fact, destruct it with `qx_choose_then` (or an equivalent explicit existential elimination), then rebuild the existential goal with `qexists_tac` and solve conjuncts from assumptions.
+works_when: Use when consuming the actual projected body-IH exceptional fact for `INR y` in `eval_for_cons_type_sound_core`; the first four premises of `for_cons_non_loop_exception_suffix_projected` are already solved from assumptions and only the existential projected-case premise remains.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35020_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35031_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35033_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4548-4566
+
+## L1146 scope='C2.0.2.3.2.1' tags=For_cons,CHOOSE,boundary-helper,body-IH,existential
+shape: A suspended core proof needs to pass a body-IH premise whose conclusion differs only by alpha names in a `case res_body of INL ... | INR ... ?env_exn ...` branch.
+pattern: Do not prove this body-IH premise inside `eval_for_cons_type_sound_core`. Prove standalone transport lemmas over arbitrary `res_body` first (`for_cons_body_ih_conclusion_transport`, then `for_cons_body_ih_premise_transport`) and have the core proof use the full-IH wrapper by name. In the standalone `INR` case, provide the existing `env_exn` witness explicitly.
+works_when: Applies after the direct suffix helper `for_cons_non_loop_exception_suffix` is the intended endpoint and all non-body-IH premises are visible/dischargeable, but local acceptance/simplification of the body-IH premise fails with CHOOSE-origin validation.
+evidence:
+- episode:E0567
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35149_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35154_t001
+
+## L1148 scope='C2.0.2.3.2.1' tags=For_cons,CHOOSE,boundary-helper,body-IH,existential,sum_case
+shape: For-cons endpoint needs `return_exception_typed env ret_ty y` but the only direct evidence is body-IH `case (INR y) of ... ?env_exn ...`.
+pattern: Do not consume the concrete `case (INR y)` existential inside `eval_for_cons_type_sound_core`; in the suspended endpoint, even alpha-equivalent assumptions, explicit witnesses, trivial conjunctions, and `P ==> P` can fail with CHOOSE/Q_TAC validation. Instead prove a standalone non-existential helper that specializes the body IH at `(stp, INR y, st_body)` and concludes `return_exception_typed env ret_ty y`, then apply that helper in the endpoint.
+works_when: Applies to the For-cons ordinary non-loop exception branch after pushed-state facts and concrete `eval_stmts cx body stp = (INR y, st_body)` are available. The helper must copy the body-IH premise shape from `eval_for_cons_type_sound_core` and have no existential/case in its conclusion.
+evidence:
+- episode:E0571
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35279_t001
+- tool_output:TO_type_system_rewrite-20260521T121230Z_m35277_t001

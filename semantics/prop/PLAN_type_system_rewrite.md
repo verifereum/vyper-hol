@@ -213,66 +213,36 @@ Import/use the appropriate conjunct of `assign_target_sound_mutual`; instantiate
 #### Not to try
 Do not duplicate target evaluator case analysis in these wrappers. Do not keep old weaker wrappers with cheats if their callers actually need the stronger side conditions.
 
-### C2: Statement soundness For-cons repair path
-- Kind: `proof_refactor`
-- Risk: 2
-- Work priority: 20
-- Work units: 0
-- Rationale: The overall For-cons repair architecture remains valid; only the scheduler gate needs refinement so the helper subtree completes before the caller patch.
-- Required for completion: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0547, E0549
-
-#### Progress note
-Refines the prior C2 plan after TO_type_system_rewrite-20260520T182357Z_m34610_t001/11 showed the scheduler selected C2.0.2.3 too early. Prior proof evidence is preserved.
-
-#### Summary
-Statement soundness repair remains focused on the For-cons exception tail. Keep the helper-first architecture: prove reusable suffix helpers, then patch the core theorem. The current update fixes dependency metadata that let the caller patch appear before the needed helper artifacts. No mathematical obligation is changed.
-
-#### Approach
-Proceed through the C2.0.2 helper chain before any caller proof patch. This component only refines scheduling and carries forward prior proof progress.
-
-#### Not to try
-Do not begin the core For-cons patch while the helper region is still broken or while `for_cons_non_loop_exception_suffix` is unproved. Do not solve this by editing unrelated statement-soundness branches.
-
-#### Argument
-The For-cons branch should be repaired by isolating the propagated non-loop exception suffix as a local helper boundary before touching the evaluator mutual proof. The body IH supplies no-TypeError and return-exception typing for the body result; pushed/pop-scope helper assumptions supply the final invariants. Once the suffix lemma exists, the core theorem branch should instantiate it directly instead of destructing exceptions in the caller.
-
-#### Definition design
-No new definitions are introduced in C2. The proof interface is theorem-based: children under C2.0.2 establish For-cons helper lemmas with conclusions matching the caller's final conjunction. Failure signs are attempts to duplicate evaluator case analysis or to re-enter the old `Cases_on y`/`suspend` proof shape in the core theorem before the suffix boundary is closed.
-
-#### Code structure
-All edits in this subtree are local to `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Helper lemmas go near the existing `for_cons_*` helper block; the core mutual theorem patch is a later component and must not be edited before the helper boundary closes.
-
-### C2.0: For-cons helper and caller repair staging
-- Kind: `proof_refactor`
+### C2: Statement soundness stack
+- Kind: `proof_group`
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: This parent remains the staging node for helper-first For-cons repair. The only change is making the child dependency chain explicit enough for scheduling.
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0547, E0549
+- Rationale: Carry-forward ancestor wrapper only; this update does not change C2's scope or strategy. The new executable work below is decomposed into risk-2 helper/patch leaves.
+- Required for completion: yes
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2 plan context
 
 #### Progress note
-Scheduler-only refinement; existing mathematical strategy and prior closure evidence are carried forward.
+Included solely as an explicit parent for dotted replacement/merge validation; omitted siblings and prior C2 progress remain governed by the existing PLAN.
 
 #### Summary
-Stage the For-cons repair so helper lemmas are completed before the core theorem patch. Carry forward the proved ReturnException suffix helper. Require the non-loop suffix helper child to close before `eval_for_cons_type_sound_core` is edited.
+Carry-forward parent context for statement soundness work. This review changes only the For-cons ordinary-exception proof-shape leaf below. No sibling obligations are reclassified or invalidated.
 
-#### Approach
-Use terminal child dependencies rather than relying on grouping-node progress. The actual artifact needed by the caller is the theorem proved by C2.0.2.2.2.
+### C2.0: Evaluator statement soundness mutual proof repairs
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Carry-forward ancestor wrapper only; the local For-cons repair does not alter the evaluator invariant or sibling case strategy.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.0 plan context
 
-#### Not to try
-Do not assume a dependency on the C2.0.2 grouping node blocks C2.0.2.3; the schedule evidence shows it does not.
+#### Progress note
+Included only as an explicit dotted parent. Existing omitted descendants remain in the PLAN.
 
-#### Argument
-The caller proof has a hostile validation context for exact-looking endpoints. Moving the body-IH specialization and popped-scope assembly into helpers avoids this context. Therefore the staging invariant is: all helper artifacts must be available before the core theorem branch is patched.
-
-#### Definition design
-No definitions. Boundary theorems should package existential return-typing evidence and expose the final suffix conjunction directly to the caller.
-
-#### Code structure
-Keep helper theorem edits in the local helper block and keep caller edits in the later C2.0.2.3 component. Do not mix cleanup/projection/suffix work with the core mutual theorem patch.
+#### Summary
+Carry-forward parent for evaluator statement soundness. The only changed descendant is the For-cons ordinary-exception endpoint repair.
 
 ### C2.0.1: Carry forward the case-shaped ReturnException weakening corollary
 - Kind: `boundary_lemma`
@@ -300,35 +270,20 @@ No proof work unless the source was damaged by failed edits. If necessary, resto
 #### Not to try
 Do not re-open the large `eval_for_cons_type_sound_core` proof from this component. Do not try to strengthen or rename this support lemma unless the new consumer lemma genuinely cannot use it.
 
-### C2.0.2: For-cons non-loop exception helper sequence
-- Kind: `boundary_lemma_group`
+### C2.0.2: For-loop statement cases
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 20
+- Work priority: 0
 - Work units: 0
-- Rationale: The previous mathematical decomposition remains sound: prove the For-cons helper boundary before patching the core theorem. This refinement only makes the scheduling gate explicit so the helper children complete before the downstream proof patch begins.
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0547, E0549
+- Rationale: Carry-forward ancestor wrapper only; E0571 concerns a local proof boundary in the For-cons case, not the overall for-loop semantics argument.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.0.2 plan context
 
 #### Progress note
-Refines the prior C2.0.2 plan after scheduler evidence TO_type_system_rewrite-20260520T182357Z_m34610_t001/11 showed C2.0.2.3 was incorrectly next. Prior proof progress for C2.0.2.1 and the C2.0.2.2 decomposition is preserved.
+Included only as an explicit dotted parent. Existing omitted descendants remain in the PLAN.
 
 #### Summary
-Local For-cons exception-tail work remains a helper-first sequence. The proved ReturnException suffix helper is carried forward. The repaired non-loop suffix boundary is decomposed into cleanup, packaged projection, and suffix assembly. Only after the suffix assembly checkpoint closes may the core theorem patch begin.
-
-#### Approach
-Execute the helper-child chain in order: cleanup, packaged projection, suffix assembly. Treat C2.0.2.3 as blocked until C2.0.2.2.2 is proved and reviewed because the core proof requires the concrete theorem artifact `for_cons_non_loop_exception_suffix`, not merely the grouping intention.
-
-#### Not to try
-Do not begin C2.0.2.3 while the helper region is still broken or while `for_cons_non_loop_exception_suffix` is unproved. Do not rely on a dependency on the grouping node C2.0.2 to gate a descendant proof patch; use the terminal child dependency explicitly.
-
-#### Argument
-The final For-cons propagated non-loop exception branch should not be solved by splitting the exception inside `eval_for_cons_type_sound_core`. The body IH already gives, for the concrete body evaluation returning `INR exn`, both `no_type_error_result (INR exn)` and an environment under which `return_exception_typed` holds. The popped-scope assumptions already give the final state/accounts/env invariants after leaving the loop scope. Therefore the proof boundary is: package the body-IH exception projection, assemble `for_cons_non_loop_exception_suffix`, then invoke that lemma in the core proof. The dependency chain must be terminal-child based because the grouping component `C2.0.2.2` has no direct proof artifact; its child `C2.0.2.2.2` is the actual lemma needed downstream.
-
-#### Definition design
-No new definitions are introduced. The proof interface is theorem-based: `for_cons_body_ih_exception_projection` must expose the body-IH facts without destructing the existential in the caller, and `for_cons_non_loop_exception_suffix` must expose the exact final conjunction shape needed by the core For-cons branch. A failure sign is any proof attempt that re-enters the old endpoint-validation pattern with exact assumptions after `mp_tac`/`strip_tac`; in that case the projection interface should be adjusted rather than patching the core theorem.
-
-#### Code structure
-All work in this subtree is local to `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place projection/suffix helpers in the helper block near the existing `for_cons_body_ih_*` and `for_cons_return_exception_suffix` theorems. Do not edit `eval_for_cons_type_sound_core` until `C2.0.2.2.2` is closed. The downstream core patch remains in C2.0.2.3 and should only call the completed suffix helper.
+Carry-forward parent for for-loop statement cases. The repair below preserves the current invariant and changes only how one ordinary-exception endpoint consumes the body IH.
 
 ### C2.0.2.1: Carry forward proved ReturnException branch-suffix helper
 - Kind: `boundary_lemma`
@@ -395,87 +350,79 @@ Do not reintroduce identity/projection helper variants for `return_exception_typ
 - Risk: 2
 - Work priority: 22
 - Work units: 0
-- Rationale: The logical facts are present in the body IH and popped-scope assumptions; E0549 shows the old proof interface, not the statement, was brittle. Factoring a packaged projection theorem before suffix assembly makes the remaining work standard.
-- Supersedes: C2.0.2.2@E0546, C2.0.2.2@E0548, C2.0.2.2@E0549
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0549, E0548, E0546
-- Invalidates prior progress/evidence: old C2.0.2.2 leaf strategy: inline/body-IH specialization followed by exact endpoint acceptance
+- Rationale: The mathematical obligation is still just specialization of the existing body IH plus previously proved pop/return-exception helpers. E0552 showed a proof-interface/tactic brittleness, not a counterexample: the failed goal after body-IH specialization was exactly an implication from the specialized consequent to itself, and after stripping it exposed the four needed conjuncts as assumptions. The repaired subtree avoids whole-conjunction theorem acceptance and destructed existential reconstruction.
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.0.2.2.0, E0550
+- Invalidates prior progress/evidence: C2.0.2.2.1@previous, E0552
 
 #### Progress note
-E0549 is accepted as design evidence: prior proof attempts do not close this component, but they identify the interface to avoid.
+C2.0.2.2.0 cleanup remains useful and is carried forward. The previous C2.0.2.2.1 statement/approach is replaced because E0552 demonstrated the exact-endpoint interface was too brittle, but the mathematical content remains the same local For-cons exception suffix path.
 
 #### Summary
-Replace the failed single helper proof with a three-step local repair. First clean the broken helper region left by E0549. Then prove a body-IH projection lemma that keeps the exception existential packaged. Finally prove `for_cons_non_loop_exception_suffix` from that projection, the popped invariants, and the existing ReturnException weakening helper.
+This subtree repairs the For-cons exception suffix boundary without changing the core mutual statement theorem. The body IH already provides the full result for the concrete body evaluation; the proof must specialize that IH and build the requested conjunction with `rpt conj_tac`, not try to accept a whole conjunction theorem. The existential for the exception case must remain packaged as an assumption/conjunct; do not open it and reconstruct a witness. After the projection lemma builds, prove the suffix helper and only then patch the suspended For-cons tail in the core theorem.
 
 #### Description
-This component remains the boundary needed before patching the downstream `eval_for_cons_type_sound_core` suspend. It owns only helper theorems around `for_cons_body_ih_*` and `for_cons_non_loop_exception_suffix` in `semantics/prop/vyperTypeStmtSoundnessScript.sml`; do not edit the core mutual theorem here.
-
-#### Statement
-Target helper family in `semantics/prop/vyperTypeStmtSoundnessScript.sml`: a new `for_cons_body_ih_exception_projection` theorem followed by the existing intended `for_cons_non_loop_exception_suffix` statement, with the suffix proof using the projection lemma rather than inline body-IH specialization.
+The prior plan correctly identified that the For-cons tail needs a boundary lemma before editing `eval_for_cons_type_sound_core`, but the proof interface encouraged exact theorem-object endpoint attempts. The new interface is intentionally mundane: clean up the failed theorem text, reprove the projection with subgoal-level conjunction construction, then use it in the suffix lemma. If the projection still reaches a goal where the four conjuncts are separate assumptions, the authorized closure is `rpt conj_tac >> first_assum ACCEPT_TAC`; whole-goal `ACCEPT_TAC`, explicit `ASSUME`/`LIST_CONJ`, and existential destruct/rebuild are forbidden.
 
 #### Approach
-The body IH yields a conjunction for exactly `(stp, INR exn, st_body)`; the projection lemma should instantiate that IH and keep the existential packaged in the theorem conclusion. In the suffix helper, split the final conjunction first; assumptions solve the popped invariant conjuncts, the projection solves no-TypeError, and exception case analysis plus the existing ReturnException helper solves the return-typing conjunct.
+Work in `semantics/prop/vyperTypeStmtSoundnessScript.sml` around the existing For-cons helper block. Keep `eval_for_cons_type_sound_core` unchanged until this subtree is complete. The proof shape is: specialize the body IH with `(stp, INR exn, st_body)`, discharge the four antecedent conjuncts from assumptions, strip the specialized consequent if necessary, then solve the final conjunction one conjunct at a time.
 
 #### Not to try
-Do not repeat the E0546/E0548/E0549 shape: `mp_tac` the body IH, `strip_tac`, `gvs[]`, then solve an exact-looking endpoint with `first_assum ACCEPT_TAC`, `qpat_assum ACCEPT_TAC`, or a local `by` block. Do not use unparenthesized `Cases_on exn >> ...`. Do not edit `eval_for_cons_type_sound_core` or the old `suspend "ReturnException_tail"` in this component.
+Do not retry `first_assum ACCEPT_TAC` on the whole conjunction, explicit `ACCEPT_TAC (LIST_CONJ [ASSUME ...])`, `MATCH_MP` theorem-object construction, or opening the exception existential with `qexists_tac`. E0551/E0552 show those endpoints are brittle in this suspended/replayed proof context. Do not edit the core For-cons mutual proof before the projection and suffix helpers build.
 
 #### Argument
-For the For-cons non-loop-exception tail, the recursive body IH is stronger than needed. Specialized to the actual body evaluation `(stp, INR exn, st_body)`, it yields no type error for `INR exn` and, for an exception result, an existential environment extending the loop-body environment in which the exception is return-typed. The suffix theorem additionally assumes that popping the loop scope has restored `state_well_typed`, `accounts_well_typed`, and `env_consistent env cx`; therefore only no-TypeError and outer-env return typing need proof. Continue and Break are excluded; ordinary non-return exceptions are handled by definitions; ReturnException is weakened back to `env` by the existing return-specific helper path.
+For a pushed For-cons body state `stp`, the statement-soundness body IH has exactly the form needed for every body result: under env/state/account typing and the concrete `eval_stmts` equation, it returns state preservation, account preservation, no-TypeError, and a result-indexed postcondition. In the exceptional body case `res_body = INR exn`, the postcondition is definitionally the exception branch and therefore contains the packaged existence of an extended exception environment. The non-loop-exception suffix theorem then combines this body result with the facts supplied by the loop-wrapper decomposition: non-loop exceptions propagate as the outer result, while popped-state invariants are supplied by the pop/extension helper. Return exceptions additionally use the already proved weakening lemma that removes the local loop variable from `return_exception_typed`.
 
 #### Definition design
-No semantic definitions should change. The proof interface change is to introduce a projection lemma whose conclusion keeps the body-IH exception facts packaged, especially the existential `env_exn`, instead of opening the existential and then trying to close exact assumptions. If the executor sees a fresh free `env_exn` from destructing the body-IH existential before the theorem boundary, that is a failure sign.
+No new definitions are required. The boundary interface is theorem-level: (1) the carried cleanup restores a parseable helper region; (2) a projection lemma exposes the body IH result for a concrete `INR exn`; (3) a suffix lemma consumes that projection and previously proved pop/return-exception helpers. Failure sign: if any proof requires choosing `env_exn` from the exception existential, the boundary is being used incorrectly; the suffix consumer should use the packaged exception branch or apply the existing return-exception weakening theorem only where it explicitly needs `return_exception_typed env ret_ty ...`.
 
 #### Code structure
-All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near the existing For-cons helper block after `for_cons_return_exception_suffix` and before the downstream `eval_for_cons_type_sound_core`. Place the new projection lemma before `for_cons_non_loop_exception_suffix`.
+All work stays in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near lines 1475--1760 and the For-cons helper block near line 2758. Do not add a new theory or library file. Keep helper theorems local unless they are already non-local in source. The helper order should be: existing `for_cons_body_exception_typed_from_body_soundness` and return-exception helpers, repaired projection lemma, pop/env restoration helper, non-loop-exception suffix helper, then the later core patch component.
 
 ### C2.0.2.2.0: Clean up failed C2.0.2.2 helper edits
 - Kind: `source_cleanup`
 - Risk: 1
 - Work priority: 0
-- Work units: 1
-- Rationale: This is mechanical source hygiene: remove or overwrite the partial failed proof text left by E0549 so the next helper statements start from a known clean region.
-- Carries progress/evidence from: E0549
-- Invalidates prior progress/evidence: partial failed source around for_cons_body_ih_no_type_error_result / for_cons_non_loop_exception_suffix from E0549
+- Work units: 0
+- Rationale: This component was already completed in E0550 and is carried forward so C2.0.2.2.1 can continue to depend on a clean helper region. No new executor work is required here.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: E0550, C2.0.2.2.0@previous
 
 #### Progress note
-The cleanup preserves successful preceding helpers and discards only unproved/broken tactics introduced during stuck attempts.
+Completed cleanup remains valid after the local subtree replacement.
 
 #### Summary
-Restore the helper block after `for_cons_return_exception_suffix` to a clean state. Keep all already-proved preceding theorems. Remove failed proof fragments for `for_cons_body_ih_no_type_error_result` and the modified `for_cons_non_loop_exception_suffix` if they do not build. Verify no obsolete failed theorem remains before adding the new projection lemma.
-
-#### Description
-The source is currently partial/broken around line ~1693. This component is not a semantic refactor; it only prevents stale failed tactics from confusing the projection proof.
+Carried-forward completed cleanup component. It exists to preserve the dependency edge for the repaired projection lemma. No action is required unless the executor finds the file still contains unparsable remnants from the failed proof attempts.
 
 #### Approach
-Edit only the local helper region in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. It is acceptable that the theory still fails later until the new helper components are completed, but there should be no leftover failed proof fragment from E0549 in this region.
+No work expected. If the source is not parseable at the helper block, overwrite the failed `for_cons_body_ih_exception_projection` proof as part of C2.0.2.2.1 rather than reopening this completed cleanup.
 
 #### Not to try
-Do not delete successful earlier helper theorems such as `for_cons_body_ih_return_exception_typed` or `for_cons_return_exception_suffix`. Do not move to the downstream core theorem as part of cleanup.
+Do not spend time on unrelated cleanup in this component.
 
-### C2.0.2.2.1: Prove packaged body-IH exception projection for For-cons
+### C2.0.2.2.1: Replace failed projection text with a conjunctive body-IH projection proof
 - Kind: `infrastructure_lemma`
 - Risk: 2
 - Work priority: 10
 - Work units: 2
-- Rationale: This is a direct specialization of the body IH at the actual evaluation triple. Keeping the existential packaged avoids the exact-endpoint validation pattern that defeated the no-TypeError-only projection.
+- Rationale: The failed logs show the specialized body IH produces exactly the desired facts. The remaining issue is proof construction, so a subgoal-by-subgoal conjunction proof is standard and avoids the rejected whole-conjunction/ASSUME theorem endpoints.
 - Dependencies: C2.0.2.2.0
 - Checkpoint: yes
-- Supersedes: failed for_cons_body_ih_no_type_error_result from E0549
+- Supersedes: C2.0.2.2.1@previous
 - Progress transition: `replacement`
-- Carries progress/evidence from: E0549
-- Invalidates prior progress/evidence: standalone no-TypeError-only projection proof that destructed the body-IH result
+- Carries progress/evidence from: E0552
+- Invalidates prior progress/evidence: C2.0.2.2.1@previous
 
 #### Progress note
-This replaces the failed no-TypeError-only projection with a stronger packaged projection that downstream code can consume without reopening the body IH.
+E0552 is carried as negative evidence: it rules out the old exact-endpoint approach and justifies this replacement. No completed proof progress from the old C2.0.2.2.1 is reused.
 
 #### Summary
-Prove `for_cons_body_ih_exception_projection`. It specializes the body IH once and returns both `no_type_error_result (INR exn)` and the exception existential. The existential must remain in the conclusion, not be destructed into the proof context before the theorem boundary. This checkpoint validates the repaired interface.
+Overwrite the current partial `for_cons_body_ih_exception_projection` proof. Keep the same mathematical statement unless current source has already changed it to the full specialized body-IH consequent; either statement is acceptable only if the conclusion is solved by specializing the body IH and constructing conjuncts one by one. After the body IH is specialized and its antecedent discharged, use `strip_tac` followed by `rpt conj_tac >> first_assum ACCEPT_TAC` or equivalent per-conjunct assumption closure. The proof must not destruct the exception existential.
 
 #### Description
-The theorem should be placed after the existing return-specific body-IH helper/`for_cons_return_exception_suffix` block. It intentionally has all antecedents in the same shape as the body IH consumer so callers can use it without recreating the fragile `mp_tac` endpoint pattern.
+The statement should match the theorem shown in the task/current source: from well-typed initial pushed body state, concrete `eval_stmts cx body stp = (INR exn, st_body)`, and the body IH, conclude `state_well_typed st_body /\ accounts_well_typed st_body.accounts /\ no_type_error_result (INR exn) /\ case (INR exn : unit + exception) of ...`. If the source currently has the full-specialized projection variant from E0552, it may be kept only if downstream C2.0.2.2.2 consumes it directly; otherwise restore the task statement. The crucial proof invariant is that the exception branch remains one assumption/conjunct containing `?env_exn...`. Do not simplify that branch in a way that introduces a free witness.
 
 #### Statement
-```sml
 Theorem for_cons_body_ih_exception_projection:
   !env env_after cx id ty ret_ty body stp st_body exn.
     state_well_typed stp /\
@@ -497,57 +444,101 @@ Theorem for_cons_body_ih_exception_projection:
               env_extends (extend_local env id ty F) env_exn /\
               env_consistent env_exn cx st_body0 /\
               return_exception_typed env_exn ret_ty exn0)) ==>
+    state_well_typed st_body /\
+    accounts_well_typed st_body.accounts /\
     no_type_error_result (INR exn) /\
-    ?env_exn.
-      env_extends (extend_local env id ty F) env_exn /\
-      env_consistent env_exn cx st_body /\
-      return_exception_typed env_exn ret_ty exn
-```
+    (case (INR exn : unit + exception) of
+     | INL u => env_consistent env_after cx st_body
+     | INR exn0 =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body /\
+           return_exception_typed env_exn ret_ty exn0)
 
 #### Approach
-Use the universally quantified body-IH assumption with the four actual antecedents. A robust proof should specialize the IH, simplify the `case` for `INR exn`, and immediately project the no-TypeError conjunct and the existential conjunct. If opening the existential, use its witness immediately for the theorem's existential conclusion; do not leave an exact assumption/goal endpoint as the final proof step.
+Use a named specialization rather than `first_x_assum`: `qpat_x_assum` on the quantified body IH, `qspecl_then [stp, INR exn, st_body] mp_tac`, discharge its antecedent with the four assumptions, then strip the consequent. Close with per-conjunct tactics, e.g. `rpt conj_tac >> first_assum ACCEPT_TAC`; if the pretty-printed case annotation prevents exact matching, first use only `simp[sum_case_def]` on the goal/assumption without opening the existential witness. Verify with `holbuild build vyperTypeStmtSoundnessTheory`.
 
 #### Not to try
-Do not prove only `no_type_error_result (INR exn)` by destructing the full IH result and ending at an exact assumption; that is precisely the E0549 failure. Do not introduce a free `env_exn` in hypotheses unless it is immediately used as the witness for the theorem's existential conclusion.
+Do not use `first_assum ACCEPT_TAC` on the entire conjunction: there is no whole-conjunction assumption after `strip_tac`. Do not build an explicit theorem with `ASSUME``...``/LIST_CONJ`; E0552 showed this fails validation in the replay context. Do not `gvs[sum_case_def]` so aggressively that it chooses an `env_exn` witness and leaves it free in hypotheses.
 
-### C2.0.2.2.2: Prove full non-loop-exception suffix helper using the projection
+### C2.0.2.2.2: Prove full non-loop-exception suffix helper using the repaired projection
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 20
 - Work units: 3
-- Rationale: Once the packaged projection lemma exists, the suffix theorem is small assembly: assumptions solve popped invariants, the projection solves no-TypeError, and exception cases plus the existing ReturnException helper solve return typing.
+- Rationale: Once C2.0.2.2.1 provides the body result for `INR exn`, this theorem is standard assembly from already available pushed-state/pop/env and return-exception helpers. No new semantic case analysis is needed.
 - Dependencies: C2.0.2.2.1
 - Checkpoint: yes
-- Supersedes: old for_cons_non_loop_exception_suffix proof attempt from E0548/E0549
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0548, E0549
-- Invalidates prior progress/evidence: inline body-IH specialization inside for_cons_non_loop_exception_suffix
+- Supersedes: C2.0.2.2.2@previous
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.0.2.2.2@previous
 
 #### Progress note
-This keeps the intended helper theorem but changes its implementation dependency to the packaged projection lemma, so downstream C2.0.2.3 can use the same boundary idea without re-entering the old brittle proof context.
+The obligation remains the previous suffix-helper obligation, but its dependency is now the repaired conjunctive projection lemma rather than the brittle exact-endpoint projection interface.
 
 #### Summary
-Prove `for_cons_non_loop_exception_suffix` after `for_cons_body_ih_exception_projection`. Split the final conjunction explicitly. Use assumptions for popped state/accounts/env, the projection lemma for no-TypeError, and safe parenthesized exception case analysis for return typing. This closes the C2.0.2.2 boundary and unblocks the downstream core-theorem patch.
+Prove the For-cons non-loop-exception suffix lemma after the projection builds. Use decomposition facts to show the outer result is the same non-loop exception and use existing assumptions/helpers for popped state/account/env consistency. For `ReturnException`, use the existing return-exception weakening helper from the body’s extended environment to the original environment. This component should not re-run body evaluator induction or duplicate statement cases.
 
 #### Description
-The theorem statement should remain equivalent to the previous intended suffix helper from source/plan: it consumes popped-scope invariants, original body preconditions, actual body evaluation, and body IH, and concludes popped invariants, no-TypeError for the propagated exception, and return typing at `env`.
+The suffix lemma should be the consumer needed by the later `ReturnException_tail`/non-loop exceptional branch in the For-cons case. It should take the concrete pushed body evaluation, body IH, and any already-established popped-state/env assumptions, then conclude the outer statement postcondition after `pop_scope`. The exact theorem name may follow the source (`for_cons_non_loop_exception_suffix` or the currently planned helper), but it must expose the result expected by the core patch component rather than requiring the core proof to destruct the body IH itself.
 
 #### Statement
-Use the existing intended statement of `for_cons_non_loop_exception_suffix` in the source/plan:
+Use the current source/planned statement for the For-cons non-loop-exception suffix helper. It must cover the case where the body returns `INR exn` with `exn <> ContinueException` and `exn <> BreakException`, and conclude the required outer postcondition after popping the For-cons local scope: preserved state/accounts, no TypeError for the outer `INR exn`, env consistency for the popped state where required, and `return_exception_typed env ret_ty exn` for propagated return exceptions.
 
+#### Approach
+First invoke `for_cons_body_ih_exception_projection` to obtain the packaged body facts. Use existing `for_body_env_extends_consistent_after_pop` or the local pop/env helper for `env_consistent env cx (st_body with scopes := TL st_body.scopes)`. For the return-typing part, split only on the exception constructor if needed: `ContinueException` and `BreakException` are excluded by hypotheses; `ReturnException v` is handled by `for_cons_body_ih_return_exception_typed` or `for_cons_return_exception_typed_from_body_ex` as appropriate; other exceptions should match the required non-return exception typing condition in the current statement.
+
+#### Not to try
+Do not inline `eval_stmts`/`finally`/`handle_loop_exception` again in this component; decomposition lemmas already isolated that. Do not specialize the body IH independently in the core proof after this helper exists. Do not open the projection’s existential except at a point where an existing theorem immediately consumes the packaged exception typing evidence.
+
+### C2.0.2.3: For-cons case
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Carry-forward ancestor wrapper only; the For-cons decomposition remains valid and the new work is localized to the non-loop exception endpoint.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.0.2.3 plan context, E0570, E0571
+
+#### Progress note
+Included only as an explicit dotted parent. The current update replaces the failed endpoint proof shape under C2.0.2.3.2.1.
+
+#### Summary
+Carry-forward parent for the For-cons proof. The semantic decomposition of pushed scope, body evaluation, loop result, and popped scope remains unchanged.
+
+### C2.0.2.3.1: Prove/fix the projected non-loop exception suffix helper
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 0
+- Work units: 2
+- Rationale: The statement is a direct conjunction assembly from its premises plus one already-used return-exception weakening lemma. E0558’s helper failure was caused by proof-script ordering after simplifying the `case INR exn`, not by missing semantics.
+- Dependencies: C2.0.2.2.2
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0558
+
+#### Progress note
+This refines the failed projected-helper attempt from E0558. The statement may keep the current name `for_cons_non_loop_exception_suffix_projected`, but its proof must avoid the incorrect fixed sequence of `conj_tac` assumptions after `simp[sum_case_def]`.
+
+#### Summary
+Repair the local helper `for_cons_non_loop_exception_suffix_projected` or replace it with an equivalently caller-shaped theorem. It should take popped-state facts, `no_type_error_result (INR exn)`, and the actual existential exceptional case fact from the body IH. It should conclude the non-loop suffix facts under the original `env`. This helper must build before touching the core theorem again.
+
+#### Statement
+Preferred shape, matching the current source if possible:
 ```sml
-Theorem for_cons_non_loop_exception_suffix:
-  !env env_after cx id ty ret_ty body stp st_body exn.
-    exn <> ContinueException /\
-    exn <> BreakException /\
+Theorem for_cons_non_loop_exception_suffix_projected:
+  !env cx id ty ret_ty st_body exn.
     state_well_typed (st_body with scopes := TL st_body.scopes) /\
     accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
     env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
-    state_well_typed stp /\
-    accounts_well_typed stp.accounts /\
-    env_consistent (extend_local env id ty F) cx stp /\
-    eval_stmts cx body stp = (INR exn, st_body) /\
-    (!stp0 res_body st_body0. ...body IH as in the projection lemma...) ==>
+    no_type_error_result (INR exn) /\
+    (case (INR exn : unit + exception) of
+     | INL u => T
+     | INR exn0 =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body /\
+           return_exception_typed env_exn ret_ty exn0) ==>
     state_well_typed (st_body with scopes := TL st_body.scopes) /\
     accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
     env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
@@ -556,54 +547,171 @@ Theorem for_cons_non_loop_exception_suffix:
      | INL _ => T
      | INR exn0 => return_exception_typed env ret_ty exn0)
 ```
+If simplifying the premise statement to an explicit `?env_exn...` makes the proof cleaner, also provide a compatibility theorem under the current name for the core call site.
 
 #### Approach
-After `rpt gen_tac >> strip_tac`, isolate each output conjunct with explicit conjunction splitting. For no-TypeError, apply `for_cons_body_ih_exception_projection` and project its first conjunct. For the final return-typing conjunct, simplify the sum case, then perform carefully scoped `Cases_on exn`; Continue/Break close by contradiction hypotheses, ReturnException uses `for_cons_body_ih_return_exception_typed`, and non-return exception constructors should close from `return_exception_typed_def` plus `no_type_error_result_def` as appropriate.
+Start with `rpt strip_tac` and simplify the `case INR exn` premise/conclusion using `sum_case_def`; avoid assuming the conjunction order after simplification. Split the final conjunction only after simplification reveals the exact goals, solve the first four conjuncts from assumptions, then destruct the existential and apply `return_exception_typed_extend_local_env_extends` with witnesses `F`, `env_exn`, `id`, and `ty`. If HOL’s `conj_tac` validation is brittle, prove an explicit existential-form helper first and make this theorem a one-line corollary by `fs[sum_case_def]`.
 
 #### Not to try
-Do not put `>>` after `Cases_on exn` unless each branch is parenthesized; E0548 showed this leaks impossible Continue/Break branches into ordinary exception proof paths. Do not use a local `by` proof for no-TypeError against the whole final conjunction. Do not touch or remove the downstream `suspend "ReturnException_tail"` yet; that is owned by the next component.
+Do not use a hard-coded sequence of four `conj_tac >- first_assum ACCEPT_TAC` immediately after `simp[sum_case_def]`; E0558 showed the goal order was not what that script assumed. Do not mention or require the universal body IH in this helper.
 
-### C2.0.2.3: Patch `eval_for_cons_type_sound_core` to call the non-loop suffix lemma
-- Kind: `proof_patch`
+### C2.0.2.3.2: For-cons non-loop exception branch
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 30
-- Work units: 3
-- Rationale: This proof patch is standard only after the terminal suffix helper child has produced `for_cons_non_loop_exception_suffix`. The explicit dependency fixes the scheduler error without changing the mathematical obligation.
-- Dependencies: C2.0.2.2.2
-- Checkpoint: yes
+- Work priority: 0
+- Work units: 0
+- Rationale: Carry-forward parent plus local strategy context. E0571 shows the non-loop exception branch needs a stronger proof boundary, but not a different semantic invariant.
 - Progress transition: `refinement`
-- Carries progress/evidence from: C2.0.2.3
+- Carries progress/evidence from: E0570, E0571
+- Invalidates prior progress/evidence: local endpoint tactics that consume CHOOSE-origin existential/case premises inside eval_for_cons_type_sound_core
 
 #### Progress note
-Refines only the dependency/priority metadata for the existing C2.0.2.3 obligation. No source-level proof progress for C2.0.2.3 has occurred, so there is no invalidated proof evidence.
+The prior projected-helper progress is retained as diagnostic evidence. The revised child component moves existential/case consumption into a standalone helper.
 
 #### Summary
-Patch the final propagated non-loop exception branch in `eval_for_cons_type_sound_core`. This component is blocked until `C2.0.2.2.2` proves the suffix helper. Once unblocked, instantiate `for_cons_non_loop_exception_suffix` with the propagated exception and delete the old `suspend "ReturnException_tail"` path. Keep normal/continue/break branches unchanged.
+Refines the For-cons non-loop exception proof strategy. Keep the existing decomposition and popped-scope facts, but do not consume the body-IH existential case inside `eval_for_cons_type_sound_core`. The child helper supplies a non-existential return-typing conclusion for the endpoint.
 
-#### Statement
-Target theorem remains the existing source theorem:
-```sml
-Theorem eval_for_cons_type_sound_core:
-  evaluate_type env.type_defs ty = SOME tyv /\
-  EVERY (value_has_type tyv) (v::vs) /\
-  id NOTIN FDOM env.var_types /\
-  type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-  env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  ... /\
-  eval_for cx tyv id body (v::vs) st = (res, st') ==>
-  state_well_typed st' /\ accounts_well_typed st'.accounts /\ env_consistent env cx st' /\
-  no_type_error_result res /\
-  case res of
-  | INR exn => return_exception_typed env ret_ty exn
-  | INL _ => T
-```
+#### Description
+This ancestor records the strategic rebase from local existential consumption to helper-based return typing. It preserves all state/account/env popped-scope reasoning already present in the core proof.
 
 #### Approach
-After the existing proof derives `loop_res = INR y`, rewrites `st_after`, and obtains the final equation `(res,st') = (INR y, st_body with scopes := TL st_body.scopes)`, instantiate `for_cons_non_loop_exception_suffix` with `exn = y`. Supply `y <> ContinueException` and `y <> BreakException` from the preceding branch splits and pass the body-IH/evaluation/state assumptions directly. The proof should be a local replacement of the failing suspended branch.
+Use the new helper to isolate return exception typing. The endpoint should split easy final conjuncts using already visible facts and call the helper only for the `return_exception_typed env ret_ty y` conjunct.
 
 #### Not to try
-Do not split `Cases_on y` in the core theorem. Do not call `for_cons_return_exception_suffix` directly from the core theorem. Do not begin this component before C2.0.2.2.2 is proved; doing so would violate the helper-first strategy and re-enter the known brittle caller context.
+Do not retry direct acceptance, `simp`, `metis`, or `MATCH_MP` over the concrete `case (INR y)` existential in the endpoint. E0571 already shows these are validation-sensitive in this context.
+
+#### Argument
+In the ordinary non-loop exception branch, the loop body has evaluated as `eval_stmts cx body stp = (INR y, st_body)` and the loop result is propagated as `INR y`. The body IH already implies, for this concrete evaluation, an extended exception environment carrying `return_exception_typed env_exn ret_ty y`. The only mathematically necessary step is to transport this return typing back through the loop-local `extend_local env id ty F`. E0571 shows this is not safe to do by local CHOOSE-witness destruction in the suspended endpoint, so the branch must use a boundary lemma whose conclusion has no existential witness.
+
+#### Definition design
+No definition changes in this subtree. The proof interface should expose a helper from the universal body IH plus concrete evaluation/pushed-state premises directly to `return_exception_typed env ret_ty y`. Any remaining endpoint goal mentioning `?env_exn`, `case (INR y)`, or a local witness `env_exn` means the abstraction boundary is still too weak.
+
+#### Code structure
+Work only in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Put the helper in the existing For-cons helper section before `eval_for_cons_type_sound_core`; patch only the final ordinary-exception endpoint of that theorem. Do not edit assignment, builtin, call, or public wrapper theories for this local repair.
+
+### C2.0.2.3.2.1: Rebase the For-cons ordinary-exception endpoint onto a body-IH boundary helper
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: The evidence shows a local proof-shape/validation problem, not a false invariant. A standalone helper can specialize the body IH and consume the existential/case branch outside the problematic endpoint; the endpoint then passes the original universal IH and concrete evaluation facts without destructing any existential locally.
+- Supersedes: C2.0.2.3.2.1@E0570-projected-endpoint, C2.0.2.3.2.1@E0571-stuck-endpoint
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0571, TO_type_system_rewrite-20260521T121230Z_m35217_t002, TO_type_system_rewrite-20260521T121230Z_m35230_t001, TO_type_system_rewrite-20260521T121230Z_m35255_t001, TO_type_system_rewrite-20260521T121230Z_m35270_t001
+- Invalidates prior progress/evidence: projected-helper endpoint tactic variants that destruct/accept the concrete case premise inside eval_for_cons_type_sound_core
+
+#### Progress note
+Prior progress is kept only as negative evidence: it proved that the universal-IH transport and projected concrete-case endpoint are validation-sensitive in this context. The current component replaces the tactic shape rather than continuing the same local acceptance attempts.
+
+#### Summary
+- Replace the stuck projected-helper endpoint with a small boundary helper proved before `eval_for_cons_type_sound_core`.
+- The helper specializes the body statement IH at `(stp, INR y, st_body)` and derives `return_exception_typed env ret_ty y` outside the problematic endpoint.
+- The endpoint must not destruct the existential/case premise locally; it should pass the universal IH and concrete pushed/eval facts to the helper.
+- Completion for this leaf means `holbuild build vyperTypeStmtSoundnessTheory` advances past `eval_for_cons_type_sound_core`; a later failure in the `Resume For_cons` body is downstream evidence, not a failure of this leaf.
+
+#### Description
+This component replaces the previous endpoint tactic plan. The old plan successfully identified the right semantic fact but left the proof with a local existential/case premise whose witness could not be used in the instrumented/suspended context. The replacement pushes that existential reasoning into a standalone theorem, so the core proof no longer relies on accepting alpha-equivalent case premises or CHOOSE-derived assumptions.
+
+#### Approach
+First add the standalone boundary helper and prove it by specializing the body IH at `stp`, `INR y`, and `st_body`; use `for_cons_ordinary_exception_return_typed_from_case_premise` to convert the resulting case premise into `return_exception_typed env ret_ty y`. Then, in the final ordinary-exception branch of `eval_for_cons_type_sound_core`, after reducing the result equality to the return-typed obligation, invoke this helper with the visible universal body IH, `env_consistent (extend_local env id ty F) cx stp`, `state_well_typed stp`, `accounts_well_typed stp.accounts`, and `eval_stmts cx body stp = (INR y, st_body)`.
+
+#### Not to try
+Do not retry `strip_assume_tac`/`qexists env_exn`/`ACCEPT_TAC` on the concrete existential or its conjuncts inside `eval_for_cons_type_sound_core`; E0571 shows even the final `return_exception_typed env_exn ret_ty y` assumption fails CHOOSE validation. Do not return to the universal body-IH transport lemmas that leave an alpha-equivalent implication/case premise to prove in the endpoint. Do not use broad `gvs[sum_case_def]` over the large endpoint context.
+
+#### Argument
+The ordinary non-loop exception branch of `eval_for` has already decomposed the loop body to `eval_stmts cx body stp = (INR y, st_body)` and has the body induction hypothesis in the standard joint form. Semantically, the needed return typing is immediate: specialize the body IH at the pushed state `stp`; its `INR` branch provides an extended environment `env_exn` consistent with `st_body` and `return_exception_typed env_exn ret_ty y`; then transport return typing back through the loop-local `extend_local env id ty F` using the already-proved `return_exception_typed_extend_local_env_extends`/`for_cons_ordinary_exception_return_typed_from_case_premise` boundary. The failed attempts show that doing this existential/case consumption inside the endpoint causes CHOOSE validation failures, so the existential must be consumed inside a standalone helper theorem whose conclusion is the non-existential fact `return_exception_typed env ret_ty y`. The endpoint then only instantiates this helper with visible facts and no longer creates goals containing the CHOOSE witness.
+
+#### Definition design
+No definition changes are authorized in this subtree. The proof interface to add is a boundary lemma, not a new invariant: it should take the body IH in exactly the same joint form used by `eval_for_cons_type_sound_core`, plus pushed-state consistency/typing and the concrete body evaluation equation, and return only `return_exception_typed env ret_ty y`. Failure signs: if the endpoint still has a goal that is a `case (INR y)` premise, an existential over `env_exn`, or a goal mentioning the witness `env_exn`, the helper boundary is too weak or has been applied too late.
+
+#### Code structure
+Work only in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place the new helper near the existing For-cons helper block, before `eval_for_cons_type_sound_core`, alongside `for_cons_ordinary_exception_return_typed_from_case_premise` and `for_cons_non_loop_exception_suffix_projected`. Then edit only the ordinary non-loop exception endpoint of `eval_for_cons_type_sound_core` to use this helper. Do not modify assignment, builtin, call, or public wrapper theories for this local repair.
+
+### C2.0.2.3.2.1.1: Add the non-existential body-IH return-typing helper for For-cons ordinary exceptions
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: The helper proof is a standard specialization of the existing body IH followed by an already-proved environment-extension return-typing transport. It is low risk because the failed evidence was endpoint validation, not the underlying fact; the same existential-to-return transport already exists as standalone lemmas.
+- Checkpoint: yes
+- Carries progress/evidence from: E0571
+
+#### Progress note
+This helper is the new boundary introduced in response to the E0571 risk mismatch. E0571 supports its necessity by showing that the existential/case premise must not be consumed in the endpoint.
+
+#### Summary
+- Add a theorem before `eval_for_cons_type_sound_core` that specializes the body IH for the concrete `INR y` body result.
+- The theorem conclusion should be exactly `return_exception_typed env ret_ty y`, with no existential witness in the conclusion.
+- Prove it outside the endpoint using existing For-cons return-typing transport lemmas.
+- This is a checkpoint because failure would mean the proposed boundary is still not strong enough or not syntactically aligned with the body IH.
+
+#### Statement
+Suggested theorem shape:
+```sml
+Theorem for_cons_ordinary_exception_return_typed_from_body_ih:
+  !env env_after cx id ty ret_ty body stp st_body y.
+    env_consistent (extend_local env id ty F) cx stp /\
+    state_well_typed stp /\
+    accounts_well_typed stp.accounts /\
+    eval_stmts cx body stp = (INR y, st_body) /\
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body, st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL u => env_consistent env_after cx st_body0
+        | INR exn =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn)) ==>
+    return_exception_typed env ret_ty y
+```
+If the exact variable names in the surrounding file differ, keep the body-IH premise syntactically aligned with `eval_for_cons_type_sound_core` rather than preserving these names.
+
+#### Approach
+Specialize the universal body IH with `stp`, `INR y`, and `st_body`; discharge its antecedent from the first four premises. From the specialized conclusion, extract the `case (INR y)` branch in this standalone theorem and apply `for_cons_ordinary_exception_return_typed_from_case_premise` (or directly `return_exception_typed_extend_local_env_extends`) to eliminate the extension witness. Keep simplification local to `sum_case_def`; avoid proving any popped-state suffix here.
+
+#### Not to try
+Do not make the helper conclude the whole final suffix unless needed; the endpoint already has popped state/account/env facts and no-type-error. Do not include a free `env_exn` parameter or any existential in the conclusion. Do not phrase the premise as a separate alpha-renamed implication that will require transport at the endpoint; copy the body-IH shape from `eval_for_cons_type_sound_core`.
+
+### C2.0.2.3.2.1.2: Patch `eval_for_cons_type_sound_core` to call the body-IH helper at the ordinary-exception endpoint
+- Kind: `proof_patch`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: After the helper exists, the core endpoint should only instantiate a theorem with visible concrete facts. This avoids all previously failing CHOOSE-origin existential/case assumption acceptance.
+- Dependencies: C2.0.2.3.2.1.1
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0570, E0571
+- Invalidates prior progress/evidence: the local `for_cons_non_loop_exception_suffix_projected` endpoint proof attempts that still leave the concrete case premise
+
+#### Progress note
+This keeps the semantic endpoint from the prior component but changes the proof boundary. The prior projected-helper work remains useful only for locating the exact ordinary-exception endpoint and ruling out local case-premise consumption.
+
+#### Summary
+- Edit the final non-Continue/non-Break `INR y` branch of `eval_for_cons_type_sound_core`.
+- Remove local destruction or acceptance of the body-IH `case (INR y)` existential premise.
+- After establishing `res = INR y` and `st' = st_body with scopes := TL st_body.scopes`, use the new helper to prove the remaining return-typed fact.
+- Verify with `holbuild build vyperTypeStmtSoundnessTheory`; success for this leaf is advancing past `eval_for_cons_type_sound_core`, even if a later `Resume For_cons` failure appears.
+
+#### Statement
+Patch target: the ordinary non-loop exception endpoint in
+```sml
+Theorem eval_for_cons_type_sound_core: ...
+```
+The theorem statement itself should not change.
+
+#### Approach
+At the endpoint, keep the already-proved facts: pushed `env_consistent`, pushed `state_well_typed`, pushed `accounts_well_typed`, concrete `eval_stmts cx body stp = (INR y, st_body)`, and the universal body IH. When the goal has reduced to `return_exception_typed env ret_ty y` (or the final suffix whose only nontrivial conjunct is that fact), `irule`/`match_mp_tac` the new helper and discharge premises by explicit `qexists_tac` plus `first_assum ACCEPT_TAC`/small `simp[]` only on non-existential facts. If the full suffix is still present, split the easy state/account/env/no-type-error conjuncts first, then call the helper for the return-typed conjunct.
+
+#### Not to try
+Do not call `for_cons_non_loop_exception_suffix_projected` here if it leaves the concrete case premise as a subgoal. Do not select, simplify, destruct, or accept a local assumption of shape `case (INR y) of ... ?env_exn ...`. Do not introduce a local witness `env_exn` in this theorem. If the new helper application still leaves a premise with a `case` or `?env_exn`, stop and escalate because the helper was not strong enough.
 
 ### C2.0.2.4: Clean up obsolete For-cons ReturnException scaffolding after the core proof builds
 - Kind: `source_cleanup`

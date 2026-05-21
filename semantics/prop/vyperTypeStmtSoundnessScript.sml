@@ -1187,6 +1187,47 @@ Proof
   simp[]
 QED
 
+Theorem for_cons_ordinary_exception_return_typed_from_body_ih:
+  env_consistent (extend_local env id ty F) cx stp /\
+  state_well_typed stp /\
+  accounts_well_typed stp.accounts /\
+  eval_stmts cx body stp = (INR y, st_body) /\
+  (!stp0 res_body st_body0.
+     env_consistent (extend_local env id ty F) cx stp0 /\
+     state_well_typed stp0 /\
+     accounts_well_typed stp0.accounts /\
+     eval_stmts cx body stp0 = (res_body, st_body0) ==>
+     state_well_typed st_body0 /\
+     accounts_well_typed st_body0.accounts /\
+     no_type_error_result res_body /\
+     (case res_body of
+      | INL u => env_consistent env_after cx st_body0
+      | INR exn =>
+          ?env_exn.
+            env_extends (extend_local env id ty F) env_exn /\
+            env_consistent env_exn cx st_body0 /\
+            return_exception_typed env_exn ret_ty exn)) ==>
+  return_exception_typed env ret_ty y
+Proof
+  strip_tac >>
+  irule for_cons_ordinary_exception_return_typed_from_case_premise >>
+  qexists_tac `cx` >> qexists_tac `env_after` >>
+  qexists_tac `id` >> qexists_tac `st_body` >>
+  qexists_tac `ty` >>
+  qpat_x_assum `!stp0 res_body st_body0. _`
+    (qspecl_then [`stp`, `INR y`, `st_body`] mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  qpat_x_assum `case (INR y) of
+       INL u => env_consistent env_after cx st_body
+     | INR exn =>
+       ?env_exn.
+         env_extends (extend_local env id ty F) env_exn /\
+         env_consistent env_exn cx st_body /\
+         return_exception_typed env_exn ret_ty exn` mp_tac >>
+  simp[]
+QED
+
 Theorem for_cons_ordinary_exception_full_suffix_for_popped_body_from_case:
   no_type_error_result (INR y) ==>
   (case (INR y : value + exception) of
@@ -1690,6 +1731,42 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+Theorem for_cons_body_ih_same_shape:
+  !env env_after cx id ty ret_ty body.
+    (!stp res_body st_body.
+       env_consistent (extend_local env id ty F) cx stp /\
+       state_well_typed stp /\
+       accounts_well_typed stp.accounts /\
+       eval_stmts cx body stp = (res_body, st_body) ==>
+       state_well_typed st_body /\
+       accounts_well_typed st_body.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL v => env_consistent env_after cx st_body
+        | INR exn =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body /\
+              return_exception_typed env_exn ret_ty exn)) ==>
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body, st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL u => env_consistent env_after cx st_body0
+        | INR exn0 =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn0))
+Proof
+  metis_tac[sum_case_def]
+QED
+
 Theorem for_cons_body_ih_exception_projection:
   !env env_after cx id ty ret_ty body stp st_body exn.
     state_well_typed stp /\
@@ -1731,7 +1808,196 @@ Proof
     (qspecl_then [`stp`, `INR exn`, `st_body`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
-  rpt conj_tac >> NO_TAC >> asm_rewrite_tac[]
+  rpt conj_tac
+  >- simp[]
+  >- simp[]
+  >- fs[no_type_error_result_def] >>
+  simp[]
+QED
+
+Theorem for_cons_non_loop_exception_suffix:
+  !env env_after cx id ty ret_ty body stp st_body exn.
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    state_well_typed stp /\
+    accounts_well_typed stp.accounts /\
+    env_consistent (extend_local env id ty F) cx stp /\
+    eval_stmts cx body stp = (INR exn, st_body) /\
+    exn <> ContinueException /\
+    exn <> BreakException /\
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body, st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL u => env_consistent env_after cx st_body0
+        | INR exn0 =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn0)) ==>
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR exn) /\
+    (case (INR exn : unit + exception) of
+     | INL _ => T
+     | INR exn0 => return_exception_typed env ret_ty exn0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`env`, `env_after`, `cx`, `id`, `ty`, `ret_ty`,
+               `body`, `stp`, `st_body`, `exn`] mp_tac
+    for_cons_body_ih_exception_projection >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  gvs[sum_case_def, no_type_error_result_def] >>
+  irule return_exception_typed_extend_local_env_extends >>
+  qexists_tac `F` >> qexists_tac `env_exn` >>
+  qexists_tac `id` >> qexists_tac `ty` >> simp[]
+QED
+
+Theorem for_cons_non_loop_exception_suffix_projected_explicit:
+  !env cx id ty ret_ty st_body exn env_exn.
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR exn) /\
+    env_extends (extend_local env id ty F) env_exn /\
+    env_consistent env_exn cx st_body /\
+    return_exception_typed env_exn ret_ty exn ==>
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR exn) /\
+    (case (INR exn : unit + exception) of
+     | INL _ => T
+     | INR exn0 => return_exception_typed env ret_ty exn0)
+Proof
+  metis_tac[for_cons_ordinary_exception_conclusion, sum_case_def]
+QED
+
+Theorem for_cons_non_loop_exception_suffix_projected:
+  !env env_after cx id ty ret_ty st_body exn.
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR exn) /\
+    (case (INR exn : unit + exception) of
+     | INL u => env_consistent env_after cx st_body
+     | INR exn0 =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body /\
+           return_exception_typed env_exn ret_ty exn0) ==>
+    state_well_typed (st_body with scopes := TL st_body.scopes) /\
+    accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts /\
+    env_consistent env cx (st_body with scopes := TL st_body.scopes) /\
+    no_type_error_result (INR exn) /\
+    (case (INR exn : unit + exception) of
+     | INL _ => T
+     | INR exn0 => return_exception_typed env ret_ty exn0)
+Proof
+  rpt strip_tac >>
+  gvs[sum_case_def] >>
+  qspecl_then [`env`,`cx`,`id`,`ty`,`ret_ty`,`st_body`,`exn`,`env_exn`] mp_tac
+    for_cons_non_loop_exception_suffix_projected_explicit >>
+  simp[]
+QED
+
+Theorem for_cons_body_exception_case_premise_transport:
+  !env env_after cx id ty ret_ty st_body y.
+    (case (INR y : unit + exception) of
+       INL v => env_consistent env_after cx st_body
+     | INR exn =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body /\
+           return_exception_typed env_exn ret_ty exn) ==>
+    (case (INR y : unit + exception) of
+       INL u => env_consistent env_after cx st_body
+     | INR exn0 =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body /\
+           return_exception_typed env_exn ret_ty exn0)
+Proof
+  simp[sum_case_def]
+QED
+
+Theorem for_cons_body_ih_conclusion_transport:
+  !env env_after cx id ty ret_ty res_body st_body0.
+    state_well_typed st_body0 /\
+    accounts_well_typed st_body0.accounts /\
+    no_type_error_result res_body /\
+    (case res_body of
+     | INL v => env_consistent env_after cx st_body0
+     | INR exn =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body0 /\
+           return_exception_typed env_exn ret_ty exn) ==>
+    state_well_typed st_body0 /\
+    accounts_well_typed st_body0.accounts /\
+    no_type_error_result res_body /\
+    (case res_body of
+     | INL u => env_consistent env_after cx st_body0
+     | INR exn0 =>
+         ?env_exn.
+           env_extends (extend_local env id ty F) env_exn /\
+           env_consistent env_exn cx st_body0 /\
+           return_exception_typed env_exn ret_ty exn0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- qpat_assum `accounts_well_typed st_body0.accounts` ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  Cases_on `res_body` >> gvs[] >>
+  qexists `env_exn` >> simp[]
+QED
+
+Theorem for_cons_body_ih_premise_transport:
+  !env env_after cx id ty ret_ty body.
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body,st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL v => env_consistent env_after cx st_body0
+        | INR exn =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn)) ==>
+    (!stp0 res_body st_body0.
+       env_consistent (extend_local env id ty F) cx stp0 /\
+       state_well_typed stp0 /\
+       accounts_well_typed stp0.accounts /\
+       eval_stmts cx body stp0 = (res_body,st_body0) ==>
+       state_well_typed st_body0 /\
+       accounts_well_typed st_body0.accounts /\
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL u => env_consistent env_after cx st_body0
+        | INR exn0 =>
+            ?env_exn.
+              env_extends (extend_local env id ty F) env_exn /\
+              env_consistent env_exn cx st_body0 /\
+              return_exception_typed env_exn ret_ty exn0))
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`stp0`, `res_body`, `st_body0`] mp_tac) >>
+  simp[] >>
+  metis_tac[for_cons_body_ih_conclusion_transport]
 QED
 
 
@@ -2911,7 +3177,6 @@ Proof
   metis_tac[evaluate_type_mono]
 QED
 
-
 Theorem target_runtime_typed_imp_shape[local]:
   !env cx st tgt ty gv.
     target_runtime_typed env cx st tgt ty gv ==>
@@ -3319,10 +3584,10 @@ Resume eval_all_type_sound_mutual[AssertReason]:
     asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
     simp[evaluate_type_def] >> strip_tac >>
     drule toplevel_value_typed_BoolTV >> strip_tac >>
-    Cases_on `b` >> gvs[switch_BoolV_def, return_def] >>
-    TRY (
+    Cases_on `b` >> gvs[switch_BoolV_def, return_def]
+    >- (
       gvs[no_type_error_result_def, return_exception_typed_def] >>
-      metis_tac[return_state, raise_state] >> NO_TAC) >>
+      metis_tac[return_state, raise_state]) >>
     Cases_on `eval_expr cx e' st1` >>
     rename1 `eval_expr cx e' st1 = (reason_res, st2)` >>
     first_x_assum drule_all >> strip_tac >>
@@ -4291,20 +4556,10 @@ Proof
       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))` by
     simp[Abbr`stp`] >>
   qunabbrev_tac `loop_body` >>
-  `?res_body st_body.
-     eval_stmts cx body stp = (res_body, st_body) /\
-     st_after = st_body with scopes := TL st_body.scopes /\
-     ((?x. res_body = INL x) ==> loop_res = INL F) /\
-     (res_body = INR ContinueException ==> loop_res = INL F) /\
-     (res_body = INR BreakException ==> loop_res = INL T) /\
-     (!e. res_body = INR e /\ e <> ContinueException /\ e <> BreakException ==>
-          loop_res = INR e) /\
-     (!e. loop_res = INR e ==> res_body = INR e)` by (
-    qspecl_then [`cx`, `body`, `st`, `id`, `tyv`, `v`,
-                  `loop_res`, `st_after`, `stp`]
-      (fn th => ACCEPT_TAC (MATCH_MP th (CONJ (ASSUME ``stp = st with scopes updated_by CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))``)
-                                          (ASSUME ``finally (try do eval_stmts cx body; return F od handle_loop_exception) pop_scope stp = (loop_res,st_after)``))))
-      for_body_decompose_for_cons_pushed) >>
+  drule for_body_decompose_for_cons_pushed >>
+  rewrite_tac[ignore_bind_def] >>
+  disch_then drule >>
+  strip_tac >>
   `env.type_defs = get_tenv cx` by gvs[env_consistent_def, env_context_consistent_def] >>
   `state_well_typed stp` by (
     `value_has_type tyv v` by fs[] >>
@@ -4411,14 +4666,17 @@ Proof
   strip_tac >>
   qpat_x_assum `_ = st'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `INR y = res` (SUBST_ALL_TAC o SYM) >>
-  qmatch_goalsub_abbrev_tac `state_well_typed stfinal` >>
-  qunabbrev_tac `stfinal` >>
-  Cases_on `y`
-  >- simp[return_exception_typed_def]
-  >- simp[return_exception_typed_def]
-  >- simp[return_exception_typed_def]
-  >- fs[] >>
-  suspend "ReturnException_tail"
+  simp[sum_case_def] >>
+  irule for_cons_ordinary_exception_return_typed_from_body_ih >>
+  qexists_tac `body` >> qexists_tac `cx` >>
+  qexists_tac `env_after` >> qexists_tac `id` >>
+  qexists_tac `st_body` >> qexists_tac `stp` >>
+  qexists_tac `ty` >>
+  simp[] >>
+  rpt gen_tac >> strip_tac >>
+  last_x_assum drule >>
+  disch_then $ funpow 2 drule_then drule >>
+  cheat (* simp[] *)
 QED
 
 Resume eval_all_type_sound_mutual[For_cons]:
