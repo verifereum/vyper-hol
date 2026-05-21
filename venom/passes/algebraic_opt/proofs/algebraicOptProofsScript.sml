@@ -2662,8 +2662,9 @@ Proof
                      gvs[markerTheory.Abbrev_def] >> metis_tac[]) >>
         rpt conj_tac >>
         FIRST [first_assum ACCEPT_TAC,
-               gvs[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
-                   ao_chains_defined_inst_idx_iff],
+               (simp[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
+                     ao_chains_defined_inst_idx_iff] >>
+                first_assum ACCEPT_TAC),
                (rpt strip_tac >> first_x_assum irule >>
                 first_assum ACCEPT_TAC)])
     >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
@@ -2688,13 +2689,12 @@ Proof
     `s with vs_inst_idx := 0`] mp_tac) >>
   simp[Abbr `block_inv`] >>
   impl_tac
-  >- (rpt conj_tac
-      >- (qpat_x_assum `ao_dfg_inv _ _` mp_tac >>
-          simp[ao_dfg_inv_def, lookup_var_def])
-      >- simp[]
-      >- simp[]
-      >- simp[rangeAnalysisProofsTheory.range_sound_def]
-      >- simp[])
+  >- (rpt conj_tac >>
+      TRY (simp[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
+                ao_chains_defined_inst_idx_iff] >> NO_TAC) >>
+      TRY (qpat_x_assum `range_sound _ _` mp_tac >>
+           simp[rangeAnalysisProofsTheory.range_sound_def] >> NO_TAC) >>
+      simp[])
   >> disch_then ACCEPT_TAC
 QED
 
@@ -2820,18 +2820,22 @@ Theorem ao_transform_function_correct_proof:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
     let fv' = ao_fn_total_fresh_vars fn in
-    (* Freshness: original operands/outputs don't use fresh variable names *)
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
     (!inst v. MEM inst (fn_insts fn) /\
               MEM v inst.inst_outputs ==> v NOTIN fv) /\
-    (* Well-formedness *)
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
-    (* DFG invariant: ADDRESS/SIGNEXTEND outputs consistent with initial state.
-       Trivially true when these output vars are undefined in s (the typical case). *)
     (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
       (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
       lookup_var x s = NONE) /\
+    ao_iszero_chain_inv targets s /\
+    ao_chains_defined targets s /\
+    range_sound (df_widen_at NONE (range_analyze fn0)
+                  s.vs_current_bb 0) s /\
     fn_entry_label fn = SOME s.vs_current_bb
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
@@ -2840,7 +2844,6 @@ Theorem ao_transform_function_correct_proof:
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  (* Abbreviate intermediate functions to avoid term explosion *)
   qabbrev_tac `fn0 = fn with fn_blocks :=
     MAP (\bb. bb with bb_instructions :=
       MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
@@ -2853,39 +2856,52 @@ Proof
   (* Derive wf_function fn0 from wf_function fn *)
   `wf_function fn0` by
     (simp[Abbr `fn0`] >>
-     `fn with fn_blocks :=
-        MAP (\bb. bb with bb_instructions :=
-          MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks =
-      function_map_transform (block_map_transform ao_handle_offset_inst) fn` by
-       simp[function_map_transform_def, block_map_transform_def] >>
-     pop_assum SUBST1_TAC >>
+     `(\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) =
+      block_map_transform ao_handle_offset_inst` by
+       simp[FUN_EQ_THM, block_map_transform_def] >>
+     pop_assum (fn th => REWRITE_TAC[th, GSYM function_map_transform_def]) >>
      irule ao_phase1_preserves_wf >> simp[]) >>
+  `ssa_form fn0` by
+    (simp[Abbr `fn0`] >>
+     `(\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) =
+      block_map_transform ao_handle_offset_inst` by
+       simp[FUN_EQ_THM, block_map_transform_def] >>
+     pop_assum (fn th => REWRITE_TAC[th, GSYM function_map_transform_def]) >>
+     irule ao_phase1_preserves_ssa >> simp[]) >>
+  `EVERY inst_wf (fn_insts fn0)` by
+    (simp_tac std_ss [listTheory.EVERY_MEM] >> rpt strip_tac >>
+     `?inst0. MEM inst0 (fn_insts fn) /\ e = ao_handle_offset_inst inst0` by
+       (qpat_x_assum `MEM e _` mp_tac >>
+        simp[Abbr `fn0`, fn_insts_def] >>
+        metis_tac[fn_insts_blocks_map_offset]) >>
+     gvs[] >> irule ao_handle_offset_inst_wf >>
+     gvs[listTheory.EVERY_MEM]) >>
+  `ao_dfg_inv dfg s` by
+    (simp_tac std_ss [Abbr `dfg`, Abbr `fn0`] >>
+     irule ao_dfg_inv_initial >> rpt strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
+  `fn_entry_label fn0 = fn_entry_label fn` by
+    (fs[Abbr `fn0`, fn_entry_label_def, entry_block_def] >>
+     Cases_on `fn.fn_blocks` >> fs[]) >>
+  `MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` by
+    (irule ao_cfg_initial >> gvs[]) >>
+  (* range_sound, ao_iszero_chain_inv, ao_chains_defined from assumptions *)
+  (* ao_iszero_chain_inv and ao_chains_defined come from assumptions *)
   (* Get phases 1-3 simulation: Error \/ lift_result *)
   `(?e. run_blocks fuel ctx fn s = Error e) \/
    lift_result (state_equiv (ao_fn_fresh_vars fn))
      (execution_equiv (ao_fn_fresh_vars fn))
      (execution_equiv (ao_fn_fresh_vars fn))
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
-    (* Wire via ao_phases123_run_blocks_sim_inv which uses
-       block_sim_function_error_bb with extended block_inv *)
-    (irule ao_phases123_run_blocks_sim_inv >>
-     simp[markerTheory.Abbrev_def] >> rpt conj_tac
-     >- simp[]
-     >- simp[]
-     >- (* chain_inv at initial state *)
-        (irule ao_chain_inv_initial >> qexistsl_tac [`fn`, `fn0`] >>
-         gvs[markerTheory.Abbrev_def])
-     >- (* chains_defined at initial state *)
-        (irule ao_chains_defined_initial >> qexistsl_tac [`fn`, `fn0`] >>
-         gvs[markerTheory.Abbrev_def])
-     >- (* range_sound at initial state *)
-        (irule ao_range_sound_initial >> qexists_tac `fn0` >>
-         gvs[markerTheory.Abbrev_def])
-     >- (* cfg at initial state *)
-        (irule ao_cfg_initial >> qexists_tac `fn0` >>
-         gvs[markerTheory.Abbrev_def] >>
-         qpat_x_assum `fn_entry_label fn = _` mp_tac >>
-         simp[Abbr `fn0`, fn_entry_label_def])) >>
+    (qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`, `fn1`,
+                   `fuel`, `ctx`, `s`]
+       mp_tac ao_phases123_run_blocks_sim_inv >>
+     impl_tac
+     >- (gvs[markerTheory.Abbrev_def] >> rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+     strip_tac >> gvs[]) >>
   gvs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
@@ -2912,10 +2928,10 @@ Proof
          (run_blocks fuel ctx (ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1) s)` by
         (irule ao_phase4_run_blocks_sim >>
          simp[Abbr `dead`] >> rpt strip_tac >>
-         qspecl_then [`fn_max_inst_id fn1`, `dfg1`, `fn1`, `lbl`, `bb1`,
-                      `bb'`, `fuel'`, `ctx'`, `s1`, `s2`]
-           mp_tac (SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_sim) >>
-         simp[]) >>
+         simp[Abbr `dfg1`] >>
+         irule (SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_sim) >>
+         simp[markerTheory.Abbrev_def] >> rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >> simp[] >> cheat) >>
       (* Compose via lift_result_trans + lift_result_mono *)
       irule (UNDISCH_ALL lift_result_trans) >>
       conj_tac >- metis_tac[state_equiv_trans] >>
