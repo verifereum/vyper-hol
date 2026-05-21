@@ -697,11 +697,11 @@ Definition translate_expr_def:
     else if obj = "self" then TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
     else if tc = SOME "module" then TopLevelName ty (source_id_to_nsid (FST ctx) src_id_opt, attr)
-    else if attr = "balance" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx ty obj]
-    else if attr = "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx ty obj]
-    else if attr = "is_contract" then Builtin (BaseT BoolT) (Acc IsContract) [make_name ctx ty obj]
-    else if attr = "codesize" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx ty obj]
-    else if attr = "codehash" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx ty obj]
+    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx ty obj]
+    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx ty obj]
+    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [make_name ctx ty obj]
+    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx ty obj]
+    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx ty obj]
     else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [make_name ctx ty obj]
     else Attribute ty (make_name ctx ty obj) attr) /\
 
@@ -717,11 +717,11 @@ Definition translate_expr_def:
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
       TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
-    else if attr = "balance" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
-    else if attr = "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
-    else if attr = "is_contract" then Builtin (BaseT BoolT) (Acc IsContract) [translate_expr ctx e]
-    else if attr = "codesize" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translate_expr ctx e]
-    else if attr = "codehash" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translate_expr ctx e]
+    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
+    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
+    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translate_expr ctx e]
+    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translate_expr ctx e]
+    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translate_expr ctx e]
     else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [translate_expr ctx e]
     else Attribute ty (translate_expr ctx e) attr) /\
 
