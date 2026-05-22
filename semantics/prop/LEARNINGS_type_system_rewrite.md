@@ -605,3 +605,20 @@ works_when: Applies in C4.4.5.5 after deriving `sparse_values_have_type` from `s
 evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42443_t001
 - episode:E0787
+
+## L1338 scope='C4.4.6' tags=ABI,builtin,irule,existential-witnesses,length-bound
+shape: Goal `value_has_type result_tv v` from `evaluate_abi_encode ... = INL v` and size/type/value premises via `evaluate_abi_encode_success_type_bound`.
+pattern: When using `evaluate_abi_encode_success_type_bound` as a backward rule, `irule` matches only the result `value_has_type result_tv v` and leaves existential witnesses for `n`, `tenv`, `tv`, `typ`, and `vin`. Immediately supply them with `qexistsl` from the live builtin branch, then `simp[]` discharges the premises.
+works_when: Applies in `well_typed_type_builtin_success_type` ABI encode resumes after deriving the appropriate `vyper_abi_size_bound tenv typ <= n`, `evaluate_type tenv typ = SOME tv`, `value_has_type tv vin`, and `evaluate_abi_encode tenv typ vin = INL v` facts.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42473_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42477_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:3358-3364
+
+## L1339 scope='C4.4.6' tags=ABI,tuple,evaluate_type,type_slot_size,boundary-helper
+shape: Need `evaluate_type tenv (TupleT ts) = SOME (TupleTV tvs)` from `MAP (evaluate_type tenv) ts = MAP SOME tvs`.
+pattern: One-step tuple `evaluate_type` reconstruction is not just `OPT_MMAP`: after recovering the element type values it must also prove the tuple `type_slot_size` bound. Factor this as a local helper or derive the slot-size side condition explicitly before using the tuple ABI encode success helper.
+works_when: Applies to `encode_tuple`/`encode_tuple_nowrap` builtin resumes where `type_builtin_result_ok` gives only an ABI encoded byte-size bound and the branch context gives `MAP evaluate_type = MAP SOME tvs`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42491_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:3366-3378

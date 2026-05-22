@@ -313,6 +313,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C4.4.5.3 | proved |  | E0784 | Call plan_oracle(mode='review') for C4.4.5.3 closure, then if accepted begin scheduled C4.4.5.4 strengthened mutual theorem. |
 | C4.4.5.4 | proved |  | E0786 | Review closure with plan_oracle, then begin C4.4.5.5 to replace the exported theorem proof with a compatibility corollary from vyper_to_abi_bound_rel_strong. |
 | C4.4.5.5 | proved |  | E0788 |  |
+| C4.4.6 | proved |  | E0789 |  |
 | C5.2 | stuck | plan_incomplete | E0113 |  |
 | C5.2.1 | proved |  | E0114 |  |
 | C5.2.2 | proved |  | E0115 |  |
@@ -8777,6 +8778,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m42451_t001` (use `read_tool_output` for exact output)
+
+## C4.4.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0789`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 34 steps, 55 tools, 8 holbuild, 2,736,867 tok (2,725,526 in, 11,341 out, 2,649,088 cached), 447.0s, $2.04696400
+
+### Attempts / Evidence
+
+- `E0789` (proved, , actual effort: 1 sessions, 2 msgs, 34 steps, 55 tools, 8 holbuild, 2,736,867 tok (2,725,526 in, 11,341 out, 2,649,088 cached), 447.0s, $2.04696400)
+  - Added local ABI encode success helper plus tuple-specific helper using `cj 1`/`cj 2 vyper_to_abi_enc_length_bound`; discharged `abi_encode`, `encode_tuple`, and `encode_tuple_nowrap` resumes in `well_typed_type_builtin_success_type`. -> `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)` succeeds; downstream `vyperSemanticsHolTheory` now advances past Builtins and fails later in `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260522T073012Z_m42528_t001`, `TO_type_system_rewrite-20260522T073012Z_m42529_t003`)
+  - Avoided reconstructing `evaluate_type (TupleT ts)` in tuple branches; introduced `MAP_evaluate_type_LIST_REL` and `evaluate_abi_encode_tuple_success_type_bound` so tuple branches consume `MAP evaluate_type = MAP SOME tvs` directly and do not need the tuple `type_slot_size` side condition. -> The previously failing tuple `evaluate_type` reconstruction goal is no longer present; both tuple ABI encode resumes close using the tuple-specific helper. (`TO_type_system_rewrite-20260522T073012Z_m42529_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42528_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42529_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42529_t003` (use `read_tool_output` for exact output)
 
 ## C5.2
 

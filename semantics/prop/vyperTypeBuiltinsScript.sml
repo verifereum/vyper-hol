@@ -3342,16 +3342,72 @@ QED
 (* ABI encode success typing: type_builtin_result_ok now has vyper_abi_size_bound condition.
    The 3 resumed branches below need to be proved using the bound. *)
 
+Theorem evaluate_abi_encode_success_type_bound[local]:
+  evaluate_abi_encode tenv typ vin = INL out ∧
+  evaluate_type tenv typ = SOME tv ∧
+  value_has_type tv vin ∧
+  evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME result_tv ∧
+  vyper_abi_size_bound tenv typ ≤ n ==>
+  value_has_type result_tv out
+Proof
+  rw[evaluate_abi_encode_def, AllCaseEqs(), LET_THM] >>
+  gvs[evaluate_type_def, value_has_type_def] >>
+  qspecl_then [`tenv`, `typ`, `vin`, `av`, `tv`] mp_tac
+    (cj 1 vyper_to_abi_enc_length_bound) >> simp[] >> decide_tac
+QED
+
+Theorem MAP_evaluate_type_LIST_REL[local]:
+  !tenv ts tvs.
+    MAP (evaluate_type tenv) ts = MAP SOME tvs ==>
+    LIST_REL (λty tv. evaluate_type tenv ty = SOME tv) ts tvs
+Proof
+  Induct_on `ts` >> rpt strip_tac >-
+    (Cases_on `tvs` >> gvs[]) >>
+  Cases_on `tvs` >> gvs[LIST_REL_CONS1]
+QED
+
+Theorem evaluate_abi_encode_tuple_success_type_bound[local]:
+  evaluate_abi_encode tenv (TupleT ts) (ArrayV (TupleV vs)) = INL out ∧
+  LIST_REL (λty tv. evaluate_type tenv ty = SOME tv) ts tvs ∧
+  value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) ∧
+  evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME result_tv ∧
+  vyper_abi_size_bound tenv (TupleT ts) ≤ n ==>
+  value_has_type result_tv out
+Proof
+  rw[evaluate_abi_encode_def, AllCaseEqs(), LET_THM] >>
+  gvs[evaluate_type_def, value_has_type_def, vyper_abi_size_bound_def] >>
+  qspecl_then [`tenv`, `ts`, `vs`, `avs`, `tvs`] mp_tac
+    (cj 2 vyper_to_abi_enc_length_bound) >> simp[] >> decide_tac
+QED
+
 Resume well_typed_type_builtin_success_type[abi_encode]:
-  cheat
+  `vyper_abi_size_bound (get_tenv cx) t <= n` by
+    (gvs[abi_encode_size_ok_def, vyper_abi_size_bound_def] >>
+     Cases_on `vyper_is_dynamic (get_tenv cx) t` >> gvs[] >> decide_tac) >>
+  irule evaluate_abi_encode_success_type_bound >>
+  qexistsl [`n`, `get_tenv cx`, `x0`, `t`, `v'`] >> simp[]
 QED
 
 Resume well_typed_type_builtin_success_type[encode_tuple]:
-  cheat
+  `LIST_REL (λty tv. evaluate_type (get_tenv cx) ty = SOME tv) ts tvs` by
+    (irule MAP_evaluate_type_LIST_REL >> simp[]) >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    simp[value_has_type_def, values_have_types_LIST_REL] >>
+  `vyper_abi_size_bound (get_tenv cx) (TupleT ts) <= n` by
+    gvs[abi_encode_size_ok_def] >>
+  irule evaluate_abi_encode_tuple_success_type_bound >>
+  qexistsl [`n`, `get_tenv cx`, `ts`, `tvs`, `vs`] >> simp[]
 QED
 
 Resume well_typed_type_builtin_success_type[encode_tuple_nowrap]:
-  cheat
+  `LIST_REL (λty tv. evaluate_type (get_tenv cx) ty = SOME tv) ts tvs` by
+    (irule MAP_evaluate_type_LIST_REL >> simp[]) >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    simp[value_has_type_def, values_have_types_LIST_REL] >>
+  `vyper_abi_size_bound (get_tenv cx) (TupleT ts) <= n` by
+    gvs[abi_encode_size_ok_def] >>
+  irule evaluate_abi_encode_tuple_success_type_bound >>
+  qexistsl [`n`, `get_tenv cx`, `ts`, `tvs`, `vs`] >> simp[]
 QED
 
 Finalise well_typed_type_builtin_success_type
