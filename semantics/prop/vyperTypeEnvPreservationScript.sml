@@ -385,10 +385,10 @@ Proof
     metis_tac[] ) >>
   conj_asm1_tac >- (
     rpt strip_tac >>
-    `?old_pair. FLOOKUP (get_source_immutables (current_module cx)
+    `?old_pair. FLOOKUP (get_source_immutables src
         (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME old_pair` by (
       qpat_x_assum `!src n. IS_SOME (FLOOKUP (get_source_immutables src _) n) ==> _`
-        (qspecl_then [`current_module cx`, `id`] mp_tac) >>
+        (qspecl_then [`src`, `id`] mp_tac) >>
       metis_tac[IS_SOME_EXISTS]) >>
     PairCases_on `old_pair` >>
     `evaluate_type (get_tenv cx) ty = SOME old_pair0` by

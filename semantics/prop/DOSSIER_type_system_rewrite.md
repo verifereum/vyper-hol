@@ -55,7 +55,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C1.6.2.4.3.3.2 | proved |  | E0233 | Review closure with strategist. If accepted, begin the scheduled post-PowMod256 checkpoint C1.6.2.4.3.3.3 or whatever Oracle next reports. |
 | C1.6.2.4.3.3.3 | proved |  | E0234 | Review closure with strategist. If accepted, follow Oracle next, expected to be the broader post-builtin/state-preservation checkpoint C1.6.2.4.3.4 or another scheduled frontier. |
 | C1.6.2.4.3.4 | proved |  | E0235 | Review closure with strategist, then follow Oracle next (likely assignment wrapper audit or next scheduled fresh-stack component). |
-| C2.0 | stuck | risk_mismatch | E0538 | Call plan_oracle(mode='review', component_id='C2.0') for revised decomposition/interface. Consider a tiny helper theorem/corollary with no existential validation brittleness, or a different statement for the body-result helper that produces the exact final postcondition directly. |
+| C2.0 | proved |  | E0616 | Review C2.0 closure with strategist, then begin the next scheduled proof component C2.1 for pure structural expression resumes. |
 | C2.0.1 | proved |  | E0543 | Review closure, then begin C2.0.2 replacement helper/caller patch. |
 | C2.0.2 | stuck | risk_mismatch | E0544 | Call plan_oracle review for C2.0.2 with this evidence. Recommend a stronger structural repair: avoid proving the final ReturnException branch inside this large theorem context entirely, e.g. extract a full caller-suffix lemma that includes the tail goal shape, or restructure `eval_for_cons_type_sound_core` with `suspend`/`Resume` so the problematic branch is a top-level proof with clean assumptions. |
 | C2.0.2.1 | proved |  | E0547 | Review closure, then begin C2.0.2.2 to add `for_cons_non_loop_exception_suffix`. |
@@ -68,17 +68,65 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.0.2.3.2 | stuck | risk_mismatch | E0562 |  |
 | C2.0.2.3.2.1 | stuck | risk_mismatch | E0571 | Call plan_oracle review for C2.0.2.3.2.1. Likely need a source cleanup/rebase: either prove a stronger boundary helper that consumes the endpoint assumptions before entering the suspended core context, or alter the endpoint to avoid any local theorem validation over the existential/case premise. |
 | C2.0.2.3.2.1.1 | proved |  | E0572 | Review closure with strategist, then begin C2.0.2.3.2.1.2 to replace endpoint-local case/existential consumption with a call to the new helper. |
+| C2.0.2.3.2.1.2 | proved |  | E0573 | Review closure with strategist; next planned work should address the downstream `Resume For_cons` ordinary-exception suffix/FAIL_TAC or scheduled sibling as PLAN directs. |
 | C2.0.2.3.2.2 | stuck | risk_mismatch | E0569 | Request strategist redesign. Likely need a stronger standalone helper that consumes the suffix premises and the visible body IH before entering the suspended core endpoint, or a different theorem statement whose conclusion matches the core goal exactly without requiring local acceptance of a universally quantified body-IH fact. |
-| C2.1 | proved |  | E0441 | Review closure, then begin the scheduled extraction-helper component and prove the standalone case-premise extraction lemma near the For_cons helper cluster. |
+| C2.0.2.4 | progressed | other | E0574 | Next session should first run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` on the current source, inspect the exact goal after the current `simp[]`, then solve remaining conjuncts one at a time. If it still requires local consumption of the `case (INR y) ... ?env_exn` premise, prefer a small standalone helper rather than more endpoint tactics. |
+| C2.0.2.4.1 | proved |  | E0575 | Begin C2.0.2.4.2 and replace the two inline Iterator_Range exclusion derivations with the helper. |
+| C2.0.2.4.2 | proved |  | E0577 | Ask strategist/review to classify the newly exposed `Targets_cons` timeout before editing outside C2.0.2.4.2. |
+| C2.0.2.4.3 | proved |  | E0578 | Call strategist review for C2.0.2.4.3 closure; then begin the scheduled next component for Targets_cons if authorized. |
+| C2.1 | stuck | risk_mismatch | E0591 | Ask strategist to review/redecompose C2.1. Prefer splitting the boundary lemma into smaller immutable branch lemmas (no-TypeError and success typed) plus storage/hashmap branch lemmas, or changing the helper statement to consume branch equations directly. |
+| C2.1.0 | proved |  | E0665 | Review closure with strategist/harness, then begin the next oracle-scheduled carry-forward/frontier component toward Expr_Subscript. |
+| C2.1.1 | progressed | plan_incomplete | E0619 | Request strategist augmentation/review for the newly discovered `BaseTarget_Subscript` timeout before editing it, or otherwise authorize treating it as a local C2.1 build-blocker analogous to C2.1.0. |
+| C2.1.1.0 | proved |  | E0666 | Review closure with strategist/harness, then begin the next oracle-scheduled carried-evidence component toward C2.1.1.13. |
+| C2.1.1.1 | proved |  | E0621 | Call plan_oracle review, then begin C2.1.1.2 (Expr_IfExp). |
+| C2.1.1.10 | proved |  | E0670 | Review C2.1.1.10 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.11). |
+| C2.1.1.11 | proved |  | E0671 | Review C2.1.1.11 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.12). |
+| C2.1.1.12 | proved |  | E0672 | Review C2.1.1.12 closure with strategist, then begin C2.1.1.13 for Expr_Subscript source repair. |
+| C2.1.1.13 | stuck | risk_mismatch | E0677 | Call plan_oracle review for C2.1.1.13. Request a replacement subtree or guidance that explicitly splits `well_typed_expr_def` Subscript ordinary-base vs place-base branches before evaluator-tail analysis, or introduces an exact adapter lemma whose conclusion matches the live residual goal so the Resume no longer relies on `FIRST` in a shared tail. |
+| C2.1.1.13.1 | proved |  | E0678 |  |
+| C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
+| C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
+| C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
+| C2.1.1.2.2 | proved |  | E0626 | Call plan_oracle review; if accepted begin C2.1.1.2.3 to rewrite Expr_IfExp resume to use helpers. |
+| C2.1.1.2.3 | proved |  | E0628 | Call plan_oracle review for C2.1.1.2.3 closure, then follow the scheduled next component. |
+| C2.1.1.3 | proved |  | E0630 |  |
+| C2.1.1.4 | stuck | risk_mismatch | E0637 | Ask strategist to replace/augment the component with a decomposition that either strengthens the mutual theorem with a place-expression invariant, introduces a provable pre-finalise place-expression soundness boundary, or restructures Expr_Subscript to reuse BaseTarget-style place proofs without relying on `well_typed_expr env e` for HashMap places. |
+| C2.1.1.4.4 | proved |  | E0643 |  |
+| C2.1.1.5 | proved |  | E0667 | Review C2.1.1.5 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.8). |
+| C2.1.1.5.1 | proved |  | E0647 |  |
+| C2.1.1.5.2 | progressed | tool_limit | E0649 | Ask plan_oracle whether to factor a small local get_Value-error-tail helper inside C2.1.1.5.2, or for a precise bounded rewrite tactic for the current source range. |
+| C2.1.1.5.2.1 | proved |  | E0650 |  |
+| C2.1.1.5.2.2 | proved |  | E0652 |  |
+| C2.1.1.6 | proved |  | E0653 | Review closure with strategist; the next exposed holbuild failure is later in `Resume eval_all_type_sound_mutual[Expr_Name]` at `drule_all well_typed_Name_lookup`. |
+| C2.1.1.7 | proved |  | E0654 | Review closure with strategist; next exposed holbuild failure is `Expr_BareGlobalName` at `drule_all bare_global_lookup_sound`, likely same proof-order pattern. |
+| C2.1.1.8 | proved |  | E0668 | Review C2.1.1.8 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.9). |
+| C2.1.1.9 | proved |  | E0669 | Review C2.1.1.9 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.10). |
 | C2.1.a | progressed | other | E0001 | Progress to C2.1.b (HashMapRef proof) or C2.1.c (ArrayRef proof), or C2.2.a (ImmutableVar proof) using the probe evidence |
-| C2.2 | proved |  | E0278 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
+| C2.1a | stuck | risk_mismatch | E0580 | Ask strategist to replace/decompose C2.1a around a local `lookup_global` TopLevelName no-TypeError/typed boundary lemma; do not keep iterating consumer-level `CASE_TAC`/`gvs`/`metis` chains. |
+| C2.1a.1 | proved |  | E0593 |  |
+| C2.1a.2 | proved |  | E0594 |  |
+| C2.1a.3 | stuck | risk_mismatch | E0596 | Call `plan_oracle(mode="review", component_id="C2.1a.3")` with this evidence before further edits. |
+| C2.1a.3.1 | proved |  | E0598 |  |
+| C2.1a.3.2 | proved |  | E0599 |  |
+| C2.1a.3.3 | proved |  | E0600 |  |
+| C2.1a.4 | proved |  | E0601 |  |
+| C2.1a.5 | proved |  | E0603 |  |
+| C2.1a.6 | proved |  | E0604 | Request strategist review, then proceed only to scheduled C2.1a.7 projection/wrapper component if accepted. |
+| C2.1a.7 | stuck | risk_mismatch | E0606 | Call plan_oracle(mode='review', component_id='C2.1a.7') with the holbuild probe evidence. Do not continue tactical patching or leave C2.1a.7 as a Risk-2 leaf without strategist repair. |
+| C2.1a.7.1 | proved |  | E0609 |  |
+| C2.1a.7.2 | proved |  | E0610 |  |
+| C2.1a.7.3 | proved |  | E0611 |  |
+| C2.1a.8 | proved |  | E0597 |  |
+| C2.1a.9 | proved |  | E0602 |  |
+| C2.1b | proved |  | E0612 |  |
+| C2.2 | stuck | plan_incomplete | E0638 | Strategist should reschedule or add dependencies so C2.1.1.4.0-.4 run before this C2.2 read-subscript/attribute component, or replace C2.2 with a component that explicitly includes the place-invariant refactor. |
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
-| C2.3 | stuck | risk_mismatch | E0446 | Call plan_oracle(mode='review', component_id='C2.3') with the CHOOSE evidence. Likely need a stronger standalone helper whose invocation does not create a case-premise side goal inside the Resume, or a different factoring of the whole suffix. |
+| C2.3 | proved |  | E0614 |  |
 | C2.3.1 | proved |  | E0447 | Review closure, then begin C2.3.2 to audit/reuse the explicit-witness helper before patching the suffix. |
 | C2.3.2 | proved |  | E0448 | Review closure, then begin C2.3.3 and replace the For_cons suffix placeholder by extracting the IH existential and applying this explicit-witness helper. |
 | C2.3.3 | stuck | risk_mismatch | E0450 | Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale. |
-| C2.4 | proved |  | E0280 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
+| C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
 | C2.5.1 | proved |  | E0281 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
 | C2.5.2 | proved |  | E0282 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
@@ -1452,12 +1500,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` The strategist's intended helper `for_cons_body_result_return_exception_typed` is useful: `match_mp_tac` reduces to the expected body-IH existential package. The mismatch is in the final proof-interface/tactic shape for consuming that existential package under goalfrag/checkpointed validation; the component was risk 1 but exceeded the tiny-patch budget and the STATE explicitly said to escalate after 1-2 focused suffix failures.
-- latest episode: `E0538`
-- blocker: The low-risk tail patch still fails at the final existential endpoint despite focused suffix edits. After reducing the case assumption to an identical existential assumption/goal, HOL validation still raises CHOOSE when trying to accept or re-use the existential theorem via qpat_x_assum/ACCEPT_TAC, disch_then ACCEPT_TAC, metis_tac, and related narrow variants. The current source is partial at lines ~4233-4241.
-- actual effort: 1 sessions, 2 msgs, 23 steps, 24 tools, 9 holbuild, 1,379,122 tok (1,372,210 in, 6,912 out, 1,332,736 cached), 267.4s, $1.07109800
-- next: Call plan_oracle(mode='review', component_id='C2.0') for revised decomposition/interface. Consider a tiny helper theorem/corollary with no existential validation brittleness, or a different statement for the body-result helper that produces the exact final postcondition directly.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0616`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 121,164 tok (120,799 in, 365 out, 97,792 cached), 7.8s, $0.17488100
+- next: Review C2.0 closure with strategist, then begin the next scheduled proof component C2.1 for pure structural expression resumes.
 
 ### Attempts / Evidence
 
@@ -1469,22 +1517,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Verified current suffix from handoff: `match_mp_tac for_cons_body_result_return_exception_typed >> simp[no_type_error_result_def] >> qpat_x_assum ... mp_tac >> rewrite_tac[] >> strip_tac >> first_assum ACCEPT_TAC`. -> Failed at final existential goal; identical-looking case assumption remained but `first_assum ACCEPT_TAC` could not consume it. (`TO_type_system_rewrite-20260520T182357Z_m34195_t001`)
   - Tried targeted conversion of the single `case INR (ReturnException v')` assumption using `SIMP_RULE`, then `mp_tac >> simp[]`, then `pure_rewrite_tac[sum_case_def] >> BETA_TAC`. -> All variants reduced to or exposed an implication/assumption whose conclusion was the desired existential, but accepting/stripping it triggered CHOOSE validation failures rather than closing the goal. (`TO_type_system_rewrite-20260520T182357Z_m34198_t001`, `TO_type_system_rewrite-20260520T182357Z_m34200_t001`, `TO_type_system_rewrite-20260520T182357Z_m34206_t001`, `TO_type_system_rewrite-20260520T182357Z_m34208_t001`)
   - Tried FOL/propositional/simple assumption variants (`metis_tac[]`, explicit `disch_tac` followed by `qpat_x_assum` matching the exact existential and `ACCEPT_TAC`). -> Still failed with CHOOSE at an identical existential assumption/goal. Current source contains the explicit `qpat_x_assum` partial suffix, not a verified proof. (`TO_type_system_rewrite-20260520T182357Z_m34210_t001`, `TO_type_system_rewrite-20260520T182357Z_m34216_t001`)
-
-### Ruled Out
-
-- Broad gvs/simp over the full For_cons context (timeouts/CHOOSE failures).
-- Old `for_cons_return_exception_typed_from_body_ex` existential reconstruction path, forbidden by PLAN.
-- More exact-assumption variants on the endpoint without revised guidance.
+- `E0616` (proved, , actual effort: 1 sessions, 1 steps, 121,164 tok (120,799 in, 365 out, 97,792 cached), 7.8s, $0.17488100)
+  - Began carry-forward component C2.0 as required by the PLAN gate; no source edits were needed or authorized by the component. -> Completed bookkeeping: old TopLevelName and assignment-statement repairs are carried forward as accepted baseline evidence, and `vyperTypeStmtSoundnessTheory` already builds after those repairs. (`TO_type_system_rewrite-20260521T174852Z_m36246_t001`, `TO_type_system_rewrite-20260521T174852Z_m36251_t001`, `TO_type_system_rewrite-20260521T174852Z_m36255_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260520T182357Z_m34195_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34198_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34200_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34206_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34208_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34210_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34216_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36246_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36251_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36255_t001` (use `read_tool_output` for exact output)
 
 ## C2.0.1
 
@@ -1842,6 +1882,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260521T121230Z_m35289_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260521T121230Z_m35288_t001` (use `read_tool_output` for exact output)
 
+## C2.0.2.3.2.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0573`
+- blocker: 
+- actual effort: 2 sessions, 1 msgs, 9 steps, 10 tools, 4 holbuild, 733,740 tok (730,984 in, 2,756 out, 625,664 cached), 112.1s, $0.92211200
+- next: Review closure with strategist; next planned work should address the downstream `Resume For_cons` ordinary-exception suffix/FAIL_TAC or scheduled sibling as PLAN directs.
+
+### Attempts / Evidence
+
+- `E0573` (proved, , actual effort: 2 sessions, 1 msgs, 9 steps, 10 tools, 4 holbuild, 733,740 tok (730,984 in, 2,756 out, 625,664 cached), 112.1s, $0.92211200)
+  - At the ordinary non-Continue/non-Break endpoint, replaced the endpoint-local case-premise helper application/destruction with `irule for_cons_ordinary_exception_return_typed_from_body_ih`, passing visible facts and the universal body IH. Human intervention had already replaced the brittle `ASSUME`` quote for `for_body_decompose_for_cons_pushed` with `drule ... >> rewrite_tac[ignore_bind_def] >> disch_then drule >> strip_tac`, improving proof quality. -> Core theorem now proves; build failure moved to downstream `Resume eval_all_type_sound_mutual[For_cons]` explicit FAIL_TAC, matching the component success criterion of advancing past `eval_for_cons_type_sound_core`. (`TO_type_system_rewrite-20260521T174852Z_m35301_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35301_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35300_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35299_t003` (use `read_tool_output` for exact output)
+
 ## C2.0.2.3.2.2
 
 ### Current Status
@@ -1883,16 +1945,119 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260521T121230Z_m35181_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260521T121230Z_m35183_t001` (use `read_tool_output` for exact output)
 
-## C2.1
+## C2.0.2.4
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other` This is cleanup/downstream suffix completion, not a semantic counterexample. The key proof-shape issue is helper conclusion/conjunct ordering after `irule`, plus avoiding local destruction of the CHOOSE-origin body-IH case premise.
+- latest episode: `E0574`
+- blocker: Current source is partial and unverified after the final edit; do not assume the last tail patch builds.
+- actual effort: 1 sessions, 3 msgs, 33 steps, 38 tools, 10 holbuild, 3,972,212 tok (3,958,768 in, 13,444 out, 3,896,832 cached), 460.0s, $2.66141600
+- next: Next session should first run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` on the current source, inspect the exact goal after the current `simp[]`, then solve remaining conjuncts one at a time. If it still requires local consumption of the `case (INR y) ... ?env_exn` premise, prefer a small standalone helper rather than more endpoint tactics.
+
+### Attempts / Evidence
+
+- `E0574` (progressed, other, actual effort: 1 sessions, 3 msgs, 33 steps, 38 tools, 10 holbuild, 3,972,212 tok (3,958,768 in, 13,444 out, 3,896,832 cached), 460.0s, $2.66141600)
+  - Replaced the For_cons Resume `FAIL_TAC` with helper-based suffix closure attempts; tried `for_cons_ordinary_exception_full_suffix_for_popped_body_visible_bundle`, direct `for_cons_ordinary_exception_return_typed_from_case_premise`, `metis_tac`, and then `for_cons_non_loop_exception_suffix_projected`. -> The original `FAIL_TAC` is gone, but the tail proof is not yet verified. Direct use of case-premise helper led back to CHOOSE/Q_TAC or timeout patterns; `for_cons_non_loop_exception_suffix_projected` appears better-shaped but needs correct conjunct/existential handling after `irule`. (`TO_type_system_rewrite-20260521T174852Z_m35320_t001`, `TO_type_system_rewrite-20260521T174852Z_m35324_t001`, `TO_type_system_rewrite-20260521T174852Z_m35336_t001`)
+
+### Ruled Out
+
+- direct endpoint-local `qpat_x_assum`/`mp_tac` consumption of the `case (INR y) ... ?env_exn` premise
+- unbounded `metis_tac[for_cons_ordinary_exception_return_typed_from_case_premise]` at the large endpoint
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35336_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35337_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35338_t004` (use `read_tool_output` for exact output)
+
+## C2.0.2.4.1
 
 ### Current Status
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0441`
+- latest episode: `E0575`
 - blocker: 
-- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 172,941 tok (171,739 in, 1,202 out, 159,232 cached), 33.2s, $0.17821100
-- next: Review closure, then begin the scheduled extraction-helper component and prove the standalone case-premise extraction lemma near the For_cons helper cluster.
+- actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 1 holbuild, 541,946 tok (540,688 in, 1,258 out, 527,872 cached), 105.6s, $0.36575600
+- next: Begin C2.0.2.4.2 and replace the two inline Iterator_Range exclusion derivations with the helper.
+
+### Attempts / Evidence
+
+- `E0575` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 1 holbuild, 541,946 tok (540,688 in, 1,258 out, 527,872 cached), 105.6s, $0.36575600)
+  - Added local theorem `is_int_type_evaluate_type_not_None_Array` before the resumed mutual proof, proving integer static types evaluated by `evaluate_type` cannot yield `NoneTV` or `ArrayTV _ _`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` replayed past the helper and reached the planned Iterator_Range inline timeout, confirming the helper parses/proves and is available for the next refactor. (`TO_type_system_rewrite-20260521T174852Z_m35401_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35401_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0577`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 19 steps, 19 tools, 7 holbuild, 1,190,347 tok (1,183,868 in, 6,479 out, 1,149,440 cached), 275.6s, $0.94123000
+- next: Ask strategist/review to classify the newly exposed `Targets_cons` timeout before editing outside C2.0.2.4.2.
+
+### Attempts / Evidence
+
+- `E0576` (progressed, other, actual effort: 1 sessions, 3 msgs, 29 steps, 31 tools, 5 holbuild, 3,583,555 tok (3,577,584 in, 5,971 out, 3,530,752 cached), 245.2s, $2.17866600)
+  - Replaced both slow inline `tv <> NoneTV` / `!t bd. tv <> ArrayTV t bd` case splits with explicit use of `is_int_type_evaluate_type_not_None_Array`. -> Helper instantiation via `qspecl_then [`env.type_defs`, `expr_type e`, `tv`]` discharged the exclusion facts; later application of `get_Value_no_type_error` still needed matching repair. (`TO_type_system_rewrite-20260521T174852Z_m35409_t001`, `TO_type_system_rewrite-20260521T174852Z_m35412_t001`)
+  - Tried `drule_all get_Value_no_type_error` with the helper-derived side conditions visible. -> Failed with HOL `predicate not true`; matching did not find/discharge the intended theorem antecedents despite visible `toplevel_value_typed`, `get_Value`, and exclusions. (`TO_type_system_rewrite-20260521T174852Z_m35412_t001`)
+  - Tried `irule (REWRITE_RULE[no_type_error_result_def] get_Value_no_type_error)` directly on the unfolded `∀msg` goal. -> Failed with `No match`; likely because the theorem conclusion is a definition-expanded predicate not matching the raw universal in this proof state. Current source instead asserts `no_type_error_result (INR y)` first, then simplifies. (`TO_type_system_rewrite-20260521T174852Z_m35420_t001`, `TO_type_system_rewrite-20260521T174852Z_m35427_t001`)
+- `E0577` (proved, , actual effort: 1 sessions, 1 msgs, 19 steps, 19 tools, 7 holbuild, 1,190,347 tok (1,183,868 in, 6,479 out, 1,149,440 cached), 275.6s, $0.94123000)
+  - Added local caller-shaped `get_Value_INR_no_type_error` corollary and used it in both Iterator_Range exceptional get_Value branches after helper-derived `NoneTV`/`ArrayTV` exclusions. -> `holbuild` replayed past `Iterator_Range`; the next failure is a separate timeout in `eval_all_type_sound_mutual[Targets_cons]` at `gvs[LIST_REL_EL_EQN]`. (`TO_type_system_rewrite-20260521T174852Z_m35454_t001`)
+  - Corrected existential witness order for `get_Value_INR_no_type_error` applications (`st`, `st'`, `tv`, `tyv`) and fixed the outer branch to use current state `st'` rather than stale `st1`. -> Iterator_Range branch solved; build advanced to Targets_cons. (`TO_type_system_rewrite-20260521T174852Z_m35450_t001`, `TO_type_system_rewrite-20260521T174852Z_m35452_t001`, `TO_type_system_rewrite-20260521T174852Z_m35454_t001`)
+
+### Ruled Out
+
+- Do not retry inline `Cases_on expr_type e` in Iterator_Range; helper plus caller-shaped corollary is sufficient.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35454_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35448_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35451_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35453_t001` (use `read_tool_output` for exact output)
+
+## C2.0.2.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0578`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 158,242 tok (157,768 in, 474 out, 150,528 cached), 23.9s, $0.12568400
+- next: Call strategist review for C2.0.2.4.3 closure; then begin the scheduled next component for Targets_cons if authorized.
+
+### Attempts / Evidence
+
+- `E0578` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 158,242 tok (157,768 in, 474 out, 150,528 cached), 23.9s, $0.12568400)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after the Iterator_Range refactor. -> Build replayed past `Iterator_Range` and failed later in `Resume eval_all_type_sound_mutual[Targets_cons]` at `gvs[LIST_REL_EL_EQN]`, satisfying the audit's expected distinct-later-failure criterion. (`TO_type_system_rewrite-20260521T174852Z_m35459_t001`)
+
+### Ruled Out
+
+- Do not fold the Targets_cons simplifier timeout into C2.0.2.4 without strategist review; it is a later distinct obligation.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35459_t001` (use `read_tool_output` for exact output)
+
+## C2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 estimate was too low for the current helper proof shape. The current proof relies on nested `>-`/`>>` structure under `Cases_on get_immutables` and `Cases_on q`; despite explicit splits, holbuild shows branches are not isolated as intended. This is a proof-interface/tactic-structure problem in the local boundary lemma, not evidence the theorem is false. A decomposition into smaller local lemmas for immutable no-TypeError and immutable success typing, or an alternate helper statement matching `get_immutables` branch equations, is likely needed.
+- latest episode: `E0591`
+- blocker: `lookup_global_TopLevelName_sound` immutable branch proof is brittle/structurally misparsed after repeated attempts to split `get_immutables` and `q`; intended INR branch keeps leaking into the INL-success branch or vice versa, and the proof repeatedly reaches goals where the live context contradicts the branch assumptions but the tactic shape applies the success existential proof to a no-TypeError-only goal. Source is partial around lines 331-364 and still has the later storage/hashmap probe.
+- actual effort: 1 sessions, 3 msgs, 57 steps, 58 tools, 22 holbuild, 5,392,314 tok (5,352,525 in, 39,789 out, 5,230,080 cached), 914.6s, $4.42093500
+- next: Ask strategist to review/redecompose C2.1. Prefer splitting the boundary lemma into smaller immutable branch lemmas (no-TypeError and success typed) plus storage/hashmap branch lemmas, or changing the helper statement to consume branch equations directly.
 
 ### Attempts / Evidence
 
@@ -1904,11 +2069,788 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Re-began C2.1 only because the repaired PLAN frontier incorrectly scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0237 evidence show the bridge lemmas already compile and have no remaining C2.1-local cheats. (`TO_type_system_rewrite-20260519T080936Z_m28066_t001`, `TO_type_system_rewrite-20260518T204229Z_m26649_t001`, `TO_type_system_rewrite-20260518T204229Z_m26650_t001`, `TO_type_system_rewrite-20260518T204229Z_m26651_t001`)
 - `E0441` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 172,941 tok (171,739 in, 1,202 out, 159,232 cached), 33.2s, $0.17821100)
   - Inspected current failing For_cons tail and deleted the direct `irule ... >> mp_tac (ASSUME case-premise) >> simp[]` residual-discharge block, replacing it with a temporary placeholder for the planned helper-boundary patch. -> The CHOOSE-sensitive direct local assertion/residual approach is retired from source; the unsimplified case-premise assumption remains available immediately before the placeholder for later helper integration. (`TO_type_system_rewrite-20260519T123242Z_m32058_t001`, `TO_type_system_rewrite-20260519T123242Z_m32059_t001`)
+- `E0579` (proved, , actual effort: 1 sessions, 8 steps, 8 tools, 2 holbuild, 741,806 tok (740,444 in, 1,362 out, 726,016 cached), 75.9s, $0.47600800)
+  - Replaced top-level `gvs[LIST_REL_EL_EQN]` in `Resume eval_all_type_sound_mutual[Targets_cons]` with direct `Cases_on `tys` >> gvs[]`, preserving cons facts for head/tail target typing. -> Removed the LIST_REL_EL_EQN timeout and exposed the next proof issue inside the success branch. (`TO_type_system_rewrite-20260521T174852Z_m35467_t001`)
+  - Corrected the tail IH specialization from the stale/nonexistent `ys` tail type list to the destructed tail type list `t`. -> `Targets_cons` replayed successfully; `holbuild` advanced to a distinct later timeout in `Resume eval_all_type_sound_mutual[Expr_TopLevelName]` at a `metis_tac[...]` step. (`TO_type_system_rewrite-20260521T174852Z_m35470_t001`, `TO_type_system_rewrite-20260521T174852Z_m35471_t001`)
+- `E0587` (progressed, other, actual effort: 1 sessions, 5 msgs, 58 steps, 67 tools, 23 holbuild, 5,937,815 tok (5,918,406 in, 19,409 out, 5,796,864 cached), 1131.9s, $4.08841200)
+  - Applied strategist's invariant repair: strengthened `env_immutables_consistent_def` to quantify bare-global readiness/type over all `src`; added `env_consistent_bare_global_ready_src` and refactored old current-source lemma as compatibility theorem. -> `vyperTypeEnvTheory` builds after the definition and boundary-lemma edit; this validates the all-source invariant interface locally. (`TO_type_system_rewrite-20260521T174852Z_m35638_t001`, `TO_type_system_rewrite-20260521T174852Z_m35648_t001`)
+  - Repaired strict dependent proofs after invariant strengthening: `env_consistent_preserved_by_frame` now uses arbitrary `src`, and `set_immutable_preserves_env_consistent` updates all-source clauses with `get_source_set_source_immutables` plus `n = id` split. -> `vyperTypeEnvPreservationTheory` and later `vyperTypeStatePreservationTheory` build through these dependency repairs. (`TO_type_system_rewrite-20260521T174852Z_m35652_t001`, `TO_type_system_rewrite-20260521T174852Z_m35658_t001`)
+  - Refactored `Targets_cons` away from timeout-prone `gvs[]`: explicit `Cases_on tys >- fs[]`, targeted `LIST_REL` simplification, and tail IH specialization to `t`. -> The previous `Targets_cons` timeout is removed; holbuild advances to `Expr_TopLevelName`. (`TO_type_system_rewrite-20260521T174852Z_m35669_t001`)
+  - Started repairing `Expr_TopLevelName`: added local all-source impossibility helper and replaced the missing-immutable branch with targeted bare-global/nonbare reasoning. Current proof is partial in the successful immutable lookup branch. -> Current failing goal is not the missing-TypeError branch but the success-typing branch: need prove `∃tv'. evaluate_type (get_tenv cx) vs = SOME tv' ∧ value_has_type tv' (SND x')` from `FLOOKUP x (string_to_num id) = SOME x'`, `get_immutables cx src_id_opt r = (INL x,r)`, state well-typedness facts, and the env immutable type clause. The latest source contains a brittle in-progress attempt using `MATCH_MP get_immutables_success`; next session should simplify this proof at the right boundary. (`TO_type_system_rewrite-20260521T174852Z_m35695_t001`, `TO_type_system_rewrite-20260521T174852Z_m35697_t001`)
+- `E0588` (progressed, other, actual effort: 1 sessions, 4 msgs, 60 steps, 78 tools, 16 holbuild, 5,355,512 tok (5,337,968 in, 17,544 out, 5,202,944 cached), 699.5s, $3.80291200)
+  - Replaced timeout-prone `simp[]` in `Targets_cons` LIST_REL split with `simp[listTheory.LIST_REL_CONS1]`. -> The previous LIST_REL simp timeout is avoided; build advances back to `Expr_TopLevelName`. (`TO_type_system_rewrite-20260521T174852Z_m35728_t001`, `TO_type_system_rewrite-20260521T174852Z_m35733_t001`)
+  - In `Expr_TopLevelName` immutable-success branch, unfolded `get_immutables` with targeted address-map split, proved `imms_well_typed imms` from the flattened `state_well_typed_def`/EVERY assumption, and used `imms_well_typed_get_source_immutables` after normalizing `x'` via `FST`/`SND`. -> The build passes the previous success-immutable existential goal and reaches the remaining TopLevelName branches; current failure is the deliberate `FAIL_TAC "TopLevelName some branch"`. (`TO_type_system_rewrite-20260521T174852Z_m35744_t001`, `TO_type_system_rewrite-20260521T174852Z_m35745_t001`, `TO_type_system_rewrite-20260521T174852Z_m35746_t001`)
+  - Inserted `Cases_on `x` >> Cases_on `q` >> gvs[]` before the leftover FAIL_TAC to split the remaining `find_var_decl_by_num = SOME ...` cases for inspection. -> Source is partial; next build should show the storage/hashmap branch goals after the new split. No build was run after this edit due to handoff instruction. (`TO_type_system_rewrite-20260521T174852Z_m35759_t001`)
+- `E0589` (progressed, other, actual effort: 1 sessions, 3 msgs, 39 steps, 52 tools, 4 holbuild, 3,755,838 tok (3,743,817 in, 12,021 out, 3,620,352 cached), 393.6s, $2.78813100)
+  - Replaced unconditional `Cases_on x >> Cases_on q` with guarded `TRY (Cases_on x) >> TRY (Cases_on q)` after holbuild showed variable `x` was not free in some residual branches. -> The guarded split reaches the deliberate probe and reveals 5 remaining storage/hashmap/read_storage-style subgoals rather than failing on variable names. (`TO_type_system_rewrite-20260521T174852Z_m35770_t001`)
+  - Tried a broad inline close: `rpt (CASE_TAC >> gvs[bind_def, return_def, raise_def, no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def, expr_type_def, toplevel_value_typed_Value]) >> metis_tac[...]`. -> This timed out in `metis_tac`/left 7 large goals; it is a proof-interface smell, not a promising tactic path. (`TO_type_system_rewrite-20260521T174852Z_m35786_t001`)
+  - Replaced the timed metis tail with `FAIL_TAC "TopLevelName post case probe"` to preserve inspectable source state. -> Current build fails at that probe with 7 large residual goals; evidence supports extracting a boundary lemma. (`TO_type_system_rewrite-20260521T174852Z_m35791_t001`)
+- `E0590` (progressed, other, actual effort: 1 sessions, 5 msgs, 72 steps, 81 tools, 21 holbuild, 7,724,823 tok (7,701,902 in, 22,921 out, 7,574,528 cached), 870.1s, $5.11176400)
+  - Added local boundary helper `lookup_global_TopLevelName_sound` and changed `Resume eval_all_type_sound_mutual[Expr_TopLevelName]` to unfold `evaluate_def` once, apply `lookup_global_state`, then use the helper. -> With the helper temporarily cheated, `vyperTypeStmtSoundnessTheory` built after additionally repairing two replay timeouts; this validates the desired consumer interface and shows the resume proof no longer needs inline `lookup_global_def` case plumbing. (`TO_type_system_rewrite-20260521T174852Z_m35832_t001`)
+  - Started proving `lookup_global_TopLevelName_sound` by extracting static `get_module_code` from either bare-global or storage-static env consistency, then splitting the immutable branch. -> The proof exposed a concrete tactical bug: `Cases_on q` is attempted when `q` is not free because `get_immutables` has not yet been destructed at that proof point. This is not a falsehood; it is the next local proof-edit step. (`TO_type_system_rewrite-20260521T174852Z_m35877_t001`)
+- `E0591` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 57 steps, 58 tools, 22 holbuild, 5,392,314 tok (5,352,525 in, 39,789 out, 5,230,080 cached), 914.6s, $4.42093500)
+  - Replaced the bad `Cases_on q` with `Cases_on `get_immutables cx src st` >> Cases_on `q`` and tried to solve INR with `get_immutables_no_type_error` and INL with `FLOOKUP` split plus `TopLevelName_missing_immutable_impossible`. -> Eliminated the original no-free-variable `q` failure, but branch ordering/goal routing remained unstable: holbuild repeatedly applied the success-typing tail to a no-TypeError-only INR/missing-entry goal, or applied the INR tactic to an INL goal. (`TO_type_system_rewrite-20260521T174852Z_m35883_t001`, `TO_type_system_rewrite-20260521T174852Z_m35925_t001`, `TO_type_system_rewrite-20260521T174852Z_m35935_t001`)
+  - Attempted several parenthesized versions using `>-` for `q` branches, `TRY` guarded by `qpat_assum`, and a probe `FAIL_TAC` after the explicit `get_immutables` split to inspect branch goals. -> Probe confirmed the expected split exists, but tactical composition with nested `Cases_on q` still misroutes subgoals under holbuild goalfrag; current failure is at `qexists_tac `FST x'`` on a goal `∀msg. y <> Error (TypeError msg)`, showing the success proof is still being run on the no-TypeError goal. (`TO_type_system_rewrite-20260521T174852Z_m35923_t001`, `TO_type_system_rewrite-20260521T174852Z_m35935_t001`, `TO_type_system_rewrite-20260521T174852Z_m35938_t001`)
+
+### Ruled Out
+
+- Immediate `Cases_on q` after `simp[]` before splitting `get_immutables`.
+- Continuing to patch a monolithic nested `lookup_global_TopLevelName_sound` proof with more `TRY`/`>-` branch plumbing.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260519T123242Z_m32058_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T123242Z_m32059_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35883_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35925_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35935_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35938_t001` (use `read_tool_output` for exact output)
+
+## C2.1.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0665`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 74,930 tok (74,580 in, 350 out, 71,168 cached), 8.1s, $0.06314400
+- next: Review closure with strategist/harness, then begin the next oracle-scheduled carry-forward/frontier component toward Expr_Subscript.
+
+### Attempts / Evidence
+
+- `E0592` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 131,397 tok (130,757 in, 640 out, 124,928 cached), 22.1s, $0.11080900)
+  - Began carried-evidence component and ran holbuild(vyperTypeStmtSoundnessTheory) as baseline check; build resumed at known partial lookup_global_TopLevelName_sound failure, confirming carried infrastructure is not the immediate blocker. -> C2.1.0 requires no edits; downstream C2.1a must replace the partial monolithic proof. (`TO_type_system_rewrite-20260521T174852Z_m35947_t001`)
+- `E0617` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 448,330 tok (447,201 in, 1,129 out, 439,296 cached), 49.4s, $0.29304300)
+  - In Targets_cons, replaced `rewrite_tac[listTheory.LIST_REL_CONS1] >> strip_tac >> gvs[]` with `simp_tac(srw_ss())[listTheory.LIST_REL_CONS1] >> strip_tac`. -> Avoided the holbuild tactic timeout while preserving the existing proof structure; target builds again. (`TO_type_system_rewrite-20260521T174852Z_m36279_t001`, `TO_type_system_rewrite-20260521T174852Z_m36280_t001`)
+- `E0665` (proved, , actual effort: 1 sessions, 1 steps, 74,930 tok (74,580 in, 350 out, 71,168 cached), 8.1s, $0.06314400)
+  - Began carried-evidence component only; no source edits. Scoped dossier shows the Targets_cons timeout refactor was already proved and holbuild evidence exists for the completed repair. -> Confirmed C2.1.0 is bookkeeping/carry-forward and requires no additional work before the current Expr_Subscript frontier. (`TO_type_system_rewrite-20260521T174852Z_m38311_t001`, `TO_type_system_rewrite-20260521T174852Z_m36280_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38311_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36280_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `plan_incomplete` After replacing the FlagMember probe with a targeted proof, the local FlagMember obligations advanced: first to the no-TypeError/result-typing goal, then to the flag-length/value-typing goal, and after adding env-context flag lookup plus INDEX_OF/TWOEXP reasoning holbuild no longer reports a FlagMember failure. The verification path is now blocked before FlagMember by an existing `BaseTarget_Subscript` proof-performance timeout at `simp[type_place_target_SubscriptTarget]`, which is not explicitly covered by active C2.1.1.
+- latest episode: `E0619`
+- blocker: Build now fails before the active expression resumes at `Resume eval_all_type_sound_mutual[BaseTarget_Subscript]`, line 5643, tactic timeout on `simp[type_place_target_SubscriptTarget]`. This appears to be another local proof-performance blocker not represented by the current C2.1.1 scope.
+- actual effort: 1 sessions, 2 msgs, 28 steps, 48 tools, 5 holbuild, 2,215,056 tok (2,207,523 in, 7,533 out, 2,142,208 cached), 309.9s, $1.62366900
+- next: Request strategist augmentation/review for the newly discovered `BaseTarget_Subscript` timeout before editing it, or otherwise authorize treating it as a local C2.1 build-blocker analogous to C2.1.0.
+
+### Attempts / Evidence
+
+- `E0618` (progressed, other, actual effort: 1 sessions, 2 msgs, 9 steps, 15 tools, 1 holbuild, 1,140,352 tok (1,137,622 in, 2,730 out, 1,102,336 cached), 87.8s, $0.80949800)
+  - Replaced `Expr_FlagMember` cheat with prefix: strip assumptions, apply `flag_member_sound`, push `eval_expr`, one-step `evaluate_def`, simplify, then inserted `FAIL_TAC "flag probe"` for goal inspection. -> Probe reached local FlagMember obligations; first shown subgoal is preservation `state_well_typed st'` with assumption `lookup_flag_mem cx nsid mid st = (res,st')`, indicating the prefix is aligned and the next closing tactic should use `lookup_flag_mem_state`. (`TO_type_system_rewrite-20260521T174852Z_m36284_t001`, `TO_type_system_rewrite-20260521T174852Z_m36285_t001`)
+  - Inspected definitions/theorems for FlagMember lookup: `lookup_flag_member_def` returns `SOME (Value (FlagV (2 ** i)))` from `INDEX_OF`; `lookup_flag_mem_def` is the state monadic version; `INDEX_OF x l = NONE <=> ~MEM x l` exists in HOL listTheory. -> Provides likely path for no-TypeError and success typing: env consistency connects `env.flag_members` to module code; `MEM mid members` rules out missing-index TypeError; success result is a `FlagV` value typed as `FlagTV` after `evaluate_type_def`. (`TO_type_system_rewrite-20260521T174852Z_m36286_t003`, `TO_type_system_rewrite-20260521T174852Z_m36288_t001`, `TO_type_system_rewrite-20260521T174852Z_m36290_t001`)
+- `E0619` (progressed, plan_incomplete, actual effort: 1 sessions, 2 msgs, 28 steps, 48 tools, 5 holbuild, 2,215,056 tok (2,207,523 in, 7,533 out, 2,142,208 cached), 309.9s, $1.62366900)
+  - Replaced `FAIL_TAC "flag probe"` with `imp_res_tac lookup_flag_mem_state >> gvs[]`. -> Closed preservation goals but exposed remaining no-TypeError/result-typing obligation for `lookup_flag_mem`. (`TO_type_system_rewrite-20260521T174852Z_m36302_t001`)
+  - Unfolded env consistency/flag lookup and `lookup_flag_mem_def`, then added `LENGTH members <= 256` from `well_typed_expr`/`well_formed_type`/`evaluate_type` and success value typing via `INDEX_OF_eq_SOME` plus `bitTheory.TWOEXP_MONO`. -> No further FlagMember failure was reported; holbuild advanced/replayed to an earlier `BaseTarget_Subscript` timeout before reaching the active resume. (`TO_type_system_rewrite-20260521T174852Z_m36306_t001`, `TO_type_system_rewrite-20260521T174852Z_m36321_t001`)
+
+### Ruled Out
+
+- The original `FAIL_TAC "flag probe"` is gone; current source has a targeted FlagMember proof prefix.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36302_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36306_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36321_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0666`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 83,784 tok (83,372 in, 412 out, 78,848 cached), 7.9s, $0.07440400
+- next: Review closure with strategist/harness, then begin the next oracle-scheduled carried-evidence component toward C2.1.1.13.
+
+### Attempts / Evidence
+
+- `E0620` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 9 tools, 2 holbuild, 772,553 tok (771,149 in, 1,404 out, 755,200 cached), 144.3s, $0.49946500)
+  - Changed line 5643 to `rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac >> gvs[]`. -> The original `simp[type_place_target_SubscriptTarget]` timeout was removed, but the following broad `gvs[]` still timed out in the large mutual-IH context. (`TO_type_system_rewrite-20260521T174852Z_m36328_t001`)
+  - Removed the broad `gvs[]`, leaving only focused `rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac` before the existing proof flow. -> holbuild replay passed BaseTarget_Subscript and advanced to the next planned FlagMember audit/failure, proving the prefix blocker is cleared. (`TO_type_system_rewrite-20260521T174852Z_m36332_t001`)
+- `E0644` (proved, , actual effort: 1 sessions, 1 steps, 74,634 tok (74,275 in, 359 out, 69,120 cached), 7.3s, $0.07110500)
+  - Carry-forward bookkeeping leaf; no source edits/builds performed in this session. Prior holbuild evidence passed the superseded structural-expression repairs and advanced beyond the old frontier. -> Accepted carried evidence for BaseTarget_Subscript/FlagMember/IfExp/StructLit/Expr_Subscript place-invariant repairs as required by the flattened subtree. (`TO_type_system_rewrite-20260521T174852Z_m36332_t001`, `TO_type_system_rewrite-20260521T174852Z_m37627_t001`)
+- `E0655` (proved, , actual effort: 1 sessions, 1 steps, 69,448 tok (69,105 in, 343 out, 65,024 cached), 7.2s, $0.06320700)
+  - Carry-forward bookkeeping leaf after C2.1.1 rebase; no source edits or build performed for this component. -> Accepted prior closed structural-expression/BaseTarget_Subscript/Expr_Name repair evidence as carried progress, matching PLAN instruction for C2.1.1.0. (`TO_type_system_rewrite-20260521T174852Z_m38051_t001`)
+- `E0666` (proved, , actual effort: 1 sessions, 1 steps, 83,784 tok (83,372 in, 412 out, 78,848 cached), 7.9s, $0.07440400)
+  - Began carried-evidence component only; no source edits. Scoped dossier shows C2.1.1.0 was already closed as structural-expression/BaseTarget_Subscript/Expr_Name carry-forward with prior holbuild/progress evidence. -> Confirmed C2.1.1.0 is bookkeeping and remains proved under the rebased subtree; no additional proof work is required before advancing toward Expr_Subscript. (`TO_type_system_rewrite-20260521T174852Z_m38315_t001`, `TO_type_system_rewrite-20260521T174852Z_m38051_t001`, `TO_type_system_rewrite-20260521T174852Z_m36332_t001`, `TO_type_system_rewrite-20260521T174852Z_m37627_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38315_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38051_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36332_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37627_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0621`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 604,815 tok (603,324 in, 1,491 out, 593,408 cached), 60.0s, $0.39101400
+- next: Call plan_oracle review, then begin C2.1.1.2 (Expr_IfExp).
+
+### Attempts / Evidence
+
+- `E0621` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 604,815 tok (603,324 in, 1,491 out, 593,408 cached), 60.0s, $0.39101400)
+  - After C2.1.1.0, audited FlagMember; holbuild exposed a residual goal because the success `return` equation had not been stripped/simplified before `TWOEXP_MONO`. -> Confirmed remaining issue was local to FlagMember success branch, not BaseTarget_Subscript. (`TO_type_system_rewrite-20260521T174852Z_m36338_t001`)
+  - Changed the `INDEX_OF` split to `Cases_on ... >> strip_tac` and added `return_def` to the local `gvs[...]` before `irule bitTheory.TWOEXP_MONO`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` succeeded, validating Expr_FlagMember under the current target. (`TO_type_system_rewrite-20260521T174852Z_m36340_t001`)
+
+### Ruled Out
+
+- Do not apply `TWOEXP_MONO` while the goal is still guarded by `return ... = (res,st)`; strip/simplify `return_def` first.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36338_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36340_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.10
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0670`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 81,210 tok (80,908 in, 302 out, 76,288 cached), 5.6s, $0.07030400
+- next: Review C2.1.1.10 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.11).
+
+### Attempts / Evidence
+
+- `E0660` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 447,782 tok (446,483 in, 1,299 out, 437,248 cached), 35.3s, $0.30376900)
+  - Refactored `Resume eval_all_type_sound_mutual[Expr_FlagMember]` to move/simplify the evaluator equation first, then strip the `well_typed_expr` antecedent in the ordinary projection before applying `flag_member_sound`; left the existing lookup/INDEX_OF tail inside that branch and discharged the place projection by `well_typed_expr_def`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` now advances past `Expr_FlagMember` and exposes the next Resume failure at `Expr_IfExp`. (`TO_type_system_rewrite-20260521T174852Z_m38189_t001`)
+- `E0670` (proved, , actual effort: 1 sessions, 1 steps, 81,210 tok (80,908 in, 302 out, 76,288 cached), 5.6s, $0.07030400)
+  - Carry-forward bookkeeping leaf for completed Expr_FlagMember repair; no source edits/builds performed under this active component, per PLAN. -> Accepted prior Expr_FlagMember proof-order repair evidence as carried progress; prior holbuild advanced to Expr_IfExp outside this component. (`TO_type_system_rewrite-20260521T174852Z_m38189_t001`)
+
+### Ruled Out
+
+- No source edit/build is required for this carried-evidence node.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38189_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.11
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0671`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 1 steps, 88,804 tok (88,518 in, 286 out, 81,408 cached), 8.0s, $0.08483400
+- next: Review C2.1.1.11 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.12).
+
+### Attempts / Evidence
+
+- `E0661` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 8 steps, 10 tools, 2 holbuild, 1,032,198 tok (1,027,782 in, 4,416 out, 1,002,496 cached), 105.2s, $0.76015800)
+  - Refactored `Expr_IfExp` Resume to `conj_tac`, put the existing proof tail under the ordinary projection, and discharged the place projection by `rpt strip_tac >> gvs[well_typed_expr_def]`. -> Build still failed in the ordinary projection: after `strip_tac`, `qpat_x_assum` could not find `well_typed_expr env (IfExp ...)` because the antecedent selection was wrong. (`TO_type_system_rewrite-20260521T174852Z_m38195_t001`)
+  - Changed the ordinary projection opening from `strip_tac >> qpat_x_assum ...` to `strip_tac >> pop_assum mp_tac`. -> Still failed at the same proof fragment; `pop_assum` selected the wrong assumption or the antecedent was not available as expected. Source is now changed again to `disch_then mp_tac`, unverified due to handoff. (`TO_type_system_rewrite-20260521T174852Z_m38197_t001`)
+- `E0662` (progressed, other, actual effort: 1 sessions, 5 msgs, 62 steps, 67 tools, 18 holbuild, 6,223,282 tok (6,205,180 in, 18,102 out, 6,077,440 cached), 671.8s, $4.22048000)
+  - Changed `ifexp_branch_from_cond_ih` and `ifexp_switch_from_branch_ihs` to accept the branch IHs in the mutual theorem's joint projection shape instead of the older ordinary-only shape. -> This repaired the helper-interface mismatch: holbuild advanced beyond `ifexp_switch_from_branch_ihs` after replacing old `qpat_assum ... well_typed_expr /\ _` assumptions with the joint IH shape; later failures occurred in the Resume tail, not helper parsing/statement shape. (`TO_type_system_rewrite-20260521T174852Z_m38233_t001`, `TO_type_system_rewrite-20260521T174852Z_m38235_t001`, `TO_type_system_rewrite-20260521T174852Z_m38239_t001`)
+  - Refactored place projection to `reverse conj_tac` and added local helper `type_place_expr_IfExp_NONE` to avoid broad unfolding of `well_typed_expr_def`. -> Broad `gvs[well_typed_expr_def]` and `gvs[type_place_expr_IfExp_NONE]` timed out on the place projection; targeted `qpat_x_assum type_place_expr... mp_tac >> simp[type_place_expr_IfExp_NONE]` advanced past the place projection to the ordinary tail. (`TO_type_system_rewrite-20260521T174852Z_m38245_t001`, `TO_type_system_rewrite-20260521T174852Z_m38251_t001`, `TO_type_system_rewrite-20260521T174852Z_m38253_t001`, `TO_type_system_rewrite-20260521T174852Z_m38255_t001`)
+  - Started repairing branch-IH subproofs under `ifexp_switch_from_branch_ihs` by replacing `simp[]` after partial specialization with `impl_tac >- asm_rewrite_tac[]`, then stripping and specializing the resulting universal IH. -> The previous direct `disch_then (qspecl_then ...)` was ill-shaped because an implication remained; final source applies `strip_tac >> qpat_x_assum ...` in both true/false branch subproofs, but this exact final source is unverified. (`TO_type_system_rewrite-20260521T174852Z_m38255_t001`, `TO_type_system_rewrite-20260521T174852Z_m38259_t001`)
+- `E0663` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 20 tools, 6 holbuild, 1,121,351 tok (1,112,114 in, 9,237 out, 1,064,960 cached), 256.5s, $1.04536000)
+  - Refactored IfExp branch-IH subproofs to specialize the correct true/false joint IH under the condition-eval antecedent, then discharge the ordinary projection with metis_tac instead of broad gvs/simp. -> holbuild advanced past Resume eval_all_type_sound_mutual[Expr_IfExp] and the next failure is in Expr_StructLit, showing the active IfExp component is repaired. (`TO_type_system_rewrite-20260521T174852Z_m38283_t003`)
+- `E0671` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 88,804 tok (88,518 in, 286 out, 81,408 cached), 8.0s, $0.08483400)
+  - Carry-forward bookkeeping leaf for completed Expr_IfExp repair; no source edits/builds performed under this active component, per PLAN. -> Accepted prior Expr_IfExp ordinary/place split-first repair evidence as carried progress; prior holbuild advanced to Expr_StructLit outside this component. (`TO_type_system_rewrite-20260521T174852Z_m38283_t003`)
+
+### Ruled Out
+
+- No source edit/build is required for this carried-evidence node.
+- Do not reuse IfExp's vacuous place projection argument for Subscript.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38283_t003` (use `read_tool_output` for exact output)
+
+## C2.1.1.12
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0672`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 50,894 tok (50,630 in, 264 out, 45,568 cached), 5.8s, $0.05601400
+- next: Review C2.1.1.12 closure with strategist, then begin C2.1.1.13 for Expr_Subscript source repair.
+
+### Attempts / Evidence
+
+- `E0664` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 385,704 tok (384,344 in, 1,360 out, 373,760 cached), 44.7s, $0.28060000)
+  - Wrapped Expr_StructLit Resume in an ordinary/place projection split; added local type_place_expr_StructLit_NONE_stmt for targeted place contradiction; kept existing ordinary proof body under stripped well_typed_expr antecedent. -> holbuild advanced past Expr_StructLit and now stops at Expr_Subscript, so the StructLit component is repaired. (`TO_type_system_rewrite-20260521T174852Z_m38291_t001`)
+- `E0672` (proved, , actual effort: 1 sessions, 1 steps, 50,894 tok (50,630 in, 264 out, 45,568 cached), 5.8s, $0.05601400)
+  - Carried accepted StructLit closure evidence; no source work authorized/needed for this bookkeeping leaf. -> Accepted evidence shows holbuild advanced past Expr_StructLit to Expr_Subscript, so C2.1.1.12 is complete. (`TO_type_system_rewrite-20260521T174852Z_m38291_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38291_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 inline proof-refactor plan is no longer de-risked. Multiple rebuilds show the shared old ordinary evaluator tail plus `FIRST [expr_subscript_place_tail_sound_stmt; old tail]` is structurally brittle: case-split/simplification either times out or leaves residual goals missing the evaluator tail equality and/or place-result facts. This is a proof-structure issue, not a local tactic issue.
+- latest episode: `E0677`
+- blocker: Current `vyperTypeStmtSoundnessScript.sml` is partial around `Resume eval_all_type_sound_mutual[Expr_Subscript]` lines ~6883-6970 and does not build. Latest holbuild failures leave an INL base/place-static residual goal or timeout after shared branch simplification. Need strategist replan, likely replacing the shared tail with an explicit static disjunction split or a stronger exact adapter lemma invoked before evaluator case analysis consumes context.
+- actual effort: 1 sessions, 5 msgs, 74 steps, 74 tools, 27 holbuild, 7,084,548 tok (7,056,354 in, 28,194 out, 6,853,120 cached), 992.4s, $5.28855000
+- next: Call plan_oracle review for C2.1.1.13. Request a replacement subtree or guidance that explicitly splits `well_typed_expr_def` Subscript ordinary-base vs place-base branches before evaluator-tail analysis, or introduces an exact adapter lemma whose conclusion matches the live residual goal so the Resume no longer relies on `FIRST` in a shared tail.
+
+### Attempts / Evidence
+
+- `E0673` (progressed, missing_helper, actual effort: 1 sessions, 6 msgs, 64 steps, 72 tools, 25 holbuild, 6,388,242 tok (6,369,580 in, 18,662 out, 6,238,208 cached), 796.2s, $4.33582400)
+  - Inserted split-first structure at `Resume eval_all_type_sound_mutual[Expr_Subscript]`, with ordinary branch using the old evaluator analysis under a stripped `well_typed_expr` premise and a temporary `cheat` for the place branch. -> Original failure at `qpat_x_assum well_typed_expr ...` is gone; holbuild proceeds through ordinary branch/tails to a remaining place-projection proof obligation. (`TO_type_system_rewrite-20260521T174852Z_m38356_t002`, `TO_type_system_rewrite-20260521T174852Z_m38414_t001`)
+  - Tried tactical simplification/rewriting for base-error tail (`INR y`) after ordinary branch; replaced broad `gvs[]` with targeted `pair_case_thm`, `sum_case_def`, `PAIR_EQ` rewrites. -> Tail simplification was eventually solved enough to expose the real place half; however repeated matching attempts on exact implication assumptions were brittle and should not be retried. (`TO_type_system_rewrite-20260521T174852Z_m38398_t001`, `TO_type_system_rewrite-20260521T174852Z_m38414_t001`)
+- `E0674` (progressed, missing_helper, actual effort: 1 sessions, 6 msgs, 70 steps, 80 tools, 19 holbuild, 7,326,663 tok (7,297,972 in, 28,691 out, 7,162,880 cached), 936.2s, $5.11763000)
+  - Added local `type_place_expr_annotation_ok_stmt` by cases over expression constructors, proving that any `type_place_expr env e = SOME vt` implies `vtype_annotation_ok vt (expr_type e)`. -> Helper succeeded enough for later proofs; initial failed attempts needed `expr_type_def`, pairing split for TopLevelName, and `metis_tac` for the Subscript case. (`TO_type_system_rewrite-20260521T174852Z_m38486_t001`, `TO_type_system_rewrite-20260521T174852Z_m38501_t001`)
+  - Added stronger local `place_expr_result_typed_expr_result_typed_stmt`: a place result at any `vt` implies ordinary `expr_result_typed` for that expression, using annotation helper; generalized from Type-only to include HashMapT/NoneT case. -> The generalized helper builds and holbuild resumes to Expr_Subscript, so it is available for next-session use. (`TO_type_system_rewrite-20260521T174852Z_m38530_t001`, `TO_type_system_rewrite-20260521T174852Z_m38532_t001`)
+  - Tried minor inline repairs in old shared ordinary branch: add fallback `subscript_vtype_index_get_Value_no_type_error` for index `get_Value`, restore `st3 = st2` after successful `get_Value`, and probe/check QED failure. -> These fixed/avoided some incidental mismatch but did not solve the core place-base tail. Latest holbuild still fails at QED with the same place-base ordinary goal; shared tail still assumes ordinary-base facts. (`TO_type_system_rewrite-20260521T174852Z_m38510_t001`, `TO_type_system_rewrite-20260521T174852Z_m38536_t001`, `TO_type_system_rewrite-20260521T174852Z_m38539_t001`)
+- `E0675` (progressed, missing_helper, actual effort: 1 sessions, 5 msgs, 62 steps, 79 tools, 19 holbuild, 6,655,640 tok (6,632,981 in, 22,659 out, 6,499,328 cached), 780.2s, $4.59769900)
+  - Factored local `expr_subscript_place_tail_sound_stmt` above the Resume, plus a local `check_array_bounds_hashmap_stmt` because the imported theorem was unavailable in this theory. -> Holbuild advanced past the helper and resumed the main `Expr_Subscript` proof, showing the helper itself was accepted through QED. (`TO_type_system_rewrite-20260521T174852Z_m38605_t001`)
+  - Started wiring the helper into the ordinary branch's success tail using a `FIRST [helper; old ordinary-base tail]` fallback. -> Source was edited after the last build but not rechecked due to handoff. This is the first action for next session. (`TO_type_system_rewrite-20260521T174852Z_m38607_t001`, `TO_type_system_rewrite-20260521T174852Z_m38606_t001`)
+- `E0676` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 73 steps, 73 tools, 27 holbuild, 6,955,619 tok (6,928,275 in, 27,344 out, 6,728,704 cached), 972.9s, $5.18252700)
+  - Tried adding `FIRST [irule expr_subscript_place_tail_sound_stmt; old ordinary tail]` in success tail and fixed parse/parentheses. -> Parsed and advanced, but residual goal persisted in ordinary branch place-base path; helper call did not resolve all shape cases. (`TO_type_system_rewrite-20260522T073012Z_m38622_t001`)
+  - Tried targeted simplification after `Cases_on base_res` using `simp_tac bool_ss [pair_case_thm, sum_case_def]` to expose INR tail without broad `gvs`. -> Avoided some timeout but branch sequencing became brittle; holbuild exposed residual goals and later timeouts in `gvs[no_type_error_result_def]`. (`TO_type_system_rewrite-20260522T073012Z_m38663_t001`, `TO_type_system_rewrite-20260522T073012Z_m38671_t001`)
+  - Tried replacing final INR-base tail `gvs[]` with explicit `PAIR_EQ` rewrites. -> INR tail nearly closed but current QED failure is a different residual INL-base/place-static goal; source remains partial. (`TO_type_system_rewrite-20260522T073012Z_m38683_t001`)
+- `E0677` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 74 steps, 74 tools, 27 holbuild, 7,084,548 tok (7,056,354 in, 28,194 out, 6,853,120 cached), 992.4s, $5.28855000)
+  - Fixed parse/parentheses of the unbuilt handoff edit and tried to call `expr_subscript_place_tail_sound_stmt` in a `FIRST` branch at the success tail. -> Parse issues fixed; helper itself remains available, but main Resume still fails at QED with ordinary/place-base residual goals. (`TO_type_system_rewrite-20260522T073012Z_m38622_t001`)
+  - Tried targeted `simp_tac bool_ss [pair_case_thm,sum_case_def]` after `Cases_on base_res` and explicit INR tail rewrites to avoid broad `gvs`. -> Avoided some broad simplifier timeouts but exposed branch-structure brittleness; edits generated residual goals that no longer had the right tail equality or facts. (`TO_type_system_rewrite-20260522T073012Z_m38663_t001`, `TO_type_system_rewrite-20260522T073012Z_m38683_t001`)
+  - Tried local rewrites and explicit `PAIR_EQ` handling for final INR-base tail. -> Tail handling partially improved but QED still has earlier INL-base/place-static residual, confirming shared-tail approach is misfactored. (`TO_type_system_rewrite-20260522T073012Z_m38684_t001`)
+
+### Ruled Out
+
+- Do not continue patching `FIRST [expr_subscript_place_tail_sound_stmt; old ordinary tail]` inside the shared success tail.
+- Do not use broad `gvs[]` after evaluator case splits; it timed out or stripped needed shape.
+- Do not proceed to Expr_Attribute/later cheats.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m38663_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38683_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38684_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38685_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0678`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 11 tools, 3 holbuild, 777,603 tok (773,006 in, 4,597 out, 711,680 cached), 147.5s, $0.80038000
+
+### Attempts / Evidence
+
+- `E0678` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 11 tools, 3 holbuild, 777,603 tok (773,006 in, 4,597 out, 711,680 cached), 147.5s, $0.80038000)
+  - Replace the partial Expr_Subscript proof with a minimal documented skeleton using local cheats for the two planned follow-up halves; no edits to later Expr_Attribute branches. -> Initial cleanup attempt with structured reverse conj branch hit holbuild branch-suffix instrumentation, so it was simplified to a robust `conj_tac >> rpt strip_tac >> cheat` placeholder. (`TO_type_system_rewrite-20260522T073012Z_m38697_t001`, `TO_type_system_rewrite-20260522T073012Z_m38698_t001`, `TO_type_system_rewrite-20260522T073012Z_m38699_t001`)
+  - Build `vyperTypeStmtSoundnessTheory` after cleanup. -> Build succeeds, confirming the source is normalized and accepted through Expr_Subscript with the planned local placeholders. (`TO_type_system_rewrite-20260522T073012Z_m38700_t001`)
+
+### Ruled Out
+
+- The previous shared `FIRST [expr_subscript_place_tail_sound_stmt; ordinary tail]` strategy is removed and should not be retried.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m38700_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38701_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38701_t002` (use `read_tool_output` for exact output)
+
+## C2.1.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 IfExp proof did not remain routine. After switching to switch_BoolV_post, holbuild shows the generated continuation subgoal has the branch IH implication on the left of a nested implication; repeated attempts to consume it directly via drule/irule/qspecl_then/impl_tac either fail to select/discharge the branch antecedent or leave the same large goal. This indicates the component needs a narrower local helper/boundary over switch_BoolV_post plus the branch IH, rather than more tactic patching in the resume.
+- latest episode: `E0623`
+- blocker: Branch continuation application remains brittle: in the true branch, holbuild shows goal `(branch_IH_implication) ==> final IfExp invariant`; `impl_tac >- simp[]` cannot discharge the branch antecedent, and direct `irule`/`drule_all` failed earlier because the selected branch eval equation/continuation shape is not aligned robustly.
+- actual effort: 1 sessions, 4 msgs, 60 steps, 64 tools, 23 holbuild, 5,168,913 tok (5,139,362 in, 29,551 out, 5,036,544 cached), 816.9s, $3.91889200
+- next: Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape.
+
+### Attempts / Evidence
+
+- `E0622` (progressed, other, actual effort: 1 sessions, 6 msgs, 77 steps, 88 tools, 26 holbuild, 7,692,085 tok (7,669,634 in, 22,451 out, 7,526,912 cached), 785.0s, $5.15059600)
+  - Direct evaluator-aligned proof: decompose IfExp typing, unfold one evaluate_def/bind_def layer, split on condition eval, apply condition IH, extract BaseTV BoolT with local evaluate_type_BaseT_BoolT, split toplevel BoolV, unfold switch_BoolV_def, then try selected branch IH. -> Progressed to selected-branch phase; current build failure is localized to invoking the true-branch IH after rewriting switch_BoolV/eval equation, not to condition typing or BoolV extraction. (`TO_type_system_rewrite-20260521T174852Z_m36421_t001`)
+  - Added local helper expr_result_typed_IfExp_branch to avoid reproving the expr_result_typed HashMapRef side condition inline for both branches. -> Helper compiles and is a good boundary for final branch result typing, but current proof has not yet reached it because branch IH application still fails. (`TO_type_system_rewrite-20260521T174852Z_m36413_t001`, `TO_type_system_rewrite-20260521T174852Z_m36426_t001`)
+- `E0623` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 60 steps, 64 tools, 23 holbuild, 5,168,913 tok (5,139,362 in, 29,551 out, 5,036,544 cached), 816.9s, $3.91889200)
+  - Reworked BoolV split to use `switch_BoolV_post`, with true/false continuations applying selected branch IH and final `expr_result_typed_IfExp_branch`. -> Progressed past earlier missing `x = Value (BoolV T/F)` assumption and avoided broad `switch_BoolV_def`, but true continuation still fails at branch IH implication discharge/final lifting. (`TO_type_system_rewrite-20260521T174852Z_m36481_t001`, `TO_type_system_rewrite-20260521T174852Z_m36489_t001`)
+  - Tried direct branch IH consumption by `drule_all`, `first_x_assum irule`, `qpat_x_assum ... irule`, and `qspecl_then ... mp_tac >> impl_tac`; also probed the post-switch goal shape. -> All variants leave or fail on the same branch implication shape; evidence points to missing local helper/factoring, not a false theorem. (`TO_type_system_rewrite-20260521T174852Z_m36434_t001`, `TO_type_system_rewrite-20260521T174852Z_m36440_t001`, `TO_type_system_rewrite-20260521T174852Z_m36447_t001`, `TO_type_system_rewrite-20260521T174852Z_m36477_t001`)
+
+### Ruled Out
+
+- Broad `gvs[switch_BoolV_def]` in the mutual-IH context times out.
+- Direct `drule_all`/`irule` on selected branch IH in the resume is brittle and repeatedly fails to align antecedents.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36481_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36489_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36477_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.2.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0624`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 638,253 tok (637,164 in, 1,089 out, 627,200 cached), 48.2s, $0.39609000
+- next: Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted.
+
+### Attempts / Evidence
+
+- `E0624` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 638,253 tok (637,164 in, 1,089 out, 627,200 cached), 48.2s, $0.39609000)
+  - Added local `expr_result_typed_BaseT_BoolT_value` and proved by unfolding `expr_result_typed_def`/`expr_runtime_typed_def`, then using `gvs[evaluate_type_BaseT_BoolT]`. -> holbuild advanced past the new helper and failed later in the existing partial Expr_IfExp resume, confirming this helper theorem compiled. (`TO_type_system_rewrite-20260521T174852Z_m36497_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36497_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0625`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 3 holbuild, 413,220 tok (411,353 in, 1,867 out, 395,776 cached), 59.4s, $0.33178300
+- next: Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted.
+
+### Attempts / Evidence
+
+- `E0625` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 3 holbuild, 413,220 tok (411,353 in, 1,867 out, 395,776 cached), 59.4s, $0.33178300)
+  - Added local theorem `ifexp_branch_from_cond_ih` before `Expr_IfExp`; proof specializes the conditional branch IH with the condition success equation, applies it to the selected branch evaluation, splits on `res`, and lifts INL branch typing via `expr_result_typed_IfExp_branch` with witness `branch`. -> holbuild advanced past `ifexp_branch_from_cond_ih`; the remaining failure is later in the old `Expr_IfExp` resume at direct `switch_BoolV_post`, outside this component. (`TO_type_system_rewrite-20260521T174852Z_m36510_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36510_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0626`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 32 steps, 34 tools, 11 holbuild, 2,783,271 tok (2,773,117 in, 10,154 out, 2,714,624 cached), 326.4s, $1.95439700
+- next: Call plan_oracle review; if accepted begin C2.1.1.2.3 to rewrite Expr_IfExp resume to use helpers.
+
+### Attempts / Evidence
+
+- `E0626` (proved, , actual effort: 1 sessions, 2 msgs, 32 steps, 34 tools, 11 holbuild, 2,783,271 tok (2,773,117 in, 10,154 out, 2,714,624 cached), 326.4s, $1.95439700)
+  - Added local `ifexp_switch_from_branch_ihs` after `ifexp_branch_from_cond_ih`. Proof abstracts final postcondition with `qho_match_abbrev_tac`, applies `switch_BoolV_post`, and discharges true/false continuations by invoking `ifexp_branch_from_cond_ih` with explicit branch/condition witnesses; avoided unfolding `switch_BoolV_def`. -> holbuild advanced past `ifexp_switch_from_branch_ihs`; remaining failure is later at old direct `switch_BoolV_post` in Expr_IfExp resume, matching next component C2.1.1.2.3. (`TO_type_system_rewrite-20260521T174852Z_m36545_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36545_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0628`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 18 steps, 17 tools, 8 holbuild, 1,170,180 tok (1,165,285 in, 4,895 out, 1,132,544 cached), 186.2s, $0.87682700
+- next: Call plan_oracle review for C2.1.1.2.3 closure, then follow the scheduled next component.
+
+### Attempts / Evidence
+
+- `E0627` (progressed, other, actual effort: 1 sessions, 3 msgs, 24 steps, 25 tools, 10 holbuild, 2,952,285 tok (2,944,135 in, 8,150 out, 2,893,824 cached), 275.7s, $1.94296700)
+  - Replaced old direct `switch_BoolV_post`/continuation branches in `Resume eval_all_type_sound_mutual[Expr_IfExp]` with a success path that extracts `expr_result_typed env e x`, derives `toplevel_value_typed x (BaseTV BoolT)`, and invokes `ifexp_switch_from_branch_ihs`. -> Success branch advanced through helper application shape but failed on residual switch equation side condition; source then edited to derive an explicit switch equation, not yet rebuilt. (`TO_type_system_rewrite-20260521T174852Z_m36568_t001`, `TO_type_system_rewrite-20260521T174852Z_m36570_t001`)
+- `E0628` (proved, , actual effort: 1 sessions, 1 msgs, 18 steps, 17 tools, 8 holbuild, 1,170,180 tok (1,165,285 in, 4,895 out, 1,132,544 cached), 186.2s, $0.87682700)
+  - Rebuilt current source, fixed success branch by selecting the exact case equation and simplifying it into a named `switch_BoolV ... = (res,st')` fact before invoking `ifexp_switch_from_branch_ihs`; fixed condition-error branch by simplifying the case equation to `res = INR y`/`st' = st1`, reusing `no_type_error_result (INR y)`, and reducing the remaining case expression. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` succeeds, so the Expr_IfExp resume is discharged without cheats in this component. (`TO_type_system_rewrite-20260521T174852Z_m36577_t001`, `TO_type_system_rewrite-20260521T174852Z_m36580_t001`, `TO_type_system_rewrite-20260521T174852Z_m36584_t001`, `TO_type_system_rewrite-20260521T174852Z_m36586_t001`, `TO_type_system_rewrite-20260521T174852Z_m36593_t001`)
+
+### Ruled Out
+
+- Direct `switch_BoolV_post` use in resume was not needed; wrapper helper interface sufficed.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36593_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0630`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 20 steps, 20 tools, 9 holbuild, 1,186,287 tok (1,182,439 in, 3,848 out, 1,152,000 cached), 176.2s, $0.84363500
+
+### Attempts / Evidence
+
+- `E0629` (progressed, other, actual effort: 1 sessions, 4 msgs, 50 steps, 61 tools, 16 holbuild, 5,654,089 tok (5,639,954 in, 14,135 out, 5,432,832 cached), 541.2s, $4.17607600)
+  - Added local StructLit boundary/helper lemmas for named exprs -> expr list, struct field `value_has_type`, OPT_MMAP/list-rel bridge, and final `struct_lit_expr_result_typed`. -> After fixing `StructTV` field type shape and OPT_MMAP equality, helper `struct_lit_expr_result_typed` now proves; build progressed into `Resume eval_all_type_sound_mutual[Expr_StructLit]`. (`TO_type_system_rewrite-20260521T174852Z_m36618_t001`, `TO_type_system_rewrite-20260521T174852Z_m36620_t001`, `TO_type_system_rewrite-20260521T174852Z_m36627_t001`, `TO_type_system_rewrite-20260521T174852Z_m36629_t001`)
+  - StructLit resume follows evaluator order: destructures `eval_exprs cx (MAP SND kes) st`, specializes the guarded expr-list IH at `MAP FST kes`, derives `well_typed_exprs env (MAP SND kes)`, and applies `struct_lit_expr_result_typed` in the success branch. -> Success branch advanced; current failure is only the error branch propagation of the monadic case equation, with residual goal showing `eval_exprs ... = (INR y,st1)`, state/env/account facts for `st1`, `no_type_error_result (INR y)`, and unsimplified `case eval_exprs ... = (res,st')`. (`TO_type_system_rewrite-20260521T174852Z_m36635_t001`, `TO_type_system_rewrite-20260521T174852Z_m36637_t001`, `TO_type_system_rewrite-20260521T174852Z_m36643_t001`, `TO_type_system_rewrite-20260521T174852Z_m36645_t001`)
+- `E0630` (proved, , actual effort: 1 sessions, 1 msgs, 20 steps, 20 tools, 9 holbuild, 1,186,287 tok (1,182,439 in, 3,848 out, 1,152,000 cached), 176.2s, $0.84363500)
+  - Repaired StructLit error branch by selecting the live eval_exprs equation and whole let/do evaluator equation, simplifying the evaluator equation with bind_def/return_def/LET_THM and the eval_exprs theorem, then using the propagated no_type_error_result assumption via no_type_error_result_def. -> `vyperTypeStmtSoundnessTheory` builds; Expr_StructLit resume is discharged without cheat. (`TO_type_system_rewrite-20260521T174852Z_m36669_t001`)
+
+### Ruled Out
+
+- broad final gvs alone does not use the no_type_error_result assumption enough; explicitly move it to the goal before simplifying with no_type_error_result_def
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36669_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Do-not-retry evidence from STATE is confirmed: `type_place_expr ==> well_typed_expr` is wrong-shaped for HashMapT/NoneT, and direct proof of place eval soundness recursively needs soundness of nested subscript indices. Existing helpers (`subscript_vtype_index_get_Value_no_type_error`, `subscript_vtype_value_step_type`) handle typed index values after an IH, but there is no IH for place-typed base expressions.
+- latest episode: `E0637`
+- blocker: The planned local place-expression boundary helper for the Expr_Subscript place branch is not mechanically available under the current mutual theorem. The live place branch has `type_place_expr env e = SOME vt` and `eval_expr cx e st = (INL x,st1)` but the only recursive IH for base `e` is guarded by `well_typed_expr env e`. A helper `type_place_expr -> eval/result soundness` would need recursive reasoning over nested `Subscript` place expressions and ordinary soundness for their index expressions before `eval_all_type_sound_mutual` is finalised, duplicating/bypassing the evaluator mutual induction. This indicates the leaf decomposition is missing a strengthened place-expression invariant or a different abstraction, not just a local tactic fix.
+- actual effort: 1 sessions, 2 msgs, 36 steps, 53 tools, 2 holbuild, 3,852,504 tok (3,834,578 in, 17,926 out, 3,727,360 cached), 415.8s, $2.93755000
+- next: Ask strategist to replace/augment the component with a decomposition that either strengthens the mutual theorem with a place-expression invariant, introduces a provable pre-finalise place-expression soundness boundary, or restructures Expr_Subscript to reuse BaseTarget-style place proofs without relying on `well_typed_expr env e` for HashMap places.
+
+### Attempts / Evidence
+
+- `E0631` (progressed, other, actual effort: 1 sessions, 3 msgs, 27 steps, 45 tools, 4 holbuild, 2,922,510 tok (2,915,616 in, 6,894 out, 2,832,896 cached), 203.7s, $2.03686800)
+  - Inserted an Expr_Subscript FAIL_TAC probe after `rpt gen_tac >> strip_tac` to inspect the raw resume goal. -> Goal has two IHs: a guarded index IH requiring successful base eval first, and an unconditional base IH for `e`; premises include `well_typed_expr env (Subscript v9 e e')` and the eval equation. (`TO_type_system_rewrite-20260521T174852Z_m36683_t001`)
+  - Expanded `well_typed_expr` and `evaluate_def`, split on `eval_expr cx e st`, then tried `first_x_assum drule_all` for the base IH. -> Failed because the first assumption is the guarded index IH, not the base IH; the goal state showed the base-success and base-error propagation equation after evaluator unfolding. (`TO_type_system_rewrite-20260521T174852Z_m36692_t001`)
+  - Tried a qpat_x_assum pattern to select the unconditional base IH, then attempted a broad replace to use `last_x_assum`. -> The qpat pattern did not match. The later replace_text matched an earlier occurrence in Stmts_cons instead of Expr_Subscript, accidentally changing Stmts_cons line ~4916. Readback confirms Expr_Subscript still has the qpat/last proof probe shape and Stmts_cons was modified. (`TO_type_system_rewrite-20260521T174852Z_m36696_t001`, `TO_type_system_rewrite-20260521T174852Z_m36698_t001`, `TO_type_system_rewrite-20260521T174852Z_m36698_t002`)
+- `E0632` (progressed, other, actual effort: 1 sessions, 5 msgs, 51 steps, 68 tools, 8 holbuild, 5,092,821 tok (5,072,376 in, 20,445 out, 4,946,944 cached), 540.3s, $3.71398200)
+  - Restored accidental Stmts_cons edit and built Expr_Subscript prefix. -> Stmts_cons source was repaired; build now reaches Expr_Subscript, confirming remaining work is active component. (`TO_type_system_rewrite-20260521T174852Z_m36705_t001`, `TO_type_system_rewrite-20260521T174852Z_m36706_t001`)
+  - Selected base IH by preserving first guarded index IH, specializing the second/base IH with [`env`,`st`,`base_res`,`st1`], and later reusing guarded IH after base success. -> This repaired the prior IH-selection blocker; build progressed to base-success branch and then to index-success/get_Value branch. (`TO_type_system_rewrite-20260521T174852Z_m36712_t001`, `TO_type_system_rewrite-20260521T174852Z_m36715_t001`, `TO_type_system_rewrite-20260521T174852Z_m36724_t001`)
+  - In index success branch, proved get_Value no-TypeError for the index result by unfolding expr_result_typed/expr_runtime_typed, case-splitting expr_type e against subscript_type_ok_def, using is_int_type_evaluate_type_not_None_Array, then get_Value_no_type_error. -> This discharged the get_Value error branch; build now stops only at a deliberate get_Value success probe. (`TO_type_system_rewrite-20260521T174852Z_m36744_t001`, `TO_type_system_rewrite-20260521T174852Z_m36746_t001`)
+- `E0633` (progressed, other, actual effort: 1 sessions, 6 msgs, 70 steps, 108 tools, 17 holbuild, 7,312,779 tok (7,292,865 in, 19,914 out, 7,157,248 cached), 675.1s, $4.85412900)
+  - Added local copies of the missing subscript boundary lemmas because `evaluate_subscript_typed`/`evaluate_subscript_success_not_HashMapRef` from `vyperTypeSoundnessHelpersScript.sml` are not imported by `vyperTypeStmtSoundnessTheory`. -> Resolved the undeclared-theorem blocker and proved the helper stack after factoring out tuple/direct-array typing as `evaluate_subscript_value_well_typed_stmt`. (`TO_type_system_rewrite-20260521T174852Z_m36778_t001`, `TO_type_system_rewrite-20260521T174852Z_m36787_t001`, `TO_type_system_rewrite-20260521T174852Z_m36802_t001`)
+  - Expanded the get_Value success tail by deriving `st3 = st2`, `env.type_defs = get_tenv cx`, `~is_HashMapRef x`, unfolding `lift_option_type`, splitting `check_array_bounds`, and applying `evaluate_subscript_typed_stmt`. -> Progressed to the direct value branch for `evaluate_subscript (get_tenv cx) tv x x'' = INL (INL x'³')` with typing `toplevel_value_typed x'³' rtv` and no-HashMapRef established, but the branch still needs to consume/simplify the remaining monadic tail implication/equation. (`TO_type_system_rewrite-20260521T174852Z_m36817_t001`, `TO_type_system_rewrite-20260521T174852Z_m36826_t001`)
+- `E0634` (progressed, other, actual effort: 1 sessions, 6 msgs, 77 steps, 88 tools, 27 holbuild, 7,175,179 tok (7,146,780 in, 28,399 out, 7,006,720 cached), 925.7s, $5.05563000)
+  - In direct `INL (INL value)` branch, selected the exact tail equation pattern and simplified with `bind_def`, `ignore_bind_def`, `return_def` after proving `~is_HashMapRef`; this consumed the monadic tail sufficiently for that branch. -> Build progressed past the direct value branch to the storage-return branch, confirming the original E0633 blocker is resolved. (`TO_type_system_rewrite-20260521T174852Z_m36868_t001`)
+  - Tried inline storage branch handling by destructing `y`, stripping the tail antecedent, simplifying, and then manually splitting `read_storage_slot`. -> Failed because the proof split a fresh `read_storage_slot` call while the live goal still retained the original tail implication; the success typing lemma did not have a matching read-success assumption. (`TO_type_system_rewrite-20260521T174852Z_m36888_t001`, `TO_type_system_rewrite-20260521T174852Z_m36898_t001`)
+  - Inserted local helper `expr_subscript_storage_tail_sound_stmt` and changed the storage branch to call it with `irule ... qexistsl [x,x'',y,rtv]`. -> Helper proof currently fails for the same reason: it tries `metis_tac[read_storage_slot_success_type]` without first deriving the read-success equation from the tail. Source is partial and must be repaired before continuing. (`TO_type_system_rewrite-20260521T174852Z_m36905_t001`)
+- `E0635` (progressed, other, actual effort: 1 sessions, 8 msgs, 101 steps, 114 tools, 34 holbuild, 10,079,223 tok (10,044,218 in, 35,005 out, 9,886,208 cached), 1178.9s, $6.78330400)
+  - Repaired `expr_subscript_storage_tail_sound_stmt` by handling `read_res` cases in the correct order after simplifying the monadic tail; success branch now derives `value_has_type rtv x'` from `read_storage_slot_success_type`, and TypeError branches use `read_storage_slot_error`. -> Build progressed past the local storage-tail helper into the Expr_Subscript resume storage branch. (`TO_type_system_rewrite-20260521T174852Z_m36920_t001`)
+  - Fixed the storage branch call site by stripping the tail implication before `irule expr_subscript_storage_tail_sound_stmt` and using the correct witness order `bounds_st, rtv, x, x'', y`. -> Build progressed beyond storage-tail branch to the `evaluate_subscript ... = INR y` error branch. (`TO_type_system_rewrite-20260521T174852Z_m36924_t001`)
+  - Inserted `evaluate_subscript_error_not_TypeError_stmt` to prove that typed evaluated subscript errors are not `TypeError`; tried several broad constructor/case-split proofs with `evaluate_subscript_def`, `array_index_def`, `value_has_type_inv`, and `value_has_type_def`. -> Current helper proof remains failing at QED on tuple base with integer index. The theorem may be true, but current decomposition/tactic is too brittle and should be narrowed or repaired deliberately. (`TO_type_system_rewrite-20260521T174852Z_m37006_t001`)
+- `E0636` (progressed, other, actual effort: 1 sessions, 5 msgs, 67 steps, 96 tools, 19 holbuild, 6,508,479 tok (6,491,323 in, 17,156 out, 6,273,024 cached), 603.7s, $4.74268700)
+  - Added `value_has_type_TupleTV_dest_stmt`, `value_has_type_ArrayTV_dest_stmt`, repaired `evaluate_subscript_error_not_TypeError_stmt`, and added `check_array_bounds_error_not_TypeError_stmt`. -> The formerly failing tuple/int `evaluate_subscript ... = INR (TypeError msg)` helper now builds; build reaches the Expr_Subscript resume. (`TO_type_system_rewrite-20260521T174852Z_m37041_t001`)
+  - Replaced FAIL_TAC placeholders in the `evaluate_subscript ... = INR y` and `check_array_bounds ... = INR y` tails with calls to the new no-TypeError boundary helpers; used `get_Value_state` for get_Value error preservation. -> The direct subscript_type_ok/value branch progressed; current failure is no longer the evaluated-subscript/check-bounds error tail, but the alternate static place-subscript disjunct. (`TO_type_system_rewrite-20260521T174852Z_m37073_t001`, `TO_type_system_rewrite-20260521T174852Z_m37076_t001`)
+- `E0637` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 36 steps, 53 tools, 2 holbuild, 3,852,504 tok (3,834,578 in, 17,926 out, 3,727,360 cached), 415.8s, $2.93755000)
+  - Rebuilt current source to verify exact failure at `Resume eval_all_type_sound_mutual[Expr_Subscript]` place branch. -> Build still fails at QED with live assumptions `type_place_expr env e = SOME vt`, `subscript_vtype vt (expr_type e') = SOME (Type v9)`, successful base eval, and only a `well_typed_expr env e ==> ... expr_result_typed env e x` implication. (`TO_type_system_rewrite-20260521T174852Z_m37197_t001`)
+  - Inspected definitions and available helpers for `type_place_expr`, `vtype_annotation_ok`, `subscript_vtype`, `expr_result_typed`, top-level HashMap lookup, and BaseTarget_Subscript proof shape. -> Definitions confirm HashMap places use annotation `NoneT`, so ordinary `well_typed_expr` cannot unlock the base IH. No existing fresh helper gives successful evaluation/result typing from `type_place_expr`; nested Subscript place helper would require recursive ordinary expression soundness for indices before the mutual theorem is finalised. (`TO_type_system_rewrite-20260521T174852Z_m37164_t001`, `TO_type_system_rewrite-20260521T174852Z_m37175_t001`, `TO_type_system_rewrite-20260521T174852Z_m37165_t002`, `TO_type_system_rewrite-20260521T174852Z_m37170_t002`, `TO_type_system_rewrite-20260521T174852Z_m37170_t003`, `TO_type_system_rewrite-20260521T174852Z_m37190_t001`)
+
+### Ruled Out
+
+- Coercing `type_place_expr env e = SOME vt` to `well_typed_expr env e`
+- Inlining the full nested place evaluator proof inside the Expr_Subscript resume
+- Treating the remaining failure as direct `subscript_type_ok` tail simplification
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m37197_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37164_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37175_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37165_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37170_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37170_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37190_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.4.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0643`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 62 steps, 63 tools, 20 holbuild, 5,723,404 tok (5,706,487 in, 16,917 out, 5,584,384 cached), 651.4s, $3.91021700
+
+### Attempts / Evidence
+
+- `E0639` (progressed, tool_limit, actual effort: 1 sessions, 5 msgs, 61 steps, 68 tools, 16 holbuild, 5,983,233 tok (5,962,688 in, 20,545 out, 5,835,264 cached), 645.4s, $4.17110200)
+  - Projected expression IH in AnnAssign (`well_typed_expr env e ==> _`) and discarded place projection, then tried to repair materialise-error no-TypeError branch inline. -> Confirmed broad inline proof still times out; `expr_result_typed_materialise_no_type_error` is the right boundary for the materialise error branch, but keeping the surrounding new-variable branch monolithic still exceeds tactic timeout. (`TO_type_system_rewrite-20260521T174852Z_m37312_t001`, `TO_type_system_rewrite-20260521T174852Z_m37319_t001`)
+  - Added helper `expr_result_typed_materialise_preserves_value_type` near materialise lemmas to avoid unfolding `expr_result_typed_def` in AnnAssign consumers. -> Helper proof was repaired and accepted far enough for build to continue to the next helper/proof region; this is a reusable boundary for materialise success typedness from the ordinary expression projection. (`TO_type_system_rewrite-20260521T174852Z_m37329_t001`, `TO_type_system_rewrite-20260521T174852Z_m37331_t001`)
+  - Started local helper `annassign_new_variable_after_materialise_sound` to factor the whole post-materialise/new-variable tail of AnnAssign. -> Initial helper failed because `irule expr_result_typed_materialise_preserves_value_type` left multiple subgoals due matching; last source edit changed that derivation to `metis_tac[expr_result_typed_materialise_preserves_value_type]` but was not verified before handoff. (`TO_type_system_rewrite-20260521T174852Z_m37341_t001`, `TO_type_system_rewrite-20260521T174852Z_m37347_t001`)
+- `E0640` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 32 steps, 33 tools, 11 holbuild, 2,766,956 tok (2,753,095 in, 13,861 out, 2,680,832 cached), 498.5s, $2.11756100)
+  - Replaced let-shaped helper use with statement-level success/error helpers; then tried explicit instantiation, drule_all, qspec, and assumption cleanup inside the branch. -> All branch-local forms still timed out before useful subgoals, showing the proof-interface boundary is still too small for the large resume context. (`TO_type_system_rewrite-20260521T174852Z_m37423_t001`, `TO_type_system_rewrite-20260521T174852Z_m37425_t001`, `TO_type_system_rewrite-20260521T174852Z_m37438_t001`, `TO_type_system_rewrite-20260521T174852Z_m37451_t001`)
+  - Added helpers annassign_eval_stmt_success_sound and annassign_eval_stmt_materialise_error_sound. -> Helpers prove, but applying even the success helper inside the already-expanded resume context times out; use a stronger whole-AnnAssign helper instead. (`TO_type_system_rewrite-20260521T174852Z_m37435_t001`)
+- `E0641` (progressed, tool_limit, actual effort: 1 sessions, 6 msgs, 75 steps, 80 tools, 31 holbuild, 7,430,016 tok (7,411,533 in, 18,483 out, 7,272,448 cached), 833.8s, $4.88613900)
+  - Replaced Append `Cases_on bt_res >> gvs[no_type_error_result_def]` with manual result split and targeted rewrites for INL/INR base-target branches. -> Build moved past Append; needed explicit pair/sum case rewrites and localized no-TypeError simplification after discarding large IH assumptions. (`TO_type_system_rewrite-20260521T174852Z_m37539_t001`)
+  - Applied the same manual result split pattern to Assign target_res INL/INR branches. -> Build moved past Assign to AugAssign, confirming the pattern applies to statement resumes after the strengthened expression IH. (`TO_type_system_rewrite-20260521T174852Z_m37545_t001`)
+  - Started repairing AugAssign base-target IH application by replacing `drule_at ... >> simp[]` with explicit qspecl/impl_tac, then manually opened INL/INR target_res branches. -> INL branch proceeded to suspended AugAssign_base_inl; INR branch failed because no-TypeError proof used the equality in the wrong direction after expanding no_type_error_result_def. (`TO_type_system_rewrite-20260521T174852Z_m37553_t001`)
+- `E0642` (progressed, tool_limit, actual effort: 1 sessions, 3 msgs, 47 steps, 46 tools, 16 holbuild, 3,966,526 tok (3,954,216 in, 12,310 out, 3,867,648 cached), 466.4s, $2.73596400)
+  - Repaired AugAssign INR/base-target and later AugAssign exception/get_Value branches using targeted monadic equation rewrites and no-TypeError facts instead of broad `gvs`; then built `vyperTypeStmtSoundnessTheory`. -> Build advanced beyond AugAssign to Iterator_Range; evidence indicates the Expr_Subscript/AugAssign fallout is no longer the first failure. (`TO_type_system_rewrite-20260521T174852Z_m37593_t001`)
+  - Started applying the same targeted split pattern to Iterator_Range: split `expr1_res`, projected the ordinary expression postcondition manually, and removed first broad `gvs[no_type_error_result_def]`. -> The first timeout moved from result split to the next broad `gvs[]` after `get_Value_state`; source remains partial and needs continued targeted rewriting or a helper. (`TO_type_system_rewrite-20260521T174852Z_m37600_t001`, `TO_type_system_rewrite-20260521T174852Z_m37603_t001`)
+- `E0643` (proved, , actual effort: 1 sessions, 4 msgs, 62 steps, 63 tools, 20 holbuild, 5,723,404 tok (5,706,487 in, 16,917 out, 5,584,384 cached), 651.4s, $3.91021700)
+  - Repaired AugAssign branches produced by the strengthened ordinary/place expression IH refactor using targeted no-TypeError and monadic equation rewrites; rebuilt `vyperTypeStmtSoundnessTheory`. -> Build advanced beyond all AugAssign resumes, showing the prior component frontier no longer fails there and hence no longer at Expr_Subscript. (`TO_type_system_rewrite-20260521T174852Z_m37593_t001`)
+  - Observed subsequent first failure in `Iterator_Range` due to broad simplification with paired expression IH context; made partial local targeted edits but did not complete the Iterator_Range proof. -> Confirms next failure is beyond the C2.1.1.4.4 closure criterion; partial source remains to be handled by follow-up plan/review. (`TO_type_system_rewrite-20260521T174852Z_m37603_t001`, `TO_type_system_rewrite-20260521T174852Z_m37613_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m37593_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37603_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37613_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0667`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 60,030 tok (59,632 in, 398 out, 50,688 cached), 7.7s, $0.08200400
+- next: Review C2.1.1.5 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.8).
+
+### Attempts / Evidence
+
+- `E0645` (progressed, other, actual effort: 1 sessions, 4 msgs, 38 steps, 43 tools, 12 holbuild, 4,231,033 tok (4,217,177 in, 13,856 out, 4,127,744 cached), 469.2s, $2.92671700)
+  - Replace `imp_res_tac get_Value_state >> gvs[]` and broad `Cases_on v1 >> Cases_on v2 >> gvs[...]` in Iterator_Range success tail with targeted state substitutions, `tv = Value v` facts, and `int_typed_value_is_IntV`. -> Moved from 81-constructor-case timeout to small focused goals; later failure was no longer broad simplification but a missing second endpoint typedness/projection and branch handling. (`TO_type_system_rewrite-20260521T174852Z_m37631_t001`, `TO_type_system_rewrite-20260521T174852Z_m37636_t001`, `TO_type_system_rewrite-20260521T174852Z_m37637_t001`)
+  - Explicitly instantiate second endpoint IH with `qpat_x_assum !env' st' res st''. _ (qspecl_then ...)`, then apply `well_typed_expr env e'` before destructing `expr2_res`. -> Supplied `value_has_type tv (IntV i2)` for the second endpoint; build advanced to the range-success/false branch no-TypeError handling. (`TO_type_system_rewrite-20260521T174852Z_m37640_t001`, `TO_type_system_rewrite-20260521T174852Z_m37641_t001`, `TO_type_system_rewrite-20260521T174852Z_m37642_t001`)
+  - Split the `i1 <= i2` case inside the range-success branch and use `range_values_well_typed` only in the true branch; tried several inline false-branch closures. -> True branch shape is essentially solved; repeated failures show the false branch remained outside the intended case-split tactical structure. Last unverified edit parenthesizes the case split and appends an explicit no-TypeError proof. (`TO_type_system_rewrite-20260521T174852Z_m37648_t001`, `TO_type_system_rewrite-20260521T174852Z_m37654_t001`, `TO_type_system_rewrite-20260521T174852Z_m37661_t001`, `TO_type_system_rewrite-20260521T174852Z_m37663_t001`, `TO_type_system_rewrite-20260521T174852Z_m37666_t001`)
+- `E0646` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 62 steps, 63 tools, 28 holbuild, 5,222,039 tok (5,201,410 in, 20,629 out, 5,094,400 cached), 772.2s, $3.70112000)
+  - Changed helper application from wrong-state `st'`/`st3` attempts to `drule_all`, `irule`, `metis_tac`, and explicit `qspecl_then` forms. -> All variants either failed to match/discharge antecedents or leaked an implication into the sibling INR branch; latest evidence shows the helper implication remains in the post-branch goal. (`TO_type_system_rewrite-20260521T174852Z_m37741_t001`, `TO_type_system_rewrite-20260521T174852Z_m37743_t001`, `TO_type_system_rewrite-20260521T174852Z_m37745_t001`, `TO_type_system_rewrite-20260521T174852Z_m37747_t001`, `TO_type_system_rewrite-20260521T174852Z_m37796_t001`)
+  - Tried proving the range-success tail inline using `no_type_error_result_def`, `range_values_well_typed`, and case analysis on `i1 <= i2` after targeted endpoint extraction. -> The no-TypeError conjunct is easy, but `range_values_well_typed` does not match cleanly in the live conjunctive goal; variants failed with branch-close/leaked subgoal problems rather than semantic counterexample. (`TO_type_system_rewrite-20260521T174852Z_m37757_t001`, `TO_type_system_rewrite-20260521T174852Z_m37761_t001`, `TO_type_system_rewrite-20260521T174852Z_m37770_t001`, `TO_type_system_rewrite-20260521T174852Z_m37783_t001`)
+  - Inserted `FAIL_TAC` probes to inspect the exact post-endpoint-extraction goal and EVERY subgoal. -> Confirmed the intended semantic assumptions are present and the goal is exactly the tail postcondition; the blocker is proof-interface/branch-structure brittleness, not missing endpoint typing. (`TO_type_system_rewrite-20260521T174852Z_m37759_t001`, `TO_type_system_rewrite-20260521T174852Z_m37764_t001`)
+- `E0656` (proved, , actual effort: 1 sessions, 1 steps, 78,448 tok (78,082 in, 366 out, 69,120 cached), 7.6s, $0.09035000)
+  - Carry-forward bookkeeping leaf retained to preserve external dependency compatibility for completed Iterator_Range repair; no source edits/builds performed for this component. -> Accepted prior closed Iterator_Range helper/refactor evidence as carried progress, matching PLAN instruction for C2.1.1.5. (`TO_type_system_rewrite-20260521T174852Z_m38054_t001`, `TO_type_system_rewrite-20260521T174852Z_m38007_t001`)
+- `E0667` (proved, , actual effort: 1 sessions, 1 steps, 60,030 tok (59,632 in, 398 out, 50,688 cached), 7.7s, $0.08200400)
+  - Carry-forward bookkeeping leaf for completed Iterator_Range repair; no source edits/builds performed under this active component, per PLAN. -> Accepted prior Iterator_Range helper/refactor/build evidence as carried progress preserving the externally referenced C2.1.1.5 dependency ID. (`TO_type_system_rewrite-20260521T174852Z_m38054_t001`, `TO_type_system_rewrite-20260521T174852Z_m38007_t001`)
+
+### Ruled Out
+
+- No source edit/build is required for this carried-evidence node.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38054_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38007_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37939_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38006_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0647`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 290,879 tok (289,752 in, 1,127 out, 275,968 cached), 64.5s, $0.24071400
+
+### Attempts / Evidence
+
+- `E0647` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 290,879 tok (289,752 in, 1,127 out, 275,968 cached), 64.5s, $0.24071400)
+  - Replaced brittle `drule iterator_range_tail_sound >> ... >> qexists_tac` in `iterator_range_tail_eval_sound` INL branch with direct `qspecl_then [`tyv`,`i1`,`i2`,`rl`,`st`] mp_tac iterator_range_tail_sound >> simp[]`. -> `holbuild vyperTypeStmtSoundnessTheory` advanced past theorem `iterator_range_tail_eval_sound` and now fails later in `Resume eval_all_type_sound_mutual[Iterator_Range]`, confirming the whole-tail helper builds. (`TO_type_system_rewrite-20260521T174852Z_m37812_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m37812_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.5.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `tool_limit` Tried the requested targeted first-endpoint get_Value INR branch normalization without unfolding expression typing first. Broad simplification still times out even after stripping the final evaluator implication, and rewriting the final case equation with the live get_Value equation did not expose res/st'. The source remains partially edited in the first-endpoint INR branch around lines 5750-5760.
+- latest episode: `E0649`
+- blocker: Inline targeted simplification of the first get_Value error tail is still too brittle/slow. A small local helper for the get_Value error tail may be needed, or the branch needs a more precise conversion/rewrite interface.
+- actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 4 holbuild, 514,523 tok (510,570 in, 3,953 out, 483,328 cached), 125.1s, $0.49646400
+- next: Ask plan_oracle whether to factor a small local get_Value-error-tail helper inside C2.1.1.5.2, or for a precise bounded rewrite tactic for the current source range.
+
+### Attempts / Evidence
+
+- `E0648` (progressed, tool_limit, actual effort: 1 sessions, 5 msgs, 64 steps, 68 tools, 25 holbuild, 6,613,500 tok (6,595,556 in, 17,944 out, 6,482,944 cached), 704.2s, $4.34285200)
+  - Replaced old outer `Cases_on range_res` success/error block in `Iterator_Range` with endpoint extraction followed by one `iterator_range_tail_eval_sound` call and a bounded proof of its tail-equation antecedent. -> Build advanced through the helper call and into later sibling branches, showing the whole-tail helper is usable in the Resume; see subsequent failures no longer at the range-res split. (`TO_type_system_rewrite-20260521T174852Z_m37874_t001`)
+  - Tried to let the first-endpoint `get_Value` INR branch continue with existing `imp_res_tac get_Value_state >> gvs[]`/typing unfold style. -> The broad `gvs[]` and then `gvs[expr_result_typed_def, expr_runtime_typed_def]` are too expensive or mis-focused; latest build times out with a goal whose direct structure is just the evaluator tail for a failed `get_Value`. (`TO_type_system_rewrite-20260521T174852Z_m37877_t001`)
+- `E0649` (progressed, tool_limit, actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 4 holbuild, 514,523 tok (510,570 in, 3,953 out, 483,328 cached), 125.1s, $0.49646400)
+  - After get_Value_state substitution, changed branch to `strip_tac >> gvs[return_def, raise_def, no_type_error_result_def]` before typing facts. -> Timed out at the control-flow simplification step; even return/raise/no_type_error simplification is too broad in the large context. (`TO_type_system_rewrite-20260521T174852Z_m37886_t001`)
+  - Changed branch to move the final evaluator equation to the goal and `simp[]` it after stripping the implication. -> Timed out at `simp[]` on the final case-expression equation; the simplifier sees too much context. (`TO_type_system_rewrite-20260521T174852Z_m37888_t001`)
+  - Changed branch to rewrite the final evaluator equation with the live `get_Value tv1 st1 = (INR y,st1)` fact using `rewrite_tac [th]`. -> The rewrite did not expose `res = INR y`/`st' = st1`; subsequent `gvs[no_type_error_result_def]` still timed out on the unchanged large tail equation. (`TO_type_system_rewrite-20260521T174852Z_m37890_t001`)
+
+### Ruled Out
+
+- broad gvs[] on the branch
+- simp[] over the full final case equation
+- rewrite_tac [get_Value equation] alone
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m37886_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37888_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37890_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.5.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0650`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 1 holbuild, 526,990 tok (525,209 in, 1,781 out, 509,952 cached), 74.7s, $0.38469100
+
+### Attempts / Evidence
+
+- `E0650` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 1 holbuild, 526,990 tok (525,209 in, 1,781 out, 509,952 cached), 74.7s, $0.38469100)
+  - Inserted local helper lemmas `iterator_range_first_get_value_error_eq` and `int_expr_get_Value_INR_no_type_error` near `iterator_range_tail_eval_sound`. -> `holbuild` replayed past the helper block and failed later in the Iterator_Range Resume, showing the new helper lemmas parsed and proved successfully. (`TO_type_system_rewrite-20260521T174852Z_m37900_t001`, `TO_type_system_rewrite-20260521T174852Z_m37901_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m37900_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37901_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.5.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0652`
+- blocker: 
+- actual effort: 1 sessions, 5 msgs, 73 steps, 73 tools, 34 holbuild, 6,965,281 tok (6,940,412 in, 24,869 out, 6,814,208 cached), 1015.8s, $4.78419400
+
+### Attempts / Evidence
+
+- `E0651` (progressed, tool_limit, actual effort: 1 sessions, 3 msgs, 28 steps, 29 tools, 9 holbuild, 3,281,357 tok (3,271,410 in, 9,947 out, 3,206,144 cached), 328.0s, $2.22781200)
+  - Replaced the first-endpoint `get_Value tv1` INR branch with `drule_all iterator_range_first_get_value_error_eq`, explicit substitution of `res`/`st'`, unpacking the first-expression IH, and applying `int_expr_get_Value_INR_no_type_error`. -> Initial integration exposed small proof-shape issues: broad `gvs[]` after helper facts timed out, then witness ordering for the existential generated by `irule` was wrong, then the `expr_result_typed env e tv1` assumption needed targeted `sum_case_def` simplification. (`TO_type_system_rewrite-20260521T174852Z_m37907_t001`, `TO_type_system_rewrite-20260521T174852Z_m37911_t001`, `TO_type_system_rewrite-20260521T174852Z_m37913_t001`)
+  - Finished the first-endpoint `get_Value tv1` INR branch by explicit substitutions, `rpt conj_tac`, `irule int_expr_get_Value_INR_no_type_error`, correctly ordered existential witnesses, and targeted `simp[sum_case_def]` on the saved `case INL tv1` typedness fact. -> Holbuild advanced past the whole first `expr1_res = INL tv1` branch, showing the helper integration works for the intended branch. (`TO_type_system_rewrite-20260521T174852Z_m37924_t001`)
+  - Started the remaining outer `expr1_res = INR y` branch by stripping the final evaluator equation and trying to simplify `(case (INR y,st1) of ...)` with `simp[sum_case_def]`. -> This direct simplification timed out, indicating this outer expression-error branch needs the same small control-flow-helper treatment or a more precise rewrite, not broad simplification in the Resume. (`TO_type_system_rewrite-20260521T174852Z_m37928_t001`)
+- `E0652` (proved, , actual effort: 1 sessions, 5 msgs, 73 steps, 73 tools, 34 holbuild, 6,965,281 tok (6,940,412 in, 24,869 out, 6,814,208 cached), 1015.8s, $4.78419400)
+  - Added local pure control-flow helper `iterator_range_expr_error_eq` for the outer `eval_expr cx e st = (INR y,st1)` Iterator_Range error tail, then replaced broad tail simplification in the Resume with helper extraction/substitution and targeted finishing from first-expression IH facts. -> `holbuild` advanced past `Resume eval_all_type_sound_mutual[Iterator_Range]`; the next failure is in `Resume eval_all_type_sound_mutual[BaseTarget_Subscript]` at line ~5983, outside this component's Iterator_Range scope. (`TO_type_system_rewrite-20260521T174852Z_m38007_t001`)
+
+### Ruled Out
+
+- No need to reopen `iterator_range_tail_eval_sound`; latest build reached a later Resume.
+- Broad simplification of the outer Iterator_Range error tail was replaced by the local helper boundary.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38007_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37939_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38006_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0653`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 7 holbuild, 995,136 tok (991,288 in, 3,848 out, 961,024 cached), 186.9s, $0.74727200
+- next: Review closure with strategist; the next exposed holbuild failure is later in `Resume eval_all_type_sound_mutual[Expr_Name]` at `drule_all well_typed_Name_lookup`.
+
+### Attempts / Evidence
+
+- `E0653` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 7 holbuild, 995,136 tok (991,288 in, 3,848 out, 961,024 cached), 186.9s, $0.74727200)
+  - Refactored `BaseTarget_Subscript`: split `bt_res`; success branch now starts with `PairCases_on x >> simp[bind_def]` instead of broad `gvs`; error branch explicitly normalizes the propagated `(INR y,st1)` tail and substitutes `res`/`st'` before a small `simp[no_type_error_result_def]`. -> `holbuild` advanced past `Resume eval_all_type_sound_mutual[BaseTarget_Subscript]` and now fails later at `Expr_Name`, so this component's targeted timeout is resolved. (`TO_type_system_rewrite-20260521T174852Z_m38030_t001`)
+  - Intermediate attempt replaced old broad post-`bt_res` simplification with branch-local simplification; build exposed only the propagated error branch timeout, confirming the success branch advanced. -> Localized remaining BaseTarget_Subscript issue to the `INR` propagation branch tail instead of the original combined split timeout. (`TO_type_system_rewrite-20260521T174852Z_m38024_t001`, `TO_type_system_rewrite-20260521T174852Z_m38028_t001`)
+
+### Ruled Out
+
+- The original `Cases_on bt_res >> gvs[no_type_error_result_def, return_def]` broad simplification timeout is gone.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38030_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38028_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38024_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0654`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 228,126 tok (226,941 in, 1,185 out, 219,648 cached), 30.0s, $0.18183900
+- next: Review closure with strategist; next exposed holbuild failure is `Expr_BareGlobalName` at `drule_all bare_global_lookup_sound`, likely same proof-order pattern.
+
+### Attempts / Evidence
+
+- `E0654` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 228,126 tok (226,941 in, 1,185 out, 219,648 cached), 30.0s, $0.18183900)
+  - Refactored `Resume eval_all_type_sound_mutual[Expr_Name]` by splitting the mutual expression/place-expression conjunct after evaluator simplification. Ordinary branch strips `well_typed_expr` before applying `well_typed_Name_lookup`; place branch closes by rewriting `well_typed_expr_def`. -> `holbuild` advances past `Expr_Name` and now fails later at `Expr_BareGlobalName`, so the planned local proof-order fix is complete. (`TO_type_system_rewrite-20260521T174852Z_m38037_t001`)
+
+### Ruled Out
+
+- The old linear `strip_tac >> gvs[] >> drule_all well_typed_Name_lookup` failure is gone; theorem application now occurs after stripping the needed antecedent.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38037_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.8
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0668`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 67,527 tok (67,137 in, 390 out, 61,952 cached), 7.0s, $0.06860100
+- next: Review C2.1.1.8 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.9).
+
+### Attempts / Evidence
+
+- `E0657` (proved, , actual effort: 1 sessions, 12 steps, 13 tools, 5 holbuild, 1,077,105 tok (1,073,410 in, 3,695 out, 1,053,696 cached), 131.1s, $0.73626800)
+  - Refactored `Resume eval_all_type_sound_mutual[Expr_BareGlobalName]` to move the `eval_expr` equation first, simplify the BareGlobalName evaluator path, split the ordinary projection, strip `well_typed_expr env (BareGlobalName body id)`, then call `drule_all bare_global_lookup_sound`. -> Original holbuild failure at premature `drule_all bare_global_lookup_sound` was eliminated; after a small tail-equation normalization and focused finishing, holbuild advanced past Expr_BareGlobalName to the next branch `Expr_TopLevelName`, outside this component. (`TO_type_system_rewrite-20260521T174852Z_m38058_t001`, `TO_type_system_rewrite-20260521T174852Z_m38061_t001`, `TO_type_system_rewrite-20260521T174852Z_m38068_t001`)
+  - Replaced broad final `metis_tac[]` over the still-opaque evaluator tail with targeted `mp_tac` on the case equation, `simp[return_def, raise_def]`, and then a final focused simplification/Metis step. -> Closed the ordinary BareGlobalName branch and the vacuous projection branch; next build failure is the analogous proof-order issue in `Expr_TopLevelName`. (`TO_type_system_rewrite-20260521T174852Z_m38062_t001`, `TO_type_system_rewrite-20260521T174852Z_m38068_t001`)
+- `E0668` (proved, , actual effort: 1 sessions, 1 steps, 67,527 tok (67,137 in, 390 out, 61,952 cached), 7.0s, $0.06860100)
+  - Carry-forward bookkeeping leaf for completed Expr_BareGlobalName repair; no source edits/builds performed under this active component, per PLAN. -> Accepted prior Expr_BareGlobalName split/strip proof-order repair evidence as carried progress; prior holbuild advanced to Expr_TopLevelName outside this component. (`TO_type_system_rewrite-20260521T174852Z_m38058_t001`, `TO_type_system_rewrite-20260521T174852Z_m38068_t001`)
+
+### Ruled Out
+
+- No source edit/build is required for this carried-evidence node.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38058_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38061_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38068_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.9
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0669`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 75,991 tok (75,684 in, 307 out, 70,144 cached), 7.1s, $0.07198200
+- next: Review C2.1.1.9 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.10).
+
+### Attempts / Evidence
+
+- `E0658` (progressed, plan_incomplete, actual effort: 1 sessions, 2 msgs, 19 steps, 34 tools, 3 holbuild, 2,235,936 tok (2,227,944 in, 7,992 out, 2,174,464 cached), 219.7s, $1.59439200)
+  - Changed `Expr_TopLevelName` Resume to match the BareGlobalName/Name split: move `eval_expr` equation, simplify `Once evaluate_def`, enter ordinary branch with `strip_tac`, use `lookup_global_state`, then `drule_all lookup_global_TopLevelName_sound`. -> Eliminated the original premature `drule_all lookup_global_TopLevelName_sound` failure, but QED exposed leftover goals in the second mutual projection because `TopLevelName` is a real place expression (`type_place_expr` can be SOME), unlike Name/BareGlobalName. (`TO_type_system_rewrite-20260521T174852Z_m38074_t001`, `TO_type_system_rewrite-20260521T174852Z_m38075_t001`)
+  - Added `imp_res_tac lookup_global_state >> gvs[well_typed_expr_def]` to the remaining projection branch. -> State preservation subgoal was reduced, but the branch still has goals such as `no_type_error_result res` under `type_place_expr env (TopLevelName vs (src_id_opt,id)) = SOME vt` (rendered as a `FLOOKUP env.toplevel_vtypes`/`vtype_annotation_ok` equation) and `lookup_global ... = (res,st)`. This requires place-branch reasoning, not just vacuity by definitions. (`TO_type_system_rewrite-20260521T174852Z_m38079_t001`, `TO_type_system_rewrite-20260521T174852Z_m38080_t001`, `TO_type_system_rewrite-20260521T174852Z_m38082_t001`)
+- `E0659` (proved, , actual effort: 1 sessions, 3 msgs, 46 steps, 54 tools, 14 holbuild, 3,809,711 tok (3,800,199 in, 9,512 out, 3,717,120 cached), 417.0s, $2.55931500)
+  - Added local TopLevelName place boundary helpers and repaired the `Expr_TopLevelName` Resume tail to use `lookup_global_TopLevelName_place_sound` after `lookup_global_state`. -> `vyperTypeStmtSoundnessTheory` now builds past `lookup_global_TopLevelName_place_sound` and `eval_all_type_sound_mutual[Expr_TopLevelName]`; holbuild exposes the next branch failure at `Expr_FlagMember`. (`TO_type_system_rewrite-20260521T174852Z_m38183_t001`)
+  - Fixed helper proof issues by deriving `env.type_defs = get_tenv cx`, handling bare-global Type case via `lookup_global_TopLevelName_sound`, and ruling out HashMapRef in Type place by unfolding `type_place_expr`. -> The helper compiled far enough for holbuild to resume into the TopLevelName mutual Resume, confirming the helper interface matches the place projection. (`TO_type_system_rewrite-20260521T174852Z_m38181_t001`)
+- `E0669` (proved, , actual effort: 1 sessions, 1 steps, 75,991 tok (75,684 in, 307 out, 70,144 cached), 7.1s, $0.07198200)
+  - Carry-forward bookkeeping leaf for completed Expr_TopLevelName repair; no source edits/builds performed under this active component, per PLAN. -> Accepted prior TopLevelName ordinary/place proof-order repair evidence as carried progress; prior holbuild advanced to Expr_FlagMember outside this component. (`TO_type_system_rewrite-20260521T174852Z_m38183_t001`, `TO_type_system_rewrite-20260521T174852Z_m38181_t001`)
+
+### Ruled Out
+
+- No source edit/build is required for this carried-evidence node.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m38183_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m38181_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.a
 
@@ -1930,16 +2872,446 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260513T175918Z_m0140_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260513T175918Z_m0142_t001` (use `read_tool_output` for exact output)
 
-## C2.2
+## C2.1a
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is no longer just replacing one metis with explicit cases. The expression case wants a reusable boundary lemma: under `env_consistent`, `state_well_typed`, and well-typed TopLevelName (`FLOOKUP env.toplevel_vtypes ... = SOME (Type vs)`), `lookup_global` either cannot return TypeError and, on success, returns a non-HashMapRef value with `toplevel_value_typed` for `evaluate_type env.type_defs vs`. Existing `toplevel_vtype_Type_immutable_sound` helps the NONE branch but not enough to keep the consumer goal small; storage branch still unattempted under the same oversized context.
+- latest episode: `E0580`
+- blocker: Inline explicit lookup_global case split for Expr_TopLevelName remains brittle/large and repeatedly times out or leaves nontrivial contradiction/typing subgoals; likely needs a local boundary lemma rather than continued consumer-level case splitting.
+- actual effort: 1 sessions, 3 msgs, 38 steps, 49 tools, 9 holbuild, 3,677,724 tok (3,665,523 in, 12,201 out, 3,571,712 cached), 427.0s, $2.62094100
+- next: Ask strategist to replace/decompose C2.1a around a local `lookup_global` TopLevelName no-TypeError/typed boundary lemma; do not keep iterating consumer-level `CASE_TAC`/`gvs`/`metis` chains.
+
+### Attempts / Evidence
+
+- `E0580` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 38 steps, 49 tools, 9 holbuild, 3,677,724 tok (3,665,523 in, 12,201 out, 3,571,712 cached), 427.0s, $2.62094100)
+  - Replaced FAIL_TAC probe with `rpt (CASE_TAC >> gvs[...])` followed by the old storage/immutable metis. -> Case split made progress but still left three large goals and the remaining metis timed out, confirming broad search remains the problem. (`TO_type_system_rewrite-20260521T174852Z_m35506_t001`)
+  - Tried stronger repeated case simplification including sum/type/toplevel case rators and AllCaseEqs. -> The repeated case/simplification tactic itself exceeded the 2.5s tactic timeout on the original >4KB goal. (`TO_type_system_rewrite-20260521T174852Z_m35509_t001`)
+  - Split first on `find_var_decl_by_num (string_to_num id) ts` and probed branch goals. -> Split produces four branch goals; even global `gvs[...]` after the split times out, so simplification must be branch-specific or factored. (`TO_type_system_rewrite-20260521T174852Z_m35513_t001`)
+  - Worked the NONE/immutable branch by destructing `get_immutables` and `FLOOKUP`, using `toplevel_vtype_Type_immutable_sound` for successful immutable value typing. -> Using wrong state in `get_immutables` initially left impossible branch and pair-split failures; switching to `s''` exposed an impossible `FLOOKUP NONE` branch whose contradiction via dummy `find_var_decl_by_num_NONE_id` metis timed out, indicating the current helper interface is inadequate and the consumer proof is still carrying too much context. (`TO_type_system_rewrite-20260521T174852Z_m35528_t001`, `TO_type_system_rewrite-20260521T174852Z_m35533_t001`)
+
+### Ruled Out
+
+- Monolithic broad metis after unfolding lookup_global
+- Unbounded `rpt CASE_TAC >> gvs[...]` over the whole post-unfolding goal
+- Continuing to patch the consumer proof without a smaller lookup_global interface
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35509_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35513_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35523_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35528_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35533_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.1
 
 ### Current Status
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0278`
+- latest episode: `E0593`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 109,993 tok (109,570 in, 423 out, 105,984 cached), 6.0s, $0.08361200
-- next: Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next.
+- actual effort: 1 sessions, 1 msgs, 14 steps, 16 tools, 5 holbuild, 1,185,940 tok (1,181,482 in, 4,458 out, 1,148,928 cached), 143.8s, $0.87097400
+
+### Attempts / Evidence
+
+- `E0581` (proved, , actual effort: 1 sessions, 1 steps, 1 tools, 1 holbuild, 56,026 tok (55,626 in, 400 out, 48,640 cached), 28.4s, $0.07125000)
+  - Proved the planned non-bare declaration-NONE contradiction using `drule_all env_consistent_toplevel_storage_static >> strip_tac >> gvs[]`. -> Probe theorem compiles; holbuild advances past the helper and the prior Targets_cons checkpoint to the known later Expr_TopLevelName missing-immutable branch. (`TO_type_system_rewrite-20260521T174852Z_m35545_t001`, `TO_type_system_rewrite-20260521T174852Z_m35545_t003`)
+- `E0593` (proved, , actual effort: 1 sessions, 1 msgs, 14 steps, 16 tools, 5 holbuild, 1,185,940 tok (1,181,482 in, 4,458 out, 1,148,928 cached), 143.8s, $0.87097400)
+  - Inserted a no-TypeError-only helper that unfolds the declaration-NONE `lookup_global` branch, splits `get_immutables`, closes the missing-immutable INL branch by `TopLevelName_missing_immutable_impossible`, and closes the INR branch by `get_immutables_no_type_error`. -> After correcting the impossibility lemma instantiation to use the post-`get_immutables` state `r`, holbuild advanced past the helper to the known old combined theorem failure. (`TO_type_system_rewrite-20260521T174852Z_m35954_t001`, `TO_type_system_rewrite-20260521T174852Z_m35962_t001`, `TO_type_system_rewrite-20260521T174852Z_m35964_t001`)
+
+### Ruled Out
+
+- Proving success typing in the no-TypeError helper
+- Using `TopLevelName_missing_immutable_impossible` with the original state `st` after `get_immutables` had returned state `r`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35964_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35953_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35963_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0594`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 14 steps, 19 tools, 4 holbuild, 1,547,899 tok (1,542,445 in, 5,454 out, 1,508,352 cached), 149.3s, $1.08826100
+
+### Attempts / Evidence
+
+- `E0582` (proved, , actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 204,697 tok (203,730 in, 967 out, 192,000 cached), 100.0s, $0.18366000)
+  - Added the exact planned current-source bare-global immutable-existence probe and proved it via the existing boundary theorem `metis_tac[env_consistent_bare_global_ready]`. -> The local proof is accepted during holbuild replay; build proceeds from the insertion point to a later `Targets_cons` timeout unrelated to the probe statement. (`TO_type_system_rewrite-20260521T174852Z_m35550_t001`, `TO_type_system_rewrite-20260521T174852Z_m35551_t001`)
+- `E0594` (proved, , actual effort: 1 sessions, 1 msgs, 14 steps, 19 tools, 4 holbuild, 1,547,899 tok (1,542,445 in, 5,454 out, 1,508,352 cached), 149.3s, $1.08826100)
+  - Inserted the success-only declaration-NONE helper. It unfolds only the no-declaration branch, splits `get_immutables` and immutable map lookup; missing entry is impossible via `TopLevelName_missing_immutable_impossible`, INR contradicts the INL result, and SOME case proves `expr_result_typed` via `expr_runtime_typed_def`, `toplevel_value_typed_Value`, env immutable type clause, and `imms_well_typed_get_source_immutables`. -> After replacing a slow `metis_tac` over `env_immutables_consistent_def` with targeted specialization and pair-splitting `x'`, holbuild advances past the helper to the known old combined theorem failure. (`TO_type_system_rewrite-20260521T174852Z_m35974_t001`, `TO_type_system_rewrite-20260521T174852Z_m35978_t001`, `TO_type_system_rewrite-20260521T174852Z_m35981_t001`)
+
+### Ruled Out
+
+- Using broad `metis_tac[pairTheory.PAIR]` after unfolding `env_immutables_consistent_def`; it timed out under the tactic limit. Targeted specialization of the toplevel_vtypes clause is the robust path.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35981_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35973_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m35980_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 component statement appears too strong for current interfaces: after inserting `TopLevelName_storage_decl_context`, the proof closes the `FLOOKUP env.bare_globals (src,string_to_num id) = NONE` branch via `env_consistent_toplevel_storage_static`, but the `SOME x` bare-global branch remains. Current `env_context_consistent_def` permits a bare-global entry to coexist with `FLOOKUP env.toplevel_vtypes ... = SOME (Type ty)` and only supplies `is_immutable_decl`; no existing uniqueness/static-code lemma excludes a concrete `StorageVarDecl` with the same numeric id or supplies `lookup_var_slot_from_layout` for that branch. This contradicts the PLAN expectation that the side condition would be mechanically discharged.
+- latest episode: `E0596`
+- blocker: Need strategist decision: weaken C2.1a.3 to a non-bare storage branch, add/export a static uniqueness invariant, or use `env_immutables_consistent_def` only for `typ = ty` and avoid requiring slot witnesses for bare globals.
+- actual effort: 1 sessions, 2 msgs, 25 steps, 37 tools, 4 holbuild, 1,885,303 tok (1,873,636 in, 11,667 out, 1,814,016 cached), 312.6s, $1.55511800
+- next: Call `plan_oracle(mode="review", component_id="C2.1a.3")` with this evidence before further edits.
+
+### Attempts / Evidence
+
+- `E0583` (proved, , actual effort: 1 sessions, 1 msgs, 24 steps, 24 tools, 10 holbuild, 2,074,104 tok (2,066,628 in, 7,476 out, 2,026,496 cached), 340.3s, $1.43818800)
+  - Proved characterization by extracting the Type top-level entry from `well_typed_expr_def`, proving the first conjunct via `TopLevelName_nonbare_find_NONE_contradiction`, and proving `src <> env.current_src` by contradiction using `TopLevelName_current_bare_global_immutable_exists` after a current-source bare-global split. -> The local theorem was accepted; the next build failure is the known unrelated `Targets_cons` `Cases_on tys >> gvs[]` timeout after theorem-context replay. (`TO_type_system_rewrite-20260521T174852Z_m35577_t001`)
+- `E0595` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 24 steps, 36 tools, 4 holbuild, 1,793,056 tok (1,782,468 in, 10,588 out, 1,725,440 cached), 289.5s, $1.46550000)
+  - Added `TopLevelName_storage_decl_context` with proof deriving `FLOOKUP env.toplevel_vtypes ... = SOME (Type ty)` from `well_typed_expr_def`, split on `FLOOKUP env.bare_globals ...`, and used `env_consistent_toplevel_storage_static` in the NONE branch. -> NONE branch closes; SOME branch remains with bare-global entry and concrete StorageVarDecl, showing the planned theorem needs an additional interface fact or a weaker statement. (`TO_type_system_rewrite-20260521T174852Z_m36007_t001`, `TO_type_system_rewrite-20260521T174852Z_m36014_t001`)
+- `E0596` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 25 steps, 37 tools, 4 holbuild, 1,885,303 tok (1,873,636 in, 11,667 out, 1,814,016 cached), 312.6s, $1.55511800)
+  - Inserted planned local theorem and derived `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` from `well_typed_expr_def`; split on `FLOOKUP env.bare_globals` and used `env_consistent_toplevel_storage_static` in the NONE branch. -> The NONE/non-bare storage branch closes, but the SOME/bare-global branch remains with goal `typ = ty` and later missing `IS_SOME lookup_var_slot_from_layout`; current exported static lemma cannot apply because it requires `FLOOKUP env.bare_globals ... = NONE`. (`TO_type_system_rewrite-20260521T174852Z_m36007_t001`, `TO_type_system_rewrite-20260521T174852Z_m36014_t001`)
+  - Searched source for a contradiction/uniqueness lemma connecting `is_immutable_decl` with `find_var_decl_by_num ... = SOME (StorageVarDecl ...)` or excluding duplicate numeric ids. -> No such lemma found; definitions of `is_immutable_decl` and `find_var_decl_by_num` scan independently and current consistency assumptions do not expose a uniqueness condition. (`TO_type_system_rewrite-20260521T174852Z_m36003_t001`, `TO_type_system_rewrite-20260521T174852Z_m36003_t002`, `TO_type_system_rewrite-20260521T174852Z_m36012_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36007_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36014_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36015_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0598`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 453,074 tok (452,216 in, 858 out, 442,368 cached), 31.4s, $0.29616400
+
+### Attempts / Evidence
+
+- `E0598` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 453,074 tok (452,216 in, 858 out, 442,368 cached), 31.4s, $0.29616400)
+  - Edited the local helper block to state `TopLevelName_nonbare_storage_decl_context` with a non-bare premise; proof derives the TopLevelName `FLOOKUP env.toplevel_vtypes` fact from `well_typed_expr_def`, then applies `env_consistent_toplevel_storage_static` and simplifies against the concrete module/declaration assumptions. -> The theorem was accepted by holbuild; next failure is downstream old wrapper, not this component. (`TO_type_system_rewrite-20260521T174852Z_m36027_t001`, `TO_type_system_rewrite-20260521T174852Z_m36028_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36027_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36028_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0599`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 367,581 tok (366,364 in, 1,217 out, 357,888 cached), 33.1s, $0.25783400
+
+### Attempts / Evidence
+
+- `E0599` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 367,581 tok (366,364 in, 1,217 out, 357,888 cached), 33.1s, $0.25783400)
+  - Inserted `TopLevelName_storage_decl_type_eq`; proof derives `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` from `well_typed_expr_def`, unfolds `env_consistent_def` and `env_immutables_consistent_def`, specializes the toplevel Type/storage-declaration clause, then specializes its storage subclause with `is_transient`, `typ`, and `id_str`. -> The theorem was accepted by holbuild; next failure is the known downstream wrapper, not this component. (`TO_type_system_rewrite-20260521T174852Z_m36032_t001`, `TO_type_system_rewrite-20260521T174852Z_m36033_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36032_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36033_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0600`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 104,852 tok (104,354 in, 498 out, 97,280 cached), 17.4s, $0.09895000
+
+### Attempts / Evidence
+
+- `E0600` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 104,852 tok (104,354 in, 498 out, 97,280 cached), 17.4s, $0.09895000)
+  - Audited local helper references with grep for old and new TopLevelName storage-context names. -> No occurrences of invalid old `TopLevelName_storage_decl_context`; only new branch-correct helpers `TopLevelName_nonbare_storage_decl_context` and `TopLevelName_storage_decl_type_eq` remain in the source. (`TO_type_system_rewrite-20260521T174852Z_m36043_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` to check replay boundary after helper refactor. -> Build resumes at the known stale `lookup_global_TopLevelName_sound` wrapper failure after the new helper block; failure is in later no-TypeError wrapper branch and not a consumer of the old storage-context helper. (`TO_type_system_rewrite-20260521T174852Z_m36044_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36043_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36044_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0601`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 8 tools, 1 holbuild, 337,685 tok (335,853 in, 1,832 out, 316,928 cached), 43.8s, $0.30804900
+
+### Attempts / Evidence
+
+- `E0584` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 18 tools, 3 holbuild, 1,005,953 tok (1,000,485 in, 5,468 out, 958,976 cached), 326.2s, $0.85107300)
+  - First tried the PLAN-suggested evaluator theorem using the case expression `case ALOOKUP ... of NONE => [] | SOME m => m` as the immutable-map assumption and direct rewriting of `evaluate_def`, `lookup_global_def`, `get_immutables_def`, `get_address_immutables_def`, `bind_def`, `lift_option_type_def`, `lift_option_def`, `return_def`, `raise_def`. -> holbuild exposed that the ALOOKUP NONE subcase has goal F: the branch raises `RuntimeError "get_address_immutables"`, not the expected TypeError over empty immutables. (`TO_type_system_rewrite-20260521T174852Z_m35600_t001`)
+  - Split the computation probe into two local theorems: `TopLevelName_missing_address_immutables_RuntimeError` for `ALOOKUP ... = NONE`, and `TopLevelName_missing_immutable_branch_TypeError` for `ALOOKUP ... = SOME imms` plus `FLOOKUP (get_source_immutables src imms) ... = NONE`. Both use only direct definition rewriting, no induction or env typing facts. -> holbuild accepted the local probes; subsequent failure is the known unrelated `Targets_cons` timeout after these theorems. (`TO_type_system_rewrite-20260521T174852Z_m35604_t001`, `TO_type_system_rewrite-20260521T174852Z_m35605_t001`)
+- `E0601` (proved, , actual effort: 1 sessions, 5 steps, 8 tools, 1 holbuild, 337,685 tok (335,853 in, 1,832 out, 316,928 cached), 43.8s, $0.30804900)
+  - Inserted local boundary lemma `lookup_global_StorageVarDecl_no_type_error` with explicit concrete module declaration, layout slot, evaluated runtime type, and lookup result premises; proof unfolds `lookup_global_def`, splits runtime type, and uses `read_storage_slot_error` for read branches. -> Source updated with the planned generic storage-declaration no-TypeError helper. (`TO_type_system_rewrite-20260521T174852Z_m36051_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` after adding the helper. -> Build replayed past the new helper and failed later at the known stale `lookup_global_TopLevelName_sound` immutable-wrapper branch, so C2.1a.4 helper is accepted by HOL. (`TO_type_system_rewrite-20260521T174852Z_m36052_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36051_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36052_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0603`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 30 steps, 32 tools, 11 holbuild, 3,320,295 tok (3,311,021 in, 9,274 out, 3,255,808 cached), 312.1s, $2.18218900
+
+### Attempts / Evidence
+
+- `E0585` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 12 tools, 3 holbuild, 986,782 tok (983,151 in, 3,631 out, 956,928 cached), 170.8s, $0.71850900)
+  - Inspected `env_immutables_consistent_def`, `env_context_consistent_def`, `well_typed_expr_def`, and `functions_well_typed_def` to test the exact proposed theorem `IS_SOME (ALOOKUP st.immutables cx.txn.target)`. The definitions only use the case-expression map and do not force address-map existence. -> The exact address-exists statement is not supported by current invariants. The relevant definitions allow the ALOOKUP-NONE branch to be classified only through the existing missing-immutable characterization, yielding non-current bare-global residual assumptions. (`TO_type_system_rewrite-20260521T174852Z_m35610_t001`, `TO_type_system_rewrite-20260521T174852Z_m35611_t002`)
+  - Proved a local contradiction/classification theorem by deriving `~IS_SOME (FLOOKUP (get_source_immutables src (case ALOOKUP ... of NONE => [] | SOME m => m)) n)` from `ALOOKUP ... = NONE` and applying `TopLevelName_missing_immutable_branch_characterisation`. -> holbuild accepted `TopLevelName_missing_address_immutables_characterisation`; the subsequent `Targets_cons` timeout is outside this component. (`TO_type_system_rewrite-20260521T174852Z_m35612_t001`, `TO_type_system_rewrite-20260521T174852Z_m35617_t001`)
+  - A first attempt used `irule`/`drule_all` directly on `TopLevelName_missing_immutable_branch_characterisation` before asserting the missing-source-immutable premise explicitly. -> The direct theorem application failed because the missing-source-immutable premise was not yet present in the goal; adding it as an intermediate fact fixed the probe. (`TO_type_system_rewrite-20260521T174852Z_m35613_t001`)
+- `E0603` (proved, , actual effort: 1 sessions, 2 msgs, 30 steps, 32 tools, 11 holbuild, 3,320,295 tok (3,311,021 in, 9,274 out, 3,255,808 cached), 312.1s, $2.18218900)
+  - Added local theorem `lookup_global_TopLevelName_storage_success_typed` for successful `StorageVarDecl` lookups. It derives storage declaration type equality, rewrites env type defs, unfolds the storage branch of `lookup_global_def`, splits slot/evaluate_type/runtime type, and proves the resulting `expr_result_typed` goals using `read_storage_slot_success_type` plus `evaluate_type_well_formed_type_value`; the ArrayTV case is direct from the returned `ArrayRef`. -> The source now contains the planned success-only storage declaration typing helper. (`TO_type_system_rewrite-20260521T174852Z_m36064_t001`)
+  - Iterated proof based on holbuild goal states, replacing brittle existential witnesses with branch-local read-storage typing facts, then rebuilt `vyperTypeStmtSoundnessTheory`. -> holbuild replayed past `lookup_global_TopLevelName_storage_success_typed` and failed only later at the known stale monolithic `lookup_global_TopLevelName_sound` proof, confirming the new helper theorem is accepted by HOL. (`TO_type_system_rewrite-20260521T174852Z_m36089_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36064_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36089_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0604`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 8 tools, 2 holbuild, 343,786 tok (342,588 in, 1,198 out, 322,560 cached), 41.3s, $0.29736000
+- next: Request strategist review, then proceed only to scheduled C2.1a.7 projection/wrapper component if accepted.
+
+### Attempts / Evidence
+
+- `E0586` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 607,730 tok (605,400 in, 2,330 out, 594,432 cached), 137.2s, $0.42195600)
+  - Attempted the planned missing-source-immutable impossibility direction by adding a local contradiction/classification theorem under `ALOOKUP ... = SOME imms` and `FLOOKUP (get_source_immutables src imms) n = NONE`, then applying `TopLevelName_missing_immutable_branch_characterisation`. -> The exact readiness theorem is not available from current invariants; the first version with `rpt strip_tac` split the conjunctive conclusion and exposed the residual `FLOOKUP env.bare_globals ... = NONE` subgoal, showing the needed result is a classification rather than impossibility. (`TO_type_system_rewrite-20260521T174852Z_m35622_t001`)
+  - Changed proof structure to keep the conjunctive conclusion intact (`rpt gen_tac >> strip_tac`), asserted the missing-source-immutable premise in the case-expression form, and used `drule_all TopLevelName_missing_immutable_branch_characterisation`. -> holbuild accepted `TopLevelName_missing_source_immutable_characterisation`; the following failure is the known unrelated `Targets_cons` timeout. (`TO_type_system_rewrite-20260521T174852Z_m35621_t001`, `TO_type_system_rewrite-20260521T174852Z_m35624_t001`)
+- `E0604` (proved, , actual effort: 1 sessions, 6 steps, 8 tools, 2 holbuild, 343,786 tok (342,588 in, 1,198 out, 322,560 cached), 41.3s, $0.29736000)
+  - Added local theorem TopLevelName_Type_HashMapVarDecl_impossible before lookup_global_TopLevelName_sound; proof derives toplevel_vtypes Type lookup from well_typed_expr_def, builds runtime_consistent from standard assumptions via runtime_consistent_def, then closes by top_level_Type_not_hashmap_decl. -> holbuild accepted the new C2.1a.6 theorem and advanced to the known stale lookup_global_TopLevelName_sound failure, so the component obligation is discharged. (`TO_type_system_rewrite-20260521T174852Z_m36102_t001`, `TO_type_system_rewrite-20260521T174852Z_m36103_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36102_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36103_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.7
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` C2.1a.7 was rated Risk 2 but the projection proof exposes the same bare-global/storage-layout gap from E0596 in the no-TypeError projection. Existing invariants give Type-vs-hashmap contradiction and storage typ=ty, but not lookup_var_slot_from_layout success when FLOOKUP env.bare_globals (src,string_to_num id) = SOME x and find_var_decl_by_num returns StorageVarDecl.
+- latest episode: `E0606`
+- blocker: Need strategist repair: either add a valid invariant/branch helper excluding or handling bare_globals SOME plus StorageVarDecl for TopLevelName lookup_global no-TypeError, weaken/route the projection through a different theorem, or authorize a counterexample/probe if the current wrapper is false under current assumptions.
+- actual effort: 1 sessions, 2 msgs, 34 steps, 35 tools, 1 holbuild, 2,987,621 tok (2,969,382 in, 18,239 out, 2,904,064 cached), 441.7s, $2.32579200
+- next: Call plan_oracle(mode='review', component_id='C2.1a.7') with the holbuild probe evidence. Do not continue tactical patching or leave C2.1a.7 as a Risk-2 leaf without strategist repair.
+
+### Attempts / Evidence
+
+- `E0605` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 29 steps, 30 tools, 2,457,323 tok (2,443,948 in, 13,375 out, 2,389,504 cached), 332.6s, $1.86822200)
+  - Audited current invariants before editing C2.1a.7 projections, especially env_context_consistent_def/env_immutables_consistent_def/functions_well_typed_def and prior C2.1a.3 dossier. -> Found a likely interface gap: env_consistent_toplevel_storage_static supplies storage layout only under FLOOKUP env.bare_globals = NONE, while env_immutables_consistent_def only gives typ=ty for StorageVarDecl and hashmap contradiction for all Type top-levels. This is relevant to C2.1a.7 storage no-TypeError projection if a bare-global entry shares the same id as a StorageVarDecl; prior E0596 explicitly warned not to force layout in bare branch. (`TO_type_system_rewrite-20260521T174852Z_m36124_t001`, `TO_type_system_rewrite-20260521T174852Z_m36125_t001`, `TO_type_system_rewrite-20260521T174852Z_m36115_t001`)
+- `E0606` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 34 steps, 35 tools, 1 holbuild, 2,987,621 tok (2,969,382 in, 18,239 out, 2,904,064 cached), 441.7s, $2.32579200)
+  - Replaced stale monolithic lookup_global_TopLevelName_sound body with planned projections: lookup_global_TopLevelName_no_type_error, lookup_global_TopLevelName_success_typed, and thin combined wrapper. Projection splits module code and find_var_decl_by_num; NONE routes to existing find_NONE helper; nonbare StorageVarDecl routes to TopLevelName_nonbare_storage_decl_context plus lookup_global_StorageVarDecl_no_type_error; HashMapVarDecl routes to TopLevelName_Type_HashMapVarDecl_impossible. -> Holbuild reached the deliberate probe in no-TypeError storage branch, showing remaining goal has bare_globals SOME, StorageVarDecl, lookup_global equation, and no_type_error_result res. This is not discharged by the non-bare storage helper and cannot use layout witnesses under current plan restrictions. (`TO_type_system_rewrite-20260521T174852Z_m36138_t001`, `TO_type_system_rewrite-20260521T174852Z_m36139_t001`)
+  - Audited env_context_consistent_def/env_immutables_consistent_def/functions_well_typed_def before editing. -> Confirmed current invariants expose bare-global top-level Type facts and all-Type HashMapVarDecl contradiction, but storage layout witnesses are only in the non-bare branch; no current source invariant in the audited definitions supplies lookup_var_slot_from_layout for bare-global StorageVarDecl. (`TO_type_system_rewrite-20260521T174852Z_m36124_t001`, `TO_type_system_rewrite-20260521T174852Z_m36125_t001`)
+
+### Ruled Out
+
+- Using TopLevelName_nonbare_storage_decl_context in the bare_globals SOME branch; its non-bare premise is explicitly false in the holbuild goal.
+- HashMap contradiction: the stuck branch is StorageVarDecl, not HashMapVarDecl.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36138_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36139_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36124_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36125_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.7.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0609`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 7 tools, 2 holbuild, 390,259 tok (389,213 in, 1,046 out, 374,272 cached), 46.0s, $0.29322100
+
+### Attempts / Evidence
+
+- `E0607` (stuck, wrong_statement, actual effort: 1 sessions, 7 steps, 12 tools, 2 holbuild, 476,982 tok (474,775 in, 2,207 out, 449,024 cached), 57.9s, $0.41947700)
+  - Inspected `toplevel` and `variable_mutability` constructors plus `var_decl_info`, `find_var_decl_by_num_def`, and `is_immutable_decl_def`. Added local theorem `duplicate_storage_and_immutable_scanners_probe` near the TopLevelName helper block. -> The concrete two-element list `[VariableDecl Private Storage id typ NONE; VariableDecl Private Immutable id imm_typ NONE]` proves both `find_var_decl_by_num (string_to_num id) ... = SOME (StorageVarDecl F typ,id)` and `is_immutable_decl (string_to_num id) ...`, so scanner-level contradiction is false. (`TO_type_system_rewrite-20260521T174852Z_m36156_t001`, `TO_type_system_rewrite-20260521T174852Z_m36156_t003`, `TO_type_system_rewrite-20260521T174852Z_m36158_t001`, `TO_type_system_rewrite-20260521T174852Z_m36159_t001`, `TO_type_system_rewrite-20260521T174852Z_m36160_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after adding the concrete scanner probe. -> The new concrete scanner probe was accepted; build then reached the pre-existing deliberate `lookup_global_TopLevelName_no_type_error bare storage probe`, confirming no contradiction lemma was obtained for the bare storage branch. (`TO_type_system_rewrite-20260521T174852Z_m36160_t001`)
+- `E0609` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 7 tools, 2 holbuild, 390,259 tok (389,213 in, 1,046 out, 374,272 cached), 46.0s, $0.29322100)
+  - Relocated env_consistent_bare_global_find_NONE below Definition env_consistent_def while keeping env_context_consistent_bare_global_find_NONE near env_context_consistent_bare_global_old; rebuilt vyperTypeSystemTheory. -> Source-order error fixed and strengthened consistency/projection interface accepted by holbuild. (`TO_type_system_rewrite-20260521T174852Z_m36197_t001`, `TO_type_system_rewrite-20260521T174852Z_m36200_t001`, `TO_type_system_rewrite-20260521T174852Z_m36201_t001`)
+
+### Ruled Out
+
+- The prior failure was theorem ordering, not a false projection lemma or holbuild issue.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36201_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36197_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36200_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.7.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0610`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 344,614 tok (343,422 in, 1,192 out, 331,264 cached), 261.7s, $0.26218200
+
+### Attempts / Evidence
+
+- `E0608` (stuck, missing_helper, actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 6 holbuild, 1,686,828 tok (1,679,143 in, 7,685 out, 1,645,568 cached), 217.5s, $1.22120900)
+  - Added branch-shaped local theorem `TopLevelName_bare_storage_decl_eval_type_probe` and proved it by deriving the Type top-level entry from `well_typed_expr_def`, unfolding `env_consistent_def`/`env_context_consistent_def`/`env_immutables_consistent_def`, and using immutable consistency to obtain an evaluated type value. -> This succeeded; holbuild advanced past the eval-type probe to the next local witness theorem, establishing that type evaluation is not the missing part of the bare branch. (`TO_type_system_rewrite-20260521T174852Z_m36168_t001`, `TO_type_system_rewrite-20260521T174852Z_m36181_t001`)
+  - Added `TopLevelName_bare_storage_decl_context_probe` with the full requested existential witness package and deliberately stopped after applying the eval-type probe to expose the remaining obligation. -> Holbuild shows the exact residual goal: with `evaluate_type (get_tenv cx) typ = SOME tv` in context, prove `?slot tv. lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\ evaluate_type ... = SOME tv`. No assumption mentions such a layout witness for the bare branch. (`TO_type_system_rewrite-20260521T174852Z_m36181_t001`)
+  - Inspected `env_consistent_toplevel_storage_static` and definitions `env_context_consistent_def`/`env_immutables_consistent_def`. -> The storage layout witness exists only in the Type/storage clause guarded by `FLOOKUP env.bare_globals = NONE`; the bare-global and immutable-consistency clauses do not provide `lookup_var_slot_from_layout`. (`TO_type_system_rewrite-20260521T174852Z_m36167_t001`, `TO_type_system_rewrite-20260521T174852Z_m36167_t003`)
+- `E0610` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 344,614 tok (343,422 in, 1,192 out, 331,264 cached), 261.7s, $0.26218200)
+  - Deleted TopLevelName_bare_storage_decl_context_probe and added TopLevelName_bare_storage_decl_impossible proved by drule_all env_consistent_bare_global_find_NONE followed by gvs[]. -> The local contradiction lemma is accepted; build advances to the downstream main theorem's bare-storage FAIL_TAC as expected. (`TO_type_system_rewrite-20260521T174852Z_m36208_t001`, `TO_type_system_rewrite-20260521T174852Z_m36209_t001`)
+
+### Ruled Out
+
+- No layout witness is needed or attempted for the bare-global storage branch; contradiction comes from find_var_decl_by_num = NONE.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36208_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36209_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.7.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0611`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 472,608 tok (470,687 in, 1,921 out, 459,776 cached), 122.2s, $0.34207300
+
+### Attempts / Evidence
+
+- `E0611` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 472,608 tok (470,687 in, 1,921 out, 459,776 cached), 122.2s, $0.34207300)
+  - In lookup_global_TopLevelName_no_type_error, replaced the bare-storage branch's deliberate FAIL_TAC with metis_tac[TopLevelName_bare_storage_decl_impossible]. -> The theorem replayed past the old failure; next failure was the immediate wrapper proof, showing the targeted FAIL_TAC was removed successfully. (`TO_type_system_rewrite-20260521T174852Z_m36213_t001`, `TO_type_system_rewrite-20260521T174852Z_m36214_t001`)
+  - Changed lookup_global_TopLevelName_sound opener from rpt strip_tac to rpt gen_tac >> strip_tac so the conjunctive conclusion remains for conj_tac. -> The local wrapper is accepted; holbuild advances to a later eval_all_type_sound_mutual[Targets_cons] timeout unrelated to the TopLevelName bare-storage branch. (`TO_type_system_rewrite-20260521T174852Z_m36216_t001`, `TO_type_system_rewrite-20260521T174852Z_m36217_t001`)
+
+### Ruled Out
+
+- The bare-global StorageVarDecl branch no longer attempts to unfold lookup_global_def or construct a layout witness.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36213_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36214_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36216_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36217_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.8
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0597`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 207,909 tok (207,084 in, 825 out, 202,752 cached), 22.4s, $0.14778600
+
+### Attempts / Evidence
+
+- `E0597` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 207,909 tok (207,084 in, 825 out, 202,752 cached), 22.4s, $0.14778600)
+  - Inspected current definitions/theorems and built `vyperTypeEnvTheory` plus `vyperTypeEnvPreservationTheory`. -> Component C2.1a.8 obligations are already satisfied in source and replay cleanly: all-source immutable consistency clauses, all-source readiness lemma, current-source compatibility lemma, and dependent env preservation build. (`TO_type_system_rewrite-20260521T174852Z_m35993_t001`, `TO_type_system_rewrite-20260521T174852Z_m36013_t001`, `TO_type_system_rewrite-20260521T174852Z_m36021_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m35993_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36013_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36021_t001` (use `read_tool_output` for exact output)
+
+## C2.1a.9
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0602`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 170,210 tok (169,038 in, 1,172 out, 161,792 cached), 24.7s, $0.15228600
+
+### Attempts / Evidence
+
+- `E0602` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 170,210 tok (169,038 in, 1,172 out, 161,792 cached), 24.7s, $0.15228600)
+  - Audited TopLevelName immutable helper block for all-source readiness use. -> Source already contains `TopLevelName_missing_immutable_impossible`, a generalized local impossibility lemma using `TopLevelName_missing_immutable_branch_characterisation` plus `env_consistent_bare_global_ready_src`; `lookup_global_TopLevelName_find_NONE_no_type_error` uses it to close the missing immutable branch. (`TO_type_system_rewrite-20260521T174852Z_m36057_t001`, `TO_type_system_rewrite-20260521T174852Z_m36057_t003`)
+  - Checked replay with `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` after the current helper block. -> Build replays past the all-source immutable readiness/impossibility helpers and fails later in the stale monolithic `lookup_global_TopLevelName_sound` proof, so C2.1a.9's boundary fact is accepted by HOL and already consumed by the find-NONE no-TypeError projection. (`TO_type_system_rewrite-20260521T174852Z_m36052_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36057_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36057_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36052_t001` (use `read_tool_output` for exact output)
+
+## C2.1b
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0612`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 173,014 tok (172,505 in, 509 out, 168,960 cached), 35.7s, $0.11747500
+
+### Attempts / Evidence
+
+- `E0612` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 173,014 tok (172,505 in, 509 out, 168,960 cached), 35.7s, $0.11747500)
+  - Grep-audited Expr_TopLevelName resume and rebuilt vyperTypeStmtSoundnessTheory. -> Resume eval_all_type_sound_mutual[Expr_TopLevelName] calls lookup_global_TopLevelName_sound; vyperTypeStmtSoundnessTheory builds successfully. (`TO_type_system_rewrite-20260521T174852Z_m36222_t001`, `TO_type_system_rewrite-20260521T174852Z_m36222_t002`)
+
+### Ruled Out
+
+- No need to repair Expr_TopLevelName consumer further; statement theory build passes at this audit point.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260521T174852Z_m36222_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36222_t002` (use `read_tool_output` for exact output)
+
+## C2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0638`
+- blocker: Current C2.2 is scheduled as Oracle next, but the live Expr_Subscript failure is the place-expression branch that the accepted C2.1.1.4 replacement plan says must be solved by first adding `place_expr_result_typed` and strengthening the expression conjunct. C2.2 depends only on C2.0 and does not authorize the C2.1.1.4.0-.4 definition/refactor edits needed by the goal; prior C2.2 dossier episodes are also about older assignment/For_cons work, not this current read-subscript/attribute obligation.
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 154,766 tok (153,422 in, 1,344 out, 141,312 cached), 32.3s, $0.17152600
+- next: Strategist should reschedule or add dependencies so C2.1.1.4.0-.4 run before this C2.2 read-subscript/attribute component, or replace C2.2 with a component that explicitly includes the place-invariant refactor.
 
 ### Attempts / Evidence
 
@@ -1949,14 +3321,24 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Grep/diff audit after build plus source check of `assignable_type_evaluate_not_NoneTV` prerequisite. -> Verified the new theorem names are present in `vyperTypeStmtSoundnessScript.sml`; existing AnnAssign/Assign code already uses the non-None consequence via `assignable_type_not_NoneT`, while `assignable_type_evaluate_not_NoneTV` is available from `vyperTypeSystem` for later refactors. (`TO_type_system_rewrite-20260518T204229Z_m26679_t001`, `TO_type_system_rewrite-20260518T204229Z_m26679_t002`, `TO_type_system_rewrite-20260518T204229Z_m26680_t001`)
 - `E0278` (proved, , actual effort: 1 sessions, 1 steps, 109,993 tok (109,570 in, 423 out, 105,984 cached), 6.0s, $0.08361200)
   - Re-began C2.2 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0240 evidence show the operation runtime/shape bridge lemmas are present, compile, and require no edits. (`TO_type_system_rewrite-20260519T085316Z_m28100_t001`, `TO_type_system_rewrite-20260518T204229Z_m26678_t001`, `TO_type_system_rewrite-20260518T204229Z_m26679_t001`, `TO_type_system_rewrite-20260518T204229Z_m26679_t002`, `TO_type_system_rewrite-20260518T204229Z_m26680_t001`)
+- `E0613` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 5 tools, 1 holbuild, 396,771 tok (395,608 in, 1,163 out, 374,784 cached), 32.1s, $0.32640200)
+  - Audited AnnAssign/Assign/AugAssign resume source for strengthened assignment side-condition derivations and rebuilt vyperTypeStmtSoundnessTheory. -> Scalar assignment branches are present/proved in source; statement soundness theory builds successfully under holbuild. (`TO_type_system_rewrite-20260521T174852Z_m36226_t001`, `TO_type_system_rewrite-20260521T174852Z_m36226_t002`, `TO_type_system_rewrite-20260521T174852Z_m36227_t001`, `TO_type_system_rewrite-20260521T174852Z_m36228_t001`)
+- `E0638` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 154,766 tok (153,422 in, 1,344 out, 141,312 cached), 32.3s, $0.17152600)
+  - Began scheduled C2.2 as required by PLAN gate; rebuilt `vyperTypeStmtSoundnessTheory` without edits. -> Build fails at `Resume eval_all_type_sound_mutual[Expr_Subscript]` QED in the place branch with `type_place_expr env e = SOME vt` and no base place-expression IH; only the ordinary IH guarded by `well_typed_expr env e` is available. This matches STATE's do-not-retry blocker and the C2.1.1.4 replacement subtree, not C2.2's stated dependency set. (`TO_type_system_rewrite-20260521T174852Z_m37206_t001`, `TO_type_system_rewrite-20260521T174852Z_m37207_t003`)
+  - Inspected source theorem statement and C2.2-related grep output. -> The expression conjunct at lines 3863-3871 still has only the old `well_typed_expr` antecedent, with no `type_place_expr` guarded postcondition or `place_expr_result_typed` definition; `Expr_Attribute` and later resumes still contain cheats, but the build prefix is blocked before them by the subscript place branch. (`TO_type_system_rewrite-20260521T174852Z_m37207_t001`, `TO_type_system_rewrite-20260521T174852Z_m37207_t002`)
+
+### Ruled Out
+
+- Retrying simplifier/metis patches on the old Expr_Subscript tail; the missing IH is structural.
+- Deriving `type_place_expr ==> well_typed_expr`; STATE records this is false for HashMap places.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m26678_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26679_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26679_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26680_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T085316Z_m28100_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37203_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37206_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37207_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37207_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m37207_t002` (use `read_tool_output` for exact output)
 
 ## C2.2.a
 
@@ -2004,12 +3386,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch`
-- latest episode: `E0446`
-- blocker: Applying the case-premise helper inside `Resume eval_all_type_sound_mutual[For_cons]` still leaves/proves the unsimplified `case (INR y ...)` premise by matching an existing assumption, and holbuild raises HOL_ERR CHOOSE during validation. This is exactly the CHOOSE-sensitive failure the component was meant to avoid; the helper interface still requires passing an existential-bearing assumption inside the Resume.
-- actual effort: 1 sessions, 1 msgs, 24 steps, 24 tools, 11 holbuild, 1,709,091 tok (1,701,010 in, 8,081 out, 1,651,712 cached), 238.1s, $1.31477600
-- next: Call plan_oracle(mode='review', component_id='C2.3') with the CHOOSE evidence. Likely need a stronger standalone helper whose invocation does not create a case-premise side goal inside the Resume, or a different factoring of the whole suffix.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0614`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 16 tools, 1 holbuild, 981,983 tok (978,516 in, 3,467 out, 948,224 cached), 82.3s, $0.72958200
 
 ### Attempts / Evidence
 
@@ -2020,16 +3401,23 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0446` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 24 steps, 24 tools, 11 holbuild, 1,709,091 tok (1,701,010 in, 8,081 out, 1,651,712 cached), 238.1s, $1.31477600)
   - Replaced placeholder with backward `irule for_cons_ordinary_exception_tail_from_stmt_case`, using existing invariant assumptions and trying to pass the visible case premise to the helper without simplifying/destructing it. -> Build progressed to the side condition for the helper's case premise but validating `ACCEPT_TAC`/assumption matching on that premise inside the suspended Resume raises HOL_ERR CHOOSE. (`TO_type_system_rewrite-20260519T123242Z_m32171_t001`)
   - Tried several normal tactic shapes (`irule` with invariant side goals, packaging helper `for_cons_ordinary_exception_tail_goal_from_case_premise`, explicit witnesses) to avoid local existential destructing. -> All variants either left residual side goals with the same case premise or failed to instantiate; the last localized failure is CHOOSE on closing the visible case-premise side goal by assumption. (`TO_type_system_rewrite-20260519T123242Z_m32153_t001`, `TO_type_system_rewrite-20260519T123242Z_m32157_t001`, `TO_type_system_rewrite-20260519T123242Z_m32165_t001`, `TO_type_system_rewrite-20260519T123242Z_m32171_t001`)
+- `E0614` (proved, , actual effort: 1 sessions, 8 steps, 16 tools, 1 holbuild, 981,983 tok (978,516 in, 3,467 out, 948,224 cached), 82.3s, $0.72958200)
+  - Audited tuple/list assignment route: grepped statement soundness for direct `assign_targets`/`target_assignment_values_assignable` use, inspected target/list bridge lemmas and the generic Assign branch, and rebuilt `vyperTypeStmtSoundnessTheory`. -> No statement-level tuple/list `assign_targets` branch remains to repair; generic Assign uses `assign_target` with the strengthened runtime/shape/context premises, and the statement theory builds cleanly. (`TO_type_system_rewrite-20260521T174852Z_m36232_t001`, `TO_type_system_rewrite-20260521T174852Z_m36233_t003`, `TO_type_system_rewrite-20260521T174852Z_m36237_t002`, `TO_type_system_rewrite-20260521T174852Z_m36237_t003`, `TO_type_system_rewrite-20260521T174852Z_m36238_t002`)
+  - Checked assignment-layer interfaces for tuple/list decomposition. -> `target_assignment_values_assignable_def` and `assign_targets_no_type_error`/`assign_target_sound_mutual` exist in prerequisites, so tuple/list list side conditions are encapsulated below the statement proof boundary rather than duplicated in the statement Resume. (`TO_type_system_rewrite-20260521T174852Z_m36234_t001`, `TO_type_system_rewrite-20260521T174852Z_m36234_t002`)
 
 ### Ruled Out
 
-- Passing the unsimplified case premise to the helper by `qpat_assum ... ACCEPT_TAC` inside the Resume
-- Backward `irule for_cons_ordinary_exception_tail_from_stmt_case` that leaves a residual case-premise subgoal inside the Resume
+- Do not add a second statement-level tuple/list case analysis over `assign_targets`; current source keeps tuple/list assignment behind `assign_target` and the assignment-layer joint invariant.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260519T123242Z_m32149_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T123242Z_m32171_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36232_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36233_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36234_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36234_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36237_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36237_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36238_t002` (use `read_tool_output` for exact output)
 
 ## C2.3.1
 
@@ -2108,10 +3496,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0280`
+- latest episode: `E0615`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 125,450 tok (125,004 in, 446 out, 118,272 cached), 7.3s, $0.10617600
-- next: Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next.
+- actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 349,184 tok (347,510 in, 1,674 out, 332,288 cached), 42.0s, $0.29247400
+- next: Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures.
 
 ### Attempts / Evidence
 
@@ -2146,14 +3534,16 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Audited `vyperTypeStmtSoundnessScript.sml` resumes/finalisation for C2.4-owned statement/list/loop/iterator cases. -> All suspended cases in `eval_all_type_sound_mutual` have Resume blocks and a `Finalise eval_all_type_sound_mutual`; remaining downstream failure is in call soundness, not C2.4 statement case proof. (`TO_type_system_rewrite-20260518T204229Z_m27602_t002`, `TO_type_system_rewrite-20260518T204229Z_m27602_t001`, `TO_type_system_rewrite-20260518T204229Z_m27602_t003`)
 - `E0280` (proved, , actual effort: 1 sessions, 1 steps, 125,450 tok (125,004 in, 446 out, 118,272 cached), 7.3s, $0.10617600)
   - Re-began C2.4 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0259 evidence show non-assignment/structured statement cases, including Append/loop/iterator work, are already proved and audited. (`TO_type_system_rewrite-20260519T085316Z_m28108_t001`, `TO_type_system_rewrite-20260518T204229Z_m27600_t001`, `TO_type_system_rewrite-20260518T204229Z_m27601_t002`, `TO_type_system_rewrite-20260518T204229Z_m27602_t002`, `TO_type_system_rewrite-20260518T204229Z_m27602_t001`)
+- `E0615` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 349,184 tok (347,510 in, 1,674 out, 332,288 cached), 42.0s, $0.29247400)
+  - Ran the planned C2.4 audit build `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> Build succeeds, confirming the repaired TopLevelName/scalar assignment/tuple-list assignment statement-theory path is not currently a build blocker. (`TO_type_system_rewrite-20260521T174852Z_m36246_t001`)
+  - Audited `vyperTypeStmtSoundnessScript.sml` for remaining literal `cheat` uses and inspected the local source region around the remaining cheated resumes. -> Remaining literal cheats are expression/call resumes after `Expr_FlagMember` and related cases, not C2.4 statement assignment/TopLevelName audit failures; statement-theory build still succeeds. (`TO_type_system_rewrite-20260521T174852Z_m36248_t001`, `TO_type_system_rewrite-20260521T174852Z_m36249_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27600_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27601_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27602_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27602_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T085316Z_m28108_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36246_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36247_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36248_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260521T174852Z_m36249_t001` (use `read_tool_output` for exact output)
 
 ## C2.5
 

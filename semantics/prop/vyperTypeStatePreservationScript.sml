@@ -705,10 +705,12 @@ Proof
   pop_assum SUBST_ALL_TAC >>
   conj_tac >- (gvs[env_scopes_consistent_def] >> metis_tac[] ) >>
   gvs[env_immutables_consistent_def, FLOOKUP_UPDATE] >>
-  conj_tac >- rw[] >>
   conj_tac >- (
-    reverse $ rw[] >> gvs[] >- metis_tac[] >>
-    NO_TAC) >>
+    rw[get_source_set_source_immutables, FLOOKUP_UPDATE] >>
+    Cases_on `n = id` >> gvs[] >> metis_tac[]) >>
+  conj_tac >- (
+    rw[get_source_set_source_immutables, FLOOKUP_UPDATE] >>
+    Cases_on `n = id` >> gvs[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>

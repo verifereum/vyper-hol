@@ -179,292 +179,497 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260518T204229Z_m25827_t003
 - tool_output:TO_type_system_rewrite-20260518T204229Z_m25801_t001
 
-## L1095 scope='C2.3.3' tags=Resume,CHOOSE,existential,For_cons,case-premise
-shape: Suspended `Resume` proof; IH assumption is `case (INR y) of ... => ?env_exn. ...`; final goal needs case-form return typing.
-pattern: In this suspended For_cons Resume, simplifying the IH case premise to an existential is not sufficient if the suffix later closes existential/conjunct obligations by exact assumption acceptance. `ACCEPT_TAC`/`first_assum ACCEPT_TAC` on theorem objects derived from existential stripping can still trigger HOL_ERR CHOOSE during validation. Prefer a helper/drule path that consumes the top-level existential theorem or factor the entire suffix outside the Resume.
-works_when: Use when holbuild shows CHOOSE after apparently trivial exact-assumption closure in `eval_all_type_sound_mutual[For_cons]` ordinary-exception suffix.
+## L1168 scope='C2.1a' tags=TopLevelName,lookup_global,immutables,get_immutables,state
+shape: TopLevelName declaration-NONE branch after `get_immutables cx src st = (INL imms,r)`
+pattern: When closing missing-immutable contradictions after a successful `get_immutables`, first apply `get_immutables_success` and instantiate downstream env/immutable lemmas with the returned state `r`, not the original state variable. The success theorem rewrites the immutable map to `get_source_immutables src (case ALOOKUP r.immutables ... )` and gives the state equality needed for `env_consistent env cx r`.
+works_when: Use in C2.1a no-declaration branch helpers where the live context has `get_immutables ... = (INL _, r)` and a missing `FLOOKUP` branch.
 evidence:
-- tool_output:TO_type_system_rewrite-20260519T123242Z_m32207_t001
-- tool_output:TO_type_system_rewrite-20260519T123242Z_m32214_t001
-- tool_output:TO_type_system_rewrite-20260519T123242Z_m32216_t002
+- episode:E0593
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m35964_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:304-384
 
-## L1100 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2' tags=For_cons,qpat_x_assum,type-constraint,case-premise
-shape: Pattern-matching the `case (INR y : unit + exception)` body premise in a context with an existing value variable `v`.
-pattern: When selecting the `case (INR y : unit + exception)` premise in the For_cons suffix, do not write the INL branch as `INL (v:unit)` if `v` is already bound as a value in the context; the quotation parser imposes the wrong type constraint. Use a fresh unit branch variable such as `u`.
-works_when: Use in targeted `qpat_x_assum`/case-premise selection in `vyperTypeStmtSoundnessScript.sml` around the For_cons ordinary-exception Resume.
+## L1169 scope='C2.1a' tags=TopLevelName,env_immutables_consistent,pair,metis-timeout
+shape: Need `evaluate_type (get_tenv cx) ty = SOME imm_tv` and `value_has_type imm_tv imm_v` for immutable `FLOOKUP ... = SOME (imm_tv,imm_v)`
+pattern: Pair-split immutable lookup payloads (`PairCases_on x'` / rename to `imm_tv,imm_v`) and explicitly specialize the `env_immutables_consistent_def` toplevel-vtypes clause. Avoid broad `metis_tac` over the unfolded invariant; use `current_immutables_well_typed` plus `imms_well_typed_get_source_immutables` for `value_has_type`.
+works_when: Use for immutable success-only typing facts under `well_typed_expr env (TopLevelName ty (src,id))`, `env_consistent`, and `find_var_decl_by_num ... = NONE`.
 evidence:
-- tool_output:TO_type_system_rewrite-20260519T123242Z_m32491_t001
-- tool_output:TO_type_system_rewrite-20260519T123242Z_m32493_t001
+- episode:E0594
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m35981_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m35980_t001
 
-## L1105 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1' tags=Resume,suspend,CHOOSE,For_cons,proof-boundary
-shape: Final For_cons ordinary-exception suffix inside `Resume eval_all_type_sound_mutual[For_cons]` has exact assumptions but endpoint tactics or nested suspend raise HOL_ERR CHOOSE.
-pattern: When a suspended `Resume` fragment raises CHOOSE on exact assumptions/tautological implications, do not keep changing endpoint tactics or insert a nested `suspend` at the same point. Move the proof boundary outside the resumed fragment, e.g. prove the whole case as an ordinary helper theorem with explicit IH premises, then make the Resume case a shallow wrapper.
-works_when: Applies after evidence shows the suffix facts are semantically present in the goal context and helper lemmas prove the final invariant, but `ACCEPT_TAC`/`simp[]`/`DISCH_THEN`/nested `suspend` fail inside the Resume proof boundary.
+## L1170 scope='C2.1a.3' tags=TopLevelName,storage,bare_globals,env_consistent_toplevel_storage_static
+shape: Need storage layout/evaluate-type witnesses for `TopLevelName ty (src,id)` with concrete `StorageVarDecl`
+pattern: Split the interface: use `TopLevelName_nonbare_storage_decl_context` only under `FLOOKUP env.bare_globals (src,string_to_num id) = NONE` to obtain `typ = ty`, `IS_SOME evaluate_type`, and `IS_SOME lookup_var_slot_from_layout`; use `TopLevelName_storage_decl_type_eq` when only declaration type equality is needed. Do not try to infer layout witnesses in the bare-global branch.
+works_when: Applies to C2.1a storage declaration branch helpers and any later TopLevelName storage consumers using `env_consistent_toplevel_storage_static`.
+evidence:
+- episode:E0596
+- episode:E0598
+- episode:E0599
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:386-423
+
+## L1171 scope='C2.1a.5' tags=lookup_global,StorageVarDecl,expr_result_typed,read_storage_slot_success_type,evaluate_type_well_formed_type_value
+shape: After unfolding `lookup_global_def` for a successful `StorageVarDecl` TopLevelName lookup, goals reduce to constructor-specific `value_has_type (Ctor ...) v` or direct ArrayRef typing.
+pattern: Do not introduce existential witnesses after `gvs[expr_result_typed_def, expr_runtime_typed_def, toplevel_value_typed_def]` has simplified the goal into direct `value_has_type` obligations. In non-array read branches, prove a constructor-specific `well_formed_type_value (Ctor args)` from the matching `evaluate_type ... = SOME (Ctor args)` using `evaluate_type_well_formed_type_value`, then `drule_all read_storage_slot_success_type`. ArrayTV is direct by `toplevel_value_typed_def`.
+works_when: Applies when the `lookup_global` storage branch is already constrained by successful `INL tvl` and concrete `StorageVarDecl` assumptions; use inside boundary helper, not consumers.
+evidence:
+- episode:E0603
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36089_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:443-482
+
+## L1173 scope='C2.1a.7.1' tags=is_immutable_decl,find_var_decl_by_num,duplicate-declarations,probe
+shape: Need contradiction between immutable declaration existence and storage declaration lookup for same numeric id
+pattern: `is_immutable_decl_def` scans the whole declaration list for an Immutable variable, while `find_var_decl_by_num_def` returns the first Storage/Transient/HashMap declaration for the numeric id. Unless a separate uniqueness invariant is available, duplicate declaration lists can likely make both predicates true; prove/check a concrete list pattern rather than assuming contradiction.
+works_when: Use during C2.1a.7.1 or any later branch that tries to exclude duplicate storage/immutable declarations from scanner definitions alone.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36129_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36130_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36141_t001
+
+## L1174 scope='C2.1a.7' tags=TopLevelName,bare_globals,StorageVarDecl,invariant-repair,lookup_global
+shape: Bare global typed as `Type ty` also appears as `find_var_decl_by_num = SOME (StorageVarDecl ...)`
+pattern: For `lookup_global_TopLevelName_no_type_error`, the bare-global StorageVarDecl branch should be made contradictory by static consistency (`find_var_decl_by_num id ts = NONE` for bare globals), not handled by storage layout witnesses. E0607 rules out scanner-only contradiction from `is_immutable_decl`; E0608 rules out layout witnesses from old invariants. The repaired interface is `env_consistent_bare_global_find_NONE`, then a local impossible-branch lemma.
+works_when: Use after the C2.1a.7.1 definition repair is in scope. Keep non-bare storage on `env_consistent_toplevel_storage_static`; use the new bare-global projection only for `FLOOKUP env.bare_globals = SOME _` branches.
+evidence:
+- episode:E0607
+- episode:E0608
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36184_t001
+
+## L1175 scope='C2.1a.7.1' tags=HOL4,theorem-order,env_consistent_def,definition_repair
+shape: Projection theorem over a definition just added/used in same script
+pattern: When adding projection lemmas near definitions, place each theorem after all definitions it unfolds. In this edit, `env_consistent_bare_global_find_NONE` was inserted before `env_consistent_def`, causing a static `Value or constructor (env_consistent_def) has not been declared` error; move it after `Definition env_consistent_def`.
+works_when: Applies to `vyperTypeSystemScript.sml` definition-repair components where env-context, scopes, immutables, and combined consistency definitions are declared sequentially.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36191_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36192_t001
+
+## L1176 scope='C2.1a.7' tags=TopLevelName,bare_globals,StorageVarDecl,env_consistent,boundary-lemma
+shape: StorageVarDecl branch with FLOOKUP env.bare_globals (src,string_to_num id) = SOME bare
+pattern: Close the branch by applying env_consistent_bare_global_find_NONE to derive get_module_code witness plus find_var_decl_by_num ... = NONE, then gvs/metis contradicts the StorageVarDecl assumption. Do not attempt lookup_var_slot_from_layout or rely on is_immutable_decl alone.
+works_when: After the C2.1a.7.1 invariant repair is in scope and the branch has env_consistent plus bare_globals SOME and get_module_code/find_var_decl_by_num assumptions.
+evidence:
+- episode:E0609
+- episode:E0610
+- episode:E0611
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36201_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36208_t001
+
+## L1184 scope='C2.1.1.2' tags=IfExp,expr_result_typed,BoolT,evaluate_type,boundary_helper
+shape: Need `toplevel_value_typed tv (BaseTV BoolT)` from condition result typing in Expr_IfExp
+pattern: Use the local helper `expr_result_typed_BaseT_BoolT_value`: after unfolding `expr_result_typed_def` and `expr_runtime_typed_def`, finish with `gvs[evaluate_type_BaseT_BoolT]`. A single `rw[...]` including `evaluate_type_BaseT_BoolT` may leave the evaluate-type equality unspecialized; the post-unfold `gvs` step is the robust proof.
+works_when: The context has `expr_result_typed env cond tv` and `expr_type cond = BaseT BoolT`, typically after the condition IH in `eval_all_type_sound_mutual[Expr_IfExp]`.
+evidence:
+- episode:E0624
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36497_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:5770-5776
+
+## L1185 scope='C2.1.1.2' tags=IfExp,switch_BoolV_post,branch_IH,boundary_helper,risk_mismatch
+shape: Expr_IfExp selected branch after `switch_BoolV_post` leaves nested branch-IH continuation plumbing
+pattern: Do not apply the branch IH directly inside the resume. Factor one-branch lifting (`ifexp_branch_from_cond_ih`) and a switch wrapper (`ifexp_switch_from_branch_ihs`) so their conclusions are the final IfExp postcondition. This avoids manual nested implication management produced by `switch_BoolV_post` continuations.
+works_when: The generated mutual IH for e_true/e_false has an outer premise `eval_expr cx cond s0 = (INL tv0,t0)` and the final goal is the joint state/env/account/no-TypeError/result-typing invariant for `IfExp`.
+evidence:
+- episode:E0623
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36491_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36489_t001
+
+## L1186 scope='C2.1.1.2' tags=IfExp,switch_BoolV_post,qho_match_abbrev_tac,higher_order_predicate,boundary_helper
+shape: Proving a wrapper over `switch_BoolV_post` where `irule switch_BoolV_post` cannot infer predicate `P`
+pattern: Before applying `switch_BoolV_post`, abstract the desired postcondition with `qho_match_abbrev_tac `P res st'``. Then `irule switch_BoolV_post`, supply the switch equation with `goal_assum $ drule_at (Pat `switch_BoolV`)`, and in each continuation branch `qunabbrev_tac `P` >> BETA_TAC` before invoking the branch helper. Direct `irule`/`ho_match_mp_tac` on `switch_BoolV_post` can fail to infer or type-match the higher-order predicate.
+works_when: The goal is a two-argument postcondition over `(res,st')` after `switch_BoolV`, and continuations can each prove that same postcondition from selected branch evaluation equations.
+evidence:
+- episode:E0626
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36545_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:5821-5880
+
+## L1187 scope='C2.1.1.3' tags=StructLit,exprs_runtime_typed,LIST_REL,OPT_MMAP,struct_has_type
+shape: Proving successful `Expr_StructLit` result typing from `exprs_runtime_typed env (MAP SND kes) vs` and struct declaration facts
+pattern: Use a local boundary lemma with conclusion matching the evaluator's constructed value: `expr_result_typed env (StructLit (StructT id) (src_id_opt,id) kes) (Value (StructV (ZIP (MAP FST args,vs))))`. In the proof, unfold `exprs_runtime_typed_def`, `expr_result_typed_def`, `expr_runtime_typed_def`, and `toplevel_value_typed_def`; witness `StructTV (ZIP (MAP FST args,tvs))`; use the StructT evaluate_type equation plus an OPT_MMAP-from-LIST_REL bridge to equate field type lists; finish with a same-names `struct_has_type` ZIP lemma.
+works_when: The well-typed StructLit premise has `FLOOKUP env.type_defs (string_to_num id)=SOME (StructArgs args)`, `MAP FST kes = MAP FST args`, and `MAP (expr_type o SND) kes = MAP SND args`, and the expression-list IH supplies `exprs_runtime_typed env (MAP SND kes) vs`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36629_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:5984-6010
+
+## L1188 scope='C2.1.1.3' tags=StructLit,monad,bind_def,error_propagation,qpat_x_assum
+shape: StructLit error branch has `eval_exprs ... = (INR y,st1)` plus unsimplified monadic/case equation for the whole StructLit evaluator
+pattern: Do not quote the `do` expression with `eval_exprs ... st` as the monadic argument. Select the live let/case equation as shown in the holbuild goal, move it to the goal, simplify with the exact `eval_exprs` equation using `asm_simp_tac(srw_ss())[Once bind_def, return_def, LET_THM]` (or after it has become a `case eval_exprs ...` equation), then use the resulting `res = INR y` and `st' = st1` to close by rewriting.
+works_when: The branch came from `Cases_on exprs_res` where `exprs_res = INR y`; state/env/account and `no_type_error_result (INR y)` are already supplied by the expression-list IH.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36631_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36645_t001
+- episode:E0629
+
+## L1189 scope='C2.1.1.4' tags=Expr_Subscript,IH-selection,guarded-IH,resume,replace_text
+shape: Expr_Subscript resume raw goal has a guarded index IH followed by an unconditional base IH
+pattern: In `Resume eval_all_type_sound_mutual[Expr_Subscript]`, do not apply `first_x_assum drule_all` after splitting the base evaluation. The first IH is guarded by a successful base-eval antecedent and is meant for the index expression `e'` only after the `INL tv1` base branch. Select/label the unconditional base IH explicitly for `e`; after the base-success case, instantiate the guarded index IH with the live `eval_expr cx e st = (INL tv1,st1)` fact.
+works_when: After `rpt gen_tac >> strip_tac`, before or after one-step evaluator unfolding, the raw goal contains both IHs for the Subscript constructor: guarded index IH first and base IH second. Verify assumption order with holbuild before using positional selectors.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36683_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36692_t001
+- episode:E0631
+
+## L1190 scope='C2.1.1.4' tags=Expr_Subscript,subscript_type_ok,get_Value,no-TypeError,resume
+shape: Expr_Subscript direct `subscript_type_ok` branch, after base/index eval succeed and before splitting get_Value result
+pattern: To prove `no_type_error_result value_res` for `get_Value x' st2` in the direct Expr_Subscript branch, unfold `expr_result_typed_def`/`expr_runtime_typed_def`, split `expr_type e`, simplify `subscript_type_ok_def` to obtain `is_int_type (expr_type e')`, then use `is_int_type_evaluate_type_not_None_Array` on the index expression's evaluated type and finish with `get_Value_no_type_error`. Do not try `drule_all` before exposing the `subscript_type_ok` cases.
+works_when: The live assumptions include `subscript_type_ok (expr_type e) (expr_type e') result_ty`, `expr_result_typed env e' x'`, and `get_Value x' st2 = (value_res,st3)`. This covers the direct array/tuple expression-subscript branch, not the place/hashmap `subscript_vtype` branch.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36744_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36746_t001
+- episode:E0632
+
+## L1191 scope='C2.1.1.4' tags=Expr_Subscript,evaluate_subscript,local-helper,ancestor-import,tail-simplification
+shape: Expr_Subscript get_Value success tail after `evaluate_subscript ... = INL (INL value)`
+pattern: In `vyperTypeStmtSoundnessTheory`, helper theorems from `vyperTypeSoundnessHelpersScript.sml` such as `evaluate_subscript_typed` and `evaluate_subscript_success_not_HashMapRef` are not directly declared in the current ancestor context. For this proof, use the local `_stmt` copies now added near `Resume eval_all_type_sound_mutual[Expr_Subscript]`. In the direct value branch, first prove `~is_HashMapRef result` with `evaluate_subscript_success_not_HashMapRef_stmt`, then strip and simplify the remaining monadic tail equation with `bind_def`/`return_def`; do not expect bare `metis_tac` or `gvs[]` to consume the tail antecedent automatically.
+works_when: The live goal has `check_array_bounds ... = (INL (),s)`, `evaluate_subscript ... = INL (INL v)`, `toplevel_value_typed v rtv`, and the tail goal/antecedent still mentions `do check_array_bounds ...; res <- return (INL v); ... od s = (res,st')`. Applies to the direct, non-storage return branch of Expr_Subscript.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36778_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36817_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36826_t001
+- episode:E0633
+
+## L1192 scope='C2.1.1.4' tags=Expr_Subscript,monadic-tail,read_storage_slot,bind_def,boundary-lemma
+shape: Expr_Subscript storage-return tail after `evaluate_subscript ... = INL (INR y)`
+pattern: Do not apply `read_storage_slot_success_type` until the monadic tail equation has been simplified into a concrete `read_storage_slot ... = (INL v, st')` assumption. First consume the exact `do check_array_bounds ...; res <- return (INR y); case res of ... od bounds_st = (res,st')` equation, rewriting with the known `check_array_bounds ... = (INL (),bounds_st)` plus `bind_def`, `ignore_bind_def`, and `return_def`; then split/use the resulting read equation.
+works_when: The live context has the storage-return subscript result (`INR y`), `check_array_bounds ... = (INL (),bounds_st)`, and a tail equation/implication that still mentions `read_storage_slot`. Applies both inline and inside a local tail-boundary helper.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36888_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36898_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36905_t001
+- episode:E0634
+
+## L1193 scope='C2.1.1.4' tags=Expr_Subscript,evaluate_subscript,TypeError,boundary-lemma,array_index
+shape: Expr_Subscript resume reaches `evaluate_subscript ... = INR err` after typed base/index and successful `get_Value`
+pattern: Do not handle the `evaluate_subscript ... = INR err` branch by broad inline unfolding in the resume. Use or prove a boundary lemma that explicitly carries typed base (`toplevel_value_typed x tv`, `~is_HashMapRef x`, `evaluate_type ... (expr_type e) = SOME tv`) and typed index evidence. If proving a standalone helper, keep the base value and index value constructor splits separate; tuple/array value cases require `array_index_def` to show the error cannot be `TypeError`.
+works_when: Applies after Expr_Subscript base and index IHs have succeeded, `get_Value x' ... = (INL idx,...)`, `check_array_bounds ... = (INL (),...)`, and the evaluator tail has split `evaluate_subscript` into an error branch. The goal is to prove `!msg. err <> TypeError msg`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36924_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37006_t001
+- episode:E0635
+
+## L1194 scope='C2.1.1.4' tags=Expr_Subscript,storage-tail,read_storage_slot,bind_def,TypeError
+shape: Storage-return tail after `evaluate_subscript ... = INL (INR y)` and `check_array_bounds ... = (INL (),bounds_st)`
+pattern: A repaired `expr_subscript_storage_tail_sound_stmt` should first simplify the exact monadic tail equation with `bind_def`/`ignore_bind_def`/`return_def`, then case-split the resulting `read_storage_slot` equation. Error cases close with `read_storage_slot_error`; the success case uses `read_storage_slot_success_type` and witnesses `rtv` for the expression result type. At the call site, strip the tail implication before `irule` and provide witnesses in theorem order (`bounds_st`, `rtv`, `x`, `x''`, `y`).
+works_when: The live context has state/env/account typing for `bounds_st`, `evaluate_type (get_tenv cx) v9 = SOME rtv`, `(case y of ... => tv'=rtv)`, `well_formed_type_value rtv`, and the exact tail equation for returning/reading the storage value.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36920_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m36924_t001
+- episode:E0635
+
+## L1195 scope='C2.1.1.4' tags=Expr_Subscript,well_typed_expr,type_place_expr,subscript_vtype,branch-split
+shape: Expr_Subscript resume after `well_typed_expr_def` splits into direct value-subscript vs place-subscript disjuncts
+pattern: Do not assume the base expression `e` is available as `well_typed_expr env e` in all `Subscript` branches. The direct branch has `well_typed_expr env e /\ subscript_type_ok (expr_type e) (expr_type e') v9`; the alternate branch has `type_place_expr env e = SOME vt /\ subscript_vtype vt (expr_type e') = SOME (Type v9)`. For the alternate branch, first use/prove a boundary lemma from `type_place_expr` to the needed base eval/result invariant, then reuse the guarded index IH and subscript_vtype helpers.
+works_when: Applies inside `Resume eval_all_type_sound_mutual[Expr_Subscript]` after unfolding `well_typed_expr_def` and `evaluate_def`, splitting `eval_expr cx e st = (INL x,st1)`, and seeing a base IH guarded by `well_typed_expr env e`. If the live assumptions include `type_place_expr env e = SOME vt` but not `well_typed_expr env e`, switch to the place-subscript boundary path.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37076_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37080_t001
+- episode:E0636
+
+## L1196 scope='C2.1.1.4' tags=Expr_Subscript,check_array_bounds,TypeError,boundary-lemma
+shape: After `check_array_bounds cx x idx st = (INR y,st)` in Expr_Subscript tail
+pattern: Use a small boundary lemma (`check_array_bounds_error_not_TypeError_stmt`) rather than unfolding the check-bounds monad at every call site. Its proof needs `oneline check_array_bounds_def` plus `get_storage_backend_no_error`; the error produced by bounds checking is a `RuntimeError`, not a `TypeError`.
+works_when: The live goal is `!msg. y <> Error (TypeError msg)` or `no_type_error_result (INR y)` after the monadic tail has simplified to a `check_array_bounds ... = (INR y,st)` assumption.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37071_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37073_t001
+- episode:E0636
+
+## L1197 scope='C2.1.1.4' tags=Expr_Subscript,type_place_expr,HashMapT,well_typed_expr,boundary-lemma
+shape: Attempted bridge from `type_place_expr env e = SOME vt` to ordinary `well_typed_expr env e` in Expr_Subscript place branch
+pattern: Do not formulate the place-branch helper as `type_place_expr env e = SOME vt ==> well_typed_expr env e`. Hashmap places are annotated with `NoneT` (`vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)`), while ordinary `well_typed_expr TopLevelName ty` requires a `Type ty` toplevel entry and `ty <> NoneT`. The reusable boundary should instead prove direct eval/result soundness for place-typed expressions, including the `HashMapRef`/`type_place_expr ... = SOME (HashMapT ...)` part of `expr_result_typed`.
+works_when: Applies after unfolding `well_typed_expr_def` for `Subscript` and landing in the disjunct with `type_place_expr env e = SOME vt` and `subscript_vtype vt (expr_type e') = SOME (Type ty)`. Especially relevant when the base IH is guarded by `well_typed_expr env e` and cannot be applied.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37087_t003
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37088_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37086_t004
+
+## L1198 scope='C2.1.1.4' tags=Expr_Subscript,type_place_expr,HashMapT,TopLevelName,boundary-lemma
+shape: Expr_Subscript place-subscript disjunct with `type_place_expr env e = SOME vt` and no `well_typed_expr env e`
+pattern: For the place branch, prove/use direct place-expression eval soundness instead of coercing the base to ordinary expression typedness. TopLevelName/HashMap should be handled with `env_consistent_toplevel_hashmap_static` plus `lookup_global_HashMapVarDecl_returns_HashMapRef`, producing `expr_result_typed` through the HashMapRef side condition of `expr_result_typed_def`. The ordinary `lookup_global_TopLevelName_sound` only covers `well_typed_expr`/`Type ty` entries, so it is insufficient for HashMapT place bases.
+works_when: The live assumptions contain `type_place_expr env (TopLevelName ann (src,id)) = SOME (HashMapT kt vt)` or a nested Subscript place branch, along with env/state/context invariants and a successful `eval_expr`/`lookup_global`. Use this before applying the guarded index IH in Expr_Subscript.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37127_t003
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37131_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37156_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37142_t002
+
+## L1199 scope='C2.1.1.4' tags=Expr_Subscript,type_place_expr,mutual-induction,HashMapT,place_expr_result_typed
+shape: Expr_Subscript place branch has `type_place_expr env e = SOME vt` but only old base IH guarded by `well_typed_expr env e`
+pattern: When a `well_typed_expr (Subscript ...)` proof reaches the alternate `type_place_expr/subscript_vtype` branch, do not try to prove a local bridge to ordinary expression typing or standalone place eval soundness. Strengthen the evaluator mutual expression conjunct with a guarded place-expression postcondition (`type_place_expr env e = SOME vt ==> ... place_expr_result_typed env tv vt`) so nested Subscript place bases use the recursive evaluator IH and indices use the ordinary IH.
+works_when: Applies in fresh `vyperTypeStmtSoundnessScript.sml` while proving expression soundness for Subscript/TopLevelName places, especially HashMap locations annotated with `NoneT`. Use after direct `subscript_type_ok` branches are separated from place branches.
+evidence:
+- episode:E0637
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37197_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37199_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37164_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37175_t001
+
+## L1200 scope='C2.0' tags=For_cons,CHOOSE,boundary-helper,Resume,existential
+shape: For_cons / large Resume endpoints with existential or case-premise facts trigger CHOOSE/exact-endpoint failures
+pattern: When For_cons proof endpoints expose raw `case (INR exn)` premises, existential packages, or exact visible assumptions, do not retry ACCEPT_TAC/ASSUME/MATCH_MP endpoint tactics in the large Resume/core proof. Move the manipulation into small boundary helpers whose conclusion is the whole suffix or a direct return-exception fact; consume live assumptions with drule/irule and explicit witnesses only at the helper boundary.
+works_when: Applies to For_cons evaluator soundness branches after evaluator recursion has produced body-IH facts and popped/pushed invariants, especially under holbuild goalfrag instrumentation.
 evidence:
 - episode:E0475
-- episode:E0476
-- episode:E0477
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32827_t001
-
-## L1106 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1' tags=no_control,bind_INR,same_blocks,performance
-shape: Goal `do read_storage_slot; lift_sum(assign_subscripts ...); write_storage_slot; assign_result ... od s = (INR exc,s') ==> no_control_exc exc` repeated under many type constructors.
-pattern: Factor the common monadic do-block into a standalone no-control helper proved by `bind_INR` and primitive no-control lemmas, rather than splitting on `type_value`/`assign_operation` and expanding all cases in the caller.
-works_when: The residual exception source is a fixed do-chain whose component functions already have no-control theorems; no typing/state hypotheses should be needed.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32866_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32870_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32879_t001
-
-## L1107 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.1' tags=holbuild,performance,AllCaseEqs,case_split
-shape: Proof-performance hotspot after `gvs[AllCaseEqs()]` on evaluator/type-value cases.
-pattern: If `AllCaseEqs` plus constructor splitting leaves many similar `INR -> no_control_exc` subgoals, stop expanding and introduce a boundary lemma for the repeated monadic suffix. More cases can increase to hundreds of goals and exceed holbuild's tactic timeout.
-works_when: The displayed residuals share the same do-block modulo constructor wrappers or operation cases.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32868_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32870_t001
-
-## L1108 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2' tags=no_control,res_tac,performance,direct_premise
-shape: Goal `no_control_exc exc` with assumptions `∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc` and `eval_exprs cx es s0 = (INR exc0,st0)`.
-pattern: Do not use `res_tac` in large no-control contexts when an exact universal premise and exact matching equation are present. Specialize the premise directly on the displayed state/exception/state variables (or `first_x_assum drule` on the matching equation) and simplify only the resulting fact.
-works_when: The error branch is generated by decomposing a monadic bind and the HOL goal already contains a no-control premise for that exact subcomputation.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32920_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32926_t002
-
-## L1109 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2' tags=For_cons,IH-selection,qpat_x_assum,eval_stmts
-shape: Multiple universal IH assumptions with similar binders (`!stp res_body st_body. _`) in `eval_for_cons_type_sound_core`.
-pattern: Select the body statement IH by matching distinctive antecedents, e.g. `env_consistent (extend_local env id ty F) cx stp /\ ... /\ eval_stmts cx body stp = ... ==> _`, not by binder names or `_` conclusion. The broad pattern matched the recursive-tail IH shape and generated an impossible `env_consistent env cx stp` obligation.
-works_when: Use this in the For_cons helper/Resume context where both body and recursive-tail IH premises are live and have overlapping quantifier names.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32953_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32955_t001
-- episode:E0482
-
-## L1110 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.1' tags=no_control,ExtCall,res_tac,premise-specialization
-shape: Goal `no_control_exc exc` with exact assumptions `∀s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc` and `eval_exprs cx es s = (INR exc,st')`.
-pattern: Avoid `res_tac` in large ExtCall/no-control contexts. Use targeted specialization: `qpat_x_assum `∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc` (qspecl_then [`s`,`exc`,`st'`] mp_tac) >> simp[]`.
-works_when: The branch is an immediate `eval_exprs` failure path and the equation variables are exactly the current `s`, `exc`, `st'`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32936_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m32937_t001
-- episode:E0481
-
-## L1112 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2' tags=For_cons,suffix,CHOOSE,case-premise,holbuild
-shape: After `irule for_cons_ordinary_exception_full_suffix_from_case_premise`, residual is a conjunction ending in `∃env_after id st_body ty. case INR y of ...`.
-pattern: Preserve the full ordinary-exception case premise instead of destructing to `env_exn`; destructing creates a CHOOSE-sensitive final `return_exception_typed env_exn ret_ty y` endpoint. Early conjuncts can be closed locally (`simp[]` for state/account/env facts, `fs[no_type_error_result_def]` for `no_type_error_result (INR y)`). If exact acceptance of the full case premise fails, factor a helper rather than destructing it.
-works_when: Use in `eval_for_cons_type_sound_core` tail after the proof prefix has assumptions `no_type_error_result (INR y)`, full `case (INR y : unit + exception) of ...`, `state_well_typed stfinal`, `accounts_well_typed stfinal.accounts`, and `env_consistent env cx stfinal`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m33024_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m33033_t001
-- episode:E0485
-
-## L1113 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2' tags=For_cons,ACCEPT_TAC,ASSUME,CHOOSE,endpoint
-shape: Exact displayed assumption equals current atomic goal in `eval_for_cons_type_sound_core` suffix.
-pattern: Do not assume exact-assumption tactics are safe under this holbuild-instrumented proof boundary. `qpat_x_assum ... ACCEPT_TAC` and `ACCEPT_TAC (ASSUME ...)` both raised HOL_ERR/CHOOSE on exact goals; prefer changing the goal shape or using small simplification where it demonstrably closes the subgoal.
-works_when: Applies to the current For_cons ordinary-exception suffix proof under holbuild goalfrag instrumentation; may not generalize globally.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m33017_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m33028_t001
-- tool_output:TO_type_system_rewrite-20260520T094007Z_m33033_t001
-- episode:E0484
-- episode:E0485
-
-## L1114 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.2' tags=For_cons,INR_witness,irule,premise_order,existential
-shape: After `irule for_cons_ordinary_exception_full_suffix_from_INR_witness` in `eval_for_cons_type_sound_core`, the first subgoal is `∃id st_body ty env_exn. ... return_exception_typed ... y`, not `no_type_error_result (INR y)`.
-pattern: Discharge the witness premise first by moving the full `case (INR y : unit + exception) of ...` assumption to the goal, `simp[]` to expose `∃env_exn. ...`, `strip_tac`, then provide witnesses `id`, `st_body`, `ty`, `env_exn`. Only then close no-error with `fs[no_type_error_result_def]` and final state/account/env facts with `simp[]`.
-works_when: Use in the ordinary-exception tail after assumptions include no-error, final state/account/env facts, and the full body-IH case premise for `INR y`. Avoid exact acceptance of the full case premise.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T110618Z_m33061_t001
-- tool_output:TO_type_system_rewrite-20260520T110618Z_m33063_t001
-- tool_output:TO_type_system_rewrite-20260520T110618Z_m33065_t001
-- episode:E0488
-
-## L1115 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.2' tags=For_cons,timeout,env_consistent,gvs
-shape: Core proof prefix fact `env.type_defs = get_tenv cx` from `env_consistent env cx st` timed out with `fs[env_consistent_def, env_context_consistent_def]`.
-pattern: Use `gvs[env_consistent_def, env_context_consistent_def]` instead of `fs[...]` for this local fact; it advanced holbuild past the timeout to the intended tail patch.
-works_when: Applies at line ~3756 of `eval_for_cons_type_sound_core`, before proving pushed-state facts.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T110618Z_m33061_t001
-- episode:E0488
-
-## L1116 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.2' tags=For_cons,INR_witness,bundle_helper,premise_order,case_premise
-shape: `irule for_cons_ordinary_exception_full_suffix_from_INR_witness_bundle` inside `eval_for_cons_type_sound_core` ordinary-exception tail.
-pattern: Generated subgoals are ordered: witness existential, `state_well_typed stfinal`, `no_type_error_result (INR y)`, accounts, env-consistency. Preserve the full `case (INR y)` assumption with `qpat_assum ... mp_tac` when deriving the witness, because the final env-consistency helper may need the same premise again.
-works_when: Use after `qmatch_goalsub_abbrev_tac `state_well_typed stfinal`` and after assumptions include no-error, the full case premise, state/accounts/env facts for `stfinal`, and popped env-consistency helper premises.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33146_t001
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33148_t001
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33150_t001
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33151_t001
-- episode:E0489
-
-## L1117 scope='ForConsOrdinaryExceptionCaseHelperSubtree.IntegrateForConsSuffix.PatchResumeSuffix.2.2.1.2.2.1.1.2.2.1.2.2.2.2' tags=For_cons,CHOOSE,exact_endpoint,helper_boundary
-shape: Trivial-looking final goals in instrumented `eval_for_cons_type_sound_core` tail, e.g. matching `state_well_typed ...` assumption or reflexive pair equality.
-pattern: Do not spend attempts on endpoint tactics (`ACCEPT_TAC`, `REFL_TAC`, `simp[]`, `REWRITE_TAC [assumption]`) when holbuild reports CHOOSE/no theorem proved on a syntactically trivial goal. Move the endpoint behind a theorem/helper boundary or restructure so the exact goal is not exposed.
-works_when: Applies specifically to the ordinary-exception tail where holbuild instrumentation has repeatedly failed on exact/trivial endpoints despite matching assumptions.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33112_t001
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33117_t001
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33135_t001
-- tool_output:TO_type_system_rewrite-20260520T125121Z_m33138_t001
-- episode:E0489
-
-## L1120 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.UseDirectCaseBundleTail' tags=For_cons,case_premise,residual_bundle,CHOOSE,boundary_lemma
-shape: For_cons ordinary-exception suffix with visible no-error, full `case (INR y : value + exception)` premise, and final stfinal invariants; residual existential helper leaves `?id' st_body' ty' env_exn...` goals.
-pattern: Use a full-suffix boundary theorem whose antecedents are the visible high-level assumptions (`no_type_error_result`, full case premise, and final invariants). In this source the intended boundary is `for_cons_ordinary_exception_full_suffix_from_case_bundle_direct >> simp[]`. Avoid intermediate residual existential bundle helpers; their conclusion order is fragile under `irule` and triggers CHOOSE/extract_thm endpoint failures when manually destructed.
-works_when: Applies after the For_cons body result has been reduced to `INR y`, Continue/Break cases are eliminated, `stfinal` is introduced, and the body IH has produced the full exceptional case premise. If a residual existential bundle appears, the proof has dropped below the intended abstraction level.
-evidence:
-- episode:E0491
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33382_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33380_t001
-
-## L1121 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.UseBundledCasePremiseTail' tags=For_cons,case_premise,bundled_theorem,irule,antecedent_order,CHOOSE
-shape: For_cons ordinary-exception suffix after `qmatch_goalsub_abbrev_tac stfinal`, with visible noerr, full `case (INR y : value + exception)` premise, and final state/account/env facts.
-pattern: Use `for_cons_ordinary_exception_full_suffix_from_case_bundle`, not the curried `_direct` wrapper, in the main theorem. Plain `irule ... >> simp[]` may not close: holbuild showed generated antecedent subgoals in the order `accounts_well_typed stfinal.accounts`, `no_type_error_result (INR y)`, `state_well_typed stfinal`, `env_consistent env cx stfinal`, then `?env_after id st_body ty. case INR y of ...`. Solve simple conjuncts by `simp[]`/`fs[no_type_error_result_def]`, then instantiate the outer existential with visible `env_after`, `id`, `st_body`, `ty` and discharge using the existing case premise. Do not destruct the inner `env_exn` in the large theorem.
-works_when: Applies only in the ordinary non-Continue/non-Break `INR y` branch of `eval_for_cons_type_sound_core` after final `stfinal` invariants and the body-IH case premise are visible. If the inner `env_exn` existential becomes the active proof obligation, stop and package it in a helper rather than using CHOOSE in the main theorem.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33470_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33474_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33475_t001
-- episode:E0492
-
-## L1124 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTail' tags=For_cons,visible_bundle,case_premise,boundary_lemma,goalfrag,INR_witness
-shape: For_cons ordinary-exception tail after `stfinal` expansion, with final suffix proved by a helper whose antecedent includes a `case INR y of ...` premise.
-pattern: A visible-bundle helper removes antecedent-only `env_after/id/ty` existentialization, but if its bundled antecedent still contains the `case INR y` body premise, applying it backward leaves the same fragile case-premise subgoal in the large theorem. Prefer a helper over the already-simplified INR witness triple (or a popped-state `_from_INR_witness_bundle` variant) so the final consumer does not need to select/simplify the case expression.
-works_when: Applies in `eval_for_cons_type_sound_core` ordinary non-continue/non-break exception branch after assumptions include no-error, popped-state facts, and body case premise. Use only for designing the next helper; do not use it as a reason to destruct `env_exn` manually in the large theorem.
-evidence:
-- episode:E0498
-- episode:E0499
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33611_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33621_t001
-
-## L1125 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithResidualWitness' tags=For_cons,ReturnException,env_extends,return_exception_typed,goalfrag,timeout
-shape: For_cons ordinary-exception tail after `simp[]`, with goal reduced to `return_exception_typed env ret_ty y`.
-pattern: A direct `Cases_on y` can avoid the unstable `case INR y` premise entirely. Non-ReturnException constructors close with `simp[return_exception_typed_def]`; only the ReturnException branch needs transport of `value_runtime_typed` from the body exception witness environment back to `env`. For that branch, prefer existing env-extension return-typing helpers or a targeted projection over broad `gvs[env_extends_def, extend_local_def]`.
-works_when: Use after popped-state/state/account/env/no-error conjuncts have simplified away and the remaining suffix is only `return_exception_typed env ret_ty y`; assumptions include the body case premise and no-error for `INR y`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33684_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33689_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33691_t002
-- episode:E0502
-
-## L1127 scope='ForConsOrdinaryExceptionCaseHelperSubtree' tags=For_cons,ReturnException,boundary_lemma,CHOOSE,large_context
-shape: For_cons ordinary-exception suffix has visible existential/case premise but local assumption/existential tactics fail in large theorem.
-pattern: Move existential/case-premise manipulation into small boundary lemmas placed before `eval_for_cons_type_sound_core`; the large theorem should consume a theorem whose conclusion matches the whole suffix and should not use raw CHOOSE/qpat/ACCEPT_TAC on the body case premise.
-works_when: Use for the For_cons ordinary-exception branch after `eval_stmts cx body stp = (INR exn, st_body)` and the final suffix needs popped state/account/env, no-TypeError, and return typing.
-evidence:
 - episode:E0503
-- episode:E0505
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33776_t001
-
-## L1128 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.AddBodyExceptionProjectionHelper' tags=For_cons,body-IH,ReturnException,boundary_lemma,case-premise,env_extends
-shape: Need `return_exception_typed env ret_ty exn` for a For_cons body result `eval_stmts cx body stp = (INR exn, st_body)` without consuming the final raw `case INR ...` premise in `eval_for_cons_type_sound_core`.
-pattern: Prove a small body-IH projection helper: specialize the universal body-soundness hypothesis at `stp`, `INR exn`, and `st_body`; discharge pushed-state preconditions; simplify the resulting `case (INR exn)`; then transport the existential `env_exn` typing back to `env` using the existing return-exception boundary (`for_cons_return_exception_typed_from_body_ex` or `return_exception_typed_extend_local_env_extends`). In the large theorem, retain the universal body IH with non-destructive `qpat_assum` and apply this projection helper instead of selecting the raw case premise.
-works_when: Use in the For_cons ordinary-exception tail after the body equation and pushed-state invariants are available, especially when raw final case-premise selection in the large theorem causes CHOOSE/FIRST_ASSUM/extract_thm failures.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33819_t001
-- episode:E0507
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33814_t001
-
-## L1130 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithBodyProjection' tags=For_cons,ReturnException,boundary_lemma,large_context,CHOOSE,premise_order
-shape: In `eval_for_cons_type_sound_core`, a small helper applies but exact endpoints such as `env_consistent env cx st` or a large-conjunction `simp[]` fail in the final ReturnException branch.
-pattern: For this For_cons large theorem, make consumer helpers require already-derived pushed facts (`env.type_defs = get_tenv cx`, `env_consistent (extend_local env id ty F) cx stp`) and order premises so the tail can discharge them sequentially. Avoid late original-env exact endpoints and avoid `simp[]` over the whole helper conjunction; use explicit `conj_tac` in theorem-statement order or escalate to a full-tail bundled helper.
-works_when: Use after `Cases_on y` in the final ReturnException branch, with retained body IH, `stp = pushed-state`, and `eval_stmts cx body stp = (INR (ReturnException v'),st_body)` available.
-evidence:
-- episode:E0514
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33920_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33934_t001
-- tool_output:TO_type_system_rewrite-20260520T132249Z_m33945_t001
-
-## L1131 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailDirectBodySoundness' tags=For_cons,CHOOSE,boundary-lemma,holbuild,exact-endpoint
-shape: In `eval_for_cons_type_sound_core`, a helper application leaves a conjunction or existential package whose conjuncts are all visible as assumptions, but endpoint tactics fail with HOL_ERR CHOOSE.
-pattern: Do not keep varying exact endpoint tactics in this For_cons tail. If `irule`/IH specialization leaves atomic visible-assumption subgoals or an existential-package conjunction, factor a helper that consumes the package/the specialized IH result and directly concludes the final `return_exception_typed ...`; the large theorem should not destruct the package or prove trivial conjuncts locally.
-works_when: Use after specializing the body IH in the final `ReturnException` branch, especially around source lines ~4205-4216, where holbuild goalfrag raises CHOOSE on tautological endpoints.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T175243Z_m34024_t001
-- tool_output:TO_type_system_rewrite-20260520T175243Z_m34048_t001
-- tool_output:TO_type_system_rewrite-20260520T175243Z_m34056_t001
-
-## L1132 scope='ForConsOrdinaryExceptionCaseHelperSubtree.FinishEvalForConsOrdinaryExceptionSuffix.PatchEvalForConsCoreTailWithBodyResultHelper' tags=For_cons,ReturnException,body-IH,boundary-helper,MATCH_MP
-shape: Final For_cons ReturnException tail after body IH specialization
-pattern: Use `for_cons_body_result_return_exception_typed` by theorem-value application to the whole specialized body-IH conjunction. Avoid `cj 4`, `irule for_cons_return_exception_typed_from_body_ex`, and local existential package construction/destruction in `eval_for_cons_type_sound_core`.
-works_when: After the local body IH has been specialized to `stp`, `INR (ReturnException v')`, and `st_body`, and its antecedent is discharged from assumptions `env_consistent (extend_local env id ty F) cx stp`, `state_well_typed stp`, `accounts_well_typed stp.accounts`, and `eval_stmts cx body stp = (INR (ReturnException v'), st_body)`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260520T175243Z_m34083_t001
-- tool_output:TO_type_system_rewrite-20260520T175243Z_m34084_t001
-
-## L1137 scope='C2.0.2' tags=For_cons,ReturnException,non-loop-exception,boundary-lemma,CHOOSE,unit+exception
-shape: Large For-cons core proof reaches propagated exception residual for `INR y` with popped invariants, pushed invariants, body evaluation equality, body IH, and `y <> ContinueException`, `y <> BreakException`.
-pattern: Do not split the exception or apply ReturnException-only helpers inside `eval_for_cons_type_sound_core`. Prove an external `for_cons_non_loop_exception_suffix` whose conclusion is the whole final residual with `(case (INR exn : unit + exception) of INL _ => T | INR exn0 => return_exception_typed env ret_ty exn0)`. Inside the helper, split on `exn`; discharge non-return constructors by `return_exception_typed_def` and the `ReturnException v` case by `for_cons_return_exception_suffix`.
-works_when: Use when holbuild/goalfrag shows `Thm.CHOOSE` in the large caller on exact-assumption/trivial implication endpoints after applying a narrower suffix helper. The caller should only instantiate the wider helper; all constructor/case/existential work stays outside the core proof.
-evidence:
 - episode:E0546
-- tool_output:TO_type_system_rewrite-20260520T182357Z_m34481_t001
-- tool_output:TO_type_system_rewrite-20260520T182357Z_m34483_t001
-- episode:E0547
-
-## L1140 scope='C2.0.2.2' tags=For_cons,body-IH,projection-helper,conjunction,existential,CHOOSE,GEN,boundary-lemma
-shape: For-cons helper specializes body IH at `(stp, INR exn, st_body)` and the goal is the full specialized conjunction, while its conjuncts appear as assumptions after `strip_tac`.
-pattern: Do not close this area by whole-goal theorem acceptance (`first_assum ACCEPT_TAC`, explicit `ASSUME`/`LIST_CONJ`, `MATCH_MP`) and do not open/rebuild the exception existential. Specialize the body IH, discharge antecedents, `strip_tac`, then construct the final conjunction subgoal-by-subgoal (`rpt conj_tac` with per-conjunct assumption closure), keeping the case/existential branch packaged.
-works_when: Applies to C2.0.2.2.1/C2.0.2.2.2 For-cons helper lemmas after body-IH specialization. If exact whole-conjunction endpoints fail, use subgoal-level construction; if even per-conjunct construction fails, escalate for a direct suffix-consumes-IH interface.
-evidence:
-- episode:E0551
-- episode:E0552
-- tool_output:TO_type_system_rewrite-20260521T114716Z_m34732_t001
-- tool_output:TO_type_system_rewrite-20260521T114716Z_m34730_t001
-
-## L1141 scope='C2.0.2.3' tags=For_cons,irule,existential-witness,suffix-helper,core-patch
-shape: Core proof applies a helper whose conclusion matches but whose variables (`body`, `env_after`, `id`, `stp`, `ty`) appear mainly in antecedents, leaving existential helper-parameter goals after bare `irule`.
-pattern: When applying `for_cons_non_loop_exception_suffix` in `eval_for_cons_type_sound_core`, do not rely on `irule` to infer all parameters. Immediately supply explicit witnesses for caller-only parameters, especially `body`, `env_after`, `id`, the pushed state, and `ty`, then simplify `Abbr`stp`` and discharge remaining local assumptions from the existing core context.
-works_when: Use after the core branch has substituted `res = INR y`, `st' = st_body with scopes := TL st_body.scopes`, and has assumptions for pushed `stp`, body evaluation, popped invariants, and `y <> ContinueException/BreakException`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T114716Z_m34784_t001
-- tool_output:TO_type_system_rewrite-20260521T114716Z_m34786_t002
-- episode:E0556
-
-## L1142 scope='C2.0.2.3' tags=For_cons,body-IH,endpoint-validation,helper-interface
-shape: Core proof must prove a helper antecedent identical to a universally quantified body-IH consequent, but exact acceptance/simplification fails in the mutual-proof context.
-pattern: When `for_cons_non_loop_exception_suffix` is applied in `eval_for_cons_type_sound_core`, proving the final body-IH antecedent inline by specializing the existing IH can enter a brittle endpoint-validation state. If exact-looking goals remain after `mp_tac`/`strip_tac` or `goal_assum $ drule_at Any`, factor the antecedent into a caller-shaped helper/corollary instead of retrying local acceptance tactics.
-works_when: Applies after the core branch has derived `res = INR y`, supplied explicit witnesses to `for_cons_non_loop_exception_suffix`, and the remaining goal is the helper's universal body-IH antecedent for arbitrary `stp0 res_body st_body0`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m34860_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m34870_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m34872_t001
-- episode:E0557
-
-## L1143 scope='C2.0.2.3.1' tags=For_cons,projected-helper,sum_case_def,existential,return_exception_typed
-shape: Projected helper with premise `case (INR exn) of ... => ?env_exn. ...` and conclusion requiring `return_exception_typed env ret_ty exn`.
-pattern: If direct proof of a case-expression projected helper is brittle after `sum_case_def`, first prove an explicit existential-form helper taking `env_exn` and the three existential conjuncts as separate premises, then prove the case-expression compatibility theorem by `rpt strip_tac >> gvs[sum_case_def] >> irule explicit_helper >> qexists_tac ...`. This avoids reconstructing universal body-IH facts in the core proof.
-works_when: Use for the For-cons non-loop exception suffix after body IH has produced an actual exceptional projection and the only semantic step is `return_exception_typed_extend_local_env_extends`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m34952_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m34954_t001
-- episode:E0559
-
-## L1144 scope='C2.0.2.3.2' tags=For_cons,existential,CHOOSE,sum_case_def,projected-helper
-shape: Goal/assumption are identical-looking existential facts after simplifying `case (INR y : unit + exception) of ...`, but `ACCEPT_TAC`, `disch_then ACCEPT_TAC`, `metis_tac[]`, or direct `ASSUME` fail with CHOOSE-origin errors.
-pattern: In the For-cons core branch, avoid exact existential endpoint acceptance. After reducing the helper premise with `simp[sum_case_def]`, move/simplify the body-IH case fact, destruct it with `qx_choose_then` (or an equivalent explicit existential elimination), then rebuild the existential goal with `qexists_tac` and solve conjuncts from assumptions.
-works_when: Use when consuming the actual projected body-IH exceptional fact for `INR y` in `eval_for_cons_type_sound_core`; the first four premises of `for_cons_non_loop_exception_suffix_projected` are already solved from assumptions and only the existential projected-case premise remains.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35020_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35031_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35033_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4548-4566
-
-## L1146 scope='C2.0.2.3.2.1' tags=For_cons,CHOOSE,boundary-helper,body-IH,existential
-shape: A suspended core proof needs to pass a body-IH premise whose conclusion differs only by alpha names in a `case res_body of INL ... | INR ... ?env_exn ...` branch.
-pattern: Do not prove this body-IH premise inside `eval_for_cons_type_sound_core`. Prove standalone transport lemmas over arbitrary `res_body` first (`for_cons_body_ih_conclusion_transport`, then `for_cons_body_ih_premise_transport`) and have the core proof use the full-IH wrapper by name. In the standalone `INR` case, provide the existing `env_exn` witness explicitly.
-works_when: Applies after the direct suffix helper `for_cons_non_loop_exception_suffix` is the intended endpoint and all non-body-IH premises are visible/dischargeable, but local acceptance/simplification of the body-IH premise fails with CHOOSE-origin validation.
-evidence:
-- episode:E0567
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35149_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35154_t001
-
-## L1148 scope='C2.0.2.3.2.1' tags=For_cons,CHOOSE,boundary-helper,body-IH,existential,sum_case
-shape: For-cons endpoint needs `return_exception_typed env ret_ty y` but the only direct evidence is body-IH `case (INR y) of ... ?env_exn ...`.
-pattern: Do not consume the concrete `case (INR y)` existential inside `eval_for_cons_type_sound_core`; in the suspended endpoint, even alpha-equivalent assumptions, explicit witnesses, trivial conjunctions, and `P ==> P` can fail with CHOOSE/Q_TAC validation. Instead prove a standalone non-existential helper that specializes the body IH at `(stp, INR y, st_body)` and concludes `return_exception_typed env ret_ty y`, then apply that helper in the endpoint.
-works_when: Applies to the For-cons ordinary non-loop exception branch after pushed-state facts and concrete `eval_stmts cx body stp = (INR y, st_body)` are available. The helper must copy the body-IH premise shape from `eval_for_cons_type_sound_core` and have no existential/case in its conclusion.
-evidence:
 - episode:E0571
 - tool_output:TO_type_system_rewrite-20260521T121230Z_m35279_t001
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35277_t001
+
+## L1201 scope='C2.0' tags=For_cons,non-loop-exception,irule,explicit-witness
+shape: For_cons non-loop exception propagation from body IH
+pattern: For non-Continue/non-Break body exceptions, use a full suffix helper that concludes the final `case (INR exn)` return-typing residual. Keep constructor splitting and existential transport outside the core proof; in the caller instantiate helper-only variables explicitly (`body`, `env_after`, `id`, pushed state, `ty`) rather than relying on bare `irule`.
+works_when: Use after the For_cons branch has body evaluation `eval_stmts cx body stp = (INR exn, st_body)`, visible pushed-state facts, popped-state facts, and `exn <> ContinueException`, `exn <> BreakException`.
+evidence:
+- episode:E0546
+- episode:E0556
+- tool_output:TO_type_system_rewrite-20260521T114716Z_m34784_t001
+
+## L1202 scope='C2.1.1.4.4' tags=expression-IH,place_expr_result_typed,Subscript,proof-refactor
+shape: Old expression conjunct has `well_typed_expr` as an antecedent, but Subscript place branch only has `type_place_expr env base = SOME vt`.
+pattern: Repair by changing the expression conjunct to first assume only env/state/eval invariants, then conclude a pair of guarded projections: ordinary `well_typed_expr` -> old `expr_result_typed` postcondition, and place `type_place_expr` -> `place_expr_result_typed` postcondition. Consumers should specialize the IH once, split projections, and use the projection matching the static guard.
+works_when: Use for Expr_Subscript/TopLevelName place-expression soundness inside `eval_all_type_sound_mutual`; do not use it to justify a standalone place-expression induction.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37207_t003
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37214_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37216_t001
+
+## L1203 scope='C2.1.1.4.4' tags=expression-IH,projection,tactic-timeout,place_expr_result_typed
+shape: After strengthening the expression conjunct, a consumer has `first_x_assum drule_all >> strip_tac` and then a full pair `(well_typed_expr ... ==> old_post) /\ (!vt. type_place_expr ... ==> place_post)` in context.
+pattern: Do not simplify with the full paired IH in context. Immediately project the needed branch: for ordinary consumers, use `qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac)` and discard the unused `!vt. type_place_expr ...` assumption. Use targeted `rewrite_tac[no_type_error_result_def]` rather than broad `gvs[]` on the resulting large goal.
+works_when: Applies to post-refactor statement/expression resumes that consume an expression IH but are not themselves proving a place-expression branch; particularly AssertReason/AnnAssign-style branches.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37227_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37260_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37273_t001
+
+## L1204 scope='C2.1.1.4.4' tags=AnnAssign,materialise,expr_result_typed,projection,tactic-timeout
+shape: After ordinary expression projection, goal needs typedness or no-TypeError facts about `materialise cx tvl st = ...` from `expr_result_typed env e tvl`.
+pattern: Use materialise boundary helpers instead of unfolding `expr_result_typed_def` in statement resumes. For error branches, `expr_result_typed_materialise_no_type_error` directly proves `err <> Error (TypeError msg)` from `well_typed_expr`, `expr_result_typed`, and the materialise equation. For success branches, the new helper `expr_result_typed_materialise_preserves_value_type` packages `expr_runtime_typed` + `materialise_preserves_value_type` to obtain `value_has_type tyv v`.
+works_when: Applies in ordinary expression consumers after the strengthened expression IH has been projected with `well_typed_expr env e`; especially AnnAssign/Append/Assign/AugAssign materialise tails. Verify helper name/location before use because source is currently unverified after final edit.
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:117
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:718
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37331_t001
+- episode:E0639
+
+## L1205 scope='C2.1.1.4.4' tags=AnnAssign,monad,eval_stmt,boundary-helper,tactic-timeout
+shape: A statement resume has a huge context and a pushed/expanded `(let tenv = ... in do ... od) st = (res,st')` AnnAssign evaluation equation.
+pattern: Do not rewrite the expanded monadic equation inside the large resume. Prove a small statement-level equation helper over the original `eval_stmt cx (AnnAssign id typ e) st = (res,st')`, e.g. deriving `new_variable id tyv v st2 = (res,st')` or `res = INR exn /\ st' = st2`, then retain the original `eval_stmt` assumption and apply that helper. The let-shaped helper may prove in isolation but match poorly in the resume.
+works_when: Use in AnnAssign after `eval_expr` and `materialise` have been case-split and the original `eval_stmt` equality can be kept in context. Avoid if the helper conclusion does not match the branch postcondition directly.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37413_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:793
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4277
+
+## L1206 scope='C2.1.1.4.4' tags=AnnAssign,expression-IH,boundary-helper,tactic-timeout,statement-resume
+shape: Statement resume under strengthened expression IH times out applying small branch helpers inside an expanded monadic evaluator equation.
+pattern: Factor a whole statement-case helper that takes the ordinary expression IH projection and the original `eval_stmt` equation, performs the local evaluator unfolding/case split in a small theorem, and returns exactly the statement postcondition. Then the `Resume` proof should only extract static typing facts, prove the projection premise, and apply the helper.
+works_when: Use for AnnAssign-like statement cases where the resume context includes the paired ordinary/place expression IH and broad branch-local simplification or `drule_all` matching times out. This pattern moved the build from AnnAssign to Append.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37455_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37477_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:857
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4370
+
+## L1207 scope='C2.1.1.4.4' tags=statement-resume,expression-IH,case-split,tactic-timeout,Append,Assign,AugAssign
+shape: Statement resume has a strengthened paired expression IH plus a target/base-target IH; after `Cases_on target_res` or `bt_res`, broad `gvs[no_type_error_result_def]` times out.
+pattern: Do a manual result split with no simplifier: `Cases_on ...`; in the INL branch, expose only the postcondition case assumption with `qpat_x_assum `case INL _ of _ => _ | _ => _` mp_tac >> rewrite_tac[] >> strip_tac`, then rewrite the outer monadic pair/sum case with `pure_rewrite_tac[pairTheory.pair_case_def] >> BETA_TAC >> pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC`. In the INR branch, substitute `res`/`st'` from the outer equation, kill large IH assumptions, and prove state/accounts/no-TypeError from the already-projected target IH facts.
+works_when: Use after base-target/target IH has already produced state/env/accounts/no-TypeError and runtime-shape facts, and the next failure is a timeout in `gvs`/`simp` immediately after a result case split. If multiple sub-resumes still need the same pattern, factor a whole-case helper instead.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37539_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37545_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37553_t001
+- episode:E0641
+
+## L1208 scope='C2.1.1.4.4' tags=no_type_error_result,INR,TypeError,contradiction,tactic-timeout
+shape: Goal is `no_type_error_result (INR y)` or its unfolded form, with context containing `!msg. y <> Error (TypeError msg)`.
+pattern: Avoid assumption matching in a huge context. Either keep the goal unfolded as `!msg. INR y <> INR (Error (TypeError msg))` and reduce to the saved inequality, or after `rpt strip_tac` specialize the saved `!msg. y <> Error (TypeError msg)` to the current `msg` and derive contradiction from the equality. Do not rewrite the goal into the positive equality `y = Error (TypeError msg)`.
+works_when: Applies to statement exception branches where no-TypeError came from a projected evaluator/target IH and was unfolded by `fs[no_type_error_result_def]`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37553_t001
+- episode:E0641
+
+## L1209 scope='C2.1.1.4.4' tags=Iterator_Range,expression-IH,tactic-timeout,get_Value,lift_sum,range
+shape: Iterator_Range after strengthened expression IH has nested `eval_expr`/`get_Value`/`lift_sum (get_range_limits ...)` cases and paired ordinary/place IHs in context; broad `gvs` times out or explodes constructor cases.
+pattern: Project ordinary expression postconditions immediately, discard unused place projections, and process monadic cases with targeted rewrites. For state-only functions use `drule get_Value_state` or `drule lift_sum_state` plus direct substitution instead of `imp_res_tac ... >> gvs[]`. For the range success tail, avoid case-splitting all value constructors; derive `v1 = IntV i` and `v2 = IntV j` from `expr_result_typed`, `get_Value` success, `is_int_type`, and `value_has_type`, or factor this into a `range_iterator_tail_sound` helper.
+works_when: Applies to `Resume eval_all_type_sound_mutual[Iterator_Range]` or similar pure tail cases after the ordinary/place expression invariant refactor. Especially useful when holbuild shows timeouts at `Cases_on ... >> gvs[no_type_error_result_def]`, `get_Value_state >> gvs[]`, or broad value-constructor simplification.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37603_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37613_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:5629
+- episode:E0642
+
+## L1211 scope='C2.1.1.5' tags=strengthened-IH,ordinary-projection,expr2,qpat_x_assum
+shape: Second endpoint IH in strengthened expression invariant: `!env st res st'. ... ==> (well_typed_expr ... ==> ordinary) /\ place`
+pattern: Do not rely on `drule_all` leaving an easily selectable `well_typed_expr _ e' ==> _` assumption. Explicitly instantiate the endpoint IH with `qspecl_then [env, st1, expr2_res, st3] mp_tac`, discharge env/state/evaluation premises, then move the `well_typed_expr env e' ==> _` projection and discharge it before splitting `expr2_res`.
+works_when: The expression IH conclusion is the strengthened ordinary/place conjunction and only the ordinary endpoint projection is needed.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37640_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37641_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37642_t001
+
+## L1212 scope='C2.1.1.5' tags=Iterator_Range,range-tail-helper,lift_sum,get_range_limits,branch-closure
+shape: After endpoint extraction in Iterator_Range: typed `IntV i1/i2` endpoints and `lift_sum (get_range_limits (IntV i1) (IntV i2)) st = (INL rl,st)` with goal `no_type_error_result (INL (GENLIST ...)) /\ EVERY ...`.
+pattern: A local helper `iterator_range_tail_sound` near `range_values_well_typed` can package the range-success tail: from `value_has_type tv (IntV i1)`, `value_has_type tv (IntV i2)`, and the `lift_sum (get_range_limits ...)` success equation, derive both the no-TypeError conjunct and the `EVERY (value_has_type tv)` range-values conjunct. This avoids hand-managed `i1 <= i2` branches in the large mutual resume. The use site still needs a matched fact/application, not raw branch tactics.
+works_when: Endpoint extraction has already rewritten both values to `IntV i1`/`IntV i2`, and `lift_sum_state` has substituted the state so the success equation has identical input/output state.
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4003-4020
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37711_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37725_t001
+
+## L1213 scope='C2.1.1.5.1' tags=Iterator_Range,whole-tail-helper,branch-leak,lift_sum,get_range_limits
+shape: Local helper over `lift_sum (get_range_limits (IntV i1) (IntV i2)) st = (range_res,st_tail)` plus final tail equation
+pattern: When a Resume branch split leaks helper implications into the sibling branch, move the split into a whole-tail helper. The helper should consume endpoint typedness, `evaluate_type`, the `lift_sum` equation, and the final tail pair equation, then return state equality, no-TypeError, and result typing. In the Resume, call the helper once after endpoint extraction instead of splitting on `range_res`.
+works_when: Endpoint extraction has already yielded `v1 = IntV i1`, `v2 = IntV i2`, `value_has_type tyv (IntV i1/i2)`, and the tail is just `lift_sum (get_range_limits ...)` followed by return/raise.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37798_t001
+- episode:E0646
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37803_t001
+
+## L1214 scope='C2.1.1.5.1' tags=HOL4,drule,qexists_tac,helper-specialization
+shape: Helper proof INL branch after `drule iterator_range_tail_sound` leaves goal `no_type_error_result ... /\ EVERY ...`, not an existential
+pattern: If a reused helper returns exactly the no-TypeError/EVERY tail fact, do not continue with existential-witness tactics intended for the enclosing result-typing conjunct. Either specialize the helper directly with `qspecl_then [...] mp_tac ... >> simp[] >> strip_tac` and then separately witness result typing with `tyv`, or prove the tail fact in a named subgoal before assembling the helper's final conjunctions.
+works_when: The local helper's final conclusion is a conjunction of state equality, no-TypeError, and a case expression; after `gvs[return_def,raise_def]`, the INL branch may split so the helper tail fact and existential result-typing fact must be handled at the correct subgoal.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37804_t001
+
+## L1216 scope='C2.1.1.5.2' tags=Iterator_Range,whole-tail-helper,resume-refactor,lift_sum
+shape: After endpoint extraction to `IntV i1/i2`, live `lift_sum (get_range_limits (IntV i1) (IntV i2)) st3 = (range_res,st5)` plus final tail pair equation
+pattern: In the Resume, call `iterator_range_tail_eval_sound` once after endpoint extraction and prove its final-tail antecedent by moving the live pair equation to the goal, case-splitting `range_res` inside the antecedent proof, and simplifying with `return_def`/`raise_def`. This avoids an outer range-res branch in the Resume.
+works_when: Endpoint facts include `evaluate_type env.type_defs (expr_type e) = SOME tv`, `value_has_type tv (IntV i1)`, `value_has_type tv (IntV i2)`, and the final evaluator tail equation is still available as a case over `(range_res,st5)`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37874_t001
+- episode:E0648
+
+## L1217 scope='C2.1.1.5.2.2' tags=Iterator_Range,error-tail,get_Value,sum_case_def,helper-integration,performance
+shape: Iterator_Range error-propagation branch with final tail equation `(case (INL tv1,st1) of ...) = (res,st')` or `(case (INR y,st1) of ...) = (res,st')` in the large mutual Resume
+pattern: Do not simplify large Iterator_Range case tails in the Resume. First use a small control-flow helper (e.g. `iterator_range_first_get_value_error_eq`) to derive `res = INR y` and `st' = st1`, substitute with `SUBST_ALL_TAC`, then unpack the relevant expression IH and prove no-TypeError with a typed helper if needed. If applying `int_expr_get_Value_INR_no_type_error` via `irule`, the generated existential witness order is `e, env, st, st', tv, ty`.
+works_when: The branch is pure error propagation before later endpoint/range computation; no state-changing tail beyond returning `(INR y,st1)` should occur. The first-expression IH is available as `well_typed_expr env e ==> ...`.
+evidence:
+- episode:E0651
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37924_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m37928_t001
+
+## L1218 scope='C2.1.1' tags=mutual-Resume,control-flow,performance,case-tail,BaseTarget_Subscript,Iterator_Range
+shape: Evaluator Resume branch with a final `(case (res,st) of ...) = (res',st')` tail and a broad `gvs`/`simp` timeout
+pattern: Normalize evaluator control-flow tails only after isolating a single semantic branch. First derive/substitute the propagated `res`/`st'` equalities or use a tiny local control-flow lemma; then unpack IH frame/typing facts. Avoid `gvs[no_type_error_result_def, return_def]` or `AllCaseEqs()` across multiple live branches in the mutual proof.
+works_when: The evaluator branch is pure sequencing/error propagation and the relevant IH already supplies frame preservation and no-TypeError facts for the sub-computation.
+evidence:
+- episode:E0652
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38007_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38011_t001
+
+## L1219 scope='C2.1.1' tags=mutual-Resume,proof-order,expression-projection,place-projection,Expr_Name,Expr_BareGlobalName
+shape: Expression Resume branch where the goal is still `well_typed_expr env (Ctor ...) ==> ...` and a constructor lookup/soundness lemma is applied with `drule_all` too early
+pattern: After evaluator simplification in expression Resume blocks, split ordinary expression and place-expression projections before applying constructor soundness lemmas. In the ordinary branch, `strip_tac` to move `well_typed_expr` into assumptions, then `drule_all` the lookup/soundness boundary lemma. Close the non-place projection separately by rewriting `well_typed_expr_def`/place-expression definitions. This fixed Expr_Name and is the intended shape for Expr_BareGlobalName.
+works_when: The constructor is an ordinary expression with a vacuous/non-place `type_place_expr` projection, and the existing boundary lemma requires `well_typed_expr env (Ctor ...)` as a premise.
+evidence:
+- episode:E0654
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38037_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38040_t001
+
+## L1220 scope='C2.1.1.9' tags=TopLevelName,type_place_expr,lookup_global,place-projection,mutual-resume
+shape: `Expr_TopLevelName` Resume after ordinary branch is solved, with remaining `type_place_expr env (TopLevelName ann nsid) = SOME vt ==> ...` projection.
+pattern: Do not close the second expression projection for `TopLevelName` by vacuity. `type_place_expr` for `TopLevelName` is a real lookup into `env.toplevel_vtypes`; after `lookup_global_state` it still needs no-TypeError and success `place_expr_result_typed` reasoning. Prefer a local place-lookup boundary lemma over broad `gvs` in the mutual Resume.
+works_when: Applies in `eval_all_type_sound_mutual[Expr_TopLevelName]` and similar name-like constructors that are also place expressions. Use after the ordinary `well_typed_expr` branch has been stripped and handled.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38075_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38082_t001
+- source:semantics/prop/vyperTypeSystemScript.sml:544-547
+
+## L1221 scope='C2.1.1' tags=proof-order,well_typed_expr,drule_all,Resume,expression-projection
+shape: Expression Resume goal still has `well_typed_expr env (Ctor ...) ==> ...` and a constructor lookup/soundness lemma is about to be applied.
+pattern: For ordinary expression projection goals, first move/simplify the evaluator equation, enter the ordinary branch, and `strip_tac` the `well_typed_expr` antecedent before `drule_all` on constructor lookup/soundness lemmas. This fixed `BareGlobalName` and the ordinary part of `TopLevelName`.
+works_when: Applies to constructor soundness lemmas whose first premise is `well_typed_expr env <same expression>` and the mutual theorem presents that premise as an implication antecedent.
+evidence:
+- episode:E0657
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38068_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38074_t001
+
+## L1222 scope='C2.1.1.9' tags=TopLevelName,type_place_expr,lookup_global,place-projection,boundary-lemma
+shape: Need to prove `type_place_expr env (TopLevelName ann (src,id)) = SOME vt` plus `lookup_global ... = (res,st')` implies no-TypeError and `place_expr_result_typed`.
+pattern: A clean boundary splits `vt`. For `Type ty`, if the name is not a bare global, use `env_consistent_toplevel_storage_static` plus `lookup_global_StorageVarDecl_no_type_error`, then unfold `lookup_global` only for INL success to prove `place_expr_result_typed (Type ty)`. If it is a bare global, derive `well_typed_expr env (TopLevelName ty (src,id))` from env-context consistency and reuse `lookup_global_TopLevelName_sound`, then bridge `expr_result_typed` to `place_expr_result_typed`. For `HashMapT kt vt`, use `env_consistent_toplevel_hashmap_static` and `lookup_global_HashMapVarDecl_returns_HashMapRef`.
+works_when: Applies to `Expr_TopLevelName` place projection after `lookup_global_state` has normalized state equality and all standard mutual hypotheses (`env_consistent`, `state_well_typed`, `context_well_typed`, `accounts_well_typed`, `functions_well_typed`) are available.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38093_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38096_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38133_t001
+
+## L1224 scope='C2.1.1' tags=Resume,IfExp,joint-IH,ordinary-projection,place-projection,performance
+shape: Expression Resume helper expects ordinary-only branch IH, but live mutual IH concludes `(well_typed_expr ... ==> ordinary) /\ (!vt. type_place_expr ... ==> place)`.
+pattern: For expression Resume branches in the joint soundness theorem, helper lemmas that consume recursive expression IHs should either accept the joint IH shape directly or use a small adapter to extract the ordinary projection. Do not search for ordinary-only `well_typed_expr ... /\ ... ==> ...` assumptions when the live context contains joint ordinary/place projections.
+works_when: Applies in `eval_all_type_sound_mutual` expression branches such as IfExp where branch dispatch helpers consume recursive expression IHs for subexpressions.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38233_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38235_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38265_t001
+
+## L1226 scope='C2.1.1' tags=Resume,well_typed_expr,type_place_expr,ordinary-projection,place-projection,Subscript
+shape: Expression Resume goal concludes `(well_typed_expr env (Ctor ...) ==> ordinary_soundness) /\ (!vt. type_place_expr env (Ctor ...) = SOME vt ==> place_soundness)`, while old proof starts by selecting `well_typed_expr` as an assumption.
+pattern: For each expression constructor Resume, split the joint ordinary/place conclusion before consuming constructor typing. In the ordinary half, `strip_tac` the `well_typed_expr` antecedent and only then unfold the constructor typing/evaluator definitions. In the place half, reason separately from the `type_place_expr ... = SOME vt` antecedent: use a targeted NONE lemma only for genuinely non-place constructors, and use place-specific IH/facts for constructors such as Subscript.
+works_when: Applies to `eval_all_type_sound_mutual` expression Resume branch-local repairs. Verified for IfExp and StructLit; current Subscript failure has the same proof-order shape but likely a non-vacuous place projection.
+evidence:
+- episode:E0663
+- episode:E0664
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38283_t003
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38291_t001
+
+## L1227 scope='C2.1.1' tags=Resume,expression,place_projection,Subscript,proof_order
+shape: Expression Resume goal concludes `(well_typed_expr env (Ctor ...) ==> ordinary) /\ (!vt. type_place_expr env (Ctor ...) = SOME vt ==> place)`
+pattern: Always split the joint expression conclusion before consuming constructor typing. For non-place constructors the place half may close by targeted `type_place_expr` contradiction; for place-capable constructors such as Subscript, strip the `type_place_expr ... = SOME vt` assumption and use the appropriate place IH/boundary lemmas.
+works_when: Applies inside `eval_all_type_sound_mutual` expression Resume branches after the strengthened joint ordinary/place invariant. Avoids premature `qpat_x_assum`/`drule_all` failures when the typing premise is still an implication antecedent.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38291_t001
+- episode:E0663
+- episode:E0664
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38309_t001
+
+## L1228 scope='C2.1.1.13' tags=Resume,Subscript,place_projection,pair_case,sum_case,proof_order
+shape: Expr_Subscript Resume after split-first; small base-error tail has `(case (INR y,st1) of ...) = (res,st')` and large mutual IH assumptions in context
+pattern: For small tail simplifications inside large mutual Resume goals, avoid `simp[]`/`gvs[]`; they time out on the whole context. Push the equality with `mp_tac`, use `simp_tac bool_ss [pair_case_thm, sum_case_def]`, then split `PAIR_EQ` if needed and finish with `asm_rewrite_tac[]` plus targeted sum-case rewrites.
+works_when: Applies to evaluator branches where the term is a simple pair/sum case but the context contains large mutual IHs and recursive evaluator terms. It is not a replacement for proving the real place projection.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38398_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38414_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38419_t001
+
+## L1230 scope='C2.1.1.13' tags=Subscript,place_expr_result_typed,expr_result_typed,type_place_expr,HashMapRef
+shape: Need ordinary `expr_result_typed env e tv` but only have `type_place_expr env e = SOME vt` and `place_expr_result_typed env tv vt`.
+pattern: A local boundary helper can convert place-success to ordinary expression result: prove `type_place_expr env e = SOME vt /\ place_expr_result_typed env tv vt ==> expr_result_typed env e tv` using `type_place_expr_annotation_ok_stmt`, `place_expr_result_typed_def`, `expr_result_typed_def`, `expr_runtime_typed_def`, and cases on `vt`. The HashMapT case is valid: annotation forces `expr_type e = NoneT`, `evaluate_type ... NoneT = SOME NoneTV`, and `toplevel_value_typed (HashMapRef ...) NoneTV`; do not rule out HashMapRef here.
+works_when: Use in Expr_Subscript place-base proof paths when a downstream obligation wants ordinary `expr_result_typed` for a place expression. It does not by itself solve the Subscript evaluator tail; HashMapRef/storage evaluation still needs place-specific handling.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38530_t001
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38532_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6726-6750
+
+## L1232 scope='C2.1.1.13' tags=Subscript,place_base,helper,HashMapRef,ArrayRef,evaluator_tail
+shape: Ordinary `well_typed_expr env (Subscript ...)` branch has place-base disjunct with `type_place_expr env e = SOME vt`, `place_expr_result_typed env x vt`, index success, and exact evaluator tail.
+pattern: Factor the place-base evaluator tail into a local helper rather than forcing the old ordinary-base proof. A useful helper assumes invariants, `well_formed_type`, `type_place_expr env e = SOME vt`, `subscript_vtype vt (expr_type e') = SOME (Type v9)`, base `place_expr_result_typed`, index `expr_result_typed`, successful `get_Value`, and the exact Subscript `do` tail, then proves state/env/account preservation, no TypeError, and ordinary `expr_result_typed` for `Subscript`. Case split on `vt`: Type(ArrayT) reuses ordinary `evaluate_subscript_typed_stmt`/storage-tail lemmas; HashMapT(Type) unfolds `evaluate_subscript_def` with a local `check_array_bounds_hashmap_stmt`.
+works_when: Use inside `Resume eval_all_type_sound_mutual[Expr_Subscript]` for the place-base static disjunct of the ordinary half, and likely also for the later real place projection. The helper was accepted by holbuild before the unbuilt call-site edit.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38605_t001
+- episode:E0675
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6752-6864
+
+## L1233 scope='C2.1.1.13' tags=check_array_bounds,HashMapRef,local_import,boundary
+shape: Need `check_array_bounds cx (HashMapRef ...) kv st = (INL (), st)` in `vyperTypeStmtSoundnessScript.sml`, but imported `check_array_bounds_hashmap` is not declared.
+pattern: Add a local theorem `check_array_bounds_hashmap_stmt[local]` proved by `Cases_on kv >> rw[check_array_bounds_def, return_def]` rather than importing a new theory or unfolding bounds repeatedly in the Resume. Use it in small helpers where HashMapRef bounds are a no-op.
+works_when: Applies in `vyperTypeStmtSoundnessScript.sml` subscript place-base helper proofs involving HashMapRef. Avoids dependency churn and broad `check_array_bounds_def` unfolding in the mutual proof body.
+evidence:
+- tool_output:TO_type_system_rewrite-20260521T174852Z_m38605_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6752-6757
+
+## L1234 scope='C2.1.1.13' tags=Subscript,well_typed_expr,static_disjunct,Resume,proof_order
+shape: `well_typed_expr env (Subscript v9 e e')` inside the mutual Resume exposes both ordinary-base and place-base static typing alternatives.
+pattern: Split the Subscript static typing disjunction before evaluator-tail case analysis. The ordinary-base branch may use ordinary `expr_result_typed` facts and old array/value proof; the place-base branch must preserve `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME ...`, use the base place IH, and then call a tail helper. A shared `FIRST [place helper; old ordinary tail]` after `get_Value` is the wrong abstraction.
+works_when: Use in `Resume eval_all_type_sound_mutual[Expr_Subscript]` after unfolding `well_typed_expr_def` once. Especially important when HashMapRef/storage refs are possible in the place-base disjunct.
+evidence:
+- episode:E0677
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38687_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38683_t001
+
+## L1235 scope='C2.1.1.13' tags=Subscript,place_projection,place_expr_result_typed,HashMapT,helper
+shape: Separate Subscript place projection under `type_place_expr env (Subscript ...) = SOME result_vt` needs successful evaluator result typed as a place.
+pattern: Do not derive the place projection from the expression-half helper alone. Add/use a helper whose success conclusion is `place_expr_result_typed env tv result_vt`; this is necessary for nested `HashMapT` place results, which are not ordinary expression results. Keep `evaluate_subscript_def`/nested hashmap unfolding inside that helper, not in the mutual Resume.
+works_when: Use for C2.1.1.13.2/C2.1.1.13.4 and any later place-capable expression whose place projection can return HashMapT references.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38687_t001
+- episode:E0677
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6759-6865

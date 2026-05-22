@@ -724,7 +724,9 @@ Definition env_context_consistent_def:
     (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-            is_immutable_decl id ts /\ ty <> NoneT) /\
+            is_immutable_decl id ts /\
+            find_var_decl_by_num id ts = NONE /\
+            ty <> NoneT) /\
     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
        well_formed_vtype env.type_defs vt) /\
     (!src id ty.
@@ -759,6 +761,20 @@ Proof
   first_x_assum drule >> rw[] >> gvs[]
 QED
 
+Theorem env_context_consistent_bare_global_find_NONE:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    ?ts. get_module_code cx src = SOME ts /\
+         FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+         is_immutable_decl id ts /\
+         find_var_decl_by_num id ts = NONE /\
+         ty <> NoneT
+Proof
+  rw[env_context_consistent_def] >>
+  first_x_assum drule >> rw[] >> gvs[]
+QED
+
+
 Definition env_scopes_consistent_def:
   env_scopes_consistent env cx (st:evaluation_state) <=>
     st.scopes <> [] /\
@@ -775,12 +791,12 @@ End
 
 Definition env_immutables_consistent_def:
   env_immutables_consistent env cx (st:evaluation_state) <=>
-    (!id ty. FLOOKUP env.bare_globals (env.current_src,id) = SOME ty ==>
-       IS_SOME (FLOOKUP (get_source_immutables env.current_src
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+       IS_SOME (FLOOKUP (get_source_immutables src
          (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)) /\
-    (!id ty tv v.
-       FLOOKUP env.bare_globals (env.current_src,id) = SOME ty /\
-       FLOOKUP (get_source_immutables env.current_src
+    (!src id ty tv v.
+       FLOOKUP env.bare_globals (src,id) = SOME ty /\
+       FLOOKUP (get_source_immutables src
          (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
        evaluate_type (get_tenv cx) ty = SOME tv) /\
     (!src id ty ts.
@@ -802,6 +818,20 @@ Definition env_consistent_def:
     env_immutables_consistent env cx st
 End
 
+Theorem env_consistent_bare_global_find_NONE:
+  env_consistent env cx st /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    ?ts. get_module_code cx src = SOME ts /\
+         FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+         is_immutable_decl id ts /\
+         find_var_decl_by_num id ts = NONE /\
+         ty <> NoneT
+Proof
+  rw[env_consistent_def] >>
+  drule_all env_context_consistent_bare_global_find_NONE >>
+  simp[]
+QED
+
 Definition defaults_env_def:
   defaults_env env = env with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 End
@@ -813,7 +843,9 @@ Definition functions_well_typed_def:
       (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
          ?ts. get_module_code cx src = SOME ts /\
               FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
-              is_immutable_decl id ts /\ ty <> NoneT) /\
+              is_immutable_decl id ts /\
+              find_var_decl_by_num id ts = NONE /\
+              ty <> NoneT) /\
       (!src id vt ts.
          FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
          ((?ty. vt = Type ty /\
