@@ -706,3 +706,21 @@ evidence:
 - episode:E0741
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m41314_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m41320_t001
+
+## L1307 scope='C4.3' tags=Extract32,type-builtin,boundary-helper,no-TypeError
+shape: Main theorem branch has `well_typed_type_builtin_args Extract32 ...` and `evaluate_type_builtin ... Extract32 ... <> INR (TypeError msg)`.
+pattern: After the Extract32 static repair, derive/use `extract32_result_base_ok bt` from `well_typed_type_builtin_args_def` and apply `evaluate_extract32_supported_no_type_error` in consumers. Avoid unfolding `evaluate_extract32_def` in the main theorem; destruct typed byte/int arguments only inside the local helper.
+works_when: Applies in C4.3/C4.4 consumers after C4.3.1-C4.3.3 are in source. Runtime errors remain allowed; the helper excludes only TypeError.
+evidence:
+- episode:E0744
+- episode:E0745
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41360_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:evaluate_extract32_supported_no_type_error
+
+## L1308 scope='C4.4' tags=ABI,type-builtin,success-typing,boundary-lemma
+shape: Suspended `well_typed_type_builtin_success_type` ABI encode branch must prove `value_has_type result_tv v` from `evaluate_type_builtin ... (AbiEncode ...) ... = INL v`.
+pattern: First invert `type_builtin_result_ok_def` and `abi_encode_size_ok_def` to expose the dynamic-bytes result type and ABI size bound. If existing ABI lemmas do not match the branch conclusion directly, add one local boundary lemma with conclusion `value_has_type result_tv v` (or the exact dynamic bytes `value_has_type`) and consume it with `irule`/`drule`; do not manually build large instantiated theorem terms.
+works_when: Use for C4.4 `abi_encode`, `encode_tuple`, and `encode_tuple_nowrap` resumes in `vyperTypeBuiltinsScript.sml`. The no-TypeError theorem is already closed, so focus only on success result typing.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41368_t001
+- plan:C4.4

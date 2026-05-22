@@ -623,328 +623,302 @@ Use the function induction principle for `assign_subscripts` or structural induc
 #### Not to try
 Do not reprove top-level storage/hashmap assignment branch facts here. Do not unfold callers like `assign_target`; this component is only about subscript recursion.
 
-### C4: Builtin/type-builtin soundness repairs
+### C4: Builtin and type-builtin soundness repairs
 - Kind: `proof_group`
 - Risk: 2
 - Work priority: 20
 - Work units: 0
-- Rationale: This is a scheduling refinement only. The source is partial in C4.3, so C4 must run before the C2 carry-forward/audit leaves even though C2 has no substantive work; the mathematical C4 strategy remains low-risk after the localized Extract32 repair plan.
+- Rationale: All remaining work in this subtree is localized to already-identified cheats in `vyperTypeBuiltinsScript.sml`/reachable builtin typing facts. Completed C4.1-C4.3.3 evidence is carried forward; the only remaining active leaves are finite constructor/type-builtin branches and a raw-call arithmetic well-formedness lemma.
 - Required for completion: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: existing C4 parent, E0742 administrative closure, TO_type_system_rewrite-20260522T073012Z_m41328_t003
-- Invalidates prior progress/evidence: old C4 priority that left C2.0 as Oracle next while C4.3 source was partial
+- Carries progress/evidence from: C4, C4.1, C4.2, C4.3, C4.3.1, C4.3.2, C4.3.3, E0735, E0740, E0743, E0744, E0745
 
 #### Progress note
-Only scheduling metadata is refined. Prior C4.1/C4.2 proof progress remains done; current execution should resume at C4.3.1 before any C2 carry-forward leaf or C4.4 work.
+This is a scheduling/interface rebase of the C4 subtree, not a mathematical reset. Prior completed builtin/static/type-builtin no-TypeError work remains valid and is represented as carry-forward children; only C4.4 and C4.5 remain executable.
 
 #### Summary
-Parent grouping for builtin/type-builtin obligations. C4 is now scheduled before C2 because the worktree contains partial C4.3 edits from the rejected Extract32 false path. The next executable mathematical repair is C4.3.1. Existing completed C4.1/C4.2 evidence is preserved.
+- Carries forward completed generic builtin typing and type-builtin no-TypeError repairs.
+- Leaves only two remaining builtin-file proof obligations: type-builtin success typing ABI branches, then raw-call/Env support.
+- Orders C4.4 before C4.5 to match source order and avoid the stale beginable-before-dependency bug.
+- Keeps the subtree within fresh-stack obligations reachable from `vyperSemanticsHolTheory`.
+- Does not reopen assignment, statement, call, or old retired theories.
 
 #### Description
-This update does not reopen proved builtin work. It repairs the frontier so the executor can begin the definition repair that removes the obsolete Bool counterexample and false generic Extract32 helper before any build/proof work elsewhere.
-
-#### Statement
-Current builtin/type-builtin obligations in `vyperTypeBuiltinsScript.sml` and the related static typing predicate in `vyperTypeSystemScript.sml`, with C4.3.1 executed first in the remaining C4 frontier.
+This replacement exists to fix the C4.4/C4.5 frontier inconsistency. It flattens the remaining C4 schedule to two executable leaves and marks prior work as carry-forward so the executor does not reopen proved regions.
 
 #### Approach
-Begin C4.3.1 next. Repair the Extract32 static predicate and regression before attempting supported Extract32 helper, main type-builtin no-TypeError, type-builtin success typing, or C2 statement consumers.
+Execute leaves in priority/dependency order. If `holbuild build vyperTypeBuiltinsTheory` reports a cheat in a carried-forward region, stop and escalate with the exact theorem name rather than silently reopening this subtree.
 
 #### Not to try
-Do not begin C2.0 merely because it has work_units=0 while the C4.3 source is partial. Do not work on C4.4 ABI success branches until C4.3.1-C4.3.3 have repaired and proved the no-TypeError boundary.
+Do not add more tactical children under C4.4 or C4.5 unless a genuinely new reusable boundary theorem is required. Do not begin raw-call/Env cleanup before the type-builtin success theorem is finalized; stale metadata made that look possible, but this replacement intentionally restores source-order scheduling.
 
 #### Argument
-The relevant C4.3 subargument is that static type-builtin typing must rule out evaluator TypeError cases. The Extract32 Bool counterexample shows the current static predicate is too weak, and the repair is to strengthen it before proving the boundary theorem. Once `well_typed_type_builtin_args` rejects unsupported Extract32 target bases, the no-TypeError theorem is again a finite constructor proof and downstream expression soundness can consume it as a boundary.
+The builtin layer exposes two kinds of boundary facts to the evaluator/call soundness proofs: (1) no-TypeError facts for builtin/type-builtin execution, and (2) success typing/well-formedness facts for values produced by builtins and special call targets. The completed C4.1-C4.3.3 work establishes the static builtin and type-builtin no-TypeError interfaces, including the repaired `Extract32` target restriction. The remaining `well_typed_type_builtin_success_type` ABI branches are independent finite cases: static `type_builtin_result_ok` supplies the ABI size bound and target/result shape, and existing ABI evaluation lemmas should produce a bytes value of the expected dynamic bytes type. After that theorem is finalized without cheats, the later raw-call support facts are small arithmetic/constructor facts used by expression/call consumers; the key arithmetic invariant is that `word_size n ≤ n` when `0 < n`, so the raw-call return type's slot-size side conditions follow from `flags.rcf_max_outsize < dimword(:256)` and the cases in `raw_call_return_type_def`.
 
 #### Definition design
-For the updated C4.3 subtree, `extract32_result_base_ok` is the static boundary predicate. It belongs in the type-system theory before `well_typed_type_builtin_args_def` and is consumed by builtin soundness proofs. The immediate probe is the Bool rejection regression; if it is not direct simplification, the definition interface is wrong.
+Do not change public builtin semantics. The repaired static interface already lives in `vyperTypeSystemScript.sml`: `type_builtin_result_ok_def` includes `abi_encode_size_ok_def`, and the `Extract32` argument predicate has been repaired. For C4.4, the proof interface should be a local boundary lemma only if an existing ABI lemma has an inconvenient conclusion; that boundary lemma must conclude directly `value_has_type result_tv v` or the exact byte-value typing needed by the suspended branch. For C4.5, avoid changing `raw_call_return_type_def`; prove arithmetic helpers about `word_size`, `type_slot_size`, and the returned bytes bound as needed. Failure signs: needing to weaken the ABI bound, needing to allow `MsgGas` in an Env rule that currently excludes it, or needing to case-split evaluator expressions in this builtin file; those indicate the wrong layer is being changed.
 
 #### Code structure
-Only C4.3 files are edited by the immediate repair: `semantics/prop/vyperTypeSystemScript.sml` for the static predicate and `semantics/prop/vyperTypeBuiltinsScript.sml` for the regression/helper/main proof. Do not edit statement soundness or call wrappers as part of this scheduling repair.
+Keep work in `semantics/prop/vyperTypeBuiltinsScript.sml` unless a helper is a reusable static typing fact already conceptually owned by `vyperTypeSystemScript.sml`. The remaining `Resume well_typed_type_builtin_success_type[...]` proofs should stay adjacent to the suspended theorem and be finalized before the raw-call theorem region. Local arithmetic helpers for `raw_call_return_type_well_formed` may be placed near `word_size_le`/`raw_call_return_type_well_formed`. Do not move old retired theory code into this subtree.
 
-### C4.1: Close reachable static builtin-typing suspended cases
-- Kind: `proof`
-- Risk: 2
-- Work priority: 0
-- Work units: 3
-- Rationale: Only needed if current build/audit shows these suspended static cases are reachable; otherwise the leaf should record a local audit that no reachable CHEAT remains there. The proof work is finite constructor typing.
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C4.1
-
-#### Progress note
-Scheduled before C4.2 so builtin boundary proofs do not depend on static typing scaffolding.
-
-#### Summary
-- Audit and close reachable static builtin-typing suspended/cheated cases.
-- If no reachable cheats exist, document the grep/build evidence and mark complete.
-- Use constructor inversion over builtin typing definitions.
-- Keep the scope limited to fresh-stack theories reachable from `vyperSemanticsHolTheory`.
-
-#### Statement
-Current reachable suspended/cheated static builtin-typing obligations, if any, in fresh-stack builtin typing sources.
-
-#### Approach
-Run the scoped grep/build audit first. For any reachable suspended case, unfold the static typing definition for that constructor and prove the finite side conditions; otherwise close the component with audit evidence only.
-
-#### Not to try
-Do not clean old retired theories unless they are imported transitively by `vyperSemanticsHolTheory`.
-
-### C4.2: Close generic builtin no-TypeError and success typing boundary
-- Kind: `proof`
-- Risk: 2
-- Work priority: 10
-- Work units: 8
-- Rationale: The theorem skeleton exists and most constructors are already handled; after C3.1, remaining branches are finite builtin constructor cases with existing helper lemmas.
-- Dependencies: C4.1, C3.1
-- Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C4.2
-
-#### Progress note
-This checkpoint gates C2.4. C2.4 must not begin until this theorem is proved without CHEAT warnings.
-
-#### Summary
-- Prove `well_typed_builtin_app_no_type_error` and `well_typed_builtin_app_success_type` without cheats.
-- Include Env/Acc and ordinary builtins whose expression branch uses `Builtin`.
-- Consume C3.1 for binop-related cases.
-- Export theorem statements that let C2.4 avoid builtin constructor analysis.
-
-#### Statement
-```sml
-Theorem well_typed_builtin_app_no_type_error:
-  ...
-Theorem well_typed_builtin_app_success_type:
-  ...
-```
-
-#### Approach
-Invert `well_typed_builtin_app` to obtain argument length/type constraints and use `LIST_REL value_has_type` to recover concrete value constructors. Apply existing per-builtin helpers (`Env_builtin_*`, `Acc_builtin_sound`, bytes/crypto/default/conversion helpers) and C3.1 for binops. Keep separate no-TypeError and success-typing outputs if current source names require it, but prove them from shared local case-analysis facts where convenient.
-
-#### Not to try
-Do not prove the statement expression branch here. Do not hide residual ABI/type-builtin cases under this theorem if they are actually owned by C4.3/C4.4.
-
-### C4.3: Repair and prove type-builtin no-TypeError boundary
-- Kind: `proof_group`
-- Risk: 2
+### C4.1: Carry forward closed reachable static builtin-typing suspended cases
+- Kind: `carried_evidence`
+- Risk: 1
 - Work priority: 0
 - Work units: 0
-- Rationale: C4.3 must be the first remaining C4 subtree because the current source contains partial Extract32 false-path edits. The counterexample already localizes the issue to a missing supported-target static restriction.
-- Dependencies: C4.2
-- Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: prior C4.3 strategy, TO_type_system_rewrite-20260522T073012Z_m41320_t001, E0742 administrative closure
-- Invalidates prior progress/evidence: any scheduling that places C4.4 or C2.0 before C4.3.1 while the C4.3 source is partial
+- Rationale: E0735 accepted this leaf as proved, and no current C4.4/C4.5 repair changes its statements or definitions.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C4.1, E0735
 
 #### Progress note
-The mathematical repair strategy is unchanged, but this subtree is now explicitly first among remaining C4 work. Execute C4.3.1, then C4.3.2, then C4.3.3.
+Preserved as completed evidence under the C4 scheduling rebase.
 
 #### Summary
-Repair the type-builtin static interface so it matches runtime TypeError behavior, then close `well_typed_type_builtin_no_type_error`. The known false case is `Extract32` with unsupported target base type `BoolT`. C4.3.1 performs the static repair and Bool regression. C4.3.2 proves the supported Extract32 helper; C4.3.3 proves the main boundary theorem.
-
-#### Description
-The old typing predicate allowed `well_typed_type_builtin_args Extract32 (BaseT BoolT) [BaseT (BytesT (Fixed 32)); BaseT (UintT 256)]`, while `evaluate_extract32` returns `INR (TypeError "evaluate_extract32 type")`. Internal static predicates are not frozen, so repair the Extract32 typing predicate to require exactly the base result types supported by the evaluator.
+- Static builtin-typing suspended cases are already closed or audited as unreachable.
+- No executor work remains here.
+- Later C4 leaves may rely on the generic static builtin interface being stable.
 
 #### Statement
-C4.3 culminates in the source-authoritative theorem `well_typed_type_builtin_no_type_error`, proved under the strengthened meaning of `well_typed_type_builtin_args` for `Extract32`.
+Already-proved reachable suspended cases in `vyperBuiltinTypingScript.sml` / builtin static typing support required by the fresh stack.
 
 #### Approach
-Execute the static repair before attempting any type-builtin no-TypeError proof. Treat the subtree as complete only when the old positive counterexample theorem is gone, the Bool rejection regression is proved, the supported Extract32 helper is available, and the main boundary theorem builds without cheats.
+No action. If a future build reports a regression in this area, escalate with the exact theorem and dependency path.
 
 #### Not to try
-Do not prove no-TypeError for `Extract32` with arbitrary `BaseT bt`; the Bool case refutes it. Do not add ad hoc assumptions to `well_typed_type_builtin_no_type_error` unless they are derivable from `well_typed_type_builtin_args`. Do not keep the old positive counterexample theorem after the repair.
+Do not reopen the large suspended static-builtin case split as part of ABI or raw-call work.
+
+### C4.2: Carry forward generic builtin no-TypeError and success typing boundary
+- Kind: `carried_evidence`
+- Risk: 1
+- Work priority: 5
+- Work units: 0
+- Rationale: E0740 accepted the generic builtin boundary. Remaining C4 work is in type-builtins and raw-call support, not this generic builtin proof.
+- Dependencies: C4.1
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C4.2, E0740
+
+#### Progress note
+Preserved as completed evidence under the C4 scheduling rebase.
+
+#### Summary
+- Generic builtin no-TypeError/success typing boundary is complete.
+- No executor work remains.
+- This leaf stays before type-builtin work because later facts may use the same builtin typing context.
+
+#### Statement
+Already-proved generic builtin no-TypeError and success typing theorems in the reachable fresh stack.
+
+#### Approach
+No action. Treat this as stable boundary evidence for downstream evaluator/call proofs.
+
+#### Not to try
+Do not duplicate generic builtin constructor analysis inside C4.4 or C4.5.
+
+### C4.3: Carry forward repaired type-builtin no-TypeError boundary
+- Kind: `proof_group`
+- Risk: 1
+- Work priority: 10
+- Work units: 0
+- Rationale: C4.3.1-C4.3.3 are accepted as proved through E0745 and directly precede the remaining type-builtin success theorem.
+- Dependencies: C4.2
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C4.3, C4.3.1, C4.3.2, C4.3.3, E0743, E0744, E0745
+
+#### Progress note
+The Extract32 repair and no-TypeError theorem remain valid and are the static interface consumed by C4.4.
+
+#### Summary
+- Carries forward the repaired `Extract32` static predicate.
+- Carries forward the supported-target Extract32 no-TypeError helper.
+- Carries forward the closed `well_typed_type_builtin_no_type_error` theorem.
+- No executor work remains in this group.
+
+#### Statement
+Already-proved repaired `well_typed_type_builtin_no_type_error` and helper facts.
+
+#### Approach
+No action. C4.4 should use these definitions directly and should not reopen the C4.3 proof.
+
+#### Not to try
+Do not weaken the repaired `Extract32` restriction or reintroduce Bool/unsupported targets.
 
 #### Argument
-The runtime TypeError arises because the old static Extract32 rule requires only `target_ty = BaseT bt`, not that `bt` is one of the evaluator-supported result bases. Define `extract32_result_base_ok` for fixed bytes, uint, int, and address, and require it in the Extract32 clause. The Bool regression then follows by simplification; the helper follows by destructing typed byte/int values and splitting supported bases; the top-level theorem is a finite `Cases_on tb` proof.
+The no-TypeError theorem for type-builtins is already repaired by strengthening static admissibility for `Extract32`. This ensures the evaluator cannot choose an unsupported target type in that branch. The success-typing theorem in C4.4 should consume the same repaired static interface but need not redo its no-TypeError reasoning.
 
 #### Definition design
-`extract32_result_base_ok` is a static boundary predicate, not a semantic evaluator wrapper. Its rewrite interface must make unsupported bases such as `BoolT`, `DecimalT`, dynamic bytes, and strings simplify to `F`, while fixed bytes, uint, int, and address simplify to `T`. The Bool rejection theorem is the required probe.
+The key definition interface is now `well_typed_type_builtin_args_def` plus `type_builtin_result_ok_def`. For `Extract32`, supported target bases are part of static admissibility. For ABI encode, size bounds are part of `type_builtin_result_ok_def`, not an external postulate.
 
 #### Code structure
-Edit `vyperTypeSystemScript.sml` to add `extract32_result_base_ok_def` and strengthen `well_typed_type_builtin_args_def`. In `vyperTypeBuiltinsScript.sml`, delete the obsolete positive counterexample, add the Bool rejection regression, then prove the supported helper and main no-TypeError theorem. Rebuild with `holbuild`.
+No edits in this carried group. New type-builtin success work should remain below the existing `Resume well_typed_type_builtin_success_type[...]` clauses in `vyperTypeBuiltinsScript.sml`.
 
-### C4.3.1: Repair Extract32 static predicate and prove Bool rejection regression
-- Kind: `definition_repair`
-- Risk: 2
+### C4.3.1: Carry forward Extract32 static predicate repair and Bool rejection regression
+- Kind: `carried_evidence`
+- Risk: 1
 - Work priority: 0
-- Work units: 5
-- Rationale: This is the urgent beginable leaf: it repairs the definition/interface mismatch that left the source partial. The regression is mechanical once the strengthened clause exists.
-- Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C4.3.1, old C4.3.2, E0741 counterexample evidence, TO_type_system_rewrite-20260522T073012Z_m41328_t003
-- Invalidates prior progress/evidence: the obsolete positive Bool counterexample theorem as executable source
+- Work units: 0
+- Rationale: E0743 proved this definition repair/regression and it remains the source-authoritative static interface.
+- Dependencies: C4.2
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C4.3.1, E0743
 
 #### Progress note
-Same obligation as before, but now explicitly scheduled as the next leaf. Prior counterexample analysis supports the repair; no prior terminal proof of this leaf counts.
+Carried forward under C4.3; listed explicitly so prior evidence remains visible after subtree replacement.
 
 #### Summary
-Add `extract32_result_base_ok` and strengthen the `Extract32` clause of `well_typed_type_builtin_args_def`. Remove the obsolete local theorem asserting the Bool Extract32 premises all hold. Add/prove the local regression `extract32_bool_not_well_typed_type_builtin_args`. Build at least through `vyperTypeBuiltinsTheory` enough to confirm the repaired static interface is visible.
-
-#### Description
-Place the new predicate before `well_typed_type_builtin_args_def` in `vyperTypeSystemScript.sml`. In `vyperTypeBuiltinsScript.sml`, delete the obsolete positive theorem `type_builtin_no_type_error_extract32_bool_counterexample`; after the repair it should be false at the static premise. Add the negative regression theorem in that same type-builtin helper area.
+- `Extract32` static target restriction repair is complete.
+- Bool/unsupported-target regression is proved.
+- No remaining work.
 
 #### Statement
-Definition shape:
-```sml
-Definition extract32_result_base_ok_def:
-  extract32_result_base_ok (BytesT (Fixed n)) = T ∧
-  extract32_result_base_ok (UintT n) = T ∧
-  extract32_result_base_ok (IntT n) = T ∧
-  extract32_result_base_ok AddressT = T ∧
-  extract32_result_base_ok _ = F
-End
-```
-Strengthened clause:
-```sml
-well_typed_type_builtin_args Extract32 target_ty ts =
-  (LENGTH ts = 2 ∧ (?bd. EL 0 ts = BaseT (BytesT bd)) ∧
-   is_int_type (EL 1 ts) ∧
-   (?bt. target_ty = BaseT bt ∧ extract32_result_base_ok bt))
-```
-Required local regression:
-```sml
-Theorem extract32_bool_not_well_typed_type_builtin_args[local]:
-  ¬ well_typed_type_builtin_args Extract32 (BaseT BoolT)
-      [BaseT (BytesT (Fixed 32)); BaseT (UintT 256)]
-```
+Current source definitions/probes around `well_typed_type_builtin_args_def` and `extract32_result_base_ok_def` are already repaired.
 
 #### Approach
-Use a definition form accepted cleanly by HOL4 for the base-type datatype; if overlapping equations are awkward, define by a `case bt of ...` expression instead. The regression should be direct `simp[well_typed_type_builtin_args_def, extract32_result_base_ok_def]`. If simplification does not reject `BoolT`, fix the predicate/strengthened clause rather than proving a brittle contradiction.
+No action.
 
 #### Not to try
-Do not start by proving `well_typed_type_builtin_no_type_error` while the old Extract32 clause remains. Do not preserve the old positive counterexample under a different name. Do not include `BoolT`, `DecimalT`, dynamic bytes, or string-like bases in `extract32_result_base_ok`.
+Do not alter this definition while proving ABI encode branches.
 
-### C4.3.2: Prove supported Extract32 no-TypeError helper
-- Kind: `boundary_lemma`
-- Risk: 2
-- Work priority: 20
-- Work units: 3
-- Rationale: With the supported-target premise supplied by C4.3.1's static repair, the helper follows by destructing typed byte and int values, then splitting the small supported-base predicate. E0742 was only an administrative abandonment of a stale active component and does not raise mathematical risk for this helper.
+### C4.3.2: Carry forward supported Extract32 no-TypeError helper
+- Kind: `carried_evidence`
+- Risk: 1
+- Work priority: 5
+- Work units: 0
+- Rationale: E0744 proved the helper using the repaired static premise.
 - Dependencies: C4.3.1
-- Progress transition: `replacement`
-- Carries progress/evidence from: TO_type_system_rewrite-20260522T073012Z_m41320_t001, TO_type_system_rewrite-20260522T073012Z_m41321_t001
-- Invalidates prior progress/evidence: E0742 as terminal/proof progress for the current C4.3.2 helper
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C4.3.2, E0744
 
 #### Progress note
-The abandoned E0742 episode is accepted as cleanup of stale active-component state, not as progress on or failure of the current helper. This replacement preserves the intended statement and dependency on C4.3.1 so C4.3.1 can run first, and C4.3.2 remains future executable work after the definition repair/regression.
+Carried forward under C4.3; no proof work remains.
 
 #### Summary
-Prove a local helper for `Extract32` that includes the new supported-base premise. Reuse local lemmas that typed byte values are `BytesV` and typed integer values are `IntV`. The conclusion excludes only `INR (TypeError msg)`; runtime errors remain allowed. The prior abandoned episode was administrative and must not count as mathematical closure or blockage of this helper.
+- Supported-target Extract32 no-TypeError helper is complete.
+- It is available to the finalized type-builtin no-TypeError theorem.
+- No remaining work.
 
 #### Statement
-```sml
-Theorem evaluate_extract32_supported_no_type_error[local]:
-  extract32_result_base_ok bt ∧
-  evaluate_type (get_tenv cx) (BaseT (BytesT bd)) = SOME bytes_tv ∧
-  value_has_type bytes_tv bytes_v ∧
-  is_int_type idx_ty ∧
-  evaluate_type (get_tenv cx) idx_ty = SOME idx_tv ∧
-  value_has_type idx_tv idx_v ==>
-  evaluate_type_builtin cx Extract32 (BaseT bt) [bytes_v; idx_v] <> INR (TypeError msg)
-```
+Already-proved local Extract32 no-TypeError helper in `vyperTypeBuiltinsScript.sml`.
 
 #### Approach
-Apply `typed_bytes_value_is_BytesV` and `typed_int_value_is_IntV` to rewrite the actual arguments to `BytesV bs` and `IntV i`. Then simplify `evaluate_type_builtin_def` and split on `bt`, or rewrite with `extract32_result_base_ok_def`, so only supported result bases remain. Do not attempt this component until C4.3.1 has repaired `well_typed_type_builtin_args_def` and proved the Bool rejection regression.
+No action.
 
 #### Not to try
-Do not omit the `extract32_result_base_ok bt` premise. Do not exclude `RuntimeError` branches; out-of-range extraction and fixed-byte length checks can legitimately fail with runtime errors. Do not treat E0742's abandoned stale-active episode as a failed proof attempt for this helper.
+Do not destruct Extract32 values again in unrelated ABI branches.
 
-### C4.3.3: Prove repaired well_typed_type_builtin_no_type_error
-- Kind: `proof`
-- Risk: 2
-- Work priority: 30
-- Work units: 5
-- Rationale: After the static repair and Extract32 helper, the theorem is a finite type-builtin constructor proof. The Extract32 branch now has exactly the missing target constraint available from `well_typed_type_builtin_args_def`.
+### C4.3.3: Carry forward repaired `well_typed_type_builtin_no_type_error`
+- Kind: `carried_evidence`
+- Risk: 1
+- Work priority: 10
+- Work units: 0
+- Rationale: E0745 proved and built `vyperTypeBuiltinsTheory` through this theorem.
 - Dependencies: C4.3.2
-- Checkpoint: yes
-- Progress transition: `reclassified`
-- Carries progress/evidence from: old C4.3.4
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C4.3.3, E0745
 
 #### Progress note
-This is the old C4.3.4 obligation renumbered after the repair/regression merge.
+This is the prerequisite boundary for the remaining C4.4 success typing proof.
 
 #### Summary
-Replace the cheat/proof gap in `well_typed_type_builtin_no_type_error`. Keep the theorem name and outer statement if possible. Handle all type-builtin constructors by finite case split, using the supported Extract32 helper for Extract32 and existing conversion/ABI helpers for the other cases.
+- Repaired type-builtin no-TypeError theorem is complete.
+- `vyperTypeBuiltinsTheory` built after this checkpoint.
+- No remaining work.
 
 #### Statement
-```sml
-Theorem well_typed_type_builtin_no_type_error:
-  type_builtin_result_ok (get_tenv cx) tb result_ty target_ty ts ∧
-  well_typed_type_builtin_args tb target_ty ts ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  evaluate_type (get_tenv cx) result_ty = SOME result_tv ∧
-  LIST_REL value_has_type tvs vs ∧ context_well_typed cx ==>
-  !msg. evaluate_type_builtin cx tb target_ty vs <> INR (TypeError msg)
-```
+`Theorem well_typed_type_builtin_no_type_error: ...` is already proved in current source.
 
 #### Approach
-Use `Cases_on tb` and simplify `type_builtin_result_ok_def`, `well_typed_type_builtin_args_def`, `evaluate_type_builtin_def`, and length/list facts as in the existing proof skeleton. In the Extract32 branch, unpack the strengthened target premise to obtain `target_ty = BaseT bt` and `extract32_result_base_ok bt`, align the two runtime arguments from the `MAP`/`LIST_REL` premises, and invoke `evaluate_extract32_supported_no_type_error`. Keep helper conclusions matched to `drule_all`/`irule` use rather than manually constructing large instantiated theorems.
+No action. C4.4 starts after this carried theorem.
 
 #### Not to try
-Do not unfold and duplicate all Extract32 evaluator cases in this main theorem; use the supported helper. Do not weaken the theorem statement with an extra unsupported-target assumption outside `well_typed_type_builtin_args`. Do not try to resurrect the old Bool counterexample as a separate runtime-only obligation.
+Do not reopen the no-TypeError theorem while proving success typing.
 
 ### C4.4: Prove type-builtin success typing, including ABI encode branches
 - Kind: `proof`
 - Risk: 2
-- Work priority: 60
+- Work priority: 40
 - Work units: 8
-- Rationale: C4.4 is still standard finite type-builtin success work, but it must wait for C4.3.3 because it consumes the same repaired type-builtin static interface and should not run while C4.3 source is partial.
+- Rationale: The remaining branches are localized suspended ABI encode cases in a finite case split. The repaired `type_builtin_result_ok` now provides the missing ABI size-bound side condition, and existing ABI evaluation/type lemmas should discharge the byte-value typing; if not, a small local boundary lemma with the exact branch conclusion is allowed.
 - Dependencies: C4.3.3
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: old C4.4
-- Invalidates prior progress/evidence: old dependency on parent C4.3 that did not block C4.4 from appearing before C4.3.1
+- Carries progress/evidence from: C4.4
 
 #### Progress note
-Only scheduling/dependency metadata is refined. The theorem obligation is unchanged, but it is no longer allowed to appear before the Extract32 no-TypeError repair sequence.
+Retained as the next executable proof leaf, now explicitly before C4.5 and without contradictory frontier metadata.
 
 #### Summary
-Replace cheated/suspended branches in `well_typed_type_builtin_success_type`, especially `abi_encode`, `encode_tuple`, and `encode_tuple_nowrap`. Use the repaired ABI bound side conditions in the current typing predicate. Preserve the existing theorem name for C2 consumers. This runs only after C4.3.3 closes.
+- Replace the remaining cheats in `well_typed_type_builtin_success_type`.
+- Focus on `abi_encode`, `encode_tuple`, and `encode_tuple_nowrap` resumes.
+- Use `type_builtin_result_ok_def`/`abi_encode_size_ok_def` to obtain the ABI bound.
+- Preserve the theorem name and finalization for evaluator consumers.
+- Checkpoint after `holbuild build vyperTypeBuiltinsTheory` succeeds with no cheats from this theorem.
 
 #### Description
-C4.4 remains downstream type-builtin success typing. It must not be used to clean up the current partial Extract32 no-TypeError edits.
+The current source already proved `extract32` and `abi_decode`. The ABI encode branches were left cheated after the result predicate was repaired to include `vyper_abi_size_bound`; those branches are now expected to be true and should be proved directly.
 
 #### Statement
 ```sml
 Theorem well_typed_type_builtin_success_type:
-  ...
+  type_builtin_result_ok (get_tenv cx) tb result_ty target_ty ts ∧
+  well_typed_type_builtin_args tb target_ty ts ∧
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
+  evaluate_type (get_tenv cx) result_ty = SOME result_tv ∧
+  LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
+  evaluate_type_builtin cx tb target_ty vs = INL v ==>
+  value_has_type result_tv v
+```
+Close the suspended resumes:
+```sml
 Resume well_typed_type_builtin_success_type[abi_encode]: ... QED
 Resume well_typed_type_builtin_success_type[encode_tuple]: ... QED
 Resume well_typed_type_builtin_success_type[encode_tuple_nowrap]: ... QED
+Finalise well_typed_type_builtin_success_type
 ```
 
 #### Approach
-For each suspended ABI success branch, invert the static type-builtin predicate to obtain evaluated result type and encoding-size/bound premises. Apply existing ABI typing lemmas to show the returned bytes/tuple value has the expected `type_value`; if a lower ABI lemma has the wrong conclusion, add a local boundary lemma in this file matching the branch use site.
+Invert `well_typed_type_builtin_args_def`, `type_builtin_result_ok_def`, `abi_encode_size_ok_def`, `evaluate_type_builtin_def`, and the successful `INL` case to expose the encoded value and result dynamic bytes type. Use the ABI bound to satisfy the size/length premise of the existing ABI encode well-typedness lemma; then rewrite `value_has_type_def` for dynamic bytes. If the available ABI lemma concludes a lower-level byte-list bound instead of `value_has_type`, add one local helper immediately above the resumes whose statement matches the branch conclusion and prove the resume by `drule`/`irule`, not by manual theorem plumbing.
 
 #### Not to try
-Do not start C4.4 while C4.3.1-C4.3.3 are open. Do not manually prove byte-length arithmetic in `vyperTypeStmtSoundnessScript.sml`. Do not weaken the success theorem to omit ABI encode typing; public expression success preservation needs it.
+Do not prove these branches by weakening/removing the ABI bound; old probes showed the theorem was false without it. Do not use large `ACCEPT_TAC (MATCH_MP ... (CONJ ...))` plumbing or quoted full assumptions; extract a boundary lemma if instantiation becomes brittle. Do not unfold or change evaluator statement/call proofs here.
 
 ### C4.5: Close raw-call return well-formedness and Env/MsgGas support
 - Kind: `proof`
 - Risk: 2
-- Work priority: 40
-- Work units: 8
-- Rationale: The remaining raw-call theorem is localized arithmetic over word/slot sizes, and Env/MsgGas issues are constructor-specific builtin facts. These are strict prerequisites for external/special call expression consumers.
-- Dependencies: C4.2, C4.4
+- Work priority: 50
+- Work units: 5
+- Rationale: After C4.4, the remaining builtin-file support is localized. `raw_call_return_type_well_formed` is arithmetic over `word_size`, `type_slot_size`, and the cases of `raw_call_return_type_def`; Env/MsgGas support is constructor-specific and should not require evaluator induction.
+- Dependencies: C4.4
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: old C4.5
+- Carries progress/evidence from: C4.5
 
 #### Progress note
-This checkpoint gates C2.5/C2.6 where type-builtin/raw/special-call expression branches consume these facts.
+This leaf is no longer beginable before C4.4. Its dependency is intentional source-order scheduling: close the type-builtin success theorem first, then edit the later raw-call/Env support region.
 
 #### Summary
-- Prove remaining raw-call return type well-formedness/no-TypeError support.
-- Resolve Env/MsgGas builtin support in the boundary layer.
-- Package facts so external/special call expression resumes can be short consumers.
-- Do not move raw-call arithmetic into statement soundness.
+- Remove the cheat in `raw_call_return_type_well_formed`.
+- Audit/close the localized Env/MsgGas builtin support obligations reachable from `vyperSemanticsHolTheory`.
+- Keep proofs in the builtin layer; do not duplicate evaluator/call case analysis.
+- Use `word_size_le` and simple DIV/arithmetic facts for raw-call bounds.
+- Checkpoint after `holbuild build vyperTypeBuiltinsTheory` succeeds and no C4.5 cheats remain.
+
+#### Description
+The raw-call theorem currently has a single cheated arithmetic subgoal after unfolding `raw_call_return_type_def`, `well_formed_type_def`, `evaluate_type_def`, and `type_slot_size_def`. The proof should show the dynamic bytes return bound is well-formed under `flags.rcf_max_outsize < dimword(:256)`, using the already-proved `word_size_le` and the definition of `word_size`. Env/MsgGas issues mentioned in the task are part of the same builtin support layer; handle only those still reachable/cheated in current source.
 
 #### Statement
-Current source theorem(s) around raw-call return type well-formedness and Env/MsgGas builtin no-TypeError/success typing, including any remaining cheat near the end of `vyperTypeBuiltinsScript.sml`.
+Primary known source obligation:
+```sml
+Theorem raw_call_return_type_well_formed:
+  flags.rcf_max_outsize < dimword(:256) ==>
+  well_formed_type tenv (raw_call_return_type flags)
+```
+Also close any same-layer reachable Env/MsgGas support theorem(s) in `vyperTypeBuiltinsScript.sml` that still contain `cheat`/suspended proof text and are prerequisites for call/expression consumers.
 
 #### Approach
-Inspect the exact remaining cheat after C4.2-C4.4. For raw-call, use evaluated return type and word/slot-size lemmas to prove well-formedness/no-TypeError; for Env MsgGas, either extend the existing `Env_builtin_no_type_error`/success theorem to cover `MsgGas` under `context_well_typed` or prove a separate helper consumed by the generic builtin theorem.
+First replace the raw-call cheat by strengthening the local arithmetic enough to prove all branches after case-splitting `flags`; keep any new helper near `word_size_le`. Expected shape: derive `word_size n ≤ n`, split on the branch that compares `word_size n < n`, and use the max-outsize/dimword hypothesis to discharge `type_slot_size`/well-formed natural-number bounds. Then grep/audit only `vyperTypeBuiltinsScript.sml` for remaining reachable Env/MsgGas cheats; close them by constructor rewriting using `env_item_type_def`/current context hypotheses, preserving any existing premise excluding `MsgGas` unless a checked theorem requires otherwise.
 
 #### Not to try
-Do not exclude `MsgGas` in C2 unless the current static typing rule truly excludes it. Do not add ad-hoc assumptions to public wrappers; fix the boundary theorem or static rule if a source-authoritative probe shows a real spec gap.
+Do not remove the `item <> MsgGas` premise from generic Env helper theorems just to make rewriting easier; the task notes this as a known issue, not permission to broaden a false helper. Do not start call-wrapper proofs under C5 from this leaf. Do not unfold the statement evaluator or raw-call expression evaluator here; consumers should use this well-formedness/support boundary.
 
 ### C5: Call wrapper soundness
 - Kind: `proof_group`

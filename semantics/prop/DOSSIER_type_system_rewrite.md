@@ -274,7 +274,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.5 | proved |  | E0089 |  |
 | C3.6 | proved |  | E0106 |  |
 | C4 | progressed | unknown | E0105 |  |
-| C4.1 | proved |  | E0735 | Review C4.1 closure with strategist; if accepted, proceed to scheduled C4.2 generic builtin no-TypeError/success typing boundary. |
+| C4.1 | proved |  | E0746 | Review closure with strategist; then clear subsequent carry-forward leaves until real C4.4 work is beginable. |
 | C4.1.1.1 | proved |  | E0178 |  |
 | C4.1.1.2 | proved |  | E0180 | Call plan_oracle(mode='review', component_id='C4.1.1.2', evidence_ids=[...]) and then follow the scheduled next frontier, likely the Keccak256/Sha256 dispatcher case component. |
 | C4.1.1.3 | proved |  | E0181 | Call plan_oracle(mode='review', component_id='C4.1.1.3', evidence_ids=[...]); then follow the scheduled next component. Current build frontier is a Concat bytes dispatcher goal in `well_typed_builtin_app_no_type_error`. |
@@ -7729,10 +7729,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0735`
+- latest episode: `E0746`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 7 steps, 17 tools, 3 holbuild, 618,777 tok (615,238 in, 3,539 out, 567,808 cached), 158.4s, $0.62722400
-- next: Review C4.1 closure with strategist; if accepted, proceed to scheduled C4.2 generic builtin no-TypeError/success typing boundary.
+- actual effort: 1 sessions, 1 msgs, 5 steps, 9 tools, 1 holbuild, 443,133 tok (438,970 in, 4,163 out, 403,968 cached), 99.8s, $0.50188400
+- next: Review closure with strategist; then clear subsequent carry-forward leaves until real C4.4 work is beginable.
 
 ### Attempts / Evidence
 
@@ -7782,19 +7782,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0735` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 17 tools, 3 holbuild, 618,777 tok (615,238 in, 3,539 out, 567,808 cached), 158.4s, $0.62722400)
   - Scoped grep for `cheat`/`suspend`/`Resume` in fresh prop SML sources, then inspected fresh aggregator and public fresh wrapper imports. -> The only static-builtin typing suspended theorem found is `evaluate_builtin_well_typed` in `vyperBuiltinTypingScript.sml`, which is imported only by retired `vyperTypeSoundnessScript.sml`; fresh `vyperSemanticsHolScript.sml` imports `vyperTypeSoundnessNew`, whose ancestors use `vyperTypeBuiltins` and not `vyperBuiltinTyping`. Thus the static-builtin typing suspended cases are not reachable from the fresh stack. (`TO_type_system_rewrite-20260522T073012Z_m40876_t002`, `TO_type_system_rewrite-20260522T073012Z_m40877_t002`, `TO_type_system_rewrite-20260522T073012Z_m40878_t002`, `TO_type_system_rewrite-20260522T073012Z_m40881_t001`, `TO_type_system_rewrite-20260522T073012Z_m40881_t002`)
   - Built `vyperTypeBuiltinsTheory` as the current fresh builtin boundary theory. -> `vyperTypeBuiltinsTheory` builds successfully; remaining cheats in that file are generic builtin/type-builtin/raw-call boundary obligations owned by later C4 leaves, not C4.1 static builtin typing suspended cases. (`TO_type_system_rewrite-20260522T073012Z_m40876_t003`)
-
-### Ruled Out
-
-- Do not edit retired `vyperBuiltinTypingScript.sml` unless it becomes reachable from `vyperSemanticsHolTheory`; current fresh imports do not reach it.
+- `E0746` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 9 tools, 1 holbuild, 443,133 tok (438,970 in, 4,163 out, 403,968 cached), 99.8s, $0.50188400)
+  - Carry-forward close using prior accepted C4.1 evidence plus current `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)`. -> No source work required: C4.1 is a carried_evidence leaf; prior E0735 established the static builtin-typing suspended cases are not reachable from the fresh stack, and current builtin boundary theory builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41374_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m40876_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40876_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40877_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40878_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40881_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40881_t002` (use `read_tool_output` for exact output)
+- `E0735` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41374_t001` (use `read_tool_output` for exact output)
 
 ## C4.1.1.1
 
