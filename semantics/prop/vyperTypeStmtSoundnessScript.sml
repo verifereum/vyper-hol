@@ -6978,6 +6978,85 @@ Proof
     strip_tac >> gvs[return_def, no_type_error_result_def, place_expr_result_typed_def])
 QED
 
+Theorem expr_subscript_ordinary_tail_sound_stmt[local]:
+  !cx env e e' v9 base_tv idx_tv idx st res st'.
+    state_well_typed st /\
+    env_consistent env cx st /\
+    accounts_well_typed st.accounts /\
+    well_formed_type env.type_defs v9 /\
+    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    expr_result_typed env e base_tv /\
+    expr_result_typed env e' idx_tv /\
+    get_Value idx_tv st = (INL idx,st) /\
+    (do
+       arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
+                   "Subscript array type";
+       check_array_bounds cx base_tv idx;
+       sub_res <- lift_sum (evaluate_subscript (get_tenv cx) arr_tv base_tv idx);
+       case sub_res of
+         INL v => return v
+       | INR (is_transient,slot,tv) =>
+           do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
+     od st = (res,st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  qpat_x_assum `expr_result_typed env e base_tv` mp_tac >>
+  simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
+  qpat_x_assum `expr_result_typed env e' idx_tv` mp_tac >>
+  simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
+  `~is_HashMapRef base_tv` by (
+    Cases_on `base_tv` >>
+    gvs[is_HashMapRef_def, toplevel_value_typed_def] >>
+    Cases_on `expr_type e` >>
+    gvs[subscript_type_ok_def, Once evaluate_type_def, AllCaseEqs()]) >>
+  `value_has_type tv' idx` by (
+    qpat_x_assum `get_Value idx_tv st = (INL idx,st)` mp_tac >>
+    Cases_on `idx_tv` >>
+    gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def] >>
+    metis_tac[]) >>
+  qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
+  simp[bind_def, lift_option_type_def, return_def, lift_sum_def] >>
+  Cases_on `check_array_bounds cx base_tv idx st` >>
+  rename1 `check_array_bounds cx base_tv idx st = (bounds_res,bounds_st)` >>
+  `bounds_st = st` by metis_tac[check_array_bounds_state] >> gvs[] >>
+  Cases_on `bounds_res` >> gvs[return_def, raise_def]
+  >- (
+    Cases_on `evaluate_subscript (get_tenv cx) tv base_tv idx` >> gvs[return_def, raise_def]
+    >- (
+      rename1 `evaluate_subscript (get_tenv cx) tv base_tv idx = INL sub_res` >>
+      drule_all evaluate_subscript_typed_stmt >> strip_tac >>
+      Cases_on `sub_res` >> gvs[return_def, bind_def]
+      >- (
+        `~is_HashMapRef x` by
+          (drule_all evaluate_subscript_success_not_HashMapRef_stmt >> simp[]) >>
+        strip_tac >>
+        qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+        simp[bind_def, ignore_bind_def, return_def] >> strip_tac >>
+        gvs[no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def, expr_type_def]) >>
+      strip_tac >>
+      simp[no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def] >>
+      irule expr_subscript_storage_tail_sound_stmt >>
+      qexistsl [`bounds_st`,`rtv`,`base_tv`,`idx`,`y`] >>
+      simp[] >>
+      `well_formed_type_value rtv` by metis_tac[evaluate_type_well_formed_type_value] >>
+      simp[]) >>
+    strip_tac >>
+    qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+    simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+    drule_all evaluate_subscript_error_not_TypeError_stmt >>
+    strip_tac >> simp[no_type_error_result_def]) >>
+  strip_tac >>
+  qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+  simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+  drule_all check_array_bounds_error_not_TypeError_stmt >>
+  strip_tac >> simp[no_type_error_result_def]
+QED
+
 Resume eval_all_type_sound_mutual[Expr_Subscript]:
   (* Normalized C2.1.1.13 editing placeholder.  The previous source used a
      shared FIRST tail combining expr_subscript_place_tail_sound_stmt with the

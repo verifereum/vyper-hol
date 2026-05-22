@@ -87,6 +87,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1.1.13.2 | proved |  | E0680 |  |
 | C2.1.1.13.3 | stuck | risk_mismatch | E0681 | Ask strategist to replace/augment this leaf, likely by extracting an ordinary-base Subscript tail helper analogous to the existing place-tail helpers, or otherwise revising the proof interface for base IH projection and evaluator-tail splitting. |
 | C2.1.1.13.3.1 | proved |  | E0682 | Review closure, then begin C2.1.1.13.3.2 to add/prove the ordinary-tail helper. |
+| C2.1.1.13.3.2 | proved |  | E0683 | Review closure, then proceed to C2.1.1.13.3.3 to use the ordinary-tail helper in the Expr_Subscript Resume ordinary branch. |
 | C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
 | C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
 | C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
@@ -2446,6 +2447,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m38872_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0683`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 26 steps, 30 tools, 8 holbuild, 2,231,009 tok (2,223,273 in, 7,736 out, 2,159,616 cached), 264.3s, $1.63017300
+- next: Review closure, then proceed to C2.1.1.13.3.3 to use the ordinary-tail helper in the Expr_Subscript Resume ordinary branch.
+
+### Attempts / Evidence
+
+- `E0683` (proved, , actual effort: 1 sessions, 2 msgs, 26 steps, 30 tools, 8 holbuild, 2,231,009 tok (2,223,273 in, 7,736 out, 2,159,616 cached), 264.3s, $1.63017300)
+  - Derived env.type_defs = get_tenv cx, destructed expr_result_typed for base/index, ruled out HashMapRef base from ordinary subscript_type_ok, extracted value_has_type for get_Value index, then mirrored expr_subscript_place_tail_sound_stmt case analysis using evaluate_subscript_typed_stmt, evaluate_subscript_error_not_TypeError_stmt, check_array_bounds_error_not_TypeError_stmt, and expr_subscript_storage_tail_sound_stmt. -> Helper proof closes and target vyperTypeStmtSoundnessTheory builds. (`TO_type_system_rewrite-20260522T073012Z_m38912_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m38912_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.1.2
 
