@@ -274,7 +274,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.5 | proved |  | E0089 |  |
 | C3.6 | proved |  | E0106 |  |
 | C4 | progressed | unknown | E0105 |  |
-| C4.1 | stuck | bad_definition | E0177 | "Rewrite main theorem using ALLGOALS(FIRST [irule helper >> gvs[] >> NO_TAC, ...]) to dispatch easy cases, then individual >- blocks for remaining cases. Or prove Keccak256/Sha256 as local sub-theorems with specific constructor names (not variable blt), consumed via irule." |
+| C4.1 | proved |  | E0735 | Review C4.1 closure with strategist; if accepted, proceed to scheduled C4.2 generic builtin no-TypeError/success typing boundary. |
 | C4.1.1.1 | proved |  | E0178 |  |
 | C4.1.1.2 | proved |  | E0180 | Call plan_oracle(mode='review', component_id='C4.1.1.2', evidence_ids=[...]) and then follow the scheduled next frontier, likely the Keccak256/Sha256 dispatcher case component. |
 | C4.1.1.3 | proved |  | E0181 | Call plan_oracle(mode='review', component_id='C4.1.1.3', evidence_ids=[...]); then follow the scheduled next component. Current build frontier is a Concat bytes dispatcher goal in `well_typed_builtin_app_no_type_error`. |
@@ -7723,11 +7723,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `bad_definition`
-- latest episode: `E0177`
-- blocker: ">~ is an infix operator that pairs a tactic with a quotation list, not a standalone filtering step. Cannot use >~ after >>. Need different goal routing architecture. Also need to handle Not case for bool/uint (not just flag), and Keccak256/Sha256 need evaluate_type_def expansion with Cases_on bd for abstract bd variable."
-- next: "Rewrite main theorem using ALLGOALS(FIRST [irule helper >> gvs[] >> NO_TAC, ...]) to dispatch easy cases, then individual >- blocks for remaining cases. Or prove Keccak256/Sha256 as local sub-theorems with specific constructor names (not variable blt), consumed via irule."
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0735`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 17 tools, 3 holbuild, 618,777 tok (615,238 in, 3,539 out, 567,808 cached), 158.4s, $0.62722400
+- next: Review C4.1 closure with strategist; if accepted, proceed to scheduled C4.2 generic builtin no-TypeError/success typing boundary.
 
 ### Attempts / Evidence
 
@@ -7774,11 +7775,22 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Rewrote well_typed_builtin_app_no_type_error: replaced monolithic gvs+TRY+catch-all with per-category >~ goal routing after Cases_on blt. Fixed parse error in keccak_sha256_no_type_error (missing closing paren). Removed disjunction-antecedent sub-theorems concat_slice_builtin_no_type_error and simple_builtin_no_type_error. -> >~ goal routing syntax is wrong: >~ is an INFIX operator (gentactic * term quotation list -> gentactic), not a standalone tactic usable after >>. Writing >> >~ [`Keccak256`] parses as applying >~ to a single non-pair argument, causing type error. Also single-backtick quotations inside lists may create wrong frag list nesting. ()
   - Per-category sub-theorems with disjunction antecedents (blt = A ∨ blt = B => ...) followed by Cases_on blt inside -> Cases_on blt inside sub-theorem creates ALL 25+ constructor subgoals, not just A and B. This is fragile and defeats the purpose of per-category grouping. ()
   - Monolithic well_typed_builtin_app_no_type_error with TRY blocks + catch-all gvs[evaluate_type_def, evaluate_builtin_def] -> TRY blocks silently backtrack when per-category strategies conflict. Catch-all gvs[evaluate_builtin_def] changes Concat/Slice conclusion from evaluate_builtin to evaluate_concat, breaking irule matching with helper lemmas. ()
+- `E0735` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 17 tools, 3 holbuild, 618,777 tok (615,238 in, 3,539 out, 567,808 cached), 158.4s, $0.62722400)
+  - Scoped grep for `cheat`/`suspend`/`Resume` in fresh prop SML sources, then inspected fresh aggregator and public fresh wrapper imports. -> The only static-builtin typing suspended theorem found is `evaluate_builtin_well_typed` in `vyperBuiltinTypingScript.sml`, which is imported only by retired `vyperTypeSoundnessScript.sml`; fresh `vyperSemanticsHolScript.sml` imports `vyperTypeSoundnessNew`, whose ancestors use `vyperTypeBuiltins` and not `vyperBuiltinTyping`. Thus the static-builtin typing suspended cases are not reachable from the fresh stack. (`TO_type_system_rewrite-20260522T073012Z_m40876_t002`, `TO_type_system_rewrite-20260522T073012Z_m40877_t002`, `TO_type_system_rewrite-20260522T073012Z_m40878_t002`, `TO_type_system_rewrite-20260522T073012Z_m40881_t001`, `TO_type_system_rewrite-20260522T073012Z_m40881_t002`)
+  - Built `vyperTypeBuiltinsTheory` as the current fresh builtin boundary theory. -> `vyperTypeBuiltinsTheory` builds successfully; remaining cheats in that file are generic builtin/type-builtin/raw-call boundary obligations owned by later C4 leaves, not C4.1 static builtin typing suspended cases. (`TO_type_system_rewrite-20260522T073012Z_m40876_t003`)
+
+### Ruled Out
+
+- Do not edit retired `vyperBuiltinTypingScript.sml` unless it becomes reachable from `vyperSemanticsHolTheory`; current fresh imports do not reach it.
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m25157_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260516T153850Z_m25159_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40876_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40876_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40877_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40878_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40881_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40881_t002` (use `read_tool_output` for exact output)
 
 ## C4.1.1.1
 
