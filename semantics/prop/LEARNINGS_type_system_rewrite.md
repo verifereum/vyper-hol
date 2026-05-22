@@ -666,3 +666,12 @@ evidence:
 - episode:E0680
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m38784_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6868-6979
+
+## L1239 scope='C2.1.1.13' tags=Subscript,Resume,joint-IH,assumption-selection,ordinary-branch
+shape: Expr_Subscript ordinary Resume after applying base expression IH: context contains both `well_typed_expr env e ==> ordinary` and `!vt. type_place_expr env e = SOME vt ==> place` projections.
+pattern: Project or label the ordinary IH immediately after applying the base IH; do not rely on later exact `qpat_x_assum` patterns over the long conclusion. If the place projection is not needed in the ordinary-base branch, discard it while it is top-stack/known-position, then discharge the ordinary implication with the existing `well_typed_expr env e`.
+works_when: Use in `eval_all_type_sound_mutual` expression Resume branches with joint ordinary/place IH conclusions, especially Subscript where both projections may be present and goals are large.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38823_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38827_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38829_t001

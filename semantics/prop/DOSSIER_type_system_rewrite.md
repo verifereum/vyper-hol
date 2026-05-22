@@ -85,6 +85,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1.1.13 | stuck | risk_mismatch | E0677 | Call plan_oracle review for C2.1.1.13. Request a replacement subtree or guidance that explicitly splits `well_typed_expr_def` Subscript ordinary-base vs place-base branches before evaluator-tail analysis, or introduces an exact adapter lemma whose conclusion matches the live residual goal so the Resume no longer relies on `FIRST` in a shared tail. |
 | C2.1.1.13.1 | proved |  | E0679 | Review closure, then begin flattened C2.1.1.13.2 to repair IfExp cold-build timeout and prove the Subscript projection helper. |
 | C2.1.1.13.2 | proved |  | E0680 |  |
+| C2.1.1.13.3 | stuck | risk_mismatch | E0681 | Ask strategist to replace/augment this leaf, likely by extracting an ordinary-base Subscript tail helper analogous to the existing place-tail helpers, or otherwise revising the proof interface for base IH projection and evaluator-tail splitting. |
+| C2.1.1.13.3.1 | proved |  | E0682 | Review closure, then begin C2.1.1.13.3.2 to add/prove the ordinary-tail helper. |
 | C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
 | C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
 | C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
@@ -2388,6 +2390,62 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260522T073012Z_m38737_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m38784_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0681`
+- blocker: The planned inline ordinary Expr_Subscript proof is forcing brittle proof plumbing before reaching the branch-specific tail lemmas. After applying the base IH, exact `qpat_x_assum` selection fails for the visible ordinary implication; stack-based projection can expose it but then discharging/simplifying the implication either times out or DISCH_THEN/first_x_assum matching fails. Splitting the base result by the renamed `base_res` fails because HOL does not see it as a free variable in the goal, while splitting `FST (eval_expr cx e st)` creates 8 branchy goals without substituting the evaluator equality. Attempts to abbreviate the visible `case (base_res,st1)` tail did not bind a case-splittable variable. This indicates the active leaf needs a better boundary helper or revised proof interface rather than more inline tactics.
+- actual effort: 1 sessions, 2 msgs, 23 steps, 24 tools, 10 holbuild, 1,683,630 tok (1,675,678 in, 7,952 out, 1,623,552 cached), 291.1s, $1.31096600
+- next: Ask strategist to replace/augment this leaf, likely by extracting an ordinary-base Subscript tail helper analogous to the existing place-tail helpers, or otherwise revising the proof interface for base IH projection and evaluator-tail splitting.
+
+### Attempts / Evidence
+
+- `E0681` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 23 steps, 24 tools, 10 holbuild, 1,683,630 tok (1,675,678 in, 7,952 out, 1,623,552 cached), 291.1s, $1.31096600)
+  - Continued from exploratory prefix: unfolded `well_typed_expr`/`evaluate`, split `eval_expr cx e st`, applied base IH, then tried exact `qpat_x_assum` to select `well_typed_expr env e ==> ...`. -> Failed: exact assumption pattern did not match the visible implication, confirming prior do-not-retry evidence. (`TO_type_system_rewrite-20260522T073012Z_m38851_t001`)
+  - Used stack order after IH projection (`pop_assum kall_tac`, `pop_assum mp_tac`) to expose ordinary implication and tried `simp[]`, `disch_then drule`, `first_x_assum drule`, and `impl_tac` to discharge it with the existing `well_typed_expr env e`. -> Failed/timed out: broad `simp[]` timed out on the large implication; other implication-discharge tactics failed to match/discharge reliably in this goal shape. (`TO_type_system_rewrite-20260522T073012Z_m38853_t001`, `TO_type_system_rewrite-20260522T073012Z_m38855_t001`, `TO_type_system_rewrite-20260522T073012Z_m38857_t001`, `TO_type_system_rewrite-20260522T073012Z_m38861_t001`)
+  - Avoided discharging the implication and tried to split the base evaluation result directly: `Cases_on base_res`, `Cases_on FST (eval_expr cx e st)`, and a `qmatch_goalsub_abbrev_tac` attempt on the visible `case (base_res,st1)` tail. -> Failed: `Cases_on base_res` reports no free variable; `FST` split leaves 8 large subgoals; the abbreviation attempt did not introduce a usable case-splittable variable. This is evidence that inline proof is the wrong interface. (`TO_type_system_rewrite-20260522T073012Z_m38863_t001`, `TO_type_system_rewrite-20260522T073012Z_m38865_t001`, `TO_type_system_rewrite-20260522T073012Z_m38867_t001`)
+
+### Ruled Out
+
+- Exact `qpat_x_assum` over the ordinary base IH implication.
+- Broad `simp[]` to discharge the ordinary IH implication in the large Resume context.
+- Direct `Cases_on base_res` after the current IH projection sequence.
+- Splitting `FST (eval_expr cx e st)` as a substitute for a clean base-result split.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m38851_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38853_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38855_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38857_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38861_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38863_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38865_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38867_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0682`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 297,448 tok (296,600 in, 848 out, 287,232 cached), 23.9s, $0.21589600
+- next: Review closure, then begin C2.1.1.13.3.2 to add/prove the ordinary-tail helper.
+
+### Attempts / Evidence
+
+- `E0682` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 297,448 tok (296,600 in, 848 out, 287,232 cached), 23.9s, $0.21589600)
+  - Removed the exploratory ordinary Expr_Subscript proof prefix ending in `FAIL_TAC` and restored the clean placeholder body for the Resume while preserving the already-proved Subscript helper block above it. -> `vyperTypeStmtSoundnessTheory` rebuilds; failures are no longer due to the intentional probe/FAIL_TAC. (`TO_type_system_rewrite-20260522T073012Z_m38872_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m38872_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.1.2
 
