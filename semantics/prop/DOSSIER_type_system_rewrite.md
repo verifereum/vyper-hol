@@ -269,7 +269,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.1.7.3.1 | stuck | wrong_statement | E0063 |  |
 | C3.1.7.3.2 | proved |  | E0060 |  |
 | C3.2 | proved |  | E0733 | Review C3.2 closure with strategist, then begin next scheduled C3 leaf (expected C3.3). |
-| C3.3 | proved |  | E0086 |  |
+| C3.3 | proved |  | E0734 | Review C3.3 closure with strategist. If accepted, commit the dossier checkpoint and proceed to next scheduled component (expected C4.1). |
 | C3.4 | proved |  | E0087 |  |
 | C3.5 | proved |  | E0089 |  |
 | C3.6 | proved |  | E0106 |  |
@@ -7603,18 +7603,24 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0086`
+- latest episode: `E0734`
 - blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 256,595 tok (255,953 in, 642 out, 248,832 cached), 17.5s, $0.17928100
+- next: Review C3.3 closure with strategist. If accepted, commit the dossier checkpoint and proceed to next scheduled component (expected C4.1).
 
 ### Attempts / Evidence
 
 - `E0086` (proved, )
   - reverse $ gvs[Once assign_target_def, bind_def, ..., AllCaseEqs(), get_immutables_def, set_immutable_def, set_address_immutables_def, LET_THM, no_type_error_result_def] >- (rpt strip_tac >> mp_tac assign_subscripts_no_type_error_runtime_typed >> impl_tac >- simp[] >> simp[]) >> rpt strip_tac >> drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def] -> Build succeeded. Adding set_address_immutables_def+LET_THM to the gvs blast resolved the set_address_immutables INR subgoal (turns out it always returns INL via return()). The blast produces exactly 2 subgoals: (1) assign_subscripts INR TypeError, closed by mp_tac assign_subscripts_no_type_error_runtime_typed + impl_tac >- simp[] + simp[]; (2) success path, closed by drule assign_result_no_type_error_from_successful_assign >> disch_then drule >> simp[no_type_error_result_def]. ()
+- `E0734` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 256,595 tok (255,953 in, 642 out, 248,832 cached), 17.5s, $0.17928100)
+  - Audited current source for `assign_subscripts_preserves_type_runtime_typed` and `assign_subscripts_no_type_error_runtime_typed` in `vyperTypeStatePreservationScript.sml`. -> Both recursive C3.3 obligations are fully proved in current source with no local `cheat`; preservation delegates to `assign_subscripts_preserves_type`, and no-TypeError delegates through `assign_subscripts_no_type_error_from_leaf` and C3.2 leaf theorem. (`TO_type_system_rewrite-20260522T073012Z_m40864_t001`, `TO_type_system_rewrite-20260522T073012Z_m40864_t002`)
+  - Built `vyperTypeStatePreservationTheory` with holbuild after audit. -> Relevant target builds cleanly, confirming the recursive assignment-subscript theorems are accepted by HOL4. (`TO_type_system_rewrite-20260522T073012Z_m40864_t003`)
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260514T195458Z_m9545_t002` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260514T195458Z_m9556_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40864_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40864_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40864_t003` (use `read_tool_output` for exact output)
 
 ## C3.4
 

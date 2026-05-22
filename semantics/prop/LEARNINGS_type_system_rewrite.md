@@ -585,3 +585,15 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40813_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40810_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7690-7760
+
+## L1295 scope='global' tags=audit,source-authoritative,rebased-plan,holbuild
+shape: PLAN leaf names a theorem, but DOSSIER has stale stuck subepisodes while current source may already have `Proof ... QED`.
+pattern: Before editing a rebased leaf, grep/read the exact current-source theorem region and build the owning theory. If the named theorem and immediate corollaries have no `cheat` and the target builds, close the component with source+holbuild evidence instead of retrying stale tactic histories.
+works_when: The task says current SML source is authoritative and the PLAN leaf statement is a current-source theorem name; especially useful after PLAN rebase/component identity drift.
+evidence:
+- episode:E0732
+- episode:E0733
+- episode:E0734
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40848_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40856_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40864_t001
