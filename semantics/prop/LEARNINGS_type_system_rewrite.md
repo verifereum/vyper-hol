@@ -637,3 +637,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40113_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7472-7539
+
+## L1273 scope='C2.2' tags=Expr_Attribute,evaluate_attribute,struct_has_type,ALOOKUP,boundary_lemma
+shape: Need to prove Attribute field projection from `value_has_type (StructTV ftypes) sv` and static field lookup `ALOOKUP ftypes id = SOME field_tv`.
+pattern: First prove a local `struct_has_type` ALOOKUP bridge by induction over parallel field/type alists: `struct_has_type ftypes fields /\ ALOOKUP ftypes id = SOME field_tv ==> ?field_v. ALOOKUP fields id = SOME field_v /\ value_has_type field_tv field_v`. Then `evaluate_attribute_value_has_type` is just a case split on `sv`, `simp[evaluate_attribute_def,value_has_type_def]`, and the bridge. This keeps `evaluate_attribute_def` out of the mutual Resume proof.
+works_when: Use when the runtime value is already known to have a concrete `StructTV ftypes` type and the static typing side has been bridged to an executable `ALOOKUP ftypes id` fact (e.g. via `attribute_type_evaluates`).
+evidence:
+- episode:E0709
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40140_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7541-7563

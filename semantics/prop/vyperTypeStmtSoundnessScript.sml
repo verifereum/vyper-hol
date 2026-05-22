@@ -7562,6 +7562,44 @@ Proof
   qexists_tac `field_v` >> simp[]
 QED
 
+Theorem expr_attribute_success_tail_sound_stmt[local]:
+  !cx env e id ty base_tv st st1 res st'.
+    state_well_typed st1 /\ env_consistent env cx st1 /\
+    accounts_well_typed st1.accounts /\
+    expr_result_typed env e base_tv /\
+    attribute_type env.type_defs (expr_type e) id = SOME ty /\
+    eval_expr cx e st = (INL base_tv,st1) /\
+    eval_expr cx (Attribute ty e id) st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of
+     | INL tv => expr_result_typed env (Attribute ty e id) tv
+     | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr cx (Attribute ty e id) st = (res,st')` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+  asm_rewrite_tac[] >>
+  qhdtm_x_assum `expr_result_typed` mp_tac >>
+  simp[expr_result_typed_def, expr_runtime_typed_def] >>
+  strip_tac >>
+  Cases_on `expr_type e` >> gvs[attribute_type_def, evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >>
+  `?sv. base_tv = Value sv /\
+        value_has_type (StructTV (ZIP (MAP FST fields,tvs))) sv` by
+    (Cases_on `base_tv` >> gvs[toplevel_value_typed_def]) >>
+  gvs[get_Value_def, return_def, bind_def] >>
+  `?field_tv. evaluate_type env.type_defs ty = SOME field_tv /\
+              ALOOKUP (ZIP (MAP FST fields,tvs)) id = SOME field_tv` by (
+    qspecl_then [`env.type_defs`,`StructT s`,`id`,`ty`,
+                 `ZIP (MAP FST fields,tvs)`] mp_tac attribute_type_evaluates >>
+    simp[attribute_type_def, evaluate_type_def]) >>
+  drule_all evaluate_attribute_value_has_type >> strip_tac >>
+  gvs[lift_sum_def, return_def, no_type_error_result_def,
+      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+      toplevel_value_typed_def]
+QED
+
 Resume eval_all_type_sound_mutual[Expr_Attribute]:
   cheat
 QED
