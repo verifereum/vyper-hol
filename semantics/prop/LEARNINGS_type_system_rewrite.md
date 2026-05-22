@@ -622,3 +622,22 @@ works_when: Applies to `encode_tuple`/`encode_tuple_nowrap` builtin resumes wher
 evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42491_t001
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:3366-3378
+
+## L1340 scope='C2.4.0' tags=exception,namespace,type-annotation,vyperState,statement-soundness
+shape: HOL type error unifying `vfmExecution$exception` with `vyperState$exception` at a sum annotation like `(INR exn : unit + exception)`.
+pattern: In `vyperTypeStmtSoundnessScript.sml`, explicit evaluator-result sum annotations must qualify the exception type as `vyperState$exception` (e.g. `unit + vyperState$exception` or `value + vyperState$exception`). Unqualified `exception` can resolve to another imported theory's exception type before tactics run.
+works_when: Use for local helper theorem statements and quoted proof patterns that feed `return_exception_typed`, `stmt_error_ok`, `no_type_error_result`, or evaluator result cases in statement soundness.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42539_t004
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42540_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:48-55
+
+## L1342 scope='C2.4.0' tags=body,namespace,type-annotation,eval_stmts,type_stmts,eval_for,statement-soundness
+shape: HOL type error where `eval_stmts`, `type_stmts`, or `eval_for` expects a `stmt list` but bare `body` is inferred/resolved as a word64 function; or proof mismatch after renaming.
+pattern: In `vyperTypeStmtSoundnessScript.sml` statement/for-cons helper prefixes, avoid the bare theorem variable name `body` for statement-list evaluator bodies. Rename user-controlled binders to `body_stmts` and higher-order computation bodies to `body_fun`; update theorem statements, proof quotations, `Cases_on`, `qmatch_*`, `qspecl_then`, and `qexists_tac` witnesses consistently. If the live goal already contains HOL-generated `body'`, use `body'` in local proof text rather than forcing `body_stmts`. A mere `(body : stmt list)` annotation may not override the imported/resolved `body` identifier.
+works_when: Applies to source elaboration/name-resolution cleanup around evaluator bodies in C2.4.0-style statement-soundness prefix/helpers, especially before semantic resume obligations. Does not justify broad semantic changes once the theory builds.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42558_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
+- episode:E0791
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml

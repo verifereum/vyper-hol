@@ -148,6 +148,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.3.5 | proved |  | E0727 |  |
 | C2.3.6 | proved |  | E0729 | Call plan_oracle review for C2.3.6; after review, inspect status/diff and checkpoint commit only the relevant stable files if the oracle accepts. |
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
+| C2.4.0 | proved |  | E0791 |  |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
 | C2.5.1 | proved |  | E0281 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
 | C2.5.2 | proved |  | E0282 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
@@ -4149,6 +4150,30 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260521T174852Z_m36247_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260521T174852Z_m36248_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260521T174852Z_m36249_t001` (use `read_tool_output` for exact output)
+
+## C2.4.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0791`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 51 steps, 53 tools, 14 holbuild, 4,595,851 tok (4,575,713 in, 20,138 out, 4,463,104 cached), 547.6s, $3.39873700
+
+### Attempts / Evidence
+
+- `E0790` (progressed, plan_incomplete, actual effort: 1 sessions, 4 steps, 5 tools, 1 holbuild, 229,282 tok (227,581 in, 1,701 out, 214,016 cached), 51.3s, $0.22586300)
+  - grep `\+ exception` in `semantics/prop/vyperTypeStmtSoundnessScript.sml` after prior replace-all -> No remaining unqualified `+ exception` annotations were found in the file. (`TO_type_system_rewrite-20260522T073012Z_m42546_t001`)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) -> Build advanced beyond the original early helper but failed later with `eval_stmts cx body` type error; function expects `stmt list`, argument `body` inferred as a word64 function. (`TO_type_system_rewrite-20260522T073012Z_m42548_t001`)
+  - Read failing helper region and current diff -> Failure points at the `for_cons_body_exception_typed_from_body_soundness` helper around `eval_stmts cx body stp`; the only current source diff is exception type qualification. (`TO_type_system_rewrite-20260522T073012Z_m42549_t001`, `TO_type_system_rewrite-20260522T073012Z_m42549_t003`)
+- `E0791` (proved, , actual effort: 1 sessions, 4 msgs, 51 steps, 53 tools, 14 holbuild, 4,595,851 tok (4,575,713 in, 20,138 out, 4,463,104 cached), 547.6s, $3.39873700)
+  - Renamed local `body` binders/witnesses/patterns in the statement-soundness for-cons/scope helper prefix to `body_stmts`/`body_fun` (and HOL-generated `body'` where already bound) so `eval_stmts`/`type_stmts` applications elaborate as `stmt list` rather than resolving imported `body`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` now succeeds; the component's source-prefix type namespace cleanup gate is passed. (`TO_type_system_rewrite-20260522T073012Z_m42647_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42647_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42642_t001` (use `read_tool_output` for exact output)
 
 ## C2.5
 

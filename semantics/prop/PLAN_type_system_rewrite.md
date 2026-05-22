@@ -72,48 +72,30 @@ The proof interface exported to downstream statement soundness is the strengthen
 #### Code structure
 Keep assignment target semantic proofs in `semantics/prop/vyperTypeStatePreservationScript.sml` and compatibility wrappers in `semantics/prop/vyperTypeAssignSoundnessScript.sml`. Statement proofs in `vyperTypeStmtSoundnessScript.sml` should consume these theorems, not duplicate assignment evaluator case analysis.
 
-### C2: Statement and expression mutual soundness cases
+### C2: Statement soundness proof repairs
 - Kind: `proof_group`
 - Risk: 2
-- Work priority: 40
+- Work priority: 20
 - Work units: 0
-- Rationale: Completed structural/assignment/attribute/Pop work is preserved; remaining expression resumes are small consumers after C3/C4 boundary lemmas are proved. The scheduling defect is repaired by explicit cross-top-level dependencies and later priorities.
+- Rationale: This parent remains a standard statement-soundness proof group; the current evidence affects only a local source-prefix cleanup leaf and does not change the statement-soundness architecture.
 - Required for completion: yes
-- Dependencies: C1
-- Progress transition: `refinement`
-- Carries progress/evidence from: C2, C2.0, C2.1, C2.2, C2.3, E0616, E0708, E0711, E0729
-- Invalidates prior progress/evidence: old C2.4/C2.5 scheduling before C4 boundary closure
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C2
 
 #### Progress note
-This rebase preserves completed C2 evidence but changes the remaining C2 frontier ordering. C2.4/C2.5/C2.6 are now consumers of C4 boundary facts, and C2.7 internal-call work remains after the non-circular helpers are available.
+Carried forward unchanged except for the refined local cleanup child C2.4.0.
 
 #### Summary
-- Carries forward completed statement/expr mutual proof work through Expr_Attribute and Expr_Pop.
-- Remaining C2 work is limited to `Expr_Builtin`, `Expr_TypeBuiltin`, external/special call expression resumes, internal-call support, and a local audit.
-- C2 consumers are explicitly blocked on C4 builtin/type-builtin/raw-call boundary leaves.
-- Statement soundness must consume subsystem boundaries, not reprove builtin/call/assignment semantics.
-- After C2.8, `vyperTypeStmtSoundnessTheory` should build without local cheats.
-
-#### Description
-This parent owns only the current source-authoritative remaining statement/expression cheats. Completed old fine-grained C2 subtrees are collapsed below as carry-forward components so the frontier is no longer over-decomposed or stale.
-
-#### Statement
-Current source-authoritative `eval_all_type_sound_mutual` in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, with no cheated/suspended cases remaining after C2.8.
-
-#### Approach
-Work through remaining C2 leaves only after their C3/C4 dependencies close. In each resume, unfold `well_typed_expr_def` once for static facts, unfold `evaluate_def` once for the semantic shape, apply IHs to recursive evaluations, and finish with the boundary theorem named in the leaf.
-
-#### Not to try
-Do not use cheated C4 boundary theorems as completion evidence. Do not duplicate builtin/type-builtin/raw-call case analysis in `vyperTypeStmtSoundnessScript.sml`. Do not start a second induction over the evaluator; strengthen/extract boundary helpers instead.
+Statement-soundness work remains governed by the existing strongest joint invariant plan. The only current change is to keep C2.4.0 active until local prefix type annotations in `vyperTypeStmtSoundnessScript.sml` elaborate cleanly. Other C2 descendants and proof obligations are preserved.
 
 #### Argument
-The mutual theorem follows the evaluator recursion. For ordinary expression constructors, the proof sequence is: unfold the evaluator one step, apply the relevant IH to subexpressions/targets/statement lists, propagate error cases using the IH's `no_type_error_result`, and for successful subcomputations invoke a subsystem boundary theorem for the non-recursive operation. Builtin and type-builtin branches have no additional evaluator recursion after `eval_exprs`; therefore their soundness is exactly the C4 boundary theorem plus expression-list runtime typing. External/special call-target branches similarly evaluate arguments and drivers, then consume raw-call/special-target no-TypeError facts from C4. Internal calls are the only remaining branch that evaluates a Vyper body, so it needs call-frame extraction and environment consistency helpers before using the mutual statement IH on the callee body.
+The statement-soundness subtree proves the evaluator-following joint invariant and uses local helper lemmas only as boundary adapters for specific statement cases. Source-prefix cleanup leaves must make the theory parse/type-check before semantic proof leaves are attempted; they do not change the evaluator invariant.
 
 #### Definition design
-The C2 proof interface must stay at subsystem boundaries: `exprs_runtime_typed` supplies evaluated argument type-values and `LIST_REL value_has_type`; C4 supplies builtin/type-builtin/raw-call no-TypeError and success typing; C1/C3 supplies assignment no-TypeError/preservation; call-frame helpers expose callee body typing and frame consistency. A failure sign is any need to unfold `evaluate_builtin_def`, `evaluate_type_builtin_def`, raw-call internals, or assignment evaluator definitions inside the statement mutual proof. If a C4 theorem statement does not match the consumer, replan the C4 boundary theorem rather than adding case analysis in C2.
+No definition redesign is authorized here. Local source cleanup may add type annotations or rename ambiguous bound/free variables, but must not weaken or alter the statement soundness invariant or evaluator definitions.
 
 #### Code structure
-Edit remaining `Resume eval_all_type_sound_mutual[...]` blocks in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Put builtin/type-builtin/raw-call constructor proofs in `vyperTypeBuiltinsScript.sml` (C4), update-binop assignment helper proofs in `vyperTypeStatePreservationScript.sml`/`vyperTypeBuiltinsScript.sml` as already located (C3), and non-circular call-frame helper lemmas either before the mutual finalization in `vyperTypeStmtSoundnessScript.sml` or in a prerequisite fresh theory if import cycles require it. Do not import `vyperTypeCallSoundness` into statement soundness.
+All edits for this refinement stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, in the local for-cons helper prefix around the reported type-analysis failure. Do not modify sibling theories under this component.
 
 ### C2.0: Carry forward completed statement-assignment and structural expression work
 - Kind: `carried_evidence`
@@ -201,41 +183,97 @@ No work remains. Downstream proofs may use the strong Pop extraction and assignm
 #### Not to try
 Do not weaken Pop back to allowing fixed arrays. Do not reopen the earlier counterexample unless source reverts the dynamic-array/assignability preconditions.
 
-### C2.4: Close `Expr_Builtin` statement-soundness case using completed builtin boundaries
-- Kind: `proof`
+### C2.4: Close `Expr_Builtin` statement-soundness case after local prefix cleanup
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 50
-- Work units: 5
-- Rationale: Once C4.2 is cheat-free, this resume is standard evaluator/IH sequencing and builtin boundary application.
-- Dependencies: C2.3, C4.2, C3.3
-- Supersedes: C2.4
-- Progress transition: `replacement`
-- Invalidates prior progress/evidence: stale C2.4 dossier entries for unrelated iterator/Append/assignment audits, old C2.4 scheduling before C4.2
+- Work priority: 40
+- Work units: 0
+- Rationale: The newly exposed issue is still a local source elaboration blocker before the Expr_Builtin proof. Once the prefix type-checks, the original Expr_Builtin proof obligation remains a standard evaluator/IH plus builtin-boundary case.
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.4, E0790
 
 #### Progress note
-C2.4 keeps the current-source obligation at `Resume eval_all_type_sound_mutual[Expr_Builtin]` but is rescheduled after C4.2. Prior unrelated C2.4 evidence does not count for this proof.
+Refined only to keep the local cleanup leaf active after E0790 advanced past the exception namespace blocker.
 
 #### Summary
-- Replace `Resume eval_all_type_sound_mutual[Expr_Builtin]: cheat QED`.
-- Start only after C4.2 and C3.3 are closed without cheats.
-- Use `eval_exprs` IH for arguments and C4.2 for builtin execution.
-- Do not unfold builtin constructors in statement soundness.
+C2.4 remains the Expr_Builtin statement-soundness subtree. Before attempting C2.4.1, the local statement-soundness prefix must type-check. The C2.4.0 cleanup now includes the ambiguous `body : stmt list` source annotation exposed by holbuild.
+
+#### Argument
+The Expr_Builtin case depends on the statement-soundness theory reaching the suspended/resumed proof obligation. Local helper theorems in the prefix are proof adapters for loop/for-cons exception handling; they must elaborate with the intended `vyperState$exception` and `stmt list` types so downstream proof cases can be checked.
+
+#### Definition design
+No new abstraction is needed. The proof interface is only that helper theorem statements mention evaluator inputs at their intended types; if HOL resolves a variable to an unrelated exported constant/function type, add an explicit annotation at the theorem statement occurrence rather than changing definitions.
+
+#### Code structure
+Keep edits local to `vyperTypeStmtSoundnessScript.sml`. C2.4.0 handles source annotations in the prefix; C2.4.1 remains the semantic Expr_Builtin proof once the file reaches it.
+
+### C2.4.0: Finish local prefix type-namespace/source annotations in `vyperTypeStmtSoundnessScript.sml`
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: The remaining failure is a mechanical HOL type-resolution issue, not a theorem-design or proof-strategy issue: `eval_stmts cx` requires a `stmt list`, while the free name `body` has been inferred/resolved as an unrelated word64 function type. The prior evidence already shows the explicit `+ exception` ambiguity is gone and the build advanced to this next local annotation problem.
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.4.0, E0790, TO_type_system_rewrite-20260522T073012Z_m42546_t001, TO_type_system_rewrite-20260522T073012Z_m42548_t001, TO_type_system_rewrite-20260522T073012Z_m42549_t001, TO_type_system_rewrite-20260522T073012Z_m42549_t003
+
+#### Progress note
+E0790 is accepted as partial progress: grep found no remaining textual `+ exception` in the file, and holbuild passed the original `vfmExecution$exception`/`vyperState$exception` unification blocker. The component is refined, not closed, because the same prefix still fails to type-check at a local ambiguous `body` variable before downstream components can run.
+
+#### Summary
+- Keep the completed `exception` qualification edits from E0790.
+- Repair the newly exposed local HOL source type ambiguity around `for_cons_body_exception_typed_from_body_soundness`.
+- Make every theorem/proof occurrence that uses `eval_stmts cx body` force `body : stmt list`, preferably by annotating the theorem statement binder/use site rather than by large proof rewrites.
+- Re-run `holbuild build vyperTypeStmtSoundnessTheory` and stop this component only when the build advances past these prefix/source type errors to the next real proof obligation or completes.
 
 #### Description
-This component repairs the earlier local rebase: the proof is a consumer, not the owner of builtin semantics. C3.3 is included as a dependency so the expression theorem does not close through assignment/update-path CHEAT warnings indirectly reachable in the same theory stack.
+This component remains a local source-cleanup gate for the statement soundness prefix. The explicit exception namespace cleanup is complete, but the theory still does not type-check because HOL resolves the free identifier `body` in a helper theorem as an unrelated word64-valued function instead of a statement list. Fix only the local annotation/name-resolution issue needed to let the source prefix elaborate. If similar adjacent helper theorems in the same for-cons block use `eval_stmts cx body`, annotate them consistently when holbuild exposes the same issue.
 
 #### Statement
-```sml
-Resume eval_all_type_sound_mutual[Expr_Builtin]:
-  ...
-QED
+Target build check for this cleanup gate:
+
+```sh
+holbuild build vyperTypeStmtSoundnessTheory
 ```
 
+must advance past the local prefix type-analysis failures caused by unqualified exception sums and ambiguous `body` variables in the for-cons helper block of `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
+
 #### Approach
-Unfold `well_typed_expr_def` once for the `Builtin` constructor and `evaluate_def` once to expose `eval_exprs` followed by `evaluate_builtin`. Apply the `eval_exprs` IH; in the successful argument case unpack `exprs_runtime_typed` into evaluated argument type-values and `LIST_REL value_has_type`, then use `well_typed_builtin_app_no_type_error` and `well_typed_builtin_app_success_type`. Builtins are pure, so state after the builtin call is the state returned by `eval_exprs`.
+At the failing helper theorem(s), force the intended type of the free variable by annotating the statement occurrence, e.g. use `(body : stmt list)` in `eval_stmts cx (body : stmt list) stp = ...`, or rename the variable to a fresh name such as `body_stmts` with a type annotation if that is cleaner. Apply the same small annotation to proof patterns (`qpat_x_assum`/quoted terms) only if they stop matching after the statement edit. Then rebuild the theory to confirm the source elaborator reaches the next obligation.
 
 #### Not to try
-Do not expand `evaluate_builtin_def` or split on builtin constructors here. Do not use C4.2 while it still contains CHEAT warnings.
+Do not revisit or undo the completed `vyperState$exception` qualifications; the build evidence shows that blocker is past. Do not attempt semantic strengthening, evaluator induction changes, or statement-soundness proof repair under this component. Do not use broad rewrites or imports to influence name resolution; this should be fixed by local theorem statement/binder annotation or renaming.
+
+### C2.4.1: Close `Expr_Builtin` statement-soundness resume using completed builtin boundaries
+- Kind: `proof`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: This carries forward the original C2.4 obligation. With the prefix repaired and builtin boundaries available, the case is ordinary proof integration rather than a new invariant design.
+- Dependencies: C2.4.0
+- Progress transition: `reclassified`
+- Carries progress/evidence from: C2.4
+
+#### Progress note
+Original C2.4 proof work is reclassified under this child so the new cleanup prerequisite can run first.
+
+#### Summary
+- Resume `eval_all_type_sound_mutual[Expr_Builtin]` in `vyperTypeStmtSoundnessScript.sml`.
+- Use the existing expression/builtin soundness facts to establish no `TypeError`, result typing, and preservation obligations for the statement-level invariant.
+- Keep the proof aligned with the joint evaluator invariant; do not start a separate induction.
+- The only new dependency relative to the prior plan is the local exception annotation cleanup in C2.4.0.
+
+#### Description
+After the file prefix builds, proceed with the previously authorized Expr_Builtin case. The goal should be handled by destructing the builtin evaluation result in the evaluator order, applying expression/builtin no-type-error and preservation boundary lemmas, and discharging exception/result typing with the local helpers from the top of the file.
+
+#### Statement
+Target remains the `Resume eval_all_type_sound_mutual[Expr_Builtin]` proof obligation in `semantics/prop/vyperTypeStmtSoundnessScript.sml` under the current source theorem statement.
+
+#### Approach
+Use the evaluator recursion/IH structure already present in `eval_all_type_sound_mutual`; avoid duplicating a full case analysis outside the resume. Bring in builtin soundness boundaries rather than unfolding builtin evaluators directly. For return/exception subgoals, use `stmt_error_ok_def`, `return_exception_typed_*` helpers, and the qualified `INR` result annotations from C2.4.0 where HOL needs the result type fixed.
+
+#### Not to try
+Do not weaken the statement mutual invariant or split off a parallel no-TypeError proof. Do not unfold builtin internals unless a boundary lemma is missing and escalation is warranted. Do not use the discovered prefix problem as a reason to rework assignment-target or call-soundness architecture; it is local name disambiguation only.
 
 ### C2.5: Close `Expr_TypeBuiltin` statement-soundness case using completed type-builtin boundaries
 - Kind: `proof`

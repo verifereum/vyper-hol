@@ -2,61 +2,62 @@
 Updated: 2026-05-22
 
 ## Cursor
-- component: C4.3.1
-- status: blocked
-- active_file: semantics/prop/vyperTypeSystemScript.sml; semantics/prop/vyperTypeBuiltinsScript.sml
-- next_action: First run git status/diff to confirm partial C4.3 edits. Then query_plan. Current rendered PLAN unexpectedly says Oracle next is C2.0 even though the urgent broken-source repair is C4.3.1; do not edit until a beginable component authorizes it. If Oracle next is still C2.0, follow the gate or ask plan_oracle to make C4.3.1 next because the worktree is intentionally partial/broken from E0741. Once C4.3.1 is active, add `extract32_result_base_ok` in `vyperTypeSystemScript.sml`, strengthen `well_typed_type_builtin_args_def` Extract32 clause, delete the positive Bool counterexample theorem, and add the negative regression theorem.
-- expected_goal_shape: After C4.3.1 repair, regression `¬ well_typed_type_builtin_args Extract32 (BaseT BoolT) [BaseT (BytesT (Fixed 32)); BaseT (UintT 256)]` should close by `simp[well_typed_type_builtin_args_def, extract32_result_base_ok_def]`. Current source before repair fails earlier at the attempted generic `evaluate_extract32_no_type_error` helper because `bt` is unrestricted.
-- verify_with: holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600) after C4.3.1 edits; optionally holbuild(targets=["vyperTypeSystemTheory"], timeout=600) immediately after the definition edit.
+- component: C2.4.1
+- status: ready
+- active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
+- next_action: First preserve the reviewed C2.4.0 stable checkpoint: inspect `git status --short` and staged diff, then commit only the relevant tracked source/task-memory changes already staged by `git add -u` if still appropriate; do not stage untracked scratch/probe files. After the commit, call `begin_component("C2.4.1")` and inspect the `Resume eval_all_type_sound_mutual[Expr_Builtin]` block before editing.
+- expected_goal_shape: C2.4.0 is proved/reviewed; `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` succeeded. PLAN says Oracle next is C2.4.1, the Expr_Builtin statement-soundness resume. Expect a semantic proof obligation in the Expr_Builtin resume, not the earlier prefix namespace/body type errors.
+- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
 
 ## If This Fails
-- If the regression is not direct simplification, fix the static predicate/Extract32 clause rather than proving a brittle contradiction. If query_plan still forces C2.0 while source is partial, call plan_oracle with scheduling/blocking evidence before editing. If the supported Extract32 helper still has an unrestricted `bt` residual after C4.3.1, checkpoint_progress under C4.3.2 and escalate.
+- If the build regresses to source-prefix `body`/`exception` namespace errors, checkpoint_progress under C2.4.1 only if active and cite the regression; otherwise likely inspect whether the C2.4.0 commit/source was lost. If Expr_Builtin exposes missing builtin boundary lemmas or brittle unfolding pressure, close/checkpoint as appropriate and call plan_oracle rather than redesigning C2.4.1 locally.
 
 ## Do Not Retry
-- Prove `evaluate_extract32_no_type_error` or C4.3 main theorem for arbitrary `BaseT bt` without a supported-result premise.: False: `bt = BoolT` satisfies old static premises but `evaluate_extract32` returns `INR (TypeError "evaluate_extract32 type")`.
-  - evidence: episode:E0741
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m41314_t001
-- Keep the positive theorem `type_builtin_no_type_error_extract32_bool_counterexample` in executable source after adding `extract32_result_base_ok`.: It is evidence for the old false predicate; after the definition repair the static premise should be false and the positive theorem should not build.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m41320_t001
-- Edit C4.3.1 files while a different component is active or while query_plan says Oracle next must be something else.: Harness gate blocked switching once already; next session must begin the authorized component or get strategist scheduling repair before editing/building.
-  - evidence: episode:E0742
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m41322_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m41326_t004
-- Stage or commit current partial C4.3 source, or use `git add -A`.: Worktree contains intentionally partial source edits and unrelated untracked scratch files; current build is not clean.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m41311_t003
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m41263_t001
+- Keeping theorem/evaluator statement-list variable named bare `body` and attempting `(body : stmt list)` annotations.: HOL can resolve the identifier as an imported word64 function before/as the type constraint is applied; consistent renaming to `body_stmts`/`body_fun` was the effective cleanup pattern.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42558_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
+  - evidence: episode:E0791
+- Treating stale `body` vs `body_stmts`/`body'` quotation failures as semantic theorem failures or doing tactic search on them.: These were rename fallout/source elaboration mismatches. Fixing the local name/quotation made the theory build.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42593_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
+- Staging or committing all files blindly with `git add -A`.: There are many untracked scratch/probe files unrelated to the stable C2.4.0 checkpoint. Only tracked relevant source/task-memory changes should be committed after inspecting status/diff.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42650_t001
+- Starting C2.4.1 proof edits before preserving the reviewed C2.4.0 checkpoint.: E0791 was accepted and the harness requested a stable checkpoint; tracked changes were staged but not committed before handoff.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42649_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42651_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach not yet tried: instead of localizing the support predicate to Extract32 only, consider whether a generic `type_builtin_target_supported` predicate would better align all type-builtins with runtime TypeError branches. Current oracle says localized Extract32 repair is sufficient; revisit only if more constructors show similar false cases.
-- A fresh expert would first ask whether the static typing rule, not the proof, should rule out every evaluator `TypeError` branch. For Extract32, yes: supported result base types are exactly fixed bytes, uint, int, and address.
-- The PLAN decomposition is now the right abstraction mathematically, but the scheduler/frontier may still be wrong. Do not tactic-thrash under the wrong active component.
-- Do not optimize the main theorem proof until the definition repair/regression is build-checked. The problem is a definition boundary, not induction or rewrite ordering.
+- Outside-the-box option not used: a local parser/type abbreviation or hiding/import change might avoid renaming `body`, but evidence shows simple local renaming works and is less invasive.
+- We are not optimizing the wrong theorem now: C2.4.0 is done; next is the actual Expr_Builtin resume C2.4.1, as PLAN schedules.
+- The PLAN decomposition still matches reality: source-prefix cleanup gate succeeded, then semantic Expr_Builtin proof is next. No need to rework assignment/call architecture for this issue.
+- Do not retry C2.4.0 tactics or namespace edits without a new build regression. For C2.4.1, if builtin boundaries are missing, ask the strategist rather than inventing a parallel induction.
+- A fresh expert should first question the working tree state: tracked changes are staged, untracked scratch files remain, and a clean logical commit should precede new proof edits. Then inspect the exact Expr_Builtin resume goal and available builtin boundary theorems.
 
 ### What Went Wrong
-- The original C4.3 theorem was false under the old static predicate: `well_typed_type_builtin_args Extract32` allowed `BaseT BoolT`, but `evaluate_extract32` returns `TypeError` for unsupported base types. Evidence: episode:E0741, tool_output:TO_type_system_rewrite-20260522T073012Z_m41314_t001.
-- I left the source partial: `vyperTypeBuiltinsScript.sml` contains helper/proof edits from the failed path, including an obsolete positive counterexample theorem and a generic Extract32 helper that is false without a supported-base premise. Do not commit this state.
-- The first replacement PLAN had a dependency scheduling bug: it authorized C4.3.2 before C4.3.1, and switching was blocked by active-component state. This was closed administratively as E0742 and reviewed by the strategist.
+- C2.4.0 was successfully closed and reviewed, but the session stopped after I staged tracked changes with `git add -u` and before committing. Next session must not blindly stage untracked scratch files; inspect status/diff first.
+- The local namespace issue was broader than the initially reported helper: once bare `body` collided with an imported word64 function, adjacent helper statements, proof witnesses, scope-bracket abstractions, For resume quotations, and the top-level `function_body_type_sound` theorem all needed consistent renaming or use of HOL-generated `body'` binders.
+- I initially fixed failures one holbuild at a time; a bounded grep audit for bare `body` in statement-list evaluator positions would have shortened the cleanup.
 
 ### Ignored Signals
-- The first Extract32 residual had no target-base support premise; that was a definition/interface problem, not a tactic problem. I initially tried to prove a generic helper anyway before constructing the concrete BoolT counterexample.
-- After the oracle repaired the subtree, query_plan still reported Oracle next C2.0 rather than C4.3.1. This is a schedule/frontier signal to re-check the gate before any next-session edits.
-- A local counterexample theorem is useful only as evidence before a definition repair; after the repair it must be removed or replaced with a negative regression.
+- Repeated HOL errors all had the same shape: `eval_stmts`/`type_stmts` expected `stmt list` but parsed `body` as a word64 function. This indicated a namespace pattern, not isolated proof failures.
+- Renaming a theorem variable requires updating theorem statements, proof quotations (`qpat_x_assum`, `Cases_on`, `qmatch_*`), existential witnesses, and manually stated intermediate facts. Missing any of these causes proof mismatches that should not be treated as semantic failures.
+- After component review accepted E0791, stable checkpoint discipline required committing before new proof work; I staged with `git add -u` but handoff interrupted before commit.
 
 ### Strategy Adjustments
-- Repair the static interface first: add `extract32_result_base_ok` and strengthen only the Extract32 clause of `well_typed_type_builtin_args_def`. Then prove the negative Bool regression, then the supported Extract32 no-TypeError helper, then the main C4.3 theorem.
-- Keep helper conclusions boundary-shaped: `extract32_result_base_ok bt` plus typed byte/int runtime values implies no `TypeError`; do not try to exclude `RuntimeError` or prove success in C4.3.
-- Do not work on C4.4 ABI success branches while C4.3 no-TypeError is open. The source-authoritative theorem name `well_typed_type_builtin_no_type_error` should remain, with stronger meaning from the repaired static predicate.
+- For C2.4.1, begin the component before any build/edit. Work only on Expr_Builtin semantics; do not continue broad namespace cleanup unless holbuild shows an actual regression.
+- Use builtin/expression boundary lemmas for Expr_Builtin; avoid unfolding builtin internals unless a missing boundary is shown and escalated.
+- If a proof branch forces many quoted assumptions or manual `qspecl_then` plumbing, treat that as a helper/interface smell and escalate, per PLAN guidance, instead of tactic-thrashing.
 
 ### Oracle Feedback
-- Strategist accepted E0741 as valid negative evidence and chose a localized definition repair: add `extract32_result_base_ok` and strengthen the Extract32 static predicate, rather than weakening public wrappers.
-- Strategist accepted E0742 as administrative cleanup only, not a mathematical failure of the new supported helper. Current PLAN says C4.3.1 should run first, then C4.3.2 helper, then C4.3.3 main theorem.
-- One scheduling issue remains visible in the latest query_plan output: Oracle next is C2.0 even though C4.3.1 is the intended repair and the source is partial. Next session must obey/repair the gate before editing.
+- Strategist's Risk-1 classification for C2.4.0 held: no definition or invariant change was needed; local renaming/qualification let `vyperTypeStmtSoundnessTheory` build.
+- Plan review accepted E0791 without PLAN changes and scheduled C2.4.1 next. This confirms the prefix cleanup is complete and C2.4.1 should proceed as ordinary statement-soundness proof integration.
+- The earlier strategist suggestion to annotate `(body : stmt list)` was less effective than renaming; evidence showed annotation did not override the imported/resolved `body` identifier, but the PLAN also permitted renaming.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41314_t001 - build showed the checked positive BoolT counterexample theorem passed, then generic Extract32 helper failed because target `bt` was unrestricted
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41311_t003 - diff showing current partial source edits: positive counterexample, typed-value helpers, false generic Extract32 helper, and partial main theorem proof
-- episode:E0741 - C4.3 closed stuck/wrong_statement with verified falsehood evidence for old theorem/static predicate
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41320_t001 - strategist replaced C4.3 subtree and merged definition repair + Bool regression into new C4.3.1
-- episode:E0742 - administrative abandonment of stale active C4.3.2 after subtree replacement; not a mathematical failure
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41326_t004 - latest query_plan: no high-risk components, active none, but Oracle next C2.0 and C4.3.1 queued
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001 - decisive `vyperTypeStmtSoundnessTheory` build success for C2.4.0
+- episode:E0791 - C2.4.0 closed as proved after local body/exception namespace cleanup
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42649_t001 - strategist review accepted E0791 and directed next work to C2.4.1
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42652_t004 - query_plan shows active none, Oracle next/beginable C2.4.1
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42650_t001 - git status before handoff: tracked files modified and many untracked scratch/probe files present
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42651_t001 - `git add -u` was run before handoff, so tracked changes may be staged
