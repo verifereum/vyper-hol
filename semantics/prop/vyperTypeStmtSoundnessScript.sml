@@ -7601,7 +7601,46 @@ Proof
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Attribute]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    rename1 `well_typed_expr env (Attribute ty e id)` >>
+    qpat_x_assum `well_typed_expr env (Attribute ty e id)` mp_tac >>
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
+    strip_tac >>
+    Cases_on `eval_expr cx e st` >>
+    rename1 `eval_expr cx e st = (base_res,st1)` >>
+    qpat_x_assum `!env0 st0 res0 st0'.
+      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      eval_expr cx e st0 = (res0,st0') ==> _`
+      (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    Cases_on `base_res`
+    >- (
+      rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
+      qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `case INL base_tv of INL tv => expr_result_typed env e tv | INR v1 => T`
+        mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
+      qspecl_then [`cx`,`env`,`e`,`id`,`ty`,`base_tv`,`st`,`st1`,`res`,`st'`]
+        match_mp_tac expr_attribute_success_tail_sound_stmt >>
+      qpat_x_assum `attribute_type_ok env.type_defs (expr_type e) id ty` mp_tac >>
+      simp[attribute_type_ok_def])
+    >- (
+      qpat_x_assum `eval_expr cx (Attribute ty e id) st = (res,st')` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+      qpat_x_assum `eval_expr cx e st = (INR y,st1)`
+        (fn th => simp_tac(srw_ss())[th]) >>
+      strip_tac >>
+      qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
+      qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
+      simp[])) >>
+  gen_tac >> strip_tac >>
+  gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Builtin]:

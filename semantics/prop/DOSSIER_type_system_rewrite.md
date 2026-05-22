@@ -137,6 +137,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.2 | stuck | plan_incomplete | E0638 | Strategist should reschedule or add dependencies so C2.1.1.4.0-.4 run before this C2.2 read-subscript/attribute component, or replace C2.2 with a component that explicitly includes the place-invariant refactor. |
 | C2.2.1 | proved |  | E0709 | Review C2.2.1 closure with strategist; if accepted, begin C2.2.2 to package the Expr_Attribute successful-tail proof using this boundary lemma. |
 | C2.2.2 | proved |  | E0710 |  |
+| C2.2.3 | proved |  | E0711 | Review C2.2.3 closure with strategist, then commit the stable Expr_Attribute checkpoint if accepted. |
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
 | C2.3 | proved |  | E0614 |  |
@@ -3779,6 +3780,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260522T073012Z_m40195_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m40194_t001` (use `read_tool_output` for exact output)
+
+## C2.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0711`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 21 steps, 28 tools, 7 holbuild, 1,516,176 tok (1,510,559 in, 5,617 out, 1,423,872 cached), 214.2s, $1.31388100
+- next: Review C2.2.3 closure with strategist, then commit the stable Expr_Attribute checkpoint if accepted.
+
+### Attempts / Evidence
+
+- `E0711` (proved, , actual effort: 1 sessions, 1 msgs, 21 steps, 28 tools, 7 holbuild, 1,516,176 tok (1,510,559 in, 5,617 out, 1,423,872 cached), 214.2s, $1.31388100)
+  - Opened the Expr_Attribute Resume with rpt gen_tac/strip_tac, split the expression-typing conjunct, case-split eval_expr cx e st, used the base expression IH, delegated the success branch to expr_attribute_success_tail_sound_stmt, and propagated INR base errors by one-step evaluator rewriting. -> vyperTypeStmtSoundnessTheory builds; grep confirms no Expr_Attribute-local FAIL_TAC and the Expr_Attribute Resume no longer contains cheat. (`TO_type_system_rewrite-20260522T073012Z_m40227_t002`, `TO_type_system_rewrite-20260522T073012Z_m40227_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40227_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40227_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40225_t001` (use `read_tool_output` for exact output)
 
 ## C2.2.a
 

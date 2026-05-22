@@ -646,3 +646,12 @@ evidence:
 - episode:E0709
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40140_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7541-7563
+
+## L1274 scope='C2.2' tags=Expr_Attribute,attribute_type_evaluates,expr_result_typed,get_Value,boundary_lemma,Resume
+shape: Need to package the successful `eval_expr cx (Attribute ty e id)` tail after base expression succeeds and `expr_result_typed env e base_tv` is available.
+pattern: Prove/use a helper over the whole Attribute evaluation equality rather than inlining in the Resume. Inside the helper: unfold `eval_expr` for `Attribute` once; rewrite with `eval_expr cx e st = (INL base_tv,st1)`; unfold `expr_result_typed_def`/`expr_runtime_typed_def`; case-split `expr_type e`, not the runtime `type_value`; `attribute_type_def` + `evaluate_type_def` force the StructT branch and produce `StructTV (ZIP (MAP FST fields,tvs))`. From `toplevel_value_typed base_tv (StructTV ...)`, derive `base_tv = Value sv`; then use `attribute_type_evaluates` and `evaluate_attribute_value_has_type` to close no-TypeError and success typing.
+works_when: Applies to C2.2.3-style Attribute integration when the base expression IH has already supplied successful-result typing and preservation facts, and the static typing side has `attribute_type env.type_defs (expr_type e) id = SOME ty`. Keep this inside the helper; the final Resume should just expose premises and call it.
+evidence:
+- episode:E0710
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40195_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7565-7601
