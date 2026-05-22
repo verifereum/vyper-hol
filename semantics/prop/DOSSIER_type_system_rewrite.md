@@ -142,7 +142,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
 | C2.3 | proved |  | E0614 |  |
 | C2.3.1 | proved |  | E0714 |  |
-| C2.3.2 | proved |  | E0713 | Review C2.3.2 with strategist. Because C2.3.1 showed Pop typing allows unconstrained bounds and C2.3.2 shows fixed-array PopOp returns TypeError, strategist should decide whether to construct a full eval_expr counterexample or authorize a typing-rule repair/replan. |
+| C2.3.2 | proved |  | E0715 |  |
 | C2.3.3 | stuck | risk_mismatch | E0450 | Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale. |
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
@@ -3914,10 +3914,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0713`
+- latest episode: `E0715`
 - blocker: 
-- actual effort: 1 sessions, 7 steps, 12 tools, 1 holbuild, 873,503 tok (871,543 in, 1,960 out, 846,336 cached), 69.7s, $0.60800300
-- next: Review C2.3.2 with strategist. Because C2.3.1 showed Pop typing allows unconstrained bounds and C2.3.2 shows fixed-array PopOp returns TypeError, strategist should decide whether to construct a full eval_expr counterexample or authorize a typing-rule repair/replan.
+- actual effort: 1 sessions, 1 msgs, 7 steps, 8 tools, 2 holbuild, 726,007 tok (724,407 in, 1,600 out, 708,096 cached), 131.0s, $0.48360300
 
 ### Attempts / Evidence
 
@@ -3925,13 +3924,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Audited existing explicit-witness helper `for_cons_ordinary_exception_tail_conclusion_premises` near the For_cons helper block. -> The theorem already has the exact explicit-witness interface requested by C2.3.2: it consumes the pushed-scope body evaluation, `env_maps_wf`, original `env_consistent`, `id NOTIN`, body state/account typing, `no_type_error_result`, and explicit `env_exn` extension/consistency/return-typing premises, and concludes the popped ordinary-exception tail. No new helper is needed. (`TO_type_system_rewrite-20260519T123242Z_m32183_t001`)
 - `E0713` (proved, , actual effort: 1 sessions, 7 steps, 12 tools, 1 holbuild, 873,503 tok (871,543 in, 1,960 out, 846,336 cached), 69.7s, $0.60800300)
   - Added `assign_subscripts_fixed_array_pop_type_error_probe[local]` for `assign_subscripts (ArrayTV elem_tv (Fixed n)) (ArrayV (SArrayV sparse)) [] PopOp` and proved it by `simp[Once assign_subscripts_def, pop_element_def]`. -> The probe theorem builds, showing fixed-array leaf PopOp returns `INR (TypeError "pop_element")`. This confirms the missing dynamic-array premise from C2.3.1 corresponds to a real TypeError-producing assignment/subscript path. (`TO_type_system_rewrite-20260522T073012Z_m40254_t001`, `TO_type_system_rewrite-20260522T073012Z_m40255_t001`)
+- `E0715` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 8 tools, 2 holbuild, 726,007 tok (724,407 in, 1,600 out, 708,096 cached), 131.0s, $0.48360300)
+  - Added local boundary lemma `well_typed_expr_Pop_dynamic_target` near the statement assignment-operation bridge lemmas, proving it by `simp[Once well_typed_expr_def]` after the repaired dynamic-array Pop typing rule. -> The planned Pop dynamic-target extraction lemma now builds and is available for the later Expr_Pop integration leaf. (`TO_type_system_rewrite-20260522T073012Z_m40288_t001`, `TO_type_system_rewrite-20260522T073012Z_m40292_t001`)
+  - The required rebuild exposed another pre-existing broad `simp[]` timeout in a sibling subscript helper exception branch; replaced that local tail with explicit conjunct closures matching the C2.3.1 timeout repair pattern. -> Immediate dependent target `vyperTypeStmtSoundnessTheory` builds cleanly under the fixed tactic timeout. (`TO_type_system_rewrite-20260522T073012Z_m40289_t001`, `TO_type_system_rewrite-20260522T073012Z_m40292_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m40254_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40255_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40255_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40255_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40288_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40292_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.3
 

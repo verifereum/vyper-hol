@@ -1387,6 +1387,15 @@ Proof
   rw[assign_operation_runtime_typed_def] >> metis_tac[]
 QED
 
+Theorem well_typed_expr_Pop_dynamic_target[local]:
+  !env ty tgt.
+    well_typed_expr env (Pop ty tgt) ==>
+    ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n)))
+Proof
+  simp[Once well_typed_expr_def]
+QED
+
+
 Theorem stmt_assign_operation_matches_target_shape_BaseTargetV:
   !loc sbs op. assign_operation_matches_target_shape (BaseTargetV loc sbs) op
 Proof
@@ -7469,9 +7478,14 @@ Proof
     qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
       (qspec_then `base_vt` mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
-    qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
-    simp[])
+    qpat_x_assum `INR y = res` (fn th => rewrite_tac[GSYM th]) >>
+    qpat_x_assum `st1 = st'` (fn th => rewrite_tac[GSYM th]) >>
+    rewrite_tac[] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    simp_tac(srw_ss())[])
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Subscript]:
