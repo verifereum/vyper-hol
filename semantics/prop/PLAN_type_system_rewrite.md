@@ -1237,32 +1237,157 @@ No action unless holbuild unexpectedly regresses at this branch.
 #### Not to try
 Do not reopen TopLevelName while repairing Subscript.
 
-### C2.2: Close the Expr_Attribute read/path resume after Iterator_Range and Expr_Subscript repairs
-- Kind: `proof`
+### C2.2: Close the Expr_Attribute statement-soundness resume with attribute boundary lemmas
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 30
-- Work units: 5
-- Rationale: This is the same Expr_Attribute consumer obligation as before, but it must not be authorized while the source fails earlier in the mutual theorem at Iterator_Range. Adding the dependency is scheduling/consistency repair, not a change to the proof strategy.
-- Dependencies: C2.1.1.5
-- Progress transition: `refinement`
-- Carries progress/evidence from: C2.2
+- Work priority: 0
+- Work units: 0
+- Rationale: Expr_Attribute is a finite evaluator branch after the base expression IH. The only semantic TypeError source after the base succeeds is `evaluate_attribute`; a value-typing boundary lemma from struct value typing and `attribute_type` should rule that out. This is standard and localized, with no definition changes or recursion-cycle risk.
+- Dependencies: C2.1.1.13.4.4
+- Supersedes: C2.2
+- Progress transition: `replacement`
+- Carries progress/evidence from: episode:E0708, commit:d880c1780
 
 #### Progress note
-C2.2 is unchanged semantically but is re-gated behind the new Iterator_Range cleanup so the executor cannot start it while the current build frontier is earlier.
+This replaces the stale C2.2 leaf guidance after the Expr_Subscript checkpoint was committed. Prior C2.2 proof work was not started; completed Expr_Subscript evidence remains a dependency/pattern, not direct proof of Expr_Attribute.
 
 #### Summary
-- Same Expr_Attribute read/path resume as previously planned.
-- Now depends on C2.1.1.5 because Iterator_Range is the current earlier build frontier.
-- Use the strengthened expression IH shape after both Subscript and Iterator_Range are clean.
+- Replace the stale single-leaf Expr_Attribute guidance with a shallow three-step semantic plan.
+- Prove one reusable boundary lemma for `evaluate_attribute` preserving field value typing and ruling out TypeError.
+- Package the Expr_Attribute evaluator tail so the mutual Resume does not unfold struct/value internals inline.
+- Integrate the Resume and audit only the Expr_Attribute region; later builtin/call cheats remain scheduled siblings, not part of this subtree.
 
 #### Description
-This update only fixes scheduling after E0643. Expr_Attribute remains a later structural expression consumer, but the current source must first build past Iterator_Range.
+This component covers the cheated `Resume eval_all_type_sound_mutual[Expr_Attribute]` in `semantics/prop/vyperTypeStmtSoundnessScript.sml` and only strict local helpers needed for that resume. The branch should follow evaluator order: evaluate the base expression; use the base IH for no-TypeError, state/env/accounts preservation, and `expr_result_typed`; if the base errors, propagate; if it succeeds, materialise/get the value if required by the current evaluator expansion, then apply an attribute boundary lemma to `evaluate_attribute`.
 
 #### Approach
-After C2.1.1.5, resume the previous Expr_Attribute plan: project the relevant expression/place IH facts and avoid broad simplification over the full strengthened context.
+Proceed in dependency order: first prove the pure attribute value lemma, then a local adapter that consumes the base IH facts and the original `eval_expr cx (Attribute ty e id) st = (res,st')` equality, then replace the `cheat` Resume with a thin call to the adapter. Use the successful Expr_Subscript integration as style precedent: the Resume should split only the static typing alternatives and base evaluation/error cases, not inline all tail semantics.
 
 #### Not to try
-Do not begin Expr_Attribute while `holbuild build vyperTypeStmtSoundnessTheory` still fails at Iterator_Range.
+Do not rebase all of C2 or reopen Expr_Subscript; that checkpoint is committed and this subtree has no dependency on its internals. Do not use broad `gvs[..., AllCaseEqs(), evaluate_attribute_def]` over the full mutual IH context; it will create unreadable subgoals and repeat the over-decomposition failure mode. Do not prove a parallel standalone no-TypeError theorem for attributes by a second induction over expressions; this branch must remain a consumer of `eval_all_type_sound_mutual` IHs.
+
+#### Argument
+For `Attribute ty e id`, static typing gives `well_typed_expr env e` and `attribute_type_ok env.type_defs (expr_type e) id ty`, i.e. `attribute_type env.type_defs (expr_type e) id = SOME ty` plus annotation well-formedness. The mutual IH for `e` gives preservation and, on success, `expr_result_typed env e tv`; after materialisation/get_Value this yields a runtime value with the evaluated type of `expr_type e`. Since `attribute_type` succeeds only for struct types, the runtime value must be a `StructV` whose field list contains `id` with a value whose type is the evaluated field type. Therefore `evaluate_attribute` returns `INL field_v` rather than `INR (TypeError ...)`, and the field value satisfies `expr_runtime_typed env (Attribute ty e id) (Value field_v)`/`expr_result_typed env (Attribute ty e id) (Value field_v)`. State changes are exactly those already accounted for by evaluating/materialising the base expression; pure `evaluate_attribute` does not mutate state.
+
+#### Definition design
+Do not change definitions. The proof interface should hide `evaluate_attribute_def` behind a boundary lemma whose conclusion matches the Expr_Attribute consumer: from `value_has_type (StructTV ftypes) sv` and `ALOOKUP ftypes id = SOME field_tv`, derive an `INL field_v` result and `value_has_type field_tv field_v`; optionally include a no-TypeError corollary if the evaluator-tail proof needs only `err <> Error (TypeError msg)`. Use existing `attribute_type_evaluates` to bridge static `attribute_type` and executable `evaluate_type`/field lookup. Failure signs: if proving the boundary lemma requires nonlocal state/env assumptions, the helper is too high-level; if the Resume unfolds `evaluate_attribute_def` repeatedly, the boundary interface is too weak.
+
+#### Code structure
+Place the attribute boundary lemma(s) near the other local expression-result helpers in `vyperTypeStmtSoundnessScript.sml` if they depend on `expr_result_typed`; if they are pure value/type facts using only `evaluate_attribute`, `value_has_type`, and `ALOOKUP`, prefer `vyperTypeExprSoundnessScript.sml` before statement soundness imports them. The evaluator-tail adapter and final Resume rewrite belong in `vyperTypeStmtSoundnessScript.sml` immediately before `Resume eval_all_type_sound_mutual[Expr_Attribute]`. Keep helper statements local unless another scheduled sibling needs them.
+
+### C2.2.1: Prove attribute evaluation preserves field value typing
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: This is a direct case split on `value_has_type`/`StructV` plus `evaluate_attribute_def` and `ALOOKUP`; old helper names in retired theories show the fact is standard, but the fresh stack should prove its own local/pure version.
+
+#### Progress note
+New local helper introduced to keep the Expr_Attribute Resume from unfolding value-operation internals.
+
+#### Summary
+- Establish the pure runtime fact for struct field projection.
+- Input should be executable field lookup evidence, not full expression-evaluation context.
+- Output should give both `evaluate_attribute sv id = INL field_v` and `value_has_type field_tv field_v`.
+- This helper is the only place in C2.2 that should unfold `evaluate_attribute_def`.
+
+#### Statement
+Recommended shape (adjust names/export locality to source conventions):
+```sml
+Theorem evaluate_attribute_value_has_type:
+  value_has_type (StructTV ftypes) sv /\
+  ALOOKUP ftypes id = SOME field_tv ==>
+  ?field_v. evaluate_attribute sv id = INL field_v /\
+            value_has_type field_tv field_v
+```
+Optional corollary if useful:
+```sml
+Theorem evaluate_attribute_no_type_error_from_value_has_type:
+  value_has_type (StructTV ftypes) sv /\
+  ALOOKUP ftypes id = SOME field_tv ==>
+  evaluate_attribute sv id <> INR (TypeError msg)
+```
+
+#### Approach
+Case split on `sv`; all non-struct cases contradict `value_has_type (StructTV ftypes) sv`. In the `StructV kvs` case, unfold the struct branch of `value_has_type` to obtain the field value/type lookup relation matching `ALOOKUP ftypes id`, then rewrite `evaluate_attribute_def`. If the exact value typing representation uses zipped field lists, prove the ALOOKUP bridge locally rather than pushing that plumbing into the Resume.
+
+#### Not to try
+Do not include `env`, `cx`, `st`, `expr_result_typed`, or `well_typed_expr` in this lemma. Those belong to the evaluator adapter. Do not use retired `vyperTypeSoundnessHelpers` theorems unless they are already imported by the fresh stack; reprove the small pure fact in the fresh layer.
+
+### C2.2.2: Package the Expr_Attribute successful-tail proof
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: After C2.2.1, the remaining work is evaluator sequencing and static-to-runtime bridging via existing `attribute_type_evaluates` and base-expression IH facts. This helper matches the final Resume use site and avoids manual theorem plumbing there.
+- Dependencies: C2.2.1
+
+#### Progress note
+New adapter lemma replacing any temptation to prove Expr_Attribute inline with broad case-splitting.
+
+#### Summary
+- Prove a local adapter for the successful base-expression branch of `Attribute`.
+- It should consume the original evaluation equality, base IH preservation/typing facts, and static `attribute_type` fact.
+- It should conclude exactly the joint postcondition needed by `eval_all_type_sound_mutual` for this branch.
+- This is the main proof-interface repair for C2.2.
+
+#### Statement
+Recommended schematic shape; specialize to actual variable names and current evaluator expansion:
+```sml
+Theorem expr_attribute_success_tail_sound_stmt[local]:
+  env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+  accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  well_typed_expr env e /\
+  attribute_type env.type_defs (expr_type e) id = SOME ty /\
+  eval_expr cx e st = (INL base_tv, st1) /\
+  (* base IH facts for the successful result, including preservation and expr_result_typed *)
+  state_well_typed st1 /\ env_consistent env cx st1 /\ accounts_well_typed st1.accounts /\
+  expr_result_typed env e base_tv /\
+  eval_expr cx (Attribute ty e id) st = (res, st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  (case res of INL tv => expr_result_typed env (Attribute ty e id) tv | INR exn => T)
+```
+If materialisation/get_Value is explicit in `evaluate_def`, include the already-proved materialise/get_Value preservation/no-TypeError premises needed by the current source rather than unfolding them in the final Resume.
+
+#### Approach
+Unfold `eval_expr` for `Attribute` once, rewrite with the known base evaluation, and split only the monadic tail. Use `expr_result_typed` plus `expr_result_typed_materialise_preserves_value_type` or the existing equivalent to obtain `value_has_type` for the base value at `expr_type e`; use `attribute_type_evaluates` to obtain the field runtime type lookup; then apply C2.2.1. The conclusion should package preservation conjuncts by reusing the base/materialise facts and prove the success result typing by unfolding `expr_result_typed_def`, `expr_runtime_typed_def`, and `expr_type_def` only at the final step.
+
+#### Not to try
+Do not manually instantiate this helper later with a long `qspecl_then` list if the statement does not unify naturally; adjust the lemma statement instead. Do not let this helper depend on the whole mutual theorem as a theorem value; pass in the branch IH facts already available in the Resume, otherwise you risk circularity. Do not destruct every constructor of `expr_type e`; `attribute_type` success already forces the struct case via `attribute_type_evaluates`.
+
+### C2.2.3: Replace the Expr_Attribute cheat and audit the local region
+- Kind: `proof_integration`
+- Risk: 1
+- Work priority: 20
+- Work units: 3
+- Rationale: With the boundary and adapter lemmas proved, the Resume is mechanical evaluator/IH wiring and a local grep/build audit. No new semantic reasoning should remain in this leaf.
+- Dependencies: C2.2.2
+- Checkpoint: yes
+
+#### Progress note
+Terminal C2.2 checkpoint: closes the local cheated Resume and verifies it did not introduce new placeholders.
+
+#### Summary
+- Replace `Resume eval_all_type_sound_mutual[Expr_Attribute]: cheat` with a thin proof.
+- Split static typing for `Attribute`, evaluate the base expression, apply the base IH, and delegate the successful tail to C2.2.2.
+- Error propagation from the base result should close from the base IH no-TypeError/preservation facts.
+- Verify `vyperTypeStmtSoundnessTheory` builds and grep the Expr_Attribute region for `cheat`/`FAIL_TAC`.
+
+#### Statement
+Target source obligation:
+```sml
+Resume eval_all_type_sound_mutual[Expr_Attribute]:
+  ...
+QED
+```
+The produced mutual-theorem conjunct must satisfy the existing `eval_all_type_sound_mutual` statement; do not change the public wrappers or the mutual theorem statement for this component.
+
+#### Approach
+In the Resume, `rpt gen_tac >> strip_tac`, expose `well_typed_expr env (Attribute ty e id)` with one `ONCE_REWRITE_CONV [well_typed_expr_def]` or bounded rewrite, then split `eval_expr cx e st`. Apply the expression IH to the base evaluation; in the `INR` base case, rewrite the Attribute evaluator and propagate the already-known result. In the `INL` base case, call `expr_attribute_success_tail_sound_stmt` with facts from the IH and static typing assumptions.
+
+#### Not to try
+Do not leave helper skeletons with `cheat` in this component after closing; checkpoint requires local zero placeholders. Do not run a whole-repository cheat cleanup or touch later `Expr_Builtin`, `Expr_TypeBuiltin`, `Expr_Pop`, or call resumes; those are sibling obligations outside C2.2. Do not use broad all-case simplification over the entire Resume body; if the proof becomes a long sequence of `first_assum ACCEPT_TAC` or quoted `ASSUME` plumbing, return to C2.2.2 and strengthen the adapter interface.
 
 ### C2.3: Close `Expr_Pop` using assignment/subscript preservation interfaces
 - Kind: `proof`

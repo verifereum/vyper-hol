@@ -135,6 +135,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1a.9 | proved |  | E0602 |  |
 | C2.1b | proved |  | E0612 |  |
 | C2.2 | stuck | plan_incomplete | E0638 | Strategist should reschedule or add dependencies so C2.1.1.4.0-.4 run before this C2.2 read-subscript/attribute component, or replace C2.2 with a component that explicitly includes the place-invariant refactor. |
+| C2.2.1 | proved |  | E0709 | Review C2.2.1 closure with strategist; if accepted, begin C2.2.2 to package the Expr_Attribute successful-tail proof using this boundary lemma. |
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
 | C2.3 | proved |  | E0614 |  |
@@ -3735,6 +3736,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260521T174852Z_m37207_t003` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260521T174852Z_m37207_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260521T174852Z_m37207_t002` (use `read_tool_output` for exact output)
+
+## C2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0709`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 13 steps, 25 tools, 1 holbuild, 1,172,521 tok (1,169,505 in, 3,016 out, 1,120,768 cached), 89.9s, $0.89454900
+- next: Review C2.2.1 closure with strategist; if accepted, begin C2.2.2 to package the Expr_Attribute successful-tail proof using this boundary lemma.
+
+### Attempts / Evidence
+
+- `E0709` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 25 tools, 1 holbuild, 1,172,521 tok (1,169,505 in, 3,016 out, 1,120,768 cached), 89.9s, $0.89454900)
+  - Proved struct_has_type_lookup_type_stmt by induction over field type/value alists, then evaluate_attribute_value_has_type by value case split and evaluate_attribute_def; verified vyperTypeStmtSoundnessTheory builds. -> Boundary lemma for evaluate_attribute field projection is proved and build-clean; grep/diff show no local cheat/FAIL_TAC in the new helper region. (`TO_type_system_rewrite-20260522T073012Z_m40139_t001`, `TO_type_system_rewrite-20260522T073012Z_m40140_t001`, `TO_type_system_rewrite-20260522T073012Z_m40141_t001`, `TO_type_system_rewrite-20260522T073012Z_m40141_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40140_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40141_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40141_t002` (use `read_tool_output` for exact output)
 
 ## C2.2.a
 

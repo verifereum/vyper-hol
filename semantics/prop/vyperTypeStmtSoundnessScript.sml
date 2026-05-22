@@ -7538,6 +7538,30 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
     >> simp[])
 QED
 
+Theorem struct_has_type_lookup_type_stmt[local]:
+  !ftypes fields id field_tv.
+    struct_has_type ftypes fields /\ ALOOKUP ftypes id = SOME field_tv ==>
+    ?field_v. ALOOKUP fields id = SOME field_v /\ value_has_type field_tv field_v
+Proof
+  Induct >> Cases_on `fields` >> simp[Once value_has_type_def] >>
+  Cases >> Cases_on `h` >> simp[Once value_has_type_def] >>
+  rw[] >> gvs[] >> Cases_on `id = q` >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem evaluate_attribute_value_has_type[local]:
+  !sv id ftypes field_tv.
+    value_has_type (StructTV ftypes) sv /\
+    ALOOKUP ftypes id = SOME field_tv ==>
+    ?field_v. evaluate_attribute sv id = INL field_v /\
+              value_has_type field_tv field_v
+Proof
+  Cases >> simp[evaluate_attribute_def, value_has_type_def] >>
+  rpt strip_tac >>
+  drule_all struct_has_type_lookup_type_stmt >> strip_tac >>
+  qexists_tac `field_v` >> simp[]
+QED
+
 Resume eval_all_type_sound_mutual[Expr_Attribute]:
   cheat
 QED
