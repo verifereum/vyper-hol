@@ -179,355 +179,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260518T204229Z_m25827_t003
 - tool_output:TO_type_system_rewrite-20260518T204229Z_m25801_t001
 
-## L1189 scope='C2.1.1.4' tags=Expr_Subscript,IH-selection,guarded-IH,resume,replace_text
-shape: Expr_Subscript resume raw goal has a guarded index IH followed by an unconditional base IH
-pattern: In `Resume eval_all_type_sound_mutual[Expr_Subscript]`, do not apply `first_x_assum drule_all` after splitting the base evaluation. The first IH is guarded by a successful base-eval antecedent and is meant for the index expression `e'` only after the `INL tv1` base branch. Select/label the unconditional base IH explicitly for `e`; after the base-success case, instantiate the guarded index IH with the live `eval_expr cx e st = (INL tv1,st1)` fact.
-works_when: After `rpt gen_tac >> strip_tac`, before or after one-step evaluator unfolding, the raw goal contains both IHs for the Subscript constructor: guarded index IH first and base IH second. Verify assumption order with holbuild before using positional selectors.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36683_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36692_t001
-- episode:E0631
-
-## L1191 scope='C2.1.1.4' tags=Expr_Subscript,evaluate_subscript,local-helper,ancestor-import,tail-simplification
-shape: Expr_Subscript get_Value success tail after `evaluate_subscript ... = INL (INL value)`
-pattern: In `vyperTypeStmtSoundnessTheory`, helper theorems from `vyperTypeSoundnessHelpersScript.sml` such as `evaluate_subscript_typed` and `evaluate_subscript_success_not_HashMapRef` are not directly declared in the current ancestor context. For this proof, use the local `_stmt` copies now added near `Resume eval_all_type_sound_mutual[Expr_Subscript]`. In the direct value branch, first prove `~is_HashMapRef result` with `evaluate_subscript_success_not_HashMapRef_stmt`, then strip and simplify the remaining monadic tail equation with `bind_def`/`return_def`; do not expect bare `metis_tac` or `gvs[]` to consume the tail antecedent automatically.
-works_when: The live goal has `check_array_bounds ... = (INL (),s)`, `evaluate_subscript ... = INL (INL v)`, `toplevel_value_typed v rtv`, and the tail goal/antecedent still mentions `do check_array_bounds ...; res <- return (INL v); ... od s = (res,st')`. Applies to the direct, non-storage return branch of Expr_Subscript.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36778_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36817_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36826_t001
-- episode:E0633
-
-## L1192 scope='C2.1.1.4' tags=Expr_Subscript,monadic-tail,read_storage_slot,bind_def,boundary-lemma
-shape: Expr_Subscript storage-return tail after `evaluate_subscript ... = INL (INR y)`
-pattern: Do not apply `read_storage_slot_success_type` until the monadic tail equation has been simplified into a concrete `read_storage_slot ... = (INL v, st')` assumption. First consume the exact `do check_array_bounds ...; res <- return (INR y); case res of ... od bounds_st = (res,st')` equation, rewriting with the known `check_array_bounds ... = (INL (),bounds_st)` plus `bind_def`, `ignore_bind_def`, and `return_def`; then split/use the resulting read equation.
-works_when: The live context has the storage-return subscript result (`INR y`), `check_array_bounds ... = (INL (),bounds_st)`, and a tail equation/implication that still mentions `read_storage_slot`. Applies both inline and inside a local tail-boundary helper.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36888_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36898_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36905_t001
-- episode:E0634
-
-## L1193 scope='C2.1.1.4' tags=Expr_Subscript,evaluate_subscript,TypeError,boundary-lemma,array_index
-shape: Expr_Subscript resume reaches `evaluate_subscript ... = INR err` after typed base/index and successful `get_Value`
-pattern: Do not handle the `evaluate_subscript ... = INR err` branch by broad inline unfolding in the resume. Use or prove a boundary lemma that explicitly carries typed base (`toplevel_value_typed x tv`, `~is_HashMapRef x`, `evaluate_type ... (expr_type e) = SOME tv`) and typed index evidence. If proving a standalone helper, keep the base value and index value constructor splits separate; tuple/array value cases require `array_index_def` to show the error cannot be `TypeError`.
-works_when: Applies after Expr_Subscript base and index IHs have succeeded, `get_Value x' ... = (INL idx,...)`, `check_array_bounds ... = (INL (),...)`, and the evaluator tail has split `evaluate_subscript` into an error branch. The goal is to prove `!msg. err <> TypeError msg`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36924_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37006_t001
-- episode:E0635
-
-## L1194 scope='C2.1.1.4' tags=Expr_Subscript,storage-tail,read_storage_slot,bind_def,TypeError
-shape: Storage-return tail after `evaluate_subscript ... = INL (INR y)` and `check_array_bounds ... = (INL (),bounds_st)`
-pattern: A repaired `expr_subscript_storage_tail_sound_stmt` should first simplify the exact monadic tail equation with `bind_def`/`ignore_bind_def`/`return_def`, then case-split the resulting `read_storage_slot` equation. Error cases close with `read_storage_slot_error`; the success case uses `read_storage_slot_success_type` and witnesses `rtv` for the expression result type. At the call site, strip the tail implication before `irule` and provide witnesses in theorem order (`bounds_st`, `rtv`, `x`, `x''`, `y`).
-works_when: The live context has state/env/account typing for `bounds_st`, `evaluate_type (get_tenv cx) v9 = SOME rtv`, `(case y of ... => tv'=rtv)`, `well_formed_type_value rtv`, and the exact tail equation for returning/reading the storage value.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36920_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m36924_t001
-- episode:E0635
-
-## L1196 scope='C2.1.1.4' tags=Expr_Subscript,check_array_bounds,TypeError,boundary-lemma
-shape: After `check_array_bounds cx x idx st = (INR y,st)` in Expr_Subscript tail
-pattern: Use a small boundary lemma (`check_array_bounds_error_not_TypeError_stmt`) rather than unfolding the check-bounds monad at every call site. Its proof needs `oneline check_array_bounds_def` plus `get_storage_backend_no_error`; the error produced by bounds checking is a `RuntimeError`, not a `TypeError`.
-works_when: The live goal is `!msg. y <> Error (TypeError msg)` or `no_type_error_result (INR y)` after the monadic tail has simplified to a `check_array_bounds ... = (INR y,st)` assumption.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37071_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37073_t001
-- episode:E0636
-
-## L1197 scope='C2.1.1.4' tags=Expr_Subscript,type_place_expr,HashMapT,well_typed_expr,boundary-lemma
-shape: Attempted bridge from `type_place_expr env e = SOME vt` to ordinary `well_typed_expr env e` in Expr_Subscript place branch
-pattern: Do not formulate the place-branch helper as `type_place_expr env e = SOME vt ==> well_typed_expr env e`. Hashmap places are annotated with `NoneT` (`vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)`), while ordinary `well_typed_expr TopLevelName ty` requires a `Type ty` toplevel entry and `ty <> NoneT`. The reusable boundary should instead prove direct eval/result soundness for place-typed expressions, including the `HashMapRef`/`type_place_expr ... = SOME (HashMapT ...)` part of `expr_result_typed`.
-works_when: Applies after unfolding `well_typed_expr_def` for `Subscript` and landing in the disjunct with `type_place_expr env e = SOME vt` and `subscript_vtype vt (expr_type e') = SOME (Type ty)`. Especially relevant when the base IH is guarded by `well_typed_expr env e` and cannot be applied.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37087_t003
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37088_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37086_t004
-
-## L1198 scope='C2.1.1.4' tags=Expr_Subscript,type_place_expr,HashMapT,TopLevelName,boundary-lemma
-shape: Expr_Subscript place-subscript disjunct with `type_place_expr env e = SOME vt` and no `well_typed_expr env e`
-pattern: For the place branch, prove/use direct place-expression eval soundness instead of coercing the base to ordinary expression typedness. TopLevelName/HashMap should be handled with `env_consistent_toplevel_hashmap_static` plus `lookup_global_HashMapVarDecl_returns_HashMapRef`, producing `expr_result_typed` through the HashMapRef side condition of `expr_result_typed_def`. The ordinary `lookup_global_TopLevelName_sound` only covers `well_typed_expr`/`Type ty` entries, so it is insufficient for HashMapT place bases.
-works_when: The live assumptions contain `type_place_expr env (TopLevelName ann (src,id)) = SOME (HashMapT kt vt)` or a nested Subscript place branch, along with env/state/context invariants and a successful `eval_expr`/`lookup_global`. Use this before applying the guarded index IH in Expr_Subscript.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37127_t003
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37131_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37156_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37142_t002
-
-## L1199 scope='C2.1.1.4' tags=Expr_Subscript,type_place_expr,mutual-induction,HashMapT,place_expr_result_typed
-shape: Expr_Subscript place branch has `type_place_expr env e = SOME vt` but only old base IH guarded by `well_typed_expr env e`
-pattern: When a `well_typed_expr (Subscript ...)` proof reaches the alternate `type_place_expr/subscript_vtype` branch, do not try to prove a local bridge to ordinary expression typing or standalone place eval soundness. Strengthen the evaluator mutual expression conjunct with a guarded place-expression postcondition (`type_place_expr env e = SOME vt ==> ... place_expr_result_typed env tv vt`) so nested Subscript place bases use the recursive evaluator IH and indices use the ordinary IH.
-works_when: Applies in fresh `vyperTypeStmtSoundnessScript.sml` while proving expression soundness for Subscript/TopLevelName places, especially HashMap locations annotated with `NoneT`. Use after direct `subscript_type_ok` branches are separated from place branches.
-evidence:
-- episode:E0637
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37197_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37199_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37164_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37175_t001
-
-## L1200 scope='C2.0' tags=For_cons,CHOOSE,boundary-helper,Resume,existential
-shape: For_cons / large Resume endpoints with existential or case-premise facts trigger CHOOSE/exact-endpoint failures
-pattern: When For_cons proof endpoints expose raw `case (INR exn)` premises, existential packages, or exact visible assumptions, do not retry ACCEPT_TAC/ASSUME/MATCH_MP endpoint tactics in the large Resume/core proof. Move the manipulation into small boundary helpers whose conclusion is the whole suffix or a direct return-exception fact; consume live assumptions with drule/irule and explicit witnesses only at the helper boundary.
-works_when: Applies to For_cons evaluator soundness branches after evaluator recursion has produced body-IH facts and popped/pushed invariants, especially under holbuild goalfrag instrumentation.
-evidence:
-- episode:E0475
-- episode:E0503
-- episode:E0546
-- episode:E0571
-- tool_output:TO_type_system_rewrite-20260521T121230Z_m35279_t001
-
-## L1201 scope='C2.0' tags=For_cons,non-loop-exception,irule,explicit-witness
-shape: For_cons non-loop exception propagation from body IH
-pattern: For non-Continue/non-Break body exceptions, use a full suffix helper that concludes the final `case (INR exn)` return-typing residual. Keep constructor splitting and existential transport outside the core proof; in the caller instantiate helper-only variables explicitly (`body`, `env_after`, `id`, pushed state, `ty`) rather than relying on bare `irule`.
-works_when: Use after the For_cons branch has body evaluation `eval_stmts cx body stp = (INR exn, st_body)`, visible pushed-state facts, popped-state facts, and `exn <> ContinueException`, `exn <> BreakException`.
-evidence:
-- episode:E0546
-- episode:E0556
-- tool_output:TO_type_system_rewrite-20260521T114716Z_m34784_t001
-
-## L1202 scope='C2.1.1.4.4' tags=expression-IH,place_expr_result_typed,Subscript,proof-refactor
-shape: Old expression conjunct has `well_typed_expr` as an antecedent, but Subscript place branch only has `type_place_expr env base = SOME vt`.
-pattern: Repair by changing the expression conjunct to first assume only env/state/eval invariants, then conclude a pair of guarded projections: ordinary `well_typed_expr` -> old `expr_result_typed` postcondition, and place `type_place_expr` -> `place_expr_result_typed` postcondition. Consumers should specialize the IH once, split projections, and use the projection matching the static guard.
-works_when: Use for Expr_Subscript/TopLevelName place-expression soundness inside `eval_all_type_sound_mutual`; do not use it to justify a standalone place-expression induction.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37207_t003
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37214_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37216_t001
-
-## L1203 scope='C2.1.1.4.4' tags=expression-IH,projection,tactic-timeout,place_expr_result_typed
-shape: After strengthening the expression conjunct, a consumer has `first_x_assum drule_all >> strip_tac` and then a full pair `(well_typed_expr ... ==> old_post) /\ (!vt. type_place_expr ... ==> place_post)` in context.
-pattern: Do not simplify with the full paired IH in context. Immediately project the needed branch: for ordinary consumers, use `qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac)` and discard the unused `!vt. type_place_expr ...` assumption. Use targeted `rewrite_tac[no_type_error_result_def]` rather than broad `gvs[]` on the resulting large goal.
-works_when: Applies to post-refactor statement/expression resumes that consume an expression IH but are not themselves proving a place-expression branch; particularly AssertReason/AnnAssign-style branches.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37227_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37260_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m37273_t001
-
-## L1240 scope='C2.1.1.13.3.3' tags=Subscript,Resume,joint-IH,conjunction,proof-shape
-shape: Expr_Subscript ordinary Resume branch after `conj_tac`; final conclusion is a conjunction of preservation/no-TypeError/success typing.
-pattern: Avoid `rpt strip_tac` that splits the final conjunction into independent goals before evaluator sequencing. Instead, keep/prove the combined ordinary result: unfold `well_typed_expr_def` and `evaluate_def` once, split base/index evaluator results with equations, project IH ordinary conjuncts immediately, then invoke `expr_subscript_ordinary_tail_sound_stmt` to supply the whole conjunction in the all-success tail. Only split conjuncts after the combined fact is available or if a branch is already reduced to a propagated IH fact.
-works_when: Use in C2.1.1.13.3.3 and similar expression Resume branches where a local tail helper returns the same conjunction as the Resume conclusion.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38922_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7060-7070
-
-## L1242 scope='C2.1.1.13.3.3' tags=Subscript,tail-helper,Resume,expr_subscript_ordinary_tail_sound_stmt
-shape: All-success ordinary Expr_Subscript tail after `get_Value x' st2 = (INL x'',st2)` and exact monadic tail equation over `x`, `x''`, `x'`, `st2`.
-pattern: The ordinary-tail helper matches if invoked as `irule expr_subscript_ordinary_tail_sound_stmt >> simp[] >> qexistsl [`base_tv`,`idx`,`idx_tv`,`tail_st`] >> simp[]`. In the live Resume branch those witnesses were `[x,x'',x',st2]`. Put `simp[]` before `qexistsl` so the non-existential conjuncts are discharged and the remaining existential matches the helper's implicit variables.
-works_when: Use when the evaluator equation has already simplified to the successful get_Value tail and assumptions include base/index `expr_result_typed`, post-index invariants, `well_formed_type`, `subscript_type_ok`, and successful `get_Value`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38985_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38987_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38989_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7112-7117
-
-## L1243 scope='C2.1.1.13.3.3' tags=Subscript,Resume,branching,THEN1,tactical,error-propagation
-shape: A `Cases_on`/`Cases_on`-nested Expr_Subscript Resume proof has several remaining subgoals, but a branch-local propagated-error tactic is written as `>> (...)` and holbuild shows it being applied with 3 input goals.
-pattern: When proving nested evaluator branches in `Resume eval_all_type_sound_mutual[Expr_Subscript]`, close each case branch explicitly with `>- (...)` before using `>>` for the next common suffix. If holbuild shows a branch tactic with multiple input goals, suspect a missing `>-`/parenthesization issue before debugging assumption selection. Branch-local error propagation should not be written as a shared `>> (...)` suffix unless it really solves all remaining branches.
-works_when: Use for nested `Cases_on` proofs where success, get_Value-error, index-error, and base-error branches need different tactics and mutual-IH assumptions are large.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39057_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39060_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7101-7130
-
-## L1244 scope='C2.1.1.13.3.3' tags=Subscript,get_Value,subscript_type_ok,int_expr_get_Value_INR_no_type_error,witness-order
-shape: Ordinary Subscript get_Value error branch after index success has `expr_result_typed env e' x'`, `get_Value x' st' = (INR y,st')`, and goal `no_type_error_result (INR y)`.
-pattern: Invoke `int_expr_get_Value_INR_no_type_error` with existential witnesses in theorem quantifier order `[e', env, st', st', x', expr_type e']`, then prove `is_int_type (expr_type e')` by cases on `expr_type e` using `subscript_type_ok_def`. Do not put `env` first; holbuild reports the post-`irule` existential order as `∃e env st st' tv ty ...`.
-works_when: Applies to ordinary `well_typed_expr` Subscript branches with `subscript_type_ok`, not place/projection branches with `subscript_vtype`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39003_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39005_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4192-4202
-
-## L1245 scope='C2.1.1.13.3.3' tags=Subscript,well_typed_expr_def,static-inversion,branching,THEN1
-shape: After unfolding `well_typed_expr_def` for `well_typed_expr env (Subscript v9 e e')`, the proof needs the ordinary static disjunct but the theorem also contains a place/projection static disjunct.
-pattern: Do not rely on `strip_tac >- (...)` immediately after `simp_tac(srw_ss())[Once well_typed_expr_def]` to isolate the ordinary Subscript static branch. If the consumer is only the ordinary half, use a controlled static inversion/split or a local helper that exposes the ordinary facts; keep the place branch as an explicit placeholder for C2.1.1.13.4.
-works_when: Applies inside `Resume eval_all_type_sound_mutual[Expr_Subscript]` ordinary branch, where the final goal remains an implication over `well_typed_expr env (Subscript ...)` and sibling component owns the place/projection case.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39094_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39100_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7070-7073
-
-## L1246 scope='C2.1.1.13.3.3' tags=Subscript,well_typed_expr_def,static-inversion,get_Value,subscript_type_ok
-shape: Ordinary Expr_Subscript static inversion and get_Value-error branch after `well_typed_expr_def` exposes ordinary/place disjunction
-pattern: For the ordinary Subscript Resume conjunct, explicitly discharge the `well_typed_expr env (Subscript ...)` antecedent, move it to the goal, rewrite only that antecedent with `CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def]))`, then use the first branch for ordinary facts and leave the place branch to the sibling. In the ordinary get_Value-error branch use `int_expr_get_Value_INR_no_type_error` with witnesses `[e', env, st', st', x', expr_type e']`, deriving `is_int_type (expr_type e')` by cases on `expr_type e` and `subscript_type_ok_def`.
-works_when: Use in C2.1.1.13.3.3-style ordinary `well_typed_expr` Subscript branches where the final goal is ordinary `expr_result_typed`, not place/projection typing.
-evidence:
-- episode:E0685
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39135_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39140_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7068-7143
-
-## L1267 scope='C2.1.1.13.4.2.1' tags=Expr_Subscript,base-success-helper,get_Value,branch-local,tail-helper
-shape: Inside `expr_subscript_ordinary_base_success_sound_stmt`, after base and index success, context has branch-local `get_Value x st2 = (INL idx,st3)` plus `do ... od st3 = (res,st')`.
-pattern: For the base-success helper, move the simplified `(case get_Value x st2 of ...) = (res,st')` equality to assumptions before splitting `get_Value`. After `Cases_on get_Value` and `Cases_on val_res`, the INL branch should be solved locally with `get_Value_state` and `expr_subscript_ordinary_tail_sound_stmt`; the INR branch should use `get_Value_state` and `expr_subscript_index_get_Value_INR_no_type_error_stmt`. If the goal still mentions the full outer `eval_expr (Subscript ...)` case, the proof has regressed to the old adapter boundary.
-works_when: Applies after unfolding `eval_expr cx (Subscript ...)` inside the base-success helper and rewriting with `eval_expr cx e st = (INL base_tv,st1)`, then using the index IH for `eval_expr cx e' st1 = (INL x,st2)`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39983_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39987_t001
-- episode:E0701
-
-## L1268 scope='C2.1.1.13.4.2' tags=Expr_Subscript,boundary-helper,wrapper,simp-timeout,helper-antecedent
-shape: Calling a Subscript boundary helper leaves a large conjunction of assumptions already present in the wrapper context; broad `simp[]` times out.
-pattern: For Subscript adapter wrappers, specialize the boundary helper, use `disch_then irule`, then discharge the helper antecedent with explicit conjunct splitting and assumption discharge (`rpt conj_tac >> first_assum ACCEPT_TAC`) after extracting any case-simplified typing fact with a targeted `mp_tac >> simp_tac(srw_ss())[] >> strip_tac`. Avoid `(impl_tac >- simp[])` or `gvs[]` on the whole antecedent.
-works_when: The wrapper has already split the base evaluation, instantiated the relevant IH, and all helper assumptions are present as separate assumptions except for a case-expression typing fact such as `case INL base_tv of ...`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40049_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40051_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40057_t001
-- episode:E0703
-
-## L1269 scope='C2.1.1.13.4.2.1' tags=Expr_Subscript,get_Value,INR,irule,existential-witness
-shape: After `get_Value x st2 = (INR val_err,st2)`, goal is `no_type_error_result (INR val_err)` with `expr_result_typed env e' x` and `subscript_type_ok ...` in assumptions.
-pattern: Use `irule expr_subscript_index_get_Value_INR_no_type_error_stmt` with explicit witnesses in the existential order shown by the goal (`e`, `e'`, `env`, `st2`, `st2`, `x`, `v9`), then `simp[]`. This avoids brittle `drule_all`/`ACCEPT_TAC` paths that may leave an apparently identical assumption unusable.
-works_when: Inside the ordinary base-success helper after `get_Value_state` has rewritten the error state to the same state and the index result typing is available from the index IH.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40035_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40037_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40041_t001
-- episode:E0702
-
-## L1270 scope='C2.1.1.13.4.3' tags=Expr_Subscript,projection-helper,postcondition,tactic-timeout,boundary-lemma
-shape: After applying `expr_subscript_place_projection_branch_sound_stmt`, context contains a large implication from the exact subscript tail equality to the desired place-typed postcondition.
-pattern: Do not immediately `Cases_on res >> simp[]` with the large helper implication still present. First derive a named intermediate postcondition by `first_x_assum irule` and targeted one-step evaluator rewrite with the known base-evaluation equality; then split `res` and convert the `INL` place-typed fact using `place_expr_result_typed_expr_result_typed_stmt`.
-works_when: Use in place-as-ordinary Subscript adapters where the projection helper conclusion is needed to prove ordinary expression result typing and the source has `eval_expr cx (Subscript ...) st = (res,st')` plus `eval_expr cx e st = (INL base_tv,st1)`.
-evidence:
-- episode:E0706
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40087_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40092_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7443-7457
-
-## L1271 scope='C2.1.1.13.4.3a' tags=BaseTarget_Subscript,bind_def,performance,proof_refactor
-shape: BaseTarget_Subscript successful base-target branch after `Cases_on bt_res` and `PairCases_on x`.
-pattern: Replace broad `simp[bind_def]` with bounded `rewrite_tac[bind_def, return_def]` after pair destruction; this exposes the monadic branch without timing out in the large mutual-IH context.
-works_when: Use only after the evaluator has already been unfolded and `eval_base_target cx bt st = (INL (x0,x1),st1)` is in context. Do not add `AllCaseEqs()` or unfold `evaluate_def` again.
-evidence:
-- episode:E0705
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40072_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40082_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6073-6075
-
-## L1272 scope='C2.1.1.13.4.4' tags=Expr_Subscript,audit,cheat,FAIL_TAC,Resume,integration
-shape: Post-integration audit for a Resume with adjacent proved local adapters and later unrelated cheated resumes in the same file.
-pattern: When closing a local integration/audit component, combine a successful theory build with a grep audit and source readback. Interpret grep hits by source region: later scheduled Resume cheats after the completed block do not block closure if the component-local Resume/adapters contain no `cheat` or `FAIL_TAC`. Fix stale comments that still mention temporary cheats before closure.
-works_when: Use only when the PLAN component's scope is a local Resume/helper region and later cheats are already covered by separate scheduled components. Cite both the build and grep/readback evidence in the closure.
-evidence:
-- episode:E0708
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t002
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40113_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7472-7539
-
-## L1273 scope='C2.2' tags=Expr_Attribute,evaluate_attribute,struct_has_type,ALOOKUP,boundary_lemma
-shape: Need to prove Attribute field projection from `value_has_type (StructTV ftypes) sv` and static field lookup `ALOOKUP ftypes id = SOME field_tv`.
-pattern: First prove a local `struct_has_type` ALOOKUP bridge by induction over parallel field/type alists: `struct_has_type ftypes fields /\ ALOOKUP ftypes id = SOME field_tv ==> ?field_v. ALOOKUP fields id = SOME field_v /\ value_has_type field_tv field_v`. Then `evaluate_attribute_value_has_type` is just a case split on `sv`, `simp[evaluate_attribute_def,value_has_type_def]`, and the bridge. This keeps `evaluate_attribute_def` out of the mutual Resume proof.
-works_when: Use when the runtime value is already known to have a concrete `StructTV ftypes` type and the static typing side has been bridged to an executable `ALOOKUP ftypes id` fact (e.g. via `attribute_type_evaluates`).
-evidence:
-- episode:E0709
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40140_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7541-7563
-
-## L1274 scope='C2.2' tags=Expr_Attribute,attribute_type_evaluates,expr_result_typed,get_Value,boundary_lemma,Resume
-shape: Need to package the successful `eval_expr cx (Attribute ty e id)` tail after base expression succeeds and `expr_result_typed env e base_tv` is available.
-pattern: Prove/use a helper over the whole Attribute evaluation equality rather than inlining in the Resume. Inside the helper: unfold `eval_expr` for `Attribute` once; rewrite with `eval_expr cx e st = (INL base_tv,st1)`; unfold `expr_result_typed_def`/`expr_runtime_typed_def`; case-split `expr_type e`, not the runtime `type_value`; `attribute_type_def` + `evaluate_type_def` force the StructT branch and produce `StructTV (ZIP (MAP FST fields,tvs))`. From `toplevel_value_typed base_tv (StructTV ...)`, derive `base_tv = Value sv`; then use `attribute_type_evaluates` and `evaluate_attribute_value_has_type` to close no-TypeError and success typing.
-works_when: Applies to C2.2.3-style Attribute integration when the base expression IH has already supplied successful-result typing and preservation facts, and the static typing side has `attribute_type env.type_defs (expr_type e) id = SOME ty`. Keep this inside the helper; the final Resume should just expose premises and call it.
-evidence:
-- episode:E0710
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40195_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7565-7601
-
-## L1279 scope='C2.3.3' tags=Expr_Pop,Append,target_runtime_typed,assign_target_no_type_error,assignable_context,proof-pattern
-shape: Need to prove Pop assignment branch after successful `eval_base_target` under dynamic `type_place_target`.
-pattern: Use the existing `Append` statement branch as the local proof template: instantiate the base-target IH, convert its INL facts into `target_runtime_typed env cx st1 (BaseTarget bt) ty (BaseTargetV loc sbs)` by unfolding `target_runtime_typed_def`/`target_value_shape_def`/`well_typed_atarget_def`; derive operation runtime typing and shape; derive `assign_target_assignable_context` via `target_runtime_typed_imp_assignable_context`; then apply assignment-target soundness/preservation wrappers. For Pop, substitute `stmt_assign_operation_runtime_typed_Pop_from_dynamic_array` and `stmt_assign_operation_matches_target_shape_Pop_BaseTargetV`.
-works_when: Applies after the Pop premise provides `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` and the base-target IH returns `base_target_value_shape` plus `location_runtime_typed`/`target_path_type`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40316_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40314_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40315_t003
-
-## L1280 scope='C2.3.3' tags=Expr_Pop,assignable_type,well_formed_type,evaluate_type,PopOp,boundary-lemma
-shape: Need `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))` in Pop branch after deriving only `evaluate_type env.type_defs elem_ty = SOME elem_tv`.
-pattern: Do not treat `assignable_type` as a mere well-formedness fact. For `ArrayT elem bd`, `assignable_type_def` requires `well_formed_type (ArrayT elem bd)` AND recursively `assignable_type elem`; an `evaluate_type elem = SOME elem_tv` fact only proves well-formedness. If a consumer only has dynamic target typing/path facts, either strengthen the static typing/extraction interface to include assignability or use/prove a specialized assignment boundary that does not require generic `assignable_type`.
-works_when: Applies to fresh-stack Pop/assignment statement proofs using `assign_target_no_type_error` or `assign_target_sound_mutual` side conditions after dynamic-array target typing repair.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40396_t001
-- source:semantics/prop/vyperTypeSystemScript.sml:224-238
-- source:semantics/prop/vyperTypeSystemScript.sml:507-508
-
-## L1281 scope='C2.3.4' tags=well_typed_expr_def,Pop,existential,conjunctive-witness,metis_tac
-shape: After strengthening a defining clause from `?n. P n` to `?n. P n /\ Q n`, an old extraction lemma for just `?n. P n` no longer closes by plain `simp[Once def]`.
-pattern: Use `simp[Once def] >> metis_tac[]` for the weaker projection lemma, and add a separate strong extraction lemma preserving the full conjunctive witness. This keeps old consumers working while exposing the stronger interface to new consumers.
-works_when: Applies to HOL4 definition repairs where an existential witness gains extra conjuncts and existing projection lemmas should remain available.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40420_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40421_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40422_t001
-
-## L1282 scope='C2.3.5' tags=PopOp,assign_result,evaluate_subscripts,popped_value,boundary-lemma
-shape: Need successful `assign_result tv PopOp old subs = (INL popped, st')` to expose `popped = SOME v` and `value_has_type elem_tv v`.
-pattern: Factor Pop result typing below `assign_target`: prove `evaluate_subscripts_leaf_well_typed`, `popped_value_well_typed`, then `assign_result_pop_success_some_typed` with premise `leaf_type tv subs = ArrayTV elem_tv (Dynamic n)`. In the final proof, after simplifying `assign_result_def`, add `leaf_type tv subs <> NoneTV` explicitly and use `evaluate_subscripts_leaf_well_typed`; do not supply an existential witness after `gvs[]` has simplified the goal to element typing.
-works_when: Applies to fresh assignment-target Pop proofs for scoped/ordinary storage/immutable paths that call `assign_result` after successful subscript assignment.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40457_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40462_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40466_t001
-- episode:E0723
-
-## L1283 scope='C2.3.5' tags=HOL4,evaluate_subscripts,induction,case-split,array_index
-shape: Induction over `evaluate_subscripts` Int-subscript branch leaves `array_index tv av i = SOME v` and `evaluate_subscripts elem_tv v subs = INL v'`.
-pattern: In `evaluate_subscripts` leaf-typing induction, split the subscript value before the current value: `Cases_on v >> gvs[evaluate_subscripts_def, AllCaseEqs()]`, then case-split `tv` and use `array_index_has_type`. If you case-split the original value after simplification, HOL reports no variable named `a` because the goal has already specialized it to `ArrayV av`.
-works_when: Applies when porting/evolving leaf-typing lemmas over `evaluate_subscripts` from retired helpers into the fresh stack.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40458_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40460_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40466_t001
-
-## L1284 scope='C2.3.5' tags=PopOp,assign_target,theorem-placement,TopLevelVar,branch-helper
-shape: Exported `assign_target_pop_success_some_typed` needs TopLevelVar helper lemmas to discharge Value/HashMapRef/ArrayRef branches.
-pattern: If the assign-target Pop boundary proof uses helpers such as `lookup_global_storage_Value_typed`, `top_level_storage_value_leaf_evaluate_type`, or ArrayRef/HashMap branch facts, place the exported theorem after those helpers (currently after `Finalise assign_target_sound_mutual` is safe) or factor/move the branch helper earlier. Placing it immediately after `assign_result_pop_success_some_typed` makes later helper names unavailable.
-works_when: Applies to lifting lower-level `assign_result` Pop facts through `assign_target` in `vyperTypeStatePreservationScript.sml`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40514_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40521_t001
-- episode:E0724
-
-## L1285 scope='C2.3.5' tags=PopOp,ScopedVar,ImmutableVar,assign_result,leaf_type
-shape: ScopedVar/ImmutableVar branches of `assign_target_pop_success_some_typed` after unfolding `assign_target_def`.
-pattern: For scoped/immutable Pop branches, derive `place_leaf_typed` via `target_runtime_typed_place_leaf_typed`, rewrite `place_leaf_typed_def`/`place_leaf_path_typed_def` to get `evaluate_type ... (ArrayT elem_ty (Dynamic n)) = SOME (leaf_type root_tv (REVERSE sbs))`, then use `gvs[evaluate_type_def]` to get `leaf_type root_tv (REVERSE sbs) = ArrayTV elem_tv (Dynamic n)`. Combine old-value typing/well-formedness from runtime consistency and finish with `assign_result_pop_success_some_typed`.
-works_when: Applies to non-storage-direct branches that call `assign_result root_tv PopOp old (REVERSE sbs)` after assignment.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40523_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40531_t001
-- episode:E0724
-
-## L1286 scope='C2.3.5' tags=PopOp,TopLevelVar,StorageVarDecl,assign_result,lookup_global_storage_Value_typed
-shape: TopLevelVar Value/StorageVarDecl branch of `assign_target_pop_success_some_typed` after unfolding `assign_target_def`.
-pattern: Case-split `p`, extract the layout slot from `IS_SOME`, then use `lookup_global_storage_Value_typed` for old-value typing and `top_level_storage_value_leaf_evaluate_type` plus `evaluate_type_def` to derive `leaf_type root_tv (REVERSE sbs) = ArrayTV elem_tv (Dynamic n)`. Finish with `assign_result_pop_success_some_typed`.
-works_when: Applies when `lookup_global` returns `INL (Value old_v)` and the declaration is `StorageVarDecl`; the branch calls `assign_result root_tv PopOp old_v (REVERSE sbs)` after `set_global` succeeds.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40547_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40597_t001
-- episode:E0725
-
-## L1287 scope='C2.3.5' tags=PopOp,TopLevelVar,HashMapRef,place_leaf_path_typed_split_leaf_type,lookup_global_HashMapRef
-shape: HashMapRef branch of `assign_target_pop_success_some_typed` after `split_hashmap_subscripts` and successful storage read/write.
-pattern: Use a fresh `lookup_global_HashMapRef` helper to align the runtime `HashMapRef` with `HashMapVarDecl`; combine with `top_level_HashMap_decl` and `target_path_type_Type_place_leaf_typed`. After `gvs[place_leaf_typed_def, place_leaf_path_typed_def]`, apply `place_leaf_path_typed_split_leaf_type` to connect `evaluate_type (ArrayT elem_ty (Dynamic n))` to `leaf_type base_tv remaining`, then finish with `read_storage_slot_success_type` and `assign_result_pop_success_some_typed`.
-works_when: Applies to TopLevelVar HashMapRef Pop paths where `assign_target` goes through `compute_hashmap_slot`, `read_storage_slot`, ordinary `assign_subscripts`, write, and `assign_result`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40578_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40595_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40597_t001
-- episode:E0725
-
-## L1288 scope='C2.3.5' tags=PopOp,ArrayRef,resolve_array_element,drule,branch-helper
-shape: TopLevelVar ArrayRef branch of `assign_target_pop_success_some_typed` needs to connect root `leaf_type (ArrayTV elem_tv' bd) (REVERSE sbs)` to resolved `leaf_type final_tv remaining`.
-pattern: Add/use simple non-nested wrapper lemmas around `resolve_array_element_leaf_type_sc` and `resolve_array_element_well_formed_sc`, then apply them with `drule`/`drule_all` to the live `resolve_array_element ... = INL (...)` assumption. Direct `metis_tac` or `MATCH_MP` on the nested original helper is brittle/timeouts in the large ArrayRef goal. After the leaf equality, `gvs[leaf_type_def]` splits ordinary vs direct dynamic Pop paths.
-works_when: Applies in fresh state-preservation ArrayRef assignment proofs after `PairCases_on x` and `gvs[...]` have exposed the `resolve_array_element` success assumption and storage read/write/assign_result assumptions.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40646_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40668_t001
-- episode:E0726
-
 ## L1289 scope='C2.1.1' tags=Resume,well_typed_expr,type_place_expr,place_projection,adapter
 shape: Expression Resume goal has joint ordinary/place projections for a constructor.
 pattern: Split the expression Resume conclusion into ordinary and place projections before consuming constructor typing. In ordinary branches, strip/use only `well_typed_expr`; in place branches, strip/use `type_place_expr`. For place-capable constructors, use adapter/helper lemmas whose conclusions match the branch, rather than carrying monadic tail unfolding in the Resume.
@@ -717,10 +368,240 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m41360_t001
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:evaluate_extract32_supported_no_type_error
 
-## L1308 scope='C4.4' tags=ABI,type-builtin,success-typing,boundary-lemma
-shape: Suspended `well_typed_type_builtin_success_type` ABI encode branch must prove `value_has_type result_tv v` from `evaluate_type_builtin ... (AbiEncode ...) ... = INL v`.
-pattern: First invert `type_builtin_result_ok_def` and `abi_encode_size_ok_def` to expose the dynamic-bytes result type and ABI size bound. If existing ABI lemmas do not match the branch conclusion directly, add one local boundary lemma with conclusion `value_has_type result_tv v` (or the exact dynamic bytes `value_has_type`) and consume it with `irule`/`drule`; do not manually build large instantiated theorem terms.
-works_when: Use for C4.4 `abi_encode`, `encode_tuple`, and `encode_tuple_nowrap` resumes in `vyperTypeBuiltinsScript.sml`. The no-TypeError theorem is already closed, so focus only on success result typing.
+## L1311 scope='C4.4' tags=ABI,type-builtin,success-typing,boundary-lemma,enc,vyper_abi_size_bound,length-bound
+shape: After unfolding `evaluate_abi_encode` success and dynamic-bytes `value_has_type`, goal is `LENGTH (enc (vyper_to_abi_type tenv typ) av) <= n` with `vyper_to_abi tenv typ vin = SOME av` and `vyper_abi_size_bound tenv typ <= n`.
+pattern: For C4.4 ABI encode branches, prove a lower-level length boundary before touching resumes. A wrapper theorem `evaluate_abi_encode tenv typ vin = INL out ∧ evaluate_type tenv typ = SOME tv ∧ value_has_type tv vin ∧ evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME result_tv ∧ vyper_abi_size_bound tenv typ <= n ==> value_has_type result_tv out` reduces mechanically to the encoded-length lemma. The reusable missing lemma is `vyper_to_abi` success under Vyper typing implies `LENGTH (enc (vyper_to_abi_type tenv typ) av) <= vyper_abi_size_bound tenv typ`; prove it once (likely in `vyperTypeABIScript.sml`) and consume it in the wrapper/resumes.
+works_when: Use for `well_typed_type_builtin_success_type[abi_encode]`, `[encode_tuple]`, and `[encode_tuple_nowrap]`. For dynamic bytes/string cases expect to need monotonicity of `ceil32`; for tuple/array/struct cases expect recursion through `vyper_abi_size_bound_list`/`vyper_abi_embedded_size`. Do not use `enc_valid` until the length premise is available.
 evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41368_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41466_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41465_t001
+- episode:E0752
 - plan:C4.4
+
+## L1312 scope='C4.4' tags=ABI,vyper_to_abi,contractABI.has_type,length-bound,helper-interface
+shape: A Vyper-to-ABI typing bridge using `contractABI$has_type` leaves tuple/array goals such as `LENGTH avs < dimword(:256)` even after element typing is proved.
+pattern: For C4.4, do not treat `vyper_to_abi_well_typed` as a pure element-typing theorem. `contractABI$has_type` includes `valid_length` for tuples/arrays, so any helper concluding `has_type (vyper_to_abi_type tenv typ) av` needs explicit length/bound facts from `evaluate_type`, `value_has_type`, and conversion length lemmas. If those bounds are not already in the statement, prove the direct encoded-length theorem instead of pushing `gvs` on the broad helper.
+works_when: Applies when a helper has conclusion `has_type (vyper_to_abi_type tenv typ) av` or `has_types (vyper_to_abi_types tenv ts) avs` and holbuild leaves `LENGTH avs < dimword(:256)` subgoals. Split the helper or add side conditions; do not solve by resume-level plumbing.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41492_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41493_t001
+
+## L1313 scope='C4.4' tags=ceil32,arithmetic,DIV_LE_MONOTONE,ABI
+shape: Need monotonicity of ABI `ceil32`: `m <= n ==> ceil32 m <= ceil32 n`.
+pattern: In `vyperTypeABI`, `ceil32_def` is not directly in scope as `ceil32_def`; use `contractABITheory.ceil32_def`. A simple proof shape is `rw[contractABITheory.ceil32_def] >> \`m + 31 <= n + 31\` by simp[] >> irule DIV_LE_MONOTONE >> simp[]`. `drule_all DIV_LE_MONOTONE` does not match the division goal reliably here.
+works_when: Use for dynamic bytes/string length cases, where `value_has_type` gives `LENGTH bs <= n` and the goal compares `32 + ceil32 (LENGTH bs)` with `32 + ceil32 n`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41485_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41487_t001
+- source:semantics/prop/vyperTypeABIScript.sml:139-145
+
+## L1314 scope='C4.4.1' tags=ABI,enc_tuple,length-bound,accumulator,MAP2,SUM
+shape: Need an upper bound for `LENGTH (enc_tuple hl tl ts vs hds tls)` or `LENGTH (enc (Tuple ts) (ListV vs))` under `has_types ts vs`.
+pattern: Hide `enc_tuple` accumulators behind a generic ABI length lemma before proving Vyper-specific ABI encode bounds. The desired accumulator theorem bounds length by existing head/tail accumulator lengths plus a `SUM (MAP2 ...)` per-element budget: dynamic elements contribute `32 + LENGTH (enc t v)`, static elements contribute `static_length t`. Tuple/dynamic-array/fixed-array wrappers should be the only lemmas consumed by Vyper proofs.
+works_when: Use before C4.4.4 `vyper_to_abi_enc_length_bound`; prove by induction on `ts` with cases on `vs`, `has_types` eliminating mismatches, `enc_def` unfolded once in the cons case, `LENGTH_enc_number` for dynamic heads, and `enc_has_static_length` for static heads.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41522_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41526_t001
+- plan:C4.4.1
+
+## L1315 scope='C2' tags=C2,Subscript,Pop,Attribute,boundary-helper,compacted
+shape: Subscript/Pop/Attribute statement-expression resumes require boundary helpers and immediate IH projections
+pattern: For future C2 resume repair, avoid replaying old long tactical histories from LEARNINGS. Query the dossier episodes cited here for the specific region, then use boundary helpers that return the whole evaluator suffix and immediately project strengthened IHs. Common subpatterns: Subscript place branches need the place-expression projection rather than coercion to ordinary well_typed_expr; Pop assignment paths should factor Pop result typing below assign_target; Attribute should use a field-ALOOKUP boundary helper.
+works_when: Returning to C2 statement/expression mutual soundness after C4/C5 prerequisites; use dossier evidence for exact old branch-specific tactics instead of keeping dozens of stale per-branch learning cards.
+evidence:
+- episode:E0637
+- episode:E0708
+- episode:E0723
+- episode:E0726
+- episode:E0710
+
+## L1316 scope='C4.4.1' tags=ABI,enc_tuple,length-bound,MAP2,SUM,boundary-lemma
+shape: Need generic upper bounds for ABI tuple/dynamic-array/fixed-array encodings before Vyper ABI length theorem
+pattern: Prove an accumulator `enc_tuple` bound once, then expose only clean wrappers: tuple wrapper over `enc (Tuple ts) (ListV vs)`, dynamic-array wrapper over `enc (Array NONE t)`, and fixed-array wrapper over `enc (Array (SOME n) t)`. Use `Once contractABITheory.enc_def`; dynamic heads need `byteTheory.LENGTH_word_to_bytes`; static heads need `cj 1 contractABITheory.enc_has_static_length`; repeated element budgets are handled by a small `SUM (MAP2 ... REPLICATE ...) <= LENGTH vs * embedded` helper. Keep accumulator instantiations inside these generic lemmas only.
+works_when: C4.4.4 or later proof needs to bound ABI encoding lengths from `has_types`/`have_type`/`has_type (Array ...)` without exposing `hl`, `tl`, `hds`, or `tls` to Vyper-specific consumers.
+evidence:
+- episode:E0754
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41583_t001
+- source:semantics/prop/vyperTypeABIScript.sml:154-266
+
+## L1317 scope='C4.4' tags=ABI,has_type,valid_int_bound,UintT,IntT,counterexample,encoded-length
+shape: A helper tries to prove `contractABI.has_type (vyper_to_abi_type tenv typ) av` from Vyper `evaluate_type` / `value_has_type`.
+pattern: Do not use ABI `has_type` as the main invariant for fresh Vyper ABI encode length proofs. Vyper permits unaligned integer widths (`UintT 1`, `IntT 2`, etc.) while `contractABI.has_type` requires `valid_int_bound n`, including byte alignment. Prove direct encoded-length facts using `enc_def`/`LENGTH_enc_number` and no-type tuple/array length wrappers instead.
+works_when: Applies to `default_to_abi`, `vyper_to_abi`, sparse static-array defaults, and any ABI encode helper whose consumer only needs `LENGTH (enc ...) <= ...`. If a goal asks for `n MOD 8 = 0` from `evaluate_type`, abandon the ABI-typing invariant and switch to direct length.
+evidence:
+- episode:E0755
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41625_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41626_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41628_t001
+
+## L1318 scope='C4.4.3' tags=ABI,enc_tuple,actual-length,no-has_type,static-premise
+shape: Need an unconditional tuple encoder length bound without ABI typing assumptions.
+pattern: Use raw actual encoded lengths for every static element: prove `enc_tuple_acc_length_bound_actual` by induction on `ts` and cases on `vs`, one-step `contractABI.enc_def`, `LENGTH_FLAT`, reverse/SUM rewrites, and split on `is_dynamic h'`. In the dynamic branch, specialize the IH to tail `t`, updated `tl + LENGTH (enc h' h)`, offset head `word_to_bytes ...::hds`, and tail `enc h' h::tls`; in the static branch specialize to `enc h' h::hds` and `[]::tls`. Select the universal IH with `qpat_x_assum`, not fragile `first_x_assum`.
+works_when: Use before static-premise tuple corollaries; it assumes no `has_type` and does not mention `static_length`. Downstream lemmas must separately prove static elements encode within `static_length`.
+evidence:
+- episode:E0762
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41674_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41677_t001
+
+## L1319 scope='C4.4.3' tags=ABI,enc_tuple,ZIP,REPLICATE,static-premise
+shape: Need to instantiate a ZIP premise over `ZIP (REPLICATE (LENGTH vs) t, vs)`.
+pattern: Use a local membership bridge: `MEM (t',v) (ZIP (REPLICATE (LENGTH vs) t,vs)) <=> t' = t /\ MEM v vs`, proved from `MEM_ZIP`, `EL_REPLICATE`, `EL_MEM`, and `MEM_EL`. This lets `simp[MEM_ZIP_REPLICATE_SAME]` reduce static-element premises for tuple/array wrapper instantiations.
+works_when: Applies to array encoder wrappers that reduce to tuple encoding over replicated ABI element types; avoid ABI `has_type_def`.
+evidence:
+- episode:E0765
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41713_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41718_t001
+
+## L1320 scope='C4.4.3' tags=ABI,dynamic-array,enc_def,word_to_bytes,length-prefix
+shape: Dynamic ABI array length wrapper using tuple accumulator over `Array NONE`.
+pattern: After `simp[Once contractABITheory.enc_def, byteTheory.LENGTH_word_to_bytes]`, instantiate the tuple accumulator with `hds = [word_to_bytes (n2w (LENGTH vs) : bytes32) T]` and `tls = []`; the prefix contributes exactly 32. Omitting this hds entry leaves an impossible bound that is short by 32.
+works_when: Use for `enc (Array NONE t) (ListV vs)` bounds, including default dynamic arrays and Vyper same-array conversion branches.
+evidence:
+- episode:E0765
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41714_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41717_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41718_t001
+
+## L1321 scope='C4.4.3' tags=ABI,MAP2,static-premise,arithmetic,induction
+shape: Replicated MAP2 embedded-size bound with both dynamic and static element premises.
+pattern: Induct on `vs`; when specializing the IH for the tail, discharge the three-part antecedent explicitly (`MEM` premise, guarded static premise, embedded inequality) rather than relying on broad `metis_tac`. Then split on `is_dynamic t`; dynamic branch uses the `elem_bound` premise for `h`, static branch needs only the embedded static inequality because the sum term already uses `static_length t`.
+works_when: Applies to `SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v) else static_length t) (REPLICATE (LENGTH vs) t) vs)` bounds.
+evidence:
+- episode:E0764
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41703_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41705_t001
+
+## L1322 scope='C4.4.4' tags=ABI,default_to_abi,fixed-array,enc_tuple,boundary-lemma
+shape: Fixed-array default branch after `enc_def`: `LENGTH (enc_tuple (head_lengths (REPLICATE n t) 0) 0 (REPLICATE n t) (REPLICATE n v) [] []) <= n * embedded`.
+pattern: For default fixed arrays, prove/apply a helper with the unfolded `enc_tuple (REPLICATE n ...)` conclusion. It should reduce to `enc_fixed_array_same_length_bound_static_premise` with `vs = REPLICATE n v`, an element encoded-length bound, a guarded static encoded-length bound, and `vyper_to_abi_embedded_head_bound`/`vyper_to_abi_type_dynamic` for the embedded size. This is more robust than matching the subterm inside the large `evaluate_type_ind` goal.
+works_when: The branch has `evaluate_type tenv typ = SOME tv` and an IH/assumption for `LENGTH (enc (vyper_to_abi_type tenv typ) (default_to_abi tv)) <= vyper_abi_size_bound tenv typ`. For static case use `vyper_to_abi_static_length_bound`; no ABI `has_type` required.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41760_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41785_t001
+- source:semantics/prop/vyperTypeABIScript.sml:509-595
+
+## L1324 scope='C4.4.4.2' tags=ABI,default_to_abi,tuple,LIST_REL,MAP2,length-bound
+shape: Need tuple encoded-length bound from `LIST_REL` element-good premises for `(vyper_to_abi_types tenv ts, MAP default_to_abi tvs)`.
+pattern: Split the tuple consumer into two proof obligations: a static ZIP premise discharged from LIST_REL element-good plus `vyper_to_abi_type_dynamic`, and a MAP2/SUM bound discharged by LIST_REL/list induction using each head `LENGTH (enc ...) <= vyper_abi_size_bound` and `vyper_to_abi_embedded_head_bound`. Then apply `enc_tuple_length_bound_static_premise` to obtain the public `enc (Tuple ...)` length conclusion. Keep `enc_tuple` accumulator parameters out of the theorem statement.
+works_when: Active C4.4.4.2 or later C4.4.4.4 compatibility derivation, after C4.4.3 static-premise tuple wrappers and C4.4.4.1 Vyper bridge helpers are available. If `evaluate_types` or arbitrary `hl/tl/hds/tls` appears in this consumer theorem, the abstraction boundary is wrong.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41879_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41881_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41882_t004
+- episode:E0766
+
+## L1325 scope='C4.4.4.2' tags=ABI,LIST_REL,SUM_MAP2,default_to_abi,proof-interface
+shape: Tuple default ABI bound from LIST_REL element premises; anonymous lambda causes brittle IH selection in MAP2/SUM induction.
+pattern: Before proving ZIP/SUM tuple consumers, name the repeated element premise as `default_to_abi_elem_bound_rel tenv typ tv` and prove a pointwise head lemma whose conclusion exactly matches the MAP2 head contribution bounded by `vyper_abi_embedded_size`. Then prove static ZIP and SUM_MAP2 consumers from the named relation, preserving the final public theorem statement with the original LIST_REL lambda.
+works_when: Use in C4.4.4.2.1-.4 and C4.4.4.3 when default ABI element/list facts feed tuple encoding bounds. Especially useful after repeated failures specializing IHs over anonymous LIST_REL lambdas.
+evidence:
+- episode:E0772
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41942_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41947_t001
+
+## L1326 scope='C4.4.4.2' tags=ABI,LIST_REL,SUM_MAP2,induction,static_length
+shape: SUM_MAP2 tuple bound cons case after LIST_REL split: tail SUM bound plus head dynamic/static contribution.
+pattern: In the tuple SUM_MAP2 helper, a short robust proof is: induct on `ts`, split `tvs`, simplify `vyper_to_abi_type_def` and `vyper_abi_size_bound_def`, use the IH on the LIST_REL tail, then use `drule_all (cj 1 vyper_to_abi_type_dynamic)` and split on `vyper_is_dynamic tenv head`. Dynamic branch closes by arithmetic from the encoded-length head bound; static branch first applies `vyper_to_abi_static_length_bound`, then arithmetic. Do not rely on auto-generated `h/h'` names to instantiate a named relation.
+works_when: Use when proving a MAP2/SUM bound over `(vyper_to_abi_types tenv ts, MAP default_to_abi tvs)` from the standard element LIST_REL premise. Assumes head conjuncts include `evaluate_type`, encoded-length bound, and static encoded-length implication.
+evidence:
+- episode:E0775
+- source:semantics/prop/vyperTypeABIScript.sml:592-619
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41993_t001
+
+## L1327 scope='C4.4.4.3' tags=ABI,LIST_REL,evaluate_type_ind,enc_tuple,boundary
+shape: Default ABI length proof where evaluate_types cons branch exposes `enc_tuple` accumulator/head_lengths goals.
+pattern: Do not prove ABI tuple length/SUM/static facts in the `evaluate_types` recursive invariant. Prove a semantic suffix invariant `?dtvs. tvs = REVERSE acc ++ dtvs /\ LIST_REL (default_to_abi_elem_bound_rel tenv) ts dtvs`, then derive tuple length/SUM/static facts in a separate corollary from C4.4.4.2 tuple boundary lemmas.
+works_when: Applies when evaluator recursion is over `evaluate_types` and tuple encoding goals appear only because a consumer theorem included ABI encoding facts in the recursive invariant.
+evidence:
+- episode:E0777
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42061_t001
+
+## L1328 scope='C4.4.4.3' tags=ABI,LIST_REL,ZIP,struct,MAP_ZIP,boundary
+shape: Struct default ABI case produces `MAP (default_to_abi o SND) (ZIP (MAP FST args,tvs))` but tuple boundary lemmas expect `MAP default_to_abi tvs`.
+pattern: Package the struct ZIP shape with a small lemma: if `LENGTH names = LENGTH tvs`, then `MAP (default_to_abi o SND) (ZIP (names,tvs)) = MAP default_to_abi tvs`. In struct cases, derive the length from `LIST_REL_LENGTH` and `LENGTH_MAP`, rewrite with this lemma, then apply the ordinary tuple LIST_REL boundary lemmas.
+works_when: Applies to ABI/default struct proofs where evaluated field type-values `tvs` are zipped with field names only for StructV/StructTV packaging, but tuple encoders operate on the value suffix list.
+evidence:
+- source:semantics/prop/vyperTypeABIScript.sml:673-679
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42130_t001
+- episode:E0778
+
+## L1329 scope='C4.4.4.3' tags=ABI,LIST_REL,boundary,irule,qspecl_then
+shape: Have `LIST_REL (default_to_abi_elem_bound_rel tenv) ts tvs`, need tuple boundary lemmas stated with expanded lambda relation or simplified `enc_tuple` goal.
+pattern: Use `LIST_REL_mono` with witness `default_to_abi_elem_bound_rel tenv` plus `simp[default_to_abi_elem_bound_rel_def]` to derive the expanded lambda LIST_REL. For tuple helper conclusions that do not match after `enc (Tuple ...)` simplifies to `enc_tuple`, either use the local `default_to_abi_enc_tuple_bound_from_LIST_REL` wrapper or explicitly specialize the boundary theorem with `qspecl_then [`tenv`,`ts`,`tvs`] mp_tac ... >> simp[]`; avoid manual theorem plumbing.
+works_when: Applies to default ABI corollaries after the semantic evaluator invariant has produced only `LIST_REL (default_to_abi_elem_bound_rel tenv)`.
+evidence:
+- episode:E0779
+- source:semantics/prop/vyperTypeABIScript.sml:832-847
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42159_t001
+
+## L1330 scope='C4.4.5' tags=ABI,ceil32,enc,dynamic-bytes,arithmetic
+shape: Goal after unfolding `enc String (BytesV bs)` or `enc (Bytes NONE) (BytesV bs)`: `len + 32 + (ceil32 len - len) <= ceil32 n + 32`.
+pattern: Do not expect `decide_tac` alone to prove dynamic bytes/string encoded-length bounds. First derive `ceil32 len <= ceil32 n` using `ceil32_mono` from the Vyper length assumption, and derive `len <= ceil32 len` by simp (`le_ceil32`), then `decide_tac` closes the subtraction arithmetic.
+works_when: Applies when Vyper `value_has_type` gives `STRLEN s <= n` or `LENGTH bs <= n`, and the ABI bound is `ceil32 n + 32`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42219_t001
+- source:semantics/prop/vyperTypeABIScript.sml:873-893
+
+## L1331 scope='C4.4.5' tags=ABI,sparse,boundary-relation,length-bound
+shape: Sparse ABI conversion proof needs bounds for both converted values and default ABI values.
+pattern: When a relation must feed sparse-array encoding, keep the per-ABI-value bound relation independent of source conversion and source `value_has_type`; defaults inserted for missing sparse entries have no `vyper_to_abi ... = SOME av` premise but still satisfy the same encoded-length interface via default-bound lemmas.
+works_when: Applies to C4.4.5-style length-bound proofs where `vyper_to_abi_sparse` appends either an explicitly converted `av` or `default_to_abi tv`. Use a separate strengthened theorem to connect successful conversions to the relation.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42259_t001
+- episode:E0782
+- source:semantics/prop/vyperTypeABIScript.sml:926-944
+
+## L1332 scope='C4.4.5' tags=ABI,sparse,induction,IH
+shape: Recursive sparse branch decreases `n` but keeps the same sparse map.
+pattern: Do not use `sparse_has_type tv n sparse` as the strengthened sparse IH premise for `vyper_to_abi_sparse`; the `SUC n` recursive call reuses the same sparse map, which may contain key `n`. Use a length-independent predicate `sparse_values_have_type tv sparse = !k v. MEM (k,v) sparse ==> value_has_type tv v`.
+works_when: Applies to proofs by `vyper_to_abi_ind` over `vyper_to_abi_sparse (SUC n) sparse`, especially when using `ALOOKUP sparse n`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42259_t001
+- source:semantics/vyperABIScript.sml:509-519
+- source:semantics/prop/vyperTypeABIScript.sml:941-944
+
+## L1333 scope='C4.4.5' tags=ABI,array,boundary-lemma,irule,static-premise
+shape: After `irule enc_dyn_array_same_length_bound_static_premise` or `irule enc_fixed_array_same_length_bound_static_premise`, the goal is a conjunction containing an existential element-bound subgoal plus a separate static-element premise.
+pattern: Do not immediately `qexists` after applying the same-array static-premise lemmas. First split the top-level conjunctions: prove the length/element-bound conjunct by choosing `vyper_abi_size_bound tenv typ` and using `abi_av_bound_rel_def` plus `vyper_to_abi_embedded_head_bound`; prove the static premise separately by `EVERY_MEM` and `abi_av_bound_rel_static_premise`.
+works_when: Applies when the context has `evaluate_type tenv typ = SOME tv` and `EVERY (abi_av_bound_rel tenv typ tv) avs`, and the goal is a dynamic/fixed same-type ABI array length bound.
+evidence:
+- episode:E0783
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42280_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42283_t001
+- source:semantics/prop/vyperTypeABIScript.sml:1008-1046
+
+## L1334 scope='C4.4.5' tags=ABI,sparse,ALOOKUP,induction
+shape: Need `value_has_type tv v` from `sparse_values_have_type tv sparse` and `ALOOKUP sparse k = SOME v`.
+pattern: If `ALOOKUP_MEM` is not available in the current theory namespace, prove the projection directly by induction on the sparse alist: split the head pair, simplify `sparse_values_have_type_def`, case-split `head_key = k`, and use the IH on the tail branch with the tail value predicate reconstructed from the head predicate.
+works_when: Applies to local sparse projection facts in `vyperTypeABIScript.sml` without adding new imports or sortedness/key-bound premises.
+evidence:
+- episode:E0784
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42309_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42318_t001
+- source:semantics/prop/vyperTypeABIScript.sml:1060-1070
+
+## L1335 scope='C4.4.5.4' tags=ABI,dynamic-array,arithmetic,boundary-lemma
+shape: Dynamic array Vyper-to-ABI branch after unfolding `enc (Array NONE ...)` has an implication `LENGTH enc_tuple ... <= emb * LENGTH vs + 32 ==> ... <= emb * n + 32`.
+pattern: For dynamic array evaluated-VHT helper proofs, keep the array encoding boundary in `abi_avs_dyn_array_bound`, then after `simp[Once contractABITheory.enc_def, vyper_abi_size_bound_def]` abbreviate the embedded element size (`emb`) and prove `emb * LENGTH vs <= emb * n` from `LENGTH vs <= n` using `LESS_MONO_MULT` and `MULT_COMM`; then arithmetic is straightforward. Do not leave repeated conditional embedded-size expressions for `decide_tac`.
+works_when: Applies when `evaluate_type tenv (ArrayT typ (Dynamic n)) = SOME tv`, `value_has_type tv (ArrayV (DynArrayV vs))`, and the same-array IH gives `EVERY ... avs` plus `LENGTH avs = LENGTH vs`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42381_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42398_t001
+- source:semantics/prop/vyperTypeABIScript.sml:1082-1108
+
+## L1336 scope='C4.4.5.4' tags=ABI,tuple,struct,drule_all,boundary-lemma
+shape: Tuple/struct branch has an induction hypothesis `!tvs. LIST_REL ... ts tvs /\ values_have_types tvs vs ==> abi_av_list_bound_rel ... tvs` and a goal about raw `enc_tuple ... <= vyper_abi_size_bound`.
+pattern: Introduce a helper that unfolds `evaluate_type`/`value_has_type` just enough to recover the concrete `tvs`, proves `LIST_REL` via `evaluate_types_LIST_REL`, applies the all-`tvs` IH, and then uses `abi_av_list_tuple_bound_enc_tuple`. In consumers, prefer `drule_all helper` over direct `irule` because the helper's premise is a universally quantified IH plus evaluated/VHT assumptions.
+works_when: Applies to `TupleT ts` and likely to `StructT id` after translating `struct_has_type` to `values_have_types (MAP SND ...) (MAP SND fields)`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42348_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42356_t001
+- source:semantics/prop/vyperTypeABIScript.sml:1020-1041
+
+## L1337 scope='C4.4.5.5' tags=ABI,compatibility-corollary,drule_all,fixed-array,sparse
+shape: Goal is exactly the fixed-array ABI length bound with `EVERY (abi_av_bound_rel ...) avs` and `LENGTH avs = n`; `drule_all abi_avs_fixed_array_bound` raises a HOL_ERR assertion.
+pattern: For the exported sparse conjunct, prefer goal-driven `irule abi_avs_fixed_array_bound >> simp[]` or explicit `qspecl_then` specialization over `drule_all`. The lemma conclusion matches the goal; `LENGTH avs = n` should discharge the lemma's `LENGTH avs <= n` premise by simplification.
+works_when: Applies in C4.4.5.5 after deriving `sparse_values_have_type` from `sparse_has_type` and applying conjunct 4 of `vyper_to_abi_bound_rel_strong`, so the context contains `evaluate_type`, `EVERY abi_av_bound_rel`, and `LENGTH avs = n`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42443_t001
+- episode:E0787

@@ -55,7 +55,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C1.6.2.4.3.3.2 | proved |  | E0233 | Review closure with strategist. If accepted, begin the scheduled post-PowMod256 checkpoint C1.6.2.4.3.3.3 or whatever Oracle next reports. |
 | C1.6.2.4.3.3.3 | proved |  | E0234 | Review closure with strategist. If accepted, follow Oracle next, expected to be the broader post-builtin/state-preservation checkpoint C1.6.2.4.3.4 or another scheduled frontier. |
 | C1.6.2.4.3.4 | proved |  | E0235 | Review closure with strategist, then follow Oracle next (likely assignment wrapper audit or next scheduled fresh-stack component). |
-| C2.0 | proved |  | E0616 | Review C2.0 closure with strategist, then begin the next scheduled proof component C2.1 for pure structural expression resumes. |
+| C2.0 | proved |  | E0767 | Call plan_oracle review for C2.0 closure, then follow Oracle next. |
 | C2.0.1 | proved |  | E0543 | Review closure, then begin C2.0.2 replacement helper/caller patch. |
 | C2.0.2 | stuck | risk_mismatch | E0544 | Call plan_oracle review for C2.0.2 with this evidence. Recommend a stronger structural repair: avoid proving the final ReturnException branch inside this large theorem context entirely, e.g. extract a full caller-suffix lemma that includes the tail goal shape, or restructure `eval_for_cons_type_sound_core` with `suspend`/`Resume` so the problematic branch is a top-level proof with clean assumptions. |
 | C2.0.2.1 | proved |  | E0547 | Review closure, then begin C2.0.2.2 to add `for_cons_non_loop_exception_suffix`. |
@@ -134,13 +134,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1a.8 | proved |  | E0597 |  |
 | C2.1a.9 | proved |  | E0602 |  |
 | C2.1b | proved |  | E0612 |  |
-| C2.2 | stuck | plan_incomplete | E0638 | Strategist should reschedule or add dependencies so C2.1.1.4.0-.4 run before this C2.2 read-subscript/attribute component, or replace C2.2 with a component that explicitly includes the place-invariant refactor. |
+| C2.2 | proved |  | E0768 |  |
 | C2.2.1 | proved |  | E0709 | Review C2.2.1 closure with strategist; if accepted, begin C2.2.2 to package the Expr_Attribute successful-tail proof using this boundary lemma. |
 | C2.2.2 | proved |  | E0710 |  |
 | C2.2.3 | proved |  | E0711 | Review C2.2.3 closure with strategist, then commit the stable Expr_Attribute checkpoint if accepted. |
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
-| C2.3 | proved |  | E0614 |  |
+| C2.3 | proved |  | E0769 |  |
 | C2.3.1 | proved |  | E0719 | Review closure, then begin C2.3.2 carry-forward extraction lemma audit. |
 | C2.3.2 | proved |  | E0720 | Review closure, then begin C2.3.3 to strengthen the Pop typing clause with assignment assignability. |
 | C2.3.3 | proved |  | E0721 | Review closure, then begin C2.3.4 to add the strong Pop extraction lemma exposing both dynamic target and assignability. |
@@ -287,6 +287,32 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C4.3.1 | proved |  | E0748 | Review closure with strategist; then continue clearing C4.3.2/C4.3.3 carried leaves until C4.4 is beginable. |
 | C4.3.2 | proved |  | E0749 | Review closure with strategist; then clear C4.3.3 carried leaf so C4.4 becomes beginable. |
 | C4.3.3 | proved |  | E0750 | Review closure with strategist; then begin real C4.4 ABI type-builtin success typing work. |
+| C4.4 | progressed | missing_helper | E0753 | Call plan_oracle to augment/replace the C4.4 ABI boundary decomposition with explicit helper lemmas and proof order for the encoded-length theorem, or approve narrowing/restructuring the current helper. |
+| C4.4.1 | proved |  | E0759 |  |
+| C4.4.2 | proved |  | E0760 |  |
+| C4.4.3 | stuck | wrong_statement | E0758 | Call plan_oracle(mode='review') with this evidence to repair C4.4.3. Likely replacement: no-type tuple accumulator with per-static-element `LENGTH (enc t v) <= static_length t` premise, or all-elements `LENGTH (enc t v)` head contribution, plus converted/default-value bridges that supply the static premise without ABI `has_type`. |
+| C4.4.3.0 | proved |  | E0761 |  |
+| C4.4.3.1 | proved |  | E0762 |  |
+| C4.4.3.2 | proved |  | E0763 | Review closure with strategist, then proceed to oracle-scheduled C4.4.3.3 if accepted. |
+| C4.4.3.3 | proved |  | E0764 | Review closure with strategist, then proceed to C4.4.3.4 if accepted. |
+| C4.4.3.4 | proved |  | E0765 | Review closure with strategist, then proceed to C4.4.4 if accepted. |
+| C4.4.4 | stuck | risk_mismatch | E0766 | Call plan_oracle review/repair for C4.4.4 before further edits; ask for a smaller factoring of default_to_abi_enc_length_bound_eval/evaluate_types cons branch or a replacement boundary lemma interface. |
+| C4.4.4.1 | proved |  | E0771 |  |
+| C4.4.4.2 | stuck | risk_mismatch | E0772 | Ask plan_oracle to review whether C4.4.4.2 needs a different helper factoring (e.g. a direct LIST_REL fold lemma with fixed tenv/ts/tvs order, a local predicate definition, or reuse of existing SUM_MAP2 helper) rather than more tactic retries. |
+| C4.4.4.2.1 | proved |  | E0773 |  |
+| C4.4.4.2.2 | proved |  | E0774 |  |
+| C4.4.4.2.3 | proved |  | E0775 |  |
+| C4.4.4.2.4 | proved |  | E0776 |  |
+| C4.4.4.3 | progressed | risk_mismatch | E0777 | Ask plan_oracle to review/augment C4.4.4.3 with a small accumulator bridge or revised invariant before further edits. |
+| C4.4.4.3.1 | proved |  | E0778 |  |
+| C4.4.4.3.2 | proved |  | E0779 |  |
+| C4.4.4.4 | proved |  | E0780 |  |
+| C4.4.5 | progressed | plan_incomplete | E0781 | Ask strategist to augment C4.4.5 with local helper components/statements for the converted-element relation and list/same/sparse boundary lemmas, or authorize an in-place strengthened local mutual theorem plus compatibility corollary. |
+| C4.4.5.1 | proved |  | E0782 | Review closure, then begin C4.4.5.2 to prove relation consumer lemmas. |
+| C4.4.5.2 | proved |  | E0783 | Call plan_oracle(mode='review') for C4.4.5.2 closure, then proceed to scheduled C4.4.5.3 if accepted. |
+| C4.4.5.3 | proved |  | E0784 | Call plan_oracle(mode='review') for C4.4.5.3 closure, then if accepted begin scheduled C4.4.5.4 strengthened mutual theorem. |
+| C4.4.5.4 | proved |  | E0786 | Review closure with plan_oracle, then begin C4.4.5.5 to replace the exported theorem proof with a compatibility corollary from vyper_to_abi_bound_rel_strong. |
+| C4.4.5.5 | proved |  | E0788 |  |
 | C5.2 | stuck | plan_incomplete | E0113 |  |
 | C5.2.1 | proved |  | E0114 |  |
 | C5.2.2 | proved |  | E0115 |  |
@@ -1529,10 +1555,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0616`
+- latest episode: `E0767`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 121,164 tok (120,799 in, 365 out, 97,792 cached), 7.8s, $0.17488100
-- next: Review C2.0 closure with strategist, then begin the next scheduled proof component C2.1 for pure structural expression resumes.
+- actual effort: 1 sessions, 1 steps, 140,766 tok (140,428 in, 338 out, 118,272 cached), 9.4s, $0.18005600
+- next: Call plan_oracle review for C2.0 closure, then follow Oracle next.
 
 ### Attempts / Evidence
 
@@ -1546,12 +1572,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Tried FOL/propositional/simple assumption variants (`metis_tac[]`, explicit `disch_tac` followed by `qpat_x_assum` matching the exact existential and `ACCEPT_TAC`). -> Still failed with CHOOSE at an identical existential assumption/goal. Current source contains the explicit `qpat_x_assum` partial suffix, not a verified proof. (`TO_type_system_rewrite-20260520T182357Z_m34210_t001`, `TO_type_system_rewrite-20260520T182357Z_m34216_t001`)
 - `E0616` (proved, , actual effort: 1 sessions, 1 steps, 121,164 tok (120,799 in, 365 out, 97,792 cached), 7.8s, $0.17488100)
   - Began carry-forward component C2.0 as required by the PLAN gate; no source edits were needed or authorized by the component. -> Completed bookkeeping: old TopLevelName and assignment-statement repairs are carried forward as accepted baseline evidence, and `vyperTypeStmtSoundnessTheory` already builds after those repairs. (`TO_type_system_rewrite-20260521T174852Z_m36246_t001`, `TO_type_system_rewrite-20260521T174852Z_m36251_t001`, `TO_type_system_rewrite-20260521T174852Z_m36255_t001`)
+- `E0767` (proved, , actual effort: 1 sessions, 1 steps, 140,766 tok (140,428 in, 338 out, 118,272 cached), 9.4s, $0.18005600)
+  - Began carry-forward component C2.0 and audited scoped PLAN/DOSSIER context; component explicitly has no proof action remaining and carries accepted prior evidence for assignment/structural expression work. -> No source edits needed; carry-forward leaf complete as bookkeeping under current PLAN. (`TO_type_system_rewrite-20260522T073012Z_m41852_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260521T174852Z_m36246_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36251_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36255_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41852_t001` (use `read_tool_output` for exact output)
 
 ## C2.0.1
 
@@ -3714,12 +3740,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `plan_incomplete`
-- latest episode: `E0638`
-- blocker: Current C2.2 is scheduled as Oracle next, but the live Expr_Subscript failure is the place-expression branch that the accepted C2.1.1.4 replacement plan says must be solved by first adding `place_expr_result_typed` and strengthening the expression conjunct. C2.2 depends only on C2.0 and does not authorize the C2.1.1.4.0-.4 definition/refactor edits needed by the goal; prior C2.2 dossier episodes are also about older assignment/For_cons work, not this current read-subscript/attribute obligation.
-- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 154,766 tok (153,422 in, 1,344 out, 141,312 cached), 32.3s, $0.17152600
-- next: Strategist should reschedule or add dependencies so C2.1.1.4.0-.4 run before this C2.2 read-subscript/attribute component, or replace C2.2 with a component that explicitly includes the place-invariant refactor.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0768`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,879 tok (116,829 in, 1,050 out, 109,568 cached), 24.7s, $0.12258900
 
 ### Attempts / Evidence
 
@@ -3734,19 +3759,20 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0638` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 154,766 tok (153,422 in, 1,344 out, 141,312 cached), 32.3s, $0.17152600)
   - Began scheduled C2.2 as required by PLAN gate; rebuilt `vyperTypeStmtSoundnessTheory` without edits. -> Build fails at `Resume eval_all_type_sound_mutual[Expr_Subscript]` QED in the place branch with `type_place_expr env e = SOME vt` and no base place-expression IH; only the ordinary IH guarded by `well_typed_expr env e` is available. This matches STATE's do-not-retry blocker and the C2.1.1.4 replacement subtree, not C2.2's stated dependency set. (`TO_type_system_rewrite-20260521T174852Z_m37206_t001`, `TO_type_system_rewrite-20260521T174852Z_m37207_t003`)
   - Inspected source theorem statement and C2.2-related grep output. -> The expression conjunct at lines 3863-3871 still has only the old `well_typed_expr` antecedent, with no `type_place_expr` guarded postcondition or `place_expr_result_typed` definition; `Expr_Attribute` and later resumes still contain cheats, but the build prefix is blocked before them by the subscript place branch. (`TO_type_system_rewrite-20260521T174852Z_m37207_t001`, `TO_type_system_rewrite-20260521T174852Z_m37207_t002`)
+- `E0768` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,879 tok (116,829 in, 1,050 out, 109,568 cached), 24.7s, $0.12258900)
+  - Began scheduled carry-forward C2.2 and relied on scoped dossier evidence for completed Expr_Attribute helper/resume proof; no source edits were needed. -> C2.2 is a carried-evidence leaf and prior accepted evidence shows Expr_Attribute is proved in current source. (`TO_type_system_rewrite-20260522T073012Z_m41859_t001`, `TO_type_system_rewrite-20260522T073012Z_m40227_t002`, `TO_type_system_rewrite-20260522T073012Z_m40227_t001`)
+  - Ran requested holbuild check for vyperTypeStmtSoundnessTheory after begin_component. -> Build is currently blocked before statement soundness by known pre-existing C4.4.4 ABI `FAIL_TAC` probe in `default_to_abi_enc_length_bound_eval`, not by C2.2 Expr_Attribute source. This matches STATE and scheduled C4.4.4 repair work. (`TO_type_system_rewrite-20260522T073012Z_m41860_t001`)
 
 ### Ruled Out
 
-- Retrying simplifier/metis patches on the old Expr_Subscript tail; the missing IH is structural.
-- Deriving `type_place_expr ==> well_typed_expr`; STATE records this is false for HashMap places.
+- No C2.2-local proof action is authorized or needed; the observed build failure belongs to C4.4.4.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260521T174852Z_m37203_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m37206_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m37207_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m37207_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m37207_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41859_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41860_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40227_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40227_t001` (use `read_tool_output` for exact output)
 
 ## C2.2.1
 
@@ -3860,9 +3886,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0614`
+- latest episode: `E0769`
 - blocker: 
-- actual effort: 1 sessions, 8 steps, 16 tools, 1 holbuild, 981,983 tok (978,516 in, 3,467 out, 948,224 cached), 82.3s, $0.72958200
+- actual effort: 1 sessions, 1 steps, 76,792 tok (76,231 in, 561 out, 62,976 cached), 9.8s, $0.11459300
 
 ### Attempts / Evidence
 
@@ -3876,20 +3902,21 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0614` (proved, , actual effort: 1 sessions, 8 steps, 16 tools, 1 holbuild, 981,983 tok (978,516 in, 3,467 out, 948,224 cached), 82.3s, $0.72958200)
   - Audited tuple/list assignment route: grepped statement soundness for direct `assign_targets`/`target_assignment_values_assignable` use, inspected target/list bridge lemmas and the generic Assign branch, and rebuilt `vyperTypeStmtSoundnessTheory`. -> No statement-level tuple/list `assign_targets` branch remains to repair; generic Assign uses `assign_target` with the strengthened runtime/shape/context premises, and the statement theory builds cleanly. (`TO_type_system_rewrite-20260521T174852Z_m36232_t001`, `TO_type_system_rewrite-20260521T174852Z_m36233_t003`, `TO_type_system_rewrite-20260521T174852Z_m36237_t002`, `TO_type_system_rewrite-20260521T174852Z_m36237_t003`, `TO_type_system_rewrite-20260521T174852Z_m36238_t002`)
   - Checked assignment-layer interfaces for tuple/list decomposition. -> `target_assignment_values_assignable_def` and `assign_targets_no_type_error`/`assign_target_sound_mutual` exist in prerequisites, so tuple/list list side conditions are encapsulated below the statement proof boundary rather than duplicated in the statement Resume. (`TO_type_system_rewrite-20260521T174852Z_m36234_t001`, `TO_type_system_rewrite-20260521T174852Z_m36234_t002`)
+- `E0769` (proved, , actual effort: 1 sessions, 1 steps, 76,792 tok (76,231 in, 561 out, 62,976 cached), 9.8s, $0.11459300)
+  - Began scheduled carry-forward C2.3 and used scoped dossier evidence for the completed Expr_Pop dynamic-array/assignability repair, assignment Pop boundary helper, and final Expr_Pop resume proof. -> C2.3 is a carried-evidence leaf with no remaining source work; prior evidence shows the Pop typing repair and Expr_Pop resume build in current source lineage. (`TO_type_system_rewrite-20260522T073012Z_m41864_t001`, `TO_type_system_rewrite-20260522T073012Z_m40813_t001`, `TO_type_system_rewrite-20260522T073012Z_m40406_t001`, `TO_type_system_rewrite-20260522T073012Z_m40414_t001`)
+  - Reused the current-session holbuild status check from C2.2 for `vyperTypeStmtSoundnessTheory`. -> The only current build blocker is the known prerequisite C4.4.4 ABI `FAIL_TAC` probe in `default_to_abi_enc_length_bound_eval`, before statement/Pop proof replay; it does not indicate a C2.3 regression. (`TO_type_system_rewrite-20260522T073012Z_m41860_t001`)
 
 ### Ruled Out
 
-- Do not add a second statement-level tuple/list case analysis over `assign_targets`; current source keeps tuple/list assignment behind `assign_target` and the assignment-layer joint invariant.
+- Do not reopen fixed-array Pop counterexample; current source-authoritative typing rule requires dynamic array and assignability.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260521T174852Z_m36232_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36233_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36234_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36234_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36237_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36237_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36238_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41864_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41860_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40813_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40406_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40414_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.1
 
@@ -8106,6 +8133,650 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `E0745` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m41374_t001` (use `read_tool_output` for exact output)
+
+## C4.4
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `missing_helper` The Builtins-side wrapper `evaluate_abi_encode_success_type_bound` is mechanically discharged by a lower-level `vyper_to_abi_enc_length_bound`; with that theorem cheated, `vyperTypeBuiltinsTheory` builds. Attempting to prove a broad mutual length-bound theorem by `vyper_to_abi_ind` leaves 18 constructor/list/array goals. This confirms the missing boundary is a real length-bound family but the current one-tactic proof is not enough and may need a more carefully factored mutual statement (e.g. separate tuple/list/array length lemmas and static/dynamic embedded-size lemmas).
+- latest episode: `E0753`
+- blocker: Need strategist guidance for a de-risked ABI encoded-length boundary proof; current broad mutual helper leaves many length goals after simple simplification, including tuple/dynamic-array/static-array cases requiring facts about `enc_tuple`, `head_lengths`, `vyper_abi_embedded_size`, `OPT_MMAP_LENGTH`, and `sparse_has_type`.
+- actual effort: 1 sessions, 2 msgs, 25 steps, 46 tools, 4 holbuild, 2,603,819 tok (2,590,743 in, 13,076 out, 2,495,488 cached), 369.0s, $2.11629900
+- next: Call plan_oracle to augment/replace the C4.4 ABI boundary decomposition with explicit helper lemmas and proof order for the encoded-length theorem, or approve narrowing/restructuring the current helper.
+
+### Attempts / Evidence
+
+- `E0751` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 5 steps, 16 tools, 1 holbuild, 681,223 tok (679,035 in, 2,188 out, 646,656 cached), 50.3s, $0.55086300)
+  - Ran `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)` and grepped `vyperTypeBuiltinsScript.sml` for C4.4 theorem/resume/cheat positions. -> Build succeeds with cheats; exact C4.4 source obligations are `Resume well_typed_type_builtin_success_type[abi_encode]`, `[encode_tuple]`, and `[encode_tuple_nowrap]` at lines ~3345-3354. The following cheat at `raw_call_return_type_well_formed` is C4.5, not C4.4. (`TO_type_system_rewrite-20260522T073012Z_m41402_t004`, `TO_type_system_rewrite-20260522T073012Z_m41402_t003`, `TO_type_system_rewrite-20260522T073012Z_m41403_t001`)
+  - Searched ABI-related source/theory context and read `evaluate_abi_encode_def` plus `evaluate_type_builtin_def` AbiEncode branch. -> Existing prop ABI file exports decode typing (`evaluate_abi_decode_well_typed`) but grep did not reveal a direct encode success-typing lemma. `evaluate_type_builtin` wraps `evaluate_abi_encode` success as `INL v`, and `evaluate_abi_encode` returns `BytesV (enc abiTy av)` when `vyper_to_abi` succeeds. Next proof likely needs a local boundary lemma from `LIST_REL value_has_type`/`vyper_to_abi` plus `vyper_abi_size_bound` to dynamic bytes `value_has_type`. (`TO_type_system_rewrite-20260522T073012Z_m41404_t004`, `TO_type_system_rewrite-20260522T073012Z_m41404_t002`, `TO_type_system_rewrite-20260522T073012Z_m41404_t003`)
+- `E0752` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 19 steps, 49 tools, 2 holbuild, 1,983,150 tok (1,976,464 in, 6,686 out, 1,875,456 cached), 169.1s, $1.64334800)
+  - Temporarily replaced the first C4.4 `abi_encode` resume cheat with `FAIL_TAC "probe_c44_abi_encode"` and ran `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)`. -> The goal is small and focused: `abi_encode_size_ok (get_tenv cx) (TupleT [t]) n`, `evaluate_type (get_tenv cx) t = SOME x0`, dynamic-bytes result type, `value_has_type x0 v'`, `needs_external_call_wrap (TupleT [t])`, and `evaluate_abi_encode (get_tenv cx) t v' = INL v` imply `value_has_type result_tv v`. This confirms the required helper should target `evaluate_abi_encode` success typing/encoded length. (`TO_type_system_rewrite-20260522T073012Z_m41421_t001`)
+  - Restored the `abi_encode` resume to its original `cheat` after probing. -> No durable proof-source edit from the probe remains; next session starts from the previous buildable-with-cheats source state. (`TO_type_system_rewrite-20260522T073012Z_m41422_t003`)
+  - Inspected `contractABI` exported/source facts around `enc_def`, `has_type_def`, `enc_valid`, and `enc_has_static_length`. -> There are ABI-side typing/validity facts (`has_type`, `has_types`, `enc_valid`, `enc_has_static_length`) but no direct exported length theorem bounding `LENGTH (enc ...)` by Vyper's `vyper_abi_size_bound`; next proof likely needs bridging Vyper `value_has_type`/`vyper_to_abi` to ABI `has_type`, plus a size-bound lemma. (`TO_type_system_rewrite-20260522T073012Z_m41416_t001`, `TO_type_system_rewrite-20260522T073012Z_m41416_t003`, `TO_type_system_rewrite-20260522T073012Z_m41419_t001`)
+- `E0753` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 25 steps, 46 tools, 4 holbuild, 2,603,819 tok (2,590,743 in, 13,076 out, 2,495,488 cached), 369.0s, $2.11629900)
+  - Added a lower-level helper `vyper_to_abi_enc_length_bound` in `vyperTypeABIScript.sml` and a Builtins wrapper `evaluate_abi_encode_success_type_bound` consuming it. -> With `vyper_to_abi_enc_length_bound` temporarily cheated, `holbuild(targets=["vyperTypeBuiltinsTheory"])` succeeds; this validates the wrapper/resume interface target. (`TO_type_system_rewrite-20260522T073012Z_m41514_t001`)
+  - Strengthened `vyper_to_abi_enc_length_bound` into a mutual family over `vyper_to_abi`, `vyper_to_abi_list`, `vyper_to_abi_same`, and `vyper_to_abi_sparse`; tried `ho_match_mp_tac vyper_to_abi_ind` with definition/value/type simplification. -> Probe left 12 then 18 subgoals, including base cases and tuple/dynamic-array cases. The theorem shape is closer, but proof needs explicit length/embedded-size lemmas rather than global `gvs`. (`TO_type_system_rewrite-20260522T073012Z_m41518_t001`, `TO_type_system_rewrite-20260522T073012Z_m41521_t001`, `TO_type_system_rewrite-20260522T073012Z_m41522_t001`)
+
+### Ruled Out
+
+- Pushing the previous broad `vyper_to_abi_well_typed` pure ABI `has_type` bridge; it left tuple/array valid-length side goals and is not the direct consumer need.
+- Relying on `enc_valid` or `enc_has_static_length` alone; `enc_valid` needs the missing length premise and `enc_has_static_length` only covers static ABI types.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41514_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41518_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41521_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41522_t001` (use `read_tool_output` for exact output)
+
+## C4.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0759`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 98,982 tok (98,533 in, 449 out, 94,720 cached), 10.0s, $0.07989500
+
+### Attempts / Evidence
+
+- `E0754` (proved, , actual effort: 1 sessions, 4 msgs, 52 steps, 62 tools, 16 holbuild, 5,232,375 tok (5,217,638 in, 14,737 out, 5,125,120 cached), 481.6s, $3.46726000)
+  - Added enc_tuple_acc_length_bound by induction on ts/cases vs with one-step enc_def unfolding, byteTheory.LENGTH_word_to_bytes for dynamic heads, and contractABITheory.enc_has_static_length for static heads. -> Proved; subsequent holbuild progressed past this theorem. (`TO_type_system_rewrite-20260522T073012Z_m41554_t001`)
+  - Added enc_tuple_length_bound wrapper, SUM_MAP2_REPLICATE_enc_bound list arithmetic helper, and dynamic/fixed array wrappers using have_type_has_types_REPLICATE and valid_length. -> Proved; holbuild progressed through all C4.4.1 helpers and failed only at known later vyper_to_abi_enc_length_bound probe. (`TO_type_system_rewrite-20260522T073012Z_m41583_t001`)
+- `E0756` (proved, , actual effort: 1 sessions, 1 steps, 128,863 tok (128,437 in, 426 out, 124,416 cached), 8.3s, $0.09509300)
+  - Carry-forward component only; no new source edits required. Retained E0754-proved typed ABI encoder wrappers (`enc_tuple_acc_length_bound`, `enc_tuple_length_bound`, `SUM_MAP2_REPLICATE_enc_bound`, `enc_dyn_array_same_length_bound`, `enc_fixed_array_same_length_bound`) as auxiliary facts. -> C4.4.1 remains proved and is not invalidated by the C4.4.2 counterexample; new repaired subtree will avoid using these wrappers for default ABI typing. (`TO_type_system_rewrite-20260522T073012Z_m41583_t001`)
+- `E0759` (proved, , actual effort: 1 sessions, 1 steps, 98,982 tok (98,533 in, 449 out, 94,720 cached), 10.0s, $0.07989500)
+  - Carry-forward component after C4.4 refinement; retained the previously proved typed ABI encoder wrappers as auxiliary facts. -> No new source work required. E0756/E0754 evidence still applies: typed wrappers remain valid and are not invalidated by E0758; they are not the core converted/default Vyper interface. (`TO_type_system_rewrite-20260522T073012Z_m41583_t001`, `TO_type_system_rewrite-20260522T073012Z_m41584_t001`, `TO_type_system_rewrite-20260522T073012Z_m41584_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41583_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41584_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41584_t002` (use `read_tool_output` for exact output)
+
+## C4.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0760`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 103,398 tok (103,139 in, 259 out, 98,816 cached), 5.6s, $0.07879300
+
+### Attempts / Evidence
+
+- `E0755` (stuck, wrong_statement, actual effort: 1 sessions, 3 msgs, 34 steps, 45 tools, 12 holbuild, 3,269,735 tok (3,260,532 in, 9,203 out, 3,172,352 cached), 290.7s, $2.30316600)
+  - Added an EVAL-proved local probe `default_to_abi_has_type_counterexample` immediately after the proved size bridge lemmas. -> Probe theorem is accepted before the later false `default_to_abi_has_type_eval` attempt; it verifies the planned default typing lemma is false for `UintT 1`. (`TO_type_system_rewrite-20260522T073012Z_m41625_t001`, `TO_type_system_rewrite-20260522T073012Z_m41626_t001`)
+  - Tried proving the PLAN-suggested `default_to_abi_has_type` by `evaluate_type_ind`. -> Base `UintT n` branch leaves unsatisfied ABI side condition `n MOD 8 = 0` from `contractABI.valid_int_bound_def`, while Vyper `evaluate_type` only gives `0 < n ∧ n ≤ 256`. (`TO_type_system_rewrite-20260522T073012Z_m41624_t001`, `TO_type_system_rewrite-20260522T073012Z_m41626_t001`)
+- `E0757` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 2 holbuild, 277,961 tok (277,265 in, 696 out, 265,728 cached), 30.8s, $0.21142900)
+  - Deleted the residual `default_to_abi_has_type` wrapper that referenced the already-removed false `default_to_abi_has_type_eval` theorem. -> Source no longer contains the false default ABI typing helper block after `vyper_abi_size_bound_le_singleton_tuple`. (`TO_type_system_rewrite-20260522T073012Z_m41641_t001`)
+  - Built `vyperTypeABITheory` after cleanup. -> Build progresses past the removed default-typing block and now fails at the planned downstream `FAIL_TAC "probe_c44_vyper_to_abi_enc_length_bound"` in `vyper_to_abi_enc_length_bound`, matching C4.4.2 success criterion. (`TO_type_system_rewrite-20260522T073012Z_m41642_t001`)
+- `E0760` (proved, , actual effort: 1 sessions, 1 steps, 103,398 tok (103,139 in, 259 out, 98,816 cached), 5.6s, $0.07879300)
+  - Carry-forward component after C4.4 refinement; retained deletion of the false `default_to_abi_has_type*` block. -> No new source work required. E0757 evidence still applies: false default ABI typing block remains removed; E0758's temporary counterexample is unrelated and scheduled for C4.4.3.0 cleanup. (`TO_type_system_rewrite-20260522T073012Z_m41641_t001`, `TO_type_system_rewrite-20260522T073012Z_m41642_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41641_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41642_t001` (use `read_tool_output` for exact output)
+
+## C4.4.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `wrong_statement` Risk mismatch for C4.4.3: not merely a tactic issue. The no-`has_type` invariant must either keep a per-static-element length premise, restrict to converted/default ABI values, or use a bound based on `LENGTH (enc t v)` for all elements rather than `static_length t` in static cases. This preserves the anti-`has_type` insight but invalidates the exact suggested lemma shape.
+- latest episode: `E0758`
+- blocker: The PLAN-suggested fully no-type tuple head-sum bound is false without at least a shape/enc-static-length premise for static elements. A malformed static tuple element such as ABI type `Tuple []` with value `NumV 0` encodes to 32 bytes via fallback `enc_number`, while the head contribution in the suggested lemma is `static_length (Tuple []) = 0`.
+- actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 1 holbuild, 939,267 tok (934,407 in, 4,860 out, 905,216 cached), 120.6s, $0.74436300
+- next: Call plan_oracle(mode='review') with this evidence to repair C4.4.3. Likely replacement: no-type tuple accumulator with per-static-element `LENGTH (enc t v) <= static_length t` premise, or all-elements `LENGTH (enc t v)` head contribution, plus converted/default-value bridges that supply the static premise without ABI `has_type`.
+
+### Attempts / Evidence
+
+- `E0758` (stuck, wrong_statement, actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 1 holbuild, 939,267 tok (934,407 in, 4,860 out, 905,216 cached), 120.6s, $0.74436300)
+  - Adversarially tested the PLAN-suggested `enc_tuple_head_sum_length_bound_no_type` shape against a static ABI type with a mismatched value: `Tuple [Tuple []]` and `[NumV 0]`. -> The local theorem `enc_tuple_head_sum_length_bound_no_type_counterexample` proves by `EVAL_TAC` that the suggested unconditional no-type head-sum bound is false: `enc (Tuple []) (NumV 0)` falls through to `enc_number` with length 32, while `static_length (Tuple []) = 0`. (`TO_type_system_rewrite-20260522T073012Z_m41656_t001`, `TO_type_system_rewrite-20260522T073012Z_m41657_t001`)
+
+### Ruled Out
+
+- Unconditional tuple no-type bound using `static_length t` for every static element and no premise on `v`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41656_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41657_t001` (use `read_tool_output` for exact output)
+
+## C4.4.3.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0761`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 324,275 tok (323,841 in, 434 out, 317,952 cached), 20.4s, $0.20144100
+
+### Attempts / Evidence
+
+- `E0761` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 324,275 tok (323,841 in, 434 out, 317,952 cached), 20.4s, $0.20144100)
+  - Deleted the temporary local `enc_tuple_head_sum_length_bound_no_type_counterexample` theorem recorded as E0758 evidence. -> Diagnostic counterexample no longer remains in `vyperTypeABIScript.sml`; source is clean for repaired hybrid encoder lemmas. (`TO_type_system_rewrite-20260522T073012Z_m41668_t001`)
+  - Built `vyperTypeABITheory` after deleting the diagnostic theorem. -> Build returns to the expected downstream `FAIL_TAC "probe_c44_vyper_to_abi_enc_length_bound"`, confirming cleanup did not disturb earlier proved helper prefix. (`TO_type_system_rewrite-20260522T073012Z_m41669_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41668_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41669_t001` (use `read_tool_output` for exact output)
+
+## C4.4.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0762`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 581,803 tok (579,951 in, 1,852 out, 569,856 cached), 47.6s, $0.39096300
+
+### Attempts / Evidence
+
+- `E0762` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 581,803 tok (579,951 in, 1,852 out, 569,856 cached), 47.6s, $0.39096300)
+  - Added local theorem `enc_tuple_acc_length_bound_actual` immediately before Vyper ABI dynamic/static bridge lemmas. Proved by induction on `ts`, case split on `vs`, one-step `enc_def` unfolding, and dynamic/static split on `is_dynamic h'`; dynamic branch accounts for 32-byte offset head plus tail, static branch accounts for actual `enc h' h` head. -> The raw actual-length tuple accumulator lemma proved without `has_type` or `static_length` assumptions; holbuild progressed past it to the known downstream `vyper_to_abi_enc_length_bound` probe. (`TO_type_system_rewrite-20260522T073012Z_m41674_t001`, `TO_type_system_rewrite-20260522T073012Z_m41677_t001`)
+  - Initial attempt used `first_x_assum` and failed to select/specialize the IH properly after the case split. -> Repaired by selecting the universal IH with `qpat_x_assum` and explicitly specializing the live `vs` tail `t`; no statement change was needed. (`TO_type_system_rewrite-20260522T073012Z_m41675_t001`, `TO_type_system_rewrite-20260522T073012Z_m41676_t001`, `TO_type_system_rewrite-20260522T073012Z_m41677_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41674_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41677_t001` (use `read_tool_output` for exact output)
+
+## C4.4.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0763`
+- blocker: 
+- actual effort: 1 sessions, 10 steps, 11 tools, 4 holbuild, 833,614 tok (830,192 in, 3,422 out, 790,528 cached), 88.4s, $0.69624400
+- next: Review closure with strategist, then proceed to oracle-scheduled C4.4.3.3 if accepted.
+
+### Attempts / Evidence
+
+- `E0763` (proved, , actual effort: 1 sessions, 10 steps, 11 tools, 4 holbuild, 833,614 tok (830,192 in, 3,422 out, 790,528 cached), 88.4s, $0.69624400)
+  - Added local SUM_MAP2_static_premise_bound, enc_tuple_acc_length_bound_static_premise, and enc_tuple_length_bound_static_premise after enc_tuple_acc_length_bound_actual in vyperTypeABIScript.sml. -> Static-premise tuple head-sum corollaries proved; final holbuild progressed through the new lemmas to the pre-existing downstream probe in vyper_to_abi_enc_length_bound. (`TO_type_system_rewrite-20260522T073012Z_m41692_t001`, `TO_type_system_rewrite-20260522T073012Z_m41697_t001`)
+  - Repaired routine tactic issues: removed a failing rename1 in the MAP2 induction and invoked enc_tuple_acc_length_bound_actual by explicit specialization rather than drule. -> Both proof suffix failures were fixed without statement changes; target now fails only outside C4.4.3.2 at the known C4.4.5 probe. (`TO_type_system_rewrite-20260522T073012Z_m41693_t001`, `TO_type_system_rewrite-20260522T073012Z_m41694_t001`, `TO_type_system_rewrite-20260522T073012Z_m41695_t001`, `TO_type_system_rewrite-20260522T073012Z_m41696_t001`, `TO_type_system_rewrite-20260522T073012Z_m41697_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41692_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41697_t001` (use `read_tool_output` for exact output)
+
+## C4.4.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0764`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 574,071 tok (571,748 in, 2,323 out, 559,104 cached), 60.3s, $0.41246200
+- next: Review closure with strategist, then proceed to C4.4.3.4 if accepted.
+
+### Attempts / Evidence
+
+- `E0764` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 574,071 tok (571,748 in, 2,323 out, 559,104 cached), 60.3s, $0.41246200)
+  - Added local SUM_MAP2_REPLICATE_enc_bound_static_premise immediately after the C4.4.3.2 tuple corollaries, by induction on vs and split on is_dynamic t. -> Replicated MAP2 embedded-size bound under explicit static premise proved; holbuild replay progressed past it to the known downstream vyper_to_abi_enc_length_bound probe. (`TO_type_system_rewrite-20260522T073012Z_m41702_t001`, `TO_type_system_rewrite-20260522T073012Z_m41705_t001`)
+  - Initial IH antecedent discharge used metis_tac; replaced with explicit conjunct proof and case split on is_dynamic t to preserve arithmetic normalization. -> Routine tactic repair; no statement change and no ABI has_type dependency introduced. (`TO_type_system_rewrite-20260522T073012Z_m41703_t001`, `TO_type_system_rewrite-20260522T073012Z_m41704_t001`, `TO_type_system_rewrite-20260522T073012Z_m41705_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41702_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41705_t001` (use `read_tool_output` for exact output)
+
+## C4.4.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0765`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 11 tools, 2 holbuild, 1,185,435 tok (1,180,648 in, 4,787 out, 1,160,704 cached), 107.4s, $0.82368200
+- next: Review closure with strategist, then proceed to C4.4.4 if accepted.
+
+### Attempts / Evidence
+
+- `E0765` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 11 tools, 2 holbuild, 1,185,435 tok (1,180,648 in, 4,787 out, 1,160,704 cached), 107.4s, $0.82368200)
+  - Added local MEM_ZIP_REPLICATE_SAME plus dynamic/fixed array wrappers enc_dyn_array_same_length_bound_static_premise and enc_fixed_array_same_length_bound_static_premise in vyperTypeABIScript.sml. -> Array no-ABI-typing wrappers with explicit static premises proved; holbuild replay progressed past them to the known downstream vyper_to_abi_enc_length_bound probe. (`TO_type_system_rewrite-20260522T073012Z_m41713_t001`, `TO_type_system_rewrite-20260522T073012Z_m41718_t001`)
+  - Initial dynamic-array tuple instantiation forgot the 32-byte length head in hds, leaving an impossible bound without the prefix. Repaired by instantiating enc_tuple_acc_length_bound_static_premise with `[word_to_bytes ...]` and using LENGTH_word_to_bytes. -> Dynamic wrapper proof aligned with enc_def for Array NONE and replayed successfully; fixed-array wrapper followed the no-prefix tuple instantiation and LENGTH vs <= n multiplication step. (`TO_type_system_rewrite-20260522T073012Z_m41714_t001`, `TO_type_system_rewrite-20260522T073012Z_m41717_t001`, `TO_type_system_rewrite-20260522T073012Z_m41718_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41713_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41718_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This appears to be a decomposition/proof-interface mismatch rather than a false theorem. Evidence shows direct-length route still avoids ABI has_type/valid_int_bound, but the mutual evaluate_type_ind theorem is too monolithic; likely needs smaller list/default tuple accumulator lemmas or a strengthened evaluate_types invariant stated directly in accumulator form.
+- latest episode: `E0766`
+- blocker: The C4.4.4 default_to_abi_enc_length_bound_eval proof remains structurally brittle after several helper attempts. Fixed-array branch was solved by adding default_fixed_array_replicate_tuple_bound_from_elem, but the remaining evaluate_types cons branch needs a better factoring/interface: the live goal is a prefixed enc_tuple accumulator bound plus a conjunctive static-element premise. Attempts to solve it by a generic enc_tuple accumulator prefix lemma led to hard/failed goals and were reverted; continuing tactic plumbing would violate the component's intended low-risk boundary-lemma shape.
+- actual effort: 1 sessions, 3 msgs, 58 steps, 74 tools, 15 holbuild, 4,835,249 tok (4,814,937 in, 20,312 out, 4,717,568 cached), 522.7s, $3.45498900
+- next: Call plan_oracle review/repair for C4.4.4 before further edits; ask for a smaller factoring of default_to_abi_enc_length_bound_eval/evaluate_types cons branch or a replacement boundary lemma interface.
+
+### Attempts / Evidence
+
+- `E0766` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 58 steps, 74 tools, 15 holbuild, 4,835,249 tok (4,814,937 in, 20,312 out, 4,717,568 cached), 522.7s, $3.45498900)
+  - Added default_fixed_array_replicate_tuple_bound_from_elem with conclusion matching unfolded fixed-array default branch; proved it via enc_fixed_array_replicate_tuple_bound_static_premise, vyper_to_abi_type_dynamic, and vyper_to_abi_static_length_bound. -> Fixed-array default branch progressed; holbuild then reported remaining goals in dynamic-array arithmetic, struct MAP(default_to_abi o SND) vs MAP default_to_abi, and evaluate_types cons accumulator branch. (`TO_type_system_rewrite-20260522T073012Z_m41805_t001`, `TO_type_system_rewrite-20260522T073012Z_m41808_t001`)
+  - Added local handling for empty dynamic array arithmetic, struct ZIP/MAP normalization with OPT_MMAP_LENGTH, and a focused conjunctive branch for evaluate_types cons using enc_tuple_acc_length_bound_static_premise. -> Reduced default_to_abi_enc_length_bound_eval to one remaining evaluate_types cons branch, with goal requiring a prefixed enc_tuple accumulator bound and a static-element premise for the new head/tail. (`TO_type_system_rewrite-20260522T073012Z_m41822_t001`, `TO_type_system_rewrite-20260522T073012Z_m41831_t001`)
+  - Tried to factor a generic enc_tuple_acc_length_prefix_bound helper for accumulator prefixes, then apply it to the evaluate_types cons branch. -> Helper proof became brittle/hard and produced duplicated dynamic/static cases; after multiple attempts it was deleted. This suggests a missing or wrong helper interface rather than a routine tactic problem. (`TO_type_system_rewrite-20260522T073012Z_m41833_t001`, `TO_type_system_rewrite-20260522T073012Z_m41839_t001`, `TO_type_system_rewrite-20260522T073012Z_m41847_t001`)
+
+### Ruled Out
+
+- ABI has_type/default_to_abi_has_type route remains ruled out by prior E0755.
+- More qspecl_then/TRY plumbing in the monolithic evaluate_type_ind proof should not be retried without a repaired helper interface.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41805_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41808_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41831_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41847_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0771`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 107,575 tok (107,084 in, 491 out, 102,912 cached), 9.3s, $0.08704600
+
+### Attempts / Evidence
+
+- `E0771` (proved, , actual effort: 1 sessions, 1 steps, 107,575 tok (107,084 in, 491 out, 102,912 cached), 9.3s, $0.08704600)
+  - Audited `vyperTypeABIScript.sml` around the ABI helper block and theorem-name grep output. -> The required local bridge/helper interfaces are present before the stale default theorem: `vyper_to_abi_type_dynamic_eval`, `vyper_to_abi_type_dynamic`, `vyper_to_abi_static_length_bound_eval`, `vyper_to_abi_static_length_bound`, `vyper_to_abi_embedded_head_bound`, `enc_fixed_array_replicate_tuple_bound_static_premise`, and `default_fixed_array_replicate_tuple_bound_from_elem`. No source edit was needed for this audit leaf. (`TO_type_system_rewrite-20260522T073012Z_m41870_t001`, `TO_type_system_rewrite-20260522T073012Z_m41870_t002`)
+
+### Ruled Out
+
+- Do not patch the old monolithic `default_to_abi_enc_length_bound_eval` in this audit leaf.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41874_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41870_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41870_t002` (use `read_tool_output` for exact output)
+
+## C4.4.4.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0772`
+- blocker: The planned LIST_REL tuple consumer lemma did not close as a routine list induction. I added the intended local helper statements in vyperTypeABIScript.sml, and the static ZIP premise helper progressed, but the MAP2/SUM bound helper repeatedly failed to match a clean induction hypothesis after quantifier/generalization changes; holbuild also reports opaque NO_TAC failures at the induction tactic on generalized goals. This is now beyond routine tactic repair and needs strategist review/factoring guidance before further edits.
+- actual effort: 1 sessions, 4 msgs, 56 steps, 58 tools, 25 holbuild, 4,996,068 tok (4,975,793 in, 20,275 out, 4,875,264 cached), 592.5s, $3.54852700
+- next: Ask plan_oracle to review whether C4.4.4.2 needs a different helper factoring (e.g. a direct LIST_REL fold lemma with fixed tenv/ts/tvs order, a local predicate definition, or reuse of existing SUM_MAP2 helper) rather than more tactic retries.
+
+### Attempts / Evidence
+
+- `E0772` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 56 steps, 58 tools, 25 holbuild, 4,996,068 tok (4,975,793 in, 20,275 out, 4,875,264 cached), 592.5s, $3.54852700)
+  - Inserted C4.4.4.2 local helper lemmas: static ZIP premise from LIST_REL, MAP2/SUM bound from LIST_REL, and public tuple bound using enc_tuple_length_bound_static_premise. -> Static premise helper initially had incorrect quantifier positioning but was repaired to a mostly standard LIST_REL/list proof shape; the build advanced to the MAP2/SUM helper. (`TO_type_system_rewrite-20260522T073012Z_m41889_t001`, `TO_type_system_rewrite-20260522T073012Z_m41896_t001`)
+  - Tried MAP2/SUM proof by induction on ts with tvs generalized; adjusted qid_spec_tac ordering and explicit IH specialization. -> Failed repeatedly: IH either had the wrong quantifier order or FIRST_ASSUM/qspec matching could not select it; holbuild sometimes reported NO_TAC at Induct_on after generalized goals. (`TO_type_system_rewrite-20260522T073012Z_m41916_t001`, `TO_type_system_rewrite-20260522T073012Z_m41920_t001`, `TO_type_system_rewrite-20260522T073012Z_m41922_t001`)
+  - Tried MAP2/SUM proof by induction on tvs and then returned to induction on ts with explicit base split to avoid leftover generalized tvs. -> Still failed on IH selection/specialization and opaque NO_TAC at induction. The mathematical subgoal is the expected head-plus-tail arithmetic bound, but the proof plumbing is no longer low-risk under the current helper statement/proof shape. (`TO_type_system_rewrite-20260522T073012Z_m41925_t001`, `TO_type_system_rewrite-20260522T073012Z_m41934_t001`, `TO_type_system_rewrite-20260522T073012Z_m41940_t001`)
+
+### Ruled Out
+
+- Continuing to vary qid_spec_tac/Induct_on order for the same MAP2/SUM helper without new factoring.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41889_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41925_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41931_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41940_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0773`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 119,522 tok (118,741 in, 781 out, 99,328 cached), 37.3s, $0.17015900
+
+### Attempts / Evidence
+
+- `E0773` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 119,522 tok (118,741 in, 781 out, 99,328 cached), 37.3s, $0.17015900)
+  - Added/verified named relation plus pointwise embedded-size bound using `rw[default_to_abi_elem_bound_rel_def]`, `drule_all vyper_to_abi_embedded_head_bound`, dynamic case split, arithmetic. -> Build reached the later SUM_MAP2 tuple helper, so C4.4.4.2.1's definition and head-bound theorem parsed and proved. (`TO_type_system_rewrite-20260522T073012Z_m41952_t001`, `TO_type_system_rewrite-20260522T073012Z_m41952_t003`)
+
+### Ruled Out
+
+- Syntax/theorem-name issue for `[local] Definition`; holbuild accepted the inserted block.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41952_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41952_t003` (use `read_tool_output` for exact output)
+
+## C4.4.4.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0774`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 75,982 tok (75,468 in, 514 out, 71,168 cached), 12.2s, $0.07250400
+
+### Attempts / Evidence
+
+- `E0774` (proved, , actual effort: 1 sessions, 1 steps, 75,982 tok (75,468 in, 514 out, 71,168 cached), 12.2s, $0.07250400)
+  - Built `vyperTypeABITheory` after beginning the static ZIP helper component; proof already present uses induction over `ts` with `tvs` case split and `vyper_to_abi_type_dynamic`. -> Build reached later SUM_MAP2 helper, proving the static ZIP premise helper is accepted. (`TO_type_system_rewrite-20260522T073012Z_m41952_t001`, `TO_type_system_rewrite-20260522T073012Z_m41952_t003`)
+
+### Ruled Out
+
+- Need to edit the static ZIP helper now; current proof is sufficient.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41952_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41952_t003` (use `read_tool_output` for exact output)
+
+## C4.4.4.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0775`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 35 steps, 39 tools, 13 holbuild, 3,342,485 tok (3,329,262 in, 13,223 out, 3,273,216 cached), 386.1s, $2.31352800
+
+### Attempts / Evidence
+
+- `E0775` (proved, , actual effort: 1 sessions, 2 msgs, 35 steps, 39 tools, 13 holbuild, 3,342,485 tok (3,329,262 in, 13,223 out, 3,273,216 cached), 386.1s, $2.31352800)
+  - Induct on `ts`; split `tvs`; use tail IH on the LIST_REL tail; use `vyper_to_abi_type_dynamic` plus `vyper_abi_size_bound_def`; dynamic head closes arithmetically, static head uses `vyper_to_abi_static_length_bound` then arithmetic. -> Build advanced beyond `default_to_abi_tuple_SUM_MAP2_bound_from_LIST_REL` to later `default_to_abi_enc_length_bound_eval`, confirming the SUM_MAP2 helper is proved. (`TO_type_system_rewrite-20260522T073012Z_m41993_t001`)
+  - Tried to use the new named relation/head-bound lemma directly in the old proof; variable-order and term-normalization caused brittle type/name failures, so reverted to direct head reasoning from existing LIST_REL conjuncts while preserving the same mathematical boundary. -> Direct use of named relation was not needed for the final proof; the accepted proof still uses the intended head-plus-tail decomposition. (`TO_type_system_rewrite-20260522T073012Z_m41974_t001`, `TO_type_system_rewrite-20260522T073012Z_m41980_t001`)
+
+### Ruled Out
+
+- Continuing to instantiate `default_to_abi_elem_bound_rel` with auto-named head variables; this caused type/name mismatches and was unnecessary.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41993_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0776`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 127,383 tok (126,880 in, 503 out, 122,368 cached), 9.6s, $0.09883400
+
+### Attempts / Evidence
+
+- `E0776` (proved, , actual effort: 1 sessions, 1 steps, 127,383 tok (126,880 in, 503 out, 122,368 cached), 9.6s, $0.09883400)
+  - Used existing boundary-composition proof: tuple encoding <= MAP2/SUM via `enc_tuple_length_bound_static_premise` plus static ZIP helper, then SUM <= `vyper_abi_size_bound_list` via the just-proved SUM_MAP2 helper, then arithmetic. -> `holbuild vyperTypeABITheory` progressed past `default_to_abi_tuple_bound_from_LIST_REL` to downstream `default_to_abi_enc_length_bound_eval`, verifying this component. (`TO_type_system_rewrite-20260522T073012Z_m41993_t001`)
+
+### Ruled Out
+
+- Unfolding `enc` or tuple layout in this final theorem; existing proof uses boundary lemmas as planned.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41993_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.3
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `risk_mismatch` Current monolithic recursion-matching proof for default_to_abi_enc_length_bound_eval remains stuck in the evaluate_types cons accumulator branch. I strengthened the local evaluate_types conjunct to carry a SUM/MAP2 bound in addition to tuple length and static premise; this exposes exactly the needed arithmetic for the cons case, but the existing TRY-based proof skeleton is brittle and repeatedly fails inside the accumulator enc_tuple branch because qmatch_goalsub_abbrev_tac abstracts the head_lengths parameter too broadly and then the branch proof has to prove the accumulator lemma for a different hl. This is a decomposition/interface issue rather than a missing arithmetic fact; likely needs a named accumulator-prefix helper or a cleaner invariant proof, not more TRY patches.
+- latest episode: `E0777`
+- blocker: Repeated failures show current monolithic proof shape is too brittle; likely need a planned helper/clean invariant for the head-plus-tail accumulator branch.
+- actual effort: 1 sessions, 3 msgs, 55 steps, 62 tools, 15 holbuild, 5,083,218 tok (5,058,534 in, 24,684 out, 4,961,792 cached), 667.6s, $3.70512600
+- next: Ask plan_oracle to review/augment C4.4.4.3 with a small accumulator bridge or revised invariant before further edits.
+
+### Attempts / Evidence
+
+- `E0777` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 55 steps, 62 tools, 15 holbuild, 5,083,218 tok (5,058,534 in, 24,684 out, 4,961,792 cached), 667.6s, $3.70512600)
+  - Strengthened evaluate_types conjunct of default_to_abi_enc_length_bound_eval with a SUM MAP2 bound so the cons branch has tail SUM bound available. -> Build still reaches same cons-accumulator goal; added bound appears in assumptions and goal, confirming it is the right information but not enough for brittle proof skeleton. (`TO_type_system_rewrite-20260522T073012Z_m42016_t001`)
+  - Patched cons branch to split three conjuncts and solve tuple length, SUM bound, and static premise using vyper_to_abi_type_dynamic and vyper_to_abi_static_length_bound. -> Proof tactic failed due broad qmatch abbreviation and THEN1 branch not solving; goal shows enc_tuple accumulator helper applied with mismatched hl abstraction. (`TO_type_system_rewrite-20260522T073012Z_m42041_t001`, `TO_type_system_rewrite-20260522T073012Z_m42054_t001`, `TO_type_system_rewrite-20260522T073012Z_m42057_t001`)
+
+### Ruled Out
+
+- Continuing to patch TRY blocks around the current branch; it keeps hitting abstraction/hl mismatch rather than a missing arithmetic fact.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42016_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42041_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42054_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42057_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0778`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 61 steps, 67 tools, 19 holbuild, 5,898,816 tok (5,879,862 in, 18,954 out, 5,766,656 cached), 560.0s, $4.01797800
+
+### Attempts / Evidence
+
+- `E0778` (proved, , actual effort: 1 sessions, 4 msgs, 61 steps, 67 tools, 19 holbuild, 5,898,816 tok (5,879,862 in, 18,954 out, 5,766,656 cached), 560.0s, $4.01797800)
+  - Added local semantic tuple-bound bridges from LIST_REL and proved default_to_abi_elem_bound_rel_eval by evaluate_type_ind; build progressed past the helper to the later vyper_to_abi_enc_length_bound probe, showing the helper theorem closed. -> default_to_abi_elem_bound_rel_eval is proved; remaining failure is downstream/outside this leaf. (`TO_type_system_rewrite-20260522T073012Z_m42130_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42130_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0779`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 22 steps, 23 tools, 9 holbuild, 1,498,710 tok (1,490,006 in, 8,704 out, 1,377,792 cached), 237.9s, $1.51108600
+
+### Attempts / Evidence
+
+- `E0779` (proved, , actual effort: 1 sessions, 1 msgs, 22 steps, 23 tools, 9 holbuild, 1,498,710 tok (1,490,006 in, 8,704 out, 1,377,792 cached), 237.9s, $1.51108600)
+  - Direct corollary proof: project `default_to_abi_elem_bound_rel_eval`; derive the tuple-helper lambda LIST_REL via `LIST_REL_mono`; use tuple boundary lemmas for enc_tuple length, SUM_MAP2, and static ZIP premise. -> Succeeded for active theorem; next holbuild failure is outside C4.4.4.3.2 at expected downstream probe. (`TO_type_system_rewrite-20260522T073012Z_m42159_t001`)
+
+### Ruled Out
+
+- No tuple encoding unfolding or old accumulator proof was needed in `default_to_abi_enc_length_bound_eval`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42159_t001` (use `read_tool_output` for exact output)
+
+## C4.4.4.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0780`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 306,669 tok (305,637 in, 1,032 out, 298,496 cached), 33.2s, $0.21591300
+
+### Attempts / Evidence
+
+- `E0780` (proved, , actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 306,669 tok (305,637 in, 1,032 out, 298,496 cached), 33.2s, $0.21591300)
+  - Used existing wrapper/corollary proofs: `default_to_abi_enc_length_bound` by `metis_tac[default_to_abi_enc_length_bound_eval]`; static corollary by composing `default_to_abi_enc_length_bound` with `vyper_to_abi_static_length_bound`. -> Succeeded; `holbuild(targets=["vyperTypeABITheory"])` failed only later at `probe_c44_vyper_to_abi_enc_length_bound`, outside this leaf. (`TO_type_system_rewrite-20260522T073012Z_m42165_t001`)
+
+### Ruled Out
+
+- No C4.4.5 direct mutual Vyper-to-ABI proof work was started in this checkpoint.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42165_t001` (use `read_tool_output` for exact output)
+
+## C4.4.5
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `plan_incomplete` Current monolithic mutual-induction proof reaches 13 remaining goals. Base helpers exist, but structural tuple/list/same/sparse branches require per-element converted-value length/static facts, not a broad TRY suffix. This matches STATE reflection that a local semantic relation analogous to default_to_abi_elem_bound_rel is probably needed.
+- latest episode: `E0781`
+- blocker: The active proof needs a helper decomposition: a converted-element relation carrying evaluate_type/value_has_type/conversion success, encoded length bound, and static bound, plus LIST_REL/MEM bridges for list/same/sparse branches. Continuing by extending the TRY suffix would violate do-not-retry guidance and proof hygiene.
+- actual effort: 1 sessions, 1 msgs, 15 steps, 22 tools, 1 holbuild, 1,192,112 tok (1,184,737 in, 7,375 out, 1,115,648 cached), 186.0s, $1.12451900
+- next: Ask strategist to augment C4.4.5 with local helper components/statements for the converted-element relation and list/same/sparse boundary lemmas, or authorize an in-place strengthened local mutual theorem plus compatibility corollary.
+
+### Attempts / Evidence
+
+- `E0770` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 2 tools, 185,199 tok (183,575 in, 1,624 out, 176,128 cached), 29.9s, $0.17401900)
+  - Began scheduled C4.4.5 as Oracle next, then audited ABI source around default and direct length theorems. -> The exported theorem `vyper_to_abi_enc_length_bound` still has its own probe, but the build prefix is blocked earlier by the C4.4.4 default theorem. Source shows C4.4.4 replacement lemmas from the repaired plan (`default_to_abi_list_*`, `default_to_abi_element_bounds_eval`) are not yet present; instead the old monolithic `default_to_abi_enc_length_bound_eval` remains with forbidden tuple-accumulator plumbing and a FAIL_TAC. (`TO_type_system_rewrite-20260522T073012Z_m41869_t001`, `TO_type_system_rewrite-20260522T073012Z_m41870_t001`)
+  - Used current-session holbuild evidence for `vyperTypeStmtSoundnessTheory`, which resumes prerequisite `vyperTypeABITheory`. -> Holbuild fails at `default_to_abi_enc_length_bound_eval` line 564/637 with `probe_c444_default_to_abi_enc_length_bound_eval`, before C4.4.5's `vyper_to_abi_enc_length_bound` proof can be replayed. (`TO_type_system_rewrite-20260522T073012Z_m41860_t001`)
+  - Checked PLAN gate after C2.3 review. -> query_plan made C4.4.5 beginable now while C4.4.4.1-.4 were only queued, contradicting C4.4.5's dependency text and current broken source reality. (`TO_type_system_rewrite-20260522T073012Z_m41868_t001`)
+- `E0781` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 15 steps, 22 tools, 1 holbuild, 1,192,112 tok (1,184,737 in, 7,375 out, 1,115,648 cached), 186.0s, $1.12451900)
+  - Ran holbuild on active C4.4.5 before trusting current edited source. -> Build reaches probe in `vyper_to_abi_enc_length_bound`; proof prefix replays through line 960 and leaves 13 goals. (`TO_type_system_rewrite-20260522T073012Z_m42243_t001`)
+  - Inspected source and instrumented log around `vyper_to_abi_enc_length_bound` and ABI helper block. -> Existing local base helper is present, but failure goals include tuple/list/struct and array/sparse structural obligations. Goal log shows monolithic suffix is not a stable interface. (`TO_type_system_rewrite-20260522T073012Z_m42248_t001`, `TO_type_system_rewrite-20260522T073012Z_m42244_t001`)
+
+### Ruled Out
+
+- Continuing with one large TRY/Cases_on/gvs suffix for all remaining branches.
+- Using contractABI.has_type as the bridge for all converted values.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42243_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42248_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42244_t001` (use `read_tool_output` for exact output)
+
+## C4.4.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0782`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 373,182 tok (371,975 in, 1,207 out, 364,032 cached), 35.8s, $0.25794100
+- next: Review closure, then begin C4.4.5.2 to prove relation consumer lemmas.
+
+### Attempts / Evidence
+
+- `E0782` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 373,182 tok (371,975 in, 1,207 out, 364,032 cached), 35.8s, $0.25794100)
+  - Inserted local definitions `abi_av_bound_rel`, `abi_av_list_bound_rel`, and `sparse_values_have_type` before `vyper_to_abi_enc_length_bound`. -> Definitions parsed and replayed; holbuild advanced to the pre-existing downstream probe in `vyper_to_abi_enc_length_bound`. (`TO_type_system_rewrite-20260522T073012Z_m42262_t001`, `TO_type_system_rewrite-20260522T073012Z_m42263_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42262_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42263_t001` (use `read_tool_output` for exact output)
+
+## C4.4.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0783`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 15 steps, 15 tools, 6 holbuild, 1,006,950 tok (1,003,150 in, 3,800 out, 971,264 cached), 119.4s, $0.75906200
+- next: Call plan_oracle(mode='review') for C4.4.5.2 closure, then proceed to scheduled C4.4.5.3 if accepted.
+
+### Attempts / Evidence
+
+- `E0783` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 15 tools, 6 holbuild, 1,006,950 tok (1,003,150 in, 3,800 out, 971,264 cached), 119.4s, $0.75906200)
+  - Rebuilt vyperTypeABITheory after repairing the C4.4.5.2 helper block; holbuild replayed through all six consumer lemmas and next failed only at the pre-existing probe in downstream theorem vyper_to_abi_enc_length_bound. -> C4.4.5.2 helper lemmas are proved in source: abi_av_bound_rel_static_premise, abi_av_list_static_premise, abi_av_list_SUM_MAP2_bound, abi_av_list_tuple_bound, abi_avs_dyn_array_bound, and abi_avs_fixed_array_bound all replay before the build reaches the old main theorem probe. (`TO_type_system_rewrite-20260522T073012Z_m42285_t001`)
+  - Repaired list static proof by changing tail IH use from irule to drule; repaired SUM_MAP2 bound by unfolding abi_av_bound_rel and using vyper_to_abi_type_dynamic/static_length_bound on the head; repaired same-array wrappers to match enc_*_static_premise conjunction/existential shape. -> Routine tactic/interface repair only; no theorem statements changed and no consumer proof unfolded ABI enc internals beyond the planned existing boundary lemmas. (`TO_type_system_rewrite-20260522T073012Z_m42275_t001`, `TO_type_system_rewrite-20260522T073012Z_m42280_t001`, `TO_type_system_rewrite-20260522T073012Z_m42283_t001`)
+
+### Ruled Out
+
+- The remaining vyperTypeABITheory failure is outside C4.4.5.2: it is the old FAIL_TAC probe in vyper_to_abi_enc_length_bound, scheduled for later C4.4.5.4/C4.4.5.5 work.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42285_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42273_t001` (use `read_tool_output` for exact output)
+
+## C4.4.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0784`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 30 steps, 32 tools, 12 holbuild, 3,295,538 tok (3,288,914 in, 6,624 out, 3,243,008 cached), 248.2s, $2.04975400
+- next: Call plan_oracle(mode='review') for C4.4.5.3 closure, then if accepted begin scheduled C4.4.5.4 strengthened mutual theorem.
+
+### Attempts / Evidence
+
+- `E0784` (proved, , actual effort: 1 sessions, 2 msgs, 30 steps, 32 tools, 12 holbuild, 3,295,538 tok (3,288,914 in, 6,624 out, 3,243,008 cached), 248.2s, $2.04975400)
+  - Added local sparse projection lemmas immediately after the C4.4.5.2 consumer lemmas: sparse_has_type_values_have_type and sparse_values_have_type_ALOOKUP. Proved the first by induction on the sparse alist with one-step sparse/value simplification; proved the second by induction over the alist and direct ALOOKUP head/tail case split. -> holbuild(targets=["vyperTypeABITheory"]) replayed through both new C4.4.5.3 lemmas and failed only later at the pre-existing downstream FAIL_TAC probe in vyper_to_abi_enc_length_bound. (`TO_type_system_rewrite-20260522T073012Z_m42318_t001`)
+  - Checked existing sparse definitions and ALOOKUP context; ALOOKUP_MEM was not available unqualified in this theory, so used a direct alist induction instead of adding imports or relying on sortedness/key bounds. -> Proof stays within the planned value-typing projection interface and does not attempt the false length-indexed sparse monotonicity lemma. (`TO_type_system_rewrite-20260522T073012Z_m42290_t001`, `TO_type_system_rewrite-20260522T073012Z_m42309_t001`)
+
+### Ruled Out
+
+- Did not prove or use sparse_has_type tv (SUC n) sparse ==> sparse_has_type tv n sparse; component uses length-independent sparse_values_have_type only.
+- Did not add sortedness/key-bound premises; value projection is independent of sparse key ordering.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42318_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42290_t001` (use `read_tool_output` for exact output)
+
+## C4.4.5.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0786`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 34 steps, 48 tools, 8 holbuild, 2,918,717 tok (2,907,746 in, 10,971 out, 2,829,312 cached), 279.0s, $2.13595600
+- next: Review closure with plan_oracle, then begin C4.4.5.5 to replace the exported theorem proof with a compatibility corollary from vyper_to_abi_bound_rel_strong.
+
+### Attempts / Evidence
+
+- `E0785` (progressed, other, actual effort: 1 sessions, 6 msgs, 73 steps, 84 tools, 20 holbuild, 7,342,341 tok (7,321,751 in, 20,590 out, 7,185,408 cached), 609.3s, $4.89211900)
+  - Added abi_av_list_tuple_bound_enc_tuple and abi_av_list_tuple_bound_from_eval_vht, then used drule_all from the strong theorem suffix. -> Tuple/struct-shaped enc_tuple goals were factored; build advanced past the tuple first failing goal to array cases. (`TO_type_system_rewrite-20260522T073012Z_m42356_t001`)
+  - Added abi_avs_dyn_array_bound_from_eval_vht and debugged its dynamic-array arithmetic with an emb abbreviation and LESS_MONO_MULT. -> The dynamic array helper itself now replays; current strong theorem suffix has not yet been updated to call it, so the first remaining failure is still the dynamic-array branch of vyper_to_abi_bound_rel_strong. (`TO_type_system_rewrite-20260522T073012Z_m42398_t001`)
+  - Moved sparse_has_type_values_have_type before the fixed-array helper and proved abi_avs_fixed_array_bound_from_eval_vht using evaluate_type unfolding and abi_avs_fixed_array_bound specialized at LENGTH avs. -> Fixed-array helper replayed; no terminal proof of C4.4.5.4 yet. (`TO_type_system_rewrite-20260522T073012Z_m42398_t001`)
+- `E0786` (proved, , actual effort: 1 sessions, 3 msgs, 34 steps, 48 tools, 8 holbuild, 2,918,717 tok (2,907,746 in, 10,971 out, 2,829,312 cached), 279.0s, $2.13595600)
+  - Added branch-specific uses of abi_avs_dyn_array_bound_from_eval_vht and abi_avs_fixed_array_bound_from_eval_vht in vyper_to_abi_bound_rel_strong; added abi_av_list_struct_bound_from_eval_vht; handled None/default/sparse SOME branches with default_to_abi_enc_length_bound, sparse_values_have_type_ALOOKUP, and simple enc/REV simplification. -> holbuild advanced past vyper_to_abi_bound_rel_strong and now fails only at the downstream exported vyper_to_abi_enc_length_bound proof probe, so the strengthened mutual theorem component is proved. (`TO_type_system_rewrite-20260522T073012Z_m42436_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42436_t001` (use `read_tool_output` for exact output)
+
+## C4.4.5.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0788`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 2 holbuild, 233,555 tok (233,045 in, 510 out, 220,160 cached), 23.3s, $0.18980500
+
+### Attempts / Evidence
+
+- `E0787` (progressed, other, actual effort: 1 sessions, 1 msgs, 5 steps, 7 tools, 1 holbuild, 664,945 tok (662,901 in, 2,044 out, 642,560 cached), 48.3s, $0.48430500)
+  - Replaced old induction/probe proof of vyper_to_abi_enc_length_bound with four-conjunct compatibility proof using vyper_to_abi_bound_rel_strong plus abi_av_list_tuple_bound, abi_avs_dyn_array_bound, sparse_has_type_values_have_type, and abi_avs_fixed_array_bound. -> First three conjuncts replayed; holbuild failed only in fourth/sparse conjunct at `drule_all abi_avs_fixed_array_bound`, with all needed assumptions visible including evaluate_type, EVERY relation, and LENGTH avs = n. (`TO_type_system_rewrite-20260522T073012Z_m42443_t001`)
+- `E0788` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 2 holbuild, 233,555 tok (233,045 in, 510 out, 220,160 cached), 23.3s, $0.18980500)
+  - Replaced final sparse-branch `drule_all abi_avs_fixed_array_bound` with goal-directed `irule abi_avs_fixed_array_bound >> simp[]` in exported `vyper_to_abi_enc_length_bound`. -> `vyperTypeABITheory` builds cleanly; the compatibility corollary now discharges the sparse fixed-array bound from `EVERY abi_av_bound_rel` and `LENGTH avs = n`. (`TO_type_system_rewrite-20260522T073012Z_m42451_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42451_t001` (use `read_tool_output` for exact output)
 
 ## C5.2
 
