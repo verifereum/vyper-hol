@@ -1,5 +1,5 @@
 Theory evalCompiler
-Ancestors compileVyper concretizeMemLocDefs alist integer_word option
+Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
@@ -274,6 +274,27 @@ Theorem empty_compiles:
   IS_SOME
     (compile_vyper ([] : toplevel list)
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Definition empty_expected_bytecode_def:
+  empty_expected_bytecode =
+    (([91w; 95w; 97w; 0w; 19w; 129w; 96w; 34w; 144w; 145w; 144w;
+       57w; 96w; 34w; 243w; 91w; 95w; 128w; 253w; 91w; 54w; 96w;
+       4w; 16w; 21w; 97w; 0w; 18w; 87w; 97w; 0w; 14w; 86w; 91w;
+       95w; 95w; 253w; 91w; 95w; 53w; 96w; 224w; 144w; 28w; 80w;
+       97w; 0w; 14w; 86w; 91w; 95w; 128w; 253w] : byte list),
+     ([91w; 54w; 96w; 4w; 16w; 21w; 97w; 0w; 18w; 87w; 97w; 0w;
+       14w; 86w; 91w; 95w; 95w; 253w; 91w; 95w; 53w; 96w; 224w;
+       144w; 28w; 80w; 97w; 0w; 14w; 86w; 91w; 95w; 128w; 253w] :
+      byte list))
+End
+
+Theorem empty_bytecode_matches_expected:
+  compile_vyper ([] : toplevel list)
+    concretize_context_eval Linear =
+    SOME empty_expected_bytecode
 Proof
   EVAL_TAC
 QED
