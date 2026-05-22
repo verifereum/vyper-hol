@@ -415,16 +415,17 @@ Theorem ao_sinv_step_preserved:
     dfg = dfg_build_function fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
     ssa_form fn0 /\
+    ao_targets_wf targets /\
     MEM bb fn0.fn_blocks /\
     idx < LENGTH bb.bb_instructions /\
     inst_wf (EL idx bb.bb_instructions) /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s /\
+    ao_chains_defined_at targets s /\
     step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
     ao_dfg_inv dfg (s' with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s' /\
-    ao_chains_defined targets s'
+    ao_chains_defined_at targets s'
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `inst = EL idx bb.bb_instructions` >>
@@ -439,13 +440,20 @@ Proof
         step_inst only modifies output vars. For the defining instruction
         of a chain target, the output gets the correct iszero value. *)
      cheat
-  >- (fs[ao_chains_defined_def] >> rpt strip_tac >>
+  >- (* ao_chains_defined_at: conditional chain definedness preserved by step.
+        When Var v was already defined in s, chain elements were defined in s,
+        and FDOM monotonicity carries them to s'. When Var v is newly created
+        by the step, needs SSA chain structure argument. *)
+     (fs[ao_chains_defined_at_def] >> rpt strip_tac >>
       `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
         metis_tac[step_inst_fdom_subset] >>
       `s'.vs_labels = s.vs_labels` by
         metis_tac[step_inst_preserves_labels_always] >>
-      `?w. eval_operand (EL k chain) s = SOME w` by metis_tac[] >>
-      metis_tac[eval_operand_fdom_mono])
+      Cases_on `?w0. eval_operand (Var v) s = SOME w0`
+      >- (`?w1. eval_operand (EL k chain) s = SOME w1` by metis_tac[] >>
+          metis_tac[eval_operand_fdom_mono])
+      >- (* Var v newly defined by step_inst — needs SSA chain analysis *)
+         cheat)
 QED
 
 (* ===== sinv state_equiv compatibility ===== *)
@@ -495,6 +503,7 @@ Theorem ao_sinv_state_equiv_compat:
     dfg = dfg_build_function fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
     fv = ao_fn_fresh_vars fn /\
+    ao_targets_wf targets /\
     (!inst v. MEM inst (fn_insts fn) /\
               MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
     (!inst v. MEM inst (fn_insts fn) /\
@@ -502,10 +511,10 @@ Theorem ao_sinv_state_equiv_compat:
     state_equiv fv s1 s2 /\
     ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s1 /\
-    ao_chains_defined targets s1 ==>
+    ao_chains_defined_at targets s1 ==>
     ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s2 /\
-    ao_chains_defined targets s2
+    ao_chains_defined_at targets s2
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
   >- (`state_equiv fv (s1 with vs_inst_idx := 0)
@@ -519,10 +528,8 @@ Proof
       qexistsl_tac [`fv`, `s1`] >> simp[] >>
       rpt strip_tac >>
       metis_tac[ao_chain_vars_not_in_fv])
-  >- (irule ao_chains_defined_state_equiv_compat >>
-      qexistsl_tac [`fv`, `s1`] >> simp[] >>
-      rpt strip_tac >>
-      metis_tac[ao_chain_vars_not_in_fv])
+  >- (irule ao_chains_defined_at_state_equiv_compat >>
+      simp[] >> metis_tac[ao_chain_vars_not_in_fv])
 QED
 
 (* ===== range_sound state_equiv compatibility ===== *)

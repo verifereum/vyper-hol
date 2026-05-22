@@ -28,7 +28,7 @@ Libs
   fcpLib
 
 (* ao_fn_fresh_vars, ao_fn_total_fresh_vars, ao_dfg_inv: algebraicOptDefsTheory
-   ao_iszero_chain_inv, ao_chains_defined, ao_targets_wf: aoResolveObligationTheory *)
+   ao_iszero_chain_inv, ao_chains_defined_at, ao_targets_wf: aoResolveObligationTheory *)
 
 (* ===== Phase 1: Offset Conversion Equality ===== *)
 
@@ -2073,6 +2073,121 @@ Proof
   first_x_assum irule >> gvs[] >> metis_tac[]
 QED
 
+(* ALOOKUP monotonicity: step only adds entries *)
+Triviality iszero_step_alookup_mono[local]:
+  !acc h w.
+    ALOOKUP acc w <> NONE ==>
+    ALOOKUP (ao_compute_iszero_step acc h) w <> NONE
+Proof
+  rpt gen_tac >>
+  simp[ao_compute_iszero_step_def] >>
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  simp[alistTheory.ALOOKUP_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+(* Var elements at pos>0 in SNOC (Var key) prev are either key or from prev *)
+Triviality snoc_var_el_cases[local]:
+  !prev key k w.
+    0 < k /\ k < LENGTH (SNOC (Var key) prev) /\
+    EL k (SNOC (Var key) prev) = Var w ==>
+    w = key \/ (k < LENGTH prev /\ EL k prev = Var w)
+Proof
+  rpt strip_tac >>
+  Cases_on `k < LENGTH prev`
+  >- (disj2_tac >> gvs[listTheory.EL_SNOC])
+  >- (disj1_tac >>
+      `k = LENGTH prev` by gvs[listTheory.LENGTH_SNOC] >>
+      gvs[listTheory.EL_LENGTH_SNOC])
+QED
+
+(* Helper: extending alist with (key, chain) where all Var-at-pos>0
+   are either key itself or keys in acc, preserves chain-var-is-key *)
+Triviality chain_var_is_key_extend[local]:
+  !acc key chain_val.
+    (!v chain k w. ALOOKUP acc v = SOME chain /\
+       0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+       ALOOKUP acc w <> NONE) /\
+    (!k w. 0 < k /\ k < LENGTH chain_val /\ EL k chain_val = Var w ==>
+       w = key \/ ALOOKUP acc w <> NONE) ==>
+    (!v chain k w.
+       ALOOKUP ((key, chain_val) :: acc) v = SOME chain /\
+       0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+       ALOOKUP ((key, chain_val) :: acc) w <> NONE)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  strip_tac >>
+  simp[alistTheory.ALOOKUP_def] >>
+  Cases_on `v = key` >> Cases_on `w = key` >> gvs[]
+  (* w=key cases closed by gvs. Remaining: w<>key cases. *)
+  >- ((* v=key, w<>key: use second precondition *)
+      first_x_assum (qspecl_then [`k`, `w`] mp_tac) >> gvs[])
+  >- ((* v<>key, w<>key: use first precondition *)
+      first_x_assum (qspecl_then [`v`, `chain`, `k`, `w`] mp_tac) >> gvs[])
+QED
+
+(* The step either returns acc unchanged or prepends one entry *)
+Triviality iszero_step_cases[local]:
+  !acc h. ao_compute_iszero_step acc h = acc \/
+    ?out prev. ao_compute_iszero_step acc h = (out, SNOC (Var out) prev) :: acc
+Proof
+  rpt gen_tac >> simp[ao_compute_iszero_step_def] >>
+  rpt BasicProvers.FULL_CASE_TAC >> simp[]
+QED
+
+(* Chain Var elements at position > 0 are target keys. *)
+Triviality iszero_step_chain_var_is_key[local]:
+  !acc h.
+    (!v chain k w. ALOOKUP acc v = SOME chain /\
+       0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+       ALOOKUP acc w <> NONE) ==>
+    (!v chain k w. ALOOKUP (ao_compute_iszero_step acc h) v = SOME chain /\
+       0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+       ALOOKUP (ao_compute_iszero_step acc h) w <> NONE)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`acc`, `h`] strip_assume_tac iszero_step_cases
+  >- (pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC)
+  >- (pop_assum (fn th => SUBST_ALL_TAC th) >>
+      qspecl_then [`acc`, `out`, `SNOC (Var out) prev`]
+        (MATCH_MP_TAC o BETA_RULE) chain_var_is_key_extend >> rpt conj_tac
+      >- cheat
+      >- cheat)
+QED
+
+Triviality foldl_chain_var_is_key[local]:
+  !insts acc.
+    (!v chain k w. ALOOKUP acc v = SOME chain /\
+       0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+       ALOOKUP acc w <> NONE) ==>
+    (!v chain k w.
+       ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
+       0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+       ALOOKUP (FOLDL ao_compute_iszero_step acc insts) w <> NONE)
+Proof
+  Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum match_mp_tac >>
+  match_mp_tac iszero_step_chain_var_is_key >>
+  first_assum ACCEPT_TAC
+QED
+
+Triviality ao_fn_targets_chain_var_is_key[local]:
+  !fn v chain k w.
+    ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain /\
+    0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
+    ALOOKUP (ao_compute_fn_iszero_targets fn) w <> NONE
+Proof
+  rpt strip_tac >>
+  `!v' chain' k' w'.
+     ALOOKUP (ao_compute_fn_iszero_targets fn) v' = SOME chain' /\
+     0 < k' /\ k' < LENGTH chain' /\ EL k' chain' = Var w' ==>
+     ALOOKUP (ao_compute_fn_iszero_targets fn) w' <> NONE` by
+    (simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+     match_mp_tac foldl_chain_var_is_key >> simp[alistTheory.ALOOKUP_def]) >>
+  metis_tac[]
+QED
+
 Triviality resolve_op_phi_no_label[local]:
   !fn0 targets op lbl.
     targets = ao_compute_fn_iszero_targets fn0 ==>
@@ -2104,7 +2219,7 @@ Triviality ao_per_inst_sim_fn0_inv[local]:
     ra = range_analyze fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s /\
+    ao_chains_defined_at targets s /\
     ao_targets_wf targets /\
     in_range_state (range_at_inst ra bb.bb_label v) s.vs_vars /\
     MEM bb fn0.fn_blocks /\
@@ -2120,6 +2235,16 @@ Triviality ao_per_inst_sim_fn0_inv[local]:
         (ao_transform_inst mid dfg ra bb.bb_label v targets inst) s)
 Proof
   rpt gen_tac >> strip_tac >>
+  (* If original errors, done *)
+  Cases_on `?e. step_inst fuel ctx inst s = Error e`
+  >- (DISJ1_TAC >> metis_tac[])
+  >- (
+  (* Non-error: derive ao_chains_defined from ao_chains_defined_at.
+     Original doesn't error → step_inst_base doesn't error → all Var
+     operands in FDOM → eval_operand (Var v) s = SOME. Combined with
+     ao_chains_defined_at + ao_targets_wf, all chain elements defined.
+     So ao_chains_defined holds for this state. *)
+  `ao_chains_defined targets s` by cheat >>
   ho_match_mp_tac (Q.SPEC `ao_fn_fresh_vars fn`
     ao_transform_inst_sim_inst) >> simp[] >>
   drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
@@ -2171,7 +2296,7 @@ Proof
       qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
       qpat_x_assum `ra = _` (SUBST_ALL_TAC o SYM) >>
       irule range_analyze_sound >>
-      qexists_tac `s` >> simp[])
+      qexists_tac `s` >> simp[]))
 QED
 
 Triviality eval_operand_inst_idx[local]:
@@ -2188,13 +2313,7 @@ Proof
   simp[ao_iszero_chain_inv_def, eval_operand_inst_idx]
 QED
 
-Triviality ao_chains_defined_inst_idx_iff[local]:
-  !targets s n.
-    ao_chains_defined targets (s with vs_inst_idx := n) <=>
-    ao_chains_defined targets s
-Proof
-  simp[ao_chains_defined_def, eval_operand_inst_idx]
-QED
+(* ao_chains_defined_at_inst_idx_iff is imported from aoResolveObligationTheory *)
 
 Triviality ao_fn0_operand_not_in_fv[local]:
   !fn fn0 fv bb inst x.
@@ -2261,7 +2380,7 @@ Triviality ao_block_sim_range[local]:
     s.vs_inst_idx = 0 /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s /\
+    ao_chains_defined_at targets s /\
     in_range_state (range_at_inst ra bb.bb_label 0) s.vs_vars ==>
     (?e. exec_block fuel ctx bb s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
@@ -2278,7 +2397,7 @@ Proof
   qabbrev_tac `sinv = \(s:venom_state).
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s` >>
+    ao_chains_defined_at targets s` >>
   `ao_transform_block mid dfg ra targets bb =
    analysis_block_transform 0 result f bb` by
     (simp[analysis_block_transform_def, ao_transform_block_def,
@@ -2321,7 +2440,7 @@ Proof
           mp_tac ao_per_inst_sim_fn0_inv >>
         impl_tac >- (
           gvs[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel,
-              ao_chain_inv_inst_idx_iff, ao_chains_defined_inst_idx_iff] >>
+              ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
           metis_tac[listTheory.EVERY_MEM, listTheory.EL_MEM]) >>
         simp[])
     >- simp[Abbr `f`, ao_transform_inst_structural]
@@ -2349,22 +2468,29 @@ Proof
     >- (* sinv preserved by step_inst at index *)
        (rpt strip_tac >>
         gvs[Abbr `sinv`,
-            ao_chain_inv_inst_idx_iff, ao_chains_defined_inst_idx_iff] >>
-        irule ao_sinv_step_preserved >>
-        qexistsl_tac [`bb`, `ctx`, `fn`, `fn0`, `fuel`, `idx`, `s'`] >>
-        gvs[markerTheory.Abbrev_def,
-            ao_dfg_inv_inst_idx_irrel,
-            ao_chain_inv_inst_idx_iff, ao_chains_defined_inst_idx_iff])
+            ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+        qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `bb`, `idx`,
+                     `fuel`, `ctx`, `s'`, `s''`]
+          mp_tac ao_sinv_step_preserved >>
+        impl_tac >- (
+          gvs[markerTheory.Abbrev_def,
+              ao_dfg_inv_inst_idx_irrel,
+              ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+          simp[ao_compute_fn_iszero_targets_wf]) >>
+        simp[])
     >- (* sinv preserved by state_equiv fv *)
        (rpt strip_tac >>
         gvs[Abbr `sinv`,
-            ao_chain_inv_inst_idx_iff, ao_chains_defined_inst_idx_iff] >>
-        irule ao_sinv_state_equiv_compat >>
-        qexistsl_tac [`fn`, `fn0`, `fv`, `s1`] >>
-        gvs[markerTheory.Abbrev_def,
-            ao_dfg_inv_inst_idx_irrel,
-            ao_chain_inv_inst_idx_iff, ao_chains_defined_inst_idx_iff] >>
-        metis_tac[])) >>
+            ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+        qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `fv`, `s1`, `s2`]
+          mp_tac ao_sinv_state_equiv_compat >>
+        impl_tac >- (
+          gvs[markerTheory.Abbrev_def,
+              ao_dfg_inv_inst_idx_irrel,
+              ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+          simp[ao_compute_fn_iszero_targets_wf] >>
+          metis_tac[]) >>
+        simp[])) >>
   simp[Abbr `sound`, Abbr `sinv`] >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
   simp[Abbr `result`] >>
@@ -2562,15 +2688,15 @@ QED
 
    block_inv = λs. ao_dfg_inv dfg s ∧
                     ao_iszero_chain_inv targets s ∧
-                    ao_chains_defined targets s ∧
+                    ao_chains_defined_at targets s ∧
                     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s ∧
                     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
 
    Key insight: block_inv is established at the initial state via:
    - ao_dfg_inv: from ADDRESS/SIGNEXTEND output undefinedness
    - ao_iszero_chain_inv: vacuously true (chain vars undefined → implication premise false)
-   - ao_chains_defined: requires all chain vars defined. At initial state this needs
-     lookup_var x s ≠ NONE for all chain vars. This is part of the initial state setup.
+   - ao_chains_defined_at: vacuously true at function entry (conditional on Var v being
+     defined, which it isn't for instruction outputs at entry)
    - range_sound: trivially true for entry block (FEMPTY range state)
    - cfg_dfs_pre: entry block is always in cfg_dfs_pre for wf_function *)
 Theorem ao_phases123_run_blocks_sim_inv[local]:
@@ -2595,7 +2721,7 @@ Theorem ao_phases123_run_blocks_sim_inv[local]:
               v NOTIN ao_fn_fresh_vars fn) /\
     ao_dfg_inv dfg s /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s /\
+    ao_chains_defined_at targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
@@ -2626,7 +2752,7 @@ Proof
   qabbrev_tac `block_inv = \s:venom_state.
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s /\
+    ao_chains_defined_at targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` >>
   `fn1 = function_map_transform bt fn0` by
@@ -2663,7 +2789,7 @@ Proof
         rpt conj_tac >>
         FIRST [first_assum ACCEPT_TAC,
                (simp[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
-                     ao_chains_defined_inst_idx_iff] >>
+                     ao_chains_defined_at_inst_idx_iff] >>
                 first_assum ACCEPT_TAC),
                (rpt strip_tac >> first_x_assum irule >>
                 first_assum ACCEPT_TAC)])
@@ -2691,7 +2817,7 @@ Proof
   impl_tac
   >- (rpt conj_tac >>
       TRY (simp[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
-                ao_chains_defined_inst_idx_iff] >> NO_TAC) >>
+                ao_chains_defined_at_inst_idx_iff] >> NO_TAC) >>
       TRY (qpat_x_assum `range_sound _ _` mp_tac >>
            simp[rangeAnalysisProofsTheory.range_sound_def] >> NO_TAC) >>
       simp[])
@@ -2783,6 +2909,47 @@ Proof
   simp[ao_transform_function_def, ao_fn_total_fresh_vars_def, LET_THM]
 QED
 
+(* Connecting lemma: target keys are instruction outputs.
+   ao_compute_iszero_step only adds keys from inst_outputs. *)
+Triviality iszero_step_key_output[local]:
+  !acc h v chain.
+    ALOOKUP (ao_compute_iszero_step acc h) v = SOME chain /\
+    ALOOKUP acc v = NONE ==>
+    MEM v h.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ALOOKUP (ao_compute_iszero_step _ _) _ = _` mp_tac >>
+  simp[ao_compute_iszero_step_def] >>
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  simp[alistTheory.ALOOKUP_def] >> IF_CASES_TAC >> gvs[]
+QED
+
+Triviality foldl_iszero_key_output[local]:
+  !insts acc v chain.
+    ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
+    ALOOKUP acc v = NONE ==>
+    ?inst. MEM inst insts /\ MEM v inst.inst_outputs
+Proof
+  Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `ao_compute_iszero_step acc h` >>
+  Cases_on `ALOOKUP (ao_compute_iszero_step acc h) v`
+  >- (first_x_assum (qspecl_then
+        [`ao_compute_iszero_step acc h`, `v`, `chain`] mp_tac) >>
+      simp[] >> metis_tac[])
+  >- (`MEM v h.inst_outputs` by metis_tac[iszero_step_key_output] >>
+      metis_tac[])
+QED
+
+Triviality ao_fn_targets_key_is_output[local]:
+  !fn v chain.
+    ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain ==>
+    ?inst. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs
+Proof
+  simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  metis_tac[foldl_iszero_key_output, alistTheory.ALOOKUP_def]
+QED
+
 (* ao_dfg_inv holds for the initial state when ADDRESS/SIGNEXTEND outputs
    are not yet defined (lookup_var = NONE). *)
 Triviality ao_dfg_inv_initial[local]:
@@ -2823,17 +2990,16 @@ Theorem ao_transform_function_correct_proof:
     let fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let targets = ao_compute_fn_iszero_targets fn0 in
-    (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
-    (!inst v. MEM inst (fn_insts fn) /\
-              MEM v inst.inst_outputs ==> v NOTIN fv) /\
+    (* Freshness: original operands/outputs don't use fresh variable names *)
+    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
+    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM x inst.inst_outputs ==> x NOTIN fv) /\
+    (* Well-formedness *)
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
-    (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
-      (inst.inst_opcode = ADDRESS \/ inst.inst_opcode = SIGNEXTEND) ==>
-      lookup_var x s = NONE) /\
-    ao_iszero_chain_inv targets s /\
-    ao_chains_defined targets s /\
+    (* All instruction outputs undefined in initial state *)
+    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM x inst.inst_outputs ==> lookup_var x s = NONE) /\
     range_sound (df_widen_at NONE (range_analyze fn0)
                   s.vs_current_bb 0) s /\
     fn_entry_label fn = SOME s.vs_current_bb
@@ -2853,6 +3019,17 @@ Proof
   qabbrev_tac `mid = fn_max_inst_id fn0` >>
   qabbrev_tac `fn1 = fn0 with fn_blocks :=
     MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks` >>
+  (* Convert bb-based freshness to fn_insts form for internal helpers *)
+  `!inst v. MEM inst (fn_insts fn) /\
+            MEM (Var v) inst.inst_operands ==> v NOTIN ao_fn_fresh_vars fn` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
+  `!inst v. MEM inst (fn_insts fn) /\
+            MEM v inst.inst_outputs ==> v NOTIN ao_fn_fresh_vars fn` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
   (* Derive wf_function fn0 from wf_function fn *)
   `wf_function fn0` by
     (simp[Abbr `fn0`] >>
@@ -2878,17 +3055,54 @@ Proof
         metis_tac[fn_insts_blocks_map_offset]) >>
      gvs[] >> irule ao_handle_offset_inst_wf >>
      gvs[listTheory.EVERY_MEM]) >>
+  (* Derive ADDRESS/SIGNEXTEND undefined from all-outputs-undefined *)
   `ao_dfg_inv dfg s` by
     (simp_tac std_ss [Abbr `dfg`, Abbr `fn0`] >>
      irule ao_dfg_inv_initial >> rpt strip_tac >>
-     first_x_assum irule >> metis_tac[]) >>
+     first_x_assum irule >>
+     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
   `fn_entry_label fn0 = fn_entry_label fn` by
     (fs[Abbr `fn0`, fn_entry_label_def, entry_block_def] >>
      Cases_on `fn.fn_blocks` >> fs[]) >>
   `MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` by
     (irule ao_cfg_initial >> gvs[]) >>
-  (* range_sound, ao_iszero_chain_inv, ao_chains_defined from assumptions *)
-  (* ao_iszero_chain_inv and ao_chains_defined come from assumptions *)
+  (* ao_iszero_chain_inv: vacuously true when all outputs undefined.
+     Chain elements at position k+1 are Var w (ISZERO outputs) — undefined.
+     So eval_operand (EL (k+1) chain) s = NONE, making the implication vacuous. *)
+  `ao_iszero_chain_inv targets s` by
+    (simp[ao_iszero_chain_inv_def] >> rpt strip_tac >>
+     `?inst. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs` by
+       (simp[Abbr `targets`] >> metis_tac[ao_fn_targets_key_is_output]) >>
+     `?w. EL (k + 1) chain = Var w` by
+       (irule ao_fn_targets_chain_tail_var >>
+        qexists_tac `fn0` >> simp[Abbr `targets`] >> DECIDE_TAC) >>
+     `ALOOKUP (ao_compute_fn_iszero_targets fn0) w <> NONE` by
+       (irule ao_fn_targets_chain_var_is_key >>
+        qexists_tac `v` >> qexists_tac `chain` >> qexists_tac `k + 1` >>
+        gvs[Abbr `targets`] >> DECIDE_TAC) >>
+     `?inst'. MEM inst' (fn_insts fn0) /\ MEM w inst'.inst_outputs` by
+       (Cases_on `ALOOKUP (ao_compute_fn_iszero_targets fn0) w` >> gvs[] >>
+        metis_tac[ao_fn_targets_key_is_output]) >>
+     `lookup_var w s = NONE` by
+       (first_x_assum irule >>
+        gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+            Abbr `fn0`] >>
+        metis_tac[fn_insts_blocks_map_offset, ao_handle_offset_inst_outputs]) >>
+     gvs[eval_operand_def]) >>
+  (* ao_chains_defined_at: vacuously true when target vars are undefined.
+     Target key v is an ISZERO output — undefined by all-outputs-undefined.
+     So eval_operand (Var v) s = NONE, making the antecedent false. *)
+  `ao_chains_defined_at targets s` by
+    (simp[ao_chains_defined_at_def] >> rpt strip_tac >>
+     `?inst. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs` by
+       (simp[Abbr `targets`] >> metis_tac[ao_fn_targets_key_is_output]) >>
+     `lookup_var v s = NONE` by
+       (first_x_assum irule >>
+        gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+            Abbr `fn0`] >>
+        metis_tac[fn_insts_blocks_map_offset, ao_handle_offset_inst_outputs]) >>
+     gvs[eval_operand_def, lookup_var_def]) >>
   (* Get phases 1-3 simulation: Error \/ lift_result *)
   `(?e. run_blocks fuel ctx fn s = Error e) \/
    lift_result (state_equiv (ao_fn_fresh_vars fn))

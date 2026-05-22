@@ -43,12 +43,120 @@ Definition ao_chains_defined_def:
                 ?w. eval_operand (EL k chain) st = SOME w
 End
 
+(* Conditional chain definedness: chain elements are defined whenever
+   the chain endpoint (Var v) is defined. Vacuously true at function
+   entry when no instruction outputs are defined. *)
+Definition ao_chains_defined_at_def:
+  ao_chains_defined_at targets st <=>
+    !v chain. ALOOKUP targets v = SOME chain /\
+              (?w. eval_operand (Var v) st = SOME w) ==>
+              !k. k < LENGTH chain ==>
+                ?w. eval_operand (EL k chain) st = SOME w
+End
+
 (* Well-formed targets: chain has >= 2 elements, variable is last *)
 Definition ao_targets_wf_def:
   ao_targets_wf targets <=>
     !v chain. ALOOKUP targets v = SOME chain ==>
       1 < LENGTH chain /\ LAST chain = Var v
 End
+
+Theorem ao_chains_defined_at_empty:
+  !st. ao_chains_defined_at [] st
+Proof
+  simp[ao_chains_defined_at_def]
+QED
+
+Theorem ao_chains_defined_implies_at:
+  !targets st.
+    ao_chains_defined targets st ==> ao_chains_defined_at targets st
+Proof
+  simp[ao_chains_defined_def, ao_chains_defined_at_def] >> metis_tac[]
+QED
+
+Theorem ao_chains_defined_at_step_preserved:
+  !targets inst fuel ctx st st'.
+    ao_chains_defined_at targets st /\
+    ao_targets_wf targets /\
+    step_inst fuel ctx inst st = OK st' /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+                 k < LENGTH chain ==>
+                 eval_operand (EL k chain) st' =
+                 eval_operand (EL k chain) st) ==>
+    ao_chains_defined_at targets st'
+Proof
+  rw[ao_chains_defined_at_def] >> rpt strip_tac >>
+  `1 < LENGTH chain /\ LAST chain = Var v` by
+    (fs[ao_targets_wf_def] >> res_tac) >>
+  `EL (LENGTH chain - 1) chain = Var v` by
+    metis_tac[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1,
+              listTheory.LENGTH_NIL, DECIDE ``1 < (n:num) ==> n <> 0``] >>
+  `LENGTH chain - 1 < LENGTH chain` by simp[] >>
+  `eval_operand (Var v) st' = eval_operand (Var v) st` by
+    metis_tac[] >>
+  `?w'. eval_operand (Var v) st = SOME w'` by metis_tac[] >>
+  `!k'. k' < LENGTH chain ==>
+    ?w''. eval_operand (EL k' chain) st = SOME w''` by metis_tac[] >>
+  `?w''. eval_operand (EL k chain) st = SOME w''` by metis_tac[] >>
+  `eval_operand (EL k chain) st' = eval_operand (EL k chain) st` by
+    metis_tac[] >>
+  metis_tac[]
+QED
+
+Triviality eval_operand_state_equiv_chain_el[local]:
+  !fv st1 st2 op.
+    state_equiv fv st1 st2 /\
+    (!x. op = Var x ==> x NOTIN fv) ==>
+    eval_operand op st2 = eval_operand op st1
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[eval_operand_def, state_equiv_def, execution_equiv_def]
+QED
+
+Theorem ao_chains_defined_at_state_equiv_compat:
+  !targets fv st1 st2.
+    ao_chains_defined_at targets st1 /\
+    ao_targets_wf targets /\
+    state_equiv fv st1 st2 /\
+    (!v chain k x. ALOOKUP targets v = SOME chain /\
+                   k < LENGTH chain /\ EL k chain = Var x ==> x NOTIN fv) ==>
+    ao_chains_defined_at targets st2
+Proof
+  rw[ao_chains_defined_at_def] >> rpt strip_tac >>
+  `1 < LENGTH chain /\ LAST chain = Var v` by
+    (fs[ao_targets_wf_def] >> res_tac) >>
+  `EL (LENGTH chain - 1) chain = Var v` by
+    metis_tac[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1,
+              listTheory.LENGTH_NIL, DECIDE ``1 < (n:num) ==> n <> 0``] >>
+  `LENGTH chain - 1 < LENGTH chain` by simp[] >>
+  `eval_operand (Var v) st2 = eval_operand (Var v) st1` by
+    (qspecl_then [`fv`, `st1`, `st2`, `Var v`]
+       mp_tac eval_operand_state_equiv_chain_el >>
+     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+  `?w'. eval_operand (Var v) st1 = SOME w'` by metis_tac[] >>
+  `!k'. k' < LENGTH chain ==>
+    ?w''. eval_operand (EL k' chain) st1 = SOME w''` by
+    metis_tac[] >>
+  `eval_operand (EL k chain) st2 = eval_operand (EL k chain) st1` by
+    (qspecl_then [`fv`, `st1`, `st2`, `EL k chain`]
+       mp_tac eval_operand_state_equiv_chain_el >>
+     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem eval_operand_inst_idx_irrel:
+  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem ao_chains_defined_at_inst_idx_iff:
+  !targets s n.
+    ao_chains_defined_at targets (s with vs_inst_idx := n) <=>
+    ao_chains_defined_at targets s
+Proof
+  simp[ao_chains_defined_at_def, eval_operand_inst_idx_irrel]
+QED
 
 (* ===== Structural: ao_compute_fn_iszero_targets produces wf targets ===== *)
 
@@ -340,6 +448,73 @@ Proof
   Cases_on `v0 = 0w` >> gvs[bool_to_word_def]
 QED
 
+Triviality chain_val_bool_local[local]:
+  !targets st v chain k w.
+    ao_iszero_chain_inv targets st /\
+    ALOOKUP targets v = SOME chain /\
+    (!k. k < LENGTH chain ==> ?w. eval_operand (EL k chain) st = SOME w) /\
+    k + 1 < LENGTH chain /\
+    eval_operand (EL (k + 1) chain) st = SOME w ==>
+    w = 0w \/ w = 1w
+Proof
+  rpt strip_tac >>
+  `k < LENGTH chain` by simp[] >>
+  `?val_k. eval_operand (EL k chain) st = SOME val_k` by metis_tac[] >>
+  `w = bool_to_word (val_k = 0w)` by
+    metis_tac[ao_iszero_chain_inv_def] >>
+  Cases_on `val_k = 0w` >> gvs[bool_to_word_def]
+QED
+
+Triviality chain_period2_gen_local[local]:
+  !n targets st v chain m vm vmn.
+    ao_iszero_chain_inv targets st /\
+    ALOOKUP targets v = SOME chain /\
+    (!k. k < LENGTH chain ==> ?w. eval_operand (EL k chain) st = SOME w) /\
+    0 < m /\ m + 2 * n < LENGTH chain /\
+    eval_operand (EL m chain) st = SOME vm /\
+    eval_operand (EL (m + 2 * n) chain) st = SOME vmn ==>
+    vmn = vm
+Proof
+  Induct_on `n` >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  `m + 2 * n < LENGTH chain` by simp[] >>
+  `?vmn'. eval_operand (EL (m + 2 * n) chain) st = SOME vmn'` by
+    metis_tac[] >>
+  `vmn' = vm` by (first_x_assum irule >> metis_tac[]) >>
+  gvs[] >>
+  `(m + 2 * n) + 1 < LENGTH chain` by simp[] >>
+  `?vm1. eval_operand (EL ((m + 2 * n) + 1) chain) st = SOME vm1` by
+    metis_tac[] >>
+  `vm1 = bool_to_word (vm = 0w)` by
+    (drule chain_inv_at >> disch_then drule >>
+     disch_then (qspec_then `m + 2 * n` mp_tac) >> simp[]) >>
+  `vmn = bool_to_word (vm1 = 0w)` by
+    (`((m + 2 * n) + 1) + 1 = m + 2 * SUC n` by simp[] >>
+     drule chain_inv_at >> disch_then drule >>
+     disch_then (qspec_then `(m + 2 * n) + 1` mp_tac) >> simp[]) >>
+  `vm = 0w \/ vm = 1w` by
+    (qspecl_then [`targets`, `st`, `v`, `chain`, `m - 1`, `vm`]
+      mp_tac chain_val_bool_local >> disch_then irule >> simp[]) >>
+  gvs[bool_to_word_def]
+QED
+
+Triviality same_parity_period2_local[local]:
+  !targets st v chain k d vk vd.
+    ao_iszero_chain_inv targets st /\
+    ALOOKUP targets v = SOME chain /\
+    (!k. k < LENGTH chain ==> ?w. eval_operand (EL k chain) st = SOME w) /\
+    0 < k /\ k <= d /\ d < LENGTH chain /\
+    (d - k) MOD 2 = 0 /\
+    eval_operand (EL k chain) st = SOME vk /\
+    eval_operand (EL d chain) st = SOME vd ==>
+    vd = vk
+Proof
+  rpt strip_tac >>
+  qspecl_then [`(d - k) DIV 2`, `targets`, `st`, `v`, `chain`, `k`, `vk`, `vd`]
+    mp_tac chain_period2_gen_local >> disch_then irule >>
+  simp[bitTheory.DIV_MULT_THM2]
+QED
+
 (* ===== Arithmetic helpers for period-2 instantiation ===== *)
 
 Triviality even_step_eq[local]:
@@ -449,6 +624,52 @@ Proof
     (qspecl_then [`targets`, `st`, `vn`, `chain`, `keep`,
                   `LENGTH chain - 1`, `vk`, `vd`]
       mp_tac same_parity_period2 >>
+     simp[Abbr `keep`, mod2_parity_cancel]) >>
+  gvs[]
+QED
+
+(* Variant using ao_chains_defined_at: if the operand is defined, the
+   resolved operand evaluates to the same value. *)
+Theorem resolve_op_eval_eq_at:
+  !targets opc op st.
+    ao_iszero_chain_inv targets st /\
+    ao_chains_defined_at targets st /\
+    ao_targets_wf targets /\
+    opc <> ISZERO /\ opc <> JNZ /\ opc <> ASSERT /\ opc <> ASSERT_UNREACHABLE /\
+    (?w. eval_operand op st = SOME w) ==>
+    eval_operand (ao_resolve_iszero_op targets opc op) st = eval_operand op st
+Proof
+  rpt strip_tac >> Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
+  rename1 `ALOOKUP targets vn` >>
+  Cases_on `ALOOKUP targets vn` >> simp[] >>
+  rename1 `ALOOKUP targets vn = SOME chain` >>
+  IF_CASES_TAC >> simp[] >>
+  `1 < LENGTH chain /\ LAST chain = Var vn` by
+    (fs[ao_targets_wf_def] >> first_x_assum drule >> simp[]) >>
+  `EL (LENGTH chain - 1) chain = Var vn` by
+    metis_tac[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1,
+              listTheory.LENGTH_NIL, DECIDE ``1 < (n:num) ==> n <> 0``] >>
+  `?vd. eval_operand (Var vn) st = SOME vd` by
+    gvs[eval_operand_def] >>
+  `!k. k < LENGTH chain ==>
+    ?w. eval_operand (EL k chain) st = SOME w` by
+    (rpt strip_tac >>
+     qpat_x_assum `ao_chains_defined_at _ _` mp_tac >>
+     simp[ao_chains_defined_at_def] >>
+     disch_then (qspecl_then [`vn`, `chain`] mp_tac) >> simp[]) >>
+  qabbrev_tac `keep = 2 - (LENGTH chain - 1) MOD 2` >>
+  `0 < keep` by
+    (simp[Abbr `keep`] >> `(LENGTH chain - 1) MOD 2 < 2` by simp[] >> simp[]) >>
+  `keep <= LENGTH chain - 1` by simp[Abbr `keep`] >>
+  `?vd'. eval_operand (EL (LENGTH chain - 1) chain) st = SOME vd'` by
+    metis_tac[DECIDE ``1 < (n:num) ==> n - 1 < n``] >>
+  `keep < LENGTH chain` by simp[] >>
+  `?vk. eval_operand (EL keep chain) st = SOME vk` by metis_tac[] >>
+  `vd' = vd` by gvs[] >>
+  `vd = vk` by
+    (qspecl_then [`targets`, `st`, `vn`, `chain`, `keep`,
+                  `LENGTH chain - 1`, `vk`, `vd`]
+      mp_tac same_parity_period2_local >>
      simp[Abbr `keep`, mod2_parity_cancel]) >>
   gvs[]
 QED
@@ -654,4 +875,95 @@ Proof
     TRY (irule resolve_op_eval_all >> simp[]) >>
     gvs[inst_wf_def] >> simp[listTheory.MAP, resolve_op_lit]
   )
+QED
+
+(* Per-operand variant: only requires chain conditions for operands of inst.
+   This avoids requiring ao_chains_defined globally, which is false at
+   function entry when chain variables are undefined instruction outputs. *)
+Theorem ao_resolve_iszero_inst_sim_local:
+  !targets inst fuel ctx st.
+    inst_wf inst /\ inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> PHI /\
+    ao_targets_wf targets /\
+    (!v chain k. MEM (Var v) inst.inst_operands /\
+                 ALOOKUP targets v = SOME chain /\ k < LENGTH chain ==>
+                 ?w. eval_operand (EL k chain) st = SOME w) /\
+    (!v chain k. MEM (Var v) inst.inst_operands /\
+                 ALOOKUP targets v = SOME chain /\ k + 1 < LENGTH chain ==>
+                 !val_k val_k1.
+                   eval_operand (EL k chain) st = SOME val_k /\
+                   eval_operand (EL (k + 1) chain) st = SOME val_k1 ==>
+                   val_k1 = bool_to_word (val_k = 0w)) ==>
+    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) st =
+    step_inst fuel ctx inst st
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `P = \v:string. MEM (Var v) inst.inst_operands` >>
+  qabbrev_tac `rt = FILTER (\(v, chain). P v) targets` >>
+  `!v. P v ==> ALOOKUP rt v = ALOOKUP targets v` by
+    simp[Abbr `rt`, alistTheory.ALOOKUP_FILTER] >>
+  `!v. ~P v ==> ALOOKUP rt v = NONE` by
+    simp[Abbr `rt`, alistTheory.ALOOKUP_FILTER] >>
+  `ao_resolve_iszero_inst targets inst =
+   ao_resolve_iszero_inst rt inst` by
+    (simp[ao_resolve_iszero_inst_def, instruction_component_equality] >>
+     irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+     Cases_on `x` >> simp[ao_resolve_iszero_op_def] >>
+     rename1 `Var vn` >>
+     `P vn` by simp[Abbr `P`] >>
+     first_x_assum drule >> simp[]) >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  `ao_targets_wf rt` by
+    (rw[ao_targets_wf_def] >> rpt strip_tac >> (
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     metis_tac[ao_targets_wf_def])) >>
+  `ao_iszero_chain_inv rt st` by
+    (rw[ao_iszero_chain_inv_def] >> rpt strip_tac >>
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     `MEM (Var v) inst.inst_operands` by fs[Abbr `P`] >>
+     qpat_x_assum `!v chain k. MEM _ _ /\ _ /\ k + 1 < _ ==> _`
+       (qspecl_then [`v`, `chain`, `k`] mp_tac) >> simp[]) >>
+  `ao_chains_defined rt st` by
+    (rw[ao_chains_defined_def] >> rpt strip_tac >>
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     `MEM (Var v) inst.inst_operands` by fs[Abbr `P`] >>
+     qpat_x_assum `!v chain k. MEM _ _ /\ _ /\ k < _ ==> _`
+       (qspecl_then [`v`, `chain`, `k`] mp_tac) >> simp[]) >>
+  metis_tac[ao_resolve_iszero_inst_sim]
+QED
+
+(* Variant using ao_chains_defined_at instead of ao_chains_defined.
+   Requires the operand (Var v) to be defined, which together with
+   ao_chains_defined_at implies chain definedness for that variable. *)
+Theorem ao_resolve_iszero_inst_sim_at:
+  !targets inst fuel ctx st.
+    inst_wf inst /\ inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> PHI /\
+    ao_targets_wf targets /\
+    ao_chains_defined_at targets st /\
+    ao_iszero_chain_inv targets st /\
+    (!v. MEM (Var v) inst.inst_operands /\
+         (?chain. ALOOKUP targets v = SOME chain) ==>
+         ?w. eval_operand (Var v) st = SOME w) ==>
+    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) st =
+    step_inst fuel ctx inst st
+Proof
+  rpt strip_tac >>
+  irule ao_resolve_iszero_inst_sim_local >> simp[] >>
+  rpt conj_tac >> rpt strip_tac >> (
+    `?w. eval_operand (Var v) st = SOME w` by
+      (qpat_x_assum `!v. _` (qspec_then `v` mp_tac) >>
+       simp[] >> disch_then irule >> metis_tac[]) >>
+    qpat_x_assum `ao_chains_defined_at _ _` mp_tac >>
+    simp[ao_chains_defined_at_def] >>
+    disch_then (qspecl_then [`v`, `chain`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `k` mp_tac) >> simp[] >>
+    TRY (disch_then irule >> simp[] >> NO_TAC) >>
+    fs[ao_iszero_chain_inv_def] >> res_tac)
 QED
