@@ -268,7 +268,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C3.1.7.3 | stuck | plan_incomplete | E0059 | Write boundary lemma assign_target_TopLevelVar_ArrayRef_ordinary_no_type_error for the standard read+write+assign_result path (all non-ArrayTV-Dynamic cases), modeled on assign_target_TopLevelVar_Value_branch_ntr. Then handle AppendOp/PopOp separately." |
 | C3.1.7.3.1 | stuck | wrong_statement | E0063 |  |
 | C3.1.7.3.2 | proved |  | E0060 |  |
-| C3.2 | progressed | other | E0085 |  |
+| C3.2 | proved |  | E0733 | Review C3.2 closure with strategist, then begin next scheduled C3 leaf (expected C3.3). |
 | C3.3 | proved |  | E0086 |  |
 | C3.4 | proved |  | E0087 |  |
 | C3.5 | proved |  | E0089 |  |
@@ -7508,10 +7508,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `other`
-- latest episode: `E0085`
-- blocker: "C3.2 ArrayRef branch helper lemmas all proved. Remaining sound_TopLevelVar cheat is a broader C3 obligation needing all sub-branch lemmas (Value, HashMapRef, ImmutableVar) in addition to ArrayRef."
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0733`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 234,424 tok (233,766 in, 658 out, 217,088 cached), 16.6s, $0.21167400
+- next: Review C3.2 closure with strategist, then begin next scheduled C3 leaf (expected C3.3).
 
 ### Attempts / Evidence
 
@@ -7585,10 +7587,15 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0085` (progressed, other)
   - Fixed assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error by adding Cases_on e to destruct exception ADT, then drule_all resolves both antecedents -> Lemma proved clean (`TO_type_system_rewrite-20260514T195458Z_m9089_t001`)
   - Fixed assign_target_TopLevelVar_ArrayRef_branch_no_type_error with explicit Cases_on x1 per type_value constructor + IMP_RES_TAC + metis_tac[] for Dynamic cases -> Main theorem builds clean, vyperTypeStatePreservationTheory succeeds (`TO_type_system_rewrite-20260514T195458Z_m9151_t001`)
+- `E0733` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 234,424 tok (233,766 in, 658 out, 217,088 cached), 16.6s, $0.21167400)
+  - Audited current source for `assign_subscripts_update_leaf_no_type_error` and `assign_operation_runtime_typed_leaf_no_type_error` in `vyperTypeStatePreservationScript.sml`. -> Both C3.2 theorem obligations are fully proved in current source with no `cheat`; update consumes `well_typed_update_binop_no_type_error`, append/pop consume leaf array operation no-TypeError facts. (`TO_type_system_rewrite-20260522T073012Z_m40856_t002`, `TO_type_system_rewrite-20260522T073012Z_m40856_t001`)
+  - Built `vyperTypeStatePreservationTheory` with holbuild after audit. -> Relevant target builds cleanly, confirming the leaf no-TypeError obligations are accepted by HOL4. (`TO_type_system_rewrite-20260522T073012Z_m40856_t003`)
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260514T195458Z_m9151_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40856_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40856_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40856_t003` (use `read_tool_output` for exact output)
 
 ## C3.3
 
