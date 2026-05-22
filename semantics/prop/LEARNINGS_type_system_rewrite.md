@@ -597,3 +597,94 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40848_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40856_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40864_t001
+
+## L1296 scope='C4.2' tags=builtin,success-typing,boundary-helper,probe,not
+shape: Generic builtin success theorem has many residual constructor goals after replacing final cheat with FAIL_TAC; first goal is `Not`/`UintT n` value_has_type for computed complement.
+pattern: When a generic builtin success theorem stalls after no-TypeError helper work, do not try to close residuals by broad catch-all simplification. Use the FAIL_TAC probe to identify the first constructor/value shape, then add a focused local success-typing helper for that constructor and dispatch the generic theorem through helpers. No-TypeError helpers are not substitutes for success-typing helpers.
+works_when: The evaluator is non-recursive and the residual goal exposes a concrete builtin constructor with value/type assumptions (e.g. `evaluate_builtin ... Not [IntV i] = INL v` and a `value_has_type` conclusion).
+evidence:
+- episode:E0736
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40891_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:2366-2410
+
+## L1297 scope='C4.2' tags=builtin,success-typing,constructor-dispatch,slice,LIST_REL_EL_EQN
+shape: Generic builtin success residual for a 3-argument builtin has MAP/evaluate_type equality plus `LIST_REL value_has_type tvs vs`, and goal needs result value typing.
+pattern: For 3-argument builtin success cases (e.g. Slice), derive stable argument facts via `LIST_REL_EL_EQN` or a length helper such as `list_el_decomp_3`; avoid nested tail destructs. Then call a small evaluator-boundary lemma (`evaluate_slice_BytesT_success_type` / `evaluate_slice_StringT_success_type`) that reasons at implementation level once.
+works_when: The static typing branch fixes a concrete argument list shape like `[arg_ty; BaseT (UintT 256); BaseT (UintT 256)]`, and `LIST_REL value_has_type tvs vs` connects evaluated type_values to runtime values.
+evidence:
+- episode:E0737
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40977_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1491-1526
+
+## L1298 scope='C4.2' tags=builtin,success-typing,concat,boundary-helper
+shape: Concat success residual: all static args are bytes or all strings, `evaluate_builtin ... (Concat n) vs = INL v`, goal is bounded Dynamic bytes/string value.
+pattern: Prove concat success through loop-boundary lemmas (`evaluate_concat_loop_bytes_success_type`, `evaluate_concat_loop_string_success_type`). In the dispatcher, use `LIST_REL_value_has_type_imp_combined` plus `list_rel_bytes_all_bytesv` / `list_rel_string_all_stringv`, unfold `evaluate_concat_def` only after establishing all runtime values have the expected constructor, then apply the loop success lemma.
+works_when: The `well_typed_builtin_app` branch gives `EVERY (λt. ∃bd. t = BaseT (BytesT bd)) ts` or `EVERY (λt. ∃m. t = BaseT (StringT m)) ts` and `2 <= LENGTH ts`.
+evidence:
+- episode:E0737
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40971_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1253-1275
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:2505-2527
+
+## L1299 scope='C4.2' tags=builtin,success-typing,MakeArray,boundary-helper,sparse_has_type,compatible_bound
+shape: MakeArray success residual: `well_typed_builtin_app ty (MakeArray o' bd) ts`, MAP/evaluate_type and LIST_REL value typing, evaluator returns `INL v`, goal `value_has_type tv v`.
+pattern: Factor MakeArray success into a local boundary helper instead of handling it in the generic dispatcher. Tuple/NONE case uses `evaluate_type_TupleT_cases` plus `values_have_types_LIST_REL`; Array/SOME case uses `evaluate_type_ArrayT_SOME`, combined LIST_REL over source types, `LIST_REL_every_same_type_EVERY_vht`, and then `sparse_has_type_enumerate` for fixed arrays or `all_have_type_EVERY` for dynamic arrays. For fixed arrays, prove the length bound explicitly from `compatible_bound (Fixed n) (LENGTH ts)` and `LIST_REL_LENGTH`; the naive `drule LIST_REL_LENGTH >> simp[compatible_bound_def]` left an implication unsolved.
+works_when: Static typing branch is the fresh `well_typed_builtin_app` MakeArray rule (`NONE` gives `ty = TupleT ts`; `SOME elem_ty` gives `ty = ArrayT elem_ty bd`, compatible bound, and `EVERY ($= elem_ty) ts`).
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41022_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41056_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1680-1728
+
+## L1300 scope='C4.2' tags=builtin,success-typing,Slice,boundary-helper,dispatcher
+shape: Generic Slice success residual under MAP/evaluate_type equality and LIST_REL value typing, goal bounded BytesV/StringV result.
+pattern: For Slice, a direct generic TRY can fail silently when length facts are hard to derive. A robust approach is to prove concrete boundary helpers `slice_bytes_builtin_success_type` and `slice_string_builtin_success_type` whose statements mirror the exact evaluated-type list shape produced by `evaluate_type_def`, then dispatch the generic theorem with `metis_tac` on the helper. This reduced residuals past both bytes and string Slice cases.
+works_when: The generic proof has already simplified `well_typed_builtin_app` and `evaluate_type_def`, so the first assumption is an exact 3-element `MAP SOME tvs` equality for bytes or string plus two Uint256 arguments.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41014_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41016_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1538-1583
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:2624-2628
+
+## L1301 scope='C4.2' tags=builtin,success-typing,dispatcher,modular-arithmetic,metis-timeout
+shape: Generic success residual for AddMod/MulMod/PowMod256 has concrete Uint256 result existential after helper exists.
+pattern: For modular arithmetic builtin success residuals, prove a local helper with conclusion `value_has_type (BaseTV (UintT 256)) v`. In the generic dispatcher, avoid `metis_tac[helper,value_has_type_def]` directly because it can time out; instead assert `value_has_type (BaseTV (UintT 256)) v` by the helper and then simplify `value_has_type_def` to discharge the concrete existential.
+works_when: The residual has `MAP SOME tvs = [SOME (BaseTV (UintT 256)); ...]`, `LIST_REL value_has_type tvs vs`, and `evaluate_builtin ... AddMod/MulMod/PowMod256 vs = INL v`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41115_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41119_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1799-1843
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:2771-2782
+
+## L1302 scope='C4.2' tags=builtin,success-typing,Bop,boundary-wrapper,get_tenv
+shape: Generic success residual for `evaluate_builtin cx acc ty (Bop b) vs = INL v` with two evaluated argument types and LIST_REL values.
+pattern: Wrap `well_typed_binop_success_type` in a builtin-facing helper whose statement uses `evaluate_builtin ... (Bop bop) vs` and `get_tenv cx` directly. After a small two-element list simplification, call `well_typed_binop_success_type` with `u = case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u`. This avoids brittle in-place qspec/qexists plumbing in the generic dispatcher.
+works_when: The generic proof has simplified `well_typed_builtin_app` enough to expose `well_typed_binop ty b h h'`, `[evaluate_type (get_tenv cx) h; evaluate_type (get_tenv cx) h'] = MAP SOME tvs`, and `evaluate_builtin ... (Bop b) vs = INL v`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41125_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41127_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41129_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1127-1142
+
+## L1303 scope='C4.2' tags=builtin,success-typing,BlockHash,BlobHash,retired-proof-pattern
+shape: After Bop residuals, next generic success goal for BlockHash: `evaluate_builtin ... (BaseT (BytesT (Fixed 32))) BlockHash [IntV i] = INL v` and goal `∃bs. v = BytesV bs ∧ LENGTH bs = 32`.
+pattern: For BlockHash/BlobHash success, mine retired `vyperBuiltinTypingScript.sml` before tactic search. BlockHash uses `evaluate_block_hash_def` plus a helper like `evaluate_block_hash_well_typed`; BlobHash uses `evaluate_blob_hash_def`. Both close the bytes32 typing goal with `LENGTH_word_to_bytes_be_32`.
+works_when: The residual is a bytes32 result for BlockHash/BlobHash under Uint256-typed index and an `INL` evaluator equation.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41129_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41130_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41131_t002
+- source:semantics/prop/vyperBuiltinTypingScript.sml:1168-1180
+
+## L1304 scope='C4.2' tags=builtin,success-typing,dispatcher,constructor-boundary,ECRecover,ECAdd,ECMul
+shape: Generic builtin success residual exposes concrete builtin evaluator equation and a `value_has_type`/existential result goal.
+pattern: For remaining non-recursive builtin success cases, prove a small evaluator-facing success helper whose conclusion is exactly `value_has_type expected_tv v` (or derive that conclusion before simplifying existential goals). BlockHash/BlobHash use bytes length helpers; Acc specializes `Acc_builtin_sound`; MethodId uses `LENGTH_TAKE` and `LENGTH_Keccak_256_w64`; ECRecover needs `evaluate_ecrecover_typed`; ECAdd/ECMul need `evaluate_ecadd_well_typed`/`evaluate_ecmul_well_typed` wrappers over bn254 result bounds. Dispatching by direct helper-to-`value_has_type_def` metis is less reliable than first deriving the `value_has_type` fact, then simplifying.
+works_when: The generic theorem has already inverted `well_typed_builtin_app` and `evaluate_type_def` enough to expose a concrete `evaluate_builtin ... BuiltinName ... = INL v` assumption and the expected runtime type is syntactically known.
+evidence:
+- episode:E0739
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41147_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41172_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41185_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:1936-1957
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:2228-2420
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:2572-2620
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:3090-3106

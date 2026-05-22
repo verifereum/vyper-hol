@@ -280,7 +280,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C4.1.1.3 | proved |  | E0181 | Call plan_oracle(mode='review', component_id='C4.1.1.3', evidence_ids=[...]); then follow the scheduled next component. Current build frontier is a Concat bytes dispatcher goal in `well_typed_builtin_app_no_type_error`. |
 | C4.1.2 | proved |  | E0238 | Review C4.1.2 closure with strategist, then follow Oracle next. |
 | C4.1.3 | proved |  | E0239 | Review C4.1.3 closure with strategist, then follow Oracle next. |
-| C4.2 | stuck | missing_helper | E0160 | "Rewrite ecrecover_no_type_error proof using EL-index approach or BuiltinTyping simp pattern. All boundary lemmas are proved. Consumer just needs correct variable connection." |
+| C4.2 | proved |  | E0740 | Ask plan_oracle to review C4.2 closure, then commit stable C4.2 progress if review accepts. |
 | C4.2.1 | proved |  | E0161 |  |
 | C4.2.2 | progressed | other | E0162 |  |
 | C5.2 | stuck | plan_incomplete | E0113 |  |
@@ -7918,11 +7918,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `missing_helper` "List destruct with gvs[LIST_REL_CONS1] for 4+ element lists produces unpredictable tail variable names. Need either: (1) EL-index approach using LIST_REL_EL_EQN, or (2) single-pass Cases_on on values with simp (not gvs), matching the working BuiltinTyping pattern at lines 253-261."
-- latest episode: `E0160`
-- blocker: "ecrecover_no_type_error list destruct: after Cases_on vs >> gvs[LIST_REL_CONS1] for 4-element lists, auto-generated variable names for tails are unpredictable. Need EL-index approach (LIST_REL_EL_EQN) or single-pass value-destruct approach (Cases_on vs >> Cases_on h >> simp, like BuiltinTyping file pattern) instead of trying to predict gvs-generated tail names."
-- next: "Rewrite ecrecover_no_type_error proof using EL-index approach or BuiltinTyping simp pattern. All boundary lemmas are proved. Consumer just needs correct variable connection."
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0740`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 51 steps, 65 tools, 17 holbuild, 3,977,537 tok (3,959,900 in, 17,637 out, 3,864,576 cached), 658.7s, $2.93801800
+- next: Ask plan_oracle to review C4.2 closure, then commit stable C4.2 progress if review accepts.
 
 ### Attempts / Evidence
 
@@ -7940,11 +7941,40 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0160` (stuck, missing_helper)
   - ecrecover_no_type_error: tried Cases_on vs >> gvs[LIST_REL_CONS1] >> Cases_on t >> gvs[LIST_REL_CONS1] >> ... for 4-element list. After 3 levels of destruct, auto-generated tail variable names (t, t', t'') from gvs don't match expected pattern. gvs renames tails unpredictably based on assumption simplification. Tried explicit variable names t, t', t'', t''' but actual names after gvs are different (t, xs, etc.) -> 8+ attempts across 2 sessions. Root cause: gvs[LIST_REL_CONS1] auto-generates variable names for list tails that depend on full assumption state, making them unpredictable. Cases_on `t''` fails because gvs renamed the tail to something else. (`TO_type_system_rewrite-20260516T153850Z_m22390_t001`, `TO_type_system_rewrite-20260516T153850Z_m22395_t001`)
   - Rewrote ecrecover_no_type_error to take typing predicates directly (like slice_no_type_error) instead of well_typed_builtin_app_def. Avoids gvs[well_typed_builtin_app_def] destroying the ≠ TypeError goal. -> Consumer proof rewritten. List destruct still fails: Cases_on `t''` cannot find t'' free in goal after gvs[LIST_REL_CONS1] renamed tails. (`TO_type_system_rewrite-20260516T153850Z_m22395_t001`)
+- `E0736` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 10 steps, 18 tools, 1 holbuild, 1,242,542 tok (1,238,851 in, 3,691 out, 1,186,816 cached), 164.2s, $0.96431300)
+  - Temporarily replaced the final `cheat` in `well_typed_builtin_app_success_type` with `FAIL_TAC "probe_builtin_success"` and built `vyperTypeBuiltinsTheory`. -> Build reached the probe with 37 residual goals. The first visible goal is the `Not`/`UintT n` success case: from `0 < n`, `n <= 256`, `0 <= i`, `Num i < 2 ** n`, and `evaluate_builtin ... Not [IntV i] = INL v`, prove `value_has_type (BaseTV (UintT n)) v`, i.e. existential IntV with nonnegative bounded result. This indicates missing per-builtin success helpers, starting with unsigned Not, not a source/parser issue. (`TO_type_system_rewrite-20260522T073012Z_m40891_t001`)
+  - Read source around `well_typed_builtin_app_success_type`, existing no-TypeError Not helpers, and `evaluate_builtin_def` Not clauses. -> Current success proof is a monolithic simplification/catch-all analogous to earlier bad C4.2 patterns. Existing helpers cover no-TypeError (`bool_not_no_type_error`, `uint_not_no_type_error`, `flag_Not_no_type_error`) but not success typing. The evaluator's Uint Not branch returns `IntV (&(2 ** int_bound_bits u) - 1 - i)`, so a focused lemma should prove this remains within Uint bound under `0 <= i` and `Num i < 2 ** n`. (`TO_type_system_rewrite-20260522T073012Z_m40889_t001`, `TO_type_system_rewrite-20260522T073012Z_m40893_t001`, `TO_type_system_rewrite-20260522T073012Z_m40894_t002`)
+- `E0737` (progressed, missing_helper, actual effort: 1 sessions, 7 msgs, 84 steps, 100 tools, 24 holbuild, 7,874,483 tok (7,852,074 in, 22,409 out, 7,710,720 cached), 814.7s, $5.23440000)
+  - Added Not success helpers (`uint_not_result_bound`, `bool_not_success_type`, `uint_not_success_type`, `flag_Not_success_type`) and focused Not dispatch in the generic success theorem. -> Build progressed past Uint/Bool/Flag Not residuals; residual count dropped from 37 to 35 after separate Flag handling. This validates the per-constructor success-helper approach. (`TO_type_system_rewrite-20260522T073012Z_m40932_t001`, `TO_type_system_rewrite-20260522T073012Z_m40947_t001`)
+  - Added focused hash and AsWeiValue success dispatch blocks using evaluator definitions and existing length/bound facts. -> Build progressed past Keccak/Sha256 and AsWeiValue residuals; residual count reached 28, next residual became Concat success. (`TO_type_system_rewrite-20260522T073012Z_m40958_t001`, `TO_type_system_rewrite-20260522T073012Z_m40962_t001`)
+  - Added `evaluate_concat_loop_bytes_success_type` and `evaluate_concat_loop_string_success_type`; added focused Concat success dispatch deriving all-BytesV/all-StringV values from LIST_REL_value_has_type_imp_combined and existing list_rel_* helpers. -> Build progressed past Concat residuals; residual count reached 26, next residual became Slice success. This suggests remaining work is more per-constructor success dispatch, not a false theorem. (`TO_type_system_rewrite-20260522T073012Z_m40971_t001`)
+  - Added `evaluate_slice_BytesT_success_type` and `evaluate_slice_StringT_success_type`; first version timed out by case-splitting all values at once, then refactored to use value_has_type inversions before evaluator expansion. Inserted `list_el_decomp_3` to support next slice dispatch but did not rebuild after insertion due handoff stop. -> Slice helper proofs were reached and after refactor build advanced back to the generic theorem; current residual is connecting generic LIST_REL/3-element argument info to slice success helpers. Need verify list_el_decomp_3 next. (`TO_type_system_rewrite-20260522T073012Z_m40975_t001`, `TO_type_system_rewrite-20260522T073012Z_m40977_t001`)
+- `E0738` (progressed, missing_helper, actual effort: 1 sessions, 6 msgs, 73 steps, 88 tools, 24 holbuild, 7,196,775 tok (7,176,084 in, 20,691 out, 7,040,512 cached), 703.4s, $4.81884600)
+  - Fixed make_array_success_type by explicit compatible_bound/LIST_REL_LENGTH reasoning in fixed-array branch and dynamic-array length proof. -> Build progressed past make_array_success_type and returned to generic success probe; MakeArray residual dropped, next residual became Ceil success. (`TO_type_system_rewrite-20260522T073012Z_m41072_t001`)
+  - Added local ceil_builtin_success_type/floor_builtin_success_type using existing decimal division bounds and within_int_bound_signed_int; dispatched generic Ceil/Floor with metis_tac. -> Build progressed past Ceil/Floor; next residual became AddMod success. (`TO_type_system_rewrite-20260522T073012Z_m41103_t001`)
+  - Added addmod_success_type, mulmod_success_type, powmod256_success_type and dispatched generic theorem by deriving value_has_type BaseTV(UintT 256) before simplifying target existential. -> Build progressed past modular arithmetic; next residual became Bop success. (`TO_type_system_rewrite-20260522T073012Z_m41119_t001`)
+  - Added builtin_bop_success_type wrapper over well_typed_binop_success_type with get_tenv cx in the statement and exact two-argument list simplification; dispatched generic Bop through it. -> Build progressed past Bop; current residual is BlockHash success with 16 generic success goals remaining. (`TO_type_system_rewrite-20260522T073012Z_m41129_t001`)
+- `E0739` (progressed, missing_helper, actual effort: 1 sessions, 5 msgs, 58 steps, 81 tools, 14 holbuild, 5,668,213 tok (5,651,428 in, 16,785 out, 5,521,408 cached), 591.6s, $3.91435400)
+  - Added BlockHash/BlobHash success helpers (`LENGTH_word_to_bytes_be_32`, `evaluate_block_hash_success_type`, `blockhash_success_type`, `blobhash_success_type`) and dispatched generic success theorem. -> Build progressed from BlockHash residual to Env residual, then after Env metis dispatch to Acc residual. (`TO_type_system_rewrite-20260522T073012Z_m41147_t001`, `TO_type_system_rewrite-20260522T073012Z_m41149_t001`)
+  - Added `acc_builtin_success_type` and MethodId helper/dispatcher; fixed helper proof by specializing `Acc_builtin_sound` at live `cx`. -> Build progressed through Acc and MethodId to ECRecover residual. (`TO_type_system_rewrite-20260522T073012Z_m41156_t001`, `TO_type_system_rewrite-20260522T073012Z_m41163_t001`)
+  - Added `evaluate_ecrecover_typed`/`ecrecover_success_type`; dispatch derives `value_has_type (BaseTV AddressT) v` then simplifies the existential goal. -> Build progressed from 10 EC residuals to 2 ECAdd/ECMul residuals. (`TO_type_system_rewrite-20260522T073012Z_m41170_t001`, `TO_type_system_rewrite-20260522T073012Z_m41172_t001`)
+  - Ported focused bn254/EC result typing lemmas from retired `vyperBuiltinTypingScript.sml` (`mk_ec_result_well_typed`, `evaluate_ecadd_well_typed`, `evaluate_ecmul_well_typed`) and wrapped them as `ecadd_success_type`/`ecmul_success_type`; added dispatcher blocks. -> Build advanced past `well_typed_builtin_app_success_type` (probe removed) and reached downstream `Len_result_fits_uint256`, showing generic builtin success is currently closed in source. (`TO_type_system_rewrite-20260522T073012Z_m41182_t001`, `TO_type_system_rewrite-20260522T073012Z_m41185_t001`)
+  - Tried to repair `Len_result_fits_uint256` StringT branch by rewriting return equality and using arithmetic. -> Still failing; exact branch needs a cleaner local proof from `return_def` and arithmetic. Source remains partial. (`TO_type_system_rewrite-20260522T073012Z_m41191_t001`, `TO_type_system_rewrite-20260522T073012Z_m41193_t001`)
+- `E0740` (proved, , actual effort: 1 sessions, 3 msgs, 51 steps, 65 tools, 17 holbuild, 3,977,537 tok (3,959,900 in, 17,637 out, 3,864,576 cached), 658.7s, $2.93801800)
+  - Added `return_INL_value` and repaired `Len_result_fits_uint256` by extracting return values with the fully-qualified `vyperStateTheory.return_def`, then restored finite-array arithmetic branch and handled storage/w2n residuals. -> `vyperTypeBuiltinsTheory` builds clean after `Len_result_fits_uint256`; local generic builtin success theorem no longer has a final cheat and build progressed through it. (`TO_type_system_rewrite-20260522T073012Z_m41245_t001`, `TO_type_system_rewrite-20260522T073012Z_m41248_t003`)
+  - Audited current file for cheats after the build. -> Remaining cheats are in type-builtin/raw-call components (C4.3/C4.4/C4.5), not in `well_typed_builtin_app_no_type_error` or `well_typed_builtin_app_success_type`; theorem-index oracle grep for the generic builtin names found no non-DISK_THM oracle evidence. (`TO_type_system_rewrite-20260522T073012Z_m41246_t002`, `TO_type_system_rewrite-20260522T073012Z_m41248_t001`)
+
+### Ruled Out
+
+- Remaining `cheat`s in `vyperTypeBuiltinsScript.sml` belong to scheduled sibling components C4.3/C4.4/C4.5, per query_plan C4 subtree.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260516T153850Z_m22390_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260516T153850Z_m22395_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41245_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41246_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41246_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41248_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41248_t003` (use `read_tool_output` for exact output)
 
 ## C4.2.1
 
