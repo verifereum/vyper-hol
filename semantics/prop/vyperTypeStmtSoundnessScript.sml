@@ -6251,8 +6251,9 @@ Theorem ifexp_branch_from_cond_ih[local]:
     INL tv => expr_result_typed env (IfExp ty cond e_true e_false) tv
   | INR exn => T
 Proof
-  rw[] >>
-  first_x_assum (qspecl_then [`cond_st`,`cond_tv`,`branch_st`] mp_tac) >>
+  strip_tac >>
+  qpat_x_assum `!s0 tv0 t0. eval_expr cx cond s0 = (INL tv0,t0) ==> _`
+    (qspecl_then [`cond_st`,`cond_tv`,`branch_st`] mp_tac) >>
   simp[] >>
   disch_then (qspecl_then [`env`,`branch_st`,`res`,`st'`] mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -6862,6 +6863,119 @@ Proof
     simp[bind_def, ignore_bind_def, return_def, check_array_bounds_hashmap_stmt, raise_def] >>
     strip_tac >> gvs[no_type_error_result_def] >>
     drule read_storage_slot_error >> strip_tac >> simp[])
+QED
+
+Theorem expr_subscript_place_projection_tail_sound_stmt[local]:
+  !cx env e e' v9 base_vt result_vt base_tv idx_tv idx st res st'.
+    state_well_typed st /\
+    env_consistent env cx st /\
+    accounts_well_typed st.accounts /\
+    well_formed_type env.type_defs v9 /\
+    type_place_expr env e = SOME base_vt /\
+    subscript_vtype base_vt (expr_type e') = SOME result_vt /\
+    vtype_annotation_ok result_vt v9 /\
+    place_expr_result_typed env base_tv base_vt /\
+    expr_result_typed env e' idx_tv /\
+    get_Value idx_tv st = (INL idx,st) /\
+    (do
+       arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
+                   "Subscript array type";
+       check_array_bounds cx base_tv idx;
+       res <- lift_sum (evaluate_subscript (get_tenv cx) arr_tv base_tv idx);
+       case res of
+         INL v => return v
+       | INR (is_transient,slot,tv) =>
+           do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
+     od st = (res,st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of INL tv => place_expr_result_typed env tv result_vt | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  Cases_on `base_vt`
+  >- (
+    `vtype_annotation_ok (Type t) (expr_type e)` by
+      metis_tac[type_place_expr_annotation_ok_stmt] >>
+    gvs[vtype_annotation_ok_def, place_expr_result_typed_def] >>
+    Cases_on `expr_type e` >> gvs[subscript_vtype_def, subscript_type_ok_def] >>
+    qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
+    simp[bind_def, lift_option_type_def, return_def, lift_sum_def] >>
+    Cases_on `check_array_bounds cx base_tv idx st` >>
+    rename1 `check_array_bounds cx base_tv idx st = (bounds_res,bounds_st)` >>
+    `bounds_st = st` by metis_tac[check_array_bounds_state] >> gvs[] >>
+    Cases_on `bounds_res` >> gvs[return_def, raise_def]
+    >- (
+      Cases_on `evaluate_subscript (get_tenv cx) tyv base_tv idx` >> gvs[return_def, raise_def]
+      >- (
+        rename1 `evaluate_subscript (get_tenv cx) tyv base_tv idx = INL sub_res` >>
+        `subscript_type_ok (ArrayT t b) (expr_type e') t` by
+          simp[subscript_type_ok_def] >>
+        drule_all evaluate_subscript_typed_stmt >> strip_tac >>
+        Cases_on `sub_res` >> gvs[return_def, bind_def]
+        >- (
+          `~is_HashMapRef x` by
+            (drule_all evaluate_subscript_success_not_HashMapRef_stmt >> simp[]) >>
+          strip_tac >>
+          qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+          simp[bind_def, ignore_bind_def, return_def] >> strip_tac >>
+          gvs[no_type_error_result_def, place_expr_result_typed_def]) >>
+        strip_tac >> PairCases_on `y` >> gvs[] >>
+        qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+        simp[bind_def, ignore_bind_def, return_def] >> strip_tac >> gvs[] >>
+        Cases_on `read_storage_slot cx y0 y1 rtv bounds_st` >>
+        rename1 `read_storage_slot cx y0 y1 rtv bounds_st = (read_res,read_st)` >>
+        `read_st = bounds_st` by metis_tac[read_storage_slot_state] >> gvs[] >>
+        Cases_on `read_res` >> gvs[return_def, raise_def, no_type_error_result_def]
+        >- (`well_formed_type_value rtv` by metis_tac[evaluate_type_well_formed_type_value] >>
+            `value_has_type rtv x` by metis_tac[read_storage_slot_success_type] >>
+            gvs[place_expr_result_typed_def, toplevel_value_typed_def, is_HashMapRef_def]) >>
+        drule read_storage_slot_error >> strip_tac >> simp[]) >>
+      strip_tac >>
+      qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+      simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+      `?idx_tyv. evaluate_type (get_tenv cx) (expr_type e') = SOME idx_tyv /\
+                 value_has_type idx_tyv idx` by (
+        qpat_x_assum `expr_result_typed env e' idx_tv` mp_tac >>
+        simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
+        Cases_on `idx_tv` >>
+        gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def]) >>
+      `subscript_type_ok (ArrayT t b) (expr_type e') t` by
+        simp[subscript_type_ok_def] >>
+      drule_all evaluate_subscript_error_not_TypeError_stmt >>
+      strip_tac >> simp[no_type_error_result_def]) >>
+    strip_tac >>
+    qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
+    simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+    drule_all check_array_bounds_error_not_TypeError_stmt >>
+    strip_tac >> simp[no_type_error_result_def])
+  >- (
+    `vtype_annotation_ok (HashMapT t v) (expr_type e)` by
+      metis_tac[type_place_expr_annotation_ok_stmt] >>
+    Cases_on `result_vt` >>
+    gvs[vtype_annotation_ok_def, place_expr_result_typed_def, subscript_vtype_def]
+    >- (
+      `?rtv. evaluate_type (get_tenv cx) t' = SOME rtv` by
+        gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+      qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
+      simp[bind_def, lift_option_type_def, return_def, lift_sum_def,
+           evaluate_type_def, check_array_bounds_hashmap_stmt, evaluate_subscript_def] >>
+      strip_tac >>
+      Cases_on `read_storage_slot cx is_t (hashmap_slot slot (encode_hashmap_key (expr_type e') idx)) rtv st` >>
+      rename1 `read_storage_slot cx is_t (hashmap_slot slot (encode_hashmap_key kt idx)) rtv st = (read_res,read_st)` >>
+      `read_st = st` by metis_tac[read_storage_slot_state] >> gvs[] >>
+      Cases_on `read_res` >> gvs[return_def, raise_def, no_type_error_result_def]
+      >- (gvs[bind_def, ignore_bind_def, return_def, check_array_bounds_hashmap_stmt] >>
+          `well_formed_type_value rtv` by metis_tac[evaluate_type_well_formed_type_value] >>
+          `value_has_type rtv x` by metis_tac[read_storage_slot_success_type] >>
+          gvs[place_expr_result_typed_def, toplevel_value_typed_def, is_HashMapRef_def]) >>
+      gvs[bind_def, ignore_bind_def, return_def, check_array_bounds_hashmap_stmt] >>
+      drule read_storage_slot_error >> strip_tac >> simp[]) >>
+    qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
+    simp[bind_def, ignore_bind_def, lift_option_type_def, return_def, lift_sum_def,
+         evaluate_type_def, check_array_bounds_hashmap_stmt, evaluate_subscript_def] >>
+    strip_tac >> gvs[return_def, no_type_error_result_def, place_expr_result_typed_def])
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Subscript]:

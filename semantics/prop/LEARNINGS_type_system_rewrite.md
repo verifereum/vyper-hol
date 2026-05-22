@@ -621,41 +621,6 @@ evidence:
 - episode:E0664
 - tool_output:TO_type_system_rewrite-20260521T174852Z_m38309_t001
 
-## L1228 scope='C2.1.1.13' tags=Resume,Subscript,place_projection,pair_case,sum_case,proof_order
-shape: Expr_Subscript Resume after split-first; small base-error tail has `(case (INR y,st1) of ...) = (res,st')` and large mutual IH assumptions in context
-pattern: For small tail simplifications inside large mutual Resume goals, avoid `simp[]`/`gvs[]`; they time out on the whole context. Push the equality with `mp_tac`, use `simp_tac bool_ss [pair_case_thm, sum_case_def]`, then split `PAIR_EQ` if needed and finish with `asm_rewrite_tac[]` plus targeted sum-case rewrites.
-works_when: Applies to evaluator branches where the term is a simple pair/sum case but the context contains large mutual IHs and recursive evaluator terms. It is not a replacement for proving the real place projection.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38398_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38414_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38419_t001
-
-## L1230 scope='C2.1.1.13' tags=Subscript,place_expr_result_typed,expr_result_typed,type_place_expr,HashMapRef
-shape: Need ordinary `expr_result_typed env e tv` but only have `type_place_expr env e = SOME vt` and `place_expr_result_typed env tv vt`.
-pattern: A local boundary helper can convert place-success to ordinary expression result: prove `type_place_expr env e = SOME vt /\ place_expr_result_typed env tv vt ==> expr_result_typed env e tv` using `type_place_expr_annotation_ok_stmt`, `place_expr_result_typed_def`, `expr_result_typed_def`, `expr_runtime_typed_def`, and cases on `vt`. The HashMapT case is valid: annotation forces `expr_type e = NoneT`, `evaluate_type ... NoneT = SOME NoneTV`, and `toplevel_value_typed (HashMapRef ...) NoneTV`; do not rule out HashMapRef here.
-works_when: Use in Expr_Subscript place-base proof paths when a downstream obligation wants ordinary `expr_result_typed` for a place expression. It does not by itself solve the Subscript evaluator tail; HashMapRef/storage evaluation still needs place-specific handling.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38530_t001
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38532_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6726-6750
-
-## L1232 scope='C2.1.1.13' tags=Subscript,place_base,helper,HashMapRef,ArrayRef,evaluator_tail
-shape: Ordinary `well_typed_expr env (Subscript ...)` branch has place-base disjunct with `type_place_expr env e = SOME vt`, `place_expr_result_typed env x vt`, index success, and exact evaluator tail.
-pattern: Factor the place-base evaluator tail into a local helper rather than forcing the old ordinary-base proof. A useful helper assumes invariants, `well_formed_type`, `type_place_expr env e = SOME vt`, `subscript_vtype vt (expr_type e') = SOME (Type v9)`, base `place_expr_result_typed`, index `expr_result_typed`, successful `get_Value`, and the exact Subscript `do` tail, then proves state/env/account preservation, no TypeError, and ordinary `expr_result_typed` for `Subscript`. Case split on `vt`: Type(ArrayT) reuses ordinary `evaluate_subscript_typed_stmt`/storage-tail lemmas; HashMapT(Type) unfolds `evaluate_subscript_def` with a local `check_array_bounds_hashmap_stmt`.
-works_when: Use inside `Resume eval_all_type_sound_mutual[Expr_Subscript]` for the place-base static disjunct of the ordinary half, and likely also for the later real place projection. The helper was accepted by holbuild before the unbuilt call-site edit.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38605_t001
-- episode:E0675
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6752-6864
-
-## L1233 scope='C2.1.1.13' tags=check_array_bounds,HashMapRef,local_import,boundary
-shape: Need `check_array_bounds cx (HashMapRef ...) kv st = (INL (), st)` in `vyperTypeStmtSoundnessScript.sml`, but imported `check_array_bounds_hashmap` is not declared.
-pattern: Add a local theorem `check_array_bounds_hashmap_stmt[local]` proved by `Cases_on kv >> rw[check_array_bounds_def, return_def]` rather than importing a new theory or unfolding bounds repeatedly in the Resume. Use it in small helpers where HashMapRef bounds are a no-op.
-works_when: Applies in `vyperTypeStmtSoundnessScript.sml` subscript place-base helper proofs involving HashMapRef. Avoids dependency churn and broad `check_array_bounds_def` unfolding in the mutual proof body.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38605_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6752-6757
-
 ## L1234 scope='C2.1.1.13' tags=Subscript,well_typed_expr,static_disjunct,Resume,proof_order
 shape: `well_typed_expr env (Subscript v9 e e')` inside the mutual Resume exposes both ordinary-base and place-base static typing alternatives.
 pattern: Split the Subscript static typing disjunction before evaluator-tail case analysis. The ordinary-base branch may use ordinary `expr_result_typed` facts and old array/value proof; the place-base branch must preserve `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME ...`, use the base place IH, and then call a tail helper. A shared `FIRST [place helper; old ordinary tail]` after `get_Value` is the wrong abstraction.
@@ -673,3 +638,31 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m38687_t001
 - episode:E0677
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6759-6865
+
+## L1236 scope='C2.1.1.13' tags=holbuild,branch-suffix,Resume,placeholder,cleanup
+shape: A temporary Resume skeleton with branch-specific `>-` suffixes fails before proof search with `branch suffix without active branch`.
+pattern: When normalizing a broken Resume only to create a safe editing placeholder, prefer the simplest single-flow skeleton (`rpt gen_tac >> strip_tac >> conj_tac >> rpt strip_tac >> cheat`) over a partially structured `reverse conj_tac >- (...) >> ...` placeholder. Save branch structure for the real proof component; holbuild instrumentation can reject suffixes in placeholder contexts.
+works_when: Use only for source-cleanup placeholders under a planned component where local cheats are explicitly authorized; do not use as a proof strategy for terminal components.
+evidence:
+- episode:E0678
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38698_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38699_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38700_t001
+
+## L1237 scope='C2.1.1.13' tags=holbuild,checkpoint,performance,rw,IfExp,Subscript,cold-build
+shape: A checkpoint-clean `vyperTypeStmtSoundnessTheory` rebuild later fails before the active Subscript helper at an earlier theorem whose proof starts with broad `rw[]` over a mutual-IH implication.
+pattern: Treat checkpoint-discard cold-build failures as real source proof-performance obligations. If an earlier helper times out on broad `rw[]`, get PLAN coverage/authorization and replace only the broad opener with controlled stripping/targeted simplification before continuing the semantic helper. Do not rely on stale checkpoints to validate newly inserted boundary lemmas.
+works_when: Use when holbuild invalidates checkpoints after local source edits and exposes an earlier timeout unrelated to the active semantic proof, especially in mutual evaluator soundness scripts.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38720_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38724_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6228-6263
+
+## L1238 scope='C2.1.1.13' tags=Subscript,place_expr_result_typed,HashMapT,evaluate_subscript,boundary_helper
+shape: Subscript place-projection helper with base `HashMapT kt result_vt` and conclusion `place_expr_result_typed env tv result_vt`.
+pattern: In the HashMap place case, derive the base annotation with `type_place_expr_annotation_ok_stmt`, then split on `result_vt`. If `result_vt = Type ty`, unfold `evaluate_subscript_def` to a storage-read tail and prove the returned `Value` with `read_storage_slot_success_type` plus `place_expr_result_typed_def`. If `result_vt = HashMapT kt vt`, the evaluator returns a `HashMapRef` directly; simplify the local do-tail with `ignore_bind_def`, `check_array_bounds_hashmap_stmt`, and `evaluate_subscript_def`, then finish by `place_expr_result_typed_def`.
+works_when: Use for Expr_Subscript proofs where the static fact is `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME result_vt`, and the consumer wants place typing of the successful result.
+evidence:
+- episode:E0680
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38784_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6868-6979

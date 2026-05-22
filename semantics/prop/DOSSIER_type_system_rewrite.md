@@ -83,7 +83,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1.1.11 | proved |  | E0671 | Review C2.1.1.11 closure with strategist, then begin the next oracle-scheduled carried-evidence component (expected C2.1.1.12). |
 | C2.1.1.12 | proved |  | E0672 | Review C2.1.1.12 closure with strategist, then begin C2.1.1.13 for Expr_Subscript source repair. |
 | C2.1.1.13 | stuck | risk_mismatch | E0677 | Call plan_oracle review for C2.1.1.13. Request a replacement subtree or guidance that explicitly splits `well_typed_expr_def` Subscript ordinary-base vs place-base branches before evaluator-tail analysis, or introduces an exact adapter lemma whose conclusion matches the live residual goal so the Resume no longer relies on `FIRST` in a shared tail. |
-| C2.1.1.13.1 | proved |  | E0678 |  |
+| C2.1.1.13.1 | proved |  | E0679 | Review closure, then begin flattened C2.1.1.13.2 to repair IfExp cold-build timeout and prove the Subscript projection helper. |
+| C2.1.1.13.2 | proved |  | E0680 |  |
 | C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
 | C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
 | C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
@@ -2348,25 +2349,45 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0678`
+- latest episode: `E0679`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 8 steps, 11 tools, 3 holbuild, 777,603 tok (773,006 in, 4,597 out, 711,680 cached), 147.5s, $0.80038000
+- actual effort: 1 sessions, 1 steps, 130,966 tok (130,512 in, 454 out, 125,440 cached), 10.0s, $0.10170000
+- next: Review closure, then begin flattened C2.1.1.13.2 to repair IfExp cold-build timeout and prove the Subscript projection helper.
 
 ### Attempts / Evidence
 
 - `E0678` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 11 tools, 3 holbuild, 777,603 tok (773,006 in, 4,597 out, 711,680 cached), 147.5s, $0.80038000)
   - Replace the partial Expr_Subscript proof with a minimal documented skeleton using local cheats for the two planned follow-up halves; no edits to later Expr_Attribute branches. -> Initial cleanup attempt with structured reverse conj branch hit holbuild branch-suffix instrumentation, so it was simplified to a robust `conj_tac >> rpt strip_tac >> cheat` placeholder. (`TO_type_system_rewrite-20260522T073012Z_m38697_t001`, `TO_type_system_rewrite-20260522T073012Z_m38698_t001`, `TO_type_system_rewrite-20260522T073012Z_m38699_t001`)
   - Build `vyperTypeStmtSoundnessTheory` after cleanup. -> Build succeeds, confirming the source is normalized and accepted through Expr_Subscript with the planned local placeholders. (`TO_type_system_rewrite-20260522T073012Z_m38700_t001`)
-
-### Ruled Out
-
-- The previous shared `FIRST [expr_subscript_place_tail_sound_stmt; ordinary tail]` strategy is removed and should not be retried.
+- `E0679` (proved, , actual effort: 1 sessions, 1 steps, 130,966 tok (130,512 in, 454 out, 125,440 cached), 10.0s, $0.10170000)
+  - Carry forward already-reviewed normalization cleanup for Expr_Subscript placeholder after subtree rebase; no new edits under this carried component. -> Existing E0678 evidence proves the cleanup was accepted and built; current rebase only made this leaf scheduled again as carried-forward dependency. (`TO_type_system_rewrite-20260522T073012Z_m38700_t001`, `TO_type_system_rewrite-20260522T073012Z_m38701_t001`, `TO_type_system_rewrite-20260522T073012Z_m38701_t002`)
 
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m38700_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m38701_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m38701_t002` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0680`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 51 steps, 53 tools, 18 holbuild, 4,832,847 tok (4,819,271 in, 13,576 out, 4,723,200 cached), 582.4s, $3.24923500
+
+### Attempts / Evidence
+
+- `E0680` (proved, , actual effort: 1 sessions, 3 msgs, 51 steps, 53 tools, 18 holbuild, 4,832,847 tok (4,819,271 in, 13,576 out, 4,723,200 cached), 582.4s, $3.24923500)
+  - Minimal IfExp build-gate refactor: `strip_tac` plus `qpat_x_assum` to instantiate the branch IH, preserving the existing proof tail. -> `holbuild` passed through `ifexp_branch_from_cond_ih` after the edit. (`TO_type_system_rewrite-20260522T073012Z_m38737_t001`)
+  - Proved `expr_subscript_place_projection_tail_sound_stmt` by local `base_vt` split; Type/Array branch uses `evaluate_subscript_typed_stmt`/error helpers and storage read typing; HashMap branch splits result vtype and simplifies local evaluator tail with `check_array_bounds_hashmap_stmt`/`evaluate_subscript_def`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` built successfully. (`TO_type_system_rewrite-20260522T073012Z_m38784_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m38737_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m38784_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.1.2
 

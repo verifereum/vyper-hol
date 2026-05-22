@@ -213,30 +213,32 @@ Import/use the appropriate conjunct of `assign_target_sound_mutual`; instantiate
 #### Not to try
 Do not duplicate target evaluator case analysis in these wrappers. Do not keep old weaker wrappers with cheats if their callers actually need the stronger side conditions.
 
-### C2: Statement/expression soundness repair path
+### C2: Statement/type soundness fresh-stack obligations
 - Kind: `proof`
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Risk is inherited from the refined Expr_Subscript child, now decomposed into standard local helpers/refactors. No broader C2 strategy is changed by this review.
+- Rationale: This is an ancestor context component included only to satisfy dotted-component structure; the local update does not change the overall C2 strategy.
 - Required for completion: yes
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: C2 prior structured plan
+- Carries progress/evidence from: existing C2 plan
 
 #### Progress note
-Included only to satisfy dotted-parent structure for the local C2.1.1.13 merge; existing C2 sibling progress and obligations are preserved.
+Ancestor carried forward unchanged; included only because the PLAN update introduces dotted descendants below C2.1.1.13.2.
 
 #### Summary
-Parent carried forward for the local Expr_Subscript repair. This review changes only the C2.1.1.13 subtree and does not invalidate sibling/cousin work.
+- Ancestor context for the statement-soundness subtree.
+- No strategy change is made at this level.
+- The only new work is the local Expr_Subscript build-gate repair below C2.1.1.13.2.
 
 #### Argument
-The overall statement/expression soundness strategy remains the joint mutual evaluator invariant. The current repair is local to the Expr_Subscript branch: preserve the two-output invariant (ordinary expression result and place projection) and avoid duplicating evaluator inductions.
+The broader statement-soundness proof continues to follow the existing joint evaluator invariant and case-by-case Resume structure. This update does not change any statement-level semantic invariant.
 
 #### Definition design
-No new global definitions are introduced at C2. Local boundary helpers remain in `vyperTypeStmtSoundnessScript.sml` and expose exact consumer-facing conclusions for evaluator-tail cases.
+No definition interface changes are authorized at this ancestor level. The update only adds a proof-performance boundary needed for reliable holbuild before the Subscript helper.
 
 #### Code structure
-No file-organization change at this level. Work remains in the fresh stack and, for this subtree, in `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
+Keep work in `semantics/prop/vyperTypeStmtSoundnessScript.sml`; no file split or library extraction is introduced by this update.
 
 ### C2.0: Carry forward completed TopLevelName and assignment-statement repairs
 - Kind: `carried_evidence`
@@ -266,29 +268,31 @@ Begin this component only if the harness requires an executable carry-forward le
 #### Not to try
 Do not retry old C2.1a layout/scanner probes or tuple/list assignment audits.
 
-### C2.1: Statement soundness mutual proof repairs
+### C2.1: Evaluator statement soundness mutual proof repairs
 - Kind: `proof`
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Risk is inherited from the refined C2.1.1.13 local proof refactor; no C2.1-level architecture is being changed.
+- Rationale: Ancestor context carried forward unchanged; the local timeout repair is within the existing statement soundness script and does not affect sibling proof architecture.
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: C2.1 prior structured plan
+- Carries progress/evidence from: existing C2.1 plan
 
 #### Progress note
-Included only as an explicit dotted parent. Omitted descendants and existing progress are preserved by merge_subtree.
+No prior progress under C2.1 is invalidated. This ancestor is included only to provide explicit parentage for the C2.1.1.13.2 replacement.
 
 #### Summary
-Parent carried forward for a local Expr_Subscript branch repair. The mutual proof architecture remains the strongest joint invariant with ordinary and place-expression projections.
+- Ancestor for evaluator mutual-proof case repairs.
+- Existing joint-invariant strategy remains unchanged.
+- The update only authorizes a local proof refactor and the original Subscript helper proof.
 
 #### Argument
-The mutual evaluator proof proves state/env/account preservation, no-TypeError, and typed successful results following evaluator recursion. Expr_Subscript is one branch of this mutual proof and must separately handle its ordinary expression and place-projection conjuncts.
+The evaluator mutual proof should continue to avoid duplicate inductions and prove the all-result joint invariant through local case lemmas. The IfExp timeout repair is purely a robustification of an already-local helper proof.
 
 #### Definition design
-Branch-local helper statements should match the live mutual proof goals and hide evaluator-tail unfolding. Helpers should be placed near the relevant Resume branch and not exported as new public API.
+No new definitions or theorem statements are introduced at this ancestor beyond the planned Subscript projection helper in the child. Failure signs remain broad simplification over mutual-IH contexts.
 
 #### Code structure
-Keep edits in `vyperTypeStmtSoundnessScript.sml`. Do not move work into old retired theories or unrelated statement/builtin/call files.
+All edits remain local to `vyperTypeStmtSoundnessScript.sml`. Do not move IfExp or Subscript helpers between theories for this update.
 
 ### C2.1.0: Carry forward completed Targets_cons timeout refactor
 - Kind: `carried_evidence`
@@ -314,33 +318,31 @@ If forced to act on this component, audit that `vyperTypeStmtSoundnessTheory` ha
 #### Not to try
 Do not edit the old Targets_cons proof while working on Expr_Subscript.
 
-### C2.1.1: Expression/statement Resume branch repair placeholders plus current Expr_Subscript frontier
+### C2.1.1: Expression cases in eval_all_type_sound_mutual
 - Kind: `proof`
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Previously blocked only because C2.1.1.13 was risk 3. That child is now decomposed into risk-1/2 work with an exact proof interface; completed sibling expression repairs remain valid.
-- Progress transition: `refinement`
-- Carries progress/evidence from: C2.1.1 prior structured plan, E0677
-- Invalidates prior progress/evidence: C2.1.1 inherited blocked status from old C2.1.1.13 leaf
+- Rationale: Ancestor carried forward unchanged; the local repair is within the expression-case portion and does not alter the expression-case decomposition.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.1.1 plan
 
 #### Progress note
-Parent risk is lowered because the stuck Expr_Subscript leaf has been replaced by a decomposed local repair strategy. Omitted done children such as C2.1.1.8-.12 are preserved.
+No expression-case strategy is replaced. The update adds a prerequisite child under the active Subscript component to keep cold holbuild reliable.
 
 #### Summary
-- Carries forward completed expression Resume repairs.
-- Refines the Expr_Subscript frontier to split static ordinary/place typing alternatives explicitly.
-- No sibling branches are reopened by E0677.
-- Work remains scoped to the current Expr_Subscript branch until holbuild advances past it.
+- Ancestor for expression evaluator cases.
+- The IfExp proof-performance issue is a prerequisite build gate, not a new semantic case obligation.
+- Expr_Subscript remains decomposed into cleanup, projection helper, ordinary half, and place-projection half.
 
 #### Argument
-Expression Resume branches prove the two conjuncts supplied by the mutual theorem: ordinary `well_typed_expr` soundness and place projection soundness. Prior branches showed that splitting ordinary/place projections early produces stable proof obligations. Expr_Subscript needs the same discipline plus a second split inside ordinary `well_typed_expr`, because its static typing admits either an ordinary base expression or a base place expression.
+Expression cases are discharged by preserving branch-specific static facts until they match evaluator-tail boundary lemmas. Broad rewrites over the mutual proof context are avoided because they lose structure and can time out.
 
 #### Definition design
-Use local boundary helpers to consume exact evaluator-tail equalities after base/index evaluation. A helper is successful when the Resume can call it by `irule`/`drule` with named facts, not with `FIRST` fallback or large quoted assumptions.
+Boundary lemmas should expose exactly the facts needed by each expression case: ordinary expression results use `expr_result_typed`, while place/projection branches use `place_expr_result_typed`. The IfExp repair must not introduce a new interface.
 
 #### Code structure
-All C2.1.1.13 edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near the existing Subscript helpers and Resume. Completed sibling branch code is not to be touched.
+Keep local helper theorems near their consumer cases in `vyperTypeStmtSoundnessScript.sml`. The IfExp refactor is an in-place proof edit around `ifexp_branch_from_cond_ih`; the Subscript helper remains immediately before the Expr_Subscript Resume.
 
 ### C2.1.1.0: Carry forward completed structural-expression and statement-branch repairs
 - Kind: `carried_evidence`
@@ -444,91 +446,98 @@ Do not reopen StructLit unless holbuild regresses before Subscript.
 ### C2.1.1.13: Repair Expr_Subscript by static-disjunct split and exact place-tail helper
 - Kind: `proof_refactor`
 - Risk: 2
-- Work priority: 0
+- Work priority: 13
 - Work units: 0
-- Rationale: The semantic shape is now understood from E0677: the proof must split the Subscript static typing disjunction before evaluator-tail case analysis, and the separate `type_place_expr` projection needs its own helper. No source-level theorem statement is suspected false; risk is standard proof refactor once the branch interface is made explicit.
-- Supersedes: C2.1.1.13@E0677-stuck-leaf
+- Rationale: The subtree has a validated semantic decomposition and the only new issue is proof/build robustness from an earlier helper timeout. Flattening removes over-decomposition without increasing semantic uncertainty; all remaining leaves are localized proof edits in one script.
+- Supersedes: C2.1.1.13 previous tactical subtree, C2.1.1.13.2.1, C2.1.1.13.2.2
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0675, E0677, TO_type_system_rewrite-20260522T073012Z_m38663_t001, TO_type_system_rewrite-20260522T073012Z_m38683_t001, TO_type_system_rewrite-20260522T073012Z_m38684_t001
-- Invalidates prior progress/evidence: C2.1.1.13 previous single-leaf shared-tail strategy
+- Carries progress/evidence from: E0678, existing C2.1.1.13 strategy, C2.1.1.13.1 completed cleanup
+- Invalidates prior progress/evidence: old tactical children C2.1.1.13.2.1, old tactical child C2.1.1.13.2.2 as a standalone child
 
 #### Progress note
-Prior evidence is carried as diagnosis and as proof that the existing local helper `expr_subscript_place_tail_sound_stmt` is accepted. The previous single-leaf plan is invalidated only in its shared-tail/`FIRST` wiring strategy; completed helper work and the obligation itself remain current.
+This replacement rebases the Expr_Subscript subtree after repeated tactical augmentations. The accepted cleanup remains valid; the two tactical children under C2.1.1.13.2 are collapsed into one beginable leaf so the executor can make the minimal IfExp performance edit and prove the Subscript projection helper in the same local build episode.
 
 #### Summary
-- Replace the brittle shared success-tail proof in `Resume eval_all_type_sound_mutual[Expr_Subscript]` with an explicit split of the static Subscript typing alternatives.
-- Ordinary-base static branch uses the old array/value proof path and may assume `well_typed_expr env e` and `subscript_type_ok (expr_type e) (expr_type e') v9`.
-- Place-base static branch uses the base expression place IH to obtain `place_expr_result_typed env x vt`, then calls the already built `expr_subscript_place_tail_sound_stmt`.
-- The separate place-projection half (`type_place_expr env (Subscript ...) = SOME ...`) needs a new exact helper whose conclusion is `place_expr_result_typed` for the subscript result vtype.
-- Do not continue into Expr_Attribute or later cheats under this component.
+- Rebase and flatten the active Expr_Subscript repair subtree.
+- Keep the accepted normalization cleanup as carried-forward evidence.
+- Collapse the IfExp timeout refactor and Subscript projection helper into one beginable boundary-lemma leaf.
+- Preserve the planned order: cleanup evidence, helper/build gate, ordinary Subscript half, place-projection Subscript half.
+- Do not broaden to Expr_Attribute, assignment cases, or builtin/call obligations in this subtree.
 
 #### Description
-This subtree repairs only `semantics/prop/vyperTypeStmtSoundnessScript.sml` around the local Subscript helpers and `Resume eval_all_type_sound_mutual[Expr_Subscript]`. The current source is partial and may not build; the first child must normalize that proof area before the semantic refactor. The intended final state is that holbuild advances past Expr_Subscript and reaches the next visible Resume cheat/obligation.
+This parent replaces the over-decomposed local subtree and is not itself a beginable work item. It authorizes exactly the local proof infrastructure needed to continue the Expr_Subscript case after checkpoint invalidation exposed an earlier proof-performance problem.
 
 #### Approach
-Use proof order, not clever automation, as the main repair. Unfold `well_typed_expr_def` for `Subscript` once, keep the resulting ordinary/place disjunction as an explicit split, and run different evaluator-tail scripts in the two branches. For the reverse conjunct, unfold `type_place_expr` for `Subscript` once to expose the base place vtype, subscript result vtype, and `vtype_annotation_ok`; then call the exact place-projection helper after evaluating base/index/get_Value.
+Use this subtree only to complete the Subscript-local proof architecture. The executor should begin leaves, not this parent. If the combined helper/build-gate leaf still needs additional semantic facts, escalate with the exact helper subgoal rather than adding tactical descendants.
 
 #### Not to try
-Do not use `FIRST [irule expr_subscript_place_tail_sound_stmt; old ordinary tail]` in a shared tail: E0677 shows it leaves residual goals and obscures which static disjunct is active. Do not rely on broad `gvs[well_typed_expr_def,type_place_expr_def,AllCaseEqs()]` over the whole mutual Resume context; it times out or strips the needed facts. Do not prove `~is_HashMapRef x` in the place-base disjunct; hashmap/storage references are exactly the intended cases there.
+Do not add further descendants under C2.1.1.13.2 for individual tactic steps. Do not reintroduce the old shared `FIRST [irule expr_subscript_place_tail_sound_stmt; ...]` success tail, because it loses the active static disjunct. Do not use global `gvs[well_typed_expr_def,type_place_expr_def,AllCaseEqs()]` over the full mutual Resume context.
 
 #### Argument
-`well_typed_expr env (Subscript v9 e e')` has two alternatives. In the ordinary-base alternative, `e` is a well-typed value expression and `subscript_type_ok (expr_type e) (expr_type e') v9`; the existing evaluator argument is valid because the base result is an ordinary expression result, not a hashmap place. In the place-base alternative, `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME (Type v9)`; the base IH must be used in its place projection form to get `place_expr_result_typed env base_tv base_vt`, after which `expr_subscript_place_tail_sound_stmt` proves invariants, no-TypeError, and expression-result typing for the Subscript.
-
-The reverse conjunct is different: assuming `type_place_expr env (Subscript v9 e e') = SOME result_vt`, unfolding `type_place_expr` gives `well_typed_expr env e'`, a base place vtype `base_vt`, `subscript_vtype base_vt (expr_type e') = SOME result_vt`, and `vtype_annotation_ok result_vt v9`. Its desired conclusion is `place_expr_result_typed env result result_vt`, not merely `expr_result_typed`; hence it should not reuse the expression-half helper blindly. A local helper over the exact evaluator tail, parameterized by `result_vt`, handles both `Type ty` and nested `HashMapT` results by case analysis on `base_vt`/`result_vt` and the definitions of `evaluate_subscript` and `place_expr_result_typed`.
+Expr_Subscript must be proved by preserving the static disjunction between ordinary expression typing and place/projection typing until the evaluator tail is discharged. The ordinary successful result can use `expr_result_typed`; the place/projection successful result must use `place_expr_result_typed`, especially for nested storage/hashmap references where ordinary expression typing is the wrong interface. The earlier `ifexp_branch_from_cond_ih` timeout is not a semantic dependency of Subscript, but cold `holbuild` must pass it before the local helper can be validated, so it is included in the same shallow build-gate leaf rather than as another durable semantic child. Once the projection-tail helper is proved, the two Resume halves should only wire branch facts and exact evaluator-tail equalities into the helper, avoiding repeated unfolding in consumers.
 
 #### Definition design
-Keep `expr_subscript_place_tail_sound_stmt` as the boundary for the expression half's place-base disjunct where the subscript vtype is `Type v9` and the consumer needs `expr_result_typed`. Add one new local boundary helper for the place projection with conclusion `case res of INL tv => place_expr_result_typed env tv result_vt | INR _ => T`; this avoids unfolding `evaluate_subscript`, `check_array_bounds`, storage reads, and hashmap slot computation in the mutual Resume. Failure signs: if the consumer must manually quote the entire tail equality or build `MATCH_MP` plumbing, strengthen the helper statement so its assumptions are exactly the live facts after `get_Value` succeeds.
+The boundary interface to provide is `expr_subscript_place_projection_tail_sound_stmt`. It consumes the base place typing fact `type_place_expr env e = SOME base_vt`, the projection fact `subscript_vtype base_vt (expr_type e') = SOME result_vt`, annotation compatibility `vtype_annotation_ok result_vt v9`, base/index runtime typing facts, successful `get_Value`, and the exact monadic evaluator-tail equality. It returns state/env/account preservation, `no_type_error_result`, and on successful result `place_expr_result_typed env tv result_vt`. This helper intentionally hides `evaluate_subscript_def`, `check_array_bounds`, storage-read cases, and nested HashMap/place cases from the mutual Resume proof. Failure signs are broad simplification over the whole mutual context, quoted copies of the monadic tail, or attempts to replace `place_expr_result_typed` with `expr_result_typed`.
 
 #### Code structure
-All work stays in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place the new helper next to `expr_subscript_place_tail_sound_stmt`, after `check_array_bounds_hashmap_stmt` if it uses that fact. Then rewrite only the `Resume eval_all_type_sound_mutual[Expr_Subscript]` proof around lines ~6867-6970. Do not edit Expr_Attribute/later Resume cheats in this component.
+All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. First make the local proof of `ifexp_branch_from_cond_ih` rebuild robust in place near lines 6228-6263 by replacing the initial broad `rw[]` with controlled introduction/simplification. Then prove `expr_subscript_place_projection_tail_sound_stmt` immediately after `expr_subscript_place_tail_sound_stmt` and before the `Expr_Subscript` Resume. Keep evaluator-tail case analysis inside this helper. Leave the normalized `Expr_Subscript` placeholder for later leaves; do not edit Expr_Attribute or later cases here.
 
 ### C2.1.1.13.1: Normalize the partial Expr_Subscript proof area
 - Kind: `source_cleanup`
 - Risk: 1
 - Work priority: 0
-- Work units: 2
-- Rationale: Mechanical cleanup of a known-bad proof edit; it does not require new semantic facts.
-- Carries progress/evidence from: E0677
+- Work units: 0
+- Rationale: This cleanup was already completed and reviewed in E0678; replacement carries it forward so downstream dependencies remain explicit without redoing work.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: E0678, commit 21f9cd3ea
 
 #### Progress note
-Uses E0677 only to identify the bad source region and the shared-tail wiring that must be removed.
+The previous normalized placeholder and removal of the bad shared tail are preserved. No executor work is intended for this carried-forward leaf.
 
 #### Summary
-- Restore the `Expr_Subscript` Resume to a readable editing shape before adding new proof structure.
-- Remove or quarantine the unbuilt `FIRST [expr_subscript_place_tail_sound_stmt; old ordinary tail]` shared-tail attempt.
-- Keep the already proved local helpers, especially `expr_subscript_place_tail_sound_stmt`, `check_array_bounds_hashmap_stmt`, and annotation/result adapters.
-- Leave later `Expr_Attribute` and following cheats untouched.
+- Carried-forward completed cleanup.
+- The shared brittle Expr_Subscript tail was removed.
+- The current source has a simple placeholder Resume that later leaves will fill.
+- This leaf remains as an explicit dependency for the helper and Resume proof leaves.
 
 #### Description
-Edit only the source range around `Resume eval_all_type_sound_mutual[Expr_Subscript]`. It is acceptable to temporarily use a local `cheat` only inside the active Expr_Subscript branch while reshaping the proof skeleton, but do not leave new unrelated cheats or move the cursor into later branches.
+No new edits are planned here. The purpose of retaining this leaf in the replacement subtree is to preserve the proof-history dependency and prevent downstream work from assuming the old shared-tail proof structure.
 
 #### Approach
-Start from the current partial source and delete the shared success-tail `FIRST` block if it continues to drive proof search into wrong branches. Re-establish the prefix through unfolding `well_typed_expr` and `evaluate` with named `base_res`, `st1`, `idx_res`, `st2`, `value_res`, `st3`, but do not append broad simplification after `Cases_on`; handle branches explicitly in later children.
+Treat E0678 as the closure evidence. If the harness unexpectedly offers this leaf as beginable, query/review rather than editing; the source cleanup should already be present.
 
 #### Not to try
-Do not try to make the current `FIRST` version build by adding more `gvs` or positional branch suffixes. Do not remove the local helper definitions that were already accepted by holbuild.
+Do not resurrect any of the removed shared-tail tactic code. Do not perform additional formatting or broad cleanup in this leaf.
 
-### C2.1.1.13.2: Add exact helper for Subscript place-projection evaluator tail
+### C2.1.1.13.2: Make cold build pass and prove the Subscript place-projection tail helper
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 10
 - Work units: 5
-- Rationale: The helper proof is by direct case analysis on the vtype shape and existing tail facts; it is localized and follows definitions already used by the accepted expression-tail helper.
+- Rationale: This is a localized proof-performance refactor plus a local boundary lemma following the already-proved `expr_subscript_place_tail_sound_stmt` structure. It has no definition changes and no cross-theory semantic uncertainty.
 - Dependencies: C2.1.1.13.1
 - Checkpoint: yes
-- Carries progress/evidence from: E0675
+- Supersedes: C2.1.1.13.2.1, C2.1.1.13.2.2
+- Progress transition: `refinement`
+- Carries progress/evidence from: pending source insertion of expr_subscript_place_projection_tail_sound_stmt with cheat, TO_type_system_rewrite-20260522T073012Z_m38723_t001
+- Invalidates prior progress/evidence: separate tactical-child split under C2.1.1.13.2
 
 #### Progress note
-Builds on the accepted `expr_subscript_place_tail_sound_stmt` design but changes the consumer-facing conclusion to `place_expr_result_typed`, which E0677 showed is missing for the reverse conjunct.
+The prior two-child split is collapsed. The same episode may edit the earlier IfExp proof enough for cold `holbuild` to reach this area, then prove the projection-tail helper. This is one beginable leaf because the IfExp edit is only a strict build prerequisite, not a separate durable obligation.
 
 #### Summary
-- Prove a local helper for the evaluator tail of a place-typed Subscript.
-- The helper should consume `type_place_expr env e = SOME base_vt`, `subscript_vtype base_vt (expr_type e') = SOME result_vt`, `vtype_annotation_ok result_vt v9`, base `place_expr_result_typed`, index `expr_result_typed`, successful `get_Value`, and the exact tail equality.
-- It should conclude state/env/account preservation, `no_type_error_result res`, and `place_expr_result_typed env tv result_vt` for successful results.
-- This helper is the proof boundary for the reverse conjunct of the mutual theorem.
+- First remove the cold-build timeout in `ifexp_branch_from_cond_ih` by replacing the initial broad `rw[]` with controlled proof setup.
+- Then prove `expr_subscript_place_projection_tail_sound_stmt` where it is already inserted with a temporary cheat.
+- The helper conclusion must be `place_expr_result_typed env tv result_vt` for successful results.
+- Prove by adapting `expr_subscript_place_tail_sound_stmt`, splitting on `base_vt` and keeping evaluator-tail unfolding local.
+- Verify with `holbuild build vyperTypeStmtSoundnessTheory` and checkpoint the result.
+
+#### Description
+This leaf is the active repair gate. The source currently contains the intended helper statement with a cheat, but cold build fails earlier at `ifexp_branch_from_cond_ih`. The executor is authorized to make the minimal local IfExp proof refactor needed for holbuild, then replace the helper cheat with a proof. No mutual Resume work belongs in this leaf.
 
 #### Statement
-Suggested statement shape (names may be adjusted to current source variables):
+Expected local theorem shape:
+
 ```sml
 Theorem expr_subscript_place_projection_tail_sound_stmt[local]:
   !cx env e e' v9 base_vt result_vt base_tv idx_tv idx st res st'.
@@ -557,77 +566,86 @@ Theorem expr_subscript_place_projection_tail_sound_stmt[local]:
     (case res of INL tv => place_expr_result_typed env tv result_vt | INR _ => T)
 ```
 
+Do not change this statement unless the current source has already type-corrected it with equivalent binder names or harmless formatting differences.
+
 #### Approach
-Prove by cases on `base_vt`, then on the relevant contained type/value cases exposed by `subscript_vtype_def` and `place_expr_result_typed_def`. For `result_vt = Type ty`, reuse the same storage-read reasoning as `expr_subscript_place_tail_sound_stmt` or call it after deriving `ty = v9` from `vtype_annotation_ok`; then convert successful facts to `place_expr_result_typed` if convenient. For `result_vt = HashMapT kt vt`, the base must be a `HashMapRef`; unfold `evaluate_subscript_def` and `check_array_bounds_hashmap_stmt` to show the result is the nested `HashMapRef` and satisfy `place_expr_result_typed_def` directly.
+For `ifexp_branch_from_cond_ih`, avoid the timeout-causing `rw[]`; introduce assumptions with `rpt gen_tac`, `strip_tac`/targeted simplification only as needed, then reuse the existing `first_x_assum ...`, case split on `res`, and `expr_result_typed_IfExp_branch` tail. For the Subscript helper, copy the structure of `expr_subscript_place_tail_sound_stmt`: derive `env.type_defs = get_tenv cx`, split on `base_vt`, use `vtype_annotation_ok_def`, `place_expr_result_typed_def`, `subscript_vtype_def`, and unfold the monadic tail only after fixing the branch. In the Type/Array branch, use `evaluate_subscript_typed_stmt`, `evaluate_subscript_success_not_HashMapRef_stmt`, `evaluate_subscript_error_not_TypeError_stmt`, and `check_array_bounds_error_not_TypeError_stmt` as in the existing helper, but finish successful values with `place_expr_result_typed_def`. In the HashMap branch, simplify through `check_array_bounds_hashmap_stmt` and `evaluate_subscript_def`, then use `read_storage_slot_state`, `read_storage_slot_success_type`, and `read_storage_slot_error`; the successful returned `Value` should satisfy `place_expr_result_typed` for `result_vt` after the `subscript_vtype`/annotation simplification.
 
 #### Not to try
-Do not make the mutual Resume unfold `evaluate_subscript_def` for nested hashmaps; keep that inside this helper. Do not force the helper to conclude `expr_result_typed` for a `HashMapT` result, because the reverse conjunct wants `place_expr_result_typed` and hashmap place expressions are not ordinary expression results.
+Do not prove this by unfolding the future `Expr_Subscript` Resume context; stay inside the local helper. Do not use quoted ASSUME/MATCH_MP plumbing for the monadic tail—if that seems necessary, the branch has not been simplified locally enough. Do not weaken the helper to return `expr_result_typed`; that fails for nested place/hashmap projections and will not support C2.1.1.13.4. Do not start C2.1.1.13.3 or C2.1.1.13.4 until this leaf builds cold.
 
 ### C2.1.1.13.3: Rewrite the ordinary expression half with an explicit static disjunction split
 - Kind: `proof_refactor`
 - Risk: 2
 - Work priority: 20
 - Work units: 5
-- Rationale: Once the branch facts are preserved, the old ordinary proof and the accepted place-tail helper match their respective branches directly.
-- Dependencies: C2.1.1.13.1
-- Carries progress/evidence from: E0675, E0677
+- Rationale: After the helper gate, this is standard mutual-proof wiring: preserve the ordinary static facts and apply the existing ordinary/place-tail helpers to exact evaluator tails.
+- Dependencies: C2.1.1.13.2
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.1.1.13.3 plan
 
 #### Progress note
-Carries the existing helper proof and the E0677 diagnosis into an explicit proof-order repair.
+This leaf is carried forward from the previous subtree, with dependency updated to the flattened C2.1.1.13.2 leaf.
 
 #### Summary
-- In the first conjunct of `eval_all_type_sound_mutual[Expr_Subscript]`, split the `well_typed_expr` Subscript ordinary/place alternatives before analyzing the evaluator tail deeply.
-- Ordinary-base branch: use the base expression ordinary IH and existing `evaluate_subscript_typed_stmt` / no-TypeError helpers.
-- Place-base branch: instantiate the base expression place IH with the exposed `base_vt`; after index evaluation and `get_Value`, call `expr_subscript_place_tail_sound_stmt`.
-- Avoid shared fallback automation across these branches.
+- Fill the first conjunct/ordinary expression side of the normalized `Expr_Subscript` Resume.
+- Split the static alternatives explicitly instead of using a shared tail.
+- Use `expr_subscript_place_tail_sound_stmt` only where its `expr_result_typed` conclusion matches the active branch.
+- Keep proof-local simplification targeted to the Subscript case.
+
+#### Description
+This leaf repairs the ordinary expression result conjunct of `eval_all_type_sound_mutual[Expr_Subscript]` after the projection helper has been established. It should not reprove evaluator-tail facts that are now encapsulated in local helpers.
 
 #### Statement
-No new theorem statement; this edits the first conjunct of:
+No new public theorem statement. Target is the relevant ordinary-expression conjunct inside:
+
 ```sml
-Resume eval_all_type_sound_mutual[Expr_Subscript]:
-  ...
+Resume eval_all_type_sound_mutual[Expr_Subscript]: ...
 ```
-for the `well_typed_expr env (Subscript v9 e e')` conclusion.
 
 #### Approach
-After `simp_tac ... [Once well_typed_expr_def]`, destruct the disjunction into two named branches. In the place branch, preserve `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME (Type v9)` until after `get_Value`; instantiate the base IH's place conjunct with `base_vt` to obtain `place_expr_result_typed env base_tv base_vt`. Then the successful `get_Value` tail should be a direct `irule expr_subscript_place_tail_sound_stmt` with witnesses `base_vt`, `base_tv`, `idx_tv`, and `idx`.
+Open only the `Expr_Subscript` case and destruct the well-typed/static premises enough to identify the ordinary expression branch versus place branch. For ordinary array/value results, use the existing successful-tail lemmas and IH facts; for place-origin expression results where the conclusion is ordinary `expr_result_typed`, use `expr_subscript_place_tail_sound_stmt`. Preserve exact `get_Value` and monadic tail equalities until applying the helper.
 
 #### Not to try
-Do not call the base ordinary IH in the place-base branch unless `well_typed_expr env e` is actually available; the static disjunct only gives `type_place_expr env e = SOME base_vt`. Do not use positional `first_x_assum` scripts if they select the wrong IH conjunct; bind or immediately destruct the base/index IH results into named facts.
+Do not restore a single shared `FIRST` tail for all static alternatives. Do not use global rewrites that consume the static disjunction before the branch-specific helper is chosen. Do not touch the reverse/place conjunct in this leaf except to leave an explicit placeholder if needed.
 
 ### C2.1.1.13.4: Close the separate Subscript place-projection half
 - Kind: `proof`
 - Risk: 2
 - Work priority: 30
 - Work units: 5
-- Rationale: The new helper gives the exact conclusion for the reverse conjunct; the remaining work is standard evaluator/IH wiring with the same case structure as the expression half.
+- Rationale: The new projection helper gives the exact successful-result conclusion required by the reverse/place conjunct; remaining work is standard IH and evaluator-tail wiring.
 - Dependencies: C2.1.1.13.2, C2.1.1.13.3
 - Checkpoint: yes
-- Carries progress/evidence from: E0677
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.1.1.13.4 plan
 
 #### Progress note
-Completes the part previously represented by `reverse conj_tac >- (rpt strip_tac >> cheat)` for Expr_Subscript only.
+This leaf is carried forward from the previous subtree, now depending on the flattened helper/build-gate leaf. It should complete the Expr_Subscript Resume and remove its placeholder cheat.
 
 #### Summary
-- Replace the `reverse conj_tac` cheat for `type_place_expr env (Subscript ...) = SOME result_vt`.
-- Unfold `type_place_expr` for Subscript to recover `well_typed_expr env e'`, base place vtype, subscript vtype, and annotation compatibility.
-- Evaluate base and index using the place IH for `e` and ordinary IH for `e'`.
-- On successful index materialization, call `expr_subscript_place_projection_tail_sound_stmt`.
-- Verify holbuild advances past `Expr_Subscript` to the next scheduled branch/cheat.
+- Fill the reverse/place-projection conjunct of `eval_all_type_sound_mutual[Expr_Subscript]`.
+- Use `expr_subscript_place_projection_tail_sound_stmt` as the main boundary lemma.
+- Successful Subscript place projections must conclude `place_expr_result_typed env tv result_vt`.
+- Completing this leaf should remove the `Expr_Subscript` placeholder cheat and build `vyperTypeStmtSoundnessTheory`.
+
+#### Description
+This is the semantic consumer of the projection-tail helper. It should be small if C2.1.1.13.2 exposed the right interface: the mutual proof supplies base expression/place IH results, index expression IH results, `get_Value`, and the exact evaluator-tail equality; the helper supplies preservation/no-TypeError/place-typed success.
 
 #### Statement
-No separate theorem statement; this closes the second conjunct of:
+No separate theorem statement. Target is the remaining place/projection conjunct inside:
+
 ```sml
-Resume eval_all_type_sound_mutual[Expr_Subscript]:
-  ...
+Resume eval_all_type_sound_mutual[Expr_Subscript]: ...
 ```
-namely the goal under `type_place_expr env (Subscript v9 e e') = SOME result_vt`.
+
+The completed Resume should no longer contain the normalized `cheat` placeholder for `Expr_Subscript`.
 
 #### Approach
-Unfold only `type_place_expr` for `Subscript`, not the whole expression type system globally. The base evaluation uses the IH's place conjunct with `base_vt`; the index evaluation uses the IH's ordinary conjunct from `well_typed_expr env e'`. For `get_Value` errors, use the existing no-TypeError helper path (`subscript_vtype_index_get_Value_no_type_error` or direct index `expr_result_typed`) and state equality from `get_Value_state`; for success, pass the exact tail equality to the new projection helper.
+Use the same evaluator-case skeleton as the ordinary half, but when the static fact is `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME result_vt`, route the tail to `expr_subscript_place_projection_tail_sound_stmt`. Instantiate it from branch facts rather than unfolding `evaluate_subscript_def` in the Resume. Then discharge successful result typing by the helper's `place_expr_result_typed` conclusion and preserve state/env/account/no-TypeError facts directly.
 
 #### Not to try
-Do not try to derive the reverse conjunct from the expression-half conclusion alone: `expr_result_typed` is wrong-shaped for `HashMapT` place results. Do not unfold nested hashmap evaluation in the Resume; the new helper owns that case.
+Do not unfold the full Subscript evaluator tail in the mutual Resume after the helper exists. Do not coerce the helper result into `expr_result_typed`; the reverse conjunct requires place typing. Do not edit assignment, builtin, call, or Expr_Attribute obligations as part of this leaf.
 
 ### C2.1.1.5: Carry forward completed Iterator_Range repair for external dependency compatibility
 - Kind: `carried_evidence`
