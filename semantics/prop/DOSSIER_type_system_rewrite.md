@@ -280,13 +280,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C4.1.1.3 | proved |  | E0181 | Call plan_oracle(mode='review', component_id='C4.1.1.3', evidence_ids=[...]); then follow the scheduled next component. Current build frontier is a Concat bytes dispatcher goal in `well_typed_builtin_app_no_type_error`. |
 | C4.1.2 | proved |  | E0238 | Review C4.1.2 closure with strategist, then follow Oracle next. |
 | C4.1.3 | proved |  | E0239 | Review C4.1.3 closure with strategist, then follow Oracle next. |
-| C4.2 | proved |  | E0740 | Ask plan_oracle to review C4.2 closure, then commit stable C4.2 progress if review accepts. |
+| C4.2 | proved |  | E0747 | Review closure with strategist; then continue clearing C4.3 carried leaves until C4.4 is beginable. |
 | C4.2.1 | proved |  | E0161 |  |
 | C4.2.2 | progressed | other | E0162 |  |
 | C4.3 | stuck | wrong_statement | E0741 | Call plan_oracle(mode='review') for C4.3 with this evidence; request repair plan for Extract32 static/result constraints or boundary theorem strengthening before any further proof work. |
-| C4.3.1 | proved |  | E0743 |  |
-| C4.3.2 | proved |  | E0744 |  |
-| C4.3.3 | proved |  | E0745 |  |
+| C4.3.1 | proved |  | E0748 | Review closure with strategist; then continue clearing C4.3.2/C4.3.3 carried leaves until C4.4 is beginable. |
+| C4.3.2 | proved |  | E0749 | Review closure with strategist; then clear C4.3.3 carried leaf so C4.4 becomes beginable. |
+| C4.3.3 | proved |  | E0750 | Review closure with strategist; then begin real C4.4 ABI type-builtin success typing work. |
 | C5.2 | stuck | plan_incomplete | E0113 |  |
 | C5.2.1 | proved |  | E0114 |  |
 | C5.2.2 | proved |  | E0115 |  |
@@ -7918,10 +7918,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0740`
+- latest episode: `E0747`
 - blocker: 
-- actual effort: 1 sessions, 3 msgs, 51 steps, 65 tools, 17 holbuild, 3,977,537 tok (3,959,900 in, 17,637 out, 3,864,576 cached), 658.7s, $2.93801800
-- next: Ask plan_oracle to review C4.2 closure, then commit stable C4.2 progress if review accepts.
+- actual effort: 1 sessions, 1 steps, 81,480 tok (81,208 in, 272 out, 71,168 cached), 5.9s, $0.09394400
+- next: Review closure with strategist; then continue clearing C4.3 carried leaves until C4.4 is beginable.
 
 ### Attempts / Evidence
 
@@ -7961,18 +7961,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0740` (proved, , actual effort: 1 sessions, 3 msgs, 51 steps, 65 tools, 17 holbuild, 3,977,537 tok (3,959,900 in, 17,637 out, 3,864,576 cached), 658.7s, $2.93801800)
   - Added `return_INL_value` and repaired `Len_result_fits_uint256` by extracting return values with the fully-qualified `vyperStateTheory.return_def`, then restored finite-array arithmetic branch and handled storage/w2n residuals. -> `vyperTypeBuiltinsTheory` builds clean after `Len_result_fits_uint256`; local generic builtin success theorem no longer has a final cheat and build progressed through it. (`TO_type_system_rewrite-20260522T073012Z_m41245_t001`, `TO_type_system_rewrite-20260522T073012Z_m41248_t003`)
   - Audited current file for cheats after the build. -> Remaining cheats are in type-builtin/raw-call components (C4.3/C4.4/C4.5), not in `well_typed_builtin_app_no_type_error` or `well_typed_builtin_app_success_type`; theorem-index oracle grep for the generic builtin names found no non-DISK_THM oracle evidence. (`TO_type_system_rewrite-20260522T073012Z_m41246_t002`, `TO_type_system_rewrite-20260522T073012Z_m41248_t001`)
-
-### Ruled Out
-
-- Remaining `cheat`s in `vyperTypeBuiltinsScript.sml` belong to scheduled sibling components C4.3/C4.4/C4.5, per query_plan C4 subtree.
+- `E0747` (proved, , actual effort: 1 sessions, 1 steps, 81,480 tok (81,208 in, 272 out, 71,168 cached), 5.9s, $0.09394400)
+  - Carry-forward close using prior accepted C4.2 evidence plus current `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)`. -> No source work required: C4.2 is a carried_evidence leaf; prior E0740 proved/audited generic builtin no-TypeError and success typing boundary, and the current builtin boundary theory still builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41374_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41245_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41246_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41246_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41248_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41248_t003` (use `read_tool_output` for exact output)
+- `E0740` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41374_t001` (use `read_tool_output` for exact output)
 
 ## C4.2.1
 
@@ -8044,26 +8039,23 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0743`
+- latest episode: `E0748`
 - blocker: 
-- actual effort: 1 sessions, 8 steps, 12 tools, 4 holbuild, 657,986 tok (653,939 in, 4,047 out, 622,592 cached), 235.3s, $0.58944100
+- actual effort: 1 sessions, 1 steps, 95,099 tok (94,759 in, 340 out, 90,624 cached), 8.7s, $0.07618700
+- next: Review closure with strategist; then continue clearing C4.3.2/C4.3.3 carried leaves until C4.4 is beginable.
 
 ### Attempts / Evidence
 
 - `E0743` (proved, , actual effort: 1 sessions, 8 steps, 12 tools, 4 holbuild, 657,986 tok (653,939 in, 4,047 out, 622,592 cached), 235.3s, $0.58944100)
   - Definition repair in `vyperTypeSystemScript.sml`: introduce supported Extract32 result-base predicate and strengthen static Extract32 args predicate. -> `vyperTypeSystemTheory` built cleanly after the definition edit. (`TO_type_system_rewrite-20260522T073012Z_m41336_t002`, `TO_type_system_rewrite-20260522T073012Z_m41337_t002`)
   - Replace positive Bool counterexample theorem with `extract32_bool_not_well_typed_type_builtin_args` proved by simplification using the repaired predicate. -> `vyperTypeBuiltinsTheory` reached the following theorem, showing the regression parsed/proved and the repaired static interface is visible; remaining failure is the pre-existing false unrestricted Extract32 helper scheduled under C4.3.2. (`TO_type_system_rewrite-20260522T073012Z_m41336_t001`, `TO_type_system_rewrite-20260522T073012Z_m41338_t001`)
-
-### Ruled Out
-
-- Old static predicate accepting Extract32 BoolT target; the old positive counterexample theorem has been removed from source.
+- `E0748` (proved, , actual effort: 1 sessions, 1 steps, 95,099 tok (94,759 in, 340 out, 90,624 cached), 8.7s, $0.07618700)
+  - Carry-forward close using prior accepted C4.3.1 evidence plus current `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)`. -> No source work required: C4.3.1 is a carried_evidence leaf; prior E0743 proved the Extract32 static predicate repair and Bool rejection regression, and current builtin boundary theory still builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41374_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41336_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41336_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41337_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41338_t001` (use `read_tool_output` for exact output)
+- `E0743` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41374_t001` (use `read_tool_output` for exact output)
 
 ## C4.3.2
 
@@ -8071,9 +8063,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0744`
+- latest episode: `E0749`
 - blocker: 
-- actual effort: 1 sessions, 7 steps, 9 tools, 1 holbuild, 692,149 tok (690,073 in, 2,076 out, 674,304 cached), 74.3s, $0.47827700
+- actual effort: 1 sessions, 1 steps, 105,177 tok (104,869 in, 308 out, 100,864 cached), 6.7s, $0.07969700
+- next: Review closure with strategist; then clear C4.3.3 carried leaf so C4.4 becomes beginable.
 
 ### Attempts / Evidence
 
@@ -8082,15 +8075,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Tried to begin new C4.3.1 after the PLAN update. -> Harness blocked switching because old C4.3.2 remained active; terminal closure required before proceeding. (`TO_type_system_rewrite-20260522T073012Z_m41322_t001`)
 - `E0744` (proved, , actual effort: 1 sessions, 7 steps, 9 tools, 1 holbuild, 692,149 tok (690,073 in, 2,076 out, 674,304 cached), 74.3s, $0.47827700)
   - Strengthen local Extract32 helper with `extract32_result_base_ok bt`, then use `typed_bytes_value_is_BytesV`, `typed_int_value_is_IntV`, `Cases_on bt`, and simplification of `extract32_result_base_ok_def`, `evaluate_type_builtin_def`, `evaluate_extract32_def`, `evaluate_convert_def`. -> Helper is accepted; build proceeds to the next planned theorem and times out in old main theorem Extract32 branch proof. (`TO_type_system_rewrite-20260522T073012Z_m41346_t001`, `TO_type_system_rewrite-20260522T073012Z_m41347_t001`)
-
-### Ruled Out
-
-- No-TypeError for arbitrary `BaseT bt` without `extract32_result_base_ok bt`; the helper statement now includes the required supported-base premise.
+- `E0749` (proved, , actual effort: 1 sessions, 1 steps, 105,177 tok (104,869 in, 308 out, 100,864 cached), 6.7s, $0.07969700)
+  - Carry-forward close using prior accepted C4.3.2 evidence plus current `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)`. -> No source work required: C4.3.2 is a carried_evidence leaf; prior E0744 proved the supported Extract32 no-TypeError helper, and current builtin boundary theory still builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41374_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41346_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41347_t001` (use `read_tool_output` for exact output)
+- `E0744` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41374_t001` (use `read_tool_output` for exact output)
 
 ## C4.3.3
 
@@ -8098,25 +8089,23 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0745`
+- latest episode: `E0750`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,220,836 tok (1,217,569 in, 3,267 out, 1,199,616 cached), 110.3s, $0.78758300
+- actual effort: 1 sessions, 1 steps, 112,555 tok (112,331 in, 224 out, 108,032 cached), 5.3s, $0.08223100
+- next: Review closure with strategist; then begin real C4.4 ABI type-builtin success typing work.
 
 ### Attempts / Evidence
 
 - `E0745` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,220,836 tok (1,217,569 in, 3,267 out, 1,199,616 cached), 110.3s, $0.78758300)
   - Update Extract32 branch of `well_typed_type_builtin_no_type_error`: after length/list simplification, case split `tvs` only as needed and `irule evaluate_extract32_supported_no_type_error`, discharging premises from live context by simplification/metis. -> Extract32 branch no longer unfolds evaluator cases and uses the supported helper as planned. (`TO_type_system_rewrite-20260522T073012Z_m41356_t001`, `TO_type_system_rewrite-20260522T073012Z_m41360_t001`)
   - Replace brittle AbiDecode branch stale `Cases_on tvs` proof with `irule evaluate_abi_decode_no_type_error` after length simplification. -> The full `vyperTypeBuiltinsTheory` target builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41359_t001`, `TO_type_system_rewrite-20260522T073012Z_m41360_t001`)
-
-### Ruled Out
-
-- Direct broad constructor enumeration of Extract32 runtime values in the main theorem; it timed out and was replaced by the boundary helper.
+- `E0750` (proved, , actual effort: 1 sessions, 1 steps, 112,555 tok (112,331 in, 224 out, 108,032 cached), 5.3s, $0.08223100)
+  - Carry-forward close using prior accepted C4.3.3 evidence plus current `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)`. -> No source work required: C4.3.3 is a carried_evidence leaf; prior E0745 proved the repaired `well_typed_type_builtin_no_type_error` theorem, and current builtin boundary theory still builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41374_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41360_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41356_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41359_t001` (use `read_tool_output` for exact output)
+- `E0745` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41374_t001` (use `read_tool_output` for exact output)
 
 ## C5.2
 
