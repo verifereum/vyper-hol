@@ -89,6 +89,15 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1.1.13.3.1 | proved |  | E0682 | Review closure, then begin C2.1.1.13.3.2 to add/prove the ordinary-tail helper. |
 | C2.1.1.13.3.2 | proved |  | E0683 | Review closure, then proceed to C2.1.1.13.3.3 to use the ordinary-tail helper in the Expr_Subscript Resume ordinary branch. |
 | C2.1.1.13.3.3 | proved |  | E0685 |  |
+| C2.1.1.13.4 | stuck | risk_mismatch | E0695 | Call plan_oracle(mode='review') for C2.1.1.13.4 and request a re-plan/ancestor guidance update for the ordinary Subscript branch adapter. Do not continue inline tactic variants until the strategist reviews the helper shape. |
+| C2.1.1.13.4.1 | proved |  | E0696 |  |
+| C2.1.1.13.4.2 | stuck | risk_mismatch | E0700 | Call plan_oracle(mode='review') for C2.1.1.13.4.2 with the new evidence. Ask for a replacement interface/decomposition for the ordinary static adapter rather than more tactic-sized retries. |
+| C2.1.1.13.4.2.1 | proved |  | E0702 |  |
+| C2.1.1.13.4.2.2 | proved |  | E0703 |  |
+| C2.1.1.13.4.3 | stuck | plan_incomplete | E0704 | Review this administrative stuck closure, then begin C2.1.1.13.4.3a to fix the prefix timeout. |
+| C2.1.1.13.4.3.1 | proved |  | E0705 | Review C2.1.1.13.4.3.1 closure, then begin C2.1.1.13.4.3.2 to finish the adapter proof now that holbuild reaches it. |
+| C2.1.1.13.4.3.2 | proved |  | E0706 | Review closure with strategist, then commit the stable local proof checkpoint if git diff contains only relevant tracked changes, before moving to the next scheduled component. |
+| C2.1.1.13.4.3a | proved |  | E0707 | Call plan_oracle(mode="review") for this closure, then commit stable local proof checkpoint if accepted. |
 | C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
 | C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
 | C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
@@ -2491,6 +2500,245 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m39140_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk mismatch: this leaf was expected to be standard IH/tail wiring after the projection helper, but eliminating the final Expr_Subscript cheat now needs an additional ordinary-branch adapter whose base-error subcase is structurally not reducing. This suggests the decomposition needs a cleaner whole-branch helper/interface rather than more local tactic variants.
+- latest episode: `E0695`
+- blocker: The active Risk-2 leaf has now required an additional ordinary Subscript branch adapter and repeated brittle plumbing. In `expr_subscript_ordinary_branch_sound_stmt`, the ordinary static split produces two subgoals; the base-error `base_res = INR` subcase still shows the unsimplified full ordinary Subscript preservation goal after applying the base IH. Even explicitly trying to consume `(case (INR y,st1) of _) = (res,st')` with targeted `mp_tac >> simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]` leaves the same full goal. Holbuild reports two failed input goals, one for the ordinary base static path and one for the place-as-ordinary static path, indicating the helper proof structure is not exposing the evaluator-tail equality as planned.
+- actual effort: 1 sessions, 2 msgs, 34 steps, 36 tools, 7 holbuild, 3,292,280 tok (3,277,859 in, 14,421 out, 3,173,376 cached), 448.1s, $2.54173300
+- next: Call plan_oracle(mode='review') for C2.1.1.13.4 and request a re-plan/ancestor guidance update for the ordinary Subscript branch adapter. Do not continue inline tactic variants until the strategist reviews the helper shape.
+
+### Attempts / Evidence
+
+- `E0686` (progressed, other, actual effort: 1 sessions, 4 msgs, 49 steps, 57 tools, 13 holbuild, 4,793,861 tok (4,773,721 in, 20,140 out, 4,654,592 cached), 605.6s, $3.52714100)
+  - Opened second/place conjunct with `rpt strip_tac`, moved `type_place_expr env (Subscript ...) = SOME vt` to the goal, and used `simp_tac(srw_ss())[Once well_typed_expr_def, AllCaseEqs()]` to expose the place static facts without unfolding evaluator internals. -> Useful static inversion: holbuild showed the expected assumptions (`well_typed_expr env e'`, `type_place_expr env e = SOME vt'`, `subscript_vtype vt' (expr_type e') = SOME vt`, `vtype_annotation_ok vt v9`). A following `gvs[]` timed out, confirming broad simplification must be avoided. (`TO_type_system_rewrite-20260522T073012Z_m39175_t001`, `TO_type_system_rewrite-20260522T073012Z_m39177_t001`)
+  - Mirrored ordinary evaluator skeleton for the second/place conjunct, applied base place IH via `qspec_then vt'`, then attempted to proceed into index evaluation and invoke `expr_subscript_place_projection_tail_sound_stmt`. -> Structural failure before helper use: after base IH, the proof still had the evaluator-tail implication as the goal; subsequent case splits were being applied under the unstripped implication, causing 10 subgoals and `FIRST_ASSUM`/assumption-selection failures. Probe after base IH confirmed place IH facts are present, but tail implication is not yet discharged. (`TO_type_system_rewrite-20260522T073012Z_m39196_t001`, `TO_type_system_rewrite-20260522T073012Z_m39198_t001`, `TO_type_system_rewrite-20260522T073012Z_m39200_t001`)
+- `E0687` (progressed, other, actual effort: 1 sessions, 4 msgs, 43 steps, 46 tools, 13 holbuild, 4,348,801 tok (4,328,882 in, 19,919 out, 4,216,320 cached), 653.0s, $3.26854000)
+  - Changed place conjunct opener to `gen_tac >> strip_tac` so the proof works on the single `vt` place obligation rather than stripping all quantifiers/implications at once. -> Useful progress: failure reduced from 10 branchy goals to 2, showing this fixes the earlier wrong branch structure and avoids treating the ordinary conjunct as active. (`TO_type_system_rewrite-20260522T073012Z_m39240_t001`)
+  - In the successful index/get_Value branch, tried `irule expr_subscript_place_projection_tail_sound_stmt >> simp[]` and removed an invalid `qexistsl` after seeing there were no existential subgoals. -> Partial evidence: helper application matches enough to reduce the branch, but `simp[]` still leaves two outer goals and the branch remains partial; further inline tinkering risks repeating failed tactic search. (`TO_type_system_rewrite-20260522T073012Z_m39242_t001`, `TO_type_system_rewrite-20260522T073012Z_m39246_t001`)
+- `E0688` (progressed, other, actual effort: 1 sessions, 5 msgs, 53 steps, 56 tools, 10 holbuild, 5,456,514 tok (5,430,775 in, 25,739 out, 5,306,368 cached), 714.8s, $4.04738900)
+  - After reaching the successful get_Value branch, used qmatch_asmsub_rename_tac to expose `get_Value idx_tv st2 = (INL idx,st2)` and probed before helper application. -> Probe confirmed the live top goal remains the full place-conjunct implication with the expected static/IH assumptions; the branch is focused but still brittle. (`TO_type_system_rewrite-20260522T073012Z_m39289_t001`)
+  - Applied `irule (Q.SPECL [`cx`,`env`,`e`,`e'`,`v9`,`vt'`,`vt`,`x`,`idx_tv`,`idx`,`st2`,`res`,`st'`] expr_subscript_place_projection_tail_sound_stmt) >> simp[well_typed_expr_def]`, first with a probe and then without it. -> Explicit instantiation did not change the failure mode: holbuild still reports two high-level goals and `first subgoal not solved by second tactic`. More inline instantiation is unlikely to help; factor a small adapter/helper or escalate the interface. (`TO_type_system_rewrite-20260522T073012Z_m39298_t001`, `TO_type_system_rewrite-20260522T073012Z_m39302_t001`)
+- `E0689` (progressed, other, actual effort: 1 sessions, 2 msgs, 34 steps, 37 tools, 7 holbuild, 3,288,532 tok (3,270,272 in, 18,260 out, 3,179,520 cached), 472.8s, $2.59132000)
+  - Removed the failed post-helper `Cases_on vt` tail and tried to strip/simplify the successful get_Value branch before applying `expr_subscript_place_projection_tail_sound_stmt` with explicit instantiation. -> No semantic progress: holbuild still reports the same two high-level outer place-conjunct goals and `first subgoal not solved by second tactic`; the branch is not matching the helper interface cleanly from inside the Resume. (`TO_type_system_rewrite-20260522T073012Z_m39380_t001`, `TO_type_system_rewrite-20260522T073012Z_m39387_t001`)
+- `E0690` (progressed, other, actual effort: 1 sessions, 4 msgs, 44 steps, 50 tools, 9 holbuild, 4,575,294 tok (4,551,000 in, 24,294 out, 4,429,824 cached), 629.1s, $3.54961200)
+  - Tried to use assumptions while simplifying the exact `(case (INL x,st1)...) = (res,st')` tail with `asm_simp_tac(srw_ss())[]`, then case-split `get_Value` and invoke the projection helper. -> Still failed with the same two high-level outer place-conjunct goals; one variant produced `No match` at helper application, showing the branch still has the wrong proof shape for direct `irule`. (`TO_type_system_rewrite-20260522T073012Z_m39394_t001`)
+  - Moved `simp_tac(srw_ss())[] >> strip_tac` inside each `val_res` branch before using `get_Value_state` and the projection helper, hoping to focus the successful tail equality before the helper. -> Still failed with the same two-goal `first subgoal not solved by second tactic` shape. This further confirms inline Resume plumbing is exhausted; next session should add the adapter or close stuck for strategist review. (`TO_type_system_rewrite-20260522T073012Z_m39396_t001`)
+- `E0691` (progressed, other, actual effort: 1 sessions, 5 msgs, 63 steps, 75 tools, 21 holbuild, 6,678,378 tok (6,647,193 in, 31,185 out, 6,520,832 cached), 908.9s, $4.82777100)
+  - Added local `expr_subscript_place_projection_branch_sound_stmt` consuming the whole `(case (INL base_tv,st1) ...) = (res,st')` branch and internally splitting `eval_expr e''` / `get_Value` before invoking `expr_subscript_place_projection_tail_sound_stmt`. -> Useful progress: after several proof fixes, holbuild got past the helper theorem and moved failure to its use in `eval_all_type_sound_mutual[Expr_Subscript]`. This validates the helper statement is at least syntactically/proof feasible. (`TO_type_system_rewrite-20260522T073012Z_m39413_t001`, `TO_type_system_rewrite-20260522T073012Z_m39450_t001`)
+  - Replaced the Resume's inline successful base branch with an explicit `qspecl_then ... mp_tac expr_subscript_place_projection_branch_sound_stmt >> (impl_tac >- simp[]) >> simp[]`. -> Partial/no final progress: the adapter call now fails while discharging the antecedent; goal is a large conjunction/implication containing exactly the already-present branch facts and evaluator-tail equality. Broad `simp[]` times out. This is better than direct tail-helper failure but still not build-clean. (`TO_type_system_rewrite-20260522T073012Z_m39450_t001`, `TO_type_system_rewrite-20260522T073012Z_m39453_t001`)
+- `E0692` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 36 steps, 58 tools, 6 holbuild, 3,744,363 tok (3,730,765 in, 13,598 out, 3,625,984 cached), 354.6s, $2.74483700)
+  - Inserted a static bridge helper `vtype_annotation_ok_well_formed_type_stmt` and a subscript-vtype preservation helper before `type_place_expr_annotation_ok_stmt`. -> First helper built; subscript helper initially failed because `well_formed_type (ArrayT elem bd)` did not immediately expose element well-formedness. (`TO_type_system_rewrite-20260522T073012Z_m39531_t001`, `TO_type_system_rewrite-20260522T073012Z_m39532_t001`)
+  - Strengthened the subscript helper proof by unfolding `well_formed_type_def`/`evaluate_type_def` and splitting `evaluate_type tenv t'`. -> Build advanced past `subscript_vtype_well_formed_stmt` to the new recursive `type_place_expr_well_formed_vtype_stmt`, so the subscript-vtype helper proof is now likely correct. (`TO_type_system_rewrite-20260522T073012Z_m39536_t001`)
+  - Tried to prove `type_place_expr_well_formed_vtype_stmt` with `ho_match_mp_tac well_typed_expr_ind`, then replaced that failed induction attempt with `ho_match_mp_tac expr_induction` plus the earlier case proof skeleton. -> `well_typed_expr_ind` is not applicable (`not a comb`). The replacement to `expr_induction` is in the current source but has not been rebuilt due handoff stop; next session must verify it first. (`TO_type_system_rewrite-20260522T073012Z_m39547_t001`, `TO_type_system_rewrite-20260522T073012Z_m39549_t001`)
+- `E0693` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 43 steps, 47 tools, 10 holbuild, 4,244,731 tok (4,227,100 in, 17,631 out, 4,120,064 cached), 497.8s, $3.12414200)
+  - Added static well-formedness bridge helpers and completed the place/projection conjunct with `expr_subscript_place_projection_branch_sound_stmt`; avoided broad `simp[]` timeout by using `disch_then irule` on the adapter implication. -> `vyperTypeStmtSoundnessTheory` built with the old ordinary-branch cheat still present, proving the reverse/place conjunct plumbing is now sound. (`TO_type_system_rewrite-20260522T073012Z_m39623_t001`)
+  - Temporarily replaced the remaining `Expr_Subscript` cheat with `FAIL_TAC "probe_expr_subscript_remaining_ordinary_place_static"` and rebuilt. -> Probe shows the remaining branch is the first/ordinary conjunct after static inversion of `well_typed_expr (Subscript ...)`, specifically the disjunct where the base is place-typed (`type_place_expr env e = SOME vt` and `subscript_vtype ... = SOME (Type v9)`). (`TO_type_system_rewrite-20260522T073012Z_m39640_t001`)
+- `E0694` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 39 steps, 42 tools, 7 holbuild, 4,127,741 tok (4,111,572 in, 16,169 out, 3,997,184 cached), 459.6s, $3.05560200)
+  - After the old inline ordinary-conjunct proof timed out as one huge `>- disch_tac >> ...` block, moved that ordinary branch into local theorem `expr_subscript_ordinary_branch_sound_stmt` so holbuild can isolate failures before the `Resume`. -> Useful refactor for diagnostics: the timeout moved from the Resume tactic to a named local helper, but the helper is still not proved. (`TO_type_system_rewrite-20260522T073012Z_m39656_t001`, `TO_type_system_rewrite-20260522T073012Z_m39669_t001`)
+  - Simplified the ordinary-base `base_res = INR` subcase by replacing brittle `pop_assum rewrite_tac`/`first_assum ACCEPT_TAC` plumbing with direct goal inspection via `FAIL_TAC "probe_ordinary_base_inr_branch"`. -> Probe shows this subcase still has the unspecialized top-level ordinary Subscript goal with static ordinary facts (`well_typed_expr env e`, `well_typed_expr env e'`, `subscript_type_ok ...`) and no evaluated-tail equality consumed; the existing tactic structure is not reducing the base-error path as expected. (`TO_type_system_rewrite-20260522T073012Z_m39678_t001`, `TO_type_system_rewrite-20260522T073012Z_m39687_t001`)
+- `E0695` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 34 steps, 36 tools, 7 holbuild, 3,292,280 tok (3,277,859 in, 14,421 out, 3,173,376 cached), 448.1s, $2.54173300)
+  - Replaced the prior probe in `expr_subscript_ordinary_branch_sound_stmt` base-error subcase with targeted tail consumption: select `(case (INR y,st1) of _ => _) = (res,st')`, simplify it, strip, then `gvs[no_type_error_result_def]`. -> No closure: holbuild still fails at the same ordinary branch with the full Subscript preservation goal and two failed input goals. The exact tail equality was not made available/consumed in the live goal shape. (`TO_type_system_rewrite-20260522T073012Z_m39725_t001`, `TO_type_system_rewrite-20260522T073012Z_m39718_t001`)
+  - Simplified analogous place/static base-error code in the new ordinary helper to avoid `first_assum ACCEPT_TAC`/rewrite plumbing, mirroring the previously successful place-conjunct style. -> Did not reach this branch because the earlier ordinary static branch still fails; source remains partial and unbuildable. (`TO_type_system_rewrite-20260522T073012Z_m39716_t002`)
+
+### Ruled Out
+
+- Broad `simp[]`/`gvs[]` over the whole ordinary branch
+- Assumption-position rewrite plumbing with repeated `first_assum ACCEPT_TAC`
+- Direct inline use of the tail helper from the Resume without an adapter
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m39725_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m39718_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m39716_t002` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0696`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 52 steps, 52 tools, 17 holbuild, 4,745,245 tok (4,726,641 in, 18,604 out, 4,630,528 cached), 743.2s, $3.35394900
+
+### Attempts / Evidence
+
+- `E0696` (proved, , actual effort: 1 sessions, 4 msgs, 52 steps, 52 tools, 17 holbuild, 4,745,245 tok (4,726,641 in, 18,604 out, 4,630,528 cached), 743.2s, $3.35394900)
+  - Installed two local skeleton adapter theorems and rewired Expr_Subscript ordinary conjunct to split well_typed_expr with Once well_typed_expr_def, then call the matching skeleton. Broad first_assum/simp attempts failed; explicit qspecl_then instantiation of the skeletons avoided existential mismatch and built. -> vyperTypeStmtSoundnessTheory builds with the intended temporary skeleton cheats, completing the cleanup gate. (`TO_type_system_rewrite-20260522T073012Z_m39827_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m39827_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m39826_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0700`
+- blocker: After the latest checkpoint, two authorized/focused attempts to consume the full evaluator equality in `expr_subscript_ordinary_static_branch_sound_stmt` still leave the same full outer Subscript implication goals before the branch-specific tail proof. First attempt rewrote with named `eval_expr e'`/`get_Value` assumptions immediately after splits; second attempt moved the outer case equality into an assumption before splitting `get_Value`. Both fail with the same high-level base-success goal, so the Risk 2 estimate/interface for this adapter is wrong or needs a new branch-level helper designed by the strategist.
+- actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 719,454 tok (712,690 in, 6,764 out, 670,208 cached), 184.2s, $0.75043400
+- next: Call plan_oracle(mode='review') for C2.1.1.13.4.2 with the new evidence. Ask for a replacement interface/decomposition for the ordinary static adapter rather than more tactic-sized retries.
+
+### Attempts / Evidence
+
+- `E0697` (progressed, other, actual effort: 1 sessions, 4 msgs, 45 steps, 51 tools, 15 holbuild, 4,265,014 tok (4,248,251 in, 16,763 out, 4,127,232 cached), 590.7s, $3.17160100)
+  - Replaced the adapter cheat with evaluator-order proof: rewrite `Subscript` once, split base result, instantiate base IH, and close base-error directly by simplification. -> Base-error propagation is no longer the blocker; proof proceeds into base-success/index cases. (`TO_type_system_rewrite-20260522T073012Z_m39843_t001`)
+  - In base-success branch, split index evaluation and instantiate the guarded index IH after `eval_expr cx e st = (INL x,st1)`. -> Index-success branch reaches `get_Value`; index-error branch appears simplifiable by the index IH, but not yet fully validated after later edits. (`TO_type_system_rewrite-20260522T073012Z_m39848_t001`, `TO_type_system_rewrite-20260522T073012Z_m39852_t001`)
+  - For get_Value success, extract `expr_result_typed` facts for base and index, use `get_Value_state`, then apply `expr_subscript_ordinary_tail_sound_stmt`. For get_Value error, try `int_expr_get_Value_INR_no_type_error`. -> Success branch is structurally plausible; get_Value-error branch revealed a tactic/interface issue around proving the integer-index antecedent from `subscript_type_ok` without creating residual focused subgoals. A temporary `FAIL_TAC "int_ante_probe"` remains in source. (`TO_type_system_rewrite-20260522T073012Z_m39875_t001`, `TO_type_system_rewrite-20260522T073012Z_m39878_t001`)
+- `E0698` (progressed, other, actual effort: 1 sessions, 4 msgs, 36 steps, 41 tools, 11 holbuild, 3,647,478 tok (3,635,835 in, 11,643 out, 3,395,072 cached), 467.6s, $3.25064100)
+  - Added `subscript_type_ok_index_is_int_stmt` from `subscript_type_ok_def`, then `expr_subscript_index_get_Value_INR_no_type_error_stmt` wrapping `int_expr_get_Value_INR_no_type_error`. Replaced the get_Value-error branch with `drule_all expr_subscript_index_get_Value_INR_no_type_error_stmt >> simp[]`. -> The original `int_ante_probe` blocker is bypassed; current failure is no longer the theorem antecedent but residual outer Subscript goals after the surrounding get_Value split. (`TO_type_system_rewrite-20260522T073012Z_m39905_t001`, `TO_type_system_rewrite-20260522T073012Z_m39915_t001`)
+  - Probed the get_Value-success tail branch with `FAIL_TAC "tail_after"` after applying `expr_subscript_ordinary_tail_sound_stmt`, then restored it to `irule expr_subscript_ordinary_tail_sound_stmt >> simp[]`. -> The probe showed the reported two goals are already present around the get_Value split/tail-helper area; the exact unresolved subgoals are truncated but have the full outer Subscript implication shape, suggesting a branch grouping/focused `>-` issue or tail-helper conclusion not solving all required goals. (`TO_type_system_rewrite-20260522T073012Z_m39908_t001`, `TO_type_system_rewrite-20260522T073012Z_m39917_t001`)
+- `E0699` (progressed, other, actual effort: 1 sessions, 3 msgs, 37 steps, 40 tools, 9 holbuild, 3,915,591 tok (3,898,459 in, 17,132 out, 3,786,240 cached), 550.7s, $2.96817500)
+  - Changed `Cases_on val_res >> simp_tac... >- ... >- ...` to explicit `Cases_on val_res >- (simp_tac... >> success) >- (simp_tac... >> error)`. -> The immediate suspected `val_res` grouping issue was ruled out; holbuild still reports two residual full outer Subscript implication goals in the enclosing branch. (`TO_type_system_rewrite-20260522T073012Z_m39926_t001`)
+  - Tried replacing the explicit `qspecl_then` tail-helper application with `drule_all expr_subscript_ordinary_tail_sound_stmt`. -> Tail-helper invocation style is not the primary blocker; the same two outer goals remain. (`TO_type_system_rewrite-20260522T073012Z_m39948_t001`)
+  - Inserted temporary `FAIL_TAC` probes at entry to the `idx_res = INL ...` branch and immediately after its first simplification, then restored source. -> The problematic full outer goal shape is already present at the index-success branch boundary; continuing to optimize the inner `get_Value` branch is likely the wrong focus. (`TO_type_system_rewrite-20260522T073012Z_m39950_t001`, `TO_type_system_rewrite-20260522T073012Z_m39952_t001`, `TO_type_system_rewrite-20260522T073012Z_m39954_t001`)
+- `E0700` (stuck, risk_mismatch, actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 719,454 tok (712,690 in, 6,764 out, 670,208 cached), 184.2s, $0.75043400)
+  - After `Cases_on idx_res`, explicitly renamed `eval_expr cx e' st1 = (INL idx_tv,st2)` and rewrote the goal with that theorem; similarly rewrote after `get_Value` split before applying tail/no-TypeError helpers. -> Still failed in the same base-success fragment with two residual full outer Subscript implication goals; rewriting the split equalities did not make HOL substitute the evaluator equality through the outer case. (`TO_type_system_rewrite-20260522T073012Z_m39969_t001`)
+  - Changed the proof to strip the full outer Subscript equality into an assumption at the start of the base-success branch, then selected the simplified `(case get_Value idx_tv st2 of _ => _) = (res,st')` assumption after splitting the index evaluation. -> Still failed at the same high-level base-success input goal; the selected assumption shape was not reliably present and the proof did not reach branch-local tail obligations. This rules out small tactical restructuring within the current adapter. (`TO_type_system_rewrite-20260522T073012Z_m39971_t001`)
+
+### Ruled Out
+
+- Rewriting the `eval_expr e'` split equality directly in the goal after `Cases_on idx_res` as a sufficient fix.
+- Moving/stripping the full outer Subscript evaluator equality into an assumption and then selecting a simplified get_Value case equality inside the same adapter.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m39964_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m39969_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m39971_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0702`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 19 holbuild, 3,495,155 tok (3,482,532 in, 12,623 out, 3,406,848 cached), 563.0s, $2.46053400
+
+### Attempts / Evidence
+
+- `E0701` (progressed, other, actual effort: 1 sessions, 3 msgs, 23 steps, 24 tools, 9 holbuild, 2,767,621 tok (2,755,732 in, 11,889 out, 2,696,704 cached), 385.3s, $2.00016200)
+  - Added `expr_subscript_ordinary_base_success_sound_stmt` with the strategist-suggested compact evaluator-equality interface and attempted direct evaluator-order proof. -> The helper reaches a much cleaner branch-local index-success goal; initial branch tactic still failed because of subgoal grouping around get_Value/val_res, not because of the outer Subscript equality from the old adapter. (`TO_type_system_rewrite-20260522T073012Z_m39977_t001`, `TO_type_system_rewrite-20260522T073012Z_m39979_t001`)
+  - Inserted a temporary FAIL_TAC probe after moving the `get_Value` case equality to assumptions and splitting `get_Value`/`val_res`. -> Probe confirmed the get_Value-success branch is clean and local: assumptions include index/base typing, `get_Value x st2 = (INL x',st3)`, and the exact do-tail equality. This supports finishing with `get_Value_state` plus `expr_subscript_ordinary_tail_sound_stmt`; source restored afterward. (`TO_type_system_rewrite-20260522T073012Z_m39983_t001`, `TO_type_system_rewrite-20260522T073012Z_m39987_t001`)
+  - Tried explicit branch tactics and then a guarded `TRY` version over both val_res branches. -> The guarded TRY version failed because `NO_TAC`/guarding left branch goals unsolved; current source was changed to an unverified ORELSE version just before handoff and must be rebuilt/cleaned next session. (`TO_type_system_rewrite-20260522T073012Z_m39991_t001`)
+- `E0702` (proved, , actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 19 holbuild, 3,495,155 tok (3,482,532 in, 12,623 out, 3,406,848 cached), 563.0s, $2.46053400)
+  - Proved `expr_subscript_ordinary_base_success_sound_stmt` by unfolding Subscript evaluation inside the helper, splitting index evaluation and `get_Value`, applying `expr_subscript_ordinary_tail_sound_stmt` in the `get_Value` success branch and `expr_subscript_index_get_Value_INR_no_type_error_stmt` in the error branch; index evaluation error branch closes from the index IH. -> `holbuild` replay passed the helper and advanced to the next theorem `expr_subscript_ordinary_static_branch_sound_stmt`, showing the active helper theorem is proved; remaining failure is sibling wrapper component work. (`TO_type_system_rewrite-20260522T073012Z_m40041_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40041_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0703`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 14 steps, 13 tools, 6 holbuild, 1,639,248 tok (1,634,116 in, 5,132 out, 1,605,632 cached), 236.8s, $1.09919600
+
+### Attempts / Evidence
+
+- `E0703` (proved, , actual effort: 1 sessions, 1 msgs, 14 steps, 13 tools, 6 holbuild, 1,639,248 tok (1,634,116 in, 5,132 out, 1,605,632 cached), 236.8s, $1.09919600)
+  - Replaced the old direct inner subscript proof for `expr_subscript_ordinary_static_branch_sound_stmt` with a thin wrapper: split only `eval_expr cx e st`, used the base IH to derive the base-success facts, instantiated the guarded index IH, then called `expr_subscript_ordinary_base_success_sound_stmt`; base-error branch unfolds one evaluator step and uses base IH facts. -> `vyperTypeStmtSoundnessTheory` builds successfully, so the wrapper theorem and the newly added helper both replay cleanly. (`TO_type_system_rewrite-20260522T073012Z_m40057_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40057_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0704`
+- blocker: Holbuild cannot verify the active adapter edit because it now stops earlier at an uncovered BaseTarget_Subscript prefix timeout; strategist added C2.1.1.13.4.3a prerequisite.
+- actual effort: 1 sessions, 1 msgs, 10 steps, 11 tools, 2 holbuild, 719,740 tok (706,258 in, 13,482 out, 654,848 cached), 309.9s, $0.98893400
+- next: Review this administrative stuck closure, then begin C2.1.1.13.4.3a to fix the prefix timeout.
+
+### Attempts / Evidence
+
+- `E0704` (stuck, plan_incomplete, actual effort: 1 sessions, 1 msgs, 10 steps, 11 tools, 2 holbuild, 719,740 tok (706,258 in, 13,482 out, 654,848 cached), 309.9s, $0.98893400)
+  - Replaced `expr_subscript_place_as_ordinary_branch_sound_stmt` cheat with planned wrapper proof, then built `vyperTypeStmtSoundnessTheory`. -> Build did not reach the active theorem; it timed out earlier at `eval_all_type_sound_mutual[BaseTarget_Subscript]` line 6074. Strategist reviewed and added prerequisite C2.1.1.13.4.3a. (`TO_type_system_rewrite-20260522T073012Z_m40072_t001`, `TO_type_system_rewrite-20260522T073012Z_m40073_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40066_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40072_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40073_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0705`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 3 tools, 1 holbuild, 378,172 tok (377,075 in, 1,097 out, 363,520 cached), 54.1s, $0.28244500
+- next: Review C2.1.1.13.4.3.1 closure, then begin C2.1.1.13.4.3.2 to finish the adapter proof now that holbuild reaches it.
+
+### Attempts / Evidence
+
+- `E0705` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 3 tools, 1 holbuild, 378,172 tok (377,075 in, 1,097 out, 363,520 cached), 54.1s, $0.28244500)
+  - Replaced the broad `PairCases_on `x` >> simp[bind_def]` in `Resume eval_all_type_sound_mutual[BaseTarget_Subscript]` with `PairCases_on `x` >> rewrite_tac[bind_def, return_def]`, preserving the rest of the proof. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` replayed past `BaseTarget_Subscript` and reached the later `expr_subscript_place_as_ordinary_branch_sound_stmt`, so the pre-adapter timeout is eliminated. (`TO_type_system_rewrite-20260522T073012Z_m40082_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40082_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0706`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 7 tools, 3 holbuild, 867,873 tok (865,229 in, 2,644 out, 846,848 cached), 139.5s, $0.59464900
+- next: Review closure with strategist, then commit the stable local proof checkpoint if git diff contains only relevant tracked changes, before moving to the next scheduled component.
+
+### Attempts / Evidence
+
+- `E0706` (proved, , actual effort: 1 sessions, 8 steps, 7 tools, 3 holbuild, 867,873 tok (865,229 in, 2,644 out, 846,848 cached), 139.5s, $0.59464900)
+  - Proved `expr_subscript_place_as_ordinary_branch_sound_stmt` by splitting base evaluation, using the base place IH, deriving `well_formed_type env.type_defs v9`, applying `expr_subscript_place_projection_branch_sound_stmt`, then converting `place_expr_result_typed` to `expr_result_typed`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` built successfully, checking both the adapter and the preceding BaseTarget_Subscript refactor. (`TO_type_system_rewrite-20260522T073012Z_m40092_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40092_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.3a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0707`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 110,668 tok (110,388 in, 280 out, 104,448 cached), 17.2s, $0.09032400
+- next: Call plan_oracle(mode="review") for this closure, then commit stable local proof checkpoint if accepted.
+
+### Attempts / Evidence
+
+- `E0707` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 110,668 tok (110,388 in, 280 out, 104,448 cached), 17.2s, $0.09032400)
+  - Ran holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after prior bounded rewrite refactor. -> Build completed successfully; component's timeout refactor is verified. (`TO_type_system_rewrite-20260522T073012Z_m40101_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40101_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.1.2
 

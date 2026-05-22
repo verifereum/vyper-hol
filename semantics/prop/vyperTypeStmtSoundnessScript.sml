@@ -6071,7 +6071,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
   rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
   first_x_assum drule_all >> strip_tac >>
   Cases_on `bt_res`
-  >- (PairCases_on `x` >> simp[bind_def] >>
+  >- (PairCases_on `x` >> rewrite_tac[bind_def, return_def] >>
       qpat_x_assum `!s'' loc sbs t'. _`
         (qspecl_then [`st`, `x0`, `x1`, `st1`] mp_tac) >> simp[] >>
       strip_tac >>
@@ -6724,6 +6724,52 @@ Proof
            toplevel_value_typed_def, is_HashMapRef_def]) >>
   simp[toplevel_value_typed_def, is_HashMapRef_def]
 QED
+Theorem vtype_annotation_ok_well_formed_type_stmt[local]:
+  !tenv vt ty.
+    well_formed_vtype tenv vt /\ vtype_annotation_ok vt ty ==>
+    well_formed_type tenv ty
+Proof
+  Cases_on `vt` >> simp[vtype_annotation_ok_def, well_formed_vtype_def] >>
+  strip_tac >> simp[well_formed_type_def, evaluate_type_def]
+QED
+
+Theorem subscript_vtype_well_formed_stmt[local]:
+  !tenv base_vt idx_ty result_vt.
+    well_formed_vtype tenv base_vt /\
+    subscript_vtype base_vt idx_ty = SOME result_vt ==>
+    well_formed_vtype tenv result_vt
+Proof
+  Cases_on `base_vt` >>
+  simp[subscript_vtype_def, well_formed_vtype_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `t` >>
+      gvs[subscript_vtype_def, well_formed_vtype_def,
+          well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `evaluate_type tenv t'` >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem type_place_expr_well_formed_vtype_stmt[local]:
+  !env cx st e vt.
+    env_consistent env cx st /\ type_place_expr env e = SOME vt ==>
+    well_formed_vtype env.type_defs vt
+Proof
+  measureInduct_on `expr_size e` >>
+  rpt strip_tac >>
+  Cases_on `e` >>
+  gvs[Once well_typed_expr_def, AllCaseEqs()]
+  >- (PairCases_on `p` >>
+      qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+      simp[well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+      gvs[env_consistent_def, env_context_consistent_def] >>
+      first_x_assum drule >> simp[]) >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `e'` mp_tac) >>
+  (impl_tac >- simp[expr_size_def]) >>
+  disch_then (qspecl_then [`env`,`cx`,`st`,`vt'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  metis_tac[subscript_vtype_well_formed_stmt]
+QED
+
 Theorem type_place_expr_annotation_ok_stmt[local]:
   !env e vt. type_place_expr env e = SOME vt ==> vtype_annotation_ok vt (expr_type e)
 Proof
@@ -6978,6 +7024,87 @@ Proof
     strip_tac >> gvs[return_def, no_type_error_result_def, place_expr_result_typed_def])
 QED
 
+Theorem expr_subscript_place_projection_branch_sound_stmt[local]:
+  !cx env e e' v9 base_vt result_vt base_tv st1 res st'.
+    state_well_typed st1 /\
+    env_consistent env cx st1 /\
+    context_well_typed cx /\
+    accounts_well_typed st1.accounts /\
+    functions_well_typed cx /\
+    well_formed_type env.type_defs v9 /\
+    well_typed_expr env e' /\
+    type_place_expr env e = SOME base_vt /\
+    subscript_vtype base_vt (expr_type e') = SOME result_vt /\
+    vtype_annotation_ok result_vt v9 /\
+    place_expr_result_typed env base_tv base_vt /\
+    (!env0 st0 res0 st0'.
+      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      eval_expr cx e' st0 = (res0,st0') ==>
+      (well_typed_expr env0 e' ==>
+       state_well_typed st0' /\ env_consistent env0 cx st0' /\
+       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+       case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
+      !vt.
+        type_place_expr env0 e' = SOME vt ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) ==>
+    (case (INL base_tv,st1) of
+       (INL tv1,s'') =>
+         (case eval_expr cx e' s'' of
+            (INL tv2,s'') =>
+              (case get_Value tv2 s'' of
+                 (INL v2,s'') =>
+                   (let
+                      tenv = get_tenv cx
+                    in
+                      do
+                        arr_tv <- lift_option_type (evaluate_type tenv (expr_type e))
+                          "Subscript array type";
+                        check_array_bounds cx tv1 v2;
+                        res <- lift_sum (evaluate_subscript tenv arr_tv tv1 v2);
+                        case res of
+                          INL v => return v
+                        | INR (is_transient,slot,tv) =>
+                          do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
+                      od) s''
+               | (INR e,s'') => (INR e,s''))
+          | (INR e,s'') => (INR e,s''))
+     | (INR e,s'') => (INR e,s'')) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of INL tv => place_expr_result_typed env tv result_vt | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_expr cx e'' st1` >>
+  rename1 `eval_expr cx e'' st1 = (idx_res,st2)` >>
+  qpat_x_assum `!env0 st0 res0 st0'. _ ==> _`
+    (qspecl_then [`env`,`st1`,`idx_res`,`st2`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e'' ==> _` mp_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  simp_tac(srw_ss())[] >>
+  Cases_on `idx_res` >> gvs[]
+  >- (
+    Cases_on `get_Value x st2` >>
+    rename1 `get_Value x st2 = (val_res,st3)` >>
+    Cases_on `val_res` >> gvs[]
+    >- (
+      strip_tac >>
+      drule get_Value_state >> strip_tac >> gvs[] >>
+      qspecl_then [`cx`,`env`,`e'`,`e''`,`v9`,`base_vt`,`result_vt`,`base_tv`,`x`,`x'`,`st2`,`res`,`st'`]
+        mp_tac expr_subscript_place_projection_tail_sound_stmt >>
+      (impl_tac >- simp[]) >>
+      simp[]) >>
+    strip_tac >>
+    drule get_Value_state >> strip_tac >> gvs[] >>
+    qspecl_then [`base_vt`,`expr_type e''`,`result_vt`,`env`,`e''`,`x`,`st'`,`INR y`,`st'`]
+      mp_tac subscript_vtype_index_get_Value_no_type_error >>
+    simp[] >> strip_tac >> gvs[no_type_error_result_def]) >>
+  strip_tac >> gvs[]
+QED
+
 Theorem expr_subscript_ordinary_tail_sound_stmt[local]:
   !cx env e e' v9 base_tv idx_tv idx st res st'.
     state_well_typed st /\
@@ -7057,91 +7184,358 @@ Proof
   strip_tac >> simp[no_type_error_result_def]
 QED
 
+Theorem subscript_type_ok_index_is_int_stmt[local]:
+  !base_ty idx_ty result_ty.
+    subscript_type_ok base_ty idx_ty result_ty ==> is_int_type idx_ty
+Proof
+  Cases >> simp[subscript_type_ok_def]
+QED
+
+Theorem expr_subscript_index_get_Value_INR_no_type_error_stmt[local]:
+  !env e e' v9 tv st y st'.
+    expr_result_typed env e' tv /\
+    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    get_Value tv st = (INR y, st') ==>
+    no_type_error_result (INR y)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`,`e'`,`tv`,`expr_type e'`,`st`,`y`,`st'`]
+    mp_tac int_expr_get_Value_INR_no_type_error >>
+  (impl_tac >- (
+    simp[] >>
+    drule subscript_type_ok_index_is_int_stmt >> simp[])) >>
+  simp[]
+QED
+
+Theorem expr_subscript_ordinary_base_success_sound_stmt[local]:
+  !cx env e e' v9 base_tv st st1 res st'.
+    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+    accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    well_typed_expr env e' /\
+    well_formed_type env.type_defs v9 /\
+    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    eval_expr cx e st = (INL base_tv,st1) /\
+    state_well_typed st1 /\ env_consistent env cx st1 /\
+    accounts_well_typed st1.accounts /\
+    expr_result_typed env e base_tv /\
+    (!env0 st0 res0 st0'.
+      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      eval_expr cx e' st0 = (res0,st0') ==>
+      (well_typed_expr env0 e' ==>
+       state_well_typed st0' /\ env_consistent env0 cx st0' /\
+       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+       case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
+      !vt.
+        type_place_expr env0 e' = SOME vt ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) /\
+    eval_expr cx (Subscript v9 e e') st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+  qpat_x_assum `eval_expr cx e st = (INL base_tv,st1)`
+    (fn th => simp_tac(srw_ss())[th]) >>
+  Cases_on `eval_expr cx e' st1` >>
+  rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
+  qpat_x_assum `!env0 st0 res0 st0'.
+    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    eval_expr cx e' st0 = (res0,st0') ==> _`
+    (qspecl_then [`env`,`st1`,`idx_res`,`st2`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `idx_res`
+  >- (
+    simp_tac(srw_ss())[] >> strip_tac >>
+    qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `case INL x of INL tv => expr_result_typed env e' tv | INR v1 => T` mp_tac >>
+    simp_tac(srw_ss())[] >> strip_tac >>
+    qpat_x_assum `(case get_Value x st2 of _ => _) = (res,st')` mp_tac >>
+    Cases_on `get_Value x st2` >>
+    rename1 `get_Value x st2 = (val_res,st3)` >>
+    Cases_on `val_res`
+    >- (
+      simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
+      rename1 `get_Value x st2 = (INL idx,st3)` >>
+      drule get_Value_state >> strip_tac >> gvs[] >>
+      qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_tv`,`x`,`idx`,`st2`,`res`,`st'`]
+        mp_tac expr_subscript_ordinary_tail_sound_stmt >>
+      (impl_tac >- simp[]) >>
+      simp[]) >>
+    simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
+    rename1 `get_Value x st2 = (INR val_err,st3)` >>
+    drule get_Value_state >> strip_tac >> gvs[] >>
+    irule expr_subscript_index_get_Value_INR_no_type_error_stmt >>
+    qexistsl [`e`,`e'`,`env`,`st2`,`st2`,`x`,`v9`] >>
+    simp[])
+  >- (
+    simp_tac(srw_ss())[] >> strip_tac >>
+    qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    gvs[])
+QED
+
+Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
+  !cx env e e' v9 st res st'.
+    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+    accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    well_typed_expr env e /\ well_typed_expr env e' /\
+    well_formed_type env.type_defs v9 /\
+    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    eval_expr cx (Subscript v9 e e') st = (res,st') /\
+    (!env0 st0 res0 st0'.
+      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      eval_expr cx e st0 = (res0,st0') ==>
+      (well_typed_expr env0 e ==>
+       state_well_typed st0' /\ env_consistent env0 cx st0' /\
+       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+       case res0 of INL tv => expr_result_typed env0 e tv | INR v1 => T) /\
+      !vt.
+        type_place_expr env0 e = SOME vt ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) /\
+    (!s'' tv1 t.
+      eval_expr cx e s'' = (INL tv1,t) ==>
+      !env0 st0 res0 st0'.
+        env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        eval_expr cx e' st0 = (res0,st0') ==>
+        (well_typed_expr env0 e' ==>
+         state_well_typed st0' /\ env_consistent env0 cx st0' /\
+         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+         case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
+        !vt.
+          type_place_expr env0 e' = SOME vt ==>
+          state_well_typed st0' /\ env_consistent env0 cx st0' /\
+          accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+          case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (base_res,st1)` >>
+  qpat_x_assum `!env0 st0 res0 st0'.
+    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    eval_expr cx e st0 = (res0,st0') ==> _`
+    (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `base_res`
+  >- (
+    rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
+    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
+      (qspecl_then [`st`,`base_tv`,`st1`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `case INL base_tv of INL tv => expr_result_typed env e tv | INR v1 => T` mp_tac >>
+    simp_tac(srw_ss())[] >> strip_tac >>
+    qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_tv`,`st`,`st1`,`res`,`st'`]
+      mp_tac expr_subscript_ordinary_base_success_sound_stmt >>
+    disch_then irule >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)
+  >- (
+    qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+    qpat_x_assum `eval_expr cx e st = (INR y,st1)`
+      (fn th => simp_tac(srw_ss())[th]) >>
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
+    qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
+    simp[])
+QED
+
+Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
+  !cx env e e' v9 base_vt st res st'.
+    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+    accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    well_typed_expr env e' /\
+    type_place_expr env e = SOME base_vt /\
+    subscript_vtype base_vt (expr_type e') = SOME (Type v9) /\
+    eval_expr cx (Subscript v9 e e') st = (res,st') /\
+    (!env0 st0 res0 st0'.
+      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      eval_expr cx e st0 = (res0,st0') ==>
+      (well_typed_expr env0 e ==>
+       state_well_typed st0' /\ env_consistent env0 cx st0' /\
+       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+       case res0 of INL tv => expr_result_typed env0 e tv | INR v1 => T) /\
+      !vt.
+        type_place_expr env0 e = SOME vt ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) /\
+    (!s'' tv1 t.
+      eval_expr cx e s'' = (INL tv1,t) ==>
+      !env0 st0 res0 st0'.
+        env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        eval_expr cx e' st0 = (res0,st0') ==>
+        (well_typed_expr env0 e' ==>
+         state_well_typed st0' /\ env_consistent env0 cx st0' /\
+         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+         case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
+        !vt.
+          type_place_expr env0 e' = SOME vt ==>
+          state_well_typed st0' /\ env_consistent env0 cx st0' /\
+          accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+          case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (base_res,st1)` >>
+  qpat_x_assum `!env0 st0 res0 st0'.
+    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    eval_expr cx e st0 = (res0,st0') ==> _`
+    (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `base_res`
+  >- (
+    rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
+    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
+      (qspec_then `base_vt` mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `case INL base_tv of INL tv => place_expr_result_typed env tv base_vt | INR v1 => T`
+      mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
+    `well_formed_type env.type_defs v9` by (
+      `well_formed_vtype env.type_defs base_vt` by
+        metis_tac[type_place_expr_well_formed_vtype_stmt] >>
+      `well_formed_vtype env.type_defs (Type v9)` by
+        metis_tac[subscript_vtype_well_formed_stmt] >>
+      `vtype_annotation_ok (Type v9) v9` by simp[vtype_annotation_ok_def] >>
+      metis_tac[vtype_annotation_ok_well_formed_type_stmt]) >>
+    qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
+      (qspecl_then [`st`,`base_tv`,`st1`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_vt`,`Type v9`,`base_tv`,`st1`,`res`,`st'`]
+      mp_tac expr_subscript_place_projection_branch_sound_stmt >>
+    (impl_tac >- (
+      rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- simp[vtype_annotation_ok_def]
+      >- first_assum ACCEPT_TAC
+      >> first_assum ACCEPT_TAC)) >>
+    strip_tac >>
+    `state_well_typed st' /\ env_consistent env cx st' /\
+     accounts_well_typed st'.accounts /\ no_type_error_result res /\
+     (case res of INL tv => place_expr_result_typed env tv (Type v9) | INR v1 => T)` by (
+      first_x_assum irule >>
+      qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+      qpat_x_assum `eval_expr cx e st = (INL base_tv,st1)`
+        (fn th => simp_tac(srw_ss())[th])) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    Cases_on `res` >> simp[] >>
+    qpat_x_assum `case INL x of INL tv => place_expr_result_typed env tv (Type v9) | INR v1 => T`
+      mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
+    irule place_expr_result_typed_expr_result_typed_stmt >>
+    qexists `Type v9` >> simp[Once well_typed_expr_def, vtype_annotation_ok_def])
+  >- (
+    qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+    qpat_x_assum `eval_expr cx e st = (INR y,st1)`
+      (fn th => simp_tac(srw_ss())[th]) >>
+    strip_tac >>
+    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
+      (qspec_then `base_vt` mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
+    qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
+    simp[])
+QED
+
 Resume eval_all_type_sound_mutual[Expr_Subscript]:
-  (* Normalized C2.1.1.13 editing placeholder.  The previous source used a
-     shared FIRST tail combining expr_subscript_place_tail_sound_stmt with the
-     ordinary array/value tail; that structure is intentionally removed.  Later
-     children split the ordinary/place Subscript static alternatives explicitly
-     and replace these local cheats. *)
+  (* C2.1.1.13.4 splits the ordinary Subscript static alternatives at this
+     boundary.  The temporary cheats are exactly the two local adapters above. *)
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
-    disch_tac >>
+    strip_tac >>
     qpat_x_assum `well_typed_expr env (Subscript v9 e e')` mp_tac >>
     CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
     strip_tac
-    >- (qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
-        simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-        Cases_on `eval_expr cx e st` >>
-        rename1 `eval_expr cx e st = (base_res,st1)` >>
-        qpat_x_assum `!env0 st0 res0 st0'.
-          env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-          accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-          eval_expr cx e st0 = (res0,st0') ==> _`
-          (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
-        (impl_tac >- simp[]) >>
-        strip_tac >>
-        Cases_on `base_res`
-        >- (qpat_x_assum `well_typed_expr env e ==> state_well_typed st1 /\ _` mp_tac >>
-            (impl_tac >- simp[]) >> strip_tac >>
-            strip_tac >>
-            simp_tac(srw_ss())[] >>
-            Cases_on `eval_expr cx e' st1` >>
-            rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
-            qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
-              (qspecl_then [`st`,`x`,`st1`] mp_tac) >>
-            impl_tac >- simp[] >> strip_tac >>
-            qpat_x_assum `!env0 st0 res0 st0'.
-              env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-              accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-              eval_expr cx e' st0 = (res0,st0') ==> _`
-              (qspecl_then [`env`,`st1`,`idx_res`,`st2`] mp_tac) >>
-            (impl_tac >- simp[]) >> strip_tac >>
-            qpat_x_assum `well_typed_expr env e' ==> state_well_typed st2 /\ _` mp_tac >>
-            (impl_tac >- simp[]) >> strip_tac >>
-            Cases_on `idx_res`
-            >- (
-              qpat_x_assum `case INL x of INL tv => expr_result_typed env e tv | INR v1 => T` mp_tac >>
-              simp_tac(srw_ss())[] >> strip_tac >>
-              qpat_x_assum `case INL x' of INL tv => expr_result_typed env e' tv | INR v1 => T` mp_tac >>
-              simp_tac(srw_ss())[] >> strip_tac >>
-              qpat_x_assum `(case (INL x,st1) of _ => _) = (res,st')` mp_tac >>
-              simp_tac(srw_ss())[] >>
-              Cases_on `get_Value x' st2` >>
-              rename1 `get_Value x' st2 = (val_res,st3)` >>
-              Cases_on `val_res`
-              >- (
-                drule get_Value_state >> strip_tac >> gvs[] >>
-                strip_tac >> gvs[] >>
-                irule expr_subscript_ordinary_tail_sound_stmt >>
-                simp[] >>
-                qexistsl [`x`,`x''`,`x'`,`st2`] >> simp[])
-              >- (
-                drule get_Value_state >> strip_tac >> gvs[] >>
-                strip_tac >> gvs[] >>
-                rpt conj_tac >> simp[] >>
-                irule int_expr_get_Value_INR_no_type_error >>
-                qexistsl [`e'`, `env`, `st'`, `st'`, `x'`, `expr_type e'`] >>
-                simp[] >>
-                Cases_on `expr_type e` >> gvs[subscript_type_ok_def]))
-            >- (
-              qpat_x_assum `(case (INL x,st1) of _ => _) = (res,st')` mp_tac >>
-              simp_tac(srw_ss())[] >>
-              strip_tac >> gvs[]))
-        >- (qpat_x_assum `well_typed_expr env e ==> state_well_typed st1 /\ _` mp_tac >>
-            (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-            strip_tac >>
-            qpat_x_assum `(case (INR y,st1) of _ => _) = (res,st')` mp_tac >>
-            simp_tac(srw_ss())[] >> strip_tac >>
-            pop_assum (fn th => rewrite_tac[GSYM th]) >>
-            pop_assum (fn th => rewrite_tac[GSYM th]) >>
-            rpt conj_tac >- first_assum ACCEPT_TAC
-            >- first_assum ACCEPT_TAC
-            >- first_assum ACCEPT_TAC
-            >- first_assum ACCEPT_TAC
-            >> simp[]))
-    >- cheat) >>
-  rpt strip_tac >> cheat
+    >- (qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`st`,`res`,`st'`]
+          match_mp_tac expr_subscript_ordinary_static_branch_sound_stmt >>
+        asm_rewrite_tac[])
+    >- (qmatch_asmsub_rename_tac `type_place_expr env e = SOME base_vt` >>
+        qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_vt`,`st`,`res`,`st'`]
+          match_mp_tac expr_subscript_place_as_ordinary_branch_sound_stmt >>
+        asm_rewrite_tac[]))
+  >> gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_expr env (Subscript v9 e e') = SOME vt` mp_tac >>
+  simp_tac(srw_ss())[Once well_typed_expr_def, AllCaseEqs()] >>
+  strip_tac >>
+  qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (base_res,st1)` >>
+  qpat_x_assum `!env0 st0 res0 st0'.
+    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    eval_expr cx e st0 = (res0,st0') ==> _`
+    (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `base_res`
+  >- (
+    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
+      (qspec_then `vt'` mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    strip_tac >>
+    qpat_x_assum `case INL x of INL tv => place_expr_result_typed env tv vt' | INR v1 => T` mp_tac >>
+    simp_tac(srw_ss())[] >> strip_tac >>
+    `well_formed_type env.type_defs v9` by (
+      `well_formed_vtype env.type_defs vt'` by
+        metis_tac[type_place_expr_well_formed_vtype_stmt] >>
+      `well_formed_vtype env.type_defs vt` by
+        metis_tac[subscript_vtype_well_formed_stmt] >>
+      metis_tac[vtype_annotation_ok_well_formed_type_stmt]) >>
+    qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
+      (qspecl_then [`st`,`x`,`st1`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`vt'`,`vt`,`x`,`st1`,`res`,`st'`]
+      mp_tac expr_subscript_place_projection_branch_sound_stmt >>
+    (impl_tac >- (
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC))) >>
+    (disch_then irule >> first_assum ACCEPT_TAC))
+  >- (
+    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
+      (qspec_then `vt'` mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+    strip_tac >>
+    qpat_x_assum `(case (INR y,st1) of _ => _) = (res,st')` mp_tac >>
+    simp_tac(srw_ss())[] >> strip_tac >>
+    pop_assum (fn th => rewrite_tac[GSYM th]) >>
+    pop_assum (fn th => rewrite_tac[GSYM th]) >>
+    rpt conj_tac >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >> simp[])
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Attribute]:
@@ -7379,5 +7773,4 @@ Theorem function_body_type_sound:
 Proof
   metis_tac[eval_stmts_no_type_error]
 QED
-
 
