@@ -780,7 +780,8 @@ Proof
   gvs[listTheory.EVERY_DEF, is_terminator_def,
       ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
       ao_cmp_prefer_iz_general_def] >>
-  rpt (CASE_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def])
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def]
 QED
 
 (* Peephole output is always non-terminator and non-INVOKE,
@@ -2126,13 +2127,16 @@ Proof
       first_x_assum (qspecl_then [`v`, `chain`, `k`, `w`] mp_tac) >> gvs[])
 QED
 
-(* The step either returns acc unchanged or prepends one entry *)
+(* The step either returns acc unchanged or prepends one entry
+   where prev is either a singleton or from ALOOKUP acc *)
 Triviality iszero_step_cases[local]:
   !acc h. ao_compute_iszero_step acc h = acc \/
-    ?out prev. ao_compute_iszero_step acc h = (out, SNOC (Var out) prev) :: acc
+    ?out prev. ao_compute_iszero_step acc h = (out, SNOC (Var out) prev) :: acc /\
+      (LENGTH prev = 1 \/ ?s. ALOOKUP acc s = SOME prev)
 Proof
   rpt gen_tac >> simp[ao_compute_iszero_step_def] >>
-  rpt BasicProvers.FULL_CASE_TAC >> simp[]
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  disj2_tac >> simp[] >> metis_tac[]
 QED
 
 (* Chain Var elements at position > 0 are target keys. *)
@@ -2147,12 +2151,35 @@ Triviality iszero_step_chain_var_is_key[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`acc`, `h`] strip_assume_tac iszero_step_cases
-  >- (pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC)
-  >- (pop_assum (fn th => SUBST_ALL_TAC th) >>
+  >- (* step = acc: trivial *)
+     (pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC)
+  >- (* step prepends, LENGTH prev = 1 *)
+     (qpat_x_assum `ao_compute_iszero_step _ _ = _` SUBST_ALL_TAC >>
       qspecl_then [`acc`, `out`, `SNOC (Var out) prev`]
-        (MATCH_MP_TAC o BETA_RULE) chain_var_is_key_extend >> rpt conj_tac
-      >- cheat
-      >- cheat)
+        (MATCH_MP_TAC o BETA_RULE) chain_var_is_key_extend >>
+      conj_tac
+      >- (rpt strip_tac >> res_tac)
+      >- (rpt strip_tac >>
+          drule_all snoc_var_el_cases >> strip_tac >> gvs[]))
+  >- (* step prepends, ALOOKUP acc s = SOME prev *)
+     (qpat_x_assum `ao_compute_iszero_step _ _ = _` SUBST_ALL_TAC >>
+      qspecl_then [`acc`, `out`, `SNOC (Var out) prev`]
+        (MATCH_MP_TAC o BETA_RULE) chain_var_is_key_extend >>
+      conj_tac
+      >- (rpt strip_tac >> res_tac)
+      >- (rpt strip_tac >>
+          Cases_on `k < LENGTH prev`
+          >- (disj2_tac >>
+              `EL k prev = Var w` by
+                (qpat_x_assum `EL k (SNOC _ _) = _` mp_tac >>
+                 simp[listTheory.EL_SNOC]) >>
+              res_tac)
+          >- (disj1_tac >>
+              `k = LENGTH prev` by
+                (qpat_x_assum `k < LENGTH (SNOC _ _)` mp_tac >>
+                 simp[listTheory.LENGTH_SNOC]) >>
+              qpat_x_assum `EL k (SNOC _ _) = _` mp_tac >>
+              simp[listTheory.EL_LENGTH_SNOC])))
 QED
 
 Triviality foldl_chain_var_is_key[local]:
