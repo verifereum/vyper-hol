@@ -254,7 +254,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.7.1.2.2.4 | proved |  | E0317 |  |
 | C2.7.2 | stuck | plan_incomplete | E0272 | Call plan_oracle review for C2.7.2 and request schedule/decomposition change to prioritize the existing For prefix-performance patch (`C2.7.1.1.1.a`) before C2.7.2. |
 | C3 | proved |  | E0236 | Review C3 closure with strategist, then follow the scheduled next component. |
-| C3.1 | stuck | other | E0099 | "Rewrite assign_target_TopLevelVar_no_type_error Type branch using irule approach: (1) Save env.type_defs=get_tenv cx with pop_assum mk_asm before any fs/gvs, (2) expand assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on (getting code, p, p0=StorageVarDecl/HashMapVarDecl), (3) Cases_on evaluate_type/Cases_on lookup_var_slot for witnesses, (4) For each Cases_on x subgoal: FIRST use irule boundary_theorem to see exact required premises, then derive each individually. If irule produces a premise gap, prove an adapter lemma." |
+| C3.1 | proved |  | E0732 | Review C3.1 closure with strategist, then begin the next scheduled C3 leaf (expected C3.2). |
 | C3.1.2 | proved |  | E0025 |  |
 | C3.1.3 | proved |  | E0027 |  |
 | C3.1.4 | proved |  | E0100 |  |
@@ -7017,11 +7017,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `other`
-- latest episode: `E0099`
-- blocker: "assign_target_TopLevelVar_no_type_error Type branch: metis_tac on boundary theorems fails after expanding assign_target_assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on. The boundary theorems (assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error, top_level_HashMapRef_assign_no_type_error) are fully proved. The problem is pure proof-engineering: after expanding assignable_context, variable names change and/or fs[] eliminates env.type_defs=get_tenv cx, breaking metis matching. The irule diagnostic approach (identified in STATE/L0398) has NEVER been executed despite being the most promising approach across 10+ sessions."
-- next: "Rewrite assign_target_TopLevelVar_no_type_error Type branch using irule approach: (1) Save env.type_defs=get_tenv cx with pop_assum mk_asm before any fs/gvs, (2) expand assignable_context via mp_tac+simp+strip_tac+PairCases_on+Cases_on (getting code, p, p0=StorageVarDecl/HashMapVarDecl), (3) Cases_on evaluate_type/Cases_on lookup_var_slot for witnesses, (4) For each Cases_on x subgoal: FIRST use irule boundary_theorem to see exact required premises, then derive each individually. If irule produces a premise gap, prove an adapter lemma."
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0732`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 6 tools, 2 holbuild, 281,460 tok (280,297 in, 1,163 out, 231,936 cached), 28.4s, $0.39266300
+- next: Review C3.1 closure with strategist, then begin the next scheduled C3 leaf (expected C3.2).
 
 ### Attempts / Evidence
 
@@ -7143,12 +7144,16 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Previous sessions tried: (1) fs[gvs] expansion in wrapper body - variable names break metis; (2) adapter bridge lemmas with /\ conclusions - API corrupts /\ to /&; (3) IS_SOME_EXISTS goal-position rewrite - over-destructures type_value; (4) mp_tac+simp[IS_SOME_EXISTS] for witness extraction - not yet build-verified -> All approaches fail at the same point: after expanding assignable_context, the derived witnesses have variable names that don't match boundary theorem premises. The CORRECT approach (adapter bridge lemma with ==> chain conclusion) was identified in L0394 but never properly executed due to API /\ corruption and stale checkpoints. (`TO_type_system_rewrite-20260515T192259Z_m11275_t001`, `TO_type_system_rewrite-20260515T192259Z_m11333_t001`)
 - `E0099` (stuck, other)
   - mp_tac assignable_context + simp[assign_target_assignable_context_def, assign_target_assignable_def] + strip_tac + PairCases_on p + gvs[FST,SND] + Cases_on p0 + gvs[] + Cases_on evaluate_type + gvs[IS_SOME_DEF] + Cases_on lookup_var_slot + gvs[IS_SOME_DEF] + by metis_tac derived facts + fs[] + Cases_on x + metis_tac[boundary_theorems] -> THEN1 first subgoal not solved: metis_tac cannot match boundary theorem premises after expansion changes variable names. fs[] at line 3301 may eliminate env.type_defs=get_tenv cx. ()
+- `E0732` (proved, , actual effort: 1 sessions, 3 steps, 6 tools, 2 holbuild, 281,460 tok (280,297 in, 1,163 out, 231,936 cached), 28.4s, $0.39266300)
+  - Audited current source for `well_typed_binop_no_type_error` and `well_typed_update_binop_no_type_error`; both are proved without `cheat` in the expected regions. -> C3.1 source-authoritative binop no-TypeError boundary and update-binop corollary are already closed in current source. (`TO_type_system_rewrite-20260522T073012Z_m40848_t002`, `TO_type_system_rewrite-20260522T073012Z_m40848_t001`)
+  - Built `vyperTypeBuiltinsTheory` and `vyperTypeStatePreservationTheory` with holbuild after the audit. -> Both relevant targets build cleanly for the C3.1 theorem boundary; remaining cheats are downstream components, not the binop boundary. (`TO_type_system_rewrite-20260522T073012Z_m40847_t003`, `TO_type_system_rewrite-20260522T073012Z_m40848_t003`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260515T192259Z_m11981_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260515T192259Z_m11275_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260515T192259Z_m11231_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40847_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40848_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40848_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40848_t001` (use `read_tool_output` for exact output)
 
 ## C3.1.2
 
