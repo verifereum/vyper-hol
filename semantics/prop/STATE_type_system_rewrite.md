@@ -2,66 +2,69 @@
 Updated: 2026-05-22
 
 ## Cursor
-- component: C2.2
-- status: blocked
-- active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First preserve the reviewed C2.1.1.13.4.4 checkpoint: inspect git status/diff, rerun holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) if practical, then stage only relevant tracked files (currently source comment + DOSSIER + rendered STATE/LEARNINGS if changed) and commit; do not stage untracked scratch/test files. After that, query_plan shows C2.2 next but its allowed action recommends plan_oracle(mode="replace", component_id="C2.2", planning_reason="PLAN appears over-decomposed; request ancestor rebase/flatten instead of further tactical decomposition"), so ask the strategist before beginning C2.2 proof work unless a fresh query_plan explicitly allows begin_component('C2.2').
-- expected_goal_shape: For the checkpoint verification, `vyperTypeStmtSoundnessTheory` should build successfully. For next proof work, C2.2 is the Expr_Attribute read/path resume; expect a cheated `Resume eval_all_type_sound_mutual[Expr_Attribute]` immediately after the completed Expr_Subscript resume, but current query_plan warns to seek a C2.2 rebase/flatten first.
+- component: C2.3.1
+- status: ready
+- active_file: semantics/prop/vyperTypeSystemScript.sml
+- next_action: Before new proof edits, preserve the reviewed C2.3 gate/probe checkpoint if still present: inspect git status/diff, stage only relevant tracked files (`semantics/prop/vyperTypeStmtSoundnessScript.sml`, `semantics/prop/PLAN_type_system_rewrite.md`, `semantics/prop/DOSSIER_type_system_rewrite.md`, and handoff-rendered STATE if appropriate), and commit the fixed-array Pop probe/replan; do not stage untracked scratch files. Then begin `C2.3.1` and edit `well_typed_expr env (Pop ty tgt)` in `semantics/prop/vyperTypeSystemScript.sml` from arbitrary `?bd. type_place_target ... ArrayT ty bd` to dynamic `?n. type_place_target ... ArrayT ty (Dynamic n)`. Rebuild `vyperTypeStmtSoundnessTheory` and fix only mechanical Pop-typing fallout.
+- expected_goal_shape: After C2.3.1 edit, proof failures should be mechanical uses of the Pop clause of `well_typed_expr_def`: old destructs expecting `?bd. type_place_target env tgt = SOME (Type (ArrayT ty bd))` must be updated to `?n. ... (Dynamic n)`. The local C2.3.2 probe theorem `assign_subscripts_fixed_array_pop_type_error_probe` should still prove by `simp[Once assign_subscripts_def, pop_element_def]` unless removed as documentation. The scheduled C2.3.2 boundary lemma after repair should prove by `simp[Once well_typed_expr_def]`.
 - verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
 
 ## If This Fails
-- If checkpoint holbuild fails, do not start C2.2; checkpoint_progress under the relevant active/last component with the exact failure and ask strategist if the failure is outside C2.1.1.13.4.4. If git status contains only the known reviewed checkpoint, commit it before proof work. If query_plan still says C2.2 is next but allowed actions only list plan_oracle replacement, call plan_oracle rather than begin/edit/build.
+- If the definition repair causes non-mechanical failures outside Pop typing construction sites, checkpoint_progress on C2.3.1 with the holbuild output and ask the strategist before broad repairs. If the fixed-array probe no longer compiles due to imports or clutter, it may be removed per PLAN after preserving E0713 evidence. If query_plan no longer makes C2.3.1 beginable, follow Oracle next rather than editing.
 
 ## Do Not Retry
-- Begin/edit/build C2.2 immediately if query_plan still lists only plan_oracle replacement in allowed actions.: Latest query_plan lists C2.2 as next but explicitly says to call plan_oracle(mode='replace', component_id='C2.2') because the PLAN appears over-decomposed. Starting proof work would violate the structured gate.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40120_t003
-- Stage or commit untracked `test_*`, `test_conj*`, or `SuspBugProbeScript.sml` files.: They are scratch/ad-hoc files unrelated to the stable proof checkpoint. Stage only tracked task-owned files and any rendered STATE/LEARNINGS changes.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40120_t002
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40095_t001
-- Reopen or optimize the Expr_Subscript helper/integration proofs after E0708.: The local region has built and been reviewed. Any remaining cheats are later scheduled resumes, not local Expr_Subscript placeholders.
-  - evidence: episode:E0708
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t002
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t001
-- Reintroduce broad `simp[bind_def]` in `BaseTarget_Subscript` successful branch.: That exact broad simplification timed out earlier; the bounded `rewrite_tac[bind_def, return_def]` is verified and committed in the prior checkpoint.
-  - evidence: episode:E0705
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40072_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40082_t001
+- Prove `well_typed_expr env (Pop elem_ty tgt)` implies `assign_operation_runtime_typed env (ArrayT elem_ty bd) PopOp` under the old arbitrary-bound rule.: C2.3.1 unfolded the exact definitions and the residual requires `bd = Dynamic n` from no premise; stronger tactics cannot invent that fact.
+  - evidence: episode:E0712
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40240_t001
+- Leave the Pop typing rule arbitrary-bound and add ad hoc dynamic assumptions inside the Expr_Pop Resume.: This hides the false static interface; fixed-array PopOp produces a TypeError at the assignment leaf, violating the no-TypeError public behavior path.
+  - evidence: episode:E0713
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40254_t001
+- Change `pop_element_def`/runtime semantics to accept fixed arrays as the first repair.: The strategist selected a localized static typing repair; changing runtime semantics is broader and not authorized by C2.3.1.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40257_t001
+  - evidence: source:semantics/vyperValueOperationScript.sml:803-808
+- Stage or commit untracked `test_*`, `test_conj*`, or `SuspBugProbeScript.sml` files.: They are pre-existing scratch/ad-hoc files unrelated to stable proof checkpoints. Stage only relevant tracked task/source/PLAN/DOSSIER/STATE/LEARNINGS changes.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t002
+- Begin C2.3.2/C2.3.3 before C2.3.1 definition repair.: query_plan makes C2.3.1 Oracle next; C2.3.2 boundary lemma depends on the repaired Pop typing rule, and C2.3.3 depends on both.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t004
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach for next session: before proving Expr_Attribute, question whether C2.2's current plan is over-decomposed or stale now that Expr_Subscript is done; query_plan already suggested an oracle rebase/flatten rather than direct proof work.
-- We are not optimizing the wrong theorem in the completed work: Expr_Subscript integration is built and audited, and remaining cheats are later resumes outside C2.1.1.13.4.4.
-- The boundary-helper decomposition for Subscript was the right abstraction; it prevented duplication of index/get_Value/read-storage reasoning in the mutual Resume.
-- Do not retry local Subscript tactics now; move on only after committing the reviewed checkpoint and resolving the C2.2 planning gate.
-- A fresh expert should first question why query_plan says C2.2 is beginable but allowed actions recommend plan_oracle replace; treat that scheduling guidance as more important than starting another proof immediately.
+- Outside-the-box option not yet explored: instead of only changing `well_typed_expr`, one could alter runtime semantics to support fixed-array Pop, but the strategist explicitly rejected changing `pop_element_def`; repairing static typing is lower-risk and preserves runtime behavior.
+- We are not optimizing the wrong theorem: the old Expr_Pop Resume cannot be proved soundly under arbitrary `bd`; the right object is the Pop typing rule/interface that supplies dynamic array side conditions.
+- The PLAN decomposition is now the right abstraction: C2.3.1 definition repair, C2.3.2 extraction/runtime boundary lemma, C2.3.3 Resume integration. Do not jump straight to C2.3.3.
+- Do not retry the failed static extraction theorem with stronger tactics; the residual goal is semantically missing data, not tactic weakness.
+- A fresh expert should first question whether any downstream Pop typing users intentionally rely on fixed arrays. If so, they need to be repaired to dynamic bounds or escalated, not patched with assumptions.
 
 ### What Went Wrong
-- STATE is stale because it still points to C2.1.1.13.4.3a. This session closed/reviewed E0707, committed the larger Subscript helper checkpoint as commit b6883b8f0, then began/closed/reviewed C2.1.1.13.4.4. The last reviewed C2.1.1.13.4.4 changes are not committed because the handoff interrupted after review.
-- The old source comment at Expr_Subscript still mentioned temporary cheats even though the adapters were proved. It was corrected, rebuilt, and reviewed, but this small source change plus regenerated DOSSIER remain unstaged/uncommitted.
-- There are many pre-existing untracked scratch/test files. They repeatedly show in git status and must not be staged or committed.
+- C2.3's old direct Expr_Pop proof plan assumed the Pop typing rule supplied the dynamic-array premise required by `assign_operation_runtime_typed ... PopOp`. C2.3.1 disproved that extraction: after unfolding `well_typed_expr_def` and `assign_operation_runtime_typed_def`, the residual required `bd = Dynamic n` from only a target typing equality.
+- C2.3.2 then showed this was not just a proof-interface nuisance: fixed-array leaf `PopOp` computes to `INR (TypeError "pop_element")` via `assign_subscripts_def` and `pop_element_def`.
+- Stable C2.2.3 progress was committed as `b91df1d2a`, but the later C2.3.2 probe/replan changes are not yet committed at handoff. Git status still includes modified PLAN/DOSSIER/source/STATE plus many pre-existing untracked scratch files.
 
 ### Ignored Signals
-- The C2.1.1.13.4.4 audit grep initially found only later unrelated cheats, plus a stale comment saying temporary cheats; that comment was a hygiene issue worth fixing before closure.
-- Holbuild after the comment change emitted many checkpoint-invalid warnings but ultimately built successfully. Treat these as holbuild checkpoint replay noise unless a future build actually fails; do not delete checkpoints.
-- query_plan after C2.1.1.13.4.4 review did not simply authorize begin_component C2.2 in allowed actions; it recommended a plan_oracle replace for over-decomposition. Preserve that in the cursor.
+- The existing `assign_operation_runtime_typed_def` explicitly made `PopOp` dynamic-array-only; the old C2.3 direct proof guidance underweighted that interface and treated Pop as a generic assignment consumer.
+- The initial C2.3 query already warned of over-decomposition and stale dependency on C3.3; calling the strategist before beginning was correct and led to the Pop gate.
+- After C2.3.1 was accepted, the scheduler still blocked C2.3.2 until an augment reclassified C2.3.1 as accepted negative evidence; do not assume review acceptance always updates frontier state automatically.
 
 ### Strategy Adjustments
-- For post-integration/audit components, grep the exact local region for `cheat`/`FAIL_TAC` and distinguish component-local placeholders from later scheduled cheats before closing.
-- After a reviewed proof checkpoint, commit immediately if build-clean and diffs are relevant; otherwise STATE becomes stale and future sessions must reconstruct what was already reviewed.
-- For C2.2, avoid broad simplification over the strengthened mutual IH context; request strategist guidance/rebase first if the plan remains over-decomposed.
+- Treat the Pop issue as a definition repair, not a hard proof. The next leaf is C2.3.1: strengthen the non-frozen Pop typing rule to dynamic arrays in `vyperTypeSystemScript.sml`.
+- Keep C2.3.1/C2.3.2 probe evidence as rationale/regression documentation, but do not depend on fixed-array negative facts for the final positive Expr_Pop proof after the rule is repaired.
+- After the typing-rule repair, prove a Pop extraction boundary lemma before touching the Expr_Pop Resume; consumers should not repeatedly unfold the full `well_typed_expr_def` or `assign_subscripts_def`.
+- Commit the reviewed C2.3.2 probe/replan checkpoint before beginning new edits if build status remains clean and only relevant tracked files are staged.
 
 ### Oracle Feedback
-- Strategist accepted E0707 as the administrative duplicate BaseTarget_Subscript closure; no PLAN change was needed.
-- Strategist accepted E0708: source readback showed Expr_Subscript delegates to the proved ordinary/place-as-ordinary/projection helpers, and the grep audit showed no local cheat or FAIL_TAC remains.
-- The only current oracle/schedule wrinkle is query_plan's C2.2 allowed action recommending a replace/rebase despite listing C2.2 as beginable. Next session should resolve that gate before proof work.
+- Strategist accepted C2.2.3 (E0711) with no PLAN changes; the Attribute Resume proof matched the planned thin wiring interface.
+- Strategist accepted C2.3.1 (E0712) as an expected negative static-extraction probe and then, after scheduler remained blocked, augmented the PLAN to treat it as accepted probe evidence.
+- Strategist accepted C2.3.2 (E0713) as sufficient localized evidence; no full `eval_expr` counterexample is required because the internal Pop typing rule is non-frozen and the mismatch is localized. The PLAN now authorizes a definition repair under C2.3.1.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40101_t001 - C2.1.1.13.4.3a verification build succeeded
-- episode:E0707 - BaseTarget_Subscript administrative duplicate closure recorded/reviewed
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t002 - `vyperTypeStmtSoundnessTheory` built successfully after Expr_Subscript integration audit/comment fix
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t001 - grep audit: no `FAIL_TAC`; no Expr_Subscript/local-adapter cheats, only later scheduled resumes
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40113_t001 - readback of Expr_Subscript region showing adapter calls and place/projection conjunct
-- episode:E0708 - C2.1.1.13.4.4 proved/reviewed
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40118_t001 - strategist accepted E0708 and requested stable checkpoint commit
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40120_t003 - latest query_plan: C2.2 next but allowed actions recommend plan_oracle replace/rebase
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40120_t002 - git status: reviewed C2.1.1.13.4.4 changes uncommitted plus untracked scratch files
+- episode:E0711 - Expr_Attribute Resume proved/reviewed; committed as b91df1d2a/b91df1d2a checkpoint context
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40227_t002 - `vyperTypeStmtSoundnessTheory` built after Expr_Attribute proof
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40233_t001 - commit `b91df1d2a` for Expr_Attribute checkpoint
+- episode:E0712 - Pop static extraction probe failed with unconstrained `bd`; accepted as negative probe evidence
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40240_t001 - exact residual goal requiring `bd = Dynamic n`
+- episode:E0713 - fixed-array PopOp probe proved TypeError leaf behavior
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40254_t001 - `vyperTypeStmtSoundnessTheory` built with fixed-array Pop probe theorem
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40255_t003 - diff showing only local fixed-array Pop probe added
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40257_t001 - strategist replaced Pop gate with definition-repair/proof plan
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t004 - current query_plan: C2.3.1 is Oracle next/beginable
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t002 - current git status: C2.3.2 probe/replan changes uncommitted plus untracked scratch files

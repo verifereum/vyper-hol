@@ -141,8 +141,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
 | C2.3 | proved |  | E0614 |  |
-| C2.3.1 | proved |  | E0447 | Review closure, then begin C2.3.2 to audit/reuse the explicit-witness helper before patching the suffix. |
-| C2.3.2 | proved |  | E0448 | Review closure, then begin C2.3.3 and replace the For_cons suffix placeholder by extracting the IH existential and applying this explicit-witness helper. |
+| C2.3.1 | stuck | wrong_statement | E0712 | Review C2.3.1 as an expected failed static extraction probe; if accepted, execute C2.3.2 fixed-array Pop evaluator/assignment behavior probe. |
+| C2.3.2 | proved |  | E0713 | Review C2.3.2 with strategist. Because C2.3.1 showed Pop typing allows unconstrained bounds and C2.3.2 shows fixed-array PopOp returns TypeError, strategist should decide whether to construct a full eval_expr counterexample or authorize a typing-rule repair/replan. |
 | C2.3.3 | stuck | risk_mismatch | E0450 | Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale. |
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
@@ -3886,22 +3886,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `proved`
-- diagnosis: `n/a`
-- latest episode: `E0447`
-- blocker: 
-- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 396,042 tok (395,131 in, 911 out, 387,072 cached), 29.4s, $0.26116100
-- next: Review closure, then begin C2.3.2 to audit/reuse the explicit-witness helper before patching the suffix.
+- result: `stuck`
+- diagnosis: `wrong_statement`
+- latest episode: `E0712`
+- blocker: The live Pop typing rule does not imply the dynamic-array bound or assign_operation_runtime_typed PopOp side condition. After unfolding well_typed_expr_def and assign_operation_runtime_typed_def, the residual goal is `?elem_tv n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\ bd = Dynamic n` from only `type_place_target env tgt = SOME (Type (ArrayT elem_ty bd))`; `bd` is unconstrained.
+- actual effort: 1 sessions, 9 steps, 12 tools, 4 holbuild, 957,585 tok (954,157 in, 3,428 out, 939,520 cached), 134.9s, $0.64578500
+- next: Review C2.3.1 as an expected failed static extraction probe; if accepted, execute C2.3.2 fixed-array Pop evaluator/assignment behavior probe.
 
 ### Attempts / Evidence
 
 - `E0447` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 396,042 tok (395,131 in, 911 out, 387,072 cached), 29.4s, $0.26116100)
   - Removed the failed E0446 suffix chain (`irule for_cons_ordinary_exception_tail_from_stmt_case` / `for_cons_inr_case_premise_extract` / `qpat_assum ... ACCEPT_TAC`) and restored a placeholder at the same residual ordinary-exception goal. -> Source now contains only a C2.3.1 cleanup placeholder at the For_cons suffix. holbuild reaches that placeholder and prints the intended residual goal; no failed helper chain remains active. (`TO_type_system_rewrite-20260519T123242Z_m32178_t001`, `TO_type_system_rewrite-20260519T123242Z_m32179_t001`)
+- `E0712` (stuck, wrong_statement, actual effort: 1 sessions, 9 steps, 12 tools, 4 holbuild, 957,585 tok (954,157 in, 3,428 out, 939,520 cached), 134.9s, $0.64578500)
+  - Temporarily added `pop_well_typed_implies_assign_operation_runtime_typed_probe[local]` with the PLAN statement, unfolded the Pop conjunct of `well_typed_expr_def`, then unfolded `assign_operation_runtime_typed_def` and inserted FAIL_TAC to inspect the residual. -> Probe could not prove: residual goal requires `evaluate_type env.type_defs elem_ty = SOME elem_tv` and `bd = Dynamic n` from only the target typing equality. This shows the current static Pop typing clause leaves `bd` arbitrary and does not supply the dynamic-array side condition. (`TO_type_system_rewrite-20260522T073012Z_m40240_t001`)
+  - Removed the temporary failed probe theorem and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source was restored with no diff in vyperTypeStmtSoundnessScript.sml; target builds from cache/clean state. (`TO_type_system_rewrite-20260522T073012Z_m40244_t002`, `TO_type_system_rewrite-20260522T073012Z_m40244_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260519T123242Z_m32178_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T123242Z_m32179_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40240_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40244_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40244_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.2
 
@@ -3909,19 +3913,24 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0448`
+- latest episode: `E0713`
 - blocker: 
-- actual effort: 1 sessions, 2 steps, 1 tools, 210,194 tok (209,644 in, 550 out, 203,776 cached), 13.2s, $0.14772800
-- next: Review closure, then begin C2.3.3 and replace the For_cons suffix placeholder by extracting the IH existential and applying this explicit-witness helper.
+- actual effort: 1 sessions, 7 steps, 12 tools, 1 holbuild, 873,503 tok (871,543 in, 1,960 out, 846,336 cached), 69.7s, $0.60800300
+- next: Review C2.3.2 with strategist. Because C2.3.1 showed Pop typing allows unconstrained bounds and C2.3.2 shows fixed-array PopOp returns TypeError, strategist should decide whether to construct a full eval_expr counterexample or authorize a typing-rule repair/replan.
 
 ### Attempts / Evidence
 
 - `E0448` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 210,194 tok (209,644 in, 550 out, 203,776 cached), 13.2s, $0.14772800)
   - Audited existing explicit-witness helper `for_cons_ordinary_exception_tail_conclusion_premises` near the For_cons helper block. -> The theorem already has the exact explicit-witness interface requested by C2.3.2: it consumes the pushed-scope body evaluation, `env_maps_wf`, original `env_consistent`, `id NOTIN`, body state/account typing, `no_type_error_result`, and explicit `env_exn` extension/consistency/return-typing premises, and concludes the popped ordinary-exception tail. No new helper is needed. (`TO_type_system_rewrite-20260519T123242Z_m32183_t001`)
+- `E0713` (proved, , actual effort: 1 sessions, 7 steps, 12 tools, 1 holbuild, 873,503 tok (871,543 in, 1,960 out, 846,336 cached), 69.7s, $0.60800300)
+  - Added `assign_subscripts_fixed_array_pop_type_error_probe[local]` for `assign_subscripts (ArrayTV elem_tv (Fixed n)) (ArrayV (SArrayV sparse)) [] PopOp` and proved it by `simp[Once assign_subscripts_def, pop_element_def]`. -> The probe theorem builds, showing fixed-array leaf PopOp returns `INR (TypeError "pop_element")`. This confirms the missing dynamic-array premise from C2.3.1 corresponds to a real TypeError-producing assignment/subscript path. (`TO_type_system_rewrite-20260522T073012Z_m40254_t001`, `TO_type_system_rewrite-20260522T073012Z_m40255_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260519T123242Z_m32183_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40254_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40255_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40255_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40255_t003` (use `read_tool_output` for exact output)
 
 ## C2.3.3
 

@@ -214,32 +214,33 @@ Import/use the appropriate conjunct of `assign_target_sound_mutual`; instantiate
 Do not duplicate target evaluator case analysis in these wrappers. Do not keep old weaker wrappers with cheats if their callers actually need the stronger side conditions.
 
 ### C2: Carry-forward ancestor context for statement soundness work
-- Kind: `ancestor_context`
-- Risk: 2
-- Work priority: 0
+- Kind: `unprovability_gate`
+- Risk: 5
+- Work priority: 20
 - Work units: 0
-- Rationale: Included only to satisfy dotted-component parent validation. This augment does not re-plan C2 or its siblings; the actual risk-bearing work is inside C2.1.1.13.4.3.
+- Rationale: Suspected theorem falsehood: complete probe components under C2 (including C2.3.2) before any other proof work. If probes confirm a counterexample, stop/report unprovable; do not silently repair the theorem.
 - Required for completion: yes
+- Checkpoint: yes
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: existing C2 plan
+- Carries progress/evidence from: current C2 parent
 
 #### Progress note
-Carry-forward parent context only; no executable work or scope expansion is introduced by this component in this update.
+Included only as explicit parent context for the C2.3.1 merge. This update does not re-plan C2 or its siblings.
 
 #### Summary
-Parent context only for the local C2.1.1.13.4.3 repair. No siblings or broader statement-soundness obligations are changed by this update.
-
-#### Description
-This component is emitted solely because the structured PLAN validator requires explicit dotted parents. The executable frontier introduced by this update is under C2.1.1.13.4.3.
+- Parent gate context is unchanged.
+- The active issue remains the `Expr_Pop` unprovability gate under C2.3.
+- This merge only reclassifies C2.3.1 as accepted negative probe evidence.
+- Continue to block unrelated proof work until the C2.3 probes resolve the suspected Pop typing bug.
 
 #### Argument
-The global statement-soundness argument is unchanged. The local repair below stabilizes one subscript-expression adapter proof and does not alter the broader invariant.
+C2 currently contains a bottom-up unprovability workflow for the statement soundness branch where direct proof may be impossible under the live Pop typing rule. The strategy is to avoid proving the statement theorem by assuming missing premises; instead, checked probes establish whether the static typing rule is too weak and whether that weakness produces an actual TypeError path. Only after the gate is resolved should normal statement proof integration resume.
 
 #### Definition design
-No definition-design change at this ancestor level. Local proof interfaces are described at C2.1.1.13.4.3.
+Do not change definitions at C2 level in this update. The relevant interface being tested is whether `well_typed_expr` for `Pop` supplies the side condition required by `assign_operation_runtime_typed env ty PopOp`; if it does not, concrete evaluator/assignment behavior must be checked before any type-rule repair is proposed.
 
 #### Code structure
-No ancestor-level file organization changes. All actual edits authorized by this update are in `semantics/prop/vyperTypeStmtSoundnessScript.sml` under the local subscript proof region.
+No source edits are owned by this parent in this update. Temporary local probe theorems belong near the suspended `Expr_Pop` resume in `semantics/prop/vyperTypeStmtSoundnessScript.sml` and must be removed after diagnostic use unless they become durable helpers.
 
 ### C2.0: Carry forward completed TopLevelName and assignment-statement repairs
 - Kind: `carried_evidence`
@@ -1389,33 +1390,164 @@ In the Resume, `rpt gen_tac >> strip_tac`, expose `well_typed_expr env (Attribut
 #### Not to try
 Do not leave helper skeletons with `cheat` in this component after closing; checkpoint requires local zero placeholders. Do not run a whole-repository cheat cleanup or touch later `Expr_Builtin`, `Expr_TypeBuiltin`, `Expr_Pop`, or call resumes; those are sibling obligations outside C2.2. Do not use broad all-case simplification over the entire Resume body; if the proof becomes a long sequence of `first_assum ACCEPT_TAC` or quoted `ASSUME` plumbing, return to C2.2.2 and strengthen the adapter interface.
 
-### C2.3: Close `Expr_Pop` using assignment/subscript preservation interfaces
-- Kind: `proof`
+### C2.3: Repair and prove `Expr_Pop` soundness using a dynamic-array Pop typing rule
+- Kind: `definition_repair_and_proof`
 - Risk: 2
 - Work priority: 30
-- Work units: 5
-- Rationale: `Pop` is the one remaining stateful non-call expression case and should be a consumer of the C3 assignment-subscript no-TypeError/preservation chain. With C3 complete, the branch is a local evaluator replay.
-- Dependencies: C2.0, C3.3
+- Work units: 0
+- Rationale: The high-risk gate is resolved by checked probes: Pop typing currently accepts fixed arrays, and fixed-array leaf Pop returns `TypeError`. The repair is localized to the non-frozen Pop static rule and the resulting proof obligations align with existing dynamic-array assignment/runtime lemmas.
+- Checkpoint: yes
+- Supersedes: C2.3.1, C2.3.2, C2.3.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0712, E0713, TO_type_system_rewrite-20260522T073012Z_m40254_t001, TO_type_system_rewrite-20260522T073012Z_m40255_t001, TO_type_system_rewrite-20260522T073012Z_m40255_t003
 
 #### Progress note
-Scheduled after C3 because `Pop` follows the update/subscript leaf path named in the task handover.
+C2.3 is no longer an unprovability gate. E0712 showed the static Pop rule does not imply a dynamic bound; E0713 proved fixed-array PopOp computes to `INR (TypeError "pop_element")` at the assignment leaf. These results justify repairing the non-frozen typing rule instead of trying to force the old `Expr_Pop` proof.
 
 #### Summary
-- Replace the `Expr_Pop` cheat.
-- Depend on C3 recursive assignment-subscript no-TypeError/preservation lemmas.
-- Preserve all-result state/account typing through the C3 operation interfaces.
-- Keep the branch proof local to the evaluator constructor.
+- The fixed-array Pop probe is accepted as valid gate evidence.
+- Do not build a full `eval_expr` counterexample before repair; the internal Pop typing rule is non-frozen and the mismatch is already localized.
+- Strengthen `well_typed_expr env (Pop ty tgt)` so the target has dynamic array type, not arbitrary array bound.
+- Then prove a small extraction lemma and use existing dynamic Pop assignment/runtime facts to close `eval_all_type_sound_mutual[Expr_Pop]`.
+- Keep the local fixed-array probe only if it remains useful documentation; it should not be a dependency of the final proof after the rule is repaired.
+
+#### Description
+Replace the former high-risk Pop gate with a local typing-rule repair and proof integration. The old proof path attempted to derive dynamic-array runtime side conditions from a Pop rule that only exposed `ArrayT ty bd`; E0712/E0713 show this is exactly the wrong interface. Since the task explicitly allows internal helper/spec statements to be strengthened or replaced and only freezes public behavior, the correct architectural move is to make Pop statically dynamic-array-only and update the branch proof accordingly.
+
+#### Approach
+First repair the typing rule, then prove the branch; do not try to prove the old branch under arbitrary `bd`. Use C2.3.1/C2.3.2 as rationale and regression documentation, not as proof dependencies for the successful branch. After the repair, rebuild at least `vyperTypeStmtSoundnessTheory`; if downstream theories break because they construct Pop typing assumptions, repair those call sites to supply a `Dynamic` bound.
+
+#### Not to try
+Do not add ad hoc assumptions inside `eval_all_type_sound_mutual[Expr_Pop]` while leaving the Pop typing rule arbitrary-bound; that just hides the false static interface. Do not prove a full evaluator counterexample unless the user requires preserving the old Pop rule. Do not unfold `assign_subscripts_def` throughout the statement proof; rely on dynamic-array assignment/runtime lemmas already present in state preservation.
+
+#### Argument
+The runtime semantics of `PopOp` is dynamic-array-specific: at the leaf, `assign_subscripts tv a [] PopOp` calls `pop_element a`, and `pop_element` only succeeds on `ArrayV (DynArrayV vs)`. Existing state-preservation code already has dynamic Pop lemmas, including dynamic no-TypeError facts for `assign_subscripts`/`assign_target`. Therefore the static type rule for `Pop` must expose a dynamic bound so the statement proof can establish `assign_operation_runtime_typed env ty PopOp` and feed the assignment target soundness theorem. Once `well_typed_expr` requires `type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n)))`, the `Expr_Pop` branch follows the evaluator recursion: typed target lookup/evaluation gives a dynamic-array leaf; assignment soundness for `PopOp` rules out `TypeError`; `popped_value`/result typing gives returned element type `ty`; and the all-result joint invariant preserves state/env/account/runtime invariants through the assignment step.
+
+#### Definition design
+The repaired Pop typing interface should provide a consumer-facing extraction lemma, not require consumers to unfold `well_typed_expr_def` repeatedly. Boundary lemma shape: from `well_typed_expr env (Pop ty tgt)`, derive `?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n)))` plus `well_formed_type env.type_defs ty` if the repaired rule includes/needs it. A second boundary lemma may derive `assign_operation_runtime_typed env ty PopOp` directly from the typed Pop premise and the target's place type if that better matches the `Expr_Pop` proof. Failure signs: if the branch still needs to reason about an unconstrained `bd`, the repair did not reach the active `well_typed_expr` definition; if consumers unfold `assign_subscripts_def` for Pop leaf cases, use the existing dynamic Pop no-TypeError/preservation lemmas instead.
+
+#### Code structure
+Edit `semantics/prop/vyperTypeSystemScript.sml` at the live `well_typed_expr` Pop clause. Add local or exported Pop extraction lemmas near the type-system lemmas used by statement soundness, preferably in `vyperTypeStmtSoundnessScript.sml` if only consumed there, or in `vyperTypeExprSoundnessScript.sml`/`vyperTypeSystemScript.sml` if other fresh-stack theories need them. Then replace the `Resume eval_all_type_sound_mutual[Expr_Pop]: cheat` in `semantics/prop/vyperTypeStmtSoundnessScript.sml` with a proof using the extraction lemma and assignment-target soundness. Do not modify retired old `vyperTypeSoundness*` theories unless `holbuild vyperSemanticsHolTheory` shows they are still reachable.
+
+### C2.3.1: Strengthen the live Pop typing rule to dynamic arrays
+- Kind: `definition_repair`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: The edit is a localized non-frozen internal rule change justified by E0712/E0713. Downstream breaks, if any, should be ordinary premise updates from arbitrary `bd` to `Dynamic n`.
+- Checkpoint: yes
+- Supersedes: C2.3.1, C2.3.2
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0712, E0713
+
+#### Progress note
+This leaf replaces the old probes with the actual source repair they justified.
+
+#### Summary
+- Modify `well_typed_expr env (Pop ty tgt)` in `vyperTypeSystemScript.sml`.
+- Require `?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n)))` instead of `?bd. ... ArrayT ty bd`.
+- Preserve any existing well-formedness side conditions if the surrounding expression rules require them.
+- Rebuild the immediate dependent theory and fix mechanical fallout at Pop typing construction sites only.
+
+#### Description
+The current rule at `vyperTypeSystemScript.sml` lines around 507 admits fixed arrays. Replace the existential over arbitrary bounds by an existential over `Dynamic n`. If the local style of `well_typed_expr` requires `well_formed_type env.type_defs ty` for expression result types, add it here as part of the same repair; otherwise keep the change minimal to avoid unrelated fallout.
 
 #### Statement
+Source-level repair target:
 ```sml
-Resume eval_all_type_sound_mutual[Expr_Pop]: ... QED
+well_typed_expr env (Pop ty tgt) =
+  (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))))
+  (* plus well_formed_type env.type_defs ty if required by the surrounding invariant style *)
+```
+not the old
+```sml
+(?bd. type_place_target env tgt = SOME (Type (ArrayT ty bd)))
 ```
 
 #### Approach
-After one-step evaluator unfolding, use the IHs for target/path evaluation and then apply C3's `assign_subscripts_no_type_error_runtime_typed` / preservation counterpart for the pop operation. The success result must show both the popped value has the expression type and the post-state remains well typed/accounts well typed.
+Edit the definition and let HOL regenerate the induction/definition theorems. Grep for proof sites that destruct `well_typed_expr ... (Pop ...)` and update them from `bd` to `n`/`Dynamic n`; these should become easier, not harder. Keep the E0713 fixed-array probe local only if it still compiles and documents the old counterexample class; remove it if the repaired proof no longer needs it and it causes clutter.
 
 #### Not to try
-Do not re-prove recursive `assign_subscripts` facts inside the statement mutual proof. Do not weaken the assignment operation side conditions introduced by C1/C2 assignment repairs.
+Do not preserve the old arbitrary-bound rule and attempt to compensate with a later `assign_operation_runtime_typed` assumption. Do not change `pop_element_def` to accept fixed arrays; that would alter runtime semantics rather than fixing the static rule.
+
+### C2.3.2: Add Pop dynamic-array extraction/runtime boundary lemma
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 2
+- Rationale: After the definition repair, the extraction is a direct consequence of `well_typed_expr_def` and the existing `assign_operation_runtime_typed` Pop characterization. It prevents the statement branch from unfolding the full type-system definition repeatedly.
+- Dependencies: C2.3.1
+- Carries progress/evidence from: E0712
+
+#### Progress note
+New helper created to match the repaired Pop proof use site.
+
+#### Summary
+- Prove a small helper consumed by `Expr_Pop`.
+- From `well_typed_expr env (Pop ty tgt)`, extract the dynamic array bound and target place type.
+- If useful, also prove a corollary deriving `assign_operation_runtime_typed env ty PopOp` for the dynamic-array target case.
+- Place the lemma near the `Expr_Pop` resume if local, or in the type/expr soundness helper file if multiple consumers use it.
+
+#### Statement
+Recommended local lemma shape:
+```sml
+Theorem well_typed_expr_Pop_dynamic_target[local]:
+  !env ty tgt.
+    well_typed_expr env (Pop ty tgt) ==>
+    ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n)))
+```
+Optional corollary if it matches the branch better:
+```sml
+Theorem well_typed_expr_Pop_assign_operation_runtime_typed[local]:
+  !env ty tgt n.
+    well_typed_expr env (Pop ty tgt) /\
+    type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) ==>
+    assign_operation_runtime_typed env ty PopOp
+```
+Adjust exact parameters to the live definition of `assign_operation_runtime_typed`.
+
+#### Approach
+Prove the extraction by `simp[Once well_typed_expr_def]` or the generated equation theorem for `well_typed_expr`. For the runtime corollary, rewrite the Pop case of `assign_operation_runtime_typed` rather than manually analyzing all assignment operations. The conclusion should be shaped so the `Expr_Pop` proof can use `drule`/`irule` without manual theorem plumbing.
+
+#### Not to try
+Do not make the statement mention fixed arrays or prove a negative fact here; that was the gate evidence and is no longer the integration interface. Do not expose the entire `well_typed_expr` conjunction for all expression constructors.
+
+### C2.3.3: Close `eval_all_type_sound_mutual[Expr_Pop]` under repaired Pop typing
+- Kind: `proof_integration`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: With dynamic-array Pop typing available, this is a standard branch of the existing joint evaluator invariant using the assignment-target soundness theorem and existing dynamic Pop lemmas.
+- Dependencies: C2.3.1, C2.3.2
+- Checkpoint: yes
+- Supersedes: C2.3.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0713
+
+#### Progress note
+This replaces the old conditional integration leaf, which was only executable if the gate resolved in favor of provability without a typing repair. The branch is now provable because the source rule supplies the dynamic premise.
+
+#### Summary
+- Replace the `Resume eval_all_type_sound_mutual[Expr_Pop]: cheat` proof.
+- Use the Pop extraction lemma to obtain a dynamic-array target type.
+- Feed the dynamic premise into assignment-target soundness/runtime typedness for `PopOp`.
+- Establish both no-`TypeError` and result/state preservation conclusions required by the joint invariant.
+- Rebuild `vyperTypeStmtSoundnessTheory` and keep this as a checkpoint before moving to call/builtin Expr cases.
+
+#### Statement
+Proof target is the existing suspended branch:
+```sml
+Resume eval_all_type_sound_mutual[Expr_Pop]:
+  ...
+QED
+```
+Do not change the theorem name or the overall `eval_all_type_sound_mutual` statement except as forced by the repaired `well_typed_expr` definition.
+
+#### Approach
+Follow the evaluator recursion for `Pop`: destruct the typed premise with `well_typed_expr_Pop_dynamic_target`, use the target evaluation/assignment target hypotheses already present in the mutual proof, and apply the dynamic-array Pop assignment lemmas rather than unfolding `assign_subscripts_def`. The key side condition to produce for assignment preservation is the same one that appears in `assign_operation_runtime_typed env ty PopOp`, now justified by `Dynamic n`.
+
+#### Not to try
+Do not try to solve the branch by `metis_tac` over the old arbitrary-bound Pop premise; the fixed-array probe shows why that premise is insufficient. Do not duplicate the full assignment target proof inside the statement branch; if a side condition is missing, add a boundary lemma matching the assignment theorem instead.
 
 ### C2.4: Close builtin expression resume
 - Kind: `proof`

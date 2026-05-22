@@ -7651,6 +7651,14 @@ Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:
   cheat
 QED
 
+Theorem assign_subscripts_fixed_array_pop_type_error_probe[local]:
+  !elem_tv n sparse.
+    assign_subscripts (ArrayTV elem_tv (Fixed n)) (ArrayV (SArrayV sparse)) [] PopOp =
+    INR (TypeError "pop_element")
+Proof
+  simp[Once assign_subscripts_def, pop_element_def]
+QED
+
 Resume eval_all_type_sound_mutual[Expr_Pop]:
   cheat
 QED

@@ -655,3 +655,21 @@ evidence:
 - episode:E0710
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40195_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7565-7601
+
+## L1275 scope='C2.3' tags=Expr_Pop,well_typed_expr_def,assign_operation_runtime_typed_def,Dynamic,Fixed,PopOp,definition_repair
+shape: Need Pop branch side condition `assign_operation_runtime_typed env (ArrayT elem_ty bd) PopOp` from static typing.
+pattern: If `well_typed_expr env (Pop elem_ty tgt)` only gives `?bd. type_place_target env tgt = SOME (Type (ArrayT elem_ty bd))`, unfolding `assign_operation_runtime_typed_def` leaves the unprovable residual `?elem_tv n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\ bd = Dynamic n`. Treat this as a typing-rule/interface bug, not a proof obligation. Repair Pop typing to require `Dynamic n` before proving Expr_Pop.
+works_when: Applies to fresh-stack Pop expression soundness and any consumer of `PopOp` assignment soundness that needs dynamic-array runtime typing.
+evidence:
+- episode:E0712
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40240_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40257_t001
+
+## L1276 scope='C2.3' tags=assign_subscripts,pop_element,PopOp,Fixed,SArrayV,TypeError,probe
+shape: Need checked evidence that fixed-array Pop is a real TypeError path.
+pattern: A minimal leaf computation proves the core counterexample class: `assign_subscripts (ArrayTV elem_tv (Fixed n)) (ArrayV (SArrayV sparse)) [] PopOp = INR (TypeError "pop_element")` by `simp[Once assign_subscripts_def, pop_element_def]`. This avoids constructing a full evaluator state unless the task requires preserving the old fixed-array Pop typing rule.
+works_when: Use when investigating Pop soundness under fixed-array typing or documenting why static Pop typing must be dynamic-array-only.
+evidence:
+- episode:E0713
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40254_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7654-7660
