@@ -688,3 +688,21 @@ evidence:
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:2228-2420
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:2572-2620
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:3090-3106
+
+## L1305 scope='C4' tags=return_def,name-shadowing,vyperState,qualified-theorem
+shape: Goal/assumption involves Vyper state monad `return x st = (INL y, st')`, but simplification with unqualified `return_def` does not unfold it.
+pattern: In `vyperTypeBuiltinsScript.sml`, prefer `vyperStateTheory.return_def` (and `vyperStateTheory.bind_def` when needed) for state-monad proofs. Imports added for builtin/bn254/vfmExecution can make unqualified `return_def` refer to the wrong theory or fail to rewrite; a local helper like `return_INL_value` should be proved with `simp[vyperStateTheory.return_def, pairTheory.PAIR_EQ, sumTheory.INL_11]`.
+works_when: The term is the Vyper state monad `return` from `vyperState`, especially in theorems about `toplevel_array_length` or other state computations returning `(INL v, st')`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41220_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41227_t001
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:3111-3115
+
+## L1306 scope='C4.3' tags=Extract32,type-builtin,static-predicate,counterexample,no-TypeError
+shape: No-TypeError theorem for `evaluate_type_builtin ... Extract32 (BaseT bt) [bytes; idx]` has no premise restricting `bt`.
+pattern: If Extract32 no-TypeError leaves an unrestricted target base type, stop and repair the static predicate. `evaluate_extract32` only avoids TypeError for fixed bytes, uint, int, and address; unsupported bases such as BoolT are a concrete counterexample under the old `well_typed_type_builtin_args` clause.
+works_when: Applies to C4.3/C4.4 type-builtin proofs where `well_typed_type_builtin_args Extract32` is used to justify runtime behavior. After repair, use/derive `extract32_result_base_ok bt` from the static predicate before simplifying `evaluate_extract32_def`.
+evidence:
+- episode:E0741
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41314_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m41320_t001

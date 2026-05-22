@@ -422,6 +422,14 @@ Definition valid_conversion_def:
   valid_conversion _ _ = F
 End
 
+Definition extract32_result_base_ok_def:
+  extract32_result_base_ok (BytesT (Fixed n)) = T /\
+  extract32_result_base_ok (UintT n) = T /\
+  extract32_result_base_ok (IntT n) = T /\
+  extract32_result_base_ok AddressT = T /\
+  extract32_result_base_ok _ = F
+End
+
 Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Empty target_ty ts = (ts = []) /\
   well_typed_type_builtin_args MaxValue target_ty ts = (ts = [] /\ is_numeric_type target_ty) /\
@@ -431,7 +439,7 @@ Definition well_typed_type_builtin_args_def:
     (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
     (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
-     (?bt. target_ty = BaseT bt)) /\
+     (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
     (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
   well_typed_type_builtin_args (AbiEncode _) target_ty ts =

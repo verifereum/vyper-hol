@@ -3193,6 +3193,59 @@ QED
 
 (* ===== Type builtins ===== *)
 
+Theorem typed_bytes_value_is_BytesV[local]:
+  evaluate_type tenv (BaseT (BytesT bd)) = SOME tv ∧ value_has_type tv v ==>
+  ∃bs. v = BytesV bs
+Proof
+  rpt strip_tac >>
+  Cases_on `bd` >> gvs[evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_int_value_is_IntV[local]:
+  is_int_type ty ∧ evaluate_type tenv ty = SOME tv ∧ value_has_type tv v ==>
+  ∃i. v = IntV i
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `is_int_type _` mp_tac >>
+  rewrite_tac[is_int_type_inv] >> strip_tac >>
+  gvs[evaluate_type_def]
+QED
+
+Theorem extract32_bool_not_well_typed_type_builtin_args[local]:
+  ¬ well_typed_type_builtin_args Extract32 (BaseT BoolT)
+      [BaseT (BytesT (Fixed 32)); BaseT (UintT 256)]
+Proof
+  simp[well_typed_type_builtin_args_def, extract32_result_base_ok_def]
+QED
+
+Theorem evaluate_extract32_supported_no_type_error[local]:
+  extract32_result_base_ok bt ∧
+  evaluate_type (get_tenv cx) (BaseT (BytesT bd)) = SOME bytes_tv ∧
+  value_has_type bytes_tv bytes_v ∧
+  is_int_type idx_ty ∧
+  evaluate_type (get_tenv cx) idx_ty = SOME idx_tv ∧
+  value_has_type idx_tv idx_v ==>
+  evaluate_type_builtin cx Extract32 (BaseT bt) [bytes_v; idx_v] <> INR (TypeError msg)
+Proof
+  rpt strip_tac >>
+  drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+  drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
+  Cases_on `bt` >>
+  gvs[extract32_result_base_ok_def, evaluate_type_builtin_def,
+      evaluate_extract32_def, evaluate_convert_def, AllCaseEqs(), LET_THM]
+QED
+
+Theorem evaluate_abi_decode_no_type_error[local]:
+  evaluate_type (get_tenv cx) (BaseT (BytesT bd)) = SOME bytes_tv ∧
+  value_has_type bytes_tv bytes_v ==>
+  evaluate_type_builtin cx (AbiDecode b) result_ty [bytes_v] <> INR (TypeError msg)
+Proof
+  rpt strip_tac >>
+  drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+  gvs[evaluate_type_builtin_def, AllCaseEqs(), LET_THM]
+QED
+
 Theorem well_typed_type_builtin_args_length:
   well_typed_type_builtin_args tb target_ty ts ==> type_builtin_args_length_ok tb (LENGTH ts)
 Proof
@@ -3209,7 +3262,28 @@ Theorem well_typed_type_builtin_no_type_error:
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ==>
   !msg. evaluate_type_builtin cx tb target_ty vs <> INR (TypeError msg)
 Proof
-  cheat
+  Cases_on `tb` >>
+  rw[type_builtin_result_ok_def, well_typed_type_builtin_args_def,
+     evaluate_type_builtin_def, AllCaseEqs(), LET_THM] >>
+  gvs[]
+  >- (qpat_x_assum `is_int_type _` mp_tac >>
+      rewrite_tac[is_int_type_inv] >> strip_tac >>
+      gvs[evaluate_type_def, evaluate_max_value_def])
+  >- simp[evaluate_max_value_def]
+  >- (qpat_x_assum `is_int_type _` mp_tac >>
+      rewrite_tac[is_int_type_inv] >> strip_tac >>
+      gvs[evaluate_type_def, evaluate_min_value_def])
+  >- simp[evaluate_min_value_def]
+  >- simp[evaluate_type_builtin_def]
+  >- (gvs[LENGTH_EQ_NUM_compute] >>
+      drule_all valid_conversion_no_type_error >> simp[])
+  >- (gvs[LENGTH_EQ_NUM_compute] >>
+      Cases_on `tvs` >> gvs[] >>
+      irule evaluate_extract32_supported_no_type_error >>
+      simp[] >> metis_tac[])
+  >- (gvs[LENGTH_EQ_NUM_compute] >>
+      irule evaluate_abi_decode_no_type_error >>
+      metis_tac[])
 QED
 
 Theorem well_typed_type_builtin_success_type:

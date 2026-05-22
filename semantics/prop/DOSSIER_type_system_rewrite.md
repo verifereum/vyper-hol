@@ -283,6 +283,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C4.2 | proved |  | E0740 | Ask plan_oracle to review C4.2 closure, then commit stable C4.2 progress if review accepts. |
 | C4.2.1 | proved |  | E0161 |  |
 | C4.2.2 | progressed | other | E0162 |  |
+| C4.3 | stuck | wrong_statement | E0741 | Call plan_oracle(mode='review') for C4.3 with this evidence; request repair plan for Extract32 static/result constraints or boundary theorem strengthening before any further proof work. |
+| C4.3.1 | proved |  | E0743 |  |
+| C4.3.2 | proved |  | E0744 |  |
+| C4.3.3 | proved |  | E0745 |  |
 | C5.2 | stuck | plan_incomplete | E0113 |  |
 | C5.2.1 | proved |  | E0114 |  |
 | C5.2.2 | proved |  | E0115 |  |
@@ -8012,6 +8016,113 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `tool_output:TO_type_system_rewrite-20260516T153850Z_m22675_t002` (use `read_tool_output` for exact output)
 - `tool_output:TO_type_system_rewrite-20260516T153850Z_m22730_t001` (use `read_tool_output` for exact output)
+
+## C4.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `wrong_statement` The source-authoritative theorem `well_typed_type_builtin_no_type_error` is false as stated. Disprove-first produced a checked local theorem `type_builtin_no_type_error_extract32_bool_counterexample`: with `tb = Extract32`, `target_ty = result_ty = BaseT BoolT`, byte/int argument types and typed runtime values, all current premises hold, but `evaluate_type_builtin ... Extract32 (BaseT BoolT) [BytesV (REPLICATE 32 0w); IntV 0] = INR (TypeError "evaluate_extract32 type")`. This is not a tactic issue; current `well_typed_type_builtin_args` allows Extract32 target `BaseT bt` for any base type, while `evaluate_extract32` TypeErrors for unsupported base types such as BoolT.
+- latest episode: `E0741`
+- blocker: C4.3 boundary theorem needs statement/typing-rule repair or strengthening: Extract32 static args/result constraints must exclude unsupported base types, or the no-TypeError theorem must require the stronger target constraint. Current public C4.3 theorem cannot be proved unchanged.
+- actual effort: 1 sessions, 4 msgs, 52 steps, 72 tools, 18 holbuild, 4,704,267 tok (4,684,155 in, 20,112 out, 4,583,424 cached), 670.2s, $3.39872700
+- next: Call plan_oracle(mode='review') for C4.3 with this evidence; request repair plan for Extract32 static/result constraints or boundary theorem strengthening before any further proof work.
+
+### Attempts / Evidence
+
+- `E0741` (stuck, wrong_statement, actual effort: 1 sessions, 4 msgs, 52 steps, 72 tools, 18 holbuild, 4,704,267 tok (4,684,155 in, 20,112 out, 4,583,424 cached), 670.2s, $3.39872700)
+  - Replaced cheat with constructor split; finite simplification reduced most branches but Extract32 residual required proving no TypeError for any `BaseT bt`. Constructed a concrete Extract32/BoolT counterexample and proved it with EVAL/simp before the build advanced to the next helper theorem. -> Verified counterexample to current theorem premises; build output shows the local counterexample theorem completed and the next theorem began, so the falsehood evidence is checked by HOL. (`TO_type_system_rewrite-20260522T073012Z_m41314_t001`)
+  - Tried to factor typed-value constructor helpers (`typed_bytes_value_is_BytesV`, `typed_int_value_is_IntV`) and a generic Extract32 no-TypeError helper. -> The generic Extract32 helper is itself false for unsupported target base types; residual goal is exactly `evaluate_type_builtin ... Extract32 (BaseT bt) [BytesV bs; IntV i] = INR (TypeError msg) ==> F` with no premise restricting `bt`. (`TO_type_system_rewrite-20260522T073012Z_m41314_t001`)
+
+### Ruled Out
+
+- Proving C4.3 unchanged by finite constructor simplification: false for Extract32 with BoolT target.
+- Generic Extract32 no-TypeError using only byte/int typed arguments: false without a supported-target-base-type premise.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41314_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41311_t003` (use `read_tool_output` for exact output)
+
+## C4.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0743`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 12 tools, 4 holbuild, 657,986 tok (653,939 in, 4,047 out, 622,592 cached), 235.3s, $0.58944100
+
+### Attempts / Evidence
+
+- `E0743` (proved, , actual effort: 1 sessions, 8 steps, 12 tools, 4 holbuild, 657,986 tok (653,939 in, 4,047 out, 622,592 cached), 235.3s, $0.58944100)
+  - Definition repair in `vyperTypeSystemScript.sml`: introduce supported Extract32 result-base predicate and strengthen static Extract32 args predicate. -> `vyperTypeSystemTheory` built cleanly after the definition edit. (`TO_type_system_rewrite-20260522T073012Z_m41336_t002`, `TO_type_system_rewrite-20260522T073012Z_m41337_t002`)
+  - Replace positive Bool counterexample theorem with `extract32_bool_not_well_typed_type_builtin_args` proved by simplification using the repaired predicate. -> `vyperTypeBuiltinsTheory` reached the following theorem, showing the regression parsed/proved and the repaired static interface is visible; remaining failure is the pre-existing false unrestricted Extract32 helper scheduled under C4.3.2. (`TO_type_system_rewrite-20260522T073012Z_m41336_t001`, `TO_type_system_rewrite-20260522T073012Z_m41338_t001`)
+
+### Ruled Out
+
+- Old static predicate accepting Extract32 BoolT target; the old positive counterexample theorem has been removed from source.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41336_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41336_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41337_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41338_t001` (use `read_tool_output` for exact output)
+
+## C4.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0744`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 9 tools, 1 holbuild, 692,149 tok (690,073 in, 2,076 out, 674,304 cached), 74.3s, $0.47827700
+
+### Attempts / Evidence
+
+- `E0742` (abandoned, plan_incomplete, actual effort: 1 sessions, 5 steps, 4 tools, 684,751 tok (675,044 in, 9,707 out, 643,072 cached), 151.0s, $0.77260600)
+  - Asked plan_oracle to repair the scheduling issue after noticing C4.3.2 depended on unexecuted C4.3.1. -> Strategist replaced the subtree: new C4.3.1 merges definition repair and Bool regression; new C4.3.2 is reclassified as the supported Extract32 helper. (`TO_type_system_rewrite-20260522T073012Z_m41320_t001`)
+  - Tried to begin new C4.3.1 after the PLAN update. -> Harness blocked switching because old C4.3.2 remained active; terminal closure required before proceeding. (`TO_type_system_rewrite-20260522T073012Z_m41322_t001`)
+- `E0744` (proved, , actual effort: 1 sessions, 7 steps, 9 tools, 1 holbuild, 692,149 tok (690,073 in, 2,076 out, 674,304 cached), 74.3s, $0.47827700)
+  - Strengthen local Extract32 helper with `extract32_result_base_ok bt`, then use `typed_bytes_value_is_BytesV`, `typed_int_value_is_IntV`, `Cases_on bt`, and simplification of `extract32_result_base_ok_def`, `evaluate_type_builtin_def`, `evaluate_extract32_def`, `evaluate_convert_def`. -> Helper is accepted; build proceeds to the next planned theorem and times out in old main theorem Extract32 branch proof. (`TO_type_system_rewrite-20260522T073012Z_m41346_t001`, `TO_type_system_rewrite-20260522T073012Z_m41347_t001`)
+
+### Ruled Out
+
+- No-TypeError for arbitrary `BaseT bt` without `extract32_result_base_ok bt`; the helper statement now includes the required supported-base premise.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41346_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41347_t001` (use `read_tool_output` for exact output)
+
+## C4.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0745`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,220,836 tok (1,217,569 in, 3,267 out, 1,199,616 cached), 110.3s, $0.78758300
+
+### Attempts / Evidence
+
+- `E0745` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,220,836 tok (1,217,569 in, 3,267 out, 1,199,616 cached), 110.3s, $0.78758300)
+  - Update Extract32 branch of `well_typed_type_builtin_no_type_error`: after length/list simplification, case split `tvs` only as needed and `irule evaluate_extract32_supported_no_type_error`, discharging premises from live context by simplification/metis. -> Extract32 branch no longer unfolds evaluator cases and uses the supported helper as planned. (`TO_type_system_rewrite-20260522T073012Z_m41356_t001`, `TO_type_system_rewrite-20260522T073012Z_m41360_t001`)
+  - Replace brittle AbiDecode branch stale `Cases_on tvs` proof with `irule evaluate_abi_decode_no_type_error` after length simplification. -> The full `vyperTypeBuiltinsTheory` target builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m41359_t001`, `TO_type_system_rewrite-20260522T073012Z_m41360_t001`)
+
+### Ruled Out
+
+- Direct broad constructor enumeration of Extract32 runtime values in the main theorem; it timed out and was replaced by the boundary helper.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m41360_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41356_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m41359_t001` (use `read_tool_output` for exact output)
 
 ## C5.2
 
