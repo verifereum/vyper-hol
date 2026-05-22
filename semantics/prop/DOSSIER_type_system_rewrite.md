@@ -141,7 +141,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
 | C2.3 | proved |  | E0614 |  |
-| C2.3.1 | stuck | wrong_statement | E0712 | Review C2.3.1 as an expected failed static extraction probe; if accepted, execute C2.3.2 fixed-array Pop evaluator/assignment behavior probe. |
+| C2.3.1 | proved |  | E0714 |  |
 | C2.3.2 | proved |  | E0713 | Review C2.3.2 with strategist. Because C2.3.1 showed Pop typing allows unconstrained bounds and C2.3.2 shows fixed-array PopOp returns TypeError, strategist should decide whether to construct a full eval_expr counterexample or authorize a typing-rule repair/replan. |
 | C2.3.3 | stuck | risk_mismatch | E0450 | Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale. |
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
@@ -3886,12 +3886,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `wrong_statement`
-- latest episode: `E0712`
-- blocker: The live Pop typing rule does not imply the dynamic-array bound or assign_operation_runtime_typed PopOp side condition. After unfolding well_typed_expr_def and assign_operation_runtime_typed_def, the residual goal is `?elem_tv n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\ bd = Dynamic n` from only `type_place_target env tgt = SOME (Type (ArrayT elem_ty bd))`; `bd` is unconstrained.
-- actual effort: 1 sessions, 9 steps, 12 tools, 4 holbuild, 957,585 tok (954,157 in, 3,428 out, 939,520 cached), 134.9s, $0.64578500
-- next: Review C2.3.1 as an expected failed static extraction probe; if accepted, execute C2.3.2 fixed-array Pop evaluator/assignment behavior probe.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0714`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 4 holbuild, 988,006 tok (984,566 in, 3,440 out, 960,512 cached), 442.8s, $0.70372600
 
 ### Attempts / Evidence
 
@@ -3900,12 +3899,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0712` (stuck, wrong_statement, actual effort: 1 sessions, 9 steps, 12 tools, 4 holbuild, 957,585 tok (954,157 in, 3,428 out, 939,520 cached), 134.9s, $0.64578500)
   - Temporarily added `pop_well_typed_implies_assign_operation_runtime_typed_probe[local]` with the PLAN statement, unfolded the Pop conjunct of `well_typed_expr_def`, then unfolded `assign_operation_runtime_typed_def` and inserted FAIL_TAC to inspect the residual. -> Probe could not prove: residual goal requires `evaluate_type env.type_defs elem_ty = SOME elem_tv` and `bd = Dynamic n` from only the target typing equality. This shows the current static Pop typing clause leaves `bd` arbitrary and does not supply the dynamic-array side condition. (`TO_type_system_rewrite-20260522T073012Z_m40240_t001`)
   - Removed the temporary failed probe theorem and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source was restored with no diff in vyperTypeStmtSoundnessScript.sml; target builds from cache/clean state. (`TO_type_system_rewrite-20260522T073012Z_m40244_t002`, `TO_type_system_rewrite-20260522T073012Z_m40244_t001`)
+- `E0714` (proved, , actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 4 holbuild, 988,006 tok (984,566 in, 3,440 out, 960,512 cached), 442.8s, $0.70372600)
+  - Changed `well_typed_expr env (Pop ty tgt)` in `vyperTypeSystemScript.sml` from arbitrary `?bd. ... ArrayT ty bd` to `?n. ... ArrayT ty (Dynamic n)`. Rebuilt `vyperTypeStmtSoundnessTheory`; dependent stack rebuilt through statement soundness. -> Pop typing rule now enforces dynamic arrays as planned and immediate dependent theory builds. (`TO_type_system_rewrite-20260522T073012Z_m40270_t001`, `TO_type_system_rewrite-20260522T073012Z_m40279_t001`)
+  - During the required rebuild, an existing subscript helper branch hit the fixed 2.5s tactic timeout at broad `simp[]`; replaced the final exception branch closure with explicit conjunct closures plus a small final simp. -> Mechanical build fallout resolved without changing theorem statements or Pop architecture. (`TO_type_system_rewrite-20260522T073012Z_m40271_t003`, `TO_type_system_rewrite-20260522T073012Z_m40279_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m40240_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40244_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40244_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40270_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40279_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.2
 

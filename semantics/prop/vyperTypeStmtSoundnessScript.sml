@@ -7352,9 +7352,14 @@ Proof
     strip_tac >>
     qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
     (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
-    qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
-    simp[])
+    qpat_x_assum `INR y = res` (fn th => rewrite_tac[GSYM th]) >>
+    qpat_x_assum `st1 = st'` (fn th => rewrite_tac[GSYM th]) >>
+    rewrite_tac[] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    simp_tac(srw_ss())[])
 QED
 
 Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
