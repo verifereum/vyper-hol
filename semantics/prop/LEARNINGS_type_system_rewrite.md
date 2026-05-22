@@ -303,62 +303,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260521T174852Z_m37260_t001
 - tool_output:TO_type_system_rewrite-20260521T174852Z_m37273_t001
 
-## L1226 scope='C2.1.1' tags=Resume,well_typed_expr,type_place_expr,ordinary-projection,place-projection,Subscript
-shape: Expression Resume goal concludes `(well_typed_expr env (Ctor ...) ==> ordinary_soundness) /\ (!vt. type_place_expr env (Ctor ...) = SOME vt ==> place_soundness)`, while old proof starts by selecting `well_typed_expr` as an assumption.
-pattern: For each expression constructor Resume, split the joint ordinary/place conclusion before consuming constructor typing. In the ordinary half, `strip_tac` the `well_typed_expr` antecedent and only then unfold the constructor typing/evaluator definitions. In the place half, reason separately from the `type_place_expr ... = SOME vt` antecedent: use a targeted NONE lemma only for genuinely non-place constructors, and use place-specific IH/facts for constructors such as Subscript.
-works_when: Applies to `eval_all_type_sound_mutual` expression Resume branch-local repairs. Verified for IfExp and StructLit; current Subscript failure has the same proof-order shape but likely a non-vacuous place projection.
-evidence:
-- episode:E0663
-- episode:E0664
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38283_t003
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38291_t001
-
-## L1227 scope='C2.1.1' tags=Resume,expression,place_projection,Subscript,proof_order
-shape: Expression Resume goal concludes `(well_typed_expr env (Ctor ...) ==> ordinary) /\ (!vt. type_place_expr env (Ctor ...) = SOME vt ==> place)`
-pattern: Always split the joint expression conclusion before consuming constructor typing. For non-place constructors the place half may close by targeted `type_place_expr` contradiction; for place-capable constructors such as Subscript, strip the `type_place_expr ... = SOME vt` assumption and use the appropriate place IH/boundary lemmas.
-works_when: Applies inside `eval_all_type_sound_mutual` expression Resume branches after the strengthened joint ordinary/place invariant. Avoids premature `qpat_x_assum`/`drule_all` failures when the typing premise is still an implication antecedent.
-evidence:
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38291_t001
-- episode:E0663
-- episode:E0664
-- tool_output:TO_type_system_rewrite-20260521T174852Z_m38309_t001
-
-## L1235 scope='C2.1.1.13' tags=Subscript,place_projection,place_expr_result_typed,HashMapT,helper
-shape: Separate Subscript place projection under `type_place_expr env (Subscript ...) = SOME result_vt` needs successful evaluator result typed as a place.
-pattern: Do not derive the place projection from the expression-half helper alone. Add/use a helper whose success conclusion is `place_expr_result_typed env tv result_vt`; this is necessary for nested `HashMapT` place results, which are not ordinary expression results. Keep `evaluate_subscript_def`/nested hashmap unfolding inside that helper, not in the mutual Resume.
-works_when: Use for C2.1.1.13.2/C2.1.1.13.4 and any later place-capable expression whose place projection can return HashMapT references.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38687_t001
-- episode:E0677
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6759-6865
-
-## L1237 scope='C2.1.1.13' tags=holbuild,checkpoint,performance,rw,IfExp,Subscript,cold-build
-shape: A checkpoint-clean `vyperTypeStmtSoundnessTheory` rebuild later fails before the active Subscript helper at an earlier theorem whose proof starts with broad `rw[]` over a mutual-IH implication.
-pattern: Treat checkpoint-discard cold-build failures as real source proof-performance obligations. If an earlier helper times out on broad `rw[]`, get PLAN coverage/authorization and replace only the broad opener with controlled stripping/targeted simplification before continuing the semantic helper. Do not rely on stale checkpoints to validate newly inserted boundary lemmas.
-works_when: Use when holbuild invalidates checkpoints after local source edits and exposes an earlier timeout unrelated to the active semantic proof, especially in mutual evaluator soundness scripts.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38720_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38724_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6228-6263
-
-## L1238 scope='C2.1.1.13' tags=Subscript,place_expr_result_typed,HashMapT,evaluate_subscript,boundary_helper
-shape: Subscript place-projection helper with base `HashMapT kt result_vt` and conclusion `place_expr_result_typed env tv result_vt`.
-pattern: In the HashMap place case, derive the base annotation with `type_place_expr_annotation_ok_stmt`, then split on `result_vt`. If `result_vt = Type ty`, unfold `evaluate_subscript_def` to a storage-read tail and prove the returned `Value` with `read_storage_slot_success_type` plus `place_expr_result_typed_def`. If `result_vt = HashMapT kt vt`, the evaluator returns a `HashMapRef` directly; simplify the local do-tail with `ignore_bind_def`, `check_array_bounds_hashmap_stmt`, and `evaluate_subscript_def`, then finish by `place_expr_result_typed_def`.
-works_when: Use for Expr_Subscript proofs where the static fact is `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME result_vt`, and the consumer wants place typing of the successful result.
-evidence:
-- episode:E0680
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38784_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6868-6979
-
-## L1239 scope='C2.1.1.13' tags=Subscript,Resume,joint-IH,assumption-selection,ordinary-branch
-shape: Expr_Subscript ordinary Resume after applying base expression IH: context contains both `well_typed_expr env e ==> ordinary` and `!vt. type_place_expr env e = SOME vt ==> place` projections.
-pattern: Project or label the ordinary IH immediately after applying the base IH; do not rely on later exact `qpat_x_assum` patterns over the long conclusion. If the place projection is not needed in the ordinary-base branch, discard it while it is top-stack/known-position, then discharge the ordinary implication with the existing `well_typed_expr env e`.
-works_when: Use in `eval_all_type_sound_mutual` expression Resume branches with joint ordinary/place IH conclusions, especially Subscript where both projections may be present and goals are large.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38823_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38827_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m38829_t001
-
 ## L1240 scope='C2.1.1.13.3.3' tags=Subscript,Resume,joint-IH,conjunction,proof-shape
 shape: Expr_Subscript ordinary Resume branch after `conj_tac`; final conclusion is a conjunction of preservation/no-TypeError/success typing.
 pattern: Avoid `rpt strip_tac` that splits the final conjunction into independent goals before evaluator sequencing. Instead, keep/prove the combined ordinary result: unfold `well_typed_expr_def` and `evaluate_def` once, split base/index evaluator results with equations, project IH ordinary conjuncts immediately, then invoke `expr_subscript_ordinary_tail_sound_stmt` to supply the whole conjunction in the all-success tail. Only split conjuncts after the combined fact is available or if a branch is already reduced to a propagated IH fact.
@@ -413,170 +357,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m39135_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m39140_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7068-7143
-
-## L1247 scope='C2.1.1.13' tags=Subscript,type_place_expr,static-inversion,gvs,Resume
-shape: Expr_Subscript place conjunct with assumption `type_place_expr env (Subscript v9 e e') = SOME vt` in mutual Resume.
-pattern: For the place/projection conjunct, move the `type_place_expr env (Subscript ...) = SOME vt` assumption to the goal and use `simp_tac(srw_ss())[Once well_typed_expr_def, AllCaseEqs()]` to expose `well_typed_expr env e'`, `type_place_expr env e = SOME vt'`, `subscript_vtype vt' (expr_type e') = SOME vt`, and `vtype_annotation_ok vt v9`. Do not follow with broad `gvs[]`; it can time out under the mutual-IH context. Strip/simplify only the exact evaluator-tail implication before proceeding.
-works_when: Use in `eval_all_type_sound_mutual[Expr_Subscript]` place/projection branch after C2.1.1.13.2 helper exists and the goal is the second/place conjunct.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39177_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39175_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39203_t001
-
-## L1248 scope='C2.1.1.13' tags=Subscript,Resume,place-conjunct,strip_tac,branch-structure
-shape: `eval_all_type_sound_mutual[Expr_Subscript]` second/place conjunct after finishing ordinary conjunct; goal is `!vt. type_place_expr env (Subscript ...) = SOME vt ==> ...`.
-pattern: Open the place conjunct with `gen_tac >> strip_tac`, not `rpt strip_tac`. `rpt strip_tac` over-strips the quantified place conjunct and can leave the proof in the wrong branch structure with many spurious goals. After `gen_tac >> strip_tac`, static inversion and the projection helper operate on the intended single `vt` place obligation.
-works_when: Use in expression Resume branches where the theorem conclusion is a conjunction of ordinary and place obligations and the second conjunct is universally quantified over `vt`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39240_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39249_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7144-7166
-
-## L1250 scope='C2.1.1.13' tags=Subscript,Resume,projection-helper,adapter,proof-interface,goal-shape
-shape: Expr_Subscript place/projection `Resume` successful get_Value branch still has two full outer branch goals after direct helper application.
-pattern: If direct use of `expr_subscript_place_projection_tail_sound_stmt` from the `Resume` leaves the full outer place-conjunct implication, do not add more inline instantiation/simplification. Factor a local consumer adapter whose conclusion matches the branch (or whole evaluator-tail implication) and have that adapter invoke the projection-tail helper. Long `Q.SPECL` lists and post-helper case splits inside the `Resume` are proof-interface smells here.
-works_when: Use after static inversion has exposed `type_place_expr env e = SOME vt'`, `subscript_vtype vt' (expr_type e') = SOME vt`, base/index IH facts, and successful `get_Value`, but holbuild still reports two high-level goals / `first subgoal not solved`.
-evidence:
-- episode:E0688
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39349_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7188-7196
-
-## L1252 scope='C2.1.1.13.4' tags=Subscript,Resume,adapter,well_formed_type,proof-interface,performance
-shape: Expr_Subscript place/projection adapter use has all branch facts except `well_formed_type env.type_defs v9`, and proving that static fact inline under the Resume times out.
-pattern: When a branch adapter leaves only a static annotation well-formedness conjunct under a huge mutual Resume context, do not prove it inline with `Cases_on`/`gvs`. Either derive the static fact before entering the large adapter antecedent via a small local lemma over `type_place_expr`/`vtype_annotation_ok`, or reformulate the adapter to consume the original static `type_place_expr env (Subscript ...) = SOME vt` assumption and internalize the well-formedness bridge.
-works_when: Use after static inversion of `type_place_expr env (Subscript v9 e e') = SOME vt` has exposed `well_typed_expr env e'`, `type_place_expr env e = SOME vt'`, `subscript_vtype vt' (expr_type e') = SOME vt`, and `vtype_annotation_ok vt v9`, but the projection branch adapter still requires `well_formed_type env.type_defs v9`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39500_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39509_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7247-7251
-
-## L1253 scope='C2.1.1.13.4' tags=Subscript,type_place_expr,well_formed_type,static-bridge,expr_induction,adapter
-shape: Expr_Subscript place/projection adapter requires `well_formed_type env.type_defs ann` but the Resume only has `type_place_expr env (Subscript ann e e') = SOME result_vt` plus `vtype_annotation_ok result_vt ann`.
-pattern: Move annotation well-formedness out of the huge mutual Resume into a small static bridge: prove `type_place_expr` returns a `well_formed_vtype` under `env_consistent`, prove `vtype_annotation_ok` on a well-formed value type implies the annotation type is `well_formed_type`, then use those facts to discharge the adapter antecedent. Do not prove this by unfolding definitions in the Resume.
-works_when: Use when a place/projection consumer adapter is otherwise proved but its use site lacks a direct `well_formed_type` fact for the syntactic annotation.
-evidence:
-- episode:E0692
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39531_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39536_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39547_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6727-6769
-
-## L1254 scope='C2.1.1.13.4' tags=Subscript,static-bridge,well_formed_type,proof-interface,narrow-helper
-shape: Expr_Subscript adapter needs `well_formed_type env.type_defs ann`, but a broad `well_typed_expr_well_formed_type` helper opens unrelated Pop/target obligations.
-pattern: For the Subscript place/projection adapter, prefer an exact static bridge over global expression/target well-formedness theorems: consume `type_place_expr env (Subscript ann base idx) = SOME vt` and `vtype_annotation_ok vt ann` (plus `env_consistent`) to derive `well_formed_type env.type_defs ann`. If a proposed helper introduces Pop or `type_place_target` cases, it is too broad for this leaf.
-works_when: Use when discharging `expr_subscript_place_projection_branch_sound_stmt`/tail-helper antecedents in `eval_all_type_sound_mutual[Expr_Subscript]`, especially after the static inversion already exposes `vtype_annotation_ok vt ann`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39588_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39592_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39596_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6753-6818
-
-## L1255 scope='C2.1.1.13.4' tags=Subscript,Resume,adapter,implication,performance,simp-timeout
-shape: After applying a branch adapter in `eval_all_type_sound_mutual[Expr_Subscript]`, goal is `(tail_eq ==> desired) ==> desired` with the exact evaluator-tail equality already in assumptions.
-pattern: Do not finish adapter applications with broad `simp[]`; it can time out on the full monadic tail. After discharging the adapter antecedent manually, consume the adapter result as an implication with `disch_then irule >> first_assum ACCEPT_TAC` when the exact tail equality is live.
-works_when: Use after `expr_subscript_place_projection_branch_sound_stmt` or a similar branch adapter has been instantiated, its static/IH conjuncts are discharged, and the remaining theorem on the goal is an implication from the exact evaluator-tail equality to the desired soundness conclusion.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39621_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39623_t001
-- episode:E0693
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7302-7306
-
-## L1257 scope='C2.1.1.13.4' tags=Subscript,static-split,adapter,proof-interface,risk-mismatch
-shape: A broad Expr_Subscript ordinary helper rewrites `well_typed_expr (Subscript ...)` internally and then base-error branches still show the full preservation/no-TypeError goal.
-pattern: Split the static `well_typed_expr (Subscript ...)` disjunction before entering branch helpers. Use separate adapters for the ordinary static branch (`well_typed_expr e`, `well_typed_expr e'`, `subscript_type_ok ...`) and the place-as-ordinary static branch (`type_place_expr e = SOME base_vt`, `subscript_vtype ... = SOME (Type ann)`). Do not repair the broad helper with more quoted tail equalities; its statement is the proof-interface problem.
-works_when: Use in `eval_all_type_sound_mutual[Expr_Subscript]` or similar evaluator cases where one syntactic expression typing rule has multiple static alternatives but the runtime evaluator skeleton is shared.
-evidence:
-- episode:E0695
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39725_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39727_t001
-
-## L1258 scope='C2.1.1.13.4' tags=Expr_Subscript,well_typed_expr,static-split,adapter
-shape: Expr_Subscript ordinary branch should be split by static typing alternative before local tail proof
-pattern: For the Expr_Subscript ordinary conjunct, split `well_typed_expr env (Subscript v9 e e')` at the Resume boundary with `Once well_typed_expr_def`/`AllCaseEqs()` and call one of two adapters: an ordinary-static adapter taking `well_typed_expr env e`, `well_typed_expr env e'`, `well_formed_type`, and `subscript_type_ok`; or a place-as-ordinary adapter taking `type_place_expr env e = SOME base_vt` and `subscript_vtype base_vt (expr_type e') = SOME (Type v9)`. Do not rewrite the static disjunction inside one broad helper.
-works_when: Current C2.1.1.13.4 replacement plan after E0695; applies to `eval_all_type_sound_mutual[Expr_Subscript]` and local adapters in `vyperTypeStmtSoundnessScript.sml`.
-evidence:
-- episode:E0695
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39727_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7187-7335
-
-## L1259 scope='C2.1.1.13.4' tags=Expr_Subscript,monadic-tail,Resume,boundary-helper
-shape: Expr_Subscript monadic tail proofs should be in small adapters/helpers, not the Resume
-pattern: Keep evaluator-tail reasoning (base/index error propagation, `get_Value`, `check_array_bounds`, `evaluate_subscript`, storage read) inside local adapter/helper theorems whose conclusions match the branch postcondition. In the Resume, only project the relevant ordinary/place IH and apply the adapter. Repeated exact case-tail rewrites and stack-position assumption plumbing in the Resume are brittle and have already failed.
-works_when: Proving/removing cheats around `expr_subscript_ordinary_static_branch_sound_stmt`, `expr_subscript_place_as_ordinary_branch_sound_stmt`, and the Expr_Subscript Resume.
-evidence:
-- episode:E0688
-- episode:E0691
-- episode:E0695
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39725_t001
-
-## L1260 scope='C2.1.1.13.4' tags=Expr_Subscript,Resume,guarded-IH,adapter,proof-interface
-shape: Expr_Subscript ordinary Resume has guarded index IH, not an unguarded standalone index IH
-pattern: When installing ordinary/static Subscript adapters, inspect the live generated Resume context: the index-expression IH is guarded by a successful base evaluation (`!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> ... eval_expr cx e' ...`). Adapter skeletons that expect an unguarded index IH will not match the caller. Make the adapter consume the guarded IH exactly or provide a tiny wrapper; do not discharge this mismatch with broad `simp`/`metis`.
-works_when: C2.1.1.13.4 Expr_Subscript ordinary conjunct after splitting `well_typed_expr env (Subscript ...)` at the Resume boundary.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39740_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39748_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39750_t001
-
-## L1261 scope='C2.1.1.13.4' tags=Expr_Subscript,skeleton,tactic-timeout,simp,metis_tac
-shape: Calling cheated adapter skeletons from a large mutual Resume times out with broad `simp[]`/`metis_tac`
-pattern: For cleanup leaves that introduce cheated adapter skeletons, the caller should apply them with exact assumption selection or an interface that unifies directly. In a large mutual Resume, `metis_tac[skeleton]`, `irule skeleton >> simp[]`, and `rpt conj_tac >> first_assum ACCEPT_TAC` can still time out/fail before reaching the skeleton cheat. Treat this as adapter interface evidence, not a semantic proof obligation.
-works_when: Wiring local boundary/adapter skeletons into `eval_all_type_sound_mutual` Resume branches with many IH assumptions.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39747_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39763_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39772_t001
-
-## L1262 scope='C2.1.1.13.4' tags=Expr_Subscript,adapter,qspecl_then,match_mp_tac,existential,skeleton
-shape: Calling a local adapter theorem from a mutual Resume leaves `∃st. ...` because some universally quantified variables occur only in premises, not the conclusion.
-pattern: When a skeleton/adapter theorem's conclusion matches the Resume goal but some parameters occur only in antecedents, do not rely on `irule`, `match_mp_tac`, `qexists`, or `HINT_EXISTS_TAC` to infer them. Explicitly specialize all adapter parameters with `qspecl_then [...] match_mp_tac` (or `mp_tac`) and then use targeted rewrites/assumptions to discharge the antecedent. This avoids bogus existential subgoals and type ambiguity.
-works_when: Use for temporary adapter integration in large mutual soundness Resume proofs, especially when the adapter conclusion is exactly the final branch postcondition but premises carry evaluator/IH terms such as `st`, `res`, `st'`, or a base vtype.
-evidence:
-- episode:E0696
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39819_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39822_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39827_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7279-7289
-
-## L1263 scope='C2.1.1.13.4.2' tags=Expr_Subscript,get_Value,subscript_type_ok,is_int_type,side-condition
-shape: Ordinary static Subscript adapter, get_Value on index returns `INR y`; need `no_type_error_result (INR y)`.
-pattern: For the get_Value-error subcase, use `int_expr_get_Value_INR_no_type_error` only after explicitly deriving `is_int_type (expr_type e')` from `subscript_type_ok (expr_type e) (expr_type e') v9`. Avoid trying to let broad `gvs[subscript_type_ok_def]` solve this inside an `impl_tac` over the specialized theorem while residual conjunctions are present.
-works_when: Base expression and index expression both evaluated successfully, index has `expr_result_typed env e' x'`, `get_Value x' st2 = (INR y,st2)`, and the ordinary static assumption `subscript_type_ok (expr_type e) (expr_type e') v9` is in context.
-evidence:
-- episode:E0697
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39875_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39878_t001
-- source:semantics/prop/vyperTypeSystemScript.sml:309-317
-
-## L1264 scope='C2.1.1.13.4.2' tags=Expr_Subscript,subscript_type_ok,get_Value,is_int_type,boundary-helper
-shape: Ordinary static Subscript adapter, get_Value on the index returns `INR y` and no-TypeError is needed.
-pattern: Factor the integer-index side condition out of the main adapter. Prove/use `subscript_type_ok_index_is_int_stmt: subscript_type_ok base idx res ==> is_int_type idx`, then wrap `int_expr_get_Value_INR_no_type_error` in a branch-shaped helper such as `expr_subscript_index_get_Value_INR_no_type_error_stmt` taking `expr_result_typed env e' tv`, `subscript_type_ok (expr_type e) (expr_type e') v9`, and `get_Value tv st = (INR y,st')`. This avoids fragile direct antecedent construction in the large Subscript branch.
-works_when: Base and index evaluations have both succeeded, the index result is `expr_result_typed env e' idx_tv`, and the ordinary static assumption `subscript_type_ok (expr_type e) (expr_type e') v9` is available.
-evidence:
-- episode:E0698
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39905_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7187-7208
-
-## L1265 scope='C2.1.1.13.4.2' tags=HOL4,THEN1,Cases_on,subgoal-control,Expr_Subscript
-shape: `Cases_on val_res >> simp_tac(srw_ss())[] >- branch1 >- branch2` in a large evaluator-tail proof leaves two full outer goals / `first subgoal not solved by second tactic`.
-pattern: When a case split is followed by focused branches in a large monadic proof, parenthesize the split explicitly: `Cases_on `val_res` >- (simp_tac... >> branch1) >- (simp_tac... >> branch2)`. Do this before trying more helper instantiations; residual outer goals after `>-` often indicate tactic grouping/subgoal-count mismatch, not a missing lemma.
-works_when: Use in local adapter proofs with nested `Cases_on` and `>>`/`>-` sequencing, especially when holbuild reports multiple failed input goals at the whole fragment rather than a single helper antecedent.
-evidence:
-- episode:E0698
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39917_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39908_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7282-7300
-
-## L1266 scope='C2.1.1.13.4.2' tags=Expr_Subscript,eval_expr,case-split,proof-interface,branch-helper
-shape: Ordinary static Subscript adapter still has full outer `(case (INL base_tv,st1) of ... eval_expr e' ...)= (res,st') ==> ...` goal after splitting `idx_res`.
-pattern: If explicit `val_res` branches and either `qspecl_then` or `drule_all` use of `expr_subscript_ordinary_tail_sound_stmt` still leave two full outer Subscript goals, stop optimizing the inner get_Value tail. The missing boundary is earlier: simplify or factor the base-success/index-success branch so the full evaluator equality is consumed/substituted immediately after the `eval_expr e'` split. A small branch helper taking the exact full equality plus ordinary/index IH facts is likely cleaner than more nested `>-` plumbing.
-works_when: Use in `expr_subscript_ordinary_static_branch_sound_stmt` when holbuild reports residual outer Subscript implication goals at the `idx_res` split or before the tail helper, even though base and index typing facts are available.
-evidence:
-- episode:E0699
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39926_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39948_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39950_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7260-7307
 
 ## L1267 scope='C2.1.1.13.4.2.1' tags=Expr_Subscript,base-success-helper,get_Value,branch-local,tail-helper
 shape: Inside `expr_subscript_ordinary_base_success_sound_stmt`, after base and index success, context has branch-local `get_Value x st2 = (INL idx,st3)` plus `do ... od st3 = (res,st')`.
@@ -656,20 +436,152 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40195_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7565-7601
 
-## L1275 scope='C2.3' tags=Expr_Pop,well_typed_expr_def,assign_operation_runtime_typed_def,Dynamic,Fixed,PopOp,definition_repair
-shape: Need Pop branch side condition `assign_operation_runtime_typed env (ArrayT elem_ty bd) PopOp` from static typing.
-pattern: If `well_typed_expr env (Pop elem_ty tgt)` only gives `?bd. type_place_target env tgt = SOME (Type (ArrayT elem_ty bd))`, unfolding `assign_operation_runtime_typed_def` leaves the unprovable residual `?elem_tv n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\ bd = Dynamic n`. Treat this as a typing-rule/interface bug, not a proof obligation. Repair Pop typing to require `Dynamic n` before proving Expr_Pop.
-works_when: Applies to fresh-stack Pop expression soundness and any consumer of `PopOp` assignment soundness that needs dynamic-array runtime typing.
+## L1279 scope='C2.3.3' tags=Expr_Pop,Append,target_runtime_typed,assign_target_no_type_error,assignable_context,proof-pattern
+shape: Need to prove Pop assignment branch after successful `eval_base_target` under dynamic `type_place_target`.
+pattern: Use the existing `Append` statement branch as the local proof template: instantiate the base-target IH, convert its INL facts into `target_runtime_typed env cx st1 (BaseTarget bt) ty (BaseTargetV loc sbs)` by unfolding `target_runtime_typed_def`/`target_value_shape_def`/`well_typed_atarget_def`; derive operation runtime typing and shape; derive `assign_target_assignable_context` via `target_runtime_typed_imp_assignable_context`; then apply assignment-target soundness/preservation wrappers. For Pop, substitute `stmt_assign_operation_runtime_typed_Pop_from_dynamic_array` and `stmt_assign_operation_matches_target_shape_Pop_BaseTargetV`.
+works_when: Applies after the Pop premise provides `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` and the base-target IH returns `base_target_value_shape` plus `location_runtime_typed`/`target_path_type`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40316_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40314_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40315_t003
+
+## L1280 scope='C2.3.3' tags=Expr_Pop,assignable_type,well_formed_type,evaluate_type,PopOp,boundary-lemma
+shape: Need `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))` in Pop branch after deriving only `evaluate_type env.type_defs elem_ty = SOME elem_tv`.
+pattern: Do not treat `assignable_type` as a mere well-formedness fact. For `ArrayT elem bd`, `assignable_type_def` requires `well_formed_type (ArrayT elem bd)` AND recursively `assignable_type elem`; an `evaluate_type elem = SOME elem_tv` fact only proves well-formedness. If a consumer only has dynamic target typing/path facts, either strengthen the static typing/extraction interface to include assignability or use/prove a specialized assignment boundary that does not require generic `assignable_type`.
+works_when: Applies to fresh-stack Pop/assignment statement proofs using `assign_target_no_type_error` or `assign_target_sound_mutual` side conditions after dynamic-array target typing repair.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40396_t001
+- source:semantics/prop/vyperTypeSystemScript.sml:224-238
+- source:semantics/prop/vyperTypeSystemScript.sml:507-508
+
+## L1281 scope='C2.3.4' tags=well_typed_expr_def,Pop,existential,conjunctive-witness,metis_tac
+shape: After strengthening a defining clause from `?n. P n` to `?n. P n /\ Q n`, an old extraction lemma for just `?n. P n` no longer closes by plain `simp[Once def]`.
+pattern: Use `simp[Once def] >> metis_tac[]` for the weaker projection lemma, and add a separate strong extraction lemma preserving the full conjunctive witness. This keeps old consumers working while exposing the stronger interface to new consumers.
+works_when: Applies to HOL4 definition repairs where an existential witness gains extra conjuncts and existing projection lemmas should remain available.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40420_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40421_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40422_t001
+
+## L1282 scope='C2.3.5' tags=PopOp,assign_result,evaluate_subscripts,popped_value,boundary-lemma
+shape: Need successful `assign_result tv PopOp old subs = (INL popped, st')` to expose `popped = SOME v` and `value_has_type elem_tv v`.
+pattern: Factor Pop result typing below `assign_target`: prove `evaluate_subscripts_leaf_well_typed`, `popped_value_well_typed`, then `assign_result_pop_success_some_typed` with premise `leaf_type tv subs = ArrayTV elem_tv (Dynamic n)`. In the final proof, after simplifying `assign_result_def`, add `leaf_type tv subs <> NoneTV` explicitly and use `evaluate_subscripts_leaf_well_typed`; do not supply an existential witness after `gvs[]` has simplified the goal to element typing.
+works_when: Applies to fresh assignment-target Pop proofs for scoped/ordinary storage/immutable paths that call `assign_result` after successful subscript assignment.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40457_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40462_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40466_t001
+- episode:E0723
+
+## L1283 scope='C2.3.5' tags=HOL4,evaluate_subscripts,induction,case-split,array_index
+shape: Induction over `evaluate_subscripts` Int-subscript branch leaves `array_index tv av i = SOME v` and `evaluate_subscripts elem_tv v subs = INL v'`.
+pattern: In `evaluate_subscripts` leaf-typing induction, split the subscript value before the current value: `Cases_on v >> gvs[evaluate_subscripts_def, AllCaseEqs()]`, then case-split `tv` and use `array_index_has_type`. If you case-split the original value after simplification, HOL reports no variable named `a` because the goal has already specialized it to `ArrayV av`.
+works_when: Applies when porting/evolving leaf-typing lemmas over `evaluate_subscripts` from retired helpers into the fresh stack.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40458_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40460_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40466_t001
+
+## L1284 scope='C2.3.5' tags=PopOp,assign_target,theorem-placement,TopLevelVar,branch-helper
+shape: Exported `assign_target_pop_success_some_typed` needs TopLevelVar helper lemmas to discharge Value/HashMapRef/ArrayRef branches.
+pattern: If the assign-target Pop boundary proof uses helpers such as `lookup_global_storage_Value_typed`, `top_level_storage_value_leaf_evaluate_type`, or ArrayRef/HashMap branch facts, place the exported theorem after those helpers (currently after `Finalise assign_target_sound_mutual` is safe) or factor/move the branch helper earlier. Placing it immediately after `assign_result_pop_success_some_typed` makes later helper names unavailable.
+works_when: Applies to lifting lower-level `assign_result` Pop facts through `assign_target` in `vyperTypeStatePreservationScript.sml`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40514_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40521_t001
+- episode:E0724
+
+## L1285 scope='C2.3.5' tags=PopOp,ScopedVar,ImmutableVar,assign_result,leaf_type
+shape: ScopedVar/ImmutableVar branches of `assign_target_pop_success_some_typed` after unfolding `assign_target_def`.
+pattern: For scoped/immutable Pop branches, derive `place_leaf_typed` via `target_runtime_typed_place_leaf_typed`, rewrite `place_leaf_typed_def`/`place_leaf_path_typed_def` to get `evaluate_type ... (ArrayT elem_ty (Dynamic n)) = SOME (leaf_type root_tv (REVERSE sbs))`, then use `gvs[evaluate_type_def]` to get `leaf_type root_tv (REVERSE sbs) = ArrayTV elem_tv (Dynamic n)`. Combine old-value typing/well-formedness from runtime consistency and finish with `assign_result_pop_success_some_typed`.
+works_when: Applies to non-storage-direct branches that call `assign_result root_tv PopOp old (REVERSE sbs)` after assignment.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40523_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40531_t001
+- episode:E0724
+
+## L1286 scope='C2.3.5' tags=PopOp,TopLevelVar,StorageVarDecl,assign_result,lookup_global_storage_Value_typed
+shape: TopLevelVar Value/StorageVarDecl branch of `assign_target_pop_success_some_typed` after unfolding `assign_target_def`.
+pattern: Case-split `p`, extract the layout slot from `IS_SOME`, then use `lookup_global_storage_Value_typed` for old-value typing and `top_level_storage_value_leaf_evaluate_type` plus `evaluate_type_def` to derive `leaf_type root_tv (REVERSE sbs) = ArrayTV elem_tv (Dynamic n)`. Finish with `assign_result_pop_success_some_typed`.
+works_when: Applies when `lookup_global` returns `INL (Value old_v)` and the declaration is `StorageVarDecl`; the branch calls `assign_result root_tv PopOp old_v (REVERSE sbs)` after `set_global` succeeds.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40547_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40597_t001
+- episode:E0725
+
+## L1287 scope='C2.3.5' tags=PopOp,TopLevelVar,HashMapRef,place_leaf_path_typed_split_leaf_type,lookup_global_HashMapRef
+shape: HashMapRef branch of `assign_target_pop_success_some_typed` after `split_hashmap_subscripts` and successful storage read/write.
+pattern: Use a fresh `lookup_global_HashMapRef` helper to align the runtime `HashMapRef` with `HashMapVarDecl`; combine with `top_level_HashMap_decl` and `target_path_type_Type_place_leaf_typed`. After `gvs[place_leaf_typed_def, place_leaf_path_typed_def]`, apply `place_leaf_path_typed_split_leaf_type` to connect `evaluate_type (ArrayT elem_ty (Dynamic n))` to `leaf_type base_tv remaining`, then finish with `read_storage_slot_success_type` and `assign_result_pop_success_some_typed`.
+works_when: Applies to TopLevelVar HashMapRef Pop paths where `assign_target` goes through `compute_hashmap_slot`, `read_storage_slot`, ordinary `assign_subscripts`, write, and `assign_result`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40578_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40595_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40597_t001
+- episode:E0725
+
+## L1288 scope='C2.3.5' tags=PopOp,ArrayRef,resolve_array_element,drule,branch-helper
+shape: TopLevelVar ArrayRef branch of `assign_target_pop_success_some_typed` needs to connect root `leaf_type (ArrayTV elem_tv' bd) (REVERSE sbs)` to resolved `leaf_type final_tv remaining`.
+pattern: Add/use simple non-nested wrapper lemmas around `resolve_array_element_leaf_type_sc` and `resolve_array_element_well_formed_sc`, then apply them with `drule`/`drule_all` to the live `resolve_array_element ... = INL (...)` assumption. Direct `metis_tac` or `MATCH_MP` on the nested original helper is brittle/timeouts in the large ArrayRef goal. After the leaf equality, `gvs[leaf_type_def]` splits ordinary vs direct dynamic Pop paths.
+works_when: Applies in fresh state-preservation ArrayRef assignment proofs after `PairCases_on x` and `gvs[...]` have exposed the `resolve_array_element` success assumption and storage read/write/assign_result assumptions.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40646_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40668_t001
+- episode:E0726
+
+## L1289 scope='C2.1.1' tags=Resume,well_typed_expr,type_place_expr,place_projection,adapter
+shape: Expression Resume goal has joint ordinary/place projections for a constructor.
+pattern: Split the expression Resume conclusion into ordinary and place projections before consuming constructor typing. In ordinary branches, strip/use only `well_typed_expr`; in place branches, strip/use `type_place_expr`. For place-capable constructors, use adapter/helper lemmas whose conclusions match the branch, rather than carrying monadic tail unfolding in the Resume.
+works_when: Applies to `eval_all_type_sound_mutual` expression Resume branches after the ordinary/place strengthened invariant, especially Subscript and TopLevelName-like place cases.
+evidence:
+- episode:E0663
+- episode:E0664
+- episode:E0695
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39727_t001
+
+## L1290 scope='C2.1.1' tags=Resume,adapter,guarded-IH,monadic-tail,proof-interface
+shape: Large expression Resume branch times out or leaves outer goals after applying a helper/adapter.
+pattern: Treat this as a helper-interface problem. Factor a small branch adapter that consumes the exact static split, guarded IHs, and evaluator-tail equality, then in the Resume project the needed IH and apply the adapter with explicit specialization if variables appear only in antecedents. Avoid broad `simp[]`/`metis_tac[]` and long inline tail rewrites.
+works_when: Applies in large mutual evaluator Resume proofs with guarded IHs and monadic tails, particularly Expr_Subscript ordinary/place adapters.
+evidence:
+- episode:E0688
+- episode:E0696
+- episode:E0699
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39950_t001
+
+## L1291 scope='C2.3' tags=Expr_Pop,PopOp,assignable_type,definition_repair,boundary-lemma
+shape: Pop typing/static interface must supply dynamic-array assignability for assignment soundness.
+pattern: Do not derive Pop assignment side conditions from runtime `evaluate_type` facts. The source Pop typing rule should expose a dynamic target and `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))`; use extraction lemmas and the Pop result boundary rather than unfolding `assignable_type_def` or re-proving fixed-array counterexamples.
+works_when: Applies to Expr_Pop statement soundness and consumers of `PopOp` assignment soundness in the fresh stack.
 evidence:
 - episode:E0712
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40240_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40257_t001
-
-## L1276 scope='C2.3' tags=assign_subscripts,pop_element,PopOp,Fixed,SArrayV,TypeError,probe
-shape: Need checked evidence that fixed-array Pop is a real TypeError path.
-pattern: A minimal leaf computation proves the core counterexample class: `assign_subscripts (ArrayTV elem_tv (Fixed n)) (ArrayV (SArrayV sparse)) [] PopOp = INR (TypeError "pop_element")` by `simp[Once assign_subscripts_def, pop_element_def]`. This avoids constructing a full evaluator state unless the task requires preserving the old fixed-array Pop typing rule.
-works_when: Use when investigating Pop soundness under fixed-array typing or documenting why static Pop typing must be dynamic-array-only.
-evidence:
 - episode:E0713
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40254_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7654-7660
+- episode:E0718
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40415_t001
+
+## L1292 scope='C2.3.6' tags=Expr_Pop,Resume,assign_target_pop_success_some_typed,assignable_type,boundary-lemma
+shape: Expr_Pop Resume needs assignment-success result typing after `assign_target ... PopOp` returns `INL popped`.
+pattern: Keep Expr_Pop at the statement-consumer level: use `well_typed_expr_Pop_dynamic_target_assignable` for dynamic target + assignability, build `target_runtime_typed`, derive `evaluate_type env.type_defs elem_ty = SOME elem_tv`, and use `assign_target_pop_success_some_typed` to rewrite the successful `lift_option_type popped` branch. Do not unfold `assign_target_def` or `assignable_type_def` in this Resume.
+works_when: Applies inside `Resume eval_all_type_sound_mutual[Expr_Pop]` after the base-target IH has produced `location_runtime_typed` and `target_path_type` facts and the proof has split `assign_target` result.
+evidence:
+- episode:E0727
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40688_t002
+- plan:C2.3.6
+
+## L1293 scope='C2.3.6' tags=HOL4,THEN1,conj_tac,Cases_on,precedence,Expr_Pop
+shape: A Resume proof uses `conj_tac >- (...) >> ...` or `Cases_on x >> simp[] >- ... >> ...` and holbuild shows the whole original conjunction or `GEN_TAC not a forall`.
+pattern: In suspended expression Resume proofs, parenthesize branch tacticals aggressively: use `(conj_tac >- ordinary_tac >> place_tac)` and `(Cases_on `tm` >- error_tac >> success_tac)` rather than relying on `>>`/`>-` precedence. Unparenthesized forms can route later tactics to the wrong subgoal and make semantic goals look unsolved even when the intended branch progressed.
+works_when: Applies when a proof has nested case splits inside the ordinary half of a joint ordinary/place expression soundness goal, especially around `Expr_Pop` and assignment-result splits.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40711_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40721_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40754_t001
+
+## L1294 scope='C2.3.6' tags=HOL4,suspend,Resume,Expr_Pop,branch-structure,THEN1
+shape: A statement Resume has a nested assignment-result split and inline tactics keep leaking or producing unreadable goals.
+pattern: Factor the nested split with `suspend` labels and prove each branch as a separate `Resume` block. For Expr_Pop, the main Resume suspends `Expr_Pop_assign_inl` and `Expr_Pop_assign_inr`; the INL Resume proves runtime consistency and `?v. popped = SOME v /\ value_has_type elem_tv v` via `assign_target_pop_success_some_typed`, while the INR Resume uses `assign_target_preserves_runtime_consistent_result` and `assign_target_no_type_error`. Do not add an early `Finalise`; leave finalisation at the existing end of the mutual proof after all labels are resumed.
+works_when: Use when an existing suspended mutual theorem already has many Resume blocks and a consumer proof needs two small post-case obligations with different boundary lemmas.
+evidence:
+- episode:E0729
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40813_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40810_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7690-7760

@@ -1392,6 +1392,15 @@ Theorem well_typed_expr_Pop_dynamic_target[local]:
     well_typed_expr env (Pop ty tgt) ==>
     ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n)))
 Proof
+  simp[Once well_typed_expr_def] >> metis_tac[]
+QED
+
+Theorem well_typed_expr_Pop_dynamic_target_assignable[local]:
+  !env ty tgt.
+    well_typed_expr env (Pop ty tgt) ==>
+    ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
+        assignable_type env.type_defs (ArrayT ty (Dynamic n))
+Proof
   simp[Once well_typed_expr_def]
 QED
 
@@ -7679,7 +7688,75 @@ Proof
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Pop]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  (reverse conj_tac
+   >- (gen_tac >> strip_tac >>
+       gvs[Once well_typed_expr_def]) >>
+   strip_tac >>
+   drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac >>
+      qpat_x_assum `eval_expr cx (Pop v11 bt) st = (res,st')` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+      Cases_on `eval_base_target cx bt st` >>
+      rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
+      first_x_assum drule_all >> strip_tac >>
+      Cases_on `bt_res`
+      >- (gvs[no_type_error_result_def] >>
+          PairCases_on `x` >>
+          gvs[] >>
+          strip_tac >>
+          qpat_x_assum `do _ od st1 = (res,st')` mp_tac >>
+          simp[bind_apply, bind_def, return_def, ignore_bind_apply] >>
+          Cases_on `assign_target cx (BaseTargetV x0 x1) PopOp st1` >>
+          rename1 `assign_target cx (BaseTargetV loc sbs) PopOp st1 = (assign_res, st2)` >>
+          `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
+          `target_runtime_typed env cx st1 (BaseTarget bt)
+             (ArrayT v11 (Dynamic n)) (BaseTargetV loc sbs)` by (
+            simp[target_runtime_typed_def, target_value_shape_def,
+                 well_typed_atarget_def, well_typed_target_def] >>
+            qexists_tac `loc_vt` >> simp[]) >>
+          `?elem_tv. evaluate_type env.type_defs v11 = SOME elem_tv` by (
+            `?vt final_tv.
+               location_runtime_typed env cx st1 loc vt /\
+               target_path_type env vt sbs (Type (ArrayT v11 (Dynamic n))) /\
+               place_leaf_typed env vt sbs (ArrayT v11 (Dynamic n)) final_tv` by
+              metis_tac[target_runtime_typed_place_leaf_typed] >>
+            `evaluate_type env.type_defs (ArrayT v11 (Dynamic n)) = SOME final_tv` by
+              metis_tac[place_leaf_typed_evaluate_type] >>
+            Cases_on `evaluate_type env.type_defs v11` >> gvs[evaluate_type_def]) >>
+          `assign_operation_runtime_typed env (ArrayT v11 (Dynamic n)) PopOp` by
+            metis_tac[stmt_assign_operation_runtime_typed_Pop_from_dynamic_array] >>
+          `assign_operation_matches_target_shape (BaseTargetV loc sbs) PopOp` by
+            simp[assign_operation_matches_target_shape_def] >>
+          `assign_target_assignable_context cx (BaseTargetV loc sbs) st1` by
+            metis_tac[target_runtime_typed_imp_assignable_context] >>
+          Cases_on `assign_res` >> simp[return_def, raise_def, lift_option_type_def]
+          >- suspend "Expr_Pop_assign_inl" >>
+          suspend "Expr_Pop_assign_inr") >>
+      strip_tac >> gvs[no_type_error_result_def])
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Pop_assign_inl]:
+  `runtime_consistent env cx st2` by (
+    drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent >>
+    disch_then $ drule_at(Pat`target_runtime_typed`) >>
+    simp[]) >>
+  `?v. x = SOME v /\ value_has_type elem_tv v` by
+    metis_tac[assign_target_pop_success_some_typed] >>
+  strip_tac >> gvs[return_def, expr_result_typed_def, expr_runtime_typed_def,
+                   toplevel_value_typed_def, runtime_consistent_def, expr_type_def]
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Pop_assign_inr]:
+  strip_tac >> gvs[] >>
+  `runtime_consistent env cx st'` by
+    metis_tac[assign_target_preserves_runtime_consistent_result] >>
+  gvs[runtime_consistent_def] >>
+  qspecl_then [`cx`, `BaseTargetV loc sbs`, `PopOp`, `st1`,
+               `INR y`, `st'`, `env`, `BaseTarget bt`,
+               `ArrayT v11 (Dynamic n)`] mp_tac assign_target_no_type_error >>
+  simp[no_type_error_result_def] >>
+  impl_tac >- simp[runtime_consistent_def] >>
+  simp[]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:

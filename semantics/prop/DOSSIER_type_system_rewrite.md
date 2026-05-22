@@ -6,9 +6,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
-| C0 | proved |  | E0530 | Review C0 closure with strategist. The next scheduled proof should remain C2.0 but its guidance must account for the current failure: `MATCH_MP for_cons_body_result_return_exception_typed th` is being attempted before discharging the implication body, so the tail likely needs `disch_then (fn th => ... )` over the whole implication/result or a small full-tail helper, not just direct MATCH_MP on the antecedent theorem. |
+| C0 | proved |  | E0730 | Review C0 closure with strategist, then follow the rebased frontier (expected C1 carry-forward then C3.1). |
 | C0.1 | stuck | other | E0004 | "Escalate to plan_oracle for C0 resolution: authorize type_builtin_result_ok repair for AbiEncode branch, adding vyper_abi_size_bound condition" |
-| C1 | progressed | plan_incomplete | E0005 | Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable. |
+| C1 | proved |  | E0731 | Review C1 closure with strategist; if accepted, follow the rebased frontier to C3.1. |
 | C1.0 | proved |  | E0186 |  |
 | C1.1 | proved |  | E0531 | Review C1.1 closure, then proceed to the next assignment-target soundness branch component in the scheduled frontier. |
 | C1.1.1 | proved |  | E0187 |  |
@@ -141,9 +141,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
 | C2.3 | proved |  | E0614 |  |
-| C2.3.1 | proved |  | E0714 |  |
-| C2.3.2 | proved |  | E0715 |  |
-| C2.3.3 | stuck | risk_mismatch | E0450 | Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale. |
+| C2.3.1 | proved |  | E0719 | Review closure, then begin C2.3.2 carry-forward extraction lemma audit. |
+| C2.3.2 | proved |  | E0720 | Review closure, then begin C2.3.3 to strengthen the Pop typing clause with assignment assignability. |
+| C2.3.3 | proved |  | E0721 | Review closure, then begin C2.3.4 to add the strong Pop extraction lemma exposing both dynamic target and assignability. |
+| C2.3.4 | proved |  | E0722 | Review closure, then begin C2.3.5 to prove the Pop assignment success-return boundary lemma. |
+| C2.3.5 | proved |  | E0727 |  |
+| C2.3.6 | proved |  | E0729 | Call plan_oracle review for C2.3.6; after review, inspect status/diff and checkpoint commit only the relevant stable files if the oracle accepts. |
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
 | C2.5.1 | proved |  | E0281 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
@@ -347,10 +350,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0530`
+- latest episode: `E0730`
 - blocker: 
-- actual effort: 1 sessions, 3 steps, 6 tools, 3 holbuild, 199,471 tok (198,301 in, 1,170 out, 188,928 cached), 39.4s, $0.17642900
-- next: Review C0 closure with strategist. The next scheduled proof should remain C2.0 but its guidance must account for the current failure: `MATCH_MP for_cons_body_result_return_exception_typed th` is being attempted before discharging the implication body, so the tail likely needs `disch_then (fn th => ... )` over the whole implication/result or a small full-tail helper, not just direct MATCH_MP on the antecedent theorem.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 172,476 tok (171,892 in, 584 out, 167,936 cached), 19.1s, $0.12126800
+- next: Review C0 closure with strategist, then follow the rebased frontier (expected C1 carry-forward then C3.1).
 
 ### Attempts / Evidence
 
@@ -358,14 +361,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Ran the C0 fresh-stack audit build and targeted grep over in-scope fresh theories for `cheat`, `suspend`, and `CHEAT`. -> The current build frontier is still the prerequisite `vyperTypeBuiltinsTheory` failure in `well_typed_builtin_app_no_type_error` on a Concat bytes dispatcher goal. Targeted greps list remaining fresh-stack cheats/suspends in `vyperTypeBuiltinsScript.sml`, `vyperTypeStatePreservationScript.sml`, `vyperTypeStmtSoundnessScript.sml`, and `vyperTypeCallSoundnessScript.sml`; `vyperTypeAssignSoundnessScript.sml` only matched a comment. (`TO_type_system_rewrite-20260518T204229Z_m25738_t002`, `TO_type_system_rewrite-20260518T204229Z_m25739_t001`, `TO_type_system_rewrite-20260518T204229Z_m25739_t004`, `TO_type_system_rewrite-20260518T204229Z_m25739_t005`, `TO_type_system_rewrite-20260518T204229Z_m25739_t003`, `TO_type_system_rewrite-20260518T204229Z_m25739_t002`)
 - `E0530` (proved, , actual effort: 1 sessions, 3 steps, 6 tools, 3 holbuild, 199,471 tok (198,301 in, 1,170 out, 188,928 cached), 39.4s, $0.17642900)
   - Run baseline holbuild/audit per C0: full `vyperSemanticsHolTheory` build, targeted `vyperTypeStatePreservationTheory` build after lock contention, and grep for cheats/suspends in fresh prop sources. -> `vyperTypeStatePreservationTheory` currently builds. Full `vyperSemanticsHolTheory` reaches `vyperTypeStmtSoundnessTheory` and fails in `eval_for_cons_type_sound_core` at the already-patched helper tail; the failing input goal is an implication from the specialized body IH result to `return_exception_typed env ret_ty (ReturnException v')`. Grep still reports cheats/suspends in builtin typing/builtins, state preservation, call soundness, and retired/out-of-scope old `vyperTypeSoundnessScript.sml`; call file has four cheats. Source around lines 4224-4231 confirms the helper-based tail is present, not the old `for_cons_return_exception_typed_from_body_ex` tail. (`TO_type_system_rewrite-20260520T182357Z_m34107_t003`, `TO_type_system_rewrite-20260520T182357Z_m34108_t003`, `TO_type_system_rewrite-20260520T182357Z_m34107_t001`, `TO_type_system_rewrite-20260520T182357Z_m34108_t001`, `TO_type_system_rewrite-20260520T182357Z_m34108_t002`)
+- `E0730` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 172,476 tok (171,892 in, 584 out, 167,936 cached), 19.1s, $0.12126800)
+  - Began rebased carry-forward C0 and ran the relevant statement-theory build check requested at session start. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` finished successfully; no source edits were made for C0 and prior baseline audit remains carried forward. (`TO_type_system_rewrite-20260522T073012Z_m40829_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260520T182357Z_m34107_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34108_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34107_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34108_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260520T182357Z_m34108_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40829_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40828_t001` (use `read_tool_output` for exact output)
 
 ## C0.1
 
@@ -390,22 +392,25 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `plan_incomplete`
-- latest episode: `E0005`
-- blocker: "Three ABI encode success-typing cheat branches require two new substantial lemmas that don't exist yet: (1) value_has_type => vyper_to_abi succeeds, and (2) LENGTH(enc ...) <= vyper_abi_size_bound. These helpers are each non-trivial and C1's Risk 2 estimate didn't account for them."
-- next: Escalate to plan_oracle: C1 needs decomposition into subcomponents for (1) the vyper_to_abi success lemma and (2) the enc-length-bound lemma, before the 3 success-typing branches are provable.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0731`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 235,327 tok (234,886 in, 441 out, 202,752 cached), 18.4s, $0.27527600
+- next: Review C1 closure with strategist; if accepted, follow the rebased frontier to C3.1.
 
 ### Attempts / Evidence
 
 - `E0005` (progressed, plan_incomplete)
   - Fix type_builtin_result_ok definition syntax (corrupted /& and <= in definition), add abi_encode_size_ok helper, use Unicode ∧ for conjunctions that API can't produce as /\ -> Definition compiles, probes pass. vyperTypeSystemTheory and vyperTypeBuiltinsTheory build successfully. Three ABI encode cheats remain. ()
   - Replace cheat proofs for abi_encode, encode_tuple, encode_tuple_nowrap -> Stuck: need value_has_type=>vyper_to_abi_success lemma and LENGTH(enc)<=vyper_abi_size_bound lemma. Neither exists in codebase. contractABI theory has LENGTH_enc_number and head_lengths_leq_LENGTH_enc_tuple which may help. ()
+- `E0731` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 235,327 tok (234,886 in, 441 out, 202,752 cached), 18.4s, $0.27527600)
+  - Began rebased carry-forward C1 and ran the assignment wrapper build target as a direct check of the carried-forward assignment-target/wrapper stack. -> `holbuild(targets=["vyperTypeAssignSoundnessTheory"], timeout=600)` finished successfully. This preserves the existing assignment-target state preservation and compatibility wrapper progress; no source edits were made for C1. (`TO_type_system_rewrite-20260522T073012Z_m40833_t001`)
 
 ### Evidence refs
 
-- `tool_output:TO_type_system_rewrite-20260513Tm0832_t001` (use `read_tool_output` for exact output)
-- `tool_output:TO_type_system_rewrite-20260513Tm0826_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40833_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40832_t001` (use `read_tool_output` for exact output)
 
 ## C1.0
 
@@ -3888,9 +3893,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0714`
+- latest episode: `E0719`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 4 holbuild, 988,006 tok (984,566 in, 3,440 out, 960,512 cached), 442.8s, $0.70372600
+- actual effort: 1 sessions, 1 steps, 77,817 tok (77,479 in, 338 out, 73,216 cached), 8.7s, $0.06806300
+- next: Review closure, then begin C2.3.2 carry-forward extraction lemma audit.
 
 ### Attempts / Evidence
 
@@ -3902,11 +3908,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0714` (proved, , actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 4 holbuild, 988,006 tok (984,566 in, 3,440 out, 960,512 cached), 442.8s, $0.70372600)
   - Changed `well_typed_expr env (Pop ty tgt)` in `vyperTypeSystemScript.sml` from arbitrary `?bd. ... ArrayT ty bd` to `?n. ... ArrayT ty (Dynamic n)`. Rebuilt `vyperTypeStmtSoundnessTheory`; dependent stack rebuilt through statement soundness. -> Pop typing rule now enforces dynamic arrays as planned and immediate dependent theory builds. (`TO_type_system_rewrite-20260522T073012Z_m40270_t001`, `TO_type_system_rewrite-20260522T073012Z_m40279_t001`)
   - During the required rebuild, an existing subscript helper branch hit the fixed 2.5s tactic timeout at broad `simp[]`; replaced the final exception branch closure with explicit conjunct closures plus a small final simp. -> Mechanical build fallout resolved without changing theorem statements or Pop architecture. (`TO_type_system_rewrite-20260522T073012Z_m40271_t003`, `TO_type_system_rewrite-20260522T073012Z_m40279_t001`)
+- `E0719` (proved, , actual effort: 1 sessions, 1 steps, 77,817 tok (77,479 in, 338 out, 73,216 cached), 8.7s, $0.06806300)
+  - Audited current `well_typed_expr` Pop clause in `vyperTypeSystemScript.sml`. -> Source already has the carried-forward dynamic-array Pop repair: `well_typed_expr env (Pop ty tgt) = (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))))`, so C2.3.1 remains satisfied with no new edit. (`TO_type_system_rewrite-20260522T073012Z_m40406_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m40270_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40279_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40406_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.2
 
@@ -3914,9 +3921,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0715`
+- latest episode: `E0720`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 7 steps, 8 tools, 2 holbuild, 726,007 tok (724,407 in, 1,600 out, 708,096 cached), 131.0s, $0.48360300
+- actual effort: 1 sessions, 1 msgs, 1 steps, 83,445 tok (83,056 in, 389 out, 77,312 cached), 11.3s, $0.07904600
+- next: Review closure, then begin C2.3.3 to strengthen the Pop typing clause with assignment assignability.
 
 ### Attempts / Evidence
 
@@ -3927,22 +3935,24 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0715` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 8 tools, 2 holbuild, 726,007 tok (724,407 in, 1,600 out, 708,096 cached), 131.0s, $0.48360300)
   - Added local boundary lemma `well_typed_expr_Pop_dynamic_target` near the statement assignment-operation bridge lemmas, proving it by `simp[Once well_typed_expr_def]` after the repaired dynamic-array Pop typing rule. -> The planned Pop dynamic-target extraction lemma now builds and is available for the later Expr_Pop integration leaf. (`TO_type_system_rewrite-20260522T073012Z_m40288_t001`, `TO_type_system_rewrite-20260522T073012Z_m40292_t001`)
   - The required rebuild exposed another pre-existing broad `simp[]` timeout in a sibling subscript helper exception branch; replaced that local tail with explicit conjunct closures matching the C2.3.1 timeout repair pattern. -> Immediate dependent target `vyperTypeStmtSoundnessTheory` builds cleanly under the fixed tactic timeout. (`TO_type_system_rewrite-20260522T073012Z_m40289_t001`, `TO_type_system_rewrite-20260522T073012Z_m40292_t001`)
+- `E0720` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 83,445 tok (83,056 in, 389 out, 77,312 cached), 11.3s, $0.07904600)
+  - Audited existing local theorem `well_typed_expr_Pop_dynamic_target` near the Pop bridge lemmas and current build prefix. -> The theorem with the planned statement is present and proved by `simp[Once well_typed_expr_def]`. The latest holbuild reached the later `Expr_Pop` Resume failure, so this extraction lemma is accepted before the current failure point. (`TO_type_system_rewrite-20260522T073012Z_m40406_t002`, `TO_type_system_rewrite-20260522T073012Z_m40401_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m40288_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40292_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40406_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40401_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.3
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` Risk estimate mismatch: the mathematical residual remains simple, but the suspended Resume/proof-runtime validation boundary is brittle for assumptions produced around existential extraction. The decomposition likely needs a different boundary, e.g. factor the whole residual into a standalone theorem that consumes all facts at once or avoid generating side goals for already-present noerr/existential premises.
-- latest episode: `E0450`
-- blocker: C2.3.3's planned local extraction/helper interface is still CHOOSE-sensitive: even a tautological `no_type_error_result (INR y) ==> no_type_error_result (INR y)` or the same fact as an assumption cannot be validated inside this Resume after existential extraction/helper application.
-- actual effort: 1 sessions, 3 msgs, 47 steps, 48 tools, 18 holbuild, 3,280,881 tok (3,264,193 in, 16,688 out, 3,191,296 cached), 559.5s, $2.46077300
-- next: Call plan_oracle review for a replacement of C2.3.3/C2.3 proof interface. Current source is partial and unproved; strategist should decide whether to keep the new helper or replace the suffix wholesale.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0721`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 269,799 tok (268,356 in, 1,443 out, 261,120 cached), 64.5s, $0.21003000
+- next: Review closure, then begin C2.3.4 to add the strong Pop extraction lemma exposing both dynamic target and assignability.
 
 ### Attempts / Evidence
 
@@ -3950,18 +3960,108 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Extracted the IH existential and added a `noerr_first` helper to avoid exact acceptance of the noerr conjunct; then attempted to close the remaining `no_type_error_result (INR y)` premise by converting both sides of the implication to `!msg. y <> Error (TypeError msg)` and stripping. -> The proof still fails with HOL_ERR CHOOSE at a tautological noerr implication inside the suspended For_cons Resume. Source currently contains partial helper and suffix edits but the component is not closed. (`TO_type_system_rewrite-20260519T123242Z_m32263_t001`)
 - `E0450` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 47 steps, 48 tools, 18 holbuild, 3,280,881 tok (3,264,193 in, 16,688 out, 3,191,296 cached), 559.5s, $2.46077300)
   - Implemented a shape-compatible `for_cons_ordinary_exception_final_case_noerr_first` helper and rewrote the For_cons suffix to extract the IH existential, keep the noerr fact separate, and apply the helper. -> The helper itself proves, but the Resume suffix still fails. After the helper application, a residual noerr premise remains; multiple ways of closing the trivial implication/assumption (`simp`, exact acceptance, expansion to `!msg`, stripping) triggered CHOOSE/extract_thm failures in the suspended proof validation. (`TO_type_system_rewrite-20260519T123242Z_m32263_t001`)
-
-### Ruled Out
-
-- Exact assumption acceptance for noerr/existential facts inside Resume
-- mp_tac + strip + simp on no_type_error_result side goal inside Resume
-- expanding both sides of the noerr implication with no_type_error_result_def inside Resume
-- Direct helper application that leaves side goals for existing facts
+- `E0716` (progressed, other, actual effort: 1 sessions, 1 msgs, 7 steps, 17 tools, 1 holbuild, 912,106 tok (910,185 in, 1,921 out, 878,080 cached), 69.9s, $0.65719500)
+  - Replaced `Resume eval_all_type_sound_mutual[Expr_Pop]: cheat` with `rpt gen_tac >> strip_tac >> FAIL_TAC "Expr_Pop probe"` to inspect the post-strip goal before attempting integration. -> Holbuild shows one goal: an eval_base_target IH assumption plus env/state/context/accounts/functions premises and `eval_expr cx (Pop v11 bt) st = (res,st')`; conclusion is the conjunction of well-typed-expression soundness and place-expression soundness. This is the correct starting shape for a case split on the Pop evaluator after destructing `well_typed_expr_Pop_dynamic_target`. (`TO_type_system_rewrite-20260522T073012Z_m40304_t001`)
+- `E0717` (progressed, other, actual effort: 1 sessions, 3 msgs, 41 steps, 70 tools, 7 holbuild, 4,423,816 tok (4,408,748 in, 15,068 out, 4,286,976 cached), 475.9s, $3.20438800)
+  - Replaced the initial `FAIL_TAC "Expr_Pop probe"` with a partial proof prefix: `conj_tac`, destruct `well_typed_expr_Pop_dynamic_target`, one-step `evaluate_def`, split `eval_base_target`, instantiate base-target IH, and inspect residual. -> Holbuild confirmed the base-target IH yields state/env/accounts/no-TypeError plus shape/path facts for `bt_res`; residual was the evaluator continuation implication. (`TO_type_system_rewrite-20260522T073012Z_m40335_t001`)
+  - Split `bt_res`, handled the `INL (loc,sbs)` path with `gvs[]`, and inspected the successful target branch. -> Holbuild confirmed assumptions now include `base_target_value_shape`, `location_runtime_typed`, and `target_path_type` for `Type (ArrayT v11 (Dynamic n))`; residual is exactly the Pop evaluator monad over `assign_target`. (`TO_type_system_rewrite-20260522T073012Z_m40340_t001`)
+  - Stripped the evaluator continuation, split `assign_target cx (BaseTargetV loc sbs) PopOp st1`, and inspected the residual. -> Holbuild confirmed the current next goal has `assign_target ... = (assign_res,st2)` and asks to prove state/env/accounts/no-TypeError plus `expr_result_typed` after the `assign_res`/`lift_option_type` case expression. (`TO_type_system_rewrite-20260522T073012Z_m40350_t001`)
+- `E0718` (stuck, risk_mismatch, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,349 tok (116,520 in, 829 out, 106,496 cached), 30.9s, $0.12823800)
+  - Rebuilt current partial `Resume eval_all_type_sound_mutual[Expr_Pop]` at the handoff cursor. -> Holbuild fails exactly at the asserted `assignable_type env.type_defs (ArrayT v11 (Dynamic n))`; assumptions include dynamic target typing, constructed `target_runtime_typed`, and `evaluate_type env.type_defs v11 = SOME elem_tv`, but not recursive element assignability. (`TO_type_system_rewrite-20260522T073012Z_m40401_t001`)
+- `E0721` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 269,799 tok (268,356 in, 1,443 out, 261,120 cached), 64.5s, $0.21003000)
+  - Strengthened the `well_typed_expr env (Pop ty tgt)` defining clause in `vyperTypeSystemScript.sml` by conjoining `assignable_type env.type_defs (ArrayT ty (Dynamic n))` under the existing dynamic-array witness. -> Definition edit matches the replacement PLAN target and `vyperTypeSystemTheory` rebuilds cleanly, so the Pop typing interface now exposes dynamic-array assignability at the type-system layer. (`TO_type_system_rewrite-20260522T073012Z_m40414_t001`, `TO_type_system_rewrite-20260522T073012Z_m40415_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260519T123242Z_m32263_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T123242Z_m32264_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40414_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40415_t001` (use `read_tool_output` for exact output)
+
+## C2.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0722`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 476,040 tok (474,140 in, 1,900 out, 464,384 cached), 362.6s, $0.33797200
+- next: Review closure, then begin C2.3.5 to prove the Pop assignment success-return boundary lemma.
+
+### Attempts / Evidence
+
+- `E0722` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 476,040 tok (474,140 in, 1,900 out, 464,384 cached), 362.6s, $0.33797200)
+  - Added local `well_typed_expr_Pop_dynamic_target_assignable` beside the existing Pop extraction lemma, proved by one-step `well_typed_expr_def` simplification. Adjusted the existing dynamic-only extraction lemma to use `metis_tac[]` after the strengthened Pop clause introduced an extra conjunct. -> `holbuild vyperTypeStmtSoundnessTheory` progressed past both Pop extraction lemmas and failed only later in the already-partial `Expr_Pop` Resume at the known obsolete `assignable_type ... by simp[assignable_type_def, well_formed_type_def]` line. This confirms the C2.3.4 strong extraction lemma is accepted by the build prefix. (`TO_type_system_rewrite-20260522T073012Z_m40419_t001`, `TO_type_system_rewrite-20260522T073012Z_m40420_t001`, `TO_type_system_rewrite-20260522T073012Z_m40421_t001`, `TO_type_system_rewrite-20260522T073012Z_m40422_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40419_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40422_t001` (use `read_tool_output` for exact output)
+
+## C2.3.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0727`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 14 steps, 16 tools, 3 holbuild, 920,754 tok (917,991 in, 2,763 out, 884,736 cached), 118.2s, $0.69153300
+
+### Attempts / Evidence
+
+- `E0723` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 31 steps, 56 tools, 6 holbuild, 3,431,285 tok (3,418,328 in, 12,957 out, 3,305,984 cached), 392.6s, $2.60342200)
+  - Ported fresh-stack versions of retired helper facts into `vyperTypeStatePreservationScript.sml`: `evaluate_subscripts_leaf_well_typed`, `popped_value_well_typed`, and `assign_result_pop_success_some_typed`. Fixed the induction proof by case-splitting subscript value before value, and removed an existential witness after `gvs[]` had simplified the goal to the value-typing conclusion. -> Lower-level `assign_result ... PopOp` helper compiles and the prerequisite theory builds; it proves successful `assign_result` Pop on a dynamic array leaf returns `SOME v` with element type. (`TO_type_system_rewrite-20260522T073012Z_m40457_t001`, `TO_type_system_rewrite-20260522T073012Z_m40458_t001`, `TO_type_system_rewrite-20260522T073012Z_m40462_t001`, `TO_type_system_rewrite-20260522T073012Z_m40466_t001`)
+  - Re-read C2.3.5 plan and source around assign_target/state preservation; identified next proof should lift through `assign_target` by cases on `loc`, using `assign_result_pop_success_some_typed` for ScopedVar/Value/Immutable/ordinary branches and `read_storage_slot_success_type` for TopLevel ArrayRef dynamic direct branch. -> Proof decomposition still matches PLAN; no terminal outcome yet because the exported `assign_target_pop_success_some_typed` boundary is not in source. (`TO_type_system_rewrite-20260522T073012Z_m40470_t004`, `TO_type_system_rewrite-20260522T073012Z_m40469_t002`)
+- `E0724` (progressed, missing_helper, actual effort: 1 sessions, 5 msgs, 59 steps, 87 tools, 23 holbuild, 6,138,213 tok (6,120,929 in, 17,284 out, 5,890,048 cached), 670.2s, $4.61794900)
+  - Inserted `assign_target_pop_success_some_typed` after `Finalise assign_target_sound_mutual`; unfolded `assign_target` by `Cases_on loc` and used `target_runtime_typed_place_leaf_typed`, runtime consistency and `assign_result_pop_success_some_typed` for ScopedVar. -> ScopedVar branch proof progressed and no longer appears as the first failure. Earlier attempt before helper definitions failed because downstream helpers were undeclared; moving theorem later fixed that structural source issue. (`TO_type_system_rewrite-20260522T073012Z_m40521_t001`, `TO_type_system_rewrite-20260522T073012Z_m40523_t001`)
+  - Added analogous ImmutableVar branch, using `get_immutables_state`, `state_well_typed_immutables_ALOOKUP`, `imms_well_typed_get_source_immutables`, and `assign_result_pop_success_some_typed`. -> ImmutableVar branch also progressed; after correction from `tva0/tva1` to the already-simplified `tv/v`, the next visible failure moved to the TopLevelVar Value/StorageVarDecl branch. (`TO_type_system_rewrite-20260522T073012Z_m40525_t001`, `TO_type_system_rewrite-20260522T073012Z_m40527_t001`, `TO_type_system_rewrite-20260522T073012Z_m40531_t001`)
+  - Stopped at `FAIL_TAC "pop target lift probe"` after two solved branches. -> Remaining first goal is TopLevelVar Value/StorageVarDecl with `lookup_global ... = INL (Value old_v)`, `evaluate_type (get_tenv cx) typ = SOME root_tv`, `assign_result root_tv PopOp old_v ... = (INL popped, st')`. It should be discharged by existing post-mutual helpers such as `lookup_global_storage_Value_typed` and `top_level_storage_value_leaf_evaluate_type`, then `assign_result_pop_success_some_typed`. (`TO_type_system_rewrite-20260522T073012Z_m40531_t001`, `TO_type_system_rewrite-20260522T073012Z_m40532_t001`)
+- `E0725` (progressed, missing_helper, actual effort: 1 sessions, 5 msgs, 62 steps, 74 tools, 18 holbuild, 6,394,886 tok (6,377,266 in, 17,620 out, 6,244,352 cached), 640.8s, $4.31534600)
+  - Ported/added `lookup_global_HashMapRef` in fresh state-preservation file by unfolding `lookup_global_def`; after fixing the proof finish, holbuild progressed past this helper. -> Helper now builds as part of replay; it provides declaration witnesses for HashMapRef branches without using retired helpers. (`TO_type_system_rewrite-20260522T073012Z_m40578_t001`)
+  - In `assign_target_pop_success_some_typed`, proved TopLevelVar Value/StorageVarDecl branch with `lookup_global_storage_Value_typed`, `top_level_storage_value_leaf_evaluate_type`, `evaluate_type_well_formed_type_value`, and `assign_result_pop_success_some_typed`. -> The first remaining failure moved past the Value branch to HashMapRef, confirming this branch is discharged. (`TO_type_system_rewrite-20260522T073012Z_m40547_t001`, `TO_type_system_rewrite-20260522T073012Z_m40552_t001`)
+  - For TopLevelVar HashMapRef, used declaration/runtime consistency (`lookup_global_HashMapRef`, `top_level_HashMap_decl`), `target_path_type_Type_place_leaf_typed`, `place_leaf_path_typed_split_leaf_type`, and `assign_result_pop_success_some_typed`. -> HashMapRef branch progressed; holbuild now fails at the next ArrayRef branch probe, so HashMapRef is no longer the first open goal. (`TO_type_system_rewrite-20260522T073012Z_m40595_t001`, `TO_type_system_rewrite-20260522T073012Z_m40597_t001`)
+- `E0726` (progressed, missing_helper, actual effort: 1 sessions, 6 msgs, 71 steps, 76 tools, 19 holbuild, 7,451,266 tok (7,428,572 in, 22,694 out, 7,181,824 cached), 813.3s, $5.50547200)
+  - Added local lookup_global_ArrayRef near lookup_global_HashMapRef helpers by porting the retired helper shape; first proof attempt left an implication, then rpt strip_tac >> gvs[] completed it and holbuild progressed back to assign_target_pop_success_some_typed. -> Provides StorageVarDecl/evaluate_type(ArrayTV ...) witnesses in the ArrayRef branch without relying on retired helper imports. (`TO_type_system_rewrite-20260522T073012Z_m40618_t001`)
+  - In ArrayRef branch, after PairCases_on x and gvs[], used lookup_global_ArrayRef and top_level_storage_value_leaf_evaluate_type to derive leaf_type (ArrayTV elem_tv' bd) (REVERSE sbs) = ArrayTV elem_tv (Dynamic n). Added local resolve_array_element_leaf_type_eq wrapper and used drule to connect this to leaf_type final_tv remaining. -> The proof progressed past the earlier inability to connect root leaf_type to resolve_array_element result; holbuild showed the new assumptions include leaf_type final_tv x2 = ArrayTV elem_tv (Dynamic n). (`TO_type_system_rewrite-20260522T073012Z_m40646_t001`)
+  - Avoided a slow metis proof of well_formed_type_value final_tv by deriving well_formed_type_value (ArrayTV elem_tv' bd) from evaluate_type and using drule_all resolve_array_element_well_formed_eq. Then split ArrayTV Fixed vs Dynamic handling after holbuild showed Cases_on `b` was stale (no variable b in goal after gvs). -> Last checked build had progressed to the ArrayTV Fixed ordinary branch; current source was edited to remove stale Cases_on b and add separate Fixed/Dynamic branches but has not been rebuilt. (`TO_type_system_rewrite-20260522T073012Z_m40668_t001`, `TO_type_system_rewrite-20260522T073012Z_m40670_t001`)
+- `E0727` (proved, , actual effort: 1 sessions, 1 msgs, 14 steps, 16 tools, 3 holbuild, 920,754 tok (917,991 in, 2,763 out, 884,736 cached), 118.2s, $0.69153300)
+  - Rebuilt `vyperTypeStatePreservationTheory` after finishing `assign_target_pop_success_some_typed`; final ArrayRef branches use `read_storage_slot_success_type` plus `value_has_type_NoneTV`, with direct dynamic branch simplifying `well_formed_type_value_def`. -> `vyperTypeStatePreservationTheory` builds cleanly, so the Pop assignment success typed-element boundary lemma is proved in source. (`TO_type_system_rewrite-20260522T073012Z_m40688_t002`)
+
+### Ruled Out
+
+- No remaining first failure in `assign_target_pop_success_some_typed` after the ArrayRef direct/ordinary branch fixes.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40688_t002` (use `read_tool_output` for exact output)
+
+## C2.3.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0729`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 54 steps, 64 tools, 20 holbuild, 5,491,716 tok (5,475,737 in, 15,979 out, 5,257,728 cached), 621.2s, $4.19827900
+- next: Call plan_oracle review for C2.3.6; after review, inspect status/diff and checkpoint commit only the relevant stable files if the oracle accepts.
+
+### Attempts / Evidence
+
+- `E0728` (progressed, other, actual effort: 1 sessions, 4 msgs, 50 steps, 62 tools, 10 holbuild, 5,257,073 tok (5,239,206 in, 17,867 out, 5,115,904 cached), 642.6s, $3.71047200)
+  - Replaced `drule well_typed_expr_Pop_dynamic_target` plus local `assignable_type ... by simp[assignable_type_def, well_formed_type_def]` with `drule well_typed_expr_Pop_dynamic_target_assignable`; rebuild progressed past old assignability failure. -> Old blocked assignability subgoal is eliminated; holbuild moved to branch/case split issues and then the assign result placeholder. (`TO_type_system_rewrite-20260522T073012Z_m40708_t003`, `TO_type_system_rewrite-20260522T073012Z_m40723_t001`)
+  - Fixed `Cases_on bt_res` branch syntax by parenthesizing `(Cases_on `bt_res` >- ...) >> ...`; earlier unparenthesized version applied `>-` to the wrong composite and left the original goal. -> Holbuild progressed to the assignment-result tail instead of failing with `PairCases_on`/branch leakage. (`TO_type_system_rewrite-20260522T073012Z_m40711_t001`, `TO_type_system_rewrite-20260522T073012Z_m40723_t001`)
+  - Parenthesized the outer `conj_tac` branch to prevent the place-expression proof from being sequenced under the ordinary branch; inserted a single `FAIL_TAC "Expr_Pop assign split"` after stripping/simplifying the assignment-result split. -> Source now reflects the intended two-conjunct structure, but the ordinary branch still fails; next session should inspect/replace the FAIL with assignment no-TypeError/preservation and Pop success boundary applications. (`TO_type_system_rewrite-20260522T073012Z_m40754_t001`)
+- `E0729` (proved, , actual effort: 1 sessions, 3 msgs, 54 steps, 64 tools, 20 holbuild, 5,491,716 tok (5,475,737 in, 15,979 out, 5,257,728 cached), 621.2s, $4.19827900)
+  - Refactored Expr_Pop Resume to solve place-expression conjunct first with reverse conj_tac, explicitly split base-target INL/INR, suspended assignment-result subgoals, then proved INL via assign_target_preserves_runtime_consistent and assign_target_pop_success_some_typed; proved INR via assign_target_preserves_runtime_consistent_result plus assign_target_no_type_error. -> vyperTypeStmtSoundnessTheory builds with Expr_Pop resume and its assignment-result resumes proved; no FAIL_TAC placeholders remain in this component. (`TO_type_system_rewrite-20260522T073012Z_m40813_t001`)
+
+### Ruled Out
+
+- Unparenthesized conj/case split structure; fixed by reverse conj_tac and explicit branch handling.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40813_t001` (use `read_tool_output` for exact output)
 
 ## C2.4
 

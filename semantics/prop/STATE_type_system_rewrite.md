@@ -2,69 +2,74 @@
 Updated: 2026-05-22
 
 ## Cursor
-- component: C2.3.1
+- component: C3.1
 - status: ready
-- active_file: semantics/prop/vyperTypeSystemScript.sml
-- next_action: Before new proof edits, preserve the reviewed C2.3 gate/probe checkpoint if still present: inspect git status/diff, stage only relevant tracked files (`semantics/prop/vyperTypeStmtSoundnessScript.sml`, `semantics/prop/PLAN_type_system_rewrite.md`, `semantics/prop/DOSSIER_type_system_rewrite.md`, and handoff-rendered STATE if appropriate), and commit the fixed-array Pop probe/replan; do not stage untracked scratch files. Then begin `C2.3.1` and edit `well_typed_expr env (Pop ty tgt)` in `semantics/prop/vyperTypeSystemScript.sml` from arbitrary `?bd. type_place_target ... ArrayT ty bd` to dynamic `?n. type_place_target ... ArrayT ty (Dynamic n)`. Rebuild `vyperTypeStmtSoundnessTheory` and fix only mechanical Pop-typing fallout.
-- expected_goal_shape: After C2.3.1 edit, proof failures should be mechanical uses of the Pop clause of `well_typed_expr_def`: old destructs expecting `?bd. type_place_target env tgt = SOME (Type (ArrayT ty bd))` must be updated to `?n. ... (Dynamic n)`. The local C2.3.2 probe theorem `assign_subscripts_fixed_array_pop_type_error_probe` should still prove by `simp[Once assign_subscripts_def, pop_element_def]` unless removed as documentation. The scheduled C2.3.2 boundary lemma after repair should prove by `simp[Once well_typed_expr_def]`.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
+- active_file: semantics/prop/vyperTypeBuiltinsScript.sml
+- next_action: Do not edit/build before preserving stable checkpoint. First inspect `git status --short` and `git diff --cached --stat`; tracked relevant source/task-memory changes are already staged from the prior C2.3 Pop repair plus PLAN/DOSSIER/LEARNINGS updates, while STATE will be rewritten by this handoff and must be staged with `git add -u semantics/prop/STATE_type_system_rewrite.md` if committing. Do not stage untracked scratch files. If the staged diff is still only stable task-owned progress, commit it with a small checkpoint message. Then begin_component('C3.1') and inspect `well_typed_binop_no_type_error` / nearby binop helpers in `vyperTypeBuiltinsScript.sml` before building.
+- expected_goal_shape: No live proof goal. Rebased PLAN frontier says C3.1 is Oracle next: close binop no-TypeError boundary lemmas, especially `well_typed_binop_no_type_error` and any immediate `well_typed_update_binop_no_type_error` corollary. Expect any build failure to be in `vyperTypeBuiltinsTheory` near binop/builtin boundaries or later residual C4 branches.
+- verify_with: After commit and begin_component('C3.1'), use `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)` for the C3.1 proof loop; C0/C1 carry-forward checks already passed with statement/assignment wrapper targets.
 
 ## If This Fails
-- If the definition repair causes non-mechanical failures outside Pop typing construction sites, checkpoint_progress on C2.3.1 with the holbuild output and ask the strategist before broad repairs. If the fixed-array probe no longer compiles due to imports or clutter, it may be removed per PLAN after preserving E0713 evidence. If query_plan no longer makes C2.3.1 beginable, follow Oracle next rather than editing.
+- If the first C3.1 build fails outside binop no-TypeError/update-binop obligations, checkpoint_progress on C3.1 with the holbuild output and ask strategist only if the failure is outside the component coverage. If a binop proof attempt starts requiring broad `gvs[evaluate_binop_def, AllCaseEqs()]` across all operators or creates huge goals, stop and use per-operator helper style from the PLAN/DOSSIER instead of tactic thrashing.
 
 ## Do Not Retry
-- Prove `well_typed_expr env (Pop elem_ty tgt)` implies `assign_operation_runtime_typed env (ArrayT elem_ty bd) PopOp` under the old arbitrary-bound rule.: C2.3.1 unfolded the exact definitions and the residual requires `bd = Dynamic n` from no premise; stronger tactics cannot invent that fact.
-  - evidence: episode:E0712
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40240_t001
-- Leave the Pop typing rule arbitrary-bound and add ad hoc dynamic assumptions inside the Expr_Pop Resume.: This hides the false static interface; fixed-array PopOp produces a TypeError at the assignment leaf, violating the no-TypeError public behavior path.
-  - evidence: episode:E0713
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40254_t001
-- Change `pop_element_def`/runtime semantics to accept fixed arrays as the first repair.: The strategist selected a localized static typing repair; changing runtime semantics is broader and not authorized by C2.3.1.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40257_t001
-  - evidence: source:semantics/vyperValueOperationScript.sml:803-808
-- Stage or commit untracked `test_*`, `test_conj*`, or `SuspBugProbeScript.sml` files.: They are pre-existing scratch/ad-hoc files unrelated to stable proof checkpoints. Stage only relevant tracked task/source/PLAN/DOSSIER/STATE/LEARNINGS changes.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t002
-- Begin C2.3.2/C2.3.3 before C2.3.1 definition repair.: query_plan makes C2.3.1 Oracle next; C2.3.2 boundary lemma depends on the repaired Pop typing rule, and C2.3.3 depends on both.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t004
+- Start editing/building C2.4 or C2.5 before C3/C4 boundary components close.: Whole-plan rebase made C2.4/C2.5 consumers dependent on C3/C4. Proving them first risks hidden CHEAT dependencies or forbidden builtin/type-builtin case analysis in statement soundness.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40825_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40826_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40839_t005
+- Use one giant `gvs[evaluate_binop_def, AllCaseEqs()]` over every binop case in C3.1.: Prior evidence and PLAN warn this causes case explosion/timeouts and brittle F-goals; C3.1 should use per-operator/local helper boundaries instead.
+  - evidence: episode:E0138
+  - evidence: episode:E0141
+  - evidence: episode:E0145
+- Stage or commit untracked scratch files such as `test_*`, `test_conj*`, or `SuspBugProbeScript.sml`.: They are ad-hoc scratch files unrelated to the stable proof checkpoint. Only tracked task-owned source/memory changes should be committed.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40839_t002
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40819_t002
+- Assume old C2.4 dossier entries prove the current `Expr_Builtin` source cheat.: C2.4 component identity drifted; strategist invalidated stale C2.4 iterator/Append evidence for current `Expr_Builtin`. Source is authoritative.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40822_t003
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40823_t001
+- Reopen the completed Expr_Pop proof or reintroduce the old assignability proof from `assignable_type_def`.: C2.3.6 is proved/reviewed; Pop assignability must come from `well_typed_expr_Pop_dynamic_target_assignable` and result typing from `assign_target_pop_success_some_typed`. Reopening it would waste time unless a build regression appears there.
+  - evidence: episode:E0729
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40813_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m40815_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box option not yet explored: instead of only changing `well_typed_expr`, one could alter runtime semantics to support fixed-array Pop, but the strategist explicitly rejected changing `pop_element_def`; repairing static typing is lower-risk and preserves runtime behavior.
-- We are not optimizing the wrong theorem: the old Expr_Pop Resume cannot be proved soundly under arbitrary `bd`; the right object is the Pop typing rule/interface that supplies dynamic array side conditions.
-- The PLAN decomposition is now the right abstraction: C2.3.1 definition repair, C2.3.2 extraction/runtime boundary lemma, C2.3.3 Resume integration. Do not jump straight to C2.3.3.
-- Do not retry the failed static extraction theorem with stronger tactics; the residual goal is semantically missing data, not tactic weakness.
-- A fresh expert should first question whether any downstream Pop typing users intentionally rely on fixed arrays. If so, they need to be repaired to dynamic bounds or escalated, not patched with assumptions.
+- Outside-the-box: before proving C3.1, ask whether current source already has some binop proofs from earlier sessions; read the local theorem region and generated theorem index rather than assuming the old dossier's C1.1 history maps exactly to current C3.1.
+- A fresh expert should question whether C3.1's theorem still contains an actual `cheat` or whether the remaining CHEAT path is now a downstream wrapper; use source grep/build after begin_component to verify.
+- Do not optimize the wrong layer: C2 statement expression resumes are blocked on C3/C4 boundaries, so proving them first is the wrong abstraction even if they are visible cheats in source.
+- If C3.1 needs many arithmetic/value-typing side lemmas, check existing `vyperEvalBinopScript.sml`, prior local helpers, and dossier evidence before inventing new broad tactics.
+- The PLAN decomposition now looks better than the previous over-augmented C2 tree, but if C3.1 again becomes a sequence of exposed constructor residuals, close/checkpoint and request decomposition rather than chasing unplanned residuals indefinitely.
 
 ### What Went Wrong
-- C2.3's old direct Expr_Pop proof plan assumed the Pop typing rule supplied the dynamic-array premise required by `assign_operation_runtime_typed ... PopOp`. C2.3.1 disproved that extraction: after unfolding `well_typed_expr_def` and `assign_operation_runtime_typed_def`, the residual required `bd = Dynamic n` from only a target typing equality.
-- C2.3.2 then showed this was not just a proof-interface nuisance: fixed-array leaf `PopOp` computes to `INR (TypeError "pop_element")` via `assign_subscripts_def` and `pop_element_def`.
-- Stable C2.2.3 progress was committed as `b91df1d2a`, but the later C2.3.2 probe/replan changes are not yet committed at handoff. Git status still includes modified PLAN/DOSSIER/source/STATE plus many pre-existing untracked scratch files.
+- At session start, source and PLAN were out of sync: old C2.4 dossier entries said proved for unrelated iterator/Append work while current source had `Expr_Builtin` and `Expr_TypeBuiltin` cheats. Following query_plan's decomposition-pressure instruction avoided starting the wrong proof.
+- Local C2.5 rebase was insufficient because type-builtin statement soundness depends on C4 boundary theorems across top-level siblings. The strategist correctly requested a whole-plan rebase instead of another local child decomposition.
+- I staged tracked files with `git add -u` just before the handoff signal. This is okay only if next session inspects the staged diff and commits the stable checkpoint before starting C3.1; untracked scratch files must remain unstaged.
 
 ### Ignored Signals
-- The existing `assign_operation_runtime_typed_def` explicitly made `PopOp` dynamic-array-only; the old C2.3 direct proof guidance underweighted that interface and treated Pop as a generic assignment consumer.
-- The initial C2.3 query already warned of over-decomposition and stale dependency on C3.3; calling the strategist before beginning was correct and led to the Pop gate.
-- After C2.3.1 was accepted, the scheduler still blocked C2.3.2 until an augment reclassified C2.3.1 as accepted negative evidence; do not assume review acceptance always updates frontier state automatically.
+- The old STATE still described C2.4 as blocked by decomposition pressure; after rebase, query_plan now points to C3.1. Next session should trust query_plan/PLAN plus source reality, not stale STATE text before this handoff.
+- C2.4/C2.5 being scheduled before C4 was a dependency-order smell. It would have forced forbidden builtin/type-builtin case analysis in statement soundness or hidden CHEAT dependencies.
+- The apparent C2.4 'proved' history was misleading because component identity drifted; source-authoritative cheats must override stale dossier status.
 
 ### Strategy Adjustments
-- Treat the Pop issue as a definition repair, not a hard proof. The next leaf is C2.3.1: strengthen the non-frozen Pop typing rule to dynamic arrays in `vyperTypeSystemScript.sml`.
-- Keep C2.3.1/C2.3.2 probe evidence as rationale/regression documentation, but do not depend on fixed-array negative facts for the final positive Expr_Pop proof after the rule is repaired.
-- After the typing-rule repair, prove a Pop extraction boundary lemma before touching the Expr_Pop Resume; consumers should not repeatedly unfold the full `well_typed_expr_def` or `assign_subscripts_def`.
-- Commit the reviewed C2.3.2 probe/replan checkpoint before beginning new edits if build status remains clean and only relevant tracked files are staged.
+- The whole PLAN is now rebased so C3 update/binop work and C4 builtin/type-builtin boundaries precede C2 consumer resumes. Follow this order strictly.
+- For C3.1, prefer existing per-operator binop helper style and theorem-boundary proofs. Do not expand `evaluate_binop_def` over all operators in one giant simplification.
+- Commit stable reviewed C0/C1 carry-forward plus prior C2.3 Pop work before new proof edits, if status/diff confirms only task-owned stable changes are staged.
+- Keep C2 `Expr_Builtin`/`Expr_TypeBuiltin` as small consumers after C4; if a C2 proof needs `evaluate_builtin_def`, escalate as a C4 boundary-interface problem.
 
 ### Oracle Feedback
-- Strategist accepted C2.2.3 (E0711) with no PLAN changes; the Attribute Resume proof matched the planned thin wiring interface.
-- Strategist accepted C2.3.1 (E0712) as an expected negative static-extraction probe and then, after scheduler remained blocked, augmented the PLAN to treat it as accepted probe evidence.
-- Strategist accepted C2.3.2 (E0713) as sufficient localized evidence; no full `eval_expr` counterexample is required because the internal Pop typing rule is non-frozen and the mismatch is localized. The PLAN now authorizes a definition repair under C2.3.1.
+- C2.4 local rebase accepted: current `Expr_Builtin` is a C4.2/C3.3-dependent consumer; stale C2.4 iterator/Append evidence is invalid for it.
+- C2.5 local rebase was rejected with whole-plan review requested; this strategist insight held and produced a coherent reordering: C3 then C4, then C2 consumers.
+- C0 and C1 carry-forward closures E0730/E0731 were accepted with no PLAN changes after successful holbuild checks. These do not certify final zero-CHEAT; C3/C4/C2/C5/C6/C7 remain required.
 
 ## Evidence Pointers
-- episode:E0711 - Expr_Attribute Resume proved/reviewed; committed as b91df1d2a/b91df1d2a checkpoint context
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40227_t002 - `vyperTypeStmtSoundnessTheory` built after Expr_Attribute proof
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40233_t001 - commit `b91df1d2a` for Expr_Attribute checkpoint
-- episode:E0712 - Pop static extraction probe failed with unconstrained `bd`; accepted as negative probe evidence
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40240_t001 - exact residual goal requiring `bd = Dynamic n`
-- episode:E0713 - fixed-array PopOp probe proved TypeError leaf behavior
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40254_t001 - `vyperTypeStmtSoundnessTheory` built with fixed-array Pop probe theorem
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40255_t003 - diff showing only local fixed-array Pop probe added
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40257_t001 - strategist replaced Pop gate with definition-repair/proof plan
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t004 - current query_plan: C2.3.1 is Oracle next/beginable
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40259_t002 - current git status: C2.3.2 probe/replan changes uncommitted plus untracked scratch files
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40823_t001 - C2.4 rebase accepted; Expr_Builtin depends on C4.2/C3 boundaries and stale C2.4 evidence invalidated
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40825_t001 - C2.5 local rebase rejected; whole-plan review required due cross-top-level C4 dependencies
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40826_t001 - whole-plan rebase installed; C3/C4 scheduled before C2 builtin/type-builtin consumers
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40829_t001 - C0 carry-forward check: `vyperTypeStmtSoundnessTheory` built successfully
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40831_t001 - strategist accepted C0/E0730 closure
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40833_t001 - C1 carry-forward check: `vyperTypeAssignSoundnessTheory` built successfully
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40835_t001 - strategist accepted C1/E0731 closure
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40839_t005 - final handoff query_plan: beginable/Oracle next is C3.1
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40839_t002 - git status: tracked files staged, STATE unstaged, many untracked scratch files present
+- episode:E0730 - C0 closed proved as rebased carry-forward audit
+- episode:E0731 - C1 closed proved as rebased assignment-target/wrapper carry-forward
