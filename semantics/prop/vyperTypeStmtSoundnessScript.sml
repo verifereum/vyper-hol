@@ -7471,7 +7471,7 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_Subscript]:
   (* C2.1.1.13.4 splits the ordinary Subscript static alternatives at this
-     boundary.  The temporary cheats are exactly the two local adapters above. *)
+     boundary and discharges them through the two proved local adapters above. *)
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (

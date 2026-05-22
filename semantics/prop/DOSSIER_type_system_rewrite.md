@@ -98,6 +98,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1.1.13.4.3.1 | proved |  | E0705 | Review C2.1.1.13.4.3.1 closure, then begin C2.1.1.13.4.3.2 to finish the adapter proof now that holbuild reaches it. |
 | C2.1.1.13.4.3.2 | proved |  | E0706 | Review closure with strategist, then commit the stable local proof checkpoint if git diff contains only relevant tracked changes, before moving to the next scheduled component. |
 | C2.1.1.13.4.3a | proved |  | E0707 | Call plan_oracle(mode="review") for this closure, then commit stable local proof checkpoint if accepted. |
+| C2.1.1.13.4.4 | proved |  | E0708 | Review closure with strategist, then commit the small comment/audit plus dossier/plan state if accepted. |
 | C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
 | C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
 | C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
@@ -2739,6 +2740,29 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m40101_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.4.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0708`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 8 tools, 2 holbuild, 706,294 tok (704,740 in, 1,554 out, 671,744 cached), 97.8s, $0.54747200
+- next: Review closure with strategist, then commit the small comment/audit plus dossier/plan state if accepted.
+
+### Attempts / Evidence
+
+- `E0708` (proved, , actual effort: 1 sessions, 6 steps, 8 tools, 2 holbuild, 706,294 tok (704,740 in, 1,554 out, 671,744 cached), 97.8s, $0.54747200)
+  - Audited `Resume eval_all_type_sound_mutual[Expr_Subscript]` and adjacent adapter theorem region; updated the stale comment that referred to temporary cheats. -> Local region now describes proved adapters, and readback shows Expr_Subscript resume calls `expr_subscript_ordinary_static_branch_sound_stmt` and `expr_subscript_place_as_ordinary_branch_sound_stmt` with the place/projection conjunct handled separately. (`TO_type_system_rewrite-20260522T073012Z_m40113_t001`)
+  - Ran holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) and grep for `cheat|FAIL_TAC|temporary cheats`. -> Build completed successfully. Grep found no `FAIL_TAC` and no local Expr_Subscript/adaptor cheats; the only `cheat` occurrences are later unrelated scheduled resumes after Expr_Subscript. (`TO_type_system_rewrite-20260522T073012Z_m40115_t002`, `TO_type_system_rewrite-20260522T073012Z_m40115_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m40115_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40115_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m40113_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.1.2
 

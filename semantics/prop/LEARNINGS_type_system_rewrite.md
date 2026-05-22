@@ -626,3 +626,14 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40072_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40082_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:6073-6075
+
+## L1272 scope='C2.1.1.13.4.4' tags=Expr_Subscript,audit,cheat,FAIL_TAC,Resume,integration
+shape: Post-integration audit for a Resume with adjacent proved local adapters and later unrelated cheated resumes in the same file.
+pattern: When closing a local integration/audit component, combine a successful theory build with a grep audit and source readback. Interpret grep hits by source region: later scheduled Resume cheats after the completed block do not block closure if the component-local Resume/adapters contain no `cheat` or `FAIL_TAC`. Fix stale comments that still mention temporary cheats before closure.
+works_when: Use only when the PLAN component's scope is a local Resume/helper region and later cheats are already covered by separate scheduled components. Cite both the build and grep/readback evidence in the closure.
+evidence:
+- episode:E0708
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t002
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40115_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m40113_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7472-7539
