@@ -88,6 +88,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1.1.13.3 | stuck | risk_mismatch | E0681 | Ask strategist to replace/augment this leaf, likely by extracting an ordinary-base Subscript tail helper analogous to the existing place-tail helpers, or otherwise revising the proof interface for base IH projection and evaluator-tail splitting. |
 | C2.1.1.13.3.1 | proved |  | E0682 | Review closure, then begin C2.1.1.13.3.2 to add/prove the ordinary-tail helper. |
 | C2.1.1.13.3.2 | proved |  | E0683 | Review closure, then proceed to C2.1.1.13.3.3 to use the ordinary-tail helper in the Expr_Subscript Resume ordinary branch. |
+| C2.1.1.13.3.3 | proved |  | E0685 |  |
 | C2.1.1.2 | stuck | risk_mismatch | E0623 | Strategist should decompose C2.1.1.2 or authorize a local helper specialized to `switch_BoolV_post` and the expression branch IH, so the resume does not manually manage the nested implication/continuation shape. |
 | C2.1.1.2.0 | proved |  | E0624 | Call plan_oracle review for this closure, then begin C2.1.1.2.1 if accepted. |
 | C2.1.1.2.1 | proved |  | E0625 | Call plan_oracle review for the closure, then begin C2.1.1.2.2 if accepted. |
@@ -2467,6 +2468,29 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m38912_t001` (use `read_tool_output` for exact output)
+
+## C2.1.1.13.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0685`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 27 steps, 29 tools, 8 holbuild, 2,414,161 tok (2,401,264 in, 12,897 out, 2,331,136 cached), 367.6s, $1.90311800
+
+### Attempts / Evidence
+
+- `E0684` (progressed, missing_helper, actual effort: 1 sessions, 5 msgs, 65 steps, 79 tools, 25 holbuild, 6,575,941 tok (6,553,898 in, 22,043 out, 6,419,968 cached), 796.4s, $4.54092400)
+  - Unfolded `well_typed_expr_def` and `evaluate_def`, split `eval_expr cx e st`, applied base IH, split base result, then in success branch applied the delayed index IH continuation and split `eval_expr cx e' st1`/`idx_res`/`get_Value`. -> Confirmed evaluator/IH sequencing shape works and reaches the planned all-success tail. Need to clean up proof and remove remaining FAIL_TAC/index-error placeholder. (`TO_type_system_rewrite-20260522T073012Z_m38975_t001`, `TO_type_system_rewrite-20260522T073012Z_m38977_t001`, `TO_type_system_rewrite-20260522T073012Z_m38983_t001`)
+  - In get_Value success branch, invoked `expr_subscript_ordinary_tail_sound_stmt`; first failed because existential witnesses were not supplied, then after `simp[]` and witnesses `[x,x'',x',st2]` this branch passed far enough to expose get_Value error branch. -> Tail helper interface is usable from Resume; success branch should keep `irule expr_subscript_ordinary_tail_sound_stmt >> simp[] >> qexistsl [`x`,`x''`,`x'`,`st2`] >> simp[]`. (`TO_type_system_rewrite-20260522T073012Z_m38985_t001`, `TO_type_system_rewrite-20260522T073012Z_m38987_t001`, `TO_type_system_rewrite-20260522T073012Z_m38989_t001`)
+  - Tried to close `get_Value x' st' = (INR y,st')` with `irule subscript_vtype_index_get_Value_no_type_error` and witnesses for a `subscript_vtype` fact derived from ordinary `subscript_type_ok`. -> Wrong helper for ordinary branch: `subscript_vtype_index_get_Value_no_type_error` is shaped for place `subscript_vtype`, not ordinary `subscript_type_ok`, so `irule` reports No match on `no_type_error_result (INR y)`. (`TO_type_system_rewrite-20260522T073012Z_m38989_t001`)
+- `E0685` (proved, , actual effort: 1 sessions, 2 msgs, 27 steps, 29 tools, 8 holbuild, 2,414,161 tok (2,401,264 in, 12,897 out, 2,331,136 cached), 367.6s, $1.90311800)
+  - Repaired static inversion by explicitly discharging the `well_typed_expr env (Subscript ...)` antecedent, rewriting only the antecedent with `well_typed_expr_def`, and using the first static branch for ordinary subscript while leaving the place branch as a sibling placeholder. Restored the ordinary evaluator/IH sequencing and verified `vyperTypeStmtSoundnessTheory` builds. -> Ordinary Expr_Subscript conjunct is discharged; remaining cheats are outside this component (place half and later cases). (`TO_type_system_rewrite-20260522T073012Z_m39135_t001`, `TO_type_system_rewrite-20260522T073012Z_m39140_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m39140_t001` (use `read_tool_output` for exact output)
 
 ## C2.1.1.2
 

@@ -7064,7 +7064,84 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
      children split the ordinary/place Subscript static alternatives explicitly
      and replace these local cheats. *)
   rpt gen_tac >> strip_tac >>
-  conj_tac >> rpt strip_tac >> cheat
+  conj_tac
+  >- (
+    disch_tac >>
+    qpat_x_assum `well_typed_expr env (Subscript v9 e e')` mp_tac >>
+    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
+    strip_tac
+    >- (qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
+        simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+        Cases_on `eval_expr cx e st` >>
+        rename1 `eval_expr cx e st = (base_res,st1)` >>
+        qpat_x_assum `!env0 st0 res0 st0'.
+          env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+          eval_expr cx e st0 = (res0,st0') ==> _`
+          (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
+        (impl_tac >- simp[]) >>
+        strip_tac >>
+        Cases_on `base_res`
+        >- (qpat_x_assum `well_typed_expr env e ==> state_well_typed st1 /\ _` mp_tac >>
+            (impl_tac >- simp[]) >> strip_tac >>
+            strip_tac >>
+            simp_tac(srw_ss())[] >>
+            Cases_on `eval_expr cx e' st1` >>
+            rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
+            qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
+              (qspecl_then [`st`,`x`,`st1`] mp_tac) >>
+            impl_tac >- simp[] >> strip_tac >>
+            qpat_x_assum `!env0 st0 res0 st0'.
+              env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+              accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+              eval_expr cx e' st0 = (res0,st0') ==> _`
+              (qspecl_then [`env`,`st1`,`idx_res`,`st2`] mp_tac) >>
+            (impl_tac >- simp[]) >> strip_tac >>
+            qpat_x_assum `well_typed_expr env e' ==> state_well_typed st2 /\ _` mp_tac >>
+            (impl_tac >- simp[]) >> strip_tac >>
+            Cases_on `idx_res`
+            >- (
+              qpat_x_assum `case INL x of INL tv => expr_result_typed env e tv | INR v1 => T` mp_tac >>
+              simp_tac(srw_ss())[] >> strip_tac >>
+              qpat_x_assum `case INL x' of INL tv => expr_result_typed env e' tv | INR v1 => T` mp_tac >>
+              simp_tac(srw_ss())[] >> strip_tac >>
+              qpat_x_assum `(case (INL x,st1) of _ => _) = (res,st')` mp_tac >>
+              simp_tac(srw_ss())[] >>
+              Cases_on `get_Value x' st2` >>
+              rename1 `get_Value x' st2 = (val_res,st3)` >>
+              Cases_on `val_res`
+              >- (
+                drule get_Value_state >> strip_tac >> gvs[] >>
+                strip_tac >> gvs[] >>
+                irule expr_subscript_ordinary_tail_sound_stmt >>
+                simp[] >>
+                qexistsl [`x`,`x''`,`x'`,`st2`] >> simp[])
+              >- (
+                drule get_Value_state >> strip_tac >> gvs[] >>
+                strip_tac >> gvs[] >>
+                rpt conj_tac >> simp[] >>
+                irule int_expr_get_Value_INR_no_type_error >>
+                qexistsl [`e'`, `env`, `st'`, `st'`, `x'`, `expr_type e'`] >>
+                simp[] >>
+                Cases_on `expr_type e` >> gvs[subscript_type_ok_def]))
+            >- (
+              qpat_x_assum `(case (INL x,st1) of _ => _) = (res,st')` mp_tac >>
+              simp_tac(srw_ss())[] >>
+              strip_tac >> gvs[]))
+        >- (qpat_x_assum `well_typed_expr env e ==> state_well_typed st1 /\ _` mp_tac >>
+            (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+            strip_tac >>
+            qpat_x_assum `(case (INR y,st1) of _ => _) = (res,st')` mp_tac >>
+            simp_tac(srw_ss())[] >> strip_tac >>
+            pop_assum (fn th => rewrite_tac[GSYM th]) >>
+            pop_assum (fn th => rewrite_tac[GSYM th]) >>
+            rpt conj_tac >- first_assum ACCEPT_TAC
+            >- first_assum ACCEPT_TAC
+            >- first_assum ACCEPT_TAC
+            >- first_assum ACCEPT_TAC
+            >> simp[]))
+    >- cheat) >>
+  rpt strip_tac >> cheat
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Attribute]:

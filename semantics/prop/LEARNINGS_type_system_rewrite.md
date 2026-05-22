@@ -675,3 +675,57 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m38823_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m38827_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m38829_t001
+
+## L1240 scope='C2.1.1.13.3.3' tags=Subscript,Resume,joint-IH,conjunction,proof-shape
+shape: Expr_Subscript ordinary Resume branch after `conj_tac`; final conclusion is a conjunction of preservation/no-TypeError/success typing.
+pattern: Avoid `rpt strip_tac` that splits the final conjunction into independent goals before evaluator sequencing. Instead, keep/prove the combined ordinary result: unfold `well_typed_expr_def` and `evaluate_def` once, split base/index evaluator results with equations, project IH ordinary conjuncts immediately, then invoke `expr_subscript_ordinary_tail_sound_stmt` to supply the whole conjunction in the all-success tail. Only split conjuncts after the combined fact is available or if a branch is already reduced to a propagated IH fact.
+works_when: Use in C2.1.1.13.3.3 and similar expression Resume branches where a local tail helper returns the same conjunction as the Resume conclusion.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38922_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7060-7070
+
+## L1241 scope='C2.1.1.13.3.3' tags=Subscript,get_Value,subscript_type_ok,ordinary-branch,no-TypeError
+shape: Ordinary Expr_Subscript Resume branch, after base/index success, has `subscript_type_ok (expr_type e) (expr_type e') v9`, `expr_result_typed env e' x'`, and `get_Value x' st = (INR y,st)`; goal is `no_type_error_result (INR y)`.
+pattern: Do not use the place/projection helper `subscript_vtype_index_get_Value_no_type_error` in the ordinary static branch. Instead use `int_expr_get_Value_INR_no_type_error` and derive `is_int_type (expr_type e')` from `subscript_type_ok (expr_type e) (expr_type e') v9` by cases on `expr_type e` with `subscript_type_ok_def`; ordinary array and tuple subscript typing both require an integer index.
+works_when: Applies to ordinary `well_typed_expr env (Subscript ...)` branch where the static fact is `subscript_type_ok`, not `subscript_vtype`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38989_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38990_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4192-4202
+
+## L1242 scope='C2.1.1.13.3.3' tags=Subscript,tail-helper,Resume,expr_subscript_ordinary_tail_sound_stmt
+shape: All-success ordinary Expr_Subscript tail after `get_Value x' st2 = (INL x'',st2)` and exact monadic tail equation over `x`, `x''`, `x'`, `st2`.
+pattern: The ordinary-tail helper matches if invoked as `irule expr_subscript_ordinary_tail_sound_stmt >> simp[] >> qexistsl [`base_tv`,`idx`,`idx_tv`,`tail_st`] >> simp[]`. In the live Resume branch those witnesses were `[x,x'',x',st2]`. Put `simp[]` before `qexistsl` so the non-existential conjuncts are discharged and the remaining existential matches the helper's implicit variables.
+works_when: Use when the evaluator equation has already simplified to the successful get_Value tail and assumptions include base/index `expr_result_typed`, post-index invariants, `well_formed_type`, `subscript_type_ok`, and successful `get_Value`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38985_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38987_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m38989_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7112-7117
+
+## L1243 scope='C2.1.1.13.3.3' tags=Subscript,Resume,branching,THEN1,tactical,error-propagation
+shape: A `Cases_on`/`Cases_on`-nested Expr_Subscript Resume proof has several remaining subgoals, but a branch-local propagated-error tactic is written as `>> (...)` and holbuild shows it being applied with 3 input goals.
+pattern: When proving nested evaluator branches in `Resume eval_all_type_sound_mutual[Expr_Subscript]`, close each case branch explicitly with `>- (...)` before using `>>` for the next common suffix. If holbuild shows a branch tactic with multiple input goals, suspect a missing `>-`/parenthesization issue before debugging assumption selection. Branch-local error propagation should not be written as a shared `>> (...)` suffix unless it really solves all remaining branches.
+works_when: Use for nested `Cases_on` proofs where success, get_Value-error, index-error, and base-error branches need different tactics and mutual-IH assumptions are large.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39057_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39060_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7101-7130
+
+## L1244 scope='C2.1.1.13.3.3' tags=Subscript,get_Value,subscript_type_ok,int_expr_get_Value_INR_no_type_error,witness-order
+shape: Ordinary Subscript get_Value error branch after index success has `expr_result_typed env e' x'`, `get_Value x' st' = (INR y,st')`, and goal `no_type_error_result (INR y)`.
+pattern: Invoke `int_expr_get_Value_INR_no_type_error` with existential witnesses in theorem quantifier order `[e', env, st', st', x', expr_type e']`, then prove `is_int_type (expr_type e')` by cases on `expr_type e` using `subscript_type_ok_def`. Do not put `env` first; holbuild reports the post-`irule` existential order as `∃e env st st' tv ty ...`.
+works_when: Applies to ordinary `well_typed_expr` Subscript branches with `subscript_type_ok`, not place/projection branches with `subscript_vtype`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39003_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39005_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:4192-4202
+
+## L1245 scope='C2.1.1.13.3.3' tags=Subscript,well_typed_expr_def,static-inversion,branching,THEN1
+shape: After unfolding `well_typed_expr_def` for `well_typed_expr env (Subscript v9 e e')`, the proof needs the ordinary static disjunct but the theorem also contains a place/projection static disjunct.
+pattern: Do not rely on `strip_tac >- (...)` immediately after `simp_tac(srw_ss())[Once well_typed_expr_def]` to isolate the ordinary Subscript static branch. If the consumer is only the ordinary half, use a controlled static inversion/split or a local helper that exposes the ordinary facts; keep the place branch as an explicit placeholder for C2.1.1.13.4.
+works_when: Applies inside `Resume eval_all_type_sound_mutual[Expr_Subscript]` ordinary branch, where the final goal remains an implication over `well_typed_expr env (Subscript ...)` and sibling component owns the place/projection case.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39094_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m39100_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7070-7073
