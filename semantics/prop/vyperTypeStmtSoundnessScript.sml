@@ -7728,10 +7728,20 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
               Cases_on `t` >> gvs[]) >>
           rename1 `toplevel_array_length cx arg_tv arg_st = (INR len_exn,len_st)` >>
           drule toplevel_array_length_state >> strip_tac >> gvs[] >>
-          strip_tac >> gvs[no_type_error_result_def] >>
-          FAIL_TAC "Expr_Builtin Len branch typed toplevel_array_length TypeError path") >>
-      rename1 `arg_res = INR arg_exn` >>
-      strip_tac >> gvs[]) >>
+          strip_tac >> gvs[no_type_error_result_def,
+                           expr_result_typed_def, expr_runtime_typed_def] >>
+          strip_tac >> spose_not_then assume_tac >> gvs[] >>
+          `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+          `well_typed_builtin_app ty Len [expr_type (HD es)]` by
+            (qpat_x_assum `well_typed_builtin_app ty Len (MAP expr_type es)` mp_tac >>
+             Cases_on `es` >> simp[well_typed_builtin_app_def] >>
+             Cases_on `t` >> gvs[]) >>
+          drule_all Len_toplevel_array_length_no_type_error >> simp[]) >>
+      qpat_x_assum `well_typed_expr env (HD es) ==> _` mp_tac >>
+      (impl_tac >- (qpat_x_assum `well_typed_builtin_app ty bt (MAP expr_type es)` mp_tac >>
+                    Cases_on `es` >> simp[well_typed_builtin_app_def] >>
+                    Cases_on `t` >> gvs[well_typed_expr_def])) >>
+      strip_tac >> strip_tac >> gvs[]) >>
   qpat_x_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_x_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,

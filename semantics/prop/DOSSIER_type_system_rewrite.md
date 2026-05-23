@@ -154,6 +154,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.4.1.2 | proved |  | E0800 | Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes. |
 | C2.4.1.3 | proved |  | E0801 | Call plan_oracle review for C2.4.1.3; if accepted, commit cleanup and proceed to C2.4.1.4 Len typed-runtime no-TypeError boundary. |
 | C2.4.1.4 | proved |  | E0802 | Call plan_oracle review for C2.4.1.4; if accepted, commit the builtin boundary and proceed to C2.4.1.5 to replace the Len TypeError-path FAIL_TAC with the new boundary. |
+| C2.4.1.5 | proved |  | E0803 | Call plan_oracle review for C2.4.1.5. Because the build now exposes the non-Len `Expr_Builtin` branch and no explicit child component for it is visible under C2.4, ask the strategist to accept the Len integration and either schedule/authorize the non-Len branch or clarify existing coverage. |
 | C2.4.1.a | proved |  | E0795 |  |
 | C2.4.1.b | proved |  | E0796 | Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
@@ -4314,6 +4315,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260522T073012Z_m42939_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42940_t002` (use `read_tool_output` for exact output)
+
+## C2.4.1.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0803`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,571,107 tok (1,566,936 in, 4,171 out, 1,536,512 cached), 144.4s, $1.04550600
+- next: Call plan_oracle review for C2.4.1.5. Because the build now exposes the non-Len `Expr_Builtin` branch and no explicit child component for it is visible under C2.4, ask the strategist to accept the Len integration and either schedule/authorize the non-Len branch or clarify existing coverage.
+
+### Attempts / Evidence
+
+- `E0803` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,571,107 tok (1,566,936 in, 4,171 out, 1,536,512 cached), 144.4s, $1.04550600)
+  - Replaced the Len TypeError-path `FAIL_TAC` in `eval_all_type_sound_mutual[Expr_Builtin]` with use of `Len_toplevel_array_length_no_type_error`; derived `well_typed_builtin_app ty Len [expr_type (HD es)]` from the singleton Len argument typing and `well_formed_type_value tv` from `evaluate_type_well_formed_type_value`. Also repaired the Len argument-exception subcase by applying the generated IH before simplifying. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` advances past all Len subcases and now fails at the existing `FAIL_TAC "Expr_Builtin non-Len branch"`, confirming the Len branch integration is complete and the remaining failure is outside this leaf's stated Len-only obligation. (`TO_type_system_rewrite-20260522T073012Z_m42958_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42958_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.a
 
