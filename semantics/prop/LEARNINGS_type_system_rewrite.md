@@ -641,3 +641,48 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
 - episode:E0791
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml
+
+## L1343 scope='C2.4.1' tags=Expr_Builtin,Len,well_typed_builtin_app,eval_exprs,boundary-lemma
+shape: Suspended `Expr_Builtin` branch of `eval_all_type_sound_mutual` with generated IHs split into `bt <> Len`/`eval_exprs` and `bt = Len`/`eval_expr (HD es)`.
+pattern: For the fresh statement-soundness `Expr_Builtin` resume, exploit the induction-generated split instead of re-case-splitting blindly: non-Len branch should consume the `eval_exprs` IH and `well_typed_builtin_app_no_type_error`/`well_typed_builtin_app_success_type`; Len branch should consume the `eval_expr (HD es)` IH and `Len_builtin_sound` plus `toplevel_array_length_state`. The `type_place_expr` projection for `Builtin` should simplify away separately.
+works_when: Applies after unfolding the `Builtin` evaluator one step and assuming `well_typed_expr env (Builtin ty bt es)`. Non-Len needs side conditions from `well_typed_expr_def`/`well_typed_builtin_app_def`, including argument type map and Env MsgGas exclusion if present; Len needs singleton argument facts from the Len typing clause.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42675_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42674_t001
+- episode:E0792
+
+## L1344 scope='C2.4.1' tags=Expr_Builtin,Len,generated-IH,qpat_assum,proof-plumbing
+shape: Generated Len IH for `eval_all_type_sound_mutual[Expr_Builtin]` has antecedent `type_check (builtin_args_length_ok bt (LENGTH es)) ... ∧ bt = Len`.
+pattern: When applying the generated Len IH in the Expr_Builtin resume, do not consume `bt = Len` or the length-check fact before discharging the IH antecedent. Use `qpat_assum` to rewrite while preserving facts, or instantiate/strip the IH before destructive assumption rewrites. If this still needs many quoted instantiations, factor a local Len-tail adapter helper.
+works_when: Applies in the Len branch after unfolding one `evaluate_def`, deriving `builtin_args_length_ok` from `well_typed_builtin_app_length`, and destructing `eval_expr cx (HD es) st`. The same caution applies to any generated IH whose antecedent repeats branch discriminants.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42723_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42725_t002
+- episode:E0793
+
+## L1345 scope='C2.4.1' tags=Expr_Builtin,Len,toplevel_array_length,SArrayV,unprovability_probe
+shape: Len branch with `well_typed_builtin_app ty Len ...`, `expr_result_typed env e arg_tv`, and `toplevel_array_length cx arg_tv st = INR ...`.
+pattern: Do not use a boundary saying all typed `is_sized_type` values are accepted by `toplevel_array_length`. Fixed-array source types are sized, and typed materialized static-array values (`Value (ArrayV (SArrayV _))`) are rejected by `toplevel_array_length_def` with `TypeError "toplevel_array_length"`. First prove concrete mismatch/reachability probes, then use a precise runtime-shape invariant or repair semantics.
+works_when: Applies to the fresh statement-soundness `Expr_Builtin` Len branch and any helper about `toplevel_array_length` under static `is_sized_type` assumptions.
+evidence:
+- episode:E0794
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42780_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42795_t001
+
+## L1346 scope='C2.4.1' tags=Expr_Builtin,Len,Name,SArrayV,unprovability_probe,reachability
+shape: C2.4.1.b reachability probe for materialized fixed-array value via local `Name`.
+pattern: The simplest candidate source of `Value (ArrayV (SArrayV []))` is a local `Name`, not an array literal or storage read. `well_typed_expr env (Name ty id)` only checks `FLOOKUP env.var_types (string_to_num id) = SOME ty`; `eval_expr cx (Name _ id)` reads `lookup_scopes_val` from `st.scopes` and returns `Value v`. Use a singleton `var_types`/scope witness with `entry.type = ArrayTV ... (Fixed 1)` and `entry.value = ArrayV (SArrayV [])` to probe Len reachability.
+works_when: Use for C2.4.1.b before constructing contract/global machinery. Full invariants may require `env.type_defs = get_tenv cx`, `current_src = current_module cx`, empty globals/functions, and singleton `st.scopes`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42812_t003
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42813_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42818_t002
+
+## L1347 scope='C2.4.1' tags=Len,toplevel_array_length,SArrayV,definition_repair,boundary_lemma
+shape: Len soundness stuck on `toplevel_array_length cx arg_tv st = (INR (Error (TypeError ...)), st')` with `expr_result_typed` and fixed-array `is_sized_type` static type.
+pattern: If typed `Len` can see `Value (ArrayV (SArrayV sparse))`, do not try to exclude that runtime shape: it is reachable via a local `Name`. Repair `toplevel_array_length_def` with a materialized static-array case returning `(INL (&LENGTH sparse), st)`, then prove a typed runtime no-TypeError boundary and use that in the consumer proof.
+works_when: Applies after E0796-style evidence that `well_typed_expr` plus standard runtime invariants allow local fixed-array values represented as `SArrayV`.
+evidence:
+- episode:E0796
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001

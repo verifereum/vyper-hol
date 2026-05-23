@@ -149,6 +149,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.3.6 | proved |  | E0729 | Call plan_oracle review for C2.3.6; after review, inspect status/diff and checkpoint commit only the relevant stable files if the oracle accepts. |
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
 | C2.4.0 | proved |  | E0791 |  |
+| C2.4.1 | stuck | risk_mismatch | E0794 | Call plan_oracle(mode='review') for C2.4.1. Likely needs a revised plan: either prove/evaluate a concrete counterexample for Len on fixed static arrays, strengthen expression/result invariants to exclude materialized SArrayV for Len inputs, or change/use a correct builtin boundary that matches evaluator behavior. |
+| C2.4.1.1 | proved |  | E0797 | Call plan_oracle review for C2.4.1.1, then proceed only if accepted to C2.4.1.2 cleanup of stale counterexample probes. |
+| C2.4.1.a | proved |  | E0795 |  |
+| C2.4.1.b | proved |  | E0796 | Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
 | C2.5.1 | proved |  | E0281 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
 | C2.5.2 | proved |  | E0282 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
@@ -4174,6 +4178,110 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260522T073012Z_m42647_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42642_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0794`
+- blocker: Len branch exposes a proof-interface/possible statement gap: after applying the generated Len IH, HOL reduces a successful typed argument to `expr_result_typed env (HD es) arg_tv` plus `well_typed_builtin_app ty Len (MAP expr_type es)`, but the remaining TypeError path from `toplevel_array_length cx arg_tv arg_st = (INR len_exn,arg_st)` cannot be ruled out by the available boundary facts. A proposed local helper `toplevel_array_length_typed_no_type_error` is false at its natural generality: fixed array values (`value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse))`) are sized but `toplevel_array_length` raises `TypeError "toplevel_array_length"` for `SArrayV`. This suggests the existing Expr_Builtin plan needs redesign or a stronger/static side condition, not more inline tactic plumbing.
+- actual effort: 1 sessions, 4 msgs, 64 steps, 77 tools, 14 holbuild, 6,587,417 tok (6,567,842 in, 19,575 out, 6,443,008 cached), 644.3s, $4.43292400
+- next: Call plan_oracle(mode='review') for C2.4.1. Likely needs a revised plan: either prove/evaluate a concrete counterexample for Len on fixed static arrays, strengthen expression/result invariants to exclude materialized SArrayV for Len inputs, or change/use a correct builtin boundary that matches evaluator behavior.
+
+### Attempts / Evidence
+
+- `E0792` (progressed, other, actual effort: 1 sessions, 2 msgs, 18 steps, 41 tools, 2 holbuild, 1,934,860 tok (1,930,090 in, 4,770 out, 1,851,392 cached), 228.0s, $1.46228600)
+  - Committed reviewed C2.4.0 checkpoint, began C2.4.1, replaced Expr_Builtin cheat with FAIL_TAC probe, built vyperTypeStmtSoundnessTheory to expose the exact resume goal. -> Goal inspection succeeded; proof not attempted yet beyond probe. The top goal is the Expr_Builtin evaluator case with two IHs split by bt <> Len and bt = Len. Non-Len should destruct eval_exprs, use well_typed_builtin_app_no_type_error/success_type; Len should use HD-es IH plus Len_builtin_sound/toplevel_array_length_state. (`TO_type_system_rewrite-20260522T073012Z_m42666_t001`, `TO_type_system_rewrite-20260522T073012Z_m42675_t001`)
+  - Inspected source and builtin boundary lemmas around Expr_Builtin and vyperTypeBuiltins. -> Confirmed well_typed_builtin_app_no_type_error, well_typed_builtin_app_success_type, well_typed_builtin_app_length, Len_result_fits_uint256, and Len_builtin_sound exist in source. Expr_Builtin source currently has FAIL_TAC at lines 7674-7676. (`TO_type_system_rewrite-20260522T073012Z_m42664_t001`, `TO_type_system_rewrite-20260522T073012Z_m42674_t001`)
+- `E0793` (progressed, other, actual effort: 1 sessions, 4 msgs, 44 steps, 67 tools, 14 holbuild, 4,748,802 tok (4,737,453 in, 11,349 out, 4,621,312 cached), 456.1s, $3.23183100)
+  - Replaced Expr_Builtin FAIL probe with direct proof skeleton: split place-expression conjunct, unfold Builtin well_typed_expr, derive env.type_defs = get_tenv cx and builtin_args_length_ok via well_typed_builtin_app_length, unfold evaluate_def and split bt = Len/non-Len. -> Advanced from the initial probe to a structured Len/non-Len proof skeleton. Slow gvs uses were replaced with targeted simp/rewrite. The skeleton is intentionally incomplete and still build-failing. (`TO_type_system_rewrite-20260522T073012Z_m42725_t002`)
+  - In Len branch, rewrote builtin_args_length_ok and bt = Len, unfolded monadic tail, destructed eval_expr cx (HD es) st, and attempted to instantiate the generated Len IH with st/()/st and env/st/arg_res/arg_st. -> HOL showed the remaining implication still needed the original type_check success and bt = Len antecedent; the last built version failed because qpat_x_assum removed bt = Len too early. Source was then adjusted to use qpat_assum for bt = Len but not rebuilt due handoff. (`TO_type_system_rewrite-20260522T073012Z_m42723_t001`)
+- `E0794` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 64 steps, 77 tools, 14 holbuild, 6,587,417 tok (6,567,842 in, 19,575 out, 6,443,008 cached), 644.3s, $4.43292400)
+  - Continued the active Expr_Builtin Len branch using generated IHs: preserved `bt = Len`, derived `well_typed_expr env (HD es)`, split `arg_res`, then split `toplevel_array_length`. -> The success subcase can be reduced to a `Len_builtin_sound` application after proving `ty = BaseT (UintT 256)` from `well_typed_builtin_app`; this advanced the proof substantially. (`TO_type_system_rewrite-20260522T073012Z_m42774_t001`)
+  - Tried to discharge the Len `toplevel_array_length` error subcase by adding a local helper stating typed sized toplevel values cannot make `toplevel_array_length` return TypeError. -> The helper failed with concrete remaining fixed-array subgoals: `value_has_type (ArrayTV tv' b) (ArrayV a)` with `a = SArrayV ...` and `toplevel_array_length` returning `INR (Error (TypeError msg))`, showing the helper is false at the needed generality. (`TO_type_system_rewrite-20260522T073012Z_m42780_t001`)
+  - Removed the false helper and left a FAIL probe at the exact Len error subgoal after the IH and typedness facts are available. -> Current goal shows the missing fact precisely: assumptions include `expr_result_typed env (HD es) arg_tv`, `well_typed_builtin_app ty Len (MAP expr_type es)`, and `toplevel_array_length cx arg_tv arg_st = (INR len_exn,arg_st)`, goal `∀msg. len_exn <> Error (TypeError msg)`. Available facts do not exclude fixed-array value TypeError. (`TO_type_system_rewrite-20260522T073012Z_m42791_t001`)
+
+### Ruled Out
+
+- Do not retry a generic `toplevel_array_length_typed_no_type_error` helper over all `is_sized_type`; fixed array values are a counterexample to that helper shape.
+- Do not continue expanding inline qspecl plumbing in the Resume; the blocked subgoal is semantic, not just tactical.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42791_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42780_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42774_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42756_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0797`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 3 holbuild, 514,568 tok (512,702 in, 1,866 out, 494,080 cached), 139.6s, $0.39613000
+- next: Call plan_oracle review for C2.4.1.1, then proceed only if accepted to C2.4.1.2 cleanup of stale counterexample probes.
+
+### Attempts / Evidence
+
+- `E0797` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 3 holbuild, 514,568 tok (512,702 in, 1,866 out, 494,080 cached), 139.6s, $0.39613000)
+  - Add missing SArrayV materialized array case before the toplevel_array_length catch-all; prove direct computation regression by simp[toplevel_array_length_def, return_def]; build vyperStateTheory. -> Definition repair and regression theorem accepted; vyperStateTheory built cleanly. (`TO_type_system_rewrite-20260522T073012Z_m42865_t001`, `TO_type_system_rewrite-20260522T073012Z_m42870_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42865_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42870_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42868_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0795`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 14 tools, 2 holbuild, 465,071 tok (462,835 in, 2,236 out, 433,664 cached), 73.5s, $0.42976700
+
+### Attempts / Evidence
+
+- `E0795` (proved, , actual effort: 1 sessions, 7 steps, 14 tools, 2 holbuild, 465,071 tok (462,835 in, 2,236 out, 433,664 cached), 73.5s, $0.42976700)
+  - Inserted `len_fixed_array_value_typed_but_toplevel_array_length_type_error[local]` with concrete fixed-array type `ArrayT (BaseT (UintT 8)) (Fixed 1)` and runtime value `ArrayV (SArrayV [])`; proved by simplification over `evaluate_type_def`, `value_has_type_def`, `toplevel_array_length_def`, `return_def`, `raise_def`, and `type_slot_size_def`. -> Probe theorem accepted; subsequent build failure is the known downstream FAIL marker in `eval_all_type_sound_mutual[Expr_Builtin]`, not the probe. (`TO_type_system_rewrite-20260522T073012Z_m42805_t001`, `TO_type_system_rewrite-20260522T073012Z_m42806_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42806_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42805_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.b
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0796`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 32 steps, 59 tools, 6 holbuild, 3,279,122 tok (3,270,719 in, 8,403 out, 3,172,352 cached), 361.6s, $2.33010100
+- next: Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan.
+
+### Attempts / Evidence
+
+- `E0796` (proved, , actual effort: 1 sessions, 3 msgs, 32 steps, 59 tools, 6 holbuild, 3,279,122 tok (3,270,719 in, 8,403 out, 3,172,352 cached), 361.6s, $2.33010100)
+  - Added `well_typed_fixed_array_expr_can_eval_to_sarray_probe[local]` using a singleton local `Name` with fixed-array type and `ArrayV (SArrayV [])`; simplified evaluator/name lookup definitions. -> Narrow probe builds: a well-typed local fixed-array expression evaluates to the materialized `SArrayV` value. Build proceeds to the known main Expr_Builtin marker. (`TO_type_system_rewrite-20260522T073012Z_m42840_t001`)
+  - Added `len_fixed_array_well_typed_expr_type_error_probe[local]` with concrete empty context/state plus singleton scope, proving env/state/context/account/function invariants, builtin Len well-typedness, and `eval_expr ... = INR (Error (TypeError "toplevel_array_length"))`. -> Full counterexample probe builds; holbuild then fails only at the known main `FAIL_TAC`, proving the current no-TypeError obligation is false for this reachable fixed-array local Name witness. (`TO_type_system_rewrite-20260522T073012Z_m42855_t001`)
+
+### Ruled Out
+
+- The rejected `Value (ArrayV (SArrayV []))` shape is not merely an unreachable typed-value artifact; it is reachable via a local `Name` expression under the standard runtime invariants.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42855_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42840_t001` (use `read_tool_output` for exact output)
 
 ## C2.5
 

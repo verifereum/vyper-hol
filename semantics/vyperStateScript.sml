@@ -668,6 +668,8 @@ Definition toplevel_array_length_def:
   od ∧
   toplevel_array_length cx (Value (ArrayV (DynArrayV vs))) =
     return $ &(LENGTH vs) ∧
+  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) =
+    return $ &(LENGTH sparse) ∧
   toplevel_array_length cx (Value (ArrayV (TupleV vs))) =
     return $ &(LENGTH vs) ∧
   toplevel_array_length cx (Value (BytesV ls)) =
@@ -680,6 +682,13 @@ End
 val () = toplevel_array_length_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
   |> cv_auto_trans;
+
+Theorem toplevel_array_length_sarrayv[local]:
+  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st =
+    (INL (&LENGTH sparse), st)
+Proof
+  simp[toplevel_array_length_def, return_def]
+QED
 
 Definition evaluate_subscript_def:
   evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) =

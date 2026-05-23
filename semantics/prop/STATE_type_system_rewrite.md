@@ -1,63 +1,63 @@
 # STATE_type_system_rewrite
-Updated: 2026-05-22
+Updated: 2026-05-23
 
 ## Cursor
-- component: C2.4.1
+- component: C2.4.1.1
 - status: ready
-- active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First preserve the reviewed C2.4.0 stable checkpoint: inspect `git status --short` and staged diff, then commit only the relevant tracked source/task-memory changes already staged by `git add -u` if still appropriate; do not stage untracked scratch/probe files. After the commit, call `begin_component("C2.4.1")` and inspect the `Resume eval_all_type_sound_mutual[Expr_Builtin]` block before editing.
-- expected_goal_shape: C2.4.0 is proved/reviewed; `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` succeeded. PLAN says Oracle next is C2.4.1, the Expr_Builtin statement-soundness resume. Expect a semantic proof obligation in the Expr_Builtin resume, not the earlier prefix namespace/body type errors.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
+- active_file: semantics/vyperStateScript.sml
+- next_action: Continue active component C2.4.1.1 only. Edit `toplevel_array_length_def` to add a case before the catch-all: `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) = return $ &(LENGTH sparse)`. Then add a small positive regression theorem (prefer near the definition or in the earliest suitable proof file per PLAN) with shape `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st = (INL (&LENGTH sparse), st)`. Do not yet work on C2.4.1.2 cleanup or the Expr_Builtin resume.
+- expected_goal_shape: After editing the definition, the old local TypeError probe in `vyperTypeStmtSoundnessScript.sml` may fail because the bug is fixed. For C2.4.1.1, first verification should show either the direct SArrayV length regression proves by `simp[toplevel_array_length_def, return_def]`, or build stops at stale counterexample probes slated for C2.4.1.2 cleanup. The intended computation is `(INL (&LENGTH sparse), st)`, not `INR (Error (TypeError ...))`.
+- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) for current downstream visibility; if definition-only regression is placed in `vyperStateScript.sml`, `holbuild(targets=["vyperStateTheory"], timeout=600)` is a faster first check.
 
 ## If This Fails
-- If the build regresses to source-prefix `body`/`exception` namespace errors, checkpoint_progress under C2.4.1 only if active and cite the regression; otherwise likely inspect whether the C2.4.0 commit/source was lost. If Expr_Builtin exposes missing builtin boundary lemmas or brittle unfolding pressure, close/checkpoint as appropriate and call plan_oracle rather than redesigning C2.4.1 locally.
+- If the SArrayV regression itself fails, inspect generated/failed goal and fix the new `toplevel_array_length_def` equation. If the build instead fails at old local counterexample theorems in `vyperTypeStmtSoundnessScript.sml`, checkpoint C2.4.1.1 progress with evidence if the definition/regression is accepted, then proceed only to C2.4.1.2 after closing/reviewing C2.4.1.1. Do not patch the main Expr_Builtin proof before C2.4.1.3/C2.4.1.4.
 
 ## Do Not Retry
-- Keeping theorem/evaluator statement-list variable named bare `body` and attempting `(body : stmt list)` annotations.: HOL can resolve the identifier as an imported word64 function before/as the type constraint is applied; consistent renaming to `body_stmts`/`body_fun` was the effective cleanup pattern.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42558_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
-  - evidence: episode:E0791
-- Treating stale `body` vs `body_stmts`/`body'` quotation failures as semantic theorem failures or doing tactic search on them.: These were rename fallout/source elaboration mismatches. Fixing the local name/quotation made the theory build.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42593_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
-- Staging or committing all files blindly with `git add -A`.: There are many untracked scratch/probe files unrelated to the stable C2.4.0 checkpoint. Only tracked relevant source/task-memory changes should be committed after inspecting status/diff.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42650_t001
-- Starting C2.4.1 proof edits before preserving the reviewed C2.4.0 checkpoint.: E0791 was accepted and the harness requested a stable checkpoint; tracked changes were staged but not committed before handoff.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42649_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42651_t001
+- Proving that materialized `Value (ArrayV (SArrayV _))` fixed arrays are unreachable from well-typed expressions.: False: E0796 proves reachability via a singleton local `Name` under `env_consistent`, `state_well_typed`, `context_well_typed`, `accounts_well_typed`, and `functions_well_typed`.
+  - evidence: episode:E0796
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001
+- Continuing the main `eval_all_type_sound_mutual[Expr_Builtin]` Len proof before repairing `toplevel_array_length` and proving the boundary lemma.: The old main-goal TypeError branch is semantically real under current definitions; tactics cannot refute it.
+  - evidence: episode:E0794
+  - evidence: episode:E0796
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
+- Leaving old local theorems named `...type_error...probe` as source obligations after the definition repair.: They describe the old buggy behavior and should become false once C2.4.1.1 is implemented; C2.4.1.2 owns removing/replacing them.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
+  - evidence: source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7674
+- Using the static fixed-array bound `n` for `SArrayV` length in `toplevel_array_length`.: The runtime `Value (ArrayV (SArrayV sparse))` case does not carry `n`; PLAN authorizes `&LENGTH sparse` unless a repository convention says otherwise.
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box option not used: a local parser/type abbreviation or hiding/import change might avoid renaming `body`, but evidence shows simple local renaming works and is less invasive.
-- We are not optimizing the wrong theorem now: C2.4.0 is done; next is the actual Expr_Builtin resume C2.4.1, as PLAN schedules.
-- The PLAN decomposition still matches reality: source-prefix cleanup gate succeeded, then semantic Expr_Builtin proof is next. No need to rework assignment/call architecture for this issue.
-- Do not retry C2.4.0 tactics or namespace edits without a new build regression. For C2.4.1, if builtin boundaries are missing, ask the strategist rather than inventing a parallel induction.
-- A fresh expert should first question the working tree state: tracked changes are staged, untracked scratch files remain, and a clean logical commit should precede new proof edits. Then inspect the exact Expr_Builtin resume goal and available builtin boundary theorems.
+- Outside-the-box approach now authorized: change the executable semantics of `Len` for materialized static arrays, rather than adding stronger proof invariants.
+- We were optimizing the wrong theorem when trying to close `Expr_Builtin` directly; the definition is the right abstraction boundary.
+- The PLAN decomposition is now correct: small executable repair, remove stale diagnostics, prove boundary lemma, then integrate.
+- Do not retry tactics in the main resume until the boundary lemma exists. If proof becomes hard again, suspect the helper statement/interface, not the goal tactics.
+- A fresh expert should first question whether `&LENGTH sparse` is semantically the right length for sparse static arrays; the PLAN chose it because no static bound is available in `Value (ArrayV (SArrayV sparse))` at `toplevel_array_length`.
 
 ### What Went Wrong
-- C2.4.0 was successfully closed and reviewed, but the session stopped after I staged tracked changes with `git add -u` and before committing. Next session must not blindly stage untracked scratch files; inspect status/diff first.
-- The local namespace issue was broader than the initially reported helper: once bare `body` collided with an imported word64 function, adjacent helper statements, proof witnesses, scope-bracket abstractions, For resume quotations, and the top-level `function_body_type_sound` theorem all needed consistent renaming or use of HOL-generated `body'` binders.
-- I initially fixed failures one holbuild at a time; a bounded grep audit for bare `body` in statement-list evaluator positions would have shortened the cleanup.
+- The prior proof path assumed the Len TypeError branch was a missing helper, but E0796 proved a concrete reachable counterexample: a local `Name` expression of fixed-array type can evaluate to `Value (ArrayV (SArrayV []))`, and old `toplevel_array_length_def` returns `Error (TypeError "toplevel_array_length")` for that value under full runtime invariants.
+- The theorem was not tactically stuck; the executable semantics omitted a runtime representation admitted by the type system. Continuing inside the large `Expr_Builtin` resume was optimizing the wrong layer.
+- Current source has diagnostic local probe theorems for the old bug in `vyperTypeStmtSoundnessScript.sml`; after repairing `toplevel_array_length`, at least the TypeError probe is intentionally false and must be removed/replaced under C2.4.1.2.
 
 ### Ignored Signals
-- Repeated HOL errors all had the same shape: `eval_stmts`/`type_stmts` expected `stmt list` but parsed `body` as a word64 function. This indicated a namespace pattern, not isolated proof failures.
-- Renaming a theorem variable requires updating theorem statements, proof quotations (`qpat_x_assum`, `Cases_on`, `qmatch_*`), existential witnesses, and manually stated intermediate facts. Missing any of these causes proof mismatches that should not be treated as semantic failures.
-- After component review accepted E0791, stable checkpoint discipline required committing before new proof work; I staged with `git add -u` but handoff interrupted before commit.
+- The all-sized-values boundary failure from E0794 already showed `SArrayV` was the suspicious case; the important question was reachability, not another case split in the main theorem.
+- The local `Name` path was enough: no array literal, ABI machinery, or realistic contract setup was needed.
+- The working tree contains many pre-existing untracked test files and dirty plan/state/dossier files; do not stage them accidentally.
 
 ### Strategy Adjustments
-- For C2.4.1, begin the component before any build/edit. Work only on Expr_Builtin semantics; do not continue broad namespace cleanup unless holbuild shows an actual regression.
-- Use builtin/expression boundary lemmas for Expr_Builtin; avoid unfolding builtin internals unless a missing boundary is shown and escalated.
-- If a proof branch forces many quoted assumptions or manual `qspecl_then` plumbing, treat that as a helper/interface smell and escalate, per PLAN guidance, instead of tactic-thrashing.
+- Follow the replacement PLAN exactly: C2.4.1.1 definition repair, C2.4.1.2 cleanup of old probes, C2.4.1.3 boundary lemma, C2.4.1.4 integration in `Expr_Builtin`.
+- For C2.4.1.1, implement the semantic fix in `semantics/vyperStateScript.sml`, not as a proof workaround in statement soundness.
+- For later C2.4.1.3, state the no-TypeError boundary at the typed runtime-value level so the main theorem can use it directly at the old FAIL_TAC site.
 
 ### Oracle Feedback
-- Strategist's Risk-1 classification for C2.4.0 held: no definition or invariant change was needed; local renaming/qualification let `vyperTypeStmtSoundnessTheory` build.
-- Plan review accepted E0791 without PLAN changes and scheduled C2.4.1 next. This confirms the prefix cleanup is complete and C2.4.1 should proceed as ordinary statement-soundness proof integration.
-- The earlier strategist suggestion to annotate `(body : stmt list)` was less effective than renaming; evidence showed annotation did not override the imported/resolved `body` identifier, but the PLAN also permitted renaming.
+- Strategist accepted E0796 and replaced the unprovability gate with a repair subtree. Key decision: support `Value (ArrayV (SArrayV sparse))` in `toplevel_array_length` rather than trying to exclude it.
+- Oracle explicitly warned not to leave old counterexample probes as current source obligations after the definition repair.
+- Oracle guidance says use `&LENGTH sparse` as the available runtime length convention unless repository evidence dictates otherwise; do not use the static fixed bound because it is not carried by `SArrayV` in this function.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001 - decisive `vyperTypeStmtSoundnessTheory` build success for C2.4.0
-- episode:E0791 - C2.4.0 closed as proved after local body/exception namespace cleanup
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42649_t001 - strategist review accepted E0791 and directed next work to C2.4.1
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42652_t004 - query_plan shows active none, Oracle next/beginable C2.4.1
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42650_t001 - git status before handoff: tracked files modified and many untracked scratch/probe files present
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42651_t001 - `git add -u` was run before handoff, so tracked changes may be staged
+- episode:E0796 - proved reachable full Len TypeError counterexample under full runtime invariants.
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001 - holbuild accepted both C2.4.1.b probe theorems and then failed only at the known main Expr_Builtin FAIL marker.
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001 - strategist review replaced the gate with repair subtree C2.4.1.1--C2.4.1.4.
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42859_t004 - current PLAN frontier/active component is C2.4.1.1.
+- source:semantics/vyperStateScript.sml:662 - `toplevel_array_length_def` currently has materialized DynArray/Tuple/Bytes/String cases and catch-all TypeError; add SArrayV before catch-all.
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7674 - old diagnostic probes currently live before `Resume eval_all_type_sound_mutual[Expr_Builtin]`.
