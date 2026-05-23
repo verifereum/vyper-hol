@@ -30,6 +30,9 @@ Libs
 (* ao_fn_fresh_vars, ao_fn_total_fresh_vars, ao_dfg_inv: algebraicOptDefsTheory
    ao_iszero_chain_inv, ao_chains_defined_at, ao_targets_wf: aoResolveObligationTheory *)
 
+val _ = delsimps ["ao_iszero_chain_inv_def", "ao_chains_defined_def",
+                  "ao_targets_wf_def"]
+
 (* ===== Phase 1: Offset Conversion Equality ===== *)
 
 (*
@@ -2266,58 +2269,30 @@ Proof
   Cases_on `?e. step_inst fuel ctx inst s = Error e`
   >- (DISJ1_TAC >> metis_tac[])
   >- (
-  (* Non-error: derive ao_chains_defined from ao_chains_defined_at.
-     Original doesn't error → step_inst_base doesn't error → all Var
-     operands in FDOM → eval_operand (Var v) s = SOME. Combined with
-     ao_chains_defined_at + ao_targets_wf, all chain elements defined.
-     So ao_chains_defined holds for this state. *)
-  `ao_chains_defined targets s` by cheat >>
+  `inst_wf inst ==>
+   step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+   step_inst fuel ctx inst s` by
+    (strip_tac >>
+     Cases_on `inst.inst_opcode = INVOKE`
+     >- cheat >>
+     Cases_on `inst.inst_opcode = PHI`
+     >- cheat
+     >- (match_mp_tac ao_resolve_iszero_inst_sim_at >>
+         rpt strip_tac >> TRY (first_assum ACCEPT_TAC) >>
+         `!e. step_inst_base inst s <> Error e` by
+           (`step_inst fuel ctx inst s = step_inst_base inst s` by
+              simp[step_inst_non_invoke] >>
+            qpat_x_assum `~(?e. _)` mp_tac >> metis_tac[]) >>
+         `v' IN FDOM s.vs_vars` by
+           (match_mp_tac step_inst_base_nonerr_var_fdom >>
+            qexists_tac `inst` >>
+            rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+            cheat) >>
+         simp[eval_operand_def, lookup_var_def,
+              finite_mapTheory.FLOOKUP_DEF])) >>
   ho_match_mp_tac (Q.SPEC `ao_fn_fresh_vars fn`
     ao_transform_inst_sim_inst) >> simp[] >>
-  drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
-  rpt conj_tac
-  >- (* H_resolve *)
-     (Cases_on `inst.inst_opcode = INVOKE \/ inst.inst_opcode = PHI`
-      >- (qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[]
-          >- (* INVOKE *)
-             (simp[ao_resolve_iszero_inst_def] >>
-              irule step_inst_operands_equiv >>
-              simp[listTheory.LENGTH_MAP, is_alloca_op_def] >>
-              rpt strip_tac >>
-              simp[listTheory.EL_MAP, resolve_op_label] >>
-              TRY (irule resolve_op_eval_eq >> simp[]) >>
-              gvs[inst_wf_def] >> simp[resolve_op_lit])
-          >- (* PHI *)
-             (simp[step_inst_def] >>
-              simp[ao_resolve_iszero_inst_def,
-                   ao_resolve_iszero_inst_opcode] >>
-              simp[Once step_inst_base_def, SimpLHS] >>
-              simp[Once step_inst_base_def, SimpRHS] >>
-              Cases_on `inst.inst_outputs` >> simp[] >>
-              Cases_on `t` >> simp[] >>
-              Cases_on `s.vs_prev_bb` >> simp[] >>
-              rename1 `resolve_phi prev` >>
-              qmatch_goalsub_abbrev_tac
-                `MAP (ao_resolve_iszero_op tgts PHI)` >>
-              `resolve_phi prev
-                 (MAP (ao_resolve_iszero_op tgts PHI)
-                      inst.inst_operands) =
-               OPTION_MAP (ao_resolve_iszero_op tgts PHI)
-                 (resolve_phi prev inst.inst_operands)` by
-                (irule resolve_phi_map_label_pres >> simp[resolve_op_label] >>
-                 `?fn'. tgts = ao_compute_fn_iszero_targets fn'` by
-                   (qunabbrev_tac `tgts` >> metis_tac[]) >>
-                 metis_tac[resolve_op_phi_no_label]) >>
-              simp[] >>
-              Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
-              rename1 `resolve_phi prev _ = SOME val_op` >>
-              `eval_operand (ao_resolve_iszero_op tgts PHI val_op) s =
-               eval_operand val_op s` by
-                (irule resolve_op_eval_eq >>
-                 qunabbrev_tac `tgts` >> simp[]) >>
-              simp[]))
-      >- (irule (SIMP_RULE std_ss [] ao_resolve_iszero_inst_sim) >>
-          gvs[]))
+  drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[]
   >- (* H_range *)
      (rpt strip_tac >>
       qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
