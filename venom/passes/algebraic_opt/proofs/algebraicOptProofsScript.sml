@@ -2947,7 +2947,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `ALOOKUP (ao_compute_iszero_step _ _) _ = _` mp_tac >>
   simp[ao_compute_iszero_step_def] >>
-  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  rpt (CASE_TAC >> gvs[]) >>
   simp[alistTheory.ALOOKUP_def] >> IF_CASES_TAC >> gvs[]
 QED
 

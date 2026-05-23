@@ -53,6 +53,7 @@ Definition ao_chains_defined_at_def:
               !k. k < LENGTH chain ==>
                 ?w. eval_operand (EL k chain) st = SOME w
 End
+val _ = delsimps ["ao_chains_defined_at_def"]
 
 (* Well-formed targets: chain has >= 2 elements, variable is last *)
 Definition ao_targets_wf_def:
