@@ -3017,16 +3017,13 @@ Theorem ao_transform_function_correct_proof:
     let fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    (* Freshness: original operands/outputs don't use fresh variable names *)
-    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var x) inst.inst_operands ==> x NOTIN fv) /\
-    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM x inst.inst_outputs ==> x NOTIN fv) /\
-    (* Well-formedness *)
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
-    (* All instruction outputs undefined in initial state *)
-    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM x inst.inst_outputs ==> lookup_var x s = NONE) /\
+    (!inst x. MEM inst (fn_insts fn) /\
+              MEM x inst.inst_outputs ==> lookup_var x s = NONE) /\
     range_sound (df_widen_at NONE (range_analyze fn0)
                   s.vs_current_bb 0) s /\
     fn_entry_label fn = SOME s.vs_current_bb
@@ -3046,17 +3043,6 @@ Proof
   qabbrev_tac `mid = fn_max_inst_id fn0` >>
   qabbrev_tac `fn1 = fn0 with fn_blocks :=
     MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks` >>
-  (* Convert bb-based freshness to fn_insts form for internal helpers *)
-  `!inst v. MEM inst (fn_insts fn) /\
-            MEM (Var v) inst.inst_operands ==> v NOTIN ao_fn_fresh_vars fn` by
-    (rpt strip_tac >> first_x_assum irule >>
-     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-     metis_tac[]) >>
-  `!inst v. MEM inst (fn_insts fn) /\
-            MEM v inst.inst_outputs ==> v NOTIN ao_fn_fresh_vars fn` by
-    (rpt strip_tac >> first_x_assum irule >>
-     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-     metis_tac[]) >>
   (* Derive wf_function fn0 from wf_function fn *)
   `wf_function fn0` by
     (simp[Abbr `fn0`] >>
@@ -3080,20 +3066,17 @@ Proof
        (qpat_x_assum `MEM e _` mp_tac >>
         simp[Abbr `fn0`, fn_insts_def] >>
         metis_tac[fn_insts_blocks_map_offset]) >>
-     gvs[] >> irule ao_handle_offset_inst_wf >>
-     gvs[listTheory.EVERY_MEM]) >>
-  (* Derive ADDRESS/SIGNEXTEND undefined from all-outputs-undefined *)
+     fs[] >> irule ao_handle_offset_inst_wf >>
+     fs[listTheory.EVERY_MEM]) >>
   `ao_dfg_inv dfg s` by
     (simp_tac std_ss [Abbr `dfg`, Abbr `fn0`] >>
      irule ao_dfg_inv_initial >> rpt strip_tac >>
-     first_x_assum irule >>
-     gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-     metis_tac[]) >>
+     first_x_assum drule >> disch_then drule >> simp[]) >>
   `fn_entry_label fn0 = fn_entry_label fn` by
     (fs[Abbr `fn0`, fn_entry_label_def, entry_block_def] >>
      Cases_on `fn.fn_blocks` >> fs[]) >>
   `MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` by
-    (irule ao_cfg_initial >> gvs[]) >>
+    (irule ao_cfg_initial >> fs[]) >>
   (* ao_iszero_chain_inv: vacuously true when all outputs undefined.
      Chain elements at position k+1 are Var w (ISZERO outputs) — undefined.
      So eval_operand (EL (k+1) chain) s = NONE, making the implication vacuous. *)
@@ -3101,35 +3084,39 @@ Proof
     (simp[ao_iszero_chain_inv_def] >> rpt strip_tac >>
      `?inst. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs` by
        (simp[Abbr `targets`] >> metis_tac[ao_fn_targets_key_is_output]) >>
+     `ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain` by
+       fs[Abbr `targets`] >>
+     drule ao_fn_targets_chain_tail_var >> strip_tac >>
      `?w. EL (k + 1) chain = Var w` by
-       (irule ao_fn_targets_chain_tail_var >>
-        qexists_tac `fn0` >> simp[Abbr `targets`] >> DECIDE_TAC) >>
+       (first_x_assum (qspec_then `k + 1` mp_tac) >> simp[]) >>
      `ALOOKUP (ao_compute_fn_iszero_targets fn0) w <> NONE` by
-       (irule ao_fn_targets_chain_var_is_key >>
-        qexists_tac `v` >> qexists_tac `chain` >> qexists_tac `k + 1` >>
-        gvs[Abbr `targets`] >> DECIDE_TAC) >>
+       (drule ao_fn_targets_chain_var_is_key >>
+        disch_then (qspecl_then [`k + 1`, `w`] mp_tac) >> simp[]) >>
      `?inst'. MEM inst' (fn_insts fn0) /\ MEM w inst'.inst_outputs` by
-       (Cases_on `ALOOKUP (ao_compute_fn_iszero_targets fn0) w` >> gvs[] >>
+       (Cases_on `ALOOKUP (ao_compute_fn_iszero_targets fn0) w` >> fs[] >>
         metis_tac[ao_fn_targets_key_is_output]) >>
      `lookup_var w s = NONE` by
-       (first_x_assum irule >>
-        gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
-            Abbr `fn0`] >>
-        metis_tac[fn_insts_blocks_map_offset, ao_handle_offset_inst_outputs]) >>
-     gvs[eval_operand_def]) >>
-  (* ao_chains_defined_at: vacuously true when target vars are undefined.
-     Target key v is an ISZERO output — undefined by all-outputs-undefined.
-     So eval_operand (Var v) s = NONE, making the antecedent false. *)
+       (qpat_x_assum `MEM inst' (fn_insts fn0)` mp_tac >>
+        simp[Abbr `fn0`, fn_insts_def] >> strip_tac >>
+        drule fn_insts_blocks_map_offset >> strip_tac >>
+        `MEM w inst0.inst_outputs` by
+          fs[ao_handle_offset_inst_outputs] >>
+        `MEM inst0 (fn_insts fn)` by fs[fn_insts_def] >>
+        res_tac) >>
+     fs[eval_operand_def]) >>
   `ao_chains_defined_at targets s` by
     (simp[ao_chains_defined_at_def] >> rpt strip_tac >>
      `?inst. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs` by
        (simp[Abbr `targets`] >> metis_tac[ao_fn_targets_key_is_output]) >>
      `lookup_var v s = NONE` by
-       (first_x_assum irule >>
-        gvs[fn_insts_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
-            Abbr `fn0`] >>
-        metis_tac[fn_insts_blocks_map_offset, ao_handle_offset_inst_outputs]) >>
-     gvs[eval_operand_def, lookup_var_def]) >>
+       (qpat_x_assum `MEM inst (fn_insts fn0)` mp_tac >>
+        simp[Abbr `fn0`, fn_insts_def] >> strip_tac >>
+        drule fn_insts_blocks_map_offset >> strip_tac >>
+        `MEM v inst0.inst_outputs` by
+          fs[ao_handle_offset_inst_outputs] >>
+        `MEM inst0 (fn_insts fn)` by fs[fn_insts_def] >>
+        res_tac) >>
+     fs[eval_operand_def, lookup_var_def]) >>
   (* Get phases 1-3 simulation: Error \/ lift_result *)
   `(?e. run_blocks fuel ctx fn s = Error e) \/
    lift_result (state_equiv (ao_fn_fresh_vars fn))
@@ -3140,10 +3127,10 @@ Proof
                    `fuel`, `ctx`, `s`]
        mp_tac ao_phases123_run_blocks_sim_inv >>
      impl_tac
-     >- (gvs[markerTheory.Abbrev_def] >> rpt conj_tac >>
-         TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-     strip_tac >> gvs[]) >>
-  gvs[] >>
+     >- (fs[markerTheory.Abbrev_def] >> rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >> fs[]) >>
+     strip_tac >> fs[]) >>
+  fs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
   (
