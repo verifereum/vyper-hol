@@ -2234,25 +2234,8 @@ Proof
   gvs[operand_distinct]
 QED
 
-Triviality var_operand_defined_if_non_error[local]:
-  !inst fuel ctx s v.
-    inst_wf inst /\ inst.inst_opcode <> INVOKE /\
-    MEM (Var v) inst.inst_operands /\
-    ~(?e. step_inst fuel ctx inst s = Error e) ==>
-    ?w. eval_operand (Var v) s = SOME w
-Proof
-  rpt strip_tac >>
-  `step_inst_base inst s = step_inst fuel ctx inst s` by
-    simp[step_inst_non_invoke] >>
-  `!e. step_inst_base inst s <> Error e` by
-    (qpat_x_assum `~(?e. _)` mp_tac >> metis_tac[]) >>
-  `v IN FDOM s.vs_vars` by cheat >>
-  simp[eval_operand_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_DEF]
-QED
-
 (* Per-inst sim with state-dependent invariants instead of ∀s preconditions.
-   H_resolve derived from chain invariant + ao_resolve_iszero_inst_sim_at.
+   H_resolve derived from chain invariant + ao_resolve_iszero_inst_sim.
    H_range derived from in_range_state + range_analyze_sound. *)
 Triviality ao_per_inst_sim_fn0_inv[local]:
   !fn fn0 mid dfg ra targets bb fuel ctx v inst s.
