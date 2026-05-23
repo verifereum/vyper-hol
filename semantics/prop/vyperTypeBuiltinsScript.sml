@@ -3156,14 +3156,14 @@ Proof
   qmatch_asmsub_rename_tac`ArrayTV _ bd` >> Cases_on`bd` >>
   gvs[value_has_type_def, vyperStateTheory.return_def, type_slot_size_def]
   >- (
+    qmatch_asmsub_rename_tac`sparse_has_type tv len sparse` >>
     qmatch_assum_abbrev_tac`len * slot < bound` >>
-    reverse(Cases_on`0 < len`) >- gvs[Abbr`bound`] >>
-    reverse(Cases_on`1 < slot`) >- (
-      `slot = 1` by gvs[] >> gvs[] ) >>
-    `len < len * slot` by gvs[] >>
-    irule LESS_TRANS >>
-    goal_assum drule >>
-    first_assum ACCEPT_TAC
+    `LENGTH sparse <= len` by metis_tac[sparse_has_type_length] >>
+    `len <= len * slot` by gvs[] >>
+    irule LESS_EQ_LESS_TRANS >>
+    qexists `len` >> simp[] >>
+    irule LESS_EQ_LESS_TRANS >>
+    qexists `len * slot` >> simp[Abbr`bound`]
   ) >>
   gvs[vyperStateTheory.bind_def, AllCaseEqs(), vyperStateTheory.return_def] >>
   TRY (drule return_INL_value >> strip_tac >> gvs[] >>
@@ -3171,6 +3171,10 @@ Proof
        `len <= len * slot` by gvs[] >>
        irule LESS_EQ_LESS_TRANS >>
        qexists `len * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
+  TRY (qmatch_assum_abbrev_tac`n * slot < bound` >>
+       `n <= n * slot` by gvs[] >>
+       irule LESS_EQ_LESS_TRANS >>
+       qexists `n * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
   TRY (qmatch_asmsub_abbrev_tac`w2n w` >>
        Q.ISPEC_THEN`w`mp_tac w2n_lt >> simp[] >> NO_TAC) >>
   qmatch_goalsub_abbrev_tac`w2n w` >>

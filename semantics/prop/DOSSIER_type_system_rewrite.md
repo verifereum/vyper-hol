@@ -150,7 +150,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
 | C2.4.0 | proved |  | E0791 |  |
 | C2.4.1 | stuck | risk_mismatch | E0794 | Call plan_oracle(mode='review') for C2.4.1. Likely needs a revised plan: either prove/evaluate a concrete counterexample for Len on fixed static arrays, strengthen expression/result invariants to exclude materialized SArrayV for Len inputs, or change/use a correct builtin boundary that matches evaluator behavior. |
-| C2.4.1.1 | proved |  | E0797 | Call plan_oracle review for C2.4.1.1, then proceed only if accepted to C2.4.1.2 cleanup of stale counterexample probes. |
+| C2.4.1.1 | proved |  | E0799 | Call plan_oracle review for this carry-forward closure; then begin C2.4.1.2 if scheduled. |
+| C2.4.1.2 | proved |  | E0800 | Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes. |
 | C2.4.1.a | proved |  | E0795 |  |
 | C2.4.1.b | proved |  | E0796 | Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
@@ -4221,21 +4222,50 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0797`
+- latest episode: `E0799`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 3 holbuild, 514,568 tok (512,702 in, 1,866 out, 494,080 cached), 139.6s, $0.39613000
-- next: Call plan_oracle review for C2.4.1.1, then proceed only if accepted to C2.4.1.2 cleanup of stale counterexample probes.
+- actual effort: 1 sessions, 1 steps, 97,234 tok (96,659 in, 575 out, 92,672 cached), 11.8s, $0.08352100
+- next: Call plan_oracle review for this carry-forward closure; then begin C2.4.1.2 if scheduled.
 
 ### Attempts / Evidence
 
 - `E0797` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 3 holbuild, 514,568 tok (512,702 in, 1,866 out, 494,080 cached), 139.6s, $0.39613000)
   - Add missing SArrayV materialized array case before the toplevel_array_length catch-all; prove direct computation regression by simp[toplevel_array_length_def, return_def]; build vyperStateTheory. -> Definition repair and regression theorem accepted; vyperStateTheory built cleanly. (`TO_type_system_rewrite-20260522T073012Z_m42865_t001`, `TO_type_system_rewrite-20260522T073012Z_m42870_t001`)
+- `E0799` (proved, , actual effort: 1 sessions, 1 steps, 97,234 tok (96,659 in, 575 out, 92,672 cached), 11.8s, $0.08352100)
+  - Began rebased carry-forward component C2.4.1.1 after planner marked it Oracle-next; no additional proof work was needed because E0797 already implemented and reviewed the definition repair. -> Carry-forward leaf is already proved; next work should be the newly scheduled C2.4.1.2 builtin Len bound repair. (`TO_type_system_rewrite-20260522T073012Z_m42870_t001`, `TO_type_system_rewrite-20260522T073012Z_m42872_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m42865_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42870_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m42868_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42872_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0800`
+- blocker: 
+- actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 984,535 tok (981,903 in, 2,632 out, 968,192 cached), 288.4s, $0.63161100
+- next: Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes.
+
+### Attempts / Evidence
+
+- `E0798` (stuck, plan_incomplete, actual effort: 1 sessions, 6 steps, 7 tools, 1 holbuild, 476,535 tok (472,321 in, 4,214 out, 456,704 cached), 292.9s, $0.43285700)
+  - Started C2.4.1.2 and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to confirm current stale-probe failure before cleanup. -> Build failed earlier in `Len_result_fits_uint256`, not at the stale probes: the new SArrayV toplevel_array_length success path leaves goal `LENGTH sparse < dimword(:256)` under `sparse_has_type tv len sparse` and related array well-formedness assumptions. (`TO_type_system_rewrite-20260522T073012Z_m42878_t003`)
+  - Inspected `Len_result_fits_uint256` source around the failing proof. -> Confirmed the existing fixed-array branch bounds `len`/storage lengths, but has no helper for materialized `SArrayV sparse` length after the definition repair. (`TO_type_system_rewrite-20260522T073012Z_m42880_t001`)
+  - Attempted to ask strategist to augment C2.4.1 with the new dependency. -> Harness blocked because active component C2.4.1.2 must be closed before oracle can switch component context. (`TO_type_system_rewrite-20260522T073012Z_m42882_t001`)
+- `E0800` (proved, , actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 984,535 tok (981,903 in, 2,632 out, 968,192 cached), 288.4s, $0.63161100)
+  - In `Len_result_fits_uint256`, replace the old `0 < len`/`1 < slot` split in the fixed-array materialized branch with `sparse_has_type_length` plus arithmetic transitivity. -> The intended SArrayV branch proof progressed; the next build exposed a nearby fixed-ArrayRef numeric goal not handled by the old final `w2n` fallback. (`TO_type_system_rewrite-20260522T073012Z_m42893_t001`, `TO_type_system_rewrite-20260522T073012Z_m42894_t001`)
+  - Add a targeted fallback after the fixed-array storage branch: when an assumption has `n * slot < bound`, prove `n < bound` via `n <= n * slot` and `LESS_EQ_LESS_TRANS`. -> `vyperTypeBuiltinsTheory` builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m42896_t001`, `TO_type_system_rewrite-20260522T073012Z_m42897_t001`)
+  - Run downstream `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to confirm the builtin repair is no longer the blocker. -> Build advances past `vyperTypeBuiltinsTheory` and fails at the expected stale theorem `len_fixed_array_value_typed_but_toplevel_array_length_type_error`, which belongs to the next planned cleanup component C2.4.1.3. (`TO_type_system_rewrite-20260522T073012Z_m42898_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42893_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42897_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42898_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.a
 

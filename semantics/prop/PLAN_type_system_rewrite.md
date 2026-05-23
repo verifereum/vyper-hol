@@ -236,166 +236,204 @@ Do not revisit or undo the completed `vyperState$exception` qualifications; the 
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: The counterexample source is now known exactly: `toplevel_array_length_def` rejects materialized static arrays `Value (ArrayV (SArrayV sparse))`, while the type system/runtime invariants allow local fixed-array values to have that representation. Adding a direct `SArrayV` case is localized and mechanically testable; downstream proof then uses a boundary lemma instead of trying to refute the impossible TypeError path.
-- Supersedes: C2.4.1.a, C2.4.1.b, C2.4.1.c
-- Progress transition: `replacement`
-- Carries progress/evidence from: C2.4.1.a, C2.4.1.b, E0795, E0796
-- Invalidates prior progress/evidence: C2.4.1.c
+- Rationale: All remaining obligations are now localized and low-risk: C2.4.1.1 has already repaired the definition; the newly exposed builtin proof failure is discharged by the existing `sparse_has_type_length` theorem plus elementary arithmetic; stale probe cleanup and Len boundary use those repaired facts.
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.4.1, E0797, E0798
+- Invalidates prior progress/evidence: old C2.4.1.2 scheduling
 
 #### Progress note
-The proved probes are carried forward as diagnosis justifying a semantics repair. The old conditional proof component C2.4.1.c is invalid because its precondition, unreachable `SArrayV`, is false.
+E0798 is accepted as a plan-incomplete/stuck episode for the old cleanup leaf. It does not invalidate the repaired definition from E0797; it reorders the subtree so the newly exposed builtin theorem is repaired before cleanup or statement-level Len boundary work.
 
 #### Summary
-- The prior unprovability gate is resolved by accepting the counterexample and repairing the runtime boundary.
-- `Len` on a well-typed fixed array can see `Value (ArrayV (SArrayV sparse))`; current `toplevel_array_length` raises a TypeError there.
-- Add an executable `SArrayV` case to `toplevel_array_length`, then prove a boundary lemma saying typed/sized Len arguments cannot produce a `TypeError`.
-- Finish the `Expr_Builtin` Len resume using that boundary plus the existing argument IH and `Len_builtin_sound` for success.
-
-#### Description
-This subtree replaces the gate. Do not try to prove that materialized static arrays are unreachable: E0796 proves they are reachable from a simple local `Name` under full invariants. The repair should make runtime behavior match the type system by supporting `Len` on `SArrayV` values. After the definition change, remove or update the local counterexample probes because they intentionally described the old buggy behavior and will become false.
-
-#### Approach
-First repair the executable definition and prove a direct regression computation. Then extract a Len boundary lemma whose conclusion matches the stuck goal: from `well_typed_builtin_app ty Len (MAP expr_type es)`, successful typed evaluation of `HD es`, and `expr_result_typed env (HD es) arg_tv`, conclude `toplevel_array_length cx arg_tv arg_st` cannot return `INR (Error (TypeError msg))`. Finally use it in the resume branch and keep the success branch using `Len_builtin_sound`.
-
-#### Not to try
-Do not attempt to prove that `Value (ArrayV (SArrayV _))` is unreachable for fixed-array expressions; C2.4.1.b proved a concrete reachable instance. Do not weaken `well_typed_builtin_app` or the public no-TypeError theorem to exclude fixed arrays unless a later user-level spec explicitly chooses that language change. Do not leave the old counterexample theorems as local proved facts after the repair; they should fail and would mislead future proof search.
+- Complete the Len fixed-array repair path after adding `SArrayV` support to `toplevel_array_length`.
+- First repair the builtin theorem `Len_result_fits_uint256`, whose old proof assumed materialized static arrays could not return a length.
+- Then remove or rewrite stale counterexample probes that asserted the former TypeError behavior.
+- Finally prove the Len typed no-TypeError boundary and use it to close the `Expr_Builtin` Len branch.
 
 #### Argument
-For a `Builtin ... Len [e]`, evaluator execution first evaluates `e` to a toplevel value `arg_tv`, then calls `toplevel_array_length cx arg_tv`. The expression IH gives no TypeError for evaluating `e`, preserves state/invariants, and supplies `expr_result_typed env e arg_tv` on success. The remaining soundness obligation is exactly the boundary between typed Len-eligible runtime values and `toplevel_array_length`: if the static builtin typing says `Len` is valid for `expr_type e`, and `arg_tv` is the typed result of `e`, then `toplevel_array_length` must not return `Error (TypeError msg)`. The only discovered missing runtime case is materialized fixed arrays, represented as `Value (ArrayV (SArrayV sparse))`; defining length for this case removes the counterexample. The success preservation branch still proves the result has `BaseTV (UintT 256)` via the existing Len soundness lemma or a small updated variant if its assumptions mention the old cases.
+The semantic repair makes `toplevel_array_length cx (Value (ArrayV (SArrayV sparse)))` succeed with `LENGTH sparse`. Therefore every typed Len proof must account for materialized static arrays, not contradict them. For fixed arrays, typing provides `SORTED $< (MAP FST sparse)` and `sparse_has_type tv len sparse`; the existing `sparse_has_type_length` theorem gives `LENGTH sparse <= len`. Well-formed fixed array typing provides the storage bound `len * type_slot_size tv < 2**256` and the slot-size positivity already materialized in the failing goal. Hence `LENGTH sparse < 2**256` follows by `LENGTH sparse <= len <= len * slot < bound`. This restores `Len_result_fits_uint256`, which feeds `Len_builtin_sound`, which in turn supports the statement-level Len success/no-TypeError boundary.
 
 #### Definition design
-The definition interface for `toplevel_array_length` should expose two facts: (1) state preservation, already represented by/near `toplevel_array_length_state`; and (2) a no-TypeError boundary for well-typed Len arguments. The definition must compute on every runtime representation admitted by `value_has_type` for Len-eligible static types. The executable probe after repair is: `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st = (INL (&LENGTH sparse), st)` or the repository's chosen static-array length convention. Failure sign: if the proof must unfold full expression typing at every Len use or manually rule out `SArrayV`, the boundary lemma is missing or too weak.
+The public definition interface after C2.4.1.1 is: `toplevel_array_length` returns the runtime length for every runtime array-like value, including `Value (ArrayV (SArrayV sparse))`, and only raises TypeError for non-array-like values. Consumers must not rely on static arrays raising TypeError. Boundary facts in this subtree should hide `toplevel_array_length_def` from statement soundness: builtin soundness proves the uint256 bound and success typing; statement soundness consumes a typed Len no-TypeError lemma. Failure signs: any theorem/probe claiming a well-typed fixed `SArrayV` Len can return `TypeError "toplevel_array_length"` is stale and must be deleted or rewritten as a regression success check.
 
 #### Code structure
-Edit `semantics/vyperStateScript.sml` for the executable `toplevel_array_length_def` case. Put small computation/state/no-TypeError lemmas near the existing `toplevel_array_length` lemmas in the earliest fresh-stack theory that can see both the state definition and type predicates; if `vyperTypeBuiltinsScript.sml` already owns `Len_builtin_sound`, place the typed boundary there or in `vyperTypeStmtSoundnessScript.sml` only if import cycles require it. In `semantics/prop/vyperTypeStmtSoundnessScript.sml`, remove the temporary counterexample probes or convert them to post-repair regression probes, then replace the `FAIL_TAC` in `eval_all_type_sound_mutual[Expr_Builtin]` Len branch with the boundary lemma. Do not modify public theorem statements for this localized bug.
+Make the builtin proof repair in `semantics/prop/vyperTypeBuiltinsScript.sml` near `Len_result_fits_uint256`; do not move this arithmetic into statement soundness. Use the exported typing lemma `sparse_has_type_length` from `vyperTypingScript.sml` if visible; if not visible, add the minimal import/open dependency rather than reproving a local copy. Keep stale-probe cleanup in `semantics/prop/vyperTypeStmtSoundnessScript.sml` after the builtin theory builds, because `vyperTypeStmtSoundnessTheory` depends on `vyperTypeBuiltinsTheory`. The final `Expr_Builtin` resume should use repaired boundary lemmas rather than unfolding `toplevel_array_length_def` repeatedly.
 
 ### C2.4.1.1: Add `toplevel_array_length` support for materialized static arrays
 - Kind: `definition_repair`
 - Risk: 1
 - Work priority: 0
-- Work units: 2
-- Rationale: This is a one-case executable definition change at the exact failing function. The computation is direct and should preserve existing state behavior because the case returns without state updates.
-- Checkpoint: yes
-- Carries progress/evidence from: C2.4.1.b, E0796
+- Work units: 0
+- Rationale: Already proved in E0797. The definition now returns `LENGTH sparse` for `Value (ArrayV (SArrayV sparse))`, matching intended array-like Len behavior.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: E0797, C2.4.1.1
 
 #### Progress note
-Uses the counterexample witness to choose the missing runtime case.
+Carry forward the closed proof episode that edited `semantics/vyperStateScript.sml` and verified the definition repair far enough to expose the downstream builtin proof failure.
 
 #### Summary
-- Edit `toplevel_array_length_def` to handle `Value (ArrayV (SArrayV sparse))`.
-- Return a length without changing state, matching other materialized value cases.
-- Prove or build-check a direct computation regression for the new case.
-- This checkpoint confirms the executable semantic bug is fixed before proof repair continues.
+- Keep the completed `toplevel_array_length` definition repair.
+- This is the prerequisite for all subsequent Len fixed-array soundness work.
+- No further executor work is requested for this leaf unless later builds show the committed edit was lost.
 
-#### Statement
-Recommended regression theorem shape:
-```sml
-Theorem toplevel_array_length_sarrayv[local or exported]:
-  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st =
-    (INL (&LENGTH sparse), st)
-```
-If the repository has a different intended sparse-array length convention, use that convention explicitly and document it in the theorem name/statement.
-
-#### Approach
-Add the new pattern before the catch-all case in `semantics/vyperStateScript.sml`. Use the same `return` form as `DynArrayV`, `TupleV`, `BytesV`, and `StringV`; the proof should be by `simp[toplevel_array_length_def, return_def]` after the definition regenerates.
-
-#### Not to try
-Do not encode this as a theorem workaround in statement soundness while leaving the evaluator raising TypeError. Do not use the static array bound `n` unless the runtime value carries or can soundly determine it; for `Value (ArrayV (SArrayV sparse))` the only local data in this function is `sparse`.
-
-### C2.4.1.2: Replace old counterexample probes with post-repair regression/audit
-- Kind: `source_cleanup`
-- Risk: 1
-- Work priority: 10
-- Work units: 1
-- Rationale: The two local probes were diagnostic scaffolding for the old semantics. After the definition repair, at least the full `Len` TypeError probe is intentionally false and must not remain in the source.
-- Dependencies: C2.4.1.1
-- Supersedes: C2.4.1.a, C2.4.1.b
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0795, E0796
-- Invalidates prior progress/evidence: C2.4.1.a, C2.4.1.b
-
-#### Progress note
-The old probes remain historical evidence but should not be current source obligations after the semantics fix.
-
-#### Summary
-- Delete the old local theorems asserting the buggy TypeError behavior.
-- Optionally keep a positive local regression theorem for `SArrayV` length.
-- Ensure `holbuild` no longer stops because of stale diagnostic facts.
-- The audit check is that source contains no theorem named as a counterexample to the repaired behavior.
-
-#### Statement
-No required exported theorem. If retaining a local regression, use the positive statement from C2.4.1.1 rather than the old existential TypeError statement.
-
-#### Approach
-Remove `len_fixed_array_value_typed_but_toplevel_array_length_type_error` and `len_fixed_array_well_typed_expr_type_error_probe` from `vyperTypeStmtSoundnessScript.sml`, or rewrite them as positive post-repair computations if useful locally. Keep changes minimal; this is cleanup of diagnostic scaffolding, not proof architecture.
-
-#### Not to try
-Do not leave failing probes commented out with ambiguous TODOs. Do not keep the name `...type_error_probe` for a positive regression theorem.
-
-### C2.4.1.3: Prove Len typed-runtime no-TypeError boundary
+### C2.4.1.2: Repair `Len_result_fits_uint256` for materialized static arrays
 - Kind: `boundary_lemma`
 - Risk: 2
-- Work priority: 20
-- Work units: 5
-- Rationale: After the `SArrayV` case, the previously known counterexample is gone. The lemma follows by case analysis on the typed Len argument/result shape and unfolding `toplevel_array_length_def` only inside this boundary, keeping consumers clean.
-- Dependencies: C2.4.1.1, C2.4.1.2
+- Work priority: 10
+- Work units: 2
+- Rationale: The failing goal has exactly the assumptions needed for the existing theorem `sparse_has_type_length`: `sparse_has_type tv len sparse` and `SORTED $< (MAP FST sparse)`. The remaining proof is elementary natural-number transitivity using the existing fixed-array bound and slot positivity.
+- Dependencies: C2.4.1.1
+- Checkpoint: yes
+- Supersedes: old C2.4.1.2
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0798
+- Invalidates prior progress/evidence: old C2.4.1.2 cleanup leaf
+
+#### Progress note
+E0798 closes the old cleanup leaf as plan-incomplete and motivates replacing this ID with the newly exposed builtin repair. The old cleanup obligation is reclassified under C2.4.1.3.
 
 #### Summary
-- Prove a lemma tailored to the stuck `Expr_Builtin` Len TypeError branch.
-- Inputs should match facts already present there: static Len typing, successful typed argument evaluation, and runtime result typedness.
-- Conclusion should directly contradict `toplevel_array_length ... = (INR (Error (TypeError msg)), ...)`.
-- Consumers should use this lemma rather than unfolding `toplevel_array_length_def`.
+- Patch `semantics/prop/vyperTypeBuiltinsScript.sml` theorem `Len_result_fits_uint256`.
+- In the fixed-array `SArrayV sparse` branch, use `sparse_has_type_length` to derive `LENGTH sparse <= len`.
+- Combine this with `0 < slot` and `len * slot < bound` to prove `LENGTH sparse < dimword(:256)`.
+- Verify with `holbuild build vyperTypeBuiltinsTheory` and preferably `holbuild build vyperTypeStmtSoundnessTheory` up to the next planned failure.
+
+#### Description
+The old proof branch split on `0 < len` and tried to prove the zero-length case by arithmetic alone. After `toplevel_array_length` succeeds on materialized static arrays, the returned value is `LENGTH sparse`, so the proof must use the sparse typing invariant to show the sparse representation cannot contain entries beyond the declared fixed length. The theorem `sparse_has_type_length` is already present in `vyperTypingScript.sml` and is visible in generated `vyperTypingTheory`; use it rather than creating an ad hoc local induction.
 
 #### Statement
-Preferred shape, adjust names to existing predicates:
+Repair existing theorem without changing its statement:
 ```sml
-Theorem well_typed_Len_toplevel_array_length_no_type_error:
-  well_typed_builtin_app ty Len [arg_ty] /\
-  expr_result_typed env e arg_tv /\ expr_type e = arg_ty /\
-  toplevel_array_length cx arg_tv st = (INR exn, st')
-  ==> (!msg. exn <> Error (TypeError msg))
+Theorem Len_result_fits_uint256:
+  well_typed_builtin_app ty Len [arg_ty] ∧
+  evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
+  well_formed_type_value arg_runtime_tv ∧
+  toplevel_value_typed arg_tv arg_runtime_tv ∧
+  toplevel_array_length cx arg_tv st = (INL n, st') ==>
+  n < dimword(:256)
 ```
-If list destructuring at the use site is easier, a variant taking `well_typed_builtin_app ty Len (MAP expr_type es)` plus `es <> []`/`e = HD es` is acceptable, but the conclusion must match the stuck goal without manual theorem plumbing.
+Optional local helper shape if direct use is awkward:
+```sml
+Theorem sparse_fixed_array_length_lt_bound[local]:
+  SORTED $< (MAP FST sparse) ∧ sparse_has_type tv len sparse ∧
+  0 < slot ∧ len * slot < bound ==>
+  LENGTH sparse < bound
+```
 
 #### Approach
-Destructure the `well_typed_builtin_app ... Len ...` premise to identify Len-eligible argument static types. Use `expr_result_typed` / `expr_runtime_typed` / `value_has_type` cases to classify `arg_tv`, then evaluate `toplevel_array_length_def`. The repaired `SArrayV` case should join the existing `DynArrayV`, `TupleV`, `BytesV`, `StringV`, and `ArrayRef` cases as non-TypeError cases.
+In the failing fixed-array branch, after abbreviating `len`, `slot`, and `bound`, derive `LENGTH sparse <= len` by `drule_all sparse_has_type_length` (or `irule`/`metis_tac` with the two assumptions). Derive `len <= len * slot` from `0 < slot` using arithmetic, then chain `LENGTH sparse <= len`, `len <= len * slot`, and `len * slot < bound` with `LESS_EQ_TRANS`/`LESS_EQ_LESS_TRANS`. Avoid special-casing `len = 0` unless arithmetic automation needs it; the length bound handles zero cleanly.
 
 #### Not to try
-Do not prove this by a large `metis_tac` over unfolded evaluator definitions. Do not require full `env_consistent`, `state_well_typed`, or accounts hypotheses unless a specific existing typing predicate needs them; the boundary should be about the already-typed runtime value.
+Do not restore the old contradiction/probe behavior where materialized `SArrayV` Len raises TypeError; C2.4.1.1 intentionally changed that semantics. Do not unfold `sparse_has_type` manually in `Len_result_fits_uint256`; the exported `sparse_has_type_length` theorem is the intended proof interface. Do not push this arithmetic into `vyperTypeStmtSoundnessScript.sml`; statement soundness should consume builtin boundary facts.
 
-### C2.4.1.4: Finish `eval_all_type_sound_mutual[Expr_Builtin]` Len branch
-- Kind: `proof`
+### C2.4.1.3: Replace old counterexample probes with post-repair regression/audit
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 20
+- Work units: 1
+- Rationale: Once `Len_result_fits_uint256` builds, stale local probes in `vyperTypeStmtSoundnessScript.sml` that asserted TypeError for fixed `SArrayV` Len are mechanically obsolete. Cleanup is deletion or conversion to success-regression facts using the repaired definition.
+- Dependencies: C2.4.1.2
+- Progress transition: `reclassified`
+- Carries progress/evidence from: old C2.4.1.2, E0798
+
+#### Progress note
+This is the old C2.4.1.2 cleanup obligation moved after the builtin theorem repair that E0798 showed is a strict prerequisite for verifying `vyperTypeStmtSoundnessTheory`.
+
+#### Summary
+- Remove or rewrite stale local counterexample probes around lines 7674-7757 of `vyperTypeStmtSoundnessScript.sml`.
+- The facts `len_fixed_array_value_typed_but_toplevel_array_length_type_error` and `len_fixed_array_well_typed_expr_type_error_probe` are no longer true after C2.4.1.1.
+- If keeping regression coverage, replace them with success/no-TypeError checks for `SArrayV` Len.
+- Verify that no local theorem still claims `TypeError "toplevel_array_length"` for a well-typed fixed array value.
+
+#### Description
+The current source context shows stale local probes immediately before `Resume eval_all_type_sound_mutual[Expr_Builtin]`. After the definition repair, `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st` computes `(INL (&LENGTH sparse), st)`, so any theorem stating it returns `INR (Error (TypeError "toplevel_array_length"))` must be removed or changed. This cleanup should be small and should not attempt to solve the entire builtin branch.
+
+#### Statement
+No frozen theorem statement. Source cleanup target:
+```sml
+Theorem len_fixed_array_value_typed_but_toplevel_array_length_type_error[local]: ...
+Theorem well_typed_fixed_array_expr_can_eval_to_sarray_probe[local]: ...
+Theorem len_fixed_array_well_typed_expr_type_error_probe[local]: ...
+```
+Delete false probes or replace with local regression facts asserting successful length evaluation for materialized fixed arrays.
+
+#### Approach
+After C2.4.1.2, build will reach `vyperTypeStmtSoundnessScript.sml` again. Delete the false TypeError probes; keep `well_typed_fixed_array_expr_can_eval_to_sarray_probe` only if useful and true, otherwise remove it with its consumers. If replacing with a regression, state the direct computation of `toplevel_array_length` on `SArrayV []` and prove by `simp[toplevel_array_length_def, return_def]`.
+
+#### Not to try
+Do not leave false local theorems with `cheat` or weakened assumptions. Do not spend effort proving large env-consistency witnesses for a regression probe unless a downstream proof consumes it; direct computation regressions are sufficient.
+
+### C2.4.1.4: Prove Len typed-runtime no-TypeError boundary
+- Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 30
 - Work units: 3
-- Rationale: Once the boundary lemma exists, the stuck branch is a direct contradiction and the success branch already has a planned path through `Len_builtin_sound`. The remaining work is proof integration in the existing resume.
-- Dependencies: C2.4.1.3
+- Rationale: After the definition and builtin length-bound repairs, the prior fixed-array counterexample is gone. The boundary follows by case analysis on the typed Len argument/result shape and should isolate `toplevel_array_length_def` from statement consumers.
+- Dependencies: C2.4.1.2, C2.4.1.3
 - Checkpoint: yes
-- Supersedes: C2.4.1.c
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0794
-- Invalidates prior progress/evidence: C2.4.1.c
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.4.1.3
 
 #### Progress note
-Replaces the old conditional proof, using repair rather than an unreachable-shape invariant.
+Same downstream boundary obligation as before, now explicitly dependent on the builtin repair and stale-probe cleanup.
 
 #### Summary
-- In the `Len` branch, use the expression IH for `HD es` as already done.
-- On `toplevel_array_length` success, keep the existing `Len_builtin_sound` route.
-- On `toplevel_array_length` exception, apply the boundary lemma to discharge the TypeError contradiction.
-- Build-check `vyperTypeStmtSoundnessTheory` to confirm the resume passes this branch.
+- Establish the typed Len no-TypeError boundary needed by `Expr_Builtin`.
+- It should say that under well-typed Len application, evaluated typed argument value, and consistent runtime typing, `toplevel_array_length` cannot produce `Error (TypeError ...)`.
+- Use `Len_result_fits_uint256`/`Len_builtin_sound` for success typing and direct `toplevel_array_length` case analysis only inside this lemma.
+- This lemma is a checkpoint because it is the consumer-facing interface for statement soundness.
 
 #### Statement
-No new theorem statement; close the existing suspended case:
+Use the current source’s intended boundary statement if already present. If absent, introduce a local theorem in `vyperTypeStmtSoundnessScript.sml` or exported theorem in `vyperTypeBuiltinsScript.sml` with this shape:
 ```sml
-Resume eval_all_type_sound_mutual[Expr_Builtin]: ...
+well_typed_builtin_app ty Len [arg_ty] ∧
+evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
+toplevel_value_typed arg_tv arg_runtime_tv ∧
+well_formed_type_value arg_runtime_tv ==>
+∀cx st err st'.
+  toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==> F
 ```
+Adjust quantifiers/names to match the `Expr_Builtin` use site.
 
 #### Approach
-At the old `FAIL_TAC` site, destruct the exception only as needed and invoke `well_typed_Len_toplevel_array_length_no_type_error` with the static Len app fact and `expr_result_typed` fact from the argument IH. If the helper was stated over singleton argument types, first derive `MAP expr_type es = [expr_type (HD es)]` from `well_typed_builtin_app`/length facts by the same small list case split already present.
+Prove by cases on `arg_ty`, evaluated runtime type, and `arg_tv`, reusing the repaired `toplevel_array_length_def` cases. Keep all unfolding in this boundary lemma. For success branches, `Len_result_fits_uint256` and `Len_builtin_sound` should remain available to prove the uint256 result typing separately.
 
 #### Not to try
-Do not re-open the old proof attempt that tried to refute the TypeError branch from IH/state invariants alone; E0796 shows those premises are insufficient. Avoid broad unfolding of `well_typed_expr_def` and `evaluate_def` beyond the existing Len branch setup.
+Do not duplicate this case split directly in `eval_all_type_sound_mutual[Expr_Builtin]`. Do not use the deleted fixed-array TypeError probe as a contradiction; the semantics now succeeds on `SArrayV`.
+
+### C2.4.1.5: Finish `eval_all_type_sound_mutual[Expr_Builtin]` Len branch
+- Kind: `proof`
+- Risk: 2
+- Work priority: 40
+- Work units: 3
+- Rationale: With the typed Len no-TypeError boundary in place, the remaining statement proof branch is proof integration rather than semantic design. The success branch can rely on `Len_builtin_sound`, and the TypeError branch is contradicted by C2.4.1.4.
+- Dependencies: C2.4.1.4
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.4.1.4
+
+#### Progress note
+This is the old C2.4.1.4 integration obligation shifted after the newly inserted builtin repair and cleanup.
+
+#### Summary
+- Complete the `Resume eval_all_type_sound_mutual[Expr_Builtin]` Len case in `vyperTypeStmtSoundnessScript.sml`.
+- Use the boundary lemma from C2.4.1.4 rather than unfolding `toplevel_array_length_def` in the mutual proof.
+- Use `Len_builtin_sound` for the successful value typing obligation.
+- Verify with `holbuild build vyperTypeStmtSoundnessTheory` before proceeding to broader statement soundness work.
+
+#### Statement
+Close the existing suspended/resumed proof branch:
+```sml
+Resume eval_all_type_sound_mutual[Expr_Builtin]:
+  ...
+QED
+```
+Do not change public theorem statements unless a later checked failure proves the current statement is false.
+
+#### Approach
+At the Len subcase, split on the result of `toplevel_array_length`. If it is a TypeError, invoke the C2.4.1.4 no-TypeError boundary with the typed argument facts already in the mutual proof context. If it succeeds, invoke `Len_builtin_sound` to obtain `value_has_type` for the returned uint256 length, then discharge the mutual invariant conjuncts by the existing expression proof framework.
+
+#### Not to try
+Do not start a second induction over expression evaluation. Do not inline all builtin typing cases in the statement proof; only the Len-specific boundary should be used here.
 
 ### C2.5: Close `Expr_TypeBuiltin` statement-soundness case using completed type-builtin boundaries
 - Kind: `proof`
