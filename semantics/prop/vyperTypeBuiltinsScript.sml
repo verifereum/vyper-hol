@@ -3182,6 +3182,47 @@ Proof
   simp[]
 QED
 
+Theorem Len_toplevel_array_length_no_type_error:
+  well_typed_builtin_app ty Len [arg_ty] ∧
+  evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
+  well_formed_type_value arg_runtime_tv ∧
+  toplevel_value_typed arg_tv arg_runtime_tv ∧
+  toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==>
+  F
+Proof
+  strip_tac >> gvs[well_typed_builtin_app_def] >>
+  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
+  >- (
+    rename1 `BaseT bt` >> Cases_on `bt` >>
+    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
+    >- (
+      Cases_on `arg_tv` >>
+      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
+          vyperStateTheory.return_def, raise_def, value_has_type_def,
+          AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
+          value_CASE_rator, get_transient_storage_def]) >>
+    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
+    Cases_on `arg_tv` >>
+    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
+        vyperStateTheory.return_def, raise_def, value_has_type_def,
+        AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
+        get_transient_storage_def, value_CASE_rator, well_formed_type_value_def]
+  ) >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `arg_tv` >>
+  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
+      vyperStateTheory.return_def, raise_def, value_has_type_def, AllCaseEqs(),
+      bind_def, ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
+      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
+      well_formed_type_value_def, type_slot_size_def] >>
+  Cases_on `b` >>
+  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
+      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def] >>
+  Cases_on `b'` >>
+  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
+      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def]
+QED
+
 Theorem Len_builtin_sound:
   well_typed_builtin_app ty Len [arg_ty] ∧
   evaluate_type tenv ty = SOME tv ∧ evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧

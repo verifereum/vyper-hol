@@ -153,6 +153,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.4.1.1 | proved |  | E0799 | Call plan_oracle review for this carry-forward closure; then begin C2.4.1.2 if scheduled. |
 | C2.4.1.2 | proved |  | E0800 | Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes. |
 | C2.4.1.3 | proved |  | E0801 | Call plan_oracle review for C2.4.1.3; if accepted, commit cleanup and proceed to C2.4.1.4 Len typed-runtime no-TypeError boundary. |
+| C2.4.1.4 | proved |  | E0802 | Call plan_oracle review for C2.4.1.4; if accepted, commit the builtin boundary and proceed to C2.4.1.5 to replace the Len TypeError-path FAIL_TAC with the new boundary. |
 | C2.4.1.a | proved |  | E0795 |  |
 | C2.4.1.b | proved |  | E0796 | Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
@@ -4291,6 +4292,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260522T073012Z_m42906_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42907_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42907_t003` (use `read_tool_output` for exact output)
+
+## C2.4.1.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0802`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 9 holbuild, 1,916,817 tok (1,909,525 in, 7,292 out, 1,859,072 cached), 475.8s, $1.40056100
+- next: Call plan_oracle review for C2.4.1.4; if accepted, commit the builtin boundary and proceed to C2.4.1.5 to replace the Len TypeError-path FAIL_TAC with the new boundary.
+
+### Attempts / Evidence
+
+- `E0802` (proved, , actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 9 holbuild, 1,916,817 tok (1,909,525 in, 7,292 out, 1,859,072 cached), 475.8s, $1.40056100)
+  - Added `Len_toplevel_array_length_no_type_error` in `vyperTypeBuiltinsScript.sml` near `Len_result_fits_uint256`/`Len_builtin_sound`; proof unfolds `well_typed_builtin_app_def`, `evaluate_type_def`, `toplevel_value_typed_def`, and repaired `toplevel_array_length_def` only inside the boundary. -> `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)` builds cleanly with the new exported Len no-TypeError boundary. (`TO_type_system_rewrite-20260522T073012Z_m42939_t001`)
+  - Ran downstream `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after adding the boundary. -> Downstream advances to the planned `Expr_Builtin` Len TypeError-path `FAIL_TAC`, confirming C2.4.1.4 boundary exists and C2.4.1.5 remains the integration step. (`TO_type_system_rewrite-20260522T073012Z_m42940_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42939_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42940_t002` (use `read_tool_output` for exact output)
 
 ## C2.4.1.a
 
