@@ -152,6 +152,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.4.1 | stuck | risk_mismatch | E0794 | Call plan_oracle(mode='review') for C2.4.1. Likely needs a revised plan: either prove/evaluate a concrete counterexample for Len on fixed static arrays, strengthen expression/result invariants to exclude materialized SArrayV for Len inputs, or change/use a correct builtin boundary that matches evaluator behavior. |
 | C2.4.1.1 | proved |  | E0799 | Call plan_oracle review for this carry-forward closure; then begin C2.4.1.2 if scheduled. |
 | C2.4.1.2 | proved |  | E0800 | Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes. |
+| C2.4.1.3 | proved |  | E0801 | Call plan_oracle review for C2.4.1.3; if accepted, commit cleanup and proceed to C2.4.1.4 Len typed-runtime no-TypeError boundary. |
 | C2.4.1.a | proved |  | E0795 |  |
 | C2.4.1.b | proved |  | E0796 | Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan. |
 | C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
@@ -4266,6 +4267,30 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260522T073012Z_m42893_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42897_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42898_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0801`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 372,485 tok (371,325 in, 1,160 out, 363,008 cached), 122.1s, $0.25788900
+- next: Call plan_oracle review for C2.4.1.3; if accepted, commit cleanup and proceed to C2.4.1.4 Len typed-runtime no-TypeError boundary.
+
+### Attempts / Evidence
+
+- `E0801` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 372,485 tok (371,325 in, 1,160 out, 363,008 cached), 122.1s, $0.25788900)
+  - Delete the obsolete probe block around lines 7674-7757 in `vyperTypeStmtSoundnessScript.sml`. -> Removed the false TypeError probes and reachability diagnostic theorem from current source. (`TO_type_system_rewrite-20260522T073012Z_m42906_t001`)
+  - Audit source for stale probe names with grep. -> No remaining matches for `len_fixed_array`, `toplevel_array_length_type_error`, or `well_typed_fixed_array_expr_can_eval_to_sarray_probe` in `vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260522T073012Z_m42907_t001`)
+  - Run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after cleanup. -> Build no longer fails at stale probes; it advances to the known `Expr_Builtin` Len TypeError-path FAIL_TAC, which is scheduled for C2.4.1.4/C2.4.1.5. (`TO_type_system_rewrite-20260522T073012Z_m42907_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42906_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42907_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m42907_t003` (use `read_tool_output` for exact output)
 
 ## C2.4.1.a
 

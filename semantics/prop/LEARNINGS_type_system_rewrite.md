@@ -686,3 +686,12 @@ evidence:
 - episode:E0796
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
+
+## L1348 scope='C2.4.1' tags=Len,SArrayV,sparse_has_type_length,Len_result_fits_uint256,toplevel_array_length
+shape: `Len_result_fits_uint256` or related Len bound goal with `Value (ArrayV (SArrayV sparse))`, assumptions `sparse_has_type tv len sparse`, `SORTED $< (MAP FST sparse)`, and `len * slot < bound`.
+pattern: For materialized static arrays, do not reason from the old TypeError catch-all. Use `sparse_has_type_length` to derive `LENGTH sparse <= len`, then chain `LENGTH sparse <= len <= len * slot < bound` with `LESS_EQ_LESS_TRANS`. Keep this arithmetic inside builtin Len boundary theorems, not statement soundness.
+works_when: Applies after `toplevel_array_length_def` has a `Value (ArrayV (SArrayV sparse))` success case returning `LENGTH sparse` and the static array typing facts expose `sparse_has_type` plus sorted sparse keys.
+evidence:
+- episode:E0800
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42893_t001
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42897_t001

@@ -7671,8 +7671,72 @@ Resume eval_all_type_sound_mutual[Expr_Attribute]:
   gvs[Once well_typed_expr_def]
 QED
 
+
 Resume eval_all_type_sound_mutual[Expr_Builtin]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (Builtin _ _ _) = SOME _` mp_tac >>
+      simp_tac(srw_ss())[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr env (Builtin ty bt es)` mp_tac >>
+  simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
+  `env.type_defs = get_tenv cx` by metis_tac[env_consistent_def, env_context_consistent_def] >>
+  `builtin_args_length_ok bt (LENGTH es)` by
+    (drule well_typed_builtin_app_length >> simp[]) >>
+  qpat_x_assum `eval_expr cx (Builtin ty bt es) st = (res,st')` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def,
+                       type_check_def, assert_def] >>
+  Cases_on `bt = Len`
+  >- (qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
+      qpat_assum `bt = Len` (fn th => rewrite_tac[th]) >>
+      simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
+                         type_check_def, assert_def] >>
+      Cases_on `eval_expr cx (HD es) st` >>
+      rename1 `eval_expr cx (HD es) st = (arg_res,arg_st)` >>
+      qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _`
+        (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+      (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _`
+        (qspecl_then [`env`,`st`,`arg_res`,`arg_st`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      Cases_on `arg_res`
+      >- (rename1 `eval_expr cx (HD es) st = (INL arg_tv,arg_st)` >>
+          qpat_x_assum `well_typed_expr env (HD es) ==> _` mp_tac >>
+          (impl_tac >- (qpat_x_assum `well_typed_builtin_app ty bt (MAP expr_type es)` mp_tac >>
+                        Cases_on `es` >> simp[well_typed_builtin_app_def] >>
+                        Cases_on `t` >> gvs[well_typed_expr_def])) >>
+          simp_tac(srw_ss())[] >> strip_tac >>
+          Cases_on `toplevel_array_length cx arg_tv arg_st` >>
+          rename1 `toplevel_array_length cx arg_tv arg_st = (len_res,len_st)` >>
+          Cases_on `len_res`
+          >- (rename1 `toplevel_array_length cx arg_tv arg_st = (INL len,len_st)` >>
+              drule toplevel_array_length_state >> strip_tac >> gvs[] >>
+              strip_tac >> gvs[expr_result_typed_def, expr_runtime_typed_def,
+                               expr_type_def, toplevel_value_typed_Value] >>
+              conj_tac >- simp[no_type_error_result_def] >>
+              qexists_tac `BaseTV (UintT 256)` >>
+              conj_tac
+              >- (qpat_x_assum `well_typed_builtin_app ty Len (MAP expr_type es)` mp_tac >>
+                  Cases_on `es` >> simp[well_typed_builtin_app_def, evaluate_type_def] >>
+                  Cases_on `t` >> gvs[]) >>
+              irule Len_builtin_sound >>
+              qexistsl_tac [`tv`,`arg_tv`,`expr_type (HD es)`,`cx`,`arg_st`,`arg_st`,`get_tenv cx`,`ty`] >>
+              simp[] >>
+              qpat_x_assum `well_typed_builtin_app ty Len (MAP expr_type es)` mp_tac >>
+              Cases_on `es` >> simp[well_typed_builtin_app_def, evaluate_type_def] >>
+              Cases_on `t` >> gvs[]) >>
+          rename1 `toplevel_array_length cx arg_tv arg_st = (INR len_exn,len_st)` >>
+          drule toplevel_array_length_state >> strip_tac >> gvs[] >>
+          strip_tac >> gvs[no_type_error_result_def] >>
+          FAIL_TAC "Expr_Builtin Len branch typed toplevel_array_length TypeError path") >>
+      rename1 `arg_res = INR arg_exn` >>
+      strip_tac >> gvs[]) >>
+  qpat_x_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
+  simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
+                     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
+  FAIL_TAC "Expr_Builtin non-Len branch"
 QED
 
 Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:

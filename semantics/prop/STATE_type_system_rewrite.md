@@ -2,62 +2,61 @@
 Updated: 2026-05-23
 
 ## Cursor
-- component: C2.4.1.1
+- component: C2.4.1.4
 - status: ready
-- active_file: semantics/vyperStateScript.sml
-- next_action: Continue active component C2.4.1.1 only. Edit `toplevel_array_length_def` to add a case before the catch-all: `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) = return $ &(LENGTH sparse)`. Then add a small positive regression theorem (prefer near the definition or in the earliest suitable proof file per PLAN) with shape `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st = (INL (&LENGTH sparse), st)`. Do not yet work on C2.4.1.2 cleanup or the Expr_Builtin resume.
-- expected_goal_shape: After editing the definition, the old local TypeError probe in `vyperTypeStmtSoundnessScript.sml` may fail because the bug is fixed. For C2.4.1.1, first verification should show either the direct SArrayV length regression proves by `simp[toplevel_array_length_def, return_def]`, or build stops at stale counterexample probes slated for C2.4.1.2 cleanup. The intended computation is `(INL (&LENGTH sparse), st)`, not `INR (Error (TypeError ...))`.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) for current downstream visibility; if definition-only regression is placed in `vyperStateScript.sml`, `holbuild(targets=["vyperStateTheory"], timeout=600)` is a faster first check.
+- active_file: semantics/prop/vyperTypeBuiltinsScript.sml
+- next_action: First inspect git status/diff: C2.4.1.3 cleanup and DOSSIER are reviewed but uncommitted; if still only those stable tracked diffs, commit them before proof work. Then continue active component C2.4.1.4 by adding a Len typed-runtime no-TypeError boundary near `Len_result_fits_uint256`/`Len_builtin_sound` in `vyperTypeBuiltinsScript.sml`. Suggested theorem: from `well_typed_builtin_app ty Len [arg_ty]`, `evaluate_type tenv arg_ty = SOME arg_runtime_tv`, `well_formed_type_value arg_runtime_tv`, `toplevel_value_typed arg_tv arg_runtime_tv`, and `toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st')`, prove `F` (or equivalently contradiction/no TypeError). Keep `toplevel_array_length_def` unfolding inside this boundary only.
+- expected_goal_shape: The last verified downstream failure is the planned `Expr_Builtin` Len branch: assumptions include `well_typed_builtin_app ty Len (MAP expr_type es)`, `expr_result_typed env (HD es) arg_tv`, and `toplevel_array_length cx arg_tv arg_st = (INR len_exn,arg_st)`, goal `∀msg. len_exn ≠ Error (TypeError msg)`. For C2.4.1.4, expect smaller boundary subgoals from cases on Len-eligible `arg_ty`/`arg_tv`; after C2.4.1.1, materialized `SArrayV` should simplify to success, not TypeError.
+- verify_with: holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600) for the boundary if placed in builtins; then holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) should still stop at the Expr_Builtin FAIL_TAC until C2.4.1.5 integrates the boundary.
 
 ## If This Fails
-- If the SArrayV regression itself fails, inspect generated/failed goal and fix the new `toplevel_array_length_def` equation. If the build instead fails at old local counterexample theorems in `vyperTypeStmtSoundnessScript.sml`, checkpoint C2.4.1.1 progress with evidence if the definition/regression is accepted, then proceed only to C2.4.1.2 after closing/reviewing C2.4.1.1. Do not patch the main Expr_Builtin proof before C2.4.1.3/C2.4.1.4.
+- If the boundary proof needs large unfolding or brittle assumptions, checkpoint_progress for C2.4.1.4 with the exact holbuild goal and ask plan_oracle only after a terminal stuck/abandoned closure. If `vyperTypeStmtSoundnessTheory` fails before the known Expr_Builtin Len FAIL_TAC, inspect whether the uncommitted cleanup or previous commits were lost before changing proofs.
 
 ## Do Not Retry
-- Proving that materialized `Value (ArrayV (SArrayV _))` fixed arrays are unreachable from well-typed expressions.: False: E0796 proves reachability via a singleton local `Name` under `env_consistent`, `state_well_typed`, `context_well_typed`, `accounts_well_typed`, and `functions_well_typed`.
+- Proving materialized `Value (ArrayV (SArrayV _))` fixed arrays are unreachable from well-typed expressions.: False; E0796 proved reachability via a singleton local `Name` under full runtime invariants.
   - evidence: episode:E0796
   - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001
-- Continuing the main `eval_all_type_sound_mutual[Expr_Builtin]` Len proof before repairing `toplevel_array_length` and proving the boundary lemma.: The old main-goal TypeError branch is semantically real under current definitions; tactics cannot refute it.
+- Leaving or recreating local facts that fixed-array `SArrayV` Len returns `Error (TypeError "toplevel_array_length")`.: Definition repair C2.4.1.1 makes that behavior false; C2.4.1.3 deleted the stale probes and audit found no remaining names.
+  - evidence: episode:E0801
+  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42907_t001
+- Inlining the full `toplevel_array_length_def` case split directly in `eval_all_type_sound_mutual[Expr_Builtin]`.: PLAN assigns this to C2.4.1.4 as a boundary lemma, then C2.4.1.5 should consume it; duplicating in the consumer repeats the earlier abstraction mistake.
+  - evidence: plan:C2.4.1.4
   - evidence: episode:E0794
-  - evidence: episode:E0796
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
-- Leaving old local theorems named `...type_error...probe` as source obligations after the definition repair.: They describe the old buggy behavior and should become false once C2.4.1.1 is implemented; C2.4.1.2 owns removing/replacing them.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
-  - evidence: source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7674
-- Using the static fixed-array bound `n` for `SArrayV` length in `toplevel_array_length`.: The runtime `Value (ArrayV (SArrayV sparse))` case does not carry `n`; PLAN authorizes `&LENGTH sparse` unless a repository convention says otherwise.
-  - evidence: tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
+- Using the static fixed-array bound `n` as the returned length for materialized `SArrayV` in `toplevel_array_length`.: The runtime value carries only `sparse`; the accepted repair returns `&LENGTH sparse` and then bounds it with `sparse_has_type_length`.
+  - evidence: episode:E0797
+  - evidence: episode:E0800
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach now authorized: change the executable semantics of `Len` for materialized static arrays, rather than adding stronger proof invariants.
-- We were optimizing the wrong theorem when trying to close `Expr_Builtin` directly; the definition is the right abstraction boundary.
-- The PLAN decomposition is now correct: small executable repair, remove stale diagnostics, prove boundary lemma, then integrate.
-- Do not retry tactics in the main resume until the boundary lemma exists. If proof becomes hard again, suspect the helper statement/interface, not the goal tactics.
-- A fresh expert should first question whether `&LENGTH sparse` is semantically the right length for sparse static arrays; the PLAN chose it because no static bound is available in `Value (ArrayV (SArrayV sparse))` at `toplevel_array_length`.
+- Outside-the-box option already used: change executable Len semantics for materialized static arrays. The remaining work should not revisit unreachability or statement weakening.
+- Check whether placing the boundary in `vyperTypeBuiltinsScript.sml` creates any dependency friction; if so, local placement in `vyperTypeStmtSoundnessScript.sml` is allowed by PLAN, but avoid duplicating the case split in the resume.
+- A fresh expert should first question whether the boundary theorem’s conclusion matches the old FAIL_TAC use site exactly; if it requires too much manual instantiation in C2.4.1.5, restate it before proving more.
+- If C2.4.1.4 becomes hard, suspect the helper statement/interface, not tactics. The theorem should be a small definition-boundary case split after C2.4.1.1/C2.4.1.2.
 
 ### What Went Wrong
-- The prior proof path assumed the Len TypeError branch was a missing helper, but E0796 proved a concrete reachable counterexample: a local `Name` expression of fixed-array type can evaluate to `Value (ArrayV (SArrayV []))`, and old `toplevel_array_length_def` returns `Error (TypeError "toplevel_array_length")` for that value under full runtime invariants.
-- The theorem was not tactically stuck; the executable semantics omitted a runtime representation admitted by the type system. Continuing inside the large `Expr_Builtin` resume was optimizing the wrong layer.
-- Current source has diagnostic local probe theorems for the old bug in `vyperTypeStmtSoundnessScript.sml`; after repairing `toplevel_array_length`, at least the TypeError probe is intentionally false and must be removed/replaced under C2.4.1.2.
+- Earlier sessions optimized the large `Expr_Builtin` resume while the executable semantics omitted a runtime representation admitted by typing. E0796 proved the reachable counterexample; C2.4.1.1 repaired the definition and C2.4.1.2 repaired the exposed builtin length bound.
+- After the definition repair, the old cleanup component was initially misordered: `vyperTypeStmtSoundnessTheory` failed first in `Len_result_fits_uint256`, not at stale probes. The strategist accepted E0798 and inserted the builtin repair before cleanup.
+- Current source still has a partial `Expr_Builtin` proof skeleton with a `FAIL_TAC` in the Len TypeError path and another for non-Len. That is intentional: C2.4.1.4 should add a boundary lemma before C2.4.1.5 integrates it.
 
 ### Ignored Signals
-- The all-sized-values boundary failure from E0794 already showed `SArrayV` was the suspicious case; the important question was reachability, not another case split in the main theorem.
-- The local `Name` path was enough: no array literal, ABI machinery, or realistic contract setup was needed.
-- The working tree contains many pre-existing untracked test files and dirty plan/state/dossier files; do not stage them accidentally.
+- The all-sized-values helper failure in E0794 already showed `SArrayV` needed definition-level attention; further inline case splitting in the consumer proof was not the right abstraction.
+- A downstream build after C2.4.1.1 was essential: it exposed `Len_result_fits_uint256` fallout before stale probe cleanup could be verified.
+- There are many pre-existing untracked test/probe files; do not stage them. Current stable tracked source/dossier changes from C2.4.1.3 were not committed before handoff.
 
 ### Strategy Adjustments
-- Follow the replacement PLAN exactly: C2.4.1.1 definition repair, C2.4.1.2 cleanup of old probes, C2.4.1.3 boundary lemma, C2.4.1.4 integration in `Expr_Builtin`.
-- For C2.4.1.1, implement the semantic fix in `semantics/vyperStateScript.sml`, not as a proof workaround in statement soundness.
-- For later C2.4.1.3, state the no-TypeError boundary at the typed runtime-value level so the main theorem can use it directly at the old FAIL_TAC site.
+- Work at the boundary level: put the no-TypeError theorem near `Len_result_fits_uint256`/`Len_builtin_sound` or another builtin-facing location, and keep `toplevel_array_length_def` unfolding out of the statement mutual proof.
+- Before new proof edits, preserve the reviewed C2.4.1.3 cleanup by committing only `semantics/prop/vyperTypeStmtSoundnessScript.sml` and task-owned dossier/plan state that actually changed; never `git add -A`.
+- For the boundary lemma, use case analysis over `well_typed_builtin_app_def`, `evaluate_type_def`, `toplevel_value_typed_def`, and repaired `toplevel_array_length_def`. Do not attempt to prove materialized `SArrayV` unreachable.
 
 ### Oracle Feedback
-- Strategist accepted E0796 and replaced the unprovability gate with a repair subtree. Key decision: support `Value (ArrayV (SArrayV sparse))` in `toplevel_array_length` rather than trying to exclude it.
-- Oracle explicitly warned not to leave old counterexample probes as current source obligations after the definition repair.
-- Oracle guidance says use `&LENGTH sparse` as the available runtime length convention unless repository evidence dictates otherwise; do not use the static fixed bound because it is not carried by `SArrayV` in this function.
+- Strategist’s key insight held: support `Value (ArrayV (SArrayV sparse))` in `toplevel_array_length` and repair the builtin Len boundary, rather than weakening public soundness.
+- Strategist initially missed the immediate `Len_result_fits_uint256` fallout; E0798 corrected the plan and the `sparse_has_type_length` guidance proved effective in E0800.
+- C2.4.1.3 cleanup was accepted; no local theorem should now claim fixed-array Len returns `TypeError "toplevel_array_length"`.
 
 ## Evidence Pointers
-- episode:E0796 - proved reachable full Len TypeError counterexample under full runtime invariants.
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001 - holbuild accepted both C2.4.1.b probe theorems and then failed only at the known main Expr_Builtin FAIL marker.
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001 - strategist review replaced the gate with repair subtree C2.4.1.1--C2.4.1.4.
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42859_t004 - current PLAN frontier/active component is C2.4.1.1.
-- source:semantics/vyperStateScript.sml:662 - `toplevel_array_length_def` currently has materialized DynArray/Tuple/Bytes/String cases and catch-all TypeError; add SArrayV before catch-all.
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7674 - old diagnostic probes currently live before `Resume eval_all_type_sound_mutual[Expr_Builtin]`.
+- episode:E0800 - repaired `Len_result_fits_uint256` for materialized static arrays; `vyperTypeBuiltinsTheory` builds
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42897_t001 - clean `vyperTypeBuiltinsTheory` build after the Len bound repair
+- episode:E0801 - removed stale fixed-array Len TypeError probes and grep-audited source
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42907_t003 - downstream build now reaches the planned Expr_Builtin Len TypeError-path FAIL_TAC
+- tool_output:TO_type_system_rewrite-20260522T073012Z_m42913_t004 - current PLAN frontier/active component is C2.4.1.4
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7732 - current known FAIL_TAC site for later integration
