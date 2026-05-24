@@ -27,6 +27,10 @@ Ancestors
 Libs
   fcpLib
 
+val _ = delsimps ["ao_iszero_chain_inv_def",
+                  "ao_chains_defined_at_def",
+                  "ao_chains_defined_def"]
+
 (* ao_fn_fresh_vars, ao_fn_total_fresh_vars, ao_dfg_inv: algebraicOptDefsTheory
    ao_iszero_chain_inv, ao_chains_defined_at, ao_targets_wf: aoResolveObligationTheory *)
 
@@ -2722,6 +2726,44 @@ QED
      defined, which it isn't for instruction outputs at entry)
    - range_sound: trivially true for entry block (FEMPTY range state)
    - cfg_dfs_pre: entry block is always in cfg_dfs_pre for wf_function *)
+Triviality ao_block_inv_state_equiv_compat[local]:
+  !fn fn0 dfg targets ra fv s1 s2.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ra = range_analyze fn0 /\
+    fv = ao_fn_fresh_vars fn /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
+    state_equiv fv s1 s2 /\
+    ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s1 /\
+    ao_chains_defined_at targets s1 /\
+    range_sound (df_widen_at NONE ra s1.vs_current_bb 0) s1 /\
+    MEM s1.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre ==>
+    ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s2 /\
+    ao_chains_defined_at targets s2 /\
+    range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2 /\
+    MEM s2.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
+Proof
+  rpt gen_tac >> strip_tac >>
+  `s2.vs_current_bb = s1.vs_current_bb` by fs[state_equiv_def] >>
+  `ao_targets_wf targets` by
+    metis_tac[ao_compute_fn_iszero_targets_wf] >>
+  `ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
+   ao_iszero_chain_inv targets s2 /\
+   ao_chains_defined_at targets s2` by
+    metis_tac[ao_sinv_state_equiv_compat] >>
+  `range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2` by
+    metis_tac[ao_range_sound_state_equiv_compat] >>
+  metis_tac[]
+QED
+
 Theorem ao_phases123_run_blocks_sim_inv[local]:
   !fn fn0 mid dfg ra targets fn1 fuel ctx s.
     fn0 = fn with fn_blocks :=
@@ -2818,8 +2860,17 @@ Proof
                 first_assum ACCEPT_TAC)])
     >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
        cheat
-    >- (* block_inv compat with state_equiv fv — WIP: needs inst_idx fixes *)
-       cheat
+    >- (* block_inv compat with state_equiv fv *)
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `block_inv _` mp_tac >>
+        simp_tac std_ss [Abbr `block_inv`] >> strip_tac >>
+        qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `ra`, `fv`, `s1`, `s2`]
+          mp_tac ao_block_inv_state_equiv_compat >>
+        impl_tac >- (
+          rpt conj_tac >>
+          TRY (first_assum ACCEPT_TAC) >>
+          simp[markerTheory.Abbrev_def]) >>
+        simp[])
     >- (* operand lookup under state_equiv *)
        (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
         `x NOTIN fv` by
