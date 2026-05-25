@@ -97,7 +97,7 @@ Proof
   >- (imp_res_tac ao_handle_offset_inst_id >> simp[])
 QED
 
-Theorem ao_handle_offset_inst_outputs[local]:
+Theorem ao_handle_offset_inst_outputs:
   !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
 Proof
   gen_tac >>
@@ -1835,7 +1835,7 @@ QED
 (* DFG output variables from fn0 are not in ao_fn_fresh_vars fn.
    Key: ao_handle_offset_inst preserves inst_outputs, so DFG tracks
    the same outputs as fn's original instructions. *)
-Triviality fn_insts_blocks_map_offset[local]:
+Theorem fn_insts_blocks_map_offset:
   !bbs inst.
     MEM inst (fn_insts_blocks
       (MAP (\bb. bb with bb_instructions :=
@@ -2065,7 +2065,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Triviality ao_fn_targets_chain_tail_var[local]:
+Theorem ao_fn_targets_chain_tail_var:
   !fn v chain k.
     ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain /\
     0 < k /\ k < LENGTH chain ==>
@@ -2204,7 +2204,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Triviality ao_fn_targets_chain_var_is_key[local]:
+Theorem ao_fn_targets_chain_var_is_key:
   !fn v chain k w.
     ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain /\
     0 < k /\ k < LENGTH chain /\ EL k chain = Var w ==>
@@ -3015,7 +3015,7 @@ Proof
       metis_tac[])
 QED
 
-Triviality ao_fn_targets_key_is_output[local]:
+Theorem ao_fn_targets_key_is_output:
   !fn v chain.
     ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain ==>
     ?inst. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs
