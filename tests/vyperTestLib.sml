@@ -213,7 +213,12 @@ val unsupported_code = [
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
   "msg.data",
-  "gas="
+  "gas=",
+  (* JSON ABI interface imports currently expose legacy ABI entries
+     with constant/payable instead of stateMutability, and dynamic ABI bytes
+     as length="..."; the frontend/ABI decoder does not support those yet. *)
+  "import jsonabi as jsonabi",
+  "import JSONInterface"
 ]
 
 fun has_unsupported_patterns src =
