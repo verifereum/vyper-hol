@@ -1,99 +1,29 @@
 (* Algebraic optimization correctness: main composition theorem.
  *
- * The transform ao_transform_function has 4 phases:
- *   Phase 1: offset canonicalization (fn → fn0)
- *   Phase 2: iszero chain analysis (computes targets)
- *   Phase 3: main rewrite pass (fn0 → fn1)
- *   Phase 4: comparator flip (fn1 → final)
- *
- * Each phase has an independent correctness theorem:
+ * Composes phase correctness theorems:
  *   Phase 1: aoPhase1ProofTheory.ao_phase1_correct (proved)
  *   Phase 2: aoPhase2ProofTheory.ao_phase2_correct (proved)
- *   Phase 3: ao_phase3_correct (cheated)
- *   Phase 4: ao_phase4_correct (cheated)
+ *   Phase 3: aoPhase3ProofTheory.ao_phase3_correct (cheated)
+ *   Phase 4: aoPhase4ProofTheory.ao_phase4_correct (cheated)
+ *   WF:      aoPreservationTheory.ao_phases123_preserve_wf (cheated)
  *
  * TOP-LEVEL: ao_transform_function_correct
  *)
 
 Theory algebraicOptProof
 Ancestors
-  algebraicOptDefs algebraicOptWf
-  aoPhase1Proof aoPhase2Proof aoTargetProps
+  algebraicOptDefs
+  aoPhase1Proof aoPhase2Proof aoPhase3Proof aoPhase4Proof
+  aoPreservation aoTargetProps
   stateEquiv stateEquivProps execEquivProps
   venomExecSemantics venomExecProofs venomWf venomState venomInst
   passSimulationProps passSimulationDefs
-  analysisSimDefs rangeAnalysisDefs
-  aoResolveObligation aoCmpFlipObligation
 Libs
   pairLib BasicProvers
 
 val _ = delsimps ["ao_iszero_chain_inv_def",
                   "ao_chains_defined_at_def",
                   "ao_chains_defined_def"]
-
-(* ===== Phase 3: main rewrite pass ===== *)
-
-Theorem ao_phase3_correct:
-  !fuel ctx fn s.
-    let fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let targets = ao_compute_fn_iszero_targets fn0 in
-    let dfg = dfg_build_function fn0 in
-    let ra = range_analyze fn0 in
-    let mid = fn_max_inst_id fn0 in
-    let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
-    let fv = ao_fn_fresh_vars fn in
-    wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
-    FDOM s.vs_vars = {} /\
-    fn_entry_label fn = SOME s.vs_current_bb ==>
-    (?e. run_blocks fuel ctx fn0 s = Error e) \/
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (run_blocks fuel ctx fn0 s) (run_blocks fuel ctx fn1 s)
-Proof
-  cheat
-QED
-
-(* ===== Phase 4: comparator flip ===== *)
-
-Theorem ao_phase4_correct:
-  !fuel ctx fn1 s.
-    let dfg1 = dfg_build_function fn1 in
-    let dead = ao_cmp_flip_dead_vars dfg1 fn1 in
-    wf_function fn1 /\ ssa_form fn1 /\
-    EVERY inst_wf (fn_insts fn1) /\
-    fn_inst_ids_distinct fn1 /\
-    (!inst. MEM inst (fn_insts fn1) ==> inst.inst_opcode <> INVOKE) ==>
-    (?e. run_blocks fuel ctx fn1 s = Error e) \/
-    lift_result (state_equiv dead) (execution_equiv dead) (execution_equiv dead)
-      (run_blocks fuel ctx fn1 s)
-      (run_blocks fuel ctx (ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1) s)
-Proof
-  cheat
-QED
-
-(* ===== WF Preservation: phases 1-3 preserve structure ===== *)
-
-Theorem ao_phases123_preserve_wf:
-  !fn.
-    let fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
-    let targets = ao_compute_fn_iszero_targets fn0 in
-    let dfg = dfg_build_function fn0 in
-    let ra = range_analyze fn0 in
-    let mid = fn_max_inst_id fn0 in
-    let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
-    wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) ==>
-    wf_function fn1 /\ ssa_form fn1 /\
-    EVERY inst_wf (fn_insts fn1) /\
-    fn_inst_ids_distinct fn1 /\
-    (!inst. MEM inst (fn_insts fn1) ==> inst.inst_opcode <> INVOKE)
-Proof
-  cheat
-QED
 
 (* ===== Main composition ===== *)
 
@@ -137,8 +67,7 @@ Proof
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   (* WF preservation *)
   `wf_function fn1 /\ ssa_form fn1 /\
-   EVERY inst_wf (fn_insts fn1) /\ fn_inst_ids_distinct fn1 /\
-   (!inst. MEM inst (fn_insts fn1) ==> inst.inst_opcode <> INVOKE)` by
+   EVERY inst_wf (fn_insts fn1)` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases123_preserve_wf) >>
      disch_then (qspec_then `fn` mp_tac) >>
      simp[Abbr `fn0`, Abbr `fn1`, Abbr `targets`, Abbr `dfg`,
