@@ -11,7 +11,7 @@
  * are cheated (the original cheats from the monolithic proof).
  *)
 
-Theory algebraicOptComposition
+Theory algebraicOptProof
 Ancestors
   algebraicOptDefs algebraicOptWf algebraicOptProofs
   stateEquiv stateEquivProps execEquivProps
