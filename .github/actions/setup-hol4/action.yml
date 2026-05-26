@@ -4,8 +4,7 @@ description: 'Builds/restores HOL4 and sets HOLDIR'
 inputs:
   hol4-ref:
     description: 'HOL4 git ref to use'
-    required: false
-    default: 'master'
+    required: true
   polyml-rev:
     description: 'Resolved Poly/ML revision, used in cache key'
     required: true
@@ -22,11 +21,11 @@ runs:
       id: version
       shell: bash
       run: |
-        rev=$(git ls-remote https://github.com/HOL-Theorem-Prover/HOL.git ${{ inputs.hol4-ref }} | cut -f1)
-        echo "hol4-rev=$rev" >> "$GITHUB_OUTPUT"
+        hol4=${{ inputs.hol4-ref }}
+        echo "hol4-rev=$hol4" >> "$GITHUB_OUTPUT"
 
     - name: Cache HOL4
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       id: cache-hol4
       with:
         path: ~/HOL
@@ -36,8 +35,9 @@ runs:
       if: steps.cache-hol4.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        git clone -b "${{ inputs.hol4-ref }}" https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
+        git clone https://github.com/HOL-Theorem-Prover/HOL.git ~/HOL
         cd ~/HOL
+        git checkout --detach "${{ steps.version.outputs.hol4-rev }}"
         poly < tools/smart-configure.sml
         bin/build
 

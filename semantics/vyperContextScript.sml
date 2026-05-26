@@ -219,7 +219,7 @@ Definition evaluate_extract32_def:
     bs = DROP n bs
   in case bt
      of BytesT (Fixed m) =>
-          if m ≤ LENGTH bs then
+          if m ≤ LENGTH bs ∧ EVERY ($= 0w) (DROP m (TAKE 32 bs)) then
             INL $ BytesV (TAKE m bs)
           else INR (RuntimeError "evaluate_extract32 bytesM")
       | UintT m =>
