@@ -15,15 +15,20 @@ jobs:
     outputs:
       build-cache-key: ${{ steps.build-key.outputs.key }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-polyml
         id: polyml
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
+        with:
+          build: 'false'
       - uses: ./.github/actions/setup-hol4
         id: hol4
         with:
+          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
-      - uses: ./.github/actions/setup-verifereum
-        id: verifereum
       - uses: ./.github/actions/holmake-verifereum
         with:
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
@@ -36,7 +41,7 @@ jobs:
           echo "key=vyper-holmake-${{ runner.os }}-$deps_hash-${{ github.sha }}" >> "$GITHUB_OUTPUT"
       - name: Restore build cache
         id: build-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: '**/.hol'
           key: ${{ steps.build-key.outputs.key }}
@@ -50,7 +55,7 @@ jobs:
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-vyper-test-exports
         id: exports
 
@@ -62,22 +67,27 @@ jobs:
       matrix:
         group: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-polyml
         id: polyml
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
+        with:
+          build: 'false'
       - uses: ./.github/actions/setup-hol4
         id: hol4
         with:
+          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
-      - uses: ./.github/actions/setup-verifereum
-        id: verifereum
       - uses: ./.github/actions/holmake-verifereum
         with:
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
           hol4-rev: ${{ steps.hol4.outputs.hol4-rev }}
           verifereum-rev: ${{ steps.verifereum.outputs.verifereum-rev }}
       - name: Restore build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: '**/.hol'
           key: ${{ needs.build.outputs.build-cache-key }}
@@ -85,7 +95,7 @@ jobs:
       - name: Fix restored timestamps
         run: find . -path '*/.hol/*' -type f -exec touch {} +
       - name: Restore Vyper test exports
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: tests/vyper-test-exports
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
