@@ -403,7 +403,14 @@ Theorem eval_preserves_swt:
     state_well_typed st' /\ env_consistent env cx st' /\
     (!v ret_tv. res = INR (ReturnException v) /\
                 evaluate_type (get_tenv cx) ret_ty = SOME ret_tv ==>
-                value_has_type ret_tv v)) /\
+                value_has_type ret_tv v) /\
+    (* An AnnAssign that succeeds extends the typing env with its local;
+       this threads the local into env_consistent for later siblings
+       (used in the stmts_cons case). *)
+    (!id typ e. s = AnnAssign id typ e /\ res = INL () ==>
+       env_consistent
+         (env with var_types updated_by
+            (flip FUPDATE (string_to_num id, typ))) cx st')) /\
   (* P1: eval_stmts — state + env preserved, return exceptions well-typed *)
   (!cx ss. !env ret_ty st res st'.
     well_typed_stmts env ret_ty ss /\
@@ -653,16 +660,34 @@ Resume eval_preserves_swt[stmts_cons]:
   reverse (Cases_on `res_s`) >> simp_tac (srw_ss()) [] >>
   strip_tac >> gvs[] >>
   gvs[well_typed_stmt_def] >>
-  (* P0 IH *)
+  (* P0 IH: state + env preservation through s1, plus (when s1 is an
+     AnnAssign) the extended-env consistency for later siblings. *)
   qpat_x_assum `!env' ret_ty' st'' res' st''. well_typed_stmt _ _ _ /\ _ ==> _`
     (qspecl_then [`env`, `ret_ty`, `st`] mp_tac) >> simp[] >>
   strip_tac >>
   TRY (gvs[] >> NO_TAC) >>
-  (* P1 guarded IH *)
+  (* The tail is well-typed under the env extended across an AnnAssign
+     (case s1 of AnnAssign id typ e => env+local | _ => env).  Establish
+     env_consistent for THAT env at st_mid, then apply the P1 IH. *)
+  qmatch_asmsub_abbrev_tac `well_typed_stmts env_post ret_ty ss` >>
+  `env_consistent env_post cx st_mid` by (
+    Cases_on `s1` >> fs[Abbr`env_post`] >>
+    first_x_assum irule >> simp[]) >>
+  (* P1 guarded IH (env_post) gives state_well_typed st' and
+     env_consistent env_post cx st'; weaken env_post back to env. *)
   qpat_x_assum `!s'' t. eval_stmt _ _ s'' = (INL (), t) ==> _`
     (qspecl_then [`st`, `st_mid`] mp_tac) >> simp[] >>
-  disch_then (qspecl_then [`env`, `ret_ty`, `st_mid`] mp_tac) >>
-  simp[] >> disch_then drule >> simp[]
+  disch_then (qspecl_then [`env_post`, `ret_ty`, `st_mid`] mp_tac) >>
+  simp[] >>
+  strip_tac >>
+  (* IH gives env_consistent env_post cx st'; weaken back to env.
+     Resolve env_post per statement form: only AnnAssign extends it. *)
+  qpat_x_assum `env_consistent env_post cx st'` mp_tac >>
+  Cases_on `s1` >> simp[Abbr`env_post`] >> strip_tac >>
+  irule env_consistent_drop_var >>
+  goal_assum (first_assum o mp_then.mp_then mp_then.Any mp_tac) >>
+  qpat_x_assum `well_typed_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_AnnAssign])
 QED
 
 Resume eval_preserves_swt[BaseTarget]:
@@ -952,6 +977,12 @@ Resume eval_preserves_swt[AnnAssign]:
   rpt CONJ_TAC >>
   TRY (irule new_variable_swt >> metis_tac[] >> NO_TAC) >>
   TRY (irule new_variable_ec >> metis_tac[] >> NO_TAC) >>
+  (* New conjunct: AnnAssign extends the typing env with its local *)
+  TRY (rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+       Cases_on `x''` >> gvs[] >>
+       irule new_variable_ec_extend >>
+       simp[] >> qexistsl_tac [`r`, `x'`] >> simp[] >>
+       metis_tac[SOME_11] >> NO_TAC) >>
   rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   imp_res_tac new_variable_not_return >> gvs[]
 QED

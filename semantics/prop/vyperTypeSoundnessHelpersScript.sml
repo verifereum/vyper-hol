@@ -3324,6 +3324,66 @@ Proof
   >> res_tac
 QED
 
+(* Extend a consistent env with a local whose binding is already
+   present in the state's scopes, with a matching declared type.
+   Purely about env_consistent + a scope-lookup fact (no evaluation),
+   so it needs no value-typing / P7 reasoning. *)
+Theorem env_consistent_extend_scope:
+  !env cx st id typ entry.
+    env_consistent env cx st /\
+    string_to_num id NOTIN FDOM env.var_types /\
+    lookup_scopes (string_to_num id) st.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) typ = SOME entry.type ==>
+    env_consistent
+      (env with var_types updated_by (flip FUPDATE (string_to_num id, typ)))
+      cx st
+Proof
+  rw[env_consistent_def] >> fs[env_consistent_def]
+  >- (
+    (* var_types: the new id, or a pre-existing one *)
+    Cases_on `id' = string_to_num id`
+    >- gvs[finite_mapTheory.FLOOKUP_UPDATE]
+    >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >> res_tac)
+  >> res_tac
+QED
+
+(* new_variable, on success, makes the env EXTENDED with the freshly
+   declared local consistent: the new var maps to typ in var_types and
+   to the matching type_value tv in the freshly added scope entry.
+   This is what threads an AnnAssign's local into the typing env for
+   subsequent sibling statements. *)
+Theorem new_variable_ec_extend:
+  !id tv typ v st st' env cx.
+    new_variable id tv v st = (INL (), st') /\
+    env_consistent env cx st /\
+    string_to_num id NOTIN FDOM env.var_types /\
+    evaluate_type (get_tenv cx) typ = SOME tv ==>
+    env_consistent
+      (env with var_types updated_by (flip FUPDATE (string_to_num id, typ)))
+      cx st'
+Proof
+  rw[new_variable_def, LET_THM] >>
+  gvs[bind_def, ignore_bind_def, get_scopes_def, type_check_def,
+      check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `st.scopes` >> gvs[raise_def, set_scopes_def, return_def] >>
+  rename1 `h::t` >>
+  `!k. k <> string_to_num id ==>
+    lookup_scopes k ((h |+ (string_to_num id,
+        <| assignable := T; type := tv; value := v |>)) :: t) =
+    lookup_scopes k (h :: t)` by
+    (rw[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rw[env_consistent_def] >> fs[env_consistent_def]
+  >- (
+    (* var_types: either the new id or a pre-existing one *)
+    Cases_on `id' = string_to_num id`
+    >- (gvs[finite_mapTheory.FLOOKUP_UPDATE,
+            lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE])
+    >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+       res_tac >> gvs[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE])
+  (* global_types + toplevel_types + flag_members: env fields unchanged *)
+  >> res_tac
+QED
+
 (* new_variable never produces ReturnException *)
 Theorem new_variable_not_return:
   !id tv v st e st'.

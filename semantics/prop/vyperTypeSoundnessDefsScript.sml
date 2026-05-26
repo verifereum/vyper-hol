@@ -604,7 +604,19 @@ Definition well_typed_stmt_def:
   well_typed_stmts env ret_ty [] = T /\
   well_typed_stmts env ret_ty (s::ss) =
     (well_typed_stmt env ret_ty s /\
-     well_typed_stmts env ret_ty ss)
+     (* An AnnAssign declares a local that is in scope for the
+        remaining sibling statements; thread the extended env
+        through, mirroring the For env-extension above.  All other
+        statement forms introduce no names visible to later siblings
+        (For/If scope their bindings to their own bodies), so the env
+        is threaded unchanged. *)
+     well_typed_stmts
+       (case s of
+          AnnAssign id typ e =>
+            env with var_types updated_by
+              (flip FUPDATE (string_to_num id, typ))
+        | _ => env)
+       ret_ty ss)
 Termination
   WF_REL_TAC`measure (λx.
     case x of INL(_,_,t) => stmt_size t
