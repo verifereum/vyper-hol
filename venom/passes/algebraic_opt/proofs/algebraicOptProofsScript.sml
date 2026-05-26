@@ -2288,7 +2288,20 @@ Proof
                rpt strip_tac >>
                simp[eval_operand_def, lookup_var_def,
                     finite_mapTheory.FLOOKUP_DEF] >>
-               cheat)) >>
+               Cases_on `inst.inst_opcode = INVOKE`
+               >- (qpat_x_assum `~(?e. step_inst _ _ _ _ = Error _)` mp_tac >>
+                   simp[Once step_inst_def] >> simp[decode_invoke_def] >>
+                   BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
+                   cheat)
+               >- (`step_inst fuel ctx inst s = step_inst_base inst s` by
+                     simp[step_inst_non_invoke] >>
+                   `!e. step_inst_base inst s <> Error e` by
+                     (rpt strip_tac >>
+                      `?e. step_inst fuel ctx inst s = Error e` by metis_tac[] >>
+                      metis_tac[]) >>
+                   drule_all step_inst_base_nonerr_var_fdom >>
+                   simp[] >> disch_then irule >>
+                   cheat))) >>
        NO_TAC) >>
   cheat)
 QED
