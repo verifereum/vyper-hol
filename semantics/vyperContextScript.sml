@@ -378,7 +378,9 @@ Definition evaluate_builtin_def:
      | _ => INR (TypeError "Not flag type")) ∧
   evaluate_builtin cx _ ty Neg [IntV i] =
     (case type_to_int_bound ty
-     of SOME u => bounded_int_op u (-i)
+     of SOME u =>
+       if within_int_bound u i then bounded_int_op u (-i)
+       else INR (RuntimeError "Neg operand bound")
       | NONE => INR (TypeError "Neg type")) ∧
   evaluate_builtin cx _ _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
   evaluate_builtin cx _ _ Keccak256 [BytesV ls] = INL $ BytesV $
