@@ -2299,9 +2299,10 @@ Proof
                      (rpt strip_tac >>
                       `?e. step_inst fuel ctx inst s = Error e` by metis_tac[] >>
                       metis_tac[]) >>
-                   drule_all step_inst_base_nonerr_var_fdom >>
+                   qspecl_then [`inst`, `s`, `v`] mp_tac
+                     step_inst_base_nonerr_var_fdom >>
                    simp[] >> disch_then irule >>
-                   cheat))) >>
+                   rpt strip_tac >> gvs[inst_wf_def]))) >>
        NO_TAC) >>
   cheat)
 QED
