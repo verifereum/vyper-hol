@@ -2268,13 +2268,28 @@ Triviality ao_per_inst_sim_fn0_inv[local]:
         (ao_transform_inst mid dfg ra bb.bb_label v targets inst) s)
 Proof
   rpt gen_tac >> strip_tac >>
-  (* If original errors, done *)
   Cases_on `?e. step_inst fuel ctx inst s = Error e`
   >- (DISJ1_TAC >> metis_tac[])
   >- (
   ho_match_mp_tac (Q.SPEC `ao_fn_fresh_vars fn`
     ao_transform_inst_sim_inst) >> simp[] >>
   drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
+  `ao_chains_defined_at targets s` by
+    (irule ao_chain_defined_prefix_implies_at >> simp[]) >>
+  rpt conj_tac >>
+  TRY (strip_tac >>
+       Cases_on `inst.inst_opcode = ISZERO`
+       >- (simp[ao_resolve_iszero_inst_def, instruction_component_equality] >>
+           irule listTheory.MAP_CONG >> simp[] >>
+           Cases >> simp[ao_resolve_iszero_op_def])
+       >- (Cases_on `inst.inst_opcode = PHI`
+           >- cheat
+           >- (irule ao_resolve_iszero_inst_sim_at >> simp[] >>
+               rpt strip_tac >>
+               simp[eval_operand_def, lookup_var_def,
+                    finite_mapTheory.FLOOKUP_DEF] >>
+               cheat)) >>
+       NO_TAC) >>
   cheat)
 QED
 

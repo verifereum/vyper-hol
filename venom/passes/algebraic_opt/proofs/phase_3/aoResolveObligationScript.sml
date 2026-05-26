@@ -934,7 +934,7 @@ QED
 
 Theorem ao_resolve_iszero_inst_sim:
   !targets inst fuel ctx st.
-    inst_wf inst /\ inst.inst_opcode <> INVOKE /\
+    inst_wf inst /\
     inst.inst_opcode <> PHI /\
     ao_iszero_chain_inv targets st /\
     ao_chains_defined targets st /\
@@ -972,7 +972,7 @@ QED
    function entry when chain variables are undefined instruction outputs. *)
 Theorem ao_resolve_iszero_inst_sim_local:
   !targets inst fuel ctx st.
-    inst_wf inst /\ inst.inst_opcode <> INVOKE /\
+    inst_wf inst /\
     inst.inst_opcode <> PHI /\
     ao_targets_wf targets /\
     (!v chain k. MEM (Var v) inst.inst_operands /\
@@ -1033,7 +1033,7 @@ QED
    ao_chains_defined_at implies chain definedness for that variable. *)
 Theorem ao_resolve_iszero_inst_sim_at:
   !targets inst fuel ctx st.
-    inst_wf inst /\ inst.inst_opcode <> INVOKE /\
+    inst_wf inst /\
     inst.inst_opcode <> PHI /\
     ao_targets_wf targets /\
     ao_chains_defined_at targets st /\
