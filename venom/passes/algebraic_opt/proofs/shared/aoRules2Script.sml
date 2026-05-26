@@ -1,14 +1,14 @@
 (*
  * Algebraic Optimization — Additional Per-Rule step_inst_base Equivalence
  *
- * TOP-LEVEL: ao_rule_* theorems for opcodes not covered by algebraicOptRules:
+ * TOP-LEVEL: ao_rule_* theorems for opcodes not covered by aoRules:
  *   - signextend identity (w >= 31w)
  *   - exp rules (x**0=1, x**1=x, 1**x=1, 0**x=iszero)
  *   - safe_sdiv / safe_smod identities
  *   - power-of-two reductions (mul↔shl, div↔shr, mod↔and)
  *   - comparator boundary rules (GT x MAX=0, LT x 0=0, etc.)
  *)
-Theory algebraicOptRules2
+Theory aoRules2
 Ancestors
   algebraicOptDefs venomExecSemantics venomState passSharedDefs passSharedPow2 valueRangeDefs
 Libs

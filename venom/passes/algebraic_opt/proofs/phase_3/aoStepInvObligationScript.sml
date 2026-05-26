@@ -13,7 +13,7 @@
 Theory aoStepInvObligation
 Ancestors
   algebraicOptDefs aoResolveObligation aoRangeObligation
-  algebraicOptWf
+  aoWf
   stateEquiv venomWf venomExecSemantics venomExecProofs venomState
   venomInst venomInstProofs venomInstProps
   analysisSimDefs rangeAnalysisProofs rangeAnalysisDefs rangeEvalDefs
@@ -419,6 +419,8 @@ Theorem ao_sinv_step_preserved:
     MEM bb fn0.fn_blocks /\
     idx < LENGTH bb.bb_instructions /\
     inst_wf (EL idx bb.bb_instructions) /\
+    (!x. MEM x (EL idx bb.bb_instructions).inst_outputs ==>
+         lookup_var x s = NONE) /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
     ao_chains_defined_at targets s /\
@@ -435,15 +437,19 @@ Proof
   >- (`ao_dfg_inv dfg s` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
       `ao_dfg_inv dfg s'` by metis_tac[ao_dfg_inv_step_any] >>
       metis_tac[ao_dfg_inv_inst_idx_irrel])
-  >- (* ao_iszero_chain_inv: chain relationships maintained by step_inst.
-        Chain eval_operands for non-output vars are preserved because
-        step_inst only modifies output vars. For the defining instruction
-        of a chain target, the output gets the correct iszero value. *)
+  >- (* ao_iszero_chain_inv preserved: for non-output chain vars,
+        eval_operand is preserved (step doesn't modify them). For output
+        chain vars: they were NONE before (by hypothesis), so any pair
+        involving them had a FALSE premise in the old state. After the
+        step, if both adjacent elements are defined, the iszero relationship
+        holds because the defining instruction IS an ISZERO. *)
      cheat
-  >- (* ao_chains_defined_at: conditional chain definedness preserved by step.
-        When Var v was already defined in s, chain elements were defined in s,
-        and FDOM monotonicity carries them to s'. When Var v is newly created
-        by the step, needs SSA chain structure argument. *)
+  >- (* ao_chains_defined_at preserved: when Var v was already defined in s,
+        chain elements were defined in s, and FDOM monotonicity carries them
+        to s'. When Var v is newly defined, chain elements that are inst
+        outputs get defined by step_inst_fdom; chain elements that are NOT
+        inst outputs must have been defined already (SSA ordering: preceding
+        chain vars defined before current one). *)
      (fs[ao_chains_defined_at_def] >> rpt strip_tac >>
       `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
         metis_tac[step_inst_fdom_subset] >>
@@ -452,7 +458,7 @@ Proof
       Cases_on `?w0. eval_operand (Var v) s = SOME w0`
       >- (`?w1. eval_operand (EL k chain) s = SOME w1` by metis_tac[] >>
           metis_tac[eval_operand_fdom_mono])
-      >- (* Var v newly defined by step_inst — needs SSA chain analysis *)
+      >- (* Var v newly defined by step_inst *)
          cheat)
 QED
 

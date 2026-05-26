@@ -10,7 +10,7 @@
  *   run_insts (from analysisSimDefs) — sequential instruction runner
  *)
 
-Theory algebraicOptSegSim
+Theory aoSegSim
 Ancestors
   stateEquiv stateEquivProps execEquivProps
   analysisSimDefs

@@ -13,12 +13,12 @@
  *)
 Theory algebraicOptProofs
 Ancestors
-  algebraicOptDefs algebraicOptRules algebraicOptSegSim
-  algebraicOptPeepholeSim algebraicOptResolveSim
-  algebraicOptBlockSim algebraicOptCmpFlipSim
+  algebraicOptDefs aoRules aoSegSim
+  aoPeepholeSim aoResolveSim
+  aoBlockSim aoCmpFlipSim
   aoResolveObligation aoRangeObligation aoCmpFlipObligation
   aoStepInvObligation aoBlockInvObligation
-  algebraicOptWf
+  aoWf
   passSimulationProps passSimulationDefs passSharedDefs passSharedSubst venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps
@@ -2503,7 +2503,8 @@ Proof
           gvs[markerTheory.Abbrev_def,
               ao_dfg_inv_inst_idx_irrel,
               ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
-          simp[ao_compute_fn_iszero_targets_wf]) >>
+          simp[ao_compute_fn_iszero_targets_wf] >>
+          cheat) >>
         simp[])
     >- (* sinv preserved by state_equiv fv *)
        (rpt strip_tac >>

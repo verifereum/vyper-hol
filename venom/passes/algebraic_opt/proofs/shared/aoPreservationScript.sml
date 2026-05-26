@@ -5,7 +5,7 @@
 
 Theory aoPreservation
 Ancestors
-  algebraicOptDefs algebraicOptWf
+  algebraicOptDefs aoWf
   venomWf venomInst
 Libs
   BasicProvers

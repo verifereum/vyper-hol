@@ -1,7 +1,7 @@
 (* Obligation: cmp_flip preserves block execution up to dead variables. *)
 Theory aoCmpFlipObligation
 Ancestors
-  algebraicOptDefs algebraicOptCmpFlipSim
+  algebraicOptDefs aoCmpFlipSim
   analysisSimDefs analysisSimProofsBase
   stateEquiv stateEquivProps stateEquivProofs execEquivProps passSimulationProps
   passSharedDefs venomInstProps

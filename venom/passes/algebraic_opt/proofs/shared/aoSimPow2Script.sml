@@ -7,9 +7,9 @@
  *   ao_mod_sim  — Mod case of ao_opt_muldiv
  *   ao_or_sim   — OR case of ao_opt_or (truthy case disabled)
  *)
-Theory algebraicOptSimPow2
+Theory aoSimPow2
 Ancestors
-  algebraicOptDefs algebraicOptRules algebraicOptRules2
+  algebraicOptDefs aoRules aoRules2
   venomExecSemantics venomState passSharedDefs passSharedPow2
 Libs
   pairLib BasicProvers

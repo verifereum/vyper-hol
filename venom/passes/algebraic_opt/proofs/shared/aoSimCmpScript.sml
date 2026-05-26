@@ -9,10 +9,10 @@
  *   state_equiv_extra_var   — inserting a fresh var preserves state_equiv
  *   run_insts_2step         — run_insts for 2-instruction sequences
  *)
-Theory algebraicOptSimCmp
+Theory aoSimCmp
 Ancestors
-  algebraicOptDefs algebraicOptRules
-  algebraicOptSegSim analysisSimDefs valueRangeDefs rangeAnalysisDefs
+  algebraicOptDefs aoRules
+  aoSegSim analysisSimDefs valueRangeDefs rangeAnalysisDefs
   venomExecSemantics venomState venomInst venomWf
   stateEquiv stateEquivProps passSharedDefs
   passSimulationDefs

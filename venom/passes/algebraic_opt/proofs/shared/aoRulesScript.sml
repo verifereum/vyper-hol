@@ -7,7 +7,7 @@
  *
  * Helper: exec_pure helpers, lit_eq lemmas
  *)
-Theory algebraicOptRules
+Theory aoRules
 Ancestors
   algebraicOptDefs venomExecSemantics venomState passSharedDefs
 Libs

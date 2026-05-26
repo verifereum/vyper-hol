@@ -13,9 +13,9 @@
  *   ao_cmp_flip_pair_equiv      — flip+remove pair produces same final value
  *)
 
-Theory algebraicOptCmpFlipSim
+Theory aoCmpFlipSim
 Ancestors
-  algebraicOptDefs algebraicOptResolveSim
+  algebraicOptDefs aoResolveSim
   passSharedDefs passSimulationProps valueRangeDefs
   venomExecSemantics venomState venomInst stateEquiv
 Libs

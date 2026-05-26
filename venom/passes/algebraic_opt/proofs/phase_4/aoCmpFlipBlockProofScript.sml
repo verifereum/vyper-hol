@@ -9,9 +9,9 @@
  *   cmp_flip_run_insts_sim — run_insts simulation for cmp_flip transform
  *)
 
-Theory algebraicOptCmpFlipBlockProof
+Theory aoCmpFlipBlockProof
 Ancestors
-  algebraicOptDefs algebraicOptCmpFlipSim
+  algebraicOptDefs aoCmpFlipSim
   analysisSimDefs analysisSimProofsBase
   passSimulationProps
   stateEquiv stateEquivProps execEquivProps

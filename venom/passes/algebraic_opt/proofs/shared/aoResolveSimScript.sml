@@ -9,7 +9,7 @@
  *   ao_cmp_flip_identity             — most instructions pass through unchanged
  *)
 
-Theory algebraicOptResolveSim
+Theory aoResolveSim
 Ancestors
   algebraicOptDefs passSharedDefs venomExecSemantics venomState venomInst
 Libs

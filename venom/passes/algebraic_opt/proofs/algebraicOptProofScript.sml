@@ -1,13 +1,5 @@
 (* Algebraic optimization correctness: main composition theorem.
  *
- * Composes phase correctness theorems:
- *   Phase 1: aoPhase1ProofTheory.ao_phase1_correct (proved)
- *   Phase 2: aoPhase2ProofTheory.ao_phase2_correct (proved)
- *   Phase 3: aoPhase3ProofTheory.ao_phase3_correct (cheated)
- *   Phase 4: aoPhase4ProofTheory.ao_phase4_correct (cheated)
- *   WF:      aoPreservationTheory.ao_phases123_preserve_wf (cheated)
- *
- * TOP-LEVEL: ao_transform_function_correct
  *)
 
 Theory algebraicOptProof

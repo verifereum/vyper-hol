@@ -11,9 +11,9 @@
  *   ao_phase3_block_sim — Phase 3 per-block lift_result simulation
  *)
 
-Theory algebraicOptBlockSim
+Theory aoBlockSim
 Ancestors
-  algebraicOptDefs algebraicOptPeepholeSim algebraicOptResolveSim
+  algebraicOptDefs aoPeepholeSim aoResolveSim
   analysisSimDefs analysisSimProofsBase
   stateEquiv stateEquivProps
   execEquivParamProps

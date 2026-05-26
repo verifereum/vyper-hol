@@ -12,11 +12,11 @@
  *
  * For 1-to-N cases, see segment proofs in algebraicOptProofsScript.sml.
  *)
-Theory algebraicOptPeepholeSim
+Theory aoPeepholeSim
 Ancestors
-  algebraicOptDefs algebraicOptRules algebraicOptRules2
-  algebraicOptSegSim analysisSimDefs algebraicOptSimArith algebraicOptSimPow2
-  algebraicOptSimCmp valueRangeDefs
+  algebraicOptDefs aoRules aoRules2
+  aoSegSim analysisSimDefs aoSimArith aoSimPow2
+  aoSimCmp valueRangeDefs
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
 Libs
@@ -99,7 +99,7 @@ QED
 
 (* ===== run_insts helpers ===== *)
 
-(* run_insts_def imported from analysisSimDefs (via algebraicOptSegSim) *)
+(* run_insts_def imported from analysisSimDefs (via aoSegSim) *)
 
 Theorem run_insts_singleton:
   !fuel ctx inst s.
@@ -793,7 +793,7 @@ QED
    The truthy branch (ao_all_truthy) is NOT semantics-preserving
    at the peephole level — it changes x|nonzero to 1w.
    This needs a higher-level proof with usage context. *)
-(* ao_or_sim imported from algebraicOptSimPow2Theory *)
+(* ao_or_sim imported from aoSimPow2Theory *)
 
 (* Singleton helpers: each ao_opt_* returns a singleton list *)
 Triviality ao_opt_and_singleton[local]:
@@ -821,7 +821,7 @@ QED
 
    This covers:
    - Identity: returns [inst] → trivial by lift_result_same
-   - 1-to-1: returns [inst'] → step_inst_base equality from algebraicOptRules
+   - 1-to-1: returns [inst'] → step_inst_base equality from aoRules
    - 1-to-N: returns [inst1,...,instk] → segment simulation
 
    DFG-dependent rules (ao_opt_or truthy, ao_opt_eq prefer_iszero,

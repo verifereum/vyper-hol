@@ -7,9 +7,9 @@
  *   ao_sdiv_sim       — SDIV (via muldiv) produces equiv or error
  *   ao_smod_sim       — SMOD (via muldiv) produces equiv or error
  *)
-Theory algebraicOptSimArith
+Theory aoSimArith
 Ancestors
-  algebraicOptDefs algebraicOptRules algebraicOptRules2
+  algebraicOptDefs aoRules aoRules2
   venomExecSemantics venomState venomInst passSharedDefs
   valueRangeDefs rangeAnalysisDefs
 Libs

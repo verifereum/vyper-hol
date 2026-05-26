@@ -6,9 +6,9 @@
  *   ao_transform_function preserves wf_function and ssa_form
  *)
 
-Theory algebraicOptWf
+Theory aoWf
 Ancestors
-  algebraicOptDefs algebraicOptPeepholeSim
+  algebraicOptDefs aoPeepholeSim
   venomState venomWf venomInst passSimulationProps passSimulationDefs
   passSharedDefs
 Libs

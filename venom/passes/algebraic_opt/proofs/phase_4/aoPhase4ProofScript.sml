@@ -8,7 +8,7 @@
 
 Theory aoPhase4Proof
 Ancestors
-  algebraicOptDefs algebraicOptCmpFlipSim
+  algebraicOptDefs aoCmpFlipSim
   aoCmpFlipObligation
   venomExecSemantics venomWf venomState venomInst
   stateEquiv stateEquivProps execEquivProps
