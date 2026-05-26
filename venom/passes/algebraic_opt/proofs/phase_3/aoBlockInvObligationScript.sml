@@ -163,7 +163,7 @@ Proof
               gvs[listTheory.EL_SNOC])))
 QED
 
-Triviality chain_var_is_iszero_output[local]:
+Theorem chain_var_is_iszero_output:
   !fn0 targets v chain k x.
     targets = ao_compute_fn_iszero_targets fn0 /\
     ALOOKUP targets v = SOME chain /\

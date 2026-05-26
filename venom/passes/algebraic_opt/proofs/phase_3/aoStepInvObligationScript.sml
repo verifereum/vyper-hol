@@ -437,12 +437,19 @@ Proof
   >- (`ao_dfg_inv dfg s` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
       `ao_dfg_inv dfg s'` by metis_tac[ao_dfg_inv_step_any] >>
       metis_tac[ao_dfg_inv_inst_idx_irrel])
-  >- (* ao_iszero_chain_inv preserved: for non-output chain vars,
-        eval_operand is preserved (step doesn't modify them). For output
-        chain vars: they were NONE before (by hypothesis), so any pair
-        involving them had a FALSE premise in the old state. After the
-        step, if both adjacent elements are defined, the iszero relationship
-        holds because the defining instruction IS an ISZERO. *)
+  >- (* ao_iszero_chain_inv: for non-output chain vars eval_operand is
+        preserved. For output vars: they were NONE in s (by hypothesis).
+        After the step they may become SOME, but the chain_inv implication
+        only fires when BOTH adjacent elements are SOME. Case analysis:
+        - EL k in outputs: was NONE, now SOME. EL (k+1) not in outputs
+          (single output + SSA), so EL (k+1) preserved. But EL (k+1) is
+          the ISZERO output of EL k — it can't have been defined before
+          EL k was (SSA ordering). Contradiction: EL (k+1) is SOME in s'.
+          Actually it equals its value in s. If it was NONE in s, then it's
+          NONE in s' (preserved). Contradicts eval_operand = SOME premise.
+        - EL (k+1) in outputs: inst IS the ISZERO producing EL (k+1).
+          Its input = EL k (not in outputs), preserved. The output value
+          is bool_to_word(input = 0w). Chain_inv holds. *)
      cheat
   >- (* ao_chains_defined_at preserved: when Var v was already defined in s,
         chain elements were defined in s, and FDOM monotonicity carries them
