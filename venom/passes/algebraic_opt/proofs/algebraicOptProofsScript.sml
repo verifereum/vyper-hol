@@ -29,10 +29,11 @@ Libs
 
 val _ = delsimps ["ao_iszero_chain_inv_def",
                   "ao_chains_defined_at_def",
-                  "ao_chains_defined_def"]
+                  "ao_chains_defined_def",
+                  "ao_chain_defined_prefix_def"]
 
 (* ao_fn_fresh_vars, ao_fn_total_fresh_vars, ao_dfg_inv: algebraicOptDefsTheory
-   ao_iszero_chain_inv, ao_chains_defined_at, ao_targets_wf: aoResolveObligationTheory *)
+   ao_iszero_chain_inv, ao_chain_defined_prefix, ao_targets_wf: aoResolveObligationTheory *)
 
 
 (* ===== Phase 1: Offset Conversion Equality ===== *)
@@ -2251,7 +2252,7 @@ Triviality ao_per_inst_sim_fn0_inv[local]:
     ra = range_analyze fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined_at targets s /\
+    ao_chain_defined_prefix targets s /\
     ao_targets_wf targets /\
     in_range_state (range_at_inst ra bb.bb_label v) s.vs_vars /\
     MEM bb fn0.fn_blocks /\
@@ -2271,59 +2272,10 @@ Proof
   Cases_on `?e. step_inst fuel ctx inst s = Error e`
   >- (DISJ1_TAC >> metis_tac[])
   >- (
-  `ao_chains_defined targets s` by cheat >>
   ho_match_mp_tac (Q.SPEC `ao_fn_fresh_vars fn`
     ao_transform_inst_sim_inst) >> simp[] >>
   drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
-  rpt conj_tac
-  >- (* H_resolve *)
-     (Cases_on `inst.inst_opcode = INVOKE \/ inst.inst_opcode = PHI`
-      >- (qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[]
-          >- (* INVOKE *)
-             (simp[ao_resolve_iszero_inst_def] >>
-              irule step_inst_operands_equiv >>
-              simp[listTheory.LENGTH_MAP, is_alloca_op_def] >>
-              rpt strip_tac >>
-              simp[listTheory.EL_MAP, resolve_op_label] >>
-              TRY (irule resolve_op_eval_eq >> simp[]) >>
-              gvs[inst_wf_def] >> simp[resolve_op_lit])
-          >- (* PHI *)
-             (simp[step_inst_def] >>
-              simp[ao_resolve_iszero_inst_def,
-                   ao_resolve_iszero_inst_opcode] >>
-              simp[Once step_inst_base_def, SimpLHS] >>
-              simp[Once step_inst_base_def, SimpRHS] >>
-              Cases_on `inst.inst_outputs` >> simp[] >>
-              Cases_on `t` >> simp[] >>
-              Cases_on `s.vs_prev_bb` >> simp[] >>
-              rename1 `resolve_phi prev` >>
-              qmatch_goalsub_abbrev_tac
-                `MAP (ao_resolve_iszero_op tgts PHI)` >>
-              `resolve_phi prev
-                 (MAP (ao_resolve_iszero_op tgts PHI)
-                      inst.inst_operands) =
-               OPTION_MAP (ao_resolve_iszero_op tgts PHI)
-                 (resolve_phi prev inst.inst_operands)` by
-                (irule resolve_phi_map_label_pres >> simp[resolve_op_label] >>
-                 `?fn'. tgts = ao_compute_fn_iszero_targets fn'` by
-                   (qunabbrev_tac `tgts` >> metis_tac[]) >>
-                 metis_tac[resolve_op_phi_no_label]) >>
-              simp[] >>
-              Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
-              rename1 `resolve_phi prev _ = SOME val_op` >>
-              `eval_operand (ao_resolve_iszero_op tgts PHI val_op) s =
-               eval_operand val_op s` by
-                (irule resolve_op_eval_eq >>
-                 qunabbrev_tac `tgts` >> simp[]) >>
-              simp[]))
-      >- (irule (SIMP_RULE std_ss [] ao_resolve_iszero_inst_sim) >>
-          gvs[]))
-  >- (* H_range *)
-     (rpt strip_tac >>
-      qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
-      qpat_x_assum `ra = _` (SUBST_ALL_TAC o SYM) >>
-      irule range_analyze_sound >>
-      qexists_tac `s` >> simp[]))
+  cheat)
 QED
 
 Triviality eval_operand_inst_idx[local]:
@@ -2340,7 +2292,7 @@ Proof
   simp[ao_iszero_chain_inv_def, eval_operand_inst_idx]
 QED
 
-(* ao_chains_defined_at_inst_idx_iff is imported from aoResolveObligationTheory *)
+(* ao_chain_defined_prefix_inst_idx_iff is imported from aoResolveObligationTheory *)
 
 Triviality ao_fn0_operand_not_in_fv[local]:
   !fn fn0 fv bb inst x.
@@ -2407,7 +2359,7 @@ Triviality ao_block_sim_range[local]:
     s.vs_inst_idx = 0 /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined_at targets s /\
+    ao_chain_defined_prefix targets s /\
     in_range_state (range_at_inst ra bb.bb_label 0) s.vs_vars ==>
     (?e. exec_block fuel ctx bb s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
@@ -2424,7 +2376,7 @@ Proof
   qabbrev_tac `sinv = \(s:venom_state).
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined_at targets s` >>
+    ao_chain_defined_prefix targets s` >>
   `ao_transform_block mid dfg ra targets bb =
    analysis_block_transform 0 result f bb` by
     (simp[analysis_block_transform_def, ao_transform_block_def,
@@ -2467,7 +2419,7 @@ Proof
           mp_tac ao_per_inst_sim_fn0_inv >>
         impl_tac >- (
           gvs[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel,
-              ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+              ao_chain_inv_inst_idx_iff, ao_chain_defined_prefix_inst_idx_iff] >>
           metis_tac[listTheory.EVERY_MEM, listTheory.EL_MEM]) >>
         simp[])
     >- simp[Abbr `f`, ao_transform_inst_structural]
@@ -2495,27 +2447,27 @@ Proof
     >- (* sinv preserved by step_inst at index *)
        (rpt strip_tac >>
         gvs[Abbr `sinv`,
-            ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+            ao_chain_inv_inst_idx_iff, ao_chain_defined_prefix_inst_idx_iff] >>
         qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `bb`, `idx`,
                      `fuel`, `ctx`, `s'`, `s''`]
           mp_tac ao_sinv_step_preserved >>
         impl_tac >- (
           gvs[markerTheory.Abbrev_def,
               ao_dfg_inv_inst_idx_irrel,
-              ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+              ao_chain_inv_inst_idx_iff, ao_chain_defined_prefix_inst_idx_iff] >>
           simp[ao_compute_fn_iszero_targets_wf] >>
           cheat) >>
         simp[])
     >- (* sinv preserved by state_equiv fv *)
        (rpt strip_tac >>
         gvs[Abbr `sinv`,
-            ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+            ao_chain_inv_inst_idx_iff, ao_chain_defined_prefix_inst_idx_iff] >>
         qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `fv`, `s1`, `s2`]
           mp_tac ao_sinv_state_equiv_compat >>
         impl_tac >- (
           gvs[markerTheory.Abbrev_def,
               ao_dfg_inv_inst_idx_irrel,
-              ao_chain_inv_inst_idx_iff, ao_chains_defined_at_inst_idx_iff] >>
+              ao_chain_inv_inst_idx_iff, ao_chain_defined_prefix_inst_idx_iff] >>
           simp[ao_compute_fn_iszero_targets_wf] >>
           metis_tac[]) >>
         simp[])) >>
@@ -2710,21 +2662,160 @@ Proof
       finite_mapTheory.FLOOKUP_DEF]
 QED
 
+(* ===== exec_block preservation of dfg_inv + chain_inv + chain_defined_prefix ===== *)
+
+Triviality ssa_same_output_same_inst:
+  !fn0 bb i j x.
+    ssa_form fn0 /\ wf_function fn0 /\ MEM bb fn0.fn_blocks /\
+    i < LENGTH bb.bb_instructions /\
+    j < LENGTH bb.bb_instructions /\
+    MEM x (EL i bb.bb_instructions).inst_outputs /\
+    MEM x (EL j bb.bb_instructions).inst_outputs ==>
+    i = j
+Proof
+  rpt strip_tac >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn0)` by
+    (irule mem_block_mem_fn_insts >> qexists_tac `bb` >> simp[] >>
+     irule listTheory.EL_MEM >> simp[]) >>
+  `MEM (EL j bb.bb_instructions) (fn_insts fn0)` by
+    (irule mem_block_mem_fn_insts >> qexists_tac `bb` >> simp[] >>
+     irule listTheory.EL_MEM >> simp[]) >>
+  `EL i bb.bb_instructions = EL j bb.bb_instructions` by
+    (fs[ssa_form_def] >>
+     qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
+       `EL i bb.bb_instructions`, `EL j bb.bb_instructions`, `x`]
+       mp_tac all_distinct_flat_map_unique >>
+     simp[]) >>
+  irule inst_ids_el_eq >> fs[wf_function_def] >> metis_tac[]
+QED
+
+Triviality output_none_preserved_step:
+  !fn0 bb fuel ctx s s_mid x i.
+    ssa_form fn0 /\ wf_function fn0 /\ MEM bb fn0.fn_blocks /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    ~is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode /\
+    step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions) s = OK s_mid /\
+    (!x i. s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+           MEM x (EL i bb.bb_instructions).inst_outputs ==>
+           lookup_var x s = NONE) /\
+    SUC s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+    MEM x (EL i bb.bb_instructions).inst_outputs ==>
+    lookup_var x (s_mid with vs_inst_idx := SUC s.vs_inst_idx) = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  `i <> s.vs_inst_idx` by DECIDE_TAC >>
+  qspecl_then [`fn0`, `bb`, `i`, `s.vs_inst_idx`, `x`]
+    assume_tac ssa_same_output_same_inst >>
+  `~MEM x (EL s.vs_inst_idx bb.bb_instructions).inst_outputs` by
+    (strip_tac >> gvs[]) >>
+  `lookup_var x s = NONE` by
+    (first_x_assum (qspecl_then [`x`, `i`] mp_tac) >> simp[]) >>
+  qspecl_then [`fuel`, `ctx`, `EL s.vs_inst_idx bb.bb_instructions`,
+               `s`, `s_mid`]
+    mp_tac venomInstPropsTheory.step_preserves_non_output_vars >> simp[] >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >>
+  strip_tac >> gvs[lookup_var_def]
+QED
+
+Triviality ao_sinv_exec_block_preserved:
+  !fn fn0 dfg targets bb fuel ctx s v.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ssa_form fn0 /\
+    ao_targets_wf targets /\
+    wf_function fn0 /\
+    EVERY inst_wf bb.bb_instructions /\
+    MEM bb fn0.fn_blocks /\
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s /\
+    ao_chain_defined_prefix targets s /\
+    (!x i. s.vs_inst_idx <= i /\ i < LENGTH bb.bb_instructions /\
+           MEM x (EL i bb.bb_instructions).inst_outputs ==>
+           lookup_var x s = NONE) /\
+    exec_block fuel ctx bb s = OK v ==>
+    ao_dfg_inv dfg (v with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets v /\
+    ao_chain_defined_prefix targets v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `fn0 = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qpat_x_assum `dfg = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qpat_x_assum `targets = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> simp[] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx bb.bb_instructions` >>
+  `MEM inst bb.bb_instructions` by
+    (simp[Abbr `inst`] >> irule listTheory.EL_MEM >> simp[]) >>
+  `inst_wf inst` by (fs[listTheory.EVERY_MEM] >> res_tac) >>
+  `MEM inst (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
+  `!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE` by
+    (rpt strip_tac >> first_x_assum (qspecl_then [`x`, `s.vs_inst_idx`] mp_tac) >>
+     simp[Abbr `inst`]) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_mid` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (strip_tac >>
+      `ao_dfg_inv dfg (s_mid with vs_inst_idx := 0) /\
+       ao_iszero_chain_inv targets s_mid /\
+       ao_chain_defined_prefix targets s_mid` by
+        (qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `bb`,
+           `s.vs_inst_idx`, `fuel`, `ctx`, `s`, `s_mid`]
+           mp_tac ao_sinv_step_preserved >>
+         simp[Abbr `inst`, markerTheory.Abbrev_def]) >>
+      Cases_on `s_mid.vs_halted` >> gvs[] >> strip_tac >> gvs[])
+  >- (strip_tac >>
+      `s_mid.vs_inst_idx = s.vs_inst_idx` by
+        metis_tac[step_inst_preserves_inst_idx] >>
+      `ao_dfg_inv dfg (s_mid with vs_inst_idx := 0) /\
+       ao_iszero_chain_inv targets s_mid /\
+       ao_chain_defined_prefix targets s_mid` by
+        (qspecl_then [`fn`, `fn0`, `dfg`, `targets`, `bb`,
+           `s.vs_inst_idx`, `fuel`, `ctx`, `s`, `s_mid`]
+           mp_tac ao_sinv_step_preserved >>
+         simp[Abbr `inst`, markerTheory.Abbrev_def]) >>
+      `ao_iszero_chain_inv targets
+        (s_mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+        fs[ao_chain_inv_inst_idx_iff] >>
+      `ao_chain_defined_prefix targets
+        (s_mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+        fs[ao_chain_defined_prefix_inst_idx_iff] >>
+      first_x_assum (qspec_then
+        `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`bb`,
+        `s_mid with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+      simp[Abbr `inst`] >>
+      impl_tac >- (
+        fs[markerTheory.Abbrev_def] >>
+        metis_tac[output_none_preserved_step]) >>
+      simp[]) >>
+  cheat
+QED
+
 (* Phases 1-3 sim using block_sim_function_error_bb with extended block_inv.
    Replaces ao_phases123_run_blocks_sim's ∀s H_resolve and H_range with
    state-dependent invariants: chain + range + dfg + cfg membership.
 
    block_inv = λs. ao_dfg_inv dfg s ∧
                     ao_iszero_chain_inv targets s ∧
-                    ao_chains_defined_at targets s ∧
+                    ao_chain_defined_prefix targets s ∧
                     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s ∧
                     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
 
    Key insight: block_inv is established at the initial state via:
    - ao_dfg_inv: from ADDRESS/SIGNEXTEND output undefinedness
    - ao_iszero_chain_inv: vacuously true (chain vars undefined → implication premise false)
-   - ao_chains_defined_at: vacuously true at function entry (conditional on Var v being
-     defined, which it isn't for instruction outputs at entry)
+   - ao_chain_defined_prefix: vacuously true at function entry (no Var operands defined,
+     so only chain[0] can be defined, making the prefix property trivial)
    - range_sound: trivially true for entry block (FEMPTY range state)
    - cfg_dfs_pre: entry block is always in cfg_dfs_pre for wf_function *)
 Triviality ao_block_inv_state_equiv_compat[local]:
@@ -2743,12 +2834,12 @@ Triviality ao_block_inv_state_equiv_compat[local]:
     state_equiv fv s1 s2 /\
     ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s1 /\
-    ao_chains_defined_at targets s1 /\
+    ao_chain_defined_prefix targets s1 /\
     range_sound (df_widen_at NONE ra s1.vs_current_bb 0) s1 /\
     MEM s1.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre ==>
     ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s2 /\
-    ao_chains_defined_at targets s2 /\
+    ao_chain_defined_prefix targets s2 /\
     range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2 /\
     MEM s2.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
 Proof
@@ -2758,7 +2849,7 @@ Proof
     metis_tac[ao_compute_fn_iszero_targets_wf] >>
   `ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
    ao_iszero_chain_inv targets s2 /\
-   ao_chains_defined_at targets s2` by
+   ao_chain_defined_prefix targets s2` by
     metis_tac[ao_sinv_state_equiv_compat] >>
   `range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2` by
     metis_tac[ao_range_sound_state_equiv_compat] >>
@@ -2787,7 +2878,7 @@ Theorem ao_phases123_run_blocks_sim_inv[local]:
               v NOTIN ao_fn_fresh_vars fn) /\
     ao_dfg_inv dfg s /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined_at targets s /\
+    ao_chain_defined_prefix targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
@@ -2818,7 +2909,7 @@ Proof
   qabbrev_tac `block_inv = \s:venom_state.
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined_at targets s /\
+    ao_chain_defined_prefix targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` >>
   `fn1 = function_map_transform bt fn0` by
@@ -2855,7 +2946,7 @@ Proof
         rpt conj_tac >>
         FIRST [first_assum ACCEPT_TAC,
                (simp[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
-                     ao_chains_defined_at_inst_idx_iff] >>
+                     ao_chain_defined_prefix_inst_idx_iff] >>
                 first_assum ACCEPT_TAC),
                (rpt strip_tac >> first_x_assum irule >>
                 first_assum ACCEPT_TAC)])
@@ -2892,7 +2983,7 @@ Proof
   impl_tac
   >- (rpt conj_tac >>
       TRY (simp[ao_dfg_inv_inst_idx_irrel, ao_chain_inv_inst_idx_iff,
-                ao_chains_defined_at_inst_idx_iff] >> NO_TAC) >>
+                ao_chain_defined_prefix_inst_idx_iff] >> NO_TAC) >>
       TRY (qpat_x_assum `range_sound _ _` mp_tac >>
            simp[rangeAnalysisProofsTheory.range_sound_def] >> NO_TAC) >>
       simp[])
@@ -3058,6 +3149,22 @@ Proof
     fs[])
 QED
 
+Triviality chain_defined_prefix_initial:
+  !fn fn0 targets s.
+    Abbrev(fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+    Abbrev(targets = ao_compute_fn_iszero_targets fn0) /\
+    ssa_form fn /\ wf_function fn /\
+    (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
+              lookup_var x s = NONE) ==>
+    ao_chain_defined_prefix targets s
+Proof
+  rpt strip_tac >>
+  irule ao_chain_defined_prefix_initial >>
+  fs[markerTheory.Abbrev_def] >> metis_tac[]
+QED
+
 Theorem ao_transform_function_correct_proof:
   !fuel ctx fn s.
     let fv = ao_fn_fresh_vars fn in
@@ -3152,19 +3259,9 @@ Proof
         `MEM inst0 (fn_insts fn)` by fs[fn_insts_def] >>
         res_tac) >>
      fs[eval_operand_def]) >>
-  `ao_chains_defined_at targets s` by
-    (simp[ao_chains_defined_at_def] >> rpt strip_tac >>
-     `?inst. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs` by
-       (simp[Abbr `targets`] >> metis_tac[ao_fn_targets_key_is_output]) >>
-     `lookup_var v s = NONE` by
-       (qpat_x_assum `MEM inst (fn_insts fn0)` mp_tac >>
-        simp[Abbr `fn0`, fn_insts_def] >> strip_tac >>
-        drule fn_insts_blocks_map_offset >> strip_tac >>
-        `MEM v inst0.inst_outputs` by
-          fs[ao_handle_offset_inst_outputs] >>
-        `MEM inst0 (fn_insts fn)` by fs[fn_insts_def] >>
-        res_tac) >>
-     fs[eval_operand_def, lookup_var_def]) >>
+  `ao_chain_defined_prefix targets s` by
+    (irule chain_defined_prefix_initial >>
+     fs[markerTheory.Abbrev_def] >> metis_tac[]) >>
   (* Get phases 1-3 simulation: Error \/ lift_result *)
   `(?e. run_blocks fuel ctx fn s = Error e) \/
    lift_result (state_equiv (ao_fn_fresh_vars fn))

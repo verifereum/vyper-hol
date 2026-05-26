@@ -55,6 +55,21 @@ Definition ao_chains_defined_at_def:
 End
 val _ = delsimps ["ao_chains_defined_at_def"]
 
+(* Chain definedness forms a prefix: if chain[j] is undefined, all
+   chain[j'] for j' > j are also undefined. This is the natural
+   consequence of SSA execution: each chain element at position k > 0
+   is an ISZERO output reading position k-1, so it can only be defined
+   if position k-1 was defined when the ISZERO executed. *)
+Definition ao_chain_defined_prefix_def:
+  ao_chain_defined_prefix targets st <=>
+    !v chain j1 j2.
+      ALOOKUP targets v = SOME chain /\
+      j1 <= j2 /\ j2 < LENGTH chain /\
+      (?w. eval_operand (EL j2 chain) st = SOME w) ==>
+      ?w. eval_operand (EL j1 chain) st = SOME w
+End
+val _ = delsimps ["ao_chain_defined_prefix_def"]
+
 (* Well-formed targets: chain has >= 2 elements, variable is last *)
 Definition ao_targets_wf_def:
   ao_targets_wf targets <=>
@@ -145,10 +160,84 @@ Proof
   metis_tac[]
 QED
 
+(* ===== ao_chain_defined_prefix properties ===== *)
+
+Theorem ao_chain_defined_prefix_implies_at:
+  !targets st.
+    ao_chain_defined_prefix targets st /\ ao_targets_wf targets ==>
+    ao_chains_defined_at targets st
+Proof
+  rw[ao_chain_defined_prefix_def, ao_chains_defined_at_def,
+     ao_targets_wf_def] >>
+  rpt strip_tac >>
+  `1 < LENGTH chain /\ LAST chain = Var v` by metis_tac[] >>
+  `EL (LENGTH chain - 1) chain = Var v` by
+    metis_tac[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1,
+              listTheory.LENGTH_NIL, DECIDE ``1 < n ==> n <> (0:num)``] >>
+  `LENGTH chain - 1 < LENGTH chain` by simp[] >>
+  `?w'. eval_operand (EL (LENGTH chain - 1) chain) st = SOME w'` by
+    metis_tac[] >>
+  `k <= LENGTH chain - 1` by simp[] >>
+  metis_tac[]
+QED
+
+Theorem ao_chain_defined_prefix_step_preserved:
+  !targets inst fuel ctx st st'.
+    ao_chain_defined_prefix targets st /\
+    step_inst fuel ctx inst st = OK st' /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+                 k < LENGTH chain ==>
+                 eval_operand (EL k chain) st' =
+                 eval_operand (EL k chain) st) ==>
+    ao_chain_defined_prefix targets st'
+Proof
+  rw[ao_chain_defined_prefix_def] >> rpt strip_tac >>
+  `eval_operand (EL j2 chain) st' = eval_operand (EL j2 chain) st` by
+    metis_tac[] >>
+  `?w'. eval_operand (EL j2 chain) st = SOME w'` by metis_tac[] >>
+  `j1 < LENGTH chain` by simp[] >>
+  `?w''. eval_operand (EL j1 chain) st = SOME w''` by metis_tac[] >>
+  `eval_operand (EL j1 chain) st' = eval_operand (EL j1 chain) st` by
+    metis_tac[] >>
+  metis_tac[]
+QED
+
+Theorem ao_chain_defined_prefix_state_equiv_compat:
+  !targets fv st1 st2.
+    ao_chain_defined_prefix targets st1 /\
+    state_equiv fv st1 st2 /\
+    (!v chain k x. ALOOKUP targets v = SOME chain /\
+                   k < LENGTH chain /\ EL k chain = Var x ==> x NOTIN fv) ==>
+    ao_chain_defined_prefix targets st2
+Proof
+  rw[ao_chain_defined_prefix_def] >> rpt strip_tac >>
+  `eval_operand (EL j2 chain) st2 = eval_operand (EL j2 chain) st1` by
+    (qspecl_then [`fv`, `st1`, `st2`, `EL j2 chain`]
+       mp_tac eval_operand_state_equiv_chain_el >>
+     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+  `?w'. eval_operand (EL j2 chain) st1 = SOME w'` by metis_tac[] >>
+  `?w''. eval_operand (EL j1 chain) st1 = SOME w''` by
+    metis_tac[] >>
+  `eval_operand (EL j1 chain) st2 = eval_operand (EL j1 chain) st1` by
+    (qspecl_then [`fv`, `st1`, `st2`, `EL j1 chain`]
+       mp_tac eval_operand_state_equiv_chain_el >>
+     impl_tac >- (simp[] >> `j1 < LENGTH chain` by simp[] >> metis_tac[]) >>
+     simp[]) >>
+  metis_tac[]
+QED
+
 Theorem eval_operand_inst_idx_irrel:
   !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem ao_chain_defined_prefix_inst_idx_iff:
+  !targets s n.
+    ao_chain_defined_prefix targets (s with vs_inst_idx := n) <=>
+    ao_chain_defined_prefix targets s
+Proof
+  simp[ao_chain_defined_prefix_def, eval_operand_inst_idx_irrel]
 QED
 
 Theorem ao_chains_defined_at_inst_idx_iff:

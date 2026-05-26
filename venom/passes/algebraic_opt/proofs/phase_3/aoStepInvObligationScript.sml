@@ -13,7 +13,7 @@
 Theory aoStepInvObligation
 Ancestors
   algebraicOptDefs aoResolveObligation aoRangeObligation
-  aoWf
+  aoTargetProps aoBlockInvObligation aoWf
   stateEquiv venomWf venomExecSemantics venomExecProofs venomState
   venomInst venomInstProofs venomInstProps
   analysisSimDefs rangeAnalysisProofs rangeAnalysisDefs rangeEvalDefs
@@ -378,6 +378,17 @@ Proof
       gvs[])
 QED
 
+Triviality eval_operand_terminator_preserved:
+  !fuel ctx inst s s' op.
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode ==>
+    eval_operand op s' = eval_operand op s
+Proof
+  rpt strip_tac >> Cases_on `op` >> simp[eval_operand_def]
+  >- (irule step_terminator_preserves_vars >> metis_tac[])
+  >- metis_tac[step_inst_preserves_labels_always]
+QED
+
 Triviality step_inst_fdom_subset:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst_wf inst ==>
@@ -407,6 +418,188 @@ Proof
   metis_tac[]
 QED
 
+(* Helper: chain_inv preserved through non-terminator step *)
+Triviality chain_inv_step_non_term[local]:
+  !fn0 targets inst fuel ctx s s'.
+    Abbrev (targets = ao_compute_fn_iszero_targets fn0) /\
+    ssa_form fn0 /\
+    ao_targets_wf targets /\
+    MEM inst (fn_insts fn0) /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    (!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE) /\
+    ao_chain_defined_prefix targets s /\
+    ao_iszero_chain_inv targets s /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_iszero_chain_inv targets s'
+Proof
+  rpt strip_tac >>
+  simp_tac std_ss [ao_iszero_chain_inv_def] >>
+  rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `ao_iszero_chain_inv targets s`
+    (mp_tac o REWRITE_RULE [ao_iszero_chain_inv_def]) >>
+  strip_tac >>
+  Cases_on `(?x. EL (k + 1) chain = Var x /\ MEM x inst.inst_outputs)`
+  >- (* Case: chain[k+1] is inst output = ISZERO case *)
+     (gvs[] >>
+      rename1 `MEM y inst.inst_outputs` >>
+      `0 < k + 1` by DECIDE_TAC >>
+      qspecl_then [`fn0`, `targets`, `v`, `chain`,
+        `k + 1`, `y`] mp_tac chain_var_is_iszero_output >>
+      impl_tac >- (gvs[markerTheory.Abbrev_def] >> DECIDE_TAC) >>
+      strip_tac >>
+      `inst' = inst` by
+        (qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
+                      `inst'`, `inst`, `y`]
+           mp_tac all_distinct_flat_map_unique >>
+         impl_tac >- gvs[ssa_form_def] >>
+         simp[]) >>
+      gvs[] >>
+      `inst.inst_outputs = [y]` by
+        (fs[inst_wf_def] >>
+         Cases_on `inst.inst_outputs` >> gvs[] >>
+         Cases_on `t` >> gvs[]) >>
+      `lookup_var y s = NONE` by metis_tac[] >>
+      `eval_operand (EL k chain) s' =
+       eval_operand (EL k chain) s` by
+        (irule eval_operand_step_preserved >> simp[] >>
+         qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+         rpt strip_tac >> gvs[] >>
+         CCONTR_TAC >> gvs[] >>
+         qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+         simp[step_inst_non_invoke, is_terminator_def,
+              Once step_inst_base_def, exec_pure1_def,
+              eval_operand_def, lookup_var_def]) >>
+      Cases_on `inst.inst_opcode = INVOKE`
+      >- gvs[is_terminator_def]
+      >- (fs[step_inst_non_invoke] >>
+          qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+          simp[Once step_inst_base_def, exec_pure1_def] >>
+          every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+          gvs[eval_operand_def, update_var_def, lookup_var_def,
+              finite_mapTheory.FLOOKUP_UPDATE]))
+  >- (Cases_on `(?x. EL k chain = Var x /\ MEM x inst.inst_outputs)`
+      >- (* Case: chain[k] is inst output, chain[k+1] is not.
+            By prefix property + freshness: chain[k+1] is undefined
+            in s, hence in s' (not an inst output). Vacuously true. *)
+         (gvs[] >>
+          rename1 `MEM y inst.inst_outputs` >>
+          `eval_operand (Var y) s = NONE` by
+            (simp[eval_operand_def] >> metis_tac[]) >>
+          `eval_operand (EL (k + 1) chain) s = NONE` by
+            (CCONTR_TAC >>
+             `?w. eval_operand (EL (k + 1) chain) s = SOME w` by
+               (Cases_on `eval_operand (EL (k + 1) chain) s` >> gvs[]) >>
+             qpat_x_assum `ao_chain_defined_prefix _ _`
+               (mp_tac o SIMP_RULE std_ss [ao_chain_defined_prefix_def]) >>
+             disch_then (qspecl_then [`v`, `chain`, `k`, `k + 1`]
+               mp_tac) >>
+             simp[] >> metis_tac[]) >>
+          `eval_operand (EL (k + 1) chain) s' =
+           eval_operand (EL (k + 1) chain) s` by
+            (irule eval_operand_step_preserved >> simp[] >>
+             qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+             metis_tac[]) >>
+          gvs[])
+      >- (* Case: neither is inst output — both preserved *)
+         (`eval_operand (EL k chain) s' =
+           eval_operand (EL k chain) s` by
+            (irule eval_operand_step_preserved >> simp[] >>
+             qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+             metis_tac[]) >>
+          `eval_operand (EL (k + 1) chain) s' =
+           eval_operand (EL (k + 1) chain) s` by
+            (irule eval_operand_step_preserved >> simp[] >>
+             qexistsl_tac [`ctx`, `fuel`, `inst`] >> simp[] >>
+             metis_tac[]) >>
+          gvs[] >> metis_tac[]))
+QED
+
+(* Helper: chain_defined_prefix preserved through non-terminator step *)
+Triviality prefix_inv_step_non_term[local]:
+  !fn0 targets inst fuel ctx s s'.
+    Abbrev (targets = ao_compute_fn_iszero_targets fn0) /\
+    ssa_form fn0 /\
+    MEM inst (fn_insts fn0) /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    (!x. MEM x inst.inst_outputs ==> lookup_var x s = NONE) /\
+    ao_chain_defined_prefix targets s /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_chain_defined_prefix targets s'
+Proof
+  rpt strip_tac >>
+  simp_tac std_ss [ao_chain_defined_prefix_def] >>
+  rpt strip_tac >>
+  rename1 `ALOOKUP targets v' = SOME chain'` >>
+  rename1 `j1 <= j2` >>
+  Cases_on `?x. EL j2 chain' = Var x /\ MEM x inst.inst_outputs`
+  >- (* j2 element is inst output: inst is ISZERO reading j2-1 *)
+     (gvs[] >>
+      rename1 `MEM y inst.inst_outputs` >>
+      Cases_on `j1 = j2` >- metis_tac[] >>
+      `j1 < j2 /\ 0 < j2` by DECIDE_TAC >>
+      qspecl_then [`fn0`, `targets`, `v'`, `chain'`,
+        `j2`, `y`] mp_tac chain_var_is_iszero_output >>
+      impl_tac >- (gvs[markerTheory.Abbrev_def] >> DECIDE_TAC) >>
+      strip_tac >>
+      `inst' = inst` by
+        (qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
+                      `inst'`, `inst`, `y`]
+           mp_tac all_distinct_flat_map_unique >>
+         impl_tac >- gvs[ssa_form_def] >>
+         simp[]) >>
+      gvs[] >>
+      `j1 <= j2 - 1 /\ j2 - 1 < LENGTH chain'` by DECIDE_TAC >>
+      `?w1. eval_operand (EL j1 chain') s = SOME w1` by
+        (qpat_x_assum `ao_chain_defined_prefix _ _`
+           (mp_tac o SIMP_RULE std_ss
+             [ao_chain_defined_prefix_def]) >>
+         disch_then (qspecl_then [`v'`, `chain'`, `j1`, `j2 - 1`]
+           mp_tac) >>
+         impl_tac >- (simp[] >>
+           fs[step_inst_non_invoke, is_terminator_def] >>
+           qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+           simp[Once step_inst_base_def, exec_pure1_def] >>
+           `j2 - 1 + 1 = j2` by DECIDE_TAC >> gvs[] >>
+           every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+           metis_tac[]) >>
+         simp[]) >>
+      metis_tac[eval_operand_fdom_mono,
+                step_inst_fdom_subset,
+                step_inst_preserves_labels_always])
+  >- (* j2 element is NOT inst output: preserved from s *)
+     (`eval_operand (EL j2 chain') s' =
+       eval_operand (EL j2 chain') s` by
+        (irule eval_operand_step_preserved >> metis_tac[]) >>
+      `?w2. eval_operand (EL j2 chain') s = SOME w2` by
+        metis_tac[] >>
+      `j1 < LENGTH chain'` by DECIDE_TAC >>
+      `?w1. eval_operand (EL j1 chain') s = SOME w1` by
+        (qpat_x_assum `ao_chain_defined_prefix _ _`
+           (mp_tac o SIMP_RULE std_ss
+             [ao_chain_defined_prefix_def]) >>
+         disch_then (qspecl_then [`v'`, `chain'`, `j1`, `j2`]
+           mp_tac) >>
+         simp[]) >>
+      metis_tac[eval_operand_fdom_mono,
+                step_inst_fdom_subset,
+                step_inst_preserves_labels_always])
+QED
+
+(* Helper: terminator step preserves all chain operands *)
+Triviality chain_operands_terminator_preserved[local]:
+  !fuel ctx inst s s' targets v chain k.
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode /\
+    ALOOKUP targets v = SOME chain /\
+    k < LENGTH chain ==>
+    eval_operand (EL k chain) s' = eval_operand (EL k chain) s
+Proof
+  metis_tac[eval_operand_terminator_preserved]
+QED
+
+(* Combined step preservation *)
 Theorem ao_sinv_step_preserved:
   !fn fn0 dfg targets bb idx fuel ctx s s'.
     fn0 = fn with fn_blocks :=
@@ -423,50 +616,46 @@ Theorem ao_sinv_step_preserved:
          lookup_var x s = NONE) /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s /\
-    ao_chains_defined_at targets s /\
+    ao_chain_defined_prefix targets s /\
     step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
     ao_dfg_inv dfg (s' with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s' /\
-    ao_chains_defined_at targets s'
+    ao_chain_defined_prefix targets s'
 Proof
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `fn0 = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qpat_x_assum `dfg = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
+  qpat_x_assum `targets = _` (ASSUME_TAC o
+    CONV_RULE (REWR_CONV (GSYM markerTheory.Abbrev_def))) >>
   qabbrev_tac `inst = EL idx bb.bb_instructions` >>
   `MEM inst bb.bb_instructions` by
     (simp[Abbr `inst`] >> irule listTheory.EL_MEM >> simp[]) >>
+  `MEM inst (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
   rpt conj_tac
-  >- (`ao_dfg_inv dfg s` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
+  >- (* ao_dfg_inv *)
+     (`ao_dfg_inv dfg s` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
       `ao_dfg_inv dfg s'` by metis_tac[ao_dfg_inv_step_any] >>
       metis_tac[ao_dfg_inv_inst_idx_irrel])
-  >- (* ao_iszero_chain_inv: for non-output chain vars eval_operand is
-        preserved. For output vars: they were NONE in s (by hypothesis).
-        After the step they may become SOME, but the chain_inv implication
-        only fires when BOTH adjacent elements are SOME. Case analysis:
-        - EL k in outputs: was NONE, now SOME. EL (k+1) not in outputs
-          (single output + SSA), so EL (k+1) preserved. But EL (k+1) is
-          the ISZERO output of EL k — it can't have been defined before
-          EL k was (SSA ordering). Contradiction: EL (k+1) is SOME in s'.
-          Actually it equals its value in s. If it was NONE in s, then it's
-          NONE in s' (preserved). Contradicts eval_operand = SOME premise.
-        - EL (k+1) in outputs: inst IS the ISZERO producing EL (k+1).
-          Its input = EL k (not in outputs), preserved. The output value
-          is bool_to_word(input = 0w). Chain_inv holds. *)
-     cheat
-  >- (* ao_chains_defined_at preserved: when Var v was already defined in s,
-        chain elements were defined in s, and FDOM monotonicity carries them
-        to s'. When Var v is newly defined, chain elements that are inst
-        outputs get defined by step_inst_fdom; chain elements that are NOT
-        inst outputs must have been defined already (SSA ordering: preceding
-        chain vars defined before current one). *)
-     (fs[ao_chains_defined_at_def] >> rpt strip_tac >>
-      `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
-        metis_tac[step_inst_fdom_subset] >>
-      `s'.vs_labels = s.vs_labels` by
-        metis_tac[step_inst_preserves_labels_always] >>
-      Cases_on `?w0. eval_operand (Var v) s = SOME w0`
-      >- (`?w1. eval_operand (EL k chain) s = SOME w1` by metis_tac[] >>
-          metis_tac[eval_operand_fdom_mono])
-      >- (* Var v newly defined by step_inst *)
-         cheat)
+  >- (* ao_iszero_chain_inv *)
+     (Cases_on `is_terminator inst.inst_opcode`
+      >- (qspecl_then [`targets`, `inst`, `fuel`, `ctx`, `s`, `s'`]
+            mp_tac ao_iszero_chain_inv_step_preserved >>
+          simp[] >> disch_then irule >>
+          metis_tac[eval_operand_terminator_preserved])
+      >- (qspecl_then [`fn0`, `targets`, `inst`, `fuel`, `ctx`, `s`, `s'`]
+            mp_tac chain_inv_step_non_term >>
+          simp[]))
+  >- (* ao_chain_defined_prefix *)
+     (Cases_on `is_terminator inst.inst_opcode`
+      >- (qspecl_then [`targets`, `inst`, `fuel`, `ctx`, `s`, `s'`]
+            mp_tac ao_chain_defined_prefix_step_preserved >>
+          simp[] >> disch_then irule >>
+          metis_tac[eval_operand_terminator_preserved])
+      >- (qspecl_then [`fn0`, `targets`, `inst`, `fuel`, `ctx`, `s`, `s'`]
+            mp_tac prefix_inv_step_non_term >>
+          simp[]))
 QED
 
 (* ===== sinv state_equiv compatibility ===== *)
@@ -524,10 +713,10 @@ Theorem ao_sinv_state_equiv_compat:
     state_equiv fv s1 s2 /\
     ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s1 /\
-    ao_chains_defined_at targets s1 ==>
+    ao_chain_defined_prefix targets s1 ==>
     ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
     ao_iszero_chain_inv targets s2 /\
-    ao_chains_defined_at targets s2
+    ao_chain_defined_prefix targets s2
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
   >- (`state_equiv fv (s1 with vs_inst_idx := 0)
@@ -541,7 +730,7 @@ Proof
       qexistsl_tac [`fv`, `s1`] >> simp[] >>
       rpt strip_tac >>
       metis_tac[ao_chain_vars_not_in_fv])
-  >- (irule ao_chains_defined_at_state_equiv_compat >>
+  >- (irule ao_chain_defined_prefix_state_equiv_compat >>
       simp[] >> metis_tac[ao_chain_vars_not_in_fv])
 QED
 

@@ -1,15 +1,8 @@
 (* Phase 3: Main rewrite pass correctness.
  *
- * The iszero peephole + range-guarded arithmetic rewrites transform
- * fn0 → fn1 preserving execution up to fresh variables.
- *
  * Uses block_sim_function_error_bb with:
- *   block_inv = ao_dfg_inv ∧ ao_iszero_chain_inv ∧ ao_chains_defined_at
+ *   block_inv = ao_dfg_inv ∧ ao_iszero_chain_inv ∧ ao_chain_defined_prefix
  *               ∧ range_sound ∧ cfg_membership
- *
- * Remaining proof obligations (cheated in aoStepInvObligation):
- *   - ao_iszero_chain_inv step preservation
- *   - ao_chains_defined_at step preservation (new var case)
  *
  * TOP-LEVEL: ao_phase3_correct
  *)
@@ -28,14 +21,8 @@ Libs
 
 val _ = delsimps ["ao_iszero_chain_inv_def",
                   "ao_chains_defined_at_def",
-                  "ao_chains_defined_def"]
-
-Triviality ao_transform_block_label[local]:
-  !mid dfg ra targets bb.
-    (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
-Proof
-  simp[ao_transform_block_def]
-QED
+                  "ao_chains_defined_def",
+                  "ao_chain_defined_prefix_def"]
 
 Triviality fn0_entry_label[local]:
   !fn. fn_entry_label (fn with fn_blocks :=
@@ -45,6 +32,25 @@ Triviality fn0_entry_label[local]:
 Proof
   simp[fn_entry_label_def, entry_block_def] >>
   gen_tac >> Cases_on `fn.fn_blocks` >> simp[]
+QED
+
+Triviality run_blocks_inst_idx_irrel[local]:
+  !fuel ctx fn s.
+    run_blocks fuel ctx fn s =
+    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  Induct_on `fuel` >> rpt gen_tac
+  >- (ONCE_REWRITE_TAC[run_blocks_def] >> simp[]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
+  simp_tac (srw_ss()) []
+QED
+
+Triviality ao_transform_block_label[local]:
+  !mid dfg ra targets bb.
+    (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
+Proof
+  simp[ao_transform_block_def]
 QED
 
 Theorem ao_phase3_correct:
@@ -66,7 +72,50 @@ Theorem ao_phase3_correct:
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (run_blocks fuel ctx fn0 s) (run_blocks fuel ctx fn1 s)
 Proof
-  cheat
+  simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `fn0 = fn with fn_blocks :=
+    MAP (\bb. bb with bb_instructions :=
+      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>
+  qabbrev_tac `targets = ao_compute_fn_iszero_targets fn0` >>
+  qabbrev_tac `dfg = dfg_build_function fn0` >>
+  qabbrev_tac `ra = range_analyze fn0` >>
+  qabbrev_tac `mid = fn_max_inst_id fn0` >>
+  qabbrev_tac `fv = ao_fn_fresh_vars fn` >>
+  qabbrev_tac `bt = ao_transform_block mid dfg ra targets` >>
+  qabbrev_tac `fn1 = fn0 with fn_blocks := MAP bt fn0.fn_blocks` >>
+  qabbrev_tac `block_inv = \s:venom_state.
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    ao_iszero_chain_inv targets s /\
+    ao_chain_defined_prefix targets s /\
+    range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
+    MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` >>
+  `fn1 = function_map_transform bt fn0` by
+    simp[function_map_transform_def, Abbr `fn1`] >>
+  pop_assum SUBST1_TAC >>
+  ONCE_REWRITE_TAC[run_blocks_inst_idx_irrel] >>
+  qspecl_then [`state_equiv fv`, `execution_equiv fv`,
+    `block_inv`, `bt`, `fn0`] mp_tac block_sim_function_error_bb >>
+  impl_tac >- (
+    rpt conj_tac
+    >- simp[state_equiv_execution_equiv_valid_state_rel]
+    >- metis_tac[state_equiv_trans]
+    >- metis_tac[execution_equiv_trans]
+    >- (qunabbrev_tac `bt` >> simp[ao_transform_block_label])
+    >- (* CHEATED: per-block sim — needs ao_block_sim_range *)
+       cheat
+    >- (* CHEATED: block_inv preserved through exec_block *)
+       cheat
+    >- (* CHEATED: block_inv compat with state_equiv fv
+          — needs ao_fn_fresh_vars freshness derivation *)
+       cheat
+    >- (* operand lookup under state_equiv *)
+       cheat)
+  >>
+  disch_then (qspecl_then [`fuel`, `ctx`,
+    `s with vs_inst_idx := 0`] mp_tac) >>
+  simp[Abbr `block_inv`] >>
+  impl_tac >- cheat >>
+  disch_then ACCEPT_TAC
 QED
 
 val _ = export_theory();
