@@ -27,7 +27,7 @@ Libs
   monadsyntax
 
 (* NOTE: abi_type_info record deleted — was never instantiated.
-   ABI dynamic/static dispatch uses is_abi_dynamic sft from compileEnv. *)
+   ABI dynamic/static dispatch uses is_abi_dynamic from compileEnv. *)
 
 (* ===== ABI Validation / Clamping ===== *)
 (* abi_clamp, abi_enc_info, abi_dec_info datatypes are defined in compileEnv
