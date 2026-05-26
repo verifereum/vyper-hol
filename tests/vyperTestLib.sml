@@ -213,7 +213,12 @@ val unsupported_code = [
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
   "msg.data",
-  "gas="
+  "gas=",
+  (* JSON ABI interface imports currently expose legacy ABI entries
+     with constant/payable instead of stateMutability, and dynamic ABI bytes
+     as length="..."; the frontend/ABI decoder does not support those yet. *)
+  "import jsonabi as jsonabi",
+  "import JSONInterface"
 ]
 
 fun has_unsupported_patterns src =
@@ -628,6 +633,8 @@ in
   ()
 end
 
+fun holbuild_extra_deps (_ : string list) = ()
+
 fun make_definitions_for_file (id, json_path) = let
   val (tests, decode_fails) = read_test_json json_path
   val () =
@@ -672,6 +679,7 @@ fun generate_defn_scripts () = let
     val jsonp_from_generated = OS.Path.concat("..", jsonp)
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
+      "val () = holbuild_extra_deps [\"", jsonp_from_generated, "\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
@@ -701,5 +709,10 @@ fun generate_test_scripts () = let
 in
   ()
 end
+
+fun generate_tests () = (
+  generate_defn_scripts ();
+  generate_test_scripts ()
+)
 
 end
