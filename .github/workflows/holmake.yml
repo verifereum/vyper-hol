@@ -18,12 +18,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-polyml
         id: polyml
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
+        with:
+          build: 'false'
       - uses: ./.github/actions/setup-hol4
         id: hol4
         with:
+          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
-      - uses: ./.github/actions/setup-verifereum
-        id: verifereum
       - uses: ./.github/actions/holmake-verifereum
         with:
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
@@ -65,12 +70,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-polyml
         id: polyml
+      - uses: ./.github/actions/setup-verifereum
+        id: verifereum
+      - uses: ./.github/actions/setup-holbuild
+        id: holbuild
+        with:
+          build: 'false'
       - uses: ./.github/actions/setup-hol4
         id: hol4
         with:
+          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
-      - uses: ./.github/actions/setup-verifereum
-        id: verifereum
       - uses: ./.github/actions/holmake-verifereum
         with:
           polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}

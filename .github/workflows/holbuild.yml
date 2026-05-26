@@ -2,11 +2,6 @@ name: holbuild
 
 on:
   workflow_dispatch:
-    inputs:
-      holbuild-ref:
-        description: "holbuild git ref to test"
-        required: false
-        default: "master"
   pull_request:
   merge_group:
 
@@ -24,16 +19,18 @@ jobs:
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
-      - uses: ./.github/actions/setup-hol4
-        id: hol4
-        with:
-          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
       - uses: ./.github/actions/setup-verifereum
         id: verifereum
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          holbuild-ref: ${{ inputs.holbuild-ref || 'master' }}
+          build: 'false'
+      - uses: ./.github/actions/setup-hol4
+        id: hol4
+        with:
+          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+      - uses: ./.github/actions/setup-holbuild
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
@@ -41,7 +38,7 @@ jobs:
       - name: Compute holbuild cache key
         id: cache-key
         run: |
-          echo "key=holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-${{ github.sha }}-build" >> "$GITHUB_OUTPUT"
+          echo "key=holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ github.sha }}-build" >> "$GITHUB_OUTPUT"
 
       - name: Restore holbuild global cache
         uses: actions/cache@v4
@@ -49,6 +46,7 @@ jobs:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.key }}
           restore-keys: |
+            holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-
             holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-
             holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-
             holbuild-global-${{ runner.os }}-
@@ -89,16 +87,18 @@ jobs:
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
-      - uses: ./.github/actions/setup-hol4
-        id: hol4
-        with:
-          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
       - uses: ./.github/actions/setup-verifereum
         id: verifereum
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          holbuild-ref: ${{ inputs.holbuild-ref || 'master' }}
+          build: 'false'
+      - uses: ./.github/actions/setup-hol4
+        id: hol4
+        with:
+          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
+          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
+      - uses: ./.github/actions/setup-holbuild
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"

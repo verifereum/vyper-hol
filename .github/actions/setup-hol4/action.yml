@@ -4,8 +4,7 @@ description: 'Builds/restores HOL4 and sets HOLDIR'
 inputs:
   hol4-ref:
     description: 'HOL4 git ref to use'
-    required: false
-    default: '4c96b9aa25da4f9066a500c13a9abe03252e3bae'
+    required: true
   polyml-rev:
     description: 'Resolved Poly/ML revision, used in cache key'
     required: true

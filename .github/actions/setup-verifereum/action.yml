@@ -2,10 +2,6 @@ name: 'Setup Verifereum'
 description: 'Clones/restores Verifereum source tree and sets VFMDIR'
 
 inputs:
-  verifereum-ref:
-    description: 'Verifereum git ref to use'
-    required: false
-    default: 'main'
   polyml-rev:
     description: 'Resolved Poly/ML revision, used in cache key'
     required: false
@@ -23,12 +19,10 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Resolve Verifereum version
+    - name: Read Verifereum pin
       id: version
       shell: bash
-      run: |
-        rev=$(git ls-remote https://github.com/verifereum/verifereum.git ${{ inputs.verifereum-ref }} | cut -f1)
-        echo "verifereum-rev=$rev" >> "$GITHUB_OUTPUT"
+      run: echo "verifereum-rev=$(tr -d '[:space:]' < PINS/verifereum.txt)" >> "$GITHUB_OUTPUT"
 
     - name: Cache Verifereum source
       uses: actions/cache@v4
@@ -40,7 +34,7 @@ runs:
     - name: Clone Verifereum
       if: steps.cache-verifereum.outputs.cache-hit != 'true'
       shell: bash
-      run: git clone -b "${{ inputs.verifereum-ref }}" https://github.com/verifereum/verifereum.git ~/verifereum
+      run: git clone https://github.com/verifereum/verifereum.git ~/verifereum
 
     - name: Checkout Verifereum revision
       shell: bash
