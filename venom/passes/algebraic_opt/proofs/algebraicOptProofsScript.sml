@@ -2316,11 +2316,18 @@ Proof
   simp[]
 QED
 
+Triviality ao_resolve_iszero_op_iszero[local]:
+  !targets op. ao_resolve_iszero_op targets ISZERO op = op
+Proof
+  rpt gen_tac >> Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
+  BasicProvers.EVERY_CASE_TAC >> simp[]
+QED
+
 (* Per-inst sim with state-dependent invariants instead of ∀s preconditions.
    H_resolve derived from chain invariant + ao_resolve_iszero_inst_sim.
    H_range derived from in_range_state + range_analyze_sound. *)
 Triviality ao_per_inst_sim_fn0_inv[local]:
-  !fn fn0 mid dfg ra targets bb fuel ctx v inst s.
+  !fn fn0 mid dfg ra targets bb fuel ctx idx inst s.
     fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
         MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
@@ -2331,7 +2338,7 @@ Triviality ao_per_inst_sim_fn0_inv[local]:
     ao_iszero_chain_inv targets s /\
     ao_chain_defined_prefix targets s /\
     ao_targets_wf targets /\
-    in_range_state (range_at_inst ra bb.bb_label v) s.vs_vars /\
+    in_range_state (range_at_inst ra bb.bb_label idx) s.vs_vars /\
     MEM bb fn0.fn_blocks /\
     MEM inst bb.bb_instructions /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
@@ -2342,7 +2349,7 @@ Triviality ao_per_inst_sim_fn0_inv[local]:
       (execution_equiv (ao_fn_fresh_vars fn))
       (step_inst fuel ctx inst s)
       (run_insts fuel ctx
-        (ao_transform_inst mid dfg ra bb.bb_label v targets inst) s)
+        (ao_transform_inst mid dfg ra bb.bb_label idx targets inst) s)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `?e. step_inst fuel ctx inst s = Error e`
@@ -2353,40 +2360,42 @@ Proof
   drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
   `ao_chains_defined_at targets s` by
     (irule ao_chain_defined_prefix_implies_at >> simp[]) >>
-  TRY (Cases_on `inst.inst_opcode = ISZERO`
-       >- (simp[ao_resolve_iszero_inst_def, instruction_component_equality] >>
-           irule listTheory.MAP_CONG >> simp[] >>
-           Cases >> simp[ao_resolve_iszero_op_def])
-       >- (Cases_on `inst.inst_opcode = PHI`
-           >- (irule ao_resolve_phi_sim >> simp[] >>
-               metis_tac[ao_fn_targets_chain_tail_var])
-           >- (irule ao_resolve_iszero_inst_sim_at >> simp[] >>
-               rpt strip_tac >>
-               simp[eval_operand_def, lookup_var_def,
-                    finite_mapTheory.FLOOKUP_DEF] >>
-               Cases_on `inst.inst_opcode = INVOKE`
-               >- (qpat_x_assum `~(?e. step_inst _ _ _ _ = Error _)` mp_tac >>
-                   simp[Once step_inst_def] >> simp[decode_invoke_def] >>
-                   BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
-                   gvs[decode_invoke_def, AllCaseEqs()] >>
-                   drule eval_operands_mem_defined >>
-                   disch_then (qspec_then `Var v` mp_tac) >>
-                   simp[eval_operand_def, lookup_var_def,
-                        finite_mapTheory.FLOOKUP_DEF])
-               >- (`step_inst fuel ctx inst s = step_inst_base inst s` by
-                     simp[step_inst_non_invoke] >>
-                   `!e. step_inst_base inst s <> Error e` by
-                     (rpt strip_tac >>
-                      `?e. step_inst fuel ctx inst s = Error e` by metis_tac[] >>
-                      metis_tac[]) >>
-                   qspecl_then [`inst`, `s`, `v`] mp_tac
-                     step_inst_base_nonerr_var_fdom >>
-                   simp[] >> disch_then irule >>
-                   rpt strip_tac >> gvs[inst_wf_def])))) >>
-  (* CHEATED: range soundness — needs variable renaming to avoid
-     v clash between instruction index and range_analyze_sound's
-     universally quantified word value *)
-  rpt strip_tac >> cheat)
+  conj_tac
+  >- (* resolve sim *)
+     (Cases_on `inst.inst_opcode = ISZERO`
+      >- (qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
+          simp[ao_resolve_iszero_inst_def,
+               ao_resolve_iszero_op_iszero])
+      >- (Cases_on `inst.inst_opcode = PHI`
+          >- (irule ao_resolve_phi_sim >> simp[] >>
+              metis_tac[ao_fn_targets_chain_tail_var])
+          >- (irule ao_resolve_iszero_inst_sim_at >> simp[] >>
+              rpt strip_tac >>
+              simp[eval_operand_def, lookup_var_def,
+                   finite_mapTheory.FLOOKUP_DEF] >>
+              Cases_on `inst.inst_opcode = INVOKE`
+              >- (qpat_x_assum `~(?e. step_inst _ _ _ _ = Error _)` mp_tac >>
+                  simp[Once step_inst_def] >> simp[decode_invoke_def] >>
+                  BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
+                  gvs[decode_invoke_def, AllCaseEqs()] >>
+                  drule eval_operands_mem_defined >>
+                  disch_then (qspec_then `Var v` mp_tac) >>
+                  simp[eval_operand_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_DEF])
+              >- (`step_inst fuel ctx inst s = step_inst_base inst s` by
+                    simp[step_inst_non_invoke] >>
+                  `!e. step_inst_base inst s <> Error e` by
+                    (rpt strip_tac >>
+                     `?e. step_inst fuel ctx inst s = Error e` by metis_tac[] >>
+                     metis_tac[]) >>
+                  qspecl_then [`inst`, `s`, `v`] mp_tac
+                    step_inst_base_nonerr_var_fdom >>
+                  simp[] >> disch_then irule >>
+                  rpt strip_tac >> gvs[inst_wf_def]))))
+  >- (* range soundness *)
+     (rpt strip_tac >>
+      irule range_analyze_sound >>
+      qexists_tac `s` >> gvs[]))
 QED
 
 Triviality eval_operand_inst_idx[local]:
