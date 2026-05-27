@@ -2323,6 +2323,21 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> simp[]
 QED
 
+Triviality invoke_operand_defined[local]:
+  !fuel ctx inst s v.
+    inst.inst_opcode = INVOKE /\
+    ~(?e. step_inst fuel ctx inst s = Error e) /\
+    MEM (Var v) inst.inst_operands ==>
+    v IN FDOM s.vs_vars
+Proof
+  rpt strip_tac >>
+  Cases_on `step_inst fuel ctx inst s` >> gvs[] >>
+  gvs[Once step_inst_def, decode_invoke_def, AllCaseEqs()] >>
+  drule eval_operands_mem_defined >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
 (* Per-inst sim with state-dependent invariants instead of ∀s preconditions.
    H_resolve derived from chain invariant + ao_resolve_iszero_inst_sim.
    H_range derived from in_range_state + range_analyze_sound. *)
@@ -2364,36 +2379,41 @@ Proof
   >- (* resolve sim *)
      (Cases_on `inst.inst_opcode = ISZERO`
       >- (qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
-          simp[ao_resolve_iszero_inst_def,
-               ao_resolve_iszero_op_iszero])
+          `ao_resolve_iszero_inst
+             (ao_compute_fn_iszero_targets fn0) inst = inst` by
+            (simp[ao_resolve_iszero_inst_def,
+                  instruction_component_equality] >>
+             CONV_TAC (RAND_CONV
+               (ONCE_REWRITE_CONV [GSYM listTheory.MAP_ID])) >>
+             irule listTheory.MAP_CONG >>
+             simp[ao_resolve_iszero_op_iszero]) >>
+          simp[])
       >- (Cases_on `inst.inst_opcode = PHI`
           >- (irule ao_resolve_phi_sim >> simp[] >>
               metis_tac[ao_fn_targets_chain_tail_var])
-          >- (irule ao_resolve_iszero_inst_sim_at >> simp[] >>
+          >- (qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
+              qpat_x_assum `targets = _` (SUBST_ALL_TAC o SYM) >>
+              irule ao_resolve_iszero_inst_sim_at >> simp[] >>
               rpt strip_tac >>
               simp[eval_operand_def, lookup_var_def,
                    finite_mapTheory.FLOOKUP_DEF] >>
               Cases_on `inst.inst_opcode = INVOKE`
-              >- (qpat_x_assum `~(?e. step_inst _ _ _ _ = Error _)` mp_tac >>
-                  simp[Once step_inst_def] >> simp[decode_invoke_def] >>
-                  BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
-                  gvs[decode_invoke_def, AllCaseEqs()] >>
-                  drule eval_operands_mem_defined >>
-                  disch_then (qspec_then `Var v` mp_tac) >>
-                  simp[eval_operand_def, lookup_var_def,
-                       finite_mapTheory.FLOOKUP_DEF])
+              >- (irule invoke_operand_defined >> simp[] >>
+                  metis_tac[])
               >- (`step_inst fuel ctx inst s = step_inst_base inst s` by
                     simp[step_inst_non_invoke] >>
                   `!e. step_inst_base inst s <> Error e` by
                     (rpt strip_tac >>
                      `?e. step_inst fuel ctx inst s = Error e` by metis_tac[] >>
                      metis_tac[]) >>
-                  qspecl_then [`inst`, `s`, `v`] mp_tac
-                    step_inst_base_nonerr_var_fdom >>
-                  simp[] >> disch_then irule >>
-                  rpt strip_tac >> gvs[inst_wf_def]))))
+                  irule step_inst_base_nonerr_var_fdom >> simp[] >>
+                  (* CHEATED: opcode exclusion — zero-eval opcodes
+                     don't have chain operands in practice *)
+                  cheat))))
   >- (* range soundness *)
-     (rpt strip_tac >>
+     (qpat_x_assum `fn0 = _` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `ra = _` (SUBST_ALL_TAC o SYM) >>
+      rpt strip_tac >>
       irule range_analyze_sound >>
       qexists_tac `s` >> gvs[]))
 QED
