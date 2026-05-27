@@ -86,10 +86,14 @@ Next steps include formalising the front-end (parsing and full type-checking), p
 
 ## Dependencies and How to Run
 
-This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper). The following branches are used for active development:
-  - HOL4: `master` (https://github.com/HOL-Theorem-Prover/HOL)
-  - Verifereum: `main` (https://github.com/verifereum/verifereum)
-  - Vyper: `main` (or the release branch matching the JSON test export you are using) (https://github.com/vyperlang/vyper)
+This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper).
+
+**Pinned versions:** The repository uses a `PINS/` directory to pin compatible dependency versions for reproducible builds:
+  - `PINS/verifereum.txt` pins the [Verifereum](https://github.com/verifereum/verifereum) commit
+  - Verifereum's `PINS/holbuild.txt` pins the [`holbuild`](https://github.com/charles-cooper/holbuild) version
+  - holbuild's `PINS/hol.txt` pins the [HOL4](https://github.com/HOL-Theorem-Prover/HOL) commit
+
+The CI workflow (`.github/workflows/holbuild.yml`) follows this pin chain automatically. For local development, you can use the pinned commits or track the latest versions (which usually work but may occasionally diverge).
 
 The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions.
 
