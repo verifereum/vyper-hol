@@ -1704,21 +1704,33 @@ QED
      outputs/inputs unchanged after by SSA.
    - Case d_bb <> bb: d_bb strictly dominated bb, exec_block doesn't
      modify d_bb's variables (SSA uniqueness). *)
-Triviality strict_dom_iszero_inv_preserved[local]:
-  !fn0 dfg bb fuel ctx s s'.
-    wf_function fn0 /\ wf_ssa fn0 /\
-    dfg = dfg_build_function fn0 /\
-    MEM bb fn0.fn_blocks /\
-    bb.bb_label = s.vs_current_bb /\
-    exec_block fuel ctx bb s = OK s' /\
-    s.vs_inst_idx = 0 /\
-    ~s'.vs_halted /\
-    EVERY inst_wf bb.bb_instructions /\
-    fn_reachable fn0 s.vs_current_bb /\
-    strict_dom_iszero_inv fn0 dfg s ==>
-    strict_dom_iszero_inv fn0 dfg s'
+(* SSA: output of instruction in one block is not in outputs of another block *)
+Triviality ssa_output_not_in_other_block[local]:
+  !fn0 d_bb bb inst x.
+    ssa_form fn0 /\ wf_function fn0 /\
+    MEM d_bb fn0.fn_blocks /\ MEM bb fn0.fn_blocks /\
+    MEM inst d_bb.bb_instructions /\ MEM x inst.inst_outputs /\
+    d_bb <> bb ==>
+    ~MEM x (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  fs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+  rename1 `MEM inst' bb.bb_instructions` >>
+  `MEM inst (fn_insts fn0) /\ MEM inst' (fn_insts fn0)` by
+    metis_tac[mem_block_mem_fn_insts] >>
+  `ssa_form fn0` by simp[] >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn0)))` by
+    fs[ssa_form_def] >>
+  `inst = inst'` by metis_tac[all_distinct_flat_map_unique] >>
+  gvs[] >>
+  `fn_inst_ids_distinct fn0` by fs[wf_function_def] >>
+  fs[fn_inst_ids_distinct_def] >>
+  qmatch_asmsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP fid _))` >>
+  qspecl_then [`fn0.fn_blocks`, `fid`, `d_bb`, `bb`]
+    (fn th => `d_bb = bb` by
+      (mp_tac th >> simp[Abbr `fid`, listTheory.MEM_MAP] >> metis_tac[]))
+    all_distinct_flat_map_unique >>
+  gvs[]
 QED
 
 Triviality strict_dom_iszero_inv_inst_idx[local]:
@@ -1953,6 +1965,42 @@ Proof
       >> simp[])
 QED
 
+(* Terminator step preserves within_block_iszero_inv up to LENGTH *)
+Triviality exec_block_wbiz_aux_term[local]:
+  !fn0 bb fuel ctx s s_step inst.
+    wf_function fn0 /\ MEM bb fn0.fn_blocks /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    inst = EL s.vs_inst_idx bb.bb_instructions /\
+    is_terminator inst.inst_opcode /\
+    step_inst fuel ctx inst s = OK s_step /\
+    within_block_iszero_inv fn0 bb s.vs_inst_idx s ==>
+    within_block_iszero_inv fn0 bb (LENGTH bb.bb_instructions) s_step
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `s.vs_inst_idx = PRE (LENGTH bb.bb_instructions)` by
+    (fs[bb_well_formed_def] >> metis_tac[]) >>
+  simp[within_block_iszero_inv_def] >> rpt gen_tac >> rpt strip_tac >>
+  `j < s.vs_inst_idx` by
+    (`~is_terminator (EL j bb.bb_instructions).inst_opcode` by
+       simp[is_terminator_def] >>
+     `j <> s.vs_inst_idx` by (strip_tac >> gvs[]) >>
+     DECIDE_TAC) >>
+  `!v. lookup_var v s_step = lookup_var v s` by
+    metis_tac[venomExecPropsTheory.step_terminator_preserves_vars] >>
+  `s_step.vs_labels = s.vs_labels` by
+    metis_tac[venomExecPropsTheory.step_inst_preserves_labels_always] >>
+  `eval_operand iz_op s_step = eval_operand iz_op s` by
+    (Cases_on `iz_op`
+     >- REWRITE_TAC[eval_operand_def]
+     >- (REWRITE_TAC[eval_operand_def] >> simp[lookup_var_def])
+     >- (REWRITE_TAC[eval_operand_def] >> gvs[])) >>
+  `lookup_var x s_step = SOME val_x` by gvs[] >>
+  `lookup_var x s = SOME val_x` by gvs[] >>
+  `eval_operand iz_op s = SOME val_op` by gvs[] >>
+  fs[within_block_iszero_inv_def] >> metis_tac[]
+QED
+
 (* exec_block_wbiz_aux: exec_block maintains within_block_iszero_inv.
    Proof by measure induction on LENGTH - vs_inst_idx.
    Terminator case: ISZEROs at j < idx preserved by step_terminator_preserves_vars.
@@ -1966,7 +2014,40 @@ Triviality exec_block_wbiz_aux[local]:
     exec_block fuel ctx bb s = OK s' ==>
     within_block_iszero_inv fn0 bb (LENGTH bb.bb_instructions) s'
 Proof
-  cheat
+  Induct_on `n` >> rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once venomExecSemanticsTheory.exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  TRY (fs[venomInstTheory.get_instruction_def] >> NO_TAC) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s_step` >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s.vs_inst_idx bb.bb_instructions` by
+    fs[venomInstTheory.get_instruction_def] >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[] >> strip_tac >>
+  gvs[AllCaseEqs()]
+  >- (* terminator *)
+     (qspecl_then [`fn0`, `bb`, `fuel`, `ctx`, `s`, `s'`,
+                   `EL s.vs_inst_idx bb.bb_instructions`]
+        mp_tac exec_block_wbiz_aux_term >>
+      impl_tac >- (simp[] >> fs[venomInstTheory.get_instruction_def]) >>
+      simp[])
+  >- (* non-terminator: wbiz_step + IH *)
+     (`s.vs_inst_idx < LENGTH bb.bb_instructions` by
+        fs[venomInstTheory.get_instruction_def] >>
+      `within_block_iszero_inv fn0 bb (SUC s.vs_inst_idx)
+         (s_step with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (qspecl_then [`fn0`, `bb`, `s.vs_inst_idx`, `fuel`, `ctx`,
+                      `s`, `s_step`]
+           mp_tac wbiz_step >>
+         impl_tac >- (simp[] >> metis_tac[listTheory.EVERY_EL]) >>
+         simp[]) >>
+      first_x_assum (qspecl_then [`fn0`, `bb`, `fuel`, `ctx`,
+         `s_step with vs_inst_idx := SUC s.vs_inst_idx`, `s'`]
+         mp_tac) >>
+      impl_tac >- simp[] >>
+      simp[])
 QED
 
 Triviality exec_block_iszero_val[local]:
@@ -1985,7 +2066,37 @@ Triviality exec_block_iszero_val[local]:
       eval_operand iz_op s' = SOME val_op ==>
       val_x = bool_to_word (val_op = 0w)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `within_block_iszero_inv fn0 bb (LENGTH bb.bb_instructions) s'` by
+    (qspecl_then [`LENGTH bb.bb_instructions`, `fn0`, `bb`, `fuel`,
+                  `ctx`, `s`, `s'`]
+       mp_tac exec_block_wbiz_aux >>
+     impl_tac >- simp[wbiz_initial] >> simp[]) >>
+  `?j. j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = iz_inst` by
+    metis_tac[listTheory.MEM_EL] >>
+  fs[within_block_iszero_inv_def] >> metis_tac[]
+QED
+
+Triviality strict_dom_iszero_inv_preserved[local]:
+  !fn0 dfg bb fuel ctx s s'.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    dfg = dfg_build_function fn0 /\
+    MEM bb fn0.fn_blocks /\
+    bb.bb_label = s.vs_current_bb /\
+    exec_block fuel ctx bb s = OK s' /\
+    s.vs_inst_idx = 0 /\
+    ~s'.vs_halted /\
+    EVERY inst_wf bb.bb_instructions /\
+    fn_reachable fn0 s.vs_current_bb /\
+    strict_dom_iszero_inv fn0 dfg s ==>
+    strict_dom_iszero_inv fn0 dfg s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn0` by fs[wf_ssa_def] >>
+  simp[strict_dom_iszero_inv_def] >> rpt gen_tac >> rpt strip_tac >>
+  Cases_on `d_bb.bb_label = s.vs_current_bb`
+  >- cheat
+  >- cheat
 QED
 
 (* ao_handle_offset_inst preserves inst_id *)
