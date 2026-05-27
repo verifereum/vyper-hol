@@ -3457,6 +3457,45 @@ Proof
   metis_tac[]
 QED
 
+Triviality iszero_step_key_output[local]:
+  !acc h v chain.
+    ALOOKUP (ao_compute_iszero_step acc h) v = SOME chain /\
+    ALOOKUP acc v = NONE ==>
+    MEM v h.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ALOOKUP (ao_compute_iszero_step _ _) _ = _` mp_tac >>
+  simp[ao_compute_iszero_step_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  simp[alistTheory.ALOOKUP_def] >> IF_CASES_TAC >> gvs[]
+QED
+
+Triviality foldl_iszero_key_output[local]:
+  !insts acc v chain.
+    ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
+    ALOOKUP acc v = NONE ==>
+    ?inst. MEM inst insts /\ MEM v inst.inst_outputs
+Proof
+  Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `ao_compute_iszero_step acc h` >>
+  Cases_on `ALOOKUP (ao_compute_iszero_step acc h) v`
+  >- (first_x_assum (qspecl_then
+        [`ao_compute_iszero_step acc h`, `v`, `chain`] mp_tac) >>
+      simp[] >> metis_tac[])
+  >- (`MEM v h.inst_outputs` by metis_tac[iszero_step_key_output] >>
+      metis_tac[])
+QED
+
+Theorem ao_fn_targets_key_is_output:
+  !fn v chain.
+    ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain ==>
+    ?inst. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs
+Proof
+  simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  metis_tac[foldl_iszero_key_output, alistTheory.ALOOKUP_def]
+QED
+
 Theorem ao_phases123_run_blocks_sim_inv[local]:
   !fn fn0 mid dfg ra targets fn1 fuel ctx s.
     fn0 = fn with fn_blocks :=
@@ -3644,47 +3683,6 @@ Triviality ao_phase_decompose[local]:
       ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
 Proof
   simp[ao_transform_function_def, ao_fn_total_fresh_vars_def, LET_THM]
-QED
-
-(* Connecting lemma: target keys are instruction outputs.
-   ao_compute_iszero_step only adds keys from inst_outputs. *)
-Triviality iszero_step_key_output[local]:
-  !acc h v chain.
-    ALOOKUP (ao_compute_iszero_step acc h) v = SOME chain /\
-    ALOOKUP acc v = NONE ==>
-    MEM v h.inst_outputs
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `ALOOKUP (ao_compute_iszero_step _ _) _ = _` mp_tac >>
-  simp[ao_compute_iszero_step_def] >>
-  rpt (CASE_TAC >> gvs[]) >>
-  simp[alistTheory.ALOOKUP_def] >> IF_CASES_TAC >> gvs[]
-QED
-
-Triviality foldl_iszero_key_output[local]:
-  !insts acc v chain.
-    ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
-    ALOOKUP acc v = NONE ==>
-    ?inst. MEM inst insts /\ MEM v inst.inst_outputs
-Proof
-  Induct >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `ao_compute_iszero_step acc h` >>
-  Cases_on `ALOOKUP (ao_compute_iszero_step acc h) v`
-  >- (first_x_assum (qspecl_then
-        [`ao_compute_iszero_step acc h`, `v`, `chain`] mp_tac) >>
-      simp[] >> metis_tac[])
-  >- (`MEM v h.inst_outputs` by metis_tac[iszero_step_key_output] >>
-      metis_tac[])
-QED
-
-Theorem ao_fn_targets_key_is_output:
-  !fn v chain.
-    ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain ==>
-    ?inst. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs
-Proof
-  simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
-  metis_tac[foldl_iszero_key_output, alistTheory.ALOOKUP_def]
 QED
 
 (* ao_dfg_inv holds for the initial state when ADDRESS/SIGNEXTEND outputs
