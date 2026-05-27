@@ -2436,6 +2436,28 @@ Proof
   simp[fn_insts_def]
 QED
 
+Triviality ao_dfg_operands_not_in_fv[local]:
+  !fn fn0 dfg x inst v.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    dfg_get_def dfg x = SOME inst /\
+    MEM (Var v) inst.inst_operands ==>
+    v NOTIN ao_fn_fresh_vars fn
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+  qpat_x_assum `MEM inst (fn_insts _)` mp_tac >>
+  simp[fn_insts_def] >> strip_tac >>
+  drule fn_insts_blocks_map_offset >> strip_tac >> gvs[] >>
+  imp_res_tac ao_handle_offset_var_ops >>
+  first_x_assum irule >> qexists_tac `inst0` >>
+  simp[fn_insts_def]
+QED
+
 (* run_blocks is independent of vs_inst_idx *)
 Triviality run_blocks_inst_idx_irrel[local]:
   !fuel ctx fn s.
@@ -3571,7 +3593,36 @@ Proof
     >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
        cheat
     >- (* block_inv compat with state_equiv fv *)
-       cheat
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `block_inv s1` mp_tac >>
+        simp_tac std_ss [Abbr `block_inv`] >> strip_tac >>
+        `s2.vs_current_bb = s1.vs_current_bb` by fs[state_equiv_def] >>
+        `!x inst'. dfg_get_def dfg x = SOME inst' ==> x NOTIN fv` by
+          metis_tac[ao_dfg_outputs_not_in_fv, markerTheory.Abbrev_def] >>
+        `!x inst' op'. dfg_get_def dfg x = SOME inst' /\
+          inst'.inst_opcode = ISZERO /\ inst'.inst_operands = [Var op'] ==>
+          op' NOTIN fv` by
+          (rpt strip_tac >>
+           `MEM (Var op') inst'.inst_operands` by simp[] >>
+           metis_tac[ao_dfg_operands_not_in_fv, markerTheory.Abbrev_def]) >>
+        rpt conj_tac
+        >- (* ao_dfg_inv *)
+           (`state_equiv fv (s1 with vs_inst_idx := 0)
+                            (s2 with vs_inst_idx := 0)` by
+              (qpat_x_assum `state_equiv _ _ _` mp_tac >>
+               simp[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+            metis_tac[ao_dfg_inv_state_equiv_compat])
+        >- (* strict_dom_iszero_inv *)
+           metis_tac[strict_dom_iszero_inv_state_equiv_compat]
+        >- (* ao_chain_defined_prefix *)
+           (irule ao_chain_defined_prefix_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
+            metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])
+        >- (* range_sound *)
+           metis_tac[ao_range_sound_state_equiv_compat,
+                     markerTheory.Abbrev_def]
+        >- simp[]
+        >- simp[])
     >- (* operand lookup under state_equiv *)
        (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
         `x NOTIN fv` by
