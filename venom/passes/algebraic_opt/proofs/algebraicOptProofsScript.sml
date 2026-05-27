@@ -2943,6 +2943,71 @@ Proof
   gvs[step_inst_base_def, exec_read0_def]
 QED
 
+(* Chain consecutive ISZERO: consecutive chain elements correspond to
+   an ISZERO instruction. EL (k+1) chain = Var w is an ISZERO output
+   whose operand is EL k chain. *)
+Triviality chain_consecutive_iszero_step_aux[local]:
+  !acc inst v chain k w.
+    ALOOKUP (ao_compute_iszero_step acc inst) v = SOME chain /\
+    k + 1 < LENGTH chain /\ EL (k + 1) chain = Var w ==>
+    (inst.inst_opcode = ISZERO /\
+     inst.inst_operands = [EL k chain] /\
+     MEM w inst.inst_outputs) \/
+    (?v' chain'. ALOOKUP acc v' = SOME chain' /\
+       k + 1 < LENGTH chain' /\ EL (k + 1) chain' = Var w /\
+       EL k chain' = EL k chain)
+Proof
+  cheat
+QED
+
+Triviality chain_consecutive_iszero_foldl[local]:
+  !insts acc v chain k w.
+    ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
+    k + 1 < LENGTH chain /\ EL (k + 1) chain = Var w ==>
+    (?inst. MEM inst insts /\
+            inst.inst_opcode = ISZERO /\
+            inst.inst_operands = [EL k chain] /\
+            MEM w inst.inst_outputs) \/
+    (?v' chain'. ALOOKUP acc v' = SOME chain' /\
+       k + 1 < LENGTH chain' /\ EL (k + 1) chain' = Var w /\
+       EL k chain' = EL k chain)
+Proof
+  Induct >> rpt strip_tac
+  >- (DISJ2_TAC >> qexistsl_tac [`v`, `chain`] >> gvs[])
+  >- (gvs[Once listTheory.FOLDL] >>
+      first_x_assum
+        (qspecl_then [`ao_compute_iszero_step acc h`,
+                      `v`, `chain`, `k`, `w`] mp_tac) >>
+      simp[] >> strip_tac
+      >- (DISJ1_TAC >> metis_tac[])
+      >- (qpat_x_assum `ALOOKUP _ _ = SOME chain'` mp_tac >>
+          qpat_x_assum `EL k chain' = _` mp_tac >>
+          qpat_x_assum `EL (k + 1) chain' = _` mp_tac >>
+          qpat_x_assum `k + 1 < LENGTH chain'` mp_tac >>
+          rpt strip_tac >>
+          drule_all chain_consecutive_iszero_step_aux >> strip_tac
+          >- (DISJ1_TAC >> qexists_tac `h` >> simp[])
+          >- (DISJ2_TAC >>
+              qexistsl_tac [`v''`, `chain''`] >> simp[] >>
+              metis_tac[])))
+QED
+
+Triviality chain_consecutive_iszero[local]:
+  !fn v chain k w.
+    ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain /\
+    k + 1 < LENGTH chain /\ EL (k + 1) chain = Var w ==>
+    ?inst. MEM inst (fn_insts fn) /\
+           inst.inst_opcode = ISZERO /\
+           inst.inst_operands = [EL k chain] /\
+           MEM w inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  gvs[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  drule_all chain_consecutive_iszero_foldl >>
+  strip_tac >> gvs[alistTheory.ALOOKUP_def] >>
+  metis_tac[]
+QED
+
 (* Per-inst sim with state-dependent invariants instead of ∀s preconditions.
    H_resolve derived from chain invariant + ao_resolve_iszero_inst_sim.
    H_range derived from in_range_state + range_analyze_sound. *)
