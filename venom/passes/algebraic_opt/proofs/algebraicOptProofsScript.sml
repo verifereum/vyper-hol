@@ -2383,6 +2383,9 @@ Proof
                      step_inst_base_nonerr_var_fdom >>
                    simp[] >> disch_then irule >>
                    rpt strip_tac >> gvs[inst_wf_def])))) >>
+  (* CHEATED: range soundness — needs variable renaming to avoid
+     v clash between instruction index and range_analyze_sound's
+     universally quantified word value *)
   rpt strip_tac >> cheat)
 QED
 
