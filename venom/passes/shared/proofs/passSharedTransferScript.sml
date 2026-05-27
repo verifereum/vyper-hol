@@ -212,7 +212,8 @@ val output_vars_finish_tac =
                   finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs);
 
 (* OK transfer: if step_inst_base returns OK on s, it also returns OK on s'
-   when operands and relevant context fields agree. *)
+   when operands agree and the conditional context fields match
+   (PHI → vs_prev_bb, PARAM → vs_params, RETURNDATACOPY → vs_returndata). *)
 Theorem step_inst_base_ok_transfer:
   !inst s v s'.
     step_inst_base inst s = OK v /\
@@ -311,10 +312,12 @@ Proof
   >- ok_transfer_finish_tac
 QED
 
-(* Per-field output determinism: each field conclusion has only the
-   preconditions it needs. The accounts field uses individual effect
-   conditions rather than a 3-way disjunction, making it easier to
-   apply when effects_independent only gives per-effect disjointness. *)
+(* Per-field output determinism: for each written state field (memory,
+   transient, accounts, immutables, returndata, logs), the output value
+   is determined by operand agreement and the corresponding read-state
+   field agreement. Accounts uses individual effect conditions
+   (Eff_STORAGE, Eff_BALANCE) rather than a disjunction, matching the
+   per-effect disjointness provided by effects_independent. *)
 Theorem step_inst_base_output_determined_fields:
   !inst s1 s2 v1 v2.
     step_inst_base inst s1 = OK v1 /\
@@ -672,6 +675,7 @@ Theorem step_inst_base_effect_free_output_determined_vars:
     step_inst_base inst s2 = OK v2 /\
     is_effect_free_op inst.inst_opcode /\
     inst.inst_opcode <> NOP /\
+    inst.inst_opcode <> PHI /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) /\
     (inst.inst_opcode = PHI ==> s1.vs_prev_bb = s2.vs_prev_bb) /\
@@ -705,67 +709,8 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_effect_free_op_def, is_terminator_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def]
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
+      all_effects_def, empty_effects_def] >>
+  transfer_determined_finish_tac
 QED
 
 

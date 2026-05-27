@@ -1,19 +1,20 @@
 (*
- * Revert-to-Assert — Correctness Proofs
+ * Revert-to-Assert: Correctness Proofs
  *
  * Proves rta_pass_correct by instantiating resolving_block_sim_function.
  *)
 
-open HolKernel Parse boolLib bossLib BasicProvers;
-open rtaDefsTheory crossBlockSimProofsTheory crossBlockSimDefsTheory
-     passSimulationDefsTheory passSimulationProofsTheory
-     execEquivParamProofsTheory execEquivParamBaseTheory
-     stateEquivTheory stateEquivPropsTheory
-     venomExecSemanticsTheory venomExecPropsTheory
-     venomInstTheory venomStateTheory
-     pred_setTheory arithmeticTheory;
-
-val _ = new_theory "rtaCorrectnessProofs";
+Theory rtaCorrectnessProofs
+Ancestors
+  rtaDefs crossBlockSimProofs crossBlockSimProps crossBlockSimDefs
+  passSimulationDefs passSimulationProofs
+  execEquivParamProofs execEquivParamBase
+  stateEquiv stateEquivProps
+  venomExecSemantics venomExecProofs venomExecProps
+  venomInst venomState
+  pred_set arithmetic
+Libs
+  BasicProvers
 
 val rveq = VAR_EQ_TAC;
 
@@ -28,6 +29,24 @@ Proof
   rpt strip_tac >>
   rw[resolving_block_sim_def] >> qexists_tac `0` >>
   rw[resolves_to_def]
+QED
+
+(* Boundary lemma: OK v resolves to r2 in one step if lift_result holds after
+   running one block. Encapsulates resolves_to_def expansion so consumer proofs
+   never need to unfold it (avoiding ∀fuel ctx variable mismatch). *)
+Triviality resolves_to_step_ok:
+  !R_ok R_term bbs1 bbs2 v r2 bb.
+    ~v.vs_halted /\ lookup_block v.vs_current_bb bbs1 = SOME bb /\
+    (!fuel ctx. lift_result R_ok R_term R_term (run_block_entry fuel ctx bb v) r2)
+    ==> resolves_to R_ok R_term bbs1 bbs2 (SUC 0) (OK v) r2
+Proof
+  rpt strip_tac >>
+  PURE_ONCE_REWRITE_TAC[resolves_to_def] >>
+  DISJ2_TAC >> DISJ1_TAC >>
+  qexists_tac `v` >> qexists_tac `bb` >> simp[] >>
+  gen_tac >> gen_tac >>
+  PURE_ONCE_REWRITE_TAC[resolves_to_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* transform_block preserves label *)
@@ -153,6 +172,29 @@ Proof
   `EL 0 bb.bb_instructions = HD bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[]) >>
   simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def]
+QED
+
+(* Combined bridge: run_block_entry directly to Abort result.
+   Avoids two-step bridging (run_block_entry→exec_block→Abort) inside ∀fuel ctx
+   scope, which causes syntactic mismatch. *)
+Triviality run_revert_block_entry:
+  !bb fuel ctx st.
+    is_simple_revert_block bb /\
+    EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions /\
+    st.vs_inst_idx = 0 /\ ~st.vs_halted
+  ==>
+    run_block_entry fuel ctx bb st =
+      Abort Revert_abort (revert_state (set_returndata [] st))
+Proof
+  rpt strip_tac >>
+  (* run_block_entry = exec_block when no PHIs *)
+  `run_block_entry fuel ctx bb st =
+     exec_block fuel ctx bb (st with vs_inst_idx := 0)` by
+    metis_tac[run_block_no_phis_eq_exec_block] >>
+  (* exec_block matches run_revert_block *)
+  `(st with vs_inst_idx := 0).vs_inst_idx = 0` by simp[] >>
+  mp_tac (Q.SPECL [`bb`, `fuel`, `ctx`, `st with vs_inst_idx := 0`] run_revert_block) >>
+  simp[]
 QED
 
 (* When all instructions have transform_jnz = NONE, block is unchanged *)
@@ -377,33 +419,33 @@ Triviality revert_fresh_var_sim:
         (update_var tmp v st with vs_inst_idx := k))))
 Proof
   rpt strip_tac >>
-  rw[resolving_block_sim_def] >> qexists_tac `SUC 0` >>
-  PURE_ONCE_REWRITE_TAC [resolves_to_def] >>
-  DISJ2_TAC >> DISJ1_TAC >>
-  simp[jump_to_def] >>
+  rw[resolving_block_sim_def] >>
+  qexists_tac `SUC 0` >>
+  irule resolves_to_step_ok >>
+  conj_tac >- simp[jump_to_def] >>
   `?rbb. lookup_block revert_lbl fn.fn_blocks = SOME rbb /\
          is_simple_revert_block rbb` by (
     fs[is_revert_label_def] >>
     Cases_on `lookup_block revert_lbl fn.fn_blocks` >> fs[]
   ) >>
   qexists_tac `rbb` >> simp[] >>
-  rpt gen_tac >>
-  (* Establish exec_block result for the revert block *)
-  `!f c. exec_block f c rbb
-    (st with <| vs_prev_bb := SOME st.vs_current_bb;
-                vs_current_bb := revert_lbl;
-                vs_inst_idx := 0 |>) =
-   Abort Revert_abort (revert_state (set_returndata []
-     (st with <| vs_prev_bb := SOME st.vs_current_bb;
-                 vs_current_bb := revert_lbl;
-                 vs_inst_idx := 0 |>)))` by (
-    rpt gen_tac >> irule run_revert_block >> simp[]
+  conj_tac >- (
+    (* ∀fuel ctx. lift_result ... *)
+    rpt strip_tac >>
+    `EVERY (\inst. inst.inst_opcode <> PHI) rbb.bb_instructions` by (
+      fs[is_simple_revert_block_def] >> Cases_on `rbb.bb_instructions` >> fs[]) >>
+    (* Prove what run_block_entry returns *)
+    `run_block_entry fuel ctx rbb (jump_to revert_lbl st) =
+       Abort Revert_abort (revert_state (set_returndata [] (jump_to revert_lbl st)))` by (
+      match_mp_tac run_revert_block_entry >> simp[jump_to_def]
+    ) >>
+    (* Now expand lift_result, jump_to, execution_equiv, etc. *)
+    simp[lift_result_def, jump_to_def, execution_equiv_def, revert_state_def,
+         set_returndata_def, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    rw[] >> metis_tac[]
   ) >>
-  ASM_REWRITE_TAC [] >>
-  simp[resolves_to_def, lift_result_def,
-       execution_equiv_def, revert_state_def, set_returndata_def,
-       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> metis_tac[]
+  simp[jump_to_def]
 QED
 
 (* Revert resolution: when original jumps to a revert label,
@@ -424,28 +466,31 @@ Triviality revert_resolves_to:
       (Abort Revert_abort st2)
 Proof
   rpt strip_tac >>
-  rw[resolving_block_sim_def] >> qexists_tac `SUC 0` >>
-  PURE_ONCE_REWRITE_TAC [resolves_to_def] >>
-  DISJ2_TAC >> DISJ1_TAC >>
-  simp[jump_to_def] >>
+  rw[resolving_block_sim_def] >>
+  qexists_tac `SUC 0` >>
+  irule resolves_to_step_ok >>
+  conj_tac >- simp[jump_to_def] >>
   `?rbb. lookup_block revert_lbl fn.fn_blocks = SOME rbb /\
          is_simple_revert_block rbb` by (
     fs[is_revert_label_def] >>
     Cases_on `lookup_block revert_lbl fn.fn_blocks` >> fs[]
   ) >>
   qexists_tac `rbb` >> simp[] >>
-  rpt strip_tac >>
-  `exec_block fuel ctx rbb
-    (st with <| vs_prev_bb := SOME st.vs_current_bb;
-                vs_current_bb := revert_lbl;
-                vs_inst_idx := 0 |>) =
-   Abort Revert_abort (revert_state (set_returndata []
-     (st with <| vs_prev_bb := SOME st.vs_current_bb;
-                 vs_current_bb := revert_lbl;
-                 vs_inst_idx := 0 |>)))` by (
-    irule run_revert_block >> simp[]
+  conj_tac >- (
+    rpt strip_tac >>
+    `EVERY (\inst. inst.inst_opcode <> PHI) rbb.bb_instructions` by (
+      fs[is_simple_revert_block_def] >> Cases_on `rbb.bb_instructions` >> fs[]) >>
+    (* Prove what run_block_entry returns *)
+    `run_block_entry fuel ctx rbb (jump_to revert_lbl st) =
+       Abort Revert_abort (revert_state (set_returndata [] (jump_to revert_lbl st)))` by (
+      match_mp_tac run_revert_block_entry >> simp[jump_to_def]
+    ) >>
+    (* Expand lift_result, normalize both goal and assumption, use execution_equiv assumption *)
+    fs[lift_result_def, jump_to_def, revert_state_def, set_returndata_def,
+       Excl "run_block_def", Excl "run_block_entry_def", Excl "eval_phis_def",
+       Excl "phi_prefix_length_def", Excl "eval_one_phi_def", Excl "run_blocks_def"]
   ) >>
-  simp[resolves_to_def, lift_result_def]
+  simp[jump_to_def]
 QED
 
 (* Pattern 1 transformed block execution: ISZERO+ASSERT+(JMP or Abort)
@@ -533,7 +578,7 @@ Proof
   rpt strip_tac >>
   qabbrev_tac `tmp = fresh_iszero_var inst.inst_id` >>
   `MEM inst bb.bb_instructions` by metis_tac[listTheory.MEM_EL, Abbr `inst`] >>
-  (* === Step 1: Establish original exec_block result === *)
+  (* Establish original exec_block result *)
   imp_res_tac step_jnz_general >>
   `inst.inst_opcode <> INVOKE` by (
     irule no_invoke_mem_inst >> metis_tac[]) >>
@@ -545,7 +590,7 @@ Proof
          is_terminator_def, jump_to_def, update_var_def] >>
     Cases_on `cond = 0w` >> simp[]
   ) >>
-  (* === Step 2: Establish transformed exec_block result === *)
+  (* Establish transformed exec_block result *)
   `st.vs_inst_idx + 3 <= LENGTH (transform_block_insts fn bb.bb_instructions)` by (
     `st.vs_inst_idx + LENGTH (transform_pattern1 inst cond_op if_zero) <=
        LENGTH (transform_block_insts fn bb.bb_instructions)` suffices_by
@@ -596,12 +641,12 @@ Proof
       mp_tac pattern1_transformed_execution >>
     simp[]
   ) >>
-  (* === Step 3: Case split and close === *)
+  (* Case split and close *)
   (* Substitute exec_block results into the goal before case splitting *)
   qpat_x_assum `exec_block fuel ctx bb st = _` (fn th => REWRITE_TAC [th]) >>
   qpat_x_assum `exec_block fuel ctx (transform_block fn bb) st = _`
     (fn th => REWRITE_TAC [th]) >>
-  (* Clean up: drop EL and step_inst_base assumptions that cause simp loops *)
+  (* Drop EL and step_inst_base assumptions that cause simp loops *)
   ntac 3 (pop_assum kall_tac) >> (* EL facts *)
   qpat_x_assum `st.vs_inst_idx + 3 <= _` kall_tac >>
   qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
@@ -836,6 +881,190 @@ Proof
   irule rta_per_block_sim_gen >> simp[]
 QED
 
+(* ===== PHI prefix preservation by transform_block_insts ===== *)
+
+(* transform_jnz returns NONE for non-JNZ instructions *)
+Triviality transform_jnz_not_jnz:
+  !fn inst. inst.inst_opcode <> JNZ ==> transform_jnz fn inst = NONE
+Proof
+  rw[transform_jnz_def]
+QED
+
+(* PHI instructions are untouched by transform_jnz *)
+Triviality transform_jnz_phi:
+  !fn inst. inst.inst_opcode = PHI ==> transform_jnz fn inst = NONE
+Proof
+  rw[transform_jnz_def]
+QED
+
+(* transform_jnz output never contains PHI *)
+Triviality transform_jnz_output_no_phis:
+  !fn inst new_insts.
+    transform_jnz fn inst = SOME new_insts ==>
+    EVERY (\i. i.inst_opcode <> PHI) new_insts
+Proof
+  rw[transform_jnz_def] >>
+  BasicProvers.every_case_tac >> fs[] >>
+  rw[transform_pattern1_def, transform_pattern2_def, LET_THM,
+     mk_iszero_inst_def, mk_assert_inst_def, mk_jmp_inst_def]
+QED
+
+(* phi_prefix_length is preserved by transform_block_insts *)
+Triviality transform_block_insts_phi_prefix_length:
+  !fn insts. phi_prefix_length (transform_block_insts fn insts) = phi_prefix_length insts
+Proof
+  Induct_on `insts` >> rpt strip_tac >>
+  simp[Once transform_block_insts_def] >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (
+    (* h is PHI: transform_jnz gives NONE, h stays, phi_prefix = SUC on both sides *)
+    `transform_jnz fn h = NONE` by simp[transform_jnz_phi] >>
+    simp[phi_prefix_length_def]
+  ) >>
+  (* h is not PHI: phi_prefix_length of (h::insts) = 0 *)
+  simp[phi_prefix_length_def] >>
+  Cases_on `transform_jnz fn h` >> simp[]
+  >- (
+    (* NONE: h stays as-is, phi_prefix of (h :: rest) = 0 since h not PHI *)
+    simp[phi_prefix_length_def]
+  ) >>
+  (* SOME x: replace h with x. First element of x is not PHI. *)
+  imp_res_tac transform_jnz_nonempty >>
+  Cases_on `x`
+  >- (
+    (* x = [] is impossible since x ≠ [] *)
+    fs[]
+  ) >>
+  (* x = h'::t; h' is ISZERO/ASSERT/JMP, never PHI *)
+  `EVERY (\i. i.inst_opcode <> PHI) (h'::t)` by (
+    metis_tac[transform_jnz_output_no_phis]) >>
+  fs[phi_prefix_length_def]
+QED
+
+(* Elements in the PHI prefix are preserved by transform_block_insts *)
+Triviality transform_block_insts_phi_prefix_el:
+  !fn insts i.
+    i < phi_prefix_length insts ==>
+    EL i (transform_block_insts fn insts) = EL i insts
+Proof
+  Induct_on `insts` >> rpt strip_tac
+  >- (
+    (* base case: phi_prefix_length [] = 0, so i < 0 is impossible *)
+    fs[phi_prefix_length_def] >> Cases_on `i` >> fs[]
+  ) >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (
+    (* h is PHI: transform_jnz gives NONE, h stays unchanged *)
+    `transform_jnz fn h = NONE` by simp[transform_jnz_phi] >>
+    simp[Once transform_block_insts_def, phi_prefix_length_def] >>
+    Cases_on `i` >> simp[] >> fs[phi_prefix_length_def]
+  ) >>
+  (* h is not PHI: phi_prefix_length = 0, contradiction with i < 0 *)
+  fs[phi_prefix_length_def] >> Cases_on `i` >> fs[]
+QED
+
+(* key lemma: eval_phis gives same result for original and transformed instructions *)
+Triviality eval_phis_transform_block_insts:
+  !fn s insts.
+    eval_phis s (transform_block_insts fn insts) = eval_phis s insts
+Proof
+  rpt strip_tac >>
+  match_mp_tac (GSYM eval_phis_same_phi_prefix) >>
+  simp[transform_block_insts_phi_prefix_length] >>
+  rpt strip_tac >>
+  irule transform_block_insts_phi_prefix_el >> simp[]
+QED
+
+(* transform_block_insts preserves no_phis *)
+Triviality transform_block_insts_no_phis:
+  !fn insts.
+    EVERY (\i. i.inst_opcode <> PHI) insts ==>
+    EVERY (\i. i.inst_opcode <> PHI) (transform_block_insts fn insts)
+Proof
+  Induct_on `insts` >> rw[transform_block_insts_def] >>
+  Cases_on `transform_jnz fn h` >> gvs[] >>
+  drule transform_jnz_output_no_phis >> simp[]
+QED
+
+(* transform_jnz = NONE for all instructions before phi_prefix_length point *)
+Triviality transform_jnz_none_before_phi_prefix:
+  !fn insts j.
+    j < phi_prefix_length insts ==>
+    transform_jnz fn (EL j insts) = NONE
+Proof
+  Induct_on `insts` >> rpt strip_tac
+  >- (
+    (* base: phi_prefix_length [] = 0, i < 0 impossible *)
+    fs[phi_prefix_length_def] >> Cases_on `j` >> fs[]
+  ) >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (
+    (* h is PHI: transform_jnz fn h = NONE; for j=0 use transform_jnz_phi,
+       for SUC j use IH *)
+    simp[phi_prefix_length_def] >> Cases_on `j`
+    >- simp[transform_jnz_phi]
+    >- (fs[phi_prefix_length_def] >> first_x_assum drule >> simp[])
+  ) >>
+  (* h not PHI: phi_prefix_length = 0, contradiction with j < 0 *)
+  fs[phi_prefix_length_def] >> Cases_on `j` >> fs[]
+QED
+
+(* ===== Bridge: exec_block-level sim → run_block_entry-level sim ===== *)
+
+(* eval_phis_preserves_halted is now in venomExecProofsTheory *)
+
+Theorem rta_run_block_entry_sim:
+  !fn fresh bb fuel ctx s.
+    fresh_vars_in_function fn SUBSET fresh /\
+    fresh_vars_not_in_function fn /\
+    no_invoke_in_function fn /\
+    MEM bb fn.fn_blocks /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted
+  ==>
+    resolving_block_sim (state_equiv fresh) (execution_equiv fresh)
+      fn.fn_blocks (MAP (transform_block fn) fn.fn_blocks)
+      (run_block_entry fuel ctx bb s)
+      (run_block_entry fuel ctx (transform_block fn bb) s)
+Proof
+  qx_gen_tac `fn` >> qx_gen_tac `fresh` >> qx_gen_tac `bb` >>
+  qx_gen_tac `fuel` >> qx_gen_tac `ctx` >> qx_gen_tac `st` >>
+  strip_tac >>
+  DISJ_CASES_TAC (Q.SPECL [`st`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
+    (* OK case: eval_phis st bb.bb_instructions = OK s_phi *)
+    (first_x_assum (qx_choose_then `s_phi` assume_tac) >>
+     fs[] >>
+     `~s_phi.vs_halted` by metis_tac[eval_phis_preserves_halted] >>
+     `eval_phis st (transform_block fn bb).bb_instructions = OK s_phi` by
+       simp[transform_block_def, eval_phis_transform_block_insts] >>
+     `phi_prefix_length (transform_block fn bb).bb_instructions =
+       phi_prefix_length bb.bb_instructions` by
+       simp[transform_block_def, transform_block_insts_phi_prefix_length] >>
+     `run_block_entry fuel ctx bb st =
+       exec_block fuel ctx bb
+         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+       metis_tac[run_block_entry_eval_phis_OK] >>
+     `run_block_entry fuel ctx (transform_block fn bb) st =
+       exec_block fuel ctx (transform_block fn bb)
+         (s_phi with vs_inst_idx := phi_prefix_length (transform_block fn bb).bb_instructions)` by
+       metis_tac[run_block_entry_eval_phis_OK] >>
+     pop_assum (fn th => PURE_ONCE_REWRITE_TAC[th]) >>
+     pop_assum (fn th => PURE_ONCE_REWRITE_TAC[th]) >>
+     fs[] >>
+     irule rta_per_block_sim_gen >> simp[] >>
+     metis_tac[transform_jnz_none_before_phi_prefix]) >>
+  (* Error case: eval_phis st bb.bb_instructions = Error e *)
+  first_x_assum (qx_choose_then `e` assume_tac) >>
+  fs[] >>
+  `eval_phis st (transform_block fn bb).bb_instructions = Error e` by
+    simp[transform_block_def, eval_phis_transform_block_insts] >>
+  `run_block_entry fuel ctx bb st = Error e` by
+    metis_tac[run_block_entry_eval_phis_Error] >>
+  `run_block_entry fuel ctx (transform_block fn bb) st = Error e` by
+    metis_tac[run_block_entry_eval_phis_Error] >>
+  irule lift_result_resolving_block_sim >>
+  simp[lift_result_def]
+QED
+
 (* ===== Context-level lookup lemmas ===== *)
 
 Triviality lookup_function_transform:
@@ -871,7 +1100,7 @@ Theorem rta_pass_correct_proof:
             (\fuel. run_blocks fuel ctx fn' s)
 Proof
   rw[LET_THM] >>
-  (* Get fn from lookup *)
+  (* Unpack fn from lookup *)
   Cases_on `lookup_function entry ctx.ctx_functions` >> fs[] >>
   rename1 `lookup_function entry ctx.ctx_functions = SOME fn` >>
   qexists_tac `transform_function fn` >>
@@ -879,10 +1108,10 @@ Proof
     rw[transform_context_def] >>
     irule lookup_function_transform >> simp[]
   ) >>
-  (* Rewrite transform_function as function_map_transform *)
+  (* transform_function = function_map_transform *)
   `transform_function fn = function_map_transform (transform_block fn) fn` by
     simp[transform_function_is_fmt] >>
-  (* Get all preconditions for _v2 *)
+  (* Collect preconditions for _v2 *)
   imp_res_tac lookup_function_MEM >>
   `fresh_vars_not_in_function fn` by fs[fresh_vars_not_in_context_def] >>
   `no_invoke_in_function fn` by
@@ -891,7 +1120,7 @@ Proof
     rw[fresh_vars_in_context_def, SUBSET_DEF, PULL_EXISTS] >>
     metis_tac[]
   ) >>
-  (* Establish the _v2 conclusion *)
+  (* Establish _v2 conclusion *)
   `!ctx' s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     ((?fuel. terminates (run_blocks fuel ctx' fn s)) <=>
      (?fuel'. terminates (run_blocks fuel' ctx'
@@ -917,7 +1146,7 @@ Proof
       >- metis_tac[state_equiv_trans]
       >- metis_tac[execution_equiv_trans]
       >- simp[transform_block_label]
-      >- (rw[function_map_transform_def] >> metis_tac[rta_per_block_sim])
+      >- (rw[function_map_transform_def] >> metis_tac[rta_run_block_entry_sim])
       >- (
         rpt gen_tac >> strip_tac >>
         rpt gen_tac >> strip_tac >>
@@ -933,8 +1162,6 @@ Proof
     ) >>
     metis_tac[]
   ) >>
-  (* Now prove pass_correct *)
+  (* Prove pass_correct *)
   rw[pass_correct_def]
 QED
-
-val _ = export_theory();

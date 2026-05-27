@@ -12,6 +12,7 @@
  * TOP-LEVEL DEFINITIONS:
  *   - wf_ir_fn             : Syntactic well-formedness for Venom IR
  *   - phi_wf_fn            : PHI-specific well-formedness conditions
+ *   - phi_elim_safe_fn     : No eliminated PHI reads a variable defined in the same block
  *
  * TOP-LEVEL THEOREMS:
  *   - wf_ir_implies_phi_wf : Syntactic WF implies PHI WF
@@ -56,14 +57,14 @@ Definition wf_ir_fn_def:
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst ==>
        phi_operands_direct dfg inst) /\
-    (* PHI operands cover all reachable predecessors - if PHI errors, it's from
-       undefined operand not missing predecessor *)
-    (!bb idx inst prev s e fuel ctx.
+    (* PHI operands cover all reachable predecessors - if eval_one_phi fails,
+       it's from undefined operand not missing predecessor *)
+    (!bb idx inst prev s.
        MEM bb func.fn_blocks /\
        get_instruction bb idx = SOME inst /\
        is_phi_inst inst /\
        s.vs_prev_bb = SOME prev /\
-       step_inst fuel ctx inst s = Error e ==>
+       eval_one_phi s inst = NONE ==>
        ?val_op. resolve_phi prev inst.inst_operands = SOME val_op)
 End
 
@@ -92,19 +93,52 @@ Definition phi_wf_fn_def:
        func.fn_blocks <> [] /\
        get_instruction (HD func.fn_blocks) idx = SOME inst ==>
        phi_single_origin dfg inst = NONE) /\
-    (* For Error case: if PHI with single origin errors, origin's output undefined
+    (* For eval_one_phi failure: if PHI with single origin fails, origin's output undefined
        This holds in well-formed SSA due to dominator properties.
        Note: is_phi_inst is implied by phi_single_origin = SOME *)
-    (!bb inst origin src_var prev e s fuel ctx.
+    (!bb inst origin src_var prev s.
        let dfg = dfg_build_function func in
        MEM bb func.fn_blocks /\
        get_instruction bb s.vs_inst_idx = SOME inst /\
        phi_single_origin dfg inst = SOME origin /\
        origin.inst_outputs = [src_var] /\
        s.vs_prev_bb = SOME prev /\
-       step_inst fuel ctx inst s = Error e ==>
+       eval_one_phi s inst = NONE ==>
        lookup_var src_var s = NONE)
 End
+
+(* Additional semantic side condition needed by parallel PHI semantics.
+   Python's PHI elimination can replace a single-origin PHI with an ASSIGN that
+   executes after the PHI/PARAM prefix. That is sound only when the ASSIGN's
+   source is not overwritten by any instruction in the same block before the
+   ASSIGN executes. A simple block-local sufficient condition is that the source
+   is not output by any instruction in the block. *)
+Definition phi_elim_safe_fn_def:
+  phi_elim_safe_fn func <=>
+    let dfg = dfg_build_function func in
+      !bb inst origin src_var.
+        MEM bb func.fn_blocks /\
+        MEM inst bb.bb_instructions /\
+        phi_single_origin dfg inst = SOME origin /\
+        origin.inst_outputs = [src_var]
+        ==>
+        !producer.
+          MEM producer bb.bb_instructions ==>
+          ~MEM src_var producer.inst_outputs
+End
+
+Theorem phi_elim_safe_fn_source_not_output:
+  !func bb inst origin src_var producer.
+    phi_elim_safe_fn func /\
+    MEM bb func.fn_blocks /\
+    MEM inst bb.bb_instructions /\
+    phi_single_origin (dfg_build_function func) inst = SOME origin /\
+    origin.inst_outputs = [src_var] /\
+    MEM producer bb.bb_instructions ==>
+    ~MEM src_var producer.inst_outputs
+Proof
+  rw[phi_elim_safe_fn_def, LET_DEF] >> metis_tac[]
+QED
 
 (* ==========================================================================
    PHI Resolution Lemmas
@@ -128,20 +162,27 @@ Proof
   strip_tac >> res_tac >> metis_tac[]
 QED
 
-(* Helper: PHI instruction stepping in terms of resolve_phi and eval_operand *)
-Theorem step_inst_phi_eval:
+(* Helper: eval_one_phi in terms of resolve_phi and eval_operand *)
+Theorem eval_one_phi_eq:
   !inst out prev s.
     inst.inst_opcode = PHI /\
     inst.inst_outputs = [out] /\
     s.vs_prev_bb = SOME prev
   ==>
-    step_inst_base inst s =
+    eval_one_phi s inst =
       case resolve_phi prev inst.inst_operands of
-        NONE => Error "phi: no matching predecessor"
+        NONE => NONE
       | SOME val_op =>
           case eval_operand val_op s of
-            SOME v => OK (update_var out v s)
-          | NONE => Error "phi: undefined operand"
+            SOME v => SOME (out, v)
+          | NONE => NONE
+Proof
+  rw[eval_one_phi_def] >> simp[]
+QED
+
+(* After PHI semantics change, step_inst_base for PHI always errors *)
+Theorem step_inst_base_phi_error:
+  !inst s. inst.inst_opcode = PHI ==> step_inst_base inst s = Error "phi outside prefix"
 Proof
   rw[step_inst_base_def]
 QED
@@ -164,9 +205,9 @@ Proof
   )
   >- (
     (* DFG origin lookup - use phi_operands_direct_lookup *)
-    (* First derive is_phi_inst from phi_single_origin = SOME *)
+    (* Derive is_phi_inst from phi_single_origin = SOME *)
     `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-    (* Then derive phi_operands_direct from wf_ir_fn assumption *)
+    (* Derive phi_operands_direct from wf_ir_fn assumption *)
     `phi_operands_direct (dfg_build_function func) inst` by (
       qpat_x_assum `!bb idx inst. _ ==> phi_operands_direct _ _`
         (qspecl_then [`bb`, `idx`, `inst`] mp_tac) >> simp[]
@@ -180,37 +221,30 @@ Proof
     first_x_assum (qspecl_then [`idx`, `inst`] mp_tac) >> simp[]
   )
   >- (
-    (* Error case: PHI with single origin errors implies origin undefined. *)
+    (* eval_one_phi failure case: PHI with single origin fails implies origin undefined. *)
     (* Derive is_phi_inst from phi_single_origin = SOME *)
     `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
     fs[is_phi_inst_def] >>
-    (* Get phi_well_formed from wf_ir_fn assumption *)
     `phi_well_formed inst.inst_operands` by (
       qpat_x_assum `!bb' idx inst'. _ ==> phi_well_formed _`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
-    (* Get inst.inst_outputs = [out] from wf_ir_fn assumption *)
     `?out. inst.inst_outputs = [out]` by (
       qpat_x_assum `!bb' idx inst'. _ ==> ?out. inst'.inst_outputs = [out]`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
-    (* Get resolve_phi success from wf_ir_fn's error condition *)
     `?val_op. resolve_phi prev inst.inst_operands = SOME val_op` by (
-      qpat_x_assum `!bb' idx inst' prev' s' e' fuel' ctx'. _ ==> ?val_op. resolve_phi _ _ = SOME _`
-        (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`, `prev`, `s`, `e`, `fuel`, `ctx`] mp_tac) >> simp[]
+      qpat_x_assum `!bb' idx inst' prev' s'. _ ==> ?val_op. resolve_phi _ _ = SOME _`
+        (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`, `prev`, `s`] mp_tac) >> simp[]
     ) >>
-    (* Get phi_operands_direct from wf_ir_fn assumption *)
     `phi_operands_direct (dfg_build_function func) inst` by (
       qpat_x_assum `!bb' idx inst'. _ ==> phi_operands_direct _ _`
         (qspecl_then [`bb`, `s.vs_inst_idx`, `inst`] mp_tac) >> simp[]
     ) >>
     gvs[] >>
-    (* Bridge step_inst → step_inst_base: PHI ≠ INVOKE *)
-    `step_inst_base inst s = Error e` by (
-      gvs[step_inst_non_invoke, is_phi_inst_def]
-    ) >>
-    (* Use step_inst_phi_eval with explicit arguments *)
-    qspecl_then [`inst`, `out`, `prev`, `s`] mp_tac step_inst_phi_eval >> simp[] >>
+    (* Use eval_one_phi_eq: eval_one_phi fails, but resolve_phi succeeded,
+       so eval_operand must have returned NONE *)
+    qspecl_then [`inst`, `out`, `prev`, `s`] mp_tac eval_one_phi_eq >> simp[] >>
     strip_tac >> gvs[] >>
     Cases_on `eval_operand val_op s` >> gvs[AllCaseEqs()] >>
     (* val_op must be Var var since phi_well_formed *)

@@ -12,8 +12,8 @@ Ancestors
   stateEquiv stateEquivProps execEquivProps execEquivParamProps venomInstProps venomExecProps
   dfgAnalysisProps venomState venomWf venomExecSemantics venomExecProofs
   analysisSimDefs analysisSimProofsBase
+  pred_set arithmetic list rich_list
 Libs
-  pred_setTheory arithmeticTheory listTheory rich_listTheory
 
 (* Quotation-free tactic helpers *)
 fun find_free_var name (asl, w) =
@@ -1229,8 +1229,7 @@ Proof
   rw[state_equiv_def, execution_equiv_def]
 QED
 
-(* Derive ac_block_establishes_precond hypotheses from fn-level facts.
-   Each conjunct is proved as a separate Proof step — no multi-goal dispatch. *)
+(* Derive ac_block_establishes_precond hypotheses from fn-level facts. *)
 Triviality ac_fn_block_precond[local]:
   !fn bb s.
     MEM bb fn.fn_blocks /\
@@ -1500,8 +1499,116 @@ Proof
       metis_tac[lift_result_weaken_UNIV])
 QED
 
+Triviality eval_operand_update_inst_idx:
+  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
+Proof
+  Cases_on `op` >> rw[eval_operand_def, lookup_var_def]
+QED
+
+Triviality ac_inv_update_inst_idx:
+  !fn dfg s n.
+    ac_inv fn dfg s ==> ac_inv fn dfg (s with vs_inst_idx := n)
+Proof
+  rw[ac_inv_def, ac_dfg_inv_def, lookup_var_def,
+     eval_operand_update_inst_idx] >> metis_tac[]
+QED
+
+Triviality ac_apply_merge_step_no_phi:
+  !candidates st inst.
+    EVERY (\i. i.inst_opcode <> PHI) (SND st) /\
+    inst.inst_opcode <> PHI ==>
+    EVERY (\i. i.inst_opcode <> PHI)
+      (SND (ac_apply_merge_step candidates st inst))
+Proof
+  Cases_on `st` >>
+  rw[ac_apply_merge_step_def, LET_THM] >>
+  rpt (CASE_TAC >> gvs[EVERY_APPEND])
+QED
+
+Triviality ac_apply_merge_fold_no_phi:
+  !l candidates st.
+    EVERY (\i. i.inst_opcode <> PHI) (SND st) /\
+    EVERY (\i. i.inst_opcode <> PHI) l ==>
+    EVERY (\i. i.inst_opcode <> PHI)
+      (SND (FOLDL (ac_apply_merge_step candidates) st l))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  conj_tac >- gvs[] >>
+  irule ac_apply_merge_step_no_phi >> simp[]
+QED
+
+Triviality ac_transform_block_no_phi:
+  !dfg bb.
+    EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions ==>
+    EVERY (\i. i.inst_opcode <> PHI)
+      (ac_transform_block dfg bb).bb_instructions
+Proof
+  rpt strip_tac >>
+  simp[ac_transform_block_def] >>
+  irule ac_apply_merge_fold_no_phi >> simp[]
+QED
+
+Triviality ac_safe_blocks_no_phi:
+  !fn bb.
+    MEM bb fn.fn_blocks /\
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+       ac_is_safe_between inst \/ inst.inst_opcode = ASSERT \/
+       is_terminator inst.inst_opcode) ==>
+    EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions
+Proof
+  rw[EVERY_MEM] >>
+  first_x_assum drule_all >>
+  Cases_on `i.inst_opcode` >>
+  rw[ac_is_safe_between_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem ac_block_sim_run_block[local]:
+  !fn dfg bb fuel ctx s1 s2.
+    dfg = dfg_build_function fn /\
+    MEM bb fn.fn_blocks /\
+    fn_inst_wf fn /\
+    wf_function fn /\
+    wf_ssa fn /\
+    (!bb' i. MEM bb' fn.fn_blocks /\ MEM i bb'.bb_instructions ==>
+       ac_is_safe_between i \/ i.inst_opcode = ASSERT \/
+       is_terminator i.inst_opcode) /\
+    state_equiv (ac_fresh_vars_fn fn) s1 s2 /\
+    ac_inv fn dfg s1 /\
+    ac_inv fn dfg s2 /\
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==> x NOTIN ac_fresh_vars_fn fn) /\
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM x inst.inst_outputs ==> x NOTIN ac_fresh_vars_fn fn) /\
+    (!bb' i x. MEM bb' fn.fn_blocks /\ MEM i bb'.bb_instructions /\
+       MEM x i.inst_outputs ==> ~IS_SOME (lookup_var x s2)) ==>
+    lift_result
+      (state_equiv (ac_fresh_vars_fn fn))
+      (execution_equiv UNIV) (execution_equiv UNIV)
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx (ac_transform_block dfg bb) s2)
+Proof
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+    metis_tac[ac_safe_blocks_no_phi] >>
+  `EVERY (\i. i.inst_opcode <> PHI)
+     (ac_transform_block (dfg_build_function fn) bb).bb_instructions` by
+    metis_tac[ac_transform_block_no_phi] >>
+  simp[venomExecProofsTheory.run_block_no_phis_eq_exec_block] >>
+  irule ac_block_sim >> simp[] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (irule execEquivProofsTheory.state_equiv_inst_idx >> simp[] >> NO_TAC) >>
+  TRY (irule ac_inv_update_inst_idx >> simp[] >> NO_TAC) >>
+  rpt strip_tac >> res_tac >> gvs[lookup_var_def]
+QED
+
 (* ===== Main Theorem ===== *)
 
+(* The assert combiner transform preserves observable behavior: running the
+   transformed function produces an equivalent result (modulo fresh variables
+   introduced by the transform) to running the original function. *)
 Theorem ac_transform_function_correct_proof:
   !fuel ctx fn s.
     let fn' = ac_transform_function fn in
@@ -1526,8 +1633,7 @@ Theorem ac_transform_function_correct_proof:
        ac_inv fn dfg s0 /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
-       s0.vs_inst_idx = 0 /\
-       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
@@ -1537,8 +1643,7 @@ Theorem ac_transform_function_correct_proof:
        ac_inv fn dfg s0 /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0)) /\
-       s0.vs_inst_idx = 0 /\
-       exec_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
+       run_block fuel' ctx' bb s0 = OK s0' /\ ~s0'.vs_halted ==>
        ac_inv fn dfg s0' /\
        (!bb' inst x. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
@@ -1564,6 +1669,6 @@ Proof
   rpt conj_tac >> simp[valid_state_rel_UNIV, ac_transform_block_label] >>
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   TRY (rpt gen_tac >> strip_tac >>
-       irule ac_block_sim >> simp[] >> metis_tac[] >> NO_TAC) >>
+       irule ac_block_sim_run_block >> simp[] >> metis_tac[] >> NO_TAC) >>
   ONCE_REWRITE_TAC[GSYM ac_transform_as_fmt] >> first_assum ACCEPT_TAC
 QED

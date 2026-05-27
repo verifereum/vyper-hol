@@ -11,10 +11,7 @@
 
 Theory passSharedVarFrame
 Ancestors
-  passSharedDefs venomExecSemantics
-
-open venomStateTheory venomInstTheory venomExecSemanticsTheory
-     venomEffectsTheory venomInstPropsTheory;
+  passSharedDefs venomExecSemantics venomState venomInst venomEffects venomInstProps
 
 (* ===================================================================== *)
 (* ===== Variable/State Helpers ======================================== *)
@@ -526,7 +523,8 @@ Theorem step_inst_base_var_frame_full:
       OK st' => OK (update_var x w st')
     | Abort a st' => Abort a (update_var x w st')
     | Error e => Error e
-    | other => other
+    | Halt st' => Halt st'
+    | IntRet vs st' => IntRet vs st'
 Proof
   rpt strip_tac >>
   drule_all step_inst_base_var_frame_result >>
@@ -592,7 +590,9 @@ Theorem step_inst_var_frame_full:
     | Abort a st' =>
         if inst.inst_opcode = INVOKE then Abort a st'
         else Abort a (update_var x w st')
-    | other => other
+    | Error e => Error e
+    | Halt st' => Halt st'
+    | IntRet vs st' => IntRet vs st'
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`

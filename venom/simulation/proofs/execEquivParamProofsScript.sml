@@ -12,10 +12,61 @@ Ancestors
   execEquivParamHelpers execEquivParamHelpers2 execEquivParamBase
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
   stateEquiv venomInst venomExecSemantics venomState
-Libs
-  finite_mapTheory listTheory rich_listTheory optionTheory pred_setTheory
+  finite_map list rich_list option pred_set
 
-open execEquivParamLib
+(* Helper: flatten the inner ∀s1 s2 in the operand agreement assumption.
+   The original assumption has ∀s1 s2. R_ok s1 s2 ⇒ ... which shadows free s1/s2.
+   This version takes the free s1/s2 directly, making metis_tac usable. *)
+Theorem operand_agreement_flat:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   fn bb inst x s1 s2.
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    MEM (Var x) inst.inst_operands /\ R_ok s1 s2
+    ==> lookup_var x s1 = lookup_var x s2
+Proof
+  rpt strip_tac >> first_x_assum drule >> disch_then drule >> simp[]
+QED
+
+(* Helper: EVERY weakening via list induction.
+   Proves EVERY with PHI guard from a stronger condition that doesn't need
+   the PHI guard. Avoids namespace collision with ∀s1 s2 inside the operand
+   agreement assumption that breaks metis_tac. *)
+Theorem EVERY_PHI_operand_agreement:
+  !s1 s2 (l : instruction list).
+    (!inst. MEM inst l /\ inst.inst_opcode = PHI ==>
+      !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2)
+    ==>
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+      !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) l
+Proof
+  Induct_on `l` >> rw[] >> Cases_on `h.inst_opcode = PHI` >> rw[] >> metis_tac[]
+QED
+
+(* Bridge lemma: from universal operand agreement (all blocks, all instructions)
+   to the EVERY condition needed by eval_phis_preserves_R_ok (PHI instructions only).
+   Trivial weakening: instantiate ∀bb to the specific block, guard to just PHI. *)
+Theorem operand_agreement_EVERY:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) fn bb s1 s2.
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+      !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2)
+      bb.bb_instructions
+Proof
+  rpt strip_tac >> match_mp_tac EVERY_PHI_operand_agreement >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`bb`,`inst`,`x`] mp_tac) >> simp[]
+QED
+
 
 (* Master theorem: step_inst preserves any valid (R_ok, R_term) pair.
    Non-INVOKE: step_inst_non_invoke reduces to step_inst_base, dispatch to helpers.
@@ -209,7 +260,7 @@ QED
 
 (* Helper: exec_block preserves R. By induction on the instruction list via
    run_defs_ind, using step_inst_preserves_R at each step. *)
-Triviality exec_block_preserves_R_helper:
+Theorem exec_block_preserves_R_helper:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn.
     valid_state_rel R_ok R_term /\
@@ -255,6 +306,50 @@ Proof
   >>
   first_x_assum irule >> irule vsr_inst_idx_R_ok >> simp[] >> metis_tac[]
 QED
+(* Helper: run_block (which wraps eval_phis + exec_block) preserves R.
+   Handles the eval_phis layer internally so the main theorem doesn't need
+   manual case splits on eval_phis results. *)
+Theorem run_block_preserves_R_helper:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) fn.
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    (!bb inst x.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+  ==>
+    !fuel ctx bb s1 s2.
+       MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
+                                (run_block fuel ctx bb s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `s1.vs_prev_bb = s2.vs_prev_bb` by (drule vsr_R_ok_prev_bb >> simp[]) >>
+  `EVERY (λinst. inst.inst_opcode = PHI ⇒ ∀x. MEM (Var x) inst.inst_operands ⇒ lookup_var x s1 = lookup_var x s2) bb.bb_instructions` by
+    (irule (Q.SPECL [`R_ok`,`R_term`,`fn`] operand_agreement_EVERY) >> metis_tac[]) >>
+  ONCE_REWRITE_TAC[run_block_def] >> qspec_then `s1` assume_tac eval_phis_ok_or_error_defs >> qspec_then `s2` assume_tac eval_phis_ok_or_error_defs >>
+  DISJ_CASES_TAC (Q.SPECL [`s1`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
+    (DISJ_CASES_TAC (Q.SPECL [`s2`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
+      (* Both OK *)
+      (fs[] >> `R_ok s' s''` by (drule_all eval_phis_preserves_R_ok >> simp[]) >>
+       `R_ok (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+              (s'' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+         (drule_all vsr_inst_idx_R_ok >> simp[]) >>
+       irule exec_block_preserves_R_helper >> metis_tac[]) >>
+     (* s1 OK, s2 Error *)
+     (fs[] >> qspecl_then [`R_ok`,`R_term`,`s1`,`s2`,`bb.bb_instructions`] mp_tac
+        eval_phis_agreement >> simp[] >> metis_tac[])) >>
+  (* s1 Error *)
+  DISJ_CASES_TAC (Q.SPECL [`s2`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
+    (* s1 Error, s2 OK *)
+    (fs[] >> qspecl_then [`R_ok`,`R_term`,`s1`,`s2`,`bb.bb_instructions`] mp_tac
+       eval_phis_error_agreement >> simp[] >> metis_tac[]) >>
+  (* Both Error *)
+  fs[lift_result_def]
+QED
 
 Theorem exec_block_preserves_R_proof:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -279,36 +374,28 @@ Proof
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (rpt strip_tac >>
-      drule_all exec_block_preserves_R_helper >> simp[])
+      irule exec_block_preserves_R_helper >> metis_tac[])
   >>
   Induct_on `fuel` >> rw[]
-  >- simp[run_blocks_def, lift_result_def]
-  >>
-  simp[Once run_blocks_def] >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
-  `s1.vs_current_bb = s2.vs_current_bb` by
-    (imp_res_tac vsr_R_ok_fields >> gvs[]) >>
-  gvs[] >>
+  >- (simp[run_blocks_def, lift_result_def]) >>
+  ONCE_REWRITE_TAC[run_blocks_unfold] >>
+  `s1.vs_current_bb = s2.vs_current_bb` by metis_tac[vsr_R_ok_current_bb] >>
+  simp[] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >>
-  gvs[lift_result_def] >>
+  simp[lift_result_def] >>
   rename1 `lookup_block _ _ = SOME bb` >>
-  `MEM bb fn.fn_blocks` by
-    (fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
-  `R_ok (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0)` by
-    (irule vsr_inst_idx_R_ok >> metis_tac[]) >>
-  `lift_result R_ok R_term R_term
-     (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-     (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by
-    (drule_all exec_block_preserves_R_helper >> simp[]) >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
-  gvs[lift_result_def] >>
-  `v.vs_halted <=> v'.vs_halted` by
-    (imp_res_tac vsr_R_ok_fields >> gvs[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[FIND_MEM, lookup_block_def] >>
+  `lift_result R_ok R_term R_term (run_block_entry fuel ctx bb s1)
+                                  (run_block_entry fuel ctx bb s2)` by
+    (irule run_block_preserves_R_helper >> metis_tac[]) >>
+  Cases_on `run_block_entry fuel ctx bb s1` >>
+  Cases_on `run_block_entry fuel ctx bb s2` >>
+  gvs[AllCaseEqs(), lift_result_def] >>
+  `v.vs_halted ⇔ v'.vs_halted` by
+    (qspecl_then [`R_ok`,`R_term`,`v`,`v'`] mp_tac vsr_R_ok_halted >> simp[]) >>
   Cases_on `v.vs_halted` >> gvs[lift_result_def] >>
-  metis_tac[vsr_R_ok_R_term]
+  qspecl_then [`R_ok`,`R_term`,`v`,`v'`] mp_tac vsr_R_ok_R_term >> simp[]
 QED
-
 Theorem state_equiv_execution_equiv_valid_state_rel_proof:
   !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
 Proof

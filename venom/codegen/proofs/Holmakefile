@@ -2,4 +2,4 @@
 # ../defs transitively includes: $(VFMDIR)/util, $(VFMDIR)/spec,
 #   ../../defs, ../../passes/shared/defs, ../../analysis/*/defs,
 #   ../../../syntax, ../../../semantics
-INCLUDES = ../defs $(VFMDIR)/spec/prop
+INCLUDES = ../defs ../../proofs $(VFMDIR)/spec/prop

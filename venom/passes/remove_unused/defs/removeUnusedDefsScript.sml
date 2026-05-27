@@ -41,7 +41,8 @@ Ancestors
    replace with NOP. *)
 Definition remove_unused_inst_def:
   remove_unused_inst (live : string list) inst =
-    if ~is_removable inst then inst
+    if inst.inst_opcode = ALLOCA then inst
+    else if ~is_removable inst then inst
     else if EVERY (\v. ~MEM v live) inst.inst_outputs
     then mk_nop_inst inst
     else inst
@@ -76,7 +77,6 @@ End
 Definition remove_unused_single_pass_def:
   remove_unused_single_pass fn =
     let lr = liveness_analyze fn in
-    let cfg = cfg_analyze fn in
     clear_nops_function
       (function_map_transform
         (\bb. remove_unused_block lr bb)
@@ -101,20 +101,21 @@ Definition remove_unused_function_def:
     | NONE => fn
 End
 
+(* All instruction outputs across all blocks of a function. *)
+Definition fn_all_outputs_def:
+  fn_all_outputs fn =
+    set (FLAT (MAP (\bb.
+      FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+      fn.fn_blocks))
+End
+
 (* Variables eliminated by remove_unused: outputs of NOP'd instructions.
    These are dead (no live use) — their values don't affect any
    observable behavior. The correctness theorem excludes them from
    state equivalence. *)
 Definition remove_unused_eliminated_vars_def:
   remove_unused_eliminated_vars fn =
-    let fn' = remove_unused_function fn in
-    (* Outputs present in original but absent in transformed *)
-    set (FLAT (MAP (\bb.
-      FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
-      fn.fn_blocks)) DIFF
-    set (FLAT (MAP (\bb.
-      FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
-      fn'.fn_blocks))
+    fn_all_outputs fn DIFF fn_all_outputs (remove_unused_function fn)
 End
 
 Definition remove_unused_context_def:
@@ -128,5 +129,5 @@ End
    forgive differences in ANY function's eliminated vars. *)
 Definition remove_unused_all_eliminated_def:
   remove_unused_all_eliminated ctx =
-    BIGUNION (set (MAP remove_unused_eliminated_vars ctx.ctx_functions))
+    BIGUNION (IMAGE remove_unused_eliminated_vars (set ctx.ctx_functions))
 End

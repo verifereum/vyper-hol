@@ -512,7 +512,7 @@ Proof
   metis_tac[]
 QED
 
-(* D5 helper: IS_SOME (lookup_var pvar s) from pvars_set + stores_dominate.
+(* IS_SOME (lookup_var pvar s) from pvars_set + stores_dominate.
    Works for any opcode covered by m2v_stores_dominate_loads (MLOAD or RETURN). *)
 Theorem m2v_pvars_set_use_is_some:
   !fn bb i s ao pvar.
@@ -701,6 +701,7 @@ Proof
   `~MEM ao inst.inst_outputs` by
     (strip_tac >>
      `inst_wf inst` by metis_tac[fn_inst_wf_MEM] >>
+     `inst.inst_opcode ≠ PHI` by metis_tac[step_inst_ok_imp_not_phi] >>
      drule_all step_inst_fdom >> strip_tac >>
      `ao IN FDOM v1.vs_vars` by simp[EXTENSION] >>
      gvs[lookup_var_def, FLOOKUP_DEF]) >>
@@ -780,7 +781,7 @@ Proof
   every_case_tac >> gvs[]
 QED
 
-(*  m2v_non32_ok ignores its first state arg (L502).
+(* m2v_non32_ok ignores its first state arg.
     Conclusion avoids mentioning it so callers don't hit type issues. *)
 Theorem m2v_non32_ok_preserved_step:
   !fn inst s2 v2 fuel ctx.
@@ -1079,8 +1080,10 @@ Resume m2v_inv_noix_step_nonpromoted[g1]:
   Cases_on `MEM v inst.inst_outputs`
   >- (Cases_on `is_effect_free_op inst.inst_opcode`
       >- (Cases_on `inst.inst_opcode = NOP`
-          >- gvs[step_inst_base_def, AllCaseEqs()]
-          >> metis_tac[])
+          >- gvs[step_inst_base_def, AllCaseEqs()] >>
+          Cases_on `inst.inst_opcode = PHI`
+          >- gvs[step_inst_base_def, AllCaseEqs()] >>
+          metis_tac[])
       >> gvs[])
   >> metis_tac[]
 QED
@@ -4328,25 +4331,25 @@ Theorem return_data_mstore_roundtrip:
 Proof
   rpt strip_tac >>
   (* Both sides = TAKE k (word_to_bytes pval T).
-     Step 1: word_to_bytes inverts mload *)
+     word_to_bytes inverts mload *)
   qabbrev_tac `bytes = word_to_bytes pval T` >>
   `bytes = TAKE 32 (DROP off s1.vs_memory ++ REPLICATE 32 0w)` by (
     simp[Abbr `bytes`, mload_def, LET_THM] >>
     irule word_bytes_roundtrip_256 >> simp[LENGTH_TAKE_EQ]) >>
-  (* Step 2: mstore writes bytes at [off..off+32) *)
+  (* mstore writes bytes at [off..off+32) *)
   `TAKE 32 (DROP off (mstore off pval s2).vs_memory) = bytes` by
     simp[DROP_mstore_prefix, Abbr `bytes`] >>
-  (* Step 3: DROP off after mstore has >= 32 elements *)
+  (* DROP off after mstore has >= 32 elements *)
   qabbrev_tac `mem2 = DROP off (mstore off pval s2).vs_memory` >>
   `32 <= LENGTH mem2` by (
     simp[Abbr `mem2`, LENGTH_DROP] >>
     mp_tac (Q.SPECL [`off`,`pval`,`s2`] LENGTH_mstore_mem) >> simp[]) >>
-  (* Step 4: LHS = TAKE k bytes *)
+  (* LHS = TAKE k bytes *)
   `TAKE k (mem2 ++ REPLICATE k 0w) = TAKE k mem2` by
     (irule TAKE_APPEND1 >> simp[]) >>
   `TAKE k mem2 = TAKE k bytes` by
     metis_tac[TAKE_TAKE_T] >>
-  (* Step 5: RHS = TAKE k bytes *)
+  (* RHS = TAKE k bytes *)
   qabbrev_tac `mem1 = DROP off s1.vs_memory` >>
   `TAKE k (mem1 ++ REPLICATE k 0w) =
    TAKE k (mem1 ++ REPLICATE 32 0w)` by

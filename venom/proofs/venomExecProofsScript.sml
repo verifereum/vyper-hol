@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map
+  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map stateEquiv passSimulationDefs
 
 (* ==========================================================================
    bool_to_word Properties
@@ -598,7 +598,7 @@ Theorem exec_block_current_bb_in_succs:
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     bb.bb_instructions <> [] /\
-    s.vs_inst_idx = 0 /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
     exec_block fuel ctx bb s = OK s1 ==>
     MEM s1.vs_current_bb (bb_succs bb)
 Proof
@@ -610,7 +610,7 @@ Proof
      MEM s1.vs_current_bb (bb_succs bb)`
     suffices_by (
       disch_then (qspecl_then
-        [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `s`] mp_tac) >>
+        [`LENGTH bb.bb_instructions - s.vs_inst_idx`, `fuel`, `ctx`, `s`] mp_tac) >>
       simp[]) >>
   completeInduct_on `n` >> rpt strip_tac >>
   qabbrev_tac `i = s'.vs_inst_idx` >>
@@ -705,6 +705,69 @@ Proof
         (CCONTR_TAC >> gvs[is_terminator_def]) >>
       `step_inst_base
          (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) s' = OK s1` by
+        gvs[step_inst_non_invoke] >>
+      drule_all step_inst_base_term_prev_bb >> simp[]
+    )
+    >- (
+      `v.vs_current_bb = s'.vs_current_bb` by
+        (drule_all step_preserves_control_flow >> simp[]) >>
+      qpat_x_assum `!m. m < _ ==> _`
+        (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+      impl_tac >- simp[Abbr `i`] >>
+      disch_then (qspecl_then [`fuel'`, `ctx'`,
+        `v with vs_inst_idx := SUC i`] mp_tac) >>
+      simp[]
+    )
+  )
+QED
+
+(* Generalized version: works from any starting index, not just vs_inst_idx = 0.
+   Key for run_block proofs where exec_block starts at phi_prefix_length. *)
+Theorem exec_block_ok_prev_bb_general:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    s.vs_inst_idx <= LENGTH bb.bb_instructions /\
+    exec_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  `!n fuel ctx s'.
+     n = LENGTH bb.bb_instructions - s'.vs_inst_idx /\
+     s'.vs_inst_idx <= LENGTH bb.bb_instructions /\
+     s'.vs_current_bb = s.vs_current_bb /\
+     exec_block fuel ctx bb s' = OK s1 ==>
+     s1.vs_prev_bb = SOME s.vs_current_bb`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions - s.vs_inst_idx`, `fuel`, `ctx`, `s`] mp_tac) >>
+      simp[]) >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `i = s'.vs_inst_idx` >>
+  Cases_on `i >= LENGTH bb.bb_instructions`
+  >- (
+    qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
+    simp[get_instruction_def]
+  ) >>
+  `i < LENGTH bb.bb_instructions` by fs[] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
+  simp[get_instruction_def] >>
+  Cases_on `step_inst fuel' ctx' (EL i bb.bb_instructions) s'` >>
+  gvs[]
+  >- (
+    strip_tac >>
+    Cases_on `is_terminator (EL i bb.bb_instructions).inst_opcode` >> gvs[]
+    >- (
+      Cases_on `v.vs_halted` >> gvs[] >>
+      `(EL i bb.bb_instructions).inst_opcode <> INVOKE` by
+        (CCONTR_TAC >> gvs[is_terminator_def] >>
+         fs[Abbr `i`]) >>
+      `step_inst_base
+         (EL i bb.bb_instructions) s' = OK s1` by
         gvs[step_inst_non_invoke] >>
       drule_all step_inst_base_term_prev_bb >> simp[]
     )
@@ -926,57 +989,99 @@ Proof
     Cases_on `fuel`
     >- gvs[run_blocks_def] >>
     rename1 `SUC fuel'` >>
-    (* Expand source run_blocks assumption, simplify case SUC *)
+    (* Expand source run_blocks assumption *)
     qpat_x_assum `run_blocks _ _ _ _ = _`
-      (fn th => assume_tac (SIMP_RULE (srw_ss()) []
-        (ONCE_REWRITE_RULE [run_blocks_def] th))) >>
+      (fn th => assume_tac (ONCE_REWRITE_RULE [run_blocks_def] th)) >>
+    fs[] >>
     Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> fs[] >>
     rename1 `SOME bb` >>
-    (* Case split on exec_block to learn what r is *)
-    Cases_on `exec_block fuel' ctx bb (s with vs_inst_idx := 0)` >> gvs[]
-    (* -- OK case -- *)
+    Cases_on `eval_phis s bb.bb_instructions` >> fs[]
+    (* OK s_phi *)
     >- (
-      Cases_on `v.vs_halted` >> gvs[]
-      (* halted: r = Halt v *)
+      rename1 `OK s_phi` >>
+      (* Derive exec_block mono from P1 IH *)
+      `!m' r'. exec_block fuel' ctx bb
+                 (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = r' /\
+               (!e. r' <> Error e) /\ fuel' <= m' ==>
+               exec_block m' ctx bb
+                 (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = r'` by
+        (rpt strip_tac >>
+         qpat_x_assum `!m'. _ ==> run_block_non_phis m' ctx bb _ = _`
+           (qspec_then `m'` mp_tac) >> simp[]) >>
+      Cases_on `exec_block fuel' ctx bb
+                  (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> gvs[]
+      (* -- OK case -- *)
+      >- (
+        Cases_on `v.vs_halted` >> gvs[]
+        (* halted *)
+        >- (
+          Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+          `exec_block m'' ctx bb
+             (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v` by
+            (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+          simp[Once run_blocks_def]
+        )
+        (* not halted *)
+        >- (
+          Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+          `exec_block m'' ctx bb
+             (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v` by
+            (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+          simp[Once run_blocks_def] >>
+          qpat_x_assum `!s''. _ /\ ~_ ==> _` (qspec_then `v` mp_tac) >> simp[] >>
+          disch_then (qspecl_then [`m''`, `r`] mp_tac) >> simp[]
+        )
+      )
+      (* -- Halt case -- *)
       >- (
         Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-        `exec_block m'' ctx bb (s with vs_inst_idx := 0) = OK v` by
+        `exec_block m'' ctx bb
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = Halt v` by
           (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
         simp[Once run_blocks_def]
       )
-      (* not halted: r = run_blocks fuel' ctx fn v *)
+      (* -- Abort case -- *)
       >- (
         Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-        `exec_block m'' ctx bb (s with vs_inst_idx := 0) = OK v` by
+        `exec_block m'' ctx bb
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = Abort a v` by
           (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
-        simp[Once run_blocks_def] >>
-        (* Use run_blocks recursive IH *)
-        first_x_assum (qspec_then `v` mp_tac) >> simp[] >>
-        disch_then (qspec_then `m''` mp_tac) >> simp[]
+        simp[Once run_blocks_def]
+      )
+      (* -- IntRet case -- *)
+      >- (
+        Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
+        `exec_block m'' ctx bb
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = IntRet l v` by
+          (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
+        simp[Once run_blocks_def]
       )
     )
-    (* -- Halt case: r = Halt v -- *)
-    >- (
-      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-      `exec_block m'' ctx bb (s with vs_inst_idx := 0) = Halt v` by
-        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
-      simp[Once run_blocks_def]
+    (* Halt/Abort/IntRet from eval_phis — these are ARB cases, impossible
+       since eval_phis only returns OK or Error *)
+    >> (
+      `(?s'. eval_phis s bb.bb_instructions = OK s') \/
+       (?e'. eval_phis s bb.bb_instructions = Error e')` by
+        metis_tac[eval_phis_ok_or_error_defs] >> fs[]
     )
-    (* -- Abort case -- *)
-    >- (
-      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-      `exec_block m'' ctx bb (s with vs_inst_idx := 0) = Abort a v` by
-        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
-      simp[Once run_blocks_def]
-    )
-    (* -- IntRet case -- *)
-    >- (
-      Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
-      `exec_block m'' ctx bb (s with vs_inst_idx := 0) = IntRet l v` by
-        (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
-      simp[Once run_blocks_def]
-    )
+    (* Error from eval_phis — contradicts !e. r <> Error e *)
+    >> gvs[]
   )
+QED
+
+(* run_block fuel monotonicity: boundary lemma lifting exec_block fuel_mono
+   through the eval_phis wrapper. *)
+Theorem run_block_fuel_mono:
+  !fuel fuel' ctx bb st res.
+    run_block fuel ctx bb st = res /\ (!e. res <> Error e) /\ fuel <= fuel' ==>
+    run_block fuel' ctx bb st = res
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`st`,`bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  RULE_ASSUM_TAC (ONCE_REWRITE_RULE[run_block_def]) >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[cj 2 fuel_mono]
 QED
 
 
@@ -1374,7 +1479,7 @@ val step_inst_base_fdom_no_output = prove(
       mcopy_def, write_memory_with_expansion_def]);
 
 val step_inst_base_fdom_custom1 = prove_fdom_group
-  ``[ASSIGN; PHI; SHA3; PARAM; ALLOCA; OFFSET]``;
+  ``[ASSIGN; SHA3; PARAM; ALLOCA; OFFSET]``;
 
 (* External calls: extract_venom_result preserves vs_vars, then update_var adds output *)
 val step_inst_base_fdom_external = prove(
@@ -1404,6 +1509,7 @@ Theorem step_inst_base_fdom:
   !inst s s'.
     step_inst_base inst s = OK s' /\
     inst_wf inst /\
+    inst.inst_opcode <> PHI /\
     ~is_terminator inst.inst_opcode ==>
     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
 Proof
@@ -1437,6 +1543,7 @@ Theorem step_inst_fdom:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     inst_wf inst /\
+    inst.inst_opcode <> PHI /\
     ~is_terminator inst.inst_opcode ==>
     FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
 Proof
@@ -1468,6 +1575,7 @@ QED
 Theorem step_inst_lookup_mono:
   !fuel ctx inst s s' v.
     step_inst fuel ctx inst s = OK s' /\ inst_wf inst /\
+    inst.inst_opcode <> PHI /\
     IS_SOME (lookup_var v s) ==>
     IS_SOME (lookup_var v s')
 Proof
@@ -1482,6 +1590,57 @@ Proof
             metis_tac[step_preserves_non_output_vars] >>
           gvs[]))
 QED
+
+(* PHI instruction execution is always an error in step_inst_base.
+   PHIs are evaluated in parallel at block entry by eval_phis,
+   never reached through normal sequential execution. *)
+Theorem step_inst_base_phi_error:
+  !inst s. inst.inst_opcode = PHI ==>
+            step_inst_base inst s = Error "phi outside prefix"
+Proof
+  rpt strip_tac >> simp[step_inst_base_def]
+QED
+
+(* step_inst on PHI always gives Error *)
+Theorem step_inst_phi_error:
+  !fuel ctx inst s. inst.inst_opcode = PHI ==>
+    step_inst fuel ctx inst s = Error "phi outside prefix"
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by fs[] >>
+  drule step_inst_non_invoke >>
+  simp[step_inst_base_phi_error]
+QED
+
+Theorem step_inst_ok_imp_not_phi:
+  !fuel ctx inst s v. step_inst fuel ctx inst s = OK v ==> inst.inst_opcode <> PHI
+Proof
+  rpt strip_tac >> CCONTR_TAC >>
+  `step_inst fuel ctx inst s = Error "phi outside prefix"` by
+    metis_tac[step_inst_phi_error] >>
+  fs[]
+QED
+
+(* IS_SOME(lookup_var v s) is monotone across step_inst OK.
+   PHI case is impossible: step_inst on PHI gives Error, contradicting OK. *)
+Triviality step_inst_lookup_mono_with_phi[local]:
+  !fuel ctx inst s s' v.
+    step_inst fuel ctx inst s = OK s' /\ inst_wf inst /\
+    IS_SOME (lookup_var v s) ==>
+    IS_SOME (lookup_var v s')
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (`lookup_var v s' = lookup_var v s` by metis_tac[step_terminator_preserves_vars] >>
+      gvs[])
+  >> Cases_on `inst.inst_opcode = PHI`
+  >- (fs[step_inst_phi_error])
+  >> Cases_on `MEM v inst.inst_outputs`
+  >- (drule_all step_inst_fdom >> strip_tac >> fs[lookup_var_def, FLOOKUP_DEF])
+  >> `lookup_var v s' = lookup_var v s` by metis_tac[step_preserves_non_output_vars] >>
+     gvs[]
+QED
+
 
 (* IS_SOME(lookup_var v s) is monotone across exec_block OK.
    Proof by strong induction on remaining instructions,
@@ -1516,9 +1675,9 @@ Proof
   `inst_wf (EL idx bb.bb_instructions)` by fs[EVERY_EL] >>
   Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> gvs[]
   >- (Cases_on `v'.vs_halted` >> gvs[] >>
-      metis_tac[step_inst_lookup_mono]) >>
+      metis_tac[step_inst_lookup_mono_with_phi]) >>
   strip_tac >>
-  `IS_SOME (lookup_var v v')` by metis_tac[step_inst_lookup_mono] >>
+  `IS_SOME (lookup_var v v')` by metis_tac[step_inst_lookup_mono_with_phi] >>
   `IS_SOME (lookup_var v (v' with vs_inst_idx := SUC idx))` by
     fs[lookup_var_def] >>
   first_x_assum (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
@@ -1527,12 +1686,6 @@ Proof
     `v' with vs_inst_idx := SUC idx`, `st'`] mp_tac) >>
   simp[]
 QED
-
-(* exec_block_output_defined: if v is in outputs of some instruction in bb,
-   exec_block OK from inst_idx=0 implies IS_SOME(lookup_var v s').
-   NOTE: proof goes in mem2varCorrectness locally due to build iteration speed.
-   It depends on step_inst_lookup_mono, exec_block_lookup_mono,
-   step_inst_fdom, and terminator_no_outputs above. *)
 
 (* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
 Triviality all_distinct_flat_mem:
@@ -1709,43 +1862,707 @@ QED
 Theorem run_blocks_step_proof:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
+    run_block fuel ctx bb ss = OK ss' ∧
     ¬ss'.vs_halted
     ⇒
     run_blocks (SUC fuel) ctx fn ss = run_blocks fuel ctx fn ss'
 Proof
-  rw[] >> simp[Once run_blocks_def]
+  rw[run_blocks_unfold]
 QED
 
 Theorem run_blocks_two_blocks_proof:
   ∀ fuel ctx fn bb_A ss ss_mid result.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
-    exec_block fuel ctx bb_A (ss with vs_inst_idx := 0) = OK ss_mid ∧
+    run_block fuel ctx bb_A ss = OK ss_mid ∧
     ¬ss_mid.vs_halted ∧
     run_blocks fuel ctx fn ss_mid = result
     ⇒
     run_blocks (SUC fuel) ctx fn ss = result
 Proof
-  rw[] >> rw[Once run_blocks_def]
+  rw[run_blocks_unfold]
 QED
 
 Theorem run_blocks_halt_proof:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = OK ss' ∧
+    run_block fuel ctx bb ss = OK ss' ∧
     ss'.vs_halted
     ⇒
     run_blocks (SUC fuel) ctx fn ss = Halt ss'
 Proof
-  rw[] >> rw[Once run_blocks_def]
+  rw[run_blocks_unfold]
 QED
 
 Theorem run_blocks_abort_proof:
   ∀ fuel ctx fn bb ss a ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
-    exec_block fuel ctx bb (ss with vs_inst_idx := 0) = Abort a ss'
+    run_block fuel ctx bb ss = Abort a ss'
     ⇒
     run_blocks (SUC fuel) ctx fn ss = Abort a ss'
 Proof
-  rw[] >> rw[Once run_blocks_def]
+  rw[run_blocks_unfold]
+QED
+
+Theorem eval_phis_preserves_alloca_fields:
+  !s insts s'. eval_phis s insts = OK s' ==> s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[eval_phis_def])
+  >> rpt strip_tac >> fs[eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[]
+  >> `v.vs_allocas = s.vs_allocas ∧ v.vs_alloca_next = s.vs_alloca_next`
+     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒ s''.vs_allocas = s.vs_allocas ∧ s''.vs_alloca_next = s.vs_alloca_next`
+         >- metis_tac[] >> metis_tac[])
+  >> fs[update_var_def]
+  >> `s' = v with vs_vars := v.vs_vars⟨x0 ↦ x1⟩` by metis_tac[]
+  >> fs[]
+QED
+
+Theorem eval_phis_preserves_inst_idx:
+  !s insts s'. eval_phis s insts = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[eval_phis_def])
+  >> rpt strip_tac >> fs[eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[]
+  >> `v.vs_inst_idx = s.vs_inst_idx` by metis_tac[]
+  >> metis_tac[update_var_inst_idx]
+QED
+
+Theorem eval_phis_preserves_current_bb:
+  !s insts s'. eval_phis s insts = OK s' ==> s'.vs_current_bb = s.vs_current_bb
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[eval_phis_def])
+  >> rpt strip_tac >> fs[eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[]
+  >> `v.vs_current_bb = s.vs_current_bb`
+     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒ s''.vs_current_bb = s.vs_current_bb`
+         >- metis_tac[] >> metis_tac[])
+  >> fs[update_var_def]
+  >> `s' = v with vs_vars := v.vs_vars⟨x0 ↦ x1⟩` by metis_tac[]
+  >> fs[]
+QED
+
+Theorem eval_phis_preserves_halted:
+  !s insts s'. eval_phis s insts = OK s' ==> s'.vs_halted = s.vs_halted
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[eval_phis_def])
+  >> rpt strip_tac >> fs[eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[]
+  >> `v.vs_halted = s.vs_halted`
+     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒ s''.vs_halted = s.vs_halted`
+         >- metis_tac[] >> metis_tac[])
+  >> fs[update_var_def]
+  >> `s' = v with vs_vars := v.vs_vars⟨x0 ↦ x1⟩` by metis_tac[]
+  >> fs[]
+QED
+
+(* ==========================================================================
+   eval_phis State Equivalence
+   ========================================================================== *)
+
+Triviality resolve_phi_MEM_el[local]:
+  !prev ops op. resolve_phi prev ops = SOME op ==> MEM op ops
+Proof
+  recInduct resolve_phi_ind >>
+  simp[resolve_phi_def] >>
+  rpt gen_tac >> strip_tac >>
+  IF_CASES_TAC >> gvs[]
+QED
+
+Triviality eval_operand_equiv_not_in_vars[local]:
+  !op s1 s2 vars v.
+    execution_equiv vars s1 s2 /\
+    eval_operand op s1 = SOME v /\
+    (!x. op = Var x ==> x NOTIN vars)
+    ==> eval_operand op s2 = SOME v
+Proof
+  Cases_on `op` >> simp[eval_operand_def] >>
+  fs[execution_equiv_def] >>
+  metis_tac[]
+QED
+
+Triviality update_var_execution_equiv[local]:
+  !vars x v s1 s2.
+    execution_equiv vars s1 s2 ==>
+    execution_equiv vars (update_var x v s1) (update_var x v s2)
+Proof
+  rw[execution_equiv_def, update_var_def] >>
+  rw[lookup_var_def, FLOOKUP_UPDATE] >>
+  fs[lookup_var_def]
+QED
+
+Triviality update_var_state_equiv[local]:
+  !vars x v s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (update_var x v s1) (update_var x v s2)
+Proof
+  rw[state_equiv_def, execution_equiv_def,
+     update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+
+Triviality eval_one_phi_equiv[local]:
+  !s1 s2 vars inst out v.
+    execution_equiv vars s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    eval_one_phi s1 inst = SOME (out, v) /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars)
+    ==> eval_one_phi s2 inst = SOME (out, v)
+Proof
+  rpt strip_tac >>
+  fs[eval_one_phi_def, AllCaseEqs()] >>
+  `MEM val_op inst.inst_operands` by metis_tac[resolve_phi_MEM_el] >>
+  `!x. val_op = Var x ==> x NOTIN vars` by metis_tac[] >>
+  `eval_operand val_op s2 = SOME v` by metis_tac[eval_operand_equiv_not_in_vars] >>
+  fs[] >> qexists_tac `prev` >> simp[]
+QED
+
+Theorem eval_phis_state_equiv:
+  !s1 s2 vars insts s1'.
+    state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) insts /\
+    eval_phis s1 insts = OK s1'
+    ==> ?s2'. eval_phis s2 insts = OK s2' /\ state_equiv vars s1' s2'
+Proof
+  Induct_on `insts` >>
+  rpt strip_tac >> fs[eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >> rfs[] >>
+  Cases_on `eval_one_phi s1 h` >> gvs[] >>
+  PairCases_on `x` >> gvs[]
+  >> Cases_on `eval_phis s1 insts` >> gvs[]
+  >> `execution_equiv vars s1 s2 ∧ s1.vs_prev_bb = s2.vs_prev_bb`
+     by fs[state_equiv_def]
+  >> `eval_one_phi s2 h = SOME (x0,x1)`
+     by metis_tac[eval_one_phi_equiv]
+  >> `∃s2'. eval_phis s2 insts = OK s2' ∧ state_equiv vars v s2'`
+     by (qsuff_tac `∀s''. eval_phis s1 insts = OK s'' ⇒ ∃s2'. eval_phis s2 insts = OK s2' ∧ state_equiv vars s'' s2'`
+         >- metis_tac[] >> metis_tac[])
+  >> qexists `update_var x0 x1 s2'` >> simp[eval_phis_def] >>
+  metis_tac[update_var_state_equiv]
+QED
+
+Theorem phi_prefix_length_le:
+  !insts. phi_prefix_length insts <= LENGTH insts
+Proof
+  Induct
+  >- simp[phi_prefix_length_def] >>
+  simp[phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> decide_tac
+QED
+
+Theorem no_phis_phi_prefix_length_zero:
+  !l. EVERY (\inst. inst.inst_opcode <> PHI) l ==> phi_prefix_length l = 0
+Proof
+  Induct >> simp[phi_prefix_length_def]
+QED
+
+Theorem eval_phis_no_phis:
+  !s l. EVERY (\inst. inst.inst_opcode <> PHI) l ==> eval_phis s l = OK s
+Proof
+  gen_tac >> Induct_on `l` >> simp[eval_phis_def]
+QED
+
+Theorem run_block_no_phis_eq_exec_block:
+  !fuel ctx bb s.
+    EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions ==>
+    run_block fuel ctx bb s = exec_block fuel ctx bb (s with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[eval_phis_no_phis, no_phis_phi_prefix_length_zero]
+QED
+
+Theorem run_block_eq_from_exec_block_eq:
+  !fuel ctx bb1 bb2 s.
+    phi_prefix_length bb1.bb_instructions = phi_prefix_length bb2.bb_instructions /\
+    (!s. eval_phis s bb1.bb_instructions = eval_phis s bb2.bb_instructions) /\
+    (!s. exec_block fuel ctx bb1 s = exec_block fuel ctx bb2 s) ==>
+    run_block fuel ctx bb1 s = run_block fuel ctx bb2 s
+Proof
+  rpt strip_tac >>
+  simp[run_block_def]
+QED
+
+Theorem run_blocks_eq_from_run_block_eq:
+  !fuel ctx fn1 fn2 s.
+    fn1.fn_blocks = fn2.fn_blocks /\
+    (!bb. MEM bb fn1.fn_blocks ==>
+      !fuel ctx s. run_block fuel ctx bb s = run_block fuel ctx bb s) ==>
+    run_blocks fuel ctx fn1 s = run_blocks fuel ctx fn2 s
+Proof
+  rw[] >> qid_spec_tac `s` >>
+  Induct_on `fuel` >-
+  (gen_tac >> simp[run_blocks_def]) >>
+  gen_tac >> gvs[run_blocks_unfold]
+QED
+
+
+Theorem eval_phis_map_congruent:
+  !s insts f.
+    (!inst. MEM inst insts ==> (f inst).inst_opcode = inst.inst_opcode) /\
+    (!inst. MEM inst insts /\ inst.inst_opcode = PHI ==> f inst = inst) ==>
+    eval_phis s (MAP f insts) = eval_phis s insts
+Proof
+  Induct_on `insts` >> simp[eval_phis_def]
+QED
+
+Theorem phi_prefix_length_map_congruent:
+  !insts f.
+    (!inst. MEM inst insts ==> (f inst).inst_opcode = inst.inst_opcode) ==>
+    phi_prefix_length (MAP f insts) = phi_prefix_length insts
+Proof
+  Induct >> simp[phi_prefix_length_def]
+QED
+
+
+(* Re-export passSimulationDefs$block_map_transform for convenience.
+   The local definition was removed to avoid constant shadowing that broke
+   pass proofs (two different block_map_transform constants from different
+   theories with the same name but different module paths). *)
+Overload block_map_transform = ``passSimulationDefs$block_map_transform``
+
+Theorem run_block_block_map_transform:
+  !fuel ctx bb f s.
+    EVERY (\inst. (f inst).inst_opcode = inst.inst_opcode) bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode = PHI ==> f inst = inst) bb.bb_instructions /\
+    (!s. exec_block fuel ctx (block_map_transform f bb) s = exec_block fuel ctx bb s) ==>
+    run_block fuel ctx (block_map_transform f bb) s = run_block fuel ctx bb s
+Proof
+  rpt strip_tac >>
+  irule run_block_eq_from_exec_block_eq >>
+  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  conj_tac >- (irule eval_phis_map_congruent >> fs[EVERY_MEM]) >>
+  irule phi_prefix_length_map_congruent >> fs[EVERY_MEM]
+QED
+
+Triviality phi_prefix_length_phi_boundary[local]:
+  !insts f.
+    (!inst. MEM inst insts ==>
+      (inst.inst_opcode = PHI <=> (f inst).inst_opcode = PHI)) ==>
+    phi_prefix_length (MAP f insts) = phi_prefix_length insts
+Proof
+  Induct >> simp[phi_prefix_length_def]
+QED
+
+Triviality eval_phis_phi_preserving[local]:
+  !s insts f.
+    (!inst. MEM inst insts ==>
+      (inst.inst_opcode = PHI <=> (f inst).inst_opcode = PHI)) /\
+    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> f inst = inst) ==>
+    eval_phis s (MAP f insts) = eval_phis s insts
+Proof
+  Induct_on `insts` >> simp[eval_phis_def]
+QED
+
+Theorem run_block_block_map_transform_phi_preserving:
+  !fuel ctx bb f s.
+    EVERY (\inst. inst.inst_opcode = PHI ==> f inst = inst) bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode = PHI ==> (f inst).inst_opcode = PHI) bb.bb_instructions /\
+    EVERY (\inst. inst.inst_opcode <> PHI ==> (f inst).inst_opcode <> PHI) bb.bb_instructions /\
+    (!s. exec_block fuel ctx (block_map_transform f bb) s = exec_block fuel ctx bb s) ==>
+    run_block fuel ctx (block_map_transform f bb) s = run_block fuel ctx bb s
+Proof
+  rpt strip_tac >>
+  `phi_prefix_length (MAP f bb.bb_instructions) =
+    phi_prefix_length bb.bb_instructions` by
+    (irule phi_prefix_length_phi_boundary >>
+     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `eval_phis s (MAP f bb.bb_instructions) =
+    eval_phis s bb.bb_instructions` by
+    (irule eval_phis_phi_preserving >>
+     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[run_block_def, passSimulationDefsTheory.block_map_transform_def]
+QED
+
+
+Theorem eval_phis_same_phi_prefix:
+  !s insts1 insts2.
+    phi_prefix_length insts1 = phi_prefix_length insts2 /\
+    (!i. i < phi_prefix_length insts1 ==> EL i insts1 = EL i insts2) ==>
+    eval_phis s insts1 = eval_phis s insts2
+Proof
+  Induct_on `insts1` >> rpt strip_tac >> gvs[eval_phis_def, phi_prefix_length_def] >>
+  Cases_on `insts2` >> gvs[eval_phis_def, phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, phi_prefix_length_def] >>
+  Cases_on `h'.inst_opcode = PHI` >> gvs[eval_phis_def, phi_prefix_length_def] >>
+  `h = h'` by (
+    first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac)
+  >> fs[]
+  >> `∀i. i < phi_prefix_length t ⇒ EL i insts1 = EL i t` by (
+    gen_tac >> strip_tac >>
+    first_x_assum (qspec_then `SUC i` mp_tac) >> simp[])
+  >> first_x_assum (qspecl_then [`s`,`t`] mp_tac) >>
+  simp[]
+QED
+
+
+(* Boundary lemmas for run_block: lift exec_block properties through eval_phis wrapper *)
+
+Theorem run_block_OK_inst_idx_0:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  RULE_ASSUM_TAC (ONCE_REWRITE_RULE[run_block_def]) >>
+  gvs[] >>
+  imp_res_tac exec_block_OK_inst_idx_0 >> simp[]
+QED
+
+Theorem run_block_ok_sets_prev_bb:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_prev_bb <> NONE
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  RULE_ASSUM_TAC (ONCE_REWRITE_RULE[run_block_def]) >>
+  gvs[] >>
+  imp_res_tac exec_block_ok_sets_prev_bb >> fs[]
+QED
+
+(* run_block OK gives exact prev_bb: the predecessor is the entry vs_current_bb.
+   This is the run_block-level boundary lemma that consumers should use
+   instead of unfolding run_block_def + exec_block_ok_prev_bb directly. *)
+Theorem run_block_ok_prev_bb_exact:
+  !fuel ctx bb s s1.
+    EVERY inst_wf bb.bb_instructions /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    bb.bb_instructions <> [] /\
+    run_block fuel ctx bb s = OK s1 ==>
+    s1.vs_prev_bb = SOME s.vs_current_bb
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  RULE_ASSUM_TAC (ONCE_REWRITE_RULE[run_block_def]) >>
+  gvs[AllCaseEqs()] >>
+  (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+     metis_tac[phi_prefix_length_le]) >>
+  qabbrev_tac `s_input = s' with vs_inst_idx := phi_prefix_length bb.bb_instructions` >>
+  `s_input.vs_current_bb = s.vs_current_bb` by (
+    simp[Abbr `s_input`] >>
+    qspecl_then [`s`,`bb.bb_instructions`,`s'`] mp_tac eval_phis_preserves_current_bb >>
+    simp[]) >>
+  `s1.vs_prev_bb = SOME s_input.vs_current_bb` by (
+    qspecl_then [`fuel`,`ctx`,`bb`,`s_input`,`s1`] mp_tac
+      exec_block_ok_prev_bb_general >>
+    simp[Abbr `s_input`] >>
+    decide_tac) >>
+  fs[Abbr `s_input`]
+QED
+
+(* eval_one_phi returns an output that is a member of inst.inst_outputs *)
+Theorem eval_one_phi_output_mem:
+  !s inst out v. eval_one_phi s inst = SOME (out,v) ==> MEM out inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[eval_one_phi_def] >>
+  Cases_on `t` >> gvs[eval_one_phi_def] >>
+  Cases_on `s.vs_prev_bb` >> gvs[eval_one_phi_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+(* Boundary lemma: eval_phis only modifies vs_vars.
+   ALL other venom_state fields are preserved.
+   This subsumes eval_phis_preserves_alloca_fields, eval_phis_preserves_inst_idx,
+   eval_phis_preserves_current_bb, and makes pass-level preservation proofs trivial. *)
+
+Triviality eval_phis_only_updates_vs_vars_ind[local]:
+  !insts st s'. eval_phis st insts = OK s' ==> s' = st with vs_vars := s'.vs_vars
+Proof
+  gen_tac >> Induct_on `insts`
+  >> rw[eval_phis_def, update_var_def, eval_one_phi_def, AllCaseEqs()]
+  >> TRY (fs[venom_state_component_equality])
+  >> rpt strip_tac
+  >> first_x_assum drule >> rw[venom_state_component_equality]
+QED
+
+Theorem eval_phis_only_updates_vs_vars:
+  !st insts s'. eval_phis st insts = OK s' ==> s' = st with vs_vars := s'.vs_vars
+Proof
+  metis_tac[eval_phis_only_updates_vs_vars_ind]
+QED
+
+(* eval_phis preserves lookup for variables that are not PHI outputs
+   of any instruction in the list. *)
+Theorem eval_phis_flookup_not_phi_output:
+  !s insts x s'.
+    eval_phis s insts = OK s' /\
+    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
+    FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[eval_phis_def])
+  >> rpt strip_tac >> fs[eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x'` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[update_var_def, FLOOKUP_UPDATE]
+  >> `FLOOKUP v.vs_vars x = FLOOKUP s.vs_vars x`
+     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒
+           FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x`
+         >- metis_tac[] >> metis_tac[])
+  >> `x'0 ≠ x` by (
+       CCONTR_TAC >> fs[] >>
+       first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
+       metis_tac[eval_one_phi_output_mem])
+  >> `s' = v with vs_vars := v.vs_vars⟨x'0 ↦ x'1⟩` by metis_tac[eval_phis_only_updates_vs_vars]
+  >> fs[FLOOKUP_UPDATE]
+QED
+
+(* eval_phis preserves FDOM for variables that are not PHI outputs *)
+Theorem eval_phis_fdom_not_phi_output:
+  !s insts x s'.
+    eval_phis s insts = OK s' /\
+    x IN FDOM s.vs_vars /\
+    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
+    x IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  imp_res_tac eval_phis_flookup_not_phi_output >>
+  fs[TO_FLOOKUP]
+QED
+
+Theorem run_block_OK_not_halted:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  RULE_ASSUM_TAC (ONCE_REWRITE_RULE[run_block_def]) >>
+  gvs[] >>
+  imp_res_tac exec_block_OK_not_halted >> fs[]
+QED
+
+(* Boundary lemma: lift_result for run_block from exec_block-level simulation.
+   KEY INSIGHT: run_block feeds exec_block from s_phi (result of eval_phis), NOT from s.
+   So the hypothesis must quantify over s_phi, or be about exec_block from that state.
+   The hypothesis uses "s_phi with vs_inst_idx := phi_prefix_length" which by
+   exec_block_skip_phis equals "s_phi with vs_inst_idx := 0". *)
+Theorem run_block_lift_result:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term1 : venom_state -> venom_state -> bool)
+   (R_term2 : venom_state -> venom_state -> bool)
+   fuel ctx bb1 bb2 s.
+    phi_prefix_length bb1.bb_instructions = phi_prefix_length bb2.bb_instructions /\
+    eval_phis s bb1.bb_instructions = eval_phis s bb2.bb_instructions /\
+    (!s_phi.
+       eval_phis s bb1.bb_instructions = OK s_phi ==>
+       (?e. exec_block fuel ctx bb1
+              (s_phi with vs_inst_idx := phi_prefix_length bb1.bb_instructions) = Error e) \/
+       lift_result R_ok R_term1 R_term2
+         (exec_block fuel ctx bb1
+            (s_phi with vs_inst_idx := phi_prefix_length bb1.bb_instructions))
+         (exec_block fuel ctx bb2
+            (s_phi with vs_inst_idx := phi_prefix_length bb2.bb_instructions))) ==>
+    (?e. run_block fuel ctx bb1 s = Error e) \/
+    lift_result R_ok R_term1 R_term2
+      (run_block fuel ctx bb1 s)
+      (run_block fuel ctx bb2 s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  DISJ_CASES_TAC (Q.SPECL [`s`,`bb1.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >>
+      `eval_phis s bb2.bb_instructions = OK s_phi` by metis_tac[] >>
+      ONCE_REWRITE_TAC[run_block_def] >>
+      qpat_x_assum `phi_prefix_length bb1.bb_instructions = phi_prefix_length bb2.bb_instructions` kall_tac >>
+      simp[])
+  >- (first_x_assum (qx_choose_then `e` strip_assume_tac) >>
+      disj1_tac >>
+      ONCE_REWRITE_TAC[run_block_def] >> simp[] >>
+      qexists_tac `e` >> simp[])
+QED
+
+(* eval_phis only grows FDOM vs_vars (monotone) *)
+Theorem eval_phis_vars_grow:
+  !s insts s'.
+    eval_phis s insts = OK s' ==> FDOM s.vs_vars SUBSET FDOM s'.vs_vars
+Proof
+  Induct_on `insts`
+  >- (* base case: eval_phis s [] = OK s, so s' = s *)
+     (rpt gen_tac >> ONCE_REWRITE_TAC[eval_phis_def] >> simp[]) >>
+  rpt gen_tac >>
+  ONCE_REWRITE_TAC[eval_phis_def] >>
+  reverse (Cases_on `h.inst_opcode = PHI`)
+  >- (* non-PHI: returns OK s, so s' = s, trivially SUBSET *)
+     (strip_tac >> gvs[Excl "eval_phis_def", Excl "eval_one_phi_def"]) >>
+  strip_tac >>
+  Cases_on `eval_one_phi s h`
+  >- (* NONE: Error "phi evaluation failed", contradicts OK *)
+     (DISJ_CASES_TAC (Q.SPECL [`s`,`insts`] eval_phis_ok_or_error_defs) >>
+      gvs[Excl "eval_phis_def", Excl "eval_one_phi_def"]) >>
+  PairCases_on `x` >>
+  DISJ_CASES_TAC (Q.SPECL [`s`,`insts`] eval_phis_ok_or_error_defs)
+  >- (* OK s_phi: IH gives FDOM s.vs_vars ⊆ FDOM s_phi.vs_vars,
+       update_var adds key to FDOM, so transitivity *)
+     (first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >>
+      gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE,
+          pred_setTheory.SUBSET_DEF, Excl "eval_phis_def",
+          Excl "eval_one_phi_def"] >>
+      metis_tac[])
+  >- (* Error: contradicts OK *)
+     (first_x_assum (qx_choose_then `e` strip_assume_tac) >>
+      gvs[Excl "eval_phis_def", Excl "eval_one_phi_def"])
+QED
+
+(* eval_one_phi returning SOME implies single output matching *)
+Theorem eval_one_phi_imp_inst_outputs:
+  !s inst out v.
+    eval_one_phi s inst = SOME (out, v) ==> inst.inst_outputs = [out]
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[eval_one_phi_def] >>
+  Cases_on `t` >> gvs[eval_one_phi_def] >>
+  Cases_on `s.vs_prev_bb` >> gvs[eval_one_phi_def] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> gvs[] >>
+  Cases_on `eval_operand x' s` >> gvs[]
+QED
+
+(* PHI output vars from prefix are in FDOM after eval_phis (MEM-based version) *)
+Theorem eval_phis_outputs_in_fdom_mem:
+  !s insts s' inst out.
+    eval_phis s insts = OK s' /\
+    MEM inst (TAKE (phi_prefix_length insts) insts) /\
+    MEM out inst.inst_outputs ==>
+    out IN FDOM s'.vs_vars
+Proof
+  Induct_on `insts` >> rpt gen_tac >- (
+    strip_tac >> fs[phi_prefix_length_def, eval_phis_def]
+  ) >> strip_tac >>
+  ONCE_REWRITE_TAC[eval_phis_def] >>
+  reverse (Cases_on `h.inst_opcode = PHI`)
+  >- suspend "non_phi_case"
+  >>
+  Cases_on `eval_one_phi s h`
+  >- suspend "eval_none_case"
+  >>
+  PairCases_on `x` >>
+  DISJ_CASES_TAC (Q.SPECL [`s`,`insts`] eval_phis_ok_or_error_defs)
+  >- suspend "ok_case"
+  >- suspend "error_case"
+QED
+
+Resume eval_phis_outputs_in_fdom_mem[non_phi_case]:
+  fs[phi_prefix_length_def] >>
+  Cases_on `inst = h` >> fs[]
+QED
+
+Resume eval_phis_outputs_in_fdom_mem[eval_none_case]:
+  fs[eval_phis_def] >> Cases_on `eval_phis s insts` >> fs[]
+QED
+
+Resume eval_phis_outputs_in_fdom_mem[error_case]:
+  first_x_assum (qx_choose_then `e` strip_assume_tac) >>
+  fs[eval_phis_def] >>
+  Cases_on `eval_phis s insts` >> fs[]
+QED
+
+Resume eval_phis_outputs_in_fdom_mem[ok_case]:
+  first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >>
+  fs[eval_phis_def, update_var_def] >>
+  qpat_x_assum `s_phi with vs_vars := _ = s'` (assume_tac o SYM) >>
+  Cases_on `inst = h`
+  >- (* inst = h: output var is x0 *)
+     (`h.inst_outputs = [x0]` by metis_tac[eval_one_phi_imp_inst_outputs] >>
+      fs[finite_mapTheory.FDOM_FUPDATE,
+          pred_setTheory.IN_INSERT])
+  >- (* inst ≠ h: use IH for rest of prefix *)
+     (fs[phi_prefix_length_def] >>
+      `TAKE (SUC (phi_prefix_length insts)) (h::insts) =
+        h :: TAKE (phi_prefix_length insts) insts` by simp[] >>
+      fs[] >>
+      `out IN FDOM s_phi.vs_vars` by (
+        last_x_assum (qspecl_then [`s`, `s_phi`, `inst`, `out`] mp_tac) >>
+        simp[]
+      ) >>
+      fs[pred_setTheory.IN_INSERT,
+          finite_mapTheory.FDOM_FUPDATE])
+QED
+
+Finalise eval_phis_outputs_in_fdom_mem
+
+(* Derived: indexed version using EL *)
+Theorem eval_phis_outputs_in_fdom_idx:
+  !s insts s' i out.
+    eval_phis s insts = OK s' /\ i < phi_prefix_length insts /\
+    MEM out (EL i insts).inst_outputs ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`, `insts`, `s'`, `EL i insts`, `out`] mp_tac
+    eval_phis_outputs_in_fdom_mem >>
+  impl_tac >- (
+    simp[listTheory.MEM_EL] >>
+    qexists_tac `i` >>
+    simp[rich_listTheory.EL_TAKE] >>
+    simp[listTheory.LENGTH_TAKE_EQ, phi_prefix_length_le]
+  ) >>
+  simp[]
+QED
+
+(* When eval_phis succeeds, run_block_entry = exec_block from phi_prefix_length *)
+Theorem run_block_entry_eval_phis_OK:
+  !fuel ctx bb s s_phi.
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    run_block_entry fuel ctx bb s =
+      exec_block fuel ctx bb (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >> ONCE_REWRITE_TAC[run_block_def] >> simp[]
+QED
+
+(* When eval_phis fails, run_block_entry = Error *)
+Theorem run_block_entry_eval_phis_Error:
+  !fuel ctx bb s e.
+    eval_phis s bb.bb_instructions = Error e ==>
+    run_block_entry fuel ctx bb s = Error e
+Proof
+  rpt strip_tac >> ONCE_REWRITE_TAC[run_block_def] >> simp[]
+QED
+
+(* Decompose run_block OK result into eval_phis + exec_block *)
+Theorem run_block_OK_decompose:
+  !fuel ctx bb s v.
+    run_block fuel ctx bb s = OK v ==>
+    ?s_phi.
+      eval_phis s bb.bb_instructions = OK s_phi /\
+      exec_block fuel ctx bb (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK v
+Proof
+  rpt strip_tac >>
+  pop_assum mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`,`bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >> simp[])
+  >- (first_x_assum (qx_choose_then `e` strip_assume_tac) >> simp[])
+QED
+
+(* Decompose run_block Error: comes from eval_phis or exec_block *)
+Theorem run_block_Error_decompose:
+  !fuel ctx bb s e.
+    run_block fuel ctx bb s = Error e ==>
+    (eval_phis s bb.bb_instructions = Error e) \/
+    (?s_phi.
+      eval_phis s bb.bb_instructions = OK s_phi /\
+      exec_block fuel ctx bb (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = Error e)
+Proof
+  rpt strip_tac >>
+  pop_assum mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`,`bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >>
+      simp[] >> disj2_tac >> qexists_tac `s_phi` >> simp[])
+  >- (first_x_assum (qx_choose_then `e'` strip_assume_tac) >>
+      simp[] >> disj1_tac >> metis_tac[])
 QED

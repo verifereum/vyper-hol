@@ -14,7 +14,7 @@
 
 Theory blockSimHelpers
 Ancestors
-  asmSem planExec stackModel codegenRel stackPlanTypes stackPlanGen venomExecSemantics venomState venomInst list rich_list arithmetic indexedLists stackOpSim instSimHelpers venomWf
+  asmSem planExec stackModel codegenRel stackPlanTypes stackPlanGen venomExecSemantics venomExecProofs venomState venomInst list rich_list arithmetic indexedLists stackOpSim instSimHelpers venomWf
 Libs
   BasicProvers
 
@@ -35,9 +35,11 @@ Proof
   simp[Once exec_block_def] >> fs[]
 QED
 
-(* Corollary: run_block = exec_block starting at inst_idx 0 *)
+(* Corollary: run_block = exec_block stepping one instruction
+   Requires no PHIs in the block (codegen blocks don't have PHIs) *)
 Theorem run_block_step:
   !fuel ctx bb vs inst vs'.
+    EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions /\
     get_instruction bb 0 = SOME inst /\
     step_inst fuel ctx inst (vs with vs_inst_idx := 0) = OK vs' /\
     ~is_terminator inst.inst_opcode ==>
@@ -45,7 +47,11 @@ Theorem run_block_step:
     exec_block fuel ctx bb (vs' with vs_inst_idx := 1)
 Proof
   rpt strip_tac >>
-  simp[run_block_def, Once exec_block_def]
+  simp[run_block_no_phis_eq_exec_block, Excl "exec_block_def"] >>
+  MP_TAC (Q.SPECL [`fuel`, `ctx`, `bb`,
+    `vs with vs_inst_idx := 0`, `inst`, `vs'`] exec_block_step) >>
+  impl_tac >- simp[Excl "exec_block_def"] >>
+  simp[Excl "exec_block_def"]
 QED
 
 (* When exec_block hits a terminator, classify the result *)
@@ -61,9 +67,10 @@ Proof
   simp[Once exec_block_def] >> fs[]
 QED
 
-(* Corollary for run_block *)
+(* When run_block hits a terminator, classify the result (no-PHI variant) *)
 Theorem run_block_terminator:
   !fuel ctx bb vs inst r.
+    EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions /\
     get_instruction bb 0 = SOME inst /\
     step_inst fuel ctx inst (vs with vs_inst_idx := 0) = OK r /\
     is_terminator inst.inst_opcode ==>
@@ -71,9 +78,9 @@ Theorem run_block_terminator:
     (if r.vs_halted then Halt r else OK r)
 Proof
   rpt strip_tac >>
-  simp[run_block_def, Once exec_block_def]
+  simp[run_block_no_phis_eq_exec_block, Excl "exec_block_def"] >>
+  irule exec_block_terminator >> simp[Excl "exec_block_def"]
 QED
-
 (* When step_inst returns non-OK, exec_block propagates *)
 Theorem exec_block_propagate:
   !fuel ctx bb vs inst.
@@ -91,9 +98,10 @@ Proof
   Cases_on `step_inst fuel ctx inst vs` >> fs[]
 QED
 
-(* Corollary for run_block *)
+(* When step_inst returns non-OK in run_block, the result propagates (no-PHI variant) *)
 Theorem run_block_propagate:
   !fuel ctx bb vs inst.
+    EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions /\
     get_instruction bb 0 = SOME inst ==>
     ((!vs'. step_inst fuel ctx inst (vs with vs_inst_idx := 0) = Halt vs' ==>
         run_block fuel ctx bb vs = Halt vs') /\
@@ -104,8 +112,11 @@ Theorem run_block_propagate:
      (!e. step_inst fuel ctx inst (vs with vs_inst_idx := 0) = Error e ==>
         run_block fuel ctx bb vs = Error e))
 Proof
-  rpt strip_tac >> simp[run_block_def, Once exec_block_def] >>
-  Cases_on `step_inst fuel ctx inst (vs with vs_inst_idx := 0)` >> fs[]
+  rpt strip_tac >>
+  simp[run_block_no_phis_eq_exec_block, Excl "exec_block_def"] >>
+  MP_TAC (Q.SPECL [`fuel`, `ctx`, `bb`, `vs with vs_inst_idx := 0`, `inst`]
+    exec_block_propagate) >>
+  simp[Excl "exec_block_def"]
 QED
 
 (* ===== venom_asm_rel stability under PC changes ===== *)
@@ -138,7 +149,7 @@ Proof
      memory_rel_def]
 QED
 
-(* Similarly for terminal_rel *)
+(* venom_asm_terminal_rel doesn't constrain as_pc, so updating it is free *)
 Theorem venom_asm_terminal_rel_pc_update:
   !vs as pc'.
     venom_asm_terminal_rel vs as ==>
@@ -157,7 +168,7 @@ Proof
   simp[asm_step_def]
 QED
 
-(* One asm_steps for a label instruction *)
+(* asm_steps 1 for a label instruction advances PC by 1 *)
 Theorem label_op_asm_steps:
   !lo o2pc prog as lbl.
     asm_block_at prog as.as_pc [AsmLabel lbl] ==>
@@ -686,7 +697,6 @@ QED
 Resume block_insts_sim[ok_nonterm_ih]:
   rpt conj_tac
   \\ TRY (FIRST_ASSUM ACCEPT_TAC)
-  (* remaining: record accessor, block_foldl ADD1, ~halted, venom_asm_rel inst_idx, asm_block_at *)
   >- SIMP_TAC (srw_ss()) []
   >- (ONCE_REWRITE_TAC[ADD1] >> ASM_REWRITE_TAC[])
   >- (SIMP_TAC (srw_ss()) []
