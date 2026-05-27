@@ -709,67 +709,8 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_effect_free_op_def, is_terminator_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def]
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
+      all_effects_def, empty_effects_def] >>
+  transfer_determined_finish_tac
 QED
 
 
