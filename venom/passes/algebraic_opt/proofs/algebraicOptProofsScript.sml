@@ -2239,6 +2239,83 @@ Proof
   gvs[operand_distinct]
 QED
 
+Triviality eval_operands_mem_defined[local]:
+  !ops s vals. eval_operands ops s = SOME vals ==>
+    !op. MEM op ops ==> ?w. eval_operand op s = SOME w
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality ao_resolve_iszero_op_not_label[local]:
+  !targets op lbl.
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+      0 < k /\ k < LENGTH chain ==> ?w. EL k chain = Var w) ==>
+    ao_resolve_iszero_op targets PHI op = Label lbl ==>
+    op = Label lbl
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
+  rename1 `ALOOKUP targets vn` >>
+  Cases_on `ALOOKUP targets vn` >> simp[] >>
+  rename1 `SOME chain` >>
+  simp[LET_THM] >>
+  qabbrev_tac `keep = 2 - (LENGTH chain - 1) MOD 2` >>
+  COND_CASES_TAC >> simp[] >>
+  strip_tac >>
+  `0 < keep /\ keep < LENGTH chain` by
+    (qunabbrev_tac `keep` >> fs[] >>
+     `(LENGTH chain - 1) MOD 2 < 2` by simp[] >> DECIDE_TAC) >>
+  first_x_assum (qspecl_then [`vn`, `chain`, `keep`] mp_tac) >>
+  simp[] >> strip_tac >> fs[operand_distinct]
+QED
+
+Triviality ao_resolve_phi_sim[local]:
+  !targets inst s fuel ctx.
+    inst.inst_opcode = PHI /\
+    ao_iszero_chain_inv targets s /\
+    ao_chains_defined_at targets s /\
+    ao_targets_wf targets /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+      0 < k /\ k < LENGTH chain ==> ?w. EL k chain = Var w) /\
+    ~(?e. step_inst fuel ctx inst s = Error e) ==>
+    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+    step_inst fuel ctx inst s
+Proof
+  rpt strip_tac >>
+  `step_inst fuel ctx inst s = step_inst_base inst s` by
+    simp[step_inst_non_invoke] >>
+  `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+   step_inst_base (ao_resolve_iszero_inst targets inst) s` by
+    simp[step_inst_non_invoke, ao_resolve_iszero_inst_def] >>
+  simp[] >>
+  simp[Once step_inst_base_def, SimpRHS] >>
+  simp[Once step_inst_base_def, ao_resolve_iszero_inst_def] >>
+  qabbrev_tac `g = ao_resolve_iszero_op targets PHI` >>
+  `!lbl. g (Label lbl) = Label lbl` by
+    simp[Abbr `g`, ao_resolve_iszero_op_def] >>
+  `!op lbl. g op = Label lbl ==> op = Label lbl` by
+    metis_tac[ao_resolve_iszero_op_not_label] >>
+  `!prev. resolve_phi prev (MAP g inst.inst_operands) =
+   OPTION_MAP g (resolve_phi prev inst.inst_operands)` by
+    (gen_tac >> irule resolve_phi_map_label_pres >> simp[]) >>
+  Cases_on `s.vs_prev_bb` >> simp[] >>
+  rename1 `SOME prev` >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
+  rename1 `resolve_phi prev _ = SOME val_op` >>
+  simp[] >>
+  `eval_operand (g val_op) s = eval_operand val_op s` by
+    (qunabbrev_tac `g` >>
+     irule resolve_op_eval_eq_at >> simp[] >>
+     qpat_x_assum `~_` mp_tac >> simp[Once step_inst_def] >>
+     simp[Once step_inst_base_def] >>
+     BasicProvers.EVERY_CASE_TAC >> simp[]) >>
+  simp[]
+QED
+
 (* Per-inst sim with state-dependent invariants instead of ∀s preconditions.
    H_resolve derived from chain invariant + ao_resolve_iszero_inst_sim.
    H_range derived from in_range_state + range_analyze_sound. *)
@@ -2276,14 +2353,13 @@ Proof
   drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
   `ao_chains_defined_at targets s` by
     (irule ao_chain_defined_prefix_implies_at >> simp[]) >>
-  rpt conj_tac >>
-  TRY (strip_tac >>
-       Cases_on `inst.inst_opcode = ISZERO`
+  TRY (Cases_on `inst.inst_opcode = ISZERO`
        >- (simp[ao_resolve_iszero_inst_def, instruction_component_equality] >>
            irule listTheory.MAP_CONG >> simp[] >>
            Cases >> simp[ao_resolve_iszero_op_def])
        >- (Cases_on `inst.inst_opcode = PHI`
-           >- cheat
+           >- (irule ao_resolve_phi_sim >> simp[] >>
+               metis_tac[ao_fn_targets_chain_tail_var])
            >- (irule ao_resolve_iszero_inst_sim_at >> simp[] >>
                rpt strip_tac >>
                simp[eval_operand_def, lookup_var_def,
@@ -2292,7 +2368,11 @@ Proof
                >- (qpat_x_assum `~(?e. step_inst _ _ _ _ = Error _)` mp_tac >>
                    simp[Once step_inst_def] >> simp[decode_invoke_def] >>
                    BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
-                   cheat)
+                   gvs[decode_invoke_def, AllCaseEqs()] >>
+                   drule eval_operands_mem_defined >>
+                   disch_then (qspec_then `Var v` mp_tac) >>
+                   simp[eval_operand_def, lookup_var_def,
+                        finite_mapTheory.FLOOKUP_DEF])
                >- (`step_inst fuel ctx inst s = step_inst_base inst s` by
                      simp[step_inst_non_invoke] >>
                    `!e. step_inst_base inst s <> Error e` by
@@ -2302,9 +2382,8 @@ Proof
                    qspecl_then [`inst`, `s`, `v`] mp_tac
                      step_inst_base_nonerr_var_fdom >>
                    simp[] >> disch_then irule >>
-                   rpt strip_tac >> gvs[inst_wf_def]))) >>
-       NO_TAC) >>
-  cheat)
+                   rpt strip_tac >> gvs[inst_wf_def])))) >>
+  rpt strip_tac >> cheat)
 QED
 
 Triviality eval_operand_inst_idx[local]:
