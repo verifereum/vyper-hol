@@ -193,12 +193,118 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+(* INVOKE step_inst preserves result_equiv: callee gets identical state
+   because setup_callee zeroes vs_vars and all other fields are equal
+   under state_equiv, so run_blocks produces identical results. *)
+Triviality eval_operands_equiv[local]:
+  !ops dead s1 s2.
+    state_equiv dead s1 s2 /\
+    (!x. MEM (Var x) ops ==> x NOTIN dead) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand h s1 = eval_operand h s2` by
+    (irule eval_operand_equiv >> qexists_tac `dead` >> simp[] >>
+     Cases_on `h` >> simp[] >> metis_tac[]) >>
+  gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
+  `eval_operands ops s1 = eval_operands ops s2` by
+    (first_x_assum irule >> qexists_tac `dead` >> simp[]) >>
+  gvs[]
+QED
+
+Triviality merge_callee_state_equiv[local]:
+  !dead s1 s2 cs.
+    state_equiv dead s1 s2 ==>
+    state_equiv dead (merge_callee_state s1 cs) (merge_callee_state s2 cs)
+Proof
+  rw[merge_callee_state_def, state_equiv_def, execution_equiv_def,
+     lookup_var_def]
+QED
+
+Triviality foldl_update_var_state_equiv[local]:
+  !pairs dead s1 s2.
+    state_equiv dead s1 s2 ==>
+    state_equiv dead
+      (FOLDL (\s' (out, val). update_var out val s') s1 pairs)
+      (FOLDL (\s' (out, val). update_var out val s') s2 pairs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >> simp[] >>
+  first_x_assum irule >>
+  gvs[state_equiv_def, execution_equiv_def, update_var_def,
+      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> IF_CASES_TAC >> gvs[]
+QED
+
+Triviality bind_outputs_state_equiv[local]:
+  !outs vals dead s1 s2.
+    state_equiv dead s1 s2 ==>
+    case (bind_outputs outs vals s1, bind_outputs outs vals s2) of
+      (SOME s1', SOME s2') => state_equiv dead s1' s2'
+    | (NONE, NONE) => T
+    | _ => F
+Proof
+  rpt strip_tac >> simp[bind_outputs_def] >>
+  IF_CASES_TAC >> simp[] >>
+  irule foldl_update_var_state_equiv >> simp[]
+QED
+
+Triviality step_inst_invoke_result_equiv[local]:
+  !fuel ctx dead inst s1 s2.
+    state_equiv dead s1 s2 /\
+    inst.inst_opcode = INVOKE /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead) ==>
+    result_equiv dead (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
+Proof
+  rpt strip_tac >>
+  simp_tac std_ss [Once step_inst_def] >>
+  simp_tac std_ss [Once step_inst_def] >>
+  Cases_on `decode_invoke inst`
+  >- simp[result_equiv_def] >>
+  PairCases_on `x` >>
+  rename1 `SOME (cname, arg_ops)` >>
+  `inst.inst_operands = Label cname :: arg_ops` by
+    (qpat_x_assum `decode_invoke _ = _` mp_tac >>
+     simp[decode_invoke_def, AllCaseEqs()] >>
+     Cases_on `inst.inst_operands` >> simp[]) >>
+  simp[] >>
+  Cases_on `lookup_function cname ctx.ctx_functions`
+  >- simp[result_equiv_def] >>
+  rename1 `SOME callee_fn` >>
+  `eval_operands arg_ops s1 = eval_operands arg_ops s2` by
+    (irule eval_operands_equiv >> qexists_tac `dead` >> simp[]) >>
+  simp[] >>
+  Cases_on `eval_operands arg_ops s2`
+  >- simp[result_equiv_def] >>
+  rename1 `SOME args` >> simp[] >>
+  `setup_callee callee_fn args s1 = setup_callee callee_fn args s2` by
+    (simp[setup_callee_def] >> IF_CASES_TAC >> simp[] >>
+     simp[venomStateTheory.venom_state_component_equality] >>
+     fs[state_equiv_def, execution_equiv_def]) >>
+  simp[] >>
+  Cases_on `setup_callee callee_fn args s2`
+  >- simp[result_equiv_def] >>
+  rename1 `SOME callee_s` >> simp[] >>
+  Cases_on `run_blocks fuel ctx callee_fn callee_s` >>
+  simp[result_equiv_def] >>
+  `state_equiv dead (merge_callee_state s1 v) (merge_callee_state s2 v)` by
+    (irule merge_callee_state_equiv >> simp[]) >>
+  `case (bind_outputs inst.inst_outputs l (merge_callee_state s1 v),
+         bind_outputs inst.inst_outputs l (merge_callee_state s2 v)) of
+     (SOME s1', SOME s2') => state_equiv dead s1' s2'
+   | (NONE, NONE) => T
+   | _ => F` by
+    (irule bind_outputs_state_equiv >> simp[]) >>
+  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s1 v)` >>
+  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s2 v)` >>
+  gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
+QED
+
 (* Case 1: Unchanged instruction — same inst on both sides *)
 Triviality per_inst_unchanged[local]:
   !dead flips all_insts inst fuel ctx s1 s2.
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
-    inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     ALOOKUP flips inst.inst_id = NONE /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead) /\
@@ -218,7 +324,9 @@ Proof
   rpt strip_tac >>
   `result_equiv dead (step_inst fuel ctx inst s1)
                      (step_inst fuel ctx inst s2)` by
-    (irule step_inst_result_equiv >> simp[]) >>
+    (Cases_on `inst.inst_opcode = INVOKE`
+     >- (irule step_inst_invoke_result_equiv >> simp[])
+     >> irule step_inst_result_equiv >> simp[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
   Cases_on `step_inst fuel ctx inst s2` >>
   gvs[result_equiv_def] >>
@@ -319,7 +427,6 @@ Triviality per_inst_flip[local]:
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
     MEM inst all_insts /\
-    inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     is_comparator inst.inst_opcode /\
     inst.inst_operands = [x2; Lit w] /\
@@ -349,6 +456,7 @@ Triviality per_inst_flip[local]:
     | _ => T
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (gvs[is_comparator_def]) >>
   `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
     (irule step_inst_non_invoke >> simp[]) >>
   qabbrev_tac `flipped = inst with
@@ -661,7 +769,6 @@ Triviality per_inst_sim[local]:
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
     MEM inst all_insts /\
-    inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     (* Unchanged/flip: operands not dead *)
     (~MEM inst.inst_id removes /\
@@ -947,7 +1054,7 @@ Triviality scan_insert_fresh_form[local]:
     ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
     MEM (aid, out_var, fresh, cmp_id) inserts ==>
     fresh = ao_fresh_var cmp_id "iz" /\
-    ?i. MEM i insts /\ i.inst_id = cmp_id
+    ?i. MEM i insts /\ i.inst_id = cmp_id /\ is_comparator i.inst_opcode
 Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
@@ -959,7 +1066,14 @@ Proof
                       h.inst_id) :: ins0 /\
            MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)` by
     metis_tac[scan_step_inserts_subset] >>
-  gvs[] >> metis_tac[]
+  gvs[]
+  >- metis_tac[]
+  >> (* Entry is either h (head) or in ins0 (tail) *)
+  gvs[listTheory.MEM]
+  >- (* Head: cmp_id = h.inst_id, need is_comparator h *)
+     (drule_all scan_step_detail >>
+      strip_tac >> gvs[] >> metis_tac[])
+  >- metis_tac[]
 QED
 
 (* Remove entries pair with a flip: removed ISZERO uses flip output *)
@@ -1189,7 +1303,6 @@ Triviality exec_block_terminator_equiv[local]:
     EL n bb1.bb_instructions = inst /\
     EL n bb2.bb_instructions = inst /\
     is_terminator inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead)
     ==>
     lift_result (state_equiv dead) (execution_equiv dead)
@@ -1197,6 +1310,7 @@ Triviality exec_block_terminator_equiv[local]:
       (exec_block fuel ctx bb1 s1) (exec_block fuel ctx bb2 s2)
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
   ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>
   `result_equiv dead (step_inst fuel ctx inst s1)
                       (step_inst fuel ctx inst s2)` by
@@ -1291,7 +1405,6 @@ Triviality exec_block_same_terminator[local]:
     EL n1 bb1.bb_instructions = inst /\
     EL n2 bb2.bb_instructions = inst /\
     is_terminator inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead)
     ==>
     lift_result (state_equiv dead) (execution_equiv dead)
@@ -1300,6 +1413,7 @@ Triviality exec_block_same_terminator[local]:
       (exec_block fuel ctx bb2 (s2 with vs_inst_idx := n2))
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
   ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>
   `step_inst fuel ctx inst (s1 with vs_inst_idx := n1) =
    step_inst_base inst (s1 with vs_inst_idx := n1)` by
@@ -1425,7 +1539,6 @@ Triviality per_inst_lr_unchanged[local]:
   !dead flips all_insts inst fuel ctx s1 s2.
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
-    inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     ALOOKUP flips inst.inst_id = NONE /\
     (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead) /\
@@ -1443,7 +1556,9 @@ Proof
   rpt strip_tac >>
   `result_equiv dead (step_inst fuel ctx inst s1)
                      (step_inst fuel ctx inst s2)` by
-    (irule step_inst_result_equiv >> simp[]) >>
+    (Cases_on `inst.inst_opcode = INVOKE`
+     >- (irule step_inst_invoke_result_equiv >> simp[])
+     >> irule step_inst_result_equiv >> simp[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
   Cases_on `step_inst fuel ctx inst s2` >>
   gvs[result_equiv_is_lift_result, stateEquivTheory.lift_result_def] >>
@@ -1584,7 +1699,6 @@ Triviality per_inst_lr_flip[local]:
    out_var orig_op1 w.
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
-    inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     is_comparator inst.inst_opcode /\
     inst.inst_operands = [orig_op1; Lit w] /\
@@ -1610,6 +1724,7 @@ Triviality per_inst_lr_flip[local]:
              inst.inst_opcode = SGT then w + 1w else w - 1w)] |>) s2)
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (gvs[is_comparator_def]) >>
   `eval_operand orig_op1 s1 = eval_operand orig_op1 s2` by
     (irule eval_operand_equiv >> qexists_tac `dead` >> simp[]) >>
   Cases_on `eval_operand orig_op1 s1`
@@ -1640,7 +1755,6 @@ Triviality per_inst_lr[local]:
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
     MEM inst all_insts /\
-    inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     (~MEM inst.inst_id removes /\
      ALOOKUP inserts inst.inst_id = NONE ==>
@@ -1760,6 +1874,7 @@ Proof
   PairCases_on `x` >>
   first_x_assum (qspecl_then [`x0`, `x1`, `x2`] mp_tac) >> simp[] >>
   strip_tac >> gvs[] >>
+  `inst.inst_opcode <> INVOKE` by (gvs[is_comparator_def]) >>
   `~MEM inst.inst_id removes /\ ALOOKUP inserts inst.inst_id = NONE` by
     (first_x_assum (qspec_then `inst.inst_id` mp_tac) >> simp[]) >>
   `ao_cmp_flip_apply_inst mid flips removes inserts inst =
@@ -1792,7 +1907,7 @@ Triviality body_lr[local]:
   !body_insts mid flips removes inserts dead all_insts fuel ctx s1 s2.
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) body_insts /\
+    EVERY (\i. ~is_terminator i.inst_opcode) body_insts /\
     (!inst. MEM inst body_insts ==> MEM inst all_insts) /\
     (!inst. MEM inst body_insts ==>
       ~MEM inst.inst_id removes /\
@@ -1852,8 +1967,8 @@ Proof
   Induct_on `body_insts`
   >- simp[run_insts_def, stateEquivTheory.lift_result_def]
   >> rpt gen_tac >> strip_tac >>
-  `~is_terminator h.inst_opcode /\ h.inst_opcode <> INVOKE /\
-   EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+  `~is_terminator h.inst_opcode /\
+   EVERY (\i. ~is_terminator i.inst_opcode)
          body_insts` by
     (qpat_x_assum `EVERY _ (_::_)` mp_tac >>
      simp[listTheory.EVERY_DEF]) >>
@@ -1882,11 +1997,85 @@ Proof
        stateEquivTheory.lift_result_def]
 QED
 
+Triviality step_inst_idx_ok_general[local]:
+  !fuel ctx inst s j s'.
+    ~is_terminator inst.inst_opcode /\
+    step_inst fuel ctx inst s = OK s' ==>
+    step_inst fuel ctx inst (s with vs_inst_idx := j) =
+      OK (s' with vs_inst_idx := j)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- simp[invoke_step_inst_idx_OK_only]
+  >> (`step_inst fuel ctx inst (s with vs_inst_idx := j) =
+       exec_result_map (\s'. s' with vs_inst_idx := j)
+         (step_inst fuel ctx inst s)` by
+        simp[step_inst_idx_indep] >>
+      gvs[instIdxIndepTheory.exec_result_map_def])
+QED
+
+Triviality step_inst_idx_non_ok_lift[local]:
+  !fuel ctx inst s j.
+    ~is_terminator inst.inst_opcode /\
+    ~(?v. step_inst fuel ctx inst s = OK v) ==>
+    lift_result (\_ _. T) (execution_equiv {}) (execution_equiv {})
+      (step_inst fuel ctx inst s)
+      (step_inst fuel ctx inst (s with vs_inst_idx := j))
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (qspecl_then [`fuel`,`ctx`,`inst`,`s`,`j`] mp_tac
+        invoke_step_inst_idx_OK_only >> simp[] >>
+      Cases_on `step_inst fuel ctx inst s` >>
+      gvs[stateEquivTheory.lift_result_def,
+          execution_equiv_def, finite_mapTheory.FDOM_FEMPTY, lookup_var_def])
+  >> (`step_inst fuel ctx inst (s with vs_inst_idx := j) =
+        exec_result_map (\s'. s' with vs_inst_idx := j)
+          (step_inst fuel ctx inst s)` by simp[step_inst_idx_indep] >>
+      Cases_on `step_inst fuel ctx inst s` >>
+      gvs[instIdxIndepTheory.exec_result_map_def,
+          stateEquivTheory.lift_result_def,
+          execution_equiv_def, finite_mapTheory.FDOM_FEMPTY, lookup_var_def])
+QED
+
+Triviality exec_block_skip_prefix_general[local]:
+  !prefix fuel ctx bb s j s'.
+    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
+    EVERY (\i. ~is_terminator i.inst_opcode) prefix /\
+    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
+    run_insts fuel ctx prefix s = OK s'
+  ==>
+    exec_block fuel ctx bb (s with vs_inst_idx := j) =
+    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
+Proof
+  Induct >> rw[run_insts_def] >>
+  rename1 `h :: prefix` >>
+  `j < LENGTH bb.bb_instructions` by simp[] >>
+  Cases_on `step_inst fuel ctx h s` >> gvs[run_insts_def] >>
+  rename1 `step_inst _ _ h s = OK s1` >>
+  `EL j bb.bb_instructions = h` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `step_inst fuel ctx h (s with vs_inst_idx := j) =
+     OK (s1 with vs_inst_idx := j)` by
+    (irule step_inst_idx_ok_general >> simp[]) >>
+  `s1.vs_inst_idx = s.vs_inst_idx` by
+    metis_tac[step_inst_preserves_inst_idx] >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def] >>
+  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `SUC j`, `s'`]
+    mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >>
+  impl_tac
+  >- (rw[] >> first_x_assum (qspec_then `SUC k` mp_tac) >>
+      simp[arithmeticTheory.ADD_CLAUSES])
+  >> simp[]
+QED
+
 (* exec_block_skip_prefix for body starting at idx 0 *)
 Triviality exec_block_skip_body[local]:
   !bb fuel ctx s s'.
     bb_well_formed bb /\
-    (!inst. MEM inst bb.bb_instructions ==> inst.inst_opcode <> INVOKE) /\
+
     run_insts fuel ctx (FRONT bb.bb_instructions) s = OK s' ==>
     exec_block fuel ctx bb (s with vs_inst_idx := 0) =
     exec_block fuel ctx bb (s' with vs_inst_idx :=
@@ -1894,15 +2083,11 @@ Triviality exec_block_skip_body[local]:
 Proof
   rpt strip_tac >>
   `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
-  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+  `EVERY (\i. ~is_terminator i.inst_opcode)
      (FRONT bb.bb_instructions)` by
-    (imp_res_tac front_non_terminators >>
-     simp[Once listTheory.EVERY_CONJ] >>
-     simp_tac std_ss [listTheory.EVERY_MEM] >> rpt strip_tac >>
-     drule_all rich_listTheory.MEM_FRONT_NOT_NIL >>
-     strip_tac >> res_tac) >>
+    (imp_res_tac front_non_terminators >> simp[]) >>
   qspecl_then [`FRONT bb.bb_instructions`, `fuel`, `ctx`, `bb`, `s`, `0`, `s'`]
-    mp_tac exec_block_skip_prefix >>
+    mp_tac exec_block_skip_prefix_general >>
   simp[] >> disch_then irule >> rpt conj_tac
   >- (rpt strip_tac >> simp[] >>
       irule (GSYM rich_listTheory.EL_FRONT) >>
@@ -1915,7 +2100,7 @@ QED
 Triviality exec_block_body_non_ok[local]:
   !prefix fuel ctx bb s j.
     j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) prefix /\
+    EVERY (\i. ~is_terminator i.inst_opcode) prefix /\
     (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
     ~(?v. run_insts fuel ctx prefix s = OK v)
     ==>
@@ -1928,32 +2113,33 @@ Proof
   `j < LENGTH bb.bb_instructions` by simp[] >>
   `h = EL j bb.bb_instructions` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `~is_terminator h.inst_opcode /\ h.inst_opcode <> INVOKE` by gvs[] >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    (irule step_inst_idx_indep >> simp[]) >>
-  Cases_on `step_inst fuel ctx h s` >>
-  gvs[instIdxIndepTheory.exec_result_map_def]
+  `~is_terminator h.inst_opcode` by gvs[] >>
+  Cases_on `step_inst fuel ctx h s` >> gvs[run_insts_def]
   >- ( (* OK: head succeeds, tail is non-OK *)
-    rename1 `_ = OK s1` >>
+    rename1 `step_inst _ _ _ s = OK s1` >>
+    `step_inst fuel ctx bb.bb_instructions❲j❳ (s with vs_inst_idx := j) =
+       OK (s1 with vs_inst_idx := j)` by
+      (irule step_inst_idx_ok_general >> simp[]) >>
     `s1.vs_inst_idx = s.vs_inst_idx` by
       metis_tac[step_inst_preserves_inst_idx] >>
     first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `SUC j`] mp_tac) >>
     simp[arithmeticTheory.ADD_CLAUSES] >>
     impl_tac
-    >- (rpt strip_tac >>
-        first_x_assum (qspec_then `SUC k` mp_tac) >>
+    >- (rw[] >> first_x_assum (qspec_then `SUC k` mp_tac) >>
         simp[arithmeticTheory.ADD_CLAUSES])
     >> strip_tac >>
     ONCE_REWRITE_TAC[exec_block_def] >>
-    simp[get_instruction_def] >> gvs[])
-  >> (* Non-OK first step: propagates through exec_block *)
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  gvs[instIdxIndepTheory.exec_result_map_def] >>
-  simp[stateEquivTheory.lift_result_def,
-       execution_equiv_def, lookup_var_def]
+    simp[get_instruction_def])
+  >> (* Non-OK: use step_inst_idx_non_ok_lift *)
+  (qspecl_then [`fuel`, `ctx`, `bb.bb_instructions❲j❳`, `s`, `j`]
+     mp_tac step_inst_idx_non_ok_lift >> simp[] >>
+   Cases_on `step_inst fuel ctx bb.bb_instructions❲j❳
+               (s with vs_inst_idx := j)` >>
+   gvs[stateEquivTheory.lift_result_def] >>
+   rpt strip_tac >> gvs[] >>
+   ONCE_REWRITE_TAC[exec_block_def] >>
+   simp[get_instruction_def, stateEquivTheory.lift_result_def,
+        execution_equiv_def, lookup_var_def])
 QED
 
 (* SSA: same output variable => same instruction *)
@@ -1983,18 +2169,6 @@ Proof
   Induct >> simp[fn_insts_blocks_def]
 QED
 
-(* Block inst is in fn_insts (convenient wrapper) *)
-Triviality block_inst_no_invoke[local]:
-  !fn lbl bb inst.
-    (!i. MEM i (fn_insts fn) ==> i.inst_opcode <> INVOKE) /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    MEM inst bb.bb_instructions ==>
-    inst.inst_opcode <> INVOKE
-Proof
-  rpt strip_tac >>
-  `MEM inst (fn_insts fn)` by metis_tac[block_inst_in_fn_insts] >>
-  res_tac
-QED
 
 (* Terminator of a well-formed block is untouched by cmp_flip_scan *)
 Triviality last_untouched[local]:
@@ -2215,8 +2389,9 @@ Triviality insert_fresh_neq_flip_output[local]:
     dfg = dfg_build_function fn1 /\
     fn_inst_ids_distinct fn1 /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_fn_fresh_vars fn1) /\
-    (?i. MEM i (fn_insts fn1) /\ i.inst_id = cmp_id) /\
+      v NOTIN ao_cmp_fresh_vars fn1) /\
+    (?i. MEM i (fn_insts fn1) /\ i.inst_id = cmp_id /\
+         is_comparator i.inst_opcode) /\
     MEM fi' (fn_insts fn1) /\ ALOOKUP flips fi'.inst_id <> NONE /\
     MEM out fi'.inst_outputs ==>
     ao_fresh_var cmp_id "iz" <> out
@@ -2241,9 +2416,9 @@ Proof
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
   `MEM (Var out_var) (HD (dfg_get_uses dfg out_var)).inst_operands` by
     (irule operand_vars_mem_var >> first_assum ACCEPT_TAC) >>
-  `out_var NOTIN ao_fn_fresh_vars fn1` by metis_tac[] >>
-  `ao_fresh_var cmp_id "iz" IN ao_fn_fresh_vars fn1` by
-    (simp[ao_fn_fresh_vars_def, pred_setTheory.GSPECIFICATION,
+  `out_var NOTIN ao_cmp_fresh_vars fn1` by metis_tac[] >>
+  `ao_fresh_var cmp_id "iz" IN ao_cmp_fresh_vars fn1` by
+    (simp[ao_cmp_fresh_vars_def, pred_setTheory.GSPECIFICATION,
           listTheory.MEM_MAP] >>
      metis_tac[]) >>
   metis_tac[]
@@ -2268,10 +2443,10 @@ Triviality non_null_body_sim[local]:
     dead = ao_cmp_flip_dead_vars dfg fn1 /\
     dfg = dfg_build_function fn1 /\
     ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
-    (!inst. MEM inst (fn_insts fn1) ==> inst.inst_opcode <> INVOKE) /\
+
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_fn_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     ~NULL flips /\
@@ -2296,10 +2471,7 @@ Proof
   rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
-  >- (imp_res_tac front_non_terminators >>
-      simp[Once listTheory.EVERY_CONJ] >>
-      simp_tac std_ss [listTheory.EVERY_MEM] >> rpt strip_tac >>
-      metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL, block_inst_no_invoke])
+  >- (imp_res_tac front_non_terminators >> simp[])
   >- (rpt strip_tac >>
       metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL, block_inst_in_fn_insts])
   >- (rpt strip_tac >>
@@ -2335,7 +2507,7 @@ Proof
             metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL,
                       block_inst_in_fn_insts] >>
           simp[] >>
-          simp[ao_fn_fresh_vars_def, pred_setTheory.GSPECIFICATION,
+          simp[ao_cmp_fresh_vars_def, pred_setTheory.GSPECIFICATION,
                listTheory.MEM_MAP] >>
           qexists_tac `i.inst_id` >> simp[] >>
           qexists_tac `i` >> simp[]))
@@ -2461,10 +2633,10 @@ QED
 
 Triviality apply_inst_every_non_term_non_invoke[local]:
   !mid flips removes inserts inst.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    ~is_terminator inst.inst_opcode /\
     (!id opc w op. ALOOKUP flips id = SOME (opc, w, op) ==>
-       ~is_terminator opc /\ opc <> INVOKE) ==>
-    EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE)
+       ~is_terminator opc) ==>
+    EVERY (\j. ~is_terminator j.inst_opcode)
       (ao_cmp_flip_apply_inst mid flips removes inserts inst)
 Proof
   rpt strip_tac >>
@@ -2472,6 +2644,70 @@ Proof
   every_case_tac >> gvs[listTheory.EVERY_DEF] >>
   TRY (res_tac >> gvs[]) >>
   simp[is_terminator_def]
+QED
+
+Triviality scan_phi_untouched[local]:
+  !dfg insts inst flips removes inserts.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!v ui. MEM ui (dfg_get_uses dfg v) ==> MEM ui insts) /\
+    MEM inst insts /\ inst.inst_opcode = PHI ==>
+    ALOOKUP flips inst.inst_id = NONE /\
+    ~MEM inst.inst_id removes /\
+    ALOOKUP inserts inst.inst_id = NONE
+Proof
+  rpt strip_tac >>
+  simp[alistTheory.ALOOKUP_NONE]
+  >- (CCONTR_TAC >> gvs[] >>
+      drule_all scan_flips_are_comparators >> strip_tac >>
+      `i = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      gvs[is_comparator_def])
+  >- (CCONTR_TAC >> gvs[] >>
+      drule_all scan_removes_are_iszero >> strip_tac >>
+      `MEM ui insts` by metis_tac[] >>
+      `ui = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      gvs[])
+  >- (CCONTR_TAC >> gvs[] >>
+      Cases_on `ALOOKUP inserts inst.inst_id` >> gvs[] >>
+      imp_res_tac alistTheory.ALOOKUP_MEM >>
+      `MEM inst.inst_id (MAP FST inserts)` by
+        (simp[listTheory.MEM_MAP] >> metis_tac[pairTheory.FST]) >>
+      drule_all scan_inserts_are_assert >> strip_tac >>
+      `MEM ui insts` by metis_tac[] >>
+      `ui = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      gvs[])
+QED
+
+Triviality comparator_not_phi[local]:
+  !opc. is_comparator opc ==> opc <> PHI
+Proof
+  Cases >> simp[is_comparator_def]
+QED
+
+Triviality flip_comparison_not_phi[local]:
+  !opc. is_comparator opc ==> flip_comparison_opcode opc <> PHI
+Proof
+  Cases >> simp[is_comparator_def, flip_comparison_opcode_def]
+QED
+
+Triviality apply_inst_non_phi[local]:
+  !mid flips removes inserts inst.
+    inst.inst_opcode <> PHI /\
+    (!id opc w op. ALOOKUP flips id = SOME (opc, w, op) ==> opc <> PHI) ==>
+    EVERY (\j. j.inst_opcode <> PHI)
+      (ao_cmp_flip_apply_inst mid flips removes inserts inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_cmp_flip_apply_inst_def] >>
+  Cases_on `ALOOKUP flips inst.inst_id` >>
+  simp[listTheory.EVERY_DEF]
+  >- (Cases_on `MEM inst.inst_id removes` >>
+      simp[listTheory.EVERY_DEF] >>
+      Cases_on `ALOOKUP inserts inst.inst_id` >>
+      simp[listTheory.EVERY_DEF] >>
+      PairCases_on `x` >> simp[listTheory.EVERY_DEF])
+  >- (PairCases_on `x` >> simp[listTheory.EVERY_DEF] >>
+      res_tac)
 QED
 
 (* Terminator operands are never dead: dead vars are either flip outputs
@@ -2484,7 +2720,7 @@ Triviality terminator_operands_not_dead[local]:
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_fn_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars fn1) /\
     bb_well_formed bb1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
     MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==>
@@ -2542,10 +2778,20 @@ Proof
       first_x_assum (qspecl_then [`LAST bb1.bb_instructions`,
                                   `ao_fresh_var i.inst_id "iz"`] mp_tac) >>
       simp[] >>
-      simp[ao_fn_fresh_vars_def, pred_setTheory.GSPECIFICATION,
+      simp[ao_cmp_fresh_vars_def, pred_setTheory.GSPECIFICATION,
            listTheory.MEM_MAP] >>
       qexists_tac `i.inst_id` >> simp[] >>
       qexists_tac `i` >> simp[])
+QED
+
+Triviality iszero_inv_lookup_eq[local]:
+  !flips insts s1 s2 s1' s2'.
+    cmp_flip_iszero_inv flips insts s1 s2 /\
+    (!v. lookup_var v s1' = lookup_var v s1) /\
+    (!v. lookup_var v s2' = lookup_var v s2) ==>
+    cmp_flip_iszero_inv flips insts s1' s2'
+Proof
+  rw[cmp_flip_iszero_inv_def] >> rpt strip_tac >> metis_tac[]
 QED
 
 (* Non-NULL case *)
@@ -2554,10 +2800,10 @@ Theorem non_null_block_sim[local]:
     dead = ao_cmp_flip_dead_vars dfg fn1 /\
     dfg = dfg_build_function fn1 /\
     ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
-    (!inst. MEM inst (fn_insts fn1) ==> inst.inst_opcode <> INVOKE) /\
+
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_fn_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     ~NULL flips /\
@@ -2599,7 +2845,7 @@ Proof
      match_mp_tac non_null_body_sim >>
      qexistsl_tac [`dfg`, `lbl`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE)
+  `EVERY (\j. ~is_terminator j.inst_opcode)
      (FLAT (MAP f bdy))` by
     (simp[listTheory.EVERY_MEM, listTheory.MEM_FLAT, listTheory.MEM_MAP,
            PULL_EXISTS] >>
@@ -2610,10 +2856,8 @@ Proof
      `MEM inst0 bb1.bb_instructions` by
        (qunabbrev_tac `bdy` >>
         metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL]) >>
-     `inst0.inst_opcode <> INVOKE` by
-       (imp_res_tac block_inst_in_fn_insts >> res_tac) >>
      qunabbrev_tac `f` >>
-     `EVERY (\j. ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE)
+     `EVERY (\j. ~is_terminator j.inst_opcode)
         (ao_cmp_flip_apply_inst mid flips removes inserts inst0)` by
        (match_mp_tac apply_inst_every_non_term_non_invoke >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -2632,7 +2876,6 @@ Proof
          (match_mp_tac exec_block_skip_body >>
           rpt conj_tac
           >- first_assum ACCEPT_TAC
-          >- (rpt strip_tac >> imp_res_tac block_inst_in_fn_insts >> res_tac)
           >- first_assum ACCEPT_TAC) >>
        `s1 with vs_inst_idx := 0 = s1` by
          fs[venomStateTheory.venom_state_component_equality] >>
@@ -2643,7 +2886,7 @@ Proof
       (`s2 with vs_inst_idx := 0 = s2` by
          fs[venomStateTheory.venom_state_component_equality] >>
        qspecl_then [`FLAT (MAP f bdy)`, `fuel`, `ctx`, `bb'`, `s2`, `0`, `v'`]
-         mp_tac exec_block_skip_prefix >>
+         mp_tac exec_block_skip_prefix_general >>
        impl_tac
        >- (rpt conj_tac
            >- (simp[] >>
@@ -2683,11 +2926,7 @@ Proof
             simp[rich_listTheory.LENGTH_FRONT, rich_listTheory.EL_PRE_LENGTH])
         (* 6. is_terminator *)
         >- fs[bb_well_formed_def]
-        (* 7. inst_opcode <> INVOKE *)
-        >- (`MEM (LAST bb1.bb_instructions) bb1.bb_instructions` by
-              (irule rich_listTheory.MEM_LAST_NOT_NIL >> simp[]) >>
-            drule_all block_inst_no_invoke >> simp[])
-        (* 8. operands not dead *)
+        (* 7. operands not dead *)
         >- (rpt strip_tac >> CCONTR_TAC >>
             drule_all terminator_operands_not_dead >> gvs[]))
     >> simp[])
@@ -2702,12 +2941,9 @@ Proof
          >- (simp[Abbr `bdy`] >>
              imp_res_tac rich_listTheory.FRONT_LENGTH >>
              gvs[listTheory.LENGTH_NIL])
-         >- (simp[listTheory.EVERY_MEM, Abbr `bdy`] >> rpt strip_tac
-             >- (imp_res_tac front_non_terminators >>
-                 gvs[listTheory.EVERY_MEM])
-             >- (imp_res_tac rich_listTheory.MEM_FRONT_NOT_NIL >>
-                 imp_res_tac block_inst_in_fn_insts >>
-                 res_tac >> gvs[]))
+         >- (simp[listTheory.EVERY_MEM, Abbr `bdy`] >> rpt strip_tac >>
+             imp_res_tac front_non_terminators >>
+             gvs[listTheory.EVERY_MEM])
 
          >- (simp[] >> rpt strip_tac >> simp[Abbr `bdy`] >>
              irule (GSYM rich_listTheory.EL_FRONT) >>
@@ -2752,10 +2988,10 @@ Theorem ao_cmp_flip_block_sim:
     let dead = ao_cmp_flip_dead_vars dfg fn1 in
     let flips = FST (ao_cmp_flip_scan dfg (fn_insts fn1)) in
     dfg = dfg_build_function fn1 /\
-    (!inst. MEM inst (fn_insts fn1) ==> inst.inst_opcode <> INVOKE) /\
+
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_fn_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     bb_well_formed bb1 /\
@@ -2786,4 +3022,351 @@ Proof
       Cases_on `r` >> gvs[] >>
       irule non_null_block_sim >> simp[] >>
       metis_tac[])
+QED
+
+(* exec_block OK implies body OK and terminator preserves variable lookups *)
+Triviality exec_block_ok_lookup_body[local]:
+  !fuel ctx bb s s'.
+    bb_well_formed bb /\
+
+    s.vs_inst_idx = 0 /\
+    exec_block fuel ctx bb s = OK s' ==>
+    ?v. run_insts fuel ctx (FRONT bb.bb_instructions) s = OK v /\
+        !x. lookup_var x s' = lookup_var x v
+Proof
+  rpt strip_tac >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  qabbrev_tac `bdy = FRONT bb.bb_instructions` >>
+  `?v. run_insts fuel ctx bdy s = OK v` by
+    (CCONTR_TAC >> gvs[] >>
+     qspecl_then [`bdy`, `fuel`, `ctx`, `bb`, `s`, `0`]
+       mp_tac exec_block_body_non_ok >>
+     impl_tac
+     >- (rpt conj_tac
+         >- (simp[Abbr `bdy`] >> imp_res_tac rich_listTheory.FRONT_LENGTH >>
+             gvs[listTheory.LENGTH_NIL])
+         >- (simp[listTheory.EVERY_MEM, Abbr `bdy`] >> rpt strip_tac >>
+             imp_res_tac front_non_terminators >> gvs[listTheory.EVERY_MEM])
+         >- (rpt strip_tac >> simp[Abbr `bdy`] >>
+             irule (GSYM rich_listTheory.EL_FRONT) >> gvs[listTheory.NULL_EQ])
+         >- simp[])
+     >> strip_tac >>
+     `s with vs_inst_idx := 0 = s` by
+       fs[venomStateTheory.venom_state_component_equality] >>
+     gvs[] >>
+     Cases_on `run_insts fuel ctx bdy s` >> gvs[lift_result_def]) >>
+  qexists_tac `v` >> simp[] >>
+  `exec_block fuel ctx bb (s with vs_inst_idx := 0) =
+   exec_block fuel ctx bb (v with vs_inst_idx := LENGTH bdy)` by
+    (qunabbrev_tac `bdy` >>
+     match_mp_tac exec_block_skip_body >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `s with vs_inst_idx := 0 = s` by
+    fs[venomStateTheory.venom_state_component_equality] >> gvs[] >>
+  qabbrev_tac `term = LAST bb.bb_instructions` >>
+  `is_terminator term.inst_opcode` by fs[bb_well_formed_def, Abbr `term`] >>
+  `LENGTH bdy < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[Abbr `bdy`, listTheory.LENGTH_FRONT]) >>
+  `get_instruction bb (LENGTH bdy) = SOME term` by
+    simp[get_instruction_def, Abbr `bdy`, Abbr `term`,
+         rich_listTheory.LENGTH_FRONT, rich_listTheory.EL_PRE_LENGTH] >>
+  rpt strip_tac >>
+  `exec_block fuel ctx bb (v with vs_inst_idx := LENGTH bdy) = OK s'` by
+    gvs[] >>
+  qpat_x_assum `OK _ = exec_block _ _ _ _` kall_tac >>
+  qpat_x_assum `exec_block _ _ bb s = _` kall_tac >>
+  pop_assum (fn th =>
+    mp_tac (ONCE_REWRITE_RULE [exec_block_def] th)) >>
+  simp[] >>
+  Cases_on `step_inst fuel ctx term (v with vs_inst_idx := LENGTH bdy)` >>
+  gvs[] >> strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all venomExecPropsTheory.step_terminator_preserves_vars >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[lookup_var_def]
+QED
+
+Triviality no_phi_in_flat_map[local]:
+  !insts f.
+    (!inst. MEM inst insts ==> inst.inst_opcode <> PHI) /\
+    (!inst. MEM inst insts ==>
+       EVERY (\j. j.inst_opcode <> PHI) (f inst)) ==>
+    EVERY (\j. j.inst_opcode <> PHI) (FLAT (MAP f insts))
+Proof
+  Induct >> simp[] >>
+  rpt strip_tac >> res_tac >> gvs[listTheory.EVERY_APPEND]
+QED
+
+Triviality phi_prefix_tail[local]:
+  !h t.
+    (!i j. i < j /\ j < LENGTH (h::t) /\
+           (EL j (h::t)).inst_opcode = PHI ==>
+           (EL i (h::t)).inst_opcode = PHI) /\
+    h.inst_opcode <> PHI ==>
+    !inst. MEM inst t ==> inst.inst_opcode <> PHI
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
+  `?k. k < LENGTH t /\ EL k t = inst` by metis_tac[listTheory.MEM_EL] >>
+  first_x_assum (qspecl_then [`0`, `SUC k`] mp_tac) >> simp[]
+QED
+
+Triviality flat_map_preserves_phi_prefix[local]:
+  !insts f.
+    (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
+           (EL i insts).inst_opcode = PHI) /\
+    (!inst. MEM inst insts /\ inst.inst_opcode = PHI ==> f inst = [inst]) /\
+    (!inst. MEM inst insts /\ inst.inst_opcode <> PHI ==>
+       EVERY (\j. j.inst_opcode <> PHI) (f inst)) ==>
+    !i j. i < j /\ j < LENGTH (FLAT (MAP f insts)) /\
+          (EL j (FLAT (MAP f insts))).inst_opcode = PHI ==>
+          (EL i (FLAT (MAP f insts))).inst_opcode = PHI
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`f h = [h]` by (first_assum irule >> simp[]) >>
+      rpt gen_tac >> strip_tac >>
+      `FLAT (MAP f (h::insts)) = h :: FLAT (MAP f insts)` by
+        simp[] >>
+      Cases_on `i`
+      >- gvs[]
+      >- (Cases_on `j` >> gvs[] >>
+          first_x_assum irule >> gvs[] >>
+          rpt conj_tac
+          >- (rpt strip_tac >>
+              qpat_x_assum `!i j. i < j /\ j < SUC _ /\ _ ==> _`
+                (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+              simp[])
+          >- (qexists_tac `n'` >> simp[])))
+  >- (rpt strip_tac >>
+      `!inst. MEM inst (h::insts) ==> inst.inst_opcode <> PHI` by
+        (rpt strip_tac >> gvs[listTheory.MEM] >>
+         CCONTR_TAC >> gvs[] >>
+         `?k. k < LENGTH insts /\ EL k insts = inst` by
+           metis_tac[listTheory.MEM_EL] >>
+         qpat_x_assum `!i j. i < j /\ _ ==> _`
+           (qspecl_then [`0`, `SUC k`] mp_tac) >>
+         simp[]) >>
+      `EVERY (\j. j.inst_opcode <> PHI) (FLAT (MAP f (h::insts)))` by
+        (irule no_phi_in_flat_map >> rpt conj_tac >> rpt strip_tac
+         >- res_tac
+         >- (`inst.inst_opcode <> PHI` by res_tac >> res_tac)) >>
+      qpat_x_assum `EVERY _ _`
+        (mp_tac o SIMP_RULE std_ss [listTheory.EVERY_EL]) >>
+      disch_then (qspec_then `j` mp_tac) >> simp[])
+QED
+
+Triviality bb_wf_front_phi_prefix[local]:
+  !bb. bb_well_formed bb ==>
+    !i j. i < j /\ j < LENGTH (FRONT bb.bb_instructions) /\
+      (EL j (FRONT bb.bb_instructions)).inst_opcode = PHI ==>
+      (EL i (FRONT bb.bb_instructions)).inst_opcode = PHI
+Proof
+  rpt strip_tac >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `j < LENGTH bb.bb_instructions` by
+    (imp_res_tac rich_listTheory.FRONT_LENGTH >> DECIDE_TAC) >>
+  `i < LENGTH bb.bb_instructions` by
+    (imp_res_tac rich_listTheory.FRONT_LENGTH >> DECIDE_TAC) >>
+  `EL j (FRONT bb.bb_instructions) = EL j bb.bb_instructions` by
+    (irule rich_listTheory.EL_FRONT >> fs[listTheory.NULL_EQ]) >>
+  `EL i (FRONT bb.bb_instructions) = EL i bb.bb_instructions` by
+    (irule rich_listTheory.EL_FRONT >> fs[listTheory.NULL_EQ]) >>
+  ntac 2 (pop_assum SUBST_ALL_TAC) >>
+  qpat_x_assum `bb_well_formed bb`
+    (strip_assume_tac o REWRITE_RULE [bb_well_formed_def]) >>
+  qpat_x_assum `!i j. i < j /\ _ ==> _`
+    (qspecl_then [`i`, `j`] mp_tac) >>
+  simp[]
+QED
+
+Triviality transformed_bb_well_formed[local]:
+  !bb1 bb' f.
+    bb_well_formed bb1 /\
+    bb'.bb_instructions = FLAT (MAP f bb1.bb_instructions) /\
+    bb'.bb_instructions <> [] /\
+    LAST bb'.bb_instructions = LAST bb1.bb_instructions /\
+    FRONT bb'.bb_instructions = FLAT (MAP f (FRONT bb1.bb_instructions)) /\
+    EVERY (\j. ~is_terminator j.inst_opcode)
+      (FLAT (MAP f (FRONT bb1.bb_instructions))) /\
+    (!inst. MEM inst (FRONT bb1.bb_instructions) /\
+            inst.inst_opcode <> PHI ==>
+      EVERY (\j. j.inst_opcode <> PHI) (f inst)) /\
+    (!inst. MEM inst (FRONT bb1.bb_instructions) /\
+            inst.inst_opcode = PHI ==>
+      f inst = [inst]) ==>
+    bb_well_formed bb'
+Proof
+  rpt strip_tac >>
+  `bb1.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `is_terminator (LAST bb1.bb_instructions).inst_opcode` by
+    fs[bb_well_formed_def] >>
+  qpat_x_assum `bb'.bb_instructions = _` kall_tac >>
+  simp_tac std_ss [bb_well_formed_def] >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- fs[]
+  >- (rpt strip_tac >>
+      CCONTR_TAC >>
+      `i < PRE (LENGTH bb'.bb_instructions)` by
+        (Cases_on `bb'.bb_instructions` >> fs[] >> DECIDE_TAC) >>
+      `EL i bb'.bb_instructions =
+       EL i (FRONT bb'.bb_instructions)` by
+        (irule (GSYM rich_listTheory.EL_FRONT) >>
+         conj_tac >- simp[listTheory.NULL_EQ]
+         >- (imp_res_tac rich_listTheory.FRONT_LENGTH >> DECIDE_TAC)) >>
+      `MEM (EL i (FRONT bb'.bb_instructions))
+           (FRONT bb'.bb_instructions)` by
+        (simp_tac std_ss [listTheory.MEM_EL] >> qexists_tac `i` >>
+         imp_res_tac rich_listTheory.FRONT_LENGTH >> DECIDE_TAC) >>
+      `MEM (EL i (FRONT bb'.bb_instructions))
+           (FLAT (MAP f (FRONT bb1.bb_instructions)))` by metis_tac[] >>
+      qpat_x_assum `EVERY _ (FLAT (MAP f (FRONT _)))`
+        (mp_tac o SIMP_RULE std_ss [listTheory.EVERY_MEM]) >>
+      disch_then drule >> strip_tac >>
+      qpat_x_assum `EL i bb'.bb_instructions = _` SUBST_ALL_TAC >>
+      fs[])
+  >- (rpt strip_tac >>
+      `0 < LENGTH bb'.bb_instructions` by
+        (Cases_on `bb'.bb_instructions` >> fs[]) >>
+      Cases_on `j < PRE (LENGTH bb'.bb_instructions)`
+      >- (`j < LENGTH (FRONT bb'.bb_instructions)` by
+            (imp_res_tac rich_listTheory.FRONT_LENGTH >> DECIDE_TAC) >>
+          `i < LENGTH (FRONT bb'.bb_instructions)` by
+            (imp_res_tac rich_listTheory.FRONT_LENGTH >> DECIDE_TAC) >>
+          drule bb_wf_front_phi_prefix >> strip_tac >>
+          `!i j. i < j /\ j < LENGTH (FLAT (MAP f (FRONT bb1.bb_instructions))) /\
+            (EL j (FLAT (MAP f (FRONT bb1.bb_instructions)))).inst_opcode = PHI ==>
+            (EL i (FLAT (MAP f (FRONT bb1.bb_instructions)))).inst_opcode = PHI` by
+            (match_mp_tac flat_map_preserves_phi_prefix >>
+             rpt conj_tac
+             >- first_assum ACCEPT_TAC
+             >- (rpt strip_tac >> res_tac)
+             >- (rpt strip_tac >> res_tac)) >>
+          `EL j (FRONT bb'.bb_instructions) =
+           EL j bb'.bb_instructions` by
+            (irule rich_listTheory.EL_FRONT >> fs[listTheory.NULL_EQ]) >>
+          `EL i (FRONT bb'.bb_instructions) =
+           EL i bb'.bb_instructions` by
+            (irule rich_listTheory.EL_FRONT >> fs[listTheory.NULL_EQ]) >>
+          metis_tac[])
+      >- (`j = PRE (LENGTH bb'.bb_instructions)` by DECIDE_TAC >>
+          `EL j bb'.bb_instructions = LAST bb'.bb_instructions` by
+            simp[rich_listTheory.EL_PRE_LENGTH] >>
+          pop_assum SUBST_ALL_TAC >>
+          `~is_terminator PHI` by simp[is_terminator_def] >>
+          metis_tac[]))
+QED
+
+(* For OK outputs, iszero_inv is preserved through exec_block.
+   Uses: body sim gives iszero_inv, terminator preserves all vars. *)
+Theorem ao_cmp_flip_block_ok_inv:
+  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2 s1' s2'.
+    let dead = ao_cmp_flip_dead_vars dfg fn1 in
+    let flips = FST (ao_cmp_flip_scan dfg (fn_insts fn1)) in
+    dfg = dfg_build_function fn1 /\
+
+    (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
+    (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
+      v NOTIN ao_cmp_fresh_vars fn1) /\
+    fn_inst_ids_distinct fn1 /\
+    ssa_form fn1 /\
+    bb_well_formed bb1 /\
+    lookup_block lbl fn1.fn_blocks = SOME bb1 /\
+    lookup_block lbl (ao_cmp_flip_function mid dfg fn1).fn_blocks = SOME bb' /\
+    state_equiv dead s1 s2 /\
+    cmp_flip_iszero_inv flips (fn_insts fn1) s1 s2 /\
+    s1.vs_inst_idx = 0 /\
+    exec_block fuel ctx bb1 s1 = OK s1' /\
+    exec_block fuel ctx bb' s2 = OK s2' ==>
+    cmp_flip_iszero_inv flips (fn_insts fn1) s1' s2'
+Proof
+  simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  Cases_on `NULL (FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)))`
+  >- (`FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)) = []` by
+        (Cases_on `ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)` >>
+         Cases_on `r` >> gvs[listTheory.NULL_EQ]) >>
+      rw[cmp_flip_iszero_inv_def] >> gvs[alistTheory.ALOOKUP_def])
+  >>
+  Cases_on `ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)` >>
+  Cases_on `r` >> gvs[] >>
+  rename1 `_ = (flips', removes, inserts)` >>
+  qabbrev_tac `f = ao_cmp_flip_apply_inst mid flips' removes inserts` >>
+  `bb1.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  `s2.vs_inst_idx = 0` by gvs[state_equiv_def] >>
+  `bb'.bb_instructions = FLAT (MAP f bb1.bb_instructions) /\
+   bb'.bb_label = bb1.bb_label` by
+    (simp[Abbr `f`] >> metis_tac[cmp_flip_block_structure]) >>
+  `ALOOKUP flips' (LAST bb1.bb_instructions).inst_id = NONE /\
+   ~MEM (LAST bb1.bb_instructions).inst_id removes /\
+   ALOOKUP inserts (LAST bb1.bb_instructions).inst_id = NONE` by
+    metis_tac[last_untouched,
+              dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
+  `FRONT bb'.bb_instructions = FLAT (MAP f (FRONT bb1.bb_instructions)) /\
+   LAST bb'.bb_instructions = LAST bb1.bb_instructions /\
+   bb'.bb_instructions <> []` by
+    (qunabbrev_tac `f` >> gvs[] >>
+     irule transformed_block_front_last >> simp[]) >>
+  `EVERY (\j. ~is_terminator j.inst_opcode)
+     (FLAT (MAP f (FRONT bb1.bb_instructions)))` by
+    (simp[listTheory.EVERY_MEM, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+           PULL_EXISTS] >>
+     rpt strip_tac >> rename1 `MEM inst1 (FRONT bb1.bb_instructions)` >>
+     `~is_terminator inst1.inst_opcode` by
+       (imp_res_tac front_non_terminators >> gvs[listTheory.EVERY_MEM]) >>
+     `MEM inst1 bb1.bb_instructions` by
+       metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL] >>
+     simp[Abbr `f`] >>
+     `EVERY (\j. ~is_terminator j.inst_opcode)
+        (ao_cmp_flip_apply_inst mid flips' removes inserts inst1)` by
+       (match_mp_tac apply_inst_every_non_term_non_invoke >>
+        simp[] >>
+        rpt strip_tac >> drule_all scan_flips_opcode_non_term >> simp[]) >>
+     qpat_x_assum `EVERY _ (ao_cmp_flip_apply_inst _ _ _ _ _)`
+       (mp_tac o SIMP_RULE std_ss [listTheory.EVERY_MEM]) >>
+     disch_then drule >> simp[]) >>
+  sg `bb_well_formed bb'`
+  >- (match_mp_tac transformed_bb_well_formed >>
+      qexistsl_tac [`bb1`, `f`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[])
+      >- (rpt strip_tac >> simp[Abbr `f`] >>
+          match_mp_tac apply_inst_non_phi >> simp[] >>
+          rpt strip_tac >>
+          drule_all scan_flip_info >> strip_tac >> gvs[] >>
+          imp_res_tac flip_comparison_not_phi)
+      >- (rpt strip_tac >>
+          `MEM inst (fn_insts fn1)` by
+            (imp_res_tac rich_listTheory.MEM_FRONT_NOT_NIL >>
+             imp_res_tac block_inst_in_fn_insts >> gvs[]) >>
+          `ALOOKUP flips' inst.inst_id = NONE /\
+           ~MEM inst.inst_id removes /\
+           ALOOKUP inserts inst.inst_id = NONE` by
+            (match_mp_tac scan_phi_untouched >>
+             qexistsl_tac [`dfg_build_function fn1`, `fn_insts fn1`] >>
+             simp[] >> rpt conj_tac
+             >- metis_tac[fn_insts_ids_all_distinct]
+             >- (rpt strip_tac >>
+                 drule_all dfgAnalysisPropsTheory.dfg_build_function_uses_sound >>
+                 simp[])) >>
+          simp[Abbr `f`] >> irule apply_untouched >> simp[])) >>
+  sg `?v. run_insts fuel ctx (FRONT bb1.bb_instructions) s1 = OK v /\
+       !x. lookup_var x s1' = lookup_var x v`
+  >- (irule exec_block_ok_lookup_body >> simp[]) >>
+  sg `?v'. run_insts fuel ctx (FRONT bb'.bb_instructions) s2 = OK v' /\
+        !x. lookup_var x s2' = lookup_var x v'`
+  >- (irule exec_block_ok_lookup_body >> simp[]) >>
+  sg `lift_result
+     (\s1' s2'. state_equiv
+       (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1) s1' s2' /\
+       cmp_flip_iszero_inv flips' (fn_insts fn1) s1' s2')
+     (execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
+     (execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
+     (run_insts fuel ctx (FRONT bb1.bb_instructions) s1)
+     (run_insts fuel ctx (FLAT (MAP f (FRONT bb1.bb_instructions))) s2)`
+  >- (qunabbrev_tac `f` >>
+      match_mp_tac non_null_body_sim >>
+      qexistsl_tac [`dfg_build_function fn1`, `lbl`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  gvs[lift_result_def] >>
+  irule iszero_inv_lookup_eq >>
+  qexistsl_tac [`v`, `v'`] >> simp[]
 QED

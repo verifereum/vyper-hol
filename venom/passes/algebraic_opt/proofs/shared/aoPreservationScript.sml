@@ -23,7 +23,9 @@ Theorem ao_phases123_preserve_wf:
       MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) ==>
     wf_function fn1 /\ ssa_form fn1 /\
-    EVERY inst_wf (fn_insts fn1)
+    EVERY inst_wf (fn_insts fn1) /\
+    (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
+      v NOTIN ao_cmp_fresh_vars fn1)
 Proof
   cheat
 QED
