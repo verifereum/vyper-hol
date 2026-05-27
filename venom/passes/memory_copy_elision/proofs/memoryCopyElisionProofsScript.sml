@@ -1724,7 +1724,6 @@ Proof
   >- simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same]
   >- (irule bp_handle_inst_add_snd_output_ext >> simp[])
   >- (irule bp_handle_inst_sub_snd_output_ext >> simp[])
-  >- simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same]
   >- (irule bp_handle_inst_assign_snd_output_ext >> simp[])
 QED
 

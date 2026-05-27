@@ -467,7 +467,8 @@ Proof
       ASM_REWRITE_TAC[])
     >- (
       (* No account-reading effects: generic theorem applies *)
-      `inst_a.inst_opcode <> PHI` by (CCONTR_TAC >> gvs[step_inst_base_def]) >>
+      `inst_a.inst_opcode <> PHI` by
+        (Cases_on `inst_a.inst_opcode` >> gvs[step_inst_base_def]) >>
       irule step_inst_base_effect_free_output_determined_vars >>
       qexistsl_tac [`inst_a`, `ss`, `vb`] >>
       rpt conj_tac >> gvs[] >>
@@ -683,7 +684,9 @@ Proof
       rpt strip_tac >> gvs[] >>
       first_x_assum irule >> simp[]) >>
   Cases_on `is_effect_free_op inst.inst_opcode`
-  >- (irule step_inst_base_effect_free_output_determined_vars >>
+  >- (`inst.inst_opcode <> PHI` by
+        (Cases_on `inst.inst_opcode` >> gvs[step_inst_base_def]) >>
+      irule step_inst_base_effect_free_output_determined_vars >>
       MAP_EVERY qexists_tac [`inst`, `s1`, `s2`] >>
       gvs[empty_effects_def]) >>
   drule_all empty_effect_non_effect_free_opcode_cases >> strip_tac >> gvs[] >>
