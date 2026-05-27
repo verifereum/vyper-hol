@@ -17,9 +17,8 @@ Theorem af_rewrite_inst_preserves_id[local]:
     af_rewrite_inst dfg vi inst = SOME result ==>
     result.inst_id = inst.inst_id
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+  rw[af_rewrite_inst_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 Theorem af_rewrite_inst_preserves_outputs[local]:
@@ -27,9 +26,8 @@ Theorem af_rewrite_inst_preserves_outputs[local]:
     af_rewrite_inst dfg vi inst = SOME result ==>
     result.inst_outputs = inst.inst_outputs
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+  rw[af_rewrite_inst_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 Theorem af_rewrite_inst_not_terminator[local]:
@@ -37,10 +35,8 @@ Theorem af_rewrite_inst_not_terminator[local]:
     af_rewrite_inst dfg vi inst = SOME result ==>
     ~is_terminator result.inst_opcode
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (PURE_CASE_TAC >> gvs[]) >>
-  rw[] >> gvs[is_terminator_def]
+  rw[af_rewrite_inst_def] >>
+  gvs[AllCaseEqs(), is_terminator_def]
 QED
 
 Theorem af_rewrite_inst_not_phi[local]:
@@ -48,9 +44,8 @@ Theorem af_rewrite_inst_not_phi[local]:
     af_rewrite_inst dfg vi inst = SOME result ==>
     result.inst_opcode <> PHI
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+  rw[af_rewrite_inst_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 (* ===== Per-instruction structural properties ===== *)

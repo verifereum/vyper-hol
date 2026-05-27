@@ -21,7 +21,20 @@ Theorem branch_opt_block_label[local]:
   !dfg live_at bb. (branch_opt_block dfg live_at bb).bb_label = bb.bb_label
 Proof
   rw[branch_opt_block_def, LET_THM] >>
-  rpt (CASE_TAC >> gvs[])
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[venomInstTheory.basic_block_component_equality]
 QED
 
 (* ===== Function as function_map_transform ===== *)
@@ -513,36 +526,37 @@ Proof
   rpt strip_tac >> gvs[] >>
   simp[branch_opt_block_def, LET_THM] >>
   (* Most cases: block unchanged → reflexivity *)
-  rpt (CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
-  (* 3 remaining goals: two removal, one insertion *)
-  ALL_TAC >| [
-    (* Goal 1: Removal (ISZERO, prefer) *)
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl])
+  (* Remaining goals: ISZERO removal and ISZERO insertion. *)
+  >- (
     irule lift_result_subset >> qexists_tac `{}` >> simp[EMPTY_SUBSET] >>
     sg `inst_wf x` >- metis_tac[dfg_inst_wf] >>
     sg `?op. x.inst_operands = [op]`
       >- metis_tac[iszero_operand_singleton] >>
     pop_assum strip_assume_tac >>
-    qspecl_then [`bb`, `fuel`, `ctx`, `s`, `dfg_build_function fn`, `s'`,
-                 `s'³'`, `s''`, `x`, `op`]
+    `HD x.inst_operands = op` by gvs[] >>
+    pop_assum SUBST_ALL_TAC >>
+    qspecl_then [`bb`, `fuel`, `ctx`, `s`, `dfg_build_function fn`, `s'³'`,
+                 `s'`, `s''`, `x`, `op`]
       mp_tac (SIMP_RULE (srw_ss()) [LET_THM] bo_block_sim_iszero_removal) >>
-    fs[],
-    (* Goal 2: Insertion *)
+    disch_then irule >> simp[])
+  >- (
     irule lift_result_subset >>
     qexists_tac `{bo_fresh_var (LAST bb.bb_instructions).inst_id}` >>
     conj_tac >- (simp[SUBSET_DEF] >> metis_tac[bo_fresh_var_in_fn]) >>
     irule (SIMP_RULE (srw_ss()) [LET_THM] bo_block_sim_iszero_insertion) >>
-    simp[],
-    (* Goal 3: Removal (ISZERO, not prefer) — same as goal 1 *)
-    irule lift_result_subset >> qexists_tac `{}` >> simp[EMPTY_SUBSET] >>
-    sg `inst_wf x` >- metis_tac[dfg_inst_wf] >>
-    sg `?op. x.inst_operands = [op]`
-      >- metis_tac[iszero_operand_singleton] >>
-    pop_assum strip_assume_tac >>
-    qspecl_then [`bb`, `fuel`, `ctx`, `s`, `dfg_build_function fn`, `s'`,
-                 `s'³'`, `s''`, `x`, `op`]
-      mp_tac (SIMP_RULE (srw_ss()) [LET_THM] bo_block_sim_iszero_removal) >>
-    fs[]
-  ]
+    simp[])
 QED
 
 

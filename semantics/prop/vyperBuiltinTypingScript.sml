@@ -986,6 +986,13 @@ Proof
   rewrite_tac[vht_IntV_UintT] >> rpt strip_tac
 QED
 
+Theorem vht_uint_value_cases[local]:
+  !k v. value_has_type (BaseTV (UintT k)) v ==>
+        ?i. v = IntV i /\ 0 <= i /\ Num i < 2 ** k
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
 (* Fold literal 2^256 back to symbolic — for goals where evaluate_builtin_def expanded it *)
 val fold_2_256 = GSYM (EVAL ``2n ** 256``);
 
@@ -1006,12 +1013,17 @@ Resume evaluate_builtin_well_typed[AddMod]:
   gvs[well_typed_builtin_app_def, evaluate_type_def] >>
   decompose_list_rel_tac >> gvs[evaluate_type_def] >>
   rename1 `evaluate_builtin _ _ _ _ [a1; a2; a3]` >>
-  Cases_on `a1` >> Cases_on `a2` >> Cases_on `a3` >>
+  qpat_x_assum `value_has_type (BaseTV (UintT 256)) a1`
+    (strip_assume_tac o MATCH_MP vht_uint_value_cases) >>
+  qpat_x_assum `value_has_type (BaseTV (UintT 256)) a2`
+    (strip_assume_tac o MATCH_MP vht_uint_value_cases) >>
+  qpat_x_assum `value_has_type (BaseTV (UintT 256)) a3`
+    (strip_assume_tac o MATCH_MP vht_uint_value_cases) >>
   gvs[evaluate_builtin_def, AllCaseEqs()] >>
   irule vht_uint_bound >>
   conj_tac >- (irule LESS_TRANS >> qexists `Num i''` >>
     conj_tac >- (irule MOD_LESS >> imp_res_tac ratTheory.NUM_NZERO >> simp[]) >>
-    irule vht_uint_Num_bound >> first_assum ACCEPT_TAC) >>
+    PURE_REWRITE_TAC [GSYM fold_2_256] >> first_assum ACCEPT_TAC) >>
   DECIDE_TAC
 QED
 
@@ -1019,12 +1031,17 @@ Resume evaluate_builtin_well_typed[MulMod]:
   gvs[well_typed_builtin_app_def, evaluate_type_def] >>
   decompose_list_rel_tac >> gvs[evaluate_type_def] >>
   rename1 `evaluate_builtin _ _ _ _ [a1; a2; a3]` >>
-  Cases_on `a1` >> Cases_on `a2` >> Cases_on `a3` >>
+  qpat_x_assum `value_has_type (BaseTV (UintT 256)) a1`
+    (strip_assume_tac o MATCH_MP vht_uint_value_cases) >>
+  qpat_x_assum `value_has_type (BaseTV (UintT 256)) a2`
+    (strip_assume_tac o MATCH_MP vht_uint_value_cases) >>
+  qpat_x_assum `value_has_type (BaseTV (UintT 256)) a3`
+    (strip_assume_tac o MATCH_MP vht_uint_value_cases) >>
   gvs[evaluate_builtin_def, AllCaseEqs()] >>
   irule vht_uint_bound >>
   conj_tac >- (irule LESS_TRANS >> qexists `Num i''` >>
     conj_tac >- (irule MOD_LESS >> imp_res_tac ratTheory.NUM_NZERO >> simp[]) >>
-    irule vht_uint_Num_bound >> first_assum ACCEPT_TAC) >>
+    PURE_REWRITE_TAC [GSYM fold_2_256] >> first_assum ACCEPT_TAC) >>
   DECIDE_TAC
 QED
 

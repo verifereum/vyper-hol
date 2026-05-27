@@ -14,7 +14,7 @@
 Theory basePtrProofs
 Ancestors
   basePtrDefs venomExecSemantics venomWf memLocDefs venomInstProofs
-  finite_map list pred_set venomInst
+  venomMemProps finite_map list pred_set venomInst
 
 (* Transfer function only modifies the output variable's pointer set. *)
 Theorem bp_handle_inst_other_var_proof:
@@ -114,31 +114,9 @@ Proof
   rpt strip_tac >>
   `step_inst_base inst s = OK s'` by
     metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  fs[venomExecSemanticsTheory.step_inst_base_def, AllCaseEqs()] >>
-  gvs[AllCaseEqs(),
-      venomExecSemanticsTheory.exec_pure1_def,
-      venomExecSemanticsTheory.exec_pure2_def,
-      venomExecSemanticsTheory.exec_pure3_def,
-      venomExecSemanticsTheory.exec_read0_def,
-      venomExecSemanticsTheory.exec_read1_def,
-      venomExecSemanticsTheory.exec_write2_def,
-      venomExecSemanticsTheory.exec_ext_call_def,
-      venomExecSemanticsTheory.exec_delegatecall_def,
-      venomExecSemanticsTheory.exec_create_def,
-      venomExecSemanticsTheory.extract_venom_result_def,
-      venomExecSemanticsTheory.exec_alloca_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  gvs[venomStateTheory.update_var_def, venomStateTheory.mstore_def,
-      venomStateTheory.mstore8_def, venomStateTheory.sstore_def,
-      venomStateTheory.tstore_def,
-      venomStateTheory.write_memory_with_expansion_def,
-      venomExecSemanticsTheory.mcopy_def,
-      venomStateTheory.revert_state_def,
-      venomStateTheory.eval_operands_def,
-      venomStateTheory.jump_to_def,
-      venomStateTheory.lookup_var_def, FLOOKUP_UPDATE,
-      venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def]
+  qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_preserves_allocas >>
+  impl_tac >- gvs[] >>
+  simp[]
 QED
 
 (* step_inst preserves FLOOKUP of alloca ids that aren't the current inst_id.
@@ -1226,26 +1204,9 @@ Theorem bp_handle_inst_fdom:
     bp_handle_inst bp inst = (c, bp') ==>
     FDOM bp' SUBSET FDOM bp UNION set (inst_defs inst)
 Proof
-  rpt strip_tac >>
-  Cases_on `inst_output inst`
-  >- (drule bp_handle_inst_no_output_unchanged_proof >> simp[] >>
-      disch_then (fn th => rewrite_tac[th]) >> simp[SUBSET_DEF]) >>
-  rename1 `SOME out` >>
-  `inst.inst_outputs = [out]` by (
-    gvs[inst_output_def] >>
-    Cases_on `inst.inst_outputs` >> gvs[] >>
-    Cases_on `t` >> gvs[]) >>
-  `inst_defs inst = [out]` by simp[inst_defs_def] >>
-  simp[] >>
-  qpat_x_assum `bp_handle_inst _ _ = _` mp_tac >>
-  rewrite_tac[bp_handle_inst_def, inst_output_def] >>
-  asm_rewrite_tac[] >>
-  simp_tac std_ss [LET_THM] >> BETA_TAC >>
-  Cases_on `inst.inst_opcode` >> simp_tac std_ss [LET_THM] >>
-  TRY (strip_tac >> gvs[SUBSET_DEF] >> NO_TAC) >>
-  rpt (IF_CASES_TAC >> simp_tac std_ss []) >>
-  rpt (CASE_TAC >> simp_tac std_ss []) >>
-  strip_tac >> gvs[FDOM_FUPDATE, SUBSET_DEF] >> metis_tac[]
+  rw[bp_handle_inst_def, inst_defs_def, inst_output_def] >>
+  gvs[AllCaseEqs(), FDOM_FUPDATE, SUBSET_DEF] >>
+  metis_tac[]
 QED
 
 (* FDOM of bp_process_block *)

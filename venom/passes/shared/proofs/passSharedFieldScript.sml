@@ -29,7 +29,10 @@ Theorem step_base_preserves_transient[local]:
     Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
     s'.vs_transient = s.vs_transient
 Proof
-  field_tac
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[step_inst_base_def]) >>
+  `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
+  drule_all write_effects_sound_transient >> simp[]
 QED
 
 Theorem step_base_preserves_accounts[local]:
@@ -41,7 +44,10 @@ Theorem step_base_preserves_accounts[local]:
     Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
     s'.vs_accounts = s.vs_accounts
 Proof
-  field_tac
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[step_inst_base_def]) >>
+  `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
+  drule_all write_effects_sound_accounts >> simp[]
 QED
 
 Theorem step_base_preserves_logs[local]:
@@ -52,7 +58,10 @@ Theorem step_base_preserves_logs[local]:
     Eff_LOG NOTIN write_effects inst.inst_opcode ==>
     s'.vs_logs = s.vs_logs
 Proof
-  field_tac
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[step_inst_base_def]) >>
+  `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
+  drule_all write_effects_sound_log >> simp[]
 QED
 
 Theorem step_base_preserves_tracked:
@@ -190,16 +199,21 @@ QED
 
 (* Frame tactic: like field_tac but rewrites eval_operand/update_var
    plus state-access functions that don't depend on vs_memory *)
-val mem_frame_tac =
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
-      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+val mem_frame_finish_tac =
+  fs[step_inst_base_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, vfmStateTheory.lookup_account_def];
+
+val mem_frame_tac =
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+  mem_frame_finish_tac;
 
 Theorem step_inst_base_mem_frame[local]:
   !inst s s' m.
@@ -213,7 +227,70 @@ Theorem step_inst_base_mem_frame[local]:
     step_inst_base inst (s with vs_memory := m) =
     OK (s' with vs_memory := m)
 Proof
-  mem_frame_tac
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def]
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
 QED
 
 (* Lift to step_inst (adds INVOKE + ALLOCA exclusions).
@@ -251,7 +328,70 @@ Theorem step_inst_base_mem_error_frame[local]:
     ==>
     step_inst_base inst (s with vs_memory := m) = Error e
 Proof
-  mem_frame_tac
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def]
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
+  >- mem_frame_finish_tac
 QED
 
 Theorem step_inst_mem_error_frame:
@@ -357,10 +497,8 @@ Proof
   simp[mstore8_def, write_memory_with_expansion_def]
 QED
 
-val trans_frame_tac =
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
-      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+val trans_frame_finish_tac =
+  fs[step_inst_base_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
@@ -370,6 +508,13 @@ val trans_frame_tac =
      mstore_def, mstore8_def, sstore_def,
      write_memory_with_expansion_def, mcopy_def,
      contract_storage_def];
+
+val trans_frame_tac =
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+  trans_frame_finish_tac;
 
 Theorem step_inst_base_trans_frame:
   !inst s s' t.
@@ -383,7 +528,83 @@ Theorem step_inst_base_trans_frame:
     step_inst_base inst (s with vs_transient := t) =
     OK (s' with vs_transient := t)
 Proof
-  trans_frame_tac
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def]
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
 QED
 
 Theorem step_inst_base_trans_error_frame:
@@ -397,7 +618,83 @@ Theorem step_inst_base_trans_error_frame:
     ==>
     step_inst_base inst (s with vs_transient := t) = Error e
 Proof
-  trans_frame_tac
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def]
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
+  >- trans_frame_finish_tac
 QED
 
 (* ----------------------------------------------------------------
@@ -502,10 +799,8 @@ Proof
   simp[tstore_def, LET_THM, contract_transient_def]
 QED
 
-val acct_frame_tac =
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
-      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+val acct_frame_finish_tac =
+  fs[step_inst_base_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
@@ -515,8 +810,14 @@ val acct_frame_tac =
      mstore_def, mstore8_def, tstore_def,
      write_memory_with_expansion_def, mcopy_def,
      contract_storage_def, contract_transient_def] >>
-  (* EXTCODEHASH: account_empty depends on balance, nonce, code only *)
   TRY (gvs[vfmStateTheory.account_empty_def] >> NO_TAC);
+
+val acct_frame_tac =
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def] >>
+  acct_frame_finish_tac;
 
 (* f : (160 word -> account_state) -> (160 word -> account_state)
    must preserve balance, code, nonce for all addresses.
@@ -536,7 +837,83 @@ Theorem step_inst_base_acct_frame:
     step_inst_base inst (s with vs_accounts := f s.vs_accounts) =
     OK (s' with vs_accounts := f s'.vs_accounts)
 Proof
-  acct_frame_tac
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def]
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
 QED
 
 Theorem step_inst_base_acct_error_frame:
@@ -553,7 +930,83 @@ Theorem step_inst_base_acct_error_frame:
     ==>
     step_inst_base inst (s with vs_accounts := f s.vs_accounts) = Error e
 Proof
-  acct_frame_tac
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      write_effects_def, read_effects_def, all_effects_def, empty_effects_def]
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
+  >- acct_frame_finish_tac
 QED
 
 val _ = export_theory();

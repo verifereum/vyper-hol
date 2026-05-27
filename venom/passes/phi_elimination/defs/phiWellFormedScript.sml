@@ -257,11 +257,16 @@ Proof
     `MEM var (phi_var_operands inst.inst_operands)` by (
       drule resolve_phi_in_operands >> simp[]
     ) >>
-    (* Unfold phi_operands_direct with our known cases to get EVERY *)
-    fs[phi_operands_direct_def] >> gvs[AllCaseEqs(), EVERY_MEM] >>
-    (* Use EVERY_MEM to get var = src_var *)
+    (* Unfold only the direct-operand condition, then use EVERY_MEM locally. *)
+    qpat_x_assum `phi_operands_direct (dfg_build_function func) inst` mp_tac >>
+    simp[phi_operands_direct_def] >>
+    ASM_REWRITE_TAC[] >>
+    strip_tac >>
     `var = src_var` by (
-      first_x_assum (qspec_then `var` mp_tac) >> simp[]
+      qpat_x_assum `EVERY (λv. v = src_var) _` mp_tac >>
+      simp[EVERY_MEM] >>
+      disch_then (qspec_then `var` mp_tac) >>
+      simp[]
     ) >>
     gvs[]
   )

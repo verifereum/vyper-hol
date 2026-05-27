@@ -42,13 +42,14 @@ End
 (* Extract a venom_context from the final compile state.
    Collects all finalized blocks plus the current (open) block
    into a single function. The entry function is the one whose
-   entry block matches the initial current_bb. *)
+   entry block matches the initial current_bb. Finalized blocks are
+   stored newest-first in the compile state. *)
 Definition extract_context_def:
   extract_context (entry_label : string) (st : compile_state)
       : venom_context # data_section list =
     let current_bb = <| bb_label := st.cs_current_bb;
-                        bb_instructions := REVERSE st.cs_current_insts |> in
-    let finalized = st.cs_blocks in
+                        bb_instructions := st.cs_current_insts |> in
+    let finalized = REVERSE st.cs_blocks in
     let all_blocks = finalized ++ [current_bb] in
     (<| ctx_functions :=
           [<| fn_name := entry_label;

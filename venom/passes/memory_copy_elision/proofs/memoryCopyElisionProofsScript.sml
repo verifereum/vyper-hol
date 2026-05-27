@@ -1654,6 +1654,80 @@ Proof
   irule bp_handle_inst_snd_eq_fst_f >> gvs[]
 QED
 
+(* Output ptrs after bp_handle_inst depend only on bp_get_ptrs, not on the
+   concrete fmap representation.  Keep bp_get_ptrs abstract; split only the
+   operand shapes that the pointer opcodes inspect. *)
+Triviality bp_handle_inst_add_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    inst.inst_opcode = ADD ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
+  Cases_on `inst.inst_operands` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t'` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h'` >> gvs[bp_get_ptrs_update_same] >>
+  rpt (IF_CASES_TAC >> gvs[bp_get_ptrs_update_same])
+QED
+
+Triviality bp_handle_inst_sub_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    inst.inst_opcode = SUB ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
+  Cases_on `inst.inst_operands` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t'` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h'` >> gvs[bp_get_ptrs_update_same] >>
+  rpt (IF_CASES_TAC >> gvs[bp_get_ptrs_update_same])
+QED
+
+Triviality bp_handle_inst_assign_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    inst.inst_opcode = ASSIGN ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same] >>
+  Cases_on `inst.inst_operands` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `t` >> gvs[bp_get_ptrs_update_same] >>
+  Cases_on `h` >> gvs[bp_get_ptrs_update_same]
+QED
+
+Triviality bp_handle_inst_snd_output_ext[local]:
+  !bp1 bp2 inst out.
+    (!v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
+    inst_output inst = SOME out /\
+    is_ptr_opcode inst.inst_opcode ==>
+    bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+    bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out
+Proof
+  rpt strip_tac >>
+  `MAP (bp_get_ptrs bp1) (MAP SND (phi_pairs inst.inst_operands)) =
+   MAP (bp_get_ptrs bp2) (MAP SND (phi_pairs inst.inst_operands))` by
+    (irule MAP_CONG >> simp[]) >>
+  gvs[is_ptr_opcode_def]
+  >- simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same]
+  >- (irule bp_handle_inst_add_snd_output_ext >> simp[])
+  >- (irule bp_handle_inst_sub_snd_output_ext >> simp[])
+  >- simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update_same]
+  >- (irule bp_handle_inst_assign_snd_output_ext >> simp[])
+QED
+
 (* FST of bp_handle_inst depends only on bp_get_ptrs *)
 Triviality bp_handle_inst_fst_ext[local]:
   !bp1 bp2 inst.
@@ -1665,18 +1739,28 @@ Proof
   >- simp[bp_handle_inst_def] >>
   rename1 `SOME out` >>
   reverse (Cases_on `is_ptr_opcode inst.inst_opcode`)
-  >- simp[bp_handle_inst_non_ptr_id] >>
-  (* Pointer opcode: expand definition for 5 opcodes *)
-  gvs[is_ptr_opcode_def, inst_output_def] >>
-  (Cases_on `inst.inst_outputs` >> gvs[] >>
-   Cases_on `t` >> gvs[]) >>
-  simp[bp_handle_inst_def, inst_output_def, LET_THM,
-       bp_get_ptrs_def, FLOOKUP_UPDATE] >>
-  `MAP (bp_get_ptrs bp1) (MAP SND (phi_pairs inst.inst_operands)) =
-   MAP (bp_get_ptrs bp2) (MAP SND (phi_pairs inst.inst_operands))` by
-    (irule MAP_CONG >> simp[bp_get_ptrs_def]) >>
-  rpt (CASE_TAC >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE]) >>
-  TRY (first_x_assum (qspec_then `h` mp_tac) >> gvs[bp_get_ptrs_def])
+  >- (
+    `bp_handle_inst bp1 inst = (F, bp1)` by
+      (irule bp_handle_inst_non_ptr_id >> simp[]) >>
+    `bp_handle_inst bp2 inst = (F, bp2)` by
+      (irule bp_handle_inst_non_ptr_id >> simp[]) >>
+    simp[]) >>
+  (* MERGE NOTE: chose origin/main helper-based proof over the eval-phis
+     direct expansion proof. If this fails, compare the pre-merge eval-phis
+     version of this theorem. *)
+  `FST (bp_handle_inst bp1 inst) =
+   (bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out <>
+    bp_get_ptrs bp1 out)` by
+    (irule bp_handle_inst_fst_eq >> simp[]) >>
+  `FST (bp_handle_inst bp2 inst) =
+   (bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out <>
+    bp_get_ptrs bp2 out)` by
+    (irule bp_handle_inst_fst_eq >> simp[]) >>
+  `bp_get_ptrs bp1 out = bp_get_ptrs bp2 out` by simp[] >>
+  `bp_get_ptrs (SND (bp_handle_inst bp1 inst)) out =
+   bp_get_ptrs (SND (bp_handle_inst bp2 inst)) out` by
+    metis_tac[bp_handle_inst_snd_output_ext] >>
+  ASM_REWRITE_TAC[]
 QED
 
 (* For opcodes that always FUPDATE (PHI, ALLOCA, ASSIGN [Var src]):
@@ -6270,6 +6354,46 @@ Proof
   simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
 
+Triviality terminator_opcode_cases[local]:
+  !op.
+    is_terminator op ==>
+    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
+    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
+    op = SELFDESTRUCT \/ op = INVALID
+Proof
+  Cases >> simp[is_terminator_def]
+QED
+
+val terminator_state_tuple_tac =
+  fs[step_inst_base_def, jump_to_def, halt_state_def, revert_state_def,
+     set_returndata_def, LET_THM] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       fs[jump_to_def, halt_state_def, revert_state_def,
+          set_returndata_def]) >>
+  gvs[];
+
+Triviality step_inst_base_terminator_ok_state_tuple[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    is_terminator inst.inst_opcode ==>
+    (s'.vs_memory, s'.vs_accounts, s'.vs_transient, s'.vs_call_ctx,
+     s'.vs_allocas, s'.vs_alloca_next) =
+    (s.vs_memory, s.vs_accounts, s.vs_transient, s.vs_call_ctx,
+     s.vs_allocas, s.vs_alloca_next)
+Proof
+  rpt strip_tac >>
+  drule terminator_opcode_cases >> strip_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+  >- terminator_state_tuple_tac
+QED
 
 (* Terminators returning OK preserve all fields relevant to lf_sound/bp_ptr_sound/alloca_inv *)
 Triviality step_terminator_ok_preserves[local]:
@@ -6288,13 +6412,10 @@ Proof
   imp_res_tac step_terminator_preserves_vars >>
   `inst.inst_opcode <> INVOKE` by (
     Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  gvs[step_inst_non_invoke] >>
-  (* Only JMP/JNZ/DJMP produce OK; others give Halt/Abort/IntRet/Error *)
-  qpat_x_assum `is_terminator _` mp_tac >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  gvs[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       gvs[jump_to_def])
+  `step_inst_base inst s = OK s'` by
+    metis_tac[step_inst_non_invoke] >>
+  drule_all step_inst_base_terminator_ok_state_tuple >>
+  simp[]
 QED
 
 (* load_store_step preserves lf for terminators *)
@@ -6341,6 +6462,15 @@ Proof
   imp_res_tac store_not_terminator
 QED
 
+Triviality exec_write2_ok_or_error[local]:
+  !f inst s.
+    (?s'. exec_write2 f inst s = OK s') \/
+    (?e. exec_write2 f inst s = Error e)
+Proof
+  rpt gen_tac >> simp[exec_write2_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
 (* Store opcodes only produce OK or Error via exec_write2 *)
 Triviality store_step_ok_or_error[local]:
   !fuel ctx inst s.
@@ -6349,10 +6479,9 @@ Triviality store_step_ok_or_error[local]:
     (?e. step_inst fuel ctx inst s = Error e)
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_store_opcode_def] >>
-  simp[step_inst_def, step_inst_base_def, exec_write2_def] >>
-  BasicProvers.every_case_tac
+  Cases_on `inst.inst_opcode` >> gvs[is_store_opcode_def, step_inst_non_invoke] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  metis_tac[exec_write2_ok_or_error]
 QED
 
 (* inst_at preserves non-OK non-Error step_inst results *)

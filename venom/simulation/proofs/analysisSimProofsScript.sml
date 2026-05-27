@@ -410,6 +410,12 @@ Theorem transfer_sound_exit_from_wf_ind:
         sound (df_at bottom result bb.bb_label (SUC i)) v
 Proof
   rpt gen_tac >> strip_tac >>
+(* MERGE NOTE: origin/main conflict hunk here contained a block/function
+   simulation proof mentioning variables such as s1/s2/bt/fn, which do not
+   match transfer_sound_exit_from_wf_ind's statement. Kept the eval-phis proof
+   for this induction theorem. If function-level simulation fails later, inspect
+   origin/main analysisSimProofsScript.sml around the corresponding theorem and
+   port that proof into the right location. *)
   completeInduct_on `n` >> rpt strip_tac >>
   qabbrev_tac `idx = s.vs_inst_idx` >>
   `idx < LENGTH bb.bb_instructions` by (fs[Abbr `idx`] >> decide_tac) >>
@@ -474,6 +480,7 @@ Proof
     )
   )
   >> fs[AllCaseEqs()]
+
 QED
 
 Theorem transfer_sound_exit_from_wf:

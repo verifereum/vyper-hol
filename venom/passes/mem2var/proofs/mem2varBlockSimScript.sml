@@ -134,12 +134,19 @@ QED
 Resume m2v_per_block_sim_at[find_none_step_sim]:
   (* Derive MEM facts shared by both branches *)
   SUBGOAL_THEN ``MEM inst (fn_insts fn)`` assume_tac
-  >- (qpat_x_assum `inst = LAST _` (SUBST_ALL_TAC o SYM) >>
-      irule MEM_fn_insts >> qexists `bb` >> simp[MEM_EL] >>
+  >- (irule MEM_fn_insts >> qexists `bb` >> simp[MEM_EL] >>
       qexists `PRE (LENGTH bb.bb_instructions)` >>
-      gvs[bb_well_formed_def]) >>
+      `bb.bb_instructions <> []` by
+        (qpat_x_assum `bb_well_formed bb` mp_tac >>
+         simp[bb_well_formed_def] >>
+         Cases_on `bb.bb_instructions` >> simp[]) >>
+      gvs[Abbr `inst`, Abbr `idx`, LAST_EL]) >>
   SUBGOAL_THEN ``MEM inst bb.bb_instructions`` assume_tac
-  >- (gvs[bb_well_formed_def] >> metis_tac[MEM_LAST_NOT_NIL]) >>
+  >- (`bb.bb_instructions <> []` by
+        (qpat_x_assum `bb_well_formed bb` mp_tac >>
+         simp[bb_well_formed_def] >>
+         Cases_on `bb.bb_instructions` >> simp[]) >>
+      metis_tac[MEM_LAST_NOT_NIL]) >>
   `inst_wf inst` by (
     drule_all fn_inst_wf_every_bb >> simp[EVERY_MEM] >>
     disch_then drule >> simp[]) >>

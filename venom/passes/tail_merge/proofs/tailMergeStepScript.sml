@@ -114,9 +114,14 @@ Theorem ee_UNIV_extract_none:
     (extract_venom_result s1 ov ro rs rr = NONE <=>
      extract_venom_result s2 ov ro rs rr = NONE)
 Proof
-  rw[execution_equiv_def, extract_venom_result_def,
-     write_memory_with_expansion_def] >>
-  rpt (CASE_TAC >> gvs[])
+  rw[extract_venom_result_def, LET_THM] >>
+  Cases_on `rr` >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  Cases_on `r.contexts` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  ntac 3 (CASE_TAC >> gvs[execution_equiv_def, write_memory_with_expansion_def])
 QED
 
 Theorem ee_UNIV_extract_some:
@@ -126,9 +131,25 @@ Theorem ee_UNIV_extract_some:
     ?st2. extract_venom_result s2 ov ro rs rr = SOME (v1, st2) /\
           execution_equiv UNIV st1 st2
 Proof
-  rw[execution_equiv_def, extract_venom_result_def,
-     write_memory_with_expansion_def] >>
-  rpt (CASE_TAC >> gvs[])
+  rw[execution_equiv_def, extract_venom_result_def] >>
+  Cases_on `rr` >> gvs[] >>
+  Cases_on `x` >> gvs[] >>
+  Cases_on `r.contexts` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[] >>
+  Cases_on `q` >> gvs[] >>
+  gvs[write_memory_with_expansion_def] >>
+  ntac 2 (CASE_TAC >> gvs[write_memory_with_expansion_def]) >>
+  qexists_tac
+    `s2 with
+     <|vs_returndata := q'.returnData;
+       vs_accounts := if q = INR NONE then r.rollback.accounts else s2.vs_accounts;
+       vs_logs := s2.vs_logs ++ if q = INR NONE then q'.logs else [];
+       vs_memory :=
+         (write_memory_with_expansion ro (TAKE rs q'.returnData) s2).vs_memory;
+       vs_transient :=
+         if q = INR NONE then r.rollback.tStorage else s2.vs_transient|>` >>
+  gvs[write_memory_with_expansion_def]
 QED
 
 (* ================================================================
@@ -1230,6 +1251,28 @@ fun timed_prove_output opc = let
   val _ = print (ms ^ "ms\n")
   in th end;
 val all_output_thms = map timed_prove_output output_target_opcodes;
+val output_thm_table = ListPair.zip (output_target_opcodes, all_output_thms);
+
+fun pick_output_opcode tm =
+  case total dest_eq tm of
+    SOME (lhs, rhs) =>
+      List.find (fn opc => aconv lhs opc orelse aconv rhs opc) output_target_opcodes
+  | NONE => NONE;
+
+fun output_thm_for opc =
+  snd (valOf (List.find (fn (opc', _) => aconv opc opc') output_thm_table));
+
+fun output_match_dispatch_tac (asl, w) =
+  case List.find (fn asm => isSome (pick_output_opcode asm)) asl of
+    SOME asm =>
+      let val opc = valOf (pick_output_opcode asm) in
+        (qspecl_then [`inst1`, `inst2`, `s1`, `s2`, `s1'`, `s2'`] mp_tac
+           (output_thm_for opc) >>
+         impl_tac >- (simp[] >> metis_tac[]) >>
+         disch_then (qspec_then `k` mp_tac) >>
+         simp[]) (asl, w)
+      end
+  | NONE => failwith "output_match_dispatch_tac: no opcode assumption";
 
 (* Define the set of output-producing opcodes for downstream use *)
 Definition is_output_opcode_def:
@@ -1258,11 +1301,7 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `inst1.inst_opcode` >>
   fs[is_terminator_def, is_output_opcode_def] >>
-  FIRST (map (fn th =>
-    irule th >> rpt conj_tac >>
-    TRY (first_assum ACCEPT_TAC) >>
-    metis_tac[])
-    all_output_thms)
+  output_match_dispatch_tac
 QED
 
 val _ = export_theory();

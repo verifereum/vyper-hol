@@ -8,7 +8,7 @@
 Theory rangeAnalysisProofs
 Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
-  venomExecSemantics venomExecProofs venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
+  venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenProps cfgAnalysisProps
   dfgAnalysisProps dfgCorrectnessProof
 
@@ -1475,17 +1475,17 @@ QED
  *)
 
 (* Terminators returning OK preserve vs_vars (JMP/JNZ/DJMP use jump_to). *)
-Triviality step_terminator_preserves_vars[local]:
+Triviality step_terminator_preserves_vs_vars[local]:
   ∀fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' ∧
     is_terminator inst.inst_opcode ⇒
     s'.vs_vars = s.vs_vars
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  rpt (pop_assum mp_tac) >> simp[is_terminator_def] >>
-  rpt strip_tac >> fs[step_inst_def, step_inst_base_def] >>
-  BasicProvers.every_case_tac >> gvs[jump_to_def]
+  rpt strip_tac >>
+  rw[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+  drule_all venomExecPropsTheory.step_terminator_preserves_vars >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[lookup_var_def]
 QED
 (* For any instruction where step_inst returns OK:
    range_evaluate_inst preserves in_range_state, given appropriate
@@ -1511,7 +1511,7 @@ Proof
   >- (mp_tac step_preserves_non_output_vars >>
       disch_then drule >> simp[] >>
       disch_then (qspec_then `v` mp_tac) >> simp[lookup_var_def])
-  >> drule_all step_terminator_preserves_vars >> simp[]
+  >> drule_all step_terminator_preserves_vs_vars >> simp[]
 QED
 
 (* range_unwrap distributes through range_transfer_opt *)
@@ -2185,6 +2185,46 @@ val list_case_const_vr = prove(
       mk_var("c", ``:value_range``))),
   Cases_on `l` >> simp[]);
 
+val range_pure2_opcodes = [
+  ``ADD``, ``SUB``, ``MUL``, ``Div``, ``Mod``, ``SDIV``, ``SMOD``,
+  ``AND``, ``OR``, ``XOR``, ``SHR``, ``SHL``, ``SAR``,
+  ``LT``, ``GT``, ``SLT``, ``SGT``, ``EQ``, ``BYTE``];
+
+val range_pure1_opcodes = [``ISZERO``, ``NOT``];
+val range_assign_opcodes = [``ASSIGN``];
+val range_all_opcodes = TypeBase.constructors_of ``:opcode``;
+
+fun range_op_mem opc opcs = List.exists (aconv opc) opcs;
+
+fun pick_range_opcode tm =
+  case total dest_eq tm of
+    SOME (lhs, rhs) =>
+      List.find (fn opc => aconv lhs opc orelse aconv rhs opc) range_all_opcodes
+  | NONE => NONE;
+
+val range_top_tac =
+  rpt strip_tac >>
+  simp[eval_range_def, eval_range_signextend_def, list_case_const_vr,
+       in_range_top];
+
+val range_non_invoke_base_tac =
+  `step_inst_base inst s = OK r` by fs[step_inst_non_invoke] >>
+  rpt strip_tac;
+
+fun range_eval_tac_for opc =
+  if range_op_mem opc range_pure2_opcodes then
+    range_non_invoke_base_tac >> exec_pure2_range_tac
+  else if range_op_mem opc range_pure1_opcodes then
+    range_non_invoke_base_tac >> exec_pure1_range_tac
+  else if range_op_mem opc range_assign_opcodes then
+    range_non_invoke_base_tac >> assign_range_tac
+  else range_top_tac;
+
+fun range_eval_dispatch_tac (asl, w) =
+  case List.find (fn asm => isSome (pick_range_opcode asm)) asl of
+    SOME asm => range_eval_tac_for (valOf (pick_range_opcode asm)) (asl, w)
+  | NONE => failwith "range_eval_dispatch_tac: no opcode assumption";
+
 (* Per-instruction range soundness for non-PHI single-output opcodes.
    Connects step_inst execution to eval_range abstraction. *)
 Triviality step_eval_range_sound[local]:
@@ -2199,23 +2239,34 @@ Triviality step_eval_range_sound[local]:
         (MAP operand_lit inst.inst_operands)) w
 Proof
   rpt gen_tac \\ strip_tac
-  \\ Cases_on `inst.inst_opcode` \\ fs[]
-  (* INVOKE: separate handling *)
-  \\ TRY (rpt strip_tac >> simp[eval_range_def]
-           >> BasicProvers.CASE_TAC >> simp[in_range_top] >> NO_TAC)
-  (* Non-INVOKE: get step_inst_base *)
-  \\ `step_inst_base inst s = OK r` by fs[step_inst_non_invoke]
-  \\ rpt strip_tac
-  (* VR_Top opcodes *)
-  \\ TRY (simp[eval_range_def, eval_range_signextend_def,
-               list_case_const_vr, in_range_top]
-           >> NO_TAC)
-  (* exec_pure2 opcodes *)
-  \\ TRY (exec_pure2_range_tac >> NO_TAC)
-  (* exec_pure1 opcodes *)
-  \\ TRY (exec_pure1_range_tac >> NO_TAC)
-  (* ASSIGN *)
-  \\ TRY (assign_range_tac >> NO_TAC)
+  \\ Cases_on `eval_range inst.inst_opcode
+        (MAP (operand_range rs) inst.inst_operands)
+        (MAP operand_lit inst.inst_operands) = VR_Top`
+  >- (rpt strip_tac \\ ASM_REWRITE_TAC[] \\ simp[in_range_top])
+  \\ Cases_on `inst.inst_opcode` \\
+     fs[eval_range_def, eval_range_signextend_def, list_case_const_vr]
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* ADD *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SUB *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* MUL *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* Div *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SDIV *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* Mod *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SMOD *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* EQ *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* LT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* GT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SLT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SGT *)
+  >- (range_non_invoke_base_tac >> exec_pure1_range_tac) (* ISZERO *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* AND *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* OR *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* XOR *)
+  >- (range_non_invoke_base_tac >> exec_pure1_range_tac) (* NOT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SHL *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SHR *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SAR *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* BYTE *)
+  >- (range_non_invoke_base_tac >> assign_range_tac) (* ASSIGN *)
 QED
 
 (* Per-instruction soundness: wraps step_range_sound + step_eval_range_sound

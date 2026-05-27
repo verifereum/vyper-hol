@@ -52,6 +52,60 @@ Proof
   vsr_terminal_tac ()
 QED
 
+Theorem vsr_step_inst_call:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = CALL /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  fs[lift_result_def] >>
+  vsr_irule vsr_exec_ext_call >> simp[]
+QED
+
+Theorem vsr_step_inst_staticcall:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = STATICCALL /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  Cases_on `t'` >> fs[lift_result_def] >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  fs[lift_result_def] >>
+  vsr_irule vsr_exec_ext_call >> simp[]
+QED
+
 Theorem vsr_step_inst_ext_call:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
@@ -59,9 +113,8 @@ Theorem vsr_step_inst_ext_call:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  vsr_irule vsr_exec_ext_call >> simp[]
+  rw[] >- (irule vsr_step_inst_call >> simp[]) >>
+  irule vsr_step_inst_staticcall >> simp[]
 QED
 
 Theorem vsr_step_inst_delegatecall:
@@ -72,8 +125,59 @@ Theorem vsr_step_inst_delegatecall:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  Cases_on `t'` >> fs[lift_result_def] >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  fs[lift_result_def] >>
   vsr_irule vsr_exec_delegatecall >> simp[]
+QED
+
+Theorem vsr_step_inst_create1:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = CREATE /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  Cases_on `t` >> fs[lift_result_def] >>
+  vsr_irule vsr_exec_create >> simp[]
+QED
+
+Theorem vsr_step_inst_create2:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    inst.inst_opcode = CREATE2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  TRY (CASE_TAC >> fs[lift_result_def]) >>
+  Cases_on `t'` >> fs[lift_result_def] >>
+  vsr_irule vsr_exec_create >> simp[]
 QED
 
 Theorem vsr_step_inst_create:
@@ -83,9 +187,8 @@ Theorem vsr_step_inst_create:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  vsr_irule vsr_exec_create >> simp[]
+  rw[] >- (irule vsr_step_inst_create1 >> simp[]) >>
+  irule vsr_step_inst_create2 >> simp[]
 QED
 
 Theorem vsr_step_inst_alloca:

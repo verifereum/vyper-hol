@@ -13,6 +13,12 @@ Ancestors
   venomExecSemantics venomInst venomEffects pred_set
   venomInstProofs1 venomInstProofs2
 
+(* MERGE NOTE: resolved in favor of the eval-phis branch's split-file
+   structure. origin/main had the older monolithic preservation proofs here;
+   this branch moved those pieces into venomInstProofs1/2/3 for build-time
+   reasons. If a theorem is missing after the merge, port only the needed
+   lemma from origin/main into the appropriate split file. *)
+
 (* Duplicate val bindings needed from Part 1 for tactic definitions *)
 val reduce_to_base_tac =
   rw[Once step_inst_def] >> simp[step_inst_base_def];
@@ -400,7 +406,7 @@ QED
 (* ===== Section 3b: step_effect_free_state_equiv ====================== *)
 (* ===================================================================== *)
 
-Theorem step_inst_base_effect_free_state_equiv[local]:
+Theorem step_inst_base_effect_free_state_equiv:
   !inst s s'.
     step_inst_base inst s = OK s' /\
     is_effect_free_op inst.inst_opcode ==>

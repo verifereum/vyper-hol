@@ -1840,13 +1840,11 @@ Proof
      strip_tac) (asl, gl)
   end) >>
   (* Stash \forall v v' in ML ref before case analysis *)
-  (* gvs[ssa_result_equiv_def] in OK/OK case will skolemize sigma_exit *)
+  (* Split result cases before opening ssa_result_equiv_def. *)
   Cases_on `run_block fuel ctx bb s1` >>
-  Cases_on `run_block fuel ctx bb' s2` >>
-  gvs[ssa_result_equiv_def] >>
-  TRY (simp[result_equiv_def] >> NO_TAC) >>
-  (* OK/OK case remains *)
-  (
+  Cases_on `run_block fuel ctx bb' s2` >- (
+    gvs[ssa_result_equiv_def] >>
+    (* OK/OK case remains *)
     rename1 `ssa_sim sigma_exit (v1:venom_state) (v2:venom_state)` >>
     qabbrev_tac `rs_a_end =
       FST (rename_block_insts rs_b_entry (phis ++ bb.bb_instructions))` >>
@@ -1866,8 +1864,10 @@ Proof
            by (rpt strip_tac >> CCONTR_TAC >>
                qpat_x_assum `~(?j'. _)` mp_tac >> simp[] >>
                qexists_tac `j'` >> simp[]) >>
-         `sigma_exit x = sigma_out x` by
-           (first_x_assum irule >> first_assum ACCEPT_TAC) >>
+         `sigma_exit x = sigma_out x` by (
+           qpat_x_assum `!x. (!j. j < LENGTH _ ==> ~MEM x _) ==>
+             sigma_exit x = sigma_out x`
+             (qspec_then `x` mp_tac) >> simp[]) >>
          Cases_on `?i. MEM i phis /\ MEM x (i:instruction).inst_outputs`
          >- ((* x is a PHI output *)
             pop_assum strip_assume_tac >>
@@ -1895,8 +1895,7 @@ Proof
                 latest_version rs_b_entry x' = _`
                 (qspec_then `x` mp_tac) >>
               simp[] >>
-              qpat_assum `bb.bb_label = _` (fn eq => REWRITE_TAC [GSYM eq]) >>
-              qexists_tac `vs'` >> first_assum ACCEPT_TAC) >>
+              qexists_tac `vs'` >> simp[]) >>
             `latest_version rs_a_end x = latest_version rs_b_entry x` by (
               qpat_assum `Abbrev (rs_a_end = _)` (fn ab =>
                 REWRITE_TAC [PURE_REWRITE_RULE [markerTheory.Abbrev_def] ab]) >>
@@ -1981,7 +1980,8 @@ Proof
     `~v1.vs_halted` by metis_tac[run_block_OK_not_halted] >>
     `~v2.vs_halted` by metis_tac[run_block_OK_not_halted] >>
     ASM_REWRITE_TAC[] >>
-    first_assum ACCEPT_TAC)
+    first_assum ACCEPT_TAC) >>
+  gvs[ssa_result_equiv_def, result_equiv_def]
 QED
 
 

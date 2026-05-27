@@ -197,7 +197,9 @@ Theorem step_inst_base_arith_condition:
                   then word_add w1 w2 else word_sub w1 w2)
 Proof
   rpt strip_tac >> gvs[] >>
-  fs[step_inst_base_def, exec_pure2_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def, exec_pure2_def] >>
+  strip_tac >>
   Cases_on `op1` >> Cases_on `op2` >>
   fs[eval_op_env_def, eval_operand_def, lookup_var_def] >>
   BasicProvers.every_case_tac >> gvs[] >>
@@ -222,7 +224,9 @@ Theorem step_inst_base_compare_condition:
                    else w2n w1 > w2n w2)
 Proof
   rpt strip_tac >> gvs[] >>
-  fs[step_inst_base_def, exec_pure2_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def, exec_pure2_def] >>
+  strip_tac >>
   Cases_on `op1` >> Cases_on `op2` >>
   fs[eval_op_env_def, eval_operand_def, lookup_var_def] >>
   BasicProvers.every_case_tac >> gvs[] >>

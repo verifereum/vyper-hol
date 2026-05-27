@@ -6,6 +6,7 @@
  *
  * TOP-LEVEL:
  *   df_analyze         — run analysis on a function
+ *   df_analyze_fuel    — bounded analysis for evaluator use
  *   df_at              — query lattice value at instruction point
  *   df_boundary        — query boundary value (exit for forward, entry for backward)
  *   df_fold_block      — fold transfer across block instructions
@@ -215,6 +216,37 @@ Definition df_analyze_def:
          Forward => cfg.cfg_dfs_pre
        | Backward => cfg.cfg_dfs_post) in
     let boundary_result = SND (wl_iterate changed process deps wl0 st0') in
+    df_populate_inst dir bottom join transfer edge_transfer
+                     ctx entry_val cfg bbs lbls boundary_result
+End
+
+Definition df_analyze_fuel_def:
+  df_analyze_fuel fuel dir bottom join transfer edge_transfer ctx
+                  entry_val fn =
+    let cfg = cfg_analyze fn in
+    let bbs = fn.fn_blocks in
+    let lbls = MAP (λbb. bb.bb_label) bbs in
+    let st0 = init_df_state bottom lbls in
+    let st0' =
+      (case entry_val of
+         NONE => st0
+       | SOME (lbl, v) =>
+           st0 with ds_boundary := st0.ds_boundary |+ (lbl, v)) in
+    let process =
+      df_process_block dir bottom join transfer edge_transfer
+                       ctx entry_val cfg bbs in
+    let changed =
+      (λlbl old new. df_boundary bottom new lbl <> df_boundary bottom old lbl) in
+    let deps =
+      (case dir of
+         Forward => cfg_succs_of cfg
+       | Backward => cfg_preds_of cfg) in
+    let wl0 =
+      (case dir of
+         Forward => cfg.cfg_dfs_pre
+       | Backward => cfg.cfg_dfs_post) in
+    let boundary_result =
+      SND (wl_iterate_fuel fuel changed process deps wl0 st0') in
     df_populate_inst dir bottom join transfer edge_transfer
                      ctx entry_val cfg bbs lbls boundary_result
 End

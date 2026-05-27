@@ -22,6 +22,10 @@ Ancestors
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState list finite_map pred_set
+Libs
+  execEquivParamLib
+
+open execEquivParamLib
 
 (* ===== Helpers ===== *)
 
@@ -414,24 +418,18 @@ Triviality R_term_idx_change:
   !R_ok R_term s n.
     valid_state_rel R_ok R_term ==> R_term (s with vs_inst_idx := n) s
 Proof
-  rw[] >>
-  `R_term s s` by metis_tac[vsr_R_term_refl] >>
-  pop_assum mp_tac >> fs[valid_state_rel_def] >>
   rpt strip_tac >>
-  first_x_assum (qspecl_then [`s`, `s`, `s with vs_inst_idx := n`, `s`] mp_tac) >>
-  simp[]
+  `R_term s s` by metis_tac[vsr_R_term_refl] >>
+  vsr_reconstruct_R_term_tac `s` `s`
 QED
 
 Triviality R_term_idx_change2:
   !R_ok R_term s n.
     valid_state_rel R_ok R_term ==> R_term s (s with vs_inst_idx := n)
 Proof
-  rw[] >>
-  `R_term s s` by metis_tac[vsr_R_term_refl] >>
-  pop_assum mp_tac >> fs[valid_state_rel_def] >>
   rpt strip_tac >>
-  first_x_assum (qspecl_then [`s`, `s`, `s`, `s with vs_inst_idx := n`] mp_tac) >>
-  simp[]
+  `R_term s s` by metis_tac[vsr_R_term_refl] >>
+  vsr_reconstruct_R_term_tac `s` `s`
 QED
 
 (* R_ok tolerates vs_inst_idx changes when both sides change to the same value *)
@@ -440,9 +438,8 @@ Theorem R_ok_idx_change:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     R_ok (s1 with vs_inst_idx := n) (s2 with vs_inst_idx := n)
 Proof
-  rw[valid_state_rel_def] >>
-  first_x_assum irule >> simp[] >>
-  qexistsl_tac [`s1`, `s2`] >> simp[]
+  rpt strip_tac >>
+  vsr_reconstruct_R_ok_tac `s1` `s2`
 QED
 
 (* R_term tolerates vs_inst_idx changes on both sides *)
@@ -452,11 +449,7 @@ Theorem R_term_idx_change_both:
     R_term (s1 with vs_inst_idx := n) (s2 with vs_inst_idx := n)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `R_term _ _` mp_tac >>
-  fs[valid_state_rel_def] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`s1`, `s2`,
-    `s1 with vs_inst_idx := n`, `s2 with vs_inst_idx := n`] mp_tac) >>
-  simp[]
+  vsr_reconstruct_R_term_tac `s1` `s2`
 QED
 
 (* lift_result preserved by exec_result_map when g preserves R_ok/R_term *)

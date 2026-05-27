@@ -184,8 +184,22 @@ Theorem m2v_promote_inst_inst_wf[local]:
   !pvar ao sz i.
     inst_wf i ==> EVERY inst_wf (m2v_promote_inst pvar ao sz i)
 Proof
-  rpt strip_tac >> simp[m2v_promote_inst_def] >>
-  rpt (CASE_TAC >> gvs[inst_wf_def])
+  rpt strip_tac >>
+  Cases_on `i.inst_opcode = MSTORE /\ sz = 32` >>
+  simp[m2v_promote_inst_def]
+  >- (Cases_on `i.inst_operands` >> gvs[inst_wf_def] >>
+      Cases_on `t` >> gvs[inst_wf_def] >>
+      Cases_on `h = Var ao` >> gvs[inst_wf_def]) >>
+  Cases_on `i.inst_opcode = MLOAD /\ sz = 32` >>
+  simp[m2v_promote_inst_def]
+  >- (Cases_on `i.inst_operands` >> gvs[inst_wf_def] >>
+      Cases_on `h = Var ao` >> gvs[inst_wf_def]) >>
+  Cases_on `i.inst_opcode = RETURN /\ sz <= 32` >>
+  simp[m2v_promote_inst_def]
+  >- (Cases_on `i.inst_operands` >> gvs[inst_wf_def] >>
+      Cases_on `t` >> gvs[inst_wf_def] >>
+      Cases_on `h = Var ao` >> gvs[inst_wf_def]) >>
+  simp[]
 QED
 
 (* EVERY inst_wf preserved by m2v_bt *)

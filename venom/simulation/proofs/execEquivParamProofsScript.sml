@@ -161,6 +161,19 @@ Proof
   ]
 QED
 
+Theorem vsr_lift_ok_halted:
+  !R_ok R_term v v'.
+    valid_state_rel R_ok R_term /\ R_ok v v' ==>
+    lift_result R_ok R_term R_term
+      (if v.vs_halted then Halt v else OK v)
+      (if v'.vs_halted then Halt v' else OK v')
+Proof
+  rpt strip_tac >>
+  imp_res_tac vsr_R_ok_R_term >>
+  imp_res_tac vsr_R_ok_fields >>
+  Cases_on `v.vs_halted` >> gvs[lift_result_def]
+QED
+
 (* exec_block/run_blocks preserve R. Mutual induction via exec_block_ind.
    New exec_block is simpler (no INVOKE special case - step_inst handles it).
    Uses vs_inst_idx := SUC s.vs_inst_idx (not next_inst). *)
@@ -227,9 +240,7 @@ Proof
   Cases_on `step_inst fuel ctx inst s2` >>
   fs[lift_result_def] >>
   IF_CASES_TAC >> fs[]
-  >- (imp_res_tac vsr_R_ok_R_term >>
-      imp_res_tac vsr_R_ok_fields >> fs[] >>
-      Cases_on `v.vs_halted` >> fs[lift_result_def])
+  >- (irule vsr_lift_ok_halted >> simp[])
   >>
   (* Substitute inst = EL ... so IH guard matches *)
   qpat_x_assum `inst = _` SUBST_ALL_TAC >>

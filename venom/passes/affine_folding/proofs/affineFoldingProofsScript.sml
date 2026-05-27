@@ -160,9 +160,8 @@ Theorem af_rewrite_inst_preserves[local]:
     result.inst_outputs = inst.inst_outputs /\
     result.inst_id = inst.inst_id
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-     af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (BasicProvers.PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+  rw[af_rewrite_inst_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 Theorem af_rewrite_inst_opcode[local]:
@@ -170,9 +169,8 @@ Theorem af_rewrite_inst_opcode[local]:
     af_rewrite_inst dfg vi inst = SOME result ==>
     (result.inst_opcode = ASSIGN \/ result.inst_opcode = ADD)
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-     af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (BasicProvers.PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+  rw[af_rewrite_inst_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 Theorem af_transform_block_label[local]:

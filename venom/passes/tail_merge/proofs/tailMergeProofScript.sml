@@ -2123,8 +2123,14 @@ Theorem step_inst_base_subst_non_jump_term[local]:
     step_inst_base inst st
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  non_jump_term_tac
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- non_jump_term_tac (* RET *)
+  >- non_jump_term_tac (* RETURN *)
+  >- non_jump_term_tac (* REVERT *)
+  >- non_jump_term_tac (* STOP *)
+  >- non_jump_term_tac (* SINK *)
+  >- non_jump_term_tac (* SELFDESTRUCT *)
+  >- non_jump_term_tac (* INVALID *)
 QED
 
 (* Helper: jump_to preserves execution_equiv UNIV *)
@@ -2325,6 +2331,26 @@ Proof
   Cases_on `r` >> simp[execution_equiv_def]
 QED
 
+val term_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
+       AllCaseEqs()] >>
+  rpt CASE_TAC >> gvs[];
+
+Theorem step_inst_base_ok_terminator_jump[local]:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 (* Non-jump terminators never return OK *)
 Theorem step_inst_base_non_jump_term_not_ok[local]:
   !inst s.
@@ -2333,9 +2359,9 @@ Theorem step_inst_base_non_jump_term_not_ok[local]:
     inst.inst_opcode <> DJMP ==>
     (!v. step_inst_base inst s <> OK v)
 Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def, step_inst_base_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac >> CCONTR_TAC >>
+  drule_all step_inst_base_ok_terminator_jump >>
+  strip_tac >> gvs[]
 QED
 
 (* Non-jumping terminator case *)
@@ -2919,13 +2945,9 @@ Proof
   Cases_on `step_inst fuel ctx x s` >> simp[] >>
   rw[] >> gvs[] >>
   Cases_on `is_terminator x.inst_opcode` >> gvs[] >- (
-    (* terminator returned OK => must be JMP/JNZ/DJMP *)
-    qpat_x_assum `is_terminator _` mp_tac >>
-    simp[is_terminator_def] >>
-    Cases_on `x.inst_opcode` >> gvs[is_terminator_def] >>
-    qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-    simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
-    gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+    `x.inst_opcode <> INVOKE` by (Cases_on `x.inst_opcode` >> gvs[is_terminator_def]) >>
+    `step_inst_base x s = OK s'` by metis_tac[step_inst_non_invoke] >>
+    drule_all venomExecPropsTheory.step_inst_base_term_prev_bb >> simp[]
   ) >>
   (* non-terminator: recurse *)
   first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`,

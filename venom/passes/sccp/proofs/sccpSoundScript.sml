@@ -228,10 +228,11 @@ Proof
     CASE_TAC >> gvs[] >>
     CASE_TAC >> gvs[] >>
     CASE_TAC >> gvs[] >>
-    TRY (CASE_TAC >> gvs[] >> CASE_TAC >> gvs[] >> NO_TAC) >>
-    CASE_TAC >> gvs[] >>
-    CASE_TAC >> gvs[] >>
-    simp[jnz_const_fold_correct])
+    Cases_on `h` >> gvs[] >>
+    TRY (Cases_on `h'` >> gvs[]) >>
+    simp[jnz_const_fold_correct] >>
+    first_x_assum (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+    simp[])
   >>
   Cases_on `inst.inst_opcode = ASSERT \/
             inst.inst_opcode = ASSERT_UNREACHABLE`
@@ -251,6 +252,10 @@ QED
 
 (* ===== analysis_inst_simulates via 1:1 corollary ===== *)
 
+(* MERGE NOTE: kept eval-phis branch's 1:1 simulation theorem because
+   sccp_inst_simulates below still derives from analysis_inst_simulates_from_1.
+   origin/main instead introduced local structural lemmas; if this proof fails,
+   consider porting those lemmas and rewriting sccp_inst_simulates directly. *)
 (* sccp_inst provides 1:1 per-instruction simulation under sound lattice *)
 Theorem sccp_inst_simulates_1:
   analysis_inst_simulates_1 (state_equiv {}) (execution_equiv {})

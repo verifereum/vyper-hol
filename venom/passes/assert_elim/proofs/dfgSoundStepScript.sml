@@ -550,36 +550,38 @@ Proof
     rpt strip_tac >>
     `v IN FDOM s.vs_vars` by metis_tac[] >>
     simp[FLOOKUP_DEF]) >>
-  rpt conj_tac >| [
-    (* ASSIGN *)
-    rpt strip_tac >> gvs[MEM] >>
-    qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-    simp[step_inst_base_def, exec_pure1_def, eval_operand_def,
-         lookup_var_def, update_var_def, FLOOKUP_DEF] >>
-    strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE],
-    (* ISZERO *)
-    rpt strip_tac >> gvs[MEM] >>
-    qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-    simp[step_inst_base_def, exec_pure1_def, eval_operand_def,
-         lookup_var_def, update_var_def, FLOOKUP_DEF,
-         bool_to_word_def] >>
-    rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs()],
-    (* EQ *)
-    rpt strip_tac >> gvs[MEM] >>
-    qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-    simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-         lookup_var_def, update_var_def, FLOOKUP_DEF,
-         bool_to_word_def] >>
-    rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs()],
-    (* LT/GT/SLT/SGT *)
-    rpt strip_tac >> gvs[MEM] >>
-    qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-    simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-         lookup_var_def, update_var_def, FLOOKUP_DEF,
-         bool_to_word_def] >>
-    rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs(),
-         integer_wordTheory.WORD_LTi, integer_wordTheory.WORD_GTi]
-  ]
+  conj_tac
+  >- ((* ASSIGN *)
+      rpt strip_tac >> gvs[MEM] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[step_inst_base_def, exec_pure1_def, eval_operand_def,
+           lookup_var_def, update_var_def, FLOOKUP_DEF] >>
+      strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE]) >>
+  conj_tac
+  >- ((* ISZERO *)
+      rpt strip_tac >> gvs[MEM] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[step_inst_base_def, exec_pure1_def, eval_operand_def,
+           lookup_var_def, update_var_def, FLOOKUP_DEF,
+           bool_to_word_def] >>
+      rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs()]) >>
+  conj_tac
+  >- ((* EQ *)
+      rpt strip_tac >> gvs[MEM] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+           lookup_var_def, update_var_def, FLOOKUP_DEF,
+           bool_to_word_def] >>
+      rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs()]) >>
+  (* LT/GT/SLT/SGT *)
+  rpt strip_tac >> gvs[MEM] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_DEF,
+       bool_to_word_def] >>
+  rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs(),
+       integer_wordTheory.WORD_LTi, integer_wordTheory.WORD_GTi]
 QED
 
 (* Combined: dfg_sound preserved through step_inst_base for new output. *)
@@ -1735,6 +1737,125 @@ Proof
   Cases >> simp[bool_to_word_def]
 QED
 
+val compare_step_output_opcode_tac =
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
+       update_var_def, FLOOKUP_UPDATE, bool_to_word_neq_0w,
+       WORD_LTi, WORD_GTi] >>
+  strip_tac >>
+  gvs[FLOOKUP_UPDATE, bool_to_word_neq_0w]
+
+Theorem compare_step_output_lt[local]:
+  !fuel ctx inst s s1 v lhs rhs w x y.
+    inst.inst_opcode = LT /\ inst.inst_operands = [lhs; rhs] /\
+    inst.inst_outputs = [v] /\ step_inst fuel ctx inst s = OK s1 /\
+    eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
+    FLOOKUP s1.vs_vars v = SOME w ==>
+    (w <> 0w <=> w2n x < w2n y)
+Proof
+  compare_step_output_opcode_tac
+QED
+
+Theorem compare_step_output_gt[local]:
+  !fuel ctx inst s s1 v lhs rhs w x y.
+    inst.inst_opcode = GT /\ inst.inst_operands = [lhs; rhs] /\
+    inst.inst_outputs = [v] /\ step_inst fuel ctx inst s = OK s1 /\
+    eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
+    FLOOKUP s1.vs_vars v = SOME w ==>
+    (w <> 0w <=> w2n x > w2n y)
+Proof
+  compare_step_output_opcode_tac
+QED
+
+Theorem compare_step_output_slt[local]:
+  !fuel ctx inst s s1 v lhs rhs w x y.
+    inst.inst_opcode = SLT /\ inst.inst_operands = [lhs; rhs] /\
+    inst.inst_outputs = [v] /\ step_inst fuel ctx inst s = OK s1 /\
+    eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
+    FLOOKUP s1.vs_vars v = SOME w ==>
+    (w <> 0w <=> w2i x < w2i y)
+Proof
+  compare_step_output_opcode_tac
+QED
+
+Theorem compare_step_output_sgt[local]:
+  !fuel ctx inst s s1 v lhs rhs w x y.
+    inst.inst_opcode = SGT /\ inst.inst_operands = [lhs; rhs] /\
+    inst.inst_outputs = [v] /\ step_inst fuel ctx inst s = OK s1 /\
+    eval_operand lhs s = SOME x /\ eval_operand rhs s = SOME y /\
+    FLOOKUP s1.vs_vars v = SOME w ==>
+    (w <> 0w <=> w2i x > w2i y)
+Proof
+  compare_step_output_opcode_tac
+QED
+
+Theorem compare_step_output[local]:
+  !fuel ctx inst s s1 v lhs rhs w x y.
+    (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+     inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
+    inst.inst_operands = [lhs; rhs] /\
+    inst.inst_outputs = [v] /\
+    step_inst fuel ctx inst s = OK s1 /\
+    eval_operand lhs s = SOME x /\
+    eval_operand rhs s = SOME y /\
+    FLOOKUP s1.vs_vars v = SOME w ==>
+    (w <> 0w <=>
+     if inst.inst_opcode = LT then w2n x < w2n y
+     else if inst.inst_opcode = GT then w2n x > w2n y
+     else if inst.inst_opcode = SLT then w2i x < w2i y
+     else w2i x > w2i y)
+Proof
+  rpt strip_tac >> gvs[] >| [
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s1`, `v`, `lhs`, `rhs`,
+                 `w`, `x`, `y`] mp_tac compare_step_output_lt >> simp[],
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s1`, `v`, `lhs`, `rhs`,
+                 `w`, `x`, `y`] mp_tac compare_step_output_gt >> simp[],
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s1`, `v`, `lhs`, `rhs`,
+                 `w`, `x`, `y`] mp_tac compare_step_output_slt >> simp[],
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s1`, `v`, `lhs`, `rhs`,
+                 `w`, `x`, `y`] mp_tac compare_step_output_sgt >> simp[]]
+QED
+
+Theorem compare_case_b_from_step[local]:
+  !fuel ctx inst s s1 r v lhs rhs.
+    (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+     inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
+    inst.inst_operands = [lhs; rhs] /\
+    inst.inst_outputs = [v] /\
+    step_inst fuel ctx inst s = OK s1 /\
+    FLOOKUP r.vs_vars v = FLOOKUP s1.vs_vars v /\
+    (!u. MEM (Var u) inst.inst_operands /\ ~MEM u inst.inst_outputs ==>
+         FLOOKUP r.vs_vars u = FLOOKUP s.vs_vars u) /\
+    ~MEM (Var v) inst.inst_operands ==>
+    !w. FLOOKUP r.vs_vars v = SOME w ==>
+      (!u wl wu. lhs = Var u /\ rhs = Lit wl /\
+         FLOOKUP r.vs_vars u = SOME wu ==>
+         (w <> 0w <=>
+          if inst.inst_opcode = LT then w2n wu < w2n wl
+          else if inst.inst_opcode = GT then w2n wu > w2n wl
+          else if inst.inst_opcode = SLT then w2i wu < w2i wl
+          else w2i wu > w2i wl)) /\
+      (!u wl wu. rhs = Var u /\ lhs = Lit wl /\
+         FLOOKUP r.vs_vars u = SOME wu ==>
+         (w <> 0w <=>
+          if inst.inst_opcode = LT then w2n wl < w2n wu
+          else if inst.inst_opcode = GT then w2n wl > w2n wu
+          else if inst.inst_opcode = SLT then w2i wl < w2i wu
+          else w2i wl > w2i wu))
+Proof
+  rpt strip_tac >> gvs[] >>
+  `FLOOKUP s1.vs_vars v = SOME w` by metis_tac[] >>
+  `FLOOKUP s.vs_vars u = SOME wu` by metis_tac[] >>
+  FIRST [
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s1`, `v`, `Var u`, `Lit wl`,
+                 `w`, `wu`, `wl`] mp_tac compare_step_output >>
+    (impl_tac >- gvs[eval_operand_def, lookup_var_def]) >> simp[],
+    qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s1`, `v`, `Lit wl`, `Var u`,
+                 `w`, `wl`, `wu`] mp_tac compare_step_output >>
+    (impl_tac >- gvs[eval_operand_def, lookup_var_def]) >> simp[]]
+QED
+
 (* Case A setup: if dinst not in bb, then v and all operand vars preserved.
    Combines run_block_tracked_not_in_bb + operand_flookup_preserved_not_in_bb. *)
 Theorem case_a_setup[local]:
@@ -1934,7 +2055,7 @@ Proof
     `dfg_eq_sound (dfg_build_function fn) s.vs_vars` by
       gvs[dfg_sound_def] >>
     qpat_x_assum `dfg_eq_sound _ s.vs_vars` mp_tac >>
-    simp[dfg_eq_sound_def] >>
+    PURE_ONCE_REWRITE_TAC [dfg_eq_sound_def] >>
     disch_tac >> rpt strip_tac >>
     first_x_assum (qspecl_then [`v`, `inst`, `lhs`, `rhs`] mp_tac) >>
     simp[] >> gvs[MEM] >> metis_tac[])
@@ -1958,35 +2079,117 @@ Theorem dfg_compare_sound_run_block[local]:
     dfg_compare_sound (dfg_build_function fn) r.vs_vars
 Proof
   rpt strip_tac >>
-  simp[dfg_compare_sound_def] >> rpt gen_tac >> strip_tac >>
+  simp[dfg_compare_sound_def] >> rpt gen_tac >> DISCH_TAC >>
   `dfg_tracked_opcode inst.inst_opcode` by (metis_tac[dfg_tracked_opcode_def]) >>
-  imp_res_tac derive_inst_outputs >>
-  Cases_on `MEM inst bb.bb_instructions` >> (
-    TRY ( (* Case B: inst in block *)
-      mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
-        case_b_setup) >>
-      (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >> strip_tac >>
-      `~MEM (Var v) inst.inst_operands` by
-        metis_tac[dfg_block_local_no_self_ref] >>
-      gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
-          update_var_def, eval_operand_def, lookup_var_def,
-          AllCaseEqs(), FLOOKUP_UPDATE, bool_to_word_neq_0w,
-          WORD_LTi, WORD_GTi] >>
-      rpt strip_tac >>
-      gvs[FLOOKUP_UPDATE, MEM, eval_operand_def, lookup_var_def] >>
-      NO_TAC) >>
-    (* Case A: inst not in block *)
+  `inst.inst_outputs = [v]` by metis_tac[derive_inst_outputs] >>
+  Cases_on `MEM inst bb.bb_instructions`
+  >- ( (* Case B: inst in block *)
     mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
-      case_a_setup) >>
+      case_b_setup) >>
     (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >> strip_tac >>
+    qspecl_then [`fuel`, `ctx`, `inst`, `s_j`, `s_j1`, `r`, `v`, `lhs`, `rhs`]
+      mp_tac compare_case_b_from_step >>
+    (impl_tac >- (rpt conj_tac >>
+      (first_assum ACCEPT_TAC ORELSE metis_tac[dfg_block_local_no_self_ref]))) >>
+    simp[])
+  >- ( (* Case A: inst not in block *)
+    sg `FLOOKUP r.vs_vars v = FLOOKUP s.vs_vars v /\
+        (!u. MEM (Var u) inst.inst_operands ==>
+             FLOOKUP r.vs_vars u = FLOOKUP s.vs_vars u)`
+    >- (irule case_a_setup >> simp[dfg_tracked_opcode_def] >> metis_tac[]) >>
     `dfg_compare_sound (dfg_build_function fn) s.vs_vars` by
       gvs[dfg_sound_def] >>
     qpat_x_assum `dfg_compare_sound _ s.vs_vars` mp_tac >>
-    simp[dfg_compare_sound_def] >>
+    PURE_ONCE_REWRITE_TAC [dfg_compare_sound_def] >>
     disch_tac >>
     first_x_assum (qspecl_then [`v`, `inst`, `lhs`, `rhs`] mp_tac) >>
-    simp[] >> gvs[MEM] >> rpt strip_tac >> metis_tac[])
+    (impl_tac >- metis_tac[]) >>
+    gvs[MEM] >> rpt strip_tac >>
+    qpat_x_assum `!u. _ ==> FLOOKUP r.vs_vars u = FLOOKUP s.vs_vars u`
+      (qspec_then `u` mp_tac) >>
+    simp[] >> strip_tac >> gvs[] >>
+    FIRST [
+      qpat_x_assum `!u wl wu. lhs = Var u /\ rhs = Lit wl /\
+          FLOOKUP s.vs_vars u = SOME wu ==> _`
+        (qspecl_then [`u`, `wl`, `wu`] mp_tac),
+      qpat_x_assum `!u wl wu. rhs = Var u /\ lhs = Lit wl /\
+          FLOOKUP s.vs_vars u = SOME wu ==> _`
+        (qspecl_then [`u`, `wl`, `wu`] mp_tac)] >>
+    simp[])
 QED
+
+Theorem exec_pure1_var_operand_defined[local]:
+  !f inst s s' u.
+    exec_pure1 f inst s = OK s' /\
+    MEM (Var u) inst.inst_operands ==>
+    ?w. FLOOKUP s.vs_vars u = SOME w
+Proof
+  rpt strip_tac >>
+  gvs[exec_pure1_def, AllCaseEqs(), eval_operand_def, lookup_var_def]
+QED
+
+Theorem exec_pure2_var_operand_defined[local]:
+  !f inst s s' u.
+    exec_pure2 f inst s = OK s' /\
+    MEM (Var u) inst.inst_operands ==>
+    ?w. FLOOKUP s.vs_vars u = SOME w
+Proof
+  rpt strip_tac >>
+  gvs[exec_pure2_def, AllCaseEqs(), eval_operand_def, lookup_var_def]
+QED
+
+Theorem step_inst_base_assign_operand_defined[local]:
+  !inst s s' u.
+    inst.inst_opcode = ASSIGN /\ step_inst_base inst s = OK s' /\
+    MEM (Var u) inst.inst_operands ==>
+    ?w. FLOOKUP s.vs_vars u = SOME w
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[AllCaseEqs(), eval_operand_def, lookup_var_def] >>
+  strip_tac >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem step_inst_base_iszero_operand_defined[local]:
+  !inst s s' u.
+    inst.inst_opcode = ISZERO /\ step_inst_base inst s = OK s' /\
+    MEM (Var u) inst.inst_operands ==>
+    ?w. FLOOKUP s.vs_vars u = SOME w
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_def] >> strip_tac >>
+  drule_all exec_pure1_var_operand_defined >> simp[]
+QED
+
+val pure2_tracked_operand_defined_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >> strip_tac >>
+  drule_all exec_pure2_var_operand_defined >> simp[];
+
+Theorem step_inst_base_pure2_tracked_operand_defined[local]:
+  !inst s s' u.
+    (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+     inst.inst_opcode = SLT \/ inst.inst_opcode = SGT \/
+     inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+    step_inst_base inst s = OK s' /\ MEM (Var u) inst.inst_operands ==>
+    ?w. FLOOKUP s.vs_vars u = SOME w
+Proof
+  rpt strip_tac >> gvs[]
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+  >- pure2_tracked_operand_defined_tac
+QED
+
+val tracked_operand_defined_tac =
+  metis_tac[step_inst_base_assign_operand_defined,
+            step_inst_base_iszero_operand_defined,
+            step_inst_base_pure2_tracked_operand_defined]
 
 (* Helper: if a tracked-opcode instruction succeeds via step_inst_base,
    all Var operands were defined in the input state. *)
@@ -1999,8 +2202,7 @@ Theorem step_inst_base_tracked_operand_defined[local]:
 Proof
   rpt strip_tac >>
   gvs[dfg_tracked_opcode_def] >>
-  gvs[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-      AllCaseEqs(), eval_operand_def, lookup_var_def]
+  tracked_operand_defined_tac
 QED
 
 (* Helper: ops_defined preserved through run_block *)
@@ -2092,6 +2294,44 @@ Proof
   Cases >> simp[eval_op_env_def]
 QED
 
+Theorem arith_step_outputs[local]:
+  !inst s s1 v op1 op2.
+    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+    inst.inst_operands = [op1; op2] /\ inst.inst_outputs = [v] /\
+    (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) /\
+    step_inst_base inst s = OK s1 ==>
+    ?w1 w2.
+      eval_op_env op1 s.vs_vars = SOME w1 /\
+      eval_op_env op2 s.vs_vars = SOME w2 /\
+      FLOOKUP s1.vs_vars v = SOME (if inst.inst_opcode = ADD then w1 + w2 else w1 - w2)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  gvs[] >| [
+    simp[step_inst_base_def, exec_pure2_def, update_var_def, FLOOKUP_UPDATE] >>
+    strip_tac >>
+    `eval_op_env op1 s.vs_vars = eval_operand op1 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    `eval_op_env op2 s.vs_vars = eval_operand op2 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    Cases_on `eval_operand op1 s` >> gvs[] >>
+    rename1 `eval_operand op1 s = SOME w1` >>
+    Cases_on `eval_operand op2 s` >> gvs[] >>
+    rename1 `eval_operand op2 s = SOME w2` >>
+    gvs[FLOOKUP_UPDATE],
+    simp[step_inst_base_def, exec_pure2_def, update_var_def, FLOOKUP_UPDATE] >>
+    strip_tac >>
+    `eval_op_env op1 s.vs_vars = eval_operand op1 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    `eval_op_env op2 s.vs_vars = eval_operand op2 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    Cases_on `eval_operand op1 s` >> gvs[] >>
+    rename1 `eval_operand op1 s = SOME w1` >>
+    Cases_on `eval_operand op2 s` >> gvs[] >>
+    rename1 `eval_operand op2 s = SOME w2` >>
+    gvs[FLOOKUP_UPDATE]]
+QED
+
 (* dfg_arith_sound preserved through run_block.
    Uses case_a/case_b infrastructure with ADD/SUB. *)
 Theorem dfg_arith_sound_run_block:
@@ -2112,37 +2352,40 @@ Theorem dfg_arith_sound_run_block:
     dfg_arith_sound (dfg_build_function fn) r.vs_vars
 Proof
   rpt strip_tac >>
-  simp[dfg_arith_sound_def] >> rpt gen_tac >> strip_tac >>
+  simp[dfg_arith_sound_def] >> rpt gen_tac >> DISCH_TAC >>
   `MEM v inst.inst_outputs /\ MEM inst (fn_insts fn)` by
     metis_tac[dfg_build_function_correct] >>
   `?bb'. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions` by
     metis_tac[fn_insts_mem_block] >>
   `dfg_tracked_opcode inst.inst_opcode` by
     (gvs[dfg_tracked_opcode_def]) >>
-  imp_res_tac derive_inst_outputs >>
-  Cases_on `MEM inst bb.bb_instructions` >> (
-    TRY ( (* Case B: inst in this block *)
-      mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
-        case_b_setup) >>
-      (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >>
-      strip_tac >>
-      `~MEM (Var v) inst.inst_operands` by
-        metis_tac[dfg_block_local_no_self_ref] >>
-      `step_inst_base inst s_j = OK s_j1` by
-        (gvs[step_inst_non_invoke]) >>
-      `eval_op_env op1 r.vs_vars = eval_op_env op1 s_j.vs_vars` by
-        (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-         first_assum irule >> gvs[MEM]) >>
-      `eval_op_env op2 r.vs_vars = eval_op_env op2 s_j.vs_vars` by
-        (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-         first_assum irule >> gvs[MEM]) >>
-      Cases_on `op1` >> Cases_on `op2` >>
-      gvs[step_inst_base_def, exec_pure2_def, update_var_def,
-          AllCaseEqs(), FLOOKUP_UPDATE,
-          eval_op_env_def, eval_operand_def, lookup_var_def] >>
-      qexistsl_tac [`v1`, `v2`] >> gvs[] >>
-      NO_TAC) >>
-    (* Case A: inst not in this block *)
+  `inst.inst_outputs = [v]` by metis_tac[derive_inst_outputs] >>
+  Cases_on `MEM inst bb.bb_instructions`
+  >- ( (* Case B: inst in this block *)
+    mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
+      case_b_setup) >>
+    (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >>
+    strip_tac >>
+    `~MEM (Var v) inst.inst_operands` by
+      metis_tac[dfg_block_local_no_self_ref] >>
+    `step_inst_base inst s_j = OK s_j1` by
+      (gvs[step_inst_non_invoke]) >>
+    `eval_op_env op1 r.vs_vars = eval_op_env op1 s_j.vs_vars` by
+      (irule eval_op_env_flookup_eq >> rpt strip_tac >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands /\ _ ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- (gvs[MEM] >> metis_tac[])) >> simp[]) >>
+    `eval_op_env op2 r.vs_vars = eval_op_env op2 s_j.vs_vars` by
+      (irule eval_op_env_flookup_eq >> rpt strip_tac >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands /\ _ ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- (gvs[MEM] >> metis_tac[])) >> simp[]) >>
+    qspecl_then [`inst`, `s_j`, `s_j1`, `v`, `op1`, `op2`]
+      mp_tac arith_step_outputs >>
+    (impl_tac >- metis_tac[]) >>
+    strip_tac >>
+    qexistsl_tac [`w1`, `w2`] >> gvs[])
+  >- ( (* Case A: inst not in this block *)
     mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
       case_a_setup) >>
     (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >> strip_tac >>
@@ -2150,14 +2393,58 @@ Proof
       (gvs[TO_FLOOKUP] >> metis_tac[]) >>
     `eval_op_env op1 r.vs_vars = eval_op_env op1 s.vs_vars` by
       (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-       first_assum irule >> gvs[MEM]) >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- gvs[MEM]) >> simp[]) >>
     `eval_op_env op2 r.vs_vars = eval_op_env op2 s.vs_vars` by
       (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-       first_assum irule >> gvs[MEM]) >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- gvs[MEM]) >> simp[]) >>
     qpat_x_assum `dfg_arith_sound _ s.vs_vars` mp_tac >>
     simp[dfg_arith_sound_def] >> disch_tac >>
     first_x_assum (qspecl_then [`v`, `inst`, `op1`, `op2`] mp_tac) >>
+    (impl_tac >- metis_tac[]) >>
     simp[])
+QED
+
+Theorem compare_full_step_outputs[local]:
+  !inst s s1 v op1 op2.
+    (inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
+    inst.inst_operands = [op1; op2] /\ inst.inst_outputs = [v] /\
+    (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) /\
+    step_inst_base inst s = OK s1 ==>
+    ?w1 w2.
+      eval_op_env op1 s.vs_vars = SOME w1 /\
+      eval_op_env op2 s.vs_vars = SOME w2 /\
+      FLOOKUP s1.vs_vars v =
+        SOME (bool_to_word (if inst.inst_opcode = LT then w2n w1 < w2n w2 else w2n w1 > w2n w2))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  gvs[] >| [
+    simp[step_inst_base_def, exec_pure2_def, update_var_def, FLOOKUP_UPDATE] >>
+    strip_tac >>
+    `eval_op_env op1 s.vs_vars = eval_operand op1 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    `eval_op_env op2 s.vs_vars = eval_operand op2 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    Cases_on `eval_operand op1 s` >> gvs[] >>
+    rename1 `eval_operand op1 s = SOME w1` >>
+    Cases_on `eval_operand op2 s` >> gvs[] >>
+    rename1 `eval_operand op2 s = SOME w2` >>
+    gvs[FLOOKUP_UPDATE],
+    simp[step_inst_base_def, exec_pure2_def, update_var_def, FLOOKUP_UPDATE] >>
+    strip_tac >>
+    `eval_op_env op1 s.vs_vars = eval_operand op1 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    `eval_op_env op2 s.vs_vars = eval_operand op2 s` by
+      metis_tac[eval_op_env_eval_operand] >>
+    Cases_on `eval_operand op1 s` >> gvs[] >>
+    rename1 `eval_operand op1 s = SOME w1` >>
+    Cases_on `eval_operand op2 s` >> gvs[] >>
+    rename1 `eval_operand op2 s = SOME w2` >>
+    gvs[FLOOKUP_UPDATE]]
 QED
 
 (* dfg_compare_full_sound preserved through run_block.
@@ -2180,37 +2467,40 @@ Theorem dfg_compare_full_sound_run_block:
     dfg_compare_full_sound (dfg_build_function fn) r.vs_vars
 Proof
   rpt strip_tac >>
-  simp[dfg_compare_full_sound_def] >> rpt gen_tac >> strip_tac >>
+  simp[dfg_compare_full_sound_def] >> rpt gen_tac >> DISCH_TAC >>
   `MEM v inst.inst_outputs /\ MEM inst (fn_insts fn)` by
     metis_tac[dfg_build_function_correct] >>
   `?bb'. MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions` by
     metis_tac[fn_insts_mem_block] >>
   `dfg_tracked_opcode inst.inst_opcode` by
     (gvs[dfg_tracked_opcode_def]) >>
-  imp_res_tac derive_inst_outputs >>
-  Cases_on `MEM inst bb.bb_instructions` >> (
-    TRY ( (* Case B: inst in this block *)
-      mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
-        case_b_setup) >>
-      (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >>
-      strip_tac >>
-      `~MEM (Var v) inst.inst_operands` by
-        metis_tac[dfg_block_local_no_self_ref] >>
-      `step_inst_base inst s_j = OK s_j1` by
-        (gvs[step_inst_non_invoke]) >>
-      `eval_op_env op1 r.vs_vars = eval_op_env op1 s_j.vs_vars` by
-        (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-         first_assum irule >> gvs[MEM]) >>
-      `eval_op_env op2 r.vs_vars = eval_op_env op2 s_j.vs_vars` by
-        (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-         first_assum irule >> gvs[MEM]) >>
-      Cases_on `op1` >> Cases_on `op2` >>
-      gvs[step_inst_base_def, exec_pure2_def, update_var_def,
-          AllCaseEqs(), FLOOKUP_UPDATE, bool_to_word_neq_0w,
-          eval_op_env_def, eval_operand_def, lookup_var_def] >>
-      qexistsl_tac [`v1`, `v2`] >> gvs[] >>
-      NO_TAC) >>
-    (* Case A: inst not in this block *)
+  `inst.inst_outputs = [v]` by metis_tac[derive_inst_outputs] >>
+  Cases_on `MEM inst bb.bb_instructions`
+  >- ( (* Case B: inst in this block *)
+    mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
+      case_b_setup) >>
+    (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >>
+    strip_tac >>
+    `~MEM (Var v) inst.inst_operands` by
+      metis_tac[dfg_block_local_no_self_ref] >>
+    `step_inst_base inst s_j = OK s_j1` by
+      (gvs[step_inst_non_invoke]) >>
+    `eval_op_env op1 r.vs_vars = eval_op_env op1 s_j.vs_vars` by
+      (irule eval_op_env_flookup_eq >> rpt strip_tac >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands /\ _ ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- (gvs[MEM] >> metis_tac[])) >> simp[]) >>
+    `eval_op_env op2 r.vs_vars = eval_op_env op2 s_j.vs_vars` by
+      (irule eval_op_env_flookup_eq >> rpt strip_tac >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands /\ _ ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- (gvs[MEM] >> metis_tac[])) >> simp[]) >>
+    qspecl_then [`inst`, `s_j`, `s_j1`, `v`, `op1`, `op2`]
+      mp_tac compare_full_step_outputs >>
+    (impl_tac >- metis_tac[]) >>
+    strip_tac >>
+    qexistsl_tac [`w1`, `w2`] >> gvs[])
+  >- ( (* Case A: inst not in this block *)
     mp_tac (Q.SPECL [`fn`, `bb`, `fuel`, `ctx`, `s`, `r`, `v`, `inst`]
       case_a_setup) >>
     (impl_tac >- (simp[dfg_tracked_opcode_def] >> metis_tac[])) >> strip_tac >>
@@ -2218,13 +2508,18 @@ Proof
       (gvs[TO_FLOOKUP] >> metis_tac[]) >>
     `eval_op_env op1 r.vs_vars = eval_op_env op1 s.vs_vars` by
       (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-       first_assum irule >> gvs[MEM]) >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- gvs[MEM]) >> simp[]) >>
     `eval_op_env op2 r.vs_vars = eval_op_env op2 s.vs_vars` by
       (irule eval_op_env_flookup_eq >> rpt strip_tac >>
-       first_assum irule >> gvs[MEM]) >>
+       qpat_x_assum `!u. MEM (Var u) inst.inst_operands ==> _`
+         (qspec_then `u` mp_tac) >>
+       (impl_tac >- gvs[MEM]) >> simp[]) >>
     qpat_x_assum `dfg_compare_full_sound _ s.vs_vars` mp_tac >>
     simp[dfg_compare_full_sound_def] >> disch_tac >>
     first_x_assum (qspecl_then [`v`, `inst`, `op1`, `op2`] mp_tac) >>
+    (impl_tac >- metis_tac[]) >>
     simp[])
 QED
 

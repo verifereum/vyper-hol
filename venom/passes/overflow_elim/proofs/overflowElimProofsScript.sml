@@ -84,6 +84,78 @@ Proof
   simp[analysis_block_transform_widen_def]
 QED
 
+(* Helper: executor output FLOOKUP implies FDOM membership. *)
+Triviality exec_pure1_output_in_fdom[local]:
+  !f inst s s' out.
+    exec_pure1 f inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  metis_tac[exec_pure1_flookup, FDOM_FLOOKUP]
+QED
+
+Triviality exec_pure2_output_in_fdom[local]:
+  !f inst s s' out.
+    exec_pure2 f inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  metis_tac[exec_pure2_flookup, FDOM_FLOOKUP]
+QED
+
+Triviality step_assign_output_in_fdom[local]:
+  !inst s s' out.
+    inst.inst_opcode = ASSIGN /\
+    step_inst_base inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def] >>
+  Cases_on `eval_operand h s` >> gvs[update_var_def, FDOM_FUPDATE]
+QED
+
+Triviality step_iszero_output_in_fdom[local]:
+  !inst s s' out.
+    inst.inst_opcode = ISZERO /\
+    step_inst_base inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def, exec_pure1_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def, exec_pure1_def] >>
+  Cases_on `eval_operand h s` >> gvs[update_var_def, FDOM_FUPDATE]
+QED
+
+val tracked_pure2_output_finish_tac =
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `t'` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `eval_operand h s` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `eval_operand h' s` >> gvs[update_var_def, FDOM_FUPDATE];
+
+Triviality step_pure2_output_in_fdom[local]:
+  !inst s s' out.
+    (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/
+     inst.inst_opcode = GT \/ inst.inst_opcode = SLT \/
+     inst.inst_opcode = SGT \/ inst.inst_opcode = ADD \/
+     inst.inst_opcode = SUB) /\
+    step_inst_base inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >> gvs[]
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+QED
+
 (* Helper: after executing a tracked opcode, the output variable is in FDOM *)
 Triviality step_tracked_output_in_fdom[local]:
   !fuel ctx inst s s' out.
@@ -96,8 +168,25 @@ Proof
   imp_res_tac tracked_step_inst_base >>
   qpat_x_assum `dfg_tracked_opcode _`
     (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >>
-  gvs[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-      AllCaseEqs(), update_var_def, FDOM_FUPDATE]
+  gvs[]
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_assign_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_iszero_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
 QED
 
 Triviality state_equiv_empty_eq[local]:

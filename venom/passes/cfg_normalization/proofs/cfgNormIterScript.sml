@@ -1021,5 +1021,8 @@ Proof
   simp[cfg_norm_fn_def, LET_THM] >>
   `s with <|vs_current_bb := s.vs_current_bb; vs_inst_idx := 0|> = s`
     by simp[venomStateTheory.venom_state_component_equality] >>
-  gvs[]
+  `s with vs_current_bb := s.vs_current_bb = s`
+    by simp[venomStateTheory.venom_state_component_equality] >>
+  ASM_REWRITE_TAC[] >>
+  first_assum ACCEPT_TAC
 QED
