@@ -2077,6 +2077,94 @@ Proof
   fs[within_block_iszero_inv_def] >> metis_tac[]
 QED
 
+(* Prefix of a valid path is valid *)
+Triviality is_fn_path_take[local]:
+  !fn l1 l2. is_fn_path fn (l1 ++ l2) ==> is_fn_path fn l1
+Proof
+  gen_tac >> Induct_on `l1` >> simp[is_fn_path_def] >>
+  rpt gen_tac >>
+  Cases_on `l1`
+  >- simp[is_fn_path_def]
+  >- (simp[is_fn_path_def] >> rpt strip_tac >>
+      first_x_assum (qspec_then `l2` mp_tac) >> simp[])
+QED
+
+(* Dominance is antisymmetric: mutual dominance implies equality *)
+Triviality fn_dominates_antisym[local]:
+  !fn a b. fn_dominates fn a b /\ fn_dominates fn b a /\ a <> b ==> F
+Proof
+  spose_not_then strip_assume_tac >>
+  `fn_reachable fn b` by metis_tac[fn_dominates_dom_reachable] >>
+  fs[fn_reachable_def] >>
+  `?path. is_fn_path fn path /\ path <> [] /\
+          HD path = entry /\ LAST path = b` by
+    metis_tac[rtc_to_fn_path] >>
+  `!n path. LENGTH path <= n /\
+     is_fn_path fn path /\ path <> [] /\
+     HD path = entry /\ LAST path = b ==> F`
+    suffices_by metis_tac[arithmeticTheory.LESS_EQ_REFL] >>
+  completeInduct_on `n` >> rpt strip_tac >>
+  `MEM a path'` by
+    (qpat_x_assum `fn_dominates fn a b`
+       (strip_assume_tac o REWRITE_RULE[fn_dominates_def]) >>
+     metis_tac[]) >>
+  qpat_x_assum `MEM a path'`
+    (strip_assume_tac o ONCE_REWRITE_RULE[listTheory.MEM_SPLIT_APPEND_first]) >>
+  rename1 `path' = pfx_a ++ [a] ++ sfx_a` >>
+  `sfx_a <> []` by
+    (CCONTR_TAC >> gvs[listTheory.LAST_APPEND_CONS]) >>
+  `is_fn_path fn (pfx_a ++ [a])` by
+    metis_tac[is_fn_path_take, listTheory.APPEND_ASSOC] >>
+  `MEM b (pfx_a ++ [a])` by
+    (qpat_x_assum `fn_dominates fn b a` mp_tac >>
+     REWRITE_TAC[fn_dominates_def] >> strip_tac >>
+     pop_assum (qspec_then `pfx_a ++ [a]` mp_tac) >>
+     simp[listTheory.LAST_APPEND_CONS] >>
+     disch_then irule >>
+     Cases_on `pfx_a` >> gvs[]) >>
+  `MEM b pfx_a` by
+    (qpat_x_assum `MEM b (pfx_a ++ [a])` mp_tac >>
+     simp[listTheory.MEM_APPEND]) >>
+  qpat_x_assum `MEM b pfx_a`
+    (strip_assume_tac o ONCE_REWRITE_RULE[listTheory.MEM_SPLIT_APPEND_first]) >>
+  rename1 `pfx_a = pfx_b ++ [b] ++ sfx_b` >>
+  `is_fn_path fn (pfx_b ++ [b])` by
+    metis_tac[is_fn_path_take, listTheory.APPEND_ASSOC] >>
+  first_x_assum (qspec_then `LENGTH (pfx_b ++ [b])` mp_tac) >>
+  impl_tac >- (
+    gvs[listTheory.LENGTH_APPEND] >> DECIDE_TAC) >>
+  disch_then (qspec_then `pfx_b ++ [b]` mp_tac) >>
+  simp[listTheory.LAST_APPEND_CONS] >>
+  Cases_on `pfx_b` >> gvs[]
+QED
+
+(* Under SSA, operands of instructions in a strict dominator block
+   are not outputs of instructions in the dominated block *)
+Triviality ssa_cross_block_operand_not_output[local]:
+  !fn0 d_bb bb inst v.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    MEM d_bb fn0.fn_blocks /\ MEM bb fn0.fn_blocks /\
+    MEM inst d_bb.bb_instructions /\
+    MEM (Var v) inst.inst_operands /\
+    fn_dominates fn0 d_bb.bb_label bb.bb_label /\
+    d_bb.bb_label <> bb.bb_label ==>
+    ~MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  `ssa_form fn0 /\ def_dominates_uses fn0` by fs[wf_ssa_def] >>
+  fs[def_dominates_uses_def] >>
+  first_x_assum (qspecl_then [`d_bb`, `inst`, `v`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `d_bb <> bb` by (CCONTR_TAC >> gvs[]) >>
+  Cases_on `def_bb = bb`
+  >- (gvs[] >>
+      `fn_dominates fn0 bb.bb_label d_bb.bb_label` by simp[] >>
+      metis_tac[fn_dominates_antisym])
+  >- (`MEM v (FLAT (MAP (\i. i.inst_outputs) def_bb.bb_instructions))` by
+        (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+      metis_tac[ssa_output_not_in_other_block])
+QED
+
 Triviality strict_dom_iszero_inv_preserved[local]:
   !fn0 dfg bb fuel ctx s s'.
     wf_function fn0 /\ wf_ssa fn0 /\
@@ -2093,10 +2181,54 @@ Triviality strict_dom_iszero_inv_preserved[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `ssa_form fn0` by fs[wf_ssa_def] >>
-  simp[strict_dom_iszero_inv_def] >> rpt gen_tac >> rpt strip_tac >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  rw[strict_dom_iszero_inv_def] >> rpt strip_tac >>
   Cases_on `d_bb.bb_label = s.vs_current_bb`
-  >- cheat
-  >- cheat
+  >- ((* d_bb = bb: ISZERO executed during this block *)
+      `d_bb = bb` by
+        (`d_bb.bb_label = bb.bb_label` by gvs[] >>
+         metis_tac[same_label_same_block]) >>
+      gvs[] >>
+      `MEM x inst.inst_outputs` by
+        metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+      qspecl_then [`fn0`, `bb`, `fuel`, `ctx`, `s`, `s'`,
+                   `inst`, `x`, `op`] mp_tac exec_block_iszero_val >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`val_x`, `val_op`] mp_tac) >> simp[])
+  >- ((* d_bb ≠ bb: values preserved across exec_block *)
+      `d_bb <> bb` by (CCONTR_TAC >> gvs[]) >>
+      `MEM x inst.inst_outputs` by
+        metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+      `MEM s'.vs_current_bb (bb_succs bb)` by
+        (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `s'`]
+           mp_tac exec_block_current_bb_in_succs >>
+         impl_tac >- (
+           simp[] >> conj_tac >-
+             (rpt strip_tac >> spose_not_then assume_tac >>
+              fs[bb_well_formed_def] >> res_tac >> DECIDE_TAC) >>
+           fs[bb_well_formed_def]) >>
+         simp[]) >>
+      `fn_cfg_edge fn0 s.vs_current_bb s'.vs_current_bb` by
+        (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+      `fn_reachable fn0 s'.vs_current_bb` by
+        metis_tac[fn_reachable_step] >>
+      `fn_dominates fn0 d_bb.bb_label s.vs_current_bb` by
+        metis_tac[fn_dominates_predecessor] >>
+      `~MEM x (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+        metis_tac[ssa_output_not_in_other_block] >>
+      `lookup_var x s' = lookup_var x s` by
+        metis_tac[exec_block_preserves_non_output_vars] >>
+      `eval_operand op s' = eval_operand op s` by
+        (Cases_on `op` >> simp_tac std_ss [eval_operand_def]
+         >- (rename1 `lookup_var vn` >>
+             `MEM (Var vn) inst.inst_operands` by simp[] >>
+             `~MEM vn (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+               metis_tac[ssa_cross_block_operand_not_output] >>
+             metis_tac[exec_block_preserves_non_output_vars])
+         >- (`s'.vs_labels = s.vs_labels` by
+               metis_tac[venomExecPropsTheory.exec_block_preserves_labels] >>
+             simp[])) >>
+      fs[strict_dom_iszero_inv_def] >> metis_tac[])
 QED
 
 (* ao_handle_offset_inst preserves inst_id *)
