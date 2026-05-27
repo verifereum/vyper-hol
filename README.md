@@ -96,12 +96,26 @@ The [Verifereum repository](https://github.com/verifereum/verifereum) includes i
 ### Running the Vyper test suite
 
 The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`.
-The exported fixtures are obtained using the Vyper repository.
-To run the Vyper test suite on our definitional interpreter, follow this approach:
 
-1. Generate the Vyper tests using `pytest -s -n0 --export tests/export -m "not fuzzing" tests/functional`.
-2. Link the export directory into `tests/vyper-test-exports` (e.g., `ln -s ../vyper/tests/export tests/vyper-test-exports`).
-3. Set the `VFMDIR` environment variable to a path of a clone of the Verifereum repository (tracking `main`).
-4. `cd tests/generated` and then run `Holmake`.
+**CI workflow (recommended reference):** The GitHub Actions workflow (`.github/workflows/holbuild.yml`) automates the full process:
 
-CI uses the same layout and currently exports fixtures from a Vyper checkout during the workflow run.
+1. Sets up PolyML, HOL4, Verifereum, and `holbuild`
+2. Clones Vyper, installs it, and exports tests via `pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional`
+3. Runs test groups in parallel using `holbuild` targeting `vyperTest_*Theory`
+
+**Local setup:**
+
+1. Install HOL4, set `HOLDIR` to your HOL installation, and install [`holbuild`](https://github.com/charles-cooper/holbuild).
+2. Clone Verifereum and set `VFMDIR` to its path (referenced by `holproject.toml`).
+3. Export Vyper tests:
+```bash
+      git clone https://github.com/vyperlang/vyper.git vyper-src
+      cd vyper-src
+      pip install . --group test
+      pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+```
+
+4. Run tests with holbuild, e.g.:
+```bash
+     holbuild --holdir "$HOLDIR" -j$(nproc) build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
+```
