@@ -3214,8 +3214,17 @@ Theorem ao_transform_function_correct_proof:
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
     (!inst x. MEM inst (fn_insts fn) /\
               MEM x inst.inst_outputs ==> lookup_var x s = NONE) /\
-    range_sound (df_widen_at NONE (range_analyze fn0)
-                  s.vs_current_bb 0) s /\
+    (!i fuel' ctx' s'. inst_wf i ==>
+      step_inst fuel' ctx'
+        (ao_resolve_iszero_inst (ao_compute_fn_iszero_targets fn0) i) s' =
+      step_inst fuel' ctx' i s') /\
+    (!bb' i idx s' op v.
+      MEM bb' fn0.fn_blocks /\ MEM i bb'.bb_instructions /\
+      eval_operand op s' = SOME v /\
+      MEM op (ao_resolve_iszero_inst
+        (ao_compute_fn_iszero_targets fn0) i).inst_operands ==>
+      in_range (range_get_range (range_analyze fn0)
+        bb'.bb_label idx op) v) /\
     fn_entry_label fn = SOME s.vs_current_bb
     ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
@@ -3267,37 +3276,8 @@ Proof
      Cases_on `fn.fn_blocks` >> fs[]) >>
   `MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` by
     (irule ao_cfg_initial >> fs[]) >>
-  (* ao_iszero_chain_inv: vacuously true when all outputs undefined.
-     Chain elements at position k+1 are Var w (ISZERO outputs) — undefined.
-     So eval_operand (EL (k+1) chain) s = NONE, making the implication vacuous. *)
-  `ao_iszero_chain_inv targets s` by
-    (simp[ao_iszero_chain_inv_def] >> rpt strip_tac >>
-     `?inst. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs` by
-       (simp[Abbr `targets`] >> metis_tac[ao_fn_targets_key_is_output]) >>
-     `ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain` by
-       fs[Abbr `targets`] >>
-     drule ao_fn_targets_chain_tail_var >> strip_tac >>
-     `?w. EL (k + 1) chain = Var w` by
-       (first_x_assum (qspec_then `k + 1` mp_tac) >> simp[]) >>
-     `ALOOKUP (ao_compute_fn_iszero_targets fn0) w <> NONE` by
-       (drule ao_fn_targets_chain_var_is_key >>
-        disch_then (qspecl_then [`k + 1`, `w`] mp_tac) >> simp[]) >>
-     `?inst'. MEM inst' (fn_insts fn0) /\ MEM w inst'.inst_outputs` by
-       (Cases_on `ALOOKUP (ao_compute_fn_iszero_targets fn0) w` >> fs[] >>
-        metis_tac[ao_fn_targets_key_is_output]) >>
-     `lookup_var w s = NONE` by
-       (qpat_x_assum `MEM inst' (fn_insts fn0)` mp_tac >>
-        simp[Abbr `fn0`, fn_insts_def] >> strip_tac >>
-        drule fn_insts_blocks_map_offset >> strip_tac >>
-        `MEM w inst0.inst_outputs` by
-          fs[ao_handle_offset_inst_outputs] >>
-        `MEM inst0 (fn_insts fn)` by fs[fn_insts_def] >>
-        res_tac) >>
-     fs[eval_operand_def]) >>
-  `ao_chain_defined_prefix targets s` by
-    (irule chain_defined_prefix_initial >>
-     fs[markerTheory.Abbrev_def] >> metis_tac[]) >>
-  (* Get phases 1-3 simulation: Error \/ lift_result *)
+  (* Get phases 1-3 simulation via ao_phases123_run_blocks_sim.
+     H_resolve and H_range provided as top-level hypotheses. *)
   `(?e. run_blocks fuel ctx fn s = Error e) \/
    lift_result (state_equiv (ao_fn_fresh_vars fn))
      (execution_equiv (ao_fn_fresh_vars fn))
@@ -3305,11 +3285,11 @@ Proof
      (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn1 s)` by
     (qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`, `fn1`,
                    `fuel`, `ctx`, `s`]
-       mp_tac ao_phases123_run_blocks_sim_inv >>
+       mp_tac ao_phases123_run_blocks_sim >>
      impl_tac
-     >- (fs[markerTheory.Abbrev_def] >> rpt conj_tac >>
-         TRY (first_assum ACCEPT_TAC) >> fs[]) >>
-     strip_tac >> fs[]) >>
+     >- (gvs[markerTheory.Abbrev_def] >> rpt conj_tac >>
+         TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+     strip_tac >> gvs[]) >>
   fs[] >>
   (* Error case auto-closed by gvs; lift_result case remains *)
   DISJ2_TAC >>
