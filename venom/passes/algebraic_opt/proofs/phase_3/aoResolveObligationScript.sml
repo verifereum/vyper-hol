@@ -77,6 +77,42 @@ Definition ao_targets_wf_def:
       1 < LENGTH chain /\ LAST chain = Var v
 End
 
+(* DFG-based iszero invariant: for each variable defined by an ISZERO
+   in the DFG, if both the output and operand are defined, the output
+   equals bool_to_word(operand = 0w). Unlike ao_iszero_chain_inv, this
+   is preserved at block boundaries because it references defining
+   instructions (stable under SSA) rather than chain sequences. *)
+Definition ao_iszero_dfg_inv_def:
+  ao_iszero_dfg_inv dfg s <=>
+    !x inst op.
+      dfg_get_def dfg x = SOME inst /\
+      inst.inst_opcode = ISZERO /\ inst.inst_operands = [op] ==>
+      !val_x val_op.
+        lookup_var x s = SOME val_x /\
+        eval_operand op s = SOME val_op ==>
+        val_x = bool_to_word (val_op = 0w)
+End
+val _ = delsimps ["ao_iszero_dfg_inv_def"]
+
+Theorem ao_iszero_dfg_inv_initial:
+  !dfg s.
+    (!x inst. dfg_get_def dfg x = SOME inst ==>
+              lookup_var x s = NONE) ==>
+    ao_iszero_dfg_inv dfg s
+Proof
+  simp[ao_iszero_dfg_inv_def] >> rpt strip_tac >> res_tac >> gvs[]
+QED
+
+Theorem ao_iszero_dfg_inv_inst_idx_iff:
+  !dfg s n. ao_iszero_dfg_inv dfg (s with vs_inst_idx := n) <=>
+            ao_iszero_dfg_inv dfg s
+Proof
+  rw[ao_iszero_dfg_inv_def, lookup_var_def] >> eq_tac >> rpt strip_tac >>
+  res_tac >> gvs[] >>
+  qpat_x_assum `eval_operand _ _ = _` mp_tac >>
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
+QED
+
 Theorem ao_chains_defined_at_empty:
   !st. ao_chains_defined_at [] st
 Proof
