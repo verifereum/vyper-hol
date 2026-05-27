@@ -2506,9 +2506,8 @@ Proof
   simp[]
 QED
 
-(* Per-block simulation using analysis_block_sim_inv_at.
-   Threads range analysis (sound) and DFG/chain invariants (sinv)
-   through each instruction via the index-restricted framework. *)
+(* ao_block_sim_range: DEAD CODE — only used by ao_phases123_run_blocks_sim_inv
+   which is also dead. The top-level theorem uses ao_phases123_run_blocks_sim. *)
 Triviality ao_block_sim_range[local]:
   !fn fn0 mid dfg ra targets bb fv fuel ctx s.
     Abbrev(fn0 = fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
