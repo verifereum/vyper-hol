@@ -79,6 +79,28 @@ Proof
   rw[exec_read1_def] >> exec_state_equiv_tac
 QED
 
+Triviality state_equiv_step_base_concl:
+  !inst s s'.
+    state_equiv (set inst.inst_outputs) s s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\
+    s'.vs_code = s.vs_code /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_labels = s.vs_labels /\
+    s'.vs_params = s.vs_params /\
+    s'.vs_prev_hashes = s.vs_prev_hashes /\
+    s'.vs_halted = s.vs_halted /\
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_prev_bb = s.vs_prev_bb /\
+    (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s) /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_returndata = s.vs_returndata
+Proof
+  rw[state_equiv_def, execution_equiv_def] >>
+  first_x_assum drule >> simp[]
+QED
+
 val exec_write2_tac =
   rw[exec_write2_def, AllCaseEqs()] >> gvs[];
 
@@ -151,8 +173,12 @@ val write_finish_tac =
        lookup_var_def, FLOOKUP_UPDATE, eval_operands_def];
 
 val step_specific_write_tac =
-  rw[Once step_inst_def, step_inst_base_def] >>
-  gvs[AllCaseEqs()] >> write_finish_tac;
+  rw[Once step_inst_def] >>
+  gvs[] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >>
+  write_finish_tac;
 
 Theorem step_mstore_preserves:
   !fuel ctx inst s s'.
@@ -285,8 +311,7 @@ QED
 
 (* Tactic: prove step_inst_base preserves a field for non-terminators.
    Includes write_effects/is_alloca_op for conditional preservation. *)
-val step_base_field_tac =
-  rw[step_inst_base_def] >>
+val step_base_field_finish_tac =
   gvs[AllCaseEqs(), is_terminator_def,
       write_effects_def, all_effects_def, empty_effects_def,
       is_alloca_op_def] >>
@@ -302,8 +327,174 @@ val step_base_field_tac =
      revert_state_def, eval_operands_def,
      lookup_var_def, FLOOKUP_UPDATE];
 
+val step_base_field_tac =
+  rw[step_inst_base_def] >> step_base_field_finish_tac;
+
+Triviality nonterminator_opcode_class:
+  !op. ~is_terminator op ==>
+    is_effect_free_op op \/
+    is_mem_write_op op \/
+    is_alloca_op op \/
+    is_ext_call_op op \/
+    op = SSTORE \/ op = TSTORE \/ op = ISTORE \/ op = LOG \/
+    op = ASSERT \/ op = ASSERT_UNREACHABLE \/ op = INVOKE
+Proof
+  Cases >> EVAL_TAC
+QED
+
+val effect_free_opcode_tac =
+  fs[step_inst_base_def] >>
+  FIRST [
+    drule exec_pure1_state_equiv >> simp[],
+    drule exec_pure2_state_equiv >> simp[],
+    drule exec_pure3_state_equiv >> simp[],
+    drule exec_read0_state_equiv >> simp[],
+    drule exec_read1_state_equiv >> simp[],
+    gvs[AllCaseEqs()] >>
+    TRY (irule state_equiv_refl) >>
+    TRY (irule state_equiv_subset >> qexists_tac `{out}` >>
+         simp[update_var_state_equiv, SUBSET_DEF])
+  ];
+
+Triviality step_inst_base_effect_free_state_equiv_local:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    is_effect_free_op inst.inst_opcode ==>
+    state_equiv (set inst.inst_outputs) s s'
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_effect_free_op_def]
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+QED
+
+val mem_write_opcode_tac =
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >>
+  fs[exec_write2_def] >>
+  gvs[AllCaseEqs()] >>
+  fs[mstore_def, mstore8_def, mcopy_def, write_memory_with_expansion_def,
+     lookup_var_def, update_var_def, contract_storage_def,
+     write_effects_def, is_alloca_op_def];
+
+Triviality step_inst_base_mem_write_preserves_all:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    is_mem_write_op inst.inst_opcode ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\
+    s'.vs_code = s.vs_code /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_labels = s.vs_labels /\
+    s'.vs_params = s.vs_params /\
+    s'.vs_prev_hashes = s.vs_prev_hashes /\
+    s'.vs_halted = s.vs_halted /\
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_prev_bb = s.vs_prev_bb /\
+    (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s) /\
+    (~is_alloca_op inst.inst_opcode /\
+     Eff_IMMUTABLES NOTIN write_effects inst.inst_opcode ==>
+     s'.vs_immutables = s.vs_immutables) /\
+    (~is_alloca_op inst.inst_opcode /\
+     Eff_RETURNDATA NOTIN write_effects inst.inst_opcode ==>
+     s'.vs_returndata = s.vs_returndata)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_mem_write_op_def]
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+QED
+
+Triviality step_inst_base_mem_write_preserves_static_fields:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    is_mem_write_op inst.inst_opcode ==>
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_logs = s.vs_logs /\
+    s'.vs_accounts = s.vs_accounts /\
+    contract_storage s' = contract_storage s
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_mem_write_op_def]
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+  >- mem_write_opcode_tac
+QED
+
 (* Single mega-lemma: all fields preserved by step_inst_base for
-   non-terminators. One 94-opcode case split. *)
+   non-terminators. One 94-opcode case split instead of 11 separate ones.
+   Also includes non-output variable preservation and conditional
+   write-effects preservation (for fields not in write_effects). *)
 Theorem step_inst_base_preserves_all:
   !inst s s'. step_inst_base inst s = OK s' /\
     ~is_terminator inst.inst_opcode ==>
@@ -326,7 +517,26 @@ Theorem step_inst_base_preserves_all:
      Eff_RETURNDATA NOTIN write_effects inst.inst_opcode ==>
      s'.vs_returndata = s.vs_returndata)
 Proof
-  step_base_field_tac
+  rpt gen_tac >> strip_tac >>
+  drule nonterminator_opcode_class >> strip_tac
+  >- (drule_all step_inst_base_effect_free_state_equiv_local >>
+      strip_tac >> drule state_equiv_step_base_concl >> simp[])
+  >- (drule_all step_inst_base_mem_write_preserves_all >> simp[])
+  >- (Cases_on `inst.inst_opcode` >>
+      gvs[is_alloca_op_def] >>
+      gvs[step_inst_base_def] >>
+      step_base_field_finish_tac)
+  >- (Cases_on `inst.inst_opcode` >>
+      gvs[is_ext_call_op_def] >>
+      gvs[step_inst_base_def] >>
+      step_base_field_finish_tac)
+  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
+  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
+  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
+  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
+  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
+  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
+  >- gvs[step_inst_base_def]
 QED
 
 (* Generic lift: from step_inst_base mega-lemma to step_inst for any field *)
