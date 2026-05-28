@@ -2571,10 +2571,77 @@ Resume eval_preserves_swt[Pop_vht]:
 QED
 
 Resume eval_preserves_swt[TypeBuiltin]:
-  rpt gen_tac >> strip_tac >>
+  (* Recipe: Cases_on tb BEFORE strip_tac to avoid sibling-goal duplication.
+     Two flavours: AbiEncode (new admission, length-bound from
+     abi_encode_bound_ok) and everything else (existing master lemma). *)
+  rpt gen_tac >>
+  Cases_on `?b. tb = AbiEncode b`
+  >- (
+    (* AbiEncode branch *)
+    fs[] >> rpt BasicProvers.VAR_EQ_TAC >>
+    strip_tac >>
+    rpt gen_tac >> strip_tac >>
+    qpat_x_assum `well_typed_expr _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_TypeBuiltin]) >>
+    (* Only the AbiEncode disjunct is consistent (other disjunct has !b. tb<>AbiEncode b) *)
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    rewrite_tac[ev_TypeBuiltin] >>
+    simp_tac std_ss [bind_apply, ignore_bind_apply, BETA_THM] >>
+    simp_tac (srw_ss()) [type_check_def, assert_def] >>
+    reverse (Cases_on `type_builtin_args_length_ok (AbiEncode b) (LENGTH es)`) >>
+    ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [raise_def] >>
+    TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+         ASM_REWRITE_TAC[] >> NO_TAC) >>
+    (* Discharge guarded P8 IH (after Cases_on tb, IH is over s'' t — two args) *)
+    last_x_assum mp_tac >>
+    disch_then (mp_tac o Q.SPECL [`st`, `st`]) >>
+    simp_tac (srw_ss()) [type_check_def, assert_def] >>
+    (impl_tac >- ASM_REWRITE_TAC[]) >>
+    disch_then assume_tac >>
+    strip_tac >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs _ _ _ = (res_es, st1)` >>
+    first_x_assum drule_all >> strip_tac >>
+    qpat_x_assum `_ = (res, st')` mp_tac >>
+    reverse (Cases_on `res_es`) >> simp_tac (srw_ss()) [] >>
+    TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+         ASM_REWRITE_TAC[sumTheory.INR_neq_INL] >> NO_TAC) >>
+    simp_tac std_ss [lift_sum_def, bind_apply, BETA_THM] >>
+    Cases_on `evaluate_type_builtin cx (AbiEncode b) typ x` >>
+    simp_tac (srw_ss()) [return_def, raise_def] >>
+    TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+         ASM_REWRITE_TAC[sumTheory.INR_neq_INL] >> NO_TAC) >>
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    ASM_REWRITE_TAC[] >>
+    (* HOIST the witnesses BEFORE rpt strip_tac fans out the goal tree.
+       This avoids re-running expensive `by` blocks per sibling. *)
+    `env.type_defs = get_tenv cx` by gvs[env_consistent_def] >>
+    `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) =
+       SOME (BaseTV (BytesT (Dynamic n)))` by (
+      `IS_SOME (evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))))` by
+        gvs[GSYM well_formed_type_def] >>
+      pop_assum mp_tac >>
+      rewrite_tac[evaluate_type_def] >>
+      simp_tac (srw_ss()) [LET_THM] >> rw[] >> simp[]) >>
+    qpat_x_assum `!vs. INL _ = INL _ ==> _` (assume_tac o Q.SPEC `x`) >>
+    fs[] >>
+    `LIST_REL (\t v. ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
+                          value_has_type tv v) (MAP expr_type es) x` by (
+      qpat_x_assum `LIST_REL _ x es` mp_tac >>
+      simp[LIST_REL_EL_EQN, listTheory.EL_MAP] >> metis_tac[]) >>
+    `value_has_type (BaseTV (BytesT (Dynamic n))) x'` by
+      metis_tac[evaluate_type_builtin_AbiEncode_well_typed] >>
+    rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+    gvs[materialise_def, return_def, expr_type_def,
+        toplevel_value_typed_def]) >>
+  (* Non-AbiEncode branch — existing proof *)
+  strip_tac >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_TypeBuiltin]) >>
+  (* AbiEncode disjunct is contradicted by `?b. tb = AbiEncode b` = F *)
+  TRY (gvs[] >> NO_TAC) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[ev_TypeBuiltin] >>
   simp_tac std_ss [bind_apply, ignore_bind_apply, BETA_THM] >>
@@ -2583,12 +2650,14 @@ Resume eval_preserves_swt[TypeBuiltin]:
   ASM_REWRITE_TAC[] >> simp_tac (srw_ss()) [raise_def] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
        ASM_REWRITE_TAC[] >> NO_TAC) >>
-  (* Discharge guarded P8 IH: intro and simplify guard *)
-  last_x_assum mp_tac >>
+  (* Push the Cases_on residual aside; pick the genuine P8 IH. *)
+  qpat_x_assum `~?b. tb = AbiEncode b` mp_tac >>
+  qpat_x_assum `!s'' x t. type_check _ _ _ = _ ==> _` mp_tac >>
   disch_then (mp_tac o Q.SPECL [`st`, `()`, `st`]) >>
   simp_tac (srw_ss()) [type_check_def, assert_def] >>
   (impl_tac >- ASM_REWRITE_TAC[]) >>
   disch_then assume_tac >>
+  strip_tac >>  (* re-introduce the negation *)
   (* Intro the main eval chain *)
   strip_tac >>
   Cases_on `eval_exprs cx es st` >>

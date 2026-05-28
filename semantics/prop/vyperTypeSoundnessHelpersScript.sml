@@ -5947,6 +5947,27 @@ Proof
       within_int_bound_def, LET_THM]
 QED
 
+(* ---- AbiEncode preservation (uses Defs-side abi_encode_bound_ok) ----
+   The output type ty = BaseT (BytesT (Dynamic n)) and the user-discharged
+   bound abi_encode_bound_ok give the length witness.  The argument-type
+   side condition is the per-expression LIST_REL we get from the P8 IH. *)
+Theorem evaluate_type_builtin_AbiEncode_well_typed:
+  !cx ensure target_ty arg_tys vs v n.
+    abi_encode_bound_ok (get_tenv cx) ensure target_ty arg_tys n /\
+    LIST_REL (\t v. ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
+                         value_has_type tv v) arg_tys vs /\
+    evaluate_type_builtin cx (AbiEncode ensure) target_ty vs = INL v ==>
+    value_has_type (BaseTV (BytesT (Dynamic n))) v
+Proof
+  rpt strip_tac >>
+  fs[abi_encode_bound_ok_def] >>
+  first_x_assum drule >> simp[LET_THM] >> strip_tac >>
+  qpat_x_assum `evaluate_type_builtin _ _ _ _ = _` mp_tac >>
+  simp[evaluate_type_builtin_def, LET_THM, AllCaseEqs()] >>
+  strip_tac >> gvs[evaluate_abi_encode_def, AllCaseEqs(), LET_THM] >>
+  simp[value_has_type_def]
+QED
+
 (* evaluate_abi_decode produces well-typed values *)
 Theorem evaluate_abi_decode_well_typed:
   !tenv typ bs v tv.

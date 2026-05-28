@@ -274,6 +274,28 @@ Definition well_formed_type_def:
   well_formed_type tenv ty = IS_SOME (evaluate_type tenv ty)
 End
 
+(* ===== AbiEncode length-bound side condition =====
+   Typing-time obligation: for any well-typed argument tuple, the
+   runtime ABI-encoded bytes fit in the declared dynamic-bytes bound.
+   Discharged per-call by callers; consumed by the AbiEncode admission
+   in well_typed_expr_def and by the runtime preservation lemma in
+   vyperTypeSoundnessHelpers (evaluate_type_builtin_AbiEncode_well_typed).
+*)
+Definition abi_encode_bound_ok_def:
+  abi_encode_bound_ok type_defs ensure target_ty arg_tys n <=>
+    !vs.
+      LIST_REL (\t v. ?tv. evaluate_type type_defs t = SOME tv /\
+                           value_has_type tv v) arg_tys vs ==>
+      (let unwrap = (~ensure /\ needs_external_call_wrap target_ty) in
+       let result = (if unwrap then
+                       (case (target_ty, vs) of
+                          (TupleT [t], [v]) => evaluate_abi_encode type_defs t v
+                        | _ => INR "abi_encode unwrap")
+                     else evaluate_abi_encode type_defs target_ty
+                            (ArrayV (TupleV vs))) in
+       !bs. result = INL (BytesV bs) ==> LENGTH bs <= n)
+End
+
 (* ===== Subscript typing ===== *)
 
 Definition subscript_type_ok_def:
@@ -587,9 +609,16 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\
-     ty = target_ty /\
-     (!b. tb <> AbiEncode b) /\
-     well_formed_type env.type_defs ty) /\
+     well_formed_type env.type_defs ty /\
+     ((* Non-AbiEncode: result type = target type (existing admission) *)
+      ((!b. tb <> AbiEncode b) /\ ty = target_ty) \/
+      (* AbiEncode: result is dynamic-bytes; user discharges the length
+         bound abi_encode_bound_ok. target_ty is the encoded type. *)
+      (?ensure n. tb = AbiEncode ensure /\
+                  ty = BaseT (BytesT (Dynamic n)) /\
+                  well_formed_type env.type_defs target_ty /\
+                  abi_encode_bound_ok env.type_defs ensure target_ty
+                                      (MAP expr_type es) n))) /\
   well_typed_expr env (Pop ty tgt) =
     (?bd. well_typed_target env tgt (ArrayT ty bd)) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
