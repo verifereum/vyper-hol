@@ -4039,7 +4039,67 @@ Triviality ao_block_sim_local[local]:
       (exec_block fuel ctx bb s)
       (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `f = \(v:num) inst.
+    ao_transform_inst mid dfg ra bb.bb_label v targets inst` >>
+  qabbrev_tac `result =
+    idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions))` >>
+  qabbrev_tac `sound = \(n:num) (s:venom_state).
+    in_range_state (range_at_inst ra bb.bb_label n) s.vs_vars /\
+    within_block_iszero_inv fn0 bb n s` >>
+  qabbrev_tac `sinv = \(s:venom_state).
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    strict_dom_iszero_inv fn0 dfg s /\
+    ao_chain_defined_prefix targets s` >>
+  `ao_transform_block mid dfg ra targets bb =
+   analysis_block_transform 0 result f bb` by
+    (simp[analysis_block_transform_def, ao_transform_block_def,
+          Abbr `f`, Abbr `result`] >>
+     `MAPi (\idx inst.
+        ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+        bb.bb_instructions =
+      MAPi (\idx inst.
+        ao_transform_inst mid dfg ra bb.bb_label
+          (df_at 0
+            (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+            bb.bb_label idx) targets inst) bb.bb_instructions`
+       suffices_by simp[] >>
+     irule MAPi_CONG' >> simp[idx_df_state_at2]) >>
+  pop_assum SUBST1_TAC >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (simp_tac std_ss [listTheory.EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[mem_block_mem_fn_insts,
+               markerTheory.Abbrev_def, listTheory.EVERY_MEM]) >>
+  drule_all test_lookup_block >> strip_tac >>
+  qspecl_then
+    [`state_equiv fv`, `execution_equiv fv`, `sound`, `sinv`,
+     `f`, `bb`, `0`, `result`,
+     `\(ctx:'b) (inst:instruction) (v:num). SUC v`, `ARB:'b`]
+    mp_tac analysis_block_sim_inv_at
+  >> impl_tac >- (
+    rpt conj_tac
+    >- simp[state_equiv_execution_equiv_valid_state_rel]
+    >- metis_tac[state_equiv_trans]
+    >- metis_tac[execution_equiv_trans]
+    >- (* per-inst sim at index *)
+       cheat
+    >- simp[Abbr `f`, ao_transform_inst_structural]
+    >- first_assum ACCEPT_TAC
+    >- (* operand lookup under state_equiv *)
+       (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+        drule_all ao_fn0_operand_not_in_fv >> strip_tac >>
+        fs[state_equiv_def, execution_equiv_def])
+    >- (* transfer_sound: range_step_inv + wbiz_step *)
+       cheat
+    >- (* sound preserved by state_equiv fv *)
+       cheat
+    >- (* df_at chain *)
+       (rpt strip_tac >> simp[Abbr `result`, idx_df_state_at2])
+    >- (* sinv preserved by step_inst at index *)
+       cheat
+    >- (* sinv preserved by state_equiv fv *)
+       cheat)
+  >> cheat
 QED
 
 Theorem ao_phases123_run_blocks_sim_inv[local]:
