@@ -16,6 +16,54 @@ Proof
   EVAL_TAC
 QED
 
+Theorem noop_result_lengths:
+  compile_vyper noop_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "noop.hex")
+Proof
+  EVAL_TAC
+QED
+
+Theorem return_uint_result_lengths:
+  compile_vyper return_uint_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "return_uint.hex")
+Proof
+  EVAL_TAC
+QED
+
+Theorem return_arg_result_lengths:
+  compile_vyper return_arg_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "return_arg.hex")
+Proof
+  EVAL_TAC
+QED
+
+Theorem local_uint_result_lengths:
+  compile_vyper local_uint_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "local_uint.hex")
+Proof
+  EVAL_TAC
+QED
+
+Theorem add_arg_result_lengths:
+  compile_vyper add_arg_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "add_arg.hex")
+Proof
+  EVAL_TAC
+QED
+
+Theorem two_external_result_lengths:
+  compile_vyper two_external_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "two_external.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem storage_read_result_lengths:
   compile_vyper storage_read_program
     concretize_context_eval Linear =
