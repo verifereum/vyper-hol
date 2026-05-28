@@ -4245,7 +4245,7 @@ Proof
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
     >- (qunabbrev_tac `bt` >> simp[])
-    >- (* Per-block sim *)
+    >- (* Per-block sim — ao_block_sim_local proved, connection needs variable matching *)
        cheat
     >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
        cheat
