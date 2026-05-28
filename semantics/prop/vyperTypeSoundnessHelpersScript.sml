@@ -363,7 +363,8 @@ Theorem env_consistent_empty:
          toplevel_types := FEMPTY;
          type_defs := get_tenv cx;
          fn_sigs := FEMPTY;
-         flag_members := FEMPTY |> cx st
+         flag_members := FEMPTY;
+         hashmap_types := FEMPTY |> cx st
 Proof
   simp[env_consistent_def, finite_mapTheory.FLOOKUP_EMPTY,
        fn_sigs_consistent_def]
@@ -507,7 +508,8 @@ Theorem functions_well_typed_body:
            toplevel_types := FEMPTY;
            type_defs := get_tenv cx;
            fn_sigs := FEMPTY;
-           flag_members := FEMPTY |> dflts /\
+           flag_members := FEMPTY;
+           hashmap_types := FEMPTY |> dflts /\
       (!id typ. MEM (id, typ) args ==>
          FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
       MAP expr_type dflts =
@@ -558,7 +560,8 @@ Theorem functions_well_typed_body_full:
            toplevel_types := FEMPTY;
            type_defs := get_tenv cx;
            fn_sigs := FEMPTY;
-           flag_members := FEMPTY |> dflts /\
+           flag_members := FEMPTY;
+           hashmap_types := FEMPTY |> dflts /\
       (!id typ. MEM (id, typ) args ==>
          FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
       MAP expr_type dflts =
@@ -585,7 +588,13 @@ Theorem functions_well_typed_body_full:
          ?ts'. get_module_code cx src = SOME ts' /\
                lookup_flag fid ts' = SOME ls /\
                FLOOKUP (get_tenv cx) (string_to_num fid) =
-                 SOME (FlagArgs (LENGTH ls)))
+                 SOME (FlagArgs (LENGTH ls))) /\
+      (!src id kt vt.
+         FLOOKUP env_body.hashmap_types (src, id) = SOME (kt, vt) ==>
+         ?ts' is_transient id_str.
+           get_module_code cx src = SOME ts' /\
+           find_var_decl_by_num id ts' =
+             SOME (HashMapVarDecl is_transient kt vt, id_str))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `functions_well_typed _`
@@ -977,7 +986,13 @@ Theorem env_consistent_scopes_only:
        ?ts. get_module_code cx src_id_opt = SOME ts /\
             lookup_flag fid ts = SOME ls /\
             FLOOKUP (get_tenv cx) (string_to_num fid) =
-              SOME (FlagArgs (LENGTH ls)))
+              SOME (FlagArgs (LENGTH ls))) /\
+    (!src_id_opt id kt vt.
+       FLOOKUP env.hashmap_types (src_id_opt, id) = SOME (kt, vt) ==>
+       ?ts is_transient id_str.
+         get_module_code cx src_id_opt = SOME ts /\
+         find_var_decl_by_num id ts =
+           SOME (HashMapVarDecl is_transient kt vt, id_str))
 Proof
   simp[env_consistent_def]
 QED
@@ -1185,7 +1200,13 @@ Theorem bind_arguments_env_consistent:
        ?ts. get_module_code cx' src_id_opt = SOME ts /\
             lookup_flag fid ts = SOME ls /\
             FLOOKUP (get_tenv cx') (string_to_num fid) =
-              SOME (FlagArgs (LENGTH ls))) ==>
+              SOME (FlagArgs (LENGTH ls))) /\
+    (!src_id_opt id kt vt.
+       FLOOKUP env_body.hashmap_types (src_id_opt, id) = SOME (kt, vt) ==>
+       ?ts is_transient id_str.
+         get_module_code cx' src_id_opt = SOME ts /\
+         find_var_decl_by_num id ts =
+           SOME (HashMapVarDecl is_transient kt vt, id_str)) ==>
     env_consistent env_body cx' (st with scopes := [sc])
 Proof
   rpt strip_tac >>
@@ -3590,6 +3611,7 @@ Theorem env_consistent_weaken_var_types:
     env.global_types = env'.global_types /\
     env.toplevel_types = env'.toplevel_types /\
     env.flag_members = env'.flag_members /\
+    env.hashmap_types = env'.hashmap_types /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              FLOOKUP env'.var_types id = SOME ty) ==>
     env_consistent env cx st

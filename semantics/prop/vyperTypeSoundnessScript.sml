@@ -2966,7 +2966,8 @@ Resume eval_preserves_swt[intcall_tail]:
                 toplevel_types := FEMPTY;
                 type_defs := get_tenv (cx with stk updated_by
                                CONS (src_id_opt, fn));
-                fn_sigs := FEMPTY; flag_members := FEMPTY|>`,
+                fn_sigs := FEMPTY; flag_members := FEMPTY;
+                hashmap_types := FEMPTY|>`,
               `r'''`, `q`, `r'`]) >>
   impl_tac >- suspend "dflts_ih" >>
   strip_tac >>
@@ -3665,7 +3666,8 @@ Finalise eval_preserves_swt
 val ce_env_def = Define `
   ce_env = <| var_types := FEMPTY; global_types := FEMPTY;
               toplevel_types := FEMPTY; type_defs := FEMPTY;
-              fn_sigs := FEMPTY; flag_members := FEMPTY |>`;
+              fn_sigs := FEMPTY; flag_members := FEMPTY;
+              hashmap_types := FEMPTY |>`;
 
 val ce_acct_def = Define `
   ce_acct = <| nonce := 0; balance := 0; storage := K 0w; code := [] |>`;

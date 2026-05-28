@@ -357,6 +357,15 @@ Datatype:
     type_defs : (num |-> type_args);
     fn_sigs : ((num option # string) |-> (type list # type));
     flag_members : ((num option # string) |-> string list);
+    (* hashmap_types: for each (src_id_opt, num-id) that corresponds to a
+       HashMapVarDecl, record the (key_type, value_type) pair.  The value
+       carrier is the AST's `value_type` (= `Type type` or nested
+       `HashMapT type value_type`).  Used by the HashMap branches of
+       well_typed_target/well_typed_expr at Subscript / SubscriptTarget —
+       since toplevel_types maps HashMaps to NoneT (and hence
+       subscript_type_ok would fail), this side-channel carries the real
+       types.  See the corresponding env_consistent conjunct. *)
+    hashmap_types : ((num option # num) |-> (type # value_type));
   |>
 End
 
@@ -550,7 +559,17 @@ Definition env_consistent_def:
        ?ts. get_module_code cx src_id_opt = SOME ts /\
             lookup_flag fid ts = SOME ls /\
             FLOOKUP (get_tenv cx) (string_to_num fid) =
-              SOME (FlagArgs (LENGTH ls)))
+              SOME (FlagArgs (LENGTH ls))) /\
+    (* HashMap consistency (forward direction): if env claims a HashMap, the
+       module code agrees on key/value types.  Required by the HashMap branch
+       of well_typed_target/well_typed_expr Subscript: at step time we need
+       a HashMapVarDecl in the AST to justify treating the slot as a map. *)
+    (!src_id_opt id kt vt.
+       FLOOKUP env.hashmap_types (src_id_opt, id) = SOME (kt, vt) ==>
+       ?ts is_transient id_str.
+         get_module_code cx src_id_opt = SOME ts /\
+         find_var_decl_by_num id ts =
+           SOME (HashMapVarDecl is_transient kt vt, id_str))
 End
 
 (* ===== well_typed_expr: state-independent AST annotation consistency ===== *)
@@ -875,6 +894,13 @@ Definition functions_well_typed_def:
                  lookup_flag fid ts' = SOME ls /\
                  FLOOKUP (get_tenv cx) (string_to_num fid) =
                    SOME (FlagArgs (LENGTH ls))) /\
+        (* hashmap_types: match module HashMapVarDecl declarations *)
+        (!src id kt vt.
+           FLOOKUP env_body.hashmap_types (src, id) = SOME (kt, vt) ==>
+           ?ts' is_transient id_str.
+             get_module_code cx src = SOME ts' /\
+             find_var_decl_by_num id ts' =
+               SOME (HashMapVarDecl is_transient kt vt, id_str)) /\
         evaluate_type (get_tenv cx) ret = SOME ret_tv /\
         well_typed_stmts env_body ret body /\
         well_typed_exprs
@@ -883,7 +909,8 @@ Definition functions_well_typed_def:
              toplevel_types := FEMPTY;
              type_defs := get_tenv cx;
              fn_sigs := FEMPTY;
-             flag_members := FEMPTY |> dflts /\
+             flag_members := FEMPTY;
+             hashmap_types := FEMPTY |> dflts /\
         (!id typ. MEM (id, typ) args ==>
            FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
         MAP expr_type dflts =
