@@ -7,9 +7,14 @@
  * Internal proofs — consumers use props/execEquivPropsScript.sml
  *
  * TOP-LEVEL THEOREMS:
- *   - step_inst_result_equiv  : Instruction step preserves result_equiv
- *   - exec_block_state_equiv   : Block execution preserves state_equiv (OK case)
- *   - exec_block_result_equiv  : Block execution preserves result_equiv (all cases)
+ *   - step_inst_result_equiv       : If state_equiv and no operand vars in exception set, step_inst_base preserves result_equiv
+ *   - exec_block_result_equiv      : If state_equiv, no INVOKE, and no operand vars in exception set, exec_block preserves result_equiv
+ *   - exec_block_state_equiv       : OK-case corollary of exec_block_result_equiv (state_equiv)
+ *   - run_block_result_equiv        : run_block (eval_phis + exec_block) preserves result_equiv under same preconditions
+ *   - run_function_result_equiv    : If state_equiv and all blocks have no INVOKE and no operand vars in exception set, run_function preserves result_equiv
+ *   - run_function_result_equiv_closed : Variant with reachable-block set (safe) closed under successors
+ *   - run_block_lift_result / run_block_lift_result_equiv : Lift exec_block results to run_block results
+ *   - state_equiv_inst_idx         : Setting vs_inst_idx to same value on both sides preserves state_equiv
  *)
 
 Theory execEquivProofs
@@ -689,10 +694,9 @@ Proof
   irule write_memory_with_expansion_preserves >> simp[]
 QED
 
-(* OFFSET: now handled by step_inst_pure2_equiv (same as ADD) *)
 
-(* LOG: appends event to vs_logs.
-   Prove all operand evals are equal, then case analysis collapses. *)
+
+(* LOG: appends event to vs_logs *)
 Triviality step_inst_log_equiv:
   !vars inst s1 s2.
     state_equiv vars s1 s2 /\
@@ -1414,8 +1418,41 @@ Proof
   Cases_on `exec_block fuel ctx bb s2` >> gvs[result_equiv_def]
 QED
 
-(* run_block wrappers (run_block = exec_block with vs_inst_idx := 0) *)
-Triviality run_block_result_equiv:
+(* Updating vs_inst_idx to the same value on both sides preserves state_equiv *)
+Theorem state_equiv_inst_idx:
+  !vars s1 s2 n. state_equiv vars s1 s2 ==>
+    state_equiv vars (s1 with vs_inst_idx := n) (s2 with vs_inst_idx := n)
+Proof
+  rw[state_equiv_def, execution_equiv_def, lookup_var_def]
+QED
+
+Triviality eval_phis_state_equiv_OK_pair:
+  !s1 s2 vars insts v v'.
+    state_equiv vars s1 s2 /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) insts /\
+    eval_phis s1 insts = OK v /\
+    eval_phis s2 insts = OK v' ==>
+    state_equiv vars v v'
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s1`,`s2`,`vars`,`insts`,`v`] mp_tac eval_phis_state_equiv >>
+  simp[]
+QED
+
+Triviality EVERY_phi_operand_weaken:
+  !vars l.
+    (!inst. MEM inst l ==>
+            !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+            !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) l
+Proof
+  rpt gen_tac >> DISCH_TAC >>
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >> metis_tac[]
+QED
+
+Theorem run_block_result_equiv:
   !fuel ctx vars bb s1 s2.
     state_equiv vars s1 s2 /\
     EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
@@ -1423,17 +1460,52 @@ Triviality run_block_result_equiv:
             !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
     result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)
 Proof
-  rw[run_block_def] >> rpt strip_tac >>
-  `state_equiv vars (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0)` by
-    (fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
-  drule_all exec_block_result_equiv >> simp[]
+  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
+  imp_res_tac EVERY_phi_operand_weaken >>
+  mp_tac (Q.SPECL [`s1`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s1 bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  mp_tac (Q.SPECL [`s2`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  Cases_on `eval_phis s2 bb.bb_instructions` >> gvs[exec_result_distinct]
+  >- (
+    irule exec_block_result_equiv >>
+    (conj_tac >- metis_tac[]) >>
+    (conj_tac >- metis_tac[]) >>
+    irule state_equiv_inst_idx >>
+    imp_res_tac eval_phis_state_equiv_OK_pair
+  )
+  >- (
+    qspecl_then [`s1`,`s2`,`vars`,`bb.bb_instructions`,`v`] mp_tac
+      eval_phis_state_equiv >> simp[] >> strip_tac >> gvs[]
+  )
+  >- (
+    qspecl_then [`s2`,`s1`,`vars`,`bb.bb_instructions`,`v`] mp_tac
+      eval_phis_state_equiv >> simp[state_equiv_sym] >> strip_tac >> gvs[]
+  )
+  >- simp[result_equiv_def]
 QED
-
+Triviality run_block_OK_eq_exec_block:
+  !fuel ctx bb s s_phi.
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    run_block fuel ctx bb s =
+      exec_block fuel ctx bb (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rw[run_block_def]
+QED
+Triviality run_block_Error_eq:
+  !fuel ctx bb s e.
+    eval_phis s bb.bb_instructions = Error e ==>
+    run_block fuel ctx bb s = Error e
+Proof
+  rw[run_block_def]
+QED
 Triviality run_block_OK_inst_idx_0:
-  !fuel ctx bb s v.
     run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
 Proof
-  rw[run_block_def] >> metis_tac[exec_block_OK_inst_idx_0]
+  rw[run_block_def] >>
+  qspecl_then [`s`,`bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >>
+  strip_tac >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  metis_tac[exec_block_OK_inst_idx_0]
 QED
 
 Triviality run_block_current_bb_in_succs:
@@ -1445,9 +1517,12 @@ Triviality run_block_current_bb_in_succs:
          ~is_terminator (EL i bb.bb_instructions).inst_opcode) ==>
     MEM v.vs_current_bb (bb_succs bb)
 Proof
-  rw[run_block_def] >> rpt strip_tac >>
-  irule exec_block_current_bb_in_succs >> simp[] >>
-  qexistsl_tac [`ctx`, `fuel`, `s with vs_inst_idx := 0`] >> simp[]
+  rw[run_block_def] >>
+  qspecl_then [`s`,`bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >>
+  strip_tac >>
+  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
+  irule exec_block_current_bb_in_succs >> simp[phi_prefix_length_le] >>
+  qexistsl_tac [`ctx`, `fuel`, `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >> simp[phi_prefix_length_le]
 QED
 
 (* ==========================================================================
@@ -1468,30 +1543,25 @@ Triviality run_blocks_result_equiv:
     result_equiv vars (run_blocks fuel ctx fn s1) (run_blocks fuel ctx fn s2)
 Proof
   Induct_on `fuel`
-  >- (simp[run_blocks_def, result_equiv_def]) >>
+  >- simp[run_blocks_def, result_equiv_def] >>
   rpt strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
-  simp[] >>
+  ONCE_REWRITE_TAC[run_blocks_unfold] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
   >- simp[result_equiv_def] >>
-  rename1 `lookup_block _ _ = SOME bb` >> simp[] >>
-  `result_equiv vars
-    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
-    PURE_REWRITE_TAC[GSYM run_block_def] >>
-    irule run_block_result_equiv >> simp[] >>
-    first_x_assum drule >> strip_tac >> simp[] >>
-    rpt strip_tac >> res_tac) >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
-  gvs[result_equiv_def]
-  >> `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
-  Cases_on `v.vs_halted` >> gvs[result_equiv_def]
-  >- fs[state_equiv_def, execution_equiv_def] >>
-  first_x_assum irule >>
-  rpt strip_tac >> TRY res_tac >> TRY (first_assum ACCEPT_TAC)
+  rename1 `lookup_block _ _ = SOME bb` >>
+  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by
+    metis_tac[run_block_result_equiv] >>
+  Cases_on `run_block fuel ctx bb s1` >>
+  Cases_on `run_block fuel ctx bb s2` >>
+  gvs[result_equiv_def] >>
+  (* OK/OK case: need halted equivalence then IH *)
+  `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `v.vs_halted` >> gvs[result_equiv_def] >-
+    fs[state_equiv_def, execution_equiv_def] >>
+  (* Not halted: apply IH *)
+  first_x_assum irule >> simp[] >>
+  rpt strip_tac >> res_tac
 QED
 
 Theorem run_function_result_equiv:
@@ -1529,44 +1599,106 @@ Triviality run_blocks_result_equiv_closed:
     result_equiv vars (run_blocks fuel ctx fn s1) (run_blocks fuel ctx fn s2)
 Proof
   Induct_on `fuel` >-
-  (simp[run_blocks_def, result_equiv_def]) >>
+  simp[run_blocks_def, result_equiv_def] >>
   rpt strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
-  CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def]))) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
-  simp[] >>
+  ONCE_REWRITE_TAC[run_blocks_unfold] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks` >-
   simp[result_equiv_def] >>
-  rename1 `lookup_block _ _ = SOME bb` >> simp[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
   `bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
    EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
-   (!inst x. MEM inst bb.bb_instructions /\
-            MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
+   (!inst x. MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
    (!s. MEM s (bb_succs bb) ==> s IN safe)` by metis_tac[] >>
-  `result_equiv vars
-    (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-    (exec_block fuel ctx bb (s2 with vs_inst_idx := 0))` by (
-    PURE_REWRITE_TAC[GSYM run_block_def] >>
-    irule run_block_result_equiv >> simp[] >>
-    rpt strip_tac >> res_tac) >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx bb (s2 with vs_inst_idx := 0)` >>
-  gvs[result_equiv_def] >>
+  `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by
+    metis_tac[run_block_result_equiv] >>
+  Cases_on `run_block fuel ctx bb s1` >>
+  Cases_on `run_block fuel ctx bb s2` >> gvs[result_equiv_def] >>
   `v.vs_halted <=> v'.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
   Cases_on `v.vs_halted` >> gvs[result_equiv_def] >-
   fs[state_equiv_def, execution_equiv_def] >>
-  (* OK/OK, not halted - apply IH *)
-  `v.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
+  (* Not halted: successor must be in safe, then apply IH *)
+  `v.vs_inst_idx = 0` by metis_tac[run_block_OK_inst_idx_0] >>
+  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
     ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
     rpt strip_tac >> CCONTR_TAC >> fs[bb_well_formed_def] >> res_tac >> fs[]) >>
-  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
-  `MEM v.vs_current_bb (bb_succs bb)` by (
-    irule exec_block_current_bb_in_succs >> simp[] >>
-    qexistsl_tac [`ctx`, `fuel`, `s1 with vs_inst_idx := 0`] >> simp[]) >>
+  `MEM v.vs_current_bb (bb_succs bb)` by
+    metis_tac[run_block_current_bb_in_succs] >>
+  `v.vs_current_bb IN safe` by metis_tac[] >>
   first_x_assum irule >> simp[] >>
-  qexists_tac `safe` >> simp[] >> metis_tac[]
+  metis_tac[]
 QED
+
+(* =====================================================================
+   Universal helpers for lifting exec_block results to run_block results.
+   These handle the eval_phis wrapper uniformly, so pass proofs don't
+   need to do eval_phis case-splitting individually.
+   ===================================================================== *)
+
+(* Lift an exec_block-level lift_result to run_block-level.
+   Requires: eval_phis agrees on both blocks, and phi_prefix_length matches.
+   This is the universal pattern for pass correctness proofs. *)
+Theorem run_block_lift_result:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   fuel ctx bb bt_bb s.
+    phi_prefix_length bb.bb_instructions = phi_prefix_length bt_bb.bb_instructions /\
+    eval_phis s bb.bb_instructions = eval_phis s bt_bb.bb_instructions /\
+    (!s_phi.
+       eval_phis s bb.bb_instructions = OK s_phi ==>
+       lift_result R_ok R_term R_term
+         (exec_block fuel ctx bb
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+         (exec_block fuel ctx bt_bb
+           (s_phi with vs_inst_idx := phi_prefix_length bt_bb.bb_instructions))) ==>
+    lift_result R_ok R_term R_term
+      (run_block fuel ctx bb s) (run_block fuel ctx bt_bb s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (
+    (* eval_phis returns OK *)
+    rw[run_block_def] >>
+    `eval_phis s bt_bb.bb_instructions = OK s'` by fs[] >>
+    rw[lift_result_def] >>
+    qpat_x_assum `!s_phi. _ ==> _` (qspec_then `s'` mp_tac) >>
+    simp[])
+  >- (
+    (* eval_phis returns Error *)
+    rw[run_block_def] >>
+    `eval_phis s bt_bb.bb_instructions = Error e` by fs[] >>
+    simp[lift_result_def])
+QED
+
+(* Lift an exec_block-level result_equiv to run_block-level.
+   Requires: eval_phis agrees on both blocks, and phi_prefix_length matches. *)
+Theorem run_block_lift_result_equiv:
+  !vars fuel ctx bb bt_bb s.
+    phi_prefix_length bb.bb_instructions = phi_prefix_length bt_bb.bb_instructions /\
+    eval_phis s bb.bb_instructions = eval_phis s bt_bb.bb_instructions /\
+    (!s_phi.
+       eval_phis s bb.bb_instructions = OK s_phi ==>
+       result_equiv vars
+         (exec_block fuel ctx bb
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+         (exec_block fuel ctx bt_bb
+           (s_phi with vs_inst_idx := phi_prefix_length bt_bb.bb_instructions))) ==>
+    result_equiv vars (run_block fuel ctx bb s) (run_block fuel ctx bt_bb s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (
+    rw[run_block_def] >>
+    `eval_phis s bt_bb.bb_instructions = OK s'` by fs[] >>
+    qpat_x_assum `!s_phi. _ ==> _` (qspec_then `s'` mp_tac) >>
+    simp[result_equiv_is_lift_result])
+  >- (
+    rw[run_block_def] >>
+    `eval_phis s bt_bb.bb_instructions = Error e` by fs[] >>
+    simp[result_equiv_is_lift_result, lift_result_def])
+QED
+
 
 Theorem run_function_result_equiv_closed:
   !fuel ctx vars fn s1 s2 safe.

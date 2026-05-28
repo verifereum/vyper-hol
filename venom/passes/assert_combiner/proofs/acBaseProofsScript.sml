@@ -74,5 +74,7 @@ Theorem safe_between_step_is_some_mono:
     IS_SOME (lookup_var v s) ==>
     IS_SOME (lookup_var v s')
 Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> PHI` by gvs[ac_is_safe_between_def] >>
   metis_tac[step_inst_lookup_mono]
 QED

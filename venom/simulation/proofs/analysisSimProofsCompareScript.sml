@@ -12,9 +12,7 @@ Ancestors
   analysisSimDefs execEquivParamDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
-  venomState
-Libs
-  listTheory finite_mapTheory pred_setTheory
+  venomState list finite_map pred_set
 
 (* Shared simplification theorems for expanding Abbrev'd blocks
    WITHOUT triggering srw_ss() loops on FLAT/MAPi terms.
@@ -930,18 +928,431 @@ Proof
   (* Derive EVERY predicates for f1 and f2 groups *)
   \\ `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
        (f1 v inst)` by (
-    qpat_x_assum `!v' inst'. ~is_terminator _ /\ _ <> INVOKE ==>
-      EVERY _ (f1 _ _)`
+    Cases_on `inst.inst_opcode = PHI`
+    >- (
+      qpat_x_assum `!v' inst'. inst'.inst_opcode = PHI ==> f1 v' inst' = [inst']`
+        (qspecl_then [`v`, `inst`] mp_tac) >>
+      simp[EVERY_DEF])
+    >>
+    qpat_x_assum `!v' inst'. ~is_terminator _ /\ _ <> INVOKE /\ _ <> PHI ==> EVERY _ (f1 v' inst')`
       (qspecl_then [`v`, `inst`] mp_tac) >>
-    (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
-    simp_tac std_ss [])
+    simp[] >>
+    match_mp_tac EVERY_MONOTONIC >> simp[])
   \\ `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
        (f2 v inst)` by (
-    qpat_x_assum `!v' inst'. ~is_terminator _ /\ _ <> INVOKE ==>
-      EVERY _ (f2 _ _)`
+    Cases_on `inst.inst_opcode = PHI`
+    >- (
+      qpat_x_assum `!v' inst'. inst'.inst_opcode = PHI ==> f2 v' inst' = [inst']`
+        (qspecl_then [`v`, `inst`] mp_tac) >>
+      simp[EVERY_DEF])
+    >>
+    qpat_x_assum `!v' inst'. ~is_terminator _ /\ _ <> INVOKE /\ _ <> PHI ==> EVERY _ (f2 v' inst')`
       (qspecl_then [`v`, `inst`] mp_tac) >>
-    (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+    simp[] >>
+    match_mp_tac EVERY_MONOTONIC >> simp[])
+  \\ qspecl_then [`R_ok`, `R_term`, `f1 v inst`, `f2 v inst`,
+       `s1`, `s2`, `s1_0`, `s2_0`, `j1`, `j2`, `bb`, `g1`, `g2`,
+       `fuel`, `ctx`, `j1 + LENGTH (f1 v inst)`,
+       `j2 + LENGTH (f2 v inst)`]
+       mp_tac abc_normal_case
+  \\ simp_tac std_ss []
+  \\ (impl_tac >- (
+      rpt conj_tac >>
+      TRY (qunabbrev_tac `s1_0` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `s2_0` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `j1` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `j2` >> REFL_TAC) >>
+      TRY (first_assum ACCEPT_TAC) >>
+      first_assum MATCH_ACCEPT_TAC))
+  \\ simp_tac std_ss []
+QED
+
+(* ===== Generalized compare: starting from arbitrary instruction index i ===== *)
+
+Theorem analysis_block_compare_from:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool)
+   (f1 : 'a -> instruction -> instruction list)
+   (f2 : 'a -> instruction -> instruction list) bb
+   (bottom : 'a) (result : 'a df_state).
+    valid_state_rel R_ok R_term /\
+    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+    inst_transform_structural f1 /\
+    inst_transform_structural f2 /\
+    EVERY inst_wf bb.bb_instructions /\
+    (!i fuel ctx s.
+       i < LENGTH bb.bb_instructions ==>
+       let inst = EL i bb.bb_instructions in
+       let v = df_at bottom result bb.bb_label i in
+       (?e. run_insts fuel ctx (f1 v inst) s = Error e) \/
+       lift_result R_ok R_term R_term
+         (run_insts fuel ctx (f1 v inst) s)
+         (run_insts fuel ctx (f2 v inst) s)) /\
+    (!inst x.
+       MEM inst (FLAT (MAPi (\idx i. f1 (df_at bottom result bb.bb_label idx) i)
+                            bb.bb_instructions)) /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+  ==>
+    !fuel ctx s1 s2 i.
+      R_ok (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0) /\
+      i <= LENGTH bb.bb_instructions /\
+      s1.vs_inst_idx =
+        LENGTH (FLAT (TAKE i (MAPi (\idx inst. f1 (df_at bottom result bb.bb_label idx) inst)
+                                 bb.bb_instructions))) /\
+      s2.vs_inst_idx =
+        LENGTH (FLAT (TAKE i (MAPi (\idx inst. f2 (df_at bottom result bb.bb_label idx) inst)
+                                 bb.bb_instructions)))
+      ==>
+      (?e. exec_block fuel ctx
+             (analysis_block_transform bottom result f1 bb) s1 = Error e) \/
+      lift_result R_ok R_term R_term
+        (exec_block fuel ctx (analysis_block_transform bottom result f1 bb) s1)
+        (exec_block fuel ctx (analysis_block_transform bottom result f2 bb) s2)
+Proof
+  rpt gen_tac >> disch_then strip_assume_tac
+  \\ simp[analysis_block_transform_def]
+  \\ qabbrev_tac `g1 = \idx inst. f1 (df_at bottom result bb.bb_label idx) inst`
+  \\ qabbrev_tac `g2 = \idx inst. f2 (df_at bottom result bb.bb_label idx) inst`
+  \\ qpat_x_assum `inst_transform_structural f1`
+    (fn th => let val th' = REWRITE_RULE [inst_transform_structural_def] th
+                  val cs = CONJUNCTS th'
+              in MAP_EVERY ASSUME_TAC cs end)
+  \\ qpat_x_assum `inst_transform_structural f2`
+    (fn th => let val th' = REWRITE_RULE [inst_transform_structural_def] th
+                  val cs = CONJUNCTS th'
+              in MAP_EVERY ASSUME_TAC cs end)
+  \\ qsuff_tac
+    `!n fuel ctx s1 s2 i.
+       R_ok (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0) /\
+       n = LENGTH bb.bb_instructions - i /\
+       i <= LENGTH bb.bb_instructions /\
+       s1.vs_inst_idx =
+         LENGTH (FLAT (TAKE i (MAPi g1 bb.bb_instructions))) /\
+       s2.vs_inst_idx =
+         LENGTH (FLAT (TAKE i (MAPi g2 bb.bb_instructions)))
+       ==>
+       (?e. exec_block fuel ctx
+              (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
+              s1 = Error e) \/
+       lift_result R_ok R_term R_term
+         (exec_block fuel ctx
+            (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions)) s1)
+         (exec_block fuel ctx
+            (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions)) s2)`
+  >- (
+    rpt strip_tac >>
+    first_x_assum (qspecl_then
+      [`LENGTH bb.bb_instructions - i`, `fuel`, `ctx`, `s1`, `s2`, `i`] mp_tac) >>
+    simp[])
+  \\ completeInduct_on `n` \\ rpt strip_tac
+  \\ Cases_on `i < LENGTH bb.bb_instructions`
+  >| [
+    ALL_TAC,
+    (* === Base case: i = LENGTH ==> past end ==> Error === *)
+    `i = LENGTH bb.bb_instructions` by decide_tac >>
+    pop_assum SUBST_ALL_TAC >>
+    DISJ1_TAC >>
+    `TAKE (LENGTH bb.bb_instructions) (MAPi g1 bb.bb_instructions) =
+     MAPi g1 bb.bb_instructions` by
+      simp[TAKE_LENGTH_ID, indexedListsTheory.LENGTH_MAPi] >>
+    ONCE_REWRITE_TAC[venomExecSemanticsTheory.exec_block_def] >>
+    simp_tac std_ss [get_instruction_def] >>
+    simp[]
+  ]
+  (* === Inductive step: i < LENGTH === *)
+  \\ qabbrev_tac `inst = EL i bb.bb_instructions`
+  \\ qabbrev_tac `v = df_at bottom result bb.bb_label i`
+  \\ qabbrev_tac `j1 = LENGTH (FLAT (TAKE i (MAPi g1 bb.bb_instructions)))`
+  \\ qabbrev_tac `j2 = LENGTH (FLAT (TAKE i (MAPi g2 bb.bb_instructions)))`
+  \\ `g1 i inst = f1 v inst` by simp[Abbr `g1`, Abbr `v`, Abbr `inst`]
+  \\ `g2 i inst = f2 v inst` by simp[Abbr `g2`, Abbr `v`, Abbr `inst`]
+  \\ qabbrev_tac `s1_0 = s1 with vs_inst_idx := 0`
+  \\ qabbrev_tac `s2_0 = s2 with vs_inst_idx := 0`
+  \\ `R_ok s1_0 s2_0` by simp[Abbr `s1_0`, Abbr `s2_0`]
+  (* Indexing facts *)
+  \\ `!k. k < LENGTH (f1 v inst) ==>
+       EL (j1 + k) (FLAT (MAPi g1 bb.bb_instructions)) =
+       EL k (f1 v inst)` by (
+    rpt strip_tac >> qunabbrev_tac `j1` >>
+    `EL (LENGTH (FLAT (TAKE i (MAPi g1 bb.bb_instructions))) + k)
+         (FLAT (MAPi g1 bb.bb_instructions)) =
+      EL k (g1 i (EL i bb.bb_instructions))`
+       by (irule EL_FLAT_MAPi >> simp[]) >>
+    qunabbrev_tac `inst` >> simp[])
+  \\ `!k. k < LENGTH (f2 v inst) ==>
+       EL (j2 + k) (FLAT (MAPi g2 bb.bb_instructions)) =
+       EL k (f2 v inst)` by (
+    rpt strip_tac >> qunabbrev_tac `j2` >>
+    `EL (LENGTH (FLAT (TAKE i (MAPi g2 bb.bb_instructions))) + k)
+         (FLAT (MAPi g2 bb.bb_instructions)) =
+      EL k (g2 i (EL i bb.bb_instructions))`
+       by (irule EL_FLAT_MAPi >> simp[]) >>
+    qunabbrev_tac `inst` >> simp[])
+  \\ `j1 + LENGTH (f1 v inst) <=
+   LENGTH (FLAT (MAPi g1 bb.bb_instructions))` by (
+    qunabbrev_tac `j1` >>
+    qpat_assum `g1 i inst = f1 v inst`
+      (fn eq => REWRITE_TAC[SYM eq]) >>
+    qunabbrev_tac `inst` >>
+    irule FLAT_MAPi_offset_bound >> simp[])
+  \\ `j2 + LENGTH (f2 v inst) <=
+   LENGTH (FLAT (MAPi g2 bb.bb_instructions))` by (
+    qunabbrev_tac `j2` >>
+    qpat_assum `g2 i inst = f2 v inst`
+      (fn eq => REWRITE_TAC[SYM eq]) >>
+    qunabbrev_tac `inst` >>
+    irule FLAT_MAPi_offset_bound >> simp[])
+  (* Per-group comparison *)
+  \\ `!fuel' ctx' s'.
+     (?e. run_insts fuel' ctx' (f1 v inst) s' = Error e) \/
+     lift_result R_ok R_term R_term (run_insts fuel' ctx' (f1 v inst) s')
+       (run_insts fuel' ctx' (f2 v inst) s')` by (
+    rpt gen_tac >>
+    qpat_x_assum `!i fuel ctx s. i < LENGTH bb.bb_instructions ==> _`
+      (fn th => mp_tac (Q.SPECL [`i`, `fuel'`, `ctx'`, `s'`] th) >>
+                ASSUME_TAC th) >>
+    impl_tac >- simp[] >>
+    simp_tac std_ss [LET_THM] >>
+    metis_tac[markerTheory.Abbrev_def])
+  (* R-preservation *)
+  \\ `lift_result R_ok R_term R_term
+     (run_insts fuel ctx (f1 v inst) s1_0)
+     (run_insts fuel ctx (f1 v inst) s2_0)` by (
+    irule run_insts_preserves_R >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    rpt strip_tac >>
+    qpat_assum `!inst' x. MEM inst' (FLAT _) /\ _ ==> _`
+      (qspecl_then [`inst'`, `x`] mp_tac) >>
+    impl_tac >- (
+      conj_tac >- (
+        simp[MEM_FLAT, indexedListsTheory.MEM_MAPi] >>
+        qexists_tac `f1 v inst` >>
+        conj_tac >- (qexists_tac `i` >>
+          simp[Abbr `g1`, Abbr `v`, Abbr `inst`]) >>
+        first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC) >>
+    disch_then irule >> first_assum ACCEPT_TAC)
+  (* IH for SUC i *)
+  \\ `!v1 v2.
+     R_ok (v1 with vs_inst_idx := 0) (v2 with vs_inst_idx := 0) ==>
+     (?e. exec_block fuel ctx
+            (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
+            (v1 with vs_inst_idx :=
+               LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions)))) =
+          Error e) \/
+     lift_result R_ok R_term R_term
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
+          (v1 with vs_inst_idx :=
+             LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions)))))
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
+          (v2 with vs_inst_idx :=
+             LENGTH (FLAT (TAKE (SUC i) (MAPi g2 bb.bb_instructions)))))` by (
+    rpt strip_tac >>
+    qpat_x_assum `!m. m < n ==> _`
+      (qspec_then `LENGTH bb.bb_instructions - SUC i` mp_tac) >>
+    impl_tac >- decide_tac >>
+    disch_then (qspecl_then [`fuel`, `ctx`,
+      `v1 with vs_inst_idx :=
+         LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions)))`,
+      `v2 with vs_inst_idx :=
+         LENGTH (FLAT (TAKE (SUC i) (MAPi g2 bb.bb_instructions)))`,
+      `SUC i`] irule) >>
+    simp_tac (srw_ss()) [] >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac)
+  (* SUC i offset facts *)
+  \\ `LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions))) =
+   j1 + LENGTH (f1 v inst)` by (
+    qunabbrev_tac `j1` >>
+    `LENGTH (FLAT (TAKE (SUC i) (MAPi g1 bb.bb_instructions))) =
+     LENGTH (FLAT (TAKE i (MAPi g1 bb.bb_instructions))) +
+       LENGTH (g1 i (EL i bb.bb_instructions))`
+      by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
+    simp[Abbr `inst`])
+  \\ `LENGTH (FLAT (TAKE (SUC i) (MAPi g2 bb.bb_instructions))) =
+   j2 + LENGTH (f2 v inst)` by (
+    qunabbrev_tac `j2` >>
+    `LENGTH (FLAT (TAKE (SUC i) (MAPi g2 bb.bb_instructions))) =
+     LENGTH (FLAT (TAKE i (MAPi g2 bb.bb_instructions))) +
+       LENGTH (g2 i (EL i bb.bb_instructions))`
+      by (irule FLAT_MAPi_offset_SUC >> simp[]) >>
+    simp[Abbr `inst`])
+  (* Rewrite IH from TAKE(SUC i) form to j+len form *)
+  \\ `!v1 v2.
+     R_ok (v1 with vs_inst_idx := 0) (v2 with vs_inst_idx := 0) ==>
+     (?e. exec_block fuel ctx
+            (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
+            (v1 with vs_inst_idx := j1 + LENGTH (f1 v inst)) = Error e) \/
+     lift_result R_ok R_term R_term
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g1 bb.bb_instructions))
+          (v1 with vs_inst_idx := j1 + LENGTH (f1 v inst)))
+       (exec_block fuel ctx
+          (bb with bb_instructions := FLAT (MAPi g2 bb.bb_instructions))
+          (v2 with vs_inst_idx := j2 + LENGTH (f2 v inst)))` by (
+    rpt strip_tac >>
+    qpat_x_assum `!a b. R_ok _ _ ==> _ \/ lift_result _ _ _ _ _`
+      (qspecl_then [`v1`, `v2`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    qpat_assum `LENGTH (FLAT (TAKE (SUC i) (MAPi g1 _))) = _`
+      (fn th => REWRITE_TAC [th]) >>
+    qpat_assum `LENGTH (FLAT (TAKE (SUC i) (MAPi g2 _))) = _`
+      (fn th => REWRITE_TAC [th]) >>
     simp_tac std_ss [])
+  (* Kill OLD IH (TAKE SUC i form) — keep rewritten IH (j+len form) *)
+  \\ qpat_x_assum `!v1 v2. R_ok _ _ ==> _ \/ lift_result _ _ _
+       (exec_block _ _ _ (v1 with vs_inst_idx := LENGTH (FLAT (TAKE (SUC i) _))))
+       _` kall_tac
+  (* Three-way case split *)
+  (* === Terminator case === *)
+  \\ Cases_on `is_terminator inst.inst_opcode`
+  >- (
+    qpat_x_assum `!aa bb. is_terminator _ ==> ?cc. f1 _ _ = [_] /\ _`
+      (qspecl_then [`v`, `inst`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    qpat_x_assum `!aa bb. is_terminator _ ==> ?cc. f2 _ _ = [_] /\ _`
+      (qspecl_then [`v`, `inst`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    rename1 `f1 v inst = [inst1]` >> rename1 `f2 v inst = [inst2]` >>
+    SUBGOAL_THEN ``(?e. step_inst fuel ctx inst1 s2_0 = Error e) \/
+       lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s2_0)
+         (step_inst fuel ctx inst2 s2_0)`` ASSUME_TAC
+    >- (first_x_assum (qspecl_then [`fuel`, `ctx`, `s2_0`] mp_tac) >>
+        qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+        qpat_assum `f2 v inst = _` (fn th => REWRITE_TAC[th]) >>
+        REWRITE_TAC[run_insts_singleton]) >>
+    `lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s1_0)
+       (step_inst fuel ctx inst1 s2_0)` by (
+      qpat_assum `lift_result _ _ _ (run_insts _ _ (f1 v inst) s1_0) _` mp_tac >>
+      qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[run_insts_singleton]) >>
+    `j1 < LENGTH (FLAT (MAPi g1 bb.bb_instructions))` by (
+      qpat_assum `j1 + LENGTH (f1 v inst) <= _` mp_tac >>
+      qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      simp_tac (srw_ss()) [] >> decide_tac) >>
+    `j2 < LENGTH (FLAT (MAPi g2 bb.bb_instructions))` by (
+      qpat_assum `j2 + LENGTH (f2 v inst) <= _` mp_tac >>
+      qpat_assum `f2 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      simp_tac (srw_ss()) [] >> decide_tac) >>
+    `EL j1 (FLAT (MAPi g1 bb.bb_instructions)) = inst1` by (
+      qpat_x_assum `!k. k < LENGTH (f1 v inst) ==> _ = EL k (f1 v inst)`
+        (qspec_then `0` mp_tac) >>
+      qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      simp_tac (srw_ss()) []) >>
+    `EL j2 (FLAT (MAPi g2 bb.bb_instructions)) = inst2` by (
+      qpat_x_assum `!k. k < LENGTH (f2 v inst) ==> _ = EL k (f2 v inst)`
+        (qspec_then `0` mp_tac) >>
+      qpat_assum `f2 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      simp_tac (srw_ss()) []) >>
+    qspecl_then [`R_ok`, `R_term`, `inst1`, `inst2`,
+      `s1`, `s2`, `s1_0`, `s2_0`, `j1`, `j2`,
+      `bb`, `g1`, `g2`, `fuel`, `ctx`]
+      mp_tac abc_terminator_case >>
+    (impl_tac >- (
+      rpt conj_tac >>
+      TRY (qunabbrev_tac `s1_0` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `s2_0` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `j1` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `j2` >> REFL_TAC) >>
+      TRY (first_assum ACCEPT_TAC) >>
+      first_assum MATCH_ACCEPT_TAC)) >>
+    simp_tac std_ss [])
+  (* === INVOKE case === *)
+  \\ Cases_on `inst.inst_opcode = INVOKE`
+  >- (
+    qpat_x_assum `!aa bb. _ = INVOKE ==> ?cc. f1 _ _ = [_] /\ _`
+      (qspecl_then [`v`, `inst`] mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+    qpat_x_assum `!aa bb. _ = INVOKE ==> ?cc. f2 _ _ = [_] /\ _`
+      (qspecl_then [`v`, `inst`] mp_tac) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+    rename1 `f1 v inst = [inst1]` >> rename1 `f2 v inst = [inst2]` >>
+    SUBGOAL_THEN ``(?e. step_inst fuel ctx inst1 s2_0 = Error e) \/
+       lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s2_0)
+         (step_inst fuel ctx inst2 s2_0)`` ASSUME_TAC
+    >- (first_x_assum (qspecl_then [`fuel`, `ctx`, `s2_0`] mp_tac) >>
+        qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+        qpat_assum `f2 v inst = _` (fn th => REWRITE_TAC[th]) >>
+        REWRITE_TAC[run_insts_singleton]) >>
+    `lift_result R_ok R_term R_term (step_inst fuel ctx inst1 s1_0)
+       (step_inst fuel ctx inst1 s2_0)` by (
+      qpat_assum `lift_result _ _ _ (run_insts _ _ (f1 v inst) s1_0) _` mp_tac >>
+      qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[run_insts_singleton]) >>
+    `j1 < LENGTH (FLAT (MAPi g1 bb.bb_instructions))` by (
+      qpat_assum `j1 + LENGTH (f1 v inst) <= _` mp_tac >>
+      qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[listTheory.LENGTH] >> decide_tac) >>
+    `j2 < LENGTH (FLAT (MAPi g2 bb.bb_instructions))` by (
+      qpat_assum `j2 + LENGTH (f2 v inst) <= _` mp_tac >>
+      qpat_assum `f2 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[listTheory.LENGTH] >> decide_tac) >>
+    `EL j1 (FLAT (MAPi g1 bb.bb_instructions)) = inst1` by (
+      qpat_x_assum `!k. k < LENGTH (f1 v inst) ==> _ = EL k (f1 v inst)`
+        (qspec_then `0` mp_tac) >>
+      qpat_assum `f1 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[listTheory.LENGTH] >> simp_tac (srw_ss()) []) >>
+    `EL j2 (FLAT (MAPi g2 bb.bb_instructions)) = inst2` by (
+      qpat_x_assum `!k. k < LENGTH (f2 v inst) ==> _ = EL k (f2 v inst)`
+        (qspec_then `0` mp_tac) >>
+      qpat_assum `f2 v inst = _` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[listTheory.LENGTH] >> simp_tac (srw_ss()) []) >>
+    (* Derive j + 1 = SUC j for applying abc_invoke_case *)
+    `LENGTH (f1 v inst) = 1` by (
+      qpat_assum `f1 v inst = [inst1]` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[listTheory.LENGTH] >> decide_tac) >>
+    `LENGTH (f2 v inst) = 1` by (
+      qpat_assum `f2 v inst = [inst2]` (fn th => REWRITE_TAC[th]) >>
+      REWRITE_TAC[listTheory.LENGTH] >> decide_tac) >>
+    qspecl_then [`R_ok`, `R_term`, `inst1`, `inst2`,
+      `s1`, `s2`, `s1_0`, `s2_0`, `j1`, `j2`,
+      `j1 + LENGTH (f1 v inst)`, `j2 + LENGTH (f2 v inst)`,
+      `bb`, `g1`, `g2`, `fuel`, `ctx`,
+      `\r1 r2. (?e. r1 = Error e) \/ lift_result R_ok R_term R_term r1 r2`]
+      mp_tac abc_invoke_case >>
+    (impl_tac >- (
+      rpt conj_tac >>
+      TRY (qunabbrev_tac `s1_0` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `s2_0` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `j1` >> REFL_TAC) >>
+      TRY (qunabbrev_tac `j2` >> REFL_TAC) >>
+      TRY decide_tac >>
+      TRY (first_assum ACCEPT_TAC) >>
+      first_assum MATCH_ACCEPT_TAC)) >>
+    simp_tac std_ss [])
+  (* === Normal case: derive per-group comparison for specific fuel/ctx/s === *)
+  \\ `(?e. run_insts fuel ctx (f1 v inst) s2_0 = Error e) \/
+       lift_result R_ok R_term R_term (run_insts fuel ctx (f1 v inst) s2_0)
+         (run_insts fuel ctx (f2 v inst) s2_0)` by
+    first_assum (qspecl_then [`fuel`, `ctx`, `s2_0`] ACCEPT_TAC)
+  (* Derive EVERY predicates for f1 and f2 groups *)
+  \\ `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
+       (f1 v inst)` by (
+    Cases_on `inst.inst_opcode = PHI`
+    >- (
+      qpat_x_assum `!v' inst'. inst'.inst_opcode = PHI ==> f1 v' inst' = [inst']`
+        (qspecl_then [`v`, `inst`] mp_tac) >>
+      simp[EVERY_DEF])
+    >>
+    qpat_x_assum `!v' inst'. ~is_terminator _ /\ _ <> INVOKE /\ _ <> PHI ==> EVERY _ (f1 v' inst')`
+      (qspecl_then [`v`, `inst`] mp_tac) >>
+    simp[] >>
+    match_mp_tac EVERY_MONOTONIC >> simp[])
+  \\ `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
+       (f2 v inst)` by (
+    Cases_on `inst.inst_opcode = PHI`
+    >- (
+      qpat_x_assum `!v' inst'. inst'.inst_opcode = PHI ==> f2 v' inst' = [inst']`
+        (qspecl_then [`v`, `inst`] mp_tac) >>
+      simp[EVERY_DEF])
+    >>
+    qpat_x_assum `!v' inst'. ~is_terminator _ /\ _ <> INVOKE /\ _ <> PHI ==> EVERY _ (f2 v' inst')`
+      (qspecl_then [`v`, `inst`] mp_tac) >>
+    simp[] >>
+    match_mp_tac EVERY_MONOTONIC >> simp[])
   \\ qspecl_then [`R_ok`, `R_term`, `f1 v inst`, `f2 v inst`,
        `s1`, `s2`, `s1_0`, `s2_0`, `j1`, `j2`, `bb`, `g1`, `g2`,
        `fuel`, `ctx`, `j1 + LENGTH (f1 v inst)`,
@@ -962,6 +1373,15 @@ QED
 
 (* ===== Compare variant: two transforms at function level ===== *)
 
+Triviality run_block_OK_inst_idx_0[local]:
+  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >> strip_tac >>
+  fs[run_block_def] >>
+  drule venomExecProofsTheory.exec_block_OK_inst_idx_0 >> simp[]
+QED
+
 Triviality block_sim_function_compare_ind_step:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) bt1 bt2 fn fuel.
@@ -976,14 +1396,14 @@ Triviality block_sim_function_compare_ind_step:
     (!bb. (bt2 bb).bb_label = bb.bb_label) /\
     (!fuel ctx bb s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-       lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
-                                (exec_block fuel ctx (bt1 bb) s2)) /\
+       lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
+                                (run_block fuel ctx (bt1 bb) s2)) /\
     (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx (bt1 bb) s = Error e) \/
-        lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s)
-                                 (exec_block fuel ctx (bt2 bb) s)) /\
+        (?e. run_block fuel ctx (bt1 bb) s = Error e) \/
+        lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s)
+                                 (run_block fuel ctx (bt2 bb) s)) /\
     (!ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
        (?e. run_blocks fuel ctx (function_map_transform bt1 fn) s1 = Error e) \/
        lift_result R_ok R_term R_term
@@ -1000,35 +1420,35 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `s1.vs_current_bb = s2.vs_current_bb` by metis_tac[] >>
   `s2.vs_inst_idx = 0` by metis_tac[] >>
-  ONCE_REWRITE_TAC[run_blocks_def] >>
+  ONCE_REWRITE_TAC[run_blocks_unfold] >>
   simp[function_map_transform_def, lookup_block_map_proof] >>
   Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
   >- gvs[lift_result_def]
   >>
   rename1 `lookup_block _ _ = SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
-  `lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
-                            (exec_block fuel ctx (bt1 bb) s2)` by metis_tac[] >>
-  `(?e. exec_block fuel ctx (bt1 bb) s2 = Error e) \/
-   lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s2)
-     (exec_block fuel ctx (bt2 bb) s2)` by (
+  `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
+                            (run_block fuel ctx (bt1 bb) s2)` by metis_tac[] >>
+  `(?e. run_block fuel ctx (bt1 bb) s2 = Error e) \/
+   lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s2)
+     (run_block fuel ctx (bt2 bb) s2)` by (
     qpat_assum `!lbl bb. lookup_block _ _ = SOME _ ==> _`
       (qspecl_then [`s2.vs_current_bb`, `bb`] mp_tac) >> simp[]) >>
-  Cases_on `?e. exec_block fuel ctx (bt1 bb) s2 = Error e`
+  Cases_on `?e. run_block fuel ctx (bt1 bb) s2 = Error e`
   >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[])
   >>
-  `lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s2)
-                            (exec_block fuel ctx (bt2 bb) s2)` by metis_tac[] >>
-  `lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
-                            (exec_block fuel ctx (bt2 bb) s2)` by (
+  `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s2)
+                            (run_block fuel ctx (bt2 bb) s2)` by metis_tac[] >>
+  `lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
+                            (run_block fuel ctx (bt2 bb) s2)` by (
     irule lift_result_trans_proof >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
-    qexists_tac `exec_block fuel ctx (bt1 bb) s2` >>
+    qexists_tac `run_block fuel ctx (bt1 bb) s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
-  Cases_on `exec_block fuel ctx (bt1 bb) s1` >>
-  Cases_on `exec_block fuel ctx (bt2 bb) s2` >>
+  Cases_on `run_block fuel ctx (bt1 bb) s1` >>
+  Cases_on `run_block fuel ctx (bt2 bb) s2` >>
   gvs[lift_result_def]
   >>
   rename1 `R_ok v1 v2` >>
@@ -1040,7 +1460,7 @@ Proof
   `~v2.vs_halted` by metis_tac[] >> simp[lift_result_def] >>
   gvs[function_map_transform_def] >>
   `v1.vs_inst_idx = 0 /\ v2.vs_inst_idx = 0` by
-    metis_tac[venomExecProofsTheory.exec_block_OK_inst_idx_0] >>
+    metis_tac[run_block_OK_inst_idx_0] >>
   qpat_assum `!ctx' s1' s2'. R_ok s1' s2' /\ _ ==> _`
     (qspecl_then [`ctx`, `v1`, `v2`] mp_tac) >>
   simp[]
@@ -1057,9 +1477,9 @@ Theorem block_sim_function_compare:
     (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx (bt1 bb) s = Error e) \/
-        lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s)
-                                 (exec_block fuel ctx (bt2 bb) s)) /\
+        (?e. run_block fuel ctx (bt1 bb) s = Error e) \/
+        lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s)
+                                 (run_block fuel ctx (bt2 bb) s)) /\
     (!bb inst x.
        MEM bb (MAP bt1 fn.fn_blocks) /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
@@ -1082,11 +1502,11 @@ Proof
       (REWRITE_RULE [GSYM AND_IMP_INTRO] vsr_R_ok_fields)) >>
   `!fuel ctx bb s1 s2.
      MEM bb fn.fn_blocks /\ R_ok s1 s2 ==>
-     lift_result R_ok R_term R_term (exec_block fuel ctx (bt1 bb) s1)
-                              (exec_block fuel ctx (bt1 bb) s2)` by (
+     lift_result R_ok R_term R_term (run_block fuel ctx (bt1 bb) s1)
+                              (run_block fuel ctx (bt1 bb) s2)` by (
     rpt strip_tac >>
     qspecl_then [`R_ok`, `R_term`, `function_map_transform bt1 fn`]
-      mp_tac (cj 1 exec_block_preserves_R_proof) >>
+      mp_tac run_block_preserves_R_helper >>
     simp[function_map_transform_def] >>
     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
     disch_then (qspecl_then [`fuel`, `ctx`, `bt1 bb`, `s1`, `s2`] mp_tac) >>
@@ -1103,10 +1523,342 @@ Proof
       impl_tac >- (conj_tac >- (irule vsr_R_ok_refl >> metis_tac[]) >> simp[]) >>
       simp[]) >>
   Induct_on `fuel`
-  >- (rw[] >> simp[run_blocks_def, function_map_transform_def, lift_result_def])
+  >- (rw[run_blocks_def, function_map_transform_def, lift_result_def])
   >>
   rpt strip_tac >>
   irule (SIMP_RULE (srw_ss()) [] block_sim_function_compare_ind_step) >>
   rpt (first_assum (fn th => EXISTS_TAC (rand (concl th)) >> ACCEPT_TAC th)
        ORELSE conj_tac ORELSE first_assum ACCEPT_TAC)
+QED
+
+(* ===== Local copies of eval_phis_flat_mapi and phi_prefix_length_flat_mapi ===== *)
+(* The Base script versions are [local] and not visible here. *)
+
+Triviality phi_prefix_length_flat_mapi_local[local]:
+  !f l.
+    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode = PHI ==>
+       f idx inst = [inst]) /\
+    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode <> PHI ==>
+       EVERY (\i. i.inst_opcode <> PHI) (f idx inst)) /\
+    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
+       (EL i l).inst_opcode = PHI) ==>
+    phi_prefix_length (FLAT (MAPi f l)) = phi_prefix_length l
+Proof
+  Induct_on `l` >- simp[phi_prefix_length_def] >>
+  rpt gen_tac >> strip_tac >>
+  simp[indexedListsTheory.MAPi_def, phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (
+    `f 0 h = [h]` by (first_x_assum (qspecl_then [`0`, `h`] mp_tac) >> simp[]) >>
+    simp[phi_prefix_length_def] >>
+    qpat_x_assum `!f. _ ==> phi_prefix_length (FLAT (MAPi f l)) = phi_prefix_length l`
+      ho_match_mp_tac >>
+    simp[combinTheory.o_DEF] >>
+    match_mp_tac phi_prefix_shift_cond3 >>
+    qexists `h` >>
+    rpt gen_tac >> strip_tac >>
+    first_x_assum irule >> simp[] >>
+    qexists `j` >> simp[] >>
+    `LENGTH (h::l) = SUC (LENGTH l)` by simp[] >>
+    decide_tac) >>
+  `phi_prefix_length l = 0` by metis_tac[phi_prefix_length_head_not_phi] >>
+  `EVERY (\i. i.inst_opcode <> PHI) (f 0 h)` by (
+    first_x_assum (qspecl_then [`0`, `h`] mp_tac) >> simp[]) >>
+  Cases_on `f 0 h`
+  >- (
+    qpat_x_assum `phi_prefix_length l = 0` (fn th => simp[GSYM th]) >>
+    qpat_x_assum `EVERY (\i. i.inst_opcode <> PHI) ([] :instruction list)` kall_tac >>
+    qpat_x_assum `!f. _ ==> phi_prefix_length (FLAT (MAPi f l)) = phi_prefix_length l`
+      ho_match_mp_tac >>
+    simp[combinTheory.o_DEF] >>
+    match_mp_tac phi_prefix_shift_cond3 >>
+    qexists `h` >>
+    rpt gen_tac >> strip_tac >>
+    first_x_assum irule >> simp[] >>
+    qexists `j` >> simp[] >>
+    `LENGTH (h::l) = SUC (LENGTH l)` by simp[] >>
+    decide_tac) >>
+  gvs[EVERY_DEF, APPEND, phi_prefix_length_def]
+QED
+
+Triviality phi_prefix_length_zero_eval_phis_ok_local[local]:
+  !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
+Proof
+  Cases_on `l` >- simp[eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[eval_phis_def, phi_prefix_length_def]
+QED
+
+Triviality eval_phis_flat_mapi_local[local]:
+  !f s l.
+    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode = PHI ==>
+       f idx inst = [inst]) /\
+    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode <> PHI ==>
+       EVERY (\i. i.inst_opcode <> PHI) (f idx inst)) /\
+    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
+       (EL i l).inst_opcode = PHI) ==>
+    eval_phis s (FLAT (MAPi f l)) = eval_phis s l
+Proof
+  Induct_on `l` >- simp[eval_phis_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (
+    `f 0 h = [h]` by (first_x_assum (qspecl_then [`0`, `h`] mp_tac) >> simp[]) >>
+    `eval_phis s (FLAT (MAPi (f o SUC) l)) = eval_phis s l` by (
+      qpat_x_assum `!f s. _ ==> eval_phis s (FLAT (MAPi f l)) = eval_phis s l`
+        ho_match_mp_tac >>
+      simp[combinTheory.o_DEF] >>
+      match_mp_tac phi_prefix_shift_cond3 >> qexists `h` >>
+      rpt gen_tac >> strip_tac >>
+      first_x_assum irule >> simp[] >>
+      qexists `j` >> simp[] >>
+      `LENGTH (h::l) = SUC (LENGTH l)` by simp[] >> decide_tac) >>
+    simp[indexedListsTheory.MAPi_def, eval_phis_def])
+  >- (
+    `phi_prefix_length (FLAT (MAPi f (h::l))) = 0` by (
+      metis_tac[phi_prefix_length_flat_mapi_local, phi_prefix_length_def]) >>
+    simp[phi_prefix_length_zero_eval_phis_ok_local, eval_phis_def])
+QED
+
+(* ===== Boundary lemma: bridge run_block -> exec_block ===== *)
+(* Key insight: bb1/bb2 are variables, so ONCE_REWRITE_TAC[run_block_def]
+   cannot expand analysis_block_transform_def. This prevents the goal from
+   losing the analysis_block_transform form, which irule needs to match. *)
+
+Triviality run_block_entry_compare:
+  !(R_ok : venom_state -> venom_state -> bool)
+   (R_term : venom_state -> venom_state -> bool) bb1 bb2 s fuel ctx s_phi.
+    eval_phis s bb1.bb_instructions = OK s_phi /\
+    eval_phis s bb2.bb_instructions = OK s_phi /\
+    ((?e. exec_block fuel ctx bb1
+            (s_phi with vs_inst_idx := phi_prefix_length bb1.bb_instructions) = Error e) \/
+     lift_result R_ok R_term R_term
+       (exec_block fuel ctx bb1
+          (s_phi with vs_inst_idx := phi_prefix_length bb1.bb_instructions))
+       (exec_block fuel ctx bb2
+          (s_phi with vs_inst_idx := phi_prefix_length bb2.bb_instructions)))
+    ==>
+    (?e. run_block fuel ctx bb1 s = Error e) \/
+    lift_result R_ok R_term R_term
+      (run_block fuel ctx bb1 s)
+      (run_block fuel ctx bb2 s)
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[AllCaseEqs()]
+QED
+
+(* Also handle the Error case: if eval_phis returns Error on both sides,
+   both run_block calls return Error with the same message *)
+
+Triviality run_block_entry_compare_error:
+  !bb1 bb2 s fuel ctx e.
+    eval_phis s bb1.bb_instructions = Error e /\
+    eval_phis s bb2.bb_instructions = Error e
+    ==>
+    (?e'. run_block fuel ctx bb1 s = Error e') /\
+    (?e'. run_block fuel ctx bb2 s = Error e')
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[AllCaseEqs()]
+QED
+
+(* ===== analysis_run_block_compare ===== *)
+
+(* Helper: analysis_block_compare_from specialized for the common case where
+   s1 = s2 = s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions
+   and i = phi_prefix_length bb.bb_instructions.
+   This avoids the nested-∀ issue when applying analysis_block_compare_from
+   inside the main proof (irule fails on nested ∀). *)
+Triviality analysis_block_compare_from_phi_prefix:
+  !(R_ok : venom_state -> venom_state -> bool)
+ (R_term : venom_state -> venom_state -> bool)
+ (f1 : 'a -> instruction -> instruction list)
+ (f2 : 'a -> instruction -> instruction list) bb
+ (bottom : 'a) (result : 'a df_state) fuel ctx s_phi.
+  valid_state_rel R_ok R_term /\
+  (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+  (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+  inst_transform_structural f1 /\
+  inst_transform_structural f2 /\
+  bb_well_formed bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  (!i fuel' ctx' s.
+     i < LENGTH bb.bb_instructions ==>
+     let inst = EL i bb.bb_instructions in
+     let v = df_at bottom result bb.bb_label i in
+     (?e. run_insts fuel' ctx' (f1 v inst) s = Error e) \/
+     lift_result R_ok R_term R_term
+       (run_insts fuel' ctx' (f1 v inst) s)
+       (run_insts fuel' ctx' (f2 v inst) s)) /\
+  (!inst x.
+     MEM inst (FLAT (MAPi (\idx i. f1 (df_at bottom result bb.bb_label idx) i)
+                          bb.bb_instructions)) /\
+     MEM (Var x) inst.inst_operands ==>
+     !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+  R_ok (s_phi with vs_inst_idx := 0) (s_phi with vs_inst_idx := 0)
+  ==>
+    (?e. run_block_non_phis fuel ctx
+           (analysis_block_transform bottom result f1 bb)
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+         Error e) \/
+    lift_result R_ok R_term R_term
+      (run_block_non_phis fuel ctx
+         (analysis_block_transform bottom result f1 bb)
+         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+      (run_block_non_phis fuel ctx
+         (analysis_block_transform bottom result f2 bb)
+         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+  rpt strip_tac >>
+  (* Pre-prove length facts as forward subgoals.
+     Abbreviations are LOCAL to each by-block: they beta-reduce
+     the lambda for inst_transform_phi matching, but don't corrupt
+     the assumptions needed for analysis_block_compare_from's impl_tac. *)
+  `LENGTH (FLAT (TAKE (phi_prefix_length bb.bb_instructions)
+    (MAPi (\idx inst. f1 (df_at bottom result bb.bb_label idx) inst)
+       bb.bb_instructions))) = phi_prefix_length bb.bb_instructions` by (
+    qabbrev_tac `g1 = \idx inst. f1 (df_at bottom result bb.bb_label idx) inst` >>
+    irule length_flat_take_phi_prefix >> simp[Abbr `g1`] >> rpt conj_tac
+    >- (rpt strip_tac >> irule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >>
+        imp_res_tac venomWfTheory.bb_well_formed_def >> fs[] >> res_tac)) >>
+  `LENGTH (FLAT (TAKE (phi_prefix_length bb.bb_instructions)
+    (MAPi (\idx inst. f2 (df_at bottom result bb.bb_label idx) inst)
+       bb.bb_instructions))) = phi_prefix_length bb.bb_instructions` by (
+    qabbrev_tac `g2 = \idx inst. f2 (df_at bottom result bb.bb_label idx) inst` >>
+    irule length_flat_take_phi_prefix >> simp[Abbr `g2`] >> rpt conj_tac
+    >- (rpt strip_tac >> irule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >>
+        imp_res_tac venomWfTheory.bb_well_formed_def >> fs[] >> res_tac)) >>
+  mp_tac (Q.SPECL
+    [`R_ok`, `R_term`, `f1`, `f2`, `bb`, `bottom`, `result`]
+    analysis_block_compare_from) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `!i fuel' ctx' s. _` irule >> simp[])
+    >- first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`fuel`, `ctx`,
+    `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `phi_prefix_length bb.bb_instructions`] mp_tac) >>
+  impl_tac >- (
+    simp[cj 6 venom_state_fupdfupds,
+         venomExecProofsTheory.phi_prefix_length_le]) >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem analysis_run_block_compare:
+  !(R_ok : venom_state -> venom_state -> bool)
+ (R_term : venom_state -> venom_state -> bool)
+ (f1 : 'a -> instruction -> instruction list)
+ (f2 : 'a -> instruction -> instruction list) bb
+ (bottom : 'a) (result : 'a df_state).
+  valid_state_rel R_ok R_term /\
+  (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
+  (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
+  inst_transform_structural f1 /\
+  inst_transform_structural f2 /\
+  bb_well_formed bb /\
+  EVERY inst_wf bb.bb_instructions /\
+  (!i fuel ctx s.
+     i < LENGTH bb.bb_instructions ==>
+     let inst = EL i bb.bb_instructions in
+     let v = df_at bottom result bb.bb_label i in
+     (?e. run_insts fuel ctx (f1 v inst) s = Error e) \/
+     lift_result R_ok R_term R_term
+       (run_insts fuel ctx (f1 v inst) s)
+       (run_insts fuel ctx (f2 v inst) s)) /\
+  (!inst x.
+     MEM inst (FLAT (MAPi (\idx i. f1 (df_at bottom result bb.bb_label idx) i)
+                          bb.bb_instructions)) /\
+     MEM (Var x) inst.inst_operands ==>
+     !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2)
+==>
+  !fuel ctx s.
+    (?e. run_block fuel ctx (analysis_block_transform bottom result f1 bb) s = Error e) \/
+    lift_result R_ok R_term R_term
+      (run_block fuel ctx (analysis_block_transform bottom result f1 bb) s)
+      (run_block fuel ctx (analysis_block_transform bottom result f2 bb) s)
+Proof
+  rpt strip_tac >>
+  (* Prove eval_phis and phi_prefix_length agreements BEFORE case split *)
+  `eval_phis s (analysis_block_transform bottom result f1 bb).bb_instructions =
+    eval_phis s bb.bb_instructions` by (
+    simp[analysis_block_transform_def] >>
+    match_mp_tac (GEN_ALL eval_phis_flat_mapi) >>
+    simp[] >> rpt conj_tac
+    >- (rpt strip_tac >> irule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >> irule inst_transform_non_phi_weak >> simp[])
+    >- (rpt strip_tac >>
+        imp_res_tac venomWfTheory.bb_well_formed_def >> fs[] >> res_tac)) >>
+  `eval_phis s (analysis_block_transform bottom result f2 bb).bb_instructions =
+    eval_phis s bb.bb_instructions` by (
+    simp[analysis_block_transform_def] >>
+    match_mp_tac (GEN_ALL eval_phis_flat_mapi) >>
+    simp[] >> rpt conj_tac
+    >- (rpt strip_tac >> irule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >> irule inst_transform_non_phi_weak >> simp[])
+    >- (rpt strip_tac >>
+        imp_res_tac venomWfTheory.bb_well_formed_def >> fs[] >> res_tac)) >>
+  `phi_prefix_length (analysis_block_transform bottom result f1 bb).bb_instructions =
+    phi_prefix_length bb.bb_instructions` by (
+    simp[analysis_block_transform_def] >>
+    match_mp_tac (GEN_ALL phi_prefix_length_flat_mapi) >>
+    simp[] >> rpt conj_tac
+    >- (rpt strip_tac >> irule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >> irule inst_transform_non_phi_weak >> simp[])
+    >- (rpt strip_tac >>
+        imp_res_tac venomWfTheory.bb_well_formed_def >> fs[] >> res_tac)) >>
+  `phi_prefix_length (analysis_block_transform bottom result f2 bb).bb_instructions =
+    phi_prefix_length bb.bb_instructions` by (
+    simp[analysis_block_transform_def] >>
+    match_mp_tac (GEN_ALL phi_prefix_length_flat_mapi) >>
+    simp[] >> rpt conj_tac
+    >- (rpt strip_tac >> irule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >> irule inst_transform_non_phi_weak >> simp[])
+    >- (rpt strip_tac >>
+        imp_res_tac venomWfTheory.bb_well_formed_def >> fs[] >> res_tac)) >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (
+    (* OK case *)
+    first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >>
+    `eval_phis s (analysis_block_transform bottom result f1 bb).bb_instructions =
+      OK s_phi` by simp[] >>
+    `eval_phis s (analysis_block_transform bottom result f2 bb).bb_instructions =
+      OK s_phi` by simp[] >>
+    (* Apply boundary lemma via mp_tac + Q.SPECL (irule fails on this triviality) *)
+    mp_tac (Q.SPECL [`R_ok`, `R_term`,
+                      `analysis_block_transform bottom result f1 bb`,
+                      `analysis_block_transform bottom result f2 bb`,
+                      `s`, `fuel`, `ctx`, `s_phi`]
+              run_block_entry_compare) >>
+    impl_tac >- (
+      rpt conj_tac >- simp[] >- simp[] >>
+      (* exec_block comparison *)
+      mp_tac (Q.SPECL [`R_ok`, `R_term`, `f1`, `f2`, `bb`, `bottom`, `result`,
+                        `fuel`, `ctx`, `s_phi`]
+                analysis_block_compare_from_phi_prefix) >>
+      impl_tac >- (
+        rpt conj_tac >> fs[] >>
+        (* R_ok reflexivity *)
+        irule execEquivParamBaseTheory.vsr_R_ok_refl >> metis_tac[]) >>
+      simp[] >> disch_then ACCEPT_TAC) >>
+    simp[] >> disch_then ACCEPT_TAC
+  ) >>
+  (* Error case — both run_block calls return Error since eval_phis returns Error *)
+  first_x_assum (qx_choose_then `e` strip_assume_tac) >>
+  DISJ1_TAC >>
+  `eval_phis s (analysis_block_transform bottom result f1 bb).bb_instructions =
+    Error e` by simp[] >>
+  qexists `e` >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[AllCaseEqs()]
 QED
