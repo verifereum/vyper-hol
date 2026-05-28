@@ -2868,7 +2868,16 @@ Resume eval_preserves_swt[IntCall]:
     SUBGOAL_THEN ``fn_sigs_consistent env.fn_sigs cx`` assume_tac
     >- (qpat_x_assum `env_consistent env cx _` mp_tac >>
         simp_tac (srw_ss()) [env_consistent_def]) >>
-    drule_all functions_well_typed_body_full >> strip_tac >>
+    (* Obtain a complete+consistent witness fn_sigs for the callee body, so
+       its internal calls resolve their signatures.  The body lemma's env_body
+       uses this witness (NOT env.fn_sigs), so the callee body type-checks. *)
+    qspec_then `cx` strip_assume_tac fn_sigs_consistent_complete_exists >>
+    rename1 `fn_sigs_consistent wfn_sigs cx` >>
+    drule functions_well_typed_body_full >>
+    disch_then drule >> disch_then drule >>
+    disch_then (qspec_then `wfn_sigs` mp_tac) >>
+    impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+    strip_tac >>
     RULE_ASSUM_TAC (PURE_REWRITE_RULE [FST, SND]) >>
     (* Re-inject ih_p1 as assumption before suspend, so it survives *)
     assume_tac ih_p1 >>
@@ -3314,6 +3323,11 @@ Resume eval_preserves_swt[chain_bind]:
 QED
 
 Resume eval_preserves_swt[chain_bind_swt]:
+  (* Drop the callee-body witness fn_sigs facts: this subgoal must use the
+     CALLER's env.fn_sigs (which types the current call's arguments), so we
+     remove the env_body witness facts that would otherwise shadow it. *)
+  qpat_x_assum `fn_sigs_consistent env_body.fn_sigs cx` (K ALL_TAC) >>
+  qpat_x_assum `fn_sigs_complete env_body.fn_sigs cx` (K ALL_TAC) >>
   drule (GEN_ALL bind_arguments_scope_well_typed) >>
   disch_then irule >>
   ho_match_mp_tac (GEN_ALL args_dflts_typing_to_el) >>
@@ -3342,9 +3356,11 @@ QED
 Resume eval_preserves_swt[chain_bind_ec]:
   drule (GEN_ALL bind_arguments_env_consistent) >>
   disch_then irule >>
-  first_assum (fn th =>
+  (* env_body.fn_sigs is the complete+consistent witness; rewrite if an
+     explicit equation survives, otherwise discharge via stk-irrelevance. *)
+  TRY (first_assum (fn th =>
     if can (match_term ``(eb:typing_env).fn_sigs = _``) (concl th)
-    then pure_rewrite_tac [th] else NO_TAC) >>
+    then pure_rewrite_tac [th] else NO_TAC)) >>
   pure_rewrite_tac [get_tenv_stk_irrelevant, get_module_code_stk_irrelevant,
                     fn_sigs_consistent_stk_irrelevant,
                     evaluation_context_accfupds] >>
@@ -3356,7 +3372,15 @@ Resume eval_preserves_swt[chain_ih]:
   (* ML-level tactic: SPECL the chain-prefix IH with 33 witnesses,
      derive bind_arguments = SOME, then discharge 12 conditions. *)
   (fn (asl, gl) => let
-    val ih_tm = List.nth(asl, 1)
+    (* Find the chain-prefix IH robustly: the universally-quantified assumption
+       whose body contains the IntCall recursion-check prefix.  (Positional
+       indexing is fragile: the extra fn_sigs witness assumptions shift the
+       IH's slot.) *)
+    val ih_tm = valOf (List.find (fn a =>
+      boolSyntax.is_forall a andalso
+      can (find_term (fn t =>
+        can (match_term ``check (¬MEM (src_id_opt,fn) cx.stk) "recursion" _``)
+          t)) a) asl)
     val ih = ASSUME ih_tm
     fun fa pat = valOf (List.find (fn a => can (match_term pat) a) asl)
     fun fa_filt pat pred = valOf (List.find (fn a =>
@@ -3400,8 +3424,12 @@ Resume eval_preserves_swt[chain_ih]:
       zero_s, arb_u, lk_out, lk_out, cx_p, push_o
     ]
     val ih2 = SIMP_RULE std_ss [] (SPECL specs ih)
-    (* Derive bind_arguments = SOME *)
-    val fsc_a = fa ``fn_sigs_consistent env.fn_sigs cx``
+    (* Derive bind_arguments = SOME.  Select the CALLER env's consistency
+       exactly: ``fn_sigs_consistent env.fn_sigs cx`` as a match pattern treats
+       `env` as a unifiable variable and would also match the callee env_body's
+       consistency, yielding a double-bind on fn_sigs in fn_sigs_param_types. *)
+    val fsc_a = valOf (List.find (fn a =>
+      aconv a ``fn_sigs_consistent env.fn_sigs cx``) asl)
     val flk_a = fa ``FLOOKUP env.fn_sigs (src_id_opt,fn) = SOME _``
     val gmc_a = fa ``get_module_code cx src_id_opt = SOME _``
     val lcf_a = fa ``lookup_callable_function _ _ _ = SOME _``

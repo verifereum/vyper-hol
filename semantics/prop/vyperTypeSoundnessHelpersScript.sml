@@ -414,12 +414,20 @@ Proof
   simp[fn_sigs_consistent_def, get_module_code_def]
 QED
 
+Theorem fn_sigs_complete_stk_irrelevant:
+  !sigs cx f. fn_sigs_complete sigs (cx with stk updated_by f) <=>
+              fn_sigs_complete sigs cx
+Proof
+  simp[fn_sigs_complete_def, get_module_code_def]
+QED
+
 Theorem functions_well_typed_stk_irrelevant:
   !cx f. functions_well_typed (cx with stk updated_by f) <=>
          functions_well_typed cx
 Proof
   simp[functions_well_typed_def, get_module_code_def,
        get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant,
+       fn_sigs_complete_stk_irrelevant,
        well_formed_type_def]
 QED
 
@@ -496,9 +504,10 @@ Theorem functions_well_typed_body:
         MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 Proof
   rw[functions_well_typed_def] >>
+  qspec_then `cx` strip_assume_tac fn_sigs_consistent_complete_exists >>
   first_x_assum (qspecl_then [`src_id_opt`, `fn`, `ts`, `fm`, `nr`, `args`,
-    `dflts`, `ret`, `body`, `FEMPTY`] mp_tac) >>
-  simp[fn_sigs_consistent_def, FLOOKUP_EMPTY] >>
+    `dflts`, `ret`, `body`, `fn_sigs`] mp_tac) >>
+  simp[] >>
   strip_tac >> qexists_tac `env_body` >> simp[]
 QED
 
@@ -513,7 +522,7 @@ Theorem functions_well_typed_body_full:
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
       SOME (fm, nr, args, dflts, ret, body) /\
-    fn_sigs_consistent fn_sigs cx ==>
+    fn_sigs_consistent fn_sigs cx /\ fn_sigs_complete fn_sigs cx ==>
     (nr ==> cx.nonreentrant_slot <> NONE) /\
     ?env_body ret_tv.
       env_body.type_defs = get_tenv cx /\

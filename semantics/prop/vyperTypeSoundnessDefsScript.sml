@@ -344,6 +344,142 @@ Definition fn_sigs_consistent_def:
         param_types = MAP SND params
 End
 
+(* ===== fn_sigs_complete: every Internal callable has a signature ===== *)
+(* For satisfiability of functions_well_typed we must EXCLUDE fn_sigs = FEMPTY:
+ * the IntCall well_typed_expr case needs FLOOKUP env.fn_sigs (src, fn) = SOME _
+ * for every internal function the body can call.  fn_sigs_complete states that
+ * a signature is present for every Internal-callable function.
+ *
+ * Completeness is Internal-scoped on purpose: Deploy-mode lookup_function is
+ * total over names (the empty-list base case returns SOME for the deploy
+ * constructor), so an "all callables" version would be unsatisfiable. *)
+Definition fn_sigs_complete_def:
+  fn_sigs_complete fn_sigs cx <=>
+    !src_id_opt fn ts x.
+      get_module_code cx src_id_opt = SOME ts /\
+      lookup_function NONE fn Internal ts = SOME x ==>
+      ?param_types ret_ty.
+        FLOOKUP fn_sigs (src_id_opt, fn) = SOME (param_types, ret_ty)
+End
+
+(* Internal function names declared in a module's toplevel statement list. *)
+Definition internal_fn_names_def:
+  internal_fn_names ts = MAP FST (FLAT (MAP dest_Internal_Fn ts))
+End
+
+(* A successful Internal lookup means the name is among the declared internal
+ * function names.  (No ([],[]) escape hatch: this is purely about names.) *)
+Theorem lookup_function_Internal_MEM_names:
+  !src_id_opt fn vis ts x.
+    lookup_function src_id_opt fn vis ts = SOME x /\ vis = Internal ==>
+    MEM fn (internal_fn_names ts)
+Proof
+  ho_match_mp_tac lookup_function_ind >>
+  rw[lookup_function_def, internal_fn_names_def, dest_Internal_Fn_def] >>
+  gvs[dest_Internal_Fn_def] >>
+  rename1 `FunctionDecl fv _ _ _ _ _ _ _ _` >>
+  Cases_on `fv` >> gvs[dest_Internal_Fn_def]
+QED
+
+(* The set of (src_id_opt, fn) keys for which an Internal callable exists. *)
+Definition icallable_def:
+  icallable cx key <=>
+    ?ts x. get_module_code cx (FST key) = SOME ts /\
+           lookup_function NONE (SND key) Internal ts = SOME x
+End
+
+Definition icallable_keys_def:
+  icallable_keys cx = { key | icallable cx key }
+End
+
+(* A concrete enumeration of internal keys, used to bound icallable_keys for
+ * finiteness. *)
+Definition internal_key_list_def:
+  internal_key_list cx =
+    case ALOOKUP cx.sources cx.txn.target of
+      NONE => []
+    | SOME mods =>
+        FLAT (MAP (\(src_id, ts).
+          MAP (\fn. (src_id, fn)) (internal_fn_names ts)) mods)
+End
+
+(* icallable_keys is contained in the concrete list, hence finite. *)
+Theorem icallable_keys_SUBSET:
+  icallable_keys cx SUBSET set (internal_key_list cx)
+Proof
+  simp[SUBSET_DEF, icallable_keys_def, icallable_def, internal_key_list_def] >>
+  rpt strip_tac >>
+  rename1 `get_module_code cx (FST key) = SOME _` >>
+  Cases_on `key` >> fs[] >>
+  fs[get_module_code_def] >>
+  Cases_on `ALOOKUP cx.sources cx.txn.target` >> fs[] >>
+  drule lookup_function_Internal_MEM_names >> simp[] >> strip_tac >>
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS, EXISTS_PROD] >>
+  qpat_x_assum `ALOOKUP x q = SOME ts` (assume_tac o MATCH_MP alistTheory.ALOOKUP_MEM) >>
+  qexists_tac `ts` >> simp[] >>
+  first_assum (irule_at Any)
+QED
+
+Theorem FINITE_icallable_keys:
+  FINITE (icallable_keys cx)
+Proof
+  irule SUBSET_FINITE >>
+  qexists_tac `set (internal_key_list cx)` >>
+  simp[FINITE_LIST_TO_SET, icallable_keys_SUBSET]
+QED
+
+(* The signature derived from a key: param types and return type of the Internal
+ * callable.  Defined via @ so it is total; on icallable keys it picks the right
+ * pair (witnessed below). *)
+Definition icallable_sig_def:
+  icallable_sig cx key =
+    @sig. ?ts fm nr params dflts ret body.
+      get_module_code cx (FST key) = SOME ts /\
+      lookup_function NONE (SND key) Internal ts =
+        SOME (fm, nr, params, dflts, ret, body) /\
+      sig = (MAP SND params, ret)
+End
+
+(* The FUN_FMAP witness over the finite key set is consistent and complete. *)
+Theorem fn_sigs_consistent_complete_exists:
+  !cx. ?fn_sigs.
+    fn_sigs_consistent fn_sigs cx /\ fn_sigs_complete fn_sigs cx
+Proof
+  gen_tac >>
+  qexists_tac `FUN_FMAP (icallable_sig cx) (icallable_keys cx)` >>
+  conj_tac
+  >- (
+    simp[fn_sigs_consistent_def] >> rpt strip_tac >>
+    `(src_id_opt, fn) IN icallable_keys cx` by (
+      pop_assum mp_tac >>
+      simp[FLOOKUP_FUN_FMAP, FINITE_icallable_keys] >>
+      IF_CASES_TAC >> simp[]) >>
+    `icallable_sig cx (src_id_opt, fn) = (param_types, ret_ty)` by (
+      qpat_x_assum `FLOOKUP _ _ = SOME (param_types, ret_ty)` mp_tac >>
+      simp[FLOOKUP_FUN_FMAP, FINITE_icallable_keys]) >>
+    fs[icallable_keys_def, icallable_def] >>
+    (* lookup_function NONE fn Internal ts = SOME x ==> lookup_callable_function ... *)
+    `lookup_callable_function cx.in_deploy fn ts = SOME x` by
+      simp[lookup_callable_function_def] >>
+    qpat_x_assum `icallable_sig _ _ = _` mp_tac >>
+    PairCases_on `x` >>
+    simp[icallable_sig_def] >>
+    SELECT_ELIM_TAC >>
+    rpt strip_tac >> gvs[] >>
+    rpt (first_assum (irule_at Any)) >> gvs[])
+  >- (
+    simp[fn_sigs_complete_def] >> rpt strip_tac >>
+    `(src_id_opt, fn) IN icallable_keys cx` by (
+      simp[icallable_keys_def, icallable_def] >>
+      rpt (first_assum (irule_at Any))) >>
+    simp[FLOOKUP_FUN_FMAP, FINITE_icallable_keys] >>
+    PairCases_on `x` >>
+    simp[icallable_sig_def] >>
+    SELECT_ELIM_TAC >>
+    rpt strip_tac >>
+    rpt (first_assum (irule_at Any)) >> simp[])
+QED
+
 (* env_consistent: typing env matches runtime state *)
 Definition env_consistent_def:
   env_consistent env cx st <=>
@@ -653,7 +789,7 @@ Definition functions_well_typed_def:
       get_module_code cx src_id_opt = SOME ts /\
       lookup_callable_function cx.in_deploy fn ts =
         SOME (fm, nr, args, dflts, ret, body) /\
-      fn_sigs_consistent fn_sigs cx ==>
+      fn_sigs_consistent fn_sigs cx /\ fn_sigs_complete fn_sigs cx ==>
       (nr ==> cx.nonreentrant_slot <> NONE) /\
       ?env_body ret_tv.
         env_body.type_defs = get_tenv cx /\
