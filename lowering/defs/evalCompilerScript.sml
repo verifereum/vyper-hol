@@ -483,10 +483,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem if_bool_result_lengths:
+  compile_vyper if_bool_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "if_bool.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem if_join_compiles:
   IS_SOME
     (compile_vyper if_join_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem if_join_result_lengths:
+  compile_vyper if_join_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "if_join.hex")
 Proof
   EVAL_TAC
 QED
@@ -499,10 +515,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem for_pass_result_lengths:
+  compile_vyper for_pass_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_pass.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem for_accum_compiles:
   IS_SOME
     (compile_vyper for_accum_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem for_accum_result_lengths:
+  compile_vyper for_accum_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_accum.hex")
 Proof
   EVAL_TAC
 QED
@@ -515,10 +547,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem for_continue_result_lengths:
+  compile_vyper for_continue_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_continue.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem for_break_compiles:
   IS_SOME
     (compile_vyper for_break_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem for_break_result_lengths:
+  compile_vyper for_break_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_break.hex")
 Proof
   EVAL_TAC
 QED
@@ -531,10 +579,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem internal_call_result_lengths:
+  compile_vyper internal_call_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_call.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem internal_call_arg_compiles:
   IS_SOME
     (compile_vyper internal_call_arg_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem internal_call_arg_result_lengths:
+  compile_vyper internal_call_arg_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_call_arg.hex")
 Proof
   EVAL_TAC
 QED
