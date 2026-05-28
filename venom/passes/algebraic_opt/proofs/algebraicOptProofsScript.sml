@@ -2231,6 +2231,60 @@ Proof
       fs[strict_dom_iszero_inv_def] >> metis_tac[])
 QED
 
+(* strict_dom_iszero_inv preserved through per-step within a block.
+   Key: dominator ISZERO outputs/operands are not in current block's outputs. *)
+Triviality strict_dom_iszero_inv_step_preserved_local[local]:
+  !fn0 dfg bb inst fuel ctx s s'.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    dfg = dfg_build_function fn0 /\
+    MEM bb fn0.fn_blocks /\
+    MEM inst bb.bb_instructions /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    bb.bb_label = s.vs_current_bb /\
+    step_inst fuel ctx inst s = OK s' /\
+    strict_dom_iszero_inv fn0 dfg s ==>
+    strict_dom_iszero_inv fn0 dfg s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn0` by fs[wf_ssa_def] >>
+  `s'.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  simp_tac std_ss [strict_dom_iszero_inv_def] >>
+  rpt gen_tac >> rpt strip_tac >>
+  `fn_dominates fn0 d_bb.bb_label bb.bb_label /\
+   d_bb.bb_label <> bb.bb_label` by gvs[] >>
+  `d_bb <> bb` by metis_tac[same_label_same_block] >>
+  `MEM x inst'.inst_outputs` by
+    metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+  `~MEM x (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+    metis_tac[ssa_output_not_in_other_block] >>
+  `~MEM x inst.inst_outputs` by
+    (strip_tac >> gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[]) >>
+  `lookup_var x s' = lookup_var x s` by
+    metis_tac[venomInstPropsTheory.step_preserves_non_output_vars] >>
+  `!vn. MEM (Var vn) inst'.inst_operands ==> ~MEM vn inst.inst_outputs` by
+    (rpt strip_tac >>
+     `~MEM vn (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+       metis_tac[ssa_cross_block_operand_not_output] >>
+     gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `!opr. MEM opr inst'.inst_operands ==>
+     eval_operand opr s' = eval_operand opr s` by
+    (rpt strip_tac >> Cases_on `opr` >> simp[eval_operand_def] >>
+     TRY (metis_tac[venomInstPropsTheory.step_preserves_labels]) >>
+     rename1 `lookup_var vn2` >>
+     `~MEM vn2 inst.inst_outputs` by metis_tac[] >>
+     metis_tac[venomInstPropsTheory.step_preserves_non_output_vars]) >>
+  qpat_x_assum `strict_dom_iszero_inv _ _ s`
+    (mp_tac o REWRITE_RULE [strict_dom_iszero_inv_def]) >>
+  disch_then (qspecl_then [`x`, `inst'`, `op`, `d_bb`] mp_tac) >>
+  gvs[] >> disch_then (qspecl_then [`val_x`, `val_op`] mp_tac) >>
+  gvs[] >>
+  `MEM op inst'.inst_operands` by gvs[] >>
+  metis_tac[]
+QED
+
 (* ao_handle_offset_inst preserves inst_id *)
 Triviality ao_handle_offset_inst_id_eq[local]:
   !inst. (ao_handle_offset_inst inst).inst_id = inst.inst_id
@@ -2734,6 +2788,19 @@ Proof
   disj2_tac >> simp[] >> metis_tac[]
 QED
 
+Triviality iszero_step_cases_strong[local]:
+  !acc h. ao_compute_iszero_step acc h = acc \/
+    ?out inp prev.
+      h.inst_opcode = ISZERO /\
+      h.inst_operands = [inp] /\ h.inst_outputs = [out] /\
+      ao_compute_iszero_step acc h = (out, SNOC (Var out) prev) :: acc /\
+      (prev = [inp] \/ ?s. inp = Var s /\ ALOOKUP acc s = SOME prev)
+Proof
+  rpt gen_tac >> simp[ao_compute_iszero_step_def] >>
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  disj2_tac >> simp[] >> metis_tac[]
+QED
+
 (* Chain Var elements at position > 0 are target keys. *)
 Triviality iszero_step_chain_var_is_key[local]:
   !acc h.
@@ -2943,13 +3010,43 @@ Proof
   gvs[step_inst_base_def, exec_read0_def]
 QED
 
+Triviality iszero_step_chain_last[local]:
+  !h acc.
+    (!v ch. ALOOKUP acc v = SOME ch /\ ch <> [] ==> LAST ch = Var v) ==>
+    (!v ch. ALOOKUP (ao_compute_iszero_step acc h) v = SOME ch /\
+       ch <> [] ==> LAST ch = Var v)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[ao_compute_iszero_step_def] >>
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY (strip_tac >> first_x_assum irule >> gvs[] >> NO_TAC) >>
+  simp[alistTheory.ALOOKUP_def] >>
+  IF_CASES_TAC >> gvs[] >> strip_tac >>
+  gvs[listTheory.LAST_SNOC, listTheory.LAST_DEF] >>
+  first_x_assum irule >> gvs[]
+QED
+
+Triviality foldl_chain_last[local]:
+  !insts acc.
+    (!v ch. ALOOKUP acc v = SOME ch /\ ch <> [] ==> LAST ch = Var v) ==>
+    (!v ch. ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME ch /\
+       ch <> [] ==> LAST ch = Var v)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum match_mp_tac >>
+  match_mp_tac iszero_step_chain_last >> first_assum ACCEPT_TAC
+QED
+
 (* Chain consecutive ISZERO: consecutive chain elements correspond to
    an ISZERO instruction. EL (k+1) chain = Var w is an ISZERO output
    whose operand is EL k chain. *)
 Triviality chain_consecutive_iszero_step_aux[local]:
   !acc inst v chain k w.
-    ALOOKUP (ao_compute_iszero_step acc inst) v = SOME chain /\
-    k + 1 < LENGTH chain /\ EL (k + 1) chain = Var w ==>
+    (!v' ch. ALOOKUP acc v' = SOME ch /\ ch <> [] ==>
+       LAST ch = Var v') ==>
+    ALOOKUP (ao_compute_iszero_step acc inst) v = SOME chain ==>
+    k + 1 < LENGTH chain ==>
+    EL (k + 1) chain = Var w ==>
     (inst.inst_opcode = ISZERO /\
      inst.inst_operands = [EL k chain] /\
      MEM w inst.inst_outputs) \/
@@ -2957,11 +3054,40 @@ Triviality chain_consecutive_iszero_step_aux[local]:
        k + 1 < LENGTH chain' /\ EL (k + 1) chain' = Var w /\
        EL k chain' = EL k chain)
 Proof
-  cheat
+  rpt gen_tac >> rpt strip_tac >>
+  qspecl_then [`acc`, `inst`] strip_assume_tac iszero_step_cases_strong
+  >- (* step = acc, passthrough *)
+     (DISJ2_TAC >> qexistsl_tac [`v`, `chain`] >> gvs[])
+  >- (* step changed, prev = [inp] *)
+     (gvs[alistTheory.ALOOKUP_def, listTheory.SNOC] >>
+      Cases_on `v = out` >> gvs[]
+      >- (DISJ1_TAC >> `k = 0` by simp[] >>
+          gvs[listTheory.EL, listTheory.HD])
+      >- (DISJ2_TAC >> qexistsl_tac [`v`, `chain`] >> gvs[]))
+  >- (* step changed, prev from ALOOKUP acc s *)
+     (gvs[alistTheory.ALOOKUP_def] >>
+      Cases_on `v = out` >> gvs[listTheory.LENGTH_SNOC]
+      >- (rename1 `ALOOKUP acc sv = SOME prev` >>
+          Cases_on `k + 1 < LENGTH prev`
+          >- (DISJ2_TAC >>
+              qexistsl_tac [`sv`, `prev`] >> simp[] >>
+              `k < LENGTH prev` by simp[] >>
+              gvs[listTheory.EL_SNOC])
+          >- (DISJ1_TAC >>
+              `k + 1 = LENGTH prev` by simp[] >>
+              `prev <> []` by (strip_tac >> gvs[]) >>
+              `LAST prev = Var sv` by metis_tac[] >>
+              `k = PRE (LENGTH prev)` by simp[] >>
+              `EL k prev = Var sv` by gvs[listTheory.LAST_EL] >>
+              `k < LENGTH prev` by simp[] >>
+              gvs[listTheory.EL_SNOC, listTheory.EL_LENGTH_SNOC]))
+      >- (DISJ2_TAC >> qexistsl_tac [`v`, `chain`] >> simp[]))
 QED
 
 Triviality chain_consecutive_iszero_foldl[local]:
   !insts acc v chain k w.
+    (!v' ch. ALOOKUP acc v' = SOME ch /\ ch <> [] ==>
+       LAST ch = Var v') ==>
     ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
     k + 1 < LENGTH chain /\ EL (k + 1) chain = Var w ==>
     (?inst. MEM inst insts /\
@@ -2972,23 +3098,30 @@ Triviality chain_consecutive_iszero_foldl[local]:
        k + 1 < LENGTH chain' /\ EL (k + 1) chain' = Var w /\
        EL k chain' = EL k chain)
 Proof
-  Induct >> rpt strip_tac
+  Induct >> rpt gen_tac >> strip_tac >> strip_tac
   >- (DISJ2_TAC >> qexistsl_tac [`v`, `chain`] >> gvs[])
   >- (gvs[Once listTheory.FOLDL] >>
+      `!v' ch. ALOOKUP (ao_compute_iszero_step acc h) v' = SOME ch /\
+         ch <> [] ==> LAST ch = Var v'` by
+        (match_mp_tac iszero_step_chain_last >> first_assum ACCEPT_TAC) >>
       first_x_assum
         (qspecl_then [`ao_compute_iszero_step acc h`,
                       `v`, `chain`, `k`, `w`] mp_tac) >>
-      simp[] >> strip_tac
+      impl_tac >- first_assum ACCEPT_TAC >>
+      impl_tac >- simp[] >>
+      strip_tac
       >- (DISJ1_TAC >> metis_tac[])
-      >- (qpat_x_assum `ALOOKUP _ _ = SOME chain'` mp_tac >>
-          qpat_x_assum `EL k chain' = _` mp_tac >>
-          qpat_x_assum `EL (k + 1) chain' = _` mp_tac >>
-          qpat_x_assum `k + 1 < LENGTH chain'` mp_tac >>
-          rpt strip_tac >>
-          drule_all chain_consecutive_iszero_step_aux >> strip_tac
-          >- (DISJ1_TAC >> qexists_tac `h` >> simp[])
+      >- (mp_tac chain_consecutive_iszero_step_aux >>
+          disch_then (qspecl_then [`acc`, `h`, `v'`, `chain'`, `k`, `w`]
+            mp_tac) >>
+          impl_tac >- first_x_assum ACCEPT_TAC >>
+          impl_tac >- first_assum ACCEPT_TAC >>
+          impl_tac >- first_assum ACCEPT_TAC >>
+          impl_tac >- first_assum ACCEPT_TAC >>
+          strip_tac
+          >- (DISJ1_TAC >> qexists_tac `h` >> gvs[])
           >- (DISJ2_TAC >>
-              qexistsl_tac [`v''`, `chain''`] >> simp[] >>
+              qexistsl_tac [`v''`, `chain''`] >> gvs[] >>
               metis_tac[])))
 QED
 
@@ -3003,9 +3136,10 @@ Triviality chain_consecutive_iszero[local]:
 Proof
   rpt strip_tac >>
   gvs[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
-  drule_all chain_consecutive_iszero_foldl >>
-  strip_tac >> gvs[alistTheory.ALOOKUP_def] >>
-  metis_tac[]
+  mp_tac (Q.SPECL [`fn_insts fn`, `[]`] chain_consecutive_iszero_foldl) >>
+  simp[alistTheory.ALOOKUP_def] >>
+  disch_then drule_all >> strip_tac >>
+  gvs[alistTheory.ALOOKUP_def] >> metis_tac[]
 QED
 
 (* Per-inst sim with state-dependent invariants instead of ∀s preconditions.
