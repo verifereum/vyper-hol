@@ -383,6 +383,11 @@ Definition evaluate_builtin_def:
        else INR (RuntimeError "Neg operand bound")
       | NONE => INR (TypeError "Neg type")) ∧
   evaluate_builtin cx _ _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
+  evaluate_builtin cx _ ty Abs [IntV i] =
+    (case type_to_int_bound ty
+     of SOME u => bounded_int_op u (ABS i)
+      | NONE => INR (TypeError "Abs type")) ∧
+  evaluate_builtin cx _ _ Abs [DecimalV i] = bounded_decimal_op (ABS i) ∧
   evaluate_builtin cx _ _ Keccak256 [BytesV ls] = INL $ BytesV $
     Keccak_256_w64 ls ∧
   evaluate_builtin cx _ _ Keccak256 [StringV s] = INL $ BytesV $

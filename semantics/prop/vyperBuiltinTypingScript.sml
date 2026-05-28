@@ -871,7 +871,16 @@ Resume evaluate_builtin_well_typed[Neg]:
 QED
 
 Resume evaluate_builtin_well_typed[Abs]:
-  gvs[evaluate_builtin_def]
+  gvs[well_typed_builtin_app_def] >>
+  Cases_on `v'` >>
+  gvs[evaluate_builtin_def, AllCaseEqs()] >>
+  imp_res_tac bounded_int_op_INL >>
+  imp_res_tac bounded_decimal_op_INL >>
+  gvs[] >>
+  TRY (Cases_on `ty` >> gvs[is_int_type_def] >>
+       gvs[type_to_int_bound_def, evaluate_type_def,
+           AllCaseEqs(), value_has_type_def, within_int_bound_def] >> NO_TAC) >>
+  gvs[evaluate_type_def, value_has_type_def]
 QED
 
 Resume evaluate_builtin_well_typed[Keccak256]:
