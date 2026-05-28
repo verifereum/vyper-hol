@@ -40,12 +40,9 @@ Ancestors
 Libs
   pairLib
 
-val assert_elim_debug = fn msg =>
-  (print ("[assertElimProofs] " ^ msg ^ "\n"); TextIO.flushOut TextIO.stdOut);
 
 (* ===== Helper: range_excludes_zero + in_range ==> w <> 0w ===== *)
 
-val _ = assert_elim_debug "START in_range_excludes_zero_nonzero";
 Theorem in_range_excludes_zero_nonzero[local]:
   !r w. in_range r w /\ range_excludes_zero r ==> w <> 0w
 Proof
@@ -54,10 +51,8 @@ Proof
   CCONTR_TAC >> gvs[integer_wordTheory.word_0_w2i] >>
   intLib.ARITH_TAC
 QED
-val _ = assert_elim_debug "DONE in_range_excludes_zero_nonzero";
 
 (* ASSERT with one operand: reverts if operand = 0w, continues unchanged otherwise *)
-val _ = assert_elim_debug "START step_inst_assert_1";
 Theorem step_inst_assert_1:
   !fuel ctx inst s op.
     inst.inst_opcode = ASSERT /\ inst.inst_operands = [op] ==>
@@ -71,9 +66,7 @@ Theorem step_inst_assert_1:
 Proof
   rpt strip_tac >> simp[step_inst_def, step_inst_base_def]
 QED
-val _ = assert_elim_debug "DONE step_inst_assert_1";
 
-val _ = assert_elim_debug "START step_inst_assert_bad_arity";
 Theorem step_inst_assert_bad_arity[local]:
   !fuel ctx inst s.
     inst.inst_opcode = ASSERT ==>
@@ -84,10 +77,8 @@ Theorem step_inst_assert_bad_arity[local]:
 Proof
   rpt strip_tac >> simp[step_inst_def, step_inst_base_def]
 QED
-val _ = assert_elim_debug "DONE step_inst_assert_bad_arity";
 
 (* in_range_state implies in_range for any looked-up variable *)
-val _ = assert_elim_debug "START in_range_state_lookup";
 Theorem in_range_state_lookup[local]:
   !rs env v w.
     in_range_state rs env /\ FLOOKUP env v = SOME w ==>
@@ -99,12 +90,10 @@ Proof
   fs[in_range_state_def] >>
   first_x_assum drule >> disch_then drule >> simp[]
 QED
-val _ = assert_elim_debug "DONE in_range_state_lookup";
 
 (* ===== Per-instruction simulation ===== *)
 
 (* ASSERT transform preserves per-instruction behavior under range_sound *)
-val _ = assert_elim_debug "START assert_elim_sim";
 Theorem assert_elim_sim[local]:
   !v fuel ctx inst s.
     range_sound v s /\ inst_wf inst ==>
@@ -151,9 +140,7 @@ Proof
   (* Label case: identity *)
   >> metis_tac[lift_result_refl, state_equiv_refl, execution_equiv_refl]
 QED
-val _ = assert_elim_debug "DONE assert_elim_sim";
 
-val _ = assert_elim_debug "START assert_elim_inst_simulates_1";
 Theorem assert_elim_inst_simulates_1[local]:
   analysis_inst_simulates_1
     (state_equiv {}) (execution_equiv {})
@@ -174,9 +161,7 @@ Proof
       BasicProvers.every_case_tac >>
       gvs[mk_nop_inst_def, is_terminator_def])
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_simulates_1";
 
-val _ = assert_elim_debug "START assert_elim_inst_simulates_proof";
 Theorem assert_elim_inst_simulates_proof:
   analysis_inst_simulates
     (state_equiv {}) (execution_equiv {})
@@ -186,12 +171,10 @@ Proof
   irule analysis_inst_simulates_from_1 >>
   ACCEPT_TAC assert_elim_inst_simulates_1
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_simulates_proof";
 
 (* ===== Function-level correctness ===== *)
 
 (* transfer_sound for range analysis — shared by all range-based passes *)
-val _ = assert_elim_debug "START range_transfer_sound";
 Theorem range_transfer_sound:
   !fn. transfer_sound range_sound range_transfer_opt
          (dfg_build_function fn, fn.fn_blocks)
@@ -203,10 +186,8 @@ Proof
       simp[in_range_state_def, FLOOKUP_DEF])
   >- (qexistsl_tac [`run_ctx`, `fuel`, `s`] >> simp[])
 QED
-val _ = assert_elim_debug "DONE range_transfer_sound";
 
 (* range_sound stable under state_equiv {} *)
-val _ = assert_elim_debug "START range_sound_state_equiv";
 Theorem range_sound_state_equiv:
   !v s1 s2. state_equiv {} s1 s2 /\ range_sound v s1 ==>
              range_sound v s2
@@ -219,11 +200,9 @@ Proof
      metis_tac[]) >>
   res_tac
 QED
-val _ = assert_elim_debug "DONE range_sound_state_equiv";
 
 (* ===== Pre-instantiated framework lemma for range analysis ===== *)
 
-val _ = assert_elim_debug "START range_intra_transfer_early";
 Theorem range_intra_transfer_early[local]:
   !fn lbl bb idx.
     wf_function fn /\
@@ -261,9 +240,7 @@ Proof
     mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
   simp[]
 QED
-val _ = assert_elim_debug "DONE range_intra_transfer_early";
 
-val _ = assert_elim_debug "START range_analysis_block_sim_boundary";
 Theorem range_analysis_block_sim_boundary[local]:
   !fn sound state_inv f bb fuel run_ctx s.
     transfer_sound sound range_transfer_opt
@@ -360,12 +337,10 @@ Proof
   >- (
     DISJ1_TAC >> qexists_tac `e` >> gvs[run_block_def])
 QED
-val _ = assert_elim_debug "DONE range_analysis_block_sim_boundary";
 
 (* Specializes df_analysis_pass_correct_widen_sound_inv to range analysis
    parameters. Eliminates ISPECL + standard obligations. Reusable across
    all range-based passes. *)
-val _ = assert_elim_debug "START range_analysis_pass_correct";
 Theorem range_analysis_pass_correct:
   !fn sound state_inv f.
     let ra = range_analyze fn in
@@ -464,13 +439,11 @@ Proof
       first_assum ACCEPT_TAC]) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
-val _ = assert_elim_debug "DONE range_analysis_pass_correct";
 
 (* Specializes df_analysis_pass_correct_widen_sound_inv2 to range analysis.
    Unlike range_analysis_pass_correct, the per-inst sim gets state_inv and
    inst_wf, and there is an obligation to prove state_inv preserved through
    step_inst (with MEM context). Used by overflow_elim, algebraic_opt. *)
-val _ = assert_elim_debug "START range_analysis_pass_correct_inv2";
 Theorem range_analysis_pass_correct_inv2:
   !fn state_inv f.
     let ra = range_analyze fn in
@@ -585,13 +558,11 @@ Proof
     >> first_assum ACCEPT_TAC) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
-val _ = assert_elim_debug "DONE range_analysis_pass_correct_inv2";
 
 (* Generalizes range_analysis_pass_correct_inv2 to arbitrary exclusion sets.
    Passes with non-empty R_ok/R_term (e.g. algebraic_opt with ao_fresh_set)
    must additionally discharge: range_sound stability under R_ok,
    lookup_var stability for fn operands under R_ok. *)
-val _ = assert_elim_debug "START range_analysis_pass_correct_excl";
 Theorem range_analysis_pass_correct_excl:
   !fn excl state_inv f.
     let ra = range_analyze fn in
@@ -713,7 +684,6 @@ Proof
     >> first_assum ACCEPT_TAC) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
-val _ = assert_elim_debug "DONE range_analysis_pass_correct_excl";
 
 (* range_analysis_pass_correct_excl_idx belongs in algebraicOptProofs where
    range_transfer_opt_disjoint_restricted is available. The universal
@@ -728,7 +698,6 @@ val _ = assert_elim_debug "DONE range_analysis_pass_correct_excl";
 
 (* PHI-prefix range soundness helpers live in rangeAnalysisProofsTheory. *)
 
-val _ = assert_elim_debug "START phi_prefix_length_lt_wf";
 Triviality phi_prefix_length_lt_wf[local]:
   !bb. bb_well_formed bb ==>
        phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
@@ -747,10 +716,8 @@ Proof
     (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
   gvs[is_terminator_def]
 QED
-val _ = assert_elim_debug "DONE phi_prefix_length_lt_wf";
 
 (* Inter-block transfer: df_widen_at at position 0 = df_widen_entry *)
-val _ = assert_elim_debug "START range_entry_eq";
 Theorem range_entry_eq:
   !fn lbl bb.
     wf_function fn /\
@@ -784,11 +751,9 @@ Proof
     mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
   simp[]
 QED
-val _ = assert_elim_debug "DONE range_entry_eq";
 
 (* df_fold_forward result agrees with df_widen_at at every position,
    and the fold output equals df_widen_at at exit position. *)
-val _ = assert_elim_debug "START df_fold_widen_at_agree";
 Triviality df_fold_widen_at_agree:
   !n transfer lbl instrs entry fv im fn bb.
     wf_function fn /\
@@ -822,9 +787,7 @@ Proof
     irule (SIMP_RULE std_ss [LET_THM] range_intra_transfer) >> simp[]) >>
   fs[]
 QED
-val _ = assert_elim_debug "DONE df_fold_widen_at_agree";
 
-val _ = assert_elim_debug "START df_fold_fv_eq_widen_at";
 Theorem df_fold_fv_eq_widen_at:
   !fn lbl bb.
     wf_function fn /\
@@ -850,10 +813,8 @@ Proof
     `fv`, `im`, `fn`, `bb`] df_fold_widen_at_agree) >>
   simp[]
 QED
-val _ = assert_elim_debug "DONE df_fold_fv_eq_widen_at";
 
 (* Precompute the ISPECL of process_fixpoint_absorbs for range analysis *)
-val _ = assert_elim_debug "START mk_range_pfa";
 fun mk_range_pfa () =
   CONV_RULE (DEPTH_CONV PairRules.PBETA_CONV)
   (SIMP_RULE std_ss [LET_THM, dfAnalyzeDefsTheory.direction_case_def]
@@ -877,10 +838,8 @@ fun mk_range_pfa () =
     ``lbl : string``,
     ``range_analyze fn``]
   dfAnalyzeWidenProofsTheory.process_fixpoint_absorbs))));
-val _ = assert_elim_debug "DONE mk_range_pfa";
 
 (* Boundary absorption at fixpoint: boundary = join(boundary, exit_val) *)
-val _ = assert_elim_debug "START range_fixpoint_absorbs";
 Theorem range_fixpoint_absorbs:
   !fn lbl.
     wf_function fn /\
@@ -932,13 +891,11 @@ Proof
         (df_widen_entry NONE (range_analyze fn) lbl)`
   \\ gvs[]
 QED
-val _ = assert_elim_debug "DONE range_fixpoint_absorbs";
 
 (* ===== Range soundness at successor entry ===== *)
 
 (* Exit soundness: range_sound at block entry ==> range_sound at block exit.
    PHI-prefix evaluation advances the analysis point before exec_block. *)
-val _ = assert_elim_debug "START range_exit_sound";
 Theorem range_exit_sound:
   !fn bb fuel run_ctx s v.
     let ra = range_analyze fn in
@@ -1025,23 +982,19 @@ Proof
     gvs[]) >>
   simp[]
 QED
-val _ = assert_elim_debug "DONE range_exit_sound";
 
 (* ===== Successor soundness (main) ===== *)
 
 (* range_transfer_opt always returns SOME *)
-val _ = assert_elim_debug "START range_transfer_opt_is_some";
 Theorem range_transfer_opt_is_some:
   !ctx inst v. ?rs. range_transfer_opt ctx inst v = SOME rs
 Proof
   rpt gen_tac >> Cases_on `v` >>
   simp[range_transfer_opt_def, LET_THM]
 QED
-val _ = assert_elim_debug "DONE range_transfer_opt_is_some";
 
 (* df_widen_at is SOME at any position >= 1 in a non-empty block,
    since range_transfer_opt always produces SOME. *)
-val _ = assert_elim_debug "START range_widen_at_some";
 Theorem range_widen_at_some:
   !fn bb n.
     let ra = range_analyze fn in
@@ -1085,11 +1038,9 @@ Proof
   simp[] >> strip_tac >>
   metis_tac[range_transfer_opt_is_some]
 QED
-val _ = assert_elim_debug "DONE range_widen_at_some";
 
 (* Helper: range_widen_opt at fixpoint produces NONE, SOME FEMPTY, or the joined value.
    In all cases either trivially sound or reduces to showing joined is sound. *)
-val _ = assert_elim_debug "START range_widen_opt_fixpoint_cases";
 Theorem range_widen_opt_fixpoint_cases:
   !old joined.
     range_widen_opt old joined = old ==>
@@ -1099,12 +1050,10 @@ Proof
   simp[range_widen_opt_def] >>
   rpt strip_tac >> BasicProvers.every_case_tac >> fs[]
 QED
-val _ = assert_elim_debug "DONE range_widen_opt_fixpoint_cases";
 
 (* Helper: JNZ branch condition for range_branch_refine_sound.
    When JNZ always has distinct labels, we can derive the branch condition
    from run_block_jnz_condition. *)
-val _ = assert_elim_debug "START jnz_branch_condition_from_run_block";
 Theorem jnz_branch_condition_from_run_block:
   !fn bb fuel run_ctx s v succ.
     run_block fuel run_ctx bb s = OK v /\
@@ -1141,12 +1090,10 @@ Proof
     `var`, `true_lbl`, `false_lbl`] mp_tac) >>
   simp[]
 QED
-val _ = assert_elim_debug "DONE jnz_branch_condition_from_run_block";
 
 (* Helper: combines jnz_branch_condition_from_run_block with
    range_branch_refine_sound to get in_range_state of the refined range
    at a successor, given run_block + boundary soundness. *)
-val _ = assert_elim_debug "START range_branch_refine_after_run_block";
 Theorem range_branch_refine_after_run_block:
   !fn bb fuel run_ctx s v succ boundary_rs.
     run_block fuel run_ctx bb s = OK v /\
@@ -1190,9 +1137,7 @@ Proof
   \\ impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)
   \\ strip_tac
 QED
-val _ = assert_elim_debug "DONE range_branch_refine_after_run_block";
 
-val _ = assert_elim_debug "START range_edge_transfer_opt_some";
 Theorem range_edge_transfer_opt_some:
   !dfg bbs pred succ rs.
     range_edge_transfer_opt (dfg, bbs) pred succ (SOME rs) =
@@ -1200,13 +1145,11 @@ Theorem range_edge_transfer_opt_some:
 Proof
   simp[range_edge_transfer_opt_def]
 QED
-val _ = assert_elim_debug "DONE range_edge_transfer_opt_some";
 
 (* Successor soundness: after running a block at a fixpoint,
    the successor has range_sound, dfg_sound+ops_defined, and is in cfg_dfs_pre.
    Requires ssa_form + dfg_sound for edge_transfer soundness. *)
 (* range_sound at successor entry point *)
-val _ = assert_elim_debug "START range_sound_at_successor";
 Theorem range_sound_at_successor:
   !fn bb fuel run_ctx s v.
     let ra = range_analyze fn in
@@ -1377,9 +1320,7 @@ Proof
     conj_tac >> first_assum ACCEPT_TAC)
   \\ metis_tac[]
 QED
-val _ = assert_elim_debug "DONE range_sound_at_successor";
 
-val _ = assert_elim_debug "START range_successor_sound";
 Theorem range_successor_sound:
   !fn bb fuel run_ctx s v.
     let ra = range_analyze fn in
@@ -1451,24 +1392,20 @@ Proof
   >> conj_tac >- first_assum ACCEPT_TAC >>
   first_assum ACCEPT_TAC
 QED
-val _ = assert_elim_debug "DONE range_successor_sound";
 
 (* dfg_sound is preserved by state_equiv {} because state_equiv {} implies
    vs_vars agreement (via lookup_var agreement with empty excluded set). *)
-val _ = assert_elim_debug "START dfg_sound_state_equiv";
 Theorem dfg_sound_state_equiv:
   !dfg s1 s2. state_equiv {} s1 s2 /\ dfg_sound dfg s1.vs_vars ==>
                dfg_sound dfg s2.vs_vars
 Proof
   rpt strip_tac >> imp_res_tac state_equiv_empty_vars_eq >> fs[]
 QED
-val _ = assert_elim_debug "DONE dfg_sound_state_equiv";
 
 (* Re-derive original JNZ distinct-labels from HOL-simplified form.
    HOL simplifies (!bb cond tl fl. ... ==> tl <> fl) to
    (!bb cond fl. JNZ ==> ops=[...fl;fl] ==> ~MEM bb bbs).
    range_successor_sound needs the original form. *)
-val _ = assert_elim_debug "START jnz_distinct_labels_from_simplified";
 Theorem jnz_distinct_labels_from_simplified:
   (!bb cond false_lbl.
      (LAST bb.bb_instructions).inst_opcode = JNZ ==>
@@ -1484,11 +1421,9 @@ Theorem jnz_distinct_labels_from_simplified:
 Proof
   rpt strip_tac >> CCONTR_TAC >> gvs[]
 QED
-val _ = assert_elim_debug "DONE jnz_distinct_labels_from_simplified";
 
 (* Successor obligation adapted for the framework call context.
    Uses range_successor_sound but handles the JNZ hypothesis form mismatch. *)
-val _ = assert_elim_debug "START range_successor_obligation";
 Theorem range_successor_obligation:
   wf_function fn /\ fn_inst_wf fn /\
   (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
@@ -1530,9 +1465,7 @@ Proof
   >> (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC))
   >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-val _ = assert_elim_debug "DONE range_successor_obligation";
 
-val _ = assert_elim_debug "START assert_elim_inst_cases";
 Theorem assert_elim_inst_cases[local]:
   !v inst. assert_elim_inst v inst = inst \/
            assert_elim_inst v inst = mk_nop_inst inst
@@ -1540,9 +1473,7 @@ Proof
   rpt gen_tac >> simp[assert_elim_inst_def] >>
   rpt (BasicProvers.PURE_CASE_TAC >> simp[])
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_cases";
 
-val _ = assert_elim_debug "START assert_elim_inst_id";
 Theorem assert_elim_inst_id[local]:
   !v inst. (assert_elim_inst v inst).inst_id = inst.inst_id
 Proof
@@ -1551,9 +1482,7 @@ Proof
                         assert_elim_inst_cases) >>
   simp[mk_nop_inst_def]
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_id";
 
-val _ = assert_elim_debug "START assert_elim_inst_terminator";
 Theorem assert_elim_inst_terminator[local]:
   !v inst. is_terminator inst.inst_opcode ==> assert_elim_inst v inst = inst
 Proof
@@ -1561,9 +1490,7 @@ Proof
   IF_CASES_TAC >> simp[] >>
   fs[is_terminator_def]
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_terminator";
 
-val _ = assert_elim_debug "START assert_elim_inst_not_terminator";
 Theorem assert_elim_inst_not_terminator[local]:
   !v inst. ~is_terminator inst.inst_opcode ==>
            ~is_terminator (assert_elim_inst v inst).inst_opcode
@@ -1573,18 +1500,14 @@ Proof
                         assert_elim_inst_cases) >>
   simp[mk_nop_inst_def, is_terminator_def]
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_not_terminator";
 
-val _ = assert_elim_debug "START assert_elim_inst_phi";
 Theorem assert_elim_inst_phi[local]:
   !v inst. inst.inst_opcode = PHI ==>
            (assert_elim_inst v inst).inst_opcode = PHI
 Proof
   rpt strip_tac >> simp[assert_elim_inst_def]
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_phi";
 
-val _ = assert_elim_debug "START assert_elim_inst_not_phi";
 Theorem assert_elim_inst_not_phi[local]:
   !v inst. inst.inst_opcode <> PHI ==>
            (assert_elim_inst v inst).inst_opcode <> PHI
@@ -1594,9 +1517,7 @@ Proof
                         assert_elim_inst_cases) >>
   simp[mk_nop_inst_def]
 QED
-val _ = assert_elim_debug "DONE assert_elim_inst_not_phi";
 
-val _ = assert_elim_debug "START aftw_singleton_eq_fmt_mapi";
 Theorem aftw_singleton_eq_fmt_mapi[local]:
   !bottom result (f : 'a -> instruction -> instruction) fn.
     analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
@@ -1611,9 +1532,7 @@ Proof
   simp[analysis_block_transform_widen_def,
        basic_block_component_equality, flat_mapi_singleton]
 QED
-val _ = assert_elim_debug "DONE aftw_singleton_eq_fmt_mapi";
 
-val _ = assert_elim_debug "START assert_elim_analysis_transform_wf";
 Theorem assert_elim_analysis_transform_wf[local]:
   !fn. wf_function fn ==>
        wf_function (analysis_function_transform_widen NONE (range_analyze fn)
@@ -1629,11 +1548,9 @@ Proof
        assert_elim_inst_not_terminator, assert_elim_inst_phi,
        assert_elim_inst_not_phi]
 QED
-val _ = assert_elim_debug "DONE assert_elim_analysis_transform_wf";
 
 (* Assert elimination preserves function-level semantics under range soundness.
    Eliminates provably-true assertions via range analysis, then clears NOPs. *)
-val _ = assert_elim_debug "START assert_elim_function_correct_proof";
 Theorem assert_elim_function_correct_proof:
   !fuel ctx fn s.
     wf_function fn /\
@@ -1720,4 +1637,3 @@ Proof
      simp[assert_elim_analysis_transform_wf]
      ]
 QED
-val _ = assert_elim_debug "DONE assert_elim_function_correct_proof";
