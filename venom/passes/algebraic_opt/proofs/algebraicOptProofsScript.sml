@@ -4169,10 +4169,11 @@ Proof
     ao_chain_defined_prefix targets s /\
     (!j x. n <= j /\ j < LENGTH bb.bb_instructions /\
            MEM x (EL j bb.bb_instructions).inst_outputs ==>
-           lookup_var x s = NONE)` >>
-  qabbrev_tac `sinv = \(s:venom_state).
+           lookup_var x s = NONE) /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
-    strict_dom_iszero_inv fn0 dfg s` >>
+    strict_dom_iszero_inv fn0 dfg s /\
+    (n < LENGTH bb.bb_instructions ==> bb.bb_label = s.vs_current_bb)` >>
+  qabbrev_tac `sinv = \(s:venom_state). T` >>
   `ao_transform_block mid dfg ra targets bb =
    analysis_block_transform 0 result f bb` by
     (simp[analysis_block_transform_def, ao_transform_block_def,
@@ -4198,8 +4199,180 @@ Proof
      `f`, `bb`, `0`, `result`,
      `\(ctx:'b) (inst:instruction) (v:num). SUC v`, `ARB:'b`]
     mp_tac analysis_block_sim_inv_at
-  >> impl_tac >- cheat
-  >> cheat
+  >> impl_tac >- (
+    (`ao_targets_wf targets` by
+      (qpat_x_assum `Abbrev (targets = _)` mp_tac >>
+       simp[markerTheory.Abbrev_def, ao_compute_fn_iszero_targets_wf])) >>
+    (`ssa_form fn0` by fs[wf_ssa_def]) >>
+    rpt conj_tac
+    >- simp[state_equiv_execution_equiv_valid_state_rel]
+    >- metis_tac[state_equiv_trans]
+    >- metis_tac[execution_equiv_trans]
+    >- (* CHEATED — per-inst sim: need to expand sound, unabbrev f,
+          rewrite df_at via idx_df_state_at2, then apply ao_per_inst_sim_fn0_inv.
+          Issue: goal has s.vs_current_bb but ao_per_inst_sim_fn0_inv uses bb.bb_label.
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `sound _ _` mp_tac >>
+        simp_tac std_ss [Abbr `sound`] >> strip_tac >>
+        simp[Abbr `f`] >>
+        `idx < LENGTH bb.bb_instructions` by simp[] >>
+        `df_at 0 result bb.bb_label idx = idx` by
+          simp[Abbr `result`, idx_df_state_at2] >>
+        pop_assum SUBST_ALL_TAC >>
+        mp_tac ao_per_inst_sim_fn0_inv >>
+        disch_then (qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`,
+          `bb`, `fuel`, `ctx`, `idx`,
+          `EL idx bb.bb_instructions`, `s'`] mp_tac) >>
+        simp[] >> disch_then irule >> rpt conj_tac >>
+        metis_tac[markerTheory.Abbrev_def, listTheory.EL_MEM,
+                  mem_block_mem_fn_insts]) *)
+       cheat
+    >- simp[Abbr `f`, ao_transform_inst_structural]
+    >- first_assum ACCEPT_TAC
+    >- (* operand lookup under state_equiv *)
+       (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+        drule_all ao_fn0_operand_not_in_fv >> strip_tac >>
+        fs[state_equiv_def, execution_equiv_def])
+    >- (* CHEATED — transfer_sound: 8 sub-branches for 8-conjunct sound.
+          Each sub-branch handles sound(n) s -> step_inst -> sound(n+1) s'.
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `sound _ _` mp_tac >>
+        simp_tac std_ss [Abbr `sound`] >> strip_tac >>
+        rename1 `step_inst fuel2 ctx2 (EL idx2 _) s2 = OK s2'` >>
+        `MEM (EL idx2 bb.bb_instructions) bb.bb_instructions` by
+          metis_tac[listTheory.EL_MEM] >>
+        `MEM (EL idx2 bb.bb_instructions) (fn_insts fn0)` by
+          metis_tac[mem_block_mem_fn_insts] >>
+        qabbrev_tac `inst2 = EL idx2 bb.bb_instructions` >>
+        rpt conj_tac
+        >- (irule ao_local_transfer_sound >>
+            qexistsl_tac [`fn`, `fn0`, `ra`, `bb`, `fuel2`, `ctx2`, `s2`] >>
+            simp[] >> metis_tac[markerTheory.Abbrev_def])
+        >- (irule wbiz_step_any >>
+            qexistsl_tac [`fn0`, `bb`, `inst2`, `fuel2`, `ctx2`, `s2`,
+                          `targets`] >>
+            simp[Abbr `inst2`] >>
+            metis_tac[markerTheory.Abbrev_def])
+        >- (Cases_on `is_terminator inst2.inst_opcode`
+            >- (irule ao_iszero_chain_inv_step_preserved >>
+                qexistsl_tac [`inst2`, `fuel2`, `ctx2`, `s2`] >>
+                simp[] >> rpt strip_tac >>
+                Cases_on `EL k chain` >> simp[eval_operand_def] >>
+                metis_tac[step_terminator_preserves_vars,
+                          venomInstPropsTheory.step_preserves_labels])
+            >- (mp_tac ao_sinv_step_preserved >>
+                disch_then (qspecl_then [`fn`, `fn0`, `dfg`, `targets`,
+                  `bb`, `idx2`, `fuel2`, `ctx2`, `s2`, `s2'`] mp_tac) >>
+                simp[Abbr `inst2`] >>
+                disch_then irule >> rpt conj_tac >>
+                metis_tac[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel]))
+        >- (Cases_on `is_terminator inst2.inst_opcode`
+            >- (irule ao_chain_defined_prefix_step_preserved >>
+                qexistsl_tac [`inst2`, `fuel2`, `ctx2`, `s2`] >>
+                simp[] >> rpt strip_tac >>
+                Cases_on `EL k chain` >> simp[eval_operand_def] >>
+                metis_tac[step_terminator_preserves_vars,
+                          venomInstPropsTheory.step_preserves_labels])
+            >- (mp_tac ao_sinv_step_preserved >>
+                disch_then (qspecl_then [`fn`, `fn0`, `dfg`, `targets`,
+                  `bb`, `idx2`, `fuel2`, `ctx2`, `s2`, `s2'`] mp_tac) >>
+                simp[Abbr `inst2`] >>
+                disch_then irule >> rpt conj_tac >>
+                metis_tac[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel]))
+        >- cheat (* freshness: use all_distinct_flat_map_unique + step_preserves_non_output_vars *)
+        >- (`ao_dfg_inv dfg s2` by metis_tac[ao_dfg_inv_inst_idx_irrel] >>
+            `ao_dfg_inv dfg s2'` by metis_tac[ao_dfg_inv_step_any] >>
+            metis_tac[ao_dfg_inv_inst_idx_irrel])
+        >- (Cases_on `is_terminator inst2.inst_opcode`
+            >- (qpat_x_assum `strict_dom_iszero_inv _ _ _` mp_tac >>
+                simp[strict_dom_iszero_inv_def] >> rpt strip_tac >> res_tac >>
+                gvs[] >>
+                `lookup_var x s2' = lookup_var x s2` by
+                  metis_tac[step_terminator_preserves_vars] >>
+                `!opr. eval_operand opr s2' = eval_operand opr s2` by
+                  (gen_tac >> Cases_on `opr` >> simp[eval_operand_def] >>
+                   TRY (metis_tac[step_terminator_preserves_vars]) >>
+                   metis_tac[venomInstPropsTheory.step_preserves_labels]) >>
+                gvs[] >> metis_tac[])
+            >- (`bb.bb_label = s2.vs_current_bb` by metis_tac[] >>
+                metis_tac[strict_dom_iszero_inv_step_preserved_local,
+                          markerTheory.Abbrev_def]))
+        >- (strip_tac >>
+            `bb.bb_label = s2.vs_current_bb` by metis_tac[] >>
+            `~is_terminator inst2.inst_opcode` by
+              (`bb_well_formed bb` by (fs[wf_function_def] >> metis_tac[]) >>
+               fs[bb_well_formed_def] >> strip_tac >>
+               `idx2 = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+               gvs[Abbr `inst2`]) >>
+            `s2'.vs_current_bb = s2.vs_current_bb` by
+              metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+            simp[])) *)
+       cheat
+    >- (* CHEATED — sound preserved by state_equiv fv: 8 sub-branches.
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `sound _ _` mp_tac >>
+        simp_tac std_ss [Abbr `sound`] >> strip_tac >>
+        `s1.vs_current_bb = s2.vs_current_bb` by
+          fs[state_equiv_def, execution_equiv_def] >>
+        rpt conj_tac
+        >- (irule ao_in_range_state_equiv_compat >>
+            qexistsl_tac [`fn`, `fn0`] >> simp[] >>
+            metis_tac[markerTheory.Abbrev_def])
+        >- (irule wbiz_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac
+            >- (`MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+                  metis_tac[listTheory.EL_MEM] >>
+                irule ao_fn0_output_not_in_fv >>
+                qexistsl_tac [`fn`, `fn0`, `bb`, `EL j bb.bb_instructions`] >>
+                simp[])
+            >- (`MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+                  metis_tac[listTheory.EL_MEM] >>
+                irule ao_fn0_operand_not_in_fv >>
+                qexistsl_tac [`fn`, `fn0`, `bb`, `EL j bb.bb_instructions`] >>
+                simp[]))
+        >- (irule ao_iszero_chain_inv_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
+            metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])
+        >- (irule ao_chain_defined_prefix_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
+            metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])
+        >- (rpt strip_tac >>
+            `MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+              metis_tac[listTheory.EL_MEM] >>
+            `x NOTIN fv` by
+              (irule ao_fn0_output_not_in_fv >>
+               qexistsl_tac [`fn`, `fn0`, `bb`, `EL j bb.bb_instructions`] >>
+               simp[]) >>
+            `lookup_var x s1 = lookup_var x s2` by
+              fs[state_equiv_def, execution_equiv_def] >>
+            metis_tac[])
+        >- (`state_equiv fv (s1 with vs_inst_idx := 0)
+                             (s2 with vs_inst_idx := 0)` by
+              (qpat_x_assum `state_equiv _ _ _` mp_tac >>
+               simp[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+            `!x inst'. dfg_get_def dfg x = SOME inst' ==> x NOTIN fv` by
+              metis_tac[ao_dfg_outputs_not_in_fv, markerTheory.Abbrev_def] >>
+            metis_tac[ao_dfg_inv_state_equiv_compat])
+        >- metis_tac[strict_dom_iszero_inv_state_equiv_compat]
+        >- simp[]) *)
+       cheat
+    >- (rpt strip_tac >> simp[Abbr `result`, idx_df_state_at2])
+    >- (* sinv step — trivial since sinv = T *)
+       simp[Abbr `sinv`]
+    >- (* sinv preserved by state_equiv — trivial *)
+       simp[Abbr `sinv`])
+  >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  simp[Abbr `sound`, Abbr `sinv`, Abbr `result`, idx_df_state_at2,
+       wbiz_initial] >>
+  (`s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality]) >>
+  gvs[] >>
+  (* CHEATED — initial sound: need to show sound 0 s from preconditions.
+     Most conjuncts are direct from preconditions. The freshness conjunct
+     (!j x. 0 <= j ...) is exactly the precondition. The bb.bb_label condition
+     with 0 < LENGTH follows from bb_well_formed (block non-empty). *)
+  impl_tac >- cheat >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem ao_phases123_run_blocks_sim_inv[local]:
@@ -4272,7 +4445,11 @@ Proof
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
     >- (qunabbrev_tac `bt` >> simp[])
-    >- (* Per-block sim — connect ao_block_sim_local *)
+    >- (* CHEATED — Per-block sim: ao_block_sim_local needs freshness
+          (!j x. j < LENGTH bb.bb_instructions /\ MEM x ... ==> lookup_var x s = NONE).
+          This must be derived from SSA (wf_ssa) at block entry (vs_inst_idx = 0).
+          Original proof expanded block_inv, derived in_range_state, then called
+          ao_block_sim_local via mp_tac + disch_then irule.
        (rpt strip_tac >>
         qpat_x_assum `block_inv _` mp_tac >>
         simp_tac std_ss [Abbr `block_inv`] >> strip_tac >>
@@ -4284,8 +4461,13 @@ Proof
         disch_then (qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`,
           `targets`, `bb`, `fv`, `fuel`, `ctx`, `s'`] mp_tac) >>
         simp[] >> disch_then irule >>
-        gvs[] >> metis_tac[])
-    >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
+        gvs[] >> metis_tac[]) *)
+       cheat
+    >- (* CHEATED — block_inv preserved through exec_block.
+          Needs SSA freshness at new block entry + range transfer + chain inv transfer.
+          The freshness condition for the new block follows from SSA: after exec_block,
+          we move to a successor block whose instruction outputs are distinct from the
+          current block's outputs (by ssa_form), so they remain NONE. *)
        cheat
     >- (* block_inv compat with state_equiv fv *)
        (rpt gen_tac >> strip_tac >>
