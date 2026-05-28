@@ -735,6 +735,31 @@ Definition well_typed_iterator_def:
      is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
+(* ===== well_typed_hashmap_write_target: standalone recognizer for HashMap
+   assignment targets.  By design this is SEPARATE from well_typed_target so
+   the existing eval_base_target_type_connection (which uses
+   subscript_type_ok) remains untouched.  Type chain navigation is leaf-first:
+   - SubscriptTarget at the AST root corresponds to the LAST key applied at
+     runtime (deepest level of the HashMap chain).
+   - We start with vt = Type leaf_t and walk inward, expecting each outer
+     SubscriptTarget to extend vt by one HashMapT layer.
+   - At the TopLevelNameTarget base, vt must equal the env's stored chain
+     HashMapT kt0 vt0 corresponding to the HashMapVarDecl. *)
+Definition well_typed_hashmap_write_target_def:
+  well_typed_hashmap_write_target env (TopLevelNameTarget (src, id)) vt =
+    (?kt0 vt0.
+       FLOOKUP env.hashmap_types (src, string_to_num id) = SOME (kt0, vt0) /\
+       vt = HashMapT kt0 vt0) /\
+  well_typed_hashmap_write_target env (SubscriptTarget inner_tgt e) vt =
+    (?kt_e.
+       well_typed_hashmap_write_target env inner_tgt (HashMapT kt_e vt) /\
+       well_typed_expr env e /\
+       expr_type e = kt_e) /\
+  well_typed_hashmap_write_target env (NameTarget _) _ = F /\
+  well_typed_hashmap_write_target env (BareGlobalNameTarget _) _ = F /\
+  well_typed_hashmap_write_target env (AttributeTarget _ _) _ = F
+End
+
 Definition well_typed_stmt_def:
   well_typed_stmt env ret_ty Pass = T /\
   well_typed_stmt env ret_ty Continue = T /\

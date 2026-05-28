@@ -2473,6 +2473,45 @@ QED
 
 Finalise assign_target_preserves_swt_ec
 
+(* === HashMap-write state preservation helpers ===
+   For TopLevelVar locations (which include HashMapRef storage targets),
+   assign_target's path goes through write_storage_slot, which preserves
+   state_well_typed/env_consistent regardless of the written value's type
+   (storage is separate from scopes/immutables tracked by state_well_typed).
+
+   These helpers support the HashMap branch of well_typed_stmt {Assign,
+   AugAssign} in vyperTypeSoundnessScript, where the static evidence
+   (well_typed_hashmap_write_target) doesn't satisfy the typing-based
+   discharge required by assign_target_well_typed. *)
+
+Theorem assign_target_toplevel_state_preserved:
+  !cx src id sbs ao st res st' env.
+    assign_target cx (BaseTargetV (TopLevelVar src id) sbs) ao st = (res, st') /\
+    state_well_typed st /\ env_consistent env cx st ==>
+    state_well_typed st' /\ env_consistent env cx st'
+Proof
+  rpt strip_tac >> gvs[assign_target_def, LET_THM]
+  >> gvs[bind_apply, CaseEq"prod", CaseEq"sum", ignore_bind_apply]
+  >> TRY(imp_res_tac lookup_global_state >> gvs[])
+  >> TRY(imp_res_tac lift_option_type_state >> gvs[])
+  >> Cases_on `tv` >> gvs[]
+  >> gvs bind_decompose_ss >> state_identity_preserves_tac
+  >> qpat_x_assum `_ s'' = (res, st')` mp_tac
+  >> simp bind_decompose_full_ss
+  >> rpt strip_tac >> gvs[]
+  >> state_identity_preserves_tac
+  >> qpat_x_assum `(case _ of _ => _ | _ => _) _ = _` mp_tac
+  >> rpt BasicProvers.TOP_CASE_TAC
+  >> simp bind_decompose_full_ss
+  >> rpt strip_tac >> gvs[]
+  >> TRY (imp_res_tac read_storage_slot_state >> gvs[])
+  >> TRY (imp_res_tac lift_sum_state >> gvs[])
+  >> TRY (imp_res_tac check_state >> imp_res_tac get_storage_backend_state
+          >> gvs[])
+  >> TRY (imp_res_tac write_storage_slot_well_typed >> gvs[])
+  >> imp_res_tac assign_result_state >> gvs[]
+QED
+
 (* === General tactics for state_well_typed preservation ===
    Used within type_preservation Resume blocks. *)
 
