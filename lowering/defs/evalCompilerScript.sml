@@ -371,10 +371,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem storage_write_result_lengths:
+  compile_vyper storage_write_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "storage_write.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem deploy_storage_compiles:
   IS_SOME
     (compile_vyper deploy_storage_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_storage_result_lengths:
+  compile_vyper deploy_storage_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "deploy_storage.hex")
 Proof
   EVAL_TAC
 QED
@@ -387,10 +403,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem event_log_result_lengths:
+  compile_vyper event_log_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "event_log.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem indexed_event_log_compiles:
   IS_SOME
     (compile_vyper indexed_event_log_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem indexed_event_log_result_lengths:
+  compile_vyper indexed_event_log_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "indexed_event_log.hex")
 Proof
   EVAL_TAC
 QED
@@ -403,6 +435,14 @@ Proof
   EVAL_TAC
 QED
 
+Theorem mixed_event_log_result_lengths:
+  compile_vyper mixed_event_log_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "mixed_event_log.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem hashmap_read_compiles:
   IS_SOME
     (compile_vyper hashmap_read_program
@@ -411,10 +451,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem hashmap_read_result_lengths:
+  compile_vyper hashmap_read_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "hashmap_read.hex")
+Proof
+  EVAL_TAC
+QED
+
 Theorem hashmap_write_compiles:
   IS_SOME
     (compile_vyper hashmap_write_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem hashmap_write_result_lengths:
+  compile_vyper hashmap_write_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "hashmap_write.hex")
 Proof
   EVAL_TAC
 QED
