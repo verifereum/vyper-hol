@@ -4133,8 +4133,7 @@ Proof
             conj_tac >- first_assum ACCEPT_TAC >>
             qexistsl_tac [`bb`, `ctx'`, `fuel`, `s'`] >>
             gvs[markerTheory.Abbrev_def, idx_df_state_at2])
-        >- (* wbiz_step — wbiz_step_any proved, naming issue after gvs *)
-           cheat)
+        >- cheat)
     >- (* sound preserved by state_equiv fv *)
        (rpt strip_tac >> gvs[Abbr `sound`] >> rpt conj_tac
         >- (irule ao_in_range_state_equiv_compat >>
@@ -4168,7 +4167,14 @@ Proof
         >- (irule ao_chain_defined_prefix_state_equiv_compat >>
             qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
             metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])))
-  >> cheat
+  >>
+  simp[Abbr `sound`, Abbr `sinv`] >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  simp[Abbr `result`] >>
+  impl_tac >- (simp[idx_df_state_at2, wbiz_initial] >>
+    `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
+    gvs[]) >>
+  simp[]
 QED
 
 Theorem ao_phases123_run_blocks_sim_inv[local]:
