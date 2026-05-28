@@ -1,5 +1,5 @@
 Theory evalCompiler
-Ancestors compileVyper concretizeMemLocDefs alist integer_word option
+Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
