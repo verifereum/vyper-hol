@@ -4146,6 +4146,7 @@ Triviality ao_block_sim_local[local]:
     bb.bb_label = s.vs_current_bb /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     strict_dom_iszero_inv fn0 dfg s /\
+    ao_iszero_chain_inv targets s /\
     ao_chain_defined_prefix targets s /\
     in_range_state (range_at_inst ra bb.bb_label 0) s.vs_vars ==>
     (?e. exec_block fuel ctx bb s = Error e) \/
@@ -4164,6 +4165,7 @@ Proof
   qabbrev_tac `sinv = \(s:venom_state).
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     strict_dom_iszero_inv fn0 dfg s /\
+    ao_iszero_chain_inv targets s /\
     ao_chain_defined_prefix targets s` >>
   `ao_transform_block mid dfg ra targets bb =
    analysis_block_transform 0 result f bb` by
@@ -4195,7 +4197,20 @@ Proof
     >- simp[state_equiv_execution_equiv_valid_state_rel]
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
-    >- cheat (* per-inst sim *)
+    >- (* per-inst sim *)
+       (rpt strip_tac >>
+        gvs[Abbr `sound`, Abbr `sinv`, Abbr `f`, Abbr `result`] >>
+        qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`, `bb`,
+          `fuel`, `ctx`, `df_at 0 (idx_df_state bb.bb_label
+            (SUC (LENGTH bb.bb_instructions))) bb.bb_label idx`,
+          `EL idx bb.bb_instructions`, `s'`]
+          mp_tac ao_per_inst_sim_fn0_inv >>
+        impl_tac >- (
+          gvs[markerTheory.Abbrev_def, ao_dfg_inv_inst_idx_irrel,
+              ao_chain_inv_inst_idx_iff, ao_chain_defined_prefix_inst_idx_iff,
+              ao_compute_fn_iszero_targets_wf, idx_df_state_at2] >>
+          metis_tac[listTheory.EVERY_MEM, listTheory.EL_MEM]) >>
+        simp[])
     >- simp[Abbr `f`, ao_transform_inst_structural]
     >- first_assum ACCEPT_TAC
     >- (* operand lookup under state_equiv *)
@@ -4257,6 +4272,9 @@ Proof
         >- (irule strict_dom_iszero_inv_state_equiv_compat >>
             qexistsl_tac [`fv`, `s1`] >>
             simp[] >> rpt strip_tac >> res_tac)
+        >- (irule ao_iszero_chain_inv_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
+            metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])
         >- (irule ao_chain_defined_prefix_state_equiv_compat >>
             qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
             metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])))
@@ -4291,6 +4309,7 @@ Theorem ao_phases123_run_blocks_sim_inv[local]:
               v NOTIN ao_fn_fresh_vars fn) /\
     ao_dfg_inv dfg s /\
     strict_dom_iszero_inv fn0 dfg s /\
+    ao_iszero_chain_inv targets s /\
     ao_chain_defined_prefix targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre /\
@@ -4323,6 +4342,7 @@ Proof
   qabbrev_tac `block_inv = \s:venom_state.
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     strict_dom_iszero_inv fn0 dfg s /\
+    ao_iszero_chain_inv targets s /\
     ao_chain_defined_prefix targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre /\
@@ -4375,6 +4395,10 @@ Proof
             metis_tac[ao_dfg_inv_state_equiv_compat])
         >- (* strict_dom_iszero_inv *)
            metis_tac[strict_dom_iszero_inv_state_equiv_compat]
+        >- (* ao_iszero_chain_inv *)
+           (irule ao_iszero_chain_inv_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
+            metis_tac[ao_chain_vars_not_in_fv, markerTheory.Abbrev_def])
         >- (* ao_chain_defined_prefix *)
            (irule ao_chain_defined_prefix_state_equiv_compat >>
             qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
@@ -4404,6 +4428,7 @@ Proof
   impl_tac
   >- (rpt conj_tac >>
       TRY (simp[ao_dfg_inv_inst_idx_irrel,
+                ao_chain_inv_inst_idx_iff,
                 ao_chain_defined_prefix_inst_idx_iff,
                 strict_dom_iszero_inv_inst_idx] >> NO_TAC) >>
       TRY (qpat_x_assum `range_sound _ _` mp_tac >>
