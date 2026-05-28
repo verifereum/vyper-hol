@@ -1,6 +1,6 @@
 Theory evalCompiler
 Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
 val () = the_compset := computeLib.add_thms [fmap_to_alist_FEMPTY] (!the_compset)
@@ -351,6 +351,14 @@ Theorem storage_read_compiles:
   IS_SOME
     (compile_vyper storage_read_program
        concretize_context_eval Linear)
+Proof
+  EVAL_TAC
+QED
+
+Theorem storage_read_result_lengths:
+  compile_vyper storage_read_program
+    concretize_context_eval Linear =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "storage_read.hex")
 Proof
   EVAL_TAC
 QED
