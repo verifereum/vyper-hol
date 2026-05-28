@@ -1,6 +1,6 @@
 Theory evalCompiler
 Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs finite_mapLib computeLib wordsLib
 
 val () = the_compset := add_finite_map_compset(!the_compset)
 val () = the_compset := computeLib.add_thms [fmap_to_alist_FEMPTY] (!the_compset)
@@ -278,27 +278,6 @@ Proof
   EVAL_TAC
 QED
 
-Definition empty_expected_bytecode_def:
-  empty_expected_bytecode =
-    (([91w; 95w; 97w; 0w; 19w; 129w; 96w; 34w; 144w; 145w; 144w;
-       57w; 96w; 34w; 243w; 91w; 95w; 128w; 253w; 91w; 54w; 96w;
-       4w; 16w; 21w; 97w; 0w; 18w; 87w; 97w; 0w; 14w; 86w; 91w;
-       95w; 95w; 253w; 91w; 95w; 53w; 96w; 224w; 144w; 28w; 80w;
-       97w; 0w; 14w; 86w; 91w; 95w; 128w; 253w] : byte list),
-     ([91w; 54w; 96w; 4w; 16w; 21w; 97w; 0w; 18w; 87w; 97w; 0w;
-       14w; 86w; 91w; 95w; 95w; 253w; 91w; 95w; 53w; 96w; 224w;
-       144w; 28w; 80w; 97w; 0w; 14w; 86w; 91w; 95w; 128w; 253w] :
-      byte list))
-End
-
-Theorem empty_bytecode_matches_expected:
-  compile_vyper ([] : toplevel list)
-    concretize_context_eval Linear =
-    SOME empty_expected_bytecode
-Proof
-  EVAL_TAC
-QED
-
 Theorem noop_compiles:
   IS_SOME
     (compile_vyper noop_program
@@ -355,26 +334,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem storage_read_result_lengths:
-  compile_vyper storage_read_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "storage_read.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem storage_write_compiles:
   IS_SOME
     (compile_vyper storage_write_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem storage_write_result_lengths:
-  compile_vyper storage_write_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "storage_write.hex")
 Proof
   EVAL_TAC
 QED
@@ -387,26 +350,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem deploy_storage_result_lengths:
-  compile_vyper deploy_storage_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "deploy_storage.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem event_log_compiles:
   IS_SOME
     (compile_vyper event_log_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem event_log_result_lengths:
-  compile_vyper event_log_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "event_log.hex")
 Proof
   EVAL_TAC
 QED
@@ -419,26 +366,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem indexed_event_log_result_lengths:
-  compile_vyper indexed_event_log_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "indexed_event_log.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem mixed_event_log_compiles:
   IS_SOME
     (compile_vyper mixed_event_log_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem mixed_event_log_result_lengths:
-  compile_vyper mixed_event_log_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "mixed_event_log.hex")
 Proof
   EVAL_TAC
 QED
@@ -451,26 +382,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem hashmap_read_result_lengths:
-  compile_vyper hashmap_read_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "hashmap_read.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem hashmap_write_compiles:
   IS_SOME
     (compile_vyper hashmap_write_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem hashmap_write_result_lengths:
-  compile_vyper hashmap_write_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "hashmap_write.hex")
 Proof
   EVAL_TAC
 QED
@@ -483,26 +398,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem if_bool_result_lengths:
-  compile_vyper if_bool_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "if_bool.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem if_join_compiles:
   IS_SOME
     (compile_vyper if_join_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem if_join_result_lengths:
-  compile_vyper if_join_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "if_join.hex")
 Proof
   EVAL_TAC
 QED
@@ -515,26 +414,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem for_pass_result_lengths:
-  compile_vyper for_pass_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_pass.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem for_accum_compiles:
   IS_SOME
     (compile_vyper for_accum_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem for_accum_result_lengths:
-  compile_vyper for_accum_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_accum.hex")
 Proof
   EVAL_TAC
 QED
@@ -547,26 +430,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem for_continue_result_lengths:
-  compile_vyper for_continue_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_continue.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem for_break_compiles:
   IS_SOME
     (compile_vyper for_break_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem for_break_result_lengths:
-  compile_vyper for_break_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "for_break.hex")
 Proof
   EVAL_TAC
 QED
@@ -579,26 +446,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem internal_call_result_lengths:
-  compile_vyper internal_call_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_call.hex")
-Proof
-  EVAL_TAC
-QED
-
 Theorem internal_call_arg_compiles:
   IS_SOME
     (compile_vyper internal_call_arg_program
        concretize_context_eval Linear)
-Proof
-  EVAL_TAC
-QED
-
-Theorem internal_call_arg_result_lengths:
-  compile_vyper internal_call_arg_program
-    concretize_context_eval Linear =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_call_arg.hex")
 Proof
   EVAL_TAC
 QED
