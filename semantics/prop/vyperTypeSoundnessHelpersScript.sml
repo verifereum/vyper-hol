@@ -2512,6 +2512,52 @@ Proof
   >> imp_res_tac assign_result_state >> gvs[]
 QED
 
+(* For any base target satisfying the HashMap-write recognizer, the runtime
+   eval_base_target — if it succeeds — must return loc = TopLevelVar src id.
+   Pure structural induction on bt; the recognizer forces the leaf to be a
+   TopLevelNameTarget and each wrapping SubscriptTarget preserves loc. *)
+Theorem eval_base_target_hashmap_imp_TopLevelVar:
+  !bt cx st loc sbs st' env vt.
+    eval_base_target cx bt st = (INL (loc, sbs), st') /\
+    well_typed_hashmap_write_target env bt vt ==>
+    ?src id. loc = TopLevelVar src id
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (* NameTarget *) gvs[well_typed_hashmap_write_target_def]
+  >- (* BareGlobalNameTarget *) gvs[well_typed_hashmap_write_target_def]
+  >- ((* TopLevelNameTarget *)
+      Cases_on `p` >>
+      gvs[Once evaluate_def, return_def])
+  >- ((* SubscriptTarget *)
+      gvs[Once well_typed_hashmap_write_target_def] >>
+      qpat_x_assum `eval_base_target _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), UNCURRY, return_def] >>
+      rpt strip_tac >> gvs[] >>
+      Cases_on `eval_base_target cx bt st` >> Cases_on `q` >> gvs[] >>
+      Cases_on `x` >> gvs[] >>
+      first_x_assum drule_all >> simp[])
+  (* AttributeTarget *)
+  >> gvs[well_typed_hashmap_write_target_def]
+QED
+
+(* Companion lemma: eval_target on BaseTarget bt — recognizer on bt — yields
+   a target value BaseTargetV (TopLevelVar src id) sbs. *)
+Theorem eval_target_BaseTarget_hashmap_imp_TopLevelVar:
+  !bt cx st tgt_v st' env vt.
+    eval_target cx (BaseTarget bt) st = (INL tgt_v, st') /\
+    well_typed_hashmap_write_target env bt vt ==>
+    ?src id sbs. tgt_v = BaseTargetV (TopLevelVar src id) sbs
+Proof
+  rpt gen_tac >> strip_tac
+  >> qpat_x_assum `eval_target _ _ _ = _` mp_tac
+  >> simp[Once evaluate_def, bind_def, AllCaseEqs(), UNCURRY, return_def]
+  >> rpt strip_tac >> gvs[]
+  >> Cases_on `eval_base_target cx bt st` >> Cases_on `q` >> gvs[]
+  >> Cases_on `x` >> gvs[]
+  >> drule_all eval_base_target_hashmap_imp_TopLevelVar
+  >> rpt strip_tac >> gvs[]
+QED
+
 (* === General tactics for state_well_typed preservation ===
    Used within type_preservation Resume blocks. *)
 

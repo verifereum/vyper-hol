@@ -435,9 +435,11 @@ Theorem eval_preserves_swt:
     (!vs tyv. res = INL vs /\
               evaluate_type (get_tenv cx) typ = SOME tyv ==>
               EVERY (value_has_type tyv) vs)) /\
-  (* P3: eval_target *)
+  (* P3: eval_target — admits HashMap-write target as second disjunct *)
   (!cx g. !env st res st'.
-    (?ty. well_typed_atarget env g ty) /\
+    ((?ty. well_typed_atarget env g ty) \/
+     (?bt vt. g = BaseTarget bt /\
+              well_typed_hashmap_write_target env bt vt)) /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
@@ -453,9 +455,10 @@ Theorem eval_preserves_swt:
     context_well_typed cx /\
     eval_targets cx gs st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st') /\
-  (* P5: eval_base_target *)
+  (* P5: eval_base_target — admits HashMap-write target as second disjunct *)
   (!cx bt. !env st res st'.
-    (?ty. well_typed_target env bt ty) /\
+    ((?ty. well_typed_target env bt ty) \/
+     (?vt. well_typed_hashmap_write_target env bt vt)) /\
     env_consistent env cx st /\
     state_well_typed st /\
     functions_well_typed cx /\
@@ -765,14 +768,19 @@ QED
 
 Resume eval_preserves_swt[AttributeTarget]:
   rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  gvs[wte_AttributeTarget] >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  rewrite_tac[ev_AttributeTarget] >>
-  simp[bind_def, AllCaseEqs(), return_def] >>
-  strip_tac >> gvs[return_def, PAIR_FST_SND_EQ, UNCURRY] >>
-  first_x_assum (qspec_then `env` mp_tac) >>
-  simp[] >> disch_then match_mp_tac >> metis_tac[]
+  rpt gen_tac >> strip_tac
+  (* Two disjuncts in P5 antecedent (already split by strip_tac):
+     existing well_typed_target branch, then HashMap branch (FALSE on
+     AttributeTarget by recognizer definition). *)
+  >- (
+    gvs[wte_AttributeTarget] >>
+    qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+    rewrite_tac[ev_AttributeTarget] >>
+    simp[bind_def, AllCaseEqs(), return_def] >>
+    strip_tac >> gvs[return_def, PAIR_FST_SND_EQ, UNCURRY] >>
+    first_x_assum (qspec_then `env` mp_tac) >>
+    simp[] >> disch_then match_mp_tac >> metis_tac[])
+  >- gvs[well_typed_hashmap_write_target_def]
 QED
 
 Resume eval_preserves_swt[for_nil]:
@@ -993,10 +1001,11 @@ Resume eval_preserves_swt[Append]:
   (* Decompose well_typed_stmt for Append *)
   qpat_x_assum `well_typed_stmt _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Append]) >>
-  (* Wrap well_typed_target as existential for P5 IH *)
+  (* Wrap well_typed_target as DISJ1 existential for the widened P5 IH *)
   qpat_assum `well_typed_target env bt _`
-    (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
-                                    `ArrayT (expr_type e) bd`) th)) >>
+    (fn th => ASSUME_TAC (DISJ1 (Q.EXISTS (`?ty. well_typed_target env bt ty`,
+                                            `ArrayT (expr_type e) bd`) th)
+                                ``?vt. well_typed_hashmap_write_target env bt vt``)) >>
   (* Unfold ev_Append *)
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Append] >>
@@ -1009,6 +1018,10 @@ Resume eval_preserves_swt[Append]:
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* P5 IH for eval_base_target *)
   first_x_assum drule_all >> strip_tac >>
+  (* Drop the disjunction hypothesis now that the IH has consumed it; it
+     would otherwise propagate into Append_atwt's suspended context and
+     duplicate the goal. *)
+  qpat_x_assum `(?ty. well_typed_target env bt ty) \/ _` kall_tac >>
   (* Step 2: eval_expr cx e st_bt *)
   Cases_on `eval_expr cx e st_bt` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
@@ -1122,29 +1135,104 @@ QED
 Resume eval_preserves_swt[Assign]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  (* Decompose well_typed_stmt for Assign *)
+  (* Decompose well_typed_stmt for Assign.  The disjunction yields TWO
+     subgoals — existing branch first, HashMap branch second. *)
   qpat_x_assum `well_typed_stmt _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Assign]) >>
-  (* Wrap well_typed_atarget as existential for P3 IH *)
-  qpat_assum `well_typed_atarget env g (expr_type e)`
-    (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_atarget env g ty`,
-                                    `expr_type e`) th)) >>
-  (* Unfold ev_Assign *)
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_Assign])
+  >- ((* Existing well_typed_atarget branch — unchanged proof, except the
+         P3 IH wrap now uses DISJ1 to feed the widened disjunctive antecedent. *)
+      qpat_assum `well_typed_atarget env g (expr_type e)`
+        (fn th => ASSUME_TAC (DISJ1 (Q.EXISTS (`?ty. well_typed_atarget env g ty`,
+                                                `expr_type e`) th)
+                                    ``?bt vt. g = BaseTarget bt /\
+                                              well_typed_hashmap_write_target env bt vt``)) >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      rewrite_tac[ev_Assign] >>
+      simp_tac std_ss [bind_apply, BETA_THM] >>
+      Cases_on `eval_target cx g st` >> rename1 `(res_tgt, st_tgt)` >>
+      reverse (Cases_on `res_tgt`) >> simp_tac (srw_ss()) [] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      rename1 `eval_target cx g st = (INL tgt_v, st_tgt)` >>
+      first_x_assum drule_all >> strip_tac >>
+      qpat_x_assum `!s'' gv t. eval_target _ _ _ = _ ==> _`
+        (qspecl_then [`st`, `tgt_v`, `st_tgt`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      Cases_on `eval_expr cx e st_tgt` >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+      TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           first_x_assum drule_all >> strip_tac >>
+           rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+           rpt strip_tac >> gvs[] >>
+           imp_res_tac eval_expr_not_return >>
+           first_x_assum (qspec_then `v` mp_tac) >>
+           simp_tac (srw_ss()) [] >> NO_TAC) >>
+      qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
+        (qspecl_then [`env`, `st_tgt`, `INL x`, `r`] mp_tac) >>
+      (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+      Cases_on `materialise cx x r` >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+      TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+           strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+           rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
+      imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      tp_materialise_conclusion_tac >>
+      simp_tac std_ss [bind_apply, BETA_THM, ignore_bind_apply] >>
+      Cases_on `assign_target cx tgt_v (Replace x') r` >>
+      `state_well_typed r'' /\ env_consistent env cx r''` by
+        suspend "Assign_atwt" >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac (cj 1 assign_target_no_return) >>
+      first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) [])
+  >- suspend "Assign_HashMap"
+QED
+
+Resume eval_preserves_swt[Assign_HashMap]:
+  (* HashMap write branch: tgt = BaseTarget bt with recognizer.
+     Strategy: feed the recognizer-evidence to the widened P3 IH (DISJ2
+     disjunct).  After eval_target succeeds, the new lemma
+     eval_target_BaseTarget_hashmap_imp_TopLevelVar pins
+     tgt_v = BaseTargetV (TopLevelVar src id) sbs.  Then the final
+     assign_target step is closed by assign_target_toplevel_state_preserved
+     (no value-typing condition needed). *)
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* Inject the DISJ2 disjunct as a single assumption via ASSUME_TAC,
+     which preserves the disjunction without stripping it (unlike `by`,
+     whose default disposition uses strip_assume_tac and would split). *)
+  qpat_assum `well_typed_hashmap_write_target env bt _`
+    (fn th => ASSUME_TAC
+      (DISJ2 ``?ty. well_typed_atarget env (BaseTarget bt) ty``
+             (Q.EXISTS (`?bt' vt. BaseTarget bt = BaseTarget bt' /\
+                                  well_typed_hashmap_write_target env bt' vt`,
+                        `bt`)
+                (Q.EXISTS (`?vt. BaseTarget bt = BaseTarget bt /\
+                                 well_typed_hashmap_write_target env bt vt`,
+                           `Type (expr_type e)`)
+                   (CONJ (REFL ``BaseTarget bt : assignment_target``) th))))) >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Assign] >>
   simp_tac std_ss [bind_apply, BETA_THM] >>
-  (* Step 1: eval_target cx g st *)
-  Cases_on `eval_target cx g st` >> rename1 `(res_tgt, st_tgt)` >>
+  (* eval_target cx (BaseTarget bt) st *)
+  Cases_on `eval_target cx (BaseTarget bt) st` >> rename1 `(res_tgt, st_tgt)` >>
   reverse (Cases_on `res_tgt`) >> simp_tac (srw_ss()) [] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
-  rename1 `eval_target cx g st = (INL tgt_v, st_tgt)` >>
-  (* P3 IH for eval_target *)
+  rename1 `eval_target cx (BaseTarget bt) st = (INL tgt_v, st_tgt)` >>
+  (* P3 IH for eval_target via DISJ2 *)
   first_x_assum drule_all >> strip_tac >>
-  (* Discharge guarded P7 IH: specialise guard, then strip *)
+  (* Discharge guarded P7 IH *)
   qpat_x_assum `!s'' gv t. eval_target _ _ _ = _ ==> _`
     (qspecl_then [`st`, `tgt_v`, `st_tgt`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  (* Step 2: eval_expr cx e st_tgt *)
+  (* Recognizer + successful eval_target ==> tgt_v has TopLevelVar leaf *)
+  `?src id sbs. tgt_v = BaseTargetV (TopLevelVar src id) sbs` by (
+     drule eval_target_BaseTarget_hashmap_imp_TopLevelVar >>
+     disch_then drule >> simp[]) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  (* eval_expr cx e st_tgt *)
   Cases_on `eval_expr cx e st_tgt` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -1154,11 +1242,10 @@ Resume eval_preserves_swt[Assign]:
        imp_res_tac eval_expr_not_return >>
        first_x_assum (qspec_then `v` mp_tac) >>
        simp_tac (srw_ss()) [] >> NO_TAC) >>
-  (* Apply P7 IH for eval_expr success *)
   qpat_x_assum `!env st res st'. well_typed_expr _ _ /\ _ ==> _`
     (qspecl_then [`env`, `st_tgt`, `INL x`, `r`] mp_tac) >>
   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  (* Step 3: materialise cx x r *)
+  (* materialise cx x r — state preserving *)
   Cases_on `materialise cx x r` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY (imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -1167,14 +1254,12 @@ Resume eval_preserves_swt[Assign]:
        rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
        imp_res_tac materialise_error >> gvs[] >> NO_TAC) >>
   imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  tp_materialise_conclusion_tac >>
-  (* Step 4: assign_target cx tgt_v (Replace x') r; return () *)
+  (* assign_target cx (BaseTargetV (TopLevelVar src id) sbs) (Replace x') r *)
   simp_tac std_ss [bind_apply, BETA_THM, ignore_bind_apply] >>
-  Cases_on `assign_target cx tgt_v (Replace x') r` >>
-  (* Apply assign_target_well_typed BEFORE splitting result *)
-  `state_well_typed r'' /\ env_consistent env cx r''` by
-    suspend "Assign_atwt" >>
-  (* Now case-split the result *)
+  Cases_on `assign_target cx (BaseTargetV (TopLevelVar src id) sbs) (Replace x') r` >>
+  `state_well_typed r'' /\ env_consistent env cx r''` by (
+     drule assign_target_toplevel_state_preserved >>
+     disch_then drule >> disch_then drule >> simp[]) >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
@@ -1199,26 +1284,82 @@ QED
 Resume eval_preserves_swt[AugAssign]:
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  (* Decompose well_typed_stmt for AugAssign *)
+  (* Decompose well_typed_stmt for AugAssign — yields 2 subgoals
+     (existing branch / HashMap branch). *)
   qpat_x_assum `well_typed_stmt _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_AugAssign]) >>
-  (* Wrap well_typed_target as existential for P5 IH *)
-  qpat_assum `well_typed_target env bt ty`
-    (fn th => ASSUME_TAC (Q.EXISTS (`?ty'. well_typed_target env bt ty'`,
-                                    `ty`) th)) >>
-  (* Unfold ev_AugAssign *)
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [wts_AugAssign])
+  >- ((* Existing well_typed_target branch *)
+      qpat_assum `well_typed_target env bt ty`
+        (fn th => ASSUME_TAC (DISJ1 (Q.EXISTS (`?ty'. well_typed_target env bt ty'`,
+                                                `ty`) th)
+                                    ``?vt. well_typed_hashmap_write_target env bt vt``)) >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      rewrite_tac[ev_AugAssign] >>
+      simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
+      Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
+      reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      Cases_on `x` >> simp_tac (srw_ss()) [] >>
+      rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
+      first_x_assum drule_all >> strip_tac >>
+      (* Drop disjunction now to prevent propagation into AugAssign_atwt *)
+      qpat_x_assum `(?ty'. well_typed_target env bt ty') \/ _` kall_tac >>
+      Cases_on `eval_expr cx e st_bt` >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+      TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           first_x_assum drule_all >> strip_tac >>
+           rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+           rpt strip_tac >> gvs[] >>
+           imp_res_tac eval_expr_not_return >>
+           first_x_assum (qspec_then `v` mp_tac) >>
+           simp_tac (srw_ss()) [] >> NO_TAC) >>
+      qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
+        (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
+        (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
+      (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
+      Cases_on `x` >> simp_tac (srw_ss()) [get_Value_def, return_def, raise_def] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      rename1 `eval_expr cx e st_bt = (INL (Value v_expr), r)` >>
+      Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r` >>
+      `state_well_typed r'' /\ env_consistent env cx r''` by
+        suspend "AugAssign_atwt" >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac (cj 1 assign_target_no_return) >>
+      first_x_assum (qspec_then `v` mp_tac) >> simp_tac (srw_ss()) [])
+  >- suspend "AugAssign_HashMap"
+QED
+
+Resume eval_preserves_swt[AugAssign_HashMap]:
+  (* HashMap write branch for AugAssign.  Mirror of Assign_HashMap; the only
+     difference is the assign_target operation is `Update ty bop v_expr`
+     (instead of `Replace v`).  `assign_target_toplevel_state_preserved`
+     is parametric over the assign-op, so it closes both. *)
+  (* Inject the DISJ2 disjunct as a single assumption via ASSUME_TAC. *)
+  qpat_assum `well_typed_hashmap_write_target env bt _`
+    (fn th => ASSUME_TAC
+      (DISJ2 ``?ty'. well_typed_target env bt ty'``
+             (Q.EXISTS (`?vt. well_typed_hashmap_write_target env bt vt`,
+                        `Type ty`) th))) >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   rewrite_tac[ev_AugAssign] >>
   simp_tac std_ss [bind_apply, BETA_THM, UNCURRY, ignore_bind_apply] >>
-  (* Step 1: eval_base_target cx bt st *)
   Cases_on `eval_base_target cx bt st` >> rename1 `(res_bt, st_bt)` >>
   reverse (Cases_on `res_bt`) >> simp_tac (srw_ss()) [] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
   Cases_on `x` >> simp_tac (srw_ss()) [] >>
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
-  (* P5 IH for eval_base_target *)
+  (* P5 IH for eval_base_target via DISJ2 *)
   first_x_assum drule_all >> strip_tac >>
-  (* Step 2: eval_expr cx e st_bt *)
+  (* Recognizer + successful eval_base_target ==> loc = TopLevelVar src id *)
+  `?src id. loc = TopLevelVar src id` by (
+     drule eval_base_target_hashmap_imp_TopLevelVar >>
+     disch_then drule >> simp[]) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
   Cases_on `eval_expr cx e st_bt` >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
   TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -1228,23 +1369,19 @@ Resume eval_preserves_swt[AugAssign]:
        imp_res_tac eval_expr_not_return >>
        first_x_assum (qspec_then `v` mp_tac) >>
        simp_tac (srw_ss()) [] >> NO_TAC) >>
-  (* Apply guarded P7 IH for eval_expr *)
   qpat_x_assum `!s'' loc' sbs' t'. eval_base_target _ _ _ = _ ==> _`
-    (qspecl_then [`st`, `loc`, `sbs`, `st_bt`] mp_tac) >>
+    (qspecl_then [`st`, `TopLevelVar src id`, `sbs`, `st_bt`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qpat_x_assum `!env' st0 res0 st0'. well_typed_expr _ _ /\ _ ==> _`
     (qspecl_then [`env`, `st_bt`, `INL x`, `r`] mp_tac) >>
   (impl_tac >- (rpt CONJ_TAC >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  (* Step 3: get_Value x r — state unchanged *)
   Cases_on `x` >> simp_tac (srw_ss()) [get_Value_def, return_def, raise_def] >>
   TRY (tp_bind_err_tac >> NO_TAC) >>
   rename1 `eval_expr cx e st_bt = (INL (Value v_expr), r)` >>
-  (* Step 4: assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r *)
-  Cases_on `assign_target cx (BaseTargetV loc sbs) (Update ty bop v_expr) r` >>
-  (* Apply assign_target_well_typed_ao BEFORE splitting result *)
-  `state_well_typed r'' /\ env_consistent env cx r''` by
-    suspend "AugAssign_atwt" >>
-  (* Now case-split the result *)
+  Cases_on `assign_target cx (BaseTargetV (TopLevelVar src id) sbs) (Update ty bop v_expr) r` >>
+  `state_well_typed r'' /\ env_consistent env cx r''` by (
+     drule assign_target_toplevel_state_preserved >>
+     disch_then drule >> disch_then drule >> simp[]) >>
   reverse (Cases_on `q`) >> simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   rpt CONJ_TAC >> TRY (first_assum ACCEPT_TAC) >>
@@ -1593,51 +1730,85 @@ QED
 
 Resume eval_preserves_swt[SubscriptTarget]:
   rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  (* Decompose well_typed_target for SubscriptTarget *)
-  qpat_x_assum `well_typed_target _ (SubscriptTarget _ _) _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_SubscriptTarget]) >>
-  (* Wrap bt typing as existential for P5 IH matching — keep existential *)
-  qpat_assum `well_typed_target env bt tgt_ty`
-    (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
-                                    `tgt_ty`) th)) >>
-  (* Unfold eval_base_target *)
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  rewrite_tac[ev_SubscriptTarget] >>
-  simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
-  (* Step 1: eval_base_target cx bt st *)
-  Cases_on `eval_base_target cx bt st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (tp_bind_err_tac >> NO_TAC) >>
-  (* P5 IH for bt *)
-  first_x_assum drule_all >> strip_tac >>
-  (* Decompose pair result *)
-  Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM] >>
-  (* Step 2: eval_expr cx e *)
-  Cases_on `eval_expr cx e r` >>
-  reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
-  TRY (tp_bind_err_tac >> NO_TAC) >>
-  (* P7 IH for e (guarded by eval_base_target success) *)
-  qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
-    (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  disch_then drule_all >> strip_tac >>
-  (* Steps 3-5: get_Value + lift_option_type + return — state-preserving *)
-  Cases_on `get_Value x r''` >>
-  reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-       rpt CONJ_TAC >> first_assum ACCEPT_TAC >> NO_TAC) >>
-  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  Cases_on `lift_option_type (value_to_key x') "SubscriptTarget value_to_key" r''` >>
-  reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
-  TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-       rpt CONJ_TAC >> first_assum ACCEPT_TAC >> NO_TAC) >>
-  imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  simp_tac (srw_ss()) [return_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  rpt CONJ_TAC >> first_assum ACCEPT_TAC
+  rpt gen_tac >> strip_tac
+  (* Two branches: existing well_typed_target or HashMap recognizer.  Both
+     produce the SAME runtime evaluation tail; we handle them by re-establishing
+     the disjunctive P5 IH antecedent on bt in each branch via the appropriate
+     DISJ1/DISJ2 wrap, then sharing the tail. *)
+  >- ((* Existing well_typed_target branch *)
+      qpat_x_assum `well_typed_target _ (SubscriptTarget _ _) _`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_SubscriptTarget]) >>
+      qpat_assum `well_typed_target env bt tgt_ty`
+        (fn th => ASSUME_TAC (DISJ1 (Q.EXISTS (`?ty. well_typed_target env bt ty`,
+                                                `tgt_ty`) th)
+                                    ``?vt. well_typed_hashmap_write_target env bt vt``)) >>
+      qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+      rewrite_tac[ev_SubscriptTarget] >>
+      simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
+      Cases_on `eval_base_target cx bt st` >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      first_x_assum drule_all >> strip_tac >>
+      Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM] >>
+      Cases_on `eval_expr cx e r` >>
+      reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
+        (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      disch_then drule_all >> strip_tac >>
+      Cases_on `get_Value x r''` >>
+      reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
+      TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+           rpt CONJ_TAC >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      Cases_on `lift_option_type (value_to_key x') "SubscriptTarget value_to_key" r''` >>
+      reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
+      TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+           rpt CONJ_TAC >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      simp_tac (srw_ss()) [return_def] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      rpt CONJ_TAC >> first_assum ACCEPT_TAC)
+  >- ((* HashMap-write recognizer branch *)
+      qpat_x_assum `well_typed_hashmap_write_target _ (SubscriptTarget _ _) _`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [well_typed_hashmap_write_target_def]) >>
+      qpat_assum `well_typed_hashmap_write_target env bt _`
+        (fn th => ASSUME_TAC (DISJ2 ``?ty. well_typed_target env bt ty``
+                                    (Q.EXISTS (`?vt. well_typed_hashmap_write_target env bt vt`,
+                                                `HashMapT (expr_type e) vt`) th))) >>
+      qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+      rewrite_tac[ev_SubscriptTarget] >>
+      simp_tac std_ss [bind_apply, BETA_THM, UNCURRY] >>
+      Cases_on `eval_base_target cx bt st` >>
+      reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      first_x_assum drule_all >> strip_tac >>
+      Cases_on `x` >> simp_tac std_ss [bind_apply, BETA_THM] >>
+      Cases_on `eval_expr cx e r` >>
+      reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
+      TRY (tp_bind_err_tac >> NO_TAC) >>
+      qpat_x_assum `!s'' loc sbs t'. eval_base_target _ _ _ = _ ==> _`
+        (qspecl_then [`st`, `q`, `r'`, `r`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      disch_then drule_all >> strip_tac >>
+      Cases_on `get_Value x r''` >>
+      reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
+      TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+           rpt CONJ_TAC >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      Cases_on `lift_option_type (value_to_key x') "SubscriptTarget value_to_key" r''` >>
+      reverse (Cases_on `q'`) >> simp_tac (srw_ss()) [] >>
+      TRY (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+           imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+           rpt CONJ_TAC >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      simp_tac (srw_ss()) [return_def] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      rpt CONJ_TAC >> first_assum ACCEPT_TAC)
 QED
 
 Theorem for_loop_scope_bracket_ec[local]:
@@ -2510,10 +2681,11 @@ Resume eval_preserves_swt[Pop]:
   (* Decompose well_typed_expr for Pop *)
   qpat_x_assum `well_typed_expr _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [wte_Pop]) >>
-  (* Wrap well_typed_target for P5 IH *)
+  (* Wrap well_typed_target as DISJ1 for the widened P5 IH *)
   qpat_assum `well_typed_target env bt _`
-    (fn th => ASSUME_TAC (Q.EXISTS (`?ty. well_typed_target env bt ty`,
-                                    `ArrayT v11 bd`) th)) >>
+    (fn th => ASSUME_TAC (DISJ1 (Q.EXISTS (`?ty. well_typed_target env bt ty`,
+                                            `ArrayT v11 bd`) th)
+                                ``?vt. well_typed_hashmap_write_target env bt vt``)) >>
   (* Unfold ev_Pop *)
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[ev_Pop] >>
@@ -2526,6 +2698,9 @@ Resume eval_preserves_swt[Pop]:
   rename1 `eval_base_target cx bt st = (INL (loc, sbs), st_bt)` >>
   (* P5 IH *)
   first_x_assum drule_all >> strip_tac >>
+  (* Drop the disjunctive evidence now that the IH has consumed it; it would
+     otherwise duplicate the Pop_vht side-goal. *)
+  qpat_x_assum `(?ty. well_typed_target env bt ty) \/ _` kall_tac >>
   (* Step 2: assign_target cx (BaseTargetV loc sbs) PopOp st_bt *)
   Cases_on `assign_target cx (BaseTargetV loc sbs) PopOp st_bt` >>
   rename1 `assign_target _ _ _ st_bt = (res_at, st_at)` >>

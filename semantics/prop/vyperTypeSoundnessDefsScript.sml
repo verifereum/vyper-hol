@@ -798,13 +798,26 @@ Definition well_typed_stmt_def:
      well_typed_expr env e /\
      expr_type e = elem_ty) /\
   well_typed_stmt env ret_ty (Assign tgt e) =
-    (well_typed_atarget env tgt (expr_type e) /\
-     well_typed_expr env e) /\
+    ((well_typed_atarget env tgt (expr_type e) /\
+      well_typed_expr env e) \/
+     (* HashMap write branch: tgt is a chain of SubscriptTargets ending in
+        a TopLevelNameTarget that resolves to a HashMapVarDecl.  The
+        recognizer walks the chain and validates each key.  At the leaf the
+        slot's runtime value_type is `Type (expr_type e)`. *)
+     (?bt.
+        tgt = BaseTarget bt /\
+        well_typed_hashmap_write_target env bt (Type (expr_type e)) /\
+        well_typed_expr env e)) /\
   well_typed_stmt env ret_ty (AugAssign ty bt bop e) =
-    (well_typed_target env bt ty /\
-     well_typed_expr env e /\
-     well_formed_type env.type_defs ty /\
-     well_typed_binop ty bop ty (expr_type e)) /\
+    ((well_typed_target env bt ty /\
+      well_typed_expr env e /\
+      well_formed_type env.type_defs ty /\
+      well_typed_binop ty bop ty (expr_type e)) \/
+     (* HashMap write branch: same recognizer; binop must accept (ty,ty,expr_type e). *)
+     (well_typed_hashmap_write_target env bt (Type ty) /\
+      well_typed_expr env e /\
+      well_formed_type env.type_defs ty /\
+      well_typed_binop ty bop ty (expr_type e))) /\
   well_typed_stmt env ret_ty (If e ss1 ss2) =
     (well_typed_expr env e /\
      expr_type e = BaseT BoolT /\
@@ -994,5 +1007,54 @@ Definition toplevel_value_typed_def:
      tyv = ArrayTV elem_tv bd) /\
   (toplevel_value_typed (HashMapRef _ _ _ _) tyv <=> (tyv = NoneTV))
 End
+
+(* ===== PoC smoke test: HashMap-write AugAssign is well-typed under the
+   widened well_typed_stmt definition.
+
+   Pattern: balanceOf[_from] -= _value, where balanceOf is a
+   HashMap[address, uint256] and _from/_value are local variables.
+
+   This is the AST shape generated for the inner-call body of ERC-20
+   _transfer / _burnFrom in stableswap-ng.
+
+   The PoC fixes a typing environment with:
+   - hashmap_types entry  (NONE, "balanceOf") -> (BaseT AddressT, Type (BaseT (UintT 256)))
+   - var_types entries    "_from"  -> BaseT AddressT
+                         "_value" -> BaseT (UintT 256)
+
+   and shows the well_typed_stmt clause for the AugAssign branch is
+   discharged via the new HashMap-write disjunct. *)
+Theorem poc_balanceOf_AugAssign_well_typed:
+  let
+    env = <| var_types :=
+               FEMPTY |+ (string_to_num "_from", BaseT AddressT)
+                     |+ (string_to_num "_value", BaseT (UintT 256));
+             global_types := FEMPTY;
+             toplevel_types := FEMPTY;
+             type_defs := FEMPTY;
+             fn_sigs := FEMPTY;
+             flag_members := FEMPTY;
+             hashmap_types :=
+               FEMPTY |+ ((NONE, string_to_num "balanceOf"),
+                          (BaseT AddressT, Type (BaseT (UintT 256))))
+          |> ;
+    stmt = AugAssign (BaseT (UintT 256))
+             (SubscriptTarget (TopLevelNameTarget (NONE, "balanceOf"))
+                              (Name (BaseT AddressT) "_from"))
+             Sub
+             (Name (BaseT (UintT 256)) "_value")
+  in
+    well_typed_stmt env NoneT stmt
+Proof
+  simp[well_typed_stmt_def] >>
+  disj2_tac >>
+  simp[well_typed_hashmap_write_target_def,
+       well_typed_expr_def, well_formed_type_def,
+       expr_type_def, well_typed_binop_def, is_int_type_def,
+       evaluate_type_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `string_to_num "_value" <> string_to_num "_from"` by EVAL_TAC >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  qexists_tac `BaseT AddressT` >> simp[]
+QED
 
 
