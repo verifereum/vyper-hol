@@ -40,6 +40,7 @@ Ancestors
 Libs
   pairLib
 
+
 (* ===== Helper: range_excludes_zero + in_range ==> w <> 0w ===== *)
 
 Theorem in_range_excludes_zero_nonzero[local]:
@@ -327,12 +328,12 @@ Proof
       ``(dfg_build_function fn, fn.fn_blocks) : dfg_analysis # basic_block list``]
       analysisSimProofsBaseTheory.analysis_run_block_sim) >>
     simp[execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel] >>
-    rpt conj_tac >>
-    FIRST [
-      first_assum ACCEPT_TAC,
-      metis_tac[stateEquivPropsTheory.state_equiv_trans],
-      metis_tac[stateEquivPropsTheory.execution_equiv_trans]
-    ])
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- metis_tac[stateEquivPropsTheory.execution_equiv_trans] >>
+    conj_tac >- metis_tac[stateEquivPropsTheory.state_equiv_trans] >>
+    goal_assum $ drule_at Any >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    simp[] )
   >- (
     DISJ1_TAC >> qexists_tac `e` >> gvs[run_block_def])
 QED
