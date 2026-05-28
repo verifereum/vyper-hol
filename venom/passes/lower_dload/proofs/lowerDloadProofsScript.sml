@@ -70,6 +70,86 @@ QED
 
 (* ===== code_layout_valid preservation ===== *)
 
+Theorem step_jmp_ok_preserves_layout:
+  !fuel ctx inst s s'.
+    inst.inst_opcode = JMP /\
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_code = s.vs_code /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+QED
+
+Theorem step_jnz_ok_preserves_layout[local]:
+  !fuel ctx inst s s'.
+    inst.inst_opcode = JNZ /\
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_code = s.vs_code /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+QED
+
+Theorem step_djmp_ok_preserves_layout[local]:
+  !fuel ctx inst s s'.
+    inst.inst_opcode = DJMP /\
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_code = s.vs_code /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
+QED
+
+val term_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
+       AllCaseEqs()] >>
+  rpt CASE_TAC >> gvs[];
+
+Theorem step_inst_base_ok_terminator_jump[local]:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  term_ok_jump_tac
+QED
+
+Theorem step_non_ok_terminator[local]:
+  !fuel ctx inst s s'.
+    (inst.inst_opcode = RET \/
+     inst.inst_opcode = RETURN \/
+     inst.inst_opcode = REVERT \/
+     inst.inst_opcode = STOP \/
+     inst.inst_opcode = SINK \/
+     inst.inst_opcode = SELFDESTRUCT \/
+     inst.inst_opcode = INVALID) ==>
+    step_inst fuel ctx inst s <> OK s'
+Proof
+  rpt strip_tac >> CCONTR_TAC >>
+  `is_terminator inst.inst_opcode` by gvs[is_terminator_def] >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `step_inst_base inst s = OK s'` by
+    metis_tac[step_inst_non_invoke] >>
+  drule_all step_inst_base_ok_terminator_jump >>
+  strip_tac >> gvs[]
+QED
+
 Theorem step_term_ok_preserves[local]:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
@@ -79,14 +159,11 @@ Theorem step_term_ok_preserves[local]:
     s'.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (
-    Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  fs[step_inst_non_invoke] >>
   Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  fs[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       fs[jump_to_def, halt_state_def, revert_state_def,
-          set_returndata_def]) >> rw[]
+  metis_tac[step_jmp_ok_preserves_layout,
+            step_jnz_ok_preserves_layout,
+            step_djmp_ok_preserves_layout,
+            step_non_ok_terminator]
 QED
 
 Theorem step_inst_preserves_layout:
@@ -391,15 +468,31 @@ QED
 val ld_terminator_tac =
   rpt strip_tac >>
   ld_derive_agree_tac >> ld_derive_fields_tac >>
-  (Q.SUBGOAL_THEN
-    `eval_operands inst.inst_operands s1 =
-     eval_operands inst.inst_operands s2`
-    ASSUME_TAC >-
-    (irule eval_operands_agree >> rpt strip_tac >> res_tac >> gvs[])) >>
   simp[step_inst_base_def, LET_THM] >>
   rpt (BasicProvers.PURE_FULL_CASE_TAC >>
        gvs[] >> TRY (res_tac >> gvs[])) >>
+  TRY (`eval_operands inst.inst_operands s1 =
+        eval_operands inst.inst_operands s2` by
+        (irule eval_operands_agree >> rpt strip_tac >> res_tac >> gvs[]) >>
+       gvs[]) >>
   gvs[lift_result_def] >> ld_close_tac;
+
+Theorem step_inst_base_ld_ok_jnz:
+  !inst s1 s2 vars.
+    inst.inst_opcode = JNZ /\
+    ld_ok vars s1 s2 /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
+      (step_inst_base inst s1)
+      (step_inst_base inst s2)
+Proof
+  rpt strip_tac >>
+  ld_derive_agree_tac >> ld_derive_fields_tac >>
+  simp[step_inst_base_def, LET_THM] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       gvs[] >> TRY (res_tac >> gvs[])) >>
+  gvs[lift_result_def] >> ld_close_tac
+QED
 
 Theorem step_inst_base_ld_ok_terminator:
   !inst s1 s2 vars.
@@ -412,8 +505,17 @@ Theorem step_inst_base_ld_ok_terminator:
       (step_inst_base inst s2)
 Proof
   gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_terminator_def, reads_memory_def] >>
-  ld_terminator_tac
+  simp[is_terminator_def, reads_memory_def]
+  >- ld_terminator_tac
+  >- (rpt strip_tac >> drule_all step_inst_base_ld_ok_jnz >> simp[])
+  >- ld_terminator_tac
+  >- ld_terminator_tac
+  >- ld_terminator_tac
+  >- ld_terminator_tac
+  >- ld_terminator_tac
+  >- ld_terminator_tac
+  >- ld_terminator_tac
+  >- ld_terminator_tac
 QED
 
 Theorem ld_terminator_sim[local]:

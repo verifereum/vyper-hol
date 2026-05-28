@@ -589,6 +589,26 @@ Proof
   Cases_on `eval_operand h s` >> fs[]
 QED
 
+val effect_free_ok_tac =
+  fs[venomExecSemanticsTheory.step_inst_base_def,
+     venomStateTheory.eval_operand_def] >>
+  TRY (irule exec_pure2_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_pure1_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_pure3_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_read0_ok >> fs[] >> NO_TAC) >>
+  TRY (irule exec_read1_ok >> fs[] >> NO_TAC) >>
+  TRY (simp[] >> NO_TAC) >>
+  TRY (`eval_operand (Label lbl) s <> NONE` by (fs[] >> metis_tac[]) >>
+       fs[venomStateTheory.eval_operand_def] >> NO_TAC) >>
+  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
+  Cases_on `inst.inst_outputs` >> fs[] >>
+  TRY (Cases_on `t` >> fs[]) >>
+  TRY (Cases_on `t'` >> fs[]) >>
+  (`eval_operand h s <> NONE` by metis_tac[]) >>
+  Cases_on `eval_operand h s` >> fs[] >>
+  TRY ((`eval_operand h' s <> NONE` by metis_tac[]) >>
+       Cases_on `eval_operand h' s` >> fs[]);
+
 Theorem effect_free_step_inst_base_ok:
   !inst s.
     inst_wf inst /\
@@ -600,27 +620,65 @@ Theorem effect_free_step_inst_base_ok:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  fs[venomInstTheory.is_effect_free_op_def, venomWfTheory.inst_wf_def] >>
-  fs[venomExecSemanticsTheory.step_inst_base_def,
-     venomStateTheory.eval_operand_def] >>
-  TRY (irule exec_pure2_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_pure1_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_pure3_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_read0_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_read1_ok >> fs[] >> NO_TAC) >>
-  (* NOP: step_inst_base = OK s trivially *)
-  TRY (simp[] >> NO_TAC) >>
-  (* OFFSET: Label operand contradicts eval_operand assumption *)
-  TRY (`eval_operand (Label lbl) s <> NONE` by (fs[] >> metis_tac[]) >>
-       fs[venomStateTheory.eval_operand_def] >> NO_TAC) >>
-  (* ASSIGN/SHA3: inline operand decomposition *)
-  Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
-  Cases_on `inst.inst_outputs` >> fs[] >>
-  TRY (Cases_on `t` >> fs[]) >>
-  TRY (Cases_on `t'` >> fs[]) >>
-  (`eval_operand h s <> NONE` by metis_tac[]) >>
-  Cases_on `eval_operand h s` >> fs[] >>
-  TRY ((`eval_operand h' s <> NONE` by metis_tac[]) >>
-       Cases_on `eval_operand h' s` >> fs[])
+  fs[venomInstTheory.is_effect_free_op_def, venomWfTheory.inst_wf_def]
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
+  >- effect_free_ok_tac
 QED
 

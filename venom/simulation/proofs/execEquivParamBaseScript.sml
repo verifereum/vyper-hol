@@ -89,7 +89,7 @@ Theorem vsr_R_term_fields:
     s1.vs_allocas = s2.vs_allocas /\
     s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> fs[valid_state_rel_def]
 QED
 
 Theorem vsr_R_ok_R_term:
@@ -363,9 +363,17 @@ Theorem vsr_exec_pure3:
          lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (exec_pure3 f inst s1) (exec_pure3 f inst s2)
 Proof
-  rw[exec_pure3_def] >> vsr_eval_ops_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  vsr_irule vsr_update_var_R_ok >> simp[]
+  rw[] >> vsr_eval_ops_tac () >>
+  Cases_on `inst.inst_operands` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `t` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `t'` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `t` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def]
+  >- (rpt CASE_TAC >> gvs[lift_result_def]) >>
+  Cases_on `t` >> gvs[lift_result_def]
+  >- (rpt CASE_TAC >> gvs[lift_result_def] >>
+      vsr_irule vsr_update_var_R_ok >> simp[]) >>
+  rpt CASE_TAC >> gvs[lift_result_def]
 QED
 
 Theorem vsr_exec_read0:
@@ -431,7 +439,24 @@ Theorem vsr_exec_ext_call:
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
-  ext_call_proof_tac [exec_ext_call_def]
+  rw[LET_THM, exec_ext_call_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_venom_delegatecall_state_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  qmatch_goalsub_abbrev_tac `run evm` >>
+  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
+  PairCases_on `x` >> gvs[lift_result_def] >>
+  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `x0` >> gvs[lift_result_def] >>
+  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_delegatecall:
@@ -441,7 +466,24 @@ Theorem vsr_exec_delegatecall:
       (exec_delegatecall inst s1 gas addr ao as_ ro rs)
       (exec_delegatecall inst s2 gas addr ao as_ ro rs)
 Proof
-  ext_call_proof_tac [exec_delegatecall_def]
+  rw[LET_THM, exec_delegatecall_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_venom_delegatecall_state_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  qmatch_goalsub_abbrev_tac `run evm` >>
+  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
+  PairCases_on `x` >> gvs[lift_result_def] >>
+  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `x0` >> gvs[lift_result_def] >>
+  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_create:
@@ -451,8 +493,24 @@ Theorem vsr_exec_create:
       (exec_create inst s1 value offset sz salt_opt)
       (exec_create inst s2 value offset sz salt_opt)
 Proof
-  Cases_on `salt_opt` >>
-  ext_call_proof_tac [exec_create_def]
+  rw[LET_THM, exec_create_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_venom_delegatecall_state_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  qmatch_goalsub_abbrev_tac `run evm` >>
+  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
+  PairCases_on `x` >> gvs[lift_result_def] >>
+  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `x0` >> gvs[lift_result_def] >>
+  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_alloca:

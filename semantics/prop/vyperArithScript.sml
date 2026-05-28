@@ -57,7 +57,8 @@ Proof
     irule integer_wordTheory.w2i_i2w_pos >>
     `Num x < 2 ** 255` by (
       irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-      qexists_tac `2 ** (n - 1)` >> simp[] >>
+      qexists_tac `2 ** (n - 1)` >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       irule bitTheory.TWOEXP_MONO2 >> simp[]) >>
     `words$INT_MAX (:256) = 2 ** 255 - 1` by
       simp[wordsTheory.INT_MAX_def, wordsTheory.INT_MIN_def,
@@ -73,9 +74,10 @@ Proof
     irule integer_wordTheory.w2i_i2w_neg >>
     fs[integerTheory.NUM_OF_INT] >>
     irule arithmeticTheory.LESS_EQ_TRANS >>
-    qexists_tac `2 ** (n - 1)` >> simp[] >>
-    simp[wordsTheory.INT_MIN_def, EVAL ``dimindex(:256)``,
-         bitTheory.TWOEXP_MONO2]
+    qexists_tac `2 ** (n - 1)` >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    simp[wordsTheory.INT_MIN_def, EVAL ``dimindex(:256)``] >>
+    irule bitTheory.TWOEXP_MONO2 >> simp[]
   )
 QED
 

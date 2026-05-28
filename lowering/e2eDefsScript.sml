@@ -42,43 +42,19 @@ End
 
 (* ===== Log Correspondence ===== *)
 
-(* Extract non-indexed values from args based on flags
-   (complement of indexed_values from compileEnvTheory). *)
-Definition non_indexed_values_def:
-  non_indexed_values [] [] = ([] : value list) /\
-  non_indexed_values (T :: flags) (_ :: vals) =
-    non_indexed_values flags vals /\
-  non_indexed_values (F :: flags) (v :: vals) =
-    v :: non_indexed_values flags vals /\
-  non_indexed_values _ _ = []
-End
-
-(* Extract non-indexed types from arg types based on flags. *)
-Definition non_indexed_types_def:
-  non_indexed_types [] [] = ([] : type list) /\
-  non_indexed_types (T :: flags) (_ :: ts) =
-    non_indexed_types flags ts /\
-  non_indexed_types (F :: flags) (t :: ts) =
-    t :: non_indexed_types flags ts /\
-  non_indexed_types _ _ = []
-End
-
 (* Single log entry correspondence. Relates a Vyper log (nsid, values)
    to an EVM event, given:
-   - event_info: maps event name to (hash, indexed_flags, arg_types)
-     (from EventDecl with indexed annotations, PR #252)
+   - event_info: maps event name to SOME (hash, arg_types, indexed_flags)
    - tenv: type environment for ABI encoding
    - addr: contract address (logger)
 
    EVM event structure:
    - ev.logger = contract address
-   - ev.topics = [event_hash; val_to_w256(idx_val_1); ...]
+   - ev.topics = event hash followed by indexed topics
    - ev.data = ABI-encode of non-indexed values as tuple
 
-   Indexed args: each encoded as bytes32 via val_to_w256
-   (sufficient for fixed-size types; dynamic types would need
-   keccak256 -- deferred until dynamic indexed args are supported).
-   Non-indexed args: ABI-encoded together as a tuple. *)
+   Static indexed args are encoded as val_to_w256. Indexed bytes/string
+   args are encoded as keccak256(raw bytes), matching compileEnv$logs_rel. *)
 Definition log_entry_corresponds_def:
   log_entry_corresponds event_info tenv (addr : address)
     ((eid, vals) : log) (ev : event) <=>
@@ -87,14 +63,15 @@ Definition log_entry_corresponds_def:
       NONE => F
     | SOME (event_hash, arg_types, indexed_flags) =>
         let idx_vals = indexed_values indexed_flags vals in
-        let nidx_vals = non_indexed_values indexed_flags vals in
-        let nidx_types = non_indexed_types indexed_flags arg_types in
+        let idx_bs = indexed_topic_flags indexed_flags (MAP is_bytestring_type arg_types) in
+        let nidx_vals = log_non_indexed_values indexed_flags vals in
+        let nidx_types = log_non_indexed_types indexed_flags arg_types in
           LENGTH indexed_flags = LENGTH vals /\
           LENGTH arg_types = LENGTH vals /\
           ev.logger = addr /\
-          (* Topics: event selector hash + indexed values as bytes32 *)
-          ev.topics = n2w event_hash :: MAP val_to_w256 idx_vals /\
-          (* Data: ABI-encoded non-indexed values as tuple *)
+          (?topic_tail.
+             ev.topics = n2w event_hash :: topic_tail /\
+             log_indexed_topics_equiv idx_bs idx_vals topic_tail) /\
           (?abi_vals.
              vyper_to_abi_list tenv nidx_types nidx_vals = SOME abi_vals /\
              ev.data = enc (Tuple (vyper_to_abi_types tenv nidx_types))
@@ -123,15 +100,14 @@ Definition state_effects_match_def:
       logs_correspond event_info tenv addr am'.logs ctxt.logs
 End
 
-(* Rollback state unchanged: accounts and transient storage
-   are the same before and after execution (used for reverts). *)
+(* Rollback state unchanged at the call boundary: committed accounts and
+   transient storage in the global rollback record are the same before and
+   after execution. This avoids comparing per-frame snapshots, which EVM may
+   update internally for gas accounting while still rolling back the call. *)
 Definition state_unchanged_def:
   state_unchanged es es' <=>
-    ~NULL es.contexts /\ ~NULL es'.contexts /\
-    (let (ctxt, rb) = HD es.contexts in
-     let (ctxt', rb') = HD es'.contexts in
-       rb'.accounts = rb.accounts /\
-       rb'.tStorage = rb.tStorage)
+    es'.rollback.accounts = es.rollback.accounts /\
+    es'.rollback.tStorage = es.rollback.tStorage
 End
 
 (* Full Vyper-EVM correspondence for a single external call.

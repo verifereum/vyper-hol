@@ -11,6 +11,7 @@
  *   compute_alloc_map     — first-fit allocator with liveness-aware reservation
  *   concretize_inst       — per-instruction transform
  *   concretize_function   — function-level transform (allocate + rewrite)
+ *   concretize_context_eval — evaluator-friendly sequential allocation
  *)
 
 Theory concretizeMemLocDefs
@@ -347,6 +348,47 @@ Definition mem_liveness_analyze_def:
 End
 
 (* =========================================================================
+   Fuel-Bounded Evaluation Helpers
+   ========================================================================= *)
+
+Definition bp_iterate_fuel_def:
+  bp_iterate_fuel 0 fn order result = result ∧
+  bp_iterate_fuel (SUC fuel) fn order result =
+    let (changed, result') = bp_one_pass fn order result in
+    if changed then bp_iterate_fuel fuel fn order result'
+    else result'
+End
+
+Definition bp_analyze_fuel_def:
+  bp_analyze_fuel fuel cfg fn =
+    bp_iterate_fuel fuel fn cfg.cfg_dfs_pre FEMPTY
+End
+
+Definition ml_iterate_fuel_def:
+  ml_iterate_fuel 0 bpr mems_used alloca_sizes live_pallocas cfg fn
+                  liveat used = (liveat, used) ∧
+  ml_iterate_fuel (SUC fuel) bpr mems_used alloca_sizes live_pallocas cfg fn
+                  liveat used =
+    let (changed, liveat', used') =
+      ml_one_pass bpr mems_used alloca_sizes live_pallocas cfg fn
+        liveat used in
+    if changed then
+      ml_iterate_fuel fuel bpr mems_used alloca_sizes live_pallocas
+        cfg fn liveat' used'
+    else (liveat', used')
+End
+
+Definition mem_liveness_analyze_fuel_def:
+  mem_liveness_analyze_fuel fuel bpr mems_used alloca_sizes
+                            live_pallocas cfg fn =
+    let (liveat, used) =
+      ml_iterate_fuel fuel bpr mems_used alloca_sizes
+        live_pallocas cfg fn FEMPTY FEMPTY in
+    ml_mark_stores_live bpr fn
+      (ml_compute_livesets liveat used fn)
+End
+
+(* =========================================================================
    First-Fit Allocator
    Ports Python MemoryAllocator.allocate + run_pass allocation loop.
    ========================================================================= *)
@@ -425,6 +467,41 @@ Definition compute_alloc_map_def:
       sorted_info pre_allocated
 End
 
+Definition alloc_liveset_items_def:
+  alloc_liveset_items fn ls =
+    MAP
+      (\inst.
+         let alloc = Allocation inst.inst_id in
+         let live = case FLOOKUP ls alloc of SOME s => s | NONE => [] in
+         (alloc, live))
+      (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn))
+End
+
+Definition compute_alloc_map_fuel_def:
+  compute_alloc_map_fuel fuel fn bpr mems_used live_pallocas cfg
+                         (pre_allocated : (allocation, num) fmap)
+                         (global_reserved : (num # num) list) =
+    let alloca_sz = get_alloca_size fn in
+    let alloca_sz_opt = \a. let sz = alloca_sz a in
+                            if sz = 0 then NONE else SOME sz in
+    let ls = mem_liveness_analyze_fuel fuel bpr mems_used alloca_sz_opt
+               live_pallocas cfg fn in
+    let items = alloc_liveset_items fn ls in
+    let pre_allocated_dom = FDOM pre_allocated in
+    let (already, to_alloc) =
+      PARTITION (\(alloc, _). alloc IN pre_allocated_dom) items in
+    let sorted = QSORT (\(_, s1) (_, s2). LENGTH s1 <= LENGTH s2)
+                   to_alloc in
+    let already_info = MAP (\(alloc, live).
+      let pos = case FLOOKUP pre_allocated alloc of
+                  SOME p => p | NONE => 0 in
+      (alloc, live, pos, alloca_sz alloc)) already in
+    let sorted_info = MAP (\(alloc, live).
+      (alloc, live, alloca_sz alloc)) sorted in
+    allocate_with_livesets global_reserved already_info
+      sorted_info pre_allocated
+End
+
 (* Convert allocation-keyed result to variable-keyed alloc_map *)
 Definition alloc_result_to_map_def:
   alloc_result_to_map fn (result : (allocation, num) fmap) : alloc_map =
@@ -470,4 +547,64 @@ Definition concretize_function_def:
       (function_map_transform
         (block_map_transform (concretize_inst amap))
         fn)
+End
+
+Definition compute_function_alloc_map_fuel_def:
+  compute_function_alloc_map_fuel fuel fn =
+    let cfg = cfg_analyze fn in
+    let bpr = bp_analyze_fuel fuel cfg fn in
+    let result =
+      compute_alloc_map_fuel fuel fn bpr (K ([] : allocation list))
+        ([] : allocation list) cfg FEMPTY ([] : (num # num) list) in
+    alloc_result_to_map fn result
+End
+
+Definition fn_has_alloca_def:
+  fn_has_alloca fn =
+    EXISTS (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)
+End
+
+(* Evaluator path: concrete non-overlapping offsets without MemLiveness. *)
+Definition compute_alloc_map_linear_def:
+  compute_alloc_map_linear ([] : instruction list) pos = FEMPTY ∧
+  compute_alloc_map_linear (inst :: rest) pos =
+    if is_alloca_op inst.inst_opcode then
+      let sz = case inst_alloca_size inst of SOME n => n | NONE => 0 in
+      let amap = compute_alloc_map_linear rest (pos + sz) in
+      case inst.inst_outputs of
+        [out] => amap |+ (out, n2w pos)
+      | _ => amap
+    else
+      compute_alloc_map_linear rest pos
+End
+
+Definition compute_function_alloc_map_eval_def:
+  compute_function_alloc_map_eval fn =
+    compute_alloc_map_linear (fn_insts fn) 0
+End
+
+Definition concretize_function_fuel_def:
+  concretize_function_fuel fuel fn =
+    if fn_has_alloca fn then
+      concretize_function (compute_function_alloc_map_fuel fuel fn) fn
+    else fn
+End
+
+Definition concretize_function_eval_def:
+  concretize_function_eval fn =
+    if fn_has_alloca fn then
+      concretize_function (compute_function_alloc_map_eval fn) fn
+    else fn
+End
+
+Definition concretize_context_fuel_def:
+  concretize_context_fuel fuel ctx =
+    ctx with ctx_functions :=
+      MAP (concretize_function_fuel fuel) ctx.ctx_functions
+End
+
+Definition concretize_context_eval_def:
+  concretize_context_eval ctx =
+    ctx with ctx_functions :=
+      MAP concretize_function_eval ctx.ctx_functions
 End

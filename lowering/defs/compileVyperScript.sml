@@ -10,6 +10,7 @@
  *
  * TOP-LEVEL:
  *   compile_vyper          -- toplevel list → byte list option
+ *   compile_vyper_eval     -- bounded-dataflow evaluator variant
  *
  * The storage/transient layout (variable name → slot) comes from the
  * Python compiler's annotated AST, NOT recomputed here.
@@ -27,6 +28,7 @@ Ancestors
   vyperContext
   compileEnv
   vyperAST
+  byte
 
 (* ===== Dispatch Strategy ===== *)
 
@@ -133,16 +135,10 @@ Definition event_hash_def:
     let abi_types = vyper_to_abi_types tenv arg_types in
     let sig_str = function_signature ename abi_types in
     let hash_bytes = Keccak_256_w64 (MAP (n2w o ORD) sig_str) in
-    w2n (word_of_bytes_be hash_bytes : bytes32)
+    num_of_bytes (be_bytes 32 [] hash_bytes)
 End
 
 (* is_bytestring_type is in compileEnvTheory *)
-
-Definition event_topic_bs_def:
-  event_topic_bs [] = ([] : bool list) ∧
-  event_topic_bs (((_,ty),is_idx) :: rest) =
-    (if is_idx then is_bytestring_type ty else F) :: event_topic_bs rest
-End
 
 Definition build_event_info_def:
   build_event_info tenv ([] : toplevel list) eim = eim ∧
@@ -152,9 +148,8 @@ Definition build_event_info_def:
         let arg_types = MAP (SND o FST) args_indexed in
         let ehash = event_hash tenv ename arg_types in
         let indexed_flags = MAP SND args_indexed in
-        let topic_bs = event_topic_bs args_indexed in
         build_event_info tenv rest
-          (λn. if n = ename then (ehash, indexed_flags, topic_bs) else eim n)
+          (λn. if n = ename then SOME (ehash, arg_types, indexed_flags) else eim n)
     | _ => build_event_info tenv rest eim
 End
 
@@ -222,6 +217,23 @@ Definition allocate_internal_special_vars_def:
     (vars1 |+ ("__return_pc__", MemLoc off1 32), off1 + 32)
 End
 
+Definition add_module_var_locations_def:
+  add_module_var_locations ([] : toplevel list) vars = vars ∧
+  add_module_var_locations (top :: rest) vars =
+    let vars' =
+      case top of
+        VariableDecl _ Storage name _ (SOME slot) =>
+          vars |+ (name, StorageLoc (n2w slot))
+      | VariableDecl _ Transient name _ (SOME slot) =>
+          vars |+ (name, TransientLoc (n2w slot))
+      | HashMapDecl _ transient name _ _ (SOME slot) =>
+          vars |+ (name,
+            if transient then TransientLoc (n2w slot)
+            else StorageLoc (n2w slot))
+      | _ => vars in
+    add_module_var_locations rest vars'
+End
+
 (* ===== Local Variable Collection ===== *)
 
 Definition collect_locals_def:
@@ -232,8 +244,8 @@ Definition collect_locals_def:
     collect_locals then_stmts ++
     collect_locals else_stmts ++
     collect_locals rest ∧
-  collect_locals (For _ _ _ _ for_body :: rest) =
-    collect_locals for_body ++ collect_locals rest ∧
+  collect_locals (For id ty _ _ for_body :: rest) =
+    (id, ty) :: collect_locals for_body ++ collect_locals rest ∧
   collect_locals (_ :: rest) = collect_locals rest
 End
 
@@ -301,8 +313,8 @@ End
 Definition build_positional_arg_def:
   build_positional_arg cenv ((name, ty) : string # type) =
     let is_prim = is_word_type ty in
-    let is_dyn = is_abi_dynamic (cenv_sft cenv) ty in
-    let abi_sz = abi_embedded_static_size (cenv_sft cenv) ty in
+    let is_dyn = is_abi_dynamic cenv.ce_struct_fields ty in
+    let abi_sz = abi_embedded_static_size cenv.ce_struct_fields ty in
     let dec = type_to_abi_dec_info cenv.ce_struct_fields cenv ty in
     (name, is_prim, is_dyn, abi_sz, dec)
 End
@@ -317,7 +329,7 @@ End
 Definition min_calldata_size_def:
   min_calldata_size cenv (args : (string # type) list) (n_defaults : num) =
     let required = TAKE (LENGTH args - n_defaults) args in
-    let sizes = MAP (λ(_,ty). abi_embedded_static_size (cenv_sft cenv) ty)
+    let sizes = MAP (λ(_,ty). abi_embedded_static_size cenv.ce_struct_fields ty)
                     required in
     4 + SUM sizes
 End
@@ -354,11 +366,14 @@ Definition build_compile_env_def:
     let var_type_map = build_var_type_map tops in
     let is_hashmap = build_is_hashmap tops in
     let tenv = type_env tops in
-    let event_info = build_event_info tenv tops (K (0, [], [])) in
+    let event_info =
+          build_event_info tenv tops
+            ((K NONE) : string -> (num # type list # bool list) option) in
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
-    let (arg_vars, args_end) = allocate_args sft_fn args 0 FEMPTY in
+    let module_vars = add_module_var_locations tops FEMPTY in
+    let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
     let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
     let (all_vars, total_mem) =
@@ -386,6 +401,7 @@ Definition build_compile_env_def:
        ce_var_type := local_var_type;
        ce_is_hashmap := is_hashmap;
        ce_event_info := event_info;
+       ce_type_env := tenv;
        ce_returns_count := rc;
        ce_return_buf := ret_buf;
        ce_is_external := is_external;
@@ -405,7 +421,7 @@ Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =
     let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
     let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
-    let max_ret = abi_size_bound (cenv_sft cenv) ret_type in
+    let max_ret = abi_size_bound cenv.ce_struct_fields ret_type in
     cenv with <| ce_ret_enc_info := enc_info;
                  ce_ret_dec_info := dec_info;
                  ce_max_return_size := max_ret |>
@@ -629,6 +645,74 @@ Definition compile_vyper_def:
       [<| ds_label := "runtime_begin";
           ds_items := [DataBytes runtime_bytecode] |>] in
     case codegen deploy_ctx' FEMPTY deploy_data of
+      NONE => NONE
+    | SOME deploy_bytecode =>
+      SOME (deploy_bytecode, runtime_bytecode)
+End
+
+Definition compile_vyper_eval_def:
+  compile_vyper_eval fuel (tops : toplevel list)
+                     (pipeline : venom_context -> venom_context)
+                     dispatch_strategy =
+    let tenv = type_env tops in
+    let sft = make_struct_fields_map tops in
+    let sft_fn = get_struct_fields sft in
+    let immutables_len = compute_immutables_len sft_fn tops in
+    let nkey_map = assign_nkeys tops 0 in
+    let use_trans = F in
+    let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
+    let selectors = build_selectors tenv ext_fns in
+    let external_fns = MAP (package_external_fn tops use_trans nkey_map)
+                           ext_fns in
+    let runtime_int_fns = MAP (package_internal_fn tops use_trans nkey_map F)
+                              int_fns in
+    let fallback_fn = package_fallback_fn tops use_trans nkey_map fb_fn in
+    let entry_label = "__entry" in
+    let method_ids = MAP FST selectors in
+    let entry_info = build_dense_entry_info selectors external_fns in
+    let (bucket_count, fn_meta_bytes, dense_buckets) =
+      (case dispatch_strategy of
+         Dense =>
+           let min_cds_values = MAP (λ(_, _, _, min_cds, _, _, _, _, _, _, _).
+                                      min_cds) external_fns in
+           let fn_mb = compute_fn_metadata_bytes min_cds_values in
+           (case generate_dense_jumptable_info method_ids of
+              NONE => (1, fn_mb, ([] : dense_bucket list))
+            | SOME (nb, buckets) => (nb, fn_mb, buckets))
+       | Sparse =>
+           let (nb, _) = generate_sparse_jumptable_buckets method_ids in
+           (nb, 0, [])
+       | Linear =>
+           (0, 0, [])) in
+    let (runtime_ctx, runtime_data) =
+      run_lowering selectors external_fns runtime_int_fns
+        fallback_fn dispatch_strategy bucket_count fn_meta_bytes
+        dense_buckets entry_info entry_label in
+    let runtime_ctx' = pipeline runtime_ctx in
+    case codegen_fuel fuel runtime_ctx' FEMPTY runtime_data of
+      NONE => NONE
+    | SOME runtime_bytecode =>
+    let has_constructor = IS_SOME ctor_fn in
+    let deploy_int_fns = MAP (package_internal_fn tops use_trans nkey_map T)
+                             int_fns in
+    let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
+         ctor_trans, ctor_body, ctor_ret) =
+      case ctor_fn of
+        SOME cf => package_constructor tops use_trans nkey_map cf
+      | NONE => (ARB, ([] : (string # bool # bool # num # abi_dec_info) list),
+                 F, F, 0n, F, ([] : stmt list), NoneT) in
+    let (deploy_ctx, deploy_data_base) =
+      run_deploy_lowering has_constructor
+        (LENGTH runtime_bytecode) immutables_len
+        ctor_args 0 deploy_int_fns
+        ctor_cenv ctor_body ctor_payable ctor_nr
+        ctor_nkey ctor_trans "__deploy" in
+    let deploy_ctx' = pipeline deploy_ctx in
+    let deploy_data =
+      deploy_data_base ++
+      [<| ds_label := "runtime_begin";
+          ds_items := [DataBytes runtime_bytecode] |>] in
+    case codegen_fuel fuel deploy_ctx' FEMPTY deploy_data of
       NONE => NONE
     | SOME deploy_bytecode =>
       SOME (deploy_bytecode, runtime_bytecode)

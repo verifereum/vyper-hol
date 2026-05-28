@@ -880,20 +880,11 @@ Theorem step_inst_base_preserves_vs_labels[local]:
     step_inst_base inst s = OK s' ==> s'.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  Cases_on `is_terminator inst.inst_opcode`
-  >- (
-    Cases_on `inst.inst_opcode` >>
-    fs[is_terminator_def] >>
-    fs[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
-    rw[]
-  )
-  >- (
-    `inst.inst_opcode <> INVOKE` by
-      (imp_res_tac step_inst_base_OK_not_INVOKE >> fs[]) >>
-    `step_inst 0 ARB inst s = OK s'` by
-      simp[step_inst_non_invoke] >>
-    imp_res_tac step_preserves_labels
-  )
+  `inst.inst_opcode <> INVOKE` by
+    (imp_res_tac step_inst_base_OK_not_INVOKE >> fs[]) >>
+  `step_inst 0 ARB inst s = OK s'` by
+    simp[step_inst_non_invoke] >>
+  metis_tac[step_inst_preserves_labels_always]
 QED
 
 (* exec_block preserves vs_labels on OK result. *)
@@ -1450,6 +1441,24 @@ Proof
   )
 QED
 
+val term_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
+       AllCaseEqs()] >>
+  rpt CASE_TAC >> gvs[];
+
+Triviality step_inst_base_ok_terminator_jump:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  term_ok_jump_tac
+QED
+
 (* Unified helper: step_inst_base on a non-PHI instruction with
    execution_equiv states. For non-terminators: preserves execution_equiv +
    current_bb + inst_idx + ~halted. For terminators (jumps): additionally
@@ -1494,10 +1503,8 @@ Proof
   Cases_on `is_terminator inst.inst_opcode`
   >- (
     `inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-     inst.inst_opcode = DJMP` by (
-      Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-      gvs[step_inst_base_def, eval_operands_def, eval_operand_def] >>
-      BasicProvers.every_case_tac >> gvs[]) >>
+     inst.inst_opcode = DJMP` by
+      metis_tac[step_inst_base_ok_terminator_jump] >>
     `step_inst_base inst s_mid = step_inst_base inst s2` by (
       qunabbrev_tac `s_mid` >>
       simp[GSYM step_inst_base_jump_prev_bb]) >>
@@ -2158,6 +2165,35 @@ Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
 QED
 
+val nonjump_term_prev_bb_tac =
+  simp[step_inst_base_def, eval_operand_prev_bb,
+       eval_operands_prev_bb, halt_state_def, revert_state_def,
+       set_returndata_def, exec_result_map_prev_bb_def,
+       read_memory_def] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  simp[exec_result_map_prev_bb_def,
+       venomStateTheory.venom_state_component_equality];
+
+Triviality step_inst_base_non_jump_terminator_prev_bb:
+  !inst (s:venom_state) p.
+    is_terminator inst.inst_opcode /\
+    inst.inst_opcode <> JMP /\ inst.inst_opcode <> JNZ /\
+    inst.inst_opcode <> DJMP ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def]
+  >- nonjump_term_prev_bb_tac
+  >- nonjump_term_prev_bb_tac
+  >- nonjump_term_prev_bb_tac
+  >- nonjump_term_prev_bb_tac
+  >- nonjump_term_prev_bb_tac
+  >- nonjump_term_prev_bb_tac
+  >- nonjump_term_prev_bb_tac
+QED
+
 (* For non-PHI, non-JMP/JNZ/DJMP opcodes, step_inst_base commutes with
    vs_prev_bb via exec_result_map_prev_bb. Extends step_inst_base_prev_bb_indep
    to cover non-jump terminators (RET, RETURN, REVERT, STOP, SINK, etc.) *)
@@ -2172,17 +2208,7 @@ Theorem step_inst_base_non_jump_prev_bb[local]:
 Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
-  >- (
-    (* Non-jump terminators: RET, RETURN, REVERT, STOP, SINK, SELFDESTRUCT, INVALID *)
-    Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-    simp[step_inst_base_def, eval_operand_prev_bb,
-         eval_operands_prev_bb, halt_state_def, revert_state_def,
-         set_returndata_def, exec_result_map_prev_bb_def,
-         read_memory_def] >>
-    BasicProvers.EVERY_CASE_TAC >>
-    simp[exec_result_map_prev_bb_def,
-         venomStateTheory.venom_state_component_equality]
-  )
+  >- metis_tac[step_inst_base_non_jump_terminator_prev_bb]
   >> irule step_inst_base_prev_bb_indep >> simp[]
 QED
 
@@ -2194,10 +2220,7 @@ Theorem step_inst_base_ok_not_halted_is_jump[local]:
     inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
     inst.inst_opcode = DJMP
 Proof
-  rw[] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  gvs[step_inst_base_def, eval_operands_def, eval_operand_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  metis_tac[step_inst_base_ok_terminator_jump]
 QED
 
 (* result_equiv is reflexive for any vars. Generalizes result_equiv_UNIV_refl. *)
@@ -2667,6 +2690,12 @@ Proof
 QED
 
 
+val subst_label_nonjump_tac =
+  gvs[step_inst_base_def, subst_label_inst_def,
+      eval_operands_subst_label, eval_operand_subst_label] >>
+  BasicProvers.every_case_tac >>
+  gvs[eval_operand_subst_label];
+
 (* For non-jump terminators, subst_label_inst has no effect on step_inst_base
    when vs_labels agrees on old and new labels *)
 Theorem step_inst_base_subst_label_non_jump[local]:
@@ -2679,11 +2708,14 @@ Theorem step_inst_base_subst_label_non_jump[local]:
     step_inst_base inst s
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  gvs[step_inst_base_def, subst_label_inst_def,
-      eval_operands_subst_label, eval_operand_subst_label] >>
-  BasicProvers.every_case_tac >>
-  gvs[eval_operand_subst_label]
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- subst_label_nonjump_tac
+  >- subst_label_nonjump_tac
+  >- subst_label_nonjump_tac
+  >- subst_label_nonjump_tac
+  >- subst_label_nonjump_tac
+  >- subst_label_nonjump_tac
+  >- subst_label_nonjump_tac
 QED
 
 (* Full JMP: covers all result types including Error *)
@@ -2803,10 +2835,14 @@ Proof
   >- simp[step_inst_base_subst_label_JMP_full]
   >- simp[step_inst_base_subst_label_JNZ_full]
   >- simp[step_inst_base_subst_label_DJMP_full]
-  >> (* Non-jump terminators: subst has no effect *)
+  >> (* Non-jump terminators: subst has no effect and cannot return OK. *)
      gvs[step_inst_base_subst_label_non_jump, is_terminator_def] >>
-     gvs[step_inst_base_def] >>
-     BasicProvers.every_case_tac
+     Cases_on `step_inst_base inst s` >> gvs[] >>
+     `is_terminator inst.inst_opcode` by gvs[is_terminator_def] >>
+     `inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+      inst.inst_opcode = DJMP` by
+       (irule step_inst_base_ok_terminator_jump >> metis_tac[]) >>
+     gvs[]
 QED
 
 Theorem get_instruction_subst_label_terminator[local]:
@@ -4700,6 +4736,20 @@ Proof
 QED
 
 (* One step of insert_split simulation for pred_bb *)
+Triviality bb_well_formed_non_term_prefix[local]:
+  !bb i.
+    bb_well_formed bb /\
+    i < LENGTH bb.bb_instructions - 1 ==>
+    ~is_terminator (EL i bb.bb_instructions).inst_opcode
+Proof
+  rw[bb_well_formed_def] >>
+  spose_not_then strip_assume_tac >>
+  `i < LENGTH bb.bb_instructions` by DECIDE_TAC >>
+  `i = PRE (LENGTH bb.bb_instructions)` by (
+    first_x_assum match_mp_tac >> simp[]) >>
+  DECIDE_TAC
+QED
+
 Theorem insert_split_pred_step[local]:
   !func pred_bb target_bb id_base func' split_lbl n ctx s cur_bb.
     wf_function_no_ids func /\
@@ -4812,8 +4862,8 @@ Proof
     (strip_tac >> fs[]) >>
   `pred_bb.bb_instructions <> []` by metis_tac[exec_block_ok_nonempty] >>
   `!i. i < LENGTH pred_bb.bb_instructions - 1 ==>
-       ~is_terminator (EL i pred_bb.bb_instructions).inst_opcode` by (
-    rpt strip_tac >> fs[bb_well_formed_def] >> res_tac >> fs[]) >>
+       ~is_terminator (EL i pred_bb.bb_instructions).inst_opcode` by
+    metis_tac[bb_well_formed_non_term_prefix] >>
   `v1.vs_prev_bb = SOME pred_bb.bb_label` by (
     drule_all run_block_ok_prev_bb >> simp[]) >>
   Cases_on `v1.vs_current_bb = target_bb.bb_label` >-

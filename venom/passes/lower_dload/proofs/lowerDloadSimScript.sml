@@ -53,6 +53,32 @@ val ld_dload_safe_tac =
       first_x_assum drule >> strip_tac >>
       gvs[] >> metis_tac[]);
 
+Theorem step_inst_base_ADD_single[local]:
+  step_inst_base <| inst_id := id; inst_opcode := ADD;
+                    inst_operands := [op1; op2]; inst_outputs := [out] |> s =
+    case (eval_operand op1 s, eval_operand op2 s) of
+      (SOME v1, SOME v2) => OK (update_var out (word_add v1 v2) s)
+    | _ => Error "undefined operand"
+Proof
+  rw[step_inst_base_def, exec_pure2_def]
+QED
+
+Theorem step_inst_base_CODECOPY3[local]:
+  step_inst_base <| inst_id := id; inst_opcode := CODECOPY;
+                    inst_operands := [op_dst; op_src; op_size];
+                    inst_outputs := outs |> s =
+    case (eval_operand op_dst s, eval_operand op_src s,
+          eval_operand op_size s) of
+      (SOME dst, SOME src, SOME size_val) =>
+        let size = w2n size_val in
+        let bytes = TAKE size (DROP (w2n src) s.vs_code ++
+                               REPLICATE size 0w) in
+          OK (write_memory_with_expansion (w2n dst) bytes s)
+    | _ => Error "undefined operand"
+Proof
+  rw[step_inst_base_def]
+QED
+
 (* DLOADBYTES Error -> expansion also errors.
    When DLOADBYTES returns Error (operand NONE), the ADD+CODECOPY expansion
    also returns Error because the same operand is NONE on s2 after ADD. *)
@@ -86,16 +112,31 @@ Proof
   `FLOOKUP s2.vs_labels "code_end" =
      SOME (n2w (LENGTH s2.vs_code - LENGTH s2.vs_data_section))` by
     gvs[code_layout_valid_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def, LET_THM] >>
-  (* After ADD returns OK (update_var add_v result s2), dst_op/size_op
-     unchanged since add_var IN vars but operand vars NOTIN vars *)
+  Cases_on `eval_operand dst_op s1 = NONE` >> gvs[]
+  >- (simp[step_inst_base_ADD_single, step_inst_base_CODECOPY3,
+           eval_operand_def, LET_THM] >>
+      (* After ADD returns OK (update_var add_v result s2), dst_op/size_op
+         unchanged since add_var IN vars but operand vars NOTIN vars *)
+      qmatch_goalsub_abbrev_tac `update_var (ld_add_var inst.inst_id) add_result s2` >>
+      `!op. (!x. op = Var x ==> x NOTIN vars) ==>
+         eval_operand op (update_var (ld_add_var inst.inst_id) add_result s2) =
+         eval_operand op s2` by
+        (rpt strip_tac >> irule eval_operand_update_var_other >>
+         rpt strip_tac >> CCONTR_TAC >> gvs[] >> res_tac >> gvs[]) >>
+      `eval_operand dst_op (update_var (ld_add_var inst.inst_id) add_result s2) =
+         eval_operand dst_op s2` by (first_x_assum irule >> metis_tac[]) >>
+      `eval_operand size_op (update_var (ld_add_var inst.inst_id) add_result s2) =
+         eval_operand size_op s2` by (first_x_assum irule >> metis_tac[]) >>
+      ASM_REWRITE_TAC[] >> gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[])) >>
+  simp[step_inst_base_ADD_single, step_inst_base_CODECOPY3,
+       eval_operand_def, LET_THM] >>
   qmatch_goalsub_abbrev_tac `update_var (ld_add_var inst.inst_id) add_result s2` >>
   `!op. (!x. op = Var x ==> x NOTIN vars) ==>
      eval_operand op (update_var (ld_add_var inst.inst_id) add_result s2) =
      eval_operand op s2` by
     (rpt strip_tac >> irule eval_operand_update_var_other >>
      rpt strip_tac >> CCONTR_TAC >> gvs[] >> res_tac >> gvs[]) >>
-  (* CODECOPY errors because dst_op or size_op is NONE *)
   `eval_operand dst_op (update_var (ld_add_var inst.inst_id) add_result s2) =
      eval_operand dst_op s2` by (first_x_assum irule >> metis_tac[]) >>
   `eval_operand size_op (update_var (ld_add_var inst.inst_id) add_result s2) =
@@ -301,6 +342,12 @@ QED
 
 (* Terminator step_inst_base OK non-halted results always have idx=0
    (they must be JMP/JNZ/DJMP which all use jump_to) *)
+val term_idx_tac =
+  rpt strip_tac >>
+  qpat_x_assum `step_inst_base inst s = OK v` mp_tac >>
+  simp[step_inst_base_def, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[];
+
 Theorem step_inst_base_term_OK_idx_0[local]:
   !inst s v.
     step_inst_base inst s = OK v /\
@@ -309,8 +356,17 @@ Theorem step_inst_base_term_OK_idx_0[local]:
     v.vs_inst_idx = 0
 Proof
   gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_terminator_def] >> rpt strip_tac >>
-  gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+  simp[is_terminator_def]
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
+  >- term_idx_tac
 QED
 
 (* Helper: step_inst_base on a terminator with idx override produces

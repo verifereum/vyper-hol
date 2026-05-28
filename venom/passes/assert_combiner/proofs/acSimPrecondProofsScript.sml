@@ -256,6 +256,30 @@ Proof
   rpt conj_tac >> metis_tac[ac_cands_ordered_tail]
 QED
 
+Triviality eval_operand_update_var_preserves_some_neq[local]:
+  !op s v val.
+    IS_SOME (eval_operand op s) /\
+    (!x. op = Var x ==> x <> v) ==>
+    IS_SOME (eval_operand op (update_var v val s))
+Proof
+  rpt strip_tac >>
+  `eval_operand op (update_var v val s) = eval_operand op s` by (
+    irule eval_operand_update_var_neq >> metis_tac[]) >>
+  gvs[]
+QED
+
+Triviality eval_operand_update_var_preserves_value_neq[local]:
+  !op s v val w.
+    eval_operand op s = SOME w /\
+    (!x. op = Var x ==> x <> v) ==>
+    eval_operand op (update_var v val s) = SOME w
+Proof
+  rpt strip_tac >>
+  `eval_operand op (update_var v val s) = eval_operand op s` by (
+    irule eval_operand_update_var_neq >> metis_tac[]) >>
+  gvs[]
+QED
+
 (* State update on fresh variable.
    Side conditions: v must not be a variable in any cand pred or mp pred. *)
 Triviality ac_sim_precond_update_fresh_var[local]:
@@ -270,10 +294,33 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `ac_sim_precond _ _ _ _ _ _` mp_tac >>
   simp[ac_sim_precond_def] >> strip_tac >>
+  `!i op. MEM i insts /\ MEM op i.inst_operands ==>
+     IS_SOME (eval_operand op (update_var v val s))` by (
+    rpt strip_tac >>
+    `IS_SOME (eval_operand op s)` by metis_tac[] >>
+    `eval_operand op (update_var v val s) = eval_operand op s` by (
+      irule eval_operand_update_var_neq >> rpt strip_tac >>
+      `x NOTIN V` by metis_tac[] >>
+      metis_tac[]) >>
+    gvs[]) >>
+  `!mc. MEM mc cands ==>
+     IS_SOME (eval_operand mc.mc_second_pred (update_var v val s)) /\
+     IS_SOME (eval_operand mc.mc_first_pred (update_var v val s))` by
+    metis_tac[eval_operand_update_var_preserves_some_neq] >>
+  `!id p. ALOOKUP mp id = SOME p ==>
+     IS_SOME (eval_operand p (update_var v val s))` by
+    metis_tac[eval_operand_update_var_preserves_some_neq] >>
+  `!id pred. ALOOKUP mp id = SOME pred ==>
+     eval_operand pred (update_var v val s) = SOME 0w` by
+    metis_tac[eval_operand_update_var_preserves_value_neq] >>
+  `!mc. MEM mc cands /\
+     (!i. MEM i insts ==> i.inst_id <> mc.mc_first_id) /\
+     ALOOKUP mp mc.mc_first_id = NONE ==>
+     eval_operand mc.mc_first_pred (update_var v val s) = SOME 0w` by
+    metis_tac[eval_operand_update_var_preserves_value_neq] >>
   rpt conj_tac
   >- (irule ac_dfg_inv_update_fresh >> simp[] >> metis_tac[])
-  >> TRY (metis_tac[]) >>
-  rpt strip_tac >> precond_eval_tac
+  >> metis_tac[]
 QED
 
 (* mp extension without head drop *)
@@ -291,8 +338,19 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `ac_sim_precond _ _ _ _ _ _` mp_tac >>
   simp[ac_sim_precond_def] >> strip_tac >>
-  rpt conj_tac >> TRY (metis_tac[]) >>
-  precond_alookup_ext_tac
+  rpt conj_tac >> TRY (metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+      Cases_on `id = key` >> gvs[] >> metis_tac[])
 QED
 
 (* Head-drop + mp extension: compose transfer_same + extend_mp *)

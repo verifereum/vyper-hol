@@ -92,6 +92,53 @@ val step_base_result_tac =
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])));
 
+Triviality exec_result_helpers_not_intret[simp]:
+  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
+  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_call_helpers_not_intret[simp]:
+  (!inst s g a v ao as_ ro rs is_s vs s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
+  (!inst s g a ao as_ ro rs vs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
+  (!inst s v off sz salt vs s'.
+     exec_create inst s v off sz salt <> IntRet vs s')
+Proof
+  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_call_helpers_no_halt_abort[simp]:
+  (!inst s g a v ao as_ ro rs is_s s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
+  (!inst s g a v ao as_ ro rs is_s ab s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
+  (!inst s g a ao as_ ro rs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
+  (!inst s g a ao as_ ro rs ab s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
+  (!inst s v off sz salt s'.
+     exec_create inst s v off sz salt <> Halt s') /\
+  (!inst s v off sz salt ab s'.
+     exec_create inst s v off sz salt <> Abort ab s')
+Proof
+  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 Theorem step_inst_base_no_halt[local]:
   !inst s s'.
     step_inst_base inst s = Halt s' ==>
@@ -105,20 +152,8 @@ Theorem step_inst_base_no_intret[local]:
     step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
-QED
-
-(* Only ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY can abort
-   among non-terminators *)
-Theorem step_inst_base_abort_opcodes[local]:
-  !inst s a s'.
-    step_inst_base inst s = Abort a s' /\
-    ~is_terminator inst.inst_opcode ==>
-    inst.inst_opcode = ASSERT \/
-    inst.inst_opcode = ASSERT_UNREACHABLE \/
-    inst.inst_opcode = RETURNDATACOPY
-Proof
-  step_base_result_tac
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_terminator_def]
 QED
 
 (* ===================================================================== *)
@@ -177,9 +212,203 @@ val wmwe_update_var = prove(
     update_var x w (write_memory_with_expansion off dat s)``,
   rw[write_memory_with_expansion_def, update_var_def]);
 
+Triviality mcopy_update_var[local]:
+  !x w dst src sz st.
+    mcopy dst src sz (update_var x w st) =
+    update_var x w (mcopy dst src sz st)
+Proof
+  simp[mcopy_def, wmwe_update_var, update_var_def]
+QED
+
 val exec_call_var_thms =
   [exec_ext_call_update_var, exec_delegatecall_update_var,
-   exec_create_update_var, wmwe_update_var];
+   exec_create_update_var, wmwe_update_var, mcopy_update_var];
+
+Definition var_frame_result_def:
+  var_frame_result x w (OK st) = OK (update_var x w st) /\
+  var_frame_result x w (Abort a st) = Abort a (update_var x w st) /\
+  var_frame_result x w (Error e) = Error e /\
+  var_frame_result x w (Halt st) = Halt st /\
+  var_frame_result x w (IntRet vals st) = IntRet vals st
+End
+
+Triviality exec_pure1_var_frame[local]:
+  !f inst x w st.
+    ~MEM x (operand_vars inst.inst_operands) /\
+    ~MEM x inst.inst_outputs ==>
+    exec_pure1 f inst (update_var x w st) =
+    var_frame_result x w (exec_pure1 f inst st)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+        eval_operand op (update_var x w st) = eval_operand op st`
+    by metis_tac[eval_operand_update_other_list] >>
+  rw[exec_pure1_def, var_frame_result_def] >>
+  Cases_on `inst.inst_operands` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `eval_operand h st` >> gvs[var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def, update_var_def,
+                         finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
+Triviality exec_pure2_var_frame[local]:
+  !f inst x w st.
+    ~MEM x (operand_vars inst.inst_operands) /\
+    ~MEM x inst.inst_outputs ==>
+    exec_pure2 f inst (update_var x w st) =
+    var_frame_result x w (exec_pure2 f inst st)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+        eval_operand op (update_var x w st) = eval_operand op st`
+    by metis_tac[eval_operand_update_other_list] >>
+  rw[exec_pure2_def, var_frame_result_def] >>
+  Cases_on `inst.inst_operands` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `t'` >> gvs[var_frame_result_def] >>
+  Cases_on `eval_operand h st` >>
+  Cases_on `eval_operand h' st` >> gvs[var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def, update_var_def,
+                         finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
+Triviality exec_pure3_var_frame[local]:
+  !f inst x w st.
+    ~MEM x (operand_vars inst.inst_operands) /\
+    ~MEM x inst.inst_outputs ==>
+    exec_pure3 f inst (update_var x w st) =
+    var_frame_result x w (exec_pure3 f inst st)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+        eval_operand op (update_var x w st) = eval_operand op st`
+    by metis_tac[eval_operand_update_other_list] >>
+  rw[exec_pure3_def, var_frame_result_def] >>
+  Cases_on `inst.inst_operands` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `t'` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `eval_operand h st` >>
+  Cases_on `eval_operand h' st` >>
+  Cases_on `eval_operand h'' st` >> gvs[var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def, update_var_def,
+                         finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
+Triviality exec_read0_var_frame[local]:
+  !f inst x w st.
+    (!s0. f (update_var x w s0) = f s0) /\
+    ~MEM x inst.inst_outputs ==>
+    exec_read0 f inst (update_var x w st) =
+    var_frame_result x w (exec_read0 f inst st)
+Proof
+  rw[exec_read0_def, var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def, update_var_def,
+                         finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
+Triviality exec_read1_var_frame[local]:
+  !f inst x w st.
+    (!a s0. f a (update_var x w s0) = f a s0) /\
+    ~MEM x (operand_vars inst.inst_operands) /\
+    ~MEM x inst.inst_outputs ==>
+    exec_read1 f inst (update_var x w st) =
+    var_frame_result x w (exec_read1 f inst st)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+        eval_operand op (update_var x w st) = eval_operand op st`
+    by metis_tac[eval_operand_update_other_list] >>
+  rw[exec_read1_def, var_frame_result_def] >>
+  Cases_on `inst.inst_operands` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `eval_operand h st` >> gvs[var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def, update_var_def,
+                         finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
+Triviality exec_write2_var_frame[local]:
+  !f inst x w st.
+    (!a b s0. f a b (update_var x w s0) = update_var x w (f a b s0)) /\
+    ~MEM x (operand_vars inst.inst_operands) ==>
+    exec_write2 f inst (update_var x w st) =
+    var_frame_result x w (exec_write2 f inst st)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+        eval_operand op (update_var x w st) = eval_operand op st`
+    by metis_tac[eval_operand_update_other_list] >>
+  rw[exec_write2_def, var_frame_result_def] >>
+  Cases_on `inst.inst_operands` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `t'` >> gvs[var_frame_result_def] >>
+  Cases_on `eval_operand h st` >>
+  Cases_on `eval_operand h' st` >> gvs[var_frame_result_def]
+QED
+
+Triviality exec_alloca_var_frame[local]:
+  !inst x w st alloc_size.
+    ~MEM x inst.inst_outputs ==>
+    exec_alloca inst (update_var x w st) alloc_size =
+    var_frame_result x w (exec_alloca inst st alloc_size)
+Proof
+  rw[exec_alloca_def, var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `FLOOKUP st.vs_allocas inst.inst_id` >>
+  gvs[var_frame_result_def, update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE,
+      finite_mapTheory.FUPDATE_COMMUTES] >>
+  Cases_on `x'` >> gvs[var_frame_result_def, update_var_def,
+                         finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
+Triviality exec_ext_call_var_frame[local]:
+  !inst x w s g a v ao as_ ro rs is_s.
+    ~MEM x inst.inst_outputs ==>
+    exec_ext_call inst (update_var x w s) g a v ao as_ ro rs is_s =
+    var_frame_result x w (exec_ext_call inst s g a v ao as_ ro rs is_s)
+Proof
+  rpt strip_tac >>
+  simp[exec_ext_call_update_var] >>
+  Cases_on `exec_ext_call inst s g a v ao as_ ro rs is_s` >>
+  gvs[var_frame_result_def]
+QED
+
+Triviality exec_delegatecall_var_frame[local]:
+  !inst x w s g a ao as_ ro rs.
+    ~MEM x inst.inst_outputs ==>
+    exec_delegatecall inst (update_var x w s) g a ao as_ ro rs =
+    var_frame_result x w (exec_delegatecall inst s g a ao as_ ro rs)
+Proof
+  rpt strip_tac >>
+  simp[exec_delegatecall_update_var] >>
+  Cases_on `exec_delegatecall inst s g a ao as_ ro rs` >>
+  gvs[var_frame_result_def]
+QED
+
+Triviality exec_create_var_frame[local]:
+  !inst x w s v off sz salt.
+    ~MEM x inst.inst_outputs ==>
+    exec_create inst (update_var x w s) v off sz salt =
+    var_frame_result x w (exec_create inst s v off sz salt)
+Proof
+  rpt strip_tac >>
+  simp[exec_create_update_var] >>
+  Cases_on `exec_create inst s v off sz salt` >>
+  gvs[var_frame_result_def]
+QED
+
+val exec_frame_thms =
+  [exec_pure1_var_frame, exec_pure2_var_frame, exec_pure3_var_frame,
+   exec_read0_var_frame, exec_read1_var_frame, exec_write2_var_frame,
+   exec_alloca_var_frame, exec_ext_call_var_frame,
+   exec_delegatecall_var_frame, exec_create_var_frame];
 
 (* ===================================================================== *)
 (* ===== step_inst_base_var_frame_full ================================= *)
@@ -188,6 +417,105 @@ val exec_call_var_thms =
 (* Full var-frame for step_inst_base: all result types.
    Directly proved without intermediate OK-only lemma.
    Strategy: case split on result type, then handle each. *)
+Theorem step_inst_base_var_frame_result[local]:
+  !inst x w st.
+    ~MEM x (operand_vars inst.inst_operands) /\
+    ~MEM x inst.inst_outputs /\
+    ~is_terminator inst.inst_opcode ==>
+    step_inst_base inst (update_var x w st) =
+    var_frame_result x w (step_inst_base inst st)
+Proof
+  rpt strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+        eval_operand op (update_var x w st) = eval_operand op st`
+    by metis_tac[eval_operand_update_other_list] >>
+  `eval_operands inst.inst_operands (update_var x w st) =
+   eval_operands inst.inst_operands st`
+    by (irule eval_operands_update_var >> gvs[]) >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (gvs[step_inst_base_def, var_frame_result_def] >>
+      Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+      Cases_on `t` >> gvs[var_frame_result_def] >>
+      Cases_on `st.vs_prev_bb` >> gvs[update_var_def, var_frame_result_def] >>
+      Cases_on `resolve_phi x' inst.inst_operands` >> gvs[var_frame_result_def] >>
+      imp_res_tac resolve_phi_mem >> res_tac >>
+      Cases_on `eval_operand x'' st` >> gvs[var_frame_result_def] >>
+      gvs[update_var_def, finite_mapTheory.FUPDATE_COMMUTES,
+          var_frame_result_def]) >>
+  Cases_on `inst.inst_opcode = LOG`
+  >- (gvs[step_inst_base_def, var_frame_result_def] >>
+      Cases_on `inst.inst_operands` >> gvs[var_frame_result_def] >>
+      Cases_on `h` >> gvs[var_frame_result_def] >>
+      rename1 `Lit tc :: rest` >>
+      `~MEM x (operand_vars rest)` by
+        gvs[operand_vars_def, operand_var_def] >>
+      `!op. MEM op rest ==>
+            eval_operand op (update_var x w st) = eval_operand op st` by
+        metis_tac[eval_operand_update_other_list] >>
+      `eval_operands (DROP 2 rest) (update_var x w st) =
+       eval_operands (DROP 2 rest) st` by (
+        irule eval_operands_update_var >>
+        metis_tac[operand_vars_drop]) >>
+      Cases_on `rest` >> gvs[var_frame_result_def] >>
+      Cases_on `t` >> gvs[var_frame_result_def] >> simp[var_frame_result_def] >>
+      Cases_on `eval_operand h st` >> gvs[var_frame_result_def] >>
+      Cases_on `eval_operand h' st` >> gvs[var_frame_result_def] >>
+      Cases_on `eval_operands t' st` >> gvs[var_frame_result_def] >>
+      gvs[update_var_def, var_frame_result_def] >>
+      BasicProvers.EVERY_CASE_TAC >>
+      gvs[var_frame_result_def, update_var_def,
+          venom_state_component_equality]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
+  CONV_TAC (RAND_CONV (RAND_CONV (ONCE_REWRITE_CONV [step_inst_base_def]))) >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  gvs(exec_frame_thms @
+      (update_var_def :: finite_mapTheory.FUPDATE_COMMUTES ::
+       mload_def :: mstore_def :: mstore8_def :: sload_def :: sstore_def ::
+       tload_def :: tstore_def :: read_memory_def ::
+       contract_storage_def :: contract_transient_def ::
+       revert_state_def :: halt_state_def :: set_returndata_def ::
+       var_frame_result_def :: exec_call_var_thms)) >>
+  fs[eval_operands_def] >>
+  RULE_ASSUM_TAC (SIMP_RULE list_ss []) >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp[var_frame_result_def] >>
+  gvs[update_var_def, var_frame_result_def, venom_state_component_equality] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  gvs(update_var_def :: finite_mapTheory.FUPDATE_COMMUTES ::
+      mload_def :: mstore_def :: mstore8_def :: sload_def :: sstore_def ::
+      tload_def :: tstore_def :: read_memory_def ::
+      contract_storage_def :: contract_transient_def ::
+      revert_state_def :: halt_state_def :: set_returndata_def ::
+      var_frame_result_def :: venom_state_component_equality ::
+      exec_call_var_thms) >>
+  gvs[AllCaseEqs(), var_frame_result_def, update_var_def,
+      venom_state_component_equality] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[var_frame_result_def]
+QED
+
 Theorem step_inst_base_var_frame_full:
   !inst x w st.
     ~MEM x (operand_vars inst.inst_operands) /\
@@ -201,75 +529,9 @@ Theorem step_inst_base_var_frame_full:
     | other => other
 Proof
   rpt strip_tac >>
-  `!op. MEM op inst.inst_operands ==>
-        eval_operand op (update_var x w st) = eval_operand op st`
-    by metis_tac[eval_operand_update_other_list] >>
-  `eval_operands inst.inst_operands (update_var x w st) =
-   eval_operands inst.inst_operands st`
-    by (irule eval_operands_update_var >> gvs[]) >>
-  (* Shared tactic for OK and Error bulk case split *)
-  let val bulk_tac =
-    Cases_on `inst.inst_opcode = PHI`
-    >- (gvs[step_inst_base_def] >>
-        Cases_on `inst.inst_outputs` >> gvs[] >>
-        Cases_on `t` >> gvs[] >>
-        Cases_on `st.vs_prev_bb` >> gvs[update_var_def] >>
-        Cases_on `resolve_phi x' inst.inst_operands` >> gvs[] >>
-        imp_res_tac resolve_phi_mem >> res_tac >>
-        Cases_on `eval_operand x'' st` >> gvs[] >>
-        gvs[update_var_def, finite_mapTheory.FUPDATE_COMMUTES]) >>
-    Cases_on `inst.inst_opcode = LOG`
-    >- (gvs[step_inst_base_def] >>
-        Cases_on `inst.inst_operands` >> gvs[] >>
-        Cases_on `h` >> gvs[] >>
-        rename1 `Lit tc :: rest` >>
-        `~MEM x (operand_vars rest)` by
-          gvs[operand_vars_def, operand_var_def] >>
-        `!op. MEM op rest ==>
-              eval_operand op (update_var x w st) = eval_operand op st` by
-          metis_tac[eval_operand_update_other_list] >>
-        `eval_operands (DROP 2 rest) (update_var x w st) =
-         eval_operands (DROP 2 rest) st` by (
-          irule eval_operands_update_var >>
-          metis_tac[operand_vars_drop]) >>
-        Cases_on `rest` >> gvs[] >>
-        Cases_on `t` >> gvs[] >> simp[] >>
-        Cases_on `eval_operand h st` >> gvs[] >>
-        Cases_on `eval_operand h' st` >> gvs[] >>
-        Cases_on `eval_operands t' st` >> gvs[] >>
-        gvs[update_var_def] >> BasicProvers.EVERY_CASE_TAC >> gvs[]) >>
-    Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-    fs[step_inst_base_def,
-       exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
-       exec_alloca_def, eval_operands_def] >>
-    RULE_ASSUM_TAC (SIMP_RULE list_ss []) >>
-    gvs[AllCaseEqs()] >>
-    rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-    gvs(update_var_def :: finite_mapTheory.FUPDATE_COMMUTES ::
-        mload_def :: mstore_def :: mstore8_def :: sload_def :: sstore_def ::
-        tload_def :: tstore_def :: mcopy_def :: read_memory_def ::
-        contract_storage_def :: contract_transient_def ::
-        revert_state_def :: halt_state_def :: set_returndata_def ::
-        exec_call_var_thms) >>
-    gvs[AllCaseEqs()]
-  in
-  Cases_on `step_inst_base inst st` >> gvs[]
-  (* OK *)
-  >- bulk_tac
-  (* Halt: impossible for non-terminators *)
-  >- (metis_tac[step_inst_base_no_halt])
-  (* Abort: only ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY *)
-  >- (imp_res_tac step_inst_base_abort_opcodes >>
-      gvs[step_inst_base_def, AllCaseEqs(),
-        update_var_def, finite_mapTheory.FUPDATE_COMMUTES,
-        revert_state_def, halt_state_def, set_returndata_def,
-        write_memory_with_expansion_def, read_memory_def])
-  (* IntRet: impossible for non-terminators *)
-  >- (metis_tac[step_inst_base_no_intret])
-  (* Error *)
-  >> bulk_tac
-  end
+  drule_all step_inst_base_var_frame_result >>
+  Cases_on `step_inst_base inst st` >> gvs[var_frame_result_def] >>
+  metis_tac[step_inst_base_no_halt, step_inst_base_no_intret]
 QED
 
 (* ===================================================================== *)

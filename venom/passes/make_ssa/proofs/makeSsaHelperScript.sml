@@ -975,7 +975,8 @@ Proof
   >- gvs[]
   (* Goal 3: MEM version bounds *)
   >- (rpt gen_tac >> strip_tac >> gvs[]
-      >- (imp_res_tac version_var_inj >> gvs[])
+      >- (`v = h /\ n = get_counter rs h` by metis_tac[version_var_inj] >>
+          ASM_REWRITE_TAC[] >> simp[])
       >> `n >= get_counter rs'' v` by res_tac >>
          `get_counter rs'' v >= get_counter rs v` by (
            Cases_on `v = h` >> gvs[]) >>
@@ -2142,15 +2143,15 @@ Theorem opcode_has_output_single[local]:
     step_inst_base inst s = OK s' ==>
     ?h. inst.inst_outputs = [h]
 Proof
-  rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  rw[opcode_has_output_def, is_terminator_def] >>
+  gvs[opcode_has_output_def, is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >> strip_tac >>
   gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM]
+      exec_read0_def, exec_read1_def, exec_alloca_def,
+      exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+      extract_venom_result_def, AllCaseEqs(), LET_THM]
 QED
 
 (* Pure sigma bridge: the if-then-else sigma from step simulation
@@ -2774,6 +2775,57 @@ QED
 
    Requires: original execution does not produce Error (well-formedness).
    Non-output opcodes have empty output lists (instruction well-formedness). *)
+Theorem lockstep_terminator_close[local]:
+  !fuel ctx bb bb' s1 s2 inst1 inst2 sigma sigma_end.
+    exec_block fuel ctx bb s1 =
+      (case step_inst_base inst1 s1 of
+         OK s'' => if s''.vs_halted then Halt s'' else OK s''
+       | Halt h => Halt h | Abort a' s' => Abort a' s'
+       | IntRet vals s' => IntRet vals s' | Error e => Error e) /\
+    exec_block fuel ctx bb' s2 =
+      (case step_inst_base inst2 s2 of
+         OK s'' => if s''.vs_halted then Halt s'' else OK s''
+       | Halt h => Halt h | Abort a' s' => Abort a' s'
+       | IntRet vals s' => IntRet vals s' | Error e => Error e) /\
+    (!e. exec_block fuel ctx bb s1 <> Error e) /\
+    ssa_sim sigma s1 s2 /\
+    inst_renamed sigma inst1 inst2 /\
+    vars_colon_free s1 /\
+    EVERY colon_free inst1.inst_outputs /\
+    is_terminator inst1.inst_opcode /\
+    inst1.inst_opcode <> INVOKE /\
+    sigma = sigma_end ==>
+    ssa_result_equiv (exec_block fuel ctx bb s1) (exec_block fuel ctx bb' s2) /\
+    (!v v'. exec_block fuel ctx bb s1 = OK v /\
+            exec_block fuel ctx bb' s2 = OK v' ==>
+      ssa_sim sigma_end v v' /\ vars_colon_free v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!e. step_inst_base inst1 s1 <> Error e` by
+    (rpt strip_tac >> gvs[]) >>
+  `ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)` by
+    metis_tac[step_terminator_ssa_sim] >>
+  Cases_on `step_inst_base inst1 s1`
+  >- (
+    `?v'. step_inst_base inst2 s2 = OK v'` by
+      (Cases_on `step_inst_base inst2 s2` >> gvs[ssa_result_equiv_def]) >>
+    `ssa_sim sigma v v'` by
+      metis_tac[step_terminator_ok_preserves_sim] >>
+    `vars_colon_free v` by
+      (mp_tac (Q.SPECL [`inst1`, `s1`, `v`]
+         vars_colon_free_step_inst_base) >> simp[]) >>
+    imp_res_tac ssa_sim_halted >> gvs[] >>
+    Cases_on `v.vs_halted` >> gvs[ssa_result_equiv_def] >>
+    metis_tac[ssa_sim_implies_exec_equiv_UNIV])
+  >- (gvs[] >> Cases_on `step_inst_base inst2 s2` >>
+      gvs[ssa_result_equiv_def])
+  >- (gvs[] >> Cases_on `step_inst_base inst2 s2` >>
+      gvs[ssa_result_equiv_def])
+  >- (gvs[] >> Cases_on `step_inst_base inst2 s2` >>
+      gvs[ssa_result_equiv_def])
+  >- metis_tac[]
+QED
+
 Theorem lockstep_body[local]:
   !k fuel ctx bb bb' s1 s2 rs0 n_phi.
     let rs_at = \j. FST (rename_block_insts rs0
@@ -2841,64 +2893,50 @@ Proof
   `ALL_DISTINCT inst1.inst_outputs` by
     (simp[Abbr `inst1`, Abbr `j`] >> first_x_assum match_mp_tac >> simp[]) >>
   Cases_on `is_terminator inst1.inst_opcode`
-  >- (
-    (* ====== Terminator case ====== *)
-    `inst1.inst_opcode <> INVOKE` by
-      (strip_tac >> gvs[is_terminator_def]) >>
-    `step_inst fuel ctx inst1 s1 = step_inst_base inst1 s1`
-      by gvs[step_inst_non_invoke] >>
-    `step_inst fuel ctx inst2 s2 = step_inst_base inst2 s2`
-      by gvs[step_inst_non_invoke] >>
-    `exec_block fuel ctx bb s1 =
-     case step_inst_base inst1 s1 of
-       OK s'' => if s''.vs_halted then Halt s'' else OK s''
-     | Halt h => Halt h | Abort a' s' => Abort a' s'
-     | IntRet vals s' => IntRet vals s' | Error e => Error e` by (
-      irule exec_block_step_term >>
-      simp[Abbr `inst1`, Abbr `j`] >> gvs[]) >>
-    `exec_block fuel ctx bb' s2 =
-     case step_inst_base inst2 s2 of
-       OK s'' => if s''.vs_halted then Halt s'' else OK s''
-     | Halt h => Halt h | Abort a' s' => Abort a' s'
-     | IntRet vals s' => IntRet vals s' | Error e => Error e` by (
-      irule exec_block_step_term >>
-      simp[Abbr `inst2`] >> gvs[]) >>
-    `!e. step_inst_base inst1 s1 <> Error e` by (
-      rpt strip_tac >> gvs[] >> metis_tac[]) >>
-    `ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)`
-      by metis_tac[step_terminator_ssa_sim] >>
-    Cases_on `step_inst_base inst1 s1`
-    >- (
-      `?v'. step_inst_base inst2 s2 = OK v'` by (
-        Cases_on `step_inst_base inst2 s2` >>
-        gvs[ssa_result_equiv_def]) >>
-      `ssa_sim (latest_version (rs_at j)) v v'` by
-        metis_tac[step_terminator_ok_preserves_sim] >>
-      `vars_colon_free v` by
-        metis_tac[vars_colon_free_step_inst_base] >>
-      imp_res_tac ssa_sim_halted >>
-      gvs[] >>
-      Cases_on `v.vs_halted` >> gvs[]
-      >- (simp[ssa_result_equiv_def] >>
-          metis_tac[ssa_sim_implies_exec_equiv_UNIV])
-      >- (
-        (* Terminator has empty outputs => rs_at j = rs_end *)
-        `rs_at j = FST (rename_block_insts rs0 bb.bb_instructions)` by (
-          simp[Abbr `rs_at`] >>
-          irule lockstep_body_term_sigma >>
-          simp[Abbr `inst1`, Abbr `j`]) >>
-        simp[ssa_result_equiv_def] >>
-        metis_tac[ssa_sim_implies_exec_equiv_UNIV])
-    )
-    >- (gvs[] >> Cases_on `step_inst_base inst2 s2` >>
-        gvs[ssa_result_equiv_def])
-    >- (gvs[] >> Cases_on `step_inst_base inst2 s2` >>
-        gvs[ssa_result_equiv_def])
-    >- (gvs[] >> Cases_on `step_inst_base inst2 s2` >>
-        gvs[ssa_result_equiv_def])
-    >- (metis_tac[])
-  ) >>
-  suspend "non_term"
+  >- suspend "term"
+  >> suspend "non_term"
+QED
+
+Resume lockstep_body[term]:
+  (* ====== Terminator case ====== *)
+  `inst1.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  `exec_block fuel ctx bb s1 =
+   case step_inst_base inst1 s1 of
+     OK s'' => if s''.vs_halted then Halt s'' else OK s''
+   | Halt h => Halt h | Abort a' s' => Abort a' s'
+   | IntRet vals s' => IntRet vals s' | Error e => Error e` by (
+    irule exec_block_step_term >>
+    simp[Abbr `inst1`, Abbr `j`] >> gvs[]) >>
+  `exec_block fuel ctx bb' s2 =
+   case step_inst_base inst2 s2 of
+     OK s'' => if s''.vs_halted then Halt s'' else OK s''
+   | Halt h => Halt h | Abort a' s' => Abort a' s'
+   | IntRet vals s' => IntRet vals s' | Error e => Error e` by (
+    irule exec_block_step_term >>
+    simp[Abbr `inst2`] >> gvs[]) >>
+  `rs_at j = FST (rename_block_insts rs0 bb.bb_instructions)` by (
+    simp[Abbr `rs_at`] >>
+    irule lockstep_body_term_sigma >>
+    simp[Abbr `inst1`, Abbr `j`]) >>
+  `latest_version (FST (rename_block_insts rs0 bb.bb_instructions)) =
+   latest_version (rs_at j)` by ASM_REWRITE_TAC[] >>
+  mp_tac lockstep_terminator_close >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `bb'`, `s1`, `s2`,
+    `inst1`, `inst2`, `latest_version (rs_at j)`,
+    `latest_version (FST (rename_block_insts rs0 bb.bb_instructions))`] mp_tac) >>
+  disch_then match_mp_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qunabbrev_tac `rs_at` >> BETA_TAC >> first_assum ACCEPT_TAC)
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (CONV_TAC (ONCE_REWRITE_CONV [EQ_SYM_EQ]) >> first_assum ACCEPT_TAC)
 QED
 
 Resume lockstep_body[non_term]:

@@ -382,14 +382,8 @@ val at_resolve = FIRST (
   @ [res_tac >> gvs[no_control_exc_def] >> NO_TAC,
      gvs[no_control_exc_def] >> NO_TAC]);
 
-Theorem assign_target_no_control:
-  (∀cx tv op s exc s'.
-    assign_target cx tv op s = (INR exc, s') ⇒ no_control_exc exc) ∧
-  (∀cx tvs vs s exc s'.
-    assign_targets cx tvs vs s = (INR exc, s') ⇒ no_control_exc exc)
-Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac
-  >> let
+val assign_target_no_control_tac =
+  let
     val gsb_contra =
       qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
         (fn th => let val b = th |> concl |> lhs |> rator |> rand
@@ -401,13 +395,65 @@ Proof
       gvs[pairTheory.ELIM_UNCURRY]
       >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
       >> TRY at_resolve >> TRY gsb_contra
-    val tac =
-      rpt gen_tac
-      >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
-      >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
-      >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
-      >> TRY at_resolve >> step >> step
-  in tac end
+  in
+    rpt gen_tac
+    >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
+    >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
+    >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
+    >> TRY at_resolve >> step >> step
+  end;
+
+Theorem assign_target_no_control:
+  (∀cx tv op s exc s'.
+    assign_target cx tv op s = (INR exc, s') ⇒ no_control_exc exc) ∧
+  (∀cx tvs vs s exc s'.
+    assign_targets cx tvs vs s = (INR exc, s') ⇒ no_control_exc exc)
+Proof
+  ho_match_mp_tac assign_target_ind >> rpt conj_tac
+  >- assign_target_no_control_tac
+  >- (
+    rpt gen_tac
+    >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
+    >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
+    >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
+    >> TRY at_resolve
+    >> gvs[pairTheory.ELIM_UNCURRY]
+    >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
+    >> TRY at_resolve
+    >> TRY (qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
+        (fn th => let val b = th |> concl |> lhs |> rator |> rand
+          in assume_tac th >> Cases_on [ANTIQUOTE b]
+             >> gvs[get_storage_backend_def, bind_def,
+                    get_transient_storage_def, get_accounts_def, return_def]
+          end))
+    >> gvs[pairTheory.ELIM_UNCURRY]
+    >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
+    >> TRY at_resolve
+    >> TRY (qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
+        (fn th => let val b = th |> concl |> lhs |> rator |> rand
+          in assume_tac th >> Cases_on [ANTIQUOTE b]
+             >> gvs[get_storage_backend_def, bind_def,
+                    get_transient_storage_def, get_accounts_def, return_def]
+          end)))
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
+  >- assign_target_no_control_tac
 QED
 (* ===== Shared tactic definitions ===== *)
 
@@ -583,7 +629,10 @@ Theorem int_call_no_control[local]:
 Proof
   rpt strip_tac >> pop_assum mp_tac
   >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
-  >> rpt (step_tac >- helper_close)
+  >> step_tac >- helper_close
+  >> step_tac >- helper_close
+  >> step_tac >- helper_close
+  >> step_tac >- helper_close
   >> step_tac >- (res_tac >> gvs[no_control_exc_def])
   >> step_tac >- (res_tac >> gvs[no_control_exc_def])
   >> pop_assum mp_tac
@@ -648,7 +697,8 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
   (* Step 1: decompose eval_exprs bind *)
   >> lean_decompose
-  >- (res_tac >> gvs[no_control_exc_def])
+  >- (qpat_x_assum `∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc`
+        (qspecl_then [`s`, `exc`, `st'`] mp_tac) >> simp[])
   (* Step 2: stash big drv IH + remove eval_exprs asms, leaving 1 asm *)
   >> qpat_x_assum `∀s exc st'. eval_exprs _ _ s = _ ⇒ _` kall_tac
   (* Step 3: stash big drv IH, leave only do-block asm *)

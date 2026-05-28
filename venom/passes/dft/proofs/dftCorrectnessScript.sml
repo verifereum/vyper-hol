@@ -5108,7 +5108,9 @@ Proof
           spose_not_then strip_assume_tac >>
           `m < LENGTH l1 /\ is_barrier (EL m l1)` suffices_by metis_tac[] >>
           simp[] >> first_x_assum (qspec_then `m` mp_tac) >> simp[]) >>
-    `EL k l2 = EL k l1` by metis_tac[barriers_same_el] >>
+    `EL k l2 = EL k l1` by (
+      qspecl_then [`l1`, `l2`, `dep`, `k`] mp_tac barriers_same_el >>
+      (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]) >>
     `k < LENGTH l2` by simp[] >>
     (* Barrier-free prefix: use barrier_free_topo_perm_result *)
     `PERM (TAKE k l1) (TAKE k l2)` by metis_tac[barrier_prefix_perm] >>
@@ -5232,7 +5234,9 @@ Proof
           spose_not_then strip_assume_tac >>
           `m < LENGTH l1 /\ is_barrier (EL m l1)` suffices_by metis_tac[] >>
           simp[] >> first_x_assum (qspec_then `m` mp_tac) >> simp[]) >>
-    `EL k l2 = EL k l1` by metis_tac[barriers_same_el] >>
+    `EL k l2 = EL k l1` by (
+      qspecl_then [`l1`, `l2`, `dep`, `k`] mp_tac barriers_same_el >>
+      (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]) >>
     `k < LENGTH l2` by simp[] >>
     `PERM (TAKE k l1) (TAKE k l2)` by
       (qspecl_then [`l1`, `l2`, `dep`, `k`] mp_tac barrier_prefix_perm >>
@@ -6239,6 +6243,51 @@ Proof
     gvs[flip_operands_inst_id])
 QED
 
+Triviality dft_block_wf_unique_terminator:
+  !bi phis sched.
+    phis = FILTER (\i. is_pseudo i.inst_opcode) bi /\
+    bi <> [] /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
+       k = PRE (LENGTH bi)) /\
+    sched <> [] /\
+    (LAST sched).inst_id = (LAST bi).inst_id /\
+    (!i. MEM i sched ==> from_block bi i /\ ~is_pseudo i.inst_opcode) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) sched) ==>
+    !i. i < LENGTH phis + LENGTH sched /\
+        is_terminator (EL i (phis ++ sched)).inst_opcode ==>
+        i = PRE (LENGTH phis + LENGTH sched)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` SUBST_ALL_TAC >>
+  Cases_on `i < LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bi)` >> gvs[]
+  >- (`is_terminator (EL i (FILTER (\i. is_pseudo i.inst_opcode) bi)).inst_opcode` by
+        gvs[EL_APPEND1] >>
+      `MEM (EL i (FILTER (\i. is_pseudo i.inst_opcode) bi))
+         (FILTER (\i. is_pseudo i.inst_opcode) bi)` by metis_tac[MEM_EL] >>
+      `is_pseudo (EL i (FILTER (\i. is_pseudo i.inst_opcode) bi)).inst_opcode` by
+        gvs[MEM_FILTER] >>
+      metis_tac[terminator_not_pseudo_not_flippable]) >>
+  `i - LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bi) < LENGTH sched` by simp[] >>
+  `is_terminator
+     (EL (i - LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bi)) sched).inst_opcode` by
+    gvs[EL_APPEND2] >>
+  qabbrev_tac `k = i - LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bi)` >>
+  `MEM (EL k sched) sched` by metis_tac[MEM_EL] >>
+  `from_block bi (EL k sched)` by metis_tac[] >>
+  `(EL k sched).inst_id = (LAST bi).inst_id` by
+    (irule from_block_terminator_id >> simp[] >> metis_tac[]) >>
+  `0 < LENGTH sched` by (Cases_on `sched` >> gvs[]) >>
+  `PRE (LENGTH sched) < LENGTH sched` by simp[] >>
+  `EL k (MAP (\x. x.inst_id) sched) =
+   EL (PRE (LENGTH sched)) (MAP (\x. x.inst_id) sched)` by
+    (simp[EL_MAP] >> gvs[LAST_EL]) >>
+  `k = PRE (LENGTH sched)` by
+    (qspecl_then [`MAP (\x. x.inst_id) sched`, `k`, `PRE (LENGTH sched)`]
+      mp_tac ALL_DISTINCT_EL_IMP >> simp[]) >>
+  gvs[Abbr `k`]
+QED
+
 (* Generalized: dft_block preserves invariant triple.
    No dependency on fn or MEM bb fn.fn_blocks. *)
 Theorem dft_block_well_formed_gen:
@@ -6269,9 +6318,7 @@ Proof
   `is_terminator (LAST bi).inst_opcode` by
     fs[bb_well_formed_def, Abbr `bi`] >>
   `~is_pseudo (LAST bi).inst_opcode` by
-    (fs[bb_well_formed_def, Abbr `bi`] >>
-     Cases_on `(LAST bb.bb_instructions).inst_opcode` >>
-     gs[is_terminator_def, is_pseudo_def]) >>
+    (drule terminator_not_pseudo_not_flippable >> simp[]) >>
   `!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
        k = PRE (LENGTH bi)` by
     fs[bb_well_formed_def, Abbr `bi`] >>
@@ -6322,49 +6369,32 @@ QED
 
 Resume dft_block_well_formed_gen[wf]:
   CONV_TAC (REWRITE_CONV [bb_well_formed_def]) >> simp[] >>
-  rpt conj_tac
-  (* nonempty *)
-  >> TRY (strip_tac >> gvs[] >> NO_TAC)
+  conj_tac
   (* LAST is terminator *)
-  >> TRY (
-    simp[rich_listTheory.LAST_APPEND_NOT_NIL] >>
-    `from_block bi (LAST sched)` by
-      (first_x_assum (qspec_then `LAST sched` mp_tac) >>
-       impl_tac >> TRY (imp_res_tac (DB.fetch "rich_list" "MEM_LAST_NOT_NIL") >> NO_TAC) >>
-       strip_tac) >>
-    drule from_block_id_unique >>
-    disch_then (qspec_then `LAST bi` mp_tac) >> simp[] >>
-    strip_tac >> gvs[flip_operands_is_terminator] >> NO_TAC)
+  >- (simp[rich_listTheory.LAST_APPEND_NOT_NIL] >>
+      `from_block bi (LAST sched)` by
+        (first_x_assum (qspec_then `LAST sched` mp_tac) >>
+         impl_tac >- (imp_res_tac (DB.fetch "rich_list" "MEM_LAST_NOT_NIL")) >>
+         strip_tac) >>
+      drule from_block_id_unique >>
+      disch_then (qspec_then `LAST bi` mp_tac) >> simp[] >>
+      strip_tac >> gvs[flip_operands_is_terminator]) >>
+  conj_tac
   (* unique terminator position *)
-  >> TRY (
-    rpt strip_tac >>
-    Cases_on `i < LENGTH phis` >> gvs[]
-    >- (
-      `EL i (phis ++ sched) = EL i phis` by simp[EL_APPEND1] >>
-      `MEM (EL i phis) phis` by metis_tac[MEM_EL] >>
-      `is_pseudo (EL i phis).inst_opcode` by gvs[Abbr `phis`, MEM_FILTER] >>
-      Cases_on `(EL i phis).inst_opcode` >>
-      gvs[is_pseudo_def, is_terminator_def])
-    >> (
-      `i - LENGTH phis < LENGTH sched` by simp[] >>
-      `EL i (phis ++ sched) = EL (i - LENGTH phis) sched`
-        by simp[EL_APPEND2] >>
-      qabbrev_tac `k = i - LENGTH phis` >>
-      `MEM (EL k sched) sched` by metis_tac[MEM_EL] >>
-      `from_block bi (EL k sched)` by metis_tac[] >>
-      `(EL k sched).inst_id = (LAST bi).inst_id` by
-        (irule from_block_terminator_id >> simp[] >> gvs[]) >>
-      `0 < LENGTH sched` by (Cases_on `sched` >> gvs[]) >>
-      `PRE (LENGTH sched) < LENGTH sched` by simp[] >>
-      `EL k (MAP (\x. x.inst_id) sched) =
-       EL (PRE (LENGTH sched)) (MAP (\x. x.inst_id) sched)` by
-        (simp[EL_MAP] >> gvs[LAST_EL]) >>
-      `k = PRE (LENGTH sched)` by
-        (qspecl_then [`MAP (\x. x.inst_id) sched`, `k`, `PRE (LENGTH sched)`]
-          mp_tac ALL_DISTINCT_EL_IMP >> simp[]) >>
-      gvs[Abbr `k`]) >> NO_TAC)
+  >- (qspecl_then [`bi`, `phis`, `sched`] mp_tac dft_block_wf_unique_terminator >>
+      impl_tac
+      >- (conj_tac >- simp[Abbr `phis`] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          first_assum ACCEPT_TAC) >>
+      strip_tac >>
+      first_assum ACCEPT_TAC) >>
   (* PHI prefix *)
-  >> (
+  (
     rpt strip_tac >>
     Cases_on `j < LENGTH phis`
     >- (
@@ -8655,8 +8685,16 @@ Proof
   `from_block orig_bi b_orig` by metis_tac[from_block_MEM_filter] >>
   `is_barrier b_orig` by metis_tac[is_barrier_from_inst_id_cross_bi] >>
   `MEM b_orig pfx \/ MEM b_orig sfx` by metis_tac[mem_orig_filter_split] >>
-  Cases_on `MEM b_orig pfx` >- metis_tac[contra_b_orig_in_pfx] >>
-  metis_tac[contra_b_orig_in_sfx]
+  Cases_on `MEM b_orig pfx`
+  >- (qspecl_then [`orig_bi`, `cur_bi`, `x`, `y`, `pfx`, `sfx`, `mid`,
+        `px_c`, `px_b`, `sfx_x`, `yb_c`, `b'`, `b_orig`] mp_tac
+        contra_b_orig_in_pfx >>
+      (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]) >>
+  `MEM b_orig sfx` by fs[] >>
+  qspecl_then [`orig_bi`, `cur_bi`, `x`, `y`, `pfx`, `sfx`, `mid`,
+    `px_c`, `px_b`, `sfx_x`, `yb_c`, `b'`, `b_orig`] mp_tac
+    contra_b_orig_in_sfx >>
+  (impl_tac >- ASM_REWRITE_TAC[]) >> simp[]
 QED
 
 Triviality last_barrier_in_prefix_eq_y[local]:

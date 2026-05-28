@@ -446,16 +446,7 @@ Proof
     ) >>
     (* Case split on original step result *)
     Cases_on `step_inst_base inst s`
-    (* Handle ALL 5 result cases together for debuggability *)
-    >> (
-      (* For Halt/Abort/IntRet: contradiction from is_phi_inst *)
-      TRY (`inst.inst_opcode = PHI` by fs[is_phi_inst_def] >>
-           simp[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> NO_TAC) >>
-      (* For Error: resolve second side via lift_result assumption *)
-      TRY (qpat_x_assum `lift_result _ _ _ _ (step_inst_base _ _)` mp_tac >>
-           Cases_on `step_inst_base (transform_inst dfg inst) s` >>
-           simp[lift_result_def, execution_equiv_refl] >> NO_TAC) >>
-      (* OK case: derive both sides return OK with same state *)
+    >- ( (* OK case: derive both sides return OK with same state *)
       rename1 `step_inst_base inst s = OK s_orig` >>
       `step_inst_base (transform_inst dfg inst) s = OK s_orig` by (
         qpat_x_assum `lift_result _ _ _ (OK _) _` mp_tac >>
@@ -468,8 +459,20 @@ Proof
         (imp_res_tac step_inst_preserves_prev_bb >> fs[]) >>
       simp[] >>
       first_x_assum (qspec_then `s_orig` mp_tac) >> simp[] >>
-      disch_then irule >> metis_tac[]
-    )
+      disch_then irule >> metis_tac[])
+    >- (qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+        fs[is_phi_inst_def] >> ASM_REWRITE_TAC[step_inst_base_def] >>
+        simp[] >> gvs[AllCaseEqs()])
+    >- (qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+        fs[is_phi_inst_def] >> ASM_REWRITE_TAC[step_inst_base_def] >>
+        simp[] >> gvs[AllCaseEqs()])
+    >- (qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+        fs[is_phi_inst_def] >> ASM_REWRITE_TAC[step_inst_base_def] >>
+        simp[] >> gvs[AllCaseEqs()]) >>
+    (* Error case: resolve second side via lift_result assumption *)
+    qpat_x_assum `lift_result _ _ _ _ (step_inst_base _ _)` mp_tac >>
+    Cases_on `step_inst_base (transform_inst dfg inst) s` >>
+    simp[lift_result_def, execution_equiv_refl]
   )
 QED
 

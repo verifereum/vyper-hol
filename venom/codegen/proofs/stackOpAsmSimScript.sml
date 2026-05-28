@@ -25,6 +25,15 @@ val asm_dispatch_thms = [asm_step_def, asm_step_op_def,
   asm_step_copy_def, asm_step_context_def,
   dup_table_def, swap_table_def, log_table_def];
 
+val asm_dup_dispatch_tac =
+  SIMP_TAC asm_dispatch_ss (asm_dispatch_thms @ [asm_dup_def, asm_next_def]) >>
+  fs[];
+
+val asm_swap_dispatch_tac =
+  SIMP_TAC asm_dispatch_ss
+    (asm_dispatch_thms @ [asm_swap_def, asm_next_def, LET_THM]) >>
+  fs[];
+
 (* ===== Per-instruction AsmOK lemmas ===== *)
 
 (* AsmPush always succeeds *)
@@ -90,13 +99,19 @@ Theorem asm_step_dup_ok:
       EL n s1.as_stack :: s1.as_stack))
 Proof
   rpt strip_tac >>
-  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/
-   n = 4 \/ n = 5 \/ n = 6 \/ n = 7 \/
-   n = 8 \/ n = 9 \/ n = 10 \/ n = 11 \/
-   n = 12 \/ n = 13 \/ n = 14 \/ n = 15` by decide_tac >>
-  gvs[dup_name_def] >>
-  SIMP_TAC asm_dispatch_ss (asm_dispatch_thms @ [asm_dup_def, asm_next_def]) >>
-  fs[]
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (0))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  PURE_REWRITE_TAC[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >>
+  gvs[dup_name_def] >|
+  [asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac,
+   asm_dup_dispatch_tac, asm_dup_dispatch_tac]
 QED
 
 (* AsmOp SWAP: case-split on n for concrete dispatch resolution *)
@@ -108,14 +123,19 @@ Theorem asm_step_swap_ok:
       LUPDATE (HD s1.as_stack) n (LUPDATE (EL n s1.as_stack) 0 s1.as_stack)))
 Proof
   rpt strip_tac >>
-  `n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/
-   n = 5 \/ n = 6 \/ n = 7 \/ n = 8 \/
-   n = 9 \/ n = 10 \/ n = 11 \/ n = 12 \/
-   n = 13 \/ n = 14 \/ n = 15 \/ n = 16` by decide_tac >>
-  gvs[swap_name_def] >>
-  SIMP_TAC asm_dispatch_ss
-    (asm_dispatch_thms @ [asm_swap_def, asm_next_def, LET_THM]) >>
-  fs[]
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (0)))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  PURE_REWRITE_TAC[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >>
+  gvs[swap_name_def] >|
+  [asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac,
+   asm_swap_dispatch_tac, asm_swap_dispatch_tac]
 QED
 
 (* AsmOp "MLOAD" succeeds when stack non-empty *)

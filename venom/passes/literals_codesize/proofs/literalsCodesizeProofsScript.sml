@@ -118,6 +118,46 @@ QED
 
 (* ===== Core step_inst equality ===== *)
 
+Theorem lit_codesize_assign_not_step[local]:
+  !fuel ctx inst s c out.
+    inst.inst_opcode = ASSIGN /\
+    inst.inst_operands = [Lit c] /\
+    inst.inst_outputs = [out] ==>
+    step_inst fuel ctx
+      (inst with <|inst_opcode := NOT; inst_operands := [Lit (~c)]|>) s =
+    step_inst fuel ctx inst s
+Proof
+  rw[venomExecSemanticsTheory.step_inst_def,
+     venomExecSemanticsTheory.step_inst_base_def,
+     venomExecSemanticsTheory.exec_pure1_def,
+     venomStateTheory.eval_operand_def]
+QED
+
+Theorem lit_codesize_assign_shl_step[local]:
+  !fuel ctx inst s c out.
+    inst.inst_opcode = ASSIGN /\
+    inst.inst_operands = [Lit c] /\
+    inst.inst_outputs = [out] /\
+    c <> 0w ==>
+    step_inst fuel ctx
+      (inst with
+       <|inst_opcode := SHL;
+         inst_operands := [Lit (n2w (trailing_zeros c));
+                           Lit (c >>> trailing_zeros c)]|>) s =
+    step_inst fuel ctx inst s
+Proof
+  rpt strip_tac >>
+  `trailing_zeros c < 256` by (irule trailing_zeros_bound >> simp[]) >>
+  `trailing_zeros c < dimword(:256)` by
+    (fs[wordsTheory.dimword_def] >> CONV_TAC fcpLib.INDEX_CONV >> fs[]) >>
+  rw[venomExecSemanticsTheory.step_inst_def,
+     venomExecSemanticsTheory.step_inst_base_def,
+     venomExecSemanticsTheory.exec_pure2_def,
+     venomStateTheory.eval_operand_def,
+     arithmeticTheory.LESS_MOD,
+     lsr_lsl_trailing_zeros]
+QED
+
 (* Core lemma: each well-formed rewritten instruction produces the
    identical step_inst result.
    inst_wf ensures correct operand/output counts, making error paths
@@ -139,18 +179,9 @@ Proof
   `?out. inst.inst_outputs = [out]` by
     (Cases_on `inst.inst_outputs` >> gvs[]) >>
   rpt (IF_CASES_TAC >> simp[]) >> gvs[] >>
-  simp[venomExecSemanticsTheory.step_inst_def,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_pure1_def,
-       venomExecSemanticsTheory.exec_pure2_def,
-       venomStateTheory.eval_operand_def] >>
-  TRY (
-    `trailing_zeros c < 256` by (irule trailing_zeros_bound >> fs[]) >>
-    `trailing_zeros c < dimword(:256)` by
-      (fs[wordsTheory.dimword_def] >>
-       CONV_TAC fcpLib.INDEX_CONV >> fs[]) >>
-    simp[arithmeticTheory.LESS_MOD, lsr_lsl_trailing_zeros] >> NO_TAC
-  )
+  FIRST [
+    irule lit_codesize_assign_not_step >> simp[],
+    irule lit_codesize_assign_shl_step >> simp[]]
 QED
 
 (* ===== Lifting to block and function level ===== *)

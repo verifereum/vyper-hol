@@ -1117,13 +1117,14 @@ Triviality process_preserves_all_P[local]:
              k = SOME v ==> P v)
 Proof
   rpt gen_tac >> strip_tac >>
-  mp_tac (SIMP_RULE std_ss [LET_THM] df_widen_process_P) >>
-  disch_then (qspecl_then [`dir`,`bottom`,`join`,`widen`,`threshold`,
+  qspecl_then [`dir`,`bottom`,`join`,`widen`,`threshold`,
     `transfer`,`edge_transfer`,`ctx`,`entry_val`,`cfg`,`bbs`,
-    `lbl`,`st`] mp_tac) >>
-  simp[] >> impl_tac >- metis_tac[] >>
+    `lbl`,`st`] mp_tac df_widen_process_P >>
+  impl_tac
+  >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+  simp_tac std_ss [LET_THM] >>
   strip_tac >> simp[process_widen_preserves_inst] >>
-  rpt conj_tac >> first_x_assum ACCEPT_TAC
+  rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC
 QED
 
 (* Helper: wl_iterate preserves boundary/entry/inst P.
@@ -1428,8 +1429,9 @@ Proof
   \\ qmatch_goalsub_abbrev_tac`SND (wl_iterate chg proc depf wl0 st0')`
   (* Prove all entries of wl_iterate result are sound *)
   (* Prove invariant for the wl_iterate result via helper lemma *)
-  \\ `(\st. Q st /\ !k v. FLOOKUP st.dws_entry k = SOME v ==> !s. sound v s)
-       (SND (wl_iterate chg proc depf wl0 st0'))` by (
+  \\ sg `(\st. Q st /\ !k v. FLOOKUP st.dws_entry k = SOME v ==> !s. sound v s)
+       (SND (wl_iterate chg proc depf wl0 st0'))`
+  >- (
     irule wl_iterate_invariant_proof >> simp[] >>
     (* After simp[]: 4 conjuncts: initial, changed, entry-pres, measure *)
     conj_tac
@@ -1451,9 +1453,19 @@ Proof
         simp[SIMP_RULE std_ss [LET_THM] df_widen_process_changed_equiv]) >>
     conj_tac
     (* 3. Entry-sound preservation *)
-    >- (rpt strip_tac >>
-        irule (SIMP_RULE std_ss [LET_THM] df_widen_process_entry_sound) >>
-        gvs[Abbr`proc`] >> metis_tac[]) >>
+    >- (rpt gen_tac >> strip_tac >> fs[] >>
+        rpt gen_tac >> strip_tac >>
+        qspecl_then [`dir`,`bottom`,`join`,`widen`,`threshold`,
+          `transfer`,`edge_transfer`,`ctx`,`entry_val`,`cfg_analyze fn`,
+          `fn.fn_blocks`,`lbl`,`st`,`sound`] mp_tac
+          df_widen_process_entry_sound >>
+        simp_tac std_ss [LET_THM] >>
+        impl_tac
+        >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+        qunabbrev_tac `proc` >>
+        DISCH_TAC >>
+        first_x_assum (qspecl_then [`k`,`v`] mp_tac) >>
+        ASM_REWRITE_TAC[]) >>
     (* 4. Bounded_measure *)
     qexistsl_tac [`b`, `leq`, `m`] >>
     gvs[latticeDefsTheory.bounded_measure_def, Abbr`proc`])

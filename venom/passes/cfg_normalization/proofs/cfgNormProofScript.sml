@@ -1132,6 +1132,29 @@ Proof
   rw[cfg_norm_inv_def]
 QED
 
+Theorem cfg_norm_inv_double_split_preconds[local]:
+  !func0 func A p t.
+    cfg_norm_inv func0 func /\
+    MEM A (fn_labels func0) /\ MEM p (fn_labels func0) /\
+    MEM t (fn_labels func0) ==>
+    (!a b. A <> STRCAT a (STRCAT "_split_" b)) /\
+    (!a b. p <> STRCAT a (STRCAT "_split_" b)) /\
+    (!a b. t <> STRCAT a (STRCAT "_split_" b)) /\
+    TAKE 6 t <> "split_"
+Proof
+  rw[]
+  >- (`split_labels_fresh split_block_name func0` by fs[cfg_norm_inv_def] >>
+      mp_tac (Q.SPECL [`func0`, `A`, `a`, `b`] original_no_split_substr) >>
+      simp[stringTheory.STRCAT_ASSOC])
+  >- (`split_labels_fresh split_block_name func0` by fs[cfg_norm_inv_def] >>
+      mp_tac (Q.SPECL [`func0`, `p`, `a`, `b`] original_no_split_substr) >>
+      simp[stringTheory.STRCAT_ASSOC])
+  >- (`split_labels_fresh split_block_name func0` by fs[cfg_norm_inv_def] >>
+      mp_tac (Q.SPECL [`func0`, `t`, `a`, `b`] original_no_split_substr) >>
+      simp[stringTheory.STRCAT_ASSOC])
+  >- (drule_all cfg_norm_inv_sep_clean >> simp[])
+QED
+
 (* Inner nesting of split_block_name can never equal single split_block_name
    when all component labels are original. *)
 Theorem double_split_inner_contra[local]:
@@ -1146,22 +1169,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `split_block_name _ _ = split_block_name _ _` mp_tac >>
   PURE_REWRITE_TAC[cfgNormDefsTheory.split_block_name_def] >>
-  qpat_x_assum `cfg_norm_inv _ _` (mp_tac o REWRITE_RULE[cfg_norm_inv_def]) >>
-  strip_tac >>
   mp_tac (Q.SPECL [`A`, `p`, `t`, `q`, `r`] double_split_contra) >>
-  (impl_tac >- (
-    rpt conj_tac
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `A`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `p`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `t`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (qpat_x_assum `!lbl. MEM lbl (fn_labels func0) ==> TAKE 6 lbl <> _`
-          (qspec_then `t` mp_tac) >> simp[]))) >>
+  impl_tac >- metis_tac[cfg_norm_inv_double_split_preconds] >>
   simp[]
 QED
 
@@ -2240,7 +2249,8 @@ Theorem double_split_not_in_labels[local]:
     ~MEM (split_block_name A B) (fn_labels func)
 Proof
   rw[split_block_name_def] >> strip_tac >>
-  qpat_x_assum `cfg_norm_inv _ _` (mp_tac o REWRITE_RULE[cfg_norm_inv_def]) >>
+  qpat_x_assum `cfg_norm_inv _ _`
+    (fn th => ASSUME_TAC th >> mp_tac (REWRITE_RULE[cfg_norm_inv_def] th)) >>
   strip_tac >>
   qpat_x_assum `!lbl. MEM lbl (fn_labels func) ==> _`
     (qspec_then `STRCAT A (STRCAT "_split_" (STRCAT x (STRCAT "_split_" y)))` mp_tac) >>
@@ -2259,18 +2269,9 @@ Proof
   PURE_REWRITE_TAC[GSYM stringTheory.STRCAT_ASSOC] >> strip_tac >>
   mp_tac (Q.SPECL [`A`, `p`, `t`, `x`, `y`] double_split_contra) >>
   impl_tac >- (
-    rpt conj_tac
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `A`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `p`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `t`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (qpat_x_assum `!lbl. MEM lbl (fn_labels func0) ==> TAKE 6 lbl <> _`
-          (qspec_then `t` mp_tac) >> simp[])) >>
+    mp_tac (Q.SPECL [`func0`, `func`, `A`, `p`, `t`]
+      cfg_norm_inv_double_split_preconds) >>
+    disch_then match_mp_tac >> ASM_REWRITE_TAC[]) >>
   metis_tac[]
 QED
 
@@ -2283,7 +2284,8 @@ Theorem double_split_not_in_labels_A[local]:
     ~MEM (split_block_name (split_block_name A1 A2) B) (fn_labels func)
 Proof
   rw[split_block_name_def] >> strip_tac >>
-  qpat_x_assum `cfg_norm_inv _ _` (mp_tac o REWRITE_RULE[cfg_norm_inv_def]) >>
+  qpat_x_assum `cfg_norm_inv _ _`
+    (fn th => ASSUME_TAC th >> mp_tac (REWRITE_RULE[cfg_norm_inv_def] th)) >>
   strip_tac >>
   (* The MEM assumption is left-associated STRCAT, C7 expects right-associated.
      Use PURE_REWRITE_TAC to normalize. *)
@@ -2304,18 +2306,9 @@ Proof
   PURE_REWRITE_TAC[GSYM stringTheory.STRCAT_ASSOC] >> strip_tac >>
   mp_tac (Q.SPECL [`A1`, `p`, `t`, `A2`, `B`] double_split_contra) >>
   impl_tac >- (
-    rpt conj_tac
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `A1`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `p`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `t`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (qpat_x_assum `!lbl. MEM lbl (fn_labels func0) ==> TAKE 6 lbl <> _`
-          (qspec_then `t` mp_tac) >> simp[])) >>
+    mp_tac (Q.SPECL [`func0`, `func`, `A1`, `p`, `t`]
+      cfg_norm_inv_double_split_preconds) >>
+    disch_then match_mp_tac >> ASM_REWRITE_TAC[]) >>
   metis_tac[]
 QED
 
@@ -2331,22 +2324,11 @@ Theorem double_split_neq_single[local]:
 Proof
   rw[split_block_name_def] >>
   PURE_REWRITE_TAC[GSYM stringTheory.STRCAT_ASSOC] >>
-  qpat_x_assum `cfg_norm_inv _ _` (mp_tac o REWRITE_RULE[cfg_norm_inv_def]) >>
-  strip_tac >>
   mp_tac (Q.SPECL [`A1`, `p`, `t`, `A2`, `B`] double_split_contra) >>
   impl_tac >- (
-    rpt conj_tac
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `A1`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `p`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (rpt strip_tac >>
-        mp_tac (Q.SPECL [`func0`, `t`, `a`, `b`] original_no_split_substr) >>
-        simp[])
-    >- (qpat_x_assum `!lbl. MEM lbl (fn_labels func0) ==> TAKE 6 lbl <> _`
-          (qspec_then `t` mp_tac) >> simp[])) >>
+    mp_tac (Q.SPECL [`func0`, `func`, `A1`, `p`, `t`]
+      cfg_norm_inv_double_split_preconds) >>
+    disch_then match_mp_tac >> ASM_REWRITE_TAC[]) >>
   metis_tac[]
 QED
 

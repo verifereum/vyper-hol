@@ -740,6 +740,17 @@ QED
 
 
 (* For NOP, exec_read0, STOP, SINK, INVALID: step_inst_base ignores operands *)
+Triviality exec_read0_ops_irrel[local]:
+  !f inst ops s.
+    exec_read0 f (inst with inst_operands := ops) s = exec_read0 f inst s
+Proof
+  rw[exec_read0_def]
+QED
+
+val ops_irrel_tac =
+  simp[Once step_inst_base_def, exec_read0_ops_irrel] >>
+  simp[Once step_inst_base_def, exec_read0_ops_irrel];
+
 Triviality step_inst_base_ops_irrel[local]:
   !inst s ops.
     MEM inst.inst_opcode [NOP; STOP; SINK; INVALID;
@@ -750,9 +761,31 @@ Triviality step_inst_base_ops_irrel[local]:
     step_inst_base (inst with inst_operands := ops) s =
     step_inst_base inst s
 Proof
-  rpt strip_tac >> gvs[] >>
-  simp[Once step_inst_base_def, exec_read0_def] >>
-  simp[Once step_inst_base_def, exec_read0_def]
+  Cases_on `inst` >>
+  rpt strip_tac >> gvs[MEM]
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
+  >- ops_irrel_tac
 QED
 
 (* Helper: eval_operands SOME implies all Var operands in FDOM *)
@@ -1397,6 +1430,22 @@ QED
 
 (* Terminator transfer puts the actual successor in sl_targets.
    For JNZ with known constant, cond_const_sound ensures the taken branch matches. *)
+val term_succ_base_tac =
+  fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  gvs[jump_to_def, is_terminator_def];
+
+val term_succ_jnz_tac =
+  fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  gvs[jump_to_def, is_terminator_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+  TRY (metis_tac[cond_const_eval_operand_sound,
+                 optionTheory.SOME_11, optionTheory.NOT_NONE_SOME]);
+
+val term_succ_djmp_tac =
+  fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  gvs[jump_to_def, is_terminator_def] >>
+  DISJ1_TAC >> irule extract_labels_el_in_foldr >> metis_tac[];
+
 Triviality sccp_transfer_term_succ_in_targets[local]:
   !inst fn lat s s'.
     inst_wf inst /\ is_terminator inst.inst_opcode /\
@@ -1404,18 +1453,18 @@ Triviality sccp_transfer_term_succ_in_targets[local]:
     step_inst_base inst s = OK s' ==>
     s'.vs_current_bb IN (sccp_transfer_inst fn inst lat).sl_targets
 Proof
-  rpt strip_tac
-  \\ Cases_on `inst.inst_opcode` \\ fs[is_terminator_def]
-  \\ fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()]
-  \\ gvs[jump_to_def]
-  \\ simp[is_terminator_def]
-  (* JNZ goals: case split on const_eval_operand *)
-  \\ BasicProvers.EVERY_CASE_TAC \\ gvs[]
-  (* CL_Const c on JNZ: derive contradiction via cond_const_eval_operand_sound *)
-  \\ TRY (metis_tac[cond_const_eval_operand_sound,
-                     optionTheory.SOME_11, optionTheory.NOT_NONE_SOME])
-  (* DJMP *)
-  \\ DISJ1_TAC \\ irule extract_labels_el_in_foldr \\ metis_tac[]
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def]
+  >- term_succ_base_tac
+  >- term_succ_jnz_tac
+  >- term_succ_djmp_tac
+  >- term_succ_base_tac
+  >- term_succ_base_tac
+  >- term_succ_base_tac
+  >- term_succ_base_tac
+  >- term_succ_base_tac
+  >- term_succ_base_tac
+  >- term_succ_base_tac
 QED
 
 (* Combined: transfer preserves non-CL_Top for all variables in its output FDOM *)
