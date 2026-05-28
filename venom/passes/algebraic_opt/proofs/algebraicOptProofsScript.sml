@@ -3568,6 +3568,26 @@ Proof
   metis_tac[fn_insts_def]
 QED
 
+Triviality ao_fn0_output_not_in_fv[local]:
+  !fn fn0 fv bb inst x.
+    Abbrev(fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
+    MEM bb fn0.fn_blocks /\
+    MEM inst bb.bb_instructions /\
+    MEM x inst.inst_outputs ==>
+    x NOTIN fv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM inst (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
+  qpat_x_assum `MEM inst (fn_insts fn0)` mp_tac >>
+  fs[markerTheory.Abbrev_def, fn_insts_def] >> strip_tac >>
+  drule fn_insts_blocks_map_offset >> strip_tac >> gvs[ao_handle_offset_inst_outputs] >>
+  metis_tac[fn_insts_def]
+QED
+
 Triviality test_wf_all_distinct[local]:
   !fn0. wf_function fn0 ==>
     ALL_DISTINCT (MAP (\bb. bb.bb_label) fn0.fn_blocks)
@@ -4046,6 +4066,64 @@ Proof
       metis_tac[wbiz_step])
 QED
 
+Triviality ao_local_transfer_sound[local]:
+  !fn0 bb idx fuel ctx s s'.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    MEM bb fn0.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn0).cfg_dfs_pre /\
+    idx < LENGTH bb.bb_instructions /\
+    inst_wf (EL idx bb.bb_instructions) /\
+    in_range_state
+      (range_at_inst (range_analyze fn0) bb.bb_label idx) s.vs_vars /\
+    within_block_iszero_inv fn0 bb idx s /\
+    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
+    in_range_state
+      (range_at_inst (range_analyze fn0) bb.bb_label (SUC idx)) s'.vs_vars /\
+    within_block_iszero_inv fn0 bb (SUC idx) s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all test_lookup_block >> strip_tac >>
+  rpt conj_tac
+  >- (qspecl_then [`fn0`, `bb.bb_label`, `bb`, `idx`,
+        `EL idx bb.bb_instructions`, `fuel`, `ctx`, `s`, `s'`]
+        mp_tac range_step_inv >>
+      simp_tac std_ss [LET_THM] >> simp[])
+  >- metis_tac[wbiz_step_any]
+QED
+
+Triviality wbiz_state_equiv_compat[local]:
+  !fn0 bb idx fv s1 s2.
+    state_equiv fv s1 s2 /\
+    within_block_iszero_inv fn0 bb idx s1 /\
+    (!j x. j < idx /\ j < LENGTH bb.bb_instructions /\
+           MEM x (EL j bb.bb_instructions).inst_outputs ==>
+           x NOTIN fv) /\
+    (!j op. j < idx /\ j < LENGTH bb.bb_instructions /\
+            MEM (Var op) (EL j bb.bb_instructions).inst_operands ==>
+            op NOTIN fv) ==>
+    within_block_iszero_inv fn0 bb idx s2
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [within_block_iszero_inv_def] >>
+  rpt strip_tac >>
+  `x NOTIN fv` by metis_tac[] >>
+  `lookup_var x s1 = SOME val_x` by
+    (qpat_x_assum `lookup_var _ s2 = _` mp_tac >>
+     fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+  `eval_operand iz_op s1 = SOME val_op` by
+    (qpat_x_assum `eval_operand _ s2 = _` mp_tac >>
+     `MEM iz_op (EL j bb.bb_instructions).inst_operands` by simp[] >>
+     Cases_on `iz_op` >> simp[eval_operand_def]
+     >- (rename1 `Var vname` >> strip_tac >>
+         `vname NOTIN fv` by metis_tac[] >>
+         fs[state_equiv_def, execution_equiv_def, lookup_var_def])
+     >- fs[state_equiv_def, execution_equiv_def]) >>
+  qpat_x_assum `within_block_iszero_inv _ _ _ _`
+    (mp_tac o REWRITE_RULE [within_block_iszero_inv_def]) >>
+  disch_then (qspecl_then [`j`, `x`, `iz_op`] mp_tac) >>
+  simp[]
+QED
+
 (* Per-block sim using local chain conditions *)
 Triviality ao_block_sim_local[local]:
   !fn fn0 mid dfg ra targets bb fv fuel ctx s.
@@ -4125,21 +4203,36 @@ Proof
         drule_all ao_fn0_operand_not_in_fv >> strip_tac >>
         fs[state_equiv_def, execution_equiv_def])
     >- (* transfer_sound: range + wbiz *)
-       (rpt strip_tac >> gvs[Abbr `sound`, Abbr `result`, Abbr `ra`] >>
+       (rpt strip_tac >>
+        gvs[Abbr `sound`, Abbr `result`, Abbr `ra`] >>
         `idx < SUC (LENGTH bb.bb_instructions)` by simp[] >>
-        simp[idx_df_state_at2] >> rpt conj_tac
+        `SUC idx < SUC (LENGTH bb.bb_instructions)` by simp[] >>
+        fs[idx_df_state_at2] >>
+        rpt conj_tac
         >- (irule (SIMP_RULE std_ss [LET_THM] range_step_inv) >>
             conj_tac >- first_assum ACCEPT_TAC >>
             conj_tac >- first_assum ACCEPT_TAC >>
             qexistsl_tac [`bb`, `ctx'`, `fuel`, `s'`] >>
-            gvs[markerTheory.Abbrev_def, idx_df_state_at2])
-        >- cheat)
+            fs[markerTheory.Abbrev_def])
+        >- (drule_all wbiz_step_any >> simp[]))
     >- (* sound preserved by state_equiv fv *)
-       (rpt strip_tac >> gvs[Abbr `sound`] >> rpt conj_tac
+       (rpt strip_tac >>
+        qpat_x_assum `sound _ _` mp_tac >>
+        simp_tac std_ss [Abbr `sound`] >> strip_tac >>
+        rpt conj_tac
         >- (irule ao_in_range_state_equiv_compat >>
             qexistsl_tac [`fn`, `fn0`, `fv`, `s1`] >>
-            gvs[markerTheory.Abbrev_def] >> metis_tac[])
-        >- cheat (* wbiz state_equiv *))
+            fs[markerTheory.Abbrev_def] >> metis_tac[])
+        >- (irule wbiz_state_equiv_compat >>
+            qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt conj_tac
+            >- (rpt strip_tac >>
+                `MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+                  (simp[listTheory.MEM_EL] >> qexists_tac `j` >> simp[]) >>
+                drule_all ao_fn0_output_not_in_fv >> simp[])
+            >- (rpt strip_tac >>
+                `MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+                  (simp[listTheory.MEM_EL] >> qexists_tac `j` >> simp[]) >>
+                drule_all ao_fn0_operand_not_in_fv >> simp[])))
     >- (rpt strip_tac >> simp[Abbr `result`, idx_df_state_at2])
     >- cheat (* sinv step — dfg+strict_dom proved separately, chain_prefix needs freshness *)
     >- (* sinv preserved by state_equiv fv *)
@@ -4245,7 +4338,7 @@ Proof
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
     >- (qunabbrev_tac `bt` >> simp[])
-    >- (* Per-block sim — ao_block_sim_local proved, connection needs variable matching *)
+    >- (* Per-block sim — connect ao_block_sim_local *)
        cheat
     >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
        cheat
