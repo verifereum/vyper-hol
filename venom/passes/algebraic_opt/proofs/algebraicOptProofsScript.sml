@@ -4011,6 +4011,37 @@ Proof
   metis_tac[foldl_iszero_key_output, alistTheory.ALOOKUP_def]
 QED
 
+(* Per-block sim using local chain conditions *)
+Triviality ao_block_sim_local[local]:
+  !fn fn0 mid dfg ra targets bb fv fuel ctx s.
+    Abbrev(fn0 = fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks) /\
+    Abbrev(mid = fn_max_inst_id fn0) /\
+    Abbrev(dfg = dfg_build_function fn0) /\
+    Abbrev(ra = range_analyze fn0) /\
+    Abbrev(targets = ao_compute_fn_iszero_targets fn0) /\
+    Abbrev(fv = ao_fn_fresh_vars fn) /\
+    wf_function fn0 /\ wf_ssa fn0 /\
+    EVERY inst_wf (fn_insts fn0) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
+    MEM bb fn0.fn_blocks /\
+    s.vs_inst_idx = 0 /\
+    bb.bb_label = s.vs_current_bb /\
+    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
+    strict_dom_iszero_inv fn0 dfg s /\
+    ao_chain_defined_prefix targets s /\
+    in_range_state (range_at_inst ra bb.bb_label 0) s.vs_vars ==>
+    (?e. exec_block fuel ctx bb s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (exec_block fuel ctx bb s)
+      (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
+Proof
+  cheat
+QED
+
 Theorem ao_phases123_run_blocks_sim_inv[local]:
   !fn fn0 mid dfg ra targets fn1 fuel ctx s.
     fn0 = fn with fn_blocks :=
