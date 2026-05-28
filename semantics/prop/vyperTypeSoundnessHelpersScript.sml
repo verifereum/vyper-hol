@@ -489,7 +489,17 @@ Theorem functions_well_typed_body:
       SOME (fm, nr, args, dflts, ret, body) ==>
     ?env_body.
       env_body.type_defs = get_tenv cx /\
-      env_body.global_types = FEMPTY /\
+      (!id ty.
+         FLOOKUP env_body.global_types id = SOME ty ==>
+         ?ts' typ.
+           get_module_code cx src_id_opt = SOME ts' /\
+           find_global_decl_by_num id ts' = SOME typ /\
+           typ = ty /\
+           (!tv v imms.
+              FLOOKUP (get_source_immutables src_id_opt
+                (case ALOOKUP imms cx.txn.target of
+                   NONE => [] | SOME m => m)) id = SOME (tv, v) ==>
+              evaluate_type (get_tenv cx) ty = SOME tv)) /\
       well_typed_stmts env_body ret body /\
       well_typed_exprs
         <| var_types := FEMPTY;
@@ -508,7 +518,9 @@ Proof
   first_x_assum (qspecl_then [`src_id_opt`, `fn`, `ts`, `fm`, `nr`, `args`,
     `dflts`, `ret`, `body`, `fn_sigs`] mp_tac) >>
   simp[] >>
-  strip_tac >> qexists_tac `env_body` >> simp[]
+  strip_tac >> qexists_tac `env_body` >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  rpt (first_assum (irule_at Any))
 QED
 
 (* Full version: takes fn_sigs parameter (needed for IntCall where body can
@@ -527,7 +539,17 @@ Theorem functions_well_typed_body_full:
     ?env_body ret_tv.
       env_body.type_defs = get_tenv cx /\
       env_body.fn_sigs = fn_sigs /\
-      env_body.global_types = FEMPTY /\
+      (!id ty.
+         FLOOKUP env_body.global_types id = SOME ty ==>
+         ?ts' typ.
+           get_module_code cx src_id_opt = SOME ts' /\
+           find_global_decl_by_num id ts' = SOME typ /\
+           typ = ty /\
+           (!tv v imms.
+              FLOOKUP (get_source_immutables src_id_opt
+                (case ALOOKUP imms cx.txn.target of
+                   NONE => [] | SOME m => m)) id = SOME (tv, v) ==>
+              evaluate_type (get_tenv cx) ty = SOME tv)) /\
       evaluate_type (get_tenv cx) ret = SOME ret_tv /\
       well_typed_stmts env_body ret body /\
       well_typed_exprs
@@ -573,7 +595,13 @@ Proof
   simp[] >>
   disch_then strip_assume_tac >>
   qexistsl_tac [`env_body`, `ret_tv`] >>
-  simp[] >> first_assum ACCEPT_TAC
+  simp[] >>
+  rpt conj_tac >> rpt strip_tac >>
+  TRY (first_x_assum drule_all >> strip_tac >>
+       rpt (first_assum (irule_at Any)) >> NO_TAC) >>
+  TRY (first_x_assum drule >> strip_tac >>
+       rpt (first_assum (irule_at Any)) >> NO_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* state_well_typed depends only on scopes and immutables *)
@@ -1130,7 +1158,12 @@ Theorem bind_arguments_env_consistent:
     fn_sigs_consistent env_body.fn_sigs cx' /\
     (!id typ. MEM (id, typ) params ==>
        FLOOKUP env_body.var_types (string_to_num id) = SOME typ) /\
-    env_body.global_types = FEMPTY /\
+    (!id ty tv v.
+       FLOOKUP env_body.global_types id = SOME ty /\
+       FLOOKUP (get_source_immutables (current_module cx')
+         (case ALOOKUP st.immutables cx'.txn.target of
+            SOME m => m | NONE => [])) id = SOME (tv, v) ==>
+       evaluate_type (get_tenv cx') ty = SOME tv) /\
     (!src_id_opt id ty ts.
        FLOOKUP env_body.toplevel_types (src_id_opt, id) = SOME ty /\
        get_module_code cx' src_id_opt = SOME ts ==>

@@ -3366,7 +3366,20 @@ Resume eval_preserves_swt[chain_bind_ec]:
                     evaluation_context_accfupds] >>
   rpt conj_tac >>
   TRY (first_assum ACCEPT_TAC) >>
-  TRY REFL_TAC
+  TRY REFL_TAC >>
+  (* Remaining: the env_body.global_types env_consistent clause, discharged
+     from the callee body_full's static global_types clause (which gives the
+     SAME evaluate_type bound universally over imms).  current_module
+     (cx with stk updated_by CONS (src_id_opt, fn)) = src_id_opt. *)
+  rpt strip_tac >>
+  qpat_x_assum
+    `!id ty. FLOOKUP (eb:typing_env).global_types id = SOME ty ==> _`
+    drule >>
+  strip_tac >>
+  first_x_assum (qspecl_then [`tv`, `v`, `r'.immutables`] mp_tac) >>
+  qpat_x_assum `FLOOKUP (get_source_immutables _ _) _ = SOME (_,_)` mp_tac >>
+  simp_tac (srw_ss())
+    [vyperContextTheory.current_module_def, get_tenv_stk_irrelevant]
 QED
 Resume eval_preserves_swt[chain_ih]:
   (* ML-level tactic: SPECL the chain-prefix IH with 33 witnesses,

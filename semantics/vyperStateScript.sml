@@ -322,6 +322,47 @@ End
 
 val () = cv_auto_trans find_var_decl_by_num_def;
 
+(* Find a module-level Constant/Immutable declaration by num key.
+ * Returns the declared type when present.  Used by the typing-env
+ * `global_types` consistency clause (mirroring how `find_var_decl_by_num`
+ * is used by the `toplevel_types` consistency clause).
+ *
+ * Module constants and immutables both share the runtime `immutables`
+ * map (see merge_constants / initial_immutables_module) and are reached
+ * from expressions via `BareGlobalName`.  *)
+Definition is_global_mutability_def:
+  is_global_mutability Immutable = T ∧
+  is_global_mutability (Constant _) = T ∧
+  is_global_mutability Storage = F ∧
+  is_global_mutability Transient = F
+End
+
+val () = cv_auto_trans is_global_mutability_def;
+
+Definition find_global_decl_by_num_def:
+  find_global_decl_by_num n [] = NONE ∧
+  find_global_decl_by_num n (VariableDecl _ mut vid typ _ :: ts) =
+    (if is_global_mutability mut ∧ string_to_num vid = n
+     then SOME typ
+     else find_global_decl_by_num n ts) ∧
+  find_global_decl_by_num n (HashMapDecl _ _ _ _ _ _ :: ts) =
+    find_global_decl_by_num n ts ∧
+  find_global_decl_by_num n (FunctionDecl _ _ _ _ _ _ _ _ _ :: ts) =
+    find_global_decl_by_num n ts ∧
+  find_global_decl_by_num n (StructDecl _ _ :: ts) =
+    find_global_decl_by_num n ts ∧
+  find_global_decl_by_num n (EventDecl _ _ :: ts) =
+    find_global_decl_by_num n ts ∧
+  find_global_decl_by_num n (FlagDecl _ _ :: ts) =
+    find_global_decl_by_num n ts ∧
+  find_global_decl_by_num n (InterfaceDecl _ _ :: ts) =
+    find_global_decl_by_num n ts
+End
+
+val () = cv_auto_trans find_global_decl_by_num_def;
+
+val () = cv_auto_trans find_global_decl_by_num_def;
+
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
 End

@@ -794,7 +794,26 @@ Definition functions_well_typed_def:
       ?env_body ret_tv.
         env_body.type_defs = get_tenv cx /\
         env_body.fn_sigs = fn_sigs /\
-        env_body.global_types = FEMPTY /\
+        (* global_types: match module-level Constant/Immutable decls in
+           the function's own source module (BareGlobalName lookups
+           resolve via current_module at runtime).  The check mirrors
+           toplevel_types but uses find_global_decl_by_num and is keyed
+           by id alone (BareGlobalName has no src_id_opt — it always
+           reads current_module).  We also assert the runtime-immutables
+           image type matches (universally quantified over imms, like
+           the toplevel_types immutable case), so env_consistent can be
+           recovered at every concrete state. *)
+        (!id ty.
+           FLOOKUP env_body.global_types id = SOME ty ==>
+           ?ts' typ.
+             get_module_code cx src_id_opt = SOME ts' /\
+             find_global_decl_by_num id ts' = SOME typ /\
+             typ = ty /\
+             (!tv v imms.
+                FLOOKUP (get_source_immutables src_id_opt
+                  (case ALOOKUP imms cx.txn.target of
+                     NONE => [] | SOME m => m)) id = SOME (tv, v) ==>
+                evaluate_type (get_tenv cx) ty = SOME tv)) /\
         (* toplevel_types: match storage decls + immutable type consistency *)
         (!src id ty ts'.
            FLOOKUP env_body.toplevel_types (src, id) = SOME ty /\
