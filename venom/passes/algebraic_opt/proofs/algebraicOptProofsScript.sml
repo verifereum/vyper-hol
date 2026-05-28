@@ -4339,7 +4339,18 @@ Proof
     >- metis_tac[execution_equiv_trans]
     >- (qunabbrev_tac `bt` >> simp[])
     >- (* Per-block sim — connect ao_block_sim_local *)
-       cheat
+       (rpt strip_tac >>
+        qpat_x_assum `block_inv _` mp_tac >>
+        simp_tac std_ss [Abbr `block_inv`] >> strip_tac >>
+        qunabbrev_tac `bt` >>
+        `in_range_state (range_at_inst ra bb.bb_label 0) s'.vs_vars` by
+          (mp_tac (Q.SPECL [`ra`, `s'.vs_current_bb`, `s'`]
+            range_sound_to_in_range_state) >> gvs[]) >>
+        mp_tac ao_block_sim_local >>
+        disch_then (qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`,
+          `targets`, `bb`, `fv`, `fuel`, `ctx`, `s'`] mp_tac) >>
+        simp[] >> disch_then irule >>
+        gvs[] >> metis_tac[])
     >- (* block_inv preserved through exec_block — WIP: needs SSA freshness + range transfer *)
        cheat
     >- (* block_inv compat with state_equiv fv *)
