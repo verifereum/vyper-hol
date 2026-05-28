@@ -1,18 +1,17 @@
 (*
- * Make SSA Pass — Correctness Proof
+ * Make SSA Pass — Helper Lemmas
  *
- * Strategy: Simulation proof with variable correspondence sigma.
- * The core is run_function_ssa_sim which uses induction on fuel
- * with a strengthened invariant tracking sigma at block boundaries.
- *
- * Definitions and core lemmas are in ssaSimDefs.
- * Per-instruction simulation is in ssaRenamedSim.
- *
- * This file contains:
+ * Infrastructure for the make_ssa_fn correctness proof:
  *   1. Label preservation through make_ssa_fn pipeline
  *   2. run_block_ssa_sim: per-block simulation
- *   3. run_function_ssa_sim: fuel induction
- *   4. make_ssa_fn_correct: top-level theorem
+ *   3. Non-aliasing / colon_free / version_var injectivity
+ *   4. PHI prefix simulation and phi_args_ok discharge
+ *   5. Lockstep body simulation (concrete + abstract sigma)
+ *   6. Well-formedness preservation (make_ssa_preserves_wf_function)
+ *   7. Pipeline correspondence (rename_blocks_body_match, bbs_outputs_agree)
+ *
+ * Core simulation definitions: ssaSimDefs. Per-instruction sim: ssaRenamedSim.
+ * Top-level theorem: makeSsaProofScript.
  *)
 
 Theory makeSsaHelper
@@ -653,7 +652,14 @@ Theorem run_block_vars_grow[local]:
     run_block fuel ctx bb s = OK v ==>
     FDOM s.vs_vars SUBSET FDOM v.vs_vars
 Proof
-  rw[run_block_def] >> imp_res_tac exec_block_vars_grow >> gvs[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = OK _`
+    (ASSUME_TAC o (ONCE_REWRITE_RULE[run_block_def])) >>
+  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> gvs[Excl "eval_phis_def", Excl "eval_one_phi_def"] >>
+  imp_res_tac eval_phis_vars_grow >>
+  imp_res_tac exec_block_vars_grow >>
+  gvs[pred_setTheory.SUBSET_DEF]
 QED
 
 (* run_block OK: outputs of all executed instructions end up in vs_vars.
@@ -674,7 +680,7 @@ QED
 
 (* exec_block OK: non-terminator instruction outputs end up in FDOM.
    The terminator case is excluded because e.g. JMP doesn't bind outputs. *)
-Triviality exec_block_non_term_outputs_in_fdom[local]:
+Triviality exec_block_non_term_out_fdom[local]:
   !n fuel ctx bb s v idx.
     n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
     exec_block fuel ctx bb s = OK v /\
@@ -737,7 +743,7 @@ Proof
 QED
 
 (* Wrapper: run_block version *)
-Theorem run_block_non_term_outputs_in_fdom[local]:
+Theorem run_block_non_term_outputs_fdom[local]:
   !fuel ctx bb s v idx.
     run_block fuel ctx bb s = OK v /\
     bb_well_formed bb /\
@@ -749,10 +755,18 @@ Theorem run_block_non_term_outputs_in_fdom[local]:
     !out. MEM out (EL idx bb.bb_instructions).inst_outputs ==>
           out IN FDOM v.vs_vars
 Proof
-  rw[run_block_def] >>
-  irule exec_block_non_term_outputs_in_fdom >>
-  qexistsl_tac [`bb`, `ctx`, `fuel`, `idx`,
-    `LENGTH bb.bb_instructions`, `s with vs_inst_idx := 0`] >> simp[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = OK _`
+    (ASSUME_TAC o (ONCE_REWRITE_RULE[run_block_def])) >>
+  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> gvs[Excl "eval_phis_def", Excl "eval_one_phi_def"] >>
+  Cases_on `phi_prefix_length bb.bb_instructions ≤ idx`
+  >- (imp_res_tac exec_block_non_term_out_fdom >>
+      fs[pred_setTheory.SUBSET_DEF])
+  >- (`idx < phi_prefix_length bb.bb_instructions` by DECIDE_TAC >>
+      imp_res_tac eval_phis_outputs_in_fdom_idx >>
+      imp_res_tac exec_block_vars_grow >>
+      fs[pred_setTheory.SUBSET_DEF])
 QED
 
 (* step_inst_base preserves lookup_var for non-output variables *)
@@ -1295,17 +1309,16 @@ Definition phi_args_ok_def:
         (EL j bb.bb_instructions).inst_opcode <> PHI) /\
       vars_colon_free s1 /\
       (!x. colon_free x ==> ?n. sigma_out x = version_var x n) /\
-      (* Runtime: when original doesn't error, PHI execution produces
-         an intermediate state with ssa_sim sigma_out *)
+      (* Runtime: eval_phis on bb' produces the post-PHI state used by run_block. *)
       (!fuel ctx.
-        (!e. exec_block fuel ctx bb s1 <> Error e) ==>
+        (!e. run_block fuel ctx bb s1 <> Error e) ==>
         ?s2_mid.
           s2_mid.vs_inst_idx = n_phi /\
           ssa_sim sigma_out s1 s2_mid /\
           s2_mid.vs_halted = s2.vs_halted /\
           s2_mid.vs_current_bb = s2.vs_current_bb /\
           s2_mid.vs_prev_bb = s2.vs_prev_bb /\
-          exec_block fuel ctx bb' s2 =
+          run_block fuel ctx bb' s2 =
           exec_block fuel ctx bb' s2_mid)
 End
 
@@ -1367,9 +1380,7 @@ Theorem phi_step_sim[local]:
     (s2'.vs_halted <=> s2.vs_halted) /\
     s2'.vs_current_bb = s2.vs_current_bb /\
     s2'.vs_prev_bb = s2.vs_prev_bb /\
-    exec_block fuel ctx bb' s2 =
-      exec_block fuel ctx bb'
-        (s2' with vs_inst_idx := SUC s2.vs_inst_idx)
+    exec_block fuel ctx bb' s2 = Error "phi outside prefix"
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
   conj_tac >- (
@@ -1378,15 +1389,10 @@ Proof
   (conj_tac >- (simp[update_var_def])) >>
   (conj_tac >- (simp[update_var_def])) >>
   (conj_tac >- (simp[update_var_def])) >>
-  mp_tac (SIMP_RULE std_ss [] exec_block_step_non_term) >>
-  disch_then (qspecl_then [`bb'`, `fuel`, `ctx`, `s2`,
-    `update_var out w s2`] mp_tac) >>
-  (impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-    >- (simp[is_terminator_def])
-    >- (simp[])
-    >> simp[step_inst_base_def, eval_operand_def])) >>
-  simp[]
+  qpat_x_assum `(EL s2.vs_inst_idx bb'.bb_instructions).inst_opcode = PHI`
+    mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
+  gvs[get_instruction_def, step_inst_def, step_inst_base_def]
 QED
 
 
@@ -1400,7 +1406,9 @@ QED
    writes it to output out_j. The no-shadow condition ensures
    v_j is not clobbered by earlier writes (v_j ∉ {out_0..out_{j-1}}).
    Distinct outputs ensures no write clobbers a later write target. *)
-Theorem phi_prefix_exec[local]:
+(* OBSOLETE after parallel-PHI semantics: PHIs are no longer executable via
+   exec_block/step_inst_base. Original sequential-PHI proof preserved below.
+Theorem phi_prefix_exec_old[local]:
   !n_phi bb' s2 prev_bb idx0 outs vals vars.
     idx0 + n_phi <= LENGTH bb'.bb_instructions /\
     s2.vs_inst_idx = idx0 /\
@@ -1531,7 +1539,8 @@ Resume phi_prefix_exec[compose]:
     gvs[Abbr `s2_1`, update_var_def, lookup_var_def, FLOOKUP_UPDATE])
 QED
 
-Finalise phi_prefix_exec;
+Finalise phi_prefix_exec_old;
+*)
 
 (* Key bridge: push_version evolves latest_version as a pointwise update *)
 Theorem latest_version_push[local]:
@@ -1570,59 +1579,6 @@ QED
    - coverage (non-PHI vars agree with sigma → latest_version rs_b_entry)
    - per-PHI resolve_phi result (for read values)
    - vars_colon_free (for freshness via latest_version_no_alias) *)
-(* Ref cells + helpers for hypothesis management in phi_prefix_sim.
-   These are val declarations (not fun) to ensure Script file compatibility. *)
-val bundled_ref : thm ref = ref TRUTH;
-val ih_ref : thm ref = ref TRUTH;
-val cond_ref : thm ref = ref TRUTH;
-val cov_ref : thm ref = ref TRUTH;
-val fresh_ref : thm ref = ref TRUTH;
-(* stash_cond: stash !x. f x = if ... then ... else ... *)
-val stash_cond : thm ref -> tactic =
-  fn r => FIRST_X_ASSUM (fn th =>
-    (let val (_, body) = dest_forall (concl th)
-         val (_, rhs) = dest_eq body
-     in if is_cond rhs
-        then (r := th; ALL_TAC)
-        else FAIL_TAC "not cond"
-     end) handle HOL_ERR _ => FAIL_TAC "not cond");
-(* stash_cov: stash !x. (!i. MEM i ... ==> ...) ==> ... (coverage) *)
-val stash_cov : thm ref -> tactic =
-  fn r => FIRST_X_ASSUM (fn th =>
-    (let val body = snd (dest_forall (concl th))
-         val (ant, _) = dest_imp body
-     in if is_forall ant
-        then (r := th; ALL_TAC)
-        else FAIL_TAC "not cov"
-     end) handle HOL_ERR _ => FAIL_TAC "not cov");
-(* stash_fresh: stash !x. colon_free x ==> ?n. sigma x = version_var x n *)
-val stash_fresh : thm ref -> tactic =
-  fn r => FIRST_X_ASSUM (fn th =>
-    (let val (_, body) = dest_forall (concl th)
-         val (_, cons) = dest_imp body
-     in if is_exists cons
-        then (r := th; ALL_TAC)
-        else FAIL_TAC "not fresh"
-     end) handle HOL_ERR _ => FAIL_TAC "not fresh");
-(* coverage_spec: mp_tac the coverage hyp (!x. (!i. MEM i ... ==> ...) ==> ...) specialized to q *)
-val coverage_spec : term quotation -> tactic =
-  fn q => FIRST_ASSUM (fn th =>
-    (let val body = snd (dest_forall (concl th))
-         val (ant, _) = dest_imp body
-     in if is_forall ant
-        then mp_tac (Q.SPEC q th)
-        else FAIL_TAC "not coverage"
-     end) handle HOL_ERR _ => FAIL_TAC "not coverage");
-(* stash_ih: remove IH from context into ih_ref.
-   Matches: !v1 v2 ... vN. <conjunction> ==> ... with 7+ universals (the IH shape) *)
-val stash_ih : thm ref -> tactic =
-  fn r => FIRST_X_ASSUM (fn th =>
-    (let val (vs, body) = strip_forall (concl th)
-         val (ant, _) = dest_imp body
-     in if length vs >= 7 andalso is_conj ant
-        then (r := th; ALL_TAC)
-        else FAIL_TAC "not IH"
-     end) handle HOL_ERR _ => FAIL_TAC "not IH");
 Triviality all_distinct_head_tail_disjoint[local]:
   !h t j a b.
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (h::t))) /\
@@ -1655,6 +1611,22 @@ Proof
   pairarg_tac >> simp[]
 QED
 
+Triviality rename_inst_single_output_latest[local]:
+  !rs inst bvar rs' inst'.
+    inst.inst_outputs = [bvar] /\
+    rename_inst rs inst = (rs', inst') ==>
+    inst'.inst_outputs = [version_var bvar (SND (push_version rs bvar))] /\
+    (!x. latest_version rs' x =
+      if x = bvar then version_var bvar (SND (push_version rs bvar))
+      else latest_version rs x)
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`rs`, `bvar`] rename_outputs_single_latest) >>
+  Cases_on `rename_outputs rs [bvar]` >>
+  Cases_on `inst.inst_opcode = PHI` >>
+  gvs[rename_inst_def, LET_THM]
+QED
+
 (* rename_block_insts doesn't change latest_version for non-output variables.
    Works for ALL instructions including PHI (unlike latest_version_stable). *)
 Theorem rename_block_insts_non_output_stable_any:
@@ -1672,7 +1644,708 @@ Proof
   impl_tac >- metis_tac[] >> gvs[]
 QED
 
+Triviality rename_block_cons_single_output_latest[local]:
+  !rs inst rest bvar.
+    inst.inst_outputs = [bvar] ==>
+    ?rs' inst'.
+      rename_inst rs inst = (rs', inst') /\
+      inst'.inst_outputs = [version_var bvar (SND (push_version rs bvar))] /\
+      (!x. latest_version rs' x =
+        if x = bvar then version_var bvar (SND (push_version rs bvar))
+        else latest_version rs x) /\
+      SND (rename_block_insts rs (inst::rest)) =
+        inst' :: SND (rename_block_insts rs' rest) /\
+      FST (rename_block_insts rs (inst::rest)) =
+        FST (rename_block_insts rs' rest)
+Proof
+  rpt strip_tac >>
+  Cases_on `rename_inst rs inst` >>
+  rename1 `rename_inst rs inst = (rs1, inst1)` >>
+  qexists_tac `rs1` >> qexists_tac `inst1` >>
+  `inst1.inst_outputs = [version_var bvar (SND (push_version rs bvar))] /\
+   (!x. latest_version rs1 x =
+      if x = bvar then version_var bvar (SND (push_version rs bvar))
+      else latest_version rs x)` by (
+    mp_tac (Q.SPECL [`rs`, `inst`, `bvar`, `rs1`, `inst1`]
+      rename_inst_single_output_latest) >> simp[]) >>
+  rpt conj_tac >> simp[] >>
+  simp[rename_block_insts_def] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Triviality rename_block_cons_head_output_latest[local]:
+  !rs inst rest bvar head_inst out.
+    inst.inst_outputs = [bvar] /\
+    head_inst.inst_outputs =
+      (EL 0 (SND (rename_block_insts rs (inst::rest)))).inst_outputs /\
+    out = version_var bvar (SND (push_version rs bvar)) ==>
+    ?rs' inst'.
+      rename_inst rs inst = (rs', inst') /\
+      inst'.inst_outputs = [out] /\
+      head_inst.inst_outputs = [out] /\
+      (!x. latest_version rs' x =
+        if x = bvar then out else latest_version rs x) /\
+      SND (rename_block_insts rs (inst::rest)) =
+        inst' :: SND (rename_block_insts rs' rest) /\
+      FST (rename_block_insts rs (inst::rest)) =
+        FST (rename_block_insts rs' rest)
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`rs`, `inst`, `rest`, `bvar`]
+    rename_block_cons_single_output_latest) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  rename1 `rename_inst rs inst = (rs1, inst1)` >>
+  qexists_tac `rs1` >> qexists_tac `inst1` >>
+  gvs[rich_listTheory.EL_CONS]
+QED
+
+Triviality rename_block_insts_cons_snd[local]:
+  !rs inst rest rs1 inst1.
+    rename_inst rs inst = (rs1, inst1) ==>
+    SND (rename_block_insts rs (inst::rest)) =
+      inst1 :: SND (rename_block_insts rs1 rest)
+Proof
+  rw[rename_block_insts_def, LET_THM] >>
+  Cases_on `rename_block_insts rs1 rest` >> gvs[]
+QED
+
+Triviality rename_block_insts_cons_fst[local]:
+  !rs inst rest rs1 inst1.
+    rename_inst rs inst = (rs1, inst1) ==>
+    FST (rename_block_insts rs (inst::rest)) =
+      FST (rename_block_insts rs1 rest)
+Proof
+  rw[rename_block_insts_def, LET_THM] >>
+  Cases_on `rename_block_insts rs1 rest` >> gvs[]
+QED
+
+Triviality phi_prefix_sim_tail_bundled[local]:
+  !phi0 phis_rest inst0 insts_rest rs_b_entry rs_1 inst_0 sigma prev_lbl s1.
+    rename_inst rs_b_entry phi0 = (rs_1, inst_0) /\
+    (!j. j < LENGTH (phi0::phis_rest) ==>
+      (EL j (phi0::phis_rest)).inst_opcode = PHI /\
+      (?bv. (EL j (phi0::phis_rest)).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j (phi0::phis_rest)).inst_outputs)) s1 = SOME w) /\
+      (EL j (inst0::insts_rest)).inst_opcode = PHI /\
+      (EL j (inst0::insts_rest)).inst_outputs =
+        (EL j (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs /\
+      resolve_phi prev_lbl (EL j (inst0::insts_rest)).inst_operands =
+        SOME (Var (sigma (HD ((EL j (phi0::phis_rest)).inst_outputs))))) ==>
+    !j. j < LENGTH phis_rest ==>
+      (EL j phis_rest).inst_opcode = PHI /\
+      (?bv. (EL j phis_rest).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j phis_rest).inst_outputs)) s1 = SOME w) /\
+      (EL j insts_rest).inst_opcode = PHI /\
+      (EL j insts_rest).inst_outputs =
+        (EL j (SND (rename_block_insts rs_1 phis_rest))).inst_outputs /\
+      resolve_phi prev_lbl (EL j insts_rest).inst_operands =
+        SOME (Var (sigma (HD ((EL j phis_rest).inst_outputs))))
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspec_then `SUC j` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `rename_block_insts rs_1 phis_rest` >>
+  gvs[rich_listTheory.EL_CONS, rename_block_insts_def, LET_THM]
+QED
+
+Triviality phi_prefix_sim_tail_bundled_by_snd[local]:
+  !phi0 phis_rest inst0 insts_rest rs_b_entry rs_1 inst_0 sigma prev_lbl s1.
+    SND (rename_block_insts rs_b_entry (phi0::phis_rest)) =
+      inst_0 :: SND (rename_block_insts rs_1 phis_rest) /\
+    (!j. j < LENGTH (phi0::phis_rest) ==>
+      (EL j (phi0::phis_rest)).inst_opcode = PHI /\
+      (?bv. (EL j (phi0::phis_rest)).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j (phi0::phis_rest)).inst_outputs)) s1 = SOME w) /\
+      (EL j (inst0::insts_rest)).inst_opcode = PHI /\
+      (EL j (inst0::insts_rest)).inst_outputs =
+        (EL j (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs /\
+      resolve_phi prev_lbl (EL j (inst0::insts_rest)).inst_operands =
+        SOME (Var (sigma (HD ((EL j (phi0::phis_rest)).inst_outputs))))) ==>
+    !j. j < LENGTH phis_rest ==>
+      (EL j phis_rest).inst_opcode = PHI /\
+      (?bv. (EL j phis_rest).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j phis_rest).inst_outputs)) s1 = SOME w) /\
+      (EL j insts_rest).inst_opcode = PHI /\
+      (EL j insts_rest).inst_outputs =
+        (EL j (SND (rename_block_insts rs_1 phis_rest))).inst_outputs /\
+      resolve_phi prev_lbl (EL j insts_rest).inst_operands =
+        SOME (Var (sigma (HD ((EL j phis_rest).inst_outputs))))
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspec_then `SUC j` mp_tac) >> simp[] >> strip_tac >>
+  gvs[rich_listTheory.EL_CONS]
+QED
+
+Triviality phi_prefix_sim_head_output[local]:
+  !phi0 phis_rest inst0 insts_rest rs_b_entry rs_1 inst_0 out0 sigma prev_lbl s1.
+    SND (rename_block_insts rs_b_entry (phi0::phis_rest)) =
+      inst_0 :: SND (rename_block_insts rs_1 phis_rest) /\
+    inst_0.inst_outputs = [out0] /\
+    (!j. j < LENGTH (phi0::phis_rest) ==>
+      (EL j (phi0::phis_rest)).inst_opcode = PHI /\
+      (?bv. (EL j (phi0::phis_rest)).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j (phi0::phis_rest)).inst_outputs)) s1 = SOME w) /\
+      (EL j (inst0::insts_rest)).inst_opcode = PHI /\
+      (EL j (inst0::insts_rest)).inst_outputs =
+        (EL j (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs /\
+      resolve_phi prev_lbl (EL j (inst0::insts_rest)).inst_operands =
+        SOME (Var (sigma (HD ((EL j (phi0::phis_rest)).inst_outputs))))) ==>
+    inst0.inst_outputs = [out0]
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[rich_listTheory.EL_CONS] >>
+  metis_tac[rich_listTheory.EL_CONS]
+QED
+
+Triviality phi_prefix_sim_head_output_from_el[local]:
+  !phi0 phis_rest inst0 rs_b_entry rs_1 inst_0 out0.
+    inst0.inst_outputs =
+      (EL 0 (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs /\
+    SND (rename_block_insts rs_b_entry (phi0::phis_rest)) =
+      inst_0 :: SND (rename_block_insts rs_1 phis_rest) /\
+    inst_0.inst_outputs = [out0] ==>
+    inst0.inst_outputs = [out0]
+Proof
+  simp[rich_listTheory.EL_CONS]
+QED
+
+Triviality all_distinct_outputs_tail[local]:
+  !phi phis.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (phi::phis))) ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) phis))
+Proof
+  simp[ALL_DISTINCT_APPEND]
+QED
+
+Triviality not_mem_flat_outputs[local]:
+  !x phis.
+    ~MEM x (FLAT (MAP (\i. i.inst_outputs) phis)) ==>
+    !i. MEM i phis ==> ~MEM x i.inst_outputs
+Proof
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Triviality all_distinct_cons_output_not_tail[local]:
+  !phi phis x.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (phi::phis))) /\
+    MEM x phi.inst_outputs ==>
+    !i. MEM i phis ==> ~MEM x i.inst_outputs
+Proof
+  simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Triviality all_distinct_cons_tail_output_ne[local]:
+  !phi phis base x i.
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (phi::phis))) /\
+    phi.inst_outputs = [base] /\ MEM i phis /\ MEM x i.inst_outputs ==>
+    x <> base
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >> gvs[] >>
+  qpat_x_assum `~MEM base' (FLAT (MAP (\i. i.inst_outputs) phis))` mp_tac >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Triviality sigma_update_preserves_versioned[local]:
+  !sigma bvar out rs.
+    (!x. colon_free x ==> ?n. sigma x = version_var x n) /\
+    out = version_var bvar (SND (push_version rs bvar)) ==>
+    !x. colon_free x ==> ?n. ((bvar =+ out) sigma) x = version_var x n
+Proof
+  rpt strip_tac >>
+  Cases_on `x = bvar` >> simp[combinTheory.APPLY_UPDATE_THM]
+  >- (qexists_tac `SND (push_version rs bvar)` >> simp[]) >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Triviality sigma_update_preserves_cons_non_output[local]:
+  !sigma sigma_tail phi phis bvar out x.
+    phi.inst_outputs = [bvar] /\
+    (!x. (!i. MEM i phis ==> ~MEM x i.inst_outputs) ==> sigma_tail x = sigma x) /\
+    (!i. MEM i (phi::phis) ==> ~MEM x i.inst_outputs) ==>
+    ((bvar =+ out) sigma_tail) x = sigma x
+Proof
+  rpt strip_tac >>
+  `x <> bvar` by (
+    strip_tac >> gvs[] >>
+    qpat_x_assum `!i. i = phi \/ MEM i phis ==> ~MEM bvar i.inst_outputs`
+      (qspec_then `phi` mp_tac) >> simp[]) >>
+  simp[combinTheory.UPDATE_def] >>
+  first_x_assum irule >> rpt strip_tac >>
+  qpat_x_assum `!i. MEM i (phi::phis) ==> ~MEM x i.inst_outputs`
+    (qspec_then `i` mp_tac) >> simp[]
+QED
+
+Triviality sigma_update_preserves_output_latest_cons[local]:
+  !sigma_tail sigma rs rs1 phi phis bvar out x i.
+    phi.inst_outputs = [bvar] /\
+    (!x i. MEM i phis /\ MEM x i.inst_outputs ==>
+      sigma_tail x = latest_version (FST (rename_block_insts rs1 phis)) x) /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (phi::phis))) /\
+    (!x. latest_version rs1 x =
+      if x = bvar then out else latest_version rs x) /\
+    FST (rename_block_insts rs (phi::phis)) =
+      FST (rename_block_insts rs1 phis) /\
+    MEM i (phi::phis) /\ MEM x i.inst_outputs ==>
+    ((bvar =+ out) sigma_tail) x =
+      latest_version (FST (rename_block_insts rs (phi::phis))) x
+Proof
+  rpt strip_tac >>
+  Cases_on `i = phi`
+  >- (
+    gvs[] >>
+    `!i'. MEM i' phis ==> ~MEM bvar i'.inst_outputs` by (
+      qpat_x_assum `~MEM bvar (FLAT (MAP _ phis))` mp_tac >>
+      simp[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+    `latest_version (FST (rename_block_insts rs1 phis)) bvar =
+     latest_version rs1 bvar` by (
+      irule rename_block_insts_non_output_stable_any >> simp[]) >>
+    gvs[combinTheory.APPLY_UPDATE_THM]) >>
+  `MEM i phis` by gvs[] >>
+  `x <> bvar` by (
+    mp_tac (Q.SPECL [`phi`, `phis`, `bvar`, `x`, `i`]
+      all_distinct_cons_tail_output_ne) >>
+    simp[]) >>
+  `sigma_tail x = latest_version (FST (rename_block_insts rs1 phis)) x` by (
+    qpat_x_assum `!x i. MEM i phis /\ MEM x i.inst_outputs ==> _`
+      (qspecl_then [`x`, `i`] mp_tac) >> simp[]) >>
+  gvs[combinTheory.APPLY_UPDATE_THM]
+QED
+
+Triviality ssa_sim_update_versioned_fresh_dom[local]:
+  !sigma s1 s2 bvar out w rs.
+    ssa_sim sigma s1 s2 /\
+    lookup_var bvar s1 = SOME w /\
+    vars_colon_free s1 /\
+    colon_free bvar /\
+    (!x. colon_free x ==> ?n. sigma x = version_var x n) /\
+    out = version_var bvar (SND (push_version rs bvar)) ==>
+    ssa_sim ((bvar =+ out) sigma) s1 (update_var out w s2)
+Proof
+  rpt strip_tac >>
+  irule ssa_sim_update_fresh_dom >>
+  rpt strip_tac >>
+  spose_not_then assume_tac >>
+  `colon_free x` by (
+    qpat_x_assum `vars_colon_free s1` mp_tac >>
+    simp[vars_colon_free_def] >> metis_tac[]) >>
+  `?n. sigma x = version_var x n` by (
+    qpat_x_assum `!x. colon_free x ==> ?n. sigma x = version_var x n`
+      (qspec_then `x` mp_tac) >> simp[]) >>
+  rename1 `sigma x = version_var x nx` >>
+  `version_var x nx = version_var bvar (SND (push_version rs bvar))` by gvs[] >>
+  `x = bvar` by metis_tac[version_var_base_inj] >>
+  gvs[]
+QED
+
+Triviality eval_one_phi_head_from_rename[local]:
+  !rs phi rest bvar inst out s prev_lbl sigma w.
+    phi.inst_outputs = [bvar] /\
+    inst.inst_outputs =
+      (EL 0 (SND (rename_block_insts rs (phi::rest)))).inst_outputs /\
+    out = version_var bvar (SND (push_version rs bvar)) /\
+    s.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME (Var (sigma bvar)) /\
+    eval_operand (Var (sigma bvar)) s = SOME w ==>
+    eval_one_phi s inst = SOME (out,w)
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`rs`, `phi`, `rest`, `bvar`, `inst`, `out`]
+    rename_block_cons_head_output_latest) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  gvs[eval_one_phi_def]
+QED
+
+Triviality phi_prefix_sim_head_step[local]:
+  !rs phi rest bvar inst out s prev_lbl sigma w.
+    phi.inst_outputs = [bvar] /\
+    inst.inst_outputs =
+      (EL 0 (SND (rename_block_insts rs (phi::rest)))).inst_outputs /\
+    out = version_var bvar (SND (push_version rs bvar)) /\
+    s.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME (Var (sigma bvar)) /\
+    eval_operand (Var (sigma bvar)) s = SOME w ==>
+    ?rs' inst'.
+      rename_inst rs phi = (rs', inst') /\
+      inst'.inst_outputs = [out] /\
+      inst.inst_outputs = [out] /\
+      (!x. latest_version rs' x =
+        if x = bvar then out else latest_version rs x) /\
+      SND (rename_block_insts rs (phi::rest)) =
+        inst' :: SND (rename_block_insts rs' rest) /\
+      FST (rename_block_insts rs (phi::rest)) =
+        FST (rename_block_insts rs' rest) /\
+      eval_one_phi s inst = SOME (out,w)
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`rs`, `phi`, `rest`, `bvar`, `inst`, `out`]
+    rename_block_cons_head_output_latest) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `rs'` (qx_choose_then `inst'` strip_assume_tac)) >>
+  qexists_tac `rs'` >> qexists_tac `inst'` >>
+  rpt conj_tac >> gvs[eval_one_phi_def]
+QED
+
+Triviality eval_one_phi_from_lookup[local]:
+  !s inst out prev_lbl v w.
+    inst.inst_outputs = [out] /\
+    s.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME (Var v) /\
+    lookup_var v s = SOME w ==>
+    eval_one_phi s inst = SOME (out,w)
+Proof
+  rw[eval_one_phi_def, eval_operand_def]
+QED
+
+Triviality eval_one_phi_from_eval_operand[local]:
+  !s inst out prev_lbl op w.
+    inst.inst_outputs = [out] /\
+    s.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME op /\
+    eval_operand op s = SOME w ==>
+    eval_one_phi s inst = SOME (out,w)
+Proof
+  rw[eval_one_phi_def]
+QED
+
+Triviality eval_one_phi_direct[local]:
+  !s2 inst0 out0 w0 prev_lbl sigma base0.
+    inst0.inst_outputs = [out0] /\
+    s2.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst0.inst_operands = SOME (Var (sigma base0)) /\
+    eval_operand (Var (sigma base0)) s2 = SOME w0 ==>
+    eval_one_phi s2 inst0 = SOME (out0,w0)
+Proof
+  rw[eval_one_phi_def]
+QED
+
+Triviality eval_one_phi_from_eval_operand_var[local]:
+  !s inst out prev_lbl v w.
+    inst.inst_outputs = [out] /\
+    s.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME (Var v) /\
+    eval_operand (Var v) s = SOME w ==>
+    eval_one_phi s inst = SOME (out,w)
+Proof
+  rw[eval_one_phi_def]
+QED
+
+Triviality eval_operand_from_ssa_lookup[local]:
+  !sigma s1 s2 x w.
+    ssa_sim sigma s1 s2 /\
+    lookup_var x s1 = SOME w ==>
+    eval_operand (Var (sigma x)) s2 = SOME w
+Proof
+  rw[eval_operand_def] >> gvs[ssa_sim_def]
+QED
+
+Triviality eval_one_phi_from_ssa_head[local]:
+  !s2 inst out prev_lbl sigma bvar s1 w.
+    inst.inst_outputs = [out] /\
+    s2.vs_prev_bb = SOME prev_lbl /\
+    resolve_phi prev_lbl inst.inst_operands = SOME (Var (sigma bvar)) /\
+    ssa_sim sigma s1 s2 /\
+    lookup_var bvar s1 = SOME w ==>
+    eval_one_phi s2 inst = SOME (out,w)
+Proof
+  rpt strip_tac >>
+  `lookup_var (sigma bvar) s2 = SOME w` by (gvs[ssa_sim_def] >> metis_tac[]) >>
+  gvs[eval_one_phi_def, eval_operand_def, lookup_var_def]
+QED
+
+Triviality phi_prefix_sim_cons_finish[local]:
+  !sigma sigma_tail rs rs1 phi phis bvar out inst insts s2 s2_tail s1 w.
+    phi.inst_outputs = [bvar] /\
+    inst.inst_opcode = PHI /\
+    eval_one_phi s2 inst = SOME (out,w) /\
+    eval_phis s2 insts = OK s2_tail /\
+    out = version_var bvar (SND (push_version rs bvar)) /\
+    (!x. latest_version rs1 x = if x = bvar then out else latest_version rs x) /\
+    FST (rename_block_insts rs (phi::phis)) = FST (rename_block_insts rs1 phis) /\
+    (!x. colon_free x ==> ?n. sigma_tail x = version_var x n) /\
+    (!x. (!i. MEM i phis ==> ~MEM x i.inst_outputs) ==> sigma_tail x = sigma x) /\
+    (!x i. MEM i phis /\ MEM x i.inst_outputs ==>
+      sigma_tail x = latest_version (FST (rename_block_insts rs1 phis)) x) /\
+    s2_tail.vs_inst_idx = s2.vs_inst_idx /\
+    ssa_sim sigma_tail s1 s2_tail /\
+    (s2_tail.vs_halted <=> s2.vs_halted) /\
+    s2_tail.vs_current_bb = s2.vs_current_bb /\
+    s2_tail.vs_prev_bb = s2.vs_prev_bb /\
+    lookup_var bvar s1 = SOME w /\
+    vars_colon_free s1 /\
+    colon_free bvar /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (phi::phis))) ==>
+    ?sigma_out s2_phi.
+      (!x. colon_free x ==> ?n. sigma_out x = version_var x n) /\
+      (!x. (!i. MEM i (phi::phis) ==> ~MEM x i.inst_outputs) ==>
+           sigma_out x = sigma x) /\
+      (!x i. MEM i (phi::phis) /\ MEM x i.inst_outputs ==>
+           sigma_out x = latest_version (FST (rename_block_insts rs (phi::phis))) x) /\
+      eval_phis s2 (inst::insts) = OK s2_phi /\
+      s2_phi.vs_inst_idx = s2.vs_inst_idx /\
+      ssa_sim sigma_out s1 s2_phi /\
+      (s2_phi.vs_halted <=> s2.vs_halted) /\
+      s2_phi.vs_current_bb = s2.vs_current_bb /\
+      s2_phi.vs_prev_bb = s2.vs_prev_bb
+Proof
+  rpt strip_tac >>
+  qexists_tac `(bvar =+ out) sigma_tail` >>
+  qexists_tac `update_var out w s2_tail` >>
+  sg `!x. colon_free x ==> ?n. ((bvar =+ out) sigma_tail) x = version_var x n` >- (
+    match_mp_tac (Q.SPECL [`sigma_tail`, `bvar`, `out`, `rs`]
+      sigma_update_preserves_versioned) >>
+    simp[]) >>
+  conj_tac >- last_x_assum ACCEPT_TAC >>
+  conj_tac >- (
+    gen_tac >> strip_tac >>
+    `x <> bvar` by (
+      qpat_x_assum `!i. MEM i (phi::phis) ==> ~MEM x i.inst_outputs`
+        (qspec_then `phi` mp_tac) >> simp[]) >>
+    simp[combinTheory.APPLY_UPDATE_THM] >>
+    first_x_assum irule >>
+    rpt strip_tac >>
+    qpat_x_assum `!i. MEM i (phi::phis) ==> ~MEM x i.inst_outputs`
+      (qspec_then `i` mp_tac) >> simp[]) >>
+  conj_tac >- (
+    rpt strip_tac >>
+    mp_tac (Q.SPECL [`sigma_tail`, `sigma`, `rs`, `rs1`,
+      `phi`, `phis`, `bvar`, `out`, `x`, `i`]
+      sigma_update_preserves_output_latest_cons) >>
+    impl_tac >- (
+      rpt conj_tac
+      >- qpat_x_assum `phi.inst_outputs = [bvar]` ACCEPT_TAC
+      >- qpat_x_assum `!x i. MEM i phis /\ MEM x i.inst_outputs ==> _` ACCEPT_TAC
+      >- qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ (phi::phis)))` ACCEPT_TAC
+      >- qpat_x_assum `!x. latest_version rs1 x = _` ACCEPT_TAC
+      >- qpat_x_assum `FST (rename_block_insts rs (phi::phis)) = _` ACCEPT_TAC
+      >- qpat_x_assum `MEM i (phi::phis)` ACCEPT_TAC
+      >- qpat_x_assum `MEM x i.inst_outputs` ACCEPT_TAC) >>
+    simp[]) >>
+  rpt conj_tac >| [
+    gvs[eval_phis_def],
+    gvs[update_var_def],
+    mp_tac (Q.SPECL [`sigma_tail`, `s1`, `s2_tail`, `bvar`, `out`, `w`, `rs`]
+      ssa_sim_update_versioned_fresh_dom) >>
+    impl_tac >- simp[] >>
+    simp[],
+    gvs[update_var_def],
+    gvs[update_var_def],
+    gvs[update_var_def]
+  ]
+QED
+
+Triviality phi_prefix_sim_head_facts[local]:
+  !rs_b_entry phi0 phis_rest inst0 insts_rest s2 prev_lbl sigma s1.
+    s2.vs_prev_bb = SOME prev_lbl /\
+    ssa_sim sigma s1 s2 /\
+    (!j. j < LENGTH (phi0::phis_rest) ==>
+      (EL j (phi0::phis_rest)).inst_opcode = PHI /\
+      (?bv. (EL j (phi0::phis_rest)).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j (phi0::phis_rest)).inst_outputs)) s1 = SOME w) /\
+      (EL j (inst0::insts_rest)).inst_opcode = PHI /\
+      (EL j (inst0::insts_rest)).inst_outputs =
+        (EL j (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs /\
+      resolve_phi prev_lbl (EL j (inst0::insts_rest)).inst_operands =
+        SOME (Var (sigma (HD ((EL j (phi0::phis_rest)).inst_outputs))))) ==>
+    ?base0 w0 rs_1 inst_0.
+      phi0.inst_outputs = [base0] /\
+      lookup_var base0 s1 = SOME w0 /\
+      colon_free base0 /\
+      rename_inst rs_b_entry phi0 = (rs_1, inst_0) /\
+      inst_0.inst_outputs =
+        [version_var base0 (SND (push_version rs_b_entry base0))] /\
+      inst0.inst_outputs =
+        [version_var base0 (SND (push_version rs_b_entry base0))] /\
+      (!x. latest_version rs_1 x =
+        if x = base0 then version_var base0 (SND (push_version rs_b_entry base0))
+        else latest_version rs_b_entry x) /\
+      SND (rename_block_insts rs_b_entry (phi0::phis_rest)) =
+        inst_0 :: SND (rename_block_insts rs_1 phis_rest) /\
+      FST (rename_block_insts rs_b_entry (phi0::phis_rest)) =
+        FST (rename_block_insts rs_1 phis_rest) /\
+      eval_one_phi s2 inst0 =
+        SOME (version_var base0 (SND (push_version rs_b_entry base0)), w0)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH (phi0::phis_rest) ==> _`
+    (fn th => assume_tac th >> qspec_then `0` mp_tac th) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  gvs[rich_listTheory.EL_CONS] >>
+  rename1 `phi0.inst_outputs = [base0]` >>
+  rename1 `lookup_var base0 s1 = SOME w0` >>
+  `phi0.inst_outputs = [base0]` by gvs[] >>
+  `lookup_var base0 s1 = SOME w0` by gvs[] >>
+  `colon_free base0` by gvs[] >>
+  `inst0.inst_outputs =
+      (EL 0 (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs` by (
+    qpat_x_assum `!j. j < SUC (LENGTH phis_rest) ==> _`
+      (qspec_then `0` mp_tac) >>
+    simp[rich_listTheory.EL_CONS]) >>
+  `resolve_phi prev_lbl inst0.inst_operands = SOME (Var (sigma base0))` by (
+    qpat_x_assum `!j. j < SUC (LENGTH phis_rest) ==> _`
+      (qspec_then `0` mp_tac) >>
+    simp[rich_listTheory.EL_CONS]) >>
+  `eval_operand (Var (sigma base0)) s2 = SOME w0` by (
+    irule eval_operand_from_ssa_lookup >>
+    qexists_tac `s1` >> simp[]) >>
+  mp_tac (Q.SPECL [`rs_b_entry`, `phi0`, `phis_rest`, `base0`,
+    `inst0`, `version_var base0 (SND (push_version rs_b_entry base0))`,
+    `s2`, `prev_lbl`, `sigma`, `w0`] phi_prefix_sim_head_step) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `rs_1` (qx_choose_then `inst_0` strip_assume_tac)) >>
+  qexists_tac `rs_1` >> qexists_tac `inst_0` >>
+  gvs[]
+QED
+
 Theorem phi_prefix_sim[local]:
+  !phis rs_b_entry insts s2 prev_lbl sigma s1.
+    s2.vs_prev_bb = SOME prev_lbl /\
+    ssa_sim sigma s1 s2 /\
+    (!x. colon_free x ==> ?n. sigma x = version_var x n) /\
+    vars_colon_free s1 /\
+    LENGTH phis <= LENGTH insts /\
+    (!j. j < LENGTH phis ==>
+      (EL j phis).inst_opcode = PHI /\
+      (?bv. (EL j phis).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j phis).inst_outputs)) s1 = SOME w) /\
+      (EL j insts).inst_opcode = PHI /\
+      (EL j insts).inst_outputs =
+        (EL j (SND (rename_block_insts rs_b_entry phis))).inst_outputs /\
+      resolve_phi prev_lbl (EL j insts).inst_operands =
+        SOME (Var (sigma (HD ((EL j phis).inst_outputs))))) /\
+    (!j. LENGTH phis <= j /\ j < LENGTH insts ==>
+      (EL j insts).inst_opcode <> PHI) /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) phis)) ==>
+    ?sigma_out s2_phi.
+      (!x. colon_free x ==> ?n. sigma_out x = version_var x n) /\
+      (!x. (!i. MEM i phis ==> ~MEM x i.inst_outputs) ==>
+           sigma_out x = sigma x) /\
+      (!x i. MEM i phis /\ MEM x i.inst_outputs ==>
+           sigma_out x =
+             latest_version (FST (rename_block_insts rs_b_entry phis)) x) /\
+      eval_phis s2 insts = OK s2_phi /\
+      s2_phi.vs_inst_idx = s2.vs_inst_idx /\
+      ssa_sim sigma_out s1 s2_phi /\
+      (s2_phi.vs_halted <=> s2.vs_halted) /\
+      s2_phi.vs_current_bb = s2.vs_current_bb /\
+      s2_phi.vs_prev_bb = s2.vs_prev_bb
+Proof
+  rpt gen_tac >>
+  MAP_EVERY qid_spec_tac [`s1`, `sigma`, `prev_lbl`, `s2`, `insts`, `rs_b_entry`] >>
+  Induct_on `phis`
+  >- (
+    rpt gen_tac >> strip_tac >>
+    qexists_tac `sigma` >> qexists_tac `s2` >>
+    Cases_on `insts`
+    >- simp[eval_phis_def, rename_block_insts_def] >>
+    rename1 `inst0::insts_rest` >>
+    `inst0.inst_opcode <> PHI` by (
+      qpat_x_assum `!j. LENGTH [] <= j /\ j < LENGTH (inst0::insts_rest) ==> _`
+        (qspec_then `0` mp_tac) >> simp[]) >>
+    simp[eval_phis_def, rename_block_insts_def]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `phi0::phis_rest` >>
+  `ssa_sim sigma s1 s2` by
+    qpat_x_assum `ssa_sim sigma s1 s2` ACCEPT_TAC >>
+  `s2.vs_prev_bb = SOME prev_lbl` by
+    qpat_x_assum `s2.vs_prev_bb = SOME prev_lbl` ACCEPT_TAC >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) phis_rest))` by (
+    qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ (phi0::phis_rest)))` mp_tac >>
+    simp[ALL_DISTINCT_APPEND]) >>
+  Cases_on `insts`
+  >- gvs[] >>
+  rename1 `LENGTH (phi0::phis_rest) <= LENGTH (inst0::insts_rest)` >>
+  `!j. LENGTH phis_rest <= j /\ j < LENGTH insts_rest ==>
+      (EL j insts_rest).inst_opcode <> PHI` by (
+    rpt strip_tac >>
+    qpat_x_assum `!j. LENGTH (phi0::phis_rest) <= j /\
+        j < LENGTH (inst0::insts_rest) ==> _`
+      (qspec_then `SUC j` mp_tac) >>
+    impl_tac >- (simp[] >> DECIDE_TAC) >>
+    simp[rich_listTheory.EL_CONS]) >>
+  `!j. j < LENGTH phis_rest ==>
+      (EL j phis_rest).inst_opcode = PHI /\
+      (?bv. (EL j phis_rest).inst_outputs = [bv] /\ colon_free bv) /\
+      (?w. lookup_var (HD ((EL j phis_rest).inst_outputs)) s1 = SOME w) /\
+      (EL j insts_rest).inst_opcode = PHI /\
+      (EL j insts_rest).inst_outputs =
+        (EL (SUC j) (SND (rename_block_insts rs_b_entry (phi0::phis_rest)))).inst_outputs /\
+      resolve_phi prev_lbl (EL j insts_rest).inst_operands =
+        SOME (Var (sigma (HD ((EL j phis_rest).inst_outputs))))` by (
+    rpt strip_tac >>
+    qpat_x_assum `!j. j < LENGTH (phi0::phis_rest) ==> _`
+      (qspec_then `SUC j` mp_tac) >>
+    impl_tac >- simp[] >>
+    simp[rich_listTheory.EL_CONS]) >>
+  mp_tac (Q.SPECL [`rs_b_entry`, `phi0`, `phis_rest`, `inst0`,
+    `insts_rest`, `s2`, `prev_lbl`, `sigma`, `s1`]
+    phi_prefix_sim_head_facts) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- qpat_x_assum `s2.vs_prev_bb = SOME prev_lbl` ACCEPT_TAC
+    >- qpat_x_assum `ssa_sim sigma s1 s2` ACCEPT_TAC
+    >- qpat_x_assum `!j. j < LENGTH (phi0::phis_rest) ==> _` ACCEPT_TAC) >>
+  disch_then (qx_choose_then `base0` (qx_choose_then `w0`
+    (qx_choose_then `rs_1` (qx_choose_then `inst_0` strip_assume_tac)))) >>
+  `inst0.inst_opcode = PHI` by (
+    qpat_x_assum `!j. j < LENGTH (phi0::phis_rest) ==> _`
+      (qspec_then `0` mp_tac) >>
+    simp[rich_listTheory.EL_CONS]) >>
+  `LENGTH phis_rest <= LENGTH insts_rest` by gvs[] >>
+  mp_tac (Q.SPECL [`phi0`, `phis_rest`, `inst0`, `insts_rest`,
+    `rs_b_entry`, `rs_1`, `inst_0`, `sigma`, `prev_lbl`, `s1`]
+    phi_prefix_sim_tail_bundled_by_snd) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- qpat_x_assum `SND (rename_block_insts rs_b_entry (phi0::phis_rest)) = _` ACCEPT_TAC
+    >- qpat_x_assum `!j. j < LENGTH (phi0::phis_rest) ==> _` ACCEPT_TAC) >>
+  disch_then (fn tail_th =>
+    FIRST_X_ASSUM
+      (qspecl_then [`rs_1`, `insts_rest`, `s2`, `prev_lbl`, `sigma`, `s1`] mp_tac) >>
+    impl_tac >- (
+      conj_tac >- qpat_x_assum `s2.vs_prev_bb = SOME prev_lbl` ACCEPT_TAC >>
+      conj_tac >- qpat_x_assum `ssa_sim sigma s1 s2` ACCEPT_TAC >>
+      conj_tac >- qpat_x_assum `!x. colon_free x ==> ?n. sigma x = version_var x n` ACCEPT_TAC >>
+      conj_tac >- qpat_x_assum `vars_colon_free s1` ACCEPT_TAC >>
+      conj_tac >- qpat_x_assum `LENGTH phis_rest <= LENGTH insts_rest` ACCEPT_TAC >>
+      conj_tac >- ACCEPT_TAC tail_th >>
+      conj_tac >- qpat_x_assum `!j. LENGTH phis_rest <= j /\ j < LENGTH insts_rest ==> _` ACCEPT_TAC >>
+      qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ phis_rest))` ACCEPT_TAC)) >>
+  strip_tac >>
+  rename1 `eval_phis s2 insts_rest = OK s2_tail` >>
+  mp_tac (Q.SPECL [`sigma`, `sigma_out`, `rs_b_entry`, `rs_1`,
+    `phi0`, `phis_rest`, `base0`,
+    `version_var base0 (SND (push_version rs_b_entry base0))`,
+    `inst0`, `insts_rest`, `s2`, `s2_tail`, `s1`, `w0`]
+    phi_prefix_sim_cons_finish) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- qpat_x_assum `phi0.inst_outputs = [base0]` ACCEPT_TAC
+    >- qpat_x_assum `inst0.inst_opcode = PHI` ACCEPT_TAC
+    >- qpat_x_assum `eval_one_phi s2 inst0 = SOME _` ACCEPT_TAC
+    >- qpat_x_assum `eval_phis s2 insts_rest = OK s2_tail` ACCEPT_TAC
+    >- simp[]
+    >- qpat_x_assum `!x. latest_version rs_1 x = _` ACCEPT_TAC
+    >- qpat_x_assum `FST (rename_block_insts rs_b_entry (phi0::phis_rest)) = _` ACCEPT_TAC
+    >- qpat_x_assum `!x. colon_free x ==> ?n. sigma_out x = version_var x n` ACCEPT_TAC
+    >- qpat_x_assum `!x. (!i. MEM i phis_rest ==> ~MEM x i.inst_outputs) ==> _` ACCEPT_TAC
+    >- qpat_x_assum `!x i. MEM i phis_rest /\ MEM x i.inst_outputs ==> _` ACCEPT_TAC
+    >- qpat_x_assum `s2_tail.vs_inst_idx = s2.vs_inst_idx` ACCEPT_TAC
+    >- qpat_x_assum `ssa_sim sigma_out s1 s2_tail` ACCEPT_TAC
+    >- qpat_x_assum `s2_tail.vs_halted <=> s2.vs_halted` ACCEPT_TAC
+    >- qpat_x_assum `s2_tail.vs_current_bb = s2.vs_current_bb` ACCEPT_TAC
+    >- qpat_x_assum `s2_tail.vs_prev_bb = s2.vs_prev_bb` ACCEPT_TAC
+    >- qpat_x_assum `lookup_var base0 s1 = SOME w0` ACCEPT_TAC
+    >- qpat_x_assum `vars_colon_free s1` ACCEPT_TAC
+    >- qpat_x_assum `colon_free base0` ACCEPT_TAC
+    >- qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ (phi0::phis_rest)))` ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+(* OBSOLETE sequential-PHI proof preserved for reference. *)
+(*
+Theorem phi_prefix_sim_old[local]:
   !phis rs_b_entry bb' s2 prev_lbl sigma s1 idx.
     s2.vs_inst_idx = idx /\
     s2.vs_prev_bb = SOME prev_lbl /\
@@ -1890,6 +2563,7 @@ Proof
     first_x_assum (qspecl_then [`fuel`, `ctx`] strip_assume_tac) >>
     qexists_tac `s2_mid` >> simp[LENGTH] >> metis_tac[])
 QED
+*)
 (* rename_outputs multi-output: latest_version evolves as FOLDL of updates *)
 Theorem rename_outputs_multi_latest[local]:
   !outs rs rs' outs'.
@@ -2289,7 +2963,7 @@ QED
 
 (* INVOKE sigma bridge: clean-context proof for INVOKE simulation.
    INVOKE branch exposing specific sigma
-   and includes vars_colon_free. NO Abbrevs before AllCaseEqs (L400). *)
+   and includes vars_colon_free. *)
 Theorem invoke_sigma_bridge[local]:
   !rs inst1 s1 s2 fuel ctx s1'.
     ssa_sim (latest_version rs) s1 s2 /\
@@ -2750,7 +3424,7 @@ QED
 
 (* Helper: for a well-formed terminated block with inst_wf instructions,
    the rename state at the terminator position equals the rename state at the end.
-   Extracted to avoid rich-context issues in lockstep_body (L1127). *)
+   Extracted to avoid rich-context issues in lockstep_body. *)
 Theorem lockstep_body_term_sigma[local]:
   !rs0 bb j.
     bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
@@ -3937,12 +4611,13 @@ Theorem run_block_ssa_sim:
         vars_colon_free v)
 Proof
   rpt gen_tac >> strip_tac >>
-  (* Bridge: run_block = exec_block when vs_inst_idx = 0 *)
-  `run_block fuel ctx bb s1 = exec_block fuel ctx bb s1` by
-    simp[run_block_def] >>
-  `run_block fuel ctx bb' s2 = exec_block fuel ctx bb' s2` by
-    simp[run_block_def] >>
   gvs[phi_args_ok_def] >>
+  (* Original block body has no PHIs, so run_block is just exec_block at idx 0. *)
+  `run_block fuel ctx bb s1 = exec_block fuel ctx bb s1` by (
+    ONCE_REWRITE_TAC[run_block_def] >>
+    `EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions` by
+      simp[EVERY_EL] >>
+    simp[eval_phis_no_phis, no_phis_phi_prefix_length_zero]) >>
   first_x_assum (qspecl_then [`fuel`, `ctx`] mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qabbrev_tac `is_ubd = \x:string. ?j. j < LENGTH bb.bb_instructions /\
@@ -4098,7 +4773,7 @@ Proof
   `~is_terminator (EL idx bb.bb_instructions).inst_opcode` by gvs[] >>
   `MEM x (EL idx bb.bb_instructions).inst_outputs` by gvs[] >>
   mp_tac (Q.SPECL [
-    `fuel`, `ctx`, `bb`, `s`, `v`, `idx`] run_block_non_term_outputs_in_fdom) >>
+    `fuel`, `ctx`, `bb`, `s`, `v`, `idx`] run_block_non_term_outputs_fdom) >>
   simp[]
 QED
 
@@ -4187,8 +4862,7 @@ Theorem run_block_ok_prev_bb:
     bb.bb_instructions <> [] ==>
     v.vs_prev_bb = SOME s.vs_current_bb
 Proof
-  rw[run_block_def] >> rpt strip_tac >>
-  imp_res_tac exec_block_ok_prev_bb >> gvs[]
+  metis_tac[run_block_ok_prev_bb_exact]
 QED
 
 Theorem run_block_current_bb_in_succs:
@@ -4200,8 +4874,15 @@ Theorem run_block_current_bb_in_succs:
     bb.bb_instructions <> [] ==>
     MEM v.vs_current_bb (bb_succs bb)
 Proof
-  rw[run_block_def] >> rpt strip_tac >>
-  imp_res_tac exec_block_current_bb_in_succs >> gvs[]
+  simp[Once run_block_def] >>
+  rpt strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac eval_phis_preserves_current_bb >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`,
+    `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `v`]
+    exec_block_current_bb_in_succs) >>
+  simp[phi_prefix_length_le]
 QED
 
 (* run_block OK gives prev_bb and current_bb in succs *)
@@ -4260,7 +4941,7 @@ Proof
     `?idx. idx < LENGTH bb.bb_instructions /\
            EL idx bb.bb_instructions = inst` by metis_tac[MEM_EL] >>
     mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `v`, `idx`]
-              run_block_non_term_outputs_in_fdom) >>
+              run_block_non_term_outputs_fdom) >>
     simp[])
 QED
 
@@ -5179,7 +5860,7 @@ Resume rename_blocks_outputs_agree[dnode]:
   (* DNode s children *)
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   (* Establish lookup biconditional WITHOUT adding MEM to assumptions
-     (gvs splits MEM x (l1 ++ l2) — see L1076) *)
+     (gvs splits MEM x (l1 ++ l2)) *)
   `(?b. lookup_block s bbs1 = SOME b) <=>
    (?b. lookup_block s bbs2 = SOME b)` by (
     irule bbs_outputs_agree_lookup >>
@@ -6243,8 +6924,7 @@ Proof
 QED
 
 (* Per-element proof for phi_prefix_sim bundled condition.
-   Extracted to avoid batch-mode Q-quotation type ambiguity (L1602).
-   bv is an explicit parameter so the parser knows its type. *)
+   bv is an explicit parameter to avoid batch-mode Q-quotation type ambiguity. *)
 Triviality phi_prefix_sim_per_element[local]:
   !phis rs_b_entry bb' bb_mid bb s1 sigma prev_lbl live_in func' j bv lbl.
     j < LENGTH phis /\
@@ -6332,6 +7012,47 @@ Proof
   simp[]
 QED
 
+Triviality ssa_sim_inst_idx_update[local]:
+  !sigma s1 s2 idx.
+    ssa_sim sigma s1 s2 ==> ssa_sim sigma s1 (s2 with vs_inst_idx := idx)
+Proof
+  rw[ssa_sim_def, lookup_var_def]
+QED
+
+Triviality phi_prefix_length_eq_by_el[local]:
+  !insts n.
+    n <= LENGTH insts /\
+    (!j. j < n ==> (EL j insts).inst_opcode = PHI) /\
+    (!j. n <= j /\ j < LENGTH insts ==>
+      (EL j insts).inst_opcode <> PHI) ==>
+    phi_prefix_length insts = n
+Proof
+  Induct_on `insts`
+  >- rw[phi_prefix_length_def] >>
+  gen_tac >> Cases_on `n` >> strip_tac
+  >- (
+    `h.inst_opcode <> PHI` by (
+      qpat_x_assum `!j. 0 <= j /\ j < LENGTH (h::insts) ==> _`
+        (qspec_then `0` mp_tac) >> simp[]) >>
+    simp[phi_prefix_length_def]) >>
+  `h.inst_opcode = PHI` by (
+    qpat_x_assum `!j. j < SUC n' ==> _`
+      (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[phi_prefix_length_def] >>
+  qpat_x_assum `!n. n <= LENGTH insts /\ _ ==> phi_prefix_length insts = n`
+    (qspec_then `n'` mp_tac) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- gvs[]
+    >- (rpt strip_tac >>
+        qpat_x_assum `!j. j < SUC n' ==> _`
+          (qspec_then `SUC j` mp_tac) >> simp[])
+    >- (rpt strip_tac >>
+        qpat_x_assum `!j. SUC n' <= j /\ _ ==> _`
+          (qspec_then `SUC j` mp_tac) >> simp[])) >>
+  simp[]
+QED
+
 (* Standalone helper for runtime proof — avoids 40+ assumption context *)
 Triviality phi_runtime_from_pipeline[local]:
   !phis rs_b_entry bb bb' s1 s2 sigma live_in func' bb_mid lbl.
@@ -6347,6 +7068,9 @@ Triviality phi_runtime_from_pipeline[local]:
     (* Per-PHI output structure *)
     (!j. j < LENGTH phis ==>
          ?bv. (EL j phis).inst_outputs = [bv] /\ colon_free bv) /\
+    (* Non-PHI body after the inserted PHI prefix *)
+    (!j. LENGTH phis <= j /\ j < LENGTH bb'.bb_instructions ==>
+      (EL j bb'.bb_instructions).inst_opcode <> PHI) /\
     (* Renamed output form — from phi_refines *)
     phi_refines
       (bb_mid with bb_instructions :=
@@ -6381,43 +7105,62 @@ Triviality phi_runtime_from_pipeline[local]:
           (s2_mid.vs_halted <=> s2.vs_halted) /\
           s2_mid.vs_current_bb = s2.vs_current_bb /\
           s2_mid.vs_prev_bb = s2.vs_prev_bb /\
-          exec_block fuel ctx bb' s2 = exec_block fuel ctx bb' s2_mid
+          run_block fuel ctx bb' s2 = exec_block fuel ctx bb' s2_mid
 Proof
   rpt gen_tac >> strip_tac >>
+  `s2.vs_prev_bb = s1.vs_prev_bb` by gvs[ssa_sim_def] >>
   Cases_on `phis = []`
   >- (
-    (* Empty phis: sigma_out = sigma *)
-    qexists_tac `sigma` >> simp[rename_block_insts_def] >>
-    rpt gen_tac >> qexists_tac `s2` >> simp[]) >>
-  (* Non-empty phis: use phi_prefix_sim *)
-  `s1.vs_prev_bb <> NONE` by (first_x_assum irule >> simp[]) >>
-  `s2.vs_prev_bb = s1.vs_prev_bb` by gvs[ssa_sim_def] >>
-  `?prev_lbl. s2.vs_prev_bb = SOME prev_lbl` by
-    (Cases_on `s2.vs_prev_bb` >>
-     FULL_SIMP_TAC (srw_ss()) []) >>
-  mp_tac (REWRITE_RULE [ADD_CLAUSES]
-    (Q.SPECL [`phis`, `rs_b_entry`, `bb'`, `s2`,
-      `prev_lbl`, `sigma`, `s1`, `0`] phi_prefix_sim)) >>
+    gvs[] >>
+    qexists_tac `sigma` >>
+    rpt conj_tac >> TRY (simp[rename_block_insts_def]) >>
+    rpt gen_tac >>
+    qexists_tac `s2` >>
+    `EVERY (\inst. inst.inst_opcode <> PHI) bb'.bb_instructions` by (
+      simp[EVERY_EL] >> rpt strip_tac >>
+      qpat_x_assum `!j. 0 <= j /\ j < LENGTH bb'.bb_instructions ==> _`
+        (qspec_then `n` mp_tac) >> simp[]) >>
+    simp[run_block_no_phis_eq_exec_block] >>
+    gvs[]) >>
+  `?prev_lbl. s2.vs_prev_bb = SOME prev_lbl` by (
+    `s1.vs_prev_bb <> NONE` by (first_x_assum irule >> simp[]) >>
+    Cases_on `s2.vs_prev_bb` >> gvs[]) >>
+  mp_tac (Q.SPECL [`phis`, `rs_b_entry`, `bb'.bb_instructions`, `s2`,
+    `prev_lbl`, `sigma`, `s1`] phi_prefix_sim) >>
   impl_tac
   >- (
-    rpt conj_tac >>
-    TRY (first_assum ACCEPT_TAC) >>
-    TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-    (* Per-element bundled — 6 conjuncts via phi_prefix_sim_per_element *)
-    gen_tac >> strip_tac >>
-    (* Get bv from per-PHI output structure *)
-    qpat_assum `!j. j < LENGTH phis ==> ?bv. _`
-      (fn th => STRIP_ASSUME_TAC (UNDISCH (Q.SPEC `j` th))) >>
-    mp_tac phi_prefix_sim_per_element >>
-    disch_then (qspecl_then [`phis`, `rs_b_entry`, `bb'`, `bb_mid`, `bb`,
-      `s1`, `sigma`, `prev_lbl`, `live_in`, `func'`, `j`, `bv`, `lbl`] mp_tac) >>
-    (impl_tac >- (
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      gvs[])) >>
-    simp[]) >>
+    conj_tac >- gvs[] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- (
+      gen_tac >> strip_tac >>
+      qpat_assum `!j. j < LENGTH phis ==> ?bv. _`
+        (fn th => STRIP_ASSUME_TAC (UNDISCH (Q.SPEC `j` th))) >>
+      mp_tac phi_prefix_sim_per_element >>
+      disch_then (qspecl_then [`phis`, `rs_b_entry`, `bb'`, `bb_mid`, `bb`,
+        `s1`, `sigma`, `prev_lbl`, `live_in`, `func'`, `j`, `bv`,
+        `s1.vs_current_bb`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+      simp[]) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    first_assum ACCEPT_TAC) >>
   strip_tac >>
+  rename1 `eval_phis s2 bb'.bb_instructions = OK s2_phi` >>
   qexists_tac `sigma_out` >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >>
+  qexists_tac `s2_phi with vs_inst_idx := LENGTH phis` >>
+  `phi_prefix_length bb'.bb_instructions = LENGTH phis` by (
+    irule phi_prefix_length_eq_by_el >> simp[]) >>
+  rpt conj_tac
+  >- simp[]
+  >- (irule ssa_sim_inst_idx_update >> first_assum ACCEPT_TAC)
+  >- gvs[]
+  >- gvs[]
+  >- gvs[]
+  >- (ONCE_REWRITE_TAC[run_block_def] >> simp[])
 QED
 
 (* phi_args_ok_from_pipeline: construct phi_args_ok from pipeline
@@ -6528,14 +7271,38 @@ Proof
   disch_then (qspecl_then [`phis`, `rs_b_entry`, `bb`, `bb'`, `s1`, `s2`,
     `sigma`, `live_in`, `func'`, `bb_mid`, `bb.bb_label`] mp_tac) >>
   (impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    TRY DECIDE_TAC >>
-    TRY (
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- gvs[] >>
+    conj_tac >- (
+      rpt strip_tac >>
+      gvs[EVERY_EL, EL_APPEND1]) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- (
       gen_tac >> strip_tac >>
-      `j < LENGTH bb_mid.bb_instructions` by DECIDE_TAC >>
+      `j < LENGTH bb_mid.bb_instructions` by (
+        qpat_x_assum `j < LENGTH bb'.bb_instructions` mp_tac >> gvs[]) >>
       qpat_assum `!j. j < LENGTH bb_mid.bb_instructions ==> _`
-        (qspec_then `j` mp_tac) >> simp[EL_APPEND1] >>
-      gvs[EVERY_EL]))) >>
+        (qspec_then `j` mp_tac) >>
+      simp[EL_APPEND2] >>
+      `MEM (EL (j - LENGTH phis) bb.bb_instructions) bb.bb_instructions` by
+        (simp[MEM_EL] >> qexists_tac `j - LENGTH phis` >> DECIDE_TAC) >>
+      qpat_x_assum `!inst. MEM inst bb.bb_instructions ==> _`
+        (qspec_then `EL (j - LENGTH phis) bb.bb_instructions` mp_tac) >>
+      simp[]) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    first_assum ACCEPT_TAC)) >>
   strip_tac >>
   qexists_tac `sigma_out` >>
   (* Prove the three conjuncts *)

@@ -12,12 +12,14 @@ Ancestors
   analysisSimDefs analysisSimProps
   venomWf venomExecSemantics venomExecProofs venomInst venomInstProps venomExecProps
   passSharedDefs passSharedProps
-  stateEquiv stateEquivProps
+  stateEquiv stateEquivProps execEquivProofs
   passSimulationDefs passSimulationProps passSimulationProofs
   venomPipelineCorrect
   finite_map venomState list
   cfgAnalysisProps cfgDefs
   dfAnalyzeDefs
+Libs
+  BasicProvers
 
 Theorem sccp_function_fn_name:
   !f f'. sccp_function f = SOME f' ==> f'.fn_name = f.fn_name
@@ -133,8 +135,10 @@ Proof
   `FDOM v.vs_vars = FDOM st.vs_vars UNION
      set (EL idx bb.bb_instructions).inst_outputs` by (
     `inst_wf (EL idx bb.bb_instructions)` by
-      fs[EVERY_EL] >>
-    metis_tac[step_inst_fdom]) >>
+	      fs[EVERY_EL] >>
+	    `(EL idx bb.bb_instructions).inst_opcode ≠ PHI` by
+	      metis_tac[step_inst_ok_imp_not_phi] >>
+	    metis_tac[step_inst_fdom]) >>
   `FDOM st.vs_vars SUBSET FDOM v.vs_vars` by
     (simp[] >> simp[pred_setTheory.SUBSET_DEF]) >>
   `FDOM v.vs_vars SUBSET FDOM st'.vs_vars` by (
@@ -186,6 +190,8 @@ Proof
   Cases_on `st.vs_inst_idx = idx`
   >- (
     `inst_wf (EL idx bb.bb_instructions)` by fs[EVERY_EL] >>
+    `(EL idx bb.bb_instructions).inst_opcode ≠ PHI` by
+      metis_tac[step_inst_ok_imp_not_phi] >>
     `FDOM v'.vs_vars = FDOM st.vs_vars UNION
        set (EL idx bb.bb_instructions).inst_outputs` by
       metis_tac[step_inst_fdom] >>
@@ -240,7 +246,6 @@ Definition strict_dom_vars_defined_def:
       v IN FDOM s.vs_vars
 End
 
-(* At entry: vacuously true because entry has no strict dominator *)
 (* At entry: vacuously true because entry has no strict dominator.
    Any path from entry to entry is [entry]; a strict dominator must
    appear on it AND differ from entry — contradiction. *)
@@ -887,6 +892,8 @@ Proof
       `SUC s.vs_inst_idx < LENGTH bb.bb_instructions` by (
         irule non_terminator_not_last >> simp[]) >>
       (* Establish common facts for IH application *)
+      `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode ≠ PHI` by
+        metis_tac[step_inst_ok_imp_not_phi] >>
       `FDOM v.vs_vars = FDOM s.vs_vars UNION
          set (EL s.vs_inst_idx bb.bb_instructions).inst_outputs` by
         metis_tac[step_inst_fdom] >>
@@ -976,13 +983,9 @@ Resume sccp_exec_block_eq[nophi_mem]:
      Case split: PHI gives contradiction, non-PHI uses cond_const_sound *)
   Cases_on `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode = PHI`
   >- (
-    (* PHI + MEM x outputs: transfer maps all outputs to CL_Bottom.
-       This contradicts FLOOKUP = SOME (CL_Const c). *)
-    qpat_x_assum `FLOOKUP (sccp_transfer_inst _ _ _).sl_vals _ = SOME (CL_Const _)`
-      mp_tac >>
-    simp[sccp_transfer_inst_def] >>
-    imp_res_tac (cj 1 foldl_fupdate_bottom) >>
-    simp[])
+    (* PHI case is contradictory: step_inst_ok_imp_not_phi gives ≠ PHI,
+       but Cases_on gives = PHI *)
+    gvs[])
   >- (
     (* non-PHI + MEM x outputs: use cond_const_sound + transfer_sound *)
     `cond_const_sound
@@ -1105,6 +1108,634 @@ Proof
   metis_tac[result_equiv_trans]
 QED
 
+Triviality sccp_inst_phi_iff[local]:
+  !st inst. (sccp_inst st inst).inst_opcode = PHI <=> inst.inst_opcode = PHI
+Proof
+  rw[sccp_inst_def, LET_THM, mk_nop_inst_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[mk_nop_inst_def]
+QED
+
+Triviality phi_prefix_length_eq_by_el_phi[local]:
+  !l1 l2.
+    LENGTH l1 = LENGTH l2 /\
+    (!i. i < LENGTH l1 ==>
+      ((EL i l1).inst_opcode = PHI <=> (EL i l2).inst_opcode = PHI)) ==>
+    phi_prefix_length l1 = phi_prefix_length l2
+Proof
+  Induct >> rpt strip_tac >> Cases_on `l2` >> gvs[phi_prefix_length_def] >>
+  `h.inst_opcode = PHI <=> h'.inst_opcode = PHI` by (
+    qpat_x_assum `!i. i < SUC (LENGTH t) ==> _` (qspec_then `0` mp_tac) >>
+    simp[]) >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
+  qpat_x_assum `!l2. _` (qspec_then `t` mp_tac) >> simp[] >>
+  impl_tac >- (
+    rpt strip_tac >>
+    qpat_x_assum `!i. i < SUC (LENGTH t) ==> _` (qspec_then `SUC i` mp_tac) >>
+    simp[]) >>
+  simp[]
+QED
+
+Triviality phi_prefix_length_el_phi_sccp[local]:
+  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
+Proof
+  Induct_on `insts` >> simp[phi_prefix_length_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
+  Cases_on `i` >> gvs[phi_prefix_length_def]
+QED
+
+Triviality sccp_analysis_block_phi_prefix_length[local]:
+  !f bb.
+    phi_prefix_length
+      (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+        (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
+    phi_prefix_length bb.bb_instructions
+Proof
+  rpt strip_tac >> irule phi_prefix_length_eq_by_el_phi >>
+  simp[sccp_bt_length] >> rpt strip_tac >>
+  simp[sccp_bt_el, sccp_inst_phi_iff]
+QED
+
+Triviality sccp_analysis_block_eval_phis[local]:
+  !s f bb.
+    eval_phis s
+      (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+        (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
+    eval_phis s bb.bb_instructions
+Proof
+  rpt strip_tac >> irule EQ_SYM >> irule eval_phis_same_phi_prefix >>
+  simp[sccp_analysis_block_phi_prefix_length] >> rpt strip_tac >>
+  `i < LENGTH bb.bb_instructions` by
+    (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+       metis_tac[phi_prefix_length_le] >> decide_tac) >>
+  `((EL i bb.bb_instructions).inst_opcode = PHI)` by
+    metis_tac[phi_prefix_length_el_phi_sccp] >>
+  `EL i (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+      (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
+    sccp_inst (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label i).sl_vals
+      (EL i bb.bb_instructions)` by simp[sccp_bt_el] >>
+  simp[sccp_inst_phi_identity]
+QED
+
+Triviality strict_dom_vars_defined_eval_phis[local]:
+  !f s bb s_phi.
+    strict_dom_vars_defined f s /\
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    strict_dom_vars_defined f s_phi
+Proof
+  rw[strict_dom_vars_defined_def] >>
+  `s_phi.vs_current_bb = s.vs_current_bb` by metis_tac[eval_phis_preserves_current_bb] >>
+  `FDOM s.vs_vars SUBSET FDOM s_phi.vs_vars` by metis_tac[eval_phis_vars_grow] >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Triviality not_phi_output_of_block_imp_not_phi_output_insts2[local]:
+  !f bb x inst.
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    ~is_phi_output_of_block f.fn_blocks bb.bb_label x /\
+    MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+    ~MEM x inst.inst_outputs
+Proof
+  rpt strip_tac >> CCONTR_TAC >>
+  fs[is_phi_output_of_block_def] >> metis_tac[]
+QED
+
+Triviality sccp_phi_prefix_df_non_phi[local]:
+  !idx f bb x.
+    wf_function f /\ MEM bb f.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    idx <= phi_prefix_length bb.bb_instructions /\
+    ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+    FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+    FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x
+Proof
+  Induct >> rpt strip_tac >- simp[] >>
+  `idx < phi_prefix_length bb.bb_instructions` by simp[] >>
+  `idx < LENGTH bb.bb_instructions` by
+    (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+       metis_tac[phi_prefix_length_le] >> decide_tac) >>
+  `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by metis_tac[MEM_EL] >>
+  `~MEM x (EL idx bb.bb_instructions).inst_outputs` by (
+    CCONTR_TAC >> fs[is_phi_output_of_block_def] >>
+    metis_tac[phi_prefix_length_el_phi_sccp]) >>
+  `df_at sccp_bottom (sccp_df_analyze f) bb.bb_label (SUC idx) =
+   sccp_transfer_inst f (EL idx bb.bb_instructions)
+     (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx)` by
+    (irule sccp_intra_fwd >> simp[] >> decide_tac) >>
+  simp[] >>
+  `FLOOKUP (sccp_transfer_inst f (EL idx bb.bb_instructions)
+      (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx)).sl_vals x =
+   FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x` by
+    metis_tac[sccp_transfer_non_output_flookup] >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
+
+Triviality sccp_transfer_phi_bottom_local[local]:
+  !f inst lat y.
+    inst.inst_opcode = PHI /\ MEM y inst.inst_outputs ==>
+    FLOOKUP (sccp_transfer_inst f inst lat).sl_vals y = SOME CL_Bottom
+Proof
+  rpt strip_tac >> simp[sccp_transfer_inst_def] >>
+  metis_tac[cj 1 foldl_fupdate_bottom]
+QED
+
+Triviality sccp_phi_prefix_df_phi_bottom[local]:
+  !idx f bb k y.
+    wf_function f /\ wf_ssa f /\ MEM bb f.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    idx <= phi_prefix_length bb.bb_instructions /\
+    k < idx /\ (EL k bb.bb_instructions).inst_opcode = PHI /\
+    MEM y (EL k bb.bb_instructions).inst_outputs ==>
+    FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals y = SOME CL_Bottom
+Proof
+  Induct >> rpt strip_tac >> gvs[] >>
+  `idx < phi_prefix_length bb.bb_instructions` by simp[] >>
+  `idx < LENGTH bb.bb_instructions` by
+    (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+       metis_tac[phi_prefix_length_le] >> decide_tac) >>
+  `df_at sccp_bottom (sccp_df_analyze f) bb.bb_label (SUC idx) =
+   sccp_transfer_inst f (EL idx bb.bb_instructions)
+     (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx)` by
+    (irule sccp_intra_fwd >> simp[] >> decide_tac) >>
+  simp[] >>
+  Cases_on `k = idx`
+  >- (
+    `((EL idx bb.bb_instructions).inst_opcode = PHI)` by gvs[] >>
+    metis_tac[sccp_transfer_phi_bottom_local]) >>
+  `k < idx` by simp[] >>
+  first_x_assum (qspecl_then [`f`, `bb`, `k`, `y`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `~MEM y (EL idx bb.bb_instructions).inst_outputs` by (
+    `idx < LENGTH bb.bb_instructions` by simp[] >>
+    `k < LENGTH bb.bb_instructions` by decide_tac >>
+    `ssa_form f` by fs[wf_ssa_def] >>
+    metis_tac[ssa_no_output_overlap_inst]) >>
+  `FLOOKUP (sccp_transfer_inst f (EL idx bb.bb_instructions)
+      (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx)).sl_vals y =
+   FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals y` by
+    metis_tac[sccp_transfer_non_output_flookup] >>
+  simp[]
+QED
+
+Triviality sccp_phi_prefix_outputs_in_fdom[local]:
+  !f bb s s_phi j v.
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    j < phi_prefix_length bb.bb_instructions /\
+    MEM v (EL j bb.bb_instructions).inst_outputs ==>
+    v IN FDOM s_phi.vs_vars
+Proof
+  rpt strip_tac >>
+  irule eval_phis_outputs_in_fdom_mem >>
+  qexistsl_tac [`EL j bb.bb_instructions`, `bb.bb_instructions`, `s`] >>
+  simp[] >>
+  `MEM (EL j bb.bb_instructions)
+     (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)` by (
+    simp[MEM_EL] >> qexists_tac `j` >>
+    simp[EL_TAKE, phi_prefix_length_le]) >>
+  simp[]
+QED
+
+Triviality sccp_nophi_inv_after_eval_phis_prefix[local]:
+  !idx f bb s s_phi x c.
+    wf_function f /\ MEM bb f.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    idx <= phi_prefix_length bb.bb_instructions /\
+    bb.bb_label = s.vs_current_bb /\
+    nophi_inv f s /\
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+      SOME (CL_Const c) /\
+    x IN FDOM s_phi.vs_vars /\
+    ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+    FLOOKUP s_phi.vs_vars x = SOME c
+Proof
+  rpt strip_tac >>
+  `FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+   FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x` by (
+    irule sccp_phi_prefix_df_non_phi >> simp[]) >>
+  `FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x =
+     SOME (CL_Const c)` by fs[] >>
+  `!inst. MEM inst bb.bb_instructions ==> inst.inst_opcode = PHI ==>
+          ~MEM x inst.inst_outputs` by
+    metis_tac[not_phi_output_of_block_imp_not_phi_output_insts2] >>
+  `FLOOKUP s_phi.vs_vars x = FLOOKUP s.vs_vars x` by
+    (drule_all eval_phis_flookup_not_phi_output >> simp[]) >>
+  `x IN FDOM s.vs_vars` by (CCONTR_TAC >> fs[FLOOKUP_DEF]) >>
+  fs[nophi_inv_def] >>
+  qpat_x_assum `!x c. _ ==> FLOOKUP s.vs_vars x = SOME c`
+    (qspecl_then [`x`, `c`] mp_tac) >>
+  disch_then irule >> gvs[]
+QED
+
+Triviality sccp_nophi_inv_after_eval_phis_prefix_post[local]:
+  !idx f bb s s_phi.
+    wf_function f /\ MEM bb f.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    idx <= phi_prefix_length bb.bb_instructions /\
+    bb.bb_label = s.vs_current_bb /\
+    nophi_inv f s /\
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    !x c.
+      FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+        SOME (CL_Const c) /\
+      x IN FDOM (s_phi with vs_inst_idx := idx).vs_vars /\
+      ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+      FLOOKUP (s_phi with vs_inst_idx := idx).vs_vars x = SOME c
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s`, `s_phi`, `x`, `c`]
+    sccp_nophi_inv_after_eval_phis_prefix) >>
+  gvs[]
+QED
+
+Triviality sccp_nophi_coverage_after_eval_phis_prefix_post[local]:
+  !idx f bb s s_phi.
+    wf_function f /\ MEM bb f.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    idx <= phi_prefix_length bb.bb_instructions /\
+    bb.bb_label = s.vs_current_bb /\
+    nophi_inv f s /\
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    !x.
+      x IN FDOM (s_phi with vs_inst_idx := idx).vs_vars /\
+      ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+      x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals /\
+      FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x
+        <> SOME CL_Top
+Proof
+  rpt strip_tac >>
+  `FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+   FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label 0).sl_vals x` by (
+    irule sccp_phi_prefix_df_non_phi >> simp[]) >>
+  `!inst. MEM inst bb.bb_instructions ==> inst.inst_opcode = PHI ==>
+          ~MEM x inst.inst_outputs` by
+    metis_tac[not_phi_output_of_block_imp_not_phi_output_insts2] >>
+  `FLOOKUP s_phi.vs_vars x = FLOOKUP s.vs_vars x` by
+    (drule_all eval_phis_flookup_not_phi_output >> simp[]) >>
+  `x IN FDOM s.vs_vars` by (CCONTR_TAC >> fs[FLOOKUP_DEF]) >>
+  fs[nophi_inv_def] >>
+  `x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) s.vs_current_bb 0).sl_vals /\
+   FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) s.vs_current_bb 0).sl_vals x <> SOME CL_Top` by (
+    qpat_x_assum `!x. x IN FDOM s.vs_vars /\ _ ==> _`
+      (qspec_then `x` mp_tac) >>
+    gvs[]) >>
+  ALL_TAC >- (
+    CCONTR_TAC >> gvs[flookup_thm, finite_mapTheory.FLOOKUP_DEF] >>
+    qpat_x_assum `!x'. x' IN FDOM s.vs_vars /\ _ ==> _`
+      (qspec_then `x` mp_tac) >>
+    gvs[]) >>
+  metis_tac[]
+QED
+
+Triviality sccp_phi_prefix_df_phi_bottom_post[local]:
+  !idx f bb s_phi.
+    wf_function f /\ wf_ssa f /\ MEM bb f.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb /\
+    idx <= phi_prefix_length bb.bb_instructions ==>
+    !k y. k < (s_phi with vs_inst_idx := idx).vs_inst_idx /\
+      (EL k bb.bb_instructions).inst_opcode = PHI /\
+      MEM y (EL k bb.bb_instructions).inst_outputs ==>
+      FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals y = SOME CL_Bottom
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`idx`, `f`, `bb`, `k`, `y`]
+    sccp_phi_prefix_df_phi_bottom) >>
+  gvs[]
+QED
+
+Triviality sccp_phi_prefix_outputs_in_fdom_post[local]:
+  !idx f bb s s_phi.
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    idx <= phi_prefix_length bb.bb_instructions ==>
+    !j v. j < (s_phi with vs_inst_idx := idx).vs_inst_idx /\
+      MEM v (EL j bb.bb_instructions).inst_outputs ==>
+      v IN FDOM (s_phi with vs_inst_idx := idx).vs_vars
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`f`, `bb`, `s`, `s_phi`, `j`, `v`]
+    sccp_phi_prefix_outputs_in_fdom) >>
+  gvs[]
+QED
+
+Triviality sccp_exec_block_eq_after_eval_phis[local]:
+  !fuel ctx f bb s s_phi.
+    wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
+    MEM bb f.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    strict_dom_vars_defined f s /\ nophi_inv f s /\
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb ==>
+    exec_block fuel ctx bb
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+    exec_block fuel ctx
+      (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+        (\lat inst. [sccp_inst lat.sl_vals inst]) bb)
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `idx = phi_prefix_length bb.bb_instructions` >>
+  Cases_on `idx < LENGTH bb.bb_instructions`
+  >- (
+    `bb.bb_label = (s_phi with vs_inst_idx := idx).vs_current_bb` by
+      (drule eval_phis_preserves_current_bb >> simp[]) >>
+    `strict_dom_vars_defined f (s_phi with vs_inst_idx := idx)` by (
+      drule_all strict_dom_vars_defined_eval_phis >>
+      simp[strict_dom_vars_defined_def]) >>
+    `!x c.
+       FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+         SOME (CL_Const c) /\
+       x IN FDOM (s_phi with vs_inst_idx := idx).vs_vars /\
+       ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+       FLOOKUP (s_phi with vs_inst_idx := idx).vs_vars x = SOME c` by (
+      mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s`, `s_phi`]
+        sccp_nophi_inv_after_eval_phis_prefix_post) >>
+      gvs[Abbr `idx`]) >>
+    `!k y. k < (s_phi with vs_inst_idx := idx).vs_inst_idx /\
+       (EL k bb.bb_instructions).inst_opcode = PHI /\
+       MEM y (EL k bb.bb_instructions).inst_outputs ==>
+       FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals y = SOME CL_Bottom` by (
+      mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s_phi`]
+        sccp_phi_prefix_df_phi_bottom_post) >>
+      gvs[Abbr `idx`]) >>
+    `!j v. j < (s_phi with vs_inst_idx := idx).vs_inst_idx /\
+       MEM v (EL j bb.bb_instructions).inst_outputs ==>
+       v IN FDOM (s_phi with vs_inst_idx := idx).vs_vars` by (
+      mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s`, `s_phi`]
+        sccp_phi_prefix_outputs_in_fdom_post) >>
+      gvs[Abbr `idx`]) >>
+    irule sccp_exec_block_eq >> gvs[Abbr `idx`] >>
+    rpt conj_tac
+    >- (
+      rpt strip_tac >>
+      qpat_x_assum `!k y. _ ==> FLOOKUP _ y = SOME CL_Bottom`
+        (qspecl_then [`k`, `y`] mp_tac) >>
+      simp[])
+    >- (
+      rpt strip_tac >>
+      qpat_x_assum `!j v. _ ==> v IN FDOM s_phi.vs_vars`
+        (qspecl_then [`j`, `v`] mp_tac) >>
+      simp[]))
+  >- (
+    `idx = LENGTH bb.bb_instructions` by
+      (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+         metis_tac[phi_prefix_length_le] >> simp[Abbr `idx`] >> decide_tac) >>
+    ONCE_REWRITE_TAC[exec_block_def] >>
+    simp[get_instruction_def, sccp_bt_length, Abbr `idx`])
+QED
+
+Triviality result_equiv_refl_local[local]:
+  !vars r. result_equiv vars r r
+Proof
+  Cases_on `r` >> simp[result_equiv_def, state_equiv_refl, execution_equiv_refl]
+QED
+
+Triviality sccp_analysis_block_well_formed[local]:
+  !f bb.
+    bb_well_formed bb ==>
+    bb_well_formed
+      (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+        (\lat inst. [sccp_inst lat.sl_vals inst]) bb)
+Proof
+  rpt strip_tac >>
+  `LENGTH (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+      (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
+   LENGTH bb.bb_instructions` by simp[sccp_bt_length] >>
+  fs[bb_well_formed_def] >>
+  simp[bb_well_formed_def] >> rpt conj_tac
+  >- (CCONTR_TAC >> gvs[])
+  >- (
+    `LAST (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+        (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
+     EL (PRE (LENGTH bb.bb_instructions))
+       (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+        (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions` by (
+      `(analysis_block_transform sccp_bottom (sccp_df_analyze f)
+          (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions <> []` by
+        (CCONTR_TAC >> gvs[]) >>
+      `PRE (LENGTH (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+          (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions) =
+       PRE (LENGTH bb.bb_instructions)` by simp[] >>
+      gvs[LAST_EL]) >>
+    pop_assum SUBST1_TAC >>
+    `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+      (Cases_on `bb.bb_instructions` >> gvs[]) >>
+    simp[sccp_bt_el, sccp_inst_is_terminator] >>
+    `LAST bb.bb_instructions =
+     EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions` by
+      (simp[LAST_EL] >> Cases_on `bb.bb_instructions` >> gvs[]) >>
+    gvs[])
+  >- (
+    rpt strip_tac >>
+    `is_terminator (EL i bb.bb_instructions).inst_opcode` by
+      gvs[sccp_bt_el, sccp_inst_is_terminator] >>
+    qpat_x_assum `!i. i < LENGTH bb.bb_instructions /\
+        is_terminator (EL i bb.bb_instructions).inst_opcode ==> _`
+      (qspec_then `i` mp_tac) >>
+    simp[])
+  >- (
+    rpt strip_tac >>
+    `i < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions` by simp[] >>
+    `(EL j bb.bb_instructions).inst_opcode = PHI` by
+      gvs[sccp_bt_el, sccp_inst_phi_iff] >>
+    `((EL i bb.bb_instructions).inst_opcode = PHI)` by (
+      qpat_x_assum `!i j. i < j /\ j < LENGTH bb.bb_instructions /\
+        (EL j bb.bb_instructions).inst_opcode = PHI ==> _`
+        (qspecl_then [`i`, `j`] mp_tac) >> simp[]) >>
+    simp[sccp_bt_el, sccp_inst_phi_iff])
+QED
+
+Triviality sccp_run_block_analysis_equiv[local]:
+  !fuel ctx f bb s.
+    MEM bb f.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+    MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
+    nophi_inv f s /\ strict_dom_vars_defined f s /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb ==>
+    result_equiv {}
+      (run_block fuel ctx bb s)
+      (run_block fuel ctx
+        (analysis_block_transform sccp_bottom (sccp_df_analyze f)
+          (\lat inst. [sccp_inst lat.sl_vals inst]) bb) s)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `abt_bb = analysis_block_transform sccp_bottom
+    (sccp_df_analyze f) (\lat inst. [sccp_inst lat.sl_vals inst]) bb` >>
+  match_mp_tac (Q.SPECL [`{}`, `fuel`, `ctx`, `bb`, `abt_bb`, `s`]
+    run_block_lift_result_equiv) >>
+  simp[Abbr `abt_bb`, sccp_analysis_block_phi_prefix_length,
+       sccp_analysis_block_eval_phis] >>
+  rpt strip_tac >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `f`, `bb`, `s`, `s_phi`]
+    sccp_exec_block_eq_after_eval_phis) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  pop_assum SUBST1_TAC >>
+  simp[result_equiv_refl_local]
+QED
+
+Triviality sccp_run_block_ctx_change[local]:
+  !fuel ctx bb s.
+    (!f' callee_s.
+      MEM f' ctx.ctx_functions /\ callee_s.vs_inst_idx = 0 /\
+      FDOM callee_s.vs_vars = EMPTY /\
+      fn_entry_label f' = SOME callee_s.vs_current_bb ==>
+      result_equiv {}
+        (run_blocks fuel ctx f' callee_s)
+        (run_blocks fuel (sccp_context ctx) (sccp_fn f') callee_s)) ==>
+    result_equiv {}
+      (run_block fuel ctx bb s)
+      (run_block fuel (sccp_context ctx) bb s)
+Proof
+  rpt strip_tac >> ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[result_equiv_def] >>
+  irule exec_block_ctx_change >> simp[]
+QED
+
+Triviality sccp_run_block_result_equiv_some[local]:
+  !fuel ctx f bb s.
+    MEM bb f.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+    s.vs_inst_idx = 0 /\ MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre /\
+    wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
+    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+    nophi_inv f s /\ strict_dom_vars_defined f s /\
+    sccp_function f <> NONE /\
+    (!f' callee_s.
+      MEM f' ctx.ctx_functions /\ callee_s.vs_inst_idx = 0 /\
+      FDOM callee_s.vs_vars = EMPTY /\
+      fn_entry_label f' = SOME callee_s.vs_current_bb ==>
+      result_equiv {}
+        (run_blocks fuel ctx f' callee_s)
+        (run_blocks fuel (sccp_context ctx) (sccp_fn f') callee_s)) ==>
+    result_equiv {}
+      (run_block fuel ctx bb s)
+      (run_block fuel (sccp_context ctx) (sccp_transform_block f bb) s)
+Proof
+  rpt strip_tac >>
+  `lookup_block bb.bb_label f.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+  qabbrev_tac `abt_bb = analysis_block_transform sccp_bottom
+    (sccp_df_analyze f) (\lat inst. [sccp_inst lat.sl_vals inst]) bb` >>
+  `result_equiv {} (run_block fuel ctx bb s) (run_block fuel ctx abt_bb s)` by (
+    qunabbrev_tac `abt_bb` >>
+    irule sccp_run_block_analysis_equiv >> simp[]) >>
+  `result_equiv {} (run_block fuel ctx abt_bb s)
+     (run_block fuel ctx (clear_nops_block abt_bb) s)` by (
+    irule clear_nops_run_block_equiv >>
+    qunabbrev_tac `abt_bb` >>
+    irule sccp_analysis_block_well_formed >> simp[]) >>
+  `sccp_transform_block f bb = clear_nops_block abt_bb` by
+    simp[Abbr `abt_bb`, sccp_transform_block_def] >>
+  `result_equiv {} (run_block fuel ctx (clear_nops_block abt_bb) s)
+     (run_block fuel (sccp_context ctx) (clear_nops_block abt_bb) s)` by
+    (irule sccp_run_block_ctx_change >> simp[]) >>
+  metis_tac[result_equiv_trans]
+QED
+
+Triviality run_block_fdom_mono_local[local]:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' /\
+    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions ==>
+    FDOM s.vs_vars SUBSET FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK s_phi` >> strip_tac >>
+  `FDOM s.vs_vars SUBSET FDOM s_phi.vs_vars` by
+    metis_tac[eval_phis_vars_grow] >>
+  `FDOM (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_vars
+     SUBSET FDOM s'.vs_vars` by
+    metis_tac[exec_block_fdom_mono] >>
+  gvs[pred_setTheory.SUBSET_DEF]
+QED
+
+Triviality run_block_outputs_in_fdom_local[local]:
+  !fuel ctx bb s s' idx v.
+    run_block fuel ctx bb s = OK s' /\
+    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+    idx < LENGTH bb.bb_instructions /\
+    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
+    MEM v (EL idx bb.bb_instructions).inst_outputs ==>
+    v IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK s_phi` >> strip_tac >>
+  Cases_on `idx < phi_prefix_length bb.bb_instructions`
+  >- (
+    `v IN FDOM s_phi.vs_vars` by
+      metis_tac[sccp_phi_prefix_outputs_in_fdom] >>
+    `FDOM (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_vars
+       SUBSET FDOM s'.vs_vars` by
+      metis_tac[exec_block_fdom_mono] >>
+    gvs[pred_setTheory.SUBSET_DEF])
+  >- (
+    `phi_prefix_length bb.bb_instructions <= idx` by simp[] >>
+    mp_tac (Q.SPECL [`bb`, `idx`, `v`,
+      `LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
+      `fuel`, `ctx`,
+      `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `s'`]
+      exec_block_output_in_fdom_aux) >>
+    simp[])
+QED
+
+Triviality strict_dom_vars_defined_preserved_run_block[local]:
+  !f bb s s' fuel ctx.
+    wf_function f /\ ssa_form f /\
+    MEM bb f.fn_blocks /\
+    bb.bb_label = s.vs_current_bb /\
+    run_block fuel ctx bb s = OK s' /\
+    s.vs_inst_idx = 0 /\
+    ~s'.vs_halted /\
+    strict_dom_vars_defined f s /\
+    fn_reachable f s.vs_current_bb /\
+    bb_well_formed bb /\
+    EVERY inst_wf bb.bb_instructions ==>
+    strict_dom_vars_defined f s'
+Proof
+  rw[strict_dom_vars_defined_def] >> rpt strip_tac >>
+  Cases_on `d_bb.bb_label = s.vs_current_bb`
+  >- (
+    `d_bb.bb_label = bb.bb_label` by simp[] >>
+    `d_bb = bb` by metis_tac[same_label_same_block] >>
+    gvs[] >>
+    `?idx. idx < LENGTH bb.bb_instructions /\
+           EL idx bb.bb_instructions = d_inst` by
+      metis_tac[MEM_EL] >>
+    `~is_terminator d_inst.inst_opcode` by (
+      spose_not_then assume_tac >>
+      `d_inst.inst_outputs = []` by
+        metis_tac[terminator_no_outputs, EVERY_MEM] >>
+      fs[]) >>
+    irule run_block_outputs_in_fdom_local >>
+    qexistsl_tac [`bb`, `ctx`, `fuel`, `idx`, `s`] >> simp[])
+  >- (
+    `MEM s'.vs_current_bb (bb_succs bb)` by (
+      mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `s'`]
+        run_block_current_bb_in_succs) >>
+      simp[] >> disch_then irule >>
+      fs[bb_well_formed_def] >>
+      rpt strip_tac >> spose_not_then assume_tac >>
+      res_tac >> fs[]) >>
+    `fn_cfg_edge f s.vs_current_bb s'.vs_current_bb` by
+      (simp[fn_cfg_edge_def] >> metis_tac[]) >>
+    `fn_dominates f d_bb.bb_label s.vs_current_bb` by
+      metis_tac[fn_dominates_predecessor] >>
+    `v IN FDOM s.vs_vars` by metis_tac[] >>
+    `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
+      metis_tac[run_block_fdom_mono_local] >>
+    metis_tac[pred_setTheory.SUBSET_DEF])
+QED
+
 (* Main theorem: result_equiv {} at every fuel, unconditionally.
    Key improvement: no Error∨ escape, enabling direct pass_correct. *)
 Theorem sccp_run_blocks_equiv:
@@ -1124,10 +1755,10 @@ Proof
   Induct >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
   >- (
     (* Base: fuel = 0 — both return Error "out of fuel" *)
-    ONCE_REWRITE_TAC[run_blocks_def] >> simp[result_equiv_def])
+    simp[run_blocks_def, result_equiv_def])
   >>
   (* Inductive step *)
-  ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
+  ONCE_REWRITE_TAC[run_blocks_unfold] >> simp[] >>
   Cases_on `lookup_block s.vs_current_bb f.fn_blocks`
   >- (
     (* NONE — both return Error "block not found" *)
@@ -1180,51 +1811,109 @@ Proof
     qpat_assum `!f' s'. MEM f' ctx.ctx_functions /\
       s'.vs_inst_idx = 0 /\ nophi_inv f' s' /\ _ ==> _`
       (qspecl_then [`f'`, `callee_s`] mp_tac) >> simp[]) >>
-  (* Establish result_equiv for the block *)
-  `result_equiv {} (exec_block fuel ctx bb s)
-    (exec_block fuel (sccp_context ctx) bt_bb s)` by (
+  (* Establish result_equiv for the run_block wrapper. *)
+  `result_equiv {} (run_block fuel ctx bb s)
+    (run_block fuel (sccp_context ctx) bt_bb s)` by (
     Cases_on `sccp_function f`
     >- (
-      (* NONE: bt_bb = bb, just ctx change *)
       `bt_bb = bb` by simp[Abbr `bt_bb`] >>
-      simp[] >> irule exec_block_ctx_change >>
+      simp[] >> irule sccp_run_block_ctx_change >>
       first_x_assum ACCEPT_TAC)
     >- (
-      (* SOME: use extracted helper *)
       `bt_bb = sccp_transform_block f bb` by simp[Abbr `bt_bb`] >>
-      simp[] >> irule sccp_block_result_equiv_some >> simp[] >>
+      simp[] >> irule sccp_run_block_result_equiv_some >> simp[] >>
       first_x_assum ACCEPT_TAC)) >>
-  (* Case split on original block result *)
-  Cases_on `exec_block fuel ctx bb s` >>
-  Cases_on `exec_block fuel (sccp_context ctx) bt_bb s` >>
+  (* Case split on original block result. *)
+  Cases_on `run_block fuel ctx bb s` >>
+  Cases_on `run_block fuel (sccp_context ctx) bt_bb s` >>
   fs[result_equiv_def]
   >- (
-    (* OK / OK — state_equiv {} implies equality, then recurse *)
+    (* OK / OK — state_equiv {} implies equality, then recurse. *)
     imp_res_tac state_equiv_empty_eq >> BasicProvers.VAR_EQ_TAC >>
-    rename1 `exec_block fuel ctx bb s = OK s'` >>
+    rename1 `run_block fuel ctx bb s = OK s'` >>
     Cases_on `s'.vs_halted` >> simp[]
     >- simp[result_equiv_def, execution_equiv_refl]
     >>
-    `s'.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
+    `s'.vs_inst_idx = 0` by metis_tac[run_block_OK_inst_idx_0] >>
     `nophi_inv f s'` by (
-      simp[nophi_inv_def] >>
-      mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `s'`]
-        sccp_cross_block_inv) >>
-      simp[] >> (impl_tac >- fs[nophi_inv_def]) >> simp[]) >>
+      qpat_x_assum `run_block_entry fuel ctx bb s = OK s'` mp_tac >>
+      ONCE_REWRITE_TAC[run_block_def] >>
+      DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+      gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK s_phi` >> strip_tac >>
+      qabbrev_tac `idx = phi_prefix_length bb.bb_instructions` >>
+      `idx <= PRE (LENGTH bb.bb_instructions)` by (
+        `idx < LENGTH bb.bb_instructions` by (
+          qunabbrev_tac `idx` >>
+          CCONTR_TAC >>
+          `LENGTH bb.bb_instructions <= phi_prefix_length bb.bb_instructions` by simp[] >>
+          `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+            simp[phi_prefix_length_le] >>
+          `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by decide_tac >>
+          fs[bb_well_formed_def] >>
+          `~is_terminator PHI` by simp[is_terminator_def] >>
+          `is_terminator (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode` by
+            metis_tac[LAST_EL] >>
+          `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
+            (Cases_on `bb.bb_instructions` >> fs[]) >>
+          metis_tac[phi_prefix_length_el_phi_sccp]) >>
+        decide_tac) >>
+      `!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
+             SOME (CL_Const c) /\
+             x IN FDOM (s_phi with vs_inst_idx := idx).vs_vars /\
+             ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+             FLOOKUP (s_phi with vs_inst_idx := idx).vs_vars x = SOME c` by (
+        mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s`, `s_phi`]
+          sccp_nophi_inv_after_eval_phis_prefix_post) >>
+        gvs[Abbr `idx`]) >>
+      `!k y. k < (s_phi with vs_inst_idx := idx).vs_inst_idx /\
+             k < LENGTH bb.bb_instructions /\
+             (EL k bb.bb_instructions).inst_opcode = PHI /\
+             MEM y (EL k bb.bb_instructions).inst_outputs ==>
+             FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals y = SOME CL_Bottom` by (
+        rpt strip_tac >>
+        mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s_phi`]
+          sccp_phi_prefix_df_phi_bottom_post) >>
+        impl_tac >- gvs[Abbr `idx`] >>
+        disch_then (qspecl_then [`k`, `y`] mp_tac) >>
+        gvs[]) >>
+      `!x. x IN FDOM (s_phi with vs_inst_idx := idx).vs_vars /\
+           ~is_phi_output_of_block f.fn_blocks bb.bb_label x ==>
+           x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals /\
+           FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x <> SOME CL_Top` by (
+        mp_tac (Q.SPECL [`idx`, `f`, `bb`, `s`, `s_phi`]
+          sccp_nophi_coverage_after_eval_phis_prefix_post) >>
+        gvs[Abbr `idx`]) >>
+      `s_phi.vs_current_bb = s.vs_current_bb` by
+        metis_tac[eval_phis_preserves_current_bb] >>
+      `(!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) s'.vs_current_bb 0).sl_vals x =
+                SOME (CL_Const c) /\
+              x IN FDOM s'.vs_vars /\
+              ~is_phi_output_of_block f.fn_blocks s'.vs_current_bb x ==>
+              FLOOKUP s'.vs_vars x = SOME c) /\
+       (!x. x IN FDOM s'.vs_vars /\
+            ~is_phi_output_of_block f.fn_blocks s'.vs_current_bb x ==>
+            x IN FDOM (df_at sccp_bottom (sccp_df_analyze f) s'.vs_current_bb 0).sl_vals /\
+            FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) s'.vs_current_bb 0).sl_vals x <> SOME CL_Top) /\
+       MEM s'.vs_current_bb (cfg_analyze f).cfg_dfs_pre` by (
+        mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`,
+          `s_phi with vs_inst_idx := idx`, `s'`] sccp_cross_block_inv) >>
+        impl_tac >- (rpt conj_tac >> gvs[Abbr `idx`] >> metis_tac[]) >>
+        simp[]) >>
+      gvs[nophi_inv_def]) >>
     `strict_dom_vars_defined f s'` by (
       mp_tac (Q.SPECL [`f`, `bb`, `s`, `s'`, `fuel`, `ctx`]
-        strict_dom_vars_defined_preserved) >>
+        strict_dom_vars_defined_preserved_run_block) >>
       (impl_tac >- fs[wf_ssa_def]) >> simp[]) >>
     `MEM s'.vs_current_bb (bb_succs bb)` by (
       mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `s'`]
-        exec_block_current_bb_in_succs) >>
+        run_block_current_bb_in_succs) >>
       simp[] >> disch_then irule >>
       fs[bb_well_formed_def] >>
       rpt strip_tac >> CCONTR_TAC >> fs[] >> res_tac >> fs[]) >>
     `fn_reachable f s'.vs_current_bb` by (
       irule fn_reachable_step >> qexists_tac `s.vs_current_bb` >> simp[] >>
       simp[fn_cfg_edge_def] >> qexists_tac `bb` >> simp[]) >>
-    (* Apply the specialized IH (not the callee fact) *)
+    (* Apply the specialized IH (not the callee fact). *)
     qpat_assum `!f' s'. MEM f' ctx.ctx_functions /\
       s'.vs_inst_idx = 0 /\ nophi_inv f' s' /\ _ ==> _`
       (qspecl_then [`f`, `s'`] mp_tac) >>

@@ -4,9 +4,11 @@
  * Per-block resolving_block_sim lifts to function-level pass_correct.
  *
  * TOP-LEVEL:
- *   resolving_block_sim_function — the main lifting theorem
+ *   resolving_block_sim_function — per-block sim ⟹ fn-level termination equiv + lift_result
  *   resolves_to_mono             — monotonicity: n ≤ m ⟹ resolves_to n ⟹ resolves_to m
  *   resolves_to_lift_result      — lift_result implies resolves_to 0
+ *   run_blocks_fuel_mono         — terminated run_blocks is stable under added fuel
+ *   run_blocks_deterministic     — terminating runs at different fuels give identical results
  *)
 
 Theory crossBlockSimProps
@@ -71,10 +73,10 @@ Theorem resolving_block_sim_function:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (* Per-block simulation with resolution *)
     (!bb fuel ctx s.
-       MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 ==>
+       MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
        resolving_block_sim R_ok R_term fn.fn_blocks fn'.fn_blocks
-         (exec_block fuel ctx bb s)
-         (exec_block fuel ctx (bt bb) s)) /\
+         (run_block fuel ctx bb s)
+         (run_block fuel ctx (bt bb) s)) /\
     (* Operand agreement for state equiv propagation through original fn *)
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\

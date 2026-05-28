@@ -9,7 +9,7 @@ Ancestors
   sccpProofsBase
   analysisSimDefs analysisSimProps analysisSimProofsBase
   sccpDefs sccpSound sccpConvergence
-  venomWf venomExecSemantics venomInst
+  venomWf venomExecSemantics venomExecProofs venomInst
   dfAnalyzeDefs dfAnalyzeProps
   cfgAnalysisProps cfgDefs
   passSharedDefs passSharedProps venomInstProps venomExecProps
@@ -47,7 +47,7 @@ Definition nophi_inv_def:
                   s.vs_current_bb 0).sl_vals x <> SOME CL_Top)
 End
 
-(* Entry state trivially satisfies nophi invariant *)
+(* An entry state with empty variables satisfies the nophi invariant *)
 Theorem nophi_inv_entry:
   !f s.
     fn_entry_label f = SOME s.vs_current_bb /\
@@ -59,117 +59,105 @@ Proof
   metis_tac[entry_label_in_dfs_pre]
 QED
 
-(* Function-level lift_result via direct fuel induction *)
-Theorem sccp_function_lift_result:
-  !f.
-    wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
-    ~sccp_has_static_assertion_failure (sccp_df_analyze f) f ==>
-    !fuel ctx s.
-      s.vs_inst_idx = 0 /\
-      nophi_inv f s ==>
-      (?e. run_blocks fuel ctx f s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_blocks fuel ctx f s)
-        (run_blocks fuel ctx
-          (analysis_function_transform sccp_bottom (sccp_df_analyze f)
-            (\lat inst. [sccp_inst lat.sl_vals inst]) f) s)
+(* eval_phis_preserves_current_bb is now in venomExecProofsTheory *)
+(* eval_one_phi returns an output that is a member of inst.inst_outputs *)
+Triviality eval_one_phi_output_mem[local]:
+  !s inst out v. eval_one_phi s inst = SOME (out,v) ==> MEM out inst.inst_outputs
 Proof
-  rpt gen_tac >> strip_tac >>
-  Induct_on `fuel`
-  >- (
-    (* Base: fuel = 0 => Error "out of fuel" *)
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[eval_one_phi_def] >>
+  Cases_on `t` >> gvs[eval_one_phi_def] >>
+  Cases_on `s.vs_prev_bb` >> gvs[eval_one_phi_def] >>
+  gvs[AllCaseEqs()]
+QED
+(* eval_phis preserves lookup for variables that are not PHI outputs
+   of any instruction in the list. *)
+Triviality eval_phis_flookup_not_phi_output[local]:
+  !s insts x s'.
+    eval_phis s insts = OK s' /\
+    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
+    FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
+Proof
+  Induct_on `insts`
+  >- (rpt strip_tac >> fs[eval_phis_def])
+  >> rpt strip_tac >> fs[eval_phis_def]
+  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
+  >> Cases_on `eval_one_phi s h` >> fs[]
+  >> PairCases_on `x'` >> fs[]
+  >> Cases_on `eval_phis s insts` >> fs[update_var_def, FLOOKUP_UPDATE]
+  >> `FLOOKUP v.vs_vars x = FLOOKUP s.vs_vars x`
+     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒
+           FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x`
+         >- metis_tac[] >> metis_tac[])
+  >> `x'0 ≠ x` by (
+       CCONTR_TAC >> fs[] >>
+       first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
+       metis_tac[eval_one_phi_output_mem])
+  >> `s' = v with vs_vars := v.vs_vars⟨x'0 ↦ x'1⟩` by metis_tac[]
+  >> fs[FLOOKUP_UPDATE]
+QED
+(* eval_phis preserves FDOM for variables that are not PHI outputs *)
+Triviality eval_phis_fdom_not_phi_output[local]:
+  !s insts x s'.
+    eval_phis s insts = OK s' /\
+    x IN FDOM s.vs_vars /\
+    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
+    x IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  imp_res_tac eval_phis_flookup_not_phi_output >>
+  fs[TO_FLOOKUP]
+QED
+
+(* A variable that is not a PHI output of the block is not a PHI output
+   of any instruction in the block's instruction list. *)
+Triviality not_phi_output_of_block_imp_not_phi_output_insts[local]:
+  !bbs lbl x bb.
+    lookup_block lbl bbs = SOME bb /\
+    ~is_phi_output_of_block bbs lbl x ==>
+    !inst. MEM inst bb.bb_instructions ==>
+           inst.inst_opcode = PHI ==>
+           ~MEM x inst.inst_outputs
+Proof
+  rpt strip_tac >>
+  CCONTR_TAC >>
+  fs[is_phi_output_of_block_def] >>
+  metis_tac[]
+QED
+
+(* eval_phis preserves the nophi invariant when processing a block's instructions *)
+Triviality eval_phis_preserves_nophi_inv[local]:
+  !f s s' bb.
+    nophi_inv f s /\
+    eval_phis s bb.bb_instructions = OK s' /\
+    s.vs_current_bb = bb.bb_label /\
+    lookup_block bb.bb_label f.fn_blocks = SOME bb ==>
+    nophi_inv f s'
+Proof
+  rpt strip_tac >>
+  fs[nophi_inv_def] >>
+  `s'.vs_current_bb = s.vs_current_bb` by metis_tac[eval_phis_preserves_current_bb] >>
+  conj_tac >- simp[] >>
+  conj_tac >- (
     rpt strip_tac >>
-    ONCE_REWRITE_TAC[run_blocks_def] >> simp[])
-  >>
+    `!inst. MEM inst bb.bb_instructions ==>
+            inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs`
+      by metis_tac[not_phi_output_of_block_imp_not_phi_output_insts] >>
+    `FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x`
+      by metis_tac[eval_phis_flookup_not_phi_output] >>
+    `FLOOKUP s.vs_vars x = SOME c` by metis_tac[TO_FLOOKUP] >>
+    simp[]) >>
   rpt strip_tac >>
-  ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
-  qabbrev_tac `fn' = analysis_function_transform sccp_bottom (sccp_df_analyze f)
-    (\lat inst. [sccp_inst lat.sl_vals inst]) f` >>
-  Cases_on `lookup_block s.vs_current_bb f.fn_blocks`
-  >- simp[]
-  >>
-  rename1 `_ = SOME bb` >>
-  `MEM bb f.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
-  (* Lookup in transformed function *)
-  `lookup_block s.vs_current_bb fn'.fn_blocks =
-    SOME (analysis_block_transform sccp_bottom (sccp_df_analyze f)
-      (\lat inst. [sccp_inst lat.sl_vals inst]) bb)` by (
-    simp[Abbr `fn'`, analysis_function_transform_def,
-         function_map_transform_def] >>
-    `lookup_block s.vs_current_bb (MAP
-       (analysis_block_transform sccp_bottom (sccp_df_analyze f)
-         (\lat inst. [sccp_inst lat.sl_vals inst])) f.fn_blocks) =
-     OPTION_MAP (analysis_block_transform sccp_bottom (sccp_df_analyze f)
-         (\lat inst. [sccp_inst lat.sl_vals inst]))
-       (lookup_block s.vs_current_bb f.fn_blocks)` suffices_by simp[] >>
-    irule lookup_block_map_proof >>
-    simp[abt_label]) >>
-  qabbrev_tac `bt_bb = analysis_block_transform sccp_bottom (sccp_df_analyze f)
-    (\lat inst. [sccp_inst lat.sl_vals inst]) bb` >>
-  simp[] >>
-  (* Per-block simulation *)
-  `MEM bb.bb_label (cfg_analyze f).cfg_dfs_pre` by
-    fs[nophi_inv_def] >>
-  mp_tac (Q.SPECL [`f`, `bb`] sccp_per_block_sim_nophi) >>
-  simp[] >>
-  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
-  impl_tac >- fs[nophi_inv_def] >>
-  strip_tac
-  >- simp[]
-  >>
-  (* lift_result for exec_block *)
-  Cases_on `exec_block fuel ctx bb s`
-  >> gvs[lift_result_def]
-  >- (
-    (* exec_block = OK v *)
-    rename1 `exec_block fuel ctx bb s = OK v` >>
-    Cases_on `exec_block fuel ctx bt_bb s`
-    >> gvs[lift_result_def, Abbr `bt_bb`]
-    >- (
-      (* Both OK *)
-      rename1 `state_equiv {} v v'` >>
-      `v = v'` by metis_tac[state_equiv_empty_eq] >>
-      gvs[] >>
-      Cases_on `v.vs_halted`
-      >- (
-        simp[lift_result_def] >>
-        fs[state_equiv_def])
-      >>
-      simp[] >>
-      `v.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
-      `nophi_inv f v` by (
-        simp[nophi_inv_def] >>
-        mp_tac (Q.SPECL [`f`, `bb`, `fuel`, `ctx`, `s`, `v`]
-          sccp_cross_block_inv) >>
-        simp[] >>
-        impl_tac >- fs[nophi_inv_def] >>
-        strip_tac >> simp[]) >>
-      first_x_assum (qspecl_then [`ctx`, `v`] mp_tac) >>
-      simp[]))
-  >> (
-    Cases_on `exec_block fuel ctx bt_bb s`
-    >> gvs[lift_result_def, Abbr `bt_bb`])
+  `!inst. MEM inst bb.bb_instructions ==>
+          inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs`
+    by metis_tac[not_phi_output_of_block_imp_not_phi_output_insts] >>
+  `FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x`
+    by metis_tac[eval_phis_flookup_not_phi_output] >>
+  `x IN FDOM s.vs_vars` by metis_tac[TO_FLOOKUP] >>
+  metis_tac[]
 QED
 
-(* Wrapper: sccp_function_lift_result with original signature *)
-Theorem sccp_function_lift_result_entry[local]:
-  !f.
-    wf_function f /\ wf_ssa f /\ fn_inst_wf f /\
-    ~sccp_has_static_assertion_failure (sccp_df_analyze f) f ==>
-    !fuel ctx s.
-      s.vs_inst_idx = 0 /\
-      fn_entry_label f = SOME s.vs_current_bb /\
-      FDOM s.vs_vars = {} ==>
-      (?e. run_blocks fuel ctx f s = Error e) \/
-      lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-        (run_blocks fuel ctx f s)
-        (run_blocks fuel ctx
-          (analysis_function_transform sccp_bottom (sccp_df_analyze f)
-            (\lat inst. [sccp_inst lat.sl_vals inst]) f) s)
-Proof
-  rpt strip_tac >>
-  irule sccp_function_lift_result >> simp[] >>
-  metis_tac[nophi_inv_entry]
-QED
-
+(* The old sccp_function_lift_result theorem was removed after the eval_phis
+   refactor. It was unused, and its original statement no longer matched the
+   final SCCP correctness architecture, which is proved in
+   sccpCorrectnessProofsTheory.sccp_run_blocks_equiv / sccp_pass_correct_fn. *)

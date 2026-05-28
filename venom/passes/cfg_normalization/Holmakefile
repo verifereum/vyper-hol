@@ -1,2 +1,3 @@
 # CFG normalization pass: public API
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics defs proofs
+# NOTE: $(VFMDIR)/spec omitted to avoid vfmExecution$run_blocks overloading venomExecSemantics$run_blocks
+INCLUDES = $(VFMDIR)/util ../.. ../../../syntax ../../../semantics defs proofs

@@ -10,18 +10,14 @@
 
 Theory assignElimSound
 Ancestors
-  assignElimDefs analysisSimProps passSimulationProps venomWf
-  passSharedProps venomInstProps
-
-open assignElimDefsTheory passSharedDefsTheory passSharedPropsTheory
-     venomStateTheory venomWfTheory venomInstPropsTheory
-     analysisSimDefsTheory analysisSimPropsTheory
-     passSimulationPropsTheory passSimulationDefsTheory
-     stateEquivTheory stateEquivPropsTheory
-     execEquivParamDefsTheory execEquivParamPropsTheory
-     venomExecSemanticsTheory finite_mapTheory
-     listTheory pred_setTheory venomInstTheory
-     dfAnalyzeDefsTheory
+  assignElimDefs passSharedDefs passSharedProps
+  analysisSimDefs analysisSimProps passSimulationDefs passSimulationProps
+  stateEquiv stateEquivProps
+  execEquivParamDefs execEquivParamProps
+  venomState venomWf venomInst venomInstProps
+  venomExecSemantics venomExecProps
+  dfAnalyzeDefs
+  finite_map list pred_set
 
 (* ===== Proof predicate ===== *)
 
@@ -190,6 +186,14 @@ Proof
   simp[state_equiv_refl, execution_equiv_refl]
 QED
 
+Theorem assign_subst_inst_structural[local]:
+  !pv. inst_transform_structural (\v inst. [assign_subst_inst v inst])
+Proof
+  rw[inst_transform_structural_def] >> rpt conj_tac >> rpt gen_tac >>
+  rw[assign_subst_inst_def, LET_THM, assign_subst_inst_opcode] >>
+  rpt strip_tac >> fs[is_terminator_def]
+QED
+
 Theorem assign_elim_inst_structural[local]:
   !pv. inst_transform_structural (\v inst. [assign_elim_inst pv v inst])
 Proof
@@ -200,10 +204,13 @@ Proof
       fs[is_terminator_def]) >>
     TRY (
       `~is_terminator (mk_nop_inst inst).inst_opcode /\
-       (mk_nop_inst inst).inst_opcode <> INVOKE` by EVAL_TAC >>
+       (mk_nop_inst inst).inst_opcode <> INVOKE /\
+       (mk_nop_inst inst).inst_opcode <> PHI` by EVAL_TAC >>
       fs[]))
 QED
 
+(* After copy-propagation substitution vs dead-write elimination,
+   runs are equivalent up to eliminated vars *)
 Theorem assign_nop_dead_writes_correct:
   !fuel ctx fn s.
     let elim = assign_elim_eliminated_vars fn in
@@ -214,6 +221,7 @@ Theorem assign_nop_dead_writes_correct:
     let fn_elim = analysis_function_transform NONE result
                     (\v inst. [assign_elim_inst pv v inst]) fn in
     fn_inst_wf fn /\
+    wf_function fn /\
     s.vs_inst_idx = 0 /\
     (!bb inst x.
        MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -237,8 +245,7 @@ Proof
   simp_tac std_ss [LET_THM] >>
   (impl_tac >- (
     simp[state_equiv_execution_equiv_valid_state_rel,
-         assign_elim_inst_structural,
-         inst_transform_structural_def, assign_subst_inst_opcode, EVERY_DEF] >>
+         assign_elim_inst_structural, assign_subst_inst_structural] >>
     rpt conj_tac
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
@@ -252,10 +259,7 @@ QED
 
 (* ===== Phase 1: Function-level substitution equality ===== *)
 
-(* Analysis convergence properties — standard dataflow obligations.
-   These are provable for copy_prop_analyze but tangential to the
-   simulation proof. Cheated as local helpers for now; will be proved
-   separately as shared infrastructure for all forward analyses. *)
+(* Copy propagation transfer soundness helpers *)
 
 (* Extending a sound copy map with a correct entry *)
 Theorem copy_sound_fupdate[local]:
@@ -293,7 +297,7 @@ QED
 
 (* Terminator OK preserves vars. JMP/JNZI/DJMP only modify
    vs_current_bb/vs_prev_bb/vs_inst_idx, not vs_vars. *)
-(* Helper: ASSIGN step semantics *)
+(* ASSIGN step semantics *)
 Theorem step_assign_result[local]:
   !fuel ctx inst src_op dst s s'.
     inst.inst_opcode = ASSIGN /\
@@ -311,6 +315,7 @@ Proof
   Cases_on `eval_operand src_op s` >> simp[]
 QED
 
+(* Copy-propagation transfer function preserves copy_sound *)
 Theorem copy_prop_transfer_sound:
   !pv. transfer_sound copy_sound_opt
              copy_prop_transfer pv
@@ -392,6 +397,7 @@ Proof
       simp[]))
 QED
 
+(* Copy-propagation join preserves copy_sound *)
 Theorem copy_prop_join_sound:
   !a b s. copy_sound_opt a s /\ copy_sound_opt b s ==>
           copy_sound_opt (copy_prop_join a b) s
@@ -404,6 +410,7 @@ Proof
   fs[FLOOKUP_DRESTRICT]
 QED
 
+(* Empty copy map is trivially sound *)
 Theorem copy_sound_opt_fempty:
   !s. copy_sound_opt (SOME FEMPTY) s
 Proof
@@ -418,8 +425,7 @@ Theorem assign_subst_inst_simulates:
   analysis_inst_simulates (state_equiv {}) (execution_equiv {})
     copy_sound_opt (\v inst. [assign_subst_inst v inst])
 Proof
-  simp[analysis_inst_simulates_def, inst_transform_structural_def,
-       assign_subst_inst_opcode] >>
+  simp[analysis_inst_simulates_def, assign_subst_inst_structural] >>
   rpt strip_tac >> simp[run_insts_sing] >>
   `step_inst fuel ctx (assign_subst_inst v inst) s =
    step_inst fuel ctx inst s`

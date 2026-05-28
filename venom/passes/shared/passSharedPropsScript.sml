@@ -52,12 +52,11 @@
 
 Theory passSharedProps
 Ancestors
-  passSharedDefs venomExecSemantics venomEffects stateEquiv venomInstProofs
+  passSharedDefs venomExecSemantics venomExecProofs venomEffects stateEquiv venomInstProofs
+  venomInstProps
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep venomState venomInst venomWf
-  copyFwdEquiv
-Libs
-  pred_setTheory listTheory rich_listTheory
+  copyFwdEquiv pred_set list rich_list
 
 
 
@@ -257,8 +256,6 @@ QED
    (from jump_to), so the inductive hypothesis applies. Terminal cases use
    execution_equiv which ignores vs_inst_idx. *)
 (* Non-terminator step_inst at different idx: OK results agree modulo idx.
-   Covers both INVOKE and non-INVOKE non-terminator instructions. *)
-(* Non-terminator step_inst at different idx: OK results agree modulo idx.
    Covers both INVOKE and non-INVOKE non-terminator instructions.
    Why: step_inst never reads vs_inst_idx; it only reads/writes other fields. *)
 Triviality foldl_update_var_idx:
@@ -375,7 +372,7 @@ QED
 
 (* Generalized: relates exec_block at any idx to exec_block on filtered block
    at the corresponding filtered index. *)
-Triviality clear_nops_block_gen:
+Theorem clear_nops_block_gen:
   !fuel ctx bb s.
     result_equiv {}
       (exec_block fuel ctx bb s)
@@ -512,33 +509,153 @@ Proof
   metis_tac[finite_mapTheory.FLOOKUP_EXT, EQ_EXT]
 QED
 
-Theorem clear_nops_function_correct:
-  !fuel ctx fn s.
-    s.vs_inst_idx = 0 ==>
-    result_equiv {}
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (clear_nops_function fn) s)
+(* If no element in the list is PHI, phi_prefix_length = 0 *)
+Triviality no_phi_prefix_length_0:
+  !l. EVERY (\inst. inst.inst_opcode <> PHI) l ==> phi_prefix_length l = 0
 Proof
-  Induct_on `fuel` >> rpt strip_tac >>
-  once_rewrite_tac[run_blocks_def] >>
-  simp[clear_nops_function_def, lookup_block_clear_nops] >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
-  simp[result_equiv_def, revert_equiv_def] >>
-  rename1 `SOME bb` >>
-  mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`] clear_nops_block_correct) >>
-  simp[] >>
-  Cases_on `exec_block fuel ctx bb s` >>
-  Cases_on `exec_block fuel ctx (clear_nops_block bb) s` >>
-  simp[result_equiv_def] >> strip_tac >>
-  imp_res_tac state_equiv_empty_eq >>
-  imp_res_tac exec_block_ok_inst_idx_0 >> gvs[] >>
-  rw[] >>
-  simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
-       clear_nops_function_def] >>
-  rewrite_tac[GSYM clear_nops_function_def] >>
-  first_x_assum irule >> simp[]
+  Induct_on `l` >> simp[phi_prefix_length_def] >> Cases >> simp[phi_prefix_length_def]
 QED
 
+(* NOP is not PHI, so FILTER removing NOPs preserves phi_prefix_length
+   when PHIs form a prefix (which bb_well_formed guarantees). *)
+Triviality phi_prefix_length_filter_nop:
+  !l. (!i j. i < j /\ j < LENGTH l /\
+        (EL j l).inst_opcode = PHI ==>
+        (EL i l).inst_opcode = PHI) ==>
+    phi_prefix_length (FILTER (\inst. inst.inst_opcode <> NOP) l) = phi_prefix_length l
+Proof
+  Induct >- simp[phi_prefix_length_def]
+  >> rpt gen_tac >> rpt disch_tac >>
+  Cases_on `h.inst_opcode = NOP`
+  >- (
+    (* h is NOP: FILTER removes it, phi_prefix_length (h::l) = 0 *)
+    simp[phi_prefix_length_def] >>
+    irule no_phi_prefix_length_0 >>
+    simp[EVERY_FILTER, EVERY_MEM] >>
+    gen_tac >> strip_tac >>
+    CCONTR_TAC >> fs[] >>
+    `?n. n < LENGTH l /\ EL n l = inst` by (
+      qspecl_then [`l`,`inst`] mp_tac MEM_EL >> simp[] >> strip_tac >>
+      qexists_tac `n` >> simp[]) >>
+    first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >>
+    simp[EL_CONS] >> fs[])
+  >- (
+    (* h is not NOP: FILTER keeps it *)
+    Cases_on `h.inst_opcode = PHI`
+    >- (
+      (* h is PHI (and not NOP): both sides get SUC, use IH *)
+      simp[phi_prefix_length_def] >>
+      first_x_assum irule >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+      simp[EL_CONS] >> decide_tac)
+    >- (
+      (* h is neither PHI nor NOP: both sides are 0 *)
+      simp[phi_prefix_length_def]))
+QED
+
+Triviality phi_prefix_length_el_phi:
+  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
+Proof
+  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
+  Cases_on `i` >> simp[phi_prefix_length_def]
+QED
+
+(* In the PHI prefix, all instructions are PHI, hence not NOP *)
+Triviality phi_prefix_no_nop:
+  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode <> NOP
+Proof
+  rpt strip_tac >> drule phi_prefix_length_el_phi >> simp[]
+QED
+
+(* If no element of l is PHI, then eval_phis on FILTER of l returns OK s *)
+Triviality eval_phis_filter_no_phi:
+  !s P l.
+    (!i. i < LENGTH l ==> (EL i l).inst_opcode <> PHI) ==>
+    eval_phis s (FILTER P l) = OK s
+Proof
+  Induct_on `l` >- simp[eval_phis_def] >>
+  rpt strip_tac >>
+  Cases_on `P h` >> gvs[] >>
+  `h.inst_opcode <> PHI` by (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  gvs[eval_phis_def] >>
+  first_x_assum irule >> rpt strip_tac >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+(* With PHI-prefix well-formedness, FILTER out NOPs preserves eval_phis *)
+Triviality eval_phis_filter_nop_wf:
+  !s l.
+    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
+           (EL i l).inst_opcode = PHI) ==>
+    eval_phis s (FILTER (\inst. inst.inst_opcode <> NOP) l) = eval_phis s l
+Proof
+  gen_tac >> Induct
+  >- simp[eval_phis_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (
+    simp[eval_phis_def] >>
+    `eval_phis s (FILTER (\inst. inst.inst_opcode <> NOP) l) = eval_phis s l` by (
+      first_x_assum irule >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+      simp[rich_listTheory.EL_CONS]) >>
+    simp[]) >>
+  Cases_on `h.inst_opcode = NOP`
+  >- (
+    simp[eval_phis_def] >>
+    irule eval_phis_filter_no_phi >> rpt strip_tac >>
+    CCONTR_TAC >>
+    first_x_assum (qspecl_then [`0`, `SUC i`] mp_tac) >>
+    simp[rich_listTheory.EL_CONS]) >>
+  simp[eval_phis_def]
+QED
+
+Triviality filter_take_phi_prefix_length:
+  !l.
+    LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
+              (TAKE (phi_prefix_length l) l)) = phi_prefix_length l
+Proof
+  rpt strip_tac >>
+  `EVERY (\inst. inst.inst_opcode <> NOP) (TAKE (phi_prefix_length l) l)` by (
+    simp[listTheory.EVERY_EL] >> rpt strip_tac >>
+    `n < phi_prefix_length l` by
+      gvs[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
+    `EL n (TAKE (phi_prefix_length l) l) = EL n l` by
+      simp[EL_TAKE] >>
+    metis_tac[phi_prefix_no_nop]) >>
+  `FILTER (\inst. inst.inst_opcode <> NOP) (TAKE (phi_prefix_length l) l) =
+   TAKE (phi_prefix_length l) l` by simp[FILTER_EQ_ID] >>
+  simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le]
+QED
+
+Theorem clear_nops_run_block_equiv:
+  !fuel ctx bb s.
+    bb_well_formed bb ==> result_equiv {}
+      (run_block fuel ctx bb s) (run_block fuel ctx (clear_nops_block bb) s)
+Proof
+  rpt strip_tac >>
+  `phi_prefix_length (clear_nops_block bb).bb_instructions = phi_prefix_length bb.bb_instructions` by (
+    simp[clear_nops_block_def] >> irule phi_prefix_length_filter_nop >>
+    fs[bb_well_formed_def]) >>
+  `eval_phis s (clear_nops_block bb).bb_instructions = eval_phis s bb.bb_instructions` by (
+    simp[clear_nops_block_def] >> irule eval_phis_filter_nop_wf >>
+    fs[bb_well_formed_def]) >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_TAC (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (
+    qpat_x_assum `?s_phi. eval_phis s bb.bb_instructions = OK s_phi`
+      (qx_choose_then `s_phi` assume_tac) >>
+    ASM_REWRITE_TAC[] >> simp[] >>
+    mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`,
+      `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`]
+      clear_nops_block_gen) >>
+    simp[filter_take_phi_prefix_length]) >>
+  qpat_x_assum `?e. eval_phis s bb.bb_instructions = Error e`
+    strip_assume_tac >>
+  ASM_REWRITE_TAC[] >> simp[result_equiv_def]
+QED
+
+(* ===================================================================== *)
 (* ===================================================================== *)
 (* ===== clear_nops structural preservation ============================ *)
 (* ===================================================================== *)
@@ -771,6 +888,68 @@ Proof
       metis_tac[])
   >- (irule clear_nops_fn_inst_ids_distinct >> simp[])
 QED
+
+Triviality find_some_mem[local]:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  Induct_on `l` >> simp[FIND_thm] >>
+  rpt strip_tac >> Cases_on `P h` >> fs[] >> metis_tac[]
+QED
+
+Theorem clear_nops_function_correct:
+  !fuel ctx fn s.
+    wf_function fn /\ s.vs_inst_idx = 0 ==>
+    result_equiv {}
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (clear_nops_function fn) s)
+Proof
+  Induct_on `fuel` >- (
+    rpt strip_tac >> simp[run_blocks_def, result_equiv_def]) >>
+  rpt strip_tac >>
+  once_rewrite_tac[run_blocks_unfold] >>
+  simp[clear_nops_function_def, lookup_block_clear_nops] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >-
+    simp[result_equiv_def] >>
+  rename1 `SOME bb` >>
+  `bb_well_formed bb` by (
+    fs[wf_function_def, lookup_block_def] >>
+    drule find_some_mem >> metis_tac[]) >>
+  `result_equiv {} (run_block fuel ctx bb s)
+     (run_block fuel ctx (clear_nops_block bb) s)` by
+    simp[clear_nops_run_block_equiv] >>
+  (* Now we need: result_equiv on both sides of the case-match on run_block *)
+  Cases_on `run_block fuel ctx bb s`
+  >- (
+    (* OK case *)
+    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+    gvs[result_equiv_def] >>
+    TRY (imp_res_tac state_equiv_empty_eq >> gvs[result_equiv_def]) >>
+    (* Only OK-OK survives *)
+    imp_res_tac state_equiv_empty_eq >> gvs[] >>
+    imp_res_tac run_block_OK_inst_idx_0 >>
+    Cases_on `v.vs_halted` >> gvs[result_equiv_def]
+    >- simp[result_equiv_def, execution_equiv_def] >>
+    once_rewrite_tac[GSYM clear_nops_function_def] >>
+    first_x_assum irule >> simp[] >>
+    irule clear_nops_function_preserves_wf >> simp[])
+  >- (
+    (* Halt case *)
+    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+    gvs[result_equiv_def])
+  >- (
+    (* Abort case *)
+    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+    gvs[result_equiv_def])
+  >- (
+    (* IntRet case *)
+    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+    gvs[result_equiv_def])
+  >>
+  (* Error case *)
+  Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+  gvs[result_equiv_def]
+QED
+
 
 (* fn_insts_blocks is FLAT (MAP bb_instructions) *)
 Theorem fn_insts_blocks_flat[local]:

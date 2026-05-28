@@ -651,20 +651,11 @@ Definition step_inst_base_def:
             | NONE => Error "undefined operand")
         | _ => Error "assert_unreachable requires 1 operand")
 
-    (* SSA - PHI node *)
-    | PHI =>
-        (case inst.inst_outputs of
-          [out] =>
-            (case s.vs_prev_bb of
-              NONE => Error "phi at entry block"
-            | SOME prev =>
-                (case resolve_phi prev inst.inst_operands of
-                  NONE => Error "phi: no matching predecessor"
-                | SOME val_op =>
-                    (case eval_operand val_op s of
-                      SOME v => OK (update_var out v s)
-                    | NONE => Error "phi: undefined operand")))
-        | _ => Error "phi requires single output")
+    (* SSA - PHI node.
+       PHIs are evaluated in parallel by eval_phis at block entry.
+       Reaching a PHI through normal sequential execution means the block
+       has a non-prefix PHI and is malformed; fail loudly. *)
+    | PHI => Error "phi outside prefix"
 
     (* SSA - ASSIGN *)
     | ASSIGN =>
@@ -1036,12 +1027,13 @@ End
    -------------------------------------------------------------------------- *)
 
 (* Merge callee's side effects back into caller after INVOKE.
-   Internal function calls share the same contract, so most mutable
-   state (memory, storage, accounts, logs, immutables) propagates.
-   vs_allocas is per-frame (caller keeps its own); vs_alloca_next is
-   global and propagates.  Caller-local fields retained:
-   vs_vars, vs_params, vs_current_bb, vs_inst_idx, vs_prev_bb,
-   vs_halted, and context fields (call/tx/block/code/data/labels/hashes). *)
+   Internal function calls share the same contract, so mutable state
+   (memory, transient storage, accounts, returndata, logs, immutables)
+   propagates from callee to caller.  vs_alloca_next propagates too
+   (global bump pointer).  vs_allocas stays as caller's (per-frame).
+   Caller-local fields are retained: vs_vars, vs_params, vs_current_bb,
+   vs_inst_idx, vs_prev_bb, vs_halted, and context fields
+   (call/tx/block/code/data/labels/hashes). *)
 Definition merge_callee_state_def:
   merge_callee_state caller callee =
     caller with <|
@@ -1118,6 +1110,53 @@ Proof
 QED
 
 (* --------------------------------------------------------------------------
+   Parallel PHI evaluation
+
+   PHIs have parallel semantics: all sources are read from the pre-PHI
+   state, then all outputs are written.  eval_phis processes the PHI
+   prefix of a block, reading every source from the original state s
+   and accumulating writes into the result state.
+   -------------------------------------------------------------------------- *)
+
+(* Evaluate one PHI instruction against state s.
+   Returns (output_var, value) or NONE on error. *)
+Definition eval_one_phi_def:
+  eval_one_phi s inst =
+    case (inst.inst_outputs, s.vs_prev_bb) of
+      ([out], SOME prev) =>
+        (case resolve_phi prev inst.inst_operands of
+           NONE => NONE
+         | SOME val_op =>
+             case eval_operand val_op s of
+               SOME v => SOME (out, v)
+             | NONE => NONE)
+    | _ => NONE
+End
+
+(* Batch-evaluate PHI prefix: read all from s, write all into result.
+   Stops at first non-PHI instruction. *)
+Definition eval_phis_def:
+  eval_phis s [] = OK s /\
+  eval_phis s (inst::rest) =
+    if inst.inst_opcode <> PHI then OK s
+    else
+      case eval_one_phi s inst of
+        NONE => Error "phi evaluation failed"
+      | SOME (out, v) =>
+          case eval_phis s rest of
+            OK s' => OK (update_var out v s')
+          | err => err
+End
+
+(* Length of the PHI prefix of an instruction list. *)
+Definition phi_prefix_length_def:
+  phi_prefix_length [] = 0 /\
+  phi_prefix_length (inst::rest) =
+    if inst.inst_opcode = PHI then SUC (phi_prefix_length rest)
+    else 0
+End
+
+(* --------------------------------------------------------------------------
    Execution (3-way mutually recursive: step_inst / exec_block / run_blocks)
 
    step_inst handles ALL opcodes including INVOKE (which calls run_blocks).
@@ -1130,8 +1169,11 @@ QED
    exec_block explicitly sets vs_inst_idx := SUC s.vs_inst_idx for the
    continuation, decoupling termination from step_inst's behavior.
 
+   run_blocks evaluates PHIs in parallel (via eval_phis) at block entry,
+   then delegates to exec_block starting past the PHI prefix.
+
    Public wrappers (defined below):
-     run_block    — exec_block with vs_inst_idx := 0
+     run_block    — eval_phis + exec_block (matching run_blocks behavior)
      run_function — run_blocks with entry-block setup
    -------------------------------------------------------------------------- *)
 
@@ -1184,12 +1226,17 @@ Definition run_defs:
         case lookup_block s.vs_current_bb fn.fn_blocks of
           NONE => Error "block not found"
         | SOME bb =>
-            case exec_block fuel' ctx bb (s with vs_inst_idx := 0) of
-              OK s' =>
-                if s'.vs_halted then Halt s'
-                else run_blocks fuel' ctx fn s'
-            | IntRet vals s' => IntRet vals s'
-            | other => other)
+            case eval_phis s bb.bb_instructions of
+              Error e => Error e
+            | OK s_phi =>
+                case exec_block fuel' ctx bb
+                       (s_phi with vs_inst_idx :=
+                          phi_prefix_length bb.bb_instructions) of
+                  OK s' =>
+                    if s'.vs_halted then Halt s'
+                    else run_blocks fuel' ctx fn s'
+                | IntRet vals s' => IntRet vals s'
+                | other => other)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<)
     (\x. case x of
@@ -1208,12 +1255,67 @@ val run_blocks_def = save_thm("run_blocks_def", cj 3 run_defs);
 (* --------------------------------------------------------------------------
    Block Entry Point
 
-   run_block always starts execution from instruction 0.
+   run_block evaluates PHIs in parallel (via eval_phis) then executes
+   the rest of the block via exec_block starting past the PHI prefix.
+   Matches the behavior inlined into run_blocks.
    -------------------------------------------------------------------------- *)
 
+(* run_block: full block execution including parallel PHI evaluation.
+   Matches the per-iteration behavior inlined in run_blocks.
+   eval_phis evaluates PHIs in parallel, then exec_block runs
+   the remaining instructions starting past the PHI prefix. *)
 Definition run_block_def:
-  run_block fuel ctx bb s = exec_block fuel ctx bb (s with vs_inst_idx := 0)
+  run_block fuel ctx bb s =
+    case eval_phis s bb.bb_instructions of
+      OK s_phi =>
+        exec_block fuel ctx bb
+          (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+    | Error e => Error e
 End
+
+(* Backward compat: run_block_entry = run_block *)
+Overload run_block_entry = ``run_block``
+val run_block_entry_def = save_thm("run_block_entry_def", run_block_def);
+
+(* eval_phis only returns OK or Error — needed to close ARB arms in run_blocks_unfold *)
+Theorem eval_phis_ok_or_error_defs:
+  !s insts. (?s'. eval_phis s insts = OK s') \/
+            (?e. eval_phis s insts = Error e)
+Proof
+  Induct_on `insts` >> rw[eval_phis_def] >>
+  BasicProvers.every_case_tac >> gvs[] >>
+  first_x_assum (qspec_then `s` strip_assume_tac) >> gvs[]
+QED
+
+(* run_blocks_unfold: unfold one iteration of run_blocks using run_block.
+   Unconditional version for use as a CONV rewrite.
+   This is the primary rewrite rule for block-iteration proofs. *)
+Theorem run_blocks_unfold:
+  run_blocks (SUC fuel) ctx fn s =
+    case lookup_block s.vs_current_bb fn.fn_blocks of
+      NONE => Error "block not found"
+    | SOME bb =>
+        case run_block fuel ctx bb s of
+          OK s' =>
+            if s'.vs_halted then Halt s'
+            else run_blocks fuel ctx fn s'
+        | IntRet vals s' => IntRet vals s'
+        | Halt s' => Halt s'
+        | Abort a s' => Abort a s'
+        | Error e => Error e
+Proof
+  simp[Once run_blocks_def, run_block_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
+  mp_tac (Q.SPECL [`s`, `x.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> gvs[]
+QED
+
+(* Alias: run_block_non_phis is exec_block (for backward compat with
+   proofs written against the pre-merge 4-way mutual recursion).
+   Use exec_block / run_block_non_phis for instruction-level reasoning
+   (no PHI evaluation, respects vs_inst_idx). *)
+Overload run_block_non_phis = ``exec_block``
+val run_block_non_phis_def = save_thm("run_block_non_phis_def", exec_block_def);
 
 (* step_inst preserves inst_idx for non-terminators (all opcodes incl INVOKE) *)
 Theorem step_inst_preserves_inst_idx:

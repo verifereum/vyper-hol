@@ -40,9 +40,7 @@ Ancestors
   venomExecSemantics venomEffects venomWf venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField
-Libs
-  listTheory rich_listTheory byteTheory arithmeticTheory
-  finite_mapTheory alistTheory wordsTheory pred_setTheory
+  list rich_list byte arithmetic finite_map alist words pred_set
 
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
 val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
@@ -1839,65 +1837,12 @@ Proof
   simp[] >> qexistsl_tac [`v`, `inp`] >> simp[]
 QED
 
-(* When a PHI with pv Var operands resolves to a non-Var-pv value,
-   pointer_arith_in_region is contradicted.
-   Key idea: construct a state where the pv input is in an alloca region
-   that does NOT contain the literal output value. *)
-Theorem phi_nonvar_pv_contradiction[local]:
-  !fn roots inst bb out u s1 prev val_op w1.
-    pointer_arith_in_region fn roots /\
-    ssa_form fn /\
-    roots SUBSET alloca_roots fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    inst.inst_opcode = PHI /\
-    inst.inst_outputs = [out] /\
-    out IN pointer_derived_vars fn roots /\
-    MEM (Var u) inst.inst_operands /\
-    u IN pointer_derived_vars fn roots /\
-    s1.vs_prev_bb = SOME prev /\
-    resolve_phi prev inst.inst_operands = SOME val_op /\
-    (!v. val_op <> Var v) /\
-    eval_operand val_op s1 = SOME w1 ==>
-    F
-Proof
-  rpt strip_tac >>
-  (* Construct counterexample state s3 *)
-  qabbrev_tac `off3 = (w2n w1 + 1) MOD dimword (:256)` >>
-  qpat_x_assum `pointer_arith_in_region _ _` mp_tac >>
-  REWRITE_TAC[pointer_arith_in_region_def, LET_DEF] >> BETA_TAC >>
-  disch_then (qspecl_then [`bb`, `inst`,
-    `s1 with <| vs_vars := s1.vs_vars |+ (u, n2w off3);
-                vs_allocas := FEMPTY |+ (0, (off3, 1)) |>`,
-    `update_var out w1
-       (s1 with <| vs_vars := s1.vs_vars |+ (u, n2w off3);
-                    vs_allocas := FEMPTY |+ (0, (off3, 1)) |>)`,
-    `out`, `w1`, `u`, `n2w off3`, `0`, `off3`, `1`] mp_tac) >>
-  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  (* step_inst_base succeeds for PHI *)
-  `step_inst_base inst
-     (s1 with <| vs_vars := s1.vs_vars |+ (u, n2w off3);
-                  vs_allocas := FEMPTY |+ (0, (off3, 1)) |>) =
-   OK (update_var out w1
-     (s1 with <| vs_vars := s1.vs_vars |+ (u, n2w off3);
-                  vs_allocas := FEMPTY |+ (0, (off3, 1)) |>))` by
-    (simp[step_inst_base_def, AllCaseEqs()] >>
-     Cases_on `val_op` >> gvs[eval_operand_def, lookup_var_def] >>
-     simp[FLOOKUP_UPDATE]) >>
-  simp[] >>
-  (* w2n (n2w off3) = off3 *)
-  `off3 < dimword (:256)` by
-    (UNABBREV_ALL_TAC >> simp[]) >>
-  simp[w2n_n2w] >>
-  (* Contradiction: off3 <= w2n w1 < off3 + 1 is impossible *)
-  simp[is_pointer_preserving_op_def, update_var_def] >>
-  UNABBREV_ALL_TAC >>
-  `w2n w1 < dimword (:256)` by simp[w2n_lt] >>
-  Cases_on `w2n w1 + 1 < dimword (:256)`
-  >- simp[]
-  >- (`w2n w1 + 1 = dimword (:256)` by decide_tac >>
-      simp[] >> strip_tac >> gvs[w2n_eq_0] >>
-      fs[dimword_def])
-QED
+(* OLD: phi_nonvar_pv_contradiction proved that when step_inst_base executed PHI
+   and resolved to a non-Var value, pointer_arith_in_region was contradicted.
+   With new PHI semantics (step_inst_base PHI s = OK s, a no-op), this is no
+   longer provable because step_inst_base doesn't execute PHI logic at all.
+   PHI evaluation now happens in eval_phis at block entry.
+   The theorem is removed since it is no longer true under the new semantics. *)
 
 (* Elimination form for pointer_arith_in_region:
    if a pp op produces w_out from a pv input w_in that's in [off, off+sz),
@@ -1908,6 +1853,7 @@ Theorem pointer_arith_in_region_elim[local]:
     MEM bb fn.fn_blocks /\
     MEM inst bb.bb_instructions /\
     is_pointer_preserving_op inst.inst_opcode /\
+    inst.inst_opcode <> PHI /\
     step_inst_base inst s = OK v /\
     inst.inst_outputs = [out] /\
     out IN pointer_derived_vars fn roots /\
@@ -1922,7 +1868,8 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `pointer_arith_in_region _ _` mp_tac >>
   REWRITE_TAC[pointer_arith_in_region_def, LET_DEF] >> BETA_TAC >>
-  disch_then (qspecl_then [`bb`,`inst`,`s`,`v`,`out`,`w_out`,
+  strip_tac >>
+  first_x_assum (qspecl_then [`bb`,`inst`,`s`,`v`,`out`,`w_out`,
     `inp`,`w_in`,`aid`,`off`,`asz`] mp_tac) >>
   simp[]
 QED
@@ -1945,6 +1892,7 @@ Theorem pp_pv_update_remap[local]:
     alloca_remap_rel fn roots remap s1 s2 /\
     pointer_arith_in_region fn roots /\
     is_pointer_preserving_op inst.inst_opcode /\
+    inst.inst_opcode <> PHI /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     inst.inst_outputs = [out] /\
     out IN pointer_derived_vars fn roots /\ out NOTIN roots /\
@@ -1989,6 +1937,7 @@ Theorem pp_step_preserves_remap[local]:
     pointer_confined fn roots /\ ssa_form fn /\
     roots SUBSET alloca_roots fn /\
     is_pointer_preserving_op inst.inst_opcode /\
+    inst.inst_opcode <> PHI /\
     ~is_alloca_op inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     inst.inst_outputs = [out] /\
@@ -2078,9 +2027,9 @@ Theorem step_inst_base_phi_ok[local]:
     st.vs_prev_bb = SOME prev /\
     resolve_phi prev inst.inst_operands = SOME val_op /\
     eval_operand val_op st = SOME w ==>
-    step_inst_base inst st = OK (update_var out w st)
+    eval_one_phi st inst = SOME (out, w)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
+  rpt strip_tac >> gvs[eval_one_phi_def, AllCaseEqs()]
 QED
 
 (* Step inversion lemmas — decompose step_inst_base OK into operand/output structure.
@@ -2122,13 +2071,9 @@ QED
 Theorem step_inst_base_phi_inv[local]:
   !inst s v1.
     step_inst_base inst s = OK v1 /\ inst.inst_opcode = PHI ==>
-    ?out prev val_op w. inst.inst_outputs = [out] /\
-                s.vs_prev_bb = SOME prev /\
-                resolve_phi prev inst.inst_operands = SOME val_op /\
-                eval_operand val_op s = SOME w /\
-                v1 = update_var out w s
+    v1 = s
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def, AllCaseEqs()]
+  rpt strip_tac >> gvs[step_inst_base_def]
 QED
 
 (* Extract clause 2b (pv displacement invariant) from alloca_remap_rel
@@ -2298,45 +2243,12 @@ Resume remap_preserved_pointer_preserving[sub_body]:
   simp[is_pointer_preserving_op_def, WORD_SUB_SUB3]
 QED
 
-(* PHI: resolve_phi gives Var u ∈ pv — suspend for clean context *)
+(* PHI is now a no-op in step_inst_base (new semantics: step_inst_base PHI s = OK s).
+   PHI evaluation happens in eval_phis at block entry instead. *)
 Resume remap_preserved_pointer_preserving[phi]:
-  drule step_inst_base_phi_inv >> (impl_tac >- simp[]) >>
-  strip_tac >> gvs[] >>
-  extract_clause2b >>
-  suspend "phi_body"
-QED
-
-Resume remap_preserved_pointer_preserving[phi_body]:
-  (* val_op must be Var u — Label case contradicts pointer_arith_in_region *)
-  `out IN pointer_derived_vars fn roots` by (
-    `MEM out inst.inst_outputs` by simp[] >>
-    metis_tac[pp_pv_output, is_pointer_preserving_op_def]) >>
-  `?u. val_op = Var u` by (
-    `MEM val_op inst.inst_operands` by metis_tac[resolve_phi_mem] >>
-    `(?u. val_op = Var u) \/ ?l. val_op = Label l` by metis_tac[] >>
-    gvs[] >>
-    mp_tac phi_nonvar_pv_contradiction >>
-    disch_then (qspecl_then [`fn`,`roots`,`inst`,`bb`,`out`,`v`,`s1`,`prev`,
-                             `Label l`,`w`] mp_tac) >>
-    simp[]) >>
-  gvs[eval_operand_def] >>
-  `u IN pointer_derived_vars fn roots` by metis_tac[resolve_phi_mem] >>
-  first_x_assum (qspec_then `u` mp_tac) >>
-  (impl_tac >- simp[]) >>
-  simp[DISJ_IMP_THM, PULL_EXISTS] >> rpt strip_tac >>
-  fs[lookup_var_def] >>
-  `s2.vs_prev_bb = SOME prev` by (
-    fs[alloca_remap_rel_def, LET_DEF]) >>
-  `step_inst_base inst s2 = OK (update_var out w2 s2)` by (
-    irule step_inst_base_phi_ok >>
-    simp[eval_operand_def, lookup_var_def]) >>
-  qexists_tac `update_var out w2 s2` >>
-  (conj_tac >- simp[]) >>
-  irule pp_step_preserves_remap >>
-  simp[is_pointer_preserving_op_def, lookup_var_def] >>
-  qexistsl_tac [`bb`,`u`,`inst`,`w`,`w2`] >>
-  simp[is_pointer_preserving_op_def, WORD_SUB_REFL] >>
-  metis_tac[resolve_phi_mem]
+  drule step_inst_base_phi_inv >> strip_tac >>
+  gvs[step_inst_base_def] >>
+  qexists `s2` >> simp[step_inst_base_def]
 QED
 
 Finalise remap_preserved_pointer_preserving
@@ -3641,7 +3553,9 @@ Theorem return_revert_remap:
              (!v. sz_op = Var v ==> v NOTIN pointer_derived_vars fn roots) ==>
              eval_operand sz_op s1 = eval_operand sz_op s2) /\
     (case inst.inst_operands of
-       [off_op; sz_op] =>
+       [] => T
+     | [op] => T
+     | [off_op; sz_op] =>
          !off1 off2 n.
            eval_operand off_op s1 = SOME off1 /\
            eval_operand off_op s2 = SOME off2 /\
@@ -3650,7 +3564,7 @@ Theorem return_revert_remap:
            w2n off2 + w2n n <= LENGTH s2.vs_memory ==>
            read_memory (w2n off1) (w2n n) s1 =
            read_memory (w2n off2) (w2n n) s2
-     | _ => T)
+     | op1 :: op2 :: op3 :: rest => T)
 Proof
   REWRITE_TAC[GSYM AND_IMP_INTRO] >>
   rpt gen_tac >> ntac 7 disch_tac >>
@@ -4620,25 +4534,26 @@ Theorem pp_operand_var_defined[local]:
     is_pointer_preserving_op inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     MEM (Var inp) inst.inst_operands /\
-    (* For PHI: inp must be the resolved operand *)
     (inst.inst_opcode = PHI ==>
        ?prev. s.vs_prev_bb = SOME prev /\
-              resolve_phi prev inst.inst_operands = SOME (Var inp)) ==>
+              resolve_phi prev inst.inst_operands = SOME (Var inp) /\
+              ?w. eval_operand (Var inp) s = SOME w) ==>
     ?w. lookup_var inp s = SOME w
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_pointer_preserving_op_def, is_alloca_op_def,
-      step_inst_base_def, exec_pure2_def, AllCaseEqs(),
-      eval_operand_def] >>
-  strip_tac >> gvs[eval_operand_def, AllCaseEqs()]
+  Cases_on `inst.inst_opcode = PHI`
+  >- (gvs[eval_operand_def])
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      Cases_on `inst.inst_opcode` >>
+      gvs[is_pointer_preserving_op_def, is_alloca_op_def,
+          step_inst_base_def, exec_pure2_def, AllCaseEqs(),
+          eval_operand_def] >>
+      strip_tac >> gvs[eval_operand_def, AllCaseEqs()])
 QED
-
-(* Helper: PP ops have exactly one output *)
 Theorem pp_single_output[local]:
   !inst s v.
     is_pointer_preserving_op inst.inst_opcode /\
+    inst.inst_opcode <> PHI /\
     step_inst_base inst s = OK v ==>
     ?out. inst.inst_outputs = [out]
 Proof
@@ -4702,20 +4617,32 @@ Resume step_preserves_ptrs_in_alloca_bounds[pp_case]:
     gvs[is_pointer_preserving_op_def, is_alloca_op_def]) >>
   `v.vs_allocas = s.vs_allocas` by
     metis_tac[step_inst_base_allocas] >>
-  `inst.inst_outputs = [u]` by metis_tac[pp_single_output, HD, MEM] >>
-  `?inp. MEM (Var inp) inst.inst_operands /\
-         inp IN pointer_derived_vars fn roots` by
-    metis_tac[pp_has_pv_input] >>
-  (* Defer finding defined value + region to per-opcode case *)
-  suspend "pp_input_region"
+  Cases_on `inst.inst_opcode = PHI`
+  >- ( (* PHI is a no-op: v = s, so alloca region preserved trivially *)
+       drule step_inst_base_phi_inv >> strip_tac >>
+       `lookup_var u s = SOME w` by metis_tac[] >>
+       `in_alloca_region s (w2n w)` by (
+         qpat_x_assum `ptrs_in_alloca_bounds _ _ _` mp_tac >>
+         REWRITE_TAC[ptrs_in_alloca_bounds_def, LET_DEF] >> BETA_TAC >>
+         disch_then (qspecl_then [`u`, `w`] mp_tac) >> simp[]) >>
+       gvs[in_alloca_region_def] >>
+       rename1 `FLOOKUP s.vs_allocas aid' = SOME (off', asz')` >>
+       MAP_EVERY qexists_tac [`aid'`, `off'`, `asz'`] >> simp[])
+  >- ( (* non-PHI PP ops *)
+       `inst.inst_outputs = [u]` by metis_tac[pp_single_output, HD, MEM] >>
+       `?inp. MEM (Var inp) inst.inst_operands /\
+              inp IN pointer_derived_vars fn roots` by
+         metis_tac[pp_has_pv_input] >>
+       (* Defer finding defined value + region to per-opcode case *)
+       suspend "pp_input_region")
 QED
 
 Resume step_preserves_ptrs_in_alloca_bounds[pp_input_region]:
   (* Per-opcode: find inp's value, get region, apply pointer_arith_in_region *)
+  (* PHI already handled in pp_case, so only ADD/SUB/ASSIGN reach here *)
   Cases_on `inst.inst_opcode` >> gvs[is_pointer_preserving_op_def]
   >- ( (* ADD *) suspend "pp_add")
   >- ( (* SUB *) suspend "pp_sub")
-  >- ( (* PHI *) suspend "pp_phi")
   >- ( (* ASSIGN *) suspend "pp_assign")
 QED
 
@@ -4782,50 +4709,7 @@ Resume step_preserves_ptrs_in_alloca_bounds[pp_assign]:
   MAP_EVERY qexists_tac [`aid`, `off`, `asz`] >> simp[]
 QED
 
-Resume step_preserves_ptrs_in_alloca_bounds[pp_phi]:
-  (* Copy step hyp before drule consumes it *)
-  qpat_x_assum `step_inst_base _ _ = OK _`
-    (fn th => assume_tac th >> assume_tac th) >>
-  drule step_inst_base_phi_inv >> (impl_tac >- simp[]) >> strip_tac >>
-  imp_res_tac resolve_phi_mem >>
-  suspend "pp_phi_body"
-QED
-
-Resume step_preserves_ptrs_in_alloca_bounds[pp_phi_body]:
-  (* Derive phi_well_formed from fn_inst_wf *)
-  `phi_well_formed inst.inst_operands` by (
-    metis_tac[phi_inst_wf_well_formed]) >>
-  suspend "pp_phi_resolved"
-QED
-
-Resume step_preserves_ptrs_in_alloca_bounds[pp_phi_resolved]:
-  (* resolve_phi returns Var (not Label, not Lit) *)
-  `?var. val_op = Var var` by
-    metis_tac[resolve_phi_gives_var] >>
-  gvs[] >>
-  (* phi_pv_all_var: resolved Var is PV *)
-  qpat_x_assum `phi_pv_all_var _ _` mp_tac >>
-  simp[phi_pv_all_var_def, LET_DEF] >>
-  disch_then (qspecl_then [`bb`, `inst`] mp_tac) >>
-  simp[] >> impl_tac >- metis_tac[] >> strip_tac >>
-  gvs[eval_operand_def] >>
-  rename1 `lookup_var u' s = SOME w_in` >>
-  `u' IN pointer_derived_vars fn roots` by metis_tac[] >>
-  `in_alloca_region s (w2n w_in)` by (
-    qpat_x_assum `ptrs_in_alloca_bounds _ _ _` mp_tac >>
-    REWRITE_TAC[ptrs_in_alloca_bounds_def, LET_DEF] >> BETA_TAC >>
-    disch_then (qspecl_then [`u'`, `w_in`] mp_tac) >> simp[]) >>
-  gvs[in_alloca_region_def] >>
-  rename1 `FLOOKUP s.vs_allocas aid = SOME (off, asz)` >>
-  `off <= w2n w /\ w2n w < off + asz` by (
-    mp_tac pointer_arith_in_region_elim >>
-    disch_then (qspecl_then [`fn`,`roots`,`bb`,`inst`,`s`,
-      `update_var out w_in s`,
-      `out`,`w`,`u'`,`w_in`,`aid`,`off`,`asz`] mp_tac) >>
-    simp[is_pointer_preserving_op_def]) >>
-  simp[in_alloca_region_def] >>
-  MAP_EVERY qexists_tac [`aid`, `off`, `asz`] >> simp[]
-QED
+(* pp_phi resume block removed: PHI case is now handled directly in pp_case *)
 
 Resume step_preserves_ptrs_in_alloca_bounds[alloca_case]:
   (* ALLOCA case: output ∈ roots, value = n2w(nao), new alloca covers it *)

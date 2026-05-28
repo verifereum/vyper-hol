@@ -4,13 +4,13 @@
  * Uses block_sim_function_pointwise_reachable from the simulation framework
  * to lift per-block simulation (phi_elim_block_sim) to function level.
  *
- * Single top-level theorem: phi_elimination_context_correct.
+ * Single top-level theorem: phi_elimination_correct.
  *)
 
 Theory phiCorrectnessProof
 Ancestors
   phiBlock passSimulationProps passSimulationDefs execEquivParamProps
-  venomExecSemantics venomInst stateEquiv stateEquivProps
+  venomExecSemantics venomInst venomWf stateEquiv stateEquivProps
   phiWellFormed phiTransform phiDefs list
 
 (* Helper: transform_function matches function_map_transform shape *)
@@ -23,21 +23,23 @@ QED
 
 (* TOP-LEVEL: Context-level correctness.
  *
- * For any well-formed function in a context, the transformed context
- * contains a same-named function with equivalent execution semantics.
+ * For any well-formed, PHI-elim-safe function in a context, the
+ * transformed context contains a same-named function with
+ * equivalent execution semantics, provided execution starts at
+ * a function entry point (vs_inst_idx = 0 and either the state
+ * has a previous block or is at the entry block label).
  *
- * Proof approach:
- *   1. Rewrite transform_function as function_map_transform
- *   2. irule block_sim_function_pointwise_reachable
- *   3. Entry block: identity (no single-origin PHIs) via exec_block_transform_identity
- *   4. Non-entry blocks: phi_elim_block_sim (guarded by vs_prev_bb)
- *   5. Wrap with transform_context membership (MEM_MAP)
+ * Proof: lift per-block simulation (phi_elim_run_block_lift_result)
+ * to function level via block_sim_function_pointwise_reachable.
  *)
 Theorem phi_elimination_correct:
   !ctx fn_name fuel (func:ir_function) s.
     MEM func ctx.ctx_functions /\
     func.fn_name = fn_name /\
     wf_ir_fn func /\
+    phi_elim_safe_fn func /\
+    wf_function func /\
+    fn_pseudos_prefix func /\
     func.fn_blocks <> [] /\
     s.vs_inst_idx = 0 /\
     (s.vs_prev_bb <> NONE \/
@@ -56,6 +58,9 @@ Proof
   `MEM func ctx.ctx_functions` by fs[] >>
   `func.fn_name = fn_name` by fs[] >>
   `wf_ir_fn func` by fs[] >>
+  `phi_elim_safe_fn func` by fs[] >>
+  `wf_function func` by fs[] >>
+  `fn_pseudos_prefix func` by fs[] >>
   `func.fn_blocks <> []` by fs[] >>
   `s.vs_inst_idx = 0` by fs[] >>
   `phi_wf_fn func` by metis_tac[wf_ir_implies_phi_wf] >>
@@ -68,19 +73,13 @@ Proof
   irule block_sim_function_pointwise_reachable >>
   simp[state_equiv_execution_equiv_valid_state_rel, transform_block_label,
        state_equiv_def, execution_equiv_def] >>
-  (* Per-block simulation — only remaining goal *)
-  rpt strip_tac >>
-  Cases_on `s''.vs_prev_bb`
-  >- ( (* prev_bb = NONE => bb = HD fn_blocks => entry block *)
-    fs[] >>
-    `!idx inst. get_instruction (HD func.fn_blocks) idx = SOME inst ==>
-       phi_single_origin (dfg_build_function func) inst = NONE` by
-      (rpt strip_tac >> res_tac) >>
-    imp_res_tac exec_block_transform_identity >>
-    fs[] >>
-    irule lift_result_refl >>
-    simp[state_equiv_refl, execution_equiv_refl]) >>
-  (* prev_bb = SOME _ => non-entry block *)
-  irule phi_elim_block_sim >>
-  fs[] >> rpt conj_tac >> rpt strip_tac >> res_tac
+  (* Per-block simulation: real PHI-prefix/eval_phis simulation. *)
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `run_block fuel0 ctx0 bb st` >>
+  qspecl_then [`func`, `bb`, `fuel0`, `ctx0`, `st`]
+    mp_tac phi_elim_run_block_lift_result >>
+  simp[] >>
+  fs[wf_function_def, fn_pseudos_prefix_def] >>
+  Cases_on `st.vs_prev_bb = NONE` >> fs[]
 QED

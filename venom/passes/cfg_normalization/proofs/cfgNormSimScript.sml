@@ -7,12 +7,9 @@
 
 Theory cfgNormSim
 Ancestors
-  cfgNormDefs cfgTransformProofs stateEquiv venomExecSemantics
-  venomWf execEquivProofs
-Libs
-  cfgNormDefsTheory cfgTransformTheory cfgTransformProofsTheory
-  stateEquivTheory venomExecSemanticsTheory venomInstTheory
-  venomStateTheory venomWfTheory finite_mapTheory
+  cfgNormDefs cfgTransform cfgTransformProofs stateEquiv
+  stateEquivProofs venomExecSemantics venomInst venomState
+  venomWf execEquivProofs finite_map
 
 (* ================================================================
    Section 1: Basic structural lemmas
@@ -453,6 +450,27 @@ Proof
   rw[] >> gvs[resolve_phi_def]
 QED
 
+(* Reverse of resolve_phi_update_phi_ops_match:
+   if resolve_phi new_label on the updated ops gives SOME, then
+   resolve_phi old_label on the original ops also gives SOME,
+   and the values are related by the var_repls mapping. *)
+Theorem resolve_phi_update_phi_ops_match_rev:
+  !old_label new_label var_repls ops val_op'.
+    resolve_phi new_label (update_phi_ops old_label new_label var_repls ops) = SOME val_op' /\
+    resolve_phi new_label ops = NONE ==>
+    ?val_op. resolve_phi old_label ops = SOME val_op /\
+      val_op' = (case val_op of
+                   Var v => (case ALOOKUP var_repls v of
+                               NONE => Var v
+                             | SOME new_v => Var new_v)
+                 | x => x)
+Proof
+  ho_match_mp_tac update_phi_ops_ind >>
+  simp[update_phi_ops_def, resolve_phi_def] >>
+  rw[] >> gvs[resolve_phi_def] >>
+  rw[] >> gvs[resolve_phi_def]
+QED
+
 (* ================================================================
    Section 5: result_equiv UNIV helpers
    ================================================================ *)
@@ -468,5 +486,25 @@ Theorem result_equiv_UNIV_trans:
   !r1 r2 r3. result_equiv UNIV r1 r2 /\ result_equiv UNIV r2 r3 ==>
               result_equiv UNIV r1 r3
 Proof
-  metis_tac[stateEquivProofsTheory.result_equiv_trans]
+  metis_tac[result_equiv_trans]
+QED
+
+
+(* build_split_block produces a block with no PHI instructions *)
+Theorem build_split_block_no_phis:
+  !pred_bb target_bb id_base split_bb var_repls.
+    build_split_block pred_bb target_bb id_base = (split_bb, var_repls) ==>
+    no_phis split_bb
+Proof
+  rpt strip_tac >>
+  fs[build_split_block_def, LET_THM] >>
+  pairarg_tac >> fs[] >>
+  simp[no_phis_def] >>
+  qpat_x_assum `<|bb_label := _; bb_instructions := fwd_insts ⧺ [_]|> = split_bb`
+    (SUBST_ALL_TAC o SYM) >>
+  simp[listTheory.EVERY_APPEND] >>
+  drule build_forwarding_assigns_insts >> strip_tac >> fs[] >>
+  simp[listTheory.EVERY_EL] >>
+  rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> EVAL_TAC
 QED

@@ -1,5 +1,9 @@
 (*
  * Single Use Expansion Pass — Proofs
+ *
+ * TOP-LEVEL (exported API):
+ *   sue_expand_function_correct_proof — expansion preserves semantics
+ *   sue_establishes_single_use_form   — expansion establishes single-use form
  *)
 
 Theory singleUseExpansionProofs
@@ -8,9 +12,11 @@ Ancestors
   passSimulationDefs passSimulationProofs
   stateEquiv stateEquivProps execEquivParamProofs analysisSimProofsBase
   venomWf venomInstProps dfgAnalysisProps
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomExecProofs venomState venomInst
   analysisSimDefs finite_map pred_set list
   indexedLists instIdxIndep
+Libs
+  pairLib
 
 (* ===== Helper: sue_expand_function is a function_map_transform ===== *)
 
@@ -1151,7 +1157,7 @@ Proof
   >- (
     (* OK st': assigns succeeded — main proof chain *)
     simp[analysisSimProofsBaseTheory.run_insts_singleton] >>
-    (* Step A: state_equiv fresh st st' *)
+    (* state_equiv fresh st st' *)
     `state_equiv (sue_fresh_vars_fn fn) st st'` by (
       qspecl_then [`assigns`, `fuel`, `ctx`, `st`, `st'`,
                     `sue_fresh_vars_fn fn`]
@@ -1162,21 +1168,21 @@ Proof
         >- metis_tac[sue_expand_assigns_in_fresh]
         >- first_assum ACCEPT_TAC) >>
       simp[]) >>
-    (* Step B: not PARAM, not PHI *)
+    (* not PARAM, not PHI *)
     `inst.inst_opcode <> PARAM /\ inst.inst_opcode <> PHI` by
       (Cases_on `inst.inst_opcode` >> gvs[sue_should_skip_def]) >>
-    (* Step C: bounded freshness for sue_expand_ops_eval (idx=0) *)
+    (* bounded freshness for sue_expand_ops_eval (idx=0) *)
     `!v j. MEM (Var v) inst.inst_operands /\ 0 <= j /\
            j < 0 + LENGTH inst.inst_operands ==>
            v <> sue_fresh_var inst.inst_id j` by
       (rpt strip_tac >> CCONTR_TAC >> gvs[] >>
        first_x_assum (qspec_then `j` mp_tac) >> simp[]) >>
-    (* Step D: eval agreement — new_ops in st' = original in st *)
+    (* eval agreement — new_ops in st' = original in st *)
     `!i. i < LENGTH inst.inst_operands ==>
          eval_operand (EL i new_ops) st' =
          eval_operand (EL i inst.inst_operands) st` by
       metis_tac[sue_expand_ops_eval] >>
-    (* Step E: eval agreement — original in st' = original in st *)
+    (* eval agreement — original in st' = original in st *)
     `!op. (!x. op = Var x ==>
                !j. j < LENGTH inst.inst_operands ==>
                x <> sue_fresh_var inst.inst_id j) ==>
@@ -1187,7 +1193,7 @@ Proof
         mp_tac sue_assigns_preserve_eval_operand >>
       impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
       simp[]) >>
-    (* Step F: combine for eval at st' *)
+    (* combine for eval at st' *)
     `!i. i < LENGTH inst.inst_operands ==>
          eval_operand (EL i new_ops) st' =
          eval_operand (EL i inst.inst_operands) st'` by (
@@ -1201,26 +1207,26 @@ Proof
          first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
          metis_tac[MEM_EL]) >>
       metis_tac[]) >>
-    (* Step G: label preservation *)
+    (* label preservation *)
     `!i. i < LENGTH inst.inst_operands ==>
          !lbl. EL i inst.inst_operands = Label lbl ==>
                EL i new_ops = Label lbl` by
       metis_tac[sue_expand_ops_label_preserved] >>
-    (* Step H: LOG HD preservation *)
+    (* LOG HD preservation *)
     `inst.inst_opcode = LOG ==> HD new_ops = HD inst.inst_operands` by (
       strip_tac >>
       `inst.inst_operands <> []` by (
         gvs[venomWfTheory.inst_wf_def] >>
         Cases_on `inst.inst_operands` >> gvs[]) >>
       metis_tac[sue_expand_ops_log_hd_preserved]) >>
-    (* Step I: step_inst (modified) st' = step_inst inst st' *)
+    (* step_inst (modified) st' = step_inst inst st' *)
     `step_inst fuel ctx (inst with inst_operands := new_ops) st' =
      step_inst fuel ctx inst st'` by (
       qspecl_then [`fuel`, `ctx`, `inst`, `new_ops`, `st'`]
         mp_tac passSharedPropsTheory.step_inst_operands_equiv >>
       impl_tac >- gvs[] >>
       simp[]) >>
-    (* Step J: lift_result from step_inst_preserves_R *)
+    (* lift_result from step_inst_preserves_R *)
     `lift_result (state_equiv (sue_fresh_vars_fn fn))
                  (execution_equiv (sue_fresh_vars_fn fn)) (execution_equiv (sue_fresh_vars_fn fn))
        (step_inst fuel ctx inst st) (step_inst fuel ctx inst st')` by (
@@ -1988,8 +1994,173 @@ Proof
   simp[]
 QED
 
+(* ===== run_block bridge: SUE preserves the PHI prefix exactly ===== *)
+
+Triviality sue_expand_inst_nonphi_prefix_append[local]:
+  !dfg inst rest.
+    inst.inst_opcode <> PHI ==>
+    phi_prefix_length (sue_expand_inst dfg inst ++ rest) = 0
+Proof
+  rpt strip_tac >>
+  simp[sue_expand_inst_def] >>
+  Cases_on `sue_should_skip inst.inst_opcode` >>
+  gvs[phi_prefix_length_def, sue_should_skip_def] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `assigns` >> gvs[phi_prefix_length_def]
+  >- (drule sue_expand_ops_assigns_are_assign >> simp[phi_prefix_length_def]) >>
+  Cases_on `inst.inst_opcode` >> gvs[sue_should_skip_def, phi_prefix_length_def]
+QED
+
+Triviality sue_expand_inst_phi[local]:
+  !dfg inst.
+    inst.inst_opcode = PHI ==> sue_expand_inst dfg inst = [inst]
+Proof
+  rw[sue_expand_inst_def, sue_should_skip_def]
+QED
+
+Triviality sue_expand_inst_phi_prefix_append[local]:
+  !dfg inst rest.
+    inst.inst_opcode = PHI ==>
+    phi_prefix_length (sue_expand_inst dfg inst ++ rest) =
+    SUC (phi_prefix_length rest)
+Proof
+  rw[sue_expand_inst_phi, phi_prefix_length_def]
+QED
+
+Triviality sue_expand_inst_prefix_length_append[local]:
+  !dfg inst rest.
+    phi_prefix_length (sue_expand_inst dfg inst ++ rest) =
+    if inst.inst_opcode = PHI then SUC (phi_prefix_length rest) else 0
+Proof
+  rpt strip_tac >>
+  simp[sue_expand_inst_def] >>
+  Cases_on `inst.inst_opcode` >> gvs[sue_should_skip_def, phi_prefix_length_def] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `assigns` >> gvs[phi_prefix_length_def] >>
+  TRY (drule sue_expand_ops_assigns_are_assign >> simp[phi_prefix_length_def])
+QED
+
+Triviality sue_expand_phi_prefix_length[local]:
+  !dfg insts.
+    phi_prefix_length (FLAT (MAP (sue_expand_inst dfg) insts)) =
+    phi_prefix_length insts
+Proof
+  gen_tac >> Induct >> simp[phi_prefix_length_def, sue_expand_inst_prefix_length_append]
+QED
+
+Triviality sue_expand_phi_prefix_el[local]:
+  !dfg insts i.
+    i < phi_prefix_length insts ==>
+    EL i (FLAT (MAP (sue_expand_inst dfg) insts)) = EL i insts
+Proof
+  gen_tac >> Induct >> simp[phi_prefix_length_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_opcode` >>
+  gvs[phi_prefix_length_def, sue_expand_inst_phi] >>
+  Cases_on `i` >> gvs[]
+QED
+
+Triviality sue_expand_phi_prefix_sum[local]:
+  !dfg insts i.
+    i <= phi_prefix_length insts ==>
+    SUM (MAP (LENGTH o sue_expand_inst dfg) (TAKE i insts)) = i
+Proof
+  gen_tac >> Induct >> simp[phi_prefix_length_def] >>
+  rpt gen_tac >> Cases_on `i` >> simp[phi_prefix_length_def] >>
+  rpt strip_tac >>
+  `h.inst_opcode = PHI` by (CCONTR_TAC >> gvs[phi_prefix_length_def]) >>
+  `n <= phi_prefix_length insts` by gvs[phi_prefix_length_def] >>
+  `SUM (MAP (LENGTH o sue_expand_inst dfg) (TAKE n insts)) = n` by metis_tac[] >>
+  gvs[sue_expand_inst_phi]
+QED
+
+Triviality sue_expand_eval_phis[local]:
+  !dfg bb s.
+    eval_phis s (sue_expand_block dfg bb).bb_instructions =
+    eval_phis s bb.bb_instructions
+Proof
+  simp[sue_expand_block_def] >> rpt strip_tac >>
+  irule venomExecProofsTheory.eval_phis_same_phi_prefix >>
+  simp[sue_expand_phi_prefix_length] >>
+  rpt strip_tac >>
+  irule sue_expand_phi_prefix_el >>
+  gvs[sue_expand_phi_prefix_length]
+QED
+
+Triviality sue_block_sim_from_phi_idx[local]:
+  !fuel ctx bb st dfg fresh fn.
+    MEM bb fn.fn_blocks /\
+    fn_inst_wf fn /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            ~is_alloca_op inst.inst_opcode /\
+            sue_operands_wf inst) /\
+    (!inst x. MEM inst bb.bb_instructions /\
+              MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    fresh = sue_fresh_vars_fn fn /\
+    st.vs_inst_idx = phi_prefix_length bb.bb_instructions ==>
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
+      (exec_block fuel ctx bb st)
+      (exec_block fuel ctx (sue_expand_block dfg bb) st)
+Proof
+  rpt strip_tac >>
+  simp[sue_expand_block_def] >>
+  qspecl_then [`bb`, `dfg`, `fresh`, `fn`] mp_tac sue_block_sim_induct >>
+  (impl_tac >- (rpt conj_tac >> metis_tac[])) >>
+  disch_then (qspecl_then
+    [`LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
+     `fuel`, `ctx`, `st`] mp_tac) >>
+  `st.vs_inst_idx <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  `SUM (MAP (LENGTH o sue_expand_inst dfg)
+        (TAKE st.vs_inst_idx bb.bb_instructions)) = st.vs_inst_idx` by (
+    irule sue_expand_phi_prefix_sum >> simp[]) >>
+  `st with vs_inst_idx := phi_prefix_length bb.bb_instructions = st` by
+    simp[venom_state_component_equality] >>
+  simp[]
+QED
+
+Triviality sue_run_block_sim[local]:
+  !fuel ctx bb st dfg fresh fn.
+    MEM bb fn.fn_blocks /\
+    fn_inst_wf fn /\
+    (!inst. MEM inst bb.bb_instructions ==>
+            ~is_alloca_op inst.inst_opcode /\
+            sue_operands_wf inst) /\
+    (!inst x. MEM inst bb.bb_instructions /\
+              MEM (Var x) inst.inst_operands ==> x NOTIN fresh) /\
+    fresh = sue_fresh_vars_fn fn ==>
+    lift_result (state_equiv fresh) (execution_equiv fresh) (execution_equiv fresh)
+      (run_block fuel ctx bb st)
+      (run_block fuel ctx (sue_expand_block dfg bb) st)
+Proof
+  rpt strip_tac >>
+  `phi_prefix_length (sue_expand_block dfg bb).bb_instructions =
+   phi_prefix_length bb.bb_instructions` by
+    simp[sue_expand_block_def, sue_expand_phi_prefix_length] >>
+  `eval_phis st (sue_expand_block dfg bb).bb_instructions =
+   eval_phis st bb.bb_instructions` by simp[sue_expand_eval_phis] >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  ASM_REWRITE_TAC [] >>
+  DISJ_CASES_TAC (Q.SPECL [`st`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (
+    first_x_assum (qx_choose_then `s_phi` strip_assume_tac) >> gvs[] >>
+    qspecl_then [`fuel`, `ctx`, `bb`,
+      `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+      `dfg`, `sue_fresh_vars_fn fn`, `fn`]
+      mp_tac sue_block_sim_from_phi_idx >>
+    impl_tac >- (simp[] >> metis_tac[]) >>
+    simp[])
+  >- (
+    first_x_assum (qx_choose_then `e` strip_assume_tac) >>
+    gvs[lift_result_def])
+QED
+
 (* ===== Semantic correctness ===== *)
 
+(* Expansion preserves semantics: running the expanded function yields a
+   state-equivalent result to running the original, provided the function
+   is well-formed, its variables are fresh w.r.t. sue_fresh_vars_fn, and
+   no instruction uses alloca or violates sue_operands_wf. *)
 Theorem sue_expand_function_correct_proof:
   !fuel ctx fn s.
     fn_inst_wf fn /\
@@ -2014,7 +2185,7 @@ Proof
       `x NOTIN sue_fresh_vars_fn fn` by metis_tac[] >>
       fs[stateEquivTheory.state_equiv_def, stateEquivTheory.execution_equiv_def])
   >- simp[sue_expand_block_label]
-  >- (rpt strip_tac >> metis_tac[sue_block_sim])
+  >- (rpt strip_tac >> metis_tac[sue_run_block_sim])
   >- metis_tac[stateEquivProofsTheory.state_equiv_trans]
   >- metis_tac[stateEquivProofsTheory.execution_equiv_trans]
   >- metis_tac[execEquivParamProofsTheory.state_equiv_execution_equiv_valid_state_rel_proof]
@@ -2530,6 +2701,10 @@ Proof
   drule_all sue_expand_inst_filter_mem >> simp[]
 QED
 
+(* The single-use expansion pass establishes single-use form: after expansion,
+   each non-exempt variable appears in at most one instruction's operands.
+   Requires distinct instruction IDs, fresh variable separation, and LOG
+   instructions having a literal as their first operand. *)
 Theorem sue_establishes_single_use_form:
   !fn.
     ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\

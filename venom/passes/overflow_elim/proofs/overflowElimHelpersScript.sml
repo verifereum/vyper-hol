@@ -475,95 +475,7 @@ Proof
   simp[]
 QED
 
-(* Connect overflow_elim_inst to framework transform via range_at_inst *)
-Definition oe_inst_v_def:
-  oe_inst_v dfg v inst =
-    if inst.inst_opcode <> ASSERT then inst
-    else if v = NONE then inst
-    else
-      let rs = range_unwrap v in
-      let dfg_ra_check =
-        case inst.inst_operands of
-          [assert_op] =>
-            (case get_producer dfg assert_op of
-               SOME iszero_inst =>
-                 if iszero_inst.inst_opcode <> ISZERO then F
-                 else (case iszero_inst.inst_operands of
-                   [cmp_op] =>
-                     (case get_producer dfg cmp_op of
-                        SOME cmp_inst =>
-                          if cmp_inst.inst_opcode = LT then
-                            (case cmp_inst.inst_operands of
-                               [res_op; x_op] =>
-                                 (case get_producer dfg res_op of
-                                    SOME add_inst =>
-                                      if add_inst.inst_opcode <> ADD then F
-                                      else (case add_inst.inst_operands of
-                                        [add_op0; add_op1] =>
-                                          let y_op =
-                                            if add_op0 = x_op then SOME add_op1
-                                            else if add_op1 = x_op then SOME add_op0
-                                            else NONE in
-                                          (case y_op of
-                                             NONE => F
-                                           | SOME y =>
-                                               let x_range = case x_op of
-                                                 Lit v => vr_constant (w2i v)
-                                               | Var v => rs_lookup rs v
-                                               | Label _ => VR_Top in
-                                               let y_range = case y of
-                                                 Lit v => vr_constant (w2i v)
-                                               | Var v => rs_lookup rs v
-                                               | Label _ => VR_Top in
-                                               range_nonneg x_range /\
-                                               range_nonneg y_range /\
-                                               vr_hi x_range + vr_hi y_range <=
-                                                 UINT256_MAX_int)
-                                      | _ => F)
-                                  | NONE => F)
-                             | _ => F)
-                          else if cmp_inst.inst_opcode = GT then
-                            (case cmp_inst.inst_operands of
-                               [res_op; x_op] =>
-                                 (case get_producer dfg res_op of
-                                    SOME sub_inst =>
-                                      if sub_inst.inst_opcode <> SUB then F
-                                      else (case sub_inst.inst_operands of
-                                        [sub_x; sub_y] =>
-                                          if sub_x <> x_op then F
-                                          else
-                                            let x_range = case x_op of
-                                              Lit v => vr_constant (w2i v)
-                                            | Var v => rs_lookup rs v
-                                            | Label _ => VR_Top in
-                                            let y_range = case sub_y of
-                                              Lit v => vr_constant (w2i v)
-                                            | Var v => rs_lookup rs v
-                                            | Label _ => VR_Top in
-                                            range_nonneg x_range /\
-                                            range_nonneg y_range /\
-                                            vr_lo x_range >= vr_hi y_range
-                                      | _ => F)
-                                  | NONE => F)
-                             | _ => F)
-                          else F
-                      | NONE => F)
-                 | _ => F)
-             | NONE => F)
-        | _ => F
-      in
-        if dfg_ra_check then mk_nop_inst inst else inst
-End
 
-(* Bridge: overflow_elim_inst matches the framework transform function
-   (taking df_widen_at result directly as the abstract domain value) *)
-Theorem overflow_elim_inst_eq:
-  !dfg ra lbl idx inst.
-    overflow_elim_inst dfg ra lbl idx inst =
-    overflow_elim_inst dfg ra lbl idx inst
-Proof
-  simp[]
-QED
 
 
 (* ================================================================
@@ -571,28 +483,11 @@ QED
    ================================================================ *)
 
 (* The sound predicate for overflow_elim includes range + dfg_ext *)
-(* NOTE: The transform function for the framework can't access lbl and idx,
-   only the abstract domain value v = df_widen_at NONE ra lbl idx.
-   But overflow_elim_inst needs ra, lbl, idx to call range_get_range.
-
-   KEY INSIGHT: range_get_range ra lbl idx op = case op of
-     Lit w => vr_constant (w2i w)
-   | Var v => rs_lookup (range_at_inst ra lbl idx) v
-   | Label _ => VR_Top
-
-   And range_at_inst ra lbl idx = range_unwrap (df_widen_at NONE ra lbl idx).
-
-   So if v_opt = df_widen_at NONE ra lbl idx, then:
-     range_get_range ra lbl idx op = range_get_range_v (range_unwrap v_opt) op
-
-   where range_get_range_v rs op = case op of
-     Lit w => vr_constant (w2i w) | Var v => rs_lookup rs v | Label _ => VR_Top.
-
-   This means we can define a version of try_elim_overflow_check that
-   takes v_opt directly instead of ra lbl idx.
-   Then: try_elim_overflow_check dfg ra lbl idx inst
-       = try_elim_overflow_check_v dfg (df_widen_at NONE ra lbl idx) inst
-*)
+(* overflow_elim_inst needs (ra, lbl, idx) for range_get_range, but the
+   framework only provides v = df_widen_at NONE ra lbl idx. Since
+   range_get_range ra lbl idx op = range_get_range_v (range_unwrap v) op
+   (see range_get_range_eq_v, overflow_elim_inst_eq_v, overflow_elim_inst_via_widen),
+   the transform can be expressed via v alone. *)
 
 (* Range query taking range state directly *)
 Definition range_get_range_v_def:
@@ -618,9 +513,7 @@ Proof
   Cases_on `op` >> simp[range_get_range_v_def, range_nonneg_def]
 QED
 
-(* Now define try_elim_add_overflow_v, try_elim_sub_underflow_v,
-   try_elim_overflow_check_v using range_get_range_v instead of
-   range_get_range ra lbl idx *)
+(* _v variants: take range state directly instead of (ra, lbl, idx) *)
 
 Definition try_elim_add_overflow_v_def:
   try_elim_add_overflow_v dfg rs (lt_inst : instruction) =
@@ -1063,10 +956,13 @@ Theorem overflow_elim_inst_simulates_1:
       (\v s. range_sound v s /\ dfg_ext_sound dfg s.vs_vars)
       (\v inst. overflow_elim_inst_v dfg (range_unwrap v) inst)
 Proof
-  rw[analysis_inst_simulates_1_def] >> rpt conj_tac
+  rpt strip_tac >> gvs[] >>
+  simp[analysis_inst_simulates_1_def, inst_transform_structural_1_def] >>
+  rpt conj_tac
   >- metis_tac[overflow_elim_sim]
   >- (rpt strip_tac >> simp[overflow_elim_inst_v_def] >>
       Cases_on `inst.inst_opcode` >> fs[is_terminator_def])
+  >- (rpt strip_tac >> simp[overflow_elim_inst_v_def])
   >- (rpt strip_tac >> simp[overflow_elim_inst_v_def])
   >> (rpt strip_tac >> gvs[overflow_elim_inst_v_def] >>
       BasicProvers.every_case_tac >>
@@ -1123,4 +1019,3 @@ Proof
   Induct_on `l1` >> simp[run_insts_def] >>
   rpt gen_tac >> Cases_on `step_inst fuel ctx h s` >> simp[]
 QED
-

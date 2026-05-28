@@ -24,8 +24,10 @@
  *   copy_fwd_cross_equiv       — mcopy vs nop → cross equiv holds
  *   copy_fwd_rel               — simulation invariant for copy forwarding
  *   mload_cross_equiv          — MLOAD same result at cross-equiv regions
- *   copy_fwd_step_equiv        — per-instruction: rewritten inst preserves rel
- *   copy_fwd_rel_preserved     — non-clobbering inst preserves invariant
+ *   copy_fwd_read_equiv        — read instruction: rewritten inst preserves rel
+ *   copy_fwd_write_equiv       — write instruction: rewritten inst preserves rel
+ *   copy_fwd_terminator_equiv  — terminator: rewritten inst preserves rel
+ *   copy_fwd_rel_preserved_identical_inst — non-clobbering inst preserves invariant
  *)
 
 Theory copyFwdEquiv
@@ -270,6 +272,8 @@ QED
 
 Definition copy_fwd_rel_def:
   copy_fwd_rel (dst_addr : num) (src_addr : num) (alloca_sz : num) s1 s2 ⇔
+    (* Observable state agrees *)
+    observable_equiv s1 s2 ∧
     (* All variables agree *)
     (∀v. lookup_var v s1 = lookup_var v s2) ∧
     (* The dst region in s1 and the src region in s2 have same content.
@@ -279,22 +283,17 @@ Definition copy_fwd_rel_def:
     (* The src region is the same in both (not clobbered) *)
     cross_mem_region_equiv
       s1.vs_memory src_addr s2.vs_memory src_addr alloca_sz ∧
-    (* Non-memory, non-alloca state agrees *)
-    s1.vs_transient = s2.vs_transient ∧
-    s1.vs_halted = s2.vs_halted ∧
-    s1.vs_returndata = s2.vs_returndata ∧
-    s1.vs_accounts = s2.vs_accounts ∧
+    (* Control and remaining internal state agrees *)
     s1.vs_call_ctx = s2.vs_call_ctx ∧
     s1.vs_tx_ctx = s2.vs_tx_ctx ∧
     s1.vs_block_ctx = s2.vs_block_ctx ∧
-    s1.vs_logs = s2.vs_logs ∧
-    s1.vs_immutables = s2.vs_immutables ∧
     s1.vs_data_section = s2.vs_data_section ∧
     s1.vs_labels = s2.vs_labels ∧
     s1.vs_code = s2.vs_code ∧
     s1.vs_params = s2.vs_params ∧
     s1.vs_prev_hashes = s2.vs_prev_hashes ∧
     s1.vs_allocas = s2.vs_allocas ∧
+    s1.vs_alloca_next = s2.vs_alloca_next ∧
     s1.vs_current_bb = s2.vs_current_bb ∧
     s1.vs_inst_idx = s2.vs_inst_idx ∧
     s1.vs_prev_bb = s2.vs_prev_bb
@@ -306,7 +305,7 @@ Theorem copy_fwd_rel_observable_equiv:
     copy_fwd_rel dst src sz s1 s2 ⇒
     observable_equiv s1 s2
 Proof
-  rw[copy_fwd_rel_def, observable_equiv_def]
+  rw[copy_fwd_rel_def]
 QED
 
 (* =========================================================================
@@ -456,15 +455,16 @@ Proof
 QED
 
 Theorem phi_transparent:
-  ∀inst s s' out prev_lbl v.
-    inst.inst_opcode = PHI ∧
-    inst.inst_outputs = [out] ∧
-    s.vs_prev_bb = SOME prev_lbl ∧
-    resolve_phi prev_lbl inst.inst_operands = SOME (Var v) ∧
-    step_inst_base inst s = OK s' ⇒
-    lookup_var out s' = lookup_var v s
+  !inst s out prev v.
+    inst.inst_outputs = [out] /\
+    s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Var v) ==>
+    !val. eval_one_phi s inst = SOME (out,val) ==>
+      val = THE (lookup_var v s) /\
+      lookup_var out (update_var out val s) = lookup_var v s
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >>
+  fs[eval_one_phi_def, AllCaseEqs()] >>
+  gvs[eval_operand_def, lookup_var_def] >>
   Cases_on `FLOOKUP s.vs_vars v` >> gvs[update_var_def, FLOOKUP_UPDATE]
 QED
