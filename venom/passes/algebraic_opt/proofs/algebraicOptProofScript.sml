@@ -57,15 +57,16 @@ Proof
           Abbr `ra`, Abbr `mid`] >>
      disch_then match_mp_tac >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  (* WF preservation *)
+  (* WF preservation + fresh vars *)
   `wf_function fn1 /\ ssa_form fn1 /\
-   EVERY inst_wf (fn_insts fn1)` by
+   EVERY inst_wf (fn_insts fn1) /\
+   (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
+     v NOTIN ao_cmp_fresh_vars fn1)` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases123_preserve_wf) >>
      disch_then (qspec_then `fn` mp_tac) >>
      simp[Abbr `fn0`, Abbr `fn1`, Abbr `targets`, Abbr `dfg`,
           Abbr `ra`, Abbr `mid`] >>
-     disch_then match_mp_tac >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+     metis_tac[]) >>
   (* Phase 4: fn1 → cmp_flip simulation *)
   qabbrev_tac `dfg1 = dfg_build_function fn1` >>
   qabbrev_tac `dead = ao_cmp_flip_dead_vars dfg1 fn1` >>

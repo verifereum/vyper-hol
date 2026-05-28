@@ -898,6 +898,15 @@ Definition ao_fn_fresh_vars_def:
          v = ao_fresh_var id "xor") }
 End
 
+Definition ao_cmp_fresh_vars_def:
+  ao_cmp_fresh_vars fn =
+    { v | ?id.
+        (?i. MEM i (fn_insts fn) /\
+             is_comparator i.inst_opcode /\
+             i.inst_id = id) /\
+        v = ao_fresh_var id "iz" }
+End
+
 Definition ao_fn_total_fresh_vars_def:
   ao_fn_total_fresh_vars fn =
     let fn0 = fn with fn_blocks :=
