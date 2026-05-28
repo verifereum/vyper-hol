@@ -3154,7 +3154,7 @@ Proof
   gvs[EVERY_DEF]
 QED
 
-Theorem enumerate_static_array_sorted[local]:
+Theorem enumerate_static_array_sorted:
   !d n vs. SORTED $< (MAP FST (enumerate_static_array d n vs))
 Proof
   metis_tac[enumerate_static_array_sorted_aux]

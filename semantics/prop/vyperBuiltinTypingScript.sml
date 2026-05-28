@@ -947,7 +947,40 @@ Resume evaluate_builtin_well_typed[Uint2Str]:
 QED
 
 Resume evaluate_builtin_well_typed[MakeArray]:
-  gvs[well_typed_builtin_app_def]
+  gvs[well_typed_builtin_app_def] >>
+  (* IS_SOME (evaluate_type (ArrayT elem_ty b)) ==> evaluate_type elem_ty = SOME tv *)
+  qpat_x_assum `IS_SOME _` mp_tac >>
+  simp_tac (srw_ss())
+    [evaluate_type_def, AllCaseEqs(), LET_THM,
+     optionTheory.IS_SOME_EXISTS] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  simp[evaluate_type_def] >>
+  gvs[evaluate_builtin_def] >>
+  (* Derive: EVERY (value_has_type tv) vs.
+     LIST_REL pairs vs and arg_tys; every arg_ty is elem_ty;
+     evaluate_type elem_ty = SOME tv, so each value has type tv. *)
+  `!vs arg_tys.
+     EVERY (\t. t = elem_ty) arg_tys /\
+     LIST_REL
+       (\v t. ?tyv. evaluate_type (get_tenv cx) t = SOME tyv /\
+                    value_has_type tyv v)
+       vs arg_tys ==>
+     EVERY (value_has_type tv) vs` by (
+    Induct >> rw[LIST_REL_CONS1] >> gvs[] >>
+    first_x_assum irule >> first_assum (irule_at Any) >> simp[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  `LENGTH vs = LENGTH arg_tys` by metis_tac[LIST_REL_LENGTH] >>
+  Cases_on `b` >> gvs[make_array_value_def, value_has_type_def]
+  >- ( (* Fixed n *)
+    qpat_x_assum `compatible_bound _ _` mp_tac >>
+    simp[compatible_bound_def] >> strip_tac >>
+    rpt BasicProvers.VAR_EQ_TAC >>
+    conj_tac >- simp[enumerate_static_array_sorted] >>
+    irule sparse_has_type_enumerate >> simp[]) >>
+  (* Dynamic n *)
+  qpat_x_assum `compatible_bound _ _` mp_tac >>
+  simp[compatible_bound_def] >> strip_tac >>
+  simp[all_have_type_EVERY]
 QED
 
 Resume evaluate_builtin_well_typed[Ceil]:

@@ -205,11 +205,18 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Uint2Str n) ts =
     (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\
      is_int_type (HD ts) /\ 78 <= n) /\
-  (* MakeArray: disabled — for NONE case, TupleT component types are
-     not connected to argument types in the current typing scheme.
-     For SOME case, all elements must have the same type but
-     well_typed_builtin_app doesn't constrain this. *)
-  well_typed_builtin_app ty (MakeArray type_opt bd) ts = F /\
+  (* MakeArray: SOME case enabled — all elements share the explicit
+     element type, result is an array of that type at the requested
+     bound.  NONE case (Vyper tuples translated as MakeArray NONE)
+     remains disabled because the typing scheme does not connect
+     TupleT component types to the homogeneous-element MakeArray
+     value semantics; tuple literals are not used in the stableswap
+     surface needed for type_preservation downstream. *)
+  well_typed_builtin_app ty (MakeArray type_opt bd) ts =
+    (?elem_ty. type_opt = SOME elem_ty /\
+               ty = ArrayT elem_ty bd /\
+               compatible_bound bd (LENGTH ts) /\
+               EVERY (\t. t = elem_ty) ts) /\
   (* Ceil/Floor: decimal -> int256 (Vyper: floor/ceil always return int256) *)
   well_typed_builtin_app ty Ceil ts =
     (LENGTH ts = 1 /\ HD ts = BaseT DecimalT /\
