@@ -3,6 +3,7 @@ Theory vyperLoweringHol
 Ancestors
   (* definitions *)
   moduleLowering
+  evalCompilerRuntime
   (* property statements and proofs *)
   moduleLoweringProps
   valueEncodingProofs
