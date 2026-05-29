@@ -23,6 +23,7 @@ Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv' = ao_fn_total_fresh_vars fn in
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+    ao_fresh_names_disjoint fn /\
     FDOM s.vs_vars = {} /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/

@@ -214,6 +214,136 @@ Proof
   fs[inst_wf_def]
 QED
 
+(* ===== Iszero chain invariant: internal positions are Vars ===== *)
+
+(* A single forward step keeps the "positions >= 1 are Var" invariant. *)
+Triviality chain_step_pos_var[local]:
+  !acc inst v ch.
+    (!v' ch'. ALOOKUP acc v' = SOME ch' ==>
+       !j. 0 < j /\ j < LENGTH ch' ==> ?y. EL j ch' = Var y) ==>
+    ALOOKUP (ao_compute_iszero_step acc inst) v = SOME ch ==>
+    !j. 0 < j /\ j < LENGTH ch ==> ?y. EL j ch = Var y
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ALOOKUP _ _ = SOME _` mp_tac >>
+  simp[ao_compute_iszero_step_def, LET_THM] >>
+  every_case_tac >> simp[] >> every_case_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  TRY (metis_tac[]) >>
+  gvs[listTheory.LENGTH_SNOC] >>
+  TRY (`j = 1` by DECIDE_TAC >> gvs[listTheory.EL_LENGTH_SNOC] >> NO_TAC) >>
+  qmatch_asmsub_rename_tac `ALOOKUP acc acc_var = SOME acc_chain` >>
+  Cases_on `j = LENGTH acc_chain`
+  >- gvs[listTheory.EL_LENGTH_SNOC]
+  >- (`j < LENGTH acc_chain` by DECIDE_TAC >>
+      gvs[listTheory.EL_SNOC] >> metis_tac[])
+QED
+
+Triviality chain_pos_var_foldl[local]:
+  !insts acc v chain k.
+    (!v' ch. ALOOKUP acc v' = SOME ch ==>
+       !j. 0 < j /\ j < LENGTH ch ==> ?y. EL j ch = Var y) /\
+    ALOOKUP (FOLDL ao_compute_iszero_step acc insts) v = SOME chain /\
+    0 < k /\ k < LENGTH chain ==>
+    ?y. EL k chain = Var y
+Proof
+  Induct
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  fs[listTheory.FOLDL] >>
+  first_x_assum (qspecl_then [`ao_compute_iszero_step acc h`, `v`, `chain`, `k`] mp_tac) >>
+  simp[] >>
+  impl_tac
+  >- (rpt strip_tac >> metis_tac[chain_step_pos_var]) >>
+  simp[]
+QED
+
+Theorem chain_pos_var:
+  !fn0 targets v chain k.
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ALOOKUP targets v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
+    ?y. EL k chain = Var y
+Proof
+  rpt strip_tac >>
+  gvs[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  qspecl_then [`fn_insts fn0`, `[]`, `v`, `chain`, `k`] mp_tac chain_pos_var_foldl >>
+  simp[]
+QED
+
+(* ===== ao_resolve_iszero_inst preserves inst_wf for PHI ===== *)
+
+(* Resolution maps non-Var operands to themselves and Vars to Vars,
+   hence preserves phi_well_formed. *)
+(* Helper: phi_well_formed is preserved through a 2-element prefix when f maps
+   Var->Var and fixes non-Var operands. *)
+Triviality phi_wf_cons2[local]:
+  !f x y rest.
+    (!v. ?w. f (Var v) = Var w) /\
+    (!op. (!v. op <> Var v) ==> f op = op) /\
+    phi_well_formed (x::y::rest) /\ phi_well_formed (MAP f rest) ==>
+    phi_well_formed (f x :: f y :: MAP f rest)
+Proof
+  rpt strip_tac >>
+  `!n. f (Lit n) = Lit n` by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  `!l. f (Label l) = Label l` by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  Cases_on `x` >> Cases_on `y` >>
+  gvs[phi_well_formed_def] >>
+  rename1 `f (Var v)` >>
+  `?w. f (Var v) = Var w` by metis_tac[] >>
+  gvs[phi_well_formed_def]
+QED
+
+Triviality phi_wf_map[local]:
+  !f ops.
+    (!v. ?w. f (Var v) = Var w) /\
+    (!op. (!v. op <> Var v) ==> f op = op) /\
+    phi_well_formed ops ==>
+    phi_well_formed (MAP f ops)
+Proof
+  gen_tac >> ho_match_mp_tac phi_well_formed_ind >>
+  rpt conj_tac >> rpt strip_tac >>
+  TRY (fs[phi_well_formed_def] >> NO_TAC) >>
+  REWRITE_TAC[listTheory.MAP] >> irule phi_wf_cons2 >> simp[] >>
+  first_x_assum irule >> fs[phi_well_formed_def]
+QED
+
+Triviality ao_resolve_iszero_op_phi_var[local]:
+  !fn0 targets v.
+    targets = ao_compute_fn_iszero_targets fn0 ==>
+    ?w. ao_resolve_iszero_op targets PHI (Var v) = Var w
+Proof
+  rpt strip_tac >>
+  simp[ao_resolve_iszero_op_def, LET_THM] >>
+  CASE_TAC >> simp[] >>
+  rename1 `ALOOKUP _ _ = SOME chain` >>
+  IF_CASES_TAC >> simp[] >>
+  qmatch_goalsub_abbrev_tac `EL keep chain` >>
+  `keep < LENGTH chain` by fs[Abbr `keep`] >>
+  `0 < keep` by
+    (`(LENGTH chain - 1) MOD 2 < 2` by simp[] >>
+     simp[Abbr `keep`] >> DECIDE_TAC) >>
+  metis_tac[chain_pos_var]
+QED
+
+Triviality ao_resolve_iszero_op_phi_nonvar[local]:
+  !targets op. (!v. op <> Var v) ==>
+    ao_resolve_iszero_op targets PHI op = op
+Proof
+  rpt strip_tac >> Cases_on `op` >> fs[ao_resolve_iszero_op_def]
+QED
+
+Triviality ao_resolve_iszero_inst_wf_phi[local]:
+  !fn0 inst.
+    inst_wf inst /\ inst.inst_opcode = PHI ==>
+    inst_wf (ao_resolve_iszero_inst (ao_compute_fn_iszero_targets fn0) inst)
+Proof
+  rpt strip_tac >>
+  fs[ao_resolve_iszero_inst_def, inst_wf_def] >>
+  simp[listTheory.LENGTH_MAP] >>
+  irule phi_wf_map >> simp[] >>
+  metis_tac[ao_resolve_iszero_op_phi_var, ao_resolve_iszero_op_phi_nonvar]
+QED
+
 Theorem ao_transform_inst_non_term:
   !mid dfg ra lbl idx targets inst.
     inst_wf inst /\ ~is_terminator inst.inst_opcode ==>
@@ -830,6 +960,201 @@ Proof
   (* fn_inst_ids_distinct *)
   >- (simp[Abbr `bt`, GSYM function_map_transform_def] >>
       irule ao_phase3_inst_ids_distinct >> fs[])
+QED
+
+(* ===== Phase 3 preserves EVERY inst_wf ===== *)
+
+(* Each ao_opt_* rewrite produces well-formed instructions, given the
+   original output arity (= 1 for the arithmetic opcodes they fire on). *)
+Triviality ao_opt_shift_inst_wf[local]:
+  !inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_shift inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_shift_def] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_signextend_inst_wf[local]:
+  !ra lbl idx inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_signextend ra lbl idx inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_signextend_def, LET_THM] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_exp_inst_wf[local]:
+  !inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_exp inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_exp_def] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_addsub_inst_wf[local]:
+  !inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_addsub inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_addsub_def, LET_THM] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_and_inst_wf[local]:
+  !inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_and inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_and_def] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_muldiv_inst_wf[local]:
+  !inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_muldiv inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_muldiv_def, LET_THM] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_or_inst_wf[local]:
+  !dfg inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_or dfg inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_or_def] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_eq_inst_wf[local]:
+  !mid dfg inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_eq mid dfg inst)
+Proof
+  rpt strip_tac >> simp[ao_opt_eq_def, LET_THM] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_opt_comparator_inst_wf[local]:
+  !mid dfg ra lbl idx inst. inst_wf inst /\ LENGTH inst.inst_outputs = 1 ==>
+    EVERY inst_wf (ao_opt_comparator mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_opt_comparator_def, ao_cmp_prefer_iz_zero_def,
+       ao_cmp_prefer_iz_max_def, ao_cmp_prefer_iz_general_def,
+       ao_signed_boundaries_def, ao_unsigned_boundaries_def, LET_THM] >>
+  every_case_tac >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> fs[inst_wf_def]
+QED
+
+(* ao_opt_producer only fires on BALANCE/EXTCODESIZE/SIGNEXTEND, all of
+   which have output arity 1 once inst_wf holds, so no extra hyp needed. *)
+Triviality ao_opt_producer_inst_wf[local]:
+  !dfg inst result.
+    inst_wf inst /\ ao_opt_producer dfg inst = SOME result ==>
+    EVERY inst_wf result
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ao_opt_producer _ _ = _` mp_tac >>
+  simp[ao_opt_producer_def] >>
+  every_case_tac >> simp[] >> strip_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_post_flip_inst_wf[local]:
+  !inst. inst_wf inst ==> inst_wf (ao_post_flip_inst inst)
+Proof
+  rpt strip_tac >> simp[ao_post_flip_inst_def] >>
+  every_case_tac >> gvs[] >> fs[inst_wf_def]
+QED
+
+Triviality ao_peephole_inst_inst_wf[local]:
+  !mid dfg ra lbl idx inst.
+    inst_wf inst ==>
+    EVERY inst_wf (ao_peephole_inst mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_peephole_inst_def, LET_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  TRY (asm_simp_tac (srw_ss()) [] >> NO_TAC) >>
+  FIRST [
+    irule ao_opt_shift_inst_wf,
+    irule ao_opt_signextend_inst_wf,
+    irule ao_opt_exp_inst_wf,
+    irule ao_opt_addsub_inst_wf,
+    irule ao_opt_and_inst_wf,
+    irule ao_opt_muldiv_inst_wf,
+    irule ao_opt_or_inst_wf,
+    irule ao_opt_eq_inst_wf,
+    irule ao_opt_comparator_inst_wf
+  ] >> gvs[inst_wf_def]
+QED
+
+Triviality ao_transform_inst_inst_wf[local]:
+  !fn0 mid dfg ra lbl idx inst.
+    inst_wf inst ==>
+    EVERY inst_wf
+      (ao_transform_inst mid dfg ra lbl idx
+        (ao_compute_fn_iszero_targets fn0) inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_transform_inst_def, LET_THM] >>
+  qabbrev_tac
+    `inst0 = ao_resolve_iszero_inst (ao_compute_fn_iszero_targets fn0) inst` >>
+  `inst_wf inst0` by
+    (Cases_on `inst.inst_opcode = PHI`
+     >- (simp[Abbr `inst0`] >> irule ao_resolve_iszero_inst_wf_phi >> simp[])
+     >- (simp[Abbr `inst0`] >> irule ao_resolve_iszero_inst_wf >> simp[])) >>
+  `inst0.inst_opcode = inst.inst_opcode /\
+   inst0.inst_outputs = inst.inst_outputs` by
+    simp[Abbr `inst0`, ao_resolve_iszero_inst_def] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- simp[] >>
+  CASE_TAC
+  >- (* NONE: pre-flip then peephole then post-flip *)
+     (simp[LET_THM, listTheory.EVERY_MAP] >>
+      `EVERY inst_wf
+         (ao_peephole_inst mid dfg ra lbl idx
+            (ao_pre_flip_inst inst0))` by
+        (irule ao_peephole_inst_inst_wf >> irule ao_pre_flip_inst_wf >>
+         simp[]) >>
+      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+      irule ao_post_flip_inst_wf >> res_tac)
+  >- (* SOME result: post-flip *)
+     (rename1 `ao_opt_producer dfg inst0 = SOME result` >>
+      simp[listTheory.EVERY_MAP] >>
+      `EVERY inst_wf result` by (irule ao_opt_producer_inst_wf >> metis_tac[]) >>
+      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+      irule ao_post_flip_inst_wf >> res_tac)
+QED
+
+Triviality ao_transform_block_inst_wf[local]:
+  !mid dfg ra fn0 bb.
+    EVERY inst_wf bb.bb_instructions ==>
+    EVERY inst_wf
+      (ao_transform_block mid dfg ra
+         (ao_compute_fn_iszero_targets fn0) bb).bb_instructions
+Proof
+  rpt strip_tac >>
+  simp[ao_transform_block_def, listTheory.EVERY_MEM, listTheory.MEM_FLAT,
+       indexedListsTheory.MEM_MAPi, PULL_EXISTS] >>
+  rpt strip_tac >>
+  qmatch_asmsub_abbrev_tac `MEM x (ao_transform_inst _ _ _ _ i _ _)` >>
+  `EVERY inst_wf (ao_transform_inst mid dfg ra bb.bb_label i
+     (ao_compute_fn_iszero_targets fn0) (EL i bb.bb_instructions))` by
+    (irule ao_transform_inst_inst_wf >> fs[listTheory.EVERY_EL]) >>
+  fs[listTheory.EVERY_MEM]
+QED
+
+Theorem ao_phase3_preserves_inst_wf:
+  !mid dfg ra fn0.
+    EVERY inst_wf (fn_insts fn0) ==>
+    EVERY inst_wf (fn_insts (function_map_transform
+      (ao_transform_block mid dfg ra (ao_compute_fn_iszero_targets fn0)) fn0))
+Proof
+  rpt strip_tac >>
+  simp[function_map_transform_def, fn_insts_def] >>
+  qpat_x_assum `EVERY inst_wf (fn_insts fn0)` mp_tac >>
+  simp[fn_insts_def] >>
+  qspec_tac (`fn0.fn_blocks`, `bbs`) >>
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >> fs[listTheory.EVERY_APPEND] >> rpt conj_tac >>
+  TRY (irule ao_transform_block_inst_wf >> simp[] >> NO_TAC) >>
+  first_x_assum irule >> simp[]
 QED
 
 val _ = export_theory();

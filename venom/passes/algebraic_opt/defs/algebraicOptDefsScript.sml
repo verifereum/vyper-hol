@@ -899,6 +899,15 @@ Definition ao_fn_fresh_vars_def:
          v = ao_fresh_var id "xor") }
 End
 
+(* The pass's fresh-variable namespace is disjoint from the original outputs.
+   Required so phase-3 inserted fresh vars cannot collide with existing
+   outputs (mirrors mem2var's m2v_fresh_names_disjoint). *)
+Definition ao_fresh_names_disjoint_def:
+  ao_fresh_names_disjoint fn <=>
+    !inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+             v NOTIN ao_fn_fresh_vars fn
+End
+
 Definition ao_fn_total_fresh_vars_def:
   ao_fn_total_fresh_vars fn =
     let fn0 = fn with fn_blocks :=

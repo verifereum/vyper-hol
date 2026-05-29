@@ -133,7 +133,7 @@ Proof
   simp[rich_listTheory.HEAD_MEM]
 QED
 
-Triviality scan_step_inserts_subset[local]:
+Theorem scan_step_inserts_subset:
   !dfg h rest flips removes inserts fl0 rm0 ins0.
     ao_cmp_flip_scan dfg rest = (fl0, rm0, ins0) /\
     ao_cmp_flip_scan dfg (h :: rest) = (flips, removes, inserts) ==>
@@ -453,7 +453,7 @@ Proof
   Induct >> simp[fn_insts_blocks_def]
 QED
 
-Triviality fn_inst_ids_to_fn_insts[local]:
+Theorem fn_inst_ids_to_fn_insts:
   !fn. fn_inst_ids_distinct fn ==>
     ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))
 Proof
@@ -937,7 +937,7 @@ Proof
   metis_tac[listTheory.FILTER_ALL_DISTINCT]
 QED
 
-Triviality scan_inserts_cmp_id_mem[local]:
+Theorem scan_inserts_cmp_id_mem:
   !dfg insts flips removes inserts id out_var fresh cmp_id.
     ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
     MEM (id, out_var, fresh, cmp_id) inserts ==>
@@ -959,7 +959,46 @@ Proof
   >> gvs[] >> metis_tac[]
 QED
 
-Triviality scan_inserts_cmp_ids_distinct[local]:
+Theorem scan_inserts_fresh_form:
+  !dfg insts flips removes inserts id out fresh cmp_id.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    MEM (id, out, fresh, cmp_id) inserts ==>
+    fresh = ao_fresh_var cmp_id "iz"
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `_ = (flips', removes', inserts')` >>
+  `inserts = inserts' \/
+   (?v ui.
+       inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+                  h.inst_id) :: inserts' /\
+       MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)` by
+    metis_tac[scan_step_inserts_subset] >>
+  gvs[]
+  >- metis_tac[]
+  >> gvs[] >> metis_tac[]
+QED
+
+Theorem scan_inserts_cmp_id_comparator:
+  !dfg insts flips removes inserts id out_var fresh cmp_id.
+    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+    MEM (id, out_var, fresh, cmp_id) inserts ==>
+    ?i. MEM i insts /\ i.inst_id = cmp_id /\ is_comparator i.inst_opcode
+Proof
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def]
+  >> rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  rename1 `_ = (flips', removes', inserts')` >>
+  drule_all scan_step_detail >>
+  disch_then strip_assume_tac >> gvs[] >>
+  TRY (first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  metis_tac[listTheory.MEM]
+QED
+
+Theorem scan_inserts_cmp_ids_distinct:
   !dfg insts flips removes inserts.
     ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) insts) ==>
@@ -1000,7 +1039,7 @@ Proof
   every_case_tac >> gvs[] >> metis_tac[]
 QED
 
-Triviality alookup_cmp_id_inj[local]:
+Theorem alookup_cmp_id_inj:
   !(inserts:(num # string # string # num) list) id1 id2 a1 b1 a2 b2 cmp_id.
     ALL_DISTINCT (MAP (\(_, _, _, c). c) inserts) /\
     ALOOKUP inserts id1 = SOME (a1, b1, cmp_id) /\
