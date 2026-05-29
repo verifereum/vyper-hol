@@ -197,7 +197,8 @@ Definition well_typed_builtin_app_def:
     (LENGTH ts = 3 /\ ty = BaseT (UintT 256) /\ EVERY ((=) (BaseT (UintT 256))) ts) /\
   well_typed_builtin_app ty BlockHash ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (BytesT (Fixed 32))) /\
   well_typed_builtin_app ty BlobHash ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (BytesT (Fixed 32))) /\
-  well_typed_builtin_app ty (Env item) ts = (ts = [] /\ ty = env_item_type item) /\
+  well_typed_builtin_app ty (Env item) ts =
+    (ts = [] /\ ty = env_item_type item /\ item <> MsgGas) /\
   well_typed_builtin_app ty (Acc item) ts =
     (LENGTH ts = 1 /\ HD ts = BaseT AddressT /\ ty = account_item_type item) /\
   well_typed_builtin_app ty MethodId ts =
@@ -711,6 +712,65 @@ Definition well_typed_stmts_def:
   well_typed_stmts env ret_ty ss = IS_SOME (type_stmts env ret_ty ss)
 End
 
+(* Conservative syntactic control-flow predicate for callable bodies.  If this
+ * holds for a statement/list, the evaluator should not be able to fall through
+ * normally; the semantic boundary lemma is proved in vyperTypeStmtSoundness. *)
+Definition stmt_no_fallthrough_def:
+  stmt_no_fallthrough Pass = F /\
+  stmt_no_fallthrough Continue = T /\
+  stmt_no_fallthrough Break = T /\
+  stmt_no_fallthrough (Expr e) = F /\
+  stmt_no_fallthrough (For id ty it n body) = F /\
+  stmt_no_fallthrough (If e ss1 ss2) =
+    (stmts_no_fallthrough ss1 /\ stmts_no_fallthrough ss2) /\
+  stmt_no_fallthrough (Assert e reason) = F /\
+  stmt_no_fallthrough (Log id es) = F /\
+  stmt_no_fallthrough (Raise reason) = T /\
+  stmt_no_fallthrough (Return opt_e) = T /\
+  stmt_no_fallthrough (Assign tgt e) = F /\
+  stmt_no_fallthrough (AugAssign ty bt bop e) = F /\
+  stmt_no_fallthrough (Append bt e) = F /\
+  stmt_no_fallthrough (AnnAssign id ty e) = F /\
+  stmts_no_fallthrough [] = F /\
+  stmts_no_fallthrough (s::ss) =
+    (stmt_no_fallthrough s \/ stmts_no_fallthrough ss)
+Termination
+  WF_REL_TAC `measure (\x.
+    case x of INL t => stmt_size t
+            | INR ts => list_size stmt_size ts)` >>
+  simp[stmt_size_def]
+End
+
+(* Static predicate for callable bodies: loop-control exceptions may be used
+ * inside loops, but Break/Continue must not escape a callable body boundary
+ * where handle_function would convert them to TypeError. *)
+Definition stmt_no_control_escape_def:
+  stmt_no_control_escape Pass = T /\
+  stmt_no_control_escape Continue = F /\
+  stmt_no_control_escape Break = F /\
+  stmt_no_control_escape (Expr e) = T /\
+  stmt_no_control_escape (Return opt_e) = T /\
+  stmt_no_control_escape (Raise reason) = T /\
+  stmt_no_control_escape (Assert e reason) = T /\
+  stmt_no_control_escape (Log id es) = T /\
+  stmt_no_control_escape (AnnAssign id typ e) = T /\
+  stmt_no_control_escape (Append bt e) = T /\
+  stmt_no_control_escape (Assign tgt e) = T /\
+  stmt_no_control_escape (AugAssign ty bt bop e) = T /\
+  stmt_no_control_escape (If e ss1 ss2) =
+    (stmts_no_control_escape ss1 /\ stmts_no_control_escape ss2) /\
+  stmt_no_control_escape (For id typ it n body) = T /\
+  stmts_no_control_escape [] = T /\
+  stmts_no_control_escape (s::ss) =
+    (stmt_no_control_escape s /\
+     (stmt_no_fallthrough s \/ stmts_no_control_escape ss))
+Termination
+  WF_REL_TAC `measure (\x.
+    case x of INL t => stmt_size t
+            | INR ts => list_size stmt_size ts)` >>
+  simp[stmt_size_def]
+End
+
 (* ===== Global consistency predicates ===== *)
 
 Definition fn_sigs_consistent_def:
@@ -883,6 +943,8 @@ Definition functions_well_typed_def:
           env_body.flag_members = flag_members /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\
           type_stmts env_body ret body = SOME env_after /\
+          (ret = NoneT \/ stmts_no_fallthrough body) /\
+          stmts_no_control_escape body /\
           well_typed_exprs (defaults_env env_body) dflts /\
           (!id typ. MEM (id,typ) args ==>
              FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\

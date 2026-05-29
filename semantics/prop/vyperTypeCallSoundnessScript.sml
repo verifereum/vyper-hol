@@ -69,6 +69,8 @@ Theorem functions_well_typed_body:
     env_body.flag_members = flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
     well_typed_exprs (defaults_env env_body) dflts /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\

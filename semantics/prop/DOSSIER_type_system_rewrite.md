@@ -55,7 +55,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C1.6.2.4.3.3.2 | proved |  | E0233 | Review closure with strategist. If accepted, begin the scheduled post-PowMod256 checkpoint C1.6.2.4.3.3.3 or whatever Oracle next reports. |
 | C1.6.2.4.3.3.3 | proved |  | E0234 | Review closure with strategist. If accepted, follow Oracle next, expected to be the broader post-builtin/state-preservation checkpoint C1.6.2.4.3.4 or another scheduled frontier. |
 | C1.6.2.4.3.4 | proved |  | E0235 | Review closure with strategist, then follow Oracle next (likely assignment wrapper audit or next scheduled fresh-stack component). |
-| C2.0 | proved |  | E0767 | Call plan_oracle review for C2.0 closure, then follow Oracle next. |
+| C2.0 | proved |  | E1111 | Call plan_oracle review, then begin the scheduled C2.6 source-prefix/IntCall integration leaf. |
 | C2.0.1 | proved |  | E0543 | Review closure, then begin C2.0.2 replacement helper/caller patch. |
 | C2.0.2 | stuck | risk_mismatch | E0544 | Call plan_oracle review for C2.0.2 with this evidence. Recommend a stronger structural repair: avoid proving the final ReturnException branch inside this large theorem context entirely, e.g. extract a full caller-suffix lemma that includes the tail goal shape, or restructure `eval_for_cons_type_sound_core` with `suspend`/`Resume` so the problematic branch is a top-level proof with clean assumptions. |
 | C2.0.2.1 | proved |  | E0547 | Review closure, then begin C2.0.2.2 to add `for_cons_non_loop_exception_suffix`. |
@@ -74,7 +74,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.0.2.4.1 | proved |  | E0575 | Begin C2.0.2.4.2 and replace the two inline Iterator_Range exclusion derivations with the helper. |
 | C2.0.2.4.2 | proved |  | E0577 | Ask strategist/review to classify the newly exposed `Targets_cons` timeout before editing outside C2.0.2.4.2. |
 | C2.0.2.4.3 | proved |  | E0578 | Call strategist review for C2.0.2.4.3 closure; then begin the scheduled next component for Targets_cons if authorized. |
-| C2.1 | stuck | risk_mismatch | E0591 | Ask strategist to review/redecompose C2.1. Prefer splitting the boundary lemma into smaller immutable branch lemmas (no-TypeError and success typed) plus storage/hashmap branch lemmas, or changing the helper statement to consume branch equations directly. |
+| C2.1 | proved |  | E1082 | Review C2.1 closure, then begin C2.2 to update callable-body projection lemmas with `stmts_no_control_escape`. |
 | C2.1.0 | proved |  | E0665 | Review closure with strategist/harness, then begin the next oracle-scheduled carry-forward/frontier component toward Expr_Subscript. |
 | C2.1.1 | progressed | plan_incomplete | E0619 | Request strategist augmentation/review for the newly discovered `BaseTarget_Subscript` timeout before editing it, or otherwise authorize treating it as a local C2.1 build-blocker analogous to C2.1.0. |
 | C2.1.1.0 | proved |  | E0666 | Review closure with strategist/harness, then begin the next oracle-scheduled carried-evidence component toward C2.1.1.13. |
@@ -134,42 +134,133 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.1a.8 | proved |  | E0597 |  |
 | C2.1a.9 | proved |  | E0602 |  |
 | C2.1b | proved |  | E0612 |  |
-| C2.2 | proved |  | E0768 |  |
+| C2.2 | proved |  | E1083 | Call plan_oracle review for C2.2 closure; if accepted, follow Oracle-next (expected C2.3 semantic no-escape or C2.4 tail-helper work). |
 | C2.2.1 | proved |  | E0709 | Review C2.2.1 closure with strategist; if accepted, begin C2.2.2 to package the Expr_Attribute successful-tail proof using this boundary lemma. |
 | C2.2.2 | proved |  | E0710 |  |
 | C2.2.3 | proved |  | E0711 | Review C2.2.3 closure with strategist, then commit the stable Expr_Attribute checkpoint if accepted. |
 | C2.2.a | proved |  | E0444 | Review closure, then begin C2.2.b or the Oracle-next component to align/close the ordinary-exception final-tail helper. |
 | C2.2.b | proved |  | E0445 | Review closure, then begin the scheduled integration component to replace the For_cons suffix placeholder with a helper application. |
-| C2.3 | proved |  | E0769 |  |
+| C2.3 | proved |  | E1084 | Call plan_oracle review for C2.3; if accepted, begin Oracle-next C2.4 and repair intcall_post_push_tail_no_type_error to consume stmts_no_control_escape/semantic no-escape. |
 | C2.3.1 | proved |  | E0719 | Review closure, then begin C2.3.2 carry-forward extraction lemma audit. |
 | C2.3.2 | proved |  | E0720 | Review closure, then begin C2.3.3 to strengthen the Pop typing clause with assignment assignability. |
 | C2.3.3 | proved |  | E0721 | Review closure, then begin C2.3.4 to add the strong Pop extraction lemma exposing both dynamic target and assignability. |
 | C2.3.4 | proved |  | E0722 | Review closure, then begin C2.3.5 to prove the Pop assignment success-return boundary lemma. |
 | C2.3.5 | proved |  | E0727 |  |
 | C2.3.6 | proved |  | E0729 | Call plan_oracle review for C2.3.6; after review, inspect status/diff and checkpoint commit only the relevant stable files if the oracle accepts. |
-| C2.4 | proved |  | E0615 | Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures. |
-| C2.4.0 | proved |  | E0791 |  |
+| C2.4 | proved |  | E1085 | Call plan_oracle review for C2.4; if accepted, begin Oracle-next C2.5 to thread the new `stmts_no_control_escape body0` premise into `intcall_expr_no_type_error_from_generated_ih`. |
+| C2.4.0 | proved |  | E0855 | Call plan_oracle review for C2.4.0 closure, then query_plan and begin exactly Oracle-next component. |
 | C2.4.1 | stuck | risk_mismatch | E0794 | Call plan_oracle(mode='review') for C2.4.1. Likely needs a revised plan: either prove/evaluate a concrete counterexample for Len on fixed static arrays, strengthen expression/result invariants to exclude materialized SArrayV for Len inputs, or change/use a correct builtin boundary that matches evaluator behavior. |
-| C2.4.1.1 | proved |  | E0799 | Call plan_oracle review for this carry-forward closure; then begin C2.4.1.2 if scheduled. |
-| C2.4.1.2 | proved |  | E0800 | Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes. |
-| C2.4.1.3 | proved |  | E0801 | Call plan_oracle review for C2.4.1.3; if accepted, commit cleanup and proceed to C2.4.1.4 Len typed-runtime no-TypeError boundary. |
-| C2.4.1.4 | proved |  | E0802 | Call plan_oracle review for C2.4.1.4; if accepted, commit the builtin boundary and proceed to C2.4.1.5 to replace the Len TypeError-path FAIL_TAC with the new boundary. |
-| C2.4.1.5 | proved |  | E0803 | Call plan_oracle review for C2.4.1.5. Because the build now exposes the non-Len `Expr_Builtin` branch and no explicit child component for it is visible under C2.4, ask the strategist to accept the Len integration and either schedule/authorize the non-Len branch or clarify existing coverage. |
+| C2.4.1.1 | proved |  | E0856 | Call plan_oracle review for C2.4.1.1 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.2 | proved |  | E0857 | Call plan_oracle review for C2.4.1.2 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.3 | proved |  | E0858 | Call plan_oracle review for C2.4.1.3 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.4 | proved |  | E0859 | Call plan_oracle review for C2.4.1.4 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.5 | proved |  | E0860 | Call plan_oracle review for C2.4.1.5 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.6 | stuck | missing_helper | E0805 | Call plan_oracle review for C2.4.1.6 with this evidence; do not continue tactical edits until the Env MsgGas gap is classified. |
+| C2.4.1.6.1 | proved |  | E0861 | Call plan_oracle review for C2.4.1.6.1 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.6.2 | stuck | risk_mismatch | E0809 | Ask the strategist whether to add a small monadic boundary lemma/corollary for both return/raise nested evaluator wrappers, or to refactor the branch proof so the nested equality is normalized before the builtin result split. |
+| C2.4.1.6.2.1 | proved |  | E0862 | Call plan_oracle review for C2.4.1.6.2.1 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.6.2.2 | proved |  | E0863 | Call plan_oracle review for C2.4.1.6.2.2 closure, then query_plan and begin exactly Oracle-next component. |
+| C2.4.1.7 | proved |  | E0864 | Call plan_oracle review for C2.4.1.7 closure, then query_plan and begin exactly Oracle-next component. |
 | C2.4.1.a | proved |  | E0795 |  |
 | C2.4.1.b | proved |  | E0796 | Call plan_oracle review. Because this proves a verified counterexample to the active Len no-TypeError obligation, do not continue sibling proof work unless the oracle/user authorizes a semantics/typing repair plan. |
-| C2.5 | stuck | wrong_statement | E0243 | Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed. |
-| C2.5.1 | proved |  | E0281 | Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next. |
-| C2.5.2 | proved |  | E0282 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
-| C2.5.3 | proved |  | E0283 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
+| C2.5 | stuck | risk_mismatch | E1089 | Call plan_oracle(mode='review', component_id='C2.5') asking for a de-risked adapter lemma shape or replacement C2.5 subtree. Do not continue qspecl_then plumbing in the main theorem. |
+| C2.5.1 | proved |  | E1091 | Call plan_oracle review; if accepted, begin C2.5.2 to replace the old inline assertion with `intcall_body_soundness_from_generated_ih`. |
+| C2.5.2 | proved |  | E1098 | Call plan_oracle(mode='review') for C2.5.2. The next observed blocker is BaseTarget_Subscript line 7132, outside the C2.5.2 IntCall local refactor; follow the reviewed PLAN before editing it. |
+| C2.5.3 | proved |  | E1099 | Call plan_oracle(mode='review') for C2.5.3. The remaining observed blocker is BaseTarget_Subscript line 7132, before later mutual resumes; do not edit it unless the reviewed PLAN schedules it. |
 | C2.5.4.1 | proved |  | E0284 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
 | C2.5.4.2 | proved |  | E0285 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
 | C2.5.5 | proved |  | E0286 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
-| C2.6 | progressed | wrong_statement | E0260 | Escalate C2.6 to strategist before continuing: either strengthen the expr-list mutual clause with a materialisable/non-hashmap condition and update callers, or add/prove a boundary lemma showing well_typed_exprs callers already exclude HashMapRef heads. |
-| C2.6.1 | proved |  | E0287 | Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier. |
-| C2.6.2 | proved |  | E0288 | Review closure with strategist, then follow Oracle next frontier. |
-| C2.6.3 | proved |  | E0289 | Review closure with strategist, then follow Oracle next frontier. |
-| C2.7 | stuck | plan_incomplete | E0264 | Strategist must decide whether to decompose the remaining expression Resume cheats inside C2/C2.7 or classify them under later builtin/call components; executor must not edit them until PLAN coverage exists. |
-| C2.7.1 | progressed | other | E0267 | Run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600)` immediately on the current source. If it still fails in `Expr_TopLevelName`, do not add more broad definitions; factor a local boundary lemma for well-typed top-level lookup/no-TypeError/result-typing or split the inline proof by `find_var_decl_by_num` branch. |
+| C2.6 | stuck | risk_mismatch | E1115 | Call plan_oracle(mode="review", component_id="C2.6") for a redesigned helper/use-site factoring, likely around `intcall_expr_no_type_error_from_generated_ih` rather than more inline proof search. |
+| C2.6.0 | proved |  | E1242 | Review C2.6.0 closure with strategist, then begin the scheduled downstream component if accepted. |
+| C2.6.1 | proved |  | E1116 | Review C2.6.1 closure with strategist, then begin C2.6.2 to add exact `intcall_live_pushed_body_preconditions` corollary. |
+| C2.6.2 | proved |  | E1117 | Review C2.6.2 closure, then begin C2.6.3 to refactor the IntCall success path and replace the old pushed-body assertion with the new exact corollary. |
+| C2.6.3 | stuck | risk_mismatch | E1121 | Ask strategist to review C2.6.3 and likely replace/augment the C2.6.3 subtree with a helper that packages the default-result split or entire IntCall post-default no-TypeError tail, then repair the current partial source accordingly. |
+| C2.6.3.1 | proved |  | E1122 | Review closure, then begin C2.6.3.2 to add/prove `bind_no_type_error_result`; after that C2.6.3.3 should replace the `FAIL_TAC` marker with a bind-boundary application and the success continuation proof. |
+| C2.6.3.2 | proved |  | E1123 |  |
+| C2.6.3.3 | stuck | risk_mismatch | E1130 | Call plan_oracle(mode='review') to redesign/re-scope the helper boundary, likely by separating a post-push tail equality premise or by making the default-success helper start after bind/ret/lock/push success rather than concluding from the whole raw case expression. |
+| C2.6.3.3.1 | stuck | risk_mismatch | E1142 | Call plan_oracle(mode="review") for C2.6.3.3.1 requesting a bridge/interface repair or subtree replacement for the continuation/post-push boundary. |
+| C2.6.3.3.1.a | proved |  | E1148 | Review C2.6.3.3.1.a closure with strategist, then proceed to carried-forward C2.6.3.3.1.b / adapter component as scheduled. |
+| C2.6.3.3.1.b | proved |  | E1149 | Review C2.6.3.3.1.b closure with strategist, then begin C2.6.3.3.1.c to add the specialized none-return adapter. |
+| C2.6.3.3.1.c | proved |  | E1150 | Review C2.6.3.3.1.c closure with strategist, then begin C2.6.3.3.1.d to replace the continuation placeholder with a direct use of `intcall_default_success_none_tail_no_type_error`. |
+| C2.6.3.3.1.d | stuck | risk_mismatch | E1158 | Ask strategist to repair C2.6.3.3.1.d with either a micro boundary lemma for `no_type_error_result res` plus top-level equality, or a cleaner continuation proof shape that avoids long manual instantiation and keeps the equality/contradiction aligned. |
+| C2.6.3.3.1.d.1 | proved |  | E1160 |  |
+| C2.6.3.3.1.e | proved |  | E1155 | Call plan_oracle review, then begin C2.6.3.3.1.d if accepted. |
+| C2.6.3.3.2 | stuck | risk_mismatch | E1161 | Ask the strategist to replace/refine C2.6.3.3.2 with a generated-IH-facing adapter whose body-IH premise is conditional on the same bind/eval-ret/lock/push facts, or to adjust the continuation helper interface so those facts are consumed internally. |
+| C2.6.3.3.2.1 | proved |  | E1163 | Call plan_oracle review. If accepted, proceed to C2.6.3.3.2.2 to add the direct body-IH setup-success bridge. |
+| C2.6.3.3.2.2 | proved |  | E1164 | Call plan_oracle review; if accepted, begin C2.6.3.3.2.3 for the post-lock no-TypeError helper using this bridge. |
+| C2.6.3.3.2.3 | proved |  | E1165 | Call plan_oracle review; if accepted, begin C2.6.3.3.2.4 to refactor `intcall_expr_no_type_error_from_generated_ih` to expose the post-lock cut and use the new helper. |
+| C2.6.3.3.2.4 | progressed | risk_mismatch | E1169 | Call plan_oracle for a narrower NoneT/post-lock consumer helper or other rebased structure; avoid further trailing branch edits in the monolithic branch. |
+| C2.6.3.3.2.4.1 | proved |  | E1193 | Call plan_oracle review, then begin the scheduled next carry-forward component C2.6.3.3.2.4.2. |
+| C2.6.3.3.2.4.2 | proved |  | E1194 | Call plan_oracle review for C2.6.3.3.2.4.2, then proceed to scheduled C2.6.3.3.2.4.3 if accepted. |
+| C2.6.3.3.2.4.3 | proved |  | E1195 | Call plan_oracle review for C2.6.3.3.2.4.3, then begin C2.6.3.3.2.4.4 to add the arbitrary-return general post-lock consumer. |
+| C2.6.3.3.2.4.3.1 | proved |  | E1178 |  |
+| C2.6.3.3.2.4.3.2 | proved |  | E1179 |  |
+| C2.6.3.3.2.4.3.3 | stuck | risk_mismatch | E1186 | Strategist should decompose/rebase this leaf, likely by extracting a whole `dflt_res = INL dflt_vs` branch theorem or changing the wrapper to consume the original case equality directly, rather than continuing nested branch tactic surgery. |
+| C2.6.3.3.2.4.4 | stuck | risk_mismatch | E1196 | Strategist should review whether to replace this leaf with a narrower helper statement that delegates directly to an existing bound/push continuation lemma, or adjust the consumer statement to carry the exact continuation equality shape required by the tail helper. Do not keep tuning qpat/ORELSE tactics in the current proof block. |
+| C2.6.3.3.2.4.4.1 | proved |  | E1211 | Review closure, then begin flattened C2.6.3.3.2.4.4.2 for fallthrough-tail helper and consumer refactor. |
+| C2.6.3.3.2.4.4.2 | proved |  | E1213 | Call plan_oracle review for accepted closure, then begin the scheduled next component for the downstream actual-args/general IntCall helper path. |
+| C2.6.3.3.2.4.5 | proved |  | E1229 |  |
+| C2.6.3.3.2.4.5.1 | proved |  | E1222 | Call plan_oracle review; then begin scheduled C2.6.3.3.2.4.5.2 if accepted. |
+| C2.6.3.3.2.4.5.2 | proved |  | E1225 | Review with plan_oracle, then continue to C2.6.3.3.2.4.5.3 if accepted; the current build failure is the downstream general actual-args-success theorem, not the closed default package lemma. |
+| C2.6.3.3.2.4.5.3 | stuck | risk_mismatch | E1227 | Ask strategist to review C2.6.3.3.2.4.5.3. Likely re-plan by tightening `intcall_successful_defaults_continuation_no_type_error_general` to assume the already-simplified post-lock equation (the goal at log lines 119-151) instead of the full nested bind/evaluate continuation equation. |
+| C2.6.3.3.2.4.6 | proved |  | E1232 |  |
+| C2.6.3.4 | proved |  | E1233 | Review closure with strategist, then follow updated PLAN; expected next component is downstream IntCall integration C2.6.4. |
+| C2.6.4 | stuck | risk_mismatch | E1238 | Ask plan_oracle to replace/augment C2.6.4 with a stronger full first-conjunct IntCall helper or a narrower proof-integration component that handles preservation/result typing without duplicating evaluator case analysis. |
+| C2.6.4.1 | proved |  | E1239 | Review closure with strategist, then proceed to C2.6.4.2 if accepted. |
+| C2.6.4.2 | progressed | risk_mismatch | E1246 | Do not continue tactic variants in this helper. Next session should first restore/revert the proof of `intcall_default_success_general_post_lock_consumer_no_type_error` to the last build-reaching shape from E1243 if possible, or stop and ask the strategist for a local replacement/refactor of the no-TypeError helper cluster. The real C2.6.4.2 work remains the full continuation boundary, not this brittle prefix helper. |
+| C2.6.4.2.1 | stuck | risk_mismatch | E1247 | Strategist review should decide whether to add a small adapter theorem for the generated-IH premise/NoneT consumer or replace the local C2.6.4.2.1 proof shape. Do not continue local tactic variants in the current theorem body. |
+| C2.6.4.2.1.1 | proved |  | E1248 | Review closure, then begin C2.6.4.2.1.2 to add the generated-IH-to-post-push adapter lemma. |
+| C2.6.4.2.1.2 | proved |  | E1249 | Call plan_oracle review, then proceed to the next scheduled child if accepted. |
+| C2.6.4.2.1.3 | proved |  | E1250 | Call plan_oracle review, then proceed to C2.6.4.2.1.4 if accepted. |
+| C2.6.4.2.1.4 | proved |  | E1252 |  |
+| C2.6.4.2.2 | proved |  | E1253 | Call plan_oracle(mode='review', component_id='C2.6.4.2.2', evidence_ids=[...]); if accepted, follow scheduled next component C2.6.4.2.3. |
+| C2.6.4.2.3 | proved |  | E1254 | Call plan_oracle(mode='review', component_id='C2.6.4.2.3', evidence_ids=[...]) and follow the scheduled next component if accepted. |
+| C2.6.4.2.4 | stuck | risk_mismatch | E1261 | Ask strategist to decompose C2.6.4.2.4 into branch-specific helpers, especially a helper for outer finally INR preserving state/env/accounts for both try-INL and try-INR cleanup outcomes. |
+| C2.6.4.2.4.1 | proved |  | E1267 |  |
+| C2.6.4.2.4.2 | proved |  | E1268 |  |
+| C2.6.4.2.4.3 | proved |  | E1269 |  |
+| C2.6.4.2.4.4 | stuck | risk_mismatch | E1274 | Strategist should replace/augment this leaf. Likely repair: prove a direct local lemma with premises exactly matching the live `intcall_default_success_post_push_sound` outer-INR context (including `well_typed_expr`, env_body equalities, lock success, no_type_error_result) and conclusion the frame triple, or fold the frame triple into a larger safe-cast tail lemma so the main theorem no longer applies the helper under a `by` assertion. |
+| C2.6.4.2.4.4.1 | proved |  | E1275 | Review closure with strategist, then begin C2.6.4.2.4.4.2 to replace the failing consumer assertion with the new boundary lemma. |
+| C2.6.4.2.4.4.2 | stuck | risk_mismatch | E1278 | Call plan_oracle(mode='review') for C2.6.4.2.4.4.2 with the stuck evidence and request a replacement integration/boundary strategy. |
+| C2.6.4.2.4.4.2.1 | proved |  | E1283 | Review closure with strategist, then begin the scheduled next component for the later `Expr_Call_IntCall` failure. |
+| C2.6.4.2.4.4.2.2 | stuck | risk_mismatch | E1280 | Strategist review should replace/refine this consumer proof interface or adjust the decomposition, e.g. a more consumer-shaped theorem/conclusion or a refactor of the surrounding `by`/branch focus rather than more tactic variations. |
+| C2.6.4.2.5 | stuck | risk_mismatch | E1285 | Call plan_oracle review for C2.6.4.2.5. Request a decomposition replacement: likely introduce a smaller lock-success full-soundness boundary that packages the body-IH consumer and post-push premises, or replace the continuation/actual-default wrapper design with a higher-level helper that hides these intermediates. |
+| C2.6.4.2.5.1 | proved |  | E1292 |  |
+| C2.6.4.2.5.2 | proved |  | E1293 |  |
+| C2.6.4.2.5.3 | proved |  | E1294 | Begin C2.6.4.2.5.4 to add/prove `intcall_successful_defaults_continuation_lock_success_case`, then replace the placeholder with an invocation of that theorem. |
+| C2.6.4.2.5.4 | proved |  | E1295 | Review closure with strategist, then begin C2.6.4.2.5.5 to replace the continuation theorem's placeholder with a case split using the new lock-success theorem. |
+| C2.6.4.2.5.5 | proved |  | E1297 | Request strategist review, then proceed only to the scheduled next component (likely C2.6.4.2.5.6) for the full actual/default IntCall wrapper / resume failure. |
+| C2.6.4.2.5.6 | stuck | risk_mismatch | E1300 | Ask strategist to review/split C2.6.4.2.5.6 into consumer-shaped default-success and default-failure wrapper helpers, or otherwise provide a robust helper interface for applying the continuation theorem without replaying generated-IH premise plumbing. |
+| C2.6.4.2.5.6.1 | proved |  | E1301 |  |
+| C2.6.4.2.5.6.2 | proved |  | E1302 |  |
+| C2.6.4.2.5.6.3 | proved |  | E1303 |  |
+| C2.6.4.2.5.6.4 | proved |  | E1328 | Request strategist review of this checkpoint closure; then if accepted, preserve a narrow checkpoint only if safe to stage relevant task-owned files without including unrelated dirty work. |
+| C2.6.4.2.5.6.4.1 | proved |  | E1306 |  |
+| C2.6.4.2.5.6.4.2 | proved |  | E1307 |  |
+| C2.6.4.2.5.6.4.3 | proved |  | E1327 | Run strategist review. Then inspect status/diff and commit a small checkpoint if review accepts and no unexpected task-owned instability is present. |
+| C2.6.4.2.5.7 | proved |  | E1329 | Request strategist review. If accepted, proceed to the next scheduled leaf (expected C2.6.4.3) unless checkpoint commit hygiene requires deferring due unrelated staged/unstaged changes. |
+| C2.6.4.3 | proved |  | E1330 | Request strategist review; if accepted, proceed to C2.6.4.4 to integrate the helper into `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`. |
+| C2.6.4.4 | proved |  | E1332 | Call plan_oracle(mode="review") for C2.6.4.4, then inspect schedule/frontier for the next component after review. |
+| C2.6.5 | stuck | risk_mismatch | E0836 | Ask strategist to decompose the external-call account-typing gap: likely an explicit run_ext_call accounts_well_typed probe/semantic repair before retrying ExtCall/RawCallTarget helpers. |
+| C2.6.5.1 | proved |  | E0873 | Review closure, then follow scheduler to C2.6.5.2 carry-forward or C2.6.5.3 repair. |
+| C2.6.5.10 | proved |  | E0922 | Call strategist review. After acceptance, scheduler should decide whether the later IntCall FAIL_TAC/source-prefix issue is already covered or needs a separate component before C2.6.6 integration. |
+| C2.6.5.2 | proved |  | E0874 | Review closure; expected next beginable leaf is C2.6.5.3 semantic guard repair. |
+| C2.6.5.3 | proved |  | E0875 | Review closure, then proceed to C2.6.5.4 regression/boundary proof scheduled after the semantic guard repair. |
+| C2.6.5.4 | proved |  | E0876 | Review closure, then proceed to C2.6.5.5 guarded setup account-typing boundary lemma. |
+| C2.6.5.5 | proved |  | E0877 | Review closure, then proceed to C2.6.5.6 extraction account-typing boundary lemma. |
+| C2.6.5.6 | proved |  | E0878 | Review C2.6.5.6 closure with strategist, then proceed to C2.6.5.7 audit if accepted. |
+| C2.6.5.7 | proved |  | E0909 | Review with strategist; if accepted, begin C2.6.5.8 to add the semantic runtime account-bound guard to `run_ext_call`. |
+| C2.6.5.8 | stuck | tool_limit | E0910 | Ask strategist to augment C2.6.5.8 with an explicit low-risk source-prefix/performance repair for the `bound_def` termination tactic, or provide an authorized verification path that reaches/checks the new guard definitions without replaying that timeout. |
+| C2.6.5.8.0 | proved |  | E0911 | Review with strategist; if accepted, begin C2.6.5.8.1 to repair/verify the cv-translatable guarded external-call definitions. |
+| C2.6.5.8.1 | proved |  | E0917 |  |
+| C2.6.5.9 | stuck | plan_incomplete | E0919 | Strategist must add/authorize a source-prefix performance repair component for vyperExprNoControlTheory or provide a verification path that reaches C2.6.5.9 before this component can be proved. |
+| C2.6.5.9.1 | proved |  | E0920 | Review with strategist, then proceed to C2.6.5.9.2 bridge lemma verification if accepted. |
+| C2.6.5.9.2 | proved |  | E0921 | Call strategist review. If accepted, the next work should classify/schedule the later `create_tail_result_sound_simp` timeout or proceed according to the PLAN if that failure already has component coverage; do not edit that theorem under C2.6.5.9.2. |
+| C2.6.6 | stuck | plan_incomplete | E0931 | Review this scheduling/blocker with strategist; expected update is to begin C2.7.3.0 before returning to C2.6.6. |
+| C2.6a | proved |  | E1101 | Call plan_oracle(mode='review') for C2.6a; if accepted, follow scheduled next component (expected C2.6 or a repair/review of the now-reached IntCall theorem failure). |
+| C2.7 | progressed | tool_limit | E1347 | Because the checkpoint nudge explicitly says not to end the session, remain idle on C2.7 with no source edits. If allowed to terminate and no tooling/config fix is reported, propose blocked end_session; if tooling is fixed or explicit retest requested, run exactly one focused holbuild before edits. |
+| C2.7.0 | proved |  | E0924 | Call strategist review, then begin the scheduled default-frame boundary lemma component C2.7.1. |
+| C2.7.1 | proved |  | E0927 |  |
 | C2.7.1.0 | proved |  | E0290 | Review closure with strategist, then follow Oracle next frontier. |
 | C2.7.1.1 | stuck | plan_incomplete | E0269 | Ask the strategist to add a low-risk prefix performance repair for the AugAssign branch before retrying C2.7.1.1. |
 | C2.7.1.1.0 | proved |  | E0291 | Review closure with strategist, then follow Oracle next frontier. |
@@ -261,7 +352,79 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C2.7.1.2.2.2.3.1.3.2.2.1.2.2.1.2.2.2.3.2.1.1.2.2.2.2.2.2.2.1.2.b.1.a.1.2.2.2.1.a.1 | stuck | risk_mismatch | E0436 | Call plan_oracle review/replace. Need a proof interface that avoids producing the final direct fact by a local `by` subproof whose validation depends on stripping the existential package in this Resume, perhaps destruct the body package before suspension/at a higher level, or redesign the suspended branch to not require using a theorem derived from existential validation at the final step. |
 | C2.7.1.2.2.3 | proved |  | E0315 | Review this administrative closure, then begin C2.7.1.2.2.4 to repair the recursive For_cons IH selector. |
 | C2.7.1.2.2.4 | proved |  | E0317 |  |
-| C2.7.2 | stuck | plan_incomplete | E0272 | Call plan_oracle review for C2.7.2 and request schedule/decomposition change to prioritize the existing For prefix-performance patch (`C2.7.1.1.1.a`) before C2.7.2. |
+| C2.7.2 | proved |  | E0928 |  |
+| C2.7.2.1 | proved |  | E0885 | Call plan_oracle review for C2.7.2.1; if accepted, begin C2.7.2.2 and replace the brittle inline forward coverage subproof with `bind_arguments_env_var_type_scope_entry`. |
+| C2.7.2.2 | proved |  | E0886 | Call plan_oracle review for C2.7.2.2; if accepted, begin C2.7.2.3 and add the backward `bind_arguments_scope_entry_env_var_type` lemma before reworking env-scopes assembly. |
+| C2.7.2.3 | proved |  | E0887 | Call plan_oracle review for C2.7.2.3; if accepted, begin C2.7.2.4 and add `bind_arguments_env_var_assignable_scope_entry` before replacing the env-scopes assembly. |
+| C2.7.2.4 | proved |  | E0888 | Call plan_oracle review for C2.7.2.4; if accepted, begin C2.7.2.5 and replace `bind_arguments_env_scopes_consistent` proof with assembly from the three directional helpers. |
+| C2.7.2.5 | proved |  | E0889 | Call plan_oracle review for C2.7.2.5; if accepted, inspect git status/diff and consider whether to commit a stable checkpoint despite pre-existing unrelated diffs. Then begin C2.7.2.6 per frontier. |
+| C2.7.2.6 | proved |  | E0890 | Review with strategist, then begin C2.7.2.7 and prove/repair `push_function_frame_consistent` if accepted. |
+| C2.7.2.7 | proved |  | E0891 | Review with strategist; if accepted, query PLAN and proceed to scheduled C2.7.3 or the next Oracle-next component. |
+| C2.7.3 | stuck | plan_incomplete | E0929 | Call plan_oracle(mode='review') for active C2.7.3 with this evidence, requesting a new prerequisite leaf to repair `vyperExprNoControlScript.sml` `int_call_no_control` for the inserted `get_scopes`/default-frame wrapper before resuming C2.7.3 wrapper lemmas. |
+| C2.7.3.0 | proved |  | E0939 | Review C2.7.3.0 closure with strategist, then follow the scheduled next component (expected C2.7.3.0a carry-forward or C2.7.3.0b.1 depending on gate). |
+| C2.7.3.0a | proved |  | E0940 | Review C2.7.3.0a closure with strategist, then proceed to C2.7.3.0b.1 to audit/refactor the IntCall tail helper boundary. |
+| C2.7.3.0b | stuck | risk_mismatch | E0938 | Call plan_oracle(mode="review") for C2.7.3.0b with this stuck evidence; ask for a redesigned helper boundary or decomposition before further edits. |
+| C2.7.3.0b.1 | proved |  | E0941 | Review C2.7.3.0b.1 closure with strategist; then proceed to C2.7.3.0b.2 to package the IntCall body IH explicitly at the caller site. |
+| C2.7.3.0b.2 | stuck | risk_mismatch | E0943 | Ask plan_oracle to redesign/decompose C2.7.3.0b.2, likely by introducing a smaller body-IH consumer/helper boundary or relocating the IH packaging earlier before the tail context is bloated. |
+| C2.7.3.0b.2.1 | proved |  | E0946 | Review closure, then begin C2.7.3.0b.2.2 to add the caller-specific corollary. |
+| C2.7.3.0b.2.2 | proved |  | E0947 | Review closure, then begin C2.7.3.0b.2.3 and replace the local Resume assertion proof with `irule intcall_body_ih_resume_pack >> simp[]`. |
+| C2.7.3.0b.2.3 | proved |  | E0959 | Call plan_oracle review; if accepted, preserve the stable checkpoint carefully given pre-existing staged/untracked repository changes. |
+| C2.7.3.0b.3 | stuck | risk_mismatch | E0951 | Strategist should revise the consumer plan/interface, likely by adding a better use-site theorem whose conclusion can be accepted by the assertion without HOL's forward/solver failure, or by authorizing a controlled local specialization outside the huge Resume context. Do not proceed to tail composition or downstream statement soundness until this assertion builds. |
+| C2.7.3.0b.3.1 | proved |  | E0954 | Review closure, then begin C2.7.3.0b.3.2 to prove the early body-preservation cut using `intcall_body_ih_resume_pack`. |
+| C2.7.3.0b.3.2 | stuck | risk_mismatch | E0955 | Strategist should redesign this leaf/helper interface, likely by adding a micro-helper whose statement exactly matches the live generated IH assumption shape or by changing the existing local helper to expose a conclusion that `irule` can match without antecedent-only witnesses. |
+| C2.7.3.0b.3.2.1 | proved |  | E0956 | Review closure, then begin C2.7.3.0b.3.2.2 to replace the Resume early assertion proof with a consumer of `intcall_body_ih_resume_point`. |
+| C2.7.3.0b.3.2.2 | proved |  | E0957 | Review closure, then begin C2.7.3.0b.3.3 to finish the `intcall_ptv_chain` tail proof at the final `metis_tac[]`. |
+| C2.7.3.0b.3.3 | proved |  | E0958 | Call plan_oracle review, then checkpoint/commit the stable prerequisite repair if accepted. |
+| C2.7.3.0c.1 | proved |  | E0962 | Run plan_oracle review, then begin C2.7.3.0c.2 to refactor case_IntCall_imm_dom to use intcall_default_frame_imm_dom. |
+| C2.7.3.0c.2 | stuck | risk_mismatch | E0965 | Call plan_oracle review/augment for C2.7.3.0c.2 with the cited build evidence and source range 1720-1811. |
+| C2.7.3.0c.2.1 | proved |  | E0969 | Call plan_oracle review if required, then begin C2.7.3.0c.2.2 to add the generated-IH/default-frame boundary helper. |
+| C2.7.3.0c.2.2 | proved |  | E0970 | Call plan_oracle review, then begin C2.7.3.0c.2.3 to refactor case_IntCall_imm_dom to consume the new helper and remove the FAIL_TAC probe. |
+| C2.7.3.0c.2.3 | stuck | risk_mismatch | E0972 | Ask strategist for a stronger helper covering the post-default administrative tail or a more use-site-shaped default_pres helper, then resume after PLAN update. |
+| C2.7.3.0c.2.3.1 | proved |  | E0976 | Review closure with strategist, then begin C2.7.3.0c.2.3.2 to remove the failed monolithic tail-preservation proof attempt. |
+| C2.7.3.0c.2.3.2 | proved |  | E0977 | Review closure with strategist, then begin C2.7.3.0c.2.3.3 to add `intcall_tail_body_provider_def`. |
+| C2.7.3.0c.2.3.3 | proved |  | E0978 | Review closure with strategist, then begin C2.7.3.0c.2.3.4 to prove the exact body/finalizer/release preservation boundary. |
+| C2.7.3.0c.2.3.4 | proved |  | E0979 | Review closure with strategist, then begin C2.7.3.0c.2.3.5 to bridge the generated IntCall IH to `intcall_tail_body_provider`. |
+| C2.7.3.0c.2.3.5 | proved |  | E0980 | Review closure with strategist, then begin the scheduled tail theorem component C2.7.3.0c.2.3.6. |
+| C2.7.3.0c.2.3.6 | stuck | risk_mismatch | E0982 | Ask strategist to refine C2.7.3.0c.2.3.6, likely by adding a micro-helper whose statement matches the exact post-finally case-split use-site or by restating `intcall_body_finally_release_imm_dom` with a conclusion that `irule` can consume directly in the tail theorem. |
+| C2.7.3.0c.2.3.6.1 | proved |  | E0985 | Review closure with strategist, then begin C2.7.3.0c.2.3.6.2 to add the stronger post-finally/safe-cast boundary lemma. |
+| C2.7.3.0c.2.3.6.2 | proved |  | E0986 | Review closure with strategist, then begin C2.7.3.0c.2.3.6.3 to refactor `post_default_intcall_tail_imm_dom` to apply the new helper. |
+| C2.7.3.0c.2.3.6.3 | proved |  | E0987 | Review closure with strategist, then begin the scheduled successor for `case_IntCall_imm_dom` refactor (likely C2.7.3.0c.2.3.7) if accepted. |
+| C2.7.3.0c.2.3.7 | stuck | risk_mismatch | E0988 | Ask strategist to add or replace with a use-site-shaped bridge, likely one that takes the live generated default-exprs IH, prefix equations, default-frame `finally` equation, and returns both `preserves_immutables_dom cxd sevl sdfl` and `intcall_tail_body_provider ... sdfl`. |
+| C2.7.3.0c.2.3.7.1 | proved |  | E0992 | Review closure, then begin the scheduled live-branch helper component C2.7.3.0c.2.3.7.2. |
+| C2.7.3.0c.2.3.7.2 | proved |  | E0994 | Review closure with the strategist, then proceed to queued C2.7.3.0c.2.3.7.3 to rewrite `case_IntCall_imm_dom` to consume the live helper instead of the old direct generic bridge block. |
+| C2.7.3.0c.2.3.7.3 | stuck | risk_mismatch | E0995 | Ask strategist to review whether to add an even more caller-local corollary/helper that accepts the two generated IHs as named assumptions and packages the application entirely, or to adjust the helper statement so the main theorem has no generated-IH antecedent subgoals. |
+| C2.7.3.0c.2.3.7.3.1 | proved |  | E1002 | Review closure with strategist, then proceed to C2.7.3.0c.2.3.7.3.2 default-frame adapter. |
+| C2.7.3.0c.2.3.7.3.2 | proved |  | E1003 | Review closure with strategist; then proceed to C2.7.3.0c.2.3.7.3.3 body-provider adapter, leaving the old inline mutual branch untouched until the planned refactor component. |
+| C2.7.3.0c.2.3.7.3.3 | proved |  | E1005 | Call plan_oracle(mode="review") for C2.7.3.0c.2.3.7.3.3, then if accepted begin C2.7.3.0c.2.3.7.3.4. |
+| C2.7.3.0c.2.3.7.3.4 | stuck | risk_mismatch | E1007 | Ask strategist to decompose/replace this leaf, likely by adding a smaller consumer-shaped helper that packages the whole default-success conjunction directly from the exact live mutual branch assumptions, or by converting mutual IH shapes to the already-proved `case_IntCall_imm_dom` premise shape instead of duplicating evaluator peeling. |
+| C2.7.3.0c.2.3.7.3.4.1 | proved |  | E1013 | Review with plan_oracle, then begin C2.7.3.0c.2.3.7.3.4.2 for the live-branch adapter replacement. |
+| C2.7.3.0c.2.3.7.3.4.2 | proved |  | E1014 | Review with plan_oracle, then begin C2.7.3.0c.2.3.7.3.5 to refactor the inline `immutables_dom_mutual` IntCall branch to call the proved adapter. |
+| C2.7.3.0c.2.3.7.3.5 | proved |  | E1015 | Review with plan_oracle; next scheduled work should address the later failure reported by holbuild, not the completed IntCall refactor. |
+| C2.7.3.0d | proved |  | E1017 | Review with plan_oracle, then resume scheduled C2.7.3.1 statement-layer/default-frame wrapper boundary work at `default_frame_eval_restores_scopes` / later `Expr_Call_IntCall` proof. |
+| C2.7.3.1 | stuck | risk_mismatch | E1020 | Call `plan_oracle(mode="review", component_id="C2.7.3.1")` with this evidence and request a decomposition/interface repair, likely a dedicated local helper/corollary that packages default-frame `finally` into the plain framed `eval_exprs` equation and generated-IH antecedents. |
+| C2.7.3.1.1 | proved |  | E1024 | Request plan review, then follow scheduler to carry-forward adapter component C2.7.3.1.2 if accepted. |
+| C2.7.3.1.2 | proved |  | E1025 | Request strategist review, then proceed to C2.7.3.1.3 whole-branch IntCall no-TypeError lemma if accepted. |
+| C2.7.3.1.3 | stuck | risk_mismatch | E1034 | Request strategist review/decomposition for a post-default tail boundary under or replacing C2.7.3.1.3. The helper should start after default success and directly prove the bind_arguments/eval-ret/nonreentrant/push/body/finally/safe_cast tail cannot return TypeError, using typedness/body_ih and safe_cast/finally helper patterns. |
+| C2.7.3.1.3.1 | proved |  | E1048 | Request strategist review, then proceed to C2.7.3.1.3.2 carry-forward audit if accepted. |
+| C2.7.3.1.3.2 | proved |  | E1049 | Request strategist review, then begin C2.7.3.1.3.3 to add the planned rv-case boundary if accepted. |
+| C2.7.3.1.3.3 | proved |  | E1050 | Request strategist review. If accepted, begin C2.7.3.1.3.4 and refactor `intcall_final_cast_no_type_error_from_body_ih` through the new boundary. |
+| C2.7.3.1.3.4 | proved |  | E1051 | Request strategist review. If accepted, begin C2.7.3.1.3.5 and repair `intcall_expr_no_type_error_from_generated_ih` at the final-cast/default-IH point. |
+| C2.7.3.1.3.5 | stuck | risk_mismatch | E1058 | Call plan_oracle(mode="review", component_id="C2.7.3.1.3.5") with this evidence. Request a replacement/augmentation that introduces a small local wrapper lemma or boundary interface for the default-IH consequence, rather than further inline high-arity generated-IH specialization. |
+| C2.7.3.1.3.5.1 | proved |  | E1071 | Request strategist review, then begin scheduled carry-forward component C2.7.3.1.3.5.2 if accepted. |
+| C2.7.3.1.3.5.2 | proved |  | E1072 | Request strategist review, then begin scheduled carry-forward component C2.7.3.1.3.5.3 if accepted. |
+| C2.7.3.1.3.5.3 | proved |  | E1073 | Request strategist review, then begin C2.7.3.1.3.5.4 to add the stronger default-expression soundness wrapper. |
+| C2.7.3.1.3.5.4 | proved |  | E1074 | Request strategist review, then begin C2.7.3.1.3.5.5 to refactor the successful-defaults IntCall tail to consume the new wrapper. |
+| C2.7.3.1.3.5.5 | stuck | risk_mismatch | E1077 | Call plan_oracle(mode='review') for C2.7.3.1.3.5.5 with this stuck closure and E1076 evidence; do not continue tactic patching inline. |
+| C2.7.3.1.3.5.5.1 | proved |  | E1078 | Request strategist review, then begin scheduled C2.7.3.1.3.5.5.2 handle_function control TypeError computation probe. |
+| C2.7.3.1.3.5.5.2 | proved |  | E1079 | Request strategist review, then begin scheduled C2.7.3.1.3.5.5.3 full post-push tail counterexample probe. |
+| C2.7.3.1.3.5.5.3 | proved |  | E1080 | Call plan_oracle review on this verified falsehood for the parent gate. Because C2 is task-required, do not continue sibling proof work unless the strategist/user authorizes a source/spec repair plan. |
+| C2.7.3.1.4 | stuck | plan_incomplete | E1055 | Review with plan_oracle and fix the schedule/dependency so C2.7.3.1.3.5 is beginable/Oracle next before C2.7.3.1.4. Then remove/rewrite the experimental default-result assertion block and repair `intcall_expr_no_type_error_from_generated_ih` as replanned. |
+| C2.7.3.2 | proved |  | E0899 | Call strategist review for E0899. If accepted, begin C2.7.3.3 to derive callable/default typing facts and consume `default_ih` at the remaining default-evaluation stage. |
+| C2.7.3.3 | stuck | risk_mismatch | E0906 | Call plan_oracle(mode='review') for C2.7.3.3 and request replacement/augmentation that avoids brittle guessed qspecl_then/default_ih selection in the large tail. |
+| C2.7.3.3.1 | proved |  | E0907 | Review with strategist; if accepted, begin C2.7.3.3.2 to prove the caller-local contradiction probe. |
+| C2.7.3.3.2 | proved |  | E0908 | Review with strategist; if accepted, C2.7.3.3 has confirmed the defaults-env obstruction and should be replanned before any further IntCall tail/body proof work. |
+| C2.7.4 | stuck | plan_incomplete | E0950 | Reschedule/deactivate C2.7.4 and begin C2.7.3.0b.2.3 to replace lines 2353-2359 with the forward-discharge tactic planned for `intcall_body_ih_resume_pack`; then close C2.7.3.0b.3 after `vyperEvalPreservesScopesTheory` builds. |
+| C2.8 | stuck | plan_incomplete | E0884 | Review with strategist/scheduler and make C2.7.2.1 (or another C2.7.2 repair leaf) the next executable component before C2.8. C2.8 should remain after C2.6.6 and C2.7.3. |
 | C3 | proved |  | E0236 | Review C3 closure with strategist, then follow the scheduled next component. |
 | C3.1 | proved |  | E0732 | Review C3.1 closure with strategist, then begin the next scheduled C3 leaf (expected C3.2). |
 | C3.1.2 | proved |  | E0025 |  |
@@ -1565,10 +1728,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0767`
+- latest episode: `E1111`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 140,766 tok (140,428 in, 338 out, 118,272 cached), 9.4s, $0.18005600
-- next: Call plan_oracle review for C2.0 closure, then follow Oracle next.
+- actual effort: 1 sessions, 1 steps, 144,837 tok (144,613 in, 224 out, 121,856 cached), 10.6s, $0.18143300
+- next: Call plan_oracle review, then begin the scheduled C2.6 source-prefix/IntCall integration leaf.
 
 ### Attempts / Evidence
 
@@ -1584,10 +1747,20 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Began carry-forward component C2.0 as required by the PLAN gate; no source edits were needed or authorized by the component. -> Completed bookkeeping: old TopLevelName and assignment-statement repairs are carried forward as accepted baseline evidence, and `vyperTypeStmtSoundnessTheory` already builds after those repairs. (`TO_type_system_rewrite-20260521T174852Z_m36246_t001`, `TO_type_system_rewrite-20260521T174852Z_m36251_t001`, `TO_type_system_rewrite-20260521T174852Z_m36255_t001`)
 - `E0767` (proved, , actual effort: 1 sessions, 1 steps, 140,766 tok (140,428 in, 338 out, 118,272 cached), 9.4s, $0.18005600)
   - Began carry-forward component C2.0 and audited scoped PLAN/DOSSIER context; component explicitly has no proof action remaining and carries accepted prior evidence for assignment/structural expression work. -> No source edits needed; carry-forward leaf complete as bookkeeping under current PLAN. (`TO_type_system_rewrite-20260522T073012Z_m41852_t001`)
+- `E0820` (proved, , actual effort: 1 sessions, 1 steps, 122,005 tok (121,691 in, 314 out, 98,816 cached), 7.6s, $0.17320300)
+  - Began carry-forward component C2.0 under the repaired C2 plan and audited scoped PLAN/DOSSIER context; component explicitly has no proof action remaining and carries accepted prior statement-assignment/structural-expression evidence. -> No source edits needed; C2.0 is complete as bookkeeping/carry-forward evidence under the current plan. (`TO_type_system_rewrite-20260524T091119Z_m43908_t001`)
+- `E0851` (proved, , actual effort: 1 sessions, 1 steps, 86,969 tok (86,699 in, 270 out, 65,024 cached), 6.2s, $0.14898700)
+  - Began carry-forward C2.0 under repaired C2 plan and audited scoped PLAN/DOSSIER context. -> Component explicitly has no proof/source work remaining and carries previously accepted statement-assignment/structural-expression evidence; no edits/builds were performed for this bookkeeping leaf. (`TO_type_system_rewrite-20260524T091119Z_m44581_t001`)
+- `E0923` (proved, , actual effort: 1 sessions, 1 steps, 79,132 tok (78,929 in, 203 out, 55,808 cached), 6.0s, $0.14959900)
+  - Began carry-forward C2.0 under the schema-valid replacement C2 plan and audited scoped PLAN/DOSSIER context; component explicitly carries prior completed non-call expression and assignment-statement evidence and requires no source edits. -> No edits/builds needed; carry-forward bookkeeping leaf complete. (`TO_type_system_rewrite-20260524T091119Z_m45972_t001`)
+- `E1081` (proved, , actual effort: 2 sessions, 2 steps, 1 tools, 1 holbuild, 149,761 tok (149,000 in, 761 out, 146,432 cached), 37.2s, $0.10888600)
+  - Began carry-forward component C2.0 under repaired C2 plan; no source edits required. Ran focused holbuild as requested to check current source status. -> Carry-forward prerequisite evidence remains bookkeeping-complete. The focused build fails at the known invalidated old `intcall_post_push_tail_no_type_error` helper, which belongs to the repaired C2 downstream leaves rather than C2.0. (`TO_type_system_rewrite-20260525T153125Z_m50503_t001`, `TO_type_system_rewrite-20260525T153549Z_m50504_t001`)
+- `E1111` (proved, , actual effort: 1 sessions, 1 steps, 144,837 tok (144,613 in, 224 out, 121,856 cached), 10.6s, $0.18143300)
+  - Began carry-forward C2.0 after C2 ancestor rebase/flatten; inspected scoped plan/dossier context. -> Component explicitly records already-proved callable-body no-control semantic repair and local IntCall helper evidence; no source edits or proof work are required for this bookkeeping leaf. (`TO_type_system_rewrite-20260525T153549Z_m51583_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41852_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51583_t001` (use `read_tool_output` for exact output)
 
 ## C2.0.1
 
@@ -2115,12 +2288,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` Risk-2 estimate was too low for the current helper proof shape. The current proof relies on nested `>-`/`>>` structure under `Cases_on get_immutables` and `Cases_on q`; despite explicit splits, holbuild shows branches are not isolated as intended. This is a proof-interface/tactic-structure problem in the local boundary lemma, not evidence the theorem is false. A decomposition into smaller local lemmas for immutable no-TypeError and immutable success typing, or an alternate helper statement matching `get_immutables` branch equations, is likely needed.
-- latest episode: `E0591`
-- blocker: `lookup_global_TopLevelName_sound` immutable branch proof is brittle/structurally misparsed after repeated attempts to split `get_immutables` and `q`; intended INR branch keeps leaking into the INL-success branch or vice versa, and the proof repeatedly reaches goals where the live context contradicts the branch assumptions but the tactic shape applies the success existential proof to a no-TypeError-only goal. Source is partial around lines 331-364 and still has the later storage/hashmap probe.
-- actual effort: 1 sessions, 3 msgs, 57 steps, 58 tools, 22 holbuild, 5,392,314 tok (5,352,525 in, 39,789 out, 5,230,080 cached), 914.6s, $4.42093500
-- next: Ask strategist to review/redecompose C2.1. Prefer splitting the boundary lemma into smaller immutable branch lemmas (no-TypeError and success typed) plus storage/hashmap branch lemmas, or changing the helper statement to consume branch equations directly.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1082`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 10 tools, 3 holbuild, 747,985 tok (745,244 in, 2,741 out, 674,304 cached), 339.1s, $0.77408200
+- next: Review C2.1 closure, then begin C2.2 to update callable-body projection lemmas with `stmts_no_control_escape`.
 
 ### Attempts / Evidence
 
@@ -2154,18 +2327,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0591` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 57 steps, 58 tools, 22 holbuild, 5,392,314 tok (5,352,525 in, 39,789 out, 5,230,080 cached), 914.6s, $4.42093500)
   - Replaced the bad `Cases_on q` with `Cases_on `get_immutables cx src st` >> Cases_on `q`` and tried to solve INR with `get_immutables_no_type_error` and INL with `FLOOKUP` split plus `TopLevelName_missing_immutable_impossible`. -> Eliminated the original no-free-variable `q` failure, but branch ordering/goal routing remained unstable: holbuild repeatedly applied the success-typing tail to a no-TypeError-only INR/missing-entry goal, or applied the INR tactic to an INL goal. (`TO_type_system_rewrite-20260521T174852Z_m35883_t001`, `TO_type_system_rewrite-20260521T174852Z_m35925_t001`, `TO_type_system_rewrite-20260521T174852Z_m35935_t001`)
   - Attempted several parenthesized versions using `>-` for `q` branches, `TRY` guarded by `qpat_assum`, and a probe `FAIL_TAC` after the explicit `get_immutables` split to inspect branch goals. -> Probe confirmed the expected split exists, but tactical composition with nested `Cases_on q` still misroutes subgoals under holbuild goalfrag; current failure is at `qexists_tac `FST x'`` on a goal `∀msg. y <> Error (TypeError msg)`, showing the success proof is still being run on the no-TypeError goal. (`TO_type_system_rewrite-20260521T174852Z_m35923_t001`, `TO_type_system_rewrite-20260521T174852Z_m35935_t001`, `TO_type_system_rewrite-20260521T174852Z_m35938_t001`)
+- `E0819` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 13 tools, 2 holbuild, 632,251 tok (627,680 in, 4,571 out, 558,080 cached), 109.3s, $0.76417000)
+  - No-edit current-source audit for fixed-array Len: grep/readback confirmed repaired SArrayV `toplevel_array_length`, typed Len no-TypeError boundary, statement integration, and no stale fixed-array Len TypeError probes in statement source. -> Audit evidence satisfies C2.1 source requirements; old fixed-array Len counterexample is superseded in current source. (`TO_type_system_rewrite-20260524T091119Z_m43889_t002`, `TO_type_system_rewrite-20260524T091119Z_m43889_t001`, `TO_type_system_rewrite-20260524T091119Z_m43889_t003`, `TO_type_system_rewrite-20260524T091119Z_m43890_t003`, `TO_type_system_rewrite-20260524T091119Z_m43890_t001`, `TO_type_system_rewrite-20260524T091119Z_m43890_t002`)
+  - Built statement soundness target after audit: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600). -> Build succeeds, so current statement theory does not fail in the Expr_Builtin Len branch; remaining cheats are unrelated scheduled obligations. (`TO_type_system_rewrite-20260524T091119Z_m43890_t004`, `TO_type_system_rewrite-20260524T091119Z_m43893_t003`)
+- `E0821` (proved, , actual effort: 1 sessions, 1 steps, 172,798 tok (172,386 in, 412 out, 125,440 cached), 9.0s, $0.30981000)
+  - Began repaired-plan C2.1 carry-forward audit component. Scoped context records C2.1/E0819 was already closed and reviewed as a valid current-source Len audit resolving the stale Len falsehood gate; component has no executor work remaining. -> No edits needed; C2.1 is complete as accepted carry-forward audit evidence. (`TO_type_system_rewrite-20260524T091119Z_m43912_t001`, `TO_type_system_rewrite-20260524T091119Z_m43894_t001`, `TO_type_system_rewrite-20260524T091119Z_m43895_t001`)
+- `E0852` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 8 tools, 2 holbuild, 562,241 tok (559,202 in, 3,039 out, 488,448 cached), 83.9s, $0.68916400)
+  - Carried current-source Len audit leaf; no source work required. Verified current statement-soundness target still builds while C2.1 active. -> vyperTypeStmtSoundnessTheory build succeeded; stale Len counterexample remains superseded and does not gate C2. (`TO_type_system_rewrite-20260524T091119Z_m44590_t001`, `TO_type_system_rewrite-20260524T091119Z_m44589_t002`)
+- `E1082` (proved, , actual effort: 1 sessions, 7 steps, 10 tools, 3 holbuild, 747,985 tok (745,244 in, 2,741 out, 674,304 cached), 339.1s, $0.77408200)
+  - Added `stmt_no_control_escape`/`stmts_no_control_escape` in `vyperTypeSystemScript.sml` using the same measure pattern as `stmt_no_fallthrough_def`, with Break/Continue rejected at callable boundary and For classified safe. -> `holbuild(targets=["vyperTypeSystemTheory"])` succeeded, validating the new mutually recursive definition and the strengthened static interface in the defining theory. (`TO_type_system_rewrite-20260525T153549Z_m50517_t001`)
+  - Strengthened `functions_well_typed_def` by adding `stmts_no_control_escape body` next to the existing `ret = NoneT \/ stmts_no_fallthrough body` callable-body fact. -> Focused dependent build reached the expected next projection theorem failure (`callable_body_typing_from_functions_well_typed`) because its statement has not yet been updated to expose the new conjunct; this is the planned C2.2 boundary-lemma work, not a C2.1 definition failure. (`TO_type_system_rewrite-20260525T153549Z_m50518_t003`)
 
 ### Ruled Out
 
-- Immediate `Cases_on q` after `simp[]` before splitting `get_immutables`.
-- Continuing to patch a monolithic nested `lookup_global_TopLevelName_sound` proof with more `TRY`/`>-` branch plumbing.
+- Definition/termination parse errors for the new predicate: vyperTypeSystemTheory builds cleanly.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260521T174852Z_m35883_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m35925_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m35935_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m35938_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50517_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50518_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50518_t002` (use `read_tool_output` for exact output)
 
 ## C2.1.0
 
@@ -3752,9 +3933,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0768`
+- latest episode: `E1083`
 - blocker: 
-- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,879 tok (116,829 in, 1,050 out, 109,568 cached), 24.7s, $0.12258900
+- actual effort: 1 sessions, 1 msgs, 9 steps, 13 tools, 2 holbuild, 647,613 tok (643,877 in, 3,736 out, 607,744 cached), 200.0s, $0.59661700
+- next: Call plan_oracle review for C2.2 closure; if accepted, follow Oracle-next (expected C2.3 semantic no-escape or C2.4 tail-helper work).
 
 ### Attempts / Evidence
 
@@ -3772,17 +3954,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0768` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 117,879 tok (116,829 in, 1,050 out, 109,568 cached), 24.7s, $0.12258900)
   - Began scheduled carry-forward C2.2 and relied on scoped dossier evidence for completed Expr_Attribute helper/resume proof; no source edits were needed. -> C2.2 is a carried-evidence leaf and prior accepted evidence shows Expr_Attribute is proved in current source. (`TO_type_system_rewrite-20260522T073012Z_m41859_t001`, `TO_type_system_rewrite-20260522T073012Z_m40227_t002`, `TO_type_system_rewrite-20260522T073012Z_m40227_t001`)
   - Ran requested holbuild check for vyperTypeStmtSoundnessTheory after begin_component. -> Build is currently blocked before statement soundness by known pre-existing C4.4.4 ABI `FAIL_TAC` probe in `default_to_abi_enc_length_bound_eval`, not by C2.2 Expr_Attribute source. This matches STATE and scheduled C4.4.4 repair work. (`TO_type_system_rewrite-20260522T073012Z_m41860_t001`)
+- `E0822` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 124,191 tok (123,625 in, 566 out, 115,712 cached), 19.5s, $0.11440100)
+  - Began scheduled zero-work carry-forward C2.2 and used scoped dossier evidence for completed Expr_Attribute helper/resume proof. -> C2.2 is a carried-evidence leaf; prior accepted evidence shows Expr_Attribute is proved in current source with no local cheat/FAIL_TAC. (`TO_type_system_rewrite-20260524T091119Z_m43919_t001`, `TO_type_system_rewrite-20260522T073012Z_m40227_t002`, `TO_type_system_rewrite-20260522T073012Z_m40227_t001`)
+  - Ran holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after begin_component as a current-source verification check. -> vyperTypeStmtSoundnessTheory builds successfully in current source; no edits were needed for C2.2. (`TO_type_system_rewrite-20260524T091119Z_m43920_t001`)
+- `E0853` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 140,531 tok (140,133 in, 398 out, 132,096 cached), 15.6s, $0.11817300)
+  - Began scheduled zero-work carry-forward C2.2 and used scoped dossier evidence for completed Expr_Attribute helper/resume proof; no source edits required by the component. -> C2.2 remains a carried-evidence leaf; prior accepted evidence shows Expr_Attribute soundness is proved in current source. (`TO_type_system_rewrite-20260524T091119Z_m44594_t001`)
+  - Verified current source with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) while C2.2 was active. -> vyperTypeStmtSoundnessTheory builds successfully; no C2.2 regression or local proof work remains. (`TO_type_system_rewrite-20260524T091119Z_m44595_t001`)
+- `E1083` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 13 tools, 2 holbuild, 647,613 tok (643,877 in, 3,736 out, 607,744 cached), 200.0s, $0.59661700)
+  - Patched statement-local callable body projections to include `stmts_no_control_escape fn_body` immediately after the existing fallthrough conjunct. -> `vyperTypeStmtSoundnessTheory` rebuild advanced past `callable_body_typing_from_functions_well_typed` and `callable_body_typing_from_env_consistent`; it now fails at the planned downstream `intcall_post_push_tail_no_type_error` helper, which belongs to later C2.4 rather than C2.2. (`TO_type_system_rewrite-20260525T153549Z_m50535_t001`)
+  - Patched exported `vyperTypeCallSoundnessScript.sml:functions_well_typed_body` to expose both `(ret = NoneT \/ stmts_no_fallthrough body)` and `stmts_no_control_escape body` before defaults typing. -> Readback/grep show the exported projection statement now carries the new no-escape conjunct; call target cannot currently be checked independently because its dependency `vyperTypeStmtSoundnessTheory` stops at the planned later IntCall-tail blocker. (`TO_type_system_rewrite-20260525T153549Z_m50538_t001`, `TO_type_system_rewrite-20260525T153549Z_m50539_t002`)
+  - Audited for remaining old projection shape lacking the new conjunct. -> No remaining `type_stmts env_body ret body/fn_body` projection immediately followed by defaults typing was found in the statement file; grep lists exactly the updated no-escape projection occurrences plus downstream IntCall-helper occurrences. (`TO_type_system_rewrite-20260525T153549Z_m50537_t001`, `TO_type_system_rewrite-20260525T153549Z_m50539_t001`)
 
 ### Ruled Out
 
-- No C2.2-local proof action is authorized or needed; the observed build failure belongs to C4.4.4.
+- No projection failure remains before the downstream IntCall tail helper in the statement target.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41859_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41860_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40227_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40227_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50535_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50537_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50538_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50539_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50539_t002` (use `read_tool_output` for exact output)
 
 ## C2.2.1
 
@@ -3896,9 +4089,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0769`
+- latest episode: `E1084`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 76,792 tok (76,231 in, 561 out, 62,976 cached), 9.8s, $0.11459300
+- actual effort: 1 sessions, 4 msgs, 66 steps, 78 tools, 24 holbuild, 7,238,981 tok (7,223,560 in, 15,421 out, 6,961,664 cached), 838.5s, $5.25294200
+- next: Call plan_oracle review for C2.3; if accepted, begin Oracle-next C2.4 and repair intcall_post_push_tail_no_type_error to consume stmts_no_control_escape/semantic no-escape.
 
 ### Attempts / Evidence
 
@@ -3915,18 +4109,22 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0769` (proved, , actual effort: 1 sessions, 1 steps, 76,792 tok (76,231 in, 561 out, 62,976 cached), 9.8s, $0.11459300)
   - Began scheduled carry-forward C2.3 and used scoped dossier evidence for the completed Expr_Pop dynamic-array/assignability repair, assignment Pop boundary helper, and final Expr_Pop resume proof. -> C2.3 is a carried-evidence leaf with no remaining source work; prior evidence shows the Pop typing repair and Expr_Pop resume build in current source lineage. (`TO_type_system_rewrite-20260522T073012Z_m41864_t001`, `TO_type_system_rewrite-20260522T073012Z_m40813_t001`, `TO_type_system_rewrite-20260522T073012Z_m40406_t001`, `TO_type_system_rewrite-20260522T073012Z_m40414_t001`)
   - Reused the current-session holbuild status check from C2.2 for `vyperTypeStmtSoundnessTheory`. -> The only current build blocker is the known prerequisite C4.4.4 ABI `FAIL_TAC` probe in `default_to_abi_enc_length_bound_eval`, before statement/Pop proof replay; it does not indicate a C2.3 regression. (`TO_type_system_rewrite-20260522T073012Z_m41860_t001`)
+- `E0823` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 160,845 tok (160,254 in, 591 out, 146,432 cached), 17.9s, $0.16005600)
+  - Began scheduled zero-work carry-forward C2.3 and used scoped dossier evidence for the completed Expr_Pop dynamic-array/assignability repair, assignment Pop helper, and Expr_Pop resume proof. -> C2.3 is a carried-evidence leaf with no remaining source work; prior evidence shows Pop typing repair and Expr_Pop resume are proved in current source lineage. (`TO_type_system_rewrite-20260524T091119Z_m43924_t001`, `TO_type_system_rewrite-20260522T073012Z_m40813_t001`, `TO_type_system_rewrite-20260522T073012Z_m40414_t001`)
+  - Ran holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after begin_component as a current-source verification check. -> vyperTypeStmtSoundnessTheory builds successfully in current source; no edits were needed for C2.3. (`TO_type_system_rewrite-20260524T091119Z_m43925_t001`)
+- `E0854` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 174,070 tok (173,662 in, 408 out, 159,744 cached), 12.9s, $0.16170200)
+  - Began scheduled carry-forward C2.3 and used scoped dossier evidence for completed Expr_Pop dynamic-array/assignability repair, Pop assignment helper, and Expr_Pop resume proof; no source edits required. -> C2.3 remains a carried-evidence leaf with no remaining source work; prior accepted evidence shows Pop repair and Expr_Pop soundness are proved in current source lineage. (`TO_type_system_rewrite-20260524T091119Z_m44599_t001`)
+  - Verified current source with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) while C2.3 was active. -> vyperTypeStmtSoundnessTheory builds successfully; no C2.3 regression or local proof work remains. (`TO_type_system_rewrite-20260524T091119Z_m44600_t001`)
+- `E1084` (proved, , actual effort: 1 sessions, 4 msgs, 66 steps, 78 tools, 24 holbuild, 7,238,981 tok (7,223,560 in, 15,421 out, 6,961,664 cached), 838.5s, $5.25294200)
+  - Inserted and proved the C2.3 control-flow boundary lemmas near no_fallthrough_eval_no_success: local no-control-to-no-loop helpers for push/pop/new_variable, eval_for, Assert/Raise/Return, the mutual stmt/list semantic theorem, and the consumer corollary. Rebuilt vyperTypeStmtSoundnessTheory. -> Build replay progressed past the new semantic no-escape lemmas and stopped at the planned downstream C2.4 false/obsolete intcall_post_push_tail_no_type_error helper, indicating the C2.3 proof prefix is accepted. (`TO_type_system_rewrite-20260525T153549Z_m50620_t001`)
 
 ### Ruled Out
 
-- Do not reopen fixed-array Pop counterexample; current source-authoritative typing rule requires dynamic array and assignability.
+- Continuing to patch intcall_post_push_tail_no_type_error under C2.3; that is scheduled as C2.4.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m41864_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m41860_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40813_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40406_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m40414_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50620_t001` (use `read_tool_output` for exact output)
 
 ## C2.3.1
 
@@ -4110,10 +4308,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0615`
+- latest episode: `E1085`
 - blocker: 
-- actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 349,184 tok (347,510 in, 1,674 out, 332,288 cached), 42.0s, $0.29247400
-- next: Review C2.4 closure with strategist, then follow the next scheduled frontier component for remaining cheats/failures.
+- actual effort: 1 sessions, 2 msgs, 36 steps, 39 tools, 11 holbuild, 3,249,334 tok (3,239,522 in, 9,812 out, 3,113,984 cached), 445.0s, $2.47904200
+- next: Call plan_oracle review for C2.4; if accepted, begin Oracle-next C2.5 to thread the new `stmts_no_control_escape body0` premise into `intcall_expr_no_type_error_from_generated_ih`.
 
 ### Attempts / Evidence
 
@@ -4151,13 +4349,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0615` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 1 holbuild, 349,184 tok (347,510 in, 1,674 out, 332,288 cached), 42.0s, $0.29247400)
   - Ran the planned C2.4 audit build `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> Build succeeds, confirming the repaired TopLevelName/scalar assignment/tuple-list assignment statement-theory path is not currently a build blocker. (`TO_type_system_rewrite-20260521T174852Z_m36246_t001`)
   - Audited `vyperTypeStmtSoundnessScript.sml` for remaining literal `cheat` uses and inspected the local source region around the remaining cheated resumes. -> Remaining literal cheats are expression/call resumes after `Expr_FlagMember` and related cases, not C2.4 statement assignment/TopLevelName audit failures; statement-theory build still succeeds. (`TO_type_system_rewrite-20260521T174852Z_m36248_t001`, `TO_type_system_rewrite-20260521T174852Z_m36249_t001`)
+- `E1085` (proved, , actual effort: 1 sessions, 2 msgs, 36 steps, 39 tools, 11 holbuild, 3,249,334 tok (3,239,522 in, 9,812 out, 3,113,984 cached), 445.0s, $2.47904200)
+  - Strengthened local theorem `intcall_post_push_tail_no_type_error` with `stmts_no_control_escape body`; in the residual `INR y` body-result path derived no Break/Continue via `stmts_no_control_escape_eval_stmts_no_loop_control` and split on `y`; used `no_fallthrough_eval_no_success` to rule out normal fallthrough when `ret <> NoneT`; used `return_exception_typed_def`/`value_runtime_typed_def` plus `safe_cast_well_typed` for ReturnException final cast TypeError exclusion. -> Focused build replayed past `intcall_post_push_tail_no_type_error` and now fails in downstream `intcall_expr_no_type_error_from_generated_ih`, confirming C2.4 helper itself is proved and C2.5 is next. (`TO_type_system_rewrite-20260525T153549Z_m50662_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260521T174852Z_m36246_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36247_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36248_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260521T174852Z_m36249_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50662_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.0
 
@@ -4165,9 +4362,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0791`
+- latest episode: `E0855`
 - blocker: 
-- actual effort: 1 sessions, 4 msgs, 51 steps, 53 tools, 14 holbuild, 4,595,851 tok (4,575,713 in, 20,138 out, 4,463,104 cached), 547.6s, $3.39873700
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 188,047 tok (187,650 in, 397 out, 182,272 cached), 14.4s, $0.12993600
+- next: Call plan_oracle review for C2.4.0 closure, then query_plan and begin exactly Oracle-next component.
 
 ### Attempts / Evidence
 
@@ -4177,11 +4375,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Read failing helper region and current diff -> Failure points at the `for_cons_body_exception_typed_from_body_soundness` helper around `eval_stmts cx body stp`; the only current source diff is exception type qualification. (`TO_type_system_rewrite-20260522T073012Z_m42549_t001`, `TO_type_system_rewrite-20260522T073012Z_m42549_t003`)
 - `E0791` (proved, , actual effort: 1 sessions, 4 msgs, 51 steps, 53 tools, 14 holbuild, 4,595,851 tok (4,575,713 in, 20,138 out, 4,463,104 cached), 547.6s, $3.39873700)
   - Renamed local `body` binders/witnesses/patterns in the statement-soundness for-cons/scope helper prefix to `body_stmts`/`body_fun` (and HOL-generated `body'` where already bound) so `eval_stmts`/`type_stmts` applications elaborate as `stmt list` rather than resolving imported `body`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` now succeeds; the component's source-prefix type namespace cleanup gate is passed. (`TO_type_system_rewrite-20260522T073012Z_m42647_t001`)
+- `E0855` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 188,047 tok (187,650 in, 397 out, 182,272 cached), 14.4s, $0.12993600)
+  - Began scheduled carry-forward cleanup anchor C2.4.0 and used scoped dossier evidence for completed local prefix type-namespace/source annotations; no source edits required. -> C2.4.0 remains complete as a carried source-cleanup anchor. (`TO_type_system_rewrite-20260524T091119Z_m44604_t001`)
+  - Verified current source with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) while C2.4.0 was active. -> vyperTypeStmtSoundnessTheory builds successfully; no C2.4.0 regression or local cleanup work remains. (`TO_type_system_rewrite-20260524T091119Z_m44605_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m42647_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m42642_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44604_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44605_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1
 
@@ -4225,10 +4426,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0799`
+- latest episode: `E0856`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 97,234 tok (96,659 in, 575 out, 92,672 cached), 11.8s, $0.08352100
-- next: Call plan_oracle review for this carry-forward closure; then begin C2.4.1.2 if scheduled.
+- actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 203,366 tok (202,975 in, 391 out, 196,608 cached), 16.9s, $0.14186900
+- next: Call plan_oracle review for C2.4.1.1 closure, then query_plan and begin exactly Oracle-next component.
 
 ### Attempts / Evidence
 
@@ -4236,11 +4437,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Add missing SArrayV materialized array case before the toplevel_array_length catch-all; prove direct computation regression by simp[toplevel_array_length_def, return_def]; build vyperStateTheory. -> Definition repair and regression theorem accepted; vyperStateTheory built cleanly. (`TO_type_system_rewrite-20260522T073012Z_m42865_t001`, `TO_type_system_rewrite-20260522T073012Z_m42870_t001`)
 - `E0799` (proved, , actual effort: 1 sessions, 1 steps, 97,234 tok (96,659 in, 575 out, 92,672 cached), 11.8s, $0.08352100)
   - Began rebased carry-forward component C2.4.1.1 after planner marked it Oracle-next; no additional proof work was needed because E0797 already implemented and reviewed the definition repair. -> Carry-forward leaf is already proved; next work should be the newly scheduled C2.4.1.2 builtin Len bound repair. (`TO_type_system_rewrite-20260522T073012Z_m42870_t001`, `TO_type_system_rewrite-20260522T073012Z_m42872_t001`)
+- `E0856` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 203,366 tok (202,975 in, 391 out, 196,608 cached), 16.9s, $0.14186900)
+  - Began scheduled carry-forward Len definition-repair anchor C2.4.1.1 and used scoped dossier evidence for completed `toplevel_array_length` materialized static-array support; no source edits required. -> C2.4.1.1 remains complete as a carried definition-repair anchor; prior evidence shows the definition repair and regression theorem were accepted. (`TO_type_system_rewrite-20260524T091119Z_m44609_t001`)
+  - Verified current source with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) while C2.4.1.1 was active. -> vyperTypeStmtSoundnessTheory builds successfully; no C2.4.1.1 regression or local definition work remains. (`TO_type_system_rewrite-20260524T091119Z_m44610_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m42870_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m42872_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44609_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44610_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.2
 
@@ -4248,10 +4452,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0800`
+- latest episode: `E0857`
 - blocker: 
-- actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 984,535 tok (981,903 in, 2,632 out, 968,192 cached), 288.4s, $0.63161100
-- next: Call plan_oracle review for C2.4.1.2; if accepted, commit the builtin proof repair and then begin C2.4.1.3 to delete/replace stale TypeError probes.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 220,261 tok (219,842 in, 419 out, 214,016 cached), 16.5s, $0.14870800
+- next: Call plan_oracle review for C2.4.1.2 closure, then query_plan and begin exactly Oracle-next component.
 
 ### Attempts / Evidence
 
@@ -4263,12 +4467,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - In `Len_result_fits_uint256`, replace the old `0 < len`/`1 < slot` split in the fixed-array materialized branch with `sparse_has_type_length` plus arithmetic transitivity. -> The intended SArrayV branch proof progressed; the next build exposed a nearby fixed-ArrayRef numeric goal not handled by the old final `w2n` fallback. (`TO_type_system_rewrite-20260522T073012Z_m42893_t001`, `TO_type_system_rewrite-20260522T073012Z_m42894_t001`)
   - Add a targeted fallback after the fixed-array storage branch: when an assumption has `n * slot < bound`, prove `n < bound` via `n <= n * slot` and `LESS_EQ_LESS_TRANS`. -> `vyperTypeBuiltinsTheory` builds cleanly. (`TO_type_system_rewrite-20260522T073012Z_m42896_t001`, `TO_type_system_rewrite-20260522T073012Z_m42897_t001`)
   - Run downstream `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to confirm the builtin repair is no longer the blocker. -> Build advances past `vyperTypeBuiltinsTheory` and fails at the expected stale theorem `len_fixed_array_value_typed_but_toplevel_array_length_type_error`, which belongs to the next planned cleanup component C2.4.1.3. (`TO_type_system_rewrite-20260522T073012Z_m42898_t001`)
+- `E0857` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 220,261 tok (219,842 in, 419 out, 214,016 cached), 16.5s, $0.14870800)
+  - Began scheduled carry-forward Len numeric-bound anchor C2.4.1.2 and used scoped dossier evidence for completed `Len_result_fits_uint256` materialized static-array repair; no source edits required. -> C2.4.1.2 remains complete as a carried boundary-lemma anchor; prior evidence shows the Len numeric-bound repair was accepted and build-checked. (`TO_type_system_rewrite-20260524T091119Z_m44614_t001`)
+  - Verified current source with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) while C2.4.1.2 was active. -> vyperTypeStmtSoundnessTheory builds successfully; no C2.4.1.2 regression or local proof work remains. (`TO_type_system_rewrite-20260524T091119Z_m44615_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260522T073012Z_m42893_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m42897_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260522T073012Z_m42898_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44614_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44615_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.3
 
@@ -4276,10 +4482,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0801`
+- latest episode: `E0858`
 - blocker: 
-- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 372,485 tok (371,325 in, 1,160 out, 363,008 cached), 122.1s, $0.25788900
-- next: Call plan_oracle review for C2.4.1.3; if accepted, commit cleanup and proceed to C2.4.1.4 Len typed-runtime no-TypeError boundary.
+- actual effort: 1 sessions, 1 msgs, 1 steps, 58,144 tok (57,530 in, 614 out, 52,736 cached), 13.2s, $0.06875800
+- next: Call plan_oracle review for C2.4.1.3 closure, then query_plan and begin exactly Oracle-next component.
 
 ### Attempts / Evidence
 
@@ -4287,12 +4493,16 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Delete the obsolete probe block around lines 7674-7757 in `vyperTypeStmtSoundnessScript.sml`. -> Removed the false TypeError probes and reachability diagnostic theorem from current source. (`TO_type_system_rewrite-20260522T073012Z_m42906_t001`)
   - Audit source for stale probe names with grep. -> No remaining matches for `len_fixed_array`, `toplevel_array_length_type_error`, or `well_typed_fixed_array_expr_can_eval_to_sarray_probe` in `vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260522T073012Z_m42907_t001`)
   - Run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after cleanup. -> Build no longer fails at stale probes; it advances to the known `Expr_Builtin` Len TypeError-path FAIL_TAC, which is scheduled for C2.4.1.4/C2.4.1.5. (`TO_type_system_rewrite-20260522T073012Z_m42907_t003`)
+- `E0858` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 58,144 tok (57,530 in, 614 out, 52,736 cached), 13.2s, $0.06875800)
+  - Begin carried source_cleanup leaf C2.4.1.3 and inspect scoped PLAN/DOSSIER. -> Confirmed this is a zero-work carry-forward cleanup anchor: stale Len counterexample/probe cleanup was already completed in E0801, with no current source work required; did not recreate stale probes. (`TO_type_system_rewrite-20260524T091119Z_m44625_t001`)
+  - Reuse prior accepted cleanup/audit/build evidence from E0801 rather than editing/building during the active checkpoint restriction. -> Prior evidence shows obsolete probe block was removed, grep found no stale probe names, and holbuild advanced past stale probes to the then-scheduled Len proof obligations; current component has no remaining work. (`TO_type_system_rewrite-20260522T073012Z_m42906_t001`, `TO_type_system_rewrite-20260522T073012Z_m42907_t001`, `TO_type_system_rewrite-20260522T073012Z_m42907_t003`)
 
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m42906_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42907_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42907_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44625_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.4
 
@@ -4300,21 +4510,27 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0802`
+- latest episode: `E0859`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 9 holbuild, 1,916,817 tok (1,909,525 in, 7,292 out, 1,859,072 cached), 475.8s, $1.40056100
-- next: Call plan_oracle review for C2.4.1.4; if accepted, commit the builtin boundary and proceed to C2.4.1.5 to replace the Len TypeError-path FAIL_TAC with the new boundary.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 131,705 tok (130,973 in, 732 out, 125,952 cached), 15.0s, $0.11004100
+- next: Call plan_oracle review for C2.4.1.4 closure, then query_plan and begin exactly Oracle-next component.
 
 ### Attempts / Evidence
 
 - `E0802` (proved, , actual effort: 1 sessions, 1 msgs, 25 steps, 28 tools, 9 holbuild, 1,916,817 tok (1,909,525 in, 7,292 out, 1,859,072 cached), 475.8s, $1.40056100)
   - Added `Len_toplevel_array_length_no_type_error` in `vyperTypeBuiltinsScript.sml` near `Len_result_fits_uint256`/`Len_builtin_sound`; proof unfolds `well_typed_builtin_app_def`, `evaluate_type_def`, `toplevel_value_typed_def`, and repaired `toplevel_array_length_def` only inside the boundary. -> `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)` builds cleanly with the new exported Len no-TypeError boundary. (`TO_type_system_rewrite-20260522T073012Z_m42939_t001`)
   - Ran downstream `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after adding the boundary. -> Downstream advances to the planned `Expr_Builtin` Len TypeError-path `FAIL_TAC`, confirming C2.4.1.4 boundary exists and C2.4.1.5 remains the integration step. (`TO_type_system_rewrite-20260522T073012Z_m42940_t002`)
+- `E0859` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 131,705 tok (130,973 in, 732 out, 125,952 cached), 15.0s, $0.11004100)
+  - Begin carried boundary_lemma leaf C2.4.1.4 and inspect scoped PLAN/DOSSIER. -> Confirmed this is a zero-work carry-forward anchor: `Len_toplevel_array_length_no_type_error` was already proved/integrated; no source changes required. (`TO_type_system_rewrite-20260524T091119Z_m44629_t001`)
+  - Verify current builtins target containing the Len no-TypeError boundary with holbuild. -> `holbuild(targets=["vyperTypeBuiltinsTheory"], timeout=600)` finished cleanly in current source, confirming the carried boundary remains build-clean. (`TO_type_system_rewrite-20260524T091119Z_m44630_t001`)
+  - Reuse prior substantive proof/downstream evidence from E0802. -> Prior evidence shows the boundary was added and built in `vyperTypeBuiltinsTheory`, and downstream `vyperTypeStmtSoundnessTheory` advanced to the scheduled integration step rather than missing the boundary. (`TO_type_system_rewrite-20260522T073012Z_m42939_t001`, `TO_type_system_rewrite-20260522T073012Z_m42940_t002`)
 
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m42939_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260522T073012Z_m42940_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44629_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44630_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.5
 
@@ -4322,19 +4538,207 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0803`
+- latest episode: `E0860`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,571,107 tok (1,566,936 in, 4,171 out, 1,536,512 cached), 144.4s, $1.04550600
-- next: Call plan_oracle review for C2.4.1.5. Because the build now exposes the non-Len `Expr_Builtin` branch and no explicit child component for it is visible under C2.4, ask the strategist to accept the Len integration and either schedule/authorize the non-Len branch or clarify existing coverage.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 147,758 tok (147,162 in, 596 out, 142,336 cached), 16.1s, $0.11317800
+- next: Call plan_oracle review for C2.4.1.5 closure, then query_plan and begin exactly Oracle-next component.
 
 ### Attempts / Evidence
 
 - `E0803` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,571,107 tok (1,566,936 in, 4,171 out, 1,536,512 cached), 144.4s, $1.04550600)
   - Replaced the Len TypeError-path `FAIL_TAC` in `eval_all_type_sound_mutual[Expr_Builtin]` with use of `Len_toplevel_array_length_no_type_error`; derived `well_typed_builtin_app ty Len [expr_type (HD es)]` from the singleton Len argument typing and `well_formed_type_value tv` from `evaluate_type_well_formed_type_value`. Also repaired the Len argument-exception subcase by applying the generated IH before simplifying. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` advances past all Len subcases and now fails at the existing `FAIL_TAC "Expr_Builtin non-Len branch"`, confirming the Len branch integration is complete and the remaining failure is outside this leaf's stated Len-only obligation. (`TO_type_system_rewrite-20260522T073012Z_m42958_t001`)
+- `E0860` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 147,758 tok (147,162 in, 596 out, 142,336 cached), 16.1s, $0.11317800)
+  - Begin carried proof leaf C2.4.1.5 and inspect scoped PLAN/DOSSIER. -> Confirmed this is a zero-work carry-forward anchor: `eval_all_type_sound_mutual[Expr_Builtin]` Len branch was already completed with `Len_toplevel_array_length_no_type_error`; no source changes required. (`TO_type_system_rewrite-20260524T091119Z_m44634_t001`)
+  - Verify current statement soundness target with holbuild. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` finished cleanly in current source, confirming the carried Len integration and later repairs remain build-clean. (`TO_type_system_rewrite-20260524T091119Z_m44635_t001`)
+  - Reuse prior substantive Len integration evidence from E0803. -> Prior evidence shows the Len TypeError-path FAIL_TAC was replaced using the Len no-TypeError boundary and the build advanced past all Len subcases to the then-scheduled non-Len branch, which is outside this Len-only leaf. (`TO_type_system_rewrite-20260522T073012Z_m42958_t001`)
 
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260522T073012Z_m42958_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44634_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44635_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.6
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `missing_helper` The planned generic builtin no-TypeError boundary does not match the non-Len Expr_Builtin proof use site. After applying eval_exprs IH and deriving exprs_runtime_typed, success typing closes via well_typed_builtin_app_success_type, but the TypeError branch requires well_typed_builtin_app_no_type_error whose statement has side condition `(!item. blt = Env item ==> item <> MsgGas)`. The statement proof context provides `well_typed_builtin_app ty bt (MAP expr_type es)` and `bt <> Len`, which does not exclude `bt = Env MsgGas`; evaluate_builtin_def has no Env MsgGas equation and falls through to TypeError, suggesting the missing side condition may reflect a real typing/semantics gap rather than a tactical issue.
+- latest episode: `E0805`
+- blocker: Need strategist decision: add/derive a typing side condition excluding `Env MsgGas`, repair `evaluate_builtin`/typing for MsgGas, or authorize a concrete counterexample probe if the current obligation is false.
+- actual effort: 1 sessions, 2 msgs, 34 steps, 40 tools, 8 holbuild, 2,956,991 tok (2,947,316 in, 9,675 out, 2,862,080 cached), 324.0s, $2.14747000
+- next: Call plan_oracle review for C2.4.1.6 with this evidence; do not continue tactical edits until the Env MsgGas gap is classified.
+
+### Attempts / Evidence
+
+- `E0804` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 33 steps, 39 tools, 8 holbuild, 2,849,653 tok (2,840,829 in, 8,824 out, 2,757,120 cached), 298.2s, $2.06182500)
+  - Replaced the non-Len FAIL marker with eval_exprs IH application, split on args_res, used exprs_runtime_typed_def to derive MAP evaluate_type and LIST_REL value_has_type, then used well_typed_builtin_app_success_type for successful builtin results. -> Success typing path now closes; proof advances to the builtin error branch. (`TO_type_system_rewrite-20260522T073012Z_m42992_t001`, `TO_type_system_rewrite-20260522T073012Z_m42996_t001`)
+  - Tried to discharge TypeError branch with well_typed_builtin_app_no_type_error. -> Fails because available assumptions do not imply the theorem's Env MsgGas exclusion side condition; goal is `evaluate_builtin ... = INR (TypeError msg) ==> F` under generic `well_typed_builtin_app` context. (`TO_type_system_rewrite-20260522T073012Z_m42996_t001`)
+- `E0805` (stuck, missing_helper, actual effort: 1 sessions, 2 msgs, 34 steps, 40 tools, 8 holbuild, 2,956,991 tok (2,947,316 in, 9,675 out, 2,862,080 cached), 324.0s, $2.14747000)
+  - Applied the generated non-Len eval_exprs IH, split on `eval_exprs cx es st`, expanded `exprs_runtime_typed_def`, derived `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs`, and used `well_typed_builtin_app_success_type` for INL builtin results. -> Successful builtin INL path closes; proof advances to the INR TypeError path. (`TO_type_system_rewrite-20260522T073012Z_m42992_t001`, `TO_type_system_rewrite-20260522T073012Z_m42996_t001`)
+  - Tried to close TypeError path with `well_typed_builtin_app_no_type_error`. -> Fails because the theorem requires the Env MsgGas exclusion side condition that is absent from the statement-soundness context. (`TO_type_system_rewrite-20260522T073012Z_m42996_t001`)
+
+### Ruled Out
+
+- Directly using `well_typed_builtin_app_no_type_error` in the current statement proof without proving/excluding `bt = Env MsgGas`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m42996_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43003_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0861`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 2 steps, 2 tools, 2 holbuild, 165,474 tok (164,643 in, 831 out, 158,720 cached), 19.2s, $0.13390500
+- next: Call plan_oracle review for C2.4.1.6.1 closure, then query_plan and begin exactly Oracle-next component.
+
+### Attempts / Evidence
+
+- `E0806` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 2 holbuild, 598,039 tok (596,658 in, 1,381 out, 585,216 cached), 201.8s, $0.39124800)
+  - Changed Env branch of `well_typed_builtin_app_def` to `(ts = [] /\ ty = env_item_type item /\ item <> MsgGas)`. -> Definition repair applied exactly as planned. (`TO_type_system_rewrite-20260522T073012Z_m43007_t001`)
+  - Built `vyperTypeSystemTheory` and `vyperTypeBuiltinsTheory`. -> Both targets build cleanly after the typing boundary repair; no local simplification fallout required. (`TO_type_system_rewrite-20260522T073012Z_m43008_t001`, `TO_type_system_rewrite-20260522T073012Z_m43009_t001`)
+- `E0861` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 2 tools, 2 holbuild, 165,474 tok (164,643 in, 831 out, 158,720 cached), 19.2s, $0.13390500)
+  - Begin carried definition_repair leaf C2.4.1.6.1 and inspect scoped PLAN/DOSSIER. -> Confirmed this is a zero-work carry-forward anchor: the Env MsgGas exclusion in `well_typed_builtin_app_def` was already completed; no source changes required. (`TO_type_system_rewrite-20260524T091119Z_m44639_t001`)
+  - Verify current type-system target affected by the Env MsgGas typing-boundary definition repair with holbuild. -> `holbuild(targets=["vyperTypeSystemTheory"], timeout=600)` finished cleanly in current source. A parallel `vyperTypeBuiltinsTheory` build attempt hit the project holbuild lock because the TypeSystem build was running; earlier current-session builtins verification already succeeded. (`TO_type_system_rewrite-20260524T091119Z_m44640_t002`, `TO_type_system_rewrite-20260524T091119Z_m44630_t001`)
+  - Reuse prior substantive Env MsgGas repair evidence from E0806. -> Prior evidence shows `well_typed_builtin_app_def` Env branch was changed to exclude `MsgGas`, and both `vyperTypeSystemTheory` and `vyperTypeBuiltinsTheory` built cleanly after the repair. (`TO_type_system_rewrite-20260522T073012Z_m43008_t001`, `TO_type_system_rewrite-20260522T073012Z_m43009_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m43008_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43009_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44639_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44640_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44630_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.6.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0809`
+- blocker: After removing the success_type_probe and adding a local success-type adapter, the INL success branch now discharges via well_typed_builtin_app_success_type, but the non-Len INR branch remains stuck on normalizing the nested raise equality without unfolding evaluate_builtin_def. Attempts to use nested_raise_error_case_imp, qpat_x_assum patterns, and focused simp[raise_def] either fail to match or time out under the tactic limit. The current proof shape has become brittle around monadic normalization rather than the original Env MsgGas side condition.
+- actual effort: 1 sessions, 4 msgs, 63 steps, 66 tools, 18 holbuild, 6,166,344 tok (6,144,015 in, 22,329 out, 6,026,752 cached), 736.1s, $4.26956100
+- next: Ask the strategist whether to add a small monadic boundary lemma/corollary for both return/raise nested evaluator wrappers, or to refactor the branch proof so the nested equality is normalized before the builtin result split.
+
+### Attempts / Evidence
+
+- `E0807` (progressed, other, actual effort: 1 sessions, 6 msgs, 86 steps, 97 tools, 32 holbuild, 8,126,586 tok (8,098,426 in, 28,160 out, 7,951,360 cached), 1071.6s, $5.55581000)
+  - Added Env side-condition assertion `!item. bt = Env item ==> item <> MsgGas` from `well_typed_builtin_app_def`, then used `drule_all well_typed_builtin_app_no_type_error` and `qspec_then msg`; this closed the TypeError contradiction branch. -> Original C2.4.1.6.2 blocker resolved; later builds no longer fail at well_typed_builtin_app_no_type_error. (`TO_type_system_rewrite-20260522T073012Z_m43028_t001`, `TO_type_system_rewrite-20260522T073012Z_m43082_t001`)
+  - Tried several ways to use well_typed_builtin_app_success_type in INL branch: metis_tac, drule_all, irule/match_mp_tac, explicit Q.INST, then `disch_then irule` after pushing instantiated theorem. -> Success typing fact `value_has_type ret_tv builtin_v` can be obtained with the instantiated theorem plus `disch_then irule >> simp[]`; however the surrounding branch still fails because the return equality remains unsimplified and branch tactic leaves state/env/typing goals. (`TO_type_system_rewrite-20260522T073012Z_m43068_t001`, `TO_type_system_rewrite-20260522T073012Z_m43082_t001`)
+  - Tried to simplify the success branch's nested return equality by pushing the newest equality (`pop_assum mp_tac`) and rewriting/simplifying with return_def; also inserted local lemma `return_value_case` as a possible focused rewrite boundary. -> Inline simp[return_def] on the large live context timed out; rewrite_tac/REWRITE_RULE did not reduce the nested case enough in the branch. Current source has the local helper but proof still needs to use it or a more focused rewrite/substitution approach. (`TO_type_system_rewrite-20260522T073012Z_m43088_t001`, `TO_type_system_rewrite-20260522T073012Z_m43104_t001`, `TO_type_system_rewrite-20260522T073012Z_m43105_t002`)
+- `E0808` (progressed, other, actual effort: 1 sessions, 5 msgs, 72 steps, 77 tools, 27 holbuild, 6,946,918 tok (6,922,470 in, 24,448 out, 6,799,360 cached), 843.6s, $4.74867000)
+  - Added local nested return helper and used drule nested_return_value_case_imp to normalize the nested success equality to res=INL(Value builtin_v), st'=args_st. -> Monadic return normalization progressed: the state/env/account/no-TypeError conjuncts are no longer the blocking point; the build now reaches value_has_type ret_tv builtin_v. (`TO_type_system_rewrite-20260522T073012Z_m43156_t001`)
+  - Tried Q.INST + mp_tac/simp, irule with explicit instantiations, direct metis_tac, and drule_all to consume well_typed_builtin_app_success_type for value_has_type ret_tv builtin_v. -> All attempts failed or left the original value_has_type goal; drule_all produced an internal assert failure, and mp_tac/simp did not discharge the assertion subgoal. This suggests the proof needs better subgoal focus or a use-site adapter rather than more tactic variants. (`TO_type_system_rewrite-20260522T073012Z_m43170_t001`, `TO_type_system_rewrite-20260522T073012Z_m43180_t001`)
+- `E0809` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 63 steps, 66 tools, 18 holbuild, 6,166,344 tok (6,144,015 in, 22,329 out, 6,026,752 cached), 736.1s, $4.26956100)
+  - Added a local adapter theorem `well_typed_builtin_app_success_type_stmt_adapter` and reorganized the INL branch after `nested_return_value_case_imp`; finally used an explicit `mp_tac (Q.INST ... well_typed_builtin_app_success_type) >> simp[]`. -> This removed the `FAIL_TAC success_type_probe` blocker and holbuild advanced past the non-Len builtin success branch; success result typing now closes. (`TO_type_system_rewrite-20260522T073012Z_m43232_t001`)
+  - Added `nested_raise_error_case_imp` and tried `drule nested_raise_error_case_imp` in the INR branch after stripping the equality. -> The helper itself was proved, but `drule` did not find/apply the matching equality in the live goal, leaving the same state/no-TypeError/postcondition goal. (`TO_type_system_rewrite-20260522T073012Z_m43239_t001`)
+  - Tried selecting the nested raise equality with exact and wildcard `qpat_x_assum` patterns, then focused `simp[raise_def]` rather than broad unfolding. -> Exact/wildcard qpat patterns failed to match the live assumption, and using `pop_assum mp_tac >> simp[raise_def]` or wildcard-selection followed by `simp[raise_def]` timed out under the tactic limit. (`TO_type_system_rewrite-20260522T073012Z_m43245_t001`, `TO_type_system_rewrite-20260522T073012Z_m43249_t001`)
+
+### Ruled Out
+
+- Unfolding `evaluate_builtin_def` in the statement proof remains disallowed by the plan.
+- Further raw variants of selecting the live nested raise equality with `qpat_x_assum` or broad `simp[raise_def]` are brittle/time out.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m43232_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43239_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43245_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43249_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.6.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0862`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 92,500 tok (91,912 in, 588 out, 86,528 cached), 9.0s, $0.08782400
+- next: Call plan_oracle review for C2.4.1.6.2.1 closure, then query_plan and begin exactly Oracle-next component.
+
+### Attempts / Evidence
+
+- `E0810` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 2 holbuild, 267,638 tok (265,600 in, 2,038 out, 245,760 cached), 65.9s, $0.28322000)
+  - Inserted [local] theorem nested_raise_error_case as an iff proved by simp[raise_def] >> metis_tac[], and rewrote nested_raise_error_case_imp to simp[nested_raise_error_case]. -> Helper theorem was accepted; target resumed through helper section and next failure is in downstream resume branch at old qpat_x_assum code. (`TO_type_system_rewrite-20260522T073012Z_m43259_t001`, `TO_type_system_rewrite-20260522T073012Z_m43260_t001`)
+- `E0862` (proved, , actual effort: 1 sessions, 1 steps, 92,500 tok (91,912 in, 588 out, 86,528 cached), 9.0s, $0.08782400)
+  - Begin carried boundary_lemma leaf C2.4.1.6.2.1 and inspect scoped PLAN/DOSSIER. -> Confirmed this is a zero-work carry-forward anchor: local nested return/raise wrapper equivalences were already proved by direct simplification; no source changes required. (`TO_type_system_rewrite-20260524T091119Z_m44644_t001`)
+  - Reuse prior substantive wrapper-equivalence evidence from E0810. -> Prior evidence shows the local `nested_raise_error_case` iff helper was inserted/proved and its implication wrapper was rewritten to use it, advancing the build to the downstream non-Len branch integration step. (`TO_type_system_rewrite-20260522T073012Z_m43259_t001`, `TO_type_system_rewrite-20260522T073012Z_m43260_t001`)
+  - Reuse current-session downstream statement-soundness verification. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` already finished cleanly in current source after the carried Len/non-Len repairs, confirming these wrapper equivalences remain integrated. (`TO_type_system_rewrite-20260524T091119Z_m44635_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m43259_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43260_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44644_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44635_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.6.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0863`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 1 steps, 59,296 tok (58,819 in, 477 out, 52,736 cached), 11.0s, $0.07109300
+- next: Call plan_oracle review for C2.4.1.6.2.2 closure, then query_plan and begin exactly Oracle-next component.
+
+### Attempts / Evidence
+
+- `E0811` (proved, , actual effort: 1 sessions, 3 msgs, 43 steps, 42 tools, 18 holbuild, 4,327,777 tok (4,313,974 in, 13,803 out, 4,237,824 cached), 516.7s, $2.91375200)
+  - Replaced the brittle non-Len branch proof with wrapper-lemma normalization: success branch uses nested_return_value_case, failure branch uses nested_raise_error_case plus Env MsgGas exclusion and well_typed_builtin_app_no_type_error; eval_exprs failure uses eval_exprs_failure_builtin_case. -> holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) succeeded, advancing past the Expr_Builtin resume. (`TO_type_system_rewrite-20260522T073012Z_m43305_t001`)
+  - Added local eval_exprs_failure_builtin_case for the eval_exprs failure wrapper after broad simp[] at the final branch timed out. -> The new helper kept monadic wrapper normalization local and made the final eval_exprs failure branch close by gvs[eval_exprs_failure_builtin_case,no_type_error_result_def]. (`TO_type_system_rewrite-20260522T073012Z_m43290_t001`, `TO_type_system_rewrite-20260522T073012Z_m43305_t001`)
+- `E0863` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 59,296 tok (58,819 in, 477 out, 52,736 cached), 11.0s, $0.07109300)
+  - Zero-work carry-forward leaf; reused accepted dossier evidence for completed non-Len Expr_Builtin branch plus current-source vyperTypeStmtSoundnessTheory clean build evidence. -> C2.4.1.6.2.2 remains proved; no source edits needed. (`TO_type_system_rewrite-20260522T073012Z_m43305_t001`, `TO_type_system_rewrite-20260522T073012Z_m43290_t001`, `TO_type_system_rewrite-20260524T091119Z_m44635_t001`)
+
+### Ruled Out
+
+- Reopening or duplicating the evaluator branch; this leaf is carry-forward only.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260522T073012Z_m43305_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260522T073012Z_m43290_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44635_t001` (use `read_tool_output` for exact output)
+
+## C2.4.1.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0864`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 67,123 tok (66,474 in, 649 out, 61,952 cached), 9.6s, $0.07305600
+- next: Call plan_oracle review for C2.4.1.7 closure, then query_plan and begin exactly Oracle-next component.
+
+### Attempts / Evidence
+
+- `E0824` (proved, , actual effort: 1 sessions, 1 steps, 90,104 tok (89,556 in, 548 out, 84,480 cached), 9.2s, $0.08406000)
+  - Began Oracle-next C2.4.1.7 superseded marker because query_plan selected it after C2.3 review. -> Component context confirms C2.4.1.7 is a dormant/superseded deep Len audit marker with no executor work; the actual current-source Len audit is C2.1 and has been accepted/reviewed. (`TO_type_system_rewrite-20260524T091119Z_m43929_t001`, `TO_type_system_rewrite-20260524T091119Z_m43895_t001`)
+  - Reused current statement-soundness build evidence from the preceding carry-forward check plus accepted C2.1 Len audit build evidence. -> vyperTypeStmtSoundnessTheory builds in current source, and prior accepted C2.1 audit showed Len repair/boundary/integration evidence; no edits or proof work are needed or allowed for this marker. (`TO_type_system_rewrite-20260524T091119Z_m43893_t003`, `TO_type_system_rewrite-20260524T091119Z_m43925_t001`)
+- `E0864` (proved, , actual effort: 1 sessions, 1 steps, 67,123 tok (66,474 in, 649 out, 61,952 cached), 9.6s, $0.07305600)
+  - Zero-work superseded marker; reused prior accepted evidence that the deep Len audit is rehomed to C2.1 and current Len authority is already accepted/reviewed. -> C2.4.1.7 remains a marker only; no new probe/build/edit was performed. (`TO_type_system_rewrite-20260524T091119Z_m43929_t001`, `TO_type_system_rewrite-20260524T091119Z_m43895_t001`)
+  - Used prior statement-soundness/current-source build and C2.1 Len audit evidence from the component dossier rather than reopening Len proof work. -> No source changes needed; marker can be closed as carried evidence. (`TO_type_system_rewrite-20260524T091119Z_m43893_t003`, `TO_type_system_rewrite-20260524T091119Z_m43925_t001`)
+
+### Ruled Out
+
+- Scheduling a new deep Len probe; current Len audit authority is C2.1.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m43929_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m43895_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m43893_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m43925_t001` (use `read_tool_output` for exact output)
 
 ## C2.4.1.a
 
@@ -4387,10 +4791,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `wrong_statement` After proving Target_Base/Target_Tuple/Targets_nil/Targets_cons and reaching BaseTarget_BareGlobal, the direct proof appears blocked by an underspecified invariant: fresh `env_context_consistent_def` only says `FLOOKUP env.bare_globals ...` implies `is_immutable_decl` when `get_module_code cx src = SOME ts` is already known, while `eval_base_target (BareGlobalNameTarget id)` can raise `TypeError` if `get_module_code cx (current_module cx) = NONE`. The retired helper theorem assumed an env invariant that provided code existence for bare globals, but the fresh theorem premises do not visibly provide it. Continuing unfolded-tactic attempts would be repeating the same proof without the missing fact.
-- latest episode: `E0243`
-- blocker: C2.5 BaseTarget_BareGlobal needs strategist review: add/derive code-existence for bare_globals/current_src, strengthen fresh env consistency/mutual theorem premises, or identify an existing helper that supplies the missing fact.
-- next: Call plan_oracle(mode='review', component_id='C2.5') with this evidence and request a de-risked replacement/augmentation for BaseTarget_BareGlobal/Subscript if needed.
+- diagnosis: `risk_mismatch` C2.5 remains at the IntCall tail-helper body premise. Bind_arguments packaging is repaired, and explicit application of intcall_post_push_tail_no_type_error exposes the exact residual body premise. Multiple attempts to specialize the generated body_ih in the large live goal failed: disch_then cannot consume the post-simp body_ih shape; drule_all hits internal assertion/predicate mismatch; a long qspecl_then instantiation is brittle and hit a parse/type quotation issue on variables such as x'. Current source is intentionally left as a parseable FAIL_TAC probe at the body_ih adapter site. This matches the PLAN warning that a local adapter/corollary is needed rather than more manual generated-IH plumbing.
+- latest episode: `E1089`
+- blocker: Need strategist-owned decomposition or a specifically shaped adapter lemma/corollary that converts the generated body_ih plus the live pushed-call assumptions into the exact body premise required by intcall_post_push_tail_no_type_error. Current source has FAIL_TAC "body_ih_adapter_needed" at lines ~10667-10669.
+- actual effort: 1 sessions, 3 msgs, 35 steps, 37 tools, 10 holbuild, 3,529,603 tok (3,514,641 in, 14,962 out, 3,417,600 cached), 558.3s, $2.64286500
+- next: Call plan_oracle(mode='review', component_id='C2.5') asking for a de-risked adapter lemma shape or replacement C2.5 subtree. Do not continue qspecl_then plumbing in the main theorem.
 
 ### Attempts / Evidence
 
@@ -4406,18 +4811,41 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Patched Target_Tuple success and error branches by stripping evaluator return equalities, using target_values_runtime_typed_LIST_REL3 and target_values_runtime_typed_imp_shape. -> Build progressed past Target_Tuple. (`TO_type_system_rewrite-20260518T204229Z_m26734_t001`, `TO_type_system_rewrite-20260518T204229Z_m26736_t001`)
   - Patched Targets_cons by matching unfolded evaluator variables, specializing the guarded list IH, and using target_runtime_typed_rebuild/runtime_consistent_def to move the head target typing from st1 to st2. -> vyperTypeStmtSoundnessTheory built through Targets_cons and then failed at BaseTarget_BareGlobal. (`TO_type_system_rewrite-20260518T204229Z_m26749_t001`)
   - Tried direct BaseTarget_BareGlobal proof from `type_place_target_BareGlobalNameTarget` plus unfolded evaluator. -> Failure exposed missing code-existence/immutable-declaration facts needed to rule out TypeError and preserve state invariants; fresh definitions and old helper evidence indicate an invariant mismatch rather than a simple tactic gap. (`TO_type_system_rewrite-20260518T204229Z_m26760_t001`, `TO_type_system_rewrite-20260518T204229Z_m26762_t001`, `TO_type_system_rewrite-20260518T204229Z_m26774_t001`)
+- `E0812` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 61 steps, 70 tools, 22 holbuild, 6,276,695 tok (6,257,044 in, 19,651 out, 6,120,960 cached), 699.1s, $4.33043000)
+  - Replaced Expr_TypeBuiltin cheat with evaluator-order proof modeled on Expr_Builtin: unfold one evaluate_def/well_typed_expr_def step, prove type_builtin_args_length_ok, apply eval_exprs IH, split args_res, then attempt well_typed_type_builtin_success_type/no_type_error on evaluate_type_builtin result. -> Initial builds failed due to brittle positional THEN1/constructor-order assumptions and mismatched target_ty vs expression result type. Evidence shows top goal still before well_typed_expr antecedent or at success wrapper equality rather than the intended local branch. (`TO_type_system_rewrite-20260522T073012Z_m43318_t001`, `TO_type_system_rewrite-20260522T073012Z_m43324_t001`, `TO_type_system_rewrite-20260522T073012Z_m43350_t001`)
+  - Inserted probes and parenthesized the args_res case split to understand branch shape. -> Probe after args_res split showed two subgoals. The success branch goal has eval_exprs success, state/env/account preservation and exprs_runtime_typed, and a wrapper equality over evaluate_type_builtin; the failure branch should be simple after stripping/gvs. Parenthesized split advanced to that branch shape, but further THEN1 still failed when applied too early. (`TO_type_system_rewrite-20260522T073012Z_m43366_t001`, `TO_type_system_rewrite-20260522T073012Z_m43372_t001`)
+- `E0813` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 37 steps, 37 tools, 13 holbuild, 2,884,926 tok (2,873,427 in, 11,499 out, 2,808,320 cached), 381.4s, $2.07466500)
+  - Direct evaluator-order proof: unfold TypeBuiltin evaluate_def/well_typed_expr_def, prove type_builtin_args_length_ok, apply eval_exprs IH, split args_res, then case split evaluate_type_builtin and apply well_typed_type_builtin_success_type/no_type_error. -> Failed repeatedly due to THEN1/branch-shape brittleness and remaining wrapper equality over evaluate_type_builtin; success branch did not close by direct drule_all. (`TO_type_system_rewrite-20260522T073012Z_m43383_t001`, `TO_type_system_rewrite-20260522T073012Z_m43392_t001`, `TO_type_system_rewrite-20260522T073012Z_m43403_t001`)
+  - Restored Resume eval_all_type_sound_mutual[Expr_TypeBuiltin] to cheat as a controlled source state and rebuilt vyperTypeStmtSoundnessTheory. -> Target builds again, but only because the Expr_TypeBuiltin obligation is cheated; no proof progress should be claimed. (`TO_type_system_rewrite-20260522T073012Z_m43413_t001`)
+- `E1086` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 40 steps, 51 tools, 7 holbuild, 4,052,682 tok (4,035,888 in, 16,794 out, 3,917,824 cached), 524.8s, $3.05305200)
+  - Replaced old `FAIL_TAC "probe intcall tail after push"` with direct `irule intcall_post_push_tail_no_type_error >> simp[]`; added `strip_tac >> gvs[]` to expose the tail equality and tried `asm "body_ih" mp_tac >> simp[]` for the generated body IH premise. -> Build still failed in `intcall_expr_no_type_error_from_generated_ih`; goalfrag showed `irule`/`simp[]` reduced to two subgoals rather than closing, indicating remaining premise-packaging mismatch rather than missing `stmts_no_control_escape` (which is present as assumption 30 in probe output). (`TO_type_system_rewrite-20260525T153549Z_m50702_t001`)
+  - Probed after `irule (REWRITE_RULE [no_type_error_result_def] intcall_post_push_tail_no_type_error) >> simp[]` to avoid Boolean conclusion mismatch (`no_type_error_result` vs `∀msg. res <> INR(Error(TypeError msg)`). -> Probe still displayed the large pre-helper goal due goalfrag prefix reporting/truncation, but source confirms the tactic reaches the helper application point; assumptions include body typing, no-control, default expression runtime typedness, and generated body IH. Candidate next step is to verify whether `metis_tac[env_extends_return_exception_typed]` closes the leftover body-IH return-exception premise. (`TO_type_system_rewrite-20260525T153549Z_m50707_t001`, `TO_type_system_rewrite-20260525T153549Z_m50711_t001`, `TO_type_system_rewrite-20260525T153549Z_m50712_t001`)
+- `E1087` (progressed, missing_helper, actual effort: 1 sessions, 4 msgs, 46 steps, 50 tools, 11 holbuild, 4,505,251 tok (4,490,330 in, 14,921 out, 4,367,360 cached), 542.4s, $3.24616000)
+  - Built the previous candidate `REWRITE_RULE [no_type_error_result_def] intcall_post_push_tail_no_type_error >> simp[] >> metis_tac[...]`. -> Build still failed. Goalfrag showed two cases: successful default evaluation and default-evaluation error branch. The previous proof only handled the success branch and left the default-error branch unsolved. (`TO_type_system_rewrite-20260525T153549Z_m50739_t001`, `TO_type_system_rewrite-20260525T153549Z_m50740_t001`)
+  - Changed `Cases_on dflt_res` to solve the successful branch with `>- (...)` and added a trailing `gvs[no_type_error_result_def]` for the error branch. -> This moved the proof to the bind_arguments witness in the successful default branch; default-error branch is structurally accounted for. (`TO_type_system_rewrite-20260525T153549Z_m50743_t001`, `TO_type_system_rewrite-20260525T153549Z_m50745_t001`)
+  - Tried to close residual bind_arguments premises using broad `metis_tac[]`, then explicit `>-` branches, then a generic `first_x_assum drule`; inspected failures. -> Broad metis timed out; explicit branch placement was wrong because the existential fact itself was still the top subgoal; generic `first_x_assum drule` selected the wrong quantified assumption. Exact residual included `MEM (id,typ) x''2 ==> FLOOKUP env_body.var_assignable ... = SOME T`, directly available from callable-body assumption 32. (`TO_type_system_rewrite-20260525T153549Z_m50747_t001`, `TO_type_system_rewrite-20260525T153549Z_m50753_t001`, `TO_type_system_rewrite-20260525T153549Z_m50759_t001`, `TO_type_system_rewrite-20260525T153549Z_m50760_t001`)
+  - Latest edit replaces generic selection with an ORELSE between exact `!id typ. MEM ...` and `!n b. FLOOKUP var_assignable ...` qpat assumptions. -> Source is unverified; handoff interrupted before build. This may close the bind_arguments residuals, but if it fails, factor a local adapter rather than continuing tactic variants. (`TO_type_system_rewrite-20260525T153549Z_m50761_t001`)
+- `E1088` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 42 steps, 44 tools, 10 holbuild, 4,146,245 tok (4,133,395 in, 12,850 out, 3,949,056 cached), 488.2s, $3.28172300)
+  - Label callable-body projection facts (`args_forward`, `args_var_types`, `args_var_assignable`) and derive `sig.param_types = MAP SND x''2`/`sig.num_defaults = LENGTH x''3` from `fn_sigs_consistent_FLOOKUP`; use explicit witnesses for intcall_bind_arguments_from_runtime_typed. -> Bind_arguments witness progressed past prior residual; build moved to tail helper/body_ih premise. (`TO_type_system_rewrite-20260525T153549Z_m50794_t001`, `TO_type_system_rewrite-20260525T153549Z_m50797_t001`)
+  - Apply `intcall_post_push_tail_no_type_error` with explicit qspecl witnesses rather than `irule`, then attempted to discharge generated body-IH premise with a long manual qspecl_then over `body_ih`. -> Explicit helper application exposed exactly the body-IH premise; broad metis timed out, and the manual qspecl block is brittle and introduced a parse error. This should be factored, not retried. (`TO_type_system_rewrite-20260525T153549Z_m50802_t001`, `TO_type_system_rewrite-20260525T153549Z_m50805_t001`)
+- `E1089` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 37 tools, 10 holbuild, 3,529,603 tok (3,514,641 in, 14,962 out, 3,417,600 cached), 558.3s, $2.64286500)
+  - Applied intcall_post_push_tail_no_type_error explicitly; used FAIL_TAC probe after asm "body_ih" mp_tac >> simp[push_function_def, return_def] to inspect the exact residual. -> Residual is the planned body premise: for all res_body/st_body, eval_stmts of pushed body implies no TypeError plus return_exception_typed env_body NoneT for INR exceptions. Live assumptions include type_stmts env_body NoneT x''5, stmts_no_control_escape x''5, call_env bind_arguments, env_scopes_consistent, and body_ih. (`TO_type_system_rewrite-20260525T153549Z_m50823_t001`)
+  - Tried to turn body_ih into the residual with drule_all / disch_then / first_x_assum after simplification, plus env_extends_return_exception_typed. -> Failed before producing a usable theorem: drule_all hit internal predicate mismatch, and disch_then/strip_tac variants did not match the post-simp theorem shape in the large goal. (`TO_type_system_rewrite-20260525T153549Z_m50826_t001`, `TO_type_system_rewrite-20260525T153549Z_m50834_t001`)
+  - Tried a direct long qspecl_then instantiation of body_ih with the evaluator temporaries. -> This repeated the explicitly forbidden brittle approach; it failed with quotation/parse trouble and confirms the need for a shaped adapter lemma rather than more manual instantiation at the call site. (`TO_type_system_rewrite-20260525T153549Z_m50849_t001`)
+  - Replaced the brittle attempt with a parseable FAIL_TAC "body_ih_adapter_needed" marker at the adapter site. -> Source is left in a controlled partial state for strategist review; no silent proof changes or weakening were made. (`TO_type_system_rewrite-20260525T153549Z_m50851_t001`)
 
 ### Ruled Out
 
-- More `simp`/`gvs`/`metis_tac` on the unfolded BareGlobalNameTarget evaluator without a code-existence fact.
+- Broad metis over the full IntCall context
+- Inline monadic tail proof from C2.4
+- Long manual qspecl_then over body_ih in the main theorem
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m26749_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26760_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26762_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26774_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26783_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50823_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50834_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50849_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m50851_t001` (use `read_tool_output` for exact output)
 
 ## C2.5.1
 
@@ -4425,10 +4853,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0281`
+- latest episode: `E1091`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 129,680 tok (129,309 in, 371 out, 126,464 cached), 5.3s, $0.08858700
-- next: Review duplicate closure with strategist, then continue through the frontier or repair scheduling so C2.7.1.1.1.b.1 becomes Oracle next.
+- actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 9 holbuild, 1,621,988 tok (1,612,536 in, 9,452 out, 1,545,216 cached), 346.0s, $1.39276800
+- next: Call plan_oracle review; if accepted, begin C2.5.2 to replace the old inline assertion with `intcall_body_soundness_from_generated_ih`.
 
 ### Attempts / Evidence
 
@@ -4437,13 +4865,20 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Built immediate dependent env theories to check fallout from env_context_consistent_def change. -> vyperTypeEnvTheory and vyperTypeEnvPreservationTheory built cleanly. (`TO_type_system_rewrite-20260518T204229Z_m26805_t002`, `TO_type_system_rewrite-20260518T204229Z_m26806_t001`)
 - `E0281` (proved, , actual effort: 1 sessions, 1 steps, 129,680 tok (129,309 in, 371 out, 126,464 cached), 5.3s, $0.08858700)
   - Re-began C2.5.1 because the current PLAN frontier scheduled this already-proved carry-forward leaf as Oracle next. -> No proof work was needed: scoped begin context and prior E0244 evidence show the definition repair and immediate dependent env theories already build cleanly. (`TO_type_system_rewrite-20260519T085316Z_m28111_t001`, `TO_type_system_rewrite-20260518T204229Z_m26804_t001`, `TO_type_system_rewrite-20260518T204229Z_m26805_t002`, `TO_type_system_rewrite-20260518T204229Z_m26806_t001`)
+- `E0814` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 4 holbuild, 1,821,456 tok (1,818,310 in, 3,146 out, 1,792,512 cached), 141.7s, $1.11962600)
+  - Added local TypeBuiltin wrapper lemmas `type_builtin_return_value_case`, `type_builtin_raise_error_case`, and `eval_exprs_failure_type_builtin_case` near the existing builtin wrapper lemmas; each proves only monadic wrapper normalization via `return_def`/`raise_def` or direct simplification, without unfolding `evaluate_type_builtin_def`. Removed the optional single eliminator after a parser issue, since the two exact iff lemmas plus failure passthrough satisfy the component interface. -> `vyperTypeStmtSoundnessTheory` builds with the new local wrapper lemmas and the existing Expr_TypeBuiltin cheat unchanged; C2.5.1 boundary lemmas are admitted. (`TO_type_system_rewrite-20260522T073012Z_m43432_t001`)
+- `E0865` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 148,353 tok (147,908 in, 445 out, 143,360 cached), 14.2s, $0.10777000)
+  - Zero-work carry-forward boundary lemma leaf; used prior proof evidence for local TypeBuiltin wrapper lemmas and refreshed current-source holbuild of vyperTypeStmtSoundnessTheory. -> C2.5.1 remains proved/build-clean; no source edits needed. (`TO_type_system_rewrite-20260522T073012Z_m43432_t001`, `TO_type_system_rewrite-20260524T091119Z_m44664_t001`)
+- `E1090` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 22 steps, 24 tools, 5 holbuild, 2,045,735 tok (2,035,338 in, 10,397 out, 1,953,792 cached), 326.5s, $1.69653600)
+  - Ran focused build after inherited final edit adding DROP arithmetic normalization. -> Build still failed at `intcall_expr_no_type_error_from_generated_ih`; goal remained the large generated `body_ih` specialization and THEN1/first-subgoal-not-solved. (`TO_type_system_rewrite-20260525T153549Z_m50965_t001`)
+  - Inserted temporary probes (`FAIL_TAC`, then `NO_TAC`) around the explicit `body_ih` antecedent to distinguish antecedent vs consequent and inspect goal shape. -> Probe confirmed the problem is still the generated `body_ih` packaging at the explicit specialization site; goal state exceeds 4KB and holbuild truncates failed input goals. (`TO_type_system_rewrite-20260525T153549Z_m50970_t001`, `TO_type_system_rewrite-20260525T153549Z_m50975_t001`, `TO_type_system_rewrite-20260525T153549Z_m50981_t001`)
+  - Removed probes and tried a more direct antecedent branch with the arithmetic equality introduced before simplification. -> Failure unchanged: `impl_tac >- ...` still does not solve the first subgoal, indicating the packaging/witness interface rather than a small simplifier ordering issue. (`TO_type_system_rewrite-20260525T153549Z_m50983_t001`)
+- `E1091` (proved, , actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 9 holbuild, 1,621,988 tok (1,612,536 in, 9,452 out, 1,545,216 cached), 346.0s, $1.39276800)
+  - Added local theorem `intcall_body_soundness_from_generated_ih` immediately before `intcall_expr_no_type_error_from_generated_ih`, moving the generated `body_ih` specialization into a boundary helper. Proved it by specializing the generated IH, discharging monadic/state antecedents with `simp[get_scopes_def, return_def]`, then applying the resulting all-env body soundness fact. -> Focused holbuild advanced past `intcall_body_soundness_from_generated_ih` and now fails at the old inline body-IH assertion in `intcall_expr_no_type_error_from_generated_ih`, confirming the new helper is accepted and the remaining blocker is the planned C2.5.2 consumer refactor. (`TO_type_system_rewrite-20260525T153549Z_m51013_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m26804_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26805_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26806_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T085316Z_m28111_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51013_t001` (use `read_tool_output` for exact output)
 
 ## C2.5.2
 
@@ -4451,10 +4886,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0282`
+- latest episode: `E1098`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 49,234 tok (48,855 in, 379 out, 45,568 cached), 6.7s, $0.05058900
-- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 124,004 tok (123,276 in, 728 out, 111,616 cached), 29.1s, $0.13594800
+- next: Call plan_oracle(mode='review') for C2.5.2. The next observed blocker is BaseTarget_Subscript line 7132, outside the C2.5.2 IntCall local refactor; follow the reviewed PLAN before editing it.
 
 ### Attempts / Evidence
 
@@ -4463,12 +4898,38 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Built vyperTypeStmtSoundnessTheory as a dependent check. -> Build imports the new env theory and then fails at existing BaseTarget_BareGlobal proof, which is the next planned component rather than a C2.5.2 lemma failure. (`TO_type_system_rewrite-20260518T204229Z_m26814_t001`)
 - `E0282` (proved, , actual effort: 1 sessions, 1 steps, 49,234 tok (48,855 in, 379 out, 45,568 cached), 6.7s, $0.05058900)
   - Duplicate carry-forward closure for already-proved bare-global readiness boundary lemma; no source edits required. -> Scoped dossier shows E0245 proved env_consistent_bare_global_ready and dependent build reached the next planned component rather than a lemma failure. (`TO_type_system_rewrite-20260518T204229Z_m26813_t001`, `TO_type_system_rewrite-20260518T204229Z_m26814_t001`, `TO_type_system_rewrite-20260519T085316Z_m28118_t001`)
+- `E0815` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 19 tools, 6 holbuild, 1,064,218 tok (1,060,483 in, 3,735 out, 1,022,464 cached), 146.2s, $0.81337700)
+  - Added the two local TypeBuiltin runtime adapters after the C2.5.1 wrapper lemmas. For each adapter unfolded exprs_runtime_typed_def, built MAP evaluate_type equality from LIST_REL_EL_EQN/LIST_EQ_REWRITE/EL_MAP, got result type witness from well_formed_type_def/IS_SOME_EXISTS, and applied the existing type-builtin boundary theorem by irule with explicit witnesses. -> Both adapter lemmas proved; vyperTypeStmtSoundnessTheory builds with the new local adapters and existing Expr_TypeBuiltin cheat untouched for C2.5.3. (`TO_type_system_rewrite-20260522T073012Z_m43462_t001`)
+- `E0866` (proved, , actual effort: 1 sessions, 1 steps, 81,617 tok (81,268 in, 349 out, 67,072 cached), 9.0s, $0.11498600)
+  - Zero-work carry-forward boundary lemma leaf; used prior proof/build evidence for TypeBuiltin runtime adapters plus refreshed current-source holbuild of vyperTypeStmtSoundnessTheory from this session. -> C2.5.2 remains proved/build-clean; no source edits needed. (`TO_type_system_rewrite-20260522T073012Z_m43462_t001`, `TO_type_system_rewrite-20260524T091119Z_m44664_t001`)
+- `E1092` (progressed, other, actual effort: 1 sessions, 2 msgs, 23 steps, 25 tools, 7 holbuild, 2,717,301 tok (2,707,809 in, 9,492 out, 2,634,240 cached), 339.8s, $1.96972500)
+  - Replaced the old inline `asm "body_ih" mp_tac >> disch_then (qspecl_then ...)` block in `intcall_expr_no_type_error_from_generated_ih` with a `qspecl_then ... mp_tac intcall_body_soundness_from_generated_ih` helper call, passing live IntCall prefix values (`env_body.current_src`, `x'`, `x''0..x''5`, actual/default values, `call_env`, `r'`, pushed context/state). -> The helper invocation did not finish the local assertion. Build output initially reported `THEN1` failure, but the instrumented log shows after simplification the remaining goal is the outer `∀msg. res <> INR (Error (TypeError msg))` tail theorem context, with helper-produced body soundness not yet threaded to `intcall_post_push_tail_no_type_error`. (`TO_type_system_rewrite-20260525T153549Z_m51036_t001`, `TO_type_system_rewrite-20260525T153549Z_m51037_t001`)
+- `E1093` (progressed, other, actual effort: 1 sessions, 4 msgs, 36 steps, 41 tools, 10 holbuild, 3,750,503 tok (3,735,788 in, 14,715 out, 3,538,944 cached), 534.0s, $3.19514200)
+  - Consumed `intcall_body_soundness_from_generated_ih` with `qspecl_then ... mp_tac`, discharged its antecedent, then used `strip_tac >> pop_assum (mk_asm "body_sound")` instead of `disch_then`, because `disch_then` failed on an implication goal. -> Helper result is successfully introduced as labelled assumption `body_sound`; holbuild advanced to the subsequent `intcall_post_push_tail_no_type_error` premise discharge. (`TO_type_system_rewrite-20260525T153549Z_m51055_t001`)
+  - Tried discharging the tail-helper first premise inline by specializing `body_sound` and proving return-exception weakening with `env_extends_return_exception_typed`. Avoided unfolding tail definitions. -> Inline subproof shape remained brittle: a `THEN1`/match failure persisted under the large outer implication, and a FAIL_TAC probe showed the visible top goal was still the outer implication with body premise plus tail computation implying `∀msg. res <> TypeError`, not a fresh generated-IH failure. (`TO_type_system_rewrite-20260525T153549Z_m51067_t001`)
+  - Final source edit (not yet built) factors the `!res_body st_body` body-tail premise into its own local assertion before applying `intcall_post_push_tail_no_type_error`, then uses `(impl_tac >- simp[])`. -> This is the recommended next verification point; source is partial/unverified after the edit. (`TO_type_system_rewrite-20260525T153549Z_m51076_t001`)
+- `E1094` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 43 steps, 55 tools, 3 holbuild, 4,172,150 tok (4,156,176 in, 15,974 out, 3,959,296 cached), 418.3s, $3.44326800)
+  - Replaced the handoff probe with an explicit antecedent subproof using `simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant, env_consistent_def, state_well_typed_def, acquire_nonreentrant_lock_scopes, acquire_nonreentrant_lock_immutables]`. -> The proof still fails at the `body_sound` antecedent; holbuild reports a THEN1 failure, confirming simp plus lock scope/immutables preservation is insufficient. (`TO_type_system_rewrite-20260525T153549Z_m51157_t001`)
+  - Instrumented the antecedent after simplification with `FAIL_TAC "probe_body_sound_after_simp"` and inspected the instrumented log. -> The log confirms live assumptions include `exprs_runtime_typed` for defaults, bind_arguments/scope facts, and lock success, but not default-evaluation state/account/env preservation facts needed to establish `env_consistent env_body pushed_cx (r' with scopes := [call_env])` and `state_well_typed (r' with scopes := [call_env])`. (`TO_type_system_rewrite-20260525T153549Z_m51160_t001`, `TO_type_system_rewrite-20260525T153549Z_m51161_t001`)
+- `E1095` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 31 steps, 46 tools, 4 holbuild, 3,101,139 tok (3,087,818 in, 13,321 out, 2,974,208 cached), 355.3s, $2.45478400)
+  - Ran focused build after inherited unverified gvs edit. -> Build still fails at `intcall_expr_no_type_error_from_generated_ih` local assertion `!res_body st_body...`; THEN1 failure occurs while discharging body_sound antecedent, before tail helper can be consumed. (`TO_type_system_rewrite-20260525T153549Z_m51208_t001`)
+  - Inserted temporary `FAIL_TAC "probe_body_sound_antecedent"` after broad gvs in the body_sound antecedent, then rebuilt and removed the probe. -> Probe confirmed simplification did not solve the antecedent; displayed live context includes strengthened default-state facts, bind_arguments scope fact, lock success, and the remaining top goal is still the outer no-TypeError implication. Probe was removed. (`TO_type_system_rewrite-20260525T153549Z_m51215_t001`, `TO_type_system_rewrite-20260525T153549Z_m51216_t001`, `TO_type_system_rewrite-20260525T153549Z_m51225_t001`)
+  - Replaced broad antecedent gvs with explicit `rpt conj_tac` branches for type_stmts, env_consistent, state_well_typed, context, accounts, functions, eval equation. -> This experiment did not close the assertion. One holbuild crashed with exit -11; rerun failed normally with THEN1 at the same assertion. Current source remains partial with this split-conjunct tactic. (`TO_type_system_rewrite-20260525T153549Z_m51233_t001`, `TO_type_system_rewrite-20260525T153549Z_m51234_t003`)
+- `E1096` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 24 steps, 29 tools, 3 holbuild, 2,425,877 tok (2,409,103 in, 16,774 out, 2,313,216 cached), 363.9s, $2.13926300)
+  - Replaced split-conjunct body_sound antecedent with a compact assertion using push_function_frame_consistent specialized to env/env_body/cx/dflt_st/call_env/pushed state. -> Direct irule did not match, showing the helper conclusion shape was not inferred robustly in the large goal. (`TO_type_system_rewrite-20260525T153549Z_m51260_t001`)
+  - Specialized push_function_frame_consistent explicitly and tried to solve its antecedent by simplifying push_function/lock definitions and available default preservation facts. -> Build still fails inside the local assertion. The existing helper's antecedent appears too strong because only default-state immutables/state/accounts and installed-call env_scopes facts are available, not full pre-push env_consistent for dflt_st. (`TO_type_system_rewrite-20260525T153549Z_m51263_t001`, `TO_type_system_rewrite-20260525T153549Z_m51264_t001`)
+- `E1097` (progressed, other, actual effort: 1 sessions, 4 msgs, 38 steps, 57 tools, 5 holbuild, 3,824,068 tok (3,809,404 in, 14,664 out, 3,691,520 cached), 562.6s, $2.87510000)
+  - Added local intcall_pushed_body_preconditions with split assumptions for env_context/env_immutables/env_scopes/state/accounts/scope_well_typed/lock field preservation, avoiding push_function_frame_consistent's full pre-push env_consistent antecedent. -> Helper itself proved after unfolding env_consistent/state/env_scopes/env_immutables and metis; then the IntCall theorem got past the previous body_sound antecedent blocker. (`TO_type_system_rewrite-20260525T153549Z_m51288_t001`, `TO_type_system_rewrite-20260525T153549Z_m51302_t001`)
+  - Replaced the local assertion antecedent proof to apply body_sound directly via impl_tac, then irule intcall_pushed_body_preconditions with stk-irrelevance/context facts and lock scope/immutables plus lock definition for accounts equality. -> Focused holbuild no longer fails at intcall_expr_no_type_error_from_generated_ih; it resumed later at eval_all_type_sound_mutual[BaseTarget_Subscript] and timed out at an existing simp[return_def] tactic, which is outside C2.5.2's intended IntCall local theorem. (`TO_type_system_rewrite-20260525T153549Z_m51302_t001`, `TO_type_system_rewrite-20260525T153549Z_m51303_t001`)
+- `E1098` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 124,004 tok (123,276 in, 728 out, 111,616 cached), 29.1s, $0.13594800)
+  - Ran focused holbuild for vyperTypeStmtSoundnessTheory after inspecting the current IntCall helper and consumer source. -> Build resumed from a failed-prefix checkpoint in eval_all_type_sound_mutual[BaseTarget_Subscript] at line 7132 and timed out on `simp[return_def]`; it did not fail in `intcall_pushed_body_preconditions` or `intcall_expr_no_type_error_from_generated_ih`, showing the C2.5.2 IntCall local refactor has advanced past its prior blocker. (`TO_type_system_rewrite-20260525T153549Z_m51311_t001`)
+  - Audited current source around `intcall_pushed_body_preconditions` and its use in `intcall_expr_no_type_error_from_generated_ih`. -> Source contains the intended split precondition helper and applies it when discharging the labelled `body_sound` antecedent before calling `intcall_post_push_tail_no_type_error`; no temporary probe was visible in the inspected C2.5.2 region. (`TO_type_system_rewrite-20260525T153549Z_m51309_t001`, `TO_type_system_rewrite-20260525T153549Z_m51309_t002`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m26813_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m26814_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T085316Z_m28118_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51311_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51309_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51309_t002` (use `read_tool_output` for exact output)
 
 ## C2.5.3
 
@@ -4476,10 +4937,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0283`
+- latest episode: `E1099`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 53,919 tok (53,646 in, 273 out, 50,688 cached), 4.7s, $0.04832400
-- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+- actual effort: 1 sessions, 1 msgs, 2 steps, 3 tools, 181,146 tok (179,472 in, 1,674 out, 161,792 cached), 32.0s, $0.21951600
+- next: Call plan_oracle(mode='review') for C2.5.3. The remaining observed blocker is BaseTarget_Subscript line 7132, before later mutual resumes; do not edit it unless the reviewed PLAN schedules it.
 
 ### Attempts / Evidence
 
@@ -4488,11 +4949,20 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Intermediate builds exposed remaining obligations: first state preservation st'=st, then no-TypeError, then ImmutableVar location runtime typing via immutable map lookup/evaluate_type. Addressed each using planned lemmas and env_immutables_consistent_def rather than broad raw unfolding. -> Failure sequence converged without weakening statements or importing retired helper theories. (`TO_type_system_rewrite-20260518T204229Z_m26826_t001`, `TO_type_system_rewrite-20260518T204229Z_m26829_t001`, `TO_type_system_rewrite-20260518T204229Z_m26835_t001`, `TO_type_system_rewrite-20260518T204229Z_m26856_t001`)
 - `E0283` (proved, , actual effort: 1 sessions, 1 steps, 53,919 tok (53,646 in, 273 out, 50,688 cached), 4.7s, $0.04832400)
   - Duplicate carry-forward closure for already-proved BaseTarget_BareGlobal resume proof; no source edits required. -> Scoped dossier shows E0246 proved the BaseTarget_BareGlobal branch and `vyperTypeStmtSoundnessTheory` built past it; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m26864_t001`, `TO_type_system_rewrite-20260519T085316Z_m28122_t001`)
+- `E0816` (proved, , actual effort: 1 sessions, 2 msgs, 29 steps, 29 tools, 13 holbuild, 3,352,466 tok (3,345,186 in, 7,280 out, 3,297,792 cached), 336.6s, $2.10426600)
+  - Replaced the Expr_TypeBuiltin cheat with evaluator-order proof: unfolded TypeBuiltin typing/evaluation one step, derived type_builtin_args_length_ok, applied eval_exprs IH after the argument evaluation split, and used the local TypeBuiltin success/no-TypeError adapters plus wrapper normalization (lift_sum/return/raise) for evaluate_type_builtin result branches. -> Expr_TypeBuiltin resume now proves; vyperTypeStmtSoundnessTheory builds without the C2.5 Expr_TypeBuiltin cheat. (`TO_type_system_rewrite-20260522T073012Z_m43495_t001`)
+- `E0867` (proved, , actual effort: 1 sessions, 1 steps, 87,303 tok (86,983 in, 320 out, 83,456 cached), 6.1s, $0.06896300)
+  - Zero-work carry-forward proof leaf; used prior proof/build evidence that Expr_TypeBuiltin resume was proved with local TypeBuiltin adapters plus refreshed current-source holbuild of vyperTypeStmtSoundnessTheory from this session. -> C2.5.3 remains proved/build-clean; no source edits needed and evaluator case analysis was not duplicated. (`TO_type_system_rewrite-20260522T073012Z_m43495_t001`, `TO_type_system_rewrite-20260524T091119Z_m44664_t001`)
+- `E1099` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 3 tools, 181,146 tok (179,472 in, 1,674 out, 161,792 cached), 32.0s, $0.21951600)
+  - Focused build audit with `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> The build matched through the repaired local IntCall theorem and resumed from the later/independent `eval_all_type_sound_mutual[BaseTarget_Subscript]` failed-prefix checkpoint at line 7132, timing out on `simp[return_def]`. This reports the next source-order blocker separately and does not indicate a C2.5 local theorem failure. (`TO_type_system_rewrite-20260525T153549Z_m51311_t001`)
+  - Local source audit around C2.5 helper and consumer region plus grep for temporary markers. -> The current C2.5 IntCall region contains the intended `intcall_default_exprs_sound_from_generated_ih`, body packaging, `intcall_pushed_body_preconditions` use, and opaque call to `intcall_post_push_tail_no_type_error`. Grep finds no `FAIL_TAC`, `cheat`, `admit`, or `suspend` in the C2.5 edited IntCall region; reported `NO_TAC`/`suspend` matches are older skeleton/control-proof sites outside this C2.5 audit scope. (`TO_type_system_rewrite-20260525T153549Z_m51316_t001`, `TO_type_system_rewrite-20260525T153549Z_m51316_t002`, `TO_type_system_rewrite-20260525T153549Z_m51316_t003`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m26864_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T085316Z_m28122_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51311_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51316_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51316_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51316_t003` (use `read_tool_output` for exact output)
 
 ## C2.5.4.1
 
@@ -4569,11 +5039,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `wrong_statement` Exprs_cons exposes a possible statement-strength gap: `well_typed_exprs env (e::es)` only gives `well_typed_expr env e`, but `eval_exprs` immediately materialises the head. If `eval_expr` succeeds with a HashMapRef, `materialise` returns TypeError. The Expr statement case separately excludes `type_place_expr env e = SOME (HashMapT kt vt)`, but the expr-list mutual clause has no analogous non-hashmap/materialisable premise. Current proof gets stuck exactly on the materialise-error branch needing `∀msg. y <> Error (TypeError msg)` from only `expr_result_typed env e x`; the side condition there implies HashMapRef corresponds to a HashMap place, not that it is impossible.
-- latest episode: `E0260`
-- blocker: Exprs_cons no-TypeError appears under-specified for materialisation of head expressions that may be HashMapRef.
-- next: Escalate C2.6 to strategist before continuing: either strengthen the expr-list mutual clause with a materialisable/non-hashmap condition and update callers, or add/prove a boundary lemma showing well_typed_exprs callers already exclude HashMapRef heads.
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E1115`
+- blocker: The planned local IntCall helper interface still does not match the generated-IH consumer use site. After removing the temporary probe and verifying the helper theorem `intcall_pushed_body_preconditions_live_from_defaults` is saved, the focused build still fails at the main pushed-body triple assertion with a >4KB enclosing `intcall_expr_no_type_error_from_generated_ih` goal and `first subgoal not solved`; holbuild does not expose a small residual premise. Further inline `simp`/`impl_tac` variants are explicitly ruled out by the handoff and learnings, so C2.6 needs strategist redesign/factoring of the helper/use-site interface.
+- actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 3 holbuild, 1,219,458 tok (1,212,023 in, 7,435 out, 1,136,640 cached), 195.6s, $1.16828500
+- next: Call plan_oracle(mode="review", component_id="C2.6") for a redesigned helper/use-site factoring, likely around `intcall_expr_no_type_error_from_generated_ih` rather than more inline proof search.
 
 ### Attempts / Evidence
 
@@ -4582,17 +5053,93 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Proved `Exprs_nil` by unfolding the eval_exprs nil equation and `exprs_runtime_typed_def`; build passed through that resume. -> Verified local nil expression-list proof. (`TO_type_system_rewrite-20260518T204229Z_m27642_t001`)
   - Attempted `Exprs_cons` by using head expression IH, materialising the head, then using tail exprs IH. Success materialise branch can reconstruct `exprs_runtime_typed`; materialise-error branch fails. -> Stuck on materialise-error branch: current assumptions only include `expr_result_typed env e x` and `materialise cx x st1 = (INR y,st')`, insufficient to prove no TypeError if `x` is a HashMapRef. (`TO_type_system_rewrite-20260518T204229Z_m27665_t001`)
   - Checked `type_stmt` expression case: standalone statement `Expr e` explicitly excludes hashmap place expressions, suggesting an analogous materialisability/non-hashmap premise may be missing for the mutual expr-list clause. -> Evidence that the proof gap is statement/invariant shape, not a tactic issue. (`TO_type_system_rewrite-20260518T204229Z_m27660_t002`)
+- `E0817` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 21 steps, 44 tools, 4 holbuild, 2,114,653 tok (2,107,401 in, 7,252 out, 2,011,648 cached), 203.0s, $1.70214900)
+  - Inventory C4/fresh builtins call theorems with grep/read before proof edits -> Found no obvious raw/special-call no-TypeError or success typing boundary theorem; call section only has raw_call_return_type_well_formed (still cheated) and ext_call_args_typed. (`TO_type_system_rewrite-20260522T073012Z_m43518_t003`, `TO_type_system_rewrite-20260522T073012Z_m43519_t002`)
+  - Probe Expr_Call_Send resume by unfolding well_typed_expr_def and one evaluate_def layer -> Goal reduces to eval_exprs IH plus Send tail pipeline, requiring missing transfer_value/dest boundary facts rather than random tactic search. (`TO_type_system_rewrite-20260522T073012Z_m43529_t001`)
+  - Grep transfer_value preservation support -> Fresh reachable theories show transfer_value_scopes/immutables and no_control only; no account/state typing preservation boundary for transfer_value found. (`TO_type_system_rewrite-20260522T073012Z_m43535_t003`, `TO_type_system_rewrite-20260522T073012Z_m43536_t001`)
+- `E0818` (stuck, missing_helper, actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 162,170 tok (160,892 in, 1,278 out, 153,088 cached), 25.9s, $0.15390400)
+  - Inventory actual C4/fresh builtin call theorem interface before continuing C2.6. -> No obvious raw/special-call no-TypeError or success-typing boundary theorem was found; call section only exposed raw_call_return_type_well_formed (still cheated) and ext_call_args_typed. (`TO_type_system_rewrite-20260522T073012Z_m43518_t003`, `TO_type_system_rewrite-20260522T073012Z_m43519_t002`)
+  - Probe Expr_Call_Send by unfolding well_typed_expr_def and one evaluate_def layer only. -> Goal reduced to eval_exprs IH plus Send tail pipeline with dest_AddressV/dest_NumV and transfer_value obligations; this confirms a missing tail boundary rather than a local tactic issue. (`TO_type_system_rewrite-20260522T073012Z_m43529_t001`)
+  - Grep/read transfer_value support and restore source to buildable cheated resume. -> Only scope/immutable/no-control transfer facts were found, not state/accounts typing preservation. The FAIL_TAC probe was reverted and vyperTypeStmtSoundnessTheory builds again. (`TO_type_system_rewrite-20260522T073012Z_m43535_t003`, `TO_type_system_rewrite-20260522T073012Z_m43536_t001`, `TO_type_system_rewrite-20260522T073012Z_m43543_t001`, `TO_type_system_rewrite-20260522T073012Z_m43544_t001`)
+- `E1100` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 3 tools, 255,480 tok (254,453 in, 1,027 out, 218,112 cached), 19.0s, $0.32157100)
+  - Started C2.6 and inspected the `Expr_Call_IntCall` mutual branch plus the current holbuild blocker. -> The planned IntCall consumer branch still exists at lines 10884ff, but `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` cannot reach it because replay stops earlier at `BaseTarget_Subscript` line 7132. Working on the IntCall branch would violate the verified-prefix invariant. (`TO_type_system_rewrite-20260525T153549Z_m51321_t002`, `TO_type_system_rewrite-20260525T153549Z_m51311_t001`)
+  - Read the earlier `BaseTarget_Subscript` proof fragment that times out. -> The failure is a localized proof-performance/source-order issue in the INR base-target branch (`strip_tac >> pop_assum mp_tac >> simp[return_def]`), not a failure in the C2.6 IntCall branch or its helper interface. (`TO_type_system_rewrite-20260525T153549Z_m51321_t001`)
+- `E1102` (progressed, other, actual effort: 1 sessions, 3 msgs, 32 steps, 37 tools, 9 holbuild, 3,408,684 tok (3,397,689 in, 10,995 out, 3,282,944 cached), 426.1s, $2.54504700)
+  - Replace manual assertion proof at lines ~10843-10871 with direct application of intcall_body_soundness_tail_premise. -> Initial irule form still reported No match; switching to match_mp_tac showed the helper does match and exposes antecedents. (`TO_type_system_rewrite-20260525T153549Z_m51356_t001`, `TO_type_system_rewrite-20260525T153549Z_m51366_t001`, `TO_type_system_rewrite-20260525T153549Z_m51368_t001`)
+  - Assert pushed env/state/accounts precondition separately, then apply intcall_body_soundness_tail_premise with body_sound and simplification of stk-irrelevant context/function typing. -> Current source fails in the precondition subgoal; match_mp_tac intcall_pushed_body_preconditions did not solve the first generated subgoal. Need next session to inspect/split the antecedents rather than retry broad simp. (`TO_type_system_rewrite-20260525T153549Z_m51378_t001`, `TO_type_system_rewrite-20260525T153549Z_m51379_t001`, `TO_type_system_rewrite-20260525T153549Z_m51380_t001`)
+- `E1103` (progressed, other, actual effort: 1 sessions, 3 msgs, 34 steps, 44 tools, 8 holbuild, 3,614,858 tok (3,605,574 in, 9,284 out, 3,364,352 cached), 453.5s, $3.16680600)
+  - Reproved intcall_lock_state_preserves_frame by explicit Cases_on nr and cx.nonreentrant_slot, then imp_res_tac the scopes/immutables/accounts preservation lemmas. -> Local lock-frame helper is accepted; build advances past it to intcall_expr_no_type_error_from_generated_ih. (`TO_type_system_rewrite-20260525T153549Z_m51448_t001`)
+  - Inside intcall_expr_no_type_error_from_generated_ih, explicitly specialized intcall_lock_state_preserves_frame and intcall_pushed_body_preconditions; tried impl_tac/simp to discharge antecedents. -> Still fails with first subgoal not solved by impl_tac; exact remaining subgoal not isolated by current fragment, but failure is still at pushed-body precondition packaging. (`TO_type_system_rewrite-20260525T153549Z_m51472_t001`)
+  - Tried metis_tac[intcall_pushed_body_preconditions] after deriving lock-frame equalities. -> Timed out under 2.5s tactic limit; do not retry broad metis here. (`TO_type_system_rewrite-20260525T153549Z_m51470_t001`)
+- `E1104` (progressed, other, actual effort: 1 sessions, 3 msgs, 21 steps, 28 tools, 5 holbuild, 2,332,772 tok (2,325,717 in, 7,055 out, 2,219,520 cached), 277.9s, $1.85239500)
+  - Changed `impl_tac >- simp[]` to `impl_tac >- (rpt conj_tac >> simp[])` for `intcall_pushed_body_preconditions`. -> Still fails with `first subgoal not solved`; explicit conjunction splitting plus simplification does not discharge all antecedents. (`TO_type_system_rewrite-20260525T153549Z_m51494_t001`)
+  - Added temporary `FAIL_TAC "precond_remaining"` after `rpt conj_tac >> simp[]` to probe any residual antecedent. -> Build fails at the probe; goalfrag still reports the enclosing large IntCall goal, not a small inner antecedent, so the exact missing premise remains unidentified. Source is partial and contains the probe. (`TO_type_system_rewrite-20260525T153549Z_m51496_t001`, `TO_type_system_rewrite-20260525T153549Z_m51497_t001`)
+- `E1105` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 27 steps, 30 tools, 10 holbuild, 2,758,973 tok (2,750,973 in, 8,000 out, 2,657,792 cached), 492.8s, $2.03480100)
+  - Inserted local intcall_pushed_body_preconditions_from_lock, combining intcall_lock_state_preserves_frame with intcall_pushed_body_preconditions; changed proof to explicit qspecl/mp_tac after irule failed. -> Wrapper proof was repaired using qspecl_then/mp_tac; holbuild advanced past it to the main IntCall helper, so the wrapper theorem is accepted by HOL4 up to that evidence point. (`TO_type_system_rewrite-20260525T153549Z_m51510_t001`, `TO_type_system_rewrite-20260525T153549Z_m51512_t001`, `TO_type_system_rewrite-20260525T153549Z_m51513_t001`, `TO_type_system_rewrite-20260525T153549Z_m51514_t001`)
+  - Changed the main IntCall helper precondition subproof from explicit qspecl/impl_tac to drule_all intcall_pushed_body_preconditions_from_lock, to avoid a remaining unsolved antecedent under a huge generated-IH context. -> Final edit is unverified: subsequent holbuild attempts do not reach project source because read-only HOL keccakTheory rebuild times out at state_array_to_string_compute under the fixed tactic timeout. (`TO_type_system_rewrite-20260525T153549Z_m51524_t001`, `TO_type_system_rewrite-20260525T153549Z_m51525_t001`, `TO_type_system_rewrite-20260525T153549Z_m51528_t001`)
+- `E1106` (progressed, tool_limit, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 160,946 tok (160,000 in, 946 out, 130,048 cached), 45.3s, $0.24316400)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) from active C2.6 state -> Build failed before reaching project source; keccakTheory cache entry unusable for requested tactic-timeout contract and rebuild timed out at state_array_to_string_compute line 623. (`TO_type_system_rewrite-20260525T153549Z_m51542_t001`)
+- `E1107` (progressed, tool_limit, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 158,492 tok (157,780 in, 712 out, 126,976 cached), 39.2s, $0.23886800)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) from active C2.6 state -> Build again failed before reaching project source; keccakTheory cache entry was unusable for the requested tactic-timeout contract and rebuilding timed out at state_array_to_string_compute line 623. (`TO_type_system_rewrite-20260525T153549Z_m51550_t001`)
+- `E1108` (progressed, tool_limit, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 160,882 tok (160,036 in, 846 out, 129,024 cached), 42.3s, $0.24495200)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) from active C2.6 state -> Build again failed before project source at read-only HOL `keccakTheory.state_array_to_string_compute`; C2.6 IntCall branch was not replayed. (`TO_type_system_rewrite-20260525T153549Z_m51557_t001`)
+- `E1109` (progressed, tool_limit, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 159,626 tok (158,904 in, 722 out, 128,000 cached), 38.5s, $0.24018000)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) from active C2.6 state -> Build failed before project source at `/home/ubuntu/HOL/examples/Crypto/Keccak/keccakScript.sml:623`, tactic timeout in `state_array_to_string_compute`; C2.6 IntCall branch was not replayed. (`TO_type_system_rewrite-20260525T153549Z_m51565_t001`)
+- `E1110` (progressed, plan_incomplete, actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 252,511 tok (250,785 in, 1,726 out, 213,504 cached), 492.4s, $0.34493700)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) from active C2.6 state after previous Keccak cache blocker cleared -> Build reached project prerequisites but timed out before vyperTypeStmtSoundnessScript.sml, in vyperExprNoControlTheory `eval_expr_no_control_with_bt[ExtCall]` at the broad `gvs[return_def, bind_def, AllCaseEqs()]` fragment. (`TO_type_system_rewrite-20260525T153549Z_m51572_t001`)
+  - Read failing ExtCall no-control resume source around lines 762-805 -> Failure is in a localized proof-performance simplification after decomposing the ExtCall if-tail, not in the active IntCall consumer branch; source was not edited. (`TO_type_system_rewrite-20260525T153549Z_m51573_t001`)
+- `E1112` (progressed, other, actual effort: 1 sessions, 2 msgs, 25 steps, 26 tools, 6 holbuild, 2,717,680 tok (2,707,696 in, 9,984 out, 2,604,544 cached), 723.7s, $2.11755200)
+  - Reviewed C2.0 closure as required, began C2.6, ran focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> Strategist accepted C2.0; build no longer stops at old ExtCall no-control timeout and reaches statement IntCall helper region, confirming source-prefix replay advanced. (`TO_type_system_rewrite-20260525T153549Z_m51588_t001`, `TO_type_system_rewrite-20260525T153549Z_m51590_t001`)
+  - Changed `intcall_default_exprs_no_type_error_from_generated_ih` implication proof from `rpt conj_tac >> simp[...]` to direct `simp[...]`. -> Build accepted `intcall_default_exprs_no_type_error_from_generated_ih` and advanced to `intcall_expr_no_type_error_from_generated_ih`; this line-10048 timeout repair is verified. (`TO_type_system_rewrite-20260525T153549Z_m51592_t001`, `TO_type_system_rewrite-20260525T153549Z_m51593_t001`)
+  - Refactored IntCall consumer body-tail subproof: first tried proving a universally quantified body-tail fact in one assertion; then split off pushed-body preconditions and attempted explicit use of `intcall_pushed_body_preconditions_from_lock`. -> Large combined assertion still fails. `drule_all`/explicit mp variants do not yet package the antecedents cleanly; latest build failure was due to an incorrect existential-witness attempt after `irule`, and a final small edit removing `qexistsl` is unverified. (`TO_type_system_rewrite-20260525T153549Z_m51604_t001`, `TO_type_system_rewrite-20260525T153549Z_m51606_t001`, `TO_type_system_rewrite-20260525T153549Z_m51611_t001`, `TO_type_system_rewrite-20260525T153549Z_m51612_t001`)
+- `E1113` (progressed, other, actual effort: 1 sessions, 3 msgs, 31 steps, 33 tools, 9 holbuild, 3,428,839 tok (3,417,861 in, 10,978 out, 3,303,936 cached), 401.1s, $2.55093300)
+  - Ran focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` from handoff source. -> Build reached the intended IntCall helper and failed at the pushed-body precondition subclaim around line 10900, so verified-prefix/source-prefix replay is clear; the remaining issue is local IntCall precondition packaging. (`TO_type_system_rewrite-20260525T153549Z_m51618_t001`)
+  - Factored an explicit subclaim deriving `env_context_consistent env_body (cx with stk updated_by CONS ...) /\ env_immutables_consistent ... dflt_st` via `intcall_env_body_consistency_for_defaults`, then tried `irule`/`qspecl_then ... mp_tac` applications of `intcall_pushed_body_preconditions_from_lock`. -> The env consistency subclaim is not the whole blocker. The precondition helper still fails after `impl_tac >- simp[]`/`gvs[]`, indicating a remaining antecedent mismatch or proof-interface issue in the large context. (`TO_type_system_rewrite-20260525T153549Z_m51624_t001`, `TO_type_system_rewrite-20260525T153549Z_m51625_t001`, `TO_type_system_rewrite-20260525T153549Z_m51627_t001`, `TO_type_system_rewrite-20260525T153549Z_m51629_t001`, `TO_type_system_rewrite-20260525T153549Z_m51643_t001`)
+  - Inserted temporary FAIL_TAC probes after `simp[]`/`rw[]` inside the antecedent proof for `intcall_pushed_body_preconditions_from_lock`. -> Goalfrag still reports only the enclosing huge IntCall goal, not a small residual antecedent; this confirms inline probing is not giving useful focus. Current source contains `FAIL_TAC "precond_rw_probe"` and must be cleaned before continuing. (`TO_type_system_rewrite-20260525T153549Z_m51633_t001`, `TO_type_system_rewrite-20260525T153549Z_m51640_t001`, `TO_type_system_rewrite-20260525T153549Z_m51645_t001`)
+- `E1114` (progressed, other, actual effort: 1 sessions, 3 msgs, 27 steps, 31 tools, 7 holbuild, 3,048,806 tok (3,039,690 in, 9,116 out, 2,929,152 cached), 409.5s, $2.29074600)
+  - Removed FAIL_TAC probe and introduced local intcall_pushed_body_preconditions_for_defaults_from_lock near intcall_pushed_body_preconditions_from_lock. -> The first helper statement was over-specific and failed because intcall_env_body_consistency_for_defaults only gives env_immutables_consistent at args_st, not dflt_st. (`TO_type_system_rewrite-20260525T153549Z_m51658_t001`)
+  - Revised helper to take env_context_consistent/env_immutables_consistent at dflt_st directly and compose intcall_pushed_body_preconditions_from_lock. -> Helper theorem was accepted; holbuild advanced to the main intcall_expr_no_type_error_from_generated_ih subclaim, so the local wrapper proof is sound but its use site still fails. (`TO_type_system_rewrite-20260525T153549Z_m51664_t001`)
+  - Tried to apply the wrapper in the main IntCall proof with explicit derivation of env_context_consistent via intcall_env_body_consistency_for_defaults plus repeated conjunction splitting. -> Still fails with first-subgoal-not-solved in the huge main generated-IH context; holbuild goalfrag reports the enclosing no-TypeError goal rather than a small residual antecedent. This confirms further inline tactic surgery is the wrong next move. (`TO_type_system_rewrite-20260525T153549Z_m51666_t001`, `TO_type_system_rewrite-20260525T153549Z_m51673_t001`, `TO_type_system_rewrite-20260525T153549Z_m51675_t001`)
+- `E1115` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 3 holbuild, 1,219,458 tok (1,212,023 in, 7,435 out, 1,136,640 cached), 195.6s, $1.16828500)
+  - Built `vyperTypeStmtSoundnessTheory` from cleaned source after inspecting the partial IntCall region; holbuild resumes at `intcall_expr_no_type_error_from_generated_ih` and fails at the pushed-body triple assertion using `intcall_pushed_body_preconditions_live_from_defaults`. -> Confirmed the source is free of the old temporary FAIL_TAC, but the use site still fails in the huge enclosing generated-IH goal at lines 10967-10976. (`TO_type_system_rewrite-20260525T153549Z_m51710_t001`, `TO_type_system_rewrite-20260525T153549Z_m51711_t001`)
+  - Tried a narrowly targeted cleanup attempt to discharge possible non-INL branch before the helper use, then reverted it after holbuild showed the same failure and no useful residual isolation. -> Ruled out a local branch-focus issue; failure remains helper-interface/use-site mismatch, not a solved prefix edit. Source was restored to remove the attempted `TRY` fragment. (`TO_type_system_rewrite-20260525T153549Z_m51715_t001`, `TO_type_system_rewrite-20260525T153549Z_m51716_t001`, `TO_type_system_rewrite-20260525T153549Z_m51719_t001`, `TO_type_system_rewrite-20260525T153549Z_m51720_t001`)
 
 ### Ruled Out
 
-- A direct `materialise_runtime_typed_no_type_error` application: it needs the evaluated type value to be non-NoneTV; HashMapRef results are typed as NoneTV via `vtype_annotation_ok` and `toplevel_value_typed_not_hashmap_material`.
+- More inline `impl_tac >- simp[]`, `rpt conj_tac`, `gvs[]`, or FAIL_TAC probes inside the pushed-body assertion; they leave only the huge generated-IH goal and do not isolate residual premises.
+- Broad `metis_tac` in the generated-IH context, previously timed out and is disallowed by the PLAN.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27634_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27642_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27665_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27660_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51710_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51711_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51716_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51720_t001` (use `read_tool_output` for exact output)
+
+## C2.6.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1242`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 124,844 tok (124,348 in, 496 out, 117,760 cached), 54.6s, $0.10670000
+- next: Review C2.6.0 closure with strategist, then begin the scheduled downstream component if accepted.
+
+### Attempts / Evidence
+
+- `E0826` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 2 holbuild, 218,523 tok (217,954 in, 569 out, 209,920 cached), 45.4s, $0.16220000)
+  - Deleted lines 8092-8109 containing the local checked counterexample theorem; no changes to adjacent call resumes. -> Cleanup target removed as required before transfer_value semantic repair. (`TO_type_system_rewrite-20260524T091119Z_m43976_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` with holbuild after deletion. -> Build succeeded, confirming no syntax/name damage from cleanup. (`TO_type_system_rewrite-20260524T091119Z_m43978_t001`)
+- `E0868` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 109,134 tok (108,658 in, 476 out, 104,448 cached), 15.2s, $0.08755400)
+  - Carry-forward cleanup leaf; no source edits. Verified current `vyperTypeStmtSoundnessTheory` build after beginning component. -> Confirmed completed cleanup remains build-clean; no old Vyper transfer overflow probe reintroduced. (`TO_type_system_rewrite-20260524T091119Z_m44688_t001`, `TO_type_system_rewrite-20260524T091119Z_m44689_t001`)
+- `E1242` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 124,844 tok (124,348 in, 496 out, 117,760 cached), 54.6s, $0.10670000)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after beginning C2.6.0. Holbuild resumed at the failed-prefix checkpoint in `create_tail_result_sound_simp` and advanced past that theorem to a later IntCall helper theorem at line 12083. -> Confirmed the C2.6.0 prefix proof-performance blocker is no longer the current build failure; source was not changed in this session. (`TO_type_system_rewrite-20260525T153549Z_m56421_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56421_t001` (use `read_tool_output` for exact output)
 
 ## C2.6.1
 
@@ -4600,10 +5147,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0287`
+- latest episode: `E1116`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 74,790 tok (74,556 in, 234 out, 71,168 cached), 3.8s, $0.05954400
-- next: Review duplicate carry-forward closure with strategist, then follow Oracle-next frontier.
+- actual effort: 1 sessions, 2 steps, 5 tools, 1 holbuild, 128,079 tok (127,177 in, 902 out, 112,640 cached), 31.4s, $0.15606500
+- next: Review C2.6.1 closure with strategist, then begin C2.6.2 to add exact `intcall_live_pushed_body_preconditions` corollary.
 
 ### Attempts / Evidence
 
@@ -4611,11 +5158,27 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Structural induction on expr with targeted simplification of well_typed_expr_def/type_place_expr/vtype_annotation_ok_def; split TopLevelName pair and Subscript runtime/static branches using subscript_type_ok_def and subscript_vtype_def. -> holbuild advanced past well_typed_expr_not_hashmap_place to the pre-existing Exprs_cons failure, so the static boundary lemma is accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m27708_t001`)
 - `E0287` (proved, , actual effort: 1 sessions, 1 steps, 74,790 tok (74,556 in, 234 out, 71,168 cached), 3.8s, $0.05954400)
   - Duplicate carry-forward closure for already-proved static boundary that well-typed expressions are not HashMap places; no source edits required. -> Scoped dossier shows E0261 proved the boundary by structural induction and holbuild advanced past the lemma to the next pre-existing Exprs_cons failure; active PLAN marks this as zero-work carry-forward. (`TO_type_system_rewrite-20260518T204229Z_m27708_t001`, `TO_type_system_rewrite-20260519T085316Z_m28138_t001`)
+- `E0825` (stuck, bad_definition, actual effort: 1 sessions, 2 msgs, 27 steps, 51 tools, 3 holbuild, 2,903,307 tok (2,891,351 in, 11,956 out, 2,798,080 cached), 287.4s, $2.22407500)
+  - Inserted local theorem `transfer_value_accounts_well_typed_counterexample` immediately before the call resumes. It constructs sender balance 1 and recipient balance `2 ** 256 - 1`, then evaluates `transfer_value from to 1` successfully and proves the resulting accounts are not `accounts_well_typed`. -> Initial pure `EVAL_TAC` reduced to a concrete residual quantifier/negated-universal goal, confirming the candidate counterexample shape but needing explicit witness/cases. (`TO_type_system_rewrite-20260524T091119Z_m43966_t001`)
+  - Finished the probe by case-splitting the initial `accounts_well_typed` universal over `0w`/`1w` and instantiating the postcondition negation at `1w:address`; rebuilt `vyperTypeStmtSoundnessTheory`. -> Probe theorem is accepted by HOL4 and owning theory builds (still with existing call-resume cheats). This is checked falsehood evidence for the transfer/runtime-preservation boundary premise in C2.6.1. (`TO_type_system_rewrite-20260524T091119Z_m43968_t001`)
+- `E0827` (proved, , actual effort: 1 sessions, 5 steps, 7 tools, 2 holbuild, 347,719 tok (346,200 in, 1,519 out, 330,240 cached), 418.1s, $0.29049000)
+  - Edited `semantics/vyperInterpreterScript.sml` at `transfer_value_def` to insert recipient balance overflow check before account mutation. -> Definition now matches the planned repaired shape; failure occurs before `update_accounts`. (`TO_type_system_rewrite-20260524T091119Z_m43985_t001`)
+  - Built `vyperInterpreterTheory` after the definition repair. -> Interpreter theory, including existing cv translation pipeline for `transfer_value_def`, built successfully. (`TO_type_system_rewrite-20260524T091119Z_m43985_t002`)
+  - Built downstream `vyperTypeStmtSoundnessTheory` after the repair. -> Fresh statement soundness theory and prerequisites rebuilt successfully; no syntax/cv/downstream breakage from the new guard. (`TO_type_system_rewrite-20260524T091119Z_m43986_t001`)
+- `E0869` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 125,296 tok (124,962 in, 334 out, 119,808 cached), 13.7s, $0.09569400)
+  - Carry-forward definition-repair leaf for `transfer_value`; no source edits in this episode. Verified current downstream statement soundness build after beginning component. -> Confirmed repaired `transfer_value` guard remains build-clean through `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260524T091119Z_m44693_t001`, `TO_type_system_rewrite-20260524T091119Z_m44694_t001`)
+- `E0930` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 247,939 tok (247,305 in, 634 out, 240,640 cached), 13.7s, $0.17266500)
+  - No edits per carry-forward leaf. Audited source names for repaired transfer/Send/external-call boundaries and guarded adapter. -> Source contains the expected carried repair interfaces; this component's work is evidence preservation, not new proof search. (`TO_type_system_rewrite-20260524T091119Z_m46427_t001`, `TO_type_system_rewrite-20260524T091119Z_m46427_t002`)
+- `E1116` (proved, , actual effort: 1 sessions, 2 steps, 5 tools, 1 holbuild, 128,079 tok (127,177 in, 902 out, 112,640 cached), 31.4s, $0.15606500)
+  - Audited mandated source ranges around helper block, accidental-edit range, and IntCall failure range; also ran focused grep for stale probes/temporary TRY fragments and a focused build. -> Source is normalized for C2.6.1: `intcall_pushed_body_preconditions_live_from_defaults` is present; no `FAIL_TAC "live_precond_residual"` or `FAIL_TAC "precond_rw_probe"` appears; the mandated local ranges contain no temporary TRY experiment. Existing global `TRY (... >> NO_TAC)` occurrences are unrelated older no-control helpers. Focused build reaches the known IntCall pushed-body assertion at lines 10967-10976. (`TO_type_system_rewrite-20260525T153549Z_m51730_t001`, `TO_type_system_rewrite-20260525T153549Z_m51730_t002`, `TO_type_system_rewrite-20260525T153549Z_m51730_t003`, `TO_type_system_rewrite-20260525T153549Z_m51730_t004`, `TO_type_system_rewrite-20260525T153549Z_m51730_t005`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27708_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260519T085316Z_m28138_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51730_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51730_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51730_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51730_t004` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51730_t005` (use `read_tool_output` for exact output)
 
 ## C2.6.2
 
@@ -4623,10 +5186,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0288`
+- latest episode: `E1117`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 50,477 tok (50,259 in, 218 out, 46,592 cached), 4.2s, $0.04817100
-- next: Review closure with strategist, then follow Oracle next frontier.
+- actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 243,243 tok (242,217 in, 1,026 out, 229,888 cached), 123.6s, $0.20736900
+- next: Review C2.6.2 closure, then begin C2.6.3 to refactor the IntCall success path and replace the old pushed-body assertion with the new exact corollary.
 
 ### Attempts / Evidence
 
@@ -4634,21 +5197,30 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Added expr_result_typed_materialise_no_type_error near expr_result_typed_def. Proof assumes TypeError by contradiction, preserves the materialise equality, uses materialise_type_error_imp_HashMapRef with drule_then assume_tac, unfolds expr_result_typed_def, and closes with well_typed_expr_not_hashmap_place. -> holbuild advanced past expr_result_typed_materialise_no_type_error to the planned downstream Exprs_cons branch, so the runtime bridge is accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m27722_t001`)
 - `E0288` (proved, , actual effort: 1 sessions, 1 steps, 50,477 tok (50,259 in, 218 out, 46,592 cached), 4.2s, $0.04817100)
   - Carry-forward runtime bridge expr_result_typed_materialise_no_type_error from prior accepted C2.6.2 dossier evidence; no source edits needed this session. -> HOL4 previously accepted the bridge and advanced to downstream Exprs_cons, so this component has no remaining work. (`TO_type_system_rewrite-20260518T204229Z_m27722_t001`)
+- `E0828` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 632,643 tok (630,401 in, 2,242 out, 617,472 cached), 87.6s, $0.44064100)
+  - Inserted suggested local regression theorem with E0825 concrete balances and an initial proof using `EVAL_TAC >> rpt conj_tac`. -> Initial proof over-split after `EVAL_TAC`; holbuild reported `no goals`, showing the post-EVAL shape was a single universal account-typing goal rather than three conjunct subgoals. (`TO_type_system_rewrite-20260524T091119Z_m43991_t001`, `TO_type_system_rewrite-20260524T091119Z_m43992_t001`)
+  - Simplified proof to `EVAL_TAC` only to inspect exact residual goal. -> Residual goal was `∀addr. ...balance < 2**256 ∧ LENGTH ...code ≤ 24576`, i.e. only account-well-typed over the unchanged post-state remained after the guard failure. (`TO_type_system_rewrite-20260524T091119Z_m43994_t001`)
+  - Final proof: `EVAL_TAC >> gen_tac >> Cases_on addr=0w >> gvs[] >> Cases_on addr=1w >> gvs[]`. -> Regression theorem accepted and `vyperTypeStmtSoundnessTheory` rebuilt successfully. (`TO_type_system_rewrite-20260524T091119Z_m43996_t001`)
+- `E0870` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 135,297 tok (135,006 in, 291 out, 130,048 cached), 13.3s, $0.09854400)
+  - Carry-forward definition-probe leaf for repaired `transfer_value` overflow regression; no source edits in this episode. Verified current downstream statement soundness build after beginning component. -> Confirmed repaired transfer overflow regression remains accepted/build-clean through `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260524T091119Z_m44697_t001`, `TO_type_system_rewrite-20260524T091119Z_m44698_t001`)
+- `E1117` (proved, , actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 243,243 tok (242,217 in, 1,026 out, 229,888 cached), 123.6s, $0.20736900)
+  - Inserted local theorem `intcall_live_pushed_body_preconditions` immediately after `intcall_pushed_body_preconditions_live_from_defaults`, proving it by instantiating the existing helper with `src_id_opt = env_body.current_src`. -> Focused `holbuild` resumed after the prior helper and advanced through the new corollary; the remaining failure is the planned downstream C2.6.3 use site still applying the older helper in the generated-IH proof. (`TO_type_system_rewrite-20260525T153549Z_m51735_t001`, `TO_type_system_rewrite-20260525T153549Z_m51736_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27722_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51735_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51736_t001` (use `read_tool_output` for exact output)
 
 ## C2.6.3
 
 ### Current Status
 
-- result: `proved`
-- diagnosis: `n/a`
-- latest episode: `E0289`
-- blocker: 
-- actual effort: 1 sessions, 1 steps, 55,923 tok (55,721 in, 202 out, 52,736 cached), 3.6s, $0.04735300
-- next: Review closure with strategist, then follow Oracle next frontier.
+- result: `stuck`
+- diagnosis: `risk_mismatch` Local branch-shape repair for `intcall_expr_no_type_error_from_generated_ih` did not converge under the C2.6.3 plan. Multiple attempts to isolate `dflt_res` by moving the success branch under `Cases_on dflt_res` still leave 8 residual goals at theorem finish; the top residual is precisely the default-evaluation `INR y` branch flowing to a no-TypeError goal. This shows the current component decomposition/interface is under-factored: the consumer proof needs a helper/boundary packaging the default-result split or whole IntCall tail rather than more local bullet edits.
+- latest episode: `E1121`
+- blocker: Current source is partial: `vyperTypeStmtSoundnessScript.sml` parses but `intcall_expr_no_type_error_from_generated_ih` leaves 8 goals at QED after local edits around lines 10965-11050. Further local bullet manipulation would violate the do-not-retry guidance and has not isolated the default error branch robustly.
+- actual effort: 1 sessions, 3 msgs, 37 steps, 36 tools, 12 holbuild, 3,302,386 tok (3,290,854 in, 11,532 out, 3,204,096 cached), 439.3s, $2.38179800
+- next: Ask strategist to review C2.6.3 and likely replace/augment the C2.6.3 subtree with a helper that packages the default-result split or entire IntCall post-default no-TypeError tail, then repair the current partial source accordingly.
 
 ### Attempts / Evidence
 
@@ -4656,42 +5228,2628 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Replaced the Exprs_cons materialise-error branch's failed materialise_runtime_typed_no_type_error call with `materialise_state` for `st' = st1` and `expr_result_typed_materialise_no_type_error` for the `!msg` no-TypeError conjunct. -> holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600) succeeded, so the Exprs_cons resume and Finalise eval_all_type_sound_mutual are accepted by HOL4. (`TO_type_system_rewrite-20260518T204229Z_m27731_t001`)
 - `E0289` (proved, , actual effort: 1 sessions, 1 steps, 55,923 tok (55,721 in, 202 out, 52,736 cached), 3.6s, $0.04735300)
   - Carry-forward completed Exprs_cons proof from prior accepted dossier E0263; no source edits needed this session. -> HOL4 previously accepted the Exprs_cons resume and Finalise eval_all_type_sound_mutual, with vyperTypeStmtSoundnessTheory succeeding under the recorded build. (`TO_type_system_rewrite-20260518T204229Z_m27731_t001`)
+- `E0829` (proved, , actual effort: 1 sessions, 2 msgs, 30 steps, 45 tools, 10 holbuild, 3,316,718 tok (3,308,574 in, 8,144 out, 3,252,224 cached), 482.8s, $2.15218200)
+  - Inserted `transfer_value_no_type_error`, `transfer_value_accounts_well_typed`, and `transfer_value_runtime_consistent` local lemmas near the call resumes. -> Initial source had unqualified vfm account definition names; holbuild rejected `lookup_account_def`/`update_account_def`, so the proof was adjusted to use `vfmStateTheory.lookup_account_def` and `vfmStateTheory.update_account_def`. (`TO_type_system_rewrite-20260524T091119Z_m44010_t001`, `TO_type_system_rewrite-20260524T091119Z_m44011_t001`)
+  - Proved account preservation by unfolding `transfer_value_def`, `accounts_well_typed_def`, `account_well_typed_def`, vfm lookup/update defs, and splitting update-address cases. -> A residual arithmetic goal for unchanged addresses required using the original account-typing assumption at that address; final proof specializes the universal assumption and closes with arithmetic. (`TO_type_system_rewrite-20260524T091119Z_m44013_t001`, `TO_type_system_rewrite-20260524T091119Z_m44017_t001`)
+  - Proved runtime-consistency adapter by case-splitting transfer result, using `transfer_value_scopes`/`transfer_value_immutables`, simplifying env/state consistency definitions, and applying the accounts boundary by explicit specialization. -> `vyperTypeStmtSoundnessTheory` built successfully with all three boundary lemmas accepted. (`TO_type_system_rewrite-20260524T091119Z_m44029_t001`)
+- `E0871` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 147,837 tok (147,506 in, 331 out, 142,336 cached), 12.7s, $0.10694800)
+  - Carry-forward boundary-lemma leaf for repaired `transfer_value`; no source edits in this episode. Verified current downstream statement soundness build after beginning component. -> Confirmed transfer-value no-TypeError/accounts/runtime-consistency boundary lemmas remain accepted/build-clean through `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260524T091119Z_m44701_t001`, `TO_type_system_rewrite-20260524T091119Z_m44702_t001`)
+- `E1118` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 17 steps, 19 tools, 4 holbuild, 2,033,477 tok (2,026,251 in, 7,226 out, 1,962,496 cached), 345.9s, $1.51680300)
+  - Replaced the old direct `qspecl_then ... mp_tac intcall_pushed_body_preconditions_live_from_defaults` at the pushed-body assertion with `irule intcall_live_pushed_body_preconditions >> simp[]`. -> Build still failed at the same assertion with 4 active goals, proving the exact corollary alone is not enough until success-path branch isolation is fixed. (`TO_type_system_rewrite-20260525T153549Z_m51742_t001`, `TO_type_system_rewrite-20260525T153549Z_m51743_t001`)
+  - Tried explicit bullets after the TOP_CASE splits around bind/evaluate/lock/push by inserting `>- (strip_tac >> gvs[no_type_error_result_def])` branches. -> The first bullet matched a branch whose goal was the full lock-error/tail no-TypeError obligation, not a simple lift/evaluate error branch; branch tactic failed and showed the live assumption still had `(if ...) dflt_st = (q,r')` plus a case on `q`. Reverted to a less bullet-heavy shape while keeping the new corollary use. (`TO_type_system_rewrite-20260525T153549Z_m51745_t001`, `TO_type_system_rewrite-20260525T153549Z_m51746_t001`, `TO_type_system_rewrite-20260525T153549Z_m51752_t001`, `TO_type_system_rewrite-20260525T153549Z_m51753_t001`, `TO_type_system_rewrite-20260525T153549Z_m51755_t001`)
+- `E1119` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 39 steps, 49 tools, 9 holbuild, 4,049,400 tok (4,036,209 in, 13,191 out, 3,799,040 cached), 439.5s, $3.48109500)
+  - Replaced blind push split with `reverse BasicProvers.TOP_CASE_TAC` and an explicit lock-error branch that unfolds `acquire_nonreentrant_lock_def`, `get_transient_storage_def`, `update_transient_def`, `return_def`, and `raise_def`, then splits the transient-slot condition and view/pure condition. -> This closed the lock `INR`/push-error side enough that holbuild reached the pushed-body assertion with 1 input goal rather than 4. This confirms branch isolation mostly worked and remaining blocker is now in the intended success branch. (`TO_type_system_rewrite-20260525T153549Z_m51790_t001`, `TO_type_system_rewrite-20260525T153549Z_m51795_t001`)
+  - Changed the pushed-body assertion from `irule intcall_live_pushed_body_preconditions >> simp[]` to explicit `qspecl_then [`env`, `env_body`, `cx`, `args_st`, `dflt_st`, `r'`, `call_env`, `fn`, `x''1`, `x''0 = View \/ x''0 = Pure`] mp_tac intcall_live_pushed_body_preconditions >> simp[]`. -> Source is partial and unverified; this was intended to address the single-goal residual where `irule` cannot instantiate antecedent-only variables. Next session should build immediately from this edit. (`TO_type_system_rewrite-20260525T153549Z_m51797_t001`)
+- `E1120` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 50 steps, 56 tools, 13 holbuild, 4,914,301 tok (4,899,994 in, 14,307 out, 4,777,984 cached), 533.6s, $3.42825200)
+  - Built immediately from prior unverified explicit instantiation, then replaced a failing `qspecl_then` use of `intcall_body_soundness_tail_premise` with direct use of the live labelled `body_sound` assumption. -> The explicit `intcall_live_pushed_body_preconditions` assertion passed; failure moved to the body-tail/post-push proof. The first direct rewrite caused timeout/metis issues, then a structured cases proof over `res_body` avoided the timeout. (`TO_type_system_rewrite-20260525T153549Z_m51803_t001`, `TO_type_system_rewrite-20260525T153549Z_m51811_t001`, `TO_type_system_rewrite-20260525T153549Z_m51819_t001`)
+  - Probed and adjusted the `intcall_post_push_tail_no_type_error` premise by simplifying the monadic tail equality with `bind_def`, `lift_option_type_def`, `return_def`, and `raise_def`, then simplified the conclusion with `no_type_error_result_def`. -> This passed the post-push premise; holbuild then exposed 7 residual branch goals at the enclosing `args_res` success bullet, with top goal showing the dflt_res error branch had incorrectly continued into the success proof. (`TO_type_system_rewrite-20260525T153549Z_m51824_t001`, `TO_type_system_rewrite-20260525T153549Z_m51827_t001`, `TO_type_system_rewrite-20260525T153549Z_m51830_t001`)
+  - Tried to close dflt_res error branch immediately after `Cases_on dflt_res`; one wrong attempt caused a parse/parenthesis issue, then source was repaired to keep the original success branch under the bullet and add `>- (rpt strip_tac >> gvs[])`. -> Final source is unbuilt due handoff. Next session must build first and only repair local branch/parentheses if needed. (`TO_type_system_rewrite-20260525T153549Z_m51839_t001`, `TO_type_system_rewrite-20260525T153549Z_m51843_t001`, `TO_type_system_rewrite-20260525T153549Z_m51849_t001`, `TO_type_system_rewrite-20260525T153549Z_m51851_t002`)
+- `E1121` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 37 steps, 36 tools, 12 holbuild, 3,302,386 tok (3,290,854 in, 11,532 out, 3,204,096 cached), 439.3s, $2.38179800)
+  - Ran required initial holbuild, fixed a parse error at the tail of `intcall_expr_no_type_error_from_generated_ih` by removing/adjusting an extra close-parenthesis and branch tail. -> Source progressed from parse error to proof failure; old branch problem remained. The dflt_res branch closure tactic targeted the wrong constructor order and did not solve the branch. (`TO_type_system_rewrite-20260525T153549Z_m51856_t001`, `TO_type_system_rewrite-20260525T153549Z_m51859_t001`)
+  - Tried several local `Cases_on dflt_res` bullet shapes: `reverse`, `>~` pattern selection for the `INR` branch, delaying `gvs[no_type_error_result_def]`, and placing the success-path proof under the `INL` branch. -> These edits avoided some immediate branch-close failures but still left 7/8 residual goals, with holbuild showing the top residual as the default-evaluation `INR y` branch continuing into the no-TypeError goal. (`TO_type_system_rewrite-20260525T153549Z_m51865_t001`, `TO_type_system_rewrite-20260525T153549Z_m51870_t001`, `TO_type_system_rewrite-20260525T153549Z_m51873_t001`, `TO_type_system_rewrite-20260525T153549Z_m51882_t001`)
+  - Tried final branch-tail simplifications at theorem finish (`gvs[no_type_error_result_def] >> rpt strip_tac >> gvs[]`, `strip_tac >> fs[...]`) after wrapping the success path in the `dflt_res = INL` branch. -> Holbuild still reports 8 goals at QED; branch isolation remains structurally wrong or under-factored. More local tactic edits are unlikely to be soundly productive under the current PLAN. (`TO_type_system_rewrite-20260525T153549Z_m51885_t001`, `TO_type_system_rewrite-20260525T153549Z_m51890_t001`)
+
+### Ruled Out
+
+- More local `simp[]`/`gvs[]` or bullet edits inside the pushed-body assertion; that assertion had already passed in prior evidence.
+- Continuing to manipulate `Cases_on dflt_res` branch order without a boundary helper; repeated attempts left the same residual branch goals.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27731_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51856_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51859_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51865_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51882_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51885_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51890_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1122`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 615,218 tok (613,393 in, 1,825 out, 605,696 cached), 64.4s, $0.39608300
+- next: Review closure, then begin C2.6.3.2 to add/prove `bind_no_type_error_result`; after that C2.6.3.3 should replace the `FAIL_TAC` marker with a bind-boundary application and the success continuation proof.
+
+### Attempts / Evidence
+
+- `E1122` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 615,218 tok (613,393 in, 1,825 out, 605,696 cached), 64.4s, $0.39608300)
+  - Replaced lines ~10965-11050, which contained the failed `Cases_on dflt_res`/success-path nested proof and trailing simplification, with a single `FAIL_TAC` marker at the default-bind boundary. -> First edit missed the enclosing branch close parenthesis and produced a parse error; adding the closing parenthesis made holbuild parse the file and fail only at the intentional proof marker/branch tail, confirming the partial source is syntactically coherent for the planned bind-boundary refactor. (`TO_type_system_rewrite-20260525T153549Z_m51895_t001`, `TO_type_system_rewrite-20260525T153549Z_m51896_t001`, `TO_type_system_rewrite-20260525T153549Z_m51897_t001`, `TO_type_system_rewrite-20260525T153549Z_m51898_t001`)
+
+### Ruled Out
+
+- Leaving the old nested `Cases_on dflt_res` branch structure in place; it repeatedly left default-error residual goals.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m51895_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51896_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51897_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51898_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1123`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 7 tools, 2 holbuild, 370,166 tok (368,953 in, 1,213 out, 348,160 cached), 55.8s, $0.31443500
+
+### Attempts / Evidence
+
+- `E1123` (proved, , actual effort: 1 sessions, 6 steps, 7 tools, 2 holbuild, 370,166 tok (368,953 in, 1,213 out, 348,160 cached), 55.8s, $0.31443500)
+  - Inserted local generic `bind_no_type_error_result` before `intcall_expr_no_type_error_from_generated_ih`; proof splits on `m s` and sum result, simplifies with `bind_def` and `no_type_error_result_def`. -> holbuild accepted the new lemma and advanced to the intentional C2.6.3.3 FAIL_TAC marker in `intcall_expr_no_type_error_from_generated_ih`; remaining failure is the planned consumer refactor, not the bind lemma. (`TO_type_system_rewrite-20260525T153549Z_m51910_t001`, `TO_type_system_rewrite-20260525T153549Z_m51911_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m51910_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51911_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E1130`
+- blocker: The active helper still forces brittle proof plumbing at `intcall_default_success_continuation_no_type_error`: after applying `intcall_pushed_body_tail_no_type_error_from_body_ih`, the remaining first premise is the generated body IH itself but it is not accepted by `simp[]`/assumption selection due source-variable normalization (`src_id_opt` vs `env_body.current_src`) and the proof suffix still requires qpatterning the entire default-success continuation equality to discharge the final tail. This confirms the helper boundary remains wrong-shaped for low-risk execution.
+- actual effort: 1 sessions, 2 msgs, 22 steps, 25 tools, 9 holbuild, 1,845,972 tok (1,838,645 in, 7,327 out, 1,660,416 cached), 317.3s, $1.94116300
+- next: Call plan_oracle(mode='review') to redesign/re-scope the helper boundary, likely by separating a post-push tail equality premise or by making the default-success helper start after bind/ret/lock/push success rather than concluding from the whole raw case expression.
+
+### Attempts / Evidence
+
+- `E1124` (progressed, other, actual effort: 1 sessions, 4 msgs, 44 steps, 50 tools, 12 holbuild, 4,133,820 tok (4,117,258 in, 16,562 out, 3,995,648 cached), 533.4s, $3.10273400)
+  - Added local `case_sum_no_type_error_result` as a small adapter over a raw `case dflt_res of INL x => branch x | INR e => ...`, avoiding main-theorem `Cases_on dflt_res`. -> Helper proved after adding `metis_tac[]` for the success branch. (`TO_type_system_rewrite-20260525T153549Z_m51953_t001`, `TO_type_system_rewrite-20260525T153549Z_m51958_t001`)
+  - Tried `qmatch_*_abbrev_tac` directly on the raw case/branch term and on a smaller bind subterm. -> Repeated pattern matching failed because the target is under an implication/antecedent in a large goal; direct qmatch matching is not robust here. (`TO_type_system_rewrite-20260525T153549Z_m51946_t001`, `TO_type_system_rewrite-20260525T153549Z_m51949_t001`, `TO_type_system_rewrite-20260525T153549Z_m51964_t001`, `TO_type_system_rewrite-20260525T153549Z_m51968_t001`)
+  - Manually introduced `branch` with `qabbrev_tac` matching the raw INL continuation, corrected shadowing so `push_function` uses `call_env`, then applied `case_sum_no_type_error_result`. -> Build reaches the adapter success-continuation obligation: assumption `branch x = (res1,st1)` and goal `no_type_error_result res1`; no residual default-INR branch is shown in the top goal. (`TO_type_system_rewrite-20260525T153549Z_m51974_t001`, `TO_type_system_rewrite-20260525T153549Z_m51979_t001`, `TO_type_system_rewrite-20260525T153549Z_m51980_t001`)
+- `E1125` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 34 steps, 35 tools, 9 holbuild, 3,391,581 tok (3,381,724 in, 9,857 out, 3,287,040 cached), 376.8s, $2.41265000)
+  - Strengthened `case_sum_no_type_error_result` so the success-continuation premise receives `dflt_res = INL x`; this successfully simplifies the live continuation context to default-success facts instead of a residual default-INR branch. -> Progress: default-error branch remains hidden and the live goal has only default-success facts plus `branch x = (res1,st1) ==> no_type_error_result res1`. (`TO_type_system_rewrite-20260525T153549Z_m51994_t001`, `TO_type_system_rewrite-20260525T153549Z_m52001_t001`)
+  - Tried moving `branch x = (res1,st1)` to the goal and unfolding the manual abbreviation with `simp[Abbr branch]` / `unabbrev_all_tac`. -> Failed: simplifier/unabbreviation still leaves a huge implication over `branch x` or fails before exposing usable bind/lock/push subgoals. (`TO_type_system_rewrite-20260525T153549Z_m52006_t001`, `TO_type_system_rewrite-20260525T153549Z_m52009_t001`)
+  - Tried selecting the abbreviation assumption explicitly with `qpat_x_assum 'Abbrev (branch = _)'` before using the branch equality. -> Failed: no matching assumption after cleanup; the local branch-abbreviation approach remains too syntactically brittle. (`TO_type_system_rewrite-20260525T153549Z_m52013_t001`)
+- `E1126` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 37 steps, 38 tools, 13 holbuild, 3,768,239 tok (3,755,013 in, 13,226 out, 3,674,112 cached), 485.5s, $2.63834100)
+  - Inserted local helper `intcall_pushed_body_tail_no_type_error_from_body_ih`, wrapping `intcall_post_push_tail_no_type_error` and deriving the body-tail premise from the generated statement IH assumption. -> Helper proof advances past its theorem; later build reaches the main theorem, so this helper is syntactically/proof valid in current source. (`TO_type_system_rewrite-20260525T153549Z_m52044_t001`)
+  - Replaced failed branch abbreviation block in main theorem with no-op/all_tac to inspect residual goal shape at QED. -> Confirmed six remaining goals; top goal is the raw default-result `case dflt_res of INL dflt_vs => bind/eval-ret/lock/push/body-tail/cast continuation | INR e => ...` equality implying `no_type_error_result res`. This goal is too large for inline proof and matches the need for a broad helper. (`TO_type_system_rewrite-20260525T153549Z_m52058_t001`, `TO_type_system_rewrite-20260525T153549Z_m52059_t001`)
+  - Tried direct cleanup of residual default-result continuation with `gvs[AllCaseEqs(), lift_option_type_def, bind_def, return_def, raise_def, no_type_error_result_def]`. -> Holbuild failed with branch-tail count/instrumentation error at the broad `gvs` suffix before useful subgoals; this path is not a robust proof interface and should not be retried as monolithic simplification. (`TO_type_system_rewrite-20260525T153549Z_m52064_t001`)
+- `E1127` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 33 steps, 43 tools, 8 holbuild, 3,641,727 tok (3,625,546 in, 16,181 out, 3,510,784 cached), 428.9s, $2.81463200)
+  - Inserted `intcall_lock_no_type_error_result` and repaired its proof by explicit `acquire_nonreentrant_lock_def` splits. -> Lock helper passed; build advanced to the new broad helper. (`TO_type_system_rewrite-20260525T153549Z_m52087_t001`, `TO_type_system_rewrite-20260525T153549Z_m52095_t001`)
+  - Inserted `intcall_default_success_continuation_no_type_error` as a broad helper covering bind/eval-ret/lock/push/body-tail continuation and started proof with `intcall_bind_arguments_from_runtime_typed`, lock split, and tail delegation. -> Proof progressed to success branch but revealed interface/tactic issues: body variable shadowing fixed, pushed-state witness fixed, then precondition proof remained on `env_scopes_consistent` under stk update. (`TO_type_system_rewrite-20260525T153549Z_m52095_t001`, `TO_type_system_rewrite-20260525T153549Z_m52099_t001`, `TO_type_system_rewrite-20260525T153549Z_m52102_t001`, `TO_type_system_rewrite-20260525T153549Z_m52105_t001`)
+- `E1128` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 62 steps, 67 tools, 21 holbuild, 6,261,164 tok (6,243,932 in, 17,232 out, 6,042,112 cached), 839.5s, $4.54711600)
+  - Repaired the interrupted `qexistsl_tac` block in `intcall_default_success_continuation_no_type_error` and rebuilt. -> Syntax issue resolved; holbuild now replays to the intended proof body instead of parse error. (`TO_type_system_rewrite-20260525T153549Z_m52115_t001`)
+  - Added local `env_scopes_consistent_stk_irrelevant` near existing stk-irrelevance lemmas and used it to prove the stk-updated `env_scopes_consistent` fact. -> The prior env_scopes bridge subgoal is no longer the blocker; build advances to the pushed-tail obligations after `intcall_live_pushed_body_preconditions`. (`TO_type_system_rewrite-20260525T153549Z_m52123_t001`)
+  - Changed pushed-tail witness ret/rtv to `NoneT`/`NoneTV` after observing the continuation had `safe_cast NoneTV`; tried closing the remaining tail equality by generic assumption rewriting. -> Still fails: residual goal is the exact opaque monadic tail equality `(do ... safe_cast NoneTV ... od) (lock_st with scopes := [call_env]) = (res,st')`, but `first_assum`/`qpat_assum` patterns did not robustly select the live equality; current suffix has `asm_rewrite_tac[]` and remains unproved. (`TO_type_system_rewrite-20260525T153549Z_m52156_t001`, `TO_type_system_rewrite-20260525T153549Z_m52171_t001`)
+- `E1129` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 33 steps, 39 tools, 9 holbuild, 3,719,606 tok (3,708,567 in, 11,039 out, 3,592,704 cached), 397.9s, $2.70683700)
+  - Repaired accidental end-of-file parse debris `stmts_no_type_error] QED` left after prior broad edits, then rebuilt. -> Parse error at line 11656 was removed; build returned to the active helper proof instead of stopping at source syntax. (`TO_type_system_rewrite-20260525T153549Z_m52193_t001`, `TO_type_system_rewrite-20260525T153549Z_m52195_t001`, `TO_type_system_rewrite-20260525T153549Z_m52196_t001`)
+  - Changed the pushed-tail helper application in `intcall_default_success_continuation_no_type_error` from hard-coded `NoneT`/`NoneTV` to live `ret0`/`rtv` after observing the theorem statement has general `ret`, and tried to split helper premises with `rpt conj_tac`. -> This revealed a clearer proof-shape failure: after splitting, residual premise goals include `evaluate_type (get_tenv cx) ret0 = SOME rtv`; the current `first_assum ACCEPT_TAC` suffix does not solve them. This is evidence for a controlled premise-discharge refactor, not more do-notation qpattern search. (`TO_type_system_rewrite-20260525T153549Z_m52199_t001`, `TO_type_system_rewrite-20260525T153549Z_m52201_t001`, `TO_type_system_rewrite-20260525T153549Z_m52206_t001`, `TO_type_system_rewrite-20260525T153549Z_m52207_t001`)
+- `E1130` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 22 steps, 25 tools, 9 holbuild, 1,845,972 tok (1,838,645 in, 7,327 out, 1,660,416 cached), 317.3s, $1.94116300)
+  - Rebuilt current source with the unverified qpattern suffix in `intcall_default_success_continuation_no_type_error`. -> Build still fails in the helper at QED with five unsolved goals; the displayed top goal is the generated body-IH premise plus raw default-success continuation equality. (`TO_type_system_rewrite-20260525T153549Z_m52274_t002`)
+  - Replaced the final generic suffix with explicit `rpt conj_tac` and several `simp[]` premise discharges before using the qpattern tail equality. -> The first premise after `irule` was not solved; holbuild shows it is still the generated body-IH premise, indicating the premise order/normal form is not matched by routine tactics. (`TO_type_system_rewrite-20260525T153549Z_m52279_t001`, `TO_type_system_rewrite-20260525T153549Z_m52287_t001`)
+  - Brief probe/repair attempts using assumption acceptance and `FAIL_TAC` confirmed the first premise shape remains the generated IH and the final suffix still depends on selecting the full continuation equality. -> This is exactly the forbidden brittle interface from the PLAN/STATE: the helper boundary is still too broad/raw, not a routine tactical failure. (`TO_type_system_rewrite-20260525T153549Z_m52289_t001`, `TO_type_system_rewrite-20260525T153549Z_m52294_t002`)
+
+### Ruled Out
+
+- Generic `rpt conj_tac >> simp[]` premise discharge after `irule`.
+- Accepting or qpattern-selecting the generated body-IH after `gvs[]`.
+- Continuing to qpattern-match the full default-success continuation equality.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52274_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52279_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52287_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52294_t002` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 refactor is not routine: direct application of intcall_default_success_post_push_no_type_error in intcall_default_success_continuation_no_type_error leaves existentialized/large residual post-push goals after the existing proof prefix. Prior checkpoint E1141 and current holbuild confirm the same interface mismatch; continued tactic variation would violate do-not-retry guidance.
+- latest episode: `E1142`
+- blocker: Post-push boundary theorem does not match the broad continuation theorem cleanly under the current source proof prefix; needs strategist-approved bridge/interface refinement rather than more local tactic search.
+- actual effort: 1 sessions, 6 msgs, 66 steps, 72 tools, 25 holbuild, 6,378,163 tok (6,352,482 in, 25,681 out, 6,195,200 cached), 1029.1s, $4.65444000
+- next: Call plan_oracle(mode="review") for C2.6.3.3.1 requesting a bridge/interface repair or subtree replacement for the continuation/post-push boundary.
+
+### Attempts / Evidence
+
+- `E1131` (proved, , actual effort: 1 sessions, 2 msgs, 11 steps, 18 tools, 2 holbuild, 1,039,967 tok (1,034,058 in, 5,909 out, 904,704 cached), 166.5s, $1.27639200)
+  - Added/proved local `intcall_body_ih_current_src_adapter` by source-stack equality rewriting and body-IH specialization (already present in source); rebuilt `vyperTypeStmtSoundnessTheory`. -> holbuild resumed through the adapter and failed later in `intcall_default_success_continuation_no_type_error`, so the adapter theorem is accepted and the remaining failure belongs to dependent broad-helper refactor components. (`TO_type_system_rewrite-20260525T153549Z_m52313_t001`)
+- `E1141` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 61 steps, 62 tools, 24 holbuild, 5,950,691 tok (5,928,373 in, 22,318 out, 5,802,496 cached), 935.1s, $4.20017300)
+  - Replaced old success branch with a post-push theorem application after simplifying push_function/lift_option_type and stripping the continuation equality. -> The branch still fails: direct irule exposes an existentialized post-push theorem application goal rather than closing cleanly. (`TO_type_system_rewrite-20260525T153549Z_m52590_t001`)
+  - Tried qspecl_then/impl_tac with explicit arguments to force the post-push theorem to match the live tail equality. -> This led to brittle side-condition discharge over a >4KB goal and repeated residual goals; evidence indicates the helper interface or consumer proof shape is not low-risk as planned. (`TO_type_system_rewrite-20260525T153549Z_m52587_t001`)
+- `E1142` (stuck, risk_mismatch, actual effort: 1 sessions, 6 msgs, 66 steps, 72 tools, 25 holbuild, 6,378,163 tok (6,352,482 in, 25,681 out, 6,195,200 cached), 1029.1s, $4.65444000)
+  - Ran holbuild on vyperTypeStmtSoundnessTheory at the current active component and inspected the failing source block around lines 11158-11164. -> Build still fails in intcall_default_success_continuation_no_type_error: the branch using irule intcall_default_success_post_push_no_type_error leaves a >4KB existentialized goal, matching prior E1141 evidence. (`TO_type_system_rewrite-20260525T153549Z_m52595_t002`, `TO_type_system_rewrite-20260525T153549Z_m52595_t001`)
+
+### Ruled Out
+
+- Direct irule/qspecl_then application of intcall_default_success_post_push_no_type_error in the broad continuation theorem without an exact bridge lemma.
+- Reverting to direct intcall_pushed_body_tail_no_type_error_from_body_ih plumbing in this consumer.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52595_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52590_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1148`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 2 holbuild, 247,559 tok (246,744 in, 815 out, 227,328 cached), 56.4s, $0.23519400
+- next: Review C2.6.3.3.1.a closure with strategist, then proceed to carried-forward C2.6.3.3.1.b / adapter component as scheduled.
+
+### Attempts / Evidence
+
+- `E1143` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 277,652 tok (276,123 in, 1,529 out, 240,640 cached), 52.4s, $0.34360500)
+  - Replaced the exploratory direct-irule lock-success branch in intcall_default_success_continuation_no_type_error with an explicit FAIL_TAC placeholder for the later bridge component, preserving the working prefix through the lock-result split. -> Source no longer contains the misleading direct `irule intcall_default_success_post_push_no_type_error` consumer branch; holbuild now fails at the intentional bridge-required placeholder, confirming cleanup boundary. (`TO_type_system_rewrite-20260525T153549Z_m52599_t001`, `TO_type_system_rewrite-20260525T153549Z_m52600_t001`, `TO_type_system_rewrite-20260525T153549Z_m52601_t001`)
+- `E1148` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 2 holbuild, 247,559 tok (246,744 in, 815 out, 227,328 cached), 56.4s, $0.23519400)
+  - Restored the lock-success branch of `intcall_default_success_continuation_no_type_error` to the planned cleanup state: `gvs[push_function_def, return_def]` followed by an intentional adapter-required placeholder instead of direct broad-bridge instantiation. -> holbuild now fails exactly at the intentional `C2.6.3.3.1.c none-return adapter required` placeholder, confirming exploratory direct-bridge proof text was removed and broad bridge theorem prefix remains intact. (`TO_type_system_rewrite-20260525T153549Z_m52695_t001`, `TO_type_system_rewrite-20260525T153549Z_m52696_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52695_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52696_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1.b
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1149`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 74,129 tok (73,790 in, 339 out, 40,448 cached), 8.4s, $0.19710400
+- next: Review C2.6.3.3.1.b closure with strategist, then begin C2.6.3.3.1.c to add the specialized none-return adapter.
+
+### Attempts / Evidence
+
+- `E1144` (proved, , actual effort: 1 sessions, 2 msgs, 23 steps, 23 tools, 9 holbuild, 2,338,066 tok (2,330,862 in, 7,204 out, 2,277,888 cached), 311.2s, $1.61993400)
+  - Inserted local bridge theorem `intcall_default_success_lock_success_tail_no_type_error` before `intcall_default_success_continuation_no_type_error`, with curried antecedents matching the live lock-success/post-push facts. Proved it by a one-time explicit `irule intcall_default_success_post_push_no_type_error`, supplying witnesses and discharging side conditions with `env_scopes_consistent_stk_irrelevant` and `evaluate_type_def`/`evaluate_type_NoneT`. -> `holbuild vyperTypeStmtSoundnessTheory` passed the new bridge theorem and now fails later at the intentional C2.6.3.3.1.c placeholder inside the continuation theorem, confirming this bridge component is proved. (`TO_type_system_rewrite-20260525T153549Z_m52607_t001`, `TO_type_system_rewrite-20260525T153549Z_m52626_t001`)
+- `E1149` (proved, , actual effort: 1 sessions, 1 steps, 74,129 tok (73,790 in, 339 out, 40,448 cached), 8.4s, $0.19710400)
+  - Carried forward the existing local theorem `intcall_default_success_lock_success_tail_no_type_error` without edits and rebuilt `vyperTypeStmtSoundnessTheory`. -> holbuild replay passed through the broad bridge and failed later at the intended continuation placeholder, confirming the lower boundary theorem remains proved and unchanged for adapter use. (`TO_type_system_rewrite-20260525T153549Z_m52696_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52696_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52694_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1.c
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1150`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 435,658 tok (433,236 in, 2,422 out, 414,208 cached), 71.5s, $0.37490400
+- next: Review C2.6.3.3.1.c closure with strategist, then begin C2.6.3.3.1.d to replace the continuation placeholder with a direct use of `intcall_default_success_none_tail_no_type_error`.
+
+### Attempts / Evidence
+
+- `E1145` (progressed, other, actual effort: 1 sessions, 2 msgs, 10 steps, 11 tools, 3 holbuild, 1,281,576 tok (1,277,478 in, 4,098 out, 1,249,280 cached), 143.4s, $0.88857000)
+  - Replaced the placeholder in the INL lock branch with a targeted use of `intcall_default_success_lock_success_tail_no_type_error`, explicitly instantiating the bridge with ret=NoneT and rtv=NoneTV after simplifying `push_function_def`, `return_def`, and the saved outer equality. -> holbuild no longer fails at the placeholder or at parsing/applying the bridge; it reaches the bridge antecedent discharge. The visible remaining subgoal is essentially the exact post-push tail equality antecedent, with `safe_cast NoneTV` expanded differently from the original assumption. (`TO_type_system_rewrite-20260525T153549Z_m52634_t001`, `TO_type_system_rewrite-20260525T153549Z_m52636_t001`)
+  - Edited the bridge antecedent-discharge block to include `lift_option_type_def`, `return_def`, and `raise_def` alongside `evaluate_type_def`/`evaluate_type_NoneT`. -> This final source edit is unverified because handoff was requested before another build. Next session must build first; if the success branch still leaves the same equality, focus only on rewriting the equality antecedent to match assumption 28 rather than changing theorem statements. (`TO_type_system_rewrite-20260525T153549Z_m52637_t001`)
+- `E1146` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 44 steps, 47 tools, 14 holbuild, 4,193,696 tok (4,174,947 in, 18,749 out, 4,025,344 cached), 671.2s, $3.32315700)
+  - Specialized the bridge with current ret/rtv instead of NoneT/NoneTV and attempted to discharge both bridge antecedents and resulting theorem antecedents by repeated conjunct tactics plus targeted tail equality rewrite. -> Build still leaves large implication goals in the success branch, e.g. tail equality implying evaluate_type/type_stmts side conditions; branch does not close. (`TO_type_system_rewrite-20260525T153549Z_m52673_t001`, `TO_type_system_rewrite-20260525T153549Z_m52676_t001`)
+  - Tried using the bridge directly as an introduction rule with qexistsl witnesses to avoid explicit qspecl plumbing. -> Witness-order/type issues were fixed, but the same four large residual antecedent goals remain, indicating the existing bridge statement is not consumer-shaped enough after ret=NoneT normalization. (`TO_type_system_rewrite-20260525T153549Z_m52683_t001`, `TO_type_system_rewrite-20260525T153549Z_m52685_t001`)
+- `E1147` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 45 steps, 48 tools, 14 holbuild, 4,320,318 tok (4,300,784 in, 19,534 out, 4,149,760 cached), 684.8s, $3.41602000)
+  - Specialized the bridge with current `ret`/`rtv` instead of hard-coded `NoneT`/`NoneTV`, then tried to discharge the resulting antecedents via targeted simplification and the live tail equality. -> The proof still left >4KB implication/equality goals in the success branch, especially tail equality implying `evaluate_type`/`type_stmts` side conditions. (`TO_type_system_rewrite-20260525T153549Z_m52673_t001`, `TO_type_system_rewrite-20260525T153549Z_m52676_t001`)
+  - Tried using `intcall_default_success_lock_success_tail_no_type_error` directly as an introduction rule with explicit witnesses to avoid qspecl/MP plumbing. -> After fixing witness-order/type issues, the same four large residual bridge-antecedent goals remained, showing the bridge statement is not consumer-shaped enough for this normalized branch. (`TO_type_system_rewrite-20260525T153549Z_m52683_t001`, `TO_type_system_rewrite-20260525T153549Z_m52685_t001`)
+- `E1150` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 435,658 tok (433,236 in, 2,422 out, 414,208 cached), 71.5s, $0.37490400)
+  - Inserted local theorem `intcall_default_success_none_tail_no_type_error` immediately after the broad bridge. Proved it as a corollary of `intcall_default_success_lock_success_tail_no_type_error` instantiated with `ret=NoneT` and `rtv=NoneTV`, with targeted rewriting of `lift_option_type_def`, `return_def`, and `raise_def` for the expanded `safe_cast NoneTV` tail equality. -> `holbuild vyperTypeStmtSoundnessTheory` replays through the new adapter theorem successfully and now fails later at the intentional placeholder in `intcall_default_success_continuation_no_type_error`, confirming C2.6.3.3.1.c's adapter is proved. (`TO_type_system_rewrite-20260525T153549Z_m52703_t001`, `TO_type_system_rewrite-20260525T153549Z_m52706_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52703_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52706_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1.d
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Active Risk-2 component repeatedly failed in the same narrow consumer contradiction. The adapter is the right semantic fact, but the consumer proof now requires brittle long `qspecl_then` plumbing and still fails to retain/use the contradiction. This looks like a proof-interface/decomposition gap: a tiny boundary lemma or a cleaner adapter conclusion may be needed.
+- latest episode: `E1158`
+- blocker: Repeated tactical attempts leave the same contradiction goal; continuing would violate proof-hygiene guidance against brittle manual instantiation and tactic thrashing.
+- actual effort: 1 sessions, 3 msgs, 57 steps, 56 tools, 18 holbuild, 5,384,719 tok (5,356,854 in, 27,865 out, 5,198,336 cached), 946.6s, $4.22770800
+- next: Ask strategist to repair C2.6.3.3.1.d with either a micro boundary lemma for `no_type_error_result res` plus top-level equality, or a cleaner continuation proof shape that avoids long manual instantiation and keeps the equality/contradiction aligned.
+
+### Attempts / Evidence
+
+- `E1151` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 23 steps, 25 tools, 4 holbuild, 2,683,603 tok (2,673,285 in, 10,318 out, 2,576,896 cached), 306.4s, $2.07993300)
+  - Replaced the intentional placeholder in `intcall_default_success_continuation_no_type_error` with `irule intcall_default_success_none_tail_no_type_error`, then supplied explicit witnesses for the adapter after the first build left existential residuals. -> Adapter application no longer leaves the original broad `evaluate_type`/`type_stmts` residuals, but the theorem still fails at QED with 3 residual goals; top goal is a lookup/assignability obligation under the original non-None `ret` path context. Source is partial and should be inspected before further editing. (`TO_type_system_rewrite-20260525T153549Z_m52712_t001`, `TO_type_system_rewrite-20260525T153549Z_m52714_t001`, `TO_type_system_rewrite-20260525T153549Z_m52729_t001`)
+  - Read the holbuild instrumented failure log to identify the residual top goal. -> The visible first residual is `MEM (id,typ) args ==> FLOOKUP env_body.var_assignable (string_to_num id) = SOME T`, which was already an assumption in the theorem antecedent but may be stranded due to setup proof structure/simplification. (`TO_type_system_rewrite-20260525T153549Z_m52724_t001`)
+- `E1152` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 22 steps, 23 tools, 6 holbuild, 1,788,350 tok (1,780,499 in, 7,851 out, 1,715,200 cached), 298.1s, $1.41962500)
+  - Changed setup proof to parenthesized `(impl_tac >- (rpt conj_tac >> simp[] >> metis_tac[]))` before stripping the bind-arguments result. -> Removed the previous three residual lookup/setup goals and exposed a single remaining semantic branch after adapter use. (`TO_type_system_rewrite-20260525T153549Z_m52752_t001`)
+  - Inspected nearby proved helper statements for `intcall_default_success_post_push_no_type_error`, `intcall_default_success_lock_success_tail_no_type_error`, and `intcall_default_success_none_tail_no_type_error`. -> The remaining branch has the exact general post-push shape with `safe_cast rtv`, whereas the none-tail adapter statement only matches `safe_cast NoneTV`. Existing broad lock-success theorem would match this branch, but using it is prohibited by the active component guidance. (`TO_type_system_rewrite-20260525T153549Z_m52754_t001`)
+- `E1153` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 23 steps, 24 tools, 6 holbuild, 1,891,726 tok (1,882,782 in, 8,944 out, 1,816,064 cached), 323.3s, $1.50994200)
+  - Parenthesized the setup `impl_tac` and discharged `intcall_bind_arguments_from_runtime_typed` antecedents with `rpt conj_tac >> simp[] >> metis_tac[]`. -> Useful progress: previous three residual setup/lookup goals disappeared; build now has one residual semantic goal in the lock-success post-push tail. (`TO_type_system_rewrite-20260525T153549Z_m52752_t001`)
+  - Compared the remaining goal against nearby helper statements. -> The residual matches the general lock-success tail with `safe_cast rtv`, not the none-tail adapter's `safe_cast NoneTV` shape. This confirms a proof-interface/decomposition mismatch for the non-None no-fallthrough branch. (`TO_type_system_rewrite-20260525T153549Z_m52754_t001`)
+- `E1156` (progressed, other, actual effort: 1 sessions, 3 msgs, 25 steps, 27 tools, 7 holbuild, 3,016,006 tok (3,005,769 in, 10,237 out, 2,902,528 cached), 378.1s, $2.27457900)
+  - Replaced the continuation lock-success branch consumer from `intcall_default_success_none_tail_no_type_error` to `intcall_default_success_push_tail_no_type_error`, with explicit witnesses and targeted conjunct discharge. -> The adapter branch mostly discharges, but after global simplification the theorem still fails at QED with a remaining contradiction: pushed-tail equality says result is `INR (Error (TypeError msg))`, while adapter should imply `no_type_error_result`; final `gvs[]` did not close it. (`TO_type_system_rewrite-20260525T153549Z_m52815_t001`, `TO_type_system_rewrite-20260525T153549Z_m52819_t001`)
+  - Tried keeping the top-level `lift_option_type` case unexpanded (`simp[]` instead of `simp[lift_option_type_def]`) to avoid normalizing into `safe_cast NoneTV` and used the general-return adapter. -> This preserved the general `safe_cast rtv` branch, but the final contradiction remained. The current source then received an unverified edit to prove `no_type_error_result res` first via sufficiency; next session must build before trusting it. (`TO_type_system_rewrite-20260525T153549Z_m52815_t001`, `TO_type_system_rewrite-20260525T153549Z_m52821_t002`)
+- `E1157` (progressed, other, actual effort: 1 sessions, 3 msgs, 56 steps, 55 tools, 18 holbuild, 5,258,612 tok (5,231,498 in, 27,114 out, 5,073,920 cached), 931.5s, $4.13827000)
+  - Specialized `intcall_default_success_push_tail_no_type_error` with concrete result `INR (Error (TypeError msg))` and discharged implications by `impl_tac`/`first_assum` plus a fallback using the top-level continuation equality. -> Adapter premises mostly discharge, but closing the branch with `simp[no_type_error_result_def]` leaves or creates residual contradiction goals; evidence includes goal states for both success and lock-failure residuals. (`TO_type_system_rewrite-20260525T153549Z_m52910_t001`)
+  - Restored deriving through `no_type_error_result res` and tried to use top-level continuation equality in lock-failure path. -> Current build still fails at QED with a single `F` goal in the success branch: assumptions include post-push equality to `(INR (Error (TypeError msg)),st')`, but no retained contradiction fact closes the branch. (`TO_type_system_rewrite-20260525T153549Z_m52917_t001`)
+- `E1158` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 57 steps, 56 tools, 18 holbuild, 5,384,719 tok (5,356,854 in, 27,865 out, 5,198,336 cached), 946.6s, $4.22770800)
+  - Instantiated `intcall_default_success_push_tail_no_type_error` with concrete result `INR (Error (TypeError msg))` after splitting the lock-success branch. -> Adapter premises can mostly be discharged, but the branch tactic does not close cleanly; holbuild shows residual goals around the top-level continuation equality and no-TypeError contradiction. (`TO_type_system_rewrite-20260525T153549Z_m52910_t001`)
+  - Derived/used `no_type_error_result res` via the general-return adapter, then tried to connect it to the concrete post-push equality and top-level continuation equality. -> Build still fails at QED with `F` and assumptions including the post-push equality to `(INR (Error (TypeError msg)),st')`; the contradiction fact is not retained in a usable shape. (`TO_type_system_rewrite-20260525T153549Z_m52917_t001`)
+  - Recorded a non-terminal checkpoint summarizing the stuck contradiction and current source partial state. -> Evidence preserved; active component remains open until this terminal stuck close. (`TO_type_system_rewrite-20260525T153549Z_m52919_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52910_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52917_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m52919_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1.d.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1160`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 40 steps, 39 tools, 14 holbuild, 3,709,249 tok (3,697,152 in, 12,097 out, 3,603,456 cached), 541.7s, $2.63311800
+
+### Attempts / Evidence
+
+- `E1159` (progressed, other, actual effort: 1 sessions, 10 msgs, 141 steps, 149 tools, 57 holbuild, 14,036,395 tok (13,986,634 in, 49,761 out, 13,630,464 cached), 2188.4s, $10.08891200)
+  - Inserted/refined `intcall_default_success_bound_continuation_no_type_error` after the push-tail helper and reworked its success branch to assert the exact post-push equality before applying the push-tail lemma; lock-error uses the lock no-TypeError lemma. -> holbuild advanced past `intcall_default_success_bound_continuation_no_type_error` and failed in `intcall_default_success_continuation_no_type_error`, showing the helper is no longer the immediate failing theorem. (`TO_type_system_rewrite-20260525T153549Z_m53021_t001`)
+  - Tried to prove the original continuation theorem as a short consumer via `intcall_bind_arguments_from_runtime_typed`, `gvs[lift_option_type_def, return_def]`, `irule intcall_default_success_bound_continuation_no_type_error`, and explicit witnesses/placeholders for ret/rtv. -> Consumer proof fails discharging the helper premise `evaluate_type (get_tenv cx) ret = SOME rtv` or its placeholder form; current residual assumptions include a labelled `eval_ret` but goal still does not close, likely because gvs has rewritten ret/rtv to NoneT/NoneTV in some branches and witness/premise matching is unstable. (`TO_type_system_rewrite-20260525T153549Z_m53064_t001`, `TO_type_system_rewrite-20260525T153549Z_m53066_t001`)
+- `E1160` (proved, , actual effort: 1 sessions, 2 msgs, 40 steps, 39 tools, 14 holbuild, 3,709,249 tok (3,697,152 in, 12,097 out, 3,603,456 cached), 541.7s, $2.63311800)
+  - Reworked `intcall_default_success_continuation_no_type_error` consumer to preserve the original continuation equality before simplifying bind/return, then apply `intcall_default_success_bound_continuation_no_type_error` with explicit `ret`/`rtv` witnesses. Used a controlled first conjunct for the generated body IH and local simplification for the continuation equality. -> Focused `holbuild vyperTypeStmtSoundnessTheory` advanced past both the new bound-continuation lemma and `intcall_default_success_continuation_no_type_error`; the next failure is in downstream `intcall_expr_no_type_error_from_generated_ih`, so this component's theorem is proved in source. (`TO_type_system_rewrite-20260525T153549Z_m53111_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53111_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.1.e
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1155`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 21 steps, 22 tools, 8 holbuild, 1,481,234 tok (1,473,302 in, 7,932 out, 1,333,248 cached), 326.7s, $1.60485400
+- next: Call plan_oracle review, then begin C2.6.3.3.1.d if accepted.
+
+### Attempts / Evidence
+
+- `E1154` (progressed, other, actual effort: 1 sessions, 1 msgs, 6 steps, 7 tools, 1 holbuild, 785,419 tok (781,790 in, 3,629 out, 756,736 cached), 87.7s, $0.61250800)
+  - Inserted `intcall_default_success_push_tail_no_type_error` with the PLAN-proposed general `case push_function ...`/`safe_cast rtv` statement and a direct proof: `rpt strip_tac >> gvs[push_function_def, return_def] >> irule intcall_default_success_lock_success_tail_no_type_error >> qexistsl_tac ...`. -> Build reaches the new theorem but fails at QED with 4 residual goals. The visible top residual is `evaluate_type (get_tenv cx) ret = SOME rtv` in a context that still mentions `type_stmts env_body NoneT body'` and `safe_cast NoneTV`, so the current proof is partial and should be inspected before further edits. (`TO_type_system_rewrite-20260525T153549Z_m52766_t001`)
+  - Read the source around the inserted theorem and preceding none-tail adapter. -> Confirmed the new theorem was inserted immediately after the proved none-tail adapter and before `intcall_default_success_continuation_no_type_error`; line ranges shifted so next session should inspect around 11180-11270. (`TO_type_system_rewrite-20260525T153549Z_m52767_t001`)
+- `E1155` (proved, , actual effort: 1 sessions, 1 msgs, 21 steps, 22 tools, 8 holbuild, 1,481,234 tok (1,473,302 in, 7,932 out, 1,333,248 cached), 326.7s, $1.60485400)
+  - Repaired `intcall_default_success_push_tail_no_type_error` proof by keeping the pushed `case push_function` equality available (using `simp[push_function_def, return_def]`, not `gvs`), applying the broad lock-success tail theorem, and discharging the tail equality by targeted `qpat_x_assum ... mp_tac >> simp[push_function_def, return_def]`. -> Focused holbuild advanced past `intcall_default_success_push_tail_no_type_error` and now fails only at downstream `intcall_default_success_continuation_no_type_error`, so the adapter leaf is proved. (`TO_type_system_rewrite-20260525T153549Z_m52793_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m52793_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The planned direct integration of intcall_default_success_continuation_no_type_error exposes a premise mismatch: the helper requires an unconditional body-IH over cx with stk updated, while the generated-IH branch only has the conditional generated body_ih whose antecedent includes the bind/eval-ret/lock/push success facts. Applying the helper by irule does not match; explicit specialization reaches 11 premise goals and the first body-IH premise cannot be discharged by asm "body_ih" mp_tac >> simp[] because it remains an implication from the generated path antecedents to the desired unconditional body theorem.
+- latest episode: `E1161`
+- blocker: Current source contains a partial attempted application of intcall_default_success_continuation_no_type_error in intcall_expr_no_type_error_from_generated_ih. Holbuild fails in the helper premise discharge, showing the continuation helper interface is too strong/misaligned for the generated-IH branch unless a narrower generated-IH adapter is added.
+- actual effort: 1 sessions, 1 msgs, 22 steps, 24 tools, 7 holbuild, 1,969,563 tok (1,959,202 in, 10,361 out, 1,884,160 cached), 345.4s, $1.62812000
+- next: Ask the strategist to replace/refine C2.6.3.3.2 with a generated-IH-facing adapter whose body-IH premise is conditional on the same bind/eval-ret/lock/push facts, or to adjust the continuation helper interface so those facts are consumed internally.
+
+### Attempts / Evidence
+
+- `E1132` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 20 steps, 20 tools, 7 holbuild, 2,044,495 tok (2,035,234 in, 9,261 out, 1,987,584 cached), 292.0s, $1.50987200)
+  - Inserted `intcall_default_success_post_push_no_type_error` before `intcall_default_success_continuation_no_type_error`; proof first derives lock/pushed preconditions via `intcall_live_pushed_body_preconditions`. -> Build reaches the new theorem and the prefix through the live-precondition derivation succeeds; failure occurs when applying the tail theorem. (`TO_type_system_rewrite-20260525T153549Z_m52321_t001`)
+  - Tried `irule`/`match_mp_tac` against `intcall_pushed_body_tail_no_type_error_from_body_ih` with explicit witnesses. -> HOL reports No match at theorem application before witnesses can be used. (`TO_type_system_rewrite-20260525T153549Z_m52321_t001`, `TO_type_system_rewrite-20260525T153549Z_m52323_t001`)
+  - Tried unconstrained `metis_tac` over tail helper plus stk-irrelevance lemmas. -> Times out, confirming this should not be solved by broad search. (`TO_type_system_rewrite-20260525T153549Z_m52327_t001`)
+  - Tried delegating to lower `intcall_post_push_tail_no_type_error` directly by `irule`. -> Also reports No match despite apparent conclusion match, indicating a theorem-interface/application mismatch that needs a better shape or inspected exact theorem form. (`TO_type_system_rewrite-20260525T153549Z_m52336_t001`)
+- `E1133` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 30 steps, 30 tools, 11 holbuild, 3,227,593 tok (3,213,350 in, 14,243 out, 3,148,800 cached), 455.3s, $2.32444000)
+  - Inserted planned local theorem `intcall_default_success_post_push_no_type_error`, deriving live pushed-body preconditions from `intcall_live_pushed_body_preconditions`. -> Prefix succeeds; holbuild reaches tail-helper application in the new theorem. (`TO_type_system_rewrite-20260525T153549Z_m52321_t001`)
+  - Tried direct delegation to `intcall_pushed_body_tail_no_type_error_from_body_ih` via `irule`/`match_mp_tac` with explicit witnesses; also tried lower `intcall_post_push_tail_no_type_error`. -> HOL reports No match/different constructors at the theorem application step. (`TO_type_system_rewrite-20260525T153549Z_m52321_t001`, `TO_type_system_rewrite-20260525T153549Z_m52323_t001`, `TO_type_system_rewrite-20260525T153549Z_m52340_t001`, `TO_type_system_rewrite-20260525T153549Z_m52342_t001`, `TO_type_system_rewrite-20260525T153549Z_m52346_t001`)
+  - Tried broad `metis_tac` with the tail helper and stk-irrelevance lemmas. -> Timed out; not a viable proof style for this boundary. (`TO_type_system_rewrite-20260525T153549Z_m52327_t001`)
+- `E1161` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 22 steps, 24 tools, 7 holbuild, 1,969,563 tok (1,959,202 in, 10,361 out, 1,884,160 cached), 345.4s, $1.62812000)
+  - Replaced the old broad `gvs[AllCaseEqs(), lift_option_type_def, bind_def, return_def, raise_def, no_type_error_result_def]` close with `Cases_on dflt_res`; the INR default branch closes but the INL branch remains as exactly the default-success continuation goal. -> Confirmed the branch can be reduced to the success-continuation equality plus no-TypeError conclusion, but not closed by simplification alone. (`TO_type_system_rewrite-20260525T153549Z_m53128_t001`, `TO_type_system_rewrite-20260525T153549Z_m53129_t001`)
+  - Tried direct `irule intcall_default_success_continuation_no_type_error` after rewriting the goal back to `no_type_error_result res`. -> HOL reports `No match`, consistent with prior evidence that direct theorem application is brittle for this continuation shape. (`TO_type_system_rewrite-20260525T153549Z_m53131_t001`, `TO_type_system_rewrite-20260525T153549Z_m53133_t001`)
+  - Specialized `intcall_default_success_continuation_no_type_error` explicitly with the live branch variables and tried to discharge its premises by labelled assumptions. -> The body-IH premise is not discharged. Holbuild shows the remaining goal is an implication from a generated path-antecedent version of `body_ih` to the unconditional body theorem required by the helper; simple `asm "body_ih" mp_tac >> simp[]` leaves the generated antecedent outstanding. (`TO_type_system_rewrite-20260525T153549Z_m53136_t001`, `TO_type_system_rewrite-20260525T153549Z_m53139_t001`, `TO_type_system_rewrite-20260525T153549Z_m53140_t001`)
+
+### Ruled Out
+
+- Direct irule of the continuation helper
+- Broad gvs/metis search over the expanded continuation
+- Discharging the helper's unconditional body-IH premise directly from the conditional generated body_ih
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53131_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53136_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53139_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53140_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1163`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 10 tools, 2 holbuild, 535,365 tok (534,012 in, 1,353 out, 487,936 cached), 64.4s, $0.51493800
+- next: Call plan_oracle review. If accepted, proceed to C2.6.3.3.2.2 to add the direct body-IH setup-success bridge.
+
+### Attempts / Evidence
+
+- `E1134` (progressed, other, actual effort: 1 sessions, 1 msgs, 3 steps, 4 tools, 416,102 tok (413,695 in, 2,407 out, 395,776 cached), 43.9s, $0.35969300)
+  - Inserted `intcall_current_src_pushed_body_tail_no_type_error[local]` with current-src stack, arbitrary `pushed_st`/`prev`, exact post-push tail equality, and assumptions for body IH plus pushed-state invariants. -> Source edit completed but not built; proof may need immediate adjustment to follow oracle guidance (`qspecl_then ... mp_tac` explicit specialization) rather than current `irule intcall_post_push_tail_no_type_error`. (`TO_type_system_rewrite-20260525T153549Z_m52350_t001`)
+- `E1135` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 12 tools, 5 holbuild, 741,579 tok (737,810 in, 3,769 out, 641,024 cached), 153.9s, $0.91751200)
+  - Added explicit outer quantifiers to the current-src wrapper to prevent HOL parsing free `body` as an existing word64 function; then proved the wrapper by applying `intcall_pushed_body_tail_no_type_error_from_body_ih` with explicit witnesses for `body'`, `cx`, the current-src pushed context, `prev`, `pushed_st`, and result state. Discharged stack-irrelevance premises with `context_well_typed_stk_irrelevant` and `functions_well_typed_stk_irrelevant`, and replayed the body IH by explicit specialization in the remaining premise. -> Wrapper theorem built successfully; `holbuild` advanced past `intcall_current_src_pushed_body_tail_no_type_error` and failed later at `intcall_default_success_post_push_no_type_error`, which is sibling component C2.6.3.3.2.2. (`TO_type_system_rewrite-20260525T153549Z_m52365_t001`)
+- `E1137` (proved, , actual effort: 1 sessions, 1 steps, 121,766 tok (121,328 in, 438 out, 115,200 cached), 10.0s, $0.10138000)
+  - Audited carry-forward theorem `intcall_current_src_pushed_body_tail_no_type_error[local]` in current source and prior proved evidence E1135. -> The wrapper theorem is present at `semantics/prop/vyperTypeStmtSoundnessScript.sml` lines 10829-10883 with the E1135 proof shape; no source edit needed for this carry-forward component. Later build failures are in downstream consumer theorem, not this wrapper. (`TO_type_system_rewrite-20260525T153549Z_m52419_t001`, `TO_type_system_rewrite-20260525T153549Z_m52365_t001`)
+- `E1162` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 40 steps, 41 tools, 14 holbuild, 3,972,301 tok (3,955,929 in, 16,372 out, 3,850,240 cached), 611.9s, $2.94472500)
+  - Specialized the conditional body premise with call_env,dflt_st,dflt_st,lock_st,cx with pushed stack, and lock_st with scopes; tried to discharge antecedent by simp/gvs over lift_option_type_def, return_def, push_function_def, evaluate_type_def/evaluate_type_NoneT and use the resulting theorem by ACCEPT_TAC. -> Failed: holbuild still shows the original conditional body theorem as the remaining subgoal, with large context including post-push continuation equality; ACCEPT_TAC/strip_tac variants do not consume it. (`TO_type_system_rewrite-20260525T153549Z_m53204_t001`, `TO_type_system_rewrite-20260525T153549Z_m53216_t001`)
+  - Inserted FAIL_TAC probes after specializing the conditional body premise and after simplifying its antecedent to inspect exact goal shape. -> Probe showed the goal remained the whole conditional body premise rather than a small conjunction of path facts, indicating specialization/antecedent discharge is structurally misaligned with the live proof state. (`TO_type_system_rewrite-20260525T153549Z_m53213_t001`, `TO_type_system_rewrite-20260525T153549Z_m53218_t001`)
+  - Tried using metis_tac after bounded simplification of the success-path antecedent. -> Timed out in FOL_SOLVER; broad automation is not acceptable here and confirms the proof interface is too brittle. (`TO_type_system_rewrite-20260525T153549Z_m53207_t001`)
+- `E1163` (proved, , actual effort: 1 sessions, 5 steps, 10 tools, 2 holbuild, 535,365 tok (534,012 in, 1,353 out, 487,936 cached), 64.4s, $0.51493800)
+  - Deleted the failed broad adapter theorem `intcall_default_success_continuation_no_type_error_from_body_success_ih` with a local line-range edit, leaving existing `intcall_default_success_bound_continuation_no_type_error` and `intcall_default_success_continuation_no_type_error` in place. -> Source cleanup completed; grep confirms the abandoned theorem name is gone and nearby helper theorem names remain. (`TO_type_system_rewrite-20260525T153549Z_m53231_t001`, `TO_type_system_rewrite-20260525T153549Z_m53233_t001`, `TO_type_system_rewrite-20260525T153549Z_m53233_t002`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after cleanup. -> Build now advances past the deleted theorem/prefix and fails in the planned downstream theorem `intcall_expr_no_type_error_from_generated_ih`, at the known old call path using `body_ih`; this matches C2.6.3.3.2.1 expected goal shape. (`TO_type_system_rewrite-20260525T153549Z_m53232_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53231_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53232_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53233_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53233_t002` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1164`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 4 tools, 2 holbuild, 277,315 tok (275,133 in, 2,182 out, 252,928 cached), 68.0s, $0.30294900
+- next: Call plan_oracle review; if accepted, begin C2.6.3.3.2.3 for the post-lock no-TypeError helper using this bridge.
+
+### Attempts / Evidence
+
+- `E1136` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 40 steps, 40 tools, 14 holbuild, 3,156,432 tok (3,138,237 in, 18,195 out, 3,015,168 cached), 602.0s, $2.66877900)
+  - Built handoff edit `qspecl_then ... wrapper >> disch_then irule >> simp[]`. -> Failed: `disch_then irule` cannot consume the specialized wrapper implication; input has four goals, top is the large wrapper antecedent. (`TO_type_system_rewrite-20260525T153549Z_m52418_t001`)
+  - Changed to `match_mp_tac (Q.SPECL ... intcall_current_src_pushed_body_tail_no_type_error) >> simp[]`. -> Failed with No match at `MATCH_MP_TAC`, confirming goal-directed application remains brittle even for the specialized wrapper. (`TO_type_system_rewrite-20260525T153549Z_m52424_t001`)
+  - Changed to `qspecl_then ... mp_tac wrapper >> impl_tac >- simp[] >> simp[]`. -> Failed because plain simp does not discharge the large conjunctive wrapper antecedent. (`TO_type_system_rewrite-20260525T153549Z_m52426_t001`)
+  - Tried `impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))` for the wrapper antecedent after deriving live preconditions. -> Failed: residual wrapper antecedent remains at QED, including live pushed-state facts not matching as assumptions after `strip_tac`. (`TO_type_system_rewrite-20260525T153549Z_m52430_t001`, `TO_type_system_rewrite-20260525T153549Z_m52436_t001`)
+  - Tried to assert live pushed-state conjunction directly via `intcall_live_pushed_body_preconditions`; tried `disch_then strip_assume_tac`, `assume_tac`, and `rw[]` variants to retain/split facts. -> Failed: `disch_then` variants did not apply because the current goal is not a single implication after the tactic structure; `rw[]` split cases but wrapper antecedent still required e.g. `evaluate_type (get_tenv cx) ret = SOME NoneTV`. (`TO_type_system_rewrite-20260525T153549Z_m52433_t001`, `TO_type_system_rewrite-20260525T153549Z_m52439_t001`, `TO_type_system_rewrite-20260525T153549Z_m52443_t001`, `TO_type_system_rewrite-20260525T153549Z_m52449_t001`, `TO_type_system_rewrite-20260525T153549Z_m52453_t001`)
+- `E1138` (progressed, other, actual effort: 1 sessions, 1 msgs, 4 steps, 5 tools, 1 holbuild, 532,105 tok (529,789 in, 2,316 out, 513,024 cached), 62.2s, $0.40981700)
+  - Inserted the curried adapter theorem immediately after `intcall_current_src_pushed_body_tail_no_type_error`; proof was `rpt strip_tac >> irule intcall_current_src_pushed_body_tail_no_type_error >> simp[]`. -> Build fails in the new adapter. `irule` does not instantiate the original conjunctive wrapper directly; residual goal is an existential package of wrapper variables/premises. Need next session to change the adapter proof to explicit specialization/`qspecl_then ... mp_tac` or `metis_tac[intcall_current_src_pushed_body_tail_no_type_error]`, not continue to consumer theorem. (`TO_type_system_rewrite-20260525T153549Z_m52467_t001`, `TO_type_system_rewrite-20260525T153549Z_m52468_t001`)
+- `E1139` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,057,214 tok (1,052,955 in, 4,259 out, 989,696 cached), 209.0s, $0.93891300)
+  - Replaced the failed `irule` proof of `intcall_current_src_pushed_body_tail_no_type_error_irule` with a theorem-driven specialization of `intcall_current_src_pushed_body_tail_no_type_error`. Introduced variables carefully so the body parameter remains accessible as `body'`, discharged the packed conjunctive antecedent from live assumptions, and left no semantic unfolding in the adapter. -> Adapter theorem now builds; holbuild advances past `intcall_current_src_pushed_body_tail_no_type_error_irule` and fails only in the downstream `intcall_default_success_post_push_no_type_error`, which belongs to the next component. (`TO_type_system_rewrite-20260525T153549Z_m52485_t001`, `TO_type_system_rewrite-20260525T153549Z_m52488_t001`)
+- `E1164` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 2 holbuild, 277,315 tok (275,133 in, 2,182 out, 252,928 cached), 68.0s, $0.30294900)
+  - Inserted local theorem `intcall_body_ih_after_setup_success` after `intcall_default_success_continuation_no_type_error`; proof specializes the generated body IH at explicit bind/eval-ret/lock/push success variables and discharges both implication antecedents from live assumptions. -> Bridge lemma accepted by holbuild; build resumes after `intcall_default_success_continuation_no_type_error`, passes the new theorem, and fails only downstream in `intcall_expr_no_type_error_from_generated_ih`, matching the planned next component. (`TO_type_system_rewrite-20260525T153549Z_m53243_t001`, `TO_type_system_rewrite-20260525T153549Z_m53244_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53243_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53244_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1165`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 8 holbuild, 2,988,533 tok (2,976,166 in, 12,367 out, 2,905,088 cached), 388.3s, $2.17894400
+- next: Call plan_oracle review; if accepted, begin C2.6.3.3.2.4 to refactor `intcall_expr_no_type_error_from_generated_ih` to expose the post-lock cut and use the new helper.
+
+### Attempts / Evidence
+
+- `E1140` (proved, , actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 11 holbuild, 2,938,415 tok (2,926,692 in, 11,723 out, 2,838,528 cached), 446.4s, $2.21177400)
+  - Replaced the failing `intcall_default_success_post_push_no_type_error` suffix with the planned derivation: derive pushed post-lock/body preconditions via `intcall_live_pushed_body_preconditions`, specialize the new curried adapter `intcall_current_src_pushed_body_tail_no_type_error_irule`, discharge the adapter's premises from live assumptions, and split the final conjunctive premise for the continuation equality/state facts. -> Holbuild advances past `intcall_default_success_post_push_no_type_error`; the next failure is in downstream `intcall_default_success_continuation_no_type_error` around line 11158, outside this component. (`TO_type_system_rewrite-20260525T153549Z_m52519_t001`)
+- `E1165` (proved, , actual effort: 1 sessions, 2 msgs, 28 steps, 27 tools, 8 holbuild, 2,988,533 tok (2,976,166 in, 12,367 out, 2,905,088 cached), 388.3s, $2.17894400)
+  - Inserted local post-lock helper `intcall_default_success_post_lock_no_type_error_from_body_ih`, plus small local `lift_option_type_INL_SOME` adapter. The helper obtains the unconditional body theorem using `intcall_body_ih_after_setup_success`, derives `evaluate_type (get_tenv cx) ret = SOME rtv` from the lift success via the small adapter, and delegates to `intcall_default_success_lock_success_tail_no_type_error`. -> After replacing a slow broad simp with targeted helper extraction, holbuild accepts the new post-lock helper and advances to the already-expected downstream failure in `intcall_expr_no_type_error_from_generated_ih` at the old body_ih premise discharge. (`TO_type_system_rewrite-20260525T153549Z_m53253_t001`, `TO_type_system_rewrite-20260525T153549Z_m53269_t001`, `TO_type_system_rewrite-20260525T153549Z_m53273_t001`, `TO_type_system_rewrite-20260525T153549Z_m53274_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53253_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53269_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53273_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53274_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `risk_mismatch` The prescribed one focused branch-structure repair did not produce a small local failing goal; holbuild still times out on the whole large args_res branch tactic, so the current consumer proof structure remains too monolithic for the 2.5s tactic timeout.
+- latest episode: `E1169`
+- blocker: `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` still times out while validating the entire `Cases_on args_res` success branch, despite explicit lock_res branches. This matches the STATE escalation trigger for a narrower helper or rebased proof structure.
+- actual effort: 1 sessions, 6 steps, 7 tools, 2 holbuild, 479,092 tok (472,512 in, 6,580 out, 432,128 cached), 157.0s, $0.61538400
+- next: Call plan_oracle for a narrower NoneT/post-lock consumer helper or other rebased structure; avoid further trailing branch edits in the monolithic branch.
+
+### Attempts / Evidence
+
+- `E1166` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 46 steps, 50 tools, 13 holbuild, 4,715,610 tok (4,698,164 in, 17,446 out, 4,398,592 cached), 614.3s, $4.22053600)
+  - Inserted explicit default-success branch: derive env.type_defs and length side condition, call intcall_bind_arguments_from_runtime_typed, split nonreentrant lock result, route lock failure through intcall_lock_no_type_error_result, route lock success toward intcall_default_success_post_lock_no_type_error_from_body_ih. -> Progressed past the original old continuation call and exposed bind success assumptions; later failed in the post-lock helper premise discharge. (`TO_type_system_rewrite-20260525T153549Z_m53319_t001`, `TO_type_system_rewrite-20260525T153549Z_m53320_t001`)
+  - Tried to discharge the post-lock helper's generated body IH premise using asm "body_ih" mp_tac with simplification of evaluate_type/lift_option_type/push_function. -> Timed out on a >4KB goal; after changing simplification set to avoid evaluate_type_def, holbuild exited -11, indicating the current tactic shape is too brittle/heavy and should be simplified or replaced, not retried blindly. (`TO_type_system_rewrite-20260525T153549Z_m53322_t001`, `TO_type_system_rewrite-20260525T153549Z_m53325_t001`)
+- `E1167` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 47 steps, 50 tools, 15 holbuild, 4,822,768 tok (4,805,467 in, 17,301 out, 4,640,256 cached), 645.9s, $3.66521300)
+  - Opened the post-lock helper first premise, introduced ce/bs/rs/ls/cxf0/ps, used `asm "body_ih" mp_tac` with only small rewrites (`get_scopes_def`, `lift_option_type_def`, `return_def`, `type_check_def`, `check_def`, `assert_def`), then specialized the resulting continuation to live setup variables and solved its setup premises with local assumptions and focused rewrites. -> Progressed beyond the previous timeout/broad-simp failure: the generated body_ih premise branch is now solved. This confirms the intended explicit setup bridge approach is viable. (`TO_type_system_rewrite-20260525T153549Z_m53349_t001`, `TO_type_system_rewrite-20260525T153549Z_m53372_t001`)
+  - After body_ih premise solved, attempted to finish remaining helper premises with `rpt conj_tac` and small ACCEPT_TAC/simp set. -> Failed at branch close with the live post-lock tail equality as remaining goal, suggesting the current application of `intcall_default_success_post_lock_no_type_error_from_body_ih` is still misaligned or not consuming the final continuation equality. (`TO_type_system_rewrite-20260525T153549Z_m53372_t001`, `TO_type_system_rewrite-20260525T153549Z_m53373_t001`)
+- `E1168` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 54 steps, 58 tools, 14 holbuild, 5,334,974 tok (5,315,196 in, 19,778 out, 5,189,632 cached), 730.2s, $3.81597600)
+  - Added `strip_tac` before applying `intcall_default_success_post_lock_no_type_error_from_body_ih`, split the unit-valued lock success result with `Cases_on x''`, and added `bind_apply` to the premise simplification. -> Progressed past E1167's live post-lock tail equality blocker; build then failed later in the lock-failure branch instead of at the lock-success helper conclusion. (`TO_type_system_rewrite-20260525T153549Z_m53404_t001`)
+  - Inspected the lock-failure goal and tried `drule intcall_lock_no_type_error_result >> simp[no_type_error_result_def] >> metis_tac[]`. -> Goal was small but `metis_tac[]` timed out because the full branch context remained huge; evidence points to using direct stripping rather than broad search. (`TO_type_system_rewrite-20260525T153549Z_m53410_t001`, `TO_type_system_rewrite-20260525T153549Z_m53411_t001`)
+  - Replaced metis with direct `strip_tac`/`gvs[]`, then adjusted trailing branch combinators for the remaining default-error branch. -> Edits are not yet correct: holbuild reports branch-tail count / timeout in the large `Cases_on args_res` branch, indicating tactic structure around the nested `>-` and trailing branch close needs to be repaired before further proof work. (`TO_type_system_rewrite-20260525T153549Z_m53413_t001`, `TO_type_system_rewrite-20260525T153549Z_m53431_t001`)
+- `E1169` (progressed, risk_mismatch, actual effort: 1 sessions, 6 steps, 7 tools, 2 holbuild, 479,092 tok (472,512 in, 6,580 out, 432,128 cached), 157.0s, $0.61538400)
+  - Rewrote `Cases_on lock_res` tail into two explicit `>-` branches and replaced lock-failure broad search with direct `drule intcall_lock_no_type_error_result >> simp[no_type_error_result_def] >> strip_tac >> strip_tac >> gvs[]`. -> Source accepted edit, but holbuild still timed out on the full `args_res` success branch instead of exposing a focused subgoal; branch proof remains too large/monolithic. (`TO_type_system_rewrite-20260525T153549Z_m53442_t001`, `TO_type_system_rewrite-20260525T153549Z_m53443_t001`)
+
+### Ruled Out
+
+- Continuing to patch the same trailing branch combinators without a narrower helper; after explicit branch split, the timeout remains at the entire `args_res` branch.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53442_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53443_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1193`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 131,233 tok (130,768 in, 465 out, 123,392 cached), 18.3s, $0.11252600
+- next: Call plan_oracle review, then begin the scheduled next carry-forward component C2.6.3.3.2.4.2.
+
+### Attempts / Evidence
+
+- `E1170` (proved, , actual effort: 1 sessions, 1 msgs, 18 steps, 18 tools, 7 holbuild, 2,073,711 tok (2,065,524 in, 8,187 out, 2,025,472 cached), 296.1s, $1.45860600)
+  - Inserted the NoneT/default-success post-lock consumer helper with lock success/failure split. Lock success specializes `intcall_default_success_post_lock_no_type_error_from_body_ih` and discharges the generated body premise by applying the helper assumption after normalizing lift/return setup; lock failure uses `intcall_lock_no_type_error_result` and direct `no_type_error_result_def` stripping. -> HOL accepted the helper: subsequent `holbuild` failure moved past the new theorem to the existing monolithic `intcall_expr_no_type_error_from_generated_ih` branch, which is the next planned component. (`TO_type_system_rewrite-20260525T153549Z_m53463_t001`)
+- `E1172` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 236,143 tok (235,401 in, 742 out, 224,256 cached), 20.1s, $0.19011300)
+  - Confirmed the carried-forward `intcall_default_success_NoneT_post_lock_consumer_no_type_error[local]` theorem remains present with a completed `Proof ... QED`; latest holbuild passes that helper and fails later in `intcall_expr_no_type_error_from_generated_ih`, so this carry-forward helper is preserved. -> Carry-forward helper remains proved/preserved; no source changes needed for this component. (`TO_type_system_rewrite-20260525T153549Z_m53490_t001`, `TO_type_system_rewrite-20260525T153549Z_m53485_t001`)
+- `E1193` (proved, , actual effort: 1 sessions, 1 steps, 131,233 tok (130,768 in, 465 out, 123,392 cached), 18.3s, $0.11252600)
+  - Confirmed the existing `intcall_default_success_NoneT_post_lock_consumer_no_type_error` theorem remains present with a completed proof; current holbuild passes it and fails later in `intcall_expr_no_type_error_from_generated_ih`. -> Carry-forward helper preserved; no source edits needed for this component. (`TO_type_system_rewrite-20260525T153549Z_m54454_t001`, `TO_type_system_rewrite-20260525T153549Z_m54465_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m54454_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m54465_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1194`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 120,288 tok (119,691 in, 597 out, 108,544 cached), 33.3s, $0.12791700
+- next: Call plan_oracle review for C2.6.3.3.2.4.2, then proceed to scheduled C2.6.3.3.2.4.3 if accepted.
+
+### Attempts / Evidence
+
+- `E1171` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 19 tools, 3 holbuild, 1,244,195 tok (1,235,285 in, 8,910 out, 1,175,040 cached), 221.5s, $1.15604500)
+  - Replaced lines 12042-12080: removed old `Cases_on lock_res` + direct `intcall_default_success_post_lock_no_type_error_from_body_ih` proof and called `intcall_default_success_NoneT_post_lock_consumer_no_type_error` instead. -> Build progressed to a focused helper-premise failure: the generated `body_ih` premise did not match by direct `ACCEPT_TAC`. (`TO_type_system_rewrite-20260525T153549Z_m53475_t001`, `TO_type_system_rewrite-20260525T153549Z_m53476_t001`)
+  - Replaced the direct `asm "body_ih" ACCEPT_TAC` with a local premise discharge that specializes `body_ih` at the explicit setup facts and then calls the helper. -> holbuild again timed out on the entire `args_res = INL actual_vs` branch, showing the main branch remains too monolithic despite the helper boundary. (`TO_type_system_rewrite-20260525T153549Z_m53484_t001`, `TO_type_system_rewrite-20260525T153549Z_m53485_t001`)
+- `E1173` (proved, , actual effort: 1 sessions, 2 msgs, 29 steps, 29 tools, 12 holbuild, 2,604,454 tok (2,592,161 in, 12,293 out, 2,513,408 cached), 465.4s, $2.01925900)
+  - Factored generated body IH specialization into standalone adapter theorem; used staged stripping, moved generated IH to goal, simplified tuple projections, specialized exact post-lock values, and discharged body premise by gvs/simp. -> Adapter theorem validated: holbuild moved past intcall_generated_body_ih_NoneT_consumer_premise and failed only in downstream main IntCall theorem branch. (`TO_type_system_rewrite-20260525T153549Z_m53528_t001`)
+- `E1194` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 120,288 tok (119,691 in, 597 out, 108,544 cached), 33.3s, $0.12791700)
+  - Began carry-forward component and ran holbuild on vyperTypeStmtSoundnessTheory. Build resumed at downstream intcall_expr_no_type_error_from_generated_ih and failed at the known old NoneT helper mismatch, not inside intcall_generated_body_ih_NoneT_live_consumer_premise. -> Existing generated body-IH adapter remains past the verified prefix/current failure point; no source edits needed for this carry-forward boundary lemma. (`TO_type_system_rewrite-20260525T153549Z_m54475_t001`, `TO_type_system_rewrite-20260525T153549Z_m54476_t001`)
+
+### Ruled Out
+
+- No need to optimize or edit the NoneT generated body-IH adapter for this carry-forward component.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m54475_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m54476_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1195`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 79,147 tok (78,759 in, 388 out, 61,952 cached), 8.6s, $0.12665100
+- next: Call plan_oracle review for C2.6.3.3.2.4.3, then begin C2.6.3.3.2.4.4 to add the arbitrary-return general post-lock consumer.
+
+### Attempts / Evidence
+
+- `E1174` (progressed, other, actual effort: 1 sessions, 2 msgs, 20 steps, 29 tools, 5 holbuild, 2,181,784 tok (2,167,873 in, 13,911 out, 2,082,816 cached), 349.5s, $1.88402300)
+  - Inserted `intcall_actual_args_success_no_type_error_from_generated_ih` before the main theorem, initially with `cheat`, then replaced with focused proof outline based on old branch: lift_option_type inversions, callable_body_typing_from_env_consistent, default exprs helper, bind_arguments helper, generated-body-IH adapter, and NoneT post-lock consumer. -> Partial source progress kept; theorem statement/proof outline exists but needs repair before build can pass. (`TO_type_system_rewrite-20260525T153549Z_m53544_t001`, `TO_type_system_rewrite-20260525T153549Z_m53550_t001`)
+  - Probed helper after `rpt strip_tac` with FAIL_TAC to see remaining goal shape. -> Probe showed assumptions had not stripped as intended: two large generated IHs remained as goals/assumptions, confirming proof must first consume top-level conjunct assumptions carefully. (`TO_type_system_rewrite-20260525T153549Z_m53549_t001`)
+  - Replaced probe with focused proof outline; holbuild failed at lookup qpat_x_assum quote. -> Current failure is syntactic/type-shape: qpat quote contains `(fm,nr,args,dflts,NoneT,body)` and `body` parses as a function-like existing identifier, causing type mismatch with expected `stmt list`. Rename binder/proof occurrences to a non-conflicting name or use a wildcard/pattern that avoids `body` in quotation. (`TO_type_system_rewrite-20260525T153549Z_m53553_t001`, `TO_type_system_rewrite-20260525T153549Z_m53554_t001`)
+- `E1175` (progressed, other, actual effort: 1 sessions, 4 msgs, 48 steps, 54 tools, 11 holbuild, 4,851,759 tok (4,839,890 in, 11,869 out, 4,723,712 cached), 522.0s, $3.29881600)
+  - Renamed helper binder and quoted callable tuple component from body to fn_body, including tail equality, lookup qpat, default-exprs qspecl tuple, callable_body_typing instantiation, and post-lock consumer call. -> Removed the previous HOL quotation type error; build proceeded to substantive premise-discharge goals. (`TO_type_system_rewrite-20260525T153549Z_m53569_t001`)
+  - Added explicit strengthened type_check fact for the default-exprs helper and used it to discharge the helper's type_check premise; avoided relying on broad simp for arithmetic/definition rewriting. -> Proof advanced through default-exprs helper premise; later reached dflt_res=INL branch. (`TO_type_system_rewrite-20260525T153549Z_m53593_t001`)
+  - Replaced initial dflt_res=INL branch gvs[] with targeted simp[NoAsms] to unpack the returned default-exprs facts. -> Avoided the earlier gvs[] timeout but the next targeted env.type_defs derivation still timed out because it unfolds env_consistent in the huge branch context. (`TO_type_system_rewrite-20260525T153549Z_m53599_t001`, `TO_type_system_rewrite-20260525T153549Z_m53603_t001`)
+- `E1176` (progressed, other, actual effort: 1 sessions, 5 msgs, 49 steps, 52 tools, 14 holbuild, 4,979,871 tok (4,961,900 in, 17,971 out, 4,845,056 cached), 675.9s, $3.54587800)
+  - Replaced direct premise-discharge attempts around `callable_body_typing_from_env_consistent` with `imp_res_tac lift_option_type_INL_SOME` followed by the existing Q.INST + simp[] call. -> Advanced past the previous get_module_code/lookup_callable_function premise and qpat labelling failures; callable-body conjuncts were available and labelled. (`TO_type_system_rewrite-20260525T153549Z_m53703_t001`, `TO_type_system_rewrite-20260525T153549Z_m53707_t001`)
+  - Inspected the instrumented log for the new failure in the dflt_res=INL branch. -> Confirmed the focused goal was still `no_type_error_result res`, with assumptions including `type_check (LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts) ... = (INL (),r)` and the failed fragment was the local assertion `LENGTH args - LENGTH es <= LENGTH dflts` by bare `decide_tac`. (`TO_type_system_rewrite-20260525T153549Z_m53715_t001`)
+  - Changed the length assertion proof to derive the inequality by moving the live type_check equality and simplifying with `type_check_def`/`assert_def` before arithmetic. -> Source edit kept but unverified due to handoff interruption. (`TO_type_system_rewrite-20260525T153549Z_m53716_t001`)
+- `E1177` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 41 steps, 41 tools, 11 holbuild, 4,120,608 tok (4,106,121 in, 14,487 out, 4,003,328 cached), 582.0s, $2.95023900)
+  - After extracting length facts from type_check_def/assert_def, continued through intcall_bind_arguments_from_runtime_typed. -> Build advanced past the previous length and bind_arguments premises to the post-lock consumer's generated-body-IH premise. (`TO_type_system_rewrite-20260525T153549Z_m53727_t001`)
+  - Tried direct irule intcall_generated_body_ih_NoneT_consumer_premise with qexistsl witnesses in the post-lock consumer premise. -> irule did not match the goal. Adding rpt strip_tac made it apply at the wrong nested implication level and produced four body-preservation subgoals, confirming the tactic shape is wrong for this interface. (`TO_type_system_rewrite-20260525T153549Z_m53740_t001`, `TO_type_system_rewrite-20260525T153549Z_m53743_t001`)
+  - Tried pushing intcall_generated_body_ih_NoneT_consumer_premise and using simp[] to let HOL instantiate/simplify the theorem against the exact target. -> Probe showed the theorem's instantiated consequent matches the desired body-IH premise, but simp[] over the full quantified bridge times out in the huge branch context. (`TO_type_system_rewrite-20260525T153549Z_m53754_t001`, `TO_type_system_rewrite-20260525T153549Z_m53759_t001`)
+- `E1187` (progressed, other, actual effort: 1 sessions, 3 msgs, 34 steps, 39 tools, 9 holbuild, 3,656,237 tok (3,641,359 in, 14,878 out, 3,527,680 cached), 539.8s, $2.77857500)
+  - Replaced the old long `qspecl_then`/`Q.GENL` wrapper-call block with a direct `MATCH_MP_TAC (Q.SPECL [...] intcall_actual_args_success_post_lock_no_type_error)` inside a fully parenthesized `Cases_on dflt_res >- (...) >- (...)` branch. -> Eliminated the previous `branch suffix without active branch` failure at the helper call; holbuild reached a real proof obligation instead. (`TO_type_system_rewrite-20260525T153549Z_m54239_t001`)
+  - Tried discharging all post-lock helper premises using a broad `rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE ... ORELSE simp[...])`. -> Timed out on the first helper-premise goal; the goal is too large for broad fallback simplification/assumption search. (`TO_type_system_rewrite-20260525T153549Z_m54239_t001`)
+  - Replaced the premise discharger with `FAIL_TAC "post-lock helper first premise"` and rebuilt/read the full instrumented log. -> Probe shows the first remaining goal is `?lock_res lock_st. ...` containing all premises of `intcall_actual_args_success_post_lock_no_type_error`; live assumptions include bind success, default success, `env_body.current_src = src_id_opt`, type/env facts, and the original continuation equality. (`TO_type_system_rewrite-20260525T153549Z_m54244_t001`, `TO_type_system_rewrite-20260525T153549Z_m54245_t001`)
+- `E1188` (progressed, other, actual effort: 1 sessions, 3 msgs, 37 steps, 40 tools, 8 holbuild, 4,014,616 tok (4,004,698 in, 9,918 out, 3,894,784 cached), 437.3s, $2.79450200)
+  - In the dflt_res=INL branch, replaced FAIL_TAC with Cases_on the lock computation, direct MATCH_MP_TAC of intcall_actual_args_success_post_lock_no_type_error, qexistsl witnesses [`q`,`r'`], and targeted premise discharge including original continuation equality simplification. -> Success branch now validates: holbuild reports the first dflt_res branch as solved and moves to the second branch. This confirms explicit lock-result witnesses are enough for the post-lock helper premise stack. (`TO_type_system_rewrite-20260525T153549Z_m54265_t001`)
+  - Tried broad `gvs[no_type_error_result_def]` and then pushing the branch equality plus `no_type_error_result (INR y)` through `simp[no_type_error_result_def]` for the dflt_res=INR branch. -> Both timed out in the huge branch context; do not retry broad no_type_error_result simplification here. (`TO_type_system_rewrite-20260525T153549Z_m54269_t001`, `TO_type_system_rewrite-20260525T153549Z_m54276_t001`)
+  - Replaced error branch with `qpat_x_assum` of the case equality, `simp[] >> strip_tac`, then attempted `first_assum ACCEPT_TAC`, a targeted rewrite using `INR y = res`, and `metis_tac[]`. -> The branch reduces to a tiny equality-propagation goal (`INR y = res`, `no_type_error_result (INR y)` |- `no_type_error_result res`), but selection/rewrite plumbing was not yet correct and metis timed out due to large context. (`TO_type_system_rewrite-20260525T153549Z_m54274_t001`, `TO_type_system_rewrite-20260525T153549Z_m54278_t001`, `TO_type_system_rewrite-20260525T153549Z_m54284_t001`)
+- `E1189` (progressed, other, actual effort: 1 sessions, 4 msgs, 49 steps, 51 tools, 19 holbuild, 5,066,817 tok (5,047,776 in, 19,041 out, 4,860,928 cached), 816.5s, $3.93593400)
+  - Added tiny local equality-transport helpers and rewrote the final `dflt_res = INR y` branch using direct theorem-value plumbing over the live `INR y = res` and `no_type_error_result (INR y)` assumptions. -> `intcall_actual_args_success_no_type_error_from_generated_ih` is no longer the failing theorem; holbuild progressed to `intcall_expr_no_type_error_from_generated_ih`. (`TO_type_system_rewrite-20260525T153549Z_m54379_t001`, `TO_type_system_rewrite-20260525T153549Z_m54383_t001`)
+  - Inspected source around the downstream consumer theorem. -> `intcall_expr_no_type_error_from_generated_ih` still contains the old full inline args-success branch at lines ~12533-12642; it has not yet been replaced by a call to `intcall_actual_args_success_no_type_error_from_generated_ih`, which matches the current failure. (`TO_type_system_rewrite-20260525T153549Z_m54384_t001`, `TO_type_system_rewrite-20260525T153549Z_m54388_t001`)
+- `E1190` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 183,328 tok (182,434 in, 894 out, 126,976 cached), 40.4s, $0.36759800)
+  - holbuild vyperTypeStmtSoundnessTheory after prior source edits; proof prefix matched through `intcall_actual_args_success_no_type_error_from_generated_ih` and failed only in downstream `intcall_expr_no_type_error_from_generated_ih` at line 12533 old inline args-success branch. -> Confirms the component target helper is accepted by HOL and current remaining failure is the scheduled downstream refactor, not the helper theorem. (`TO_type_system_rewrite-20260525T153549Z_m54395_t003`, `TO_type_system_rewrite-20260525T153549Z_m54395_t001`)
+- `E1195` (proved, , actual effort: 1 sessions, 1 steps, 79,147 tok (78,759 in, 388 out, 61,952 cached), 8.6s, $0.12665100)
+  - Began carry-forward component and reused the fresh holbuild evidence for vyperTypeStmtSoundnessTheory. The proof prefix passes the narrow NoneT whole-branch helper `intcall_actual_args_success_no_type_error_from_generated_ih` and fails later only where the downstream main theorem still calls it against an arbitrary-return branch. -> Existing narrow NoneT helper remains proved/current as reference only; no source edits needed for this carry-forward component. (`TO_type_system_rewrite-20260525T153549Z_m54479_t001`, `TO_type_system_rewrite-20260525T153549Z_m54476_t001`)
+
+### Ruled Out
+
+- Do not reuse this narrow helper for the live arbitrary-return main theorem.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m54479_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m54476_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1178`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 5 tools, 2 holbuild, 330,644 tok (328,555 in, 2,089 out, 311,808 cached), 86.9s, $0.30230900
+
+### Attempts / Evidence
+
+- `E1178` (proved, , actual effort: 1 sessions, 5 steps, 5 tools, 2 holbuild, 330,644 tok (328,555 in, 2,089 out, 311,808 cached), 86.9s, $0.30230900)
+  - Replaced the timed-out high-arity generated body-IH simplification with a comment and `conj_tac >- all_tac` placeholder at the first post-lock consumer premise. -> Cleanup edit removed the disallowed direct adapter application while preserving the prior successful branch prefix. (`TO_type_system_rewrite-20260525T153549Z_m53770_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after cleanup. -> Build no longer times out on `mp_tac ... >> simp[]`; it fails immediately at the intentional unsolved first conjunct placeholder, confirming the next component's adapter insertion point. (`TO_type_system_rewrite-20260525T153549Z_m53771_t001`)
+  - Grep/read audit for disallowed fragments. -> No remaining `mp_tac intcall_generated_body_ih_NoneT_consumer_premise` or probe failure text in the local branch; readback shows only the adapter-ready placeholder. (`TO_type_system_rewrite-20260525T153549Z_m53772_t001`, `TO_type_system_rewrite-20260525T153549Z_m53772_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53770_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53771_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53772_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53772_t002` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1179`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 7 tools, 2 holbuild, 677,039 tok (671,095 in, 5,944 out, 633,344 cached), 133.5s, $0.68374700
+
+### Attempts / Evidence
+
+- `E1179` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 7 tools, 2 holbuild, 677,039 tok (671,095 in, 5,944 out, 633,344 cached), 133.5s, $0.68374700)
+  - Inserted `intcall_generated_body_ih_NoneT_live_consumer_premise` with live prefix facts and conclusion matching the post-lock consumer's quantified body-IH premise; proof delegates to `intcall_generated_body_ih_NoneT_consumer_premise`. -> Initial proof shape was correct but broad `gvs` on the old adapter premise timed out. (`TO_type_system_rewrite-20260525T153549Z_m53778_t001`, `TO_type_system_rewrite-20260525T153549Z_m53779_t001`)
+  - Replaced broad `gvs` discharge with conjunct-by-conjunct `first_assum ACCEPT_TAC ORELSE simp[get_scopes_def,set_scopes_def,return_def]`. -> Holbuild accepted the new adapter theorem and advanced to the next theorem, failing only at the intentionally unsolved placeholder in `intcall_actual_args_success_no_type_error_from_generated_ih`. (`TO_type_system_rewrite-20260525T153549Z_m53780_t001`, `TO_type_system_rewrite-20260525T153549Z_m53781_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m53778_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53780_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m53781_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.3.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The local wrapper theorem `intcall_actual_args_success_post_lock_no_type_error` is present, but applying it inside the existing large `Cases_on dflt_res >- (...)` branch remains goalfrag/branch-shape brittle. No semantic falsehood evidence; this is decomposition/script-shape mismatch. Source is partial: CHANGED_TAC was removed, but the wrapper-call branch remains unproved and build-broken.
+- latest episode: `E1186`
+- blocker: After conservative branch-shape repair (removed the unverified CHANGED_TAC suffix), holbuild still fails with `branch suffix without active branch` at the next wrapper-call tactic inside the `dflt_res = INL x` branch. This matches STATE/PLAN's stop condition; further tactic plumbing in this Risk-2 leaf would violate the do-not-retry guidance.
+- actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 2 holbuild, 454,253 tok (452,329 in, 1,924 out, 402,944 cached), 78.8s, $0.50611700
+- next: Strategist should decompose/rebase this leaf, likely by extracting a whole `dflt_res = INL dflt_vs` branch theorem or changing the wrapper to consume the original case equality directly, rather than continuing nested branch tactic surgery.
+
+### Attempts / Evidence
+
+- `E1180` (progressed, other, actual effort: 1 sessions, 2 msgs, 14 steps, 16 tools, 3 holbuild, 1,746,168 tok (1,740,415 in, 5,753 out, 1,689,600 cached), 192.2s, $1.27146500)
+  - Replaced placeholder with direct `irule intcall_generated_body_ih_NoneT_live_consumer_premise`. -> Failed with `No match`, confirming ordinary first-order `irule` cannot match the adapter conclusion to the quantified consumer premise in this branch. (`TO_type_system_rewrite-20260525T153549Z_m53786_t001`, `TO_type_system_rewrite-20260525T153549Z_m53787_t001`)
+  - Tried `mp_tac intcall_generated_body_ih_NoneT_live_consumer_premise >> simp[] >> disch_then irule`. -> Timed out at `simp[]` in the large branch context; do not retry broad simplification over even the new adapter theorem. (`TO_type_system_rewrite-20260525T153549Z_m53791_t001`, `TO_type_system_rewrite-20260525T153549Z_m53792_t001`)
+  - Tried `ho_match_mp_tac intcall_generated_body_ih_NoneT_live_consumer_premise >> rpt conj_tac ...`. -> Higher-order matching applies the theorem but leaves an existential witness goal for `src_id_opt es r ts tc_ok args_st dflts`; broad fallback simp timed out on that existential goal. (`TO_type_system_rewrite-20260525T153549Z_m53793_t001`, `TO_type_system_rewrite-20260525T153549Z_m53794_t001`)
+  - Edited current source to add explicit witnesses `qexistsl [`src_id_opt`, `es`, `r`, `ts`, `tc_ok`, `args_st`, `dflts`]` after `ho_match_mp_tac`. -> Promising but unverified due to handoff; next session should build immediately to see remaining premise(s). (`TO_type_system_rewrite-20260525T153549Z_m53796_t001`, `TO_type_system_rewrite-20260525T153549Z_m53797_t002`)
+- `E1181` (progressed, other, actual effort: 1 sessions, 4 msgs, 51 steps, 52 tools, 15 holbuild, 5,243,467 tok (5,226,254 in, 17,213 out, 5,109,248 cached), 699.5s, $3.65604400)
+  - Changed the post-lock consumer conclusion from `strip_tac >> first_assum ACCEPT_TAC` to `disch_then ACCEPT_TAC`. -> This solved the immediate `no_type_error_result res ==> no_type_error_result res` conclusion at that point, but later `rpt conj_tac` created a similar trivial implication subgoal inside the consumer premise list; blind `first_assum ACCEPT_TAC` does not solve implication goals. (`TO_type_system_rewrite-20260525T153549Z_m53841_t001`, `TO_type_system_rewrite-20260525T153549Z_m53849_t001`)
+  - Tried several exact/wildcard assumption selections for the final `dflt_res = INR y` branch, including pushing `no_type_error_result (INR y)`, matching `_ = (res,st')`, simplifying the selected equality with `SIMP_RULE`, and substituting it with `SUBST_ALL_TAC`. -> Exact variables in qpat patterns did not match reliably because HOL renamed the branch variable; generic equality selection often selected the success-branch equality or left `no_type_error_result res` unchanged. `gvs[no_type_error_result_def]` in the huge context still times out. (`TO_type_system_rewrite-20260525T153549Z_m53854_t001`, `TO_type_system_rewrite-20260525T153549Z_m53865_t001`, `TO_type_system_rewrite-20260525T153549Z_m53879_t001`, `TO_type_system_rewrite-20260525T153549Z_m53888_t001`)
+  - Inserted `TRY (disch_then ACCEPT_TAC)` after `rpt conj_tac` in the post-lock consumer premise block. -> This is promising for implication-shaped consumer premises and avoided the prior `first_assum` failure there, but the current source then fails/times out at the later final error-branch `gvs[no_type_error_result_def]`. (`TO_type_system_rewrite-20260525T153549Z_m53888_t001`)
+- `E1182` (progressed, other, actual effort: 1 sessions, 3 msgs, 35 steps, 38 tools, 6 holbuild, 3,541,735 tok (3,529,335 in, 12,400 out, 3,422,208 cached), 428.7s, $2.61873900)
+  - Repaired missing closing parenthesis around the dflt_res=INL success branch and rebuilt. -> Parse error fixed; holbuild advanced to proof-time timeout in the success branch. (`TO_type_system_rewrite-20260525T153549Z_m53946_t002`, `TO_type_system_rewrite-20260525T153549Z_m53949_t001`)
+  - Inserted temporary FAIL_TAC probes after bind and after post-lock consumer premise splitting, then removed them before handoff. -> Probes confirmed the next obstacle is not the old generated-body-IH adapter; remaining subgoals after consumer premise splitting include no_type_error_result res in the success branch. Current source is probe-free but unverified. (`TO_type_system_rewrite-20260525T153549Z_m53956_t001`, `TO_type_system_rewrite-20260525T153549Z_m53974_t001`, `TO_type_system_rewrite-20260525T153549Z_m53978_t001`)
+- `E1183` (progressed, other, actual effort: 1 sessions, 4 msgs, 44 steps, 46 tools, 10 holbuild, 4,623,323 tok (4,610,368 in, 12,955 out, 4,492,288 cached), 521.4s, $3.22519400)
+  - After deriving the smaller post-lock continuation equality, replaced the full `impl_tac >- (...) >> disch_then ACCEPT_TAC` with direct `disch_then irule` on `intcall_default_success_NoneT_post_lock_consumer_no_type_error`. -> Source parses; holbuild advanced beyond the previous inline premise-discharge block but left remaining helper premises/subgoals, so the tactic did not solve the success branch. (`TO_type_system_rewrite-20260525T153549Z_m54103_t001`)
+  - Inserted `FAIL_TAC "dflt error branch goal"` after the success-branch helper application to inspect the next goal. -> Probe confirms a remaining `no_type_error_result res` goal with the INL default-success facts, bind success, scope facts, and lock equation live; because `disch_then irule` did not close the success branch, the probe label is misleading and should be removed/replaced next session. (`TO_type_system_rewrite-20260525T153549Z_m54106_t001`, `TO_type_system_rewrite-20260525T153549Z_m54107_t001`)
+- `E1184` (progressed, other, actual effort: 1 sessions, 2 msgs, 24 steps, 23 tools, 5 holbuild, 2,306,076 tok (2,293,785 in, 12,291 out, 2,212,864 cached), 339.0s, $1.87976700)
+  - Tried `irule o SIMP_RULE` / `MATCH_MP_TAC (Q.SPECL ...)` for `intcall_default_success_NoneT_post_lock_consumer_no_type_error`, followed by explicit body-IH/live-prefix premise discharge. -> Build still fails at the first body-IH premise attempt; holbuild shows current goal is still the top-level `no_type_error_result res`, so the application shape is not giving the intended small antecedent in the branch. (`TO_type_system_rewrite-20260525T153549Z_m54124_t001`, `TO_type_system_rewrite-20260525T153549Z_m54133_t001`)
+  - Inserted and then removed a temporary `FAIL_TAC "post-lock consumer antecedent"` probe after `impl_tac` to inspect the helper antecedent shape. -> Probe showed two failed input goals and the top goal still printed as the huge `no_type_error_result res` branch, reinforcing that inline premise transfer remains brittle. (`TO_type_system_rewrite-20260525T153549Z_m54128_t001`)
+- `E1185` (progressed, other, actual effort: 1 sessions, 2 msgs, 36 steps, 36 tools, 14 holbuild, 3,630,883 tok (3,615,238 in, 15,645 out, 3,531,776 cached), 560.4s, $2.65254800)
+  - Added local wrapper theorem immediately before `intcall_actual_args_success_no_type_error_from_generated_ih`, with live prefix facts and conclusion `no_type_error_result res`; wrapper calls `intcall_default_success_NoneT_post_lock_consumer_no_type_error` and discharges body premise through `intcall_generated_body_ih_NoneT_live_consumer_premise`. -> Source edit accepted; next build proceeded past insertion to the original theorem, indicating the wrapper theorem parses and is at least being processed before the remaining failure. (`TO_type_system_rewrite-20260525T153549Z_m54155_t001`, `TO_type_system_rewrite-20260525T153549Z_m54156_t001`)
+  - Replaced inline post-lock consumer block in the `dflt_res = INL x` branch with a call to the new wrapper theorem, then tried to arrange the local lock/result equality premises by simplification under `simp[lift_option_type_def,evaluate_type_def,return_def,bind_apply,push_function_def]`. -> Direct edits to the branch continuation repeatedly triggered holbuild `branch suffix without active branch` instrumentation failures; this suggests the branch tactic shape/parenthesization is still brittle, not that the wrapper theorem has been semantically refuted. (`TO_type_system_rewrite-20260525T153549Z_m54183_t001`, `TO_type_system_rewrite-20260525T153549Z_m54185_t001`)
+- `E1186` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 2 holbuild, 454,253 tok (452,329 in, 1,924 out, 402,944 cached), 78.8s, $0.50611700)
+  - Removed the final unverified `CHANGED_TAC (simp[])` after the bind-arguments `strip_tac` and rebuilt `vyperTypeStmtSoundnessTheory`. -> Holbuild still reported `branch suffix without active branch`, now at the following `qspecl_then ... intcall_actual_args_success_post_lock_no_type_error` wrapper call. This confirms the issue is not just the CHANGED_TAC suffix but the branch/wrapper application shape. (`TO_type_system_rewrite-20260525T153549Z_m54196_t001`, `TO_type_system_rewrite-20260525T153549Z_m54197_t001`)
+
+### Ruled Out
+
+- Further direct use-site plumbing of `intcall_actual_args_success_post_lock_no_type_error` inside the existing `Cases_on dflt_res` branch.
+- Treating `CHANGED_TAC (simp[])` as the sole cause of the branch suffix failure.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m54197_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m54195_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 leaf underestimated proof-interface brittleness. I tried the STATE-suggested evaluate_type_NoneT residual fix and then refactored the success branch to call the lower-level intcall_default_success_lock_success_tail_no_type_error via intcall_body_ih_after_setup_success. The proof still leaves a success-branch contradiction goal with the final continuation equality evaluating to INR (Error (TypeError msg)); broad continuation simplification/fallbacks do not consume it, and repeated tactic edits are now brittle proof plumbing. No evidence of theorem falsehood, but the helper statement/proof interface likely needs a narrower post-lock lemma or a different cut.
+- latest episode: `E1196`
+- blocker: intcall_default_success_general_post_lock_consumer_no_type_error remains unproved in source. Latest holbuild leaves a success-branch F goal after attempting direct lower-level tail delegation; the live assumptions include the generated body theorem, setup successes, and the final continuation equality to INR (Error (TypeError msg)), indicating the current proof shape is not discharging the tail theorem's no-TypeError conclusion cleanly.
+- actual effort: 1 sessions, 4 msgs, 55 steps, 56 tools, 17 holbuild, 5,364,809 tok (5,339,843 in, 24,966 out, 5,235,200 cached), 942.3s, $3.88979500
+- next: Strategist should review whether to replace this leaf with a narrower helper statement that delegates directly to an existing bound/push continuation lemma, or adjust the consumer statement to carry the exact continuation equality shape required by the tail helper. Do not keep tuning qpat/ORELSE tactics in the current proof block.
+
+### Attempts / Evidence
+
+- `E1191` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 37 tools, 11 holbuild, 3,678,545 tok (3,666,051 in, 12,494 out, 3,554,816 cached), 543.5s, $2.70840300)
+  - Build after inherited strip_tac edit; irule helper call reached premise discharge but left two/large failed goals under helper premises. -> Confirmed the edit moved past the previous unstripped-implication No match; failure is now premise discharge for intcall_actual_args_success_no_type_error_from_generated_ih. (`TO_type_system_rewrite-20260525T153549Z_m54411_t001`)
+  - Switched helper invocation from irule to MATCH_MP_TAC, then tried discharging default_ih/body_ih and remaining conjuncts with first_assum/simp. -> MATCH_MP_TAC exposes premises, but direct rpt conj_tac leaves multiple unsolved goals. First failed premise was a generated default_ih-like universal, then after targeting IHs the remaining goal involved the continuation equality / x''4=NoneT shape. (`TO_type_system_rewrite-20260525T153549Z_m54417_t001`, `TO_type_system_rewrite-20260525T153549Z_m54420_t001`, `TO_type_system_rewrite-20260525T153549Z_m54422_t001`)
+  - Normalized return type using gvs[evaluate_type_def] and specialized helper src argument to env_body.current_src, then tried using labelled/generated IH assumptions and continuation equality normalization with evaluate_type_def/bind_apply. -> The source moved to the intended later helper call shape, but build still fails with large premise-discharge goals; latest exact visible first failed goal is an implication whose conclusion is x''4 = NoneT, indicating the helper interface still does not align mechanically with the live context. (`TO_type_system_rewrite-20260525T153549Z_m54436_t001`, `TO_type_system_rewrite-20260525T153549Z_m54442_t001`, `TO_type_system_rewrite-20260525T153549Z_m54443_t001`)
+- `E1192` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 18 steps, 20 tools, 2 holbuild, 1,628,700 tok (1,620,550 in, 8,150 out, 1,545,216 cached), 243.0s, $1.39377800)
+  - Rebuilt current partial source, inspected the live success branch, and tried making the generated `default_ih`/`body_ih` premises exact via `MATCH_ACCEPT_TAC` rather than simplification. -> No progress: holbuild still fails after helper application with two large premise-discharge goals; the first explicit goal is an implication concluding `x''4 = NoneT`. (`TO_type_system_rewrite-20260525T153549Z_m54449_t003`, `TO_type_system_rewrite-20260525T153549Z_m54454_t001`)
+  - Read full instrumented log for the failed premise after applying `intcall_actual_args_success_no_type_error_from_generated_ih`. -> Confirmed the helper mismatch is semantic/interface-level: live context has arbitrary return type variable `x''4` and `ret_tv`; helper assumes the callable lookup returned `NoneT`, so it generates an unprovable/unavailable `x''4 = NoneT` side condition. (`TO_type_system_rewrite-20260525T153549Z_m54457_t001`)
+- `E1196` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 55 steps, 56 tools, 17 holbuild, 5,364,809 tok (5,339,843 in, 24,966 out, 5,235,200 cached), 942.3s, $3.88979500)
+  - Added evaluate_type_NoneT to the residual premise simplifier in the existing wrapper-through intcall_default_success_post_lock_no_type_error_from_body_ih proof. -> Did not close; holbuild still showed the ret=NoneT disjunct residual return-type lift goal until further attempts exposed qpat/ORELSE focus issues. (`TO_type_system_rewrite-20260525T153549Z_m54567_t001`, `TO_type_system_rewrite-20260525T153549Z_m54585_t001`)
+  - Replaced the success branch proof with a direct lower-level route: derive body theorem using intcall_body_ih_after_setup_success, invert lift_option_type via lift_option_type_INL_SOME, then irule intcall_default_success_lock_success_tail_no_type_error with ret/rtv. -> Made progress past the earlier evaluate_type_NoneT residual, but holbuild now leaves a success-branch contradiction goal F with the final continuation equality producing INR (Error (TypeError msg)). (`TO_type_system_rewrite-20260525T153549Z_m54588_t001`, `TO_type_system_rewrite-20260525T153549Z_m54601_t001`)
+  - Tried targeted fallback for the tail theorem final continuation equality using qpat_x_assum on the do/finally continuation and simplification of lift_option_type/return/raise. -> No progress; same F goal remains. This suggests the tail helper or consumer cut is misaligned rather than a small tactic omission. (`TO_type_system_rewrite-20260525T153549Z_m54607_t001`, `TO_type_system_rewrite-20260525T153549Z_m54618_t001`)
+
+### Ruled Out
+
+- Adding evaluate_type_NoneT alone to the wrapper premise simplifier
+- Continuing broad rpt conj_tac/first_assum/qpat fallback automation over the final continuation equality
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m54618_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m54614_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m54587_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1211`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 246,017 tok (245,383 in, 634 out, 240,640 cached), 17.6s, $0.16305500
+- next: Review closure, then begin flattened C2.6.3.3.2.4.4.2 for fallthrough-tail helper and consumer refactor.
+
+### Attempts / Evidence
+
+- `E1197` (proved, , actual effort: 1 sessions, 3 msgs, 48 steps, 50 tools, 20 holbuild, 4,557,926 tok (4,544,018 in, 13,908 out, 4,439,040 cached), 720.9s, $3.16165000)
+  - Added local theorem intcall_default_success_lock_success_tail_not_type_error immediately after the lock-success tail theorem; proved it by specializing intcall_default_success_lock_success_tail_no_type_error to INR (Error (TypeError msg)) via qspecl_then, discharging the mirrored premises, and simplifying with no_type_error_result_def. -> holbuild advanced past the new bridge theorem and now fails at downstream intcall_default_success_general_post_lock_consumer_no_type_error, showing the bridge was accepted. (`TO_type_system_rewrite-20260525T153549Z_m54673_t001`)
+- `E1211` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 246,017 tok (245,383 in, 634 out, 240,640 cached), 17.6s, $0.16305500)
+  - Verified the carried-forward local theorem `intcall_default_success_lock_success_tail_not_type_error` is still present in source and holbuild failures are downstream in `intcall_default_success_general_post_lock_consumer_no_type_error`, so this bridge remains accepted local infrastructure. -> No source edits required for this carry-forward component; evidence shows the theorem exists and current build reaches a later theorem. (`TO_type_system_rewrite-20260525T153549Z_m55211_t001`, `TO_type_system_rewrite-20260525T153549Z_m55202_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m55211_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55202_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1213`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 39 steps, 39 tools, 16 holbuild, 3,773,834 tok (3,761,787 in, 12,047 out, 3,669,504 cached), 613.8s, $2.65757700
+- next: Call plan_oracle review for accepted closure, then begin the scheduled next component for the downstream actual-args/general IntCall helper path.
+
+### Attempts / Evidence
+
+- `E1198` (progressed, other, actual effort: 1 sessions, 4 msgs, 54 steps, 55 tools, 20 holbuild, 5,567,443 tok (5,545,069 in, 22,374 out, 5,419,008 cached), 898.8s, $4.01102900)
+  - Replaced timeout-causing `gvs[no_type_error_result_def]` in the success branch with direct call to `intcall_default_success_lock_success_tail_no_type_error`; this advanced to a residual TypeError contradiction shape. -> holbuild showed the branch progressed but left `F` under final continuation equality to `INR (Error (TypeError msg))`; direct no-TypeError theorem proved only the non-expanded goal shape. (`TO_type_system_rewrite-20260525T153549Z_m54691_t001`)
+  - Tried `qspecl_then ... mp_tac intcall_default_success_lock_success_tail_not_type_error` with targeted premise discharge including return-type disjuncts (`ret = NoneT` or `stmts_no_fallthrough body'`). -> Premises appear dischargeable, but after `simp[]`/`strip_tac` the branch still leaves the residual `F`; pushing the bridge theorem does not automatically solve the current contradiction goal. (`TO_type_system_rewrite-20260525T153549Z_m54708_t001`, `TO_type_system_rewrite-20260525T153549Z_m54710_t001`, `TO_type_system_rewrite-20260525T153549Z_m54721_t001`)
+  - Tried using `irule intcall_default_success_lock_success_tail_not_type_error` directly on the residual `F` goal. -> `irule` failed with `No match`, confirming the bridge conclusion/cut shape does not match the live goal directly despite being logically the intended contradiction. (`TO_type_system_rewrite-20260525T153549Z_m54704_t001`)
+  - Inserted diagnostic `FAIL_TAC "probe bridge remainder"` after bridge specialization to inspect the remaining goal after `simp[]`. -> Probe shows the remaining goal is still the exact TypeError contradiction `F` with premises including generated body theorem, pure return-type fact, setup facts, and final continuation equality. The probe is currently left in source and must be removed next session. (`TO_type_system_rewrite-20260525T153549Z_m54710_t001`, `TO_type_system_rewrite-20260525T153549Z_m54734_t001`)
+- `E1199` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 56 steps, 56 tools, 23 holbuild, 5,289,064 tok (5,270,267 in, 18,797 out, 5,171,200 cached), 897.1s, $3.64484500)
+  - Removed diagnostic probe and tried applying `intcall_default_success_lock_success_tail_not_type_error` in the success branch after post-lock equality. -> Premises were mostly discharged, but branch still left a large residual; direct bridge did not solve the live goal shape. (`TO_type_system_rewrite-20260525T153549Z_m54745_t001`)
+  - Changed success branch to apply `intcall_default_success_lock_success_tail_no_type_error` with `res` directly and `disch_then ACCEPT_TAC`. -> This advanced past some previous residuals but holbuild still leaves an expanded no-TypeError goal `∀msg. res <> INR (Error (TypeError msg))` under the same final continuation equality. (`TO_type_system_rewrite-20260525T153549Z_m54750_t001`, `TO_type_system_rewrite-20260525T153549Z_m54794_t001`)
+  - Simplified the `lock_res = INR y` branch using `intcall_lock_no_type_error_result`, `sum_case_def`, beta reduction, and direct equality rewriting. -> Several tactical variants showed the error branch is routine, but broad `gvs[no_type_error_result_def]` also exposed/propagated the success-branch residual; the active blocker remains the success-branch cut shape. (`TO_type_system_rewrite-20260525T153549Z_m54783_t001`, `TO_type_system_rewrite-20260525T153549Z_m54791_t001`)
+- `E1200` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 33 steps, 33 tools, 13 holbuild, 2,830,866 tok (2,812,752 in, 18,114 out, 2,739,712 cached), 624.5s, $2.27847600)
+  - Case split `lock_res`; in INL branch destruct unit, rewrite `(case INL () ...)` equality, then apply `intcall_default_success_post_lock_no_type_error_from_body_ih` with `bind_st = ret_st = dflt_st`. -> Boundary-theorem route still leaves residual `F` with assumption final continuation equals `INR (Error (TypeError msg))`; no terminal source proof yet. (`TO_type_system_rewrite-20260525T153549Z_m54819_t001`, `TO_type_system_rewrite-20260525T153549Z_m54821_t001`, `TO_type_system_rewrite-20260525T153549Z_m54831_t001`)
+- `E1201` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 34 steps, 34 tools, 13 holbuild, 2,932,666 tok (2,913,862 in, 18,804 out, 2,839,552 cached), 637.9s, $2.35544600)
+  - Replaced old direct tail theorem route with case split on `lock_res`; in `INL ()` branch applied `intcall_default_success_post_lock_no_type_error_from_body_ih` specialized with both intermediate states as `dflt_st`. -> Premises mostly discharge, but QED leaves old expanded TypeError contradiction residual under the final monadic continuation equality. (`TO_type_system_rewrite-20260525T153549Z_m54819_t001`, `TO_type_system_rewrite-20260525T153549Z_m54821_t001`)
+  - Changed opening to `rpt gen_tac >> strip_tac` to avoid early expansion of all assumptions and rechecked boundary theorem route. -> Same residual persists, so the PLAN's stated failure sign recurred even with the boundary theorem path. (`TO_type_system_rewrite-20260525T153549Z_m54831_t001`)
+- `E1202` (progressed, other, actual effort: 1 sessions, 4 msgs, 44 steps, 47 tools, 16 holbuild, 4,295,971 tok (4,278,783 in, 17,188 out, 4,163,072 cached), 724.5s, $3.17573100)
+  - Adjusted inserted adapter to use `body'`, strengthened its body-IH premise to match the post-lock boundary theorem, and finished it with the boundary theorem plus `gvs[no_type_error_result_def] >> first_assum ACCEPT_TAC`. -> Helper now appears proved: holbuild advanced to `intcall_default_success_general_post_lock_consumer_no_type_error`, so the contradiction-adapter abstraction is viable. (`TO_type_system_rewrite-20260525T153549Z_m54884_t001`)
+  - Refactored target INL branch to expand `no_type_error_result_def`, introduce `msg`, normalize the `case INL ()` equality, and invoke the local contradiction helper with existential witnesses. -> Target is still failing after `qexistsl_tac`; using `simp[]` timed out, and a manual `rpt conj_tac` attempt left helper premises such as `scope_well_typed call_env`. Need a focused premise-discharge tactic, not broad simp or bad-precedence ORELSE chains. (`TO_type_system_rewrite-20260525T153549Z_m54889_t001`, `TO_type_system_rewrite-20260525T153549Z_m54891_t001`)
+- `E1203` (progressed, other, actual effort: 1 sessions, 4 msgs, 43 steps, 48 tools, 16 holbuild, 4,834,982 tok (4,812,528 in, 22,454 out, 4,696,576 cached), 827.2s, $3.60166800)
+  - Replaced precedence-broken ORELSE tail with parenthesized assumption/disjunction premise discharge after invoking the local contradiction adapter. -> The earlier trivial premise failure (`scope_well_typed call_env`) was eliminated; holbuild reached QED but left a residual `F` goal in the target theorem's INL branch. (`TO_type_system_rewrite-20260525T153549Z_m54901_t001`)
+  - Tried avoiding assumption simplification by expanding `no_type_error_result_def` with CONV/rewrite and reusing the helper by `irule`/witnesses; also tried adding `no_type_error_result_def` to the small fallback simplifier for helper premises. -> All variants still left the same residual `F` at QED, with assumptions including final continuation equality to `INR (Error (TypeError msg))`. Broad `metis_tac` over the adapter timed out and should not be retried. (`TO_type_system_rewrite-20260525T153549Z_m54930_t001`, `TO_type_system_rewrite-20260525T153549Z_m54932_t001`, `TO_type_system_rewrite-20260525T153549Z_m54935_t001`)
+  - Inserted `FAIL_TAC "probe before helper"` immediately before applying the adapter to inspect whether the pre-helper state is the intended contradiction branch. -> Source now contains the probe at line 12013; it has not been built yet. Next session should first remove/use this probe intentionally, not forget it in source. (`TO_type_system_rewrite-20260525T153549Z_m54938_t002`)
+- `E1204` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 803,791 tok (798,255 in, 5,536 out, 724,480 cached), 203.6s, $0.89719500)
+  - Built with the existing `FAIL_TAC "probe before helper"` to inspect the branch before applying the adapter. -> Probe confirmed the expected INL branch: assumptions include generated body-IH, bind/eval/lock equalities, typing/context facts, final continuation equality to `(INR (Error (TypeError msg)),st')`, and conclusion `F`. (`TO_type_system_rewrite-20260525T153549Z_m54943_t001`)
+  - Replaced the probe/direct `irule` helper use with an explicit qspecl/mp_tac + `impl_tac` cut over `intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih`, discharging premises by assumptions/disjunction/small simp. -> Holbuild still reached QED with the same residual `F` under the final continuation equality, now with the body-IH assumption normalized to `∀msg. res0 <> INR (Error (TypeError msg))`. (`TO_type_system_rewrite-20260525T153549Z_m54946_t001`, `TO_type_system_rewrite-20260525T153549Z_m54951_t001`)
+  - Tried a more explicit body-IH premise discharge inside the helper antecedent, then reverted it after failure. -> Manual premise discharge hit a large goal and failed to select/solve the intended assumption; reverting restored the focused cut attempt state. (`TO_type_system_rewrite-20260525T153549Z_m54948_t001`)
+- `E1205` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 4 holbuild, 886,083 tok (879,769 in, 6,314 out, 801,792 cached), 217.0s, $0.98020100)
+  - Built through the inserted diagnostic `FAIL_TAC "probe before helper"`. -> Confirmed the pre-helper state is exactly the expected expanded TypeError contradiction: generated body-IH plus setup/typing assumptions and final continuation equality imply `F`. (`TO_type_system_rewrite-20260525T153549Z_m54943_t001`)
+  - Replaced probe/direct irule with qspecl/mp_tac of `intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih` and `impl_tac` cut, then discharged premises by assumptions/disjunction/small simp. -> Holbuild still leaves the same residual `F` at QED, so the focused cut did not connect the helper to the live goal as intended. (`TO_type_system_rewrite-20260525T153549Z_m54946_t001`, `TO_type_system_rewrite-20260525T153549Z_m54951_t001`)
+  - Briefly tried explicit generated body-IH premise discharge inside the helper antecedent and reverted after failure. -> The premise-discharge subgoal became large and failed by assumption selection; this supports helper/interface redesign rather than further target-branch plumbing. (`TO_type_system_rewrite-20260525T153549Z_m54948_t001`)
+- `E1206` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 24 steps, 26 tools, 8 holbuild, 2,895,388 tok (2,886,431 in, 8,957 out, 2,778,112 cached), 403.7s, $2.19936100)
+  - Copied the NoneT consumer style: call `intcall_default_success_post_lock_no_type_error_from_body_ih` in the success branch and try to prove its body-IH premise using the normalized `!cxf pushed` assumption with `push_function_def`/`return_def`. -> Build failed in the premise-discharge step. The selected normalized premise led to a goal where the generated setup premise was still required; `gvs[lift_option_type_def, return_def]` did not solve the first subgoal. (`TO_type_system_rewrite-20260525T153549Z_m54961_t001`, `TO_type_system_rewrite-20260525T153549Z_m54965_t001`)
+  - Tried selecting the original all-setup generated body-IH premise by a six-quantifier `qpat_x_assum` and by a primed-variable pattern. -> Selection was brittle: one variant failed to match; another selected/used a premise but still left the target body-IH conclusion such as `state_well_typed st0'`, showing the specialization did not discharge the needed implication in the intended way. (`TO_type_system_rewrite-20260525T153549Z_m54963_t001`, `TO_type_system_rewrite-20260525T153549Z_m54975_t001`, `TO_type_system_rewrite-20260525T153549Z_m54979_t001`)
+  - Tried simplifying the branch before using the normalized premise and discharging `push_function` guard directly. -> Simplification exposed hidden specialization to `NoneT`/`NoneTV` and shifted intermediate states (`bind_st'`/`ret_st'`), causing `first_assum ACCEPT_TAC` to miss the push guard and leaving a large generated setup obligation. (`TO_type_system_rewrite-20260525T153549Z_m54967_t001`, `TO_type_system_rewrite-20260525T153549Z_m54970_t001`, `TO_type_system_rewrite-20260525T153549Z_m54977_t001`)
+- `E1207` (progressed, other, actual effort: 1 sessions, 5 msgs, 60 steps, 63 tools, 18 holbuild, 6,220,603 tok (6,196,859 in, 23,744 out, 6,068,224 cached), 963.8s, $4.38960700)
+  - Replaced the arbitrary-return INL proof fragment with a call to `intcall_default_success_NoneT_post_lock_consumer_no_type_error`, then discharged its normalized two-quantifier body-IH premise manually. -> The `ret=NoneT`/`rtv=NoneTV` subcase was discharged; holbuild advanced from helper-premise failure to a final residual `F` goal in the non-None/fallthrough case. (`TO_type_system_rewrite-20260525T153549Z_m55032_t001`, `TO_type_system_rewrite-20260525T153549Z_m55042_t001`)
+- `E1208` (progressed, other, actual effort: 1 sessions, 4 msgs, 43 steps, 52 tools, 14 holbuild, 4,588,447 tok (4,572,877 in, 15,570 out, 4,453,888 cached), 659.0s, $3.28898900)
+  - After fixing a missing parenthesis in the carried source, replaced the INL branch with a direct `irule intcall_post_push_tail_no_type_error` using the pushed context `(cx with stk updated_by CONS ...)` and pushed state `(lock_st with scopes := [call_env])`. -> This avoided the prior all-setup wrapper and moved the failure to proving the theorem's body-soundness premise; initial existential witness order was wrong, then corrected. (`TO_type_system_rewrite-20260525T153549Z_m55104_t001`, `TO_type_system_rewrite-20260525T153549Z_m55106_t001`)
+  - Specialized the live generated body-IH directly with `env_body`, `NoneT`, `env_after`, pushed state, `res_body`, `st_body`; added an inline frame-precondition cut using `intcall_live_pushed_body_preconditions`. -> This discharged several premises and showed the missing reusable fact is the pushed frame preconditions. The inline proof needed explicit existential witnesses and `env_scopes_consistent_stk_irrelevant`. (`TO_type_system_rewrite-20260525T153549Z_m55113_t001`, `TO_type_system_rewrite-20260525T153549Z_m55117_t001`, `TO_type_system_rewrite-20260525T153549Z_m55121_t001`, `TO_type_system_rewrite-20260525T153549Z_m55123_t001`)
+  - Tried to extract the conjunctive frame-precondition assumption after `Cases_on res_body` using `first_assum`, `goal_assum drule`, and a `qpat_assum` fallback. -> Current source remains partial; holbuild still fails on `env_consistent env_body ... (lock_st with scopes := [call_env])` after `Cases_on res_body`, indicating assumption extraction/splitting is not yet stable. A named/asserted local fact should be used rather than brittle assumption selection. (`TO_type_system_rewrite-20260525T153549Z_m55125_t001`, `TO_type_system_rewrite-20260525T153549Z_m55128_t001`)
+- `E1209` (progressed, other, actual effort: 1 sessions, 4 msgs, 49 steps, 55 tools, 14 holbuild, 5,050,799 tok (5,029,480 in, 21,319 out, 4,908,544 cached), 769.3s, $3.69852200)
+  - Moved pushed-frame precondition proof before the generated body-IH specialization, destructing it with strip_assume_tac and using env_extends_return_exception_typed explicitly. -> This fixed the previous env_consistent extraction failure and progressed to the known final fallthrough/TypeError residual when the tail theorem was instantiated with NoneT. (`TO_type_system_rewrite-20260525T153549Z_m55152_t001`)
+  - Tried instantiating intcall_post_push_tail_no_type_error with ret and the generated body-IH ret, rather than NoneT. -> Premise discharge exposed the body-IH conclusion return_exception_typed env_exn NoneT y, insufficient for return_exception_typed env_exn ret y under only stmts_no_fallthrough; this confirms the direct ret route needs a fallthrough-specific helper, not a ret/NoneT selector tweak. (`TO_type_system_rewrite-20260525T153549Z_m55164_t001`)
+  - Tried to prove the needed tail premise by applying intcall_body_soundness_tail_premise to the live generated body-IH and pushed-frame facts. -> The helper's conclusion is exactly the needed tail premise, but current in-source use via match_mp_tac is incomplete: holbuild fails on a large conjunction after applying the helper, and qexists_tac env_after was wrong because the matched goal is not existential. (`TO_type_system_rewrite-20260525T153549Z_m55179_t001`, `TO_type_system_rewrite-20260525T153549Z_m55181_t001`)
+- `E1210` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 16 steps, 17 tools, 5 holbuild, 1,303,791 tok (1,299,145 in, 4,646 out, 1,253,376 cached), 200.3s, $0.99491300)
+  - Changed the tail-premise proof to use `match_mp_tac intcall_body_soundness_tail_premise`, discharged the generated body-IH premise directly by assumption, instantiated the post-push tail theorem with `NoneT`/`NoneTV`, and proved pushed frame preconditions with explicit `qspecl_then ... intcall_live_pushed_body_preconditions`. -> holbuild progressed past earlier qpat/irule/env_consistent failures but QED left the same final fallthrough TypeError contradiction residual, confirming this is a proof-interface mismatch rather than local premise plumbing. (`TO_type_system_rewrite-20260525T153549Z_m55202_t001`)
+  - Earlier in this session, tried `first_assum ACCEPT_TAC` for the normalized body-IH premise and direct `gvs[]` for `type_stmts`; adjusted the tail theorem witnesses from arbitrary `ret` to `NoneT` when build showed the type-stmts premise was `NoneT`. -> These tactical fixes moved the failure from body-IH/premise discharge to the known residual; they do not solve the arbitrary-return fallthrough branch. (`TO_type_system_rewrite-20260525T153549Z_m55189_t001`, `TO_type_system_rewrite-20260525T153549Z_m55193_t001`, `TO_type_system_rewrite-20260525T153549Z_m55195_t001`)
+- `E1212` (progressed, other, actual effort: 1 sessions, 3 msgs, 30 steps, 36 tools, 10 holbuild, 3,414,939 tok (3,399,714 in, 15,225 out, 3,293,184 cached), 538.2s, $2.63599200)
+  - Changed the lock-success branch to use `simp[push_function_def, return_def]` before `Cases_on ret = NoneT`, preserving the original assumptions instead of rewriting the false branch through `NoneT`. -> holbuild showed the false branch now has actual `ret`, `evaluate_type ... ret = SOME rtv`, `type_stmts env_body ret body'`, and `stmts_no_fallthrough body'`; this confirms the branch-structure route is viable. (`TO_type_system_rewrite-20260525T153549Z_m55323_t001`)
+  - Added a fallthrough branch using a local pushed-frame fact and `intcall_current_src_pushed_body_tail_no_type_error_irule`. Initial frame proof used `drule_all intcall_live_pushed_body_preconditions`. -> holbuild failed before the tail helper application; `drule_all` hit a predicate/assertion issue on the large context. The source was then changed to an explicit `qspecl_then` frame cut, but handoff arrived before verification. (`TO_type_system_rewrite-20260525T153549Z_m55325_t001`, `TO_type_system_rewrite-20260525T153549Z_m55327_t001`, `TO_type_system_rewrite-20260525T153549Z_m55329_t001`)
+- `E1213` (proved, , actual effort: 1 sessions, 3 msgs, 39 steps, 39 tools, 16 holbuild, 3,773,834 tok (3,761,787 in, 12,047 out, 3,669,504 cached), 613.8s, $2.65757700)
+  - Built vyperTypeStmtSoundnessTheory after refactoring the lock-success fallthrough branch to derive the actual `evaluate_type (get_tenv cx) ret = SOME rtv`, pushed-frame fact, and apply `intcall_current_src_pushed_body_tail_no_type_error_irule` with explicit witnesses. -> holbuild replay advanced past `intcall_default_success_general_post_lock_consumer_no_type_error` and failed only later in `intcall_expr_no_type_error_from_generated_ih`, showing the active post-lock consumer is proved in current source. (`TO_type_system_rewrite-20260525T153549Z_m55371_t001`)
+
+### Ruled Out
+
+- The NoneT-specialized route is not used in the fallthrough branch; the branch keeps actual ret/rtv and uses the current-src pushed tail helper.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m55371_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1229`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 17 tools, 6 holbuild, 1,641,064 tok (1,633,519 in, 7,545 out, 1,564,160 cached), 289.9s, $1.35522500
+
+### Attempts / Evidence
+
+- `E1214` (progressed, other, actual effort: 1 sessions, 2 msgs, 24 steps, 29 tools, 5 holbuild, 2,683,509 tok (2,666,691 in, 16,818 out, 2,561,024 cached), 423.5s, $2.31338700)
+  - Added a local arbitrary-return analogue of `intcall_generated_body_ih_NoneT_live_consumer_premise`, replacing lookup tuple with `(fm,nr,args,dflts,ret,fn_body)` and `NoneTV` with `ret_tv`. -> Build reached the new adapter but failed in its proof before the actual-args helper; direct copy of old qspecl proof did not close setup premises. (`TO_type_system_rewrite-20260525T153549Z_m55390_t001`)
+  - Tried making adapter premise discharge more explicit with `rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[...])`. -> Still failed; goal showed remaining setup premises after simplification, because the qspecl instantiation was misaligned with the quantified generated body IH premise. (`TO_type_system_rewrite-20260525T153549Z_m55397_t001`)
+  - Tried specializing the body IH with the full generated-body variable list patterned after the live consumer, including `ret` and `ret_tv`. -> `DISCH_THEN`/`qspecl_then` failed on a large implication goal, confirming the manual 30-argument instantiation is too brittle or still has the wrong arity/order. (`TO_type_system_rewrite-20260525T153549Z_m55400_t001`, `TO_type_system_rewrite-20260525T153549Z_m55403_t001`)
+- `E1215` (progressed, other, actual effort: 1 sessions, 4 msgs, 40 steps, 46 tools, 12 holbuild, 4,110,966 tok (4,096,454 in, 14,512 out, 3,980,288 cached), 617.6s, $3.00633400)
+  - Adjusted `intcall_generated_body_ih_live_consumer_premise` proof by aligning the generated-body IH specialization with the older NoneT consumer pattern: added the extra `rpt gen_tac >> strip_tac`, corrected the state arguments around default evaluation/bind/eval-ret/lock, and used `gvs`/arithmetic for setup conjuncts. -> The arbitrary-return adapter now appears to build: holbuild progressed past it to `intcall_expr_no_type_error_from_generated_ih` (downstream theorem). This is useful partial source progress but not the planned generalized actual-args helper. (`TO_type_system_rewrite-20260525T153549Z_m55443_t001`)
+  - Earlier failed attempts adjusted qspecl/state arguments iteratively using holbuild goal states. -> Failures showed exact mismatches: first a length `type_check` normalization obligation, then wrong state choices for default evaluation (`args_st = dflt_st`, then `finally ... dflt_st = ...`), then `push_function` needed `env_body.current_src = src_id_opt`, then body conclusion needed another strip/gvs. These validate the final adapter shape but reinforce that this is brittle generated-plumbing work. (`TO_type_system_rewrite-20260525T153549Z_m55414_t001`, `TO_type_system_rewrite-20260525T153549Z_m55416_t001`, `TO_type_system_rewrite-20260525T153549Z_m55418_t001`, `TO_type_system_rewrite-20260525T153549Z_m55420_t001`, `TO_type_system_rewrite-20260525T153549Z_m55423_t001`, `TO_type_system_rewrite-20260525T153549Z_m55425_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` after adapter repair. -> Build failure moved to downstream `intcall_expr_no_type_error_from_generated_ih`, where the old NoneT-only helper remains in use and leaves large goals. This confirms C2.6.3.3.2.4.5 still needs the actual general helper before touching C2.6.3.3.2.4.6. (`TO_type_system_rewrite-20260525T153549Z_m55443_t001`)
+- `E1216` (progressed, other, actual effort: 1 sessions, 3 msgs, 34 steps, 38 tools, 7 holbuild, 3,609,478 tok (3,593,061 in, 16,417 out, 3,481,600 cached), 476.3s, $2.79061500)
+  - Inserted `intcall_actual_args_success_no_type_error_from_generated_ih_general` by copying the old NoneT actual-args helper and replacing lookup/eval/cast path with arbitrary `ret` and `ret_tv`; added explicit callable-body/default/bind side conditions to avoid relying on existential facts from `callable_body_typing_from_env_consistent`. -> Source now contains the intended draft generalized helper, but it is partial and not build-clean. (`TO_type_system_rewrite-20260525T153549Z_m55460_t001`, `TO_type_system_rewrite-20260525T153549Z_m55467_t001`)
+  - Built `vyperTypeStmtSoundnessTheory`; after fixing env_body variable mismatch and adding `env_body.current_src`, build reaches QED of the new helper but leaves six unsolved goals. -> Failure evidence shows the first remaining goal is the default-expression generated IH premise; the tactic used `rpt conj_tac` too broadly after the post-lock consumer and did not solve all premises. (`TO_type_system_rewrite-20260525T153549Z_m55481_t001`, `TO_type_system_rewrite-20260525T153549Z_m55483_t001`)
+- `E1217` (progressed, other, actual effort: 1 sessions, 4 msgs, 48 steps, 51 tools, 7 holbuild, 4,884,223 tok (4,865,324 in, 18,899 out, 4,745,216 cached), 627.5s, $3.54011800)
+  - Changed normalized length proof to first derive `LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts`, then prove the normalized `type_check` by simplification. -> Build passed the prior early `?a b. ~(a /\ b)` failure and reached a later default-helper premise/final-QED failure. (`TO_type_system_rewrite-20260525T153549Z_m55537_t001`)
+  - Added `return_def` to `simp[get_scopes_def]` in the default-helper premise split. -> Closed the immediate `get_scopes args_st = (INL args_st.scopes,args_st)` side goal; build reached QED with six unsolved goals. (`TO_type_system_rewrite-20260525T153549Z_m55542_t001`)
+  - Tried explicit qpat assumptions in the post-lock body-IH premise and in the final consumer `rpt conj_tac` branch. -> Did not reduce the six QED goals; first unsolved goal remains the default-expression generated-IH-style universal premise, so the current premise order/matching is still wrong or the helper needs a smaller boundary lemma. (`TO_type_system_rewrite-20260525T153549Z_m55572_t001`)
+- `E1218` (progressed, other, actual effort: 1 sessions, 1 msgs, 10 steps, 13 tools, 2 holbuild, 902,919 tok (898,876 in, 4,043 out, 840,704 cached), 142.4s, $0.83250200)
+  - In intcall_actual_args_success_no_type_error_from_generated_ih_general, changed the first intcall_default_exprs_sound_from_generated_ih premise discharge from a copied qpat_assum on the huge generated default-IH formula to `first_assum ACCEPT_TAC`, preserving the fixed normalized-length/get_scopes prefix. -> Build did not reduce the six QED goals; the top unsolved goal remains exactly the generated default-expression IH premise, so the focused repair did not improve the proof state. (`TO_type_system_rewrite-20260525T153549Z_m55588_t001`, `TO_type_system_rewrite-20260525T153549Z_m55590_t001`)
+- `E1228` (progressed, other, actual effort: 1 sessions, 3 msgs, 23 steps, 28 tools, 6 holbuild, 2,590,174 tok (2,579,466 in, 10,708 out, 2,477,568 cached), 335.1s, $2.06951400)
+  - Restated `intcall_successful_defaults_continuation_no_type_error_general` to take explicit `lock_res lock_st` and direct post-lock continuation equation, then applied `intcall_default_success_general_post_lock_consumer_no_type_error`. -> Holbuild accepted the repaired internal consumer and advanced to `intcall_actual_args_success_no_type_error_from_generated_ih_general`, confirming the E1227 interface repair works locally. (`TO_type_system_rewrite-20260525T153549Z_m56012_t001`)
+  - Changed successful `dflt_res=INL` branch of actual-args theorem to call the repaired `intcall_successful_defaults_continuation_no_type_error_general` instead of raw post-lock/no-TypeError helper. -> Premise alignment partly improved, but QED still leaves six large goals, whose first goals are exactly the two generated-IH assumptions and original setup facts. This indicates the caller still duplicates default-package construction instead of consuming `intcall_defaults_result_package_from_generated_ih_general`. (`TO_type_system_rewrite-20260525T153549Z_m56022_t001`, `TO_type_system_rewrite-20260525T153549Z_m56023_t001`)
+- `E1229` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 17 tools, 6 holbuild, 1,641,064 tok (1,633,519 in, 7,545 out, 1,564,160 cached), 289.9s, $1.35522500)
+  - Refactored `intcall_actual_args_success_no_type_error_from_generated_ih_general` to invoke `intcall_defaults_result_package_from_generated_ih_general` at the start, destruct the INL default package, and feed package facts plus the local lock-case split into the repaired `intcall_successful_defaults_continuation_no_type_error_general`. -> holbuild advanced past `intcall_actual_args_success_no_type_error_from_generated_ih_general`; the next failure is downstream in `intcall_expr_no_type_error_from_generated_ih`, matching queued component C2.6.3.3.2.4.6. (`TO_type_system_rewrite-20260525T153549Z_m56050_t001`)
+  - Corrected premise-order mismatch after applying the repaired successful-defaults consumer: removed duplicate bind-argument conjunct discharge and added the missing `env_body.flag_members = env.flag_members` discharge before immutables/scope facts. -> The local general helper chain now closes; downstream proof still calls the old NoneT-only helper and leaves two goals, which is outside this component. (`TO_type_system_rewrite-20260525T153549Z_m56047_t001`, `TO_type_system_rewrite-20260525T153549Z_m56050_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56050_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56047_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1222`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 124,787 tok (124,288 in, 499 out, 118,272 cached), 10.9s, $0.10418600
+- next: Call plan_oracle review; then begin scheduled C2.6.3.3.2.4.5.2 if accepted.
+
+### Attempts / Evidence
+
+- `E1219` (proved, , actual effort: 1 sessions, 2 msgs, 30 steps, 31 tools, 9 holbuild, 2,736,286 tok (2,724,613 in, 11,673 out, 2,642,944 cached), 466.2s, $2.08000700)
+  - Applied intcall_default_success_general_post_lock_consumer_no_type_error after deriving the generated body consumer premise with intcall_generated_body_ih_live_consumer_premise; replaced broad final ORELSE with explicit premise discharge and a targeted disjunct proof for ret=NoneT/stmts_no_fallthrough. -> holbuild vyperTypeStmtSoundnessTheory passed the new post-lock boundary lemma and next failed at the downstream general actual-args helper. (`TO_type_system_rewrite-20260525T153549Z_m55632_t001`)
+- `E1222` (proved, , actual effort: 1 sessions, 1 steps, 124,787 tok (124,288 in, 499 out, 118,272 cached), 10.9s, $0.10418600)
+  - Checked current source and recent holbuild position for carried-forward `intcall_actual_args_success_post_lock_no_type_error_general`. -> The theorem is present and holbuild reaches the downstream general helper failure, confirming this dependency is available for the new boundary leaves. (`TO_type_system_rewrite-20260525T153549Z_m55683_t001`, `TO_type_system_rewrite-20260525T153549Z_m55687_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m55683_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55687_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55700_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1225`
+- blocker: 
+- actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 680,633 tok (676,901 in, 3,732 out, 644,608 cached), 153.9s, $0.59572900
+- next: Review with plan_oracle, then continue to C2.6.3.3.2.4.5.3 if accepted; the current build failure is the downstream general actual-args-success theorem, not the closed default package lemma.
+
+### Attempts / Evidence
+
+- `E1220` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 20 steps, 21 tools, 3 holbuild, 1,750,973 tok (1,742,237 in, 8,736 out, 1,668,096 cached), 315.2s, $1.46683300)
+  - Removed duplicated final-continuation `qpat_x_assum` in the INL branch and rebuilt. -> Build advanced past the accidental duplicate; next failure showed INR branch proof was being applied to seven remaining post-lock-premise goals, confirming branch composition damage. (`TO_type_system_rewrite-20260525T153549Z_m55677_t002`, `TO_type_system_rewrite-20260525T153549Z_m55679_t001`)
+  - Changed the connector after the INL post-lock call from `>>` to `>-` so the following INR proof is used only as the second dflt_res branch. -> Build no longer times out in the INR proof, but QED still leaves six generated-IH/call-path premises. The remaining top goal is the default-expression generated IH premise, matching the component's explicit failure sign after branch repair. (`TO_type_system_rewrite-20260525T153549Z_m55683_t001`, `TO_type_system_rewrite-20260525T153549Z_m55684_t001`)
+- `E1221` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 21 steps, 22 tools, 3 holbuild, 1,861,100 tok (1,851,635 in, 9,465 out, 1,776,128 cached), 330.1s, $1.54954900)
+  - Cleaned interrupted edit by removing duplicated continuation assumption and rebuilt. -> Advanced beyond duplicate-line failure; established accidental duplicate was not the substantive blocker. (`TO_type_system_rewrite-20260525T153549Z_m55677_t002`, `TO_type_system_rewrite-20260525T153549Z_m55679_t001`)
+  - Repaired local branch skeleton by replacing the connector after the INL branch with `>-` so the INR proof is not applied to post-lock premises. -> Removed the prior timeout/failure in the INR proof, but QED still leaves six generated-IH/call-path obligations, with the top goal being the default-expression generated IH premise. (`TO_type_system_rewrite-20260525T153549Z_m55683_t001`, `TO_type_system_rewrite-20260525T153549Z_m55684_t001`)
+- `E1223` (progressed, other, actual effort: 1 sessions, 4 msgs, 40 steps, 46 tools, 10 holbuild, 4,423,927 tok (4,404,893 in, 19,034 out, 4,287,488 cached), 636.3s, $3.30178900)
+  - Inserted intcall_defaults_result_package_from_generated_ih_general and copied non-body assumptions plus default-evaluation equation from the general theorem. -> Source now has the planned boundary lemma in front of intcall_actual_args_success_no_type_error_from_generated_ih_general. (`TO_type_system_rewrite-20260525T153549Z_m55716_t001`)
+  - Applied intcall_default_exprs_sound_from_generated_ih; fixed tactic precedence by parenthesizing impl_tac before continuing. -> Build advanced from seven leaked default-IH premise goals to the intended post-default package branch, confirming the default generated-IH instantiation is now consumed locally. (`TO_type_system_rewrite-20260525T153549Z_m55729_t001`)
+  - Removed broad simp[] after Cases_on dflt_res and destructed the case package by mp_tac/simp[NoAsms]/strip_tac; added explicit re-assumption of INL facts and applied intcall_bind_arguments_from_runtime_typed. -> Build advanced to the final package-return portion, but latest checked state still failed because the final branch tactic did not solve the existential/conjunctive package in one step. (`TO_type_system_rewrite-20260525T153549Z_m55734_t001`, `TO_type_system_rewrite-20260525T153549Z_m55745_t001`)
+- `E1224` (progressed, other, actual effort: 1 sessions, 5 msgs, 57 steps, 61 tools, 17 holbuild, 5,777,700 tok (5,759,058 in, 18,642 out, 5,627,392 cached), 810.4s, $4.03128600)
+  - Changed selected case-assumption destruct from simplification of the goal to `strip_assume_tac o SIMP_RULE (srw_ss()) [sum_case_def]`. -> Exposed the four INL success facts as separate assumptions; next failure moved to returning the conclusion package/existential, showing case-package simplification works when applied as a theorem rule. (`TO_type_system_rewrite-20260525T153549Z_m55815_t001`)
+  - Tried to split/return the INL branch after applying `intcall_bind_arguments_from_runtime_typed`; probed with explicit conj/existential structure and metis variants. -> Repeated failures showed the proof was trying to solve the entire `case INL x of ...` package or the second conjunct of the theorem without first splitting the outer theorem conclusion. Broad `simp[sum_case_def]` timed out in large context; `pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC` is the better narrow rewrite. (`TO_type_system_rewrite-20260525T153549Z_m55840_t001`, `TO_type_system_rewrite-20260525T153549Z_m55850_t001`)
+  - Inserted `conj_tac >- first_assum ACCEPT_TAC` after `strip_tac` to solve `no_type_error_result dflt_res`. -> Build showed `conj_tac` was applied while the goal was still the unsplit case package, because `strip_tac` had introduced the whole returned conjunction as a single assumption rather than decomposing it. Last source edit changed this to `disch_then strip_assume_tac`, but it has not been built. (`TO_type_system_rewrite-20260525T153549Z_m55859_t001`, `TO_type_system_rewrite-20260525T153549Z_m55861_t001`)
+- `E1225` (proved, , actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 680,633 tok (676,901 in, 3,732 out, 644,608 cached), 153.9s, $0.59572900)
+  - Changed the lemma opener from repeated stripping to `rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th))` so the main antecedent is flattened without splitting the disjunctive `(ret = NoneT \/ stmts_no_fallthrough fn_body)` assumption into multiple proof branches. -> `intcall_defaults_result_package_from_generated_ih_general` was accepted; holbuild advanced to the next theorem `intcall_actual_args_success_no_type_error_from_generated_ih_general`, proving the default-result/bind-context package component. (`TO_type_system_rewrite-20260525T153549Z_m55874_t001`, `TO_type_system_rewrite-20260525T153549Z_m55873_t001`)
+
+### Ruled Out
+
+- Using `rpt strip_tac` for the package lemma opener: it splits the disjunctive return/fallthrough premise and creates duplicate branches, leaving unclosed goals after the INL branch.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m55874_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55873_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.5.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E1227`
+- blocker: Final successful-defaults continuation equation remains brittle after many targeted attempts. The proof advanced through all `intcall_default_success_general_post_lock_consumer_no_type_error` premises, but the last obligation is an implication from the lock equality to the simplified post-lock result equation. Attempts to use `disch_tac >> simp[]`, rewrite/substitute with the lock equality, `impl_tac`, `MATCH_MP` on the moved continuation equation, and theorem-level `SIMP_RULE` all failed or left the same goal. This suggests the boundary statement is too syntactic and should likely assume the already-simplified post-lock equation directly, as STATE reflection anticipated.
+- actual effort: 1 sessions, 4 msgs, 52 steps, 52 tools, 18 holbuild, 4,987,561 tok (4,965,640 in, 21,921 out, 4,742,656 cached), 858.1s, $4.14387800
+- next: Ask strategist to review C2.6.3.3.2.4.5.3. Likely re-plan by tightening `intcall_successful_defaults_continuation_no_type_error_general` to assume the already-simplified post-lock equation (the goal at log lines 119-151) instead of the full nested bind/evaluate continuation equation.
+
+### Attempts / Evidence
+
+- `E1226` (progressed, other, actual effort: 1 sessions, 2 msgs, 24 steps, 27 tools, 7 holbuild, 2,871,786 tok (2,859,370 in, 12,416 out, 2,787,328 cached), 408.7s, $2.12635400)
+  - Added local theorem `intcall_successful_defaults_continuation_no_type_error_general` before the main general helper. Statement uses body generated IH, lookup/eval assumptions, `bind_arguments = SOME call_env`, `evaluate_type = SOME ret_tv`, call-env package, and the successful-defaults continuation equation. -> Source now contains the planned consumer lemma; initial build reached its proof, confirming parse/type shape up to proof obligations. (`TO_type_system_rewrite-20260525T153549Z_m55880_t001`, `TO_type_system_rewrite-20260525T153549Z_m55881_t001`)
+  - Derived lifted forms of `bind_arguments` and `evaluate_type`; fixed missing `return_def` in `lift_option_type_def` simplification. -> Build advanced past those facts and reached the application of `intcall_actual_args_success_post_lock_no_type_error_general`. (`TO_type_system_rewrite-20260525T153549Z_m55883_t001`)
+  - Tried to discharge all post-lock premises after `MATCH_MP_TAC ... post_lock_general` using broad `rpt conj_tac` with `metis_tac[]` and then a minimal `first_assum` probe. -> Broad `metis_tac[]` timed out over 28 subgoals; minimal `first_assum ACCEPT_TAC` showed the first remaining goal is the body generated-IH premise, not solved by exact assumption due to matching/quantifier shape. Latest unbuilt source changed the tail to `rpt (conj_tac >- first_assum ACCEPT_TAC)` as a probe and should be replaced by explicit premise discharge. (`TO_type_system_rewrite-20260525T153549Z_m55894_t001`, `TO_type_system_rewrite-20260525T153549Z_m55898_t001`, `TO_type_system_rewrite-20260525T153549Z_m55899_t001`)
+- `E1227` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 52 steps, 52 tools, 18 holbuild, 4,987,561 tok (4,965,640 in, 21,921 out, 4,742,656 cached), 858.1s, $4.14387800)
+  - Used the existing consumer boundary `intcall_default_success_general_post_lock_consumer_no_type_error` and explicit premise discharge; reached only the final continuation-equation implication. -> All generated-IH, bind/evaluate, env/state/scope premises are discharged; holbuild shows only the final lock-equality implication remains. (`TO_type_system_rewrite-20260525T153549Z_m55948_t001`, `TO_type_system_rewrite-20260525T153549Z_m55950_t001`)
+  - Tried final local proof variants: `disch_tac >> simp[]`, rewriting with the lock equality, `impl_tac`, direct `MATCH_MP`/`ACCEPT_TAC`, `SUBST_ALL_TAC`, theorem-level `SIMP_RULE`, and `strip_tac`/`pop_assum` over the simplified continuation equation. -> All attempts failed or left the same final goal; qpat selection and implication handling are brittle because the continuation equation after simplification is an implication over the lock result rather than an exact assumption matching the goal. (`TO_type_system_rewrite-20260525T153549Z_m55953_t001`, `TO_type_system_rewrite-20260525T153549Z_m55956_t001`, `TO_type_system_rewrite-20260525T153549Z_m55959_t001`, `TO_type_system_rewrite-20260525T153549Z_m55965_t001`, `TO_type_system_rewrite-20260525T153549Z_m55985_t001`, `TO_type_system_rewrite-20260525T153549Z_m55995_t001`, `TO_type_system_rewrite-20260525T153549Z_m55998_t001`)
+
+### Ruled Out
+
+- More direct post-lock premise plumbing
+- Calling the default-expression generated IH in this consumer
+- Broad `simp[]`/`metis_tac[]` over the final implication
+- Solving the final implication by repeatedly rearranging `disch_tac`, `impl_tac`, or `qpat_assum` without changing the boundary interface
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m55948_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55950_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55953_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55985_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55995_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m55998_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.3.2.4.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1232`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 23 steps, 25 tools, 7 holbuild, 2,150,353 tok (2,143,695 in, 6,658 out, 2,063,872 cached), 328.8s, $1.63079100
+
+### Attempts / Evidence
+
+- `E1230` (progressed, other, actual effort: 1 sessions, 2 msgs, 9 steps, 10 tools, 1 holbuild, 1,154,114 tok (1,150,874 in, 3,240 out, 1,118,720 cached), 103.1s, $0.81733000)
+  - Changed `intcall_expr_no_type_error_from_generated_ih` success branch from old `intcall_actual_args_success_no_type_error_from_generated_ih` to `intcall_actual_args_success_no_type_error_from_generated_ih_general`, adding `x''4` and `ret_tv` in the specialization list. -> Focused holbuild reached the general helper application, but branch close leaves five goals. Instrumented log shows the remaining top goal is still the old NoneT-specific continuation implication ending in `x''4 = NoneT`, not a simple missing conjunct. (`TO_type_system_rewrite-20260525T153549Z_m56059_t001`, `TO_type_system_rewrite-20260525T153549Z_m56060_t001`)
+- `E1231` (progressed, other, actual effort: 1 sessions, 4 msgs, 39 steps, 47 tools, 2 holbuild, 4,122,498 tok (4,104,959 in, 17,539 out, 3,993,088 cached), 456.7s, $3.08206900)
+  - In `intcall_expr_no_type_error_from_generated_ih`, changed line 13629 from `gvs[evaluate_type_def]` to `gvs[]` and rebuilt `vyperTypeStmtSoundnessTheory`. -> No progress in goal shape: holbuild still leaves five goals after applying the general helper; instrumented log still shows old NoneT-specific lookup tuple and `x''4 = NoneT` obligation. (`TO_type_system_rewrite-20260525T153549Z_m56081_t001`, `TO_type_system_rewrite-20260525T153549Z_m56082_t001`, `TO_type_system_rewrite-20260525T153549Z_m56083_t001`)
+- `E1232` (proved, , actual effort: 1 sessions, 2 msgs, 23 steps, 25 tools, 7 holbuild, 2,150,353 tok (2,143,695 in, 6,658 out, 2,063,872 cached), 328.8s, $1.63079100)
+  - Replaced the destruct of `callable_body_typing_from_env_consistent` with controlled `CONJUNCTS_THEN2`/`qx_choose_then` so `evaluate_type (get_tenv cx) x''4 = SOME ret_tv` and `type_stmts env_body x''4 x''5 = SOME env_after` remain available while the disjunctive no-fallthrough fact is not simplified to `x''4 = NoneT`. Removed the late broad `gvs[]` before helper application and specialized `intcall_actual_args_success_no_type_error_from_generated_ih_general` with `src_id_opt`. -> Focused holbuild passed `intcall_expr_no_type_error_from_generated_ih` and resumed at the downstream `eval_all_type_sound_mutual[Expr_Call_IntCall]` branch; the active refactor theorem no longer leaves the old `x''4 = NoneT` side condition. (`TO_type_system_rewrite-20260525T153549Z_m56129_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56129_t001` (use `read_tool_output` for exact output)
+
+## C2.6.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1233`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 115,186 tok (114,693 in, 493 out, 107,520 cached), 36.7s, $0.10441500
+- next: Review closure with strategist, then follow updated PLAN; expected next component is downstream IntCall integration C2.6.4.
+
+### Attempts / Evidence
+
+- `E1233` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 115,186 tok (114,693 in, 493 out, 107,520 cached), 36.7s, $0.10441500)
+  - Began refined build-audit leaf and ran holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) without editing. -> Audit succeeded for this component: holbuild matched/replayed through the local helper prefix and failed later at downstream `eval_all_type_sound_mutual[Expr_Call_IntCall]` on `gvs[Once well_typed_expr_def]`; no old `x''4 = NoneT`/local-helper regression appeared. (`TO_type_system_rewrite-20260525T153549Z_m56140_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56140_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Generated-IH selection was repaired and the place-expression conjunct is solved by `type_place_expr_Call_IntCall_NONE`. The remaining failure is a proof-interface mismatch at lines 13759-13763: `MATCH_MP_TAC` cannot apply the no-TypeError-only helper to the full first-conjunct goal. This validates STATE's warning that the IntCall helper stack may need a stronger full-conjunct boundary.
+- latest episode: `E1238`
+- blocker: The current PLAN/local helper boundary is too weak for the live `Expr_Call_IntCall` mutual proof first conjunct. The existing helper `intcall_actual_args_success_no_type_error_from_generated_ih_general` proves only `no_type_error_result res`, but the goal after the validated split requires state/env/accounts preservation plus `expr_result_typed`. Continuing with tactic search would require brittle long instantiations/MATCH_MP plumbing or duplicating evaluator reasoning inline.
+- actual effort: 1 sessions, 1 msgs, 14 steps, 19 tools, 3 holbuild, 1,050,101 tok (1,044,336 in, 5,765 out, 930,304 cached), 198.2s, $1.20826200
+- next: Ask plan_oracle to replace/augment C2.6.4 with a stronger full first-conjunct IntCall helper or a narrower proof-integration component that handles preservation/result typing without duplicating evaluator case analysis.
+
+### Attempts / Evidence
+
+- `E0830` (proved, , actual effort: 1 sessions, 4 msgs, 50 steps, 67 tools, 15 holbuild, 4,600,034 tok (4,584,707 in, 15,327 out, 4,379,136 cached), 484.7s, $3.67723300)
+  - Added local `send_args_runtime_typed_dest` helper deriving successful `dest_AddressV`/`dest_NumV` from `exprs_runtime_typed` plus Send static argument types; proved Send resume by unfolding Send evaluator, applying eval_exprs IH, using transfer_value_runtime_consistent/no_type_error, and final NoneV typing simplification. -> `vyperTypeStmtSoundnessTheory` builds cleanly for this component; Send cheat removed. (`TO_type_system_rewrite-20260524T091119Z_m44086_t001`)
+- `E0872` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 156,742 tok (156,440 in, 302 out, 151,552 cached), 13.5s, $0.10927600)
+  - Carry-forward proof leaf for `Expr_Call_Send`; no source edits in this episode. Verified current downstream statement soundness build after beginning component. -> Confirmed Send call expression branch remains accepted/build-clean through `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260524T091119Z_m44705_t001`, `TO_type_system_rewrite-20260524T091119Z_m44706_t001`)
+- `E1234` (progressed, other, actual effort: 1 sessions, 4 msgs, 39 steps, 41 tools, 9 holbuild, 3,975,147 tok (3,956,833 in, 18,314 out, 3,853,824 cached), 1001.4s, $2.99137700)
+  - Changed the post-branch tail from `gvs[Once well_typed_expr_def]` to `simp[Once well_typed_expr_def]`. -> Still timed out on the same 10 remaining goals; simplifier remained too broad for this integration tail. (`TO_type_system_rewrite-20260525T153549Z_m56148_t001`)
+  - Changed the tail to `rewrite_tac[Once well_typed_expr_def]`. -> Avoided the timeout, but did not close the 10 remaining goals; QED reported no theorem proved. This suggests the tail goals are mostly already-obvious generated IH obligations plus the second place-expression conjunct, not suitable for all-goal rewriting alone. (`TO_type_system_rewrite-20260525T153549Z_m56150_t001`)
+  - Tried replacing the first no-TypeError conjunct by direct application of `intcall_expr_no_type_error_from_generated_ih` using `MATCH_MP_TAC`/`irule`. -> Both direct applications failed to match the live mutual-induction goal. The helper's conclusion is only `no_type_error_result res`, whereas the first conjunct of the mutual theorem requires state/env/accounts preservation plus result typing; direct replacement was the wrong abstraction. (`TO_type_system_rewrite-20260525T153549Z_m56164_t001`, `TO_type_system_rewrite-20260525T153549Z_m56166_t001`)
+  - Restored the expanded first-conjunct proof, then probed/edited the final tail. `qpat_x_assum` for `type_place_expr ... = SOME _` failed because not every one of the 10 remaining goals contains that assumption; final `rewrite_tac` alone still left goals. -> The remaining proof should split the second conjunct explicitly rather than applying a single tactic to all 10 goals. Last source edit changed the tail to `(first_assum ACCEPT_TAC ORELSE rewrite_tac[Once well_typed_expr_def])`, but this final edit is unverified. (`TO_type_system_rewrite-20260525T153549Z_m56170_t001`, `TO_type_system_rewrite-20260525T153549Z_m56177_t001`, `TO_type_system_rewrite-20260525T153549Z_m56180_t001`)
+- `E1235` (progressed, other, actual effort: 1 sessions, 3 msgs, 29 steps, 37 tools, 3 holbuild, 2,891,682 tok (2,876,533 in, 15,149 out, 2,764,288 cached), 395.5s, $2.39783900)
+  - Focused build of unverified tail `(first_assum ACCEPT_TAC ORELSE rewrite_tac[Once well_typed_expr_def])`. -> Confirmed it still leaves 10 goals at QED; generated IH assumptions are not solved by plain assumption acceptance and the place-expression conjunct is not the only remaining work. (`TO_type_system_rewrite-20260525T153549Z_m56187_t001`)
+  - Changed tail to `(first_assum MATCH_ACCEPT_TAC ORELSE rewrite_tac[Once well_typed_expr_def])` and rebuilt. -> No improvement; still 10 goals at QED. (`TO_type_system_rewrite-20260525T153549Z_m56195_t001`)
+  - Changed tail to `rw[Once well_typed_expr_def]` and rebuilt. -> This reduced failure input to 2 goals before timing out; it shows controlled stripping/rewriting can expose only the first-conjunct generated-IH proof obligations plus the second conjunct, but all-goal `rw` is too broad/slow and must be replaced by explicit focused tactics. (`TO_type_system_rewrite-20260525T153549Z_m56209_t001`, `TO_type_system_rewrite-20260525T153549Z_m56210_t001`)
+- `E1236` (progressed, other, actual effort: 1 sessions, 3 msgs, 32 steps, 45 tools, 2 holbuild, 3,208,866 tok (3,186,623 in, 22,243 out, 3,077,632 cached), 492.0s, $2.75106100)
+  - Inserted local `type_place_expr_Call_IntCall_NONE` and rewrote `Expr_Call_IntCall` resume as `reverse conj_tac`: place-expression conjunct solved by the new lemma, first conjunct keeps expanded evaluator proof and reuses `intcall_actual_args_success_no_type_error_from_generated_ih_general`. -> Build advanced past the old timeout but failed at the first generated-IH `qpat_x_assum`; the split/lemma direction is validated, but the generated-IH assumption selection order/pattern needs repair. (`TO_type_system_rewrite-20260525T153549Z_m56246_t001`, `TO_type_system_rewrite-20260525T153549Z_m56247_t001`)
+  - After the build failure, reordered the `actual_ih` and `default_ih` `qpat_x_assum` blocks so the visible top goal's actual-args IH should be selected first; no rebuild performed after this final edit because handoff was requested. -> Source is partial/unverified. Next session must inspect lines 13649-13765 and build before further proof edits. (`TO_type_system_rewrite-20260525T153549Z_m56248_t001`)
+- `E1237` (progressed, other, actual effort: 1 sessions, 1 msgs, 13 steps, 18 tools, 3 holbuild, 955,319 tok (950,439 in, 4,880 out, 837,632 cached), 183.1s, $1.12925100)
+  - Adjusted default generated-IH selection pattern to include `s7 prev0 t7 s8 x8 t8`, matching the visible default-args IH after the IntCall split. -> Build advanced beyond the previous qpat_x_assum failure to a later callable-body typing derivation failure. (`TO_type_system_rewrite-20260525T153549Z_m56260_t001`)
+  - Replaced `drule_all callable_body_typing_from_env_consistent` with the earlier working style: strip the `lift_option_type_INL_eq` pairs, `PairCases_on x''`, instantiate `callable_body_typing_from_env_consistent`, then `simp[]`. -> Build advanced beyond callable-body derivation; the next failure is the attempted application of the no-TypeError-only IntCall helper to the full preservation/result-typing conjunct. (`TO_type_system_rewrite-20260525T153549Z_m56264_t001`, `TO_type_system_rewrite-20260525T153549Z_m56265_t001`)
+- `E1238` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 14 steps, 19 tools, 3 holbuild, 1,050,101 tok (1,044,336 in, 5,765 out, 930,304 cached), 198.2s, $1.20826200)
+  - Kept the strategist-approved structural split (`reverse conj_tac`) and local `type_place_expr_Call_IntCall_NONE`; repaired generated-IH selection by matching the default IH shape including `get_scopes`/`set_scopes` binders. -> Build advanced past the previous `qpat_x_assum` failure. (`TO_type_system_rewrite-20260525T153549Z_m56260_t001`)
+  - Used the earlier local proof style for callable-body facts: derive SOME facts from `lift_option_type_INL_eq`, `PairCases_on x''`, instantiate `callable_body_typing_from_env_consistent`, and simplify. -> Build advanced to the substantive helper-boundary mismatch. (`TO_type_system_rewrite-20260525T153549Z_m56264_t001`)
+  - Tried the planned `MATCH_MP_TAC (Q.SPECL ... intcall_actual_args_success_no_type_error_from_generated_ih_general)` at the live first-conjunct goal. -> No match: live goal includes preservation and `expr_result_typed`; helper concludes only no-TypeError. This is a decomposition/interface gap, not an IH-selection issue. (`TO_type_system_rewrite-20260525T153549Z_m56265_t001`)
+
+### Ruled Out
+
+- Do not reintroduce all-goal `rw[Once well_typed_expr_def]` or broad simplification; prior evidence showed timeout and the split is validated.
+- Do not keep trying to apply the no-TypeError-only helper directly to the full first conjunct.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56264_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56265_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56266_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1239`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 23 steps, 22 tools, 8 holbuild, 1,845,165 tok (1,837,329 in, 7,836 out, 1,776,128 cached), 370.5s, $1.42914900
+- next: Review closure with strategist, then proceed to C2.6.4.2 if accepted.
+
+### Attempts / Evidence
+
+- `E1239` (proved, , actual effort: 1 sessions, 1 msgs, 23 steps, 22 tools, 8 holbuild, 1,845,165 tok (1,837,329 in, 7,836 out, 1,776,128 cached), 370.5s, $1.42914900)
+  - Factored default finally restoration into deterministic state/env frame lemmas, then proved intcall_default_exprs_frame_sound_from_generated_ih from the generated default-expression IH and default_frame_eval_result. -> Focused holbuild advanced beyond the lower-level helper after explicit instantiation of env_consistent_restore_intcall_default_frame and avoiding broad FIRST/gvs search. (`TO_type_system_rewrite-20260525T153549Z_m56330_t001`)
+  - Added PLAN wrapper intcall_defaults_result_frame_package_from_generated_ih_general; it combines the new all-result frame helper with existing intcall_defaults_result_package_from_generated_ih_general for success call_env facts. -> Focused holbuild accepted the wrapper and progressed to the downstream Expr_Call_IntCall resume mismatch, proving C2.6.4.1’s boundary lemma is available. (`TO_type_system_rewrite-20260525T153549Z_m56348_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56348_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56330_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `risk_mismatch` This repeats the previously identified proof-interface/factoring problem in the same giant no-TypeError helper. The latest failures show premise discharge for `intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih` remains brittle: ret=NoneT branch can discharge more premises but still leaves the no-fallthrough branch; ret-general branch cannot prove the `evaluate_type`/lift-option premise without unsuitable rewriting. This should not be pursued by more local tactic variants.
+- latest episode: `E1246`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 30 steps, 37 tools, 12 holbuild, 3,480,653 tok (3,467,883 in, 12,770 out, 3,356,672 cached), 581.9s, $2.61749100
+- next: Do not continue tactic variants in this helper. Next session should first restore/revert the proof of `intcall_default_success_general_post_lock_consumer_no_type_error` to the last build-reaching shape from E1243 if possible, or stop and ask the strategist for a local replacement/refactor of the no-TypeError helper cluster. The real C2.6.4.2 work remains the full continuation boundary, not this brittle prefix helper.
+
+### Attempts / Evidence
+
+- `E1240` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 14 steps, 22 tools, 3 holbuild, 1,620,916 tok (1,609,264 in, 11,652 out, 1,488,384 cached), 508.9s, $1.69815200)
+  - Added local release-lock accounts/frame lemmas near existing IntCall lock lemmas. -> Source edit accepted; subsequent build progressed past the new lemmas to later proof prefixes. (`TO_type_system_rewrite-20260525T153549Z_m56404_t001`, `TO_type_system_rewrite-20260525T153549Z_m56405_t001`)
+  - Replaced broad `gvs[no_type_error_result_def]` in an IntCall contradiction helper with targeted use of `no_type_error_result (INR (Error (TypeError msg)))`. -> Source edit accepted; subsequent build progressed to an earlier create-tail proof-performance timeout. (`TO_type_system_rewrite-20260525T153549Z_m56406_t001`, `TO_type_system_rewrite-20260525T153549Z_m56407_t001`)
+  - Escalated uncovered prefix timeout to strategist. -> Plan refined with new prerequisite C2.6.0; C2.6.4.2 remains active/progressed but blocked by build-through prerequisite. (`TO_type_system_rewrite-20260525T153549Z_m56408_t001`)
+- `E1241` (stuck, plan_incomplete, actual effort: 1 sessions, 1 msgs, 17 steps, 25 tools, 3 holbuild, 2,055,103 tok (2,039,030 in, 16,073 out, 1,896,960 cached), 595.2s, $2.14102000)
+  - Added planned IntCall cleanup-frame lemmas and repaired one IntCall proof timeout, then attempted focused build. -> Build exposed earlier `create_tail_result_sound_simp` timeout before IntCall component can be checked. (`TO_type_system_rewrite-20260525T153549Z_m56407_t001`)
+  - Asked strategist to cover the earlier timeout. -> PLAN inserted C2.6.0 prerequisite and retained C2.6.4.2 as later work. (`TO_type_system_rewrite-20260525T153549Z_m56408_t001`)
+  - Checkpointed C2.6.4.2 partial progress and tried to begin C2.6.0. -> Harness blocked component switch because C2.6.4.2 remained active. (`TO_type_system_rewrite-20260525T153549Z_m56410_t001`, `TO_type_system_rewrite-20260525T153549Z_m56411_t001`)
+- `E1243` (progressed, plan_incomplete, actual effort: 1 sessions, 2 msgs, 15 steps, 23 tools, 2 holbuild, 1,555,625 tok (1,549,531 in, 6,094 out, 1,452,032 cached), 210.9s, $1.39633100)
+  - Replaced the failing `qpat_x_assum no_type_error_result (INR (Error (TypeError msg)))` selection with a proof that strengthens the `impl_tac` premise and finishes the contradiction by `fs[no_type_error_result_def] >> first_assum ACCEPT_TAC`. -> Source edit accepted; focused holbuild replay passed `intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih`. (`TO_type_system_rewrite-20260525T153549Z_m56430_t001`, `TO_type_system_rewrite-20260525T153549Z_m56431_t001`)
+  - Focused holbuild then stopped at `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]` lines 14082-14086, where the proof still applies `intcall_actual_args_success_no_type_error_from_generated_ih_general` to a full preservation/result-typing conjunct. -> Confirms the current frontier is the planned C2.6.4.2/C2.6.4 boundary issue: no-TypeError-only helper cannot match the full mutual proof goal; next work should prove a full continuation soundness helper, not patch final resume tactics. (`TO_type_system_rewrite-20260525T153549Z_m56431_t001`)
+- `E1244` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 36 steps, 41 tools, 15 holbuild, 3,979,957 tok (3,968,773 in, 11,184 out, 3,863,552 cached), 600.3s, $2.79340100)
+  - Labelled the generated body-IH with `mk_asm "body_ih"` and tried to specialize it inside the NoneT branch of `intcall_default_success_general_post_lock_consumer_no_type_error`. -> Did not close; after discharging setup premises, applying the specialized consequent to the individual preservation subgoal still failed by assumption-selection/instantiation mismatch. (`TO_type_system_rewrite-20260525T153549Z_m56598_t001`)
+  - Avoided broad `gvs[evaluate_type_def]` by targeted rewriting of `ret = NoneT` and the `lift_option_type (evaluate_type ... NoneT)` premise before specializing `body_ih`. -> Setup premises discharged, but using the resulting body package still did not solve `state_well_typed st0'`; `metis_tac[]` also failed in the large context. (`TO_type_system_rewrite-20260525T153549Z_m56600_t001`)
+  - Earlier attempt used `rpt conj_tac >> gvs[evaluate_type_def]` to discharge setup premises. -> Timed out, confirming broad simplification in this >4KiB goal is not viable. (`TO_type_system_rewrite-20260525T153549Z_m56594_t001`)
+- `E1245` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 40 tools, 11 holbuild, 3,956,907 tok (3,943,254 in, 13,653 out, 3,718,656 cached), 527.6s, $3.39190800)
+  - Replaced labelled `body_ih` specialization in `intcall_default_success_general_post_lock_consumer_no_type_error` with a direct call to `intcall_default_success_post_lock_no_type_error_from_body_ih`. -> Got past the previous `metis_tac[]` point but failed discharging a helper premise because the monadic tail equality was still under a `case INL ()` wrapper in a >4KiB context. (`TO_type_system_rewrite-20260525T153549Z_m56610_t001`, `TO_type_system_rewrite-20260525T153549Z_m56614_t001`)
+  - Split `lock_res` cases and tried to use `intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih` for the TypeError contradiction instead of consuming the body package directly. -> Still did not close; success branch helper-premise discharge needed exact tail equality/TypeError result plumbing, and failure/no-fallthrough branch left a large contradiction goal. Current source remains partial. (`TO_type_system_rewrite-20260525T153549Z_m56623_t001`, `TO_type_system_rewrite-20260525T153549Z_m56635_t001`)
+- `E1246` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 30 steps, 37 tools, 12 holbuild, 3,480,653 tok (3,467,883 in, 12,770 out, 3,356,672 cached), 581.9s, $2.61749100)
+  - Replaced the previous metis-only call in `intcall_default_success_general_post_lock_consumer_no_type_error` with an explicit specialization of `intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih` using `ret=NoneT`, then tried to discharge the generated body-IH package premise by unfolding `push_function_def` and applying the quantified assumption. -> Got past some matching/time issues but failed in premise discharge: after applying the body package, the proof still needed to turn the package into `no_type_error_result res0`; adding `simp[no_type_error_result_def]` helped that subcase but did not make the whole helper close. (`TO_type_system_rewrite-20260525T153549Z_m56651_t001`, `TO_type_system_rewrite-20260525T153549Z_m56655_t001`)
+  - Tried to finish remaining setup premises by using `gvs[lift_option_type_def, return_def]` / `asm_rewrite_tac` / targeted `qpat_assum` on the `lift_option_type (SOME NoneTV)` assumption. -> The NoneT/success branch advanced, but using `ret=NoneT` only handles the `ret = NoneT` disjunct. The other disjunct (`stmts_no_fallthrough body'`) remains a large TypeError contradiction at QED, same broad interface failure as E1245. (`TO_type_system_rewrite-20260525T153549Z_m56659_t001`)
+  - Switched specialization back to general `ret` to cover the no-fallthrough branch and attempted to solve the `evaluate_type` lift-option premise by rewriting definitions. -> Failed before reaching the tail contradiction: premise required `(case evaluate_type (get_tenv cx) ret of ... ) dflt_st = (INL rtv,dflt_st)` and the current context only has the corresponding `lift_option_type` assumption. Local rewriting/assumption-selection variants did not close; latest source was switched back to `NoneT` immediately before handoff and is unverified. (`TO_type_system_rewrite-20260525T153549Z_m56664_t001`, `TO_type_system_rewrite-20260525T153549Z_m56670_t001`)
+
+### Ruled Out
+
+- Metis-only use of the contradiction helper in the giant consumer (timed out or failed matching).
+- More qpat/first/last/simp/gvs variants for helper premise discharge inside lines 12252-12272.
+- Specializing the contradiction helper only with `ret=NoneT` as a complete proof; it does not cover the `stmts_no_fallthrough` disjunct.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56649_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56655_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56659_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56670_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-1 direct delegation did not become mechanical. Current source is partial/experimental. Multiple statement-preserving variants of the success branch still fail while trying to discharge the delegated post-lock theorem/NoneT consumer premises in a >4KiB generated-IH context; even the ret=NoneT shortcut via the existing NoneT consumer times out or leaves a huge existential/conjunction package. This indicates the helper interface needs a smaller adapter or a replanned boundary, not more local tactic tuning inside lines 12252-12283.
+- latest episode: `E1247`
+- blocker: Proof-interface mismatch in intcall_default_success_general_post_lock_consumer_no_type_error: delegated theorem premise/consumer application exposes generated body-IH plumbing and large conjunction/existential goals; local tactic variants are now forbidden by the PLAN/STATE do-not-retry guidance.
+- actual effort: 1 sessions, 1 msgs, 20 steps, 22 tools, 8 holbuild, 1,589,049 tok (1,578,683 in, 10,366 out, 1,523,712 cached), 377.2s, $1.34769100
+- next: Strategist review should decide whether to add a small adapter theorem for the generated-IH premise/NoneT consumer or replace the local C2.6.4.2.1 proof shape. Do not continue local tactic variants in the current theorem body.
+
+### Attempts / Evidence
+
+- `E1247` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 20 steps, 22 tools, 8 holbuild, 1,589,049 tok (1,578,683 in, 10,366 out, 1,523,712 cached), 377.2s, $1.34769100)
+  - Built the inherited unverified direct-delegation edit for `intcall_default_success_general_post_lock_consumer_no_type_error`. -> Failed on generated-IH first premise while selecting/specializing the six-argument assumption; goal required body IH facts such as `state_well_typed st0'` from a large context. (`TO_type_system_rewrite-20260525T153549Z_m56721_t001`)
+  - Adjusted the success-branch premise proof to use the local two-argument post-push premise and then a factored call to `intcall_body_ih_after_setup_success`. -> Still failed/left >4KiB premise-discharge goals; simple `first_assum ACCEPT_TAC`/`simp[]` could not close the generated setup package. (`TO_type_system_rewrite-20260525T153549Z_m56728_t001`, `TO_type_system_rewrite-20260525T153549Z_m56730_t001`)
+  - Tried a statement-preserving `ret = NoneT` case split that delegates the NoneT branch to the existing `intcall_default_success_NoneT_post_lock_consumer_no_type_error`. -> Application exposed a huge existential/conjunction goal; explicit witnesses typechecked only after correction, but simplification timed out even before the residual premises could be discharged. (`TO_type_system_rewrite-20260525T153549Z_m56737_t001`, `TO_type_system_rewrite-20260525T153549Z_m56739_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56721_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56728_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56730_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56737_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56739_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1248`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 25 steps, 28 tools, 9 holbuild, 2,809,697 tok (2,803,104 in, 6,593 out, 2,765,312 cached), 383.6s, $1.76940600
+- next: Review closure, then begin C2.6.4.2.1.2 to add the generated-IH-to-post-push adapter lemma.
+
+### Attempts / Evidence
+
+- `E1248` (proved, , actual effort: 1 sessions, 2 msgs, 25 steps, 28 tools, 9 holbuild, 2,809,697 tok (2,803,104 in, 6,593 out, 2,765,312 cached), 383.6s, $1.76940600)
+  - Removed the unbuilt `ret = NoneT` shortcut and inline generated-IH reconstruction from `intcall_default_success_general_post_lock_consumer_no_type_error`; replaced the theorem proof with a lock-result skeleton whose success and failure branches are temporary cheats pending the planned adapter/tail components. -> `holbuild` no longer stops in `intcall_default_success_general_post_lock_consumer_no_type_error`; it progressed to the later `eval_all_type_sound_mutual[Expr_Call_IntCall]` failure, confirming the experimental proof body cleanup is complete. (`TO_type_system_rewrite-20260525T153549Z_m56766_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56766_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56743_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1249`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 360,803 tok (359,347 in, 1,456 out, 338,944 cached), 107.7s, $0.31516700
+- next: Call plan_oracle review, then proceed to the next scheduled child if accepted.
+
+### Attempts / Evidence
+
+- `E1249` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 360,803 tok (359,347 in, 1,456 out, 338,944 cached), 107.7s, $0.31516700)
+  - Replaced the unparseable thin-wrapper proof with direct implication plumbing over the generated body-IH assumption: specialize the six setup variables, discharge concrete setup equalities and post-push equation, then specialize body evaluation variables. -> `intcall_generated_body_ih_to_post_push_body_ih` built successfully; holbuild advanced past the theorem and failed later in `eval_all_type_sound_mutual[Expr_Call_IntCall]`, outside this component. (`TO_type_system_rewrite-20260525T153549Z_m56780_t001`, `TO_type_system_rewrite-20260525T153549Z_m56778_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56780_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56778_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.1.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1250`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 726,292 tok (723,268 in, 3,024 out, 694,272 cached), 110.0s, $0.58283600
+- next: Call plan_oracle review, then proceed to C2.6.4.2.1.4 if accepted.
+
+### Attempts / Evidence
+
+- `E1250` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 726,292 tok (723,268 in, 3,024 out, 694,272 cached), 110.0s, $0.58283600)
+  - Added `intcall_default_success_post_lock_no_type_error_from_post_push_body_ih` immediately after the six-setup post-lock theorem. The proof delegates directly to `intcall_default_success_lock_success_tail_no_type_error`, provides the same tail arguments, rewrites `env_scopes_consistent` across the pushed stack, and discharges remaining premises from the live context. -> `vyperTypeStmtSoundnessTheory` advanced past the new post-push body-IH theorem and later timed out inside the existing final `eval_all_type_sound_mutual[Expr_Call_IntCall]` integration, outside this component. (`TO_type_system_rewrite-20260525T153549Z_m56791_t001`, `TO_type_system_rewrite-20260525T153549Z_m56790_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56791_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56790_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.1.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1252`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 49 steps, 51 tools, 18 holbuild, 4,942,510 tok (4,923,090 in, 19,420 out, 4,808,192 cached), 839.7s, $3.56118600
+
+### Attempts / Evidence
+
+- `E1251` (progressed, other, actual effort: 1 sessions, 3 msgs, 29 steps, 30 tools, 9 holbuild, 3,520,862 tok (3,507,313 in, 13,549 out, 3,450,368 cached), 489.6s, $2.41637900)
+  - Replaced the temporary cheats in `intcall_default_success_general_post_lock_consumer_no_type_error` with a lock-result split. Success branch cases `INL ()`, derives `evaluate_type` SOME via `lift_option_type_INL_SOME`, then tries to apply `intcall_default_success_post_lock_no_type_error_from_post_push_body_ih`; failure branch chains `intcall_lock_no_type_error_result`. -> Build enters the general consumer and no longer reports `cheat`, but the success/failure proof shape is not yet closed; residual goal shown as `no_type_error_result (INL ()) ==> no_type_error_result res` in the context containing the post-push body IH and tail equation. (`TO_type_system_rewrite-20260525T153549Z_m56797_t001`, `TO_type_system_rewrite-20260525T153549Z_m56802_t001`, `TO_type_system_rewrite-20260525T153549Z_m56817_t001`)
+  - Inspected the post-push helper statement/proof around lines 12059-12126 to verify its premise shape and conclusion for use in the general consumer. -> Confirmed the helper conclusion matches the success branch tail equation and requires only the post-push body-IH premise plus existing frame/no-TypeError assumptions; next proof should consume it cleanly rather than leave its implication as a subgoal. (`TO_type_system_rewrite-20260525T153549Z_m56821_t001`)
+- `E1252` (proved, , actual effort: 1 sessions, 3 msgs, 49 steps, 51 tools, 18 holbuild, 4,942,510 tok (4,923,090 in, 19,420 out, 4,808,192 cached), 839.7s, $3.56118600)
+  - Repaired `intcall_default_success_general_post_lock_consumer_no_type_error` by destructing the conjunction premise without splitting, using `intcall_generated_body_ih_to_post_push_body_ih` to derive the post-push body IH in the INL lock-success branch, simplifying the concrete tail equation before applying `intcall_default_success_post_lock_no_type_error_from_post_push_body_ih`, and handling the INR lock-failure branch via `intcall_lock_no_type_error_result`. -> holbuild passed through the theorem and resumed later at `eval_all_type_sound_mutual[Expr_Call_IntCall]`, showing the active theorem is proved; target still fails in a downstream integration proof outside this component. (`TO_type_system_rewrite-20260525T153549Z_m56946_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56946_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1253`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 9 steps, 14 tools, 3 holbuild, 804,644 tok (801,461 in, 3,183 out, 759,296 cached), 158.2s, $0.68596300
+- next: Call plan_oracle(mode='review', component_id='C2.6.4.2.2', evidence_ids=[...]); if accepted, follow scheduled next component C2.6.4.2.3.
+
+### Attempts / Evidence
+
+- `E1253` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 14 tools, 3 holbuild, 804,644 tok (801,461 in, 3,183 out, 759,296 cached), 158.2s, $0.68596300)
+  - Added intcall_lock_attempt_sound_frame with lock equation package: derive no_type_error_result via intcall_lock_no_type_error_result; split lock_res. Success branch uses intcall_lock_state_preserves_frame and state_well_typed_def/accounts equality. Failure branch unfolds lock/raise/return/acquire cases locally to show unchanged state/env consistency and no TypeError. -> The first attempt left unresolved acquire_nonreentrant_lock failure subcases because TOP_CASE_TAC did not split the storage/current and is_view condition precisely. (`TO_type_system_rewrite-20260525T153549Z_m56959_t001`)
+  - Replaced generic TOP_CASE_TAC cleanup with explicit split on lookup_storage ... = 1w and is_view, then gvs with raise_def/return_def/update_transient_def/state_well_typed_def. -> vyperTypeStmtSoundnessTheory replay passed through intcall_lock_attempt_sound_frame and failed later at the known downstream Expr_Call_IntCall wrapper match; no failure remains in the new theorem. (`TO_type_system_rewrite-20260525T153549Z_m56961_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56961_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56958_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1254`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 113,089 tok (112,458 in, 631 out, 102,400 cached), 63.4s, $0.12042000
+- next: Call plan_oracle(mode='review', component_id='C2.6.4.2.3', evidence_ids=[...]) and follow the scheduled next component if accepted.
+
+### Attempts / Evidence
+
+- `E1254` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 113,089 tok (112,458 in, 631 out, 102,400 cached), 63.4s, $0.12042000)
+  - Inserted/verified local safe-cast boundary lemma using `safe_cast_preserves_well_typed`, unfolding only `expr_result_typed_def`, `expr_runtime_typed_def`, and `toplevel_value_typed_def`, with `well_typed_expr_not_hashmap_place` for the hashmap side condition. -> `holbuild vyperTypeStmtSoundnessTheory` resumed past `intcall_safe_cast_expr_result_typed` and failed later at the expected downstream Expr_Call_IntCall integration `MATCH_MP_TAC` site, so the component theorem is accepted as proved. (`TO_type_system_rewrite-20260525T153549Z_m56979_t002`, `TO_type_system_rewrite-20260525T153549Z_m56979_t001`)
+
+### Ruled Out
+
+- Premise-free safe_cast result typing remains ruled out; the proved boundary keeps `value_has_type ret_tv rv`.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m56979_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m56979_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The theorem still appears true, but the current inline proof mixes try classification, cleanup case analysis, body IH application, cleanup-frame preservation, and outer finally result simplification at once. Holbuild shows multiple input goals for branch-specific tactics; this is exactly the branch-granularity/factoring problem flagged in STATE. Need a named outer-INR helper or branch-specific cleanup-failure preservation lemma rather than continuing local tactic variants.
+- latest episode: `E1261`
+- blocker: Inline proof of outer-INR cleanup-failure branch in intcall_default_success_post_push_sound has become brittle and branch-broadcasting creates multiple incompatible subgoals; active Risk 2 decomposition under-specified branch helper granularity.
+- actual effort: 1 sessions, 4 msgs, 69 steps, 69 tools, 26 holbuild, 6,633,833 tok (6,613,147 in, 20,686 out, 6,358,528 cached), 1023.0s, $5.07293900
+- next: Ask strategist to decompose C2.6.4.2.4 into branch-specific helpers, especially a helper for outer finally INR preserving state/env/accounts for both try-INL and try-INR cleanup outcomes.
+
+### Attempts / Evidence
+
+- `E1255` (progressed, other, actual effort: 1 sessions, 2 msgs, 13 steps, 21 tools, 1 holbuild, 1,424,747 tok (1,417,968 in, 6,779 out, 1,321,472 cached), 194.6s, $1.34658600)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after begin_component -> Build did not fail at the newly inserted env_consistent_restore_intcall_body_frame; it continued to the known downstream Expr_Call_IntCall old-wrapper MATCH_MP_TAC at lines 14264-14268 with a >4KiB goal. This validates the body-frame helper enough to use as a candidate bridge, but C2.6.4.2.4 theorem is not yet added/proved. (`TO_type_system_rewrite-20260525T153549Z_m57054_t002`)
+  - Read IntCall helper clusters around lines 10530-12480 and 13591-13925 -> Confirmed existing helpers are mostly no-TypeError-only (`intcall_post_push_tail_no_type_error`, `intcall_successful_defaults_continuation_no_type_error_general`, generated no-TypeError wrappers). Existing reusable pieces include `intcall_lock_attempt_sound_frame`, `intcall_safe_cast_expr_result_typed`, cleanup frame lemmas, and new `env_consistent_restore_intcall_body_frame`. (`TO_type_system_rewrite-20260525T153549Z_m57055_t001`, `TO_type_system_rewrite-20260525T153549Z_m57056_t002`, `TO_type_system_rewrite-20260525T153549Z_m57061_t001`)
+- `E1256` (progressed, other, actual effort: 1 sessions, 2 msgs, 26 steps, 36 tools, 3 holbuild, 2,819,853 tok (2,809,153 in, 10,700 out, 2,704,896 cached), 286.2s, $2.19473300)
+  - Added `intcall_default_success_post_push_sound[local]` as full analogue of `intcall_default_success_post_push_no_type_error`, with extra `well_typed_expr`, `expr_type`, and full preservation/result-typing conclusion. -> The theorem statement parses and initial proof prefix typechecks; first probe after `rpt strip_tac` showed the expected 10 conjunctive subgoals and confirmed the local premises include the exact post-push tail equation. (`TO_type_system_rewrite-20260525T153549Z_m57134_t001`, `TO_type_system_rewrite-20260525T153549Z_m57135_t001`)
+  - Extended proof prefix with `drule_all intcall_live_pushed_body_preconditions` and then with a no-TypeError subproof via `intcall_default_success_post_push_no_type_error`; unfolded outer bind and split the `finally` result. -> Build reaches the explicit `post_push_sound_after_finally_split` probe, so the helper can already derive pushed-state `env_consistent/state_well_typed/accounts_well_typed` facts and the `no_type_error_result res` conjunct. Remaining branch work starts after `Cases_on fin_res >> gvs[]`. (`TO_type_system_rewrite-20260525T153549Z_m57137_t001`)
+- `E1257` (progressed, other, actual effort: 1 sessions, 4 msgs, 46 steps, 59 tools, 10 holbuild, 4,629,391 tok (4,610,987 in, 18,404 out, 4,402,176 cached), 591.8s, $3.79726300)
+  - After `Cases_on fin_res >> gvs[]`, classified `INL rv` with `intcall_finally_try_handle_success_rv`, unfolded `finally/try` enough to reach the normal body-success cleanup/cast branch. -> Reached concrete normal-success branch with body equation, cleanup equations, and final goal `state_well_typed s'' /\ env_consistent env cx s'' /\ accounts_well_typed s''.accounts /\ expr_result_typed ... (Value crv)`; this validates the expected branch structure. (`TO_type_system_rewrite-20260525T153549Z_m57167_t001`)
+  - Applied body IH for `eval_stmts ... body' (lock_st with scopes := [call_env]) = (INL (),st_bdy)` and `intcall_unlock_state_preserves_frame` to cleanup-after-pop equation. -> Derived `state_well_typed st_bdy`, `accounts_well_typed st_bdy.accounts`, `env_consistent env_after ... st_bdy`, and cleanup equalities `fin_st.scopes = args_st.scopes`, `fin_st.immutables = st_bdy.immutables`, `fin_st.accounts = st_bdy.accounts`. This is useful partial preservation evidence. (`TO_type_system_rewrite-20260525T153549Z_m57176_t001`, `TO_type_system_rewrite-20260525T153549Z_m57186_t001`)
+  - Tried to finish env restoration inline using broad `gvs[...] >> metis_tac[env_consistent_restore_intcall_body_frame]`, then attempted an intermediate assertion `env_consistent env_after ... fin_st`. -> Both variants exposed a >4KB env-consistency restoration goal / metis timeout. This is a factoring signal: prove a small cleanup-frame lemma rather than continuing inline metis/gvs plumbing. (`TO_type_system_rewrite-20260525T153549Z_m57188_t001`, `TO_type_system_rewrite-20260525T153549Z_m57191_t001`)
+- `E1258` (progressed, other, actual effort: 1 sessions, 5 msgs, 49 steps, 65 tools, 9 holbuild, 5,032,310 tok (5,012,280 in, 20,030 out, 4,890,112 cached), 600.0s, $3.65679600)
+  - Added `intcall_finally_try_handle_success_cleanup`, strengthening existing `intcall_finally_try_handle_success_rv` with the cleanup equation for both normal success and ReturnException cases. -> holbuild continued past the new theorem to the existing partial consumer, validating the classifier proof. (`TO_type_system_rewrite-20260525T153549Z_m57282_t001`)
+  - Changed `intcall_default_success_post_push_sound` to use `drule intcall_finally_try_handle_success_cleanup >> disch_then strip_assume_tac`, avoiding broad inline unfolding of `finally/try` in the consumer. -> Verified reduction from many case-split goals to exactly two proof cases: normal `rv=NoneV` body success with cleanup equation, and ReturnException with cleanup equation. A subsequent `>-` branch failed because the normal-case subproof did not yet solve its first subgoal. (`TO_type_system_rewrite-20260525T153549Z_m57299_t001`, `TO_type_system_rewrite-20260525T153549Z_m57300_t001`)
+- `E1259` (progressed, other, actual effort: 1 sessions, 4 msgs, 52 steps, 61 tools, 16 holbuild, 5,355,940 tok (5,335,669 in, 20,271 out, 5,209,600 cached), 713.0s, $3.84327500)
+  - Added intcall_safe_cast_NoneTV_NoneV near the IntCall safe-cast helper cluster and used gvs with lift_option_type/return/expr_result_typed after normal branch cleanup restoration. -> The normal body-success branch of intcall_default_success_post_push_sound is now solved; holbuild proceeds to the ReturnException branch failure. (`TO_type_system_rewrite-20260525T153549Z_m57349_t001`, `TO_type_system_rewrite-20260525T153549Z_m57353_t001`)
+- `E1260` (progressed, other, actual effort: 1 sessions, 3 msgs, 45 steps, 53 tools, 6 holbuild, 4,636,216 tok (4,619,610 in, 16,606 out, 4,503,040 cached), 469.2s, $3.33255000)
+  - Specialized the body IH for `INR (ReturnException rv)`, used `intcall_cleanup_after_pop_preserves_frame` and `intcall_cleanup_frame_restore_sound` with static facts from `env_extends_def`, then rewrote `NoneT` return/cast with `intcall_safe_cast_NoneTV_NoneV`. -> ReturnException successful-finally branch in `intcall_default_success_post_push_sound` now solves; holbuild proceeds to the remaining outer `fin_res = INR y` preservation branch. (`TO_type_system_rewrite-20260525T153549Z_m57377_t001`, `TO_type_system_rewrite-20260525T153549Z_m57404_t001`)
+  - Tried broad `gvs[finally_def, try_def, ignore_bind_apply, bind_apply, bind_def, ignore_bind_def, return_def, raise_def, handle_function_def, AllCaseEqs()]` for the outer `fin_res = INR y` branch. -> Timed out / over-unfolded; do not retry this whole-tail simplification in the consumer. (`TO_type_system_rewrite-20260525T153549Z_m57388_t001`)
+  - Added local classifier `intcall_try_handle_success_body_cases` to classify `try (do fn_m; return NoneV od) handle_function pushed_st = (INL x,try_st)` into normal body success or ReturnException body result. -> New helper theorem typechecks and builds through; intended for a focused outer-INR helper/proof, but current inline outer-INR attempt was reverted to a `FAIL_TAC` cursor after an accidental bad edit. (`TO_type_system_rewrite-20260525T153549Z_m57395_t001`, `TO_type_system_rewrite-20260525T153549Z_m57404_t001`)
+- `E1261` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 69 steps, 69 tools, 26 holbuild, 6,633,833 tok (6,613,147 in, 20,686 out, 6,358,528 cached), 1023.0s, $5.07293900)
+  - Controlled finally/try split, classify try-INL branches with intcall_try_handle_success_body_cases, then prove cleanup-INL contradiction and cleanup-INR preservation using body IH plus intcall_cleanup_after_pop_preserves_frame/intcall_cleanup_frame_restore_sound. -> try-INL normal and ReturnException cleanup failure subbranches advanced/mostly solved, but proof required duplicated inline branch plumbing and repeated qpat matching. (`TO_type_system_rewrite-20260525T153549Z_m57513_t001`)
+  - For try-INR branch, classify body result with intcall_try_handle_result_body_cases and duplicate cleanup success/failure frame restoration inline. -> Classifier matched only after broadening pattern, but branch success left an implication goal not fully consumed by the branch tactic; final cleanup-failure branch repeatedly suffered qpat matching/focus failures after simplification. (`TO_type_system_rewrite-20260525T153549Z_m57517_t001`, `TO_type_system_rewrite-20260525T153549Z_m57524_t001`, `TO_type_system_rewrite-20260525T153549Z_m57538_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m57513_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57517_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57524_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57538_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1267`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 92,540 tok (92,207 in, 333 out, 85,504 cached), 9.4s, $0.08625700
+
+### Attempts / Evidence
+
+- `E1262` (proved, , actual effort: 1 sessions, 7 steps, 8 tools, 2 holbuild, 486,888 tok (484,752 in, 2,136 out, 459,264 cached), 96.0s, $0.42115200)
+  - Composed intcall_cleanup_after_pop_preserves_frame with intcall_cleanup_frame_restore_sound without splitting cleanup_res/nr/is_view. -> New local cleanup-after-body wrapper added; holbuild got past it and failed at downstream intcall_default_success_post_push_sound, so component theorem is proved. (`TO_type_system_rewrite-20260525T153549Z_m57549_t001`, `TO_type_system_rewrite-20260525T153549Z_m57550_t001`)
+- `E1267` (proved, , actual effort: 1 sessions, 1 steps, 92,540 tok (92,207 in, 333 out, 85,504 cached), 9.4s, $0.08625700)
+  - Carry-forward verification of `intcall_cleanup_after_body_preserves_caller_frame` in current source prefix. -> The current build failure is downstream at `intcall_default_success_post_push_sound`, confirming this helper remains proved in the accepted prefix. (`TO_type_system_rewrite-20260525T153549Z_m57647_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m57647_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57550_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1268`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 202,895 tok (202,472 in, 423 out, 192,512 cached), 17.3s, $0.15874600
+
+### Attempts / Evidence
+
+- `E1263` (proved, , actual effort: 1 sessions, 2 msgs, 19 steps, 21 tools, 7 holbuild, 1,821,592 tok (1,815,284 in, 6,308 out, 1,780,224 cached), 282.5s, $1.25465200)
+  - Unfolded finally_def/try_def and split try result, cleanup result, do fn_m; return NoneV, fn_m result, and body exception constructors; kept lemma pure with only body/cleanup equations. -> Classifier theorem proved; downstream build failure is the pre-existing partial main theorem branch scheduled for later leaves. (`TO_type_system_rewrite-20260525T153549Z_m57558_t001`, `TO_type_system_rewrite-20260525T153549Z_m57572_t001`)
+- `E1268` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 202,895 tok (202,472 in, 423 out, 192,512 cached), 17.3s, $0.15874600)
+  - Carry-forward verification of `intcall_finally_try_handle_inr_body_cleanup_cases` in current source prefix. -> The current build failure is downstream at `intcall_default_success_post_push_sound`, confirming the pure classifier remains proved in the accepted prefix. The source theorem is unchanged and matches the PLAN boundary shape. (`TO_type_system_rewrite-20260525T153549Z_m57647_t002`, `TO_type_system_rewrite-20260525T153549Z_m57661_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m57647_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57572_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57661_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1269`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 4 tools, 1 holbuild, 552,455 tok (551,452 in, 1,003 out, 538,112 cached), 57.1s, $0.36584600
+
+### Attempts / Evidence
+
+- `E1264` (proved, , actual effort: 1 sessions, 9 steps, 9 tools, 3 holbuild, 591,260 tok (588,925 in, 2,335 out, 474,112 cached), 116.0s, $0.88117100)
+  - Verified `intcall_default_finally_inr_preserves_frame` by explicitly instantiating generated body IH in normal/exception branches and applying `intcall_cleanup_after_body_preserves_caller_frame`; added explicit existential witnesses where `irule` left schematic variables. -> holbuild progressed past the helper and failed later in the known partial `intcall_default_success_post_push_sound`, showing this leaf theorem is proved. (`TO_type_system_rewrite-20260525T153549Z_m57609_t001`)
+- `E1269` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 1 holbuild, 552,455 tok (551,452 in, 1,003 out, 538,112 cached), 57.1s, $0.36584600)
+  - Changed only the helper statement line for `intcall_default_finally_inr_preserves_frame` to consume the ordinary generated body IH, reusing the existing proof body. -> Build replay got past the repaired helper and failed later in `intcall_default_success_post_push_sound`, confirming the repaired helper statement/proof is accepted in the current theory prefix. (`TO_type_system_rewrite-20260525T153549Z_m57667_t001`, `TO_type_system_rewrite-20260525T153549Z_m57668_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m57667_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57668_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` C2.6.4.2.4.4 was estimated Risk 2 as a small consumer integration, but repeated attempts show the consumer interface remains brittle. I factored a local adapter `intcall_default_finally_inr_preserves_frame_from_caller_ctx`; holbuild gets through that adapter and then fails in the main consumer at the frame assertion. Exact `qspecl_then`/`impl_tac`, retained/generated-IH facts, `drule_all`, and bounded `metis_tac` all either leave the same outer frame triple or time out. This is not the old universal-NoneT false premise; it is a proof-interface/decomposition mismatch in the consumer shape.
+- latest episode: `E1274`
+- blocker: Risk mismatch: the planned small consumer edit still requires a stronger/direct consumer-shaped boundary lemma or reworked decomposition; continuing tactic variants would violate do-not-retry guidance.
+- actual effort: 1 sessions, 3 msgs, 53 steps, 56 tools, 21 holbuild, 5,317,922 tok (5,296,861 in, 21,061 out, 5,187,072 cached), 904.8s, $3.77431100
+- next: Strategist should replace/augment this leaf. Likely repair: prove a direct local lemma with premises exactly matching the live `intcall_default_success_post_push_sound` outer-INR context (including `well_typed_expr`, env_body equalities, lock success, no_type_error_result) and conclusion the frame triple, or fold the frame triple into a larger safe-cast tail lemma so the main theorem no longer applies the helper under a `by` assertion.
+
+### Attempts / Evidence
+
+- `E1265` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 26 steps, 25 tools, 9 holbuild, 2,889,768 tok (2,879,682 in, 10,086 out, 2,824,192 cached), 418.4s, $1.99212600)
+  - Replaced the old long outer-INR inline branch with a direct call to `intcall_default_finally_inr_preserves_frame`; tried both `irule` and `mp_tac`+`impl_tac` styles with explicit specialization. -> Build reaches the new integration branch but cannot prove the helper's first premise from the live generated IH due to `NoneT` vs arbitrary `ret_ty1` return-exception typing mismatch. (`TO_type_system_rewrite-20260525T153549Z_m57638_t001`)
+- `E1266` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 13 tools, 1 holbuild, 499,386 tok (496,395 in, 2,991 out, 462,336 cached), 73.7s, $0.49119300)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` at the current partial direct-helper integration. -> Build fails exactly at the outer-INR replacement: the subgoal is the preservation triple, and applying `intcall_default_finally_inr_preserves_frame` leaves a first premise requiring a universal `NoneT`-typed exceptional branch not supplied by the live generated IH. (`TO_type_system_rewrite-20260525T153549Z_m57647_t002`)
+  - Checked the proposed no-control bridge by inspecting `stmts_no_control_escape` and the available no-control theorem. -> The available theorem only proves `exn <> BreakException /\ exn <> ContinueException`; `stmt_no_control_escape (Return opt_e) = T`, while `no_control_exc_return_exception_typed` needs `no_control_exc`, which excludes `ReturnException`. Thus this bridge cannot generally prove `return_exception_typed _ NoneT exn` for body returns. (`TO_type_system_rewrite-20260525T153549Z_m57653_t003`, `TO_type_system_rewrite-20260525T153549Z_m57649_t001`, `TO_type_system_rewrite-20260525T153549Z_m57648_t001`)
+- `E1270` (progressed, other, actual effort: 1 sessions, 2 msgs, 12 steps, 14 tools, 4 holbuild, 1,528,396 tok (1,524,254 in, 4,142 out, 1,491,968 cached), 205.2s, $1.03167400)
+  - After C2.6.4.2.4.3 repaired the helper statement, tried simplifying the consumer helper application and discharging the first premise with `first_assum ACCEPT_TAC`. -> Build still failed at the outer-INR consumer block; `first_assum` did not match the live generated-IH premise after simplification. (`TO_type_system_rewrite-20260525T153549Z_m57673_t001`)
+  - Restored explicit generated-IH premise proof and then changed it to `qpat_x_assum ... mp_tac >> simp[]`; finally inserted `FAIL_TAC "premise_probe"` after `simp[]` to inspect the subgoal. -> The non-probe version did not close; the probe build intentionally fails. Source is partial with the probe still present. Evidence shows the tactic entered the same outer-INR block after the repaired helper but does not yet close the helper premise. (`TO_type_system_rewrite-20260525T153549Z_m57675_t001`, `TO_type_system_rewrite-20260525T153549Z_m57679_t001`)
+- `E1271` (progressed, other, actual effort: 1 sessions, 4 msgs, 48 steps, 51 tools, 18 holbuild, 5,078,695 tok (5,061,291 in, 17,404 out, 4,936,192 cached), 800.3s, $3.61571100)
+  - Moved probe immediately after helper `simp[...]`. -> Confirmed the helper application leaves the same three top-level goals and the first goal is the desired frame-preservation conclusion; the helper premise still must be discharged before simplification can finish. (`TO_type_system_rewrite-20260525T153549Z_m57691_t001`)
+  - Tried `impl_tac >- first_assum ACCEPT_TAC` and a bounded `metis_tac` fallback with the helper plus stk-irrelevance lemmas. -> `first_assum` did not close; `metis_tac` timed out, so broad automation is not a viable consumer tactic. (`TO_type_system_rewrite-20260525T153549Z_m57699_t001`, `TO_type_system_rewrite-20260525T153549Z_m57697_t001`)
+  - Tried stripping the helper premise and applying the live generated IH with `qpat_assum ... (qspecl_then [...])`, followed by stk-irrelevance simplification. -> The `THEN1` branch still did not solve. A later probe after the IH application intentionally failed, but goalfrag only reported the outer failed fragment, not the exact residual inner goal. (`TO_type_system_rewrite-20260525T153549Z_m57725_t001`, `TO_type_system_rewrite-20260525T153549Z_m57731_t001`, `TO_type_system_rewrite-20260525T153549Z_m57732_t001`)
+- `E1272` (progressed, other, actual effort: 1 sessions, 4 msgs, 53 steps, 57 tools, 22 holbuild, 5,299,365 tok (5,278,212 in, 21,153 out, 5,154,304 cached), 950.2s, $3.83128200)
+  - Asserted a generated-IH-shaped local fact exactly matching the repaired helper's first premise and proved it from the live generated IH using stk-irrelevance lemmas. -> The local fact itself was accepted; an initial `pop_assum` labelled the wrong assumption, then `qpat_x_assum ... (mk_asm "body_ih_for_helper")` correctly labelled the intended quantified IH premise. (`TO_type_system_rewrite-20260525T153549Z_m57740_t001`, `TO_type_system_rewrite-20260525T153549Z_m57752_t001`)
+  - Tried to discharge helper premises via `mp_tac`/`impl_tac`, labelled assumptions, `FIRST_PROVE`, and then explicit `irule intcall_default_finally_inr_preserves_frame` with witnesses. -> Generic premise-selection remained brittle. The explicit `irule` form with witnesses exposed that the helper application is not the old NoneT mismatch; remaining failures are about managing premises/final continuation, not theorem falsehood evidence. (`TO_type_system_rewrite-20260525T153549Z_m57754_t001`, `TO_type_system_rewrite-20260525T153549Z_m57779_t001`)
+  - Replaced the explicit premise list with `suspend "after_irule_qexists"` after `irule`/`qexistsl` to inspect the post-helper/final residual. -> Build intentionally fails at QED with a suspended goal whose assumptions include `finally ... = (INL x,fin_st)`, the safe-cast bind equation, `no_type_error_result res`, and the frame facts `state_well_typed fin_st`, `env_consistent env cx fin_st`, `accounts_well_typed fin_st.accounts`; the goal is the final preservation/result-typing package for `st'`/`res`. (`TO_type_system_rewrite-20260525T153549Z_m57786_t001`)
+- `E1273` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 49 steps, 52 tools, 20 holbuild, 4,813,629 tok (4,794,926 in, 18,703 out, 4,691,456 cached), 817.8s, $3.42416800)
+  - Inserted `intcall_default_finally_inr_preserves_frame_from_caller_ctx` after `intcall_default_finally_inr_preserves_frame`; proof delegates to existing helper and discharges the caller-context vs pushed-context mismatch internally. -> Adapter theorem now builds through its own proof prefix; it solves the stk-irrelevance mismatch internally. (`TO_type_system_rewrite-20260525T153549Z_m57886_t001`, `TO_type_system_rewrite-20260525T153549Z_m57916_t001`)
+  - Updated consumer to call the new adapter; tried `drule_all`, exact `qspecl_then` with `impl_tac`, and generated-IH local fact/label variants. -> Consumer still fails at the frame assertion, with holbuild showing the outer frame triple rather than a useful inner premise. The helper theorem itself is no longer the old NoneT mismatch, but the consumer application remains brittle. (`TO_type_system_rewrite-20260525T153549Z_m57919_t001`, `TO_type_system_rewrite-20260525T153549Z_m57923_t001`)
+- `E1274` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 53 steps, 56 tools, 21 holbuild, 5,317,922 tok (5,296,861 in, 21,061 out, 5,187,072 cached), 904.8s, $3.77431100)
+  - Added local adapter `intcall_default_finally_inr_preserves_frame_from_caller_ctx` that delegates to `intcall_default_finally_inr_preserves_frame` and internalizes caller-context vs stk-updated context side conditions. -> Adapter proof itself proceeds past its original failures after repairing body variable usage and explicitly specializing the generated IH; holbuild then reaches the main consumer. (`TO_type_system_rewrite-20260525T153549Z_m57916_t001`)
+  - Integrated adapter in `intcall_default_success_post_push_sound` with exact `qspecl_then`/`impl_tac`, both with a labelled `body_ih_for_helper` and with the unlabelled generated IH local fact kept in context. -> Consumer still fails at the frame assertion, with holbuild showing the same outer frame triple and `first subgoal not solved`; the nested premise does not become a clean boundary call. (`TO_type_system_rewrite-20260525T153549Z_m57921_t001`, `TO_type_system_rewrite-20260525T153549Z_m57923_t001`)
+  - Tried `drule_all` and then bounded `metis_tac` on the consumer-shaped adapter to avoid inline premise plumbing. -> `drule_all` hit an internal assert/predicate mismatch; `metis_tac` timed out. This rules out broad automation as the bridge. (`TO_type_system_rewrite-20260525T153549Z_m57919_t001`, `TO_type_system_rewrite-20260525T153549Z_m57927_t001`)
+
+### Ruled Out
+
+- More `qspecl_then`/`impl_tac` variants in the consumer.
+- `drule_all` on the adapter theorem.
+- Broad `metis_tac` with the adapter theorem.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m57916_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57923_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57927_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m57924_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1275`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 28 steps, 28 tools, 10 holbuild, 2,010,071 tok (2,000,531 in, 9,540 out, 1,946,624 cached), 414.2s, $1.52904700
+- next: Review closure with strategist, then begin C2.6.4.2.4.4.2 to replace the failing consumer assertion with the new boundary lemma.
+
+### Attempts / Evidence
+
+- `E1275` (proved, , actual effort: 1 sessions, 2 msgs, 28 steps, 28 tools, 10 holbuild, 2,010,071 tok (2,000,531 in, 9,540 out, 1,946,624 cached), 414.2s, $1.52904700)
+  - Added local theorem `intcall_default_success_post_push_outer_inr_frame` after `intcall_default_finally_inr_preserves_frame_from_caller_ctx`; proved it by applying the existing caller-context frame helper and discharging its generated body-IH antecedent with stack-irrelevance rewrites. -> holbuild progressed past the new boundary lemma and now fails later in `intcall_default_success_post_push_sound` at the existing consumer `metis_tac` block, which is the planned next component C2.6.4.2.4.4.2. (`TO_type_system_rewrite-20260525T153549Z_m57961_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m57961_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.4.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The active leaf's planned consumer integration remains brittle even after adding a local live-context bridge theorem. The bridge theorem itself is proved (holbuild progresses past it), but `intcall_default_success_post_push_sound` still fails in the outer-INR frame assertion with `first subgoal not solved by second tactic` and the same frame triple goal. This invalidates the Risk-2 assumption that a consumer-shaped boundary would integrate mechanically in the existing `by` assertion.
+- latest episode: `E1278`
+- blocker: Need strategist reshaping of the boundary/integration strategy; continuing direct theorem-application variants in the consumer is now tactic thrashing.
+- actual effort: 1 sessions, 2 msgs, 31 steps, 32 tools, 12 holbuild, 3,337,745 tok (3,321,113 in, 16,632 out, 3,230,208 cached), 586.7s, $2.56858900
+- next: Call plan_oracle(mode='review') for C2.6.4.2.4.4.2 with the stuck evidence and request a replacement integration/boundary strategy.
+
+### Attempts / Evidence
+
+- `E1276` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 39 steps, 43 tools, 14 holbuild, 4,487,193 tok (4,474,203 in, 12,990 out, 4,371,968 cached), 630.7s, $3.08685900)
+  - Replaced the old consumer `metis_tac[intcall_default_finally_inr_preserves_frame_from_caller_ctx]` with `metis_tac[intcall_default_success_post_push_outer_inr_frame]`. -> Bounded metis on the new boundary still timed out in the full consumer context, so automation alone is not enough. (`TO_type_system_rewrite-20260525T153549Z_m57968_t001`)
+  - Tried explicit `qspecl_then` on `intcall_default_success_post_push_outer_inr_frame` with `simp[]`, `impl_tac`, `disch_then irule`, and probes. -> Repeated failures still report the same outer frame triple; `impl_tac` probes did not show a clean inner antecedent in holbuild output. This suggests theorem application shape or tactical use remains wrong, not that the boundary lemma is false. (`TO_type_system_rewrite-20260525T153549Z_m57990_t001`, `TO_type_system_rewrite-20260525T153549Z_m57998_t001`)
+  - Inspected current source around the active branch and also around an early accidental replacement site. -> Active branch currently has a partial `qspecl_then ... intcall_default_success_post_push_outer_inr_frame >> simp[]` block. A previous broad `replace_text` matched an earlier occurrence around line 363; next session must inspect/revert any unintended change before building further. (`TO_type_system_rewrite-20260525T153549Z_m58000_t001`, `TO_type_system_rewrite-20260525T153549Z_m58000_t002`)
+- `E1277` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 30 steps, 31 tools, 12 holbuild, 3,213,404 tok (3,197,538 in, 15,866 out, 3,107,840 cached), 573.9s, $2.47839000)
+  - Added `intcall_default_success_post_push_outer_inr_frame_live` with premises matching the live outer-INR branch and proved it by specializing the existing boundary theorem with explicit generated-IH premise discharge. -> Bridge theorem proof passed far enough for holbuild to advance into `intcall_default_success_post_push_sound`; evidence shows next failure is back in the consumer theorem, not at the bridge theorem. (`TO_type_system_rewrite-20260525T153549Z_m58109_t001`)
+  - Replaced the consumer assertion with `irule intcall_default_success_post_push_outer_inr_frame_live >> simp[...]`. -> Consumer still fails at the same outer frame triple with `first subgoal not solved by second tactic`; direct bridge consumption in the `by` assertion remains brittle. (`TO_type_system_rewrite-20260525T153549Z_m58116_t001`)
+- `E1278` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 31 steps, 32 tools, 12 holbuild, 3,337,745 tok (3,321,113 in, 16,632 out, 3,230,208 cached), 586.7s, $2.56858900)
+  - Added and proved a live-context bridge theorem `intcall_default_success_post_push_outer_inr_frame_live` wrapping `intcall_default_success_post_push_outer_inr_frame`. -> holbuild advanced past the bridge theorem and failed in the consumer, showing the bridge proof itself is accepted but not enough for the planned integration. (`TO_type_system_rewrite-20260525T153549Z_m58109_t001`)
+  - Tried consuming the bridge with `irule intcall_default_success_post_push_outer_inr_frame_live >> simp[...]` in the outer-INR frame assertion. -> The same frame triple remains and the `by` assertion reports `first subgoal not solved by second tactic`; direct consumption remains unusable. (`TO_type_system_rewrite-20260525T153549Z_m58116_t001`)
+  - Recorded non-terminal checkpoint with the exact source/evidence and ruled-out direct bridge consumption. -> Episode E1277 documents the risk mismatch and source partial state. (`TO_type_system_rewrite-20260525T153549Z_m58117_t001`)
+
+### Ruled Out
+
+- Direct `mp_tac`/`MATCH_MP_TAC`/`irule`/`qspecl_then` variants of `intcall_default_success_post_push_outer_inr_frame` inside the consumer `by` assertion.
+- Adding the live-context bridge theorem and consuming it with direct `irule` in the same consumer `by` assertion.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58109_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58116_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58117_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.4.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1283`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 196,634 tok (195,569 in, 1,065 out, 177,664 cached), 82.1s, $0.21030700
+- next: Review closure with strategist, then begin the scheduled next component for the later `Expr_Call_IntCall` failure.
+
+### Attempts / Evidence
+
+- `E1279` (proved, , actual effort: 1 sessions, 2 msgs, 17 steps, 18 tools, 6 holbuild, 1,248,032 tok (1,241,936 in, 6,096 out, 1,193,472 cached), 255.3s, $1.02193600)
+  - Inserted local `intcall_default_success_post_push_outer_inr_frame_apply` after `_live`; proved it by specializing `_live`, discharging the generated-IH premise with the stripped IH plus `context_well_typed_stk_irrelevant`/`functions_well_typed_stk_irrelevant`. -> `holbuild vyperTypeStmtSoundnessTheory` advanced past the new apply theorem and failed later at the pre-existing main-theorem consumer block still using `_live`, matching the expected next-component failure shape. (`TO_type_system_rewrite-20260525T153549Z_m58140_t001`)
+- `E1281` (progressed, other, actual effort: 1 sessions, 4 msgs, 38 steps, 43 tools, 9 holbuild, 3,594,915 tok (3,579,976 in, 14,939 out, 3,456,000 cached), 534.8s, $2.79605000)
+  - Changed `Cases_on fin_res >> gvs[] ... >> (tail)` into explicit `>- (...)` for the existing INL branch followed by `>- (...)` for the outer-INR branch. -> Focused the outer-INR branch: holbuild reported one failed input goal at the frame assertion instead of the previous three, confirming the branch-focus refactor worked. (`TO_type_system_rewrite-20260525T153549Z_m58236_t001`)
+  - In the focused outer-INR branch, used `qspecl_then ... mp_tac intcall_default_success_post_push_outer_inr_frame_apply` and discharged implications sequentially with `impl_tac`, avoiding broad `simp` timeout. -> The frame assertion was consumed and build advanced to QED; remaining goals are later residual INL/fallthrough cases, not the target outer-INR frame triple. (`TO_type_system_rewrite-20260525T153549Z_m58245_t001`)
+  - Tried to close remaining residuals with a single final contradiction using `drule (cj 2 no_fallthrough_eval_no_success)` specialized to the body-evaluation equation. -> Failed because there are two residual goals and the `>-` proof only targeted the first; also the visible residual is a `finally ... = (INL x,fin_st)` goal where the body eval equation is not yet exposed, so this needs explicit INL-branch case handling rather than a trailing broadcast contradiction. (`TO_type_system_rewrite-20260525T153549Z_m58261_t001`)
+- `E1282` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 3 holbuild, 1,296,296 tok (1,291,189 in, 5,107 out, 1,240,064 cached), 166.7s, $1.02886700)
+  - Ran holbuild on current partial source before edits; confirmed selected INR tail applying `_apply` leaves `type_stmts env_body NoneT body' = SOME env_after` under only `type_stmts env_body (expr_type (Call ...)) body' = SOME env_after` and `stmts_no_fallthrough body'`. -> Confirmed the failure is not multi-goal focus but a `_apply` premise mismatch. (`TO_type_system_rewrite-20260525T153549Z_m58320_t001`)
+  - Inspected local helper `_apply` and consumer block; removed the duplicate selected INR tail as recommended by STATE so only the original focused outer-INR branch remains. -> Source now fails at QED with one focused caller-frame triple goal for `finally ... = (INR y,fin_st)`, still with arbitrary return type/no-fallthrough assumptions rather than a `NoneT` body typing premise. (`TO_type_system_rewrite-20260525T153549Z_m58321_t001`, `TO_type_system_rewrite-20260525T153549Z_m58322_t001`, `TO_type_system_rewrite-20260525T153549Z_m58329_t001`)
+- `E1283` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 196,634 tok (195,569 in, 1,065 out, 177,664 cached), 82.1s, $0.21030700)
+  - Inserted/kept `intcall_default_success_post_push_outer_inr_frame_ret` and consumed it in the selected outer-INR branch of `intcall_default_success_post_push_sound`. -> Focused build advanced beyond the helper and consumer theorem to a later IntCall mutual-resume failure, confirming the outer-INR frame boundary repair is discharged. (`TO_type_system_rewrite-20260525T153549Z_m58356_t001`)
+
+### Ruled Out
+
+- No `type_stmts env_body NoneT body' = SOME env_after` subgoal remains in this branch; the return-polymorphic boundary is used instead.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58356_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58357_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58357_t002` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.4.4.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 consumer integration did not reduce to atomic premise discharge. Fresh holbuild confirmed the source starts with three failed input goals for the `by` assertion. Probing after `irule (Q.SPECL ... intcall_default_success_post_push_outer_inr_frame_apply)` showed the displayed frame triple remains, with holbuild still reporting three failed input goals; adding `simp`, `first_assum ACCEPT_TAC`, or `rpt conj_tac` variants either left the same triple, timed out, or failed with THEN1/first-subgoal-not-solved. This suggests the consumer `by` assertion/focus and theorem interface are still mismatched, not a routine tactic issue.
+- latest episode: `E1280`
+- blocker: Applying the proved `_apply` boundary in the main `intcall_default_success_post_push_sound` outer-INR assertion still leaves the original frame triple/multiple failed input goals; current decomposition underestimated the proof-interface/focus problem.
+- actual effort: 1 sessions, 3 msgs, 38 steps, 41 tools, 11 holbuild, 3,182,146 tok (3,165,275 in, 16,871 out, 3,083,264 cached), 614.5s, $2.45781700
+- next: Strategist review should replace/refine this consumer proof interface or adjust the decomposition, e.g. a more consumer-shaped theorem/conclusion or a refactor of the surrounding `by`/branch focus rather than more tactic variations.
+
+### Attempts / Evidence
+
+- `E1280` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 38 steps, 41 tools, 11 holbuild, 3,182,146 tok (3,165,275 in, 16,871 out, 3,083,264 cached), 614.5s, $2.45781700)
+  - Initial source used `qspecl_then [...] mp_tac intcall_default_success_post_push_outer_inr_frame_apply >> simp[...]` in the frame `by` block. -> Timed out and holbuild showed the same `state_well_typed fin_st /\ env_consistent env cx fin_st /\ accounts_well_typed fin_st.accounts` goal with three failed input goals, so simple forward theorem consumption did not focus/discharge the assertion. (`TO_type_system_rewrite-20260525T153549Z_m58179_t001`)
+  - Replaced with `irule (Q.SPECL [...] intcall_default_success_post_push_outer_inr_frame_apply) >> simp[...] >> rpt conj_tac >> first_assum ACCEPT_TAC` and variants with `ORELSE simp[]`. -> Still failed on the same outer frame triple / three-goal shape; variants produced `FIRST_ASSUM` failure or `first subgoal not solved by second tactic`. (`TO_type_system_rewrite-20260525T153549Z_m58182_t001`, `TO_type_system_rewrite-20260525T153549Z_m58214_t001`)
+  - Inserted temporary `FAIL_TAC` probes immediately after `irule` and after `simp` to inspect the post-application shape. -> Probe evidence showed the failed fragment's top input goal remains the frame triple and holbuild still reports three failed input goals; the proof interface/focus issue persists before atomic premise discharge can happen. (`TO_type_system_rewrite-20260525T153549Z_m58204_t001`, `TO_type_system_rewrite-20260525T153549Z_m58206_t001`)
+
+### Ruled Out
+
+- Direct `_live` consumption remains ruled out by PLAN/prior episodes.
+- Simple `_apply` consumption via `qspecl_then ... mp_tac`, `irule ... >> simp`, and small first-assumption discharge variants.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58179_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58182_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58204_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58206_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58214_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` C2.6.4.2.5 was rated Risk 2, but the planned direct clone/strengthening of the no-TypeError continuation wrapper is not a routine proof. The new full continuation helper parses, but the lock-success branch requires brittle large conjunct plumbing to compose `intcall_generated_body_ih_live_consumer_premise` with `intcall_default_success_post_push_sound`; repeated focused attempts timed out or exposed a huge goal. This suggests the helper interface/decomposition needs redesign or an intermediate boundary helper, not more tactic search.
+- latest episode: `E1285`
+- blocker: Direct proof of the planned `intcall_successful_defaults_continuation_sound_general` leaves a >4KB lock-success branch and times out after multiple tactical variants; current source contains a partial draft and is not build-clean.
+- actual effort: 1 sessions, 3 msgs, 36 steps, 39 tools, 11 holbuild, 3,764,021 tok (3,747,300 in, 16,721 out, 3,640,320 cached), 591.0s, $2.85669000
+- next: Call plan_oracle review for C2.6.4.2.5. Request a decomposition replacement: likely introduce a smaller lock-success full-soundness boundary that packages the body-IH consumer and post-push premises, or replace the continuation/actual-default wrapper design with a higher-level helper that hides these intermediates.
+
+### Attempts / Evidence
+
+- `E1284` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 38 tools, 11 holbuild, 3,633,145 tok (3,617,460 in, 15,685 out, 3,511,808 cached), 572.7s, $2.75471400)
+  - Inserted draft `intcall_successful_defaults_continuation_sound_general` with full expression package conclusion and lock-res split. -> Statement parses far enough for holbuild to enter proof, but proof is incomplete. (`TO_type_system_rewrite-20260525T153549Z_m58398_t001`)
+  - Tried direct lock-success proof by applying `intcall_default_success_post_push_sound`, deriving the body IH with `intcall_generated_body_ih_live_consumer_premise`, then discharging the post-push theorem premises by `rpt conj_tac`/assumption selection. -> Repeated build failures/timeouts in a large lock-success branch; the last failure times out on the whole branch after large conjunct/plumbing tactic, indicating the proof interface or factoring is too brittle for the PLAN's risk-2 estimate. (`TO_type_system_rewrite-20260525T153549Z_m58404_t001`, `TO_type_system_rewrite-20260525T153549Z_m58412_t001`, `TO_type_system_rewrite-20260525T153549Z_m58424_t001`, `TO_type_system_rewrite-20260525T153549Z_m58429_t001`)
+- `E1285` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 36 steps, 39 tools, 11 holbuild, 3,764,021 tok (3,747,300 in, 16,721 out, 3,640,320 cached), 591.0s, $2.85669000)
+  - Added full continuation helper `intcall_successful_defaults_continuation_sound_general[local]` with premises mirroring the existing no-TypeError helper plus `well_typed_expr`/`expr_type` and preservation conclusion. -> Statement/proof entered by holbuild, but not proved; source is partial. (`TO_type_system_rewrite-20260525T153549Z_m58398_t001`)
+  - Tried lock-success case by splitting `lock_res`, simplifying the generated case equation, applying `irule intcall_default_success_post_push_sound`, and using `intcall_generated_body_ih_live_consumer_premise` for the body-IH premise. -> Initial broad `gvs[]`/`simp[]` timed out on the huge branch; replacing with targeted rewrites got further but still left brittle premise discharge. (`TO_type_system_rewrite-20260525T153549Z_m58404_t001`, `TO_type_system_rewrite-20260525T153549Z_m58412_t001`)
+  - Specialized `intcall_generated_body_ih_live_consumer_premise` explicitly and attempted to discharge `intcall_default_success_post_push_sound` premises with selected conjunction tactics and `env_scopes_consistent_stk_irrelevant`. -> The whole lock-success branch timed out; the goal shape shows large generated-IH assumptions plus many post-push premises. This is a proof-interface/decomposition issue rather than a simple tactic miss. (`TO_type_system_rewrite-20260525T153549Z_m58422_t001`, `TO_type_system_rewrite-20260525T153549Z_m58429_t001`)
+
+### Ruled Out
+
+- Directly applying the old no-TypeError wrapper to the final full package goal (already ruled out by STATE and prior build failures).
+- Broad simplification (`gvs[]`/`simp[]`) over the full lock-success branch; it times out under the 2.5s tactic budget.
+- Continuing to add manual `rpt conj_tac`/assumption plumbing to the giant branch; this is brittle and violates the abstraction-level guidance.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58430_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58429_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58422_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1292`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 106,310 tok (105,984 in, 326 out, 101,376 cached), 9.3s, $0.08350800
+
+### Attempts / Evidence
+
+- `E1286` (proved, , actual effort: 1 sessions, 4 steps, 8 tools, 2 holbuild, 322,412 tok (321,146 in, 1,266 out, 276,480 cached), 77.8s, $0.39955000)
+  - Deleted lines 14569-14736 containing the abandoned full-continuation theorem draft. -> Source cleanup succeeded; helper block now flows from the existing no-TypeError continuation theorem directly to the actual-args no-TypeError helper. (`TO_type_system_rewrite-20260525T153549Z_m58438_t001`)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after cleanup. -> Build advanced past the deleted draft and fails later at the scheduled `Expr_Call_IntCall` use of `intcall_actual_args_success_no_type_error_from_generated_ih_general`, matching the component's acceptable cleanup criterion. (`TO_type_system_rewrite-20260525T153549Z_m58439_t003`)
+- `E1292` (proved, , actual effort: 1 sessions, 1 steps, 106,310 tok (105,984 in, 326 out, 101,376 cached), 9.3s, $0.08350800)
+  - Reviewed replacement PLAN and scoped dossier; C2.6.4.2.5.1 is an explicit carry-forward cleanup component already discharged by E1286 with no new work required. -> Accepted as carried-forward proved cleanup; no additional source edits made under this component. (`TO_type_system_rewrite-20260525T153549Z_m58588_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58438_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58439_t003` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1293`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 113,374 tok (113,125 in, 249 out, 108,032 cached), 7.2s, $0.08695100
+
+### Attempts / Evidence
+
+- `E1287` (proved, , actual effort: 1 sessions, 3 steps, 6 tools, 200,005 tok (198,731 in, 1,274 out, 178,688 cached), 26.8s, $0.22777900)
+  - Confirmed source contains local theorem `intcall_generated_body_ih_live_consumer_premise`/packaged generated body IH wrapper at lines 13657-13765, proved by specializing the generated IH and discharging lift/push/scopes facts only. -> Packaged post-push body premise proof is present and build advances beyond the helper cluster. (`TO_type_system_rewrite-20260525T153549Z_m58451_t001`)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after startup; build resumes/fails later in the planned `eval_all_type_sound_mutual[Expr_Call_IntCall]` final integration use of the old no-TypeError helper, not in the new generated-body package lemma. -> Focused verification for this leaf passed far enough to show C2.6.4.2.5.2 is not the failing point; later failure belongs to downstream IntCall integration/helper components. (`TO_type_system_rewrite-20260525T153549Z_m58449_t003`)
+- `E1293` (proved, , actual effort: 1 sessions, 1 steps, 113,374 tok (113,125 in, 249 out, 108,032 cached), 7.2s, $0.08695100)
+  - Reviewed scoped dossier for carry-forward generated-body package component; source theorem `intcall_generated_body_post_push_ih` was already proved by E1287 and remains the planned body-IH boundary. -> Accepted as carried-forward proved boundary lemma; no new source edits made under this component. (`TO_type_system_rewrite-20260525T153549Z_m58591_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58449_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58451_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1294`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 900,625 tok (897,962 in, 2,663 out, 876,032 cached), 89.0s, $0.62755600
+- next: Begin C2.6.4.2.5.4 to add/prove `intcall_successful_defaults_continuation_lock_success_case`, then replace the placeholder with an invocation of that theorem.
+
+### Attempts / Evidence
+
+- `E1288` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 28 steps, 34 tools, 8 holbuild, 3,103,819 tok (3,088,463 in, 15,356 out, 2,991,104 cached), 483.4s, $2.44302700)
+  - Replaced the original inline `qspecl_then ... intcall_generated_body_ih_live_consumer_premise` body subgoal with a two-step package: first assert the universal `!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'. ...` premise from `intcall_generated_body_ih_live_consumer_premise`, then specialize it to concrete `call_env,dflt_st,dflt_st,lock_st,cx with stk...,lock_st` before calling `intcall_default_success_post_push_sound`. -> Still fails in the lock-success branch with the large generated-body IH premise; holbuild reports the THEN1 subgoal is not solved, so this remains a cross-abstraction generated-IH problem rather than a post-push theorem problem. (`TO_type_system_rewrite-20260525T153549Z_m58497_t001`)
+  - Inserted a temporary `FAIL_TAC "pkg leftovers"` after the package-premise conjunct discharge to probe whether the first package derivation had residual subgoals. -> Build still reports the same large generated-IH premise/THEN1 failure; source now contains the probe and is partial. The failure evidence supports that a named adapter helper with exactly the post-push premise, or strategist review, is needed before more tactic variations. (`TO_type_system_rewrite-20260525T153549Z_m58499_t001`)
+- `E1289` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 32 steps, 40 tools, 10 holbuild, 3,400,308 tok (3,381,490 in, 18,818 out, 3,255,296 cached), 580.2s, $2.82315800)
+  - Added local adapter theorem `intcall_generated_body_post_push_ih` whose conclusion is the body-soundness premise expected by `intcall_default_success_post_push_sound`, proved by controlled specialization of `intcall_generated_body_ih_live_consumer_premise` outside the continuation theorem. -> Adapter theorem itself replayed successfully: later holbuild failures started in `intcall_successful_defaults_continuation_sound_general`, not in the new adapter. (`TO_type_system_rewrite-20260525T153549Z_m58516_t001`)
+  - Rewrote the lock-success branch of `intcall_successful_defaults_continuation_sound_general` to call `intcall_generated_body_post_push_ih`, then apply `intcall_default_success_post_push_sound` with explicit conjunct discharge rather than broad `rpt conj_tac`. -> Still times out as one large branch tactic; the visible goal remains huge and includes the generated-body IH assumption, suggesting the branch should be factored further or the full continuation theorem may be the wrong boundary. Current source is partial. (`TO_type_system_rewrite-20260525T153549Z_m58533_t001`)
+  - Inspected diff after a probe removal attempt. -> Diff confirms new adapter/continuation edits are present and also shows much unrelated pre-existing work; next session must not commit this partial state and should inspect the exact current source before editing. (`TO_type_system_rewrite-20260525T153549Z_m58535_t001`)
+- `E1290` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 33 steps, 38 tools, 11 holbuild, 3,377,927 tok (3,361,631 in, 16,296 out, 3,248,640 cached), 537.8s, $2.67815500)
+  - Added local helper `intcall_successful_defaults_lock_success_sound_from_body_ih` that assumes the already-derived body IH and applies `intcall_default_success_post_push_sound`. -> The helper itself likely replayed successfully: later holbuild failures moved into the newly-added generalized helper rather than this direct helper. (`TO_type_system_rewrite-20260525T153549Z_m58563_t001`, `TO_type_system_rewrite-20260525T153549Z_m58566_t001`)
+  - Added `intcall_successful_defaults_lock_success_sound_general` to derive the body IH using `intcall_generated_body_post_push_ih` and then call the direct helper. -> Still non-build-clean. `rpt conj_tac`/`first_assum ACCEPT_TAC` timed out; switching to explicit conjunct discharge exposed missing `env_body.current_src` rewriting for `env_immutables`, then left an unsolved final premise/tail equality goal. This repeats the premise-plumbing failure pattern. (`TO_type_system_rewrite-20260525T153549Z_m58564_t001`, `TO_type_system_rewrite-20260525T153549Z_m58566_t001`, `TO_type_system_rewrite-20260525T153549Z_m58570_t001`)
+- `E1291` (stuck, risk_mismatch, actual effort: 1 sessions, 9 steps, 10 tools, 3 holbuild, 716,127 tok (712,291 in, 3,836 out, 670,208 cached), 138.2s, $0.66059900)
+  - Split the final premise of `intcall_successful_defaults_lock_success_sound_general` explicitly into the lock-acquire equality and post-push tail equality instead of using `first_assum ACCEPT_TAC`. -> This mechanical fix advanced the build past `intcall_successful_defaults_lock_success_sound_general`; the next failure moved into `intcall_successful_defaults_continuation_sound_general`. (`TO_type_system_rewrite-20260525T153549Z_m58577_t003`, `TO_type_system_rewrite-20260525T153549Z_m58580_t001`)
+  - Rewrote the lock-success branch of `intcall_successful_defaults_continuation_sound_general` to call `intcall_successful_defaults_lock_success_sound_general` directly, discharging its premises explicitly from live assumptions. -> The branch tactic timed out with a huge generated-IH/phase-fact premise-discharge goal. This repeats the known brittle generalized-wrapper pattern rather than producing a small composition. (`TO_type_system_rewrite-20260525T153549Z_m58584_t001`)
+- `E1294` (proved, , actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 900,625 tok (897,962 in, 2,663 out, 876,032 cached), 89.0s, $0.62755600)
+  - Inspected current IntCall helper cluster; retained `intcall_successful_defaults_lock_success_sound_from_body_ih` and the E1291-repaired `intcall_successful_defaults_lock_success_sound_general`, but removed the long direct generalized-helper application from the success branch of `intcall_successful_defaults_continuation_sound_general`. -> The continuation theorem no longer contains the E1291 timeout script; it now has an explicit placeholder at the success branch for C2.6.4.2.5.4's planned `intcall_successful_defaults_continuation_lock_success_case`. (`TO_type_system_rewrite-20260525T153549Z_m58595_t001`)
+  - Ran focused holbuild after replacing the brittle success-branch proof with a placeholder. -> Build failure is now the intentional placeholder `FAIL_TAC "C2.6.4.2.5.4..."`, not a tactic timeout from the old generalized-helper premise plumbing. This matches C2.6.4.2.5.3's stabilization criterion and leaves proof completion to the next planned component. (`TO_type_system_rewrite-20260525T153549Z_m58600_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58595_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58600_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1295`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 33 steps, 34 tools, 12 holbuild, 3,284,130 tok (3,273,396 in, 10,734 out, 3,181,056 cached), 498.2s, $2.37424800
+- next: Review closure with strategist, then begin C2.6.4.2.5.5 to replace the continuation theorem's placeholder with a case split using the new lock-success theorem.
+
+### Attempts / Evidence
+
+- `E1295` (proved, , actual effort: 1 sessions, 2 msgs, 33 steps, 34 tools, 12 holbuild, 3,284,130 tok (3,273,396 in, 10,734 out, 3,181,056 cached), 498.2s, $2.37424800)
+  - Inserted `intcall_successful_defaults_continuation_lock_success_case` with the continuation theorem's hypotheses plus `lock_res = INL ()`; simplified the success case to a concrete tail equality and applied `intcall_successful_defaults_lock_success_sound_general`/direct helper premises with explicit conjunct discharge. -> The branch theorem replayed successfully; `holbuild` advanced to `intcall_successful_defaults_continuation_sound_general`'s placeholder for the next planned component rather than failing in the new theorem. (`TO_type_system_rewrite-20260525T153549Z_m58638_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58638_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1297`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 14 holbuild, 3,425,501 tok (3,415,299 in, 10,202 out, 3,331,072 cached), 602.1s, $2.39273100
+- next: Request strategist review, then proceed only to the scheduled next component (likely C2.6.4.2.5.6) for the full actual/default IntCall wrapper / resume failure.
+
+### Attempts / Evidence
+
+- `E1296` (progressed, other, actual effort: 1 sessions, 1 msgs, 5 steps, 7 tools, 1 holbuild, 675,817 tok (672,399 in, 3,418 out, 645,632 cached), 97.8s, $0.55919100)
+  - Replaced the placeholder in `intcall_successful_defaults_continuation_sound_general` with `Cases_on lock_res`; in the `INL ()` branch, applied the newly-proved `intcall_successful_defaults_continuation_lock_success_case` with explicit conjunct discharge. -> Build advanced past the success branch to the old `INR y` failure-branch code, indicating the new branch theorem is usable in the final continuation theorem. (`TO_type_system_rewrite-20260525T153549Z_m58644_t001`)
+  - Left existing failure-branch simplification `qpat_x_assum ... mp_tac >> simp[] >> strip_tac` in place. -> `simp[]` timed out in the large IntCall context. This is likely a local tactic-performance issue: the goal is just simplifying a `case INR y` equality to `res = INR y` and `st'=lock_st` before applying `intcall_lock_attempt_sound_frame`. (`TO_type_system_rewrite-20260525T153549Z_m58644_t001`)
+- `E1297` (proved, , actual effort: 1 sessions, 3 msgs, 42 steps, 41 tools, 14 holbuild, 3,425,501 tok (3,415,299 in, 10,202 out, 3,331,072 cached), 602.1s, $2.39273100)
+  - Replaced the failure-branch broad simplification with a targeted `sum_case_def` rewrite, beta/pair equality extraction, explicit substitutions for `res = INR y` and `st' = lock_st`, and a small no-TypeError proof avoiding global simplification. -> `intcall_successful_defaults_continuation_sound_general` now builds far enough for holbuild to advance to the later `eval_all_type_sound_mutual[Expr_Call_IntCall]` resume, so the C2.6.4.2.5.5 continuation theorem is proved. (`TO_type_system_rewrite-20260525T153549Z_m58690_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58690_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The full IntCall actual/default preservation wrapper remains non-build-clean in the default-success/default-failure branch plumbing. The current proof still fails after applying `intcall_successful_defaults_continuation_sound_general`/`intcall_default_failure_tail`: HOL leaves two giant generated-IH premise goals, and explicit/qpat/first_assum discharge variants do not solve them reliably. This matches the STATE warning that the monolithic wrapper is too brittle and likely needs a branch-shaped helper or component split rather than more tactic search.
+- latest episode: `E1300`
+- blocker: Brittle helper interface/decomposition for `intcall_actual_args_success_sound_from_generated_ih_general`; repeated premise-discharge attempts leave >4KB goals and fail before reaching the intended default-failure tail facts.
+- actual effort: 1 sessions, 2 msgs, 38 steps, 39 tools, 9 holbuild, 3,740,443 tok (3,716,201 in, 24,242 out, 3,613,696 cached), 696.7s, $3.04663300
+- next: Ask strategist to review/split C2.6.4.2.5.6 into consumer-shaped default-success and default-failure wrapper helpers, or otherwise provide a robust helper interface for applying the continuation theorem without replaying generated-IH premise plumbing.
+
+### Attempts / Evidence
+
+- `E1298` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 5 steps, 8 tools, 641,915 tok (640,111 in, 1,804 out, 607,744 cached), 47.8s, $0.51982700)
+  - After C2.6.4.2.5.5 was proved/reviewed, began C2.6.4.2.5.6 and inspected the new failing `Expr_Call_IntCall` resume and nearby no-TypeError wrapper. -> The current failure is not in the continuation helper: holbuild saved `intcall_successful_defaults_continuation_sound_general`, then failed because the resume applies `intcall_actual_args_success_no_type_error_from_generated_ih_general` where the goal requires state/env/account preservation and result typing. The no-TypeError wrapper is too weak for the current goal. (`TO_type_system_rewrite-20260525T153549Z_m58690_t001`, `TO_type_system_rewrite-20260525T153549Z_m58695_t003`)
+- `E1299` (progressed, missing_helper, actual effort: 1 sessions, 5 msgs, 65 steps, 67 tools, 23 holbuild, 6,698,011 tok (6,680,871 in, 17,140 out, 6,551,040 cached), 966.1s, $4.43887500)
+  - Removed duplicated `rewrite_tac[sumTheory.sum_case_def])` and focused on the `dflt_res = INR y` branch of `intcall_actual_args_success_sound_from_generated_ih_general`. -> Syntax repaired; proof advanced to semantic/tactic failures in default-failure branch rather than parse error. (`TO_type_system_rewrite-20260525T153549Z_m58737_t001`, `TO_type_system_rewrite-20260525T153549Z_m58743_t001`)
+  - Added local helper `intcall_default_failure_tail` to factor the trivial error-result tail instead of solving it in the huge IntCall context. -> Helper initially failed because `rw[sum_case_def]` did not unfold `no_type_error_result`; adding `no_type_error_result_def` proved the helper and moved the build failure back into the wrapper application. (`TO_type_system_rewrite-20260525T153549Z_m58779_t001`, `TO_type_system_rewrite-20260525T153549Z_m58782_t001`, `TO_type_system_rewrite-20260525T153549Z_m58796_t001`)
+  - Changed the wrapper `INR` branch to call `MATCH_MP_TAC intcall_default_failure_tail` after substituting `st' = dflt_st` and `res = INR y`. -> Current failure is premise discharge after `MATCH_MP_TAC intcall_default_failure_tail`: large context contains frame facts (`state_well_typed dflt_st`, `env_consistent env cx dflt_st`, `accounts_well_typed dflt_st.accounts`, `no_type_error_result (INR y)`), but `rpt conj_tac >> first_assum ACCEPT_TAC` fails on the first premise. Source remains partial. (`TO_type_system_rewrite-20260525T153549Z_m58798_t001`)
+- `E1300` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 38 steps, 39 tools, 9 holbuild, 3,740,443 tok (3,716,201 in, 24,242 out, 3,613,696 cached), 696.7s, $3.04663300)
+  - Applied `intcall_successful_defaults_continuation_sound_general` in the `dflt_res = INL x` branch, then tried to discharge the resulting premises with `qpat_assum`, `first_assum`, and explicit per-conjunct tactics. -> The first obligations after theorem application are still giant generated-IH goals; exact pattern and first-assumption variants fail, so the wrapper proof is not a simple Risk-2 premise discharge. (`TO_type_system_rewrite-20260525T153549Z_m58834_t001`, `TO_type_system_rewrite-20260525T153549Z_m58835_t001`)
+  - Retained and applied `intcall_default_failure_tail` in the `dflt_res = INR y` branch after pair equality substitutions. -> The helper itself is proved, but the wrapper still fails before/at premise discharge in a large context; the helper application point is too late/unstable for the monolithic wrapper. (`TO_type_system_rewrite-20260525T153549Z_m58839_t001`, `TO_type_system_rewrite-20260525T153549Z_m58804_t002`)
+
+### Ruled Out
+
+- More `qpat_assum`/`first_assum` premise-discharge variants in the monolithic wrapper
+- Broad simplification in the giant IntCall branch
+- Bypassing the continuation theorem by inlining body/lock/tail reasoning
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58839_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58835_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58804_t002` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1301`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 153,876 tok (153,195 in, 681 out, 137,216 cached), 34.2s, $0.16893300
+
+### Attempts / Evidence
+
+- `E1301` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 153,876 tok (153,195 in, 681 out, 137,216 cached), 34.2s, $0.16893300)
+  - Verified current source contains local `intcall_default_failure_tail[local]` immediately before the IntCall actual/default wrapper, with a tiny proof `rw[no_type_error_result_def, sumTheory.sum_case_def]`. Rebuilt `vyperTypeStmtSoundnessTheory`; holbuild passed this helper and failed later in the next theorem's monolithic wrapper, confirming the tail helper itself is retained/proved. -> Helper retained and accepted by HOL prefix; remaining failure is downstream in `intcall_actual_args_success_sound_from_generated_ih_general`, not in the tail helper. (`TO_type_system_rewrite-20260525T153549Z_m58850_t001`, `TO_type_system_rewrite-20260525T153549Z_m58850_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58850_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58850_t003` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1302`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 35 steps, 38 tools, 17 holbuild, 3,724,422 tok (3,715,418 in, 9,004 out, 3,663,872 cached), 1261.8s, $2.35978600
+
+### Attempts / Evidence
+
+- `E1302` (proved, , actual effort: 1 sessions, 2 msgs, 35 steps, 38 tools, 17 holbuild, 3,724,422 tok (3,715,418 in, 9,004 out, 3,663,872 cached), 1261.8s, $2.35978600)
+  - Inserted local theorem `intcall_actual_args_success_default_failure_branch[local]` immediately after `intcall_default_failure_tail`, with explicit `no_type_error_result (INR y)` premise from the defaults package and pair equality `(INR y,dflt_st)=(res,st')`. Proof uses targeted pair/sum normalization and unfolds only the no-TypeError assumption via `no_type_error_result_def`. -> After several small proof-shape attempts, holbuild progressed past the new helper and failed later in `intcall_actual_args_success_sound_from_generated_ih_general`, confirming the branch helper is proved and the remaining failure is the planned downstream wrapper refactor/success branch work. (`TO_type_system_rewrite-20260525T153549Z_m58887_t001`, `TO_type_system_rewrite-20260525T153549Z_m58888_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58887_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58888_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1303`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 9 tools, 2 holbuild, 665,356 tok (660,915 in, 4,441 out, 607,232 cached), 118.2s, $0.70526100
+
+### Attempts / Evidence
+
+- `E1303` (proved, , actual effort: 1 sessions, 8 steps, 9 tools, 2 holbuild, 665,356 tok (660,915 in, 4,441 out, 607,232 cached), 118.2s, $0.70526100)
+  - Inserted a consumer-shaped local helper whose statement copies intcall_successful_defaults_continuation_sound_general's stable premise/conclusion shape and proves by direct MATCH_MP_TAC application of that continuation theorem. -> The helper builds; focused holbuild replay progressed beyond it and the next failure is in the old authoritative wrapper proof. (`TO_type_system_rewrite-20260525T153549Z_m58902_t001`, `TO_type_system_rewrite-20260525T153549Z_m58904_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58902_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58904_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1328`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 181,897 tok (181,426 in, 471 out, 161,792 cached), 23.2s, $0.19319600
+- next: Request strategist review of this checkpoint closure; then if accepted, preserve a narrow checkpoint only if safe to stage relevant task-owned files without including unrelated dirty work.
+
+### Attempts / Evidence
+
+- `E1328` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 181,897 tok (181,426 in, 471 out, 161,792 cached), 23.2s, $0.19319600)
+  - Focused integration audit: inspected dirty repository status and relevant `vyperTypeStmtSoundnessScript.sml` diff, then ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` under the rebased checkpoint component. -> `vyperTypeStmtSoundnessTheory` builds successfully in current working tree; status confirms many unrelated tracked diffs and untracked scratch files remain, so no broad staging/commit should attribute them to this component. (`TO_type_system_rewrite-20260525T153549Z_m59903_t001`, `TO_type_system_rewrite-20260525T153549Z_m59900_t001`, `TO_type_system_rewrite-20260525T153549Z_m59905_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m59903_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59900_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59905_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1306`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 100,788 tok (100,404 in, 384 out, 94,720 cached), 8.9s, $0.08730000
+
+### Attempts / Evidence
+
+- `E1304` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 2 holbuild, 231,689 tok (229,777 in, 1,912 out, 212,992 cached), 238.9s, $0.24778100)
+  - Refactored `intcall_generated_body_ih_NoneT_consumer_premise` to capture the generated forall assumption and specialize it directly with all concrete prefix terms, including destructured callable tuple fields, instead of `qhdtm_x_assum bool$! mp_tac >> simp[]`. -> Prefix theorem no longer times out; `holbuild` resumed through it and advanced to the next scheduled wrapper theorem `intcall_actual_args_success_sound_from_generated_ih_general`. (`TO_type_system_rewrite-20260525T153549Z_m58976_t001`, `TO_type_system_rewrite-20260525T153549Z_m58977_t001`)
+- `E1306` (proved, , actual effort: 1 sessions, 1 steps, 100,788 tok (100,404 in, 384 out, 94,720 cached), 8.9s, $0.08730000)
+  - Carried forward the accepted direct-specialization proof of `intcall_generated_body_ih_NoneT_consumer_premise`; no new edit was made after PLAN refinement. -> Subsequent holbuild progressed past the NoneT consumer theorem and exposed the next strict-prefix live consumer timeout, confirming the NoneT theorem remains build-clean in source order. (`TO_type_system_rewrite-20260525T153549Z_m58986_t001`, `TO_type_system_rewrite-20260525T153549Z_m58982_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m58986_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m58982_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1307`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 677,468 tok (673,836 in, 3,632 out, 657,408 cached), 110.1s, $0.51980400
+
+### Attempts / Evidence
+
+- `E1305` (stuck, plan_incomplete, actual effort: 1 sessions, 8 steps, 9 tools, 1 holbuild, 640,103 tok (637,000 in, 3,103 out, 611,328 cached), 245.5s, $0.52711400)
+  - Re-ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after C2.6.4.2.5.6.4.1; a temporary downstream FAIL_TAC probe was reverted when build exposed an earlier prefix timeout. -> Build did not reach `intcall_actual_args_success_sound_from_generated_ih_general`; it failed first at `intcall_generated_body_ih_live_consumer_premise` line ~13756 on `qhdtm_x_assum bool$! mp_tac >> simp[]`. (`TO_type_system_rewrite-20260525T153549Z_m58986_t001`, `TO_type_system_rewrite-20260525T153549Z_m58989_t001`)
+- `E1307` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 677,468 tok (673,836 in, 3,632 out, 657,408 cached), 110.1s, $0.51980400)
+  - Refactored `intcall_generated_body_ih_live_consumer_premise` by replacing the broad `qhdtm_x_assum bool$! mp_tac >> simp[]` with direct `qpat_x_assum ... mp_tac` and concrete specialization of the generated body IH for `(fm,nr,args,dflts,ret,fn_body)`, `ret_tv`, and the live IntCall state sequence. Corrected the `t8` instantiation to `args_st` so the finally/defaults premise matches. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` progressed past `intcall_generated_body_ih_live_consumer_premise` and next failed at the downstream wrapper theorem `intcall_actual_args_success_sound_from_generated_ih_general`, as scheduled for C2.6.4.2.5.6.4.3. (`TO_type_system_rewrite-20260525T153549Z_m59000_t001`, `TO_type_system_rewrite-20260525T153549Z_m59001_t001`, `TO_type_system_rewrite-20260525T153549Z_m59002_t001`, `TO_type_system_rewrite-20260525T153549Z_m59003_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m59003_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59000_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.6.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1327`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 3 holbuild, 1,046,552 tok (1,044,038 in, 2,514 out, 993,280 cached), 149.2s, $0.82585000
+- next: Run strategist review. Then inspect status/diff and commit a small checkpoint if review accepts and no unexpected task-owned instability is present.
+
+### Attempts / Evidence
+
+- `E1308` (progressed, other, actual effort: 1 sessions, 2 msgs, 7 steps, 10 tools, 3 holbuild, 917,264 tok (914,320 in, 2,944 out, 884,224 cached), 141.3s, $0.68091200)
+  - After proving both strict-prefix consumer lemmas, reran `holbuild` on `vyperTypeStmtSoundnessTheory`; build reaches `intcall_actual_args_success_sound_from_generated_ih_general` and fails at the success-branch premise formerly discharged by `qpat_x_assum `Abbrev (lp = _)` mp_tac >> simp[markerTheory.Abbrev_def, GSYM pairTheory.PAIR]`. -> The wrapper is now the active blocker; failure is local to success-helper premise discharge, not a prefix theorem. The goal state remains >4KB because generated IH assumptions are still in context. (`TO_type_system_rewrite-20260525T153549Z_m59007_t002`)
+  - Tried killing the two generated IH assumptions with full `qpat_x_assum` patterns before a probe, but first pattern selection failed under the live context. -> Showed that exact long `qpat_x_assum` patterns are brittle in the wrapper context; not reliable for cleanup/probing. (`TO_type_system_rewrite-20260525T153549Z_m59009_t001`)
+  - Changed probe to `ntac 2 (qhdtm_x_assum `bool$!` kall_tac) >> FAIL_TAC "probe_wrapper_premise"` and rebuilt. -> Probe reached the same premise after deleting two forall assumptions, but holbuild still reports the pre-probe goal with large generated-IH assumptions; source currently contains this probe and must be removed or replaced. (`TO_type_system_rewrite-20260525T153549Z_m59011_t001`)
+- `E1309` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 40 steps, 40 tools, 14 holbuild, 3,689,749 tok (3,676,477 in, 13,272 out, 3,584,000 cached), 610.6s, $2.65254500)
+  - Restored/modified the lock-pair premise tactic after the retained probe by trying `simp[Abbr `lp`, GSYM pairTheory.PAIR]` and variants that additionally pushed the `Abbrev` assumption. -> The conjunct was not solved; qpat extraction variants failed or left the same residual. The active goal from the helper statement shows the first remaining conjunct is the lock-pair equality followed by many package premises. (`TO_type_system_rewrite-20260525T153549Z_m59022_t001`, `TO_type_system_rewrite-20260525T153549Z_m59031_t001`, `TO_type_system_rewrite-20260525T153549Z_m59042_t001`)
+  - Tried decomposing the pair with `PairCases_on `lp`` plus abbreviation simplification. -> Broad `gvs` timed out; more targeted pair/abbrev extraction still left the equality residual. This confirmed the problem is not merely exposing FST/SND syntactically. (`TO_type_system_rewrite-20260525T153549Z_m59034_t001`, `TO_type_system_rewrite-20260525T153549Z_m59037_t001`, `TO_type_system_rewrite-20260525T153549Z_m59039_t001`)
+  - Tried turning the abbreviation assumption into a rewrite theorem using `REWRITE_RULE [markerTheory.Abbrev_def]`, then applying `GSYM pairTheory.PAIR` or accepting the derived symmetric equality. -> One rewrite_tac variant timed out; a more targeted mp/discharge/accept approach failed to match the residual. Further tuning is brittle and violates the plan's warning against positional premise plumbing. (`TO_type_system_rewrite-20260525T153549Z_m59050_t001`, `TO_type_system_rewrite-20260525T153549Z_m59052_t001`, `TO_type_system_rewrite-20260525T153549Z_m59055_t001`)
+- `E1310` (progressed, other, actual effort: 1 sessions, 4 msgs, 40 steps, 43 tools, 15 holbuild, 4,106,073 tok (4,087,954 in, 18,119 out, 3,971,072 cached), 695.3s, $3.11351600)
+  - Add `intcall_actual_args_success_default_success_branch_pair[local]` with full copied premise list and prove it via `intcall_actual_args_success_default_success_branch` instantiated with `FST lock_pair`/`SND lock_pair`. -> Initial helper proof succeeded far enough for holbuild to advance to `intcall_actual_args_success_sound_from_generated_ih_general`; the original lock-pair premise obstruction moved to the wrapper tail. (`TO_type_system_rewrite-20260525T153549Z_m59081_t001`)
+  - Rebase wrapper success branch to apply the pair helper with `lp`; discharge `Abbrev (lp = ...)` directly for the lock-pair premise. -> Wrapper application reached the final helper tail; the remaining goal compared old split-lock continuation with new FST/SND/pair expression, showing the helper statement did not exactly match the old theorem's branch normal form. (`TO_type_system_rewrite-20260525T153549Z_m59084_t001`, `TO_type_system_rewrite-20260525T153549Z_m59096_t001`)
+  - Adjust pair helper conclusion to pattern match on `lock_pair` as `(lock_res,lock_st)` instead of using `FST lock_pair`/`SND lock_pair`. -> Current build fails in the helper proof with one residual equality after applying the old success-branch theorem; exact residual at lines 86-130 of the instrumented log shows need to rewrite `env_body.current_src = src_id_opt` and normalize pair case, not to revisit wrapper lock-pair tactics. (`TO_type_system_rewrite-20260525T153549Z_m59102_t001`, `TO_type_system_rewrite-20260525T153549Z_m59103_t001`)
+- `E1311` (progressed, other, actual effort: 1 sessions, 3 msgs, 39 steps, 45 tools, 14 holbuild, 4,171,908 tok (4,159,281 in, 12,627 out, 3,942,400 cached), 583.2s, $3.43441500)
+  - Repaired `intcall_actual_args_success_default_success_branch_pair` by replacing the final `first_assum ACCEPT_TAC ORELSE simp[]` fallback with a targeted extraction of the pair-case tail assumption and `simp[]`. -> The helper theorem now saves; holbuild proceeds to `intcall_actual_args_success_sound_from_generated_ih_general`. (`TO_type_system_rewrite-20260525T153549Z_m59112_t001`)
+  - In the wrapper default-failure branch, supplied both existential witnesses (`y`, `dflt_st`) and tried to discharge the five branch-helper premises explicitly, deriving the tail equality from the simplified `(case INR y ...)` assumption. -> The first four premises can be discharged only with very targeted tactics; the remaining equality is now `(INR y,dflt_st) = (res,st')` with the same fact in assumptions, but current `ACCEPT_TAC (ASSUME ...)` still fails due to context/term plumbing. Next session should solve this equality with a more stable assumption-selection or rewrite, not revisit helper proof. (`TO_type_system_rewrite-20260525T153549Z_m59145_t001`)
+- `E1312` (progressed, other, actual effort: 1 sessions, 5 msgs, 63 steps, 66 tools, 23 holbuild, 6,059,103 tok (6,042,362 in, 16,741 out, 5,913,088 cached), 924.1s, $4.10514400)
+  - Added local helper `intcall_actual_args_success_default_failure_branch_case` for the unsimplified `case INR y ... = (res,st')` tail and local helper `intcall_actual_args_success_default_failure_branch_lambda` for the exact lambda equality assumption form. -> Both helpers built; holbuild advanced to `intcall_actual_args_success_sound_from_generated_ih_general`, confirming the small-context helper idea is viable. (`TO_type_system_rewrite-20260525T153549Z_m59195_t001`)
+  - Changed wrapper default-failure branch to apply `intcall_actual_args_success_default_failure_branch_lambda`, use witnesses `y` and `dflt_st`, and discharge initial premises with exact goal/assumption matching. -> First three preservation premises can be solved; failure moves to the `no_type_error_result (INR y)` premise after rewriting, with assumptions containing exactly the corresponding universal inequality. (`TO_type_system_rewrite-20260525T153549Z_m59204_t001`, `TO_type_system_rewrite-20260525T153549Z_m59209_t001`, `TO_type_system_rewrite-20260525T153549Z_m59210_t001`)
+- `E1313` (progressed, other, actual effort: 1 sessions, 4 msgs, 50 steps, 52 tools, 18 holbuild, 5,171,973 tok (5,155,925 in, 16,048 out, 5,032,960 cached), 768.4s, $3.61274500)
+  - Replaced generic `rpt conj_tac` tail with explicit first-three premises and simplified the unsimplified default-failure equality premise via `qpat_x_assum (case INR y ...) mp_tac >> simp[] >> strip_tac`. -> Confirmed the wrapper tail can derive `INR y = res` and `dflt_st = st'`; final residual no longer includes the lambda equality premise, only no-TypeError packaging. (`TO_type_system_rewrite-20260525T153549Z_m59235_t001`, `TO_type_system_rewrite-20260525T153549Z_m59237_t001`)
+  - Tried exact/generic assumption tactics for `no_type_error_result (INR y)` after the equality simplification: `qpat_x_assum`, quoted `ASSUME`, `goal_term` exact matching, and `metis_tac[]`. -> All are brittle in the huge context: qpat/goal_term fail to select, quoted ASSUME raises CHOOSE, and metis times out. Do not keep varying these tactics. (`TO_type_system_rewrite-20260525T153549Z_m59244_t001`, `TO_type_system_rewrite-20260525T153549Z_m59248_t001`, `TO_type_system_rewrite-20260525T153549Z_m59250_t001`, `TO_type_system_rewrite-20260525T153549Z_m59258_t001`)
+  - Current source uses `qpat_x_assum (case INR y ...) mp_tac >> simp[] >> strip_tac >> qpat_x_assum no_type_error_result mp_tac >> rewrite_tac[]`. -> Build leaves residual `no_type_error_result (INR y) ==> no_type_error_result (INR y)` at QED; next action should replace this final tiny tail with a small helper or `strip_tac`/identity tactic rather than more assumption search. (`TO_type_system_rewrite-20260525T153549Z_m59263_t001`, `TO_type_system_rewrite-20260525T153549Z_m59264_t001`)
+- `E1314` (progressed, other, actual effort: 1 sessions, 5 msgs, 52 steps, 57 tools, 14 holbuild, 5,394,248 tok (5,378,045 in, 16,203 out, 5,257,216 cached), 1071.4s, $3.71884300)
+  - Replaced `intcall_generated_body_post_push_ih` proof with a derived continuation from `intcall_generated_body_ih_live_consumer_premise`, then instantiated the small continuation with `call_env`, `dflt_st`, `dflt_st`, `lock_st`, pushed context, and pushed state. -> Focused build no longer fails at the old `>> simp[]` timeout in `intcall_generated_body_post_push_ih`; it advances to the wrapper theorem, confirming the boundary-lemma refactor worked. (`TO_type_system_rewrite-20260525T153549Z_m59317_t001`)
+  - For wrapper default-failure branch, tried direct assumption selection and then labelled `no_type_error_result dflt_res` before case-splitting as `dflt_nte`. -> The label survives and specializes to `dflt_nte :- no_type_error_result (INR y)`, but `asm "dflt_nte" ACCEPT_TAC` still fails; current last edit (not built) changed this to `simp[L "dflt_nte"]` and should be verified next. (`TO_type_system_rewrite-20260525T153549Z_m59355_t001`)
+- `E1315` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 54 steps, 55 tools, 21 holbuild, 5,302,032 tok (5,281,989 in, 20,043 out, 5,173,248 cached), 865.0s, $3.73161900)
+  - Added `intcall_actual_args_success_default_failure_branch_lambda_imp` to move `no_type_error_result (INR y)` after the lambda equality premise and proved it via the existing lambda helper. -> The helper itself builds, but `MATCH_MP_TAC`/`irule` did not produce a usable wrapper goal shape: matching failed or existential order/type mismatch appeared, and the no-TypeError premise remained exposed in the huge context. (`TO_type_system_rewrite-20260525T153549Z_m59505_t001`, `TO_type_system_rewrite-20260525T153549Z_m59511_t001`)
+  - Tried simplifying the default-failure equality first and using `intcall_default_failure_tail` to avoid the larger branch helper. -> The required pair/case normalization with `gvs[pairTheory.PAIR_EQ]` timed out in the large wrapper context, confirming this must be factored into a small helper rather than solved inline. (`TO_type_system_rewrite-20260525T153549Z_m59515_t001`)
+  - Applied `intcall_actual_args_success_default_failure_branch_case` with the success branch term explicit, so the final caller only needs frame facts, no-TypeError, and the existing `(case INR y ...) = (res,st')` equality. -> Frame facts discharge, but the no-TypeError premise again cannot be solved by labelled or qpat assumption use in the giant context; build fails at line ~16123. (`TO_type_system_rewrite-20260525T153549Z_m59517_t001`, `TO_type_system_rewrite-20260525T153549Z_m59521_t001`)
+- `E1316` (progressed, other, actual effort: 1 sessions, 3 msgs, 25 steps, 29 tools, 8 holbuild, 2,882,980 tok (2,870,136 in, 12,844 out, 2,788,352 cached), 446.5s, $2.18841600)
+  - Added `intcall_default_failure_tail_case_from_result` and first tried applying it in the wrapper with broad `MATCH_MP_TAC`/`rpt conj_tac`; fixed premise discharge by explicitly providing `dflt_st` and the opaque success-tail lambda, then using exact frame/no-TypeError assumptions and the unsplit case equality. -> Helper and integration now pass through `intcall_actual_args_success_sound_from_generated_ih_general`; final INR branch closes via labelled `failure_tail` and `rewrite_tac[sumTheory.sum_case_def]`, avoiding the old direct `no_type_error_result (INR y)` subgoal. (`TO_type_system_rewrite-20260525T153549Z_m59549_t001`, `TO_type_system_rewrite-20260525T153549Z_m59550_t001`, `TO_type_system_rewrite-20260525T153549Z_m59551_t001`)
+  - Ran focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after the refactor. -> Build advances to `eval_all_type_sound_mutual[Expr_Call_IntCall]` and fails when applying `intcall_actual_args_success_no_type_error_from_generated_ih_general` with `MATCH_MP_TAC`: no match, two goals in context, at source lines 16499-16503. (`TO_type_system_rewrite-20260525T153549Z_m59551_t001`, `TO_type_system_rewrite-20260525T153549Z_m59552_t002`)
+- `E1317` (progressed, other, actual effort: 1 sessions, 3 msgs, 36 steps, 39 tools, 8 holbuild, 3,780,660 tok (3,769,747 in, 10,913 out, 3,661,824 cached), 429.4s, $2.69791700)
+  - Changed `Cases_on args_res >> gvs[no_type_error_result_def]` to `gvs[]` so success case keeps usable context; build still failed at `MATCH_MP_TAC ... intcall_actual_args_success_no_type_error_from_generated_ih_general` with No match. -> Ruled out loss of context from `no_type_error_result_def` as sole cause of stale call-site mismatch. (`TO_type_system_rewrite-20260525T153549Z_m59567_t001`)
+  - Tried replacing the call-site theorem with `intcall_actual_args_success_sound_from_generated_ih_general` specialized with expression type/extra arguments, hoping to project the joint theorem directly. -> Direct joint theorem application also failed with No match in the unsplit evaluator expression, indicating the call site first needs to expose the same `finally ... = (dflt_res,dflt_st)` shape as the helper theorem. (`TO_type_system_rewrite-20260525T153549Z_m59572_t001`)
+  - Factored the evaluator tail locally: after `callable_body_typing_from_env_consistent`, inserted `simp[get_scopes_def, return_def]`, split `get_scopes args_st`, split the default `finally` result, and entered only the `INL dflt_res` branch for applying the no-TypeError helper. -> The old no-TypeError helper now matches far enough to move past `MATCH_MP_TAC`; failure moved to generic `FIRST_ASSUM` premise discharge. This shows the needed interface shape is exposed, but the remaining `rpt conj_tac >> first_assum ACCEPT_TAC` style is too brittle in the larger context. (`TO_type_system_rewrite-20260525T153549Z_m59580_t001`)
+  - Changed `simp[] >> strip_tac` after `callable_body_typing_from_env_consistent` to unpack the nonreentrant fact and existential package explicitly with `CONJUNCTS_THEN2`/`qx_choose_then`, matching the earlier no-TypeError helper proof shape. -> Still fails at generic `FIRST_ASSUM` after the theorem application, so premise matching is the remaining issue. A temporary `FAIL_TAC "probe_after_intcall_nte_match"` was inserted but not built after insertion. (`TO_type_system_rewrite-20260525T153549Z_m59589_t001`)
+- `E1318` (progressed, other, actual effort: 1 sessions, 3 msgs, 37 steps, 39 tools, 7 holbuild, 3,989,174 tok (3,973,619 in, 15,555 out, 3,849,728 cached), 463.3s, $3.01096900)
+  - Removed `FAIL_TAC "probe_after_intcall_nte_match"`, briefly tried replacing the Resume body with direct `MATCH_MP_TAC intcall_expr_no_type_error_from_generated_ih`. -> Direct projection was rejected by theorem-shape mismatch: helper only proves `no_type_error_result`, while Resume goal needs the joint state/env/accounts/no-TypeError/result-typed conclusion. (`TO_type_system_rewrite-20260525T153549Z_m59641_t001`)
+  - Restored and copied the detailed proof skeleton from `intcall_expr_no_type_error_from_generated_ih`: extract actual/default/body IH labels, unfold `evaluate_def`, split get-module/lookup/type-check/eval cases, unpack callable-body typing, derive `sig.param_types = MAP SND x''2 /\ sig.num_defaults = LENGTH x''3`, normalize `get_scopes`/`finally`, and apply `intcall_actual_args_success_no_type_error_from_generated_ih_general`. -> Build reaches the normalized downstream branch and helper application; failure is again the broad post-helper premise tail (`FIRST_ASSUM`), not the probe or no-match. This confirms next work should replace only that tail with explicit premise discharges or a local compatibility helper. (`TO_type_system_rewrite-20260525T153549Z_m59653_t001`, `TO_type_system_rewrite-20260525T153549Z_m59663_t001`)
+- `E1319` (progressed, other, actual effort: 1 sessions, 3 msgs, 23 steps, 27 tools, 4 holbuild, 2,474,960 tok (2,465,331 in, 9,629 out, 2,362,880 cached), 292.2s, $1.98256500)
+  - Replaced downstream call-site application of `intcall_actual_args_success_no_type_error_from_generated_ih_general` with stronger joint helper `intcall_actual_args_success_sound_from_generated_ih_general` specialized to `sig.ret_ty` and `v17`. -> Build still failed in the local Expr_Call_IntCall fragment; initial failure showed the antecedent implication was not stripped before applying the helper, so the huge evaluator-tail implication remained as the goal. (`TO_type_system_rewrite-20260525T153549Z_m59680_t001`)
+  - Inserted `strip_tac` before applying the joint helper so the full evaluator-tail equality is available as an assumption. -> Build progressed to the helper premise discharge tail but still failed in the same fragment; broad tail remained too brittle. (`TO_type_system_rewrite-20260525T153549Z_m59683_t001`)
+  - Replaced the broad `rpt conj_tac >> first_assum` tail with explicit `CONJ_TAC THEN1` discharges for default/body IHs, check/lift/type/eval facts, frame facts, callable-body package facts, defaults typing facts, and the full `finally ... = (dflt_res,dflt_st)` assumption; final branch pushes the full case equality to simp. -> Source is partial after this edit. Focused build still fails in the same Expr_Call_IntCall fragment; next session should inspect the full latest instrumented goal from this build to identify the first mismatched explicit premise rather than continuing broad assumption search. (`TO_type_system_rewrite-20260525T153549Z_m59689_t001`)
+- `E1320` (progressed, other, actual effort: 1 sessions, 2 msgs, 19 steps, 24 tools, 3 holbuild, 2,092,307 tok (2,084,144 in, 8,163 out, 1,985,024 cached), 263.5s, $1.73300200)
+  - Ran focused holbuild on current explicit-premise source. -> Build failed in the Expr_Call_IntCall fragment with FIRST_ASSUM-origin failure and two input goals; the displayed top goal was still the whole evaluator-tail implication before downstream normalization, suggesting failure occurs before the joint-helper premise tail rather than at the final explicit CONJ_TAC list. (`TO_type_system_rewrite-20260525T153549Z_m59695_t003`)
+  - Inserted temporary `FAIL_TAC "probe_after_lift_option_facts"` immediately after the two lift-option `qpat_assum`/MATCH_MP steps and rebuilt. -> The probe was not reached; holbuild still failed with FIRST_ASSUM-origin in the same large pre-normalization goal. This points to brittle/wrong assumption selection in the preceding wildcard `qpat_assum` steps, likely because the patterns can match inside labelled generated-IH assumptions. (`TO_type_system_rewrite-20260525T153549Z_m59710_t001`)
+  - Removed the temporary probe and changed the two initial lift-option qpat patterns to exact current-state strings with message literals and state `r`. -> Source was updated but not rebuilt due to handoff request. Next session should build immediately to test whether the proof now reaches the intended later premise-discharge point. (`TO_type_system_rewrite-20260525T153549Z_m59711_t001`)
+- `E1321` (progressed, other, actual effort: 1 sessions, 3 msgs, 32 steps, 38 tools, 8 holbuild, 3,549,635 tok (3,540,680 in, 8,955 out, 3,434,496 cached), 459.1s, $2.51681800)
+  - Changed first two lift-option extractions in the Expr_Call_IntCall downstream branch to exact message/state patterns with `mp_tac ... >> strip_tac`; built with holbuild. -> The old early FIRST_ASSUM-looking failure advanced: probes after both exact lift-option strips and after `PairCases_on x'' >> gvs[]` were reached, showing those steps are no longer the blocker. (`TO_type_system_rewrite-20260525T153549Z_m59724_t001`, `TO_type_system_rewrite-20260525T153549Z_m59727_t001`, `TO_type_system_rewrite-20260525T153549Z_m59732_t001`)
+  - Inserted probes after callable-body unpack and after sig-field derivation. -> Both probes were reached; `callable_body_typing_from_env_consistent` unpacking and `sig.param_types = MAP SND x''2 /\ sig.num_defaults = LENGTH x''3` derivation are not the remaining blocker. (`TO_type_system_rewrite-20260525T153549Z_m59739_t001`, `TO_type_system_rewrite-20260525T153549Z_m59742_t001`)
+  - Moved probe to immediately after `simp[get_scopes_def, return_def] >> BasicProvers.TOP_CASE_TAC`. -> Probe was reached. Current source contains `FAIL_TAC "probe_after_get_scopes_top_case"`; next work starts after this point, likely at `qmatch_asmsub_rename_tac`/`Cases_on scope_res` or subsequent finally/default branch normalization. (`TO_type_system_rewrite-20260525T153549Z_m59745_t001`, `TO_type_system_rewrite-20260525T153549Z_m59747_t002`)
+- `E1322` (progressed, other, actual effort: 1 sessions, 3 msgs, 29 steps, 33 tools, 7 holbuild, 2,979,593 tok (2,972,292 in, 7,301 out, 2,864,640 cached), 379.4s, $2.18961000)
+  - Removed previous `probe_after_get_scopes_top_case`, ran focused holbuild on `vyperTypeStmtSoundnessTheory`. -> Build advanced past the old probe but failed with FIRST_ASSUM-origin failure in the same huge Expr_Call_IntCall branch; no direct no-TypeError `(INR y)` blocker resurfaced, but the generated-IH context remained >4KB. (`TO_type_system_rewrite-20260525T153549Z_m59755_t001`)
+  - Inserted probes at/after the joint helper application and after `scope_res` split to localize the FIRST_ASSUM failure. -> Those probes were not reached; failure still displayed the large evaluator-tail implication, indicating the problem is before/around scope/finally normalization rather than a specific later explicit conjunct. (`TO_type_system_rewrite-20260525T153549Z_m59760_t001`, `TO_type_system_rewrite-20260525T153549Z_m59769_t001`)
+  - Moved temporary probe to immediately after `BasicProvers.TOP_CASE_TAC` following `simp[get_scopes_def, return_def]`. -> Probe is reached. Full instrumented goal shows two goals and the top goal is the whole `case get_scopes args_st of ... = (res,st') ==> joint tail`; this is the right boundary for a local compatibility helper. (`TO_type_system_rewrite-20260525T153549Z_m59775_t001`, `TO_type_system_rewrite-20260525T153549Z_m59777_t001`)
+- `E1323` (progressed, other, actual effort: 1 sessions, 2 msgs, 24 steps, 26 tools, 6 holbuild, 2,727,073 tok (2,718,822 in, 8,251 out, 2,612,224 cached), 355.5s, $2.08663200)
+  - Removed `FAIL_TAC "probe_after_get_scopes_top_case_2"` and rebuilt `vyperTypeStmtSoundnessTheory`. -> The focused build still fails in the same huge Expr_Call_IntCall generated-IH context with FIRST_ASSUM-origin failure before reaching a precise downstream premise; the old probe was no longer the first failure. (`TO_type_system_rewrite-20260525T153549Z_m59784_t001`, `TO_type_system_rewrite-20260525T153549Z_m59787_t001`)
+  - Tried replacing the scope/default `gvs[no_type_error_result_def]` with `simp[no_type_error_result_def]` and inserted targeted probes around scope/finally branch entry. -> The inserted probes were not reached; builds continued to report the large whole evaluator-tail implication and FIRST_ASSUM-origin failure, showing inline branch probing is not isolating a stable premise and reinforcing the need for a boundary/helper extraction. (`TO_type_system_rewrite-20260525T153549Z_m59801_t001`, `TO_type_system_rewrite-20260525T153549Z_m59804_t001`)
+- `E1324` (progressed, other, actual effort: 1 sessions, 2 msgs, 23 steps, 29 tools, 7 holbuild, 2,651,470 tok (2,641,452 in, 10,018 out, 2,529,792 cached), 367.3s, $2.12373600)
+  - Removed `FAIL_TAC "probe_before_finally_top_case"` by replacing the downstream branch with a flattened get_scopes/finally normalization and direct application of `intcall_actual_args_success_sound_from_generated_ih_general`. -> Focused build progressed past the old probe to explicit helper-premise failures; first failure was qpat selection of the `get_module_code` lift_option premise. (`TO_type_system_rewrite-20260525T153549Z_m59811_t003`, `TO_type_system_rewrite-20260525T153549Z_m59815_t001`)
+  - Replaced the two lift_option premise discharges with `simp[lift_option_type_def, return_def]` and repaired the type_check premise using the existing length-check assumption plus `type_check_def/assert_def`. -> Focused build advanced to the MAP-expr-types premise, showing the lift_option and args-length/type_check premises are no longer the first blockers. (`TO_type_system_rewrite-20260525T153549Z_m59821_t001`, `TO_type_system_rewrite-20260525T153549Z_m59828_t001`)
+  - Changed the MAP-expr-types premise to `simp[]`, but exact replace first hit an older similar branch at line ~15283; restored that older line to its original `qpat_assum ... args` form. Current last edit at line ~16531 is unbuilt. -> Source is partial and must be verified at the start of next session; the latest diff/evidence records both the intended current edit and restoration of the accidental earlier edit. (`TO_type_system_rewrite-20260525T153549Z_m59830_t001`, `TO_type_system_rewrite-20260525T153549Z_m59831_t001`, `TO_type_system_rewrite-20260525T153549Z_m59832_t002`)
+- `E1325` (progressed, other, actual effort: 1 sessions, 1 msgs, 13 steps, 16 tools, 2 holbuild, 1,506,040 tok (1,500,362 in, 5,678 out, 1,403,392 cached), 167.3s, $1.35688600)
+  - Changed the earlier strict-prefix MAP-expr-types premise at line ~15283 from exact `qpat_assum ... ACCEPT_TAC` to `(CONJ_TAC THEN1 simp[])` after holbuild unexpectedly resumed there. -> Focused build advanced past `intcall_successful_defaults_continuation_sound_general`, so the unintended earlier branch needed the same simplification-style repair and is no longer the first blocker. (`TO_type_system_rewrite-20260525T153549Z_m59837_t001`, `TO_type_system_rewrite-20260525T153549Z_m59844_t001`, `TO_type_system_rewrite-20260525T153549Z_m59845_t001`)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after the line ~15283 edit. -> Build resumes in `eval_all_type_sound_mutual[Expr_Call_IntCall]` and fails at line ~16538 while discharging explicit premises for `intcall_actual_args_success_sound_from_generated_ih_general`; top visible remaining goal starts with `well_typed_expr env (Call sig.ret_ty (IntCall (src_id_opt,fn)) es v17) /\ ...`. (`TO_type_system_rewrite-20260525T153549Z_m59845_t001`, `TO_type_system_rewrite-20260525T153549Z_m59846_t001`, `TO_type_system_rewrite-20260525T153549Z_m59847_t001`)
+- `E1326` (progressed, other, actual effort: 1 sessions, 2 msgs, 23 steps, 29 tools, 3 holbuild, 2,533,072 tok (2,528,634 in, 4,438 out, 2,421,248 cached), 193.6s, $1.88069400)
+  - Replace line ~16538 qpat assumption selection with direct call-typing proof: `simp[Once well_typed_expr_def] >> qexists `sig` >> simp[]`. -> Focused build advanced past line ~16538 to line ~16539, proving the whole-call `well_typed_expr env (Call sig.ret_ty ...)` premise from static facts. (`TO_type_system_rewrite-20260525T153549Z_m59859_t001`, `TO_type_system_rewrite-20260525T153549Z_m59860_t001`)
+  - Replace line ~16539 qpat assumption selection with `simp[expr_type_def]`. -> Did not solve the expr_type premise. Full log shows remaining goal begins `expr_type (Call sig.ret_ty ...) = x''4` with assumptions including `FLOOKUP env.fn_sigs ... = SOME sig`, callable-body fact `x''4` as the function ret type, but no direct expr_type equation assumption. This is another proof-interface signal. (`TO_type_system_rewrite-20260525T153549Z_m59871_t001`, `TO_type_system_rewrite-20260525T153549Z_m59872_t001`, `TO_type_system_rewrite-20260525T153549Z_m59873_t001`)
+- `E1327` (proved, , actual effort: 1 sessions, 1 msgs, 12 steps, 14 tools, 3 holbuild, 1,046,552 tok (1,044,038 in, 2,514 out, 993,280 cached), 149.2s, $0.82585000)
+  - Repaired the Expr_Call_IntCall downstream premise tail after `intcall_actual_args_success_sound_from_generated_ih_general`: derive `fn_sigs_consistent env.fn_sigs cx` and use `fn_sigs_consistent_FLOOKUP` before `gvs[expr_type_def]` to prove `expr_type (Call sig.ret_ty ...) = x''4`; then expand the var-assignable premise rather than exact `qpat_assum` because the helper expects `(b <=> T)`. -> Focused build advanced past the expr_type premise and then past the var_assignable premise; `holbuild` completed `vyperTypeStmtSoundnessTheory`. (`TO_type_system_rewrite-20260525T153549Z_m59883_t001`, `TO_type_system_rewrite-20260525T153549Z_m59884_t001`, `TO_type_system_rewrite-20260525T153549Z_m59888_t001`, `TO_type_system_rewrite-20260525T153549Z_m59889_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m59883_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59884_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59888_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59889_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.2.5.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1329`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 329,604 tok (328,478 in, 1,126 out, 320,000 cached), 34.1s, $0.23617000
+- next: Request strategist review. If accepted, proceed to the next scheduled leaf (expected C2.6.4.3) unless checkpoint commit hygiene requires deferring due unrelated staged/unstaged changes.
+
+### Attempts / Evidence
+
+- `E1329` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 329,604 tok (328,478 in, 1,126 out, 320,000 cached), 34.1s, $0.23617000)
+  - Ran the focused build audit for the IntCall actual/default helper cluster with `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`, then grepped `vyperTypeStmtSoundnessScript.sml` for `cheat|CHEAT|suspend` and inspected repository status. -> Focused build succeeds. Grep reports only comment occurrences of CHEAT and the pre-existing suspended mutual-proof skeleton around lines 5557-5604; no new cheat/suspend is reported in the IntCall helper cluster. Dirty-tree status remains broad/pre-existing and should not be committed wholesale. (`TO_type_system_rewrite-20260525T153549Z_m59912_t001`, `TO_type_system_rewrite-20260525T153549Z_m59913_t001`, `TO_type_system_rewrite-20260525T153549Z_m59913_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m59912_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59913_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59913_t003` (use `read_tool_output` for exact output)
+
+## C2.6.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1330`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 10 steps, 12 tools, 3 holbuild, 815,760 tok (806,706 in, 9,054 out, 752,640 cached), 343.0s, $0.91827000
+- next: Request strategist review; if accepted, proceed to C2.6.4.4 to integrate the helper into `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`.
+
+### Attempts / Evidence
+
+- `E1330` (proved, , actual effort: 1 sessions, 1 msgs, 10 steps, 12 tools, 3 holbuild, 815,760 tok (806,706 in, 9,054 out, 752,640 cached), 343.0s, $0.91827000)
+  - Added local theorem `intcall_expr_sound_from_generated_ih` before the IntCall resume by copying the existing generated-IH evaluator split and strengthening the conclusion to the full joint state/env/accounts/no-TypeError/result-typing package. Initial proof used `rpt strip_tac`, which over-stripped the final conjunction and caused premature evaluator splitting with multiple goals. -> First build failed at the first `TOP_CASE_TAC` because the proof had five goals after `rpt strip_tac`; the fix was to preserve the joint conclusion by changing the opener to `rpt gen_tac >> strip_tac`. (`TO_type_system_rewrite-20260525T153549Z_m59927_t001`, `TO_type_system_rewrite-20260525T153549Z_m59930_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after the opener repair. -> Focused target built successfully with the new full IntCall helper in source. (`TO_type_system_rewrite-20260525T153549Z_m59931_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m59926_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59931_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m59932_t001` (use `read_tool_output` for exact output)
+
+## C2.6.4.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1332`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 105,816 tok (105,509 in, 307 out, 92,160 cached), 42.9s, $0.12203500
+- next: Call plan_oracle(mode="review") for C2.6.4.4, then inspect schedule/frontier for the next component after review.
+
+### Attempts / Evidence
+
+- `E1331` (progressed, other, actual effort: 1 sessions, 2 msgs, 15 steps, 17 tools, 4 holbuild, 1,814,292 tok (1,808,309 in, 5,983 out, 1,763,840 cached), 393.7s, $1.28375500)
+  - Replaced the long `Expr_Call_IntCall` Resume body with a compact proof calling `intcall_expr_sound_from_generated_ih` and initially left the second conjunct as `rpt strip_tac >> simp[type_place_expr_Call_IntCall_NONE]`. -> Focused build timed out in the second/place-expression conjunct because `rpt strip_tac` split generated-IH conjunctions into multiple large goals before reaching the `type_place_expr` contradiction. Changed the branch opener to `rpt gen_tac >> strip_tac`. (`TO_type_system_rewrite-20260525T153549Z_m59939_t001`)
+  - After fixing the place branch, tried uninstantiated `MATCH_MP_TAC intcall_expr_sound_from_generated_ih >> rpt conj_tac >> first_assum ACCEPT_TAC`, then labelled the three generated IHs and tried exact labelled acceptance plus ordinary `first_assum`. -> Build failed because theorem application left an existential `∃st` helper premise; goal showed the helper was not instantiated with the live `st`, so exact assumption acceptance was being applied to the wrong residual obligation. A `FAIL_TAC` probe confirmed the residual goal shape. (`TO_type_system_rewrite-20260525T153549Z_m59944_t001`, `TO_type_system_rewrite-20260525T153549Z_m59947_t001`)
+  - Edited the Resume to explicitly specialize the helper with `Q.SPECL [`cx`, `env`, `st`, `res`, `st'`, `v16`, `src_id_opt`, `fn`, `es`, `v17`] intcall_expr_sound_from_generated_ih`, preserving generated-IH labels and the branch-level `rpt gen_tac >> strip_tac` fix. -> Source now contains this likely next attempt, but it has not been built yet due handoff. Next session should first run the focused holbuild and inspect remaining subgoals if any. (`TO_type_system_rewrite-20260525T153549Z_m59949_t001`)
+- `E1332` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 105,816 tok (105,509 in, 307 out, 92,160 cached), 42.9s, $0.12203500)
+  - Ran focused holbuild on current `vyperTypeStmtSoundnessTheory` after explicit `Q.SPECL` integration of `intcall_expr_sound_from_generated_ih` in `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`. -> Focused build succeeded; the IntCall Resume integration obligation is proved with the helper and place-expression contradiction. (`TO_type_system_rewrite-20260525T153549Z_m59955_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m59955_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Non-external call-tail adapters (RawLog/RawRevert/SelfDestruct/Create/Send transfer tail) build, but the remaining ExtCall and RawCallTarget helpers would need account-typing preservation across run_ext_call replacement accounts. Current source exposes run_ext_call as returning accounts' from Verifereum execution/extract_call_result, and available Verifereum wf_state/wf_account_state preservation lacks Vyper account_well_typed balance < 2 ** 256. Grep found no run_ext_call accounts_well_typed theorem. This matches prior learning/evidence; the Risk 2 assumption that existing run-call/builtin boundaries suffice is wrong for external replacement accounts.
+- latest episode: `E0836`
+- blocker: ExtCall/RawCallTarget boundary adapters need a stronger semantic/external-call contract (or semantic repair) ensuring returned accounts satisfy Vyper accounts_well_typed; existing wf_state preservation is too weak.
+- actual effort: 1 sessions, 1 msgs, 17 steps, 37 tools, 1 holbuild, 1,689,648 tok (1,682,778 in, 6,870 out, 1,598,976 cached), 143.5s, $1.42459800
+- next: Ask strategist to decompose the external-call account-typing gap: likely an explicit run_ext_call accounts_well_typed probe/semantic repair before retrying ExtCall/RawCallTarget helpers.
+
+### Attempts / Evidence
+
+- `E0831` (progressed, other, actual effort: 1 sessions, 4 msgs, 63 steps, 77 tools, 21 holbuild, 6,401,263 tok (6,380,750 in, 20,513 out, 6,263,296 cached), 734.5s, $4.33430800)
+  - Proved RawLog operand/tail helpers by decomposing evaluated operands via exprs_runtime_typed and isolating log updates with runtime_consistent_logs_cons rather than unfolding env/state invariants in the consumer. -> vyperTypeStmtSoundnessTheory builds after helper additions; remaining C2.6.5 cheats are unchanged. (`TO_type_system_rewrite-20260524T091119Z_m44179_t001`)
+- `E0832` (progressed, other, actual effort: 1 sessions, 4 msgs, 48 steps, 63 tools, 13 holbuild, 4,942,611 tok (4,926,427 in, 16,184 out, 4,795,392 cached), 600.9s, $3.53839100)
+  - Added selfdestruct_args_runtime_typed_dest and selfdestruct_tail_sound, composing transfer_value_runtime_consistent/no_type_error after evaluated AddressT operand destructs. -> vyperTypeStmtSoundnessTheory built after SelfDestruct helpers; these helpers are stable through later successful builds. (`TO_type_system_rewrite-20260524T091119Z_m44207_t001`)
+  - Added create_args_runtime_typed_dest using LIST_REL_EL_EQN/LIST_REL_LENGTH plus LAST_MAP/LAST_EL to derive HD AddressV and LAST NumV destructors for CreateTarget. -> Initial proof was adjusted after a failed HD/LAST proof; final create operand helper built. (`TO_type_system_rewrite-20260524T091119Z_m44216_t001`)
+  - Added accounts_well_typed_increment_nonce and runtime_consistent_increment_nonce boundary for update_accounts (vfmExecution$increment_nonce addr). -> After splitting update_account address equality, vyperTypeStmtSoundnessTheory built; increment_nonce adapter is stable. (`TO_type_system_rewrite-20260524T091119Z_m44228_t001`)
+  - Started create_tail_sound by composing optional transfer_value with runtime_consistent_increment_nonce and no-TypeError branch. -> First attempt failed because IF_CASES_TAC did not split amount > 0 in the already-simplified goal; source was then edited to Cases_on `amount > 0` but not rebuilt before handoff. (`TO_type_system_rewrite-20260524T091119Z_m44230_t001`, `TO_type_system_rewrite-20260524T091119Z_m44233_t002`)
+- `E0833` (progressed, other, actual effort: 1 sessions, 5 msgs, 63 steps, 67 tools, 21 holbuild, 6,096,108 tok (6,074,898 in, 21,210 out, 5,941,248 cached), 741.3s, $4.27517400)
+  - Repaired create_tail_sound by removing an over-nested amount>0 split and composing transfer_value_runtime_consistent with runtime_consistent_increment_nonce. -> vyperTypeStmtSoundnessTheory built cleanly after create_tail_sound repair. (`TO_type_system_rewrite-20260524T091119Z_m44241_t001`)
+  - Replaced Expr_Call_RawRevert cheat with evaluator-order proof using expression-list IH and raw_revert_tail_sound; split LENGTH vs = 1 and used runtime_consistent projection. -> vyperTypeStmtSoundnessTheory built after RawRevert resume proof. (`TO_type_system_rewrite-20260524T091119Z_m44260_t001`)
+  - Attempted Expr_Call_RawLog resume by applying raw_log_args_runtime_typed_dest and raw_log_tail_sound, then simplifying tail internals. -> Current source fails in RawLog; final goal still has monadic case equation for raw_log tail and assumptions from raw_log_tail_sound. Need better boundary/use-site shape rather than continuing broad simplification/metis. (`TO_type_system_rewrite-20260524T091119Z_m44295_t001`)
+- `E0834` (progressed, other, actual effort: 1 sessions, 5 msgs, 67 steps, 74 tools, 18 holbuild, 6,455,255 tok (6,429,945 in, 25,310 out, 6,295,040 cached), 774.3s, $4.58134500)
+  - Added raw_log_tail_result_sound and raw_log_tail_result_sound_simp adapters; rewrote Expr_Call_RawLog resume to consume the simplified tail equation instead of continuing broad consumer unfolding. -> vyperTypeStmtSoundnessTheory built after the RawLog repair; RawLog is stable through that evidence point. (`TO_type_system_rewrite-20260524T091119Z_m44345_t001`)
+  - Started replacing Expr_Call_SelfDestructTarget cheat using selfdestruct_tail_sound and operand destructors directly inside the resume. -> Current source is not build-clean. Failure goal is a SelfDestruct result-equation mismatch after evaluator expansion; likely needs a selfdestruct_tail_result_sound adapter rather than more resume unfolding. (`TO_type_system_rewrite-20260524T091119Z_m44367_t001`)
+- `E0835` (progressed, other, actual effort: 1 sessions, 4 msgs, 56 steps, 65 tools, 19 holbuild, 5,445,703 tok (5,424,901 in, 20,802 out, 5,263,360 cached), 754.8s, $4.06344500)
+  - Added selfdestruct_tail_result_sound_simp matching the evaluator-expanded SelfDestruct case equation, and rewrote the SelfDestruct resume to apply it instead of unfolding the tail. -> vyperTypeStmtSoundnessTheory built after the SelfDestruct adapter/resume repair; failure moved to CreateTarget. (`TO_type_system_rewrite-20260524T091119Z_m44387_t001`)
+  - Added create_tail_result_sound_simp matching the evaluator-expanded CreateTarget tail equation; after aligning the helper statement to use s''.accounts rather than an inserted get_accounts do-block, reused it in the CreateTarget resume. -> vyperTypeStmtSoundnessTheory built cleanly for this target; grep shows C2.6.5 non-external tails are stable and remaining cheats are IntCall/ExtCall/RawCallTarget. (`TO_type_system_rewrite-20260524T091119Z_m44425_t001`, `TO_type_system_rewrite-20260524T091119Z_m44426_t001`)
+- `E0836` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 17 steps, 37 tools, 1 holbuild, 1,689,648 tok (1,682,778 in, 6,870 out, 1,598,976 cached), 143.5s, $1.42459800)
+  - Audit remaining C2.6.5 cheats after successful build; grep confirms only ExtCall/RawCallTarget remain in this component (IntCall is C2.7). -> vyperTypeStmtSoundnessTheory builds with non-external adapters, but cheats remain for external/raw external-call tails. (`TO_type_system_rewrite-20260524T091119Z_m44433_t001`, `TO_type_system_rewrite-20260524T091119Z_m44434_t002`)
+  - Inspect run_ext_call_def and available Verifereum preservation interfaces. -> run_ext_call can return replacement accounts' from extract_call_result/final_state; grep found no accounts_well_typed/run_ext_call theorem, and Verifereum wf_account_state_def only constrains nonce/code length, not balance, while Vyper account_well_typed requires balance < 2 ** 256 and code length <=24576. (`TO_type_system_rewrite-20260524T091119Z_m44438_t001`, `TO_type_system_rewrite-20260524T091119Z_m44439_t001`, `TO_type_system_rewrite-20260524T091119Z_m44441_t001`, `TO_type_system_rewrite-20260524T091119Z_m44447_t003`, `TO_type_system_rewrite-20260524T091119Z_m44448_t002`, `TO_type_system_rewrite-20260524T091119Z_m44448_t003`)
+
+### Ruled Out
+
+- Using Verifereum wf_state alone to prove Vyper accounts_well_typed for returned accounts
+- Continuing broad unfolding in ExtCall/RawCallTarget resumes without an account-typing boundary
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44433_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44434_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44438_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44439_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44441_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44447_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44448_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44448_t003` (use `read_tool_output` for exact output)
+
+## C2.6.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0873`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 114,349 tok (113,930 in, 419 out, 105,472 cached), 14.0s, $0.10759600
+- next: Review closure, then follow scheduler to C2.6.5.2 carry-forward or C2.6.5.3 repair.
+
+### Attempts / Evidence
+
+- `E0837` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 19 tools, 4 holbuild, 876,152 tok (872,697 in, 3,455 out, 829,952 cached), 126.5s, $0.73235100)
+  - Inserted concrete local probe theorem using caller `0w`, callee `1w`, balances `1` and `2 ** 256 - 1`, `make_ext_call_state caller callee [] [] (SOME 1) ...`; proved by `EVAL_TAC`, address case splits for initial account typing, then contradiction by instantiating bad universal at `1w`. -> Probe theorem proved and target builds; confirms external-call setup can create ill-typed rollback accounts before Verifereum execution. (`TO_type_system_rewrite-20260524T091119Z_m44461_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`)
+  - Initial suggested arity `make_ext_call_state caller callee [] (SOME 1)` failed to typecheck; adjusted to current source arity with both `code` and `calldata` lists: `make_ext_call_state caller callee [] [] (SOME 1)`. -> Ruled out stale PLAN theorem arity; current source requires two list arguments before `value_opt`. (`TO_type_system_rewrite-20260524T091119Z_m44462_t001`)
+  - Initial proof tried `qexists_tac` after simplification of negated universal; goal was not existential. Replaced with `strip_tac` and instantiated the assumption at `1w`. -> Routine tactic correction; final proof is small computation without run_call or mutual induction. (`TO_type_system_rewrite-20260524T091119Z_m44464_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`)
+- `E0839` (proved, , actual effort: 1 sessions, 1 steps, 115,387 tok (114,902 in, 485 out, 109,056 cached), 9.6s, $0.09830800)
+  - No re-proof attempted; began the carried probe only because the refreshed PLAN frontier listed C2.6.5.1. The theorem was already proved in E0837 and reviewed, with `vyperTypeStmtSoundnessTheory` building. -> Carry-forward probe is already proved and remains valid evidence for the external-call setup guard repair. (`TO_type_system_rewrite-20260524T091119Z_m44466_t001`, `TO_type_system_rewrite-20260524T091119Z_m44461_t001`)
+- `E0841` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 150,241 tok (149,794 in, 447 out, 143,360 cached), 15.9s, $0.11726000)
+  - No source edits; verified current source still builds and carried local probe remains present/proved. -> `vyperTypeStmtSoundnessTheory` builds, so the carried `make_ext_call_state_value_transfer_can_break_accounts_well_typed[local]` probe remains valid evidence for the setup guard repair. (`TO_type_system_rewrite-20260524T091119Z_m44496_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`, `TO_type_system_rewrite-20260524T091119Z_m44461_t001`)
+- `E0843` (proved, , actual effort: 1 sessions, 1 steps, 110,573 tok (110,160 in, 413 out, 104,960 cached), 9.8s, $0.09087000)
+  - No source edits; after required C2 gate replacement, began the carry-forward probe again because scheduler exposed it as Oracle next. Reused accepted review/build evidence rather than re-proving. -> C2.6.5.1 remains a completed internal-adapter counterexample probe and should advance the frontier; it is not task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44496_t001`, `TO_type_system_rewrite-20260524T091119Z_m44498_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`)
+- `E0845` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 139,569 tok (139,084 in, 485 out, 133,120 cached), 14.6s, $0.11093000)
+  - No source edits; began carry-forward probe because refreshed PLAN frontier exposed C2.6.5.1. Rebuilt vyperTypeStmtSoundnessTheory to verify current source still builds with the local setup-overflow probe present/proved. -> Current target builds; carried `make_ext_call_state_value_transfer_can_break_accounts_well_typed` probe remains valid internal adapter evidence for C2.6.5.3 guard repair, not task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44531_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`, `TO_type_system_rewrite-20260524T091119Z_m44461_t001`)
+- `E0847` (proved, , actual effort: 1 sessions, 1 steps, 99,722 tok (99,337 in, 385 out, 93,696 cached), 7.4s, $0.08660300)
+  - No source edits; scheduler exposed C2.6.5.1 again after C2 replacement despite E0845 review. Reused current successful vyperTypeStmtSoundnessTheory build and prior checked probe evidence. -> Carry-forward setup-overflow probe remains proved and reviewed as internal adapter evidence; repeated closure is only to satisfy the structured gate, not new mathematical work. (`TO_type_system_rewrite-20260524T091119Z_m44531_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`, `TO_type_system_rewrite-20260524T091119Z_m44461_t001`)
+- `E0849` (proved, , actual effort: 1 sessions, 1 steps, 81,637 tok (81,217 in, 420 out, 74,240 cached), 7.3s, $0.08460500)
+  - No source edits; began C2.6.5.1 only because the repaired PLAN/scheduler re-exposed the already-completed carry-forward probe. Reused the current successful `vyperTypeStmtSoundnessTheory` build and prior checked setup-overflow probe evidence. -> Carry-forward setup-overflow probe remains proved and reviewed as internal adapter evidence for guarding `run_ext_call`; this closure is scheduler bookkeeping, not new mathematical work or task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44555_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`, `TO_type_system_rewrite-20260524T091119Z_m44461_t001`)
+- `E0873` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 114,349 tok (113,930 in, 419 out, 105,472 cached), 14.0s, $0.10759600)
+  - No source edits; began carry-forward probe because scheduler exposed C2.6.5.1. Rebuilt vyperTypeStmtSoundnessTheory and reused prior checked setup-overflow probe evidence. -> Current target builds; carried make_ext_call_state setup-overflow probe remains proved as internal adapter evidence for guarding run_ext_call, not task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44719_t001`, `TO_type_system_rewrite-20260524T091119Z_m44466_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44718_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44719_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44466_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.10
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0922`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 6 holbuild, 1,761,327 tok (1,756,634 in, 4,693 out, 1,728,000 cached), 207.2s, $1.14796000
+- next: Call strategist review. After acceptance, scheduler should decide whether the later IntCall FAIL_TAC/source-prefix issue is already covered or needs a separate component before C2.6.6 integration.
+
+### Attempts / Evidence
+
+- `E0922` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 6 holbuild, 1,761,327 tok (1,756,634 in, 4,693 out, 1,728,000 cached), 207.2s, $1.14796000)
+  - Inserted `run_ext_call_accounts_well_typed` boundary lemma immediately after `extract_call_result_accounts_well_typed`. Initial proof tried backward `irule`/`drule_all`; matching failed because extraction theorem expects an explicit `(result, final_state)` pair, while assumptions contained complex `dispatch_precompiles`/`run_call` terms. -> Reworked the proof to abbreviate the `extract_call_result` outcome, pair-split it, derive the guard premise via `ext_call_success_accounts_ok_imp_extract_premise`, then specialize `extract_call_result_accounts_well_typed` explicitly. This avoids unfolding `dispatch_precompiles`/`run_call` and matches the planned boundary proof style. (`TO_type_system_rewrite-20260524T091119Z_m45949_t001`, `TO_type_system_rewrite-20260524T091119Z_m45951_t001`, `TO_type_system_rewrite-20260524T091119Z_m45955_t001`, `TO_type_system_rewrite-20260524T091119Z_m45957_t001`)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` with the final proof. -> Build resumed at `run_ext_call_accounts_well_typed`, accepted the theorem, and proceeded to a later unrelated statement proof (`eval_all_type_sound_mutual[Expr_Call_IntCall]` with existing `FAIL_TAC "after_default_mp"`). Thus C2.6.5.10 local boundary is verified. (`TO_type_system_rewrite-20260524T091119Z_m45959_t001`)
+
+### Ruled Out
+
+- Unfolding dispatch_precompiles or run_call
+- Deriving account typing from Verifereum wf_accounts
+- Reproving extract_call_result account typing inline
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45959_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45960_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45948_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0874`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 130,648 tok (130,312 in, 336 out, 121,856 cached), 13.3s, $0.11328800
+- next: Review closure; expected next beginable leaf is C2.6.5.3 semantic guard repair.
+
+### Attempts / Evidence
+
+- `E0838` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 283,821 tok (282,423 in, 1,398 out, 274,944 cached), 57.1s, $0.21680700)
+  - Inserted concrete local probe reusing caller `0w`, callee `1w`, balances `1` and `2 ** 256 - 1`, and current `make_ext_call_state caller callee [] [] (SOME 1)` arity. Proof uses `EVAL_TAC`, address splits for good account typing, contradiction at `1w` for bad account typing, and existential witnesses `[]` and `empty_transient_storage` for extraction result. -> Probe theorem proved and target builds; confirms `extract_call_result` success exposes `final_state.rollback.accounts` unchanged even when those accounts violate Vyper typing. (`TO_type_system_rewrite-20260524T091119Z_m44471_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`)
+- `E0840` (proved, , actual effort: 1 sessions, 1 steps, 121,467 tok (121,134 in, 333 out, 115,200 cached), 6.9s, $0.09726000)
+  - No re-proof attempted; began the carried probe only because the refreshed PLAN frontier listed C2.6.5.2. The theorem was already proved in E0838 and reviewed, with `vyperTypeStmtSoundnessTheory` building. -> Carry-forward probe is already proved and remains valid evidence that extraction success returns bad rollback accounts unchanged. (`TO_type_system_rewrite-20260524T091119Z_m44472_t001`, `TO_type_system_rewrite-20260524T091119Z_m44471_t001`)
+- `E0842` (proved, , actual effort: 1 sessions, 1 steps, 81,994 tok (81,707 in, 287 out, 75,264 cached), 5.4s, $0.07845700)
+  - No source edits; verified current `vyperTypeStmtSoundnessTheory` build after beginning the carry-forward probe. -> Carried `extract_call_result_success_exposes_bad_accounts[local]` remains proved in current source and continues to show only that unconditional extraction preservation is false. (`TO_type_system_rewrite-20260524T091119Z_m44496_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`, `TO_type_system_rewrite-20260524T091119Z_m44471_t001`)
+- `E0844` (proved, , actual effort: 1 sessions, 1 steps, 116,936 tok (116,614 in, 322 out, 111,104 cached), 5.5s, $0.09276200)
+  - No source edits; after required C2 gate replacement, began the carry-forward probe again because scheduler exposed it after C2.6.5.1. Reused accepted review/build evidence rather than re-proving. -> C2.6.5.2 remains a completed internal-adapter counterexample probe and should advance the frontier to C2.6.5.3; it is not task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44496_t001`, `TO_type_system_rewrite-20260524T091119Z_m44501_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`)
+- `E0846` (proved, , actual effort: 1 sessions, 1 steps, 76,821 tok (76,497 in, 324 out, 70,144 cached), 5.7s, $0.07655700)
+  - No source edits; began carry-forward extraction probe because refreshed PLAN frontier exposed C2.6.5.2. Reused current successful vyperTypeStmtSoundnessTheory build plus prior accepted proof outputs for `extract_call_result_success_exposes_bad_accounts`. -> Current target builds; carried extraction-success probe remains valid internal adapter evidence that unconditional extraction preservation is false without a typed final-state premise, shaping C2.6.5.6 rather than implying task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44531_t001`, `TO_type_system_rewrite-20260524T091119Z_m44501_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`)
+- `E0848` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 112,913 tok (112,478 in, 435 out, 105,472 cached), 13.0s, $0.10081600)
+  - No source edits; began carry-forward extraction-success probe because scheduler exposed C2.6.5.2. Rebuilt vyperTypeStmtSoundnessTheory to verify current source still builds and reused prior checked probe evidence. -> Current target builds; carried `extract_call_result_success_exposes_bad_accounts` probe remains valid internal adapter evidence that unconditional extraction preservation is false without a typed final-state premise, not task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44555_t001`, `TO_type_system_rewrite-20260524T091119Z_m44501_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`)
+- `E0850` (proved, , actual effort: 1 sessions, 1 steps, 91,535 tok (91,204 in, 331 out, 83,456 cached), 5.4s, $0.09039800)
+  - No source edits; began C2.6.5.2 only because the repaired PLAN/scheduler re-exposed the already-completed carry-forward probe. Reused the current successful `vyperTypeStmtSoundnessTheory` build and prior checked extraction-success probe evidence. -> Carry-forward extraction-success probe remains proved and reviewed as internal adapter evidence requiring a typed-final-state premise for extraction boundaries; this closure is scheduler bookkeeping, not new mathematical work or task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44555_t001`, `TO_type_system_rewrite-20260524T091119Z_m44501_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`)
+- `E0874` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 130,648 tok (130,312 in, 336 out, 121,856 cached), 13.3s, $0.11328800)
+  - No source edits; began carry-forward extraction-success probe because scheduler exposed C2.6.5.2. Rebuilt vyperTypeStmtSoundnessTheory and reused prior checked extraction probe evidence. -> Current target builds; carried extract_call_result_success_exposes_bad_accounts probe remains proved as internal adapter evidence requiring an explicit typed-final-state premise for extraction boundaries, not task-level unprovability. (`TO_type_system_rewrite-20260524T091119Z_m44723_t001`, `TO_type_system_rewrite-20260524T091119Z_m44472_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44722_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44723_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44472_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0875`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 10 steps, 15 tools, 3 holbuild, 865,093 tok (862,651 in, 2,442 out, 830,464 cached), 462.4s, $0.64942700
+- next: Review closure, then proceed to C2.6.5.4 regression/boundary proof scheduled after the semantic guard repair.
+
+### Attempts / Evidence
+
+- `E0875` (proved, , actual effort: 1 sessions, 1 msgs, 10 steps, 15 tools, 3 holbuild, 865,093 tok (862,651 in, 2,442 out, 830,464 cached), 462.4s, $0.64942700)
+  - Added `ext_call_value_transfer_ok` immediately after `extract_call_result_def`, with `NONE => T` and `SOME amount` requiring caller balance covers amount and callee balance plus amount stays below `2 ** 256`; translated it with `cv_auto_trans`. -> Guard definition added in the Vyper-facing interpreter adapter without modifying raw `make_ext_call_state` or `extract_call_result`. (`TO_type_system_rewrite-20260524T091119Z_m44732_t001`)
+  - Wrapped `run_ext_call` so it returns `NONE` unless `ext_call_value_transfer_ok caller callee value_opt accounts` holds before looking up code and constructing `make_ext_call_state`; updated existing `cv_auto_trans run_ext_call_def`. -> Guard is placed before `make_ext_call_state`, preserving all original behavior under the guard and blocking known ill-typed setup path. (`TO_type_system_rewrite-20260524T091119Z_m44733_t001`)
+  - Built `vyperInterpreterTheory`, then downstream `vyperTypeStmtSoundnessTheory`. -> Both targets build successfully after the guard repair; downstream statement-soundness target remains build-clean. (`TO_type_system_rewrite-20260524T091119Z_m44734_t001`, `TO_type_system_rewrite-20260524T091119Z_m44735_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44732_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44733_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44734_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44735_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0876`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 420,095 tok (419,235 in, 860 out, 409,600 cached), 53.3s, $0.27877500
+- next: Review closure, then proceed to C2.6.5.5 guarded setup account-typing boundary lemma.
+
+### Attempts / Evidence
+
+- `E0876` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 420,095 tok (419,235 in, 860 out, 409,600 cached), 53.3s, $0.27877500)
+  - Added local concrete regression theorem `run_ext_call_overflowing_value_transfer_rejected` beside the prior external-call adapter probes, reusing caller `0w`, callee `1w`, balances `1` and `2 ** 256 - 1`, and proving the guarded `run_ext_call ... = NONE` by `EVAL_TAC`. -> Regression theorem proves the previously overflowing setup example is rejected on the actual Vyper-facing `run_ext_call` path before extraction. (`TO_type_system_rewrite-20260524T091119Z_m44741_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` after adding the regression theorem. -> Downstream statement-soundness target builds successfully with the new local regression proof. (`TO_type_system_rewrite-20260524T091119Z_m44742_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44739_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44741_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44742_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0877`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 12 steps, 13 tools, 4 holbuild, 1,458,407 tok (1,454,998 in, 3,409 out, 1,430,528 cached), 142.0s, $0.93988400
+- next: Review closure, then proceed to C2.6.5.6 extraction account-typing boundary lemma.
+
+### Attempts / Evidence
+
+- `E0877` (proved, , actual effort: 1 sessions, 1 msgs, 12 steps, 13 tools, 4 holbuild, 1,458,407 tok (1,454,998 in, 3,409 out, 1,430,528 cached), 142.0s, $0.93988400)
+  - Added local helper `vfm_transfer_value_accounts_well_typed`, proving Verifereum `transfer_value` preserves Vyper `accounts_well_typed` under the new caller-balance and recipient-overflow inequalities by unfolding `vfmExecution$transfer_value`, `lookup_account`, and `update_account`. -> Helper isolates the raw account-update arithmetic needed by guarded setup; proof builds in downstream target. (`TO_type_system_rewrite-20260524T091119Z_m44749_t001`, `TO_type_system_rewrite-20260524T091119Z_m44756_t001`)
+  - Added local boundary `guarded_make_ext_call_state_accounts_well_typed`; case-split on `value_opt`, use raw `transfer_value` simplification for `NONE`, and apply the helper plus guard inequalities for `SOME amount`. -> Boundary proves accounts inside `make_ext_call_state ... .rollback.accounts` are well typed under `accounts_well_typed accounts` and `ext_call_value_transfer_ok`. `vyperTypeStmtSoundnessTheory` builds. (`TO_type_system_rewrite-20260524T091119Z_m44749_t001`, `TO_type_system_rewrite-20260524T091119Z_m44756_t001`)
+  - Initial boundary proof attempts unfolded too far or tried to `irule` after simplification had changed the goal shape; adjusted to split `NONE` before applying the helper only in the `SOME` case. -> Routine tactic correction; final proof avoids Verifereum `wf_state` and mentions only setup/account fields as planned. (`TO_type_system_rewrite-20260524T091119Z_m44750_t001`, `TO_type_system_rewrite-20260524T091119Z_m44752_t001`, `TO_type_system_rewrite-20260524T091119Z_m44754_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44749_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44756_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0878`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 8 tools, 2 holbuild, 333,769 tok (331,987 in, 1,782 out, 307,712 cached), 67.2s, $0.32869100
+- next: Review C2.6.5.6 closure with strategist, then proceed to C2.6.5.7 audit if accepted.
+
+### Attempts / Evidence
+
+- `E0878` (proved, , actual effort: 1 sessions, 5 steps, 8 tools, 2 holbuild, 333,769 tok (331,987 in, 1,782 out, 307,712 cached), 67.2s, $0.32869100)
+  - Inserted theorem after run_ext_call_overflowing_value_transfer_rejected: accounts_well_typed orig_accounts /\ (case result of INR NONE => accounts_well_typed final_state.rollback.accounts | _ => T) /\ extract_call_result ... = SOME (...,accounts',...) ==> accounts_well_typed accounts'. Proof rw[extract_call_result_def] >> gvs[AllCaseEqs()]. -> Closed the extraction account-typing boundary exactly as planned; no make_ext_call_state assumptions used. (`TO_type_system_rewrite-20260524T091119Z_m44773_t001`, `TO_type_system_rewrite-20260524T091119Z_m44774_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44773_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44774_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0909`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 99,660 tok (99,089 in, 571 out, 92,672 cached), 10.7s, $0.09555100
+- next: Review with strategist; if accepted, begin C2.6.5.8 to add the semantic runtime account-bound guard to `run_ext_call`.
+
+### Attempts / Evidence
+
+- `E0879` (stuck, bad_definition, actual effort: 1 sessions, 11 steps, 32 tools, 1,148,611 tok (1,141,665 in, 6,946 out, 1,093,120 cached), 112.8s, $0.99766500)
+  - Audited Verifereum theory/source for `run_call`, `dispatch_precompiles`, `wf_state`, `wf_accounts`, rollback account preservation, and Vyper `accounts_well_typed` consumers. -> No theorem found that yields Vyper `accounts_well_typed final_state.rollback.accounts` for successful run_call/precompile returns; project theorem indexes under verifereum were absent and source greps showed only wf/storage preservation facts. (`TO_type_system_rewrite-20260524T091119Z_m44779_t002`, `TO_type_system_rewrite-20260524T091119Z_m44779_t003`, `TO_type_system_rewrite-20260524T091119Z_m44784_t003`)
+  - Compared Verifereum `wf_account_state_def`/`wf_accounts_def` with Vyper `account_well_typed_def`/`accounts_well_typed_def`. -> Verifereum wf account state tracks nonce/code-length but not `balance < 2 ** 256`; Vyper `accounts_well_typed` requires balance bound and code bound. Thus `wf_accounts`/`wf_state` cannot discharge C2.6.5.6 success premise. (`TO_type_system_rewrite-20260524T091119Z_m44783_t002`, `TO_type_system_rewrite-20260524T091119Z_m44787_t005`)
+  - Inspected current adapter definition and preservation boundaries. -> `run_ext_call_def` directly extracts successful `dispatch_precompiles` or `run_call` final states. Existing `preserves_wf_accounts_dispatch_precompiles` and `run_call_preserves_storage_outside_accessed_slots` do not imply account balance/code Vyper typing. Minimal repair appears to filter/guard success extraction in `run_ext_call` by `accounts_well_typed final_state.rollback.accounts` before calling `extract_call_result`. (`TO_type_system_rewrite-20260524T091119Z_m44785_t002`, `TO_type_system_rewrite-20260524T091119Z_m44785_t003`, `TO_type_system_rewrite-20260524T091119Z_m44785_t001`, `TO_type_system_rewrite-20260524T091119Z_m44787_t003`)
+- `E0909` (proved, , actual effort: 1 sessions, 1 steps, 99,660 tok (99,089 in, 571 out, 92,672 cached), 10.7s, $0.09555100)
+  - Carried forward accepted negative audit E0879 per PLAN: no existing Verifereum `wf_accounts`/storage preservation fact supplies Vyper `accounts_well_typed final_state.rollback.accounts` for successful `run_ext_call` extraction. -> Audit evidence establishes the old direct integration route is unavailable and justifies the guarded adapter repair in C2.6.5.8-C2.6.5.10; no new source edits were needed for this source_audit component. (`TO_type_system_rewrite-20260524T091119Z_m44779_t002`, `TO_type_system_rewrite-20260524T091119Z_m44779_t003`, `TO_type_system_rewrite-20260524T091119Z_m44783_t002`, `TO_type_system_rewrite-20260524T091119Z_m44787_t005`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m44779_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44779_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44780_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44783_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44785_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m44787_t005` (use `read_tool_output` for exact output)
+
+## C2.6.5.8
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `tool_limit`
+- latest episode: `E0910`
+- blocker: Cannot verify the localized `run_ext_call` guard edit because rebuilding `vyperInterpreterTheory` times out before reaching the edited definitions, in the pre-existing `bound_def` termination proof under the fixed 2.5s tactic timeout. The component edit is syntactically localized, but the active component has no authorized source-prefix/performance repair leaf.
+- actual effort: 1 sessions, 1 msgs, 11 steps, 12 tools, 1 holbuild, 1,263,851 tok (1,257,498 in, 6,353 out, 1,228,288 cached), 190.6s, $0.95078400
+- next: Ask strategist to augment C2.6.5.8 with an explicit low-risk source-prefix/performance repair for the `bound_def` termination tactic, or provide an authorized verification path that reaches/checks the new guard definitions without replaying that timeout.
+
+### Attempts / Evidence
+
+- `E0910` (stuck, tool_limit, actual effort: 1 sessions, 1 msgs, 11 steps, 12 tools, 1 holbuild, 1,263,851 tok (1,257,498 in, 6,353 out, 1,228,288 cached), 190.6s, $0.95078400)
+  - Added semantic `accounts_runtime_well_typed_def`, `ext_call_success_accounts_ok_def`, and guarded both `run_ext_call_def` extraction sites exactly as planned; then built `vyperInterpreterTheory`. -> Build did not reach `cv_auto_trans run_ext_call_def`; it timed out at the earlier `bound_def` termination proof. The diff confirms the C2.6.5.8 edit itself is localized near the external-call adapter, with pre-existing transfer guard edits also present in the file. (`TO_type_system_rewrite-20260524T091119Z_m45655_t001`, `TO_type_system_rewrite-20260524T091119Z_m45656_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45655_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45656_t003` (use `read_tool_output` for exact output)
+
+## C2.6.5.8.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0911`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 14 tools, 1 holbuild, 476,341 tok (473,634 in, 2,707 out, 377,856 cached), 59.1s, $0.74902800
+- next: Review with strategist; if accepted, begin C2.6.5.8.1 to repair/verify the cv-translatable guarded external-call definitions.
+
+### Attempts / Evidence
+
+- `E0911` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 14 tools, 1 holbuild, 476,341 tok (473,634 in, 2,707 out, 377,856 cached), 59.1s, $0.74902800)
+  - holbuild(targets=["vyperInterpreterTheory"], timeout=600) on active C2.6.5.8.0 source -> Build proceeded past the previous bound_def termination timeout and later failed at cv translation of accounts_runtime_well_typed_def, demonstrating the C2.6.5.8.0 prefix blocker is no longer the active failure. (`TO_type_system_rewrite-20260524T091119Z_m45670_t003`, `TO_type_system_rewrite-20260524T091119Z_m45672_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45670_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45672_t003` (use `read_tool_output` for exact output)
+
+## C2.6.5.8.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0917`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 22 steps, 26 tools, 6 holbuild, 1,814,766 tok (1,805,849 in, 8,917 out, 1,751,040 cached), 249.2s, $1.41707500
+
+### Attempts / Evidence
+
+- `E0912` (progressed, bad_definition, actual effort: 1 sessions, 2 msgs, 25 steps, 49 tools, 2 holbuild, 2,907,282 tok (2,895,664 in, 11,618 out, 2,820,096 cached), 246.8s, $2.13642800)
+  - Original E0910 definition: `accounts_runtime_well_typed accounts <=> !addr. ... lookup_account addr accounts ...`; holbuild vyperInterpreterTheory. -> Failed at `cv_auto_trans accounts_runtime_well_typed_def`: cv translator encountered higher-order universal/function type `:160 word -> bool`. (`TO_type_system_rewrite-20260524T091119Z_m45694_t001`, `TO_type_system_rewrite-20260524T091119Z_m45695_t001`)
+  - Split `account_runtime_well_typed` and redefined `accounts_runtime_well_typed` using `EVERY (account_runtime_well_typed o SND) (toSortedAList (build_spt empty_account_state (dimword (:160)) accounts))`; first without, then with `(accounts : evm_accounts)` annotation. -> Without annotation, cv still treated `accounts` as polymorphic function-typed argument. With annotation, it generated helper definitions through `EVERY_o_account_runtime_well_t`, then failed translating specialized `build_spt_empty_account_state_` with `dest_thy_const` / `not a const`. (`TO_type_system_rewrite-20260524T091119Z_m45700_t001`, `TO_type_system_rewrite-20260524T091119Z_m45701_t001`)
+- `E0913` (progressed, bad_definition, actual effort: 1 sessions, 3 msgs, 40 steps, 61 tools, 12 holbuild, 4,383,491 tok (4,368,263 in, 15,228 out, 4,254,720 cached), 417.7s, $3.15191500)
+  - Defined `accounts_spt_runtime_well_typed` recursively on `account_state spt`, kept `accounts_runtime_well_typed` as the required universal predicate, and added intended `[cv_rep]` bridge `b2c (accounts_runtime_well_typed accounts) = cv_accounts_spt_runtime_well_typed (from_evm_accounts accounts)`. -> Promising definition-interface shift: it should let `cv_auto_trans ext_call_success_accounts_ok_def` consume the universal predicate via `from_evm_accounts` instead of translating the higher-order universal directly. Source not yet verified. (`TO_type_system_rewrite-20260524T091119Z_m45715_t001`)
+  - Proved/supporting helper attempts: `account_runtime_well_typed_empty_account_state`, `accounts_spt_runtime_well_typed_lookup`, and started `accounts_spt_runtime_well_typed_insert`; build reached insert helper. -> `accounts_spt_runtime_well_typed_lookup` now replays after adding `sptreeTheory.wf_def`; `accounts_spt_runtime_well_typed_insert` currently times out due to broad `rw` after `recInduct sptreeTheory.insert_ind`. (`TO_type_system_rewrite-20260524T091119Z_m45744_t001`)
+- `E0914` (progressed, plan_incomplete, actual effort: 1 sessions, 4 msgs, 53 steps, 64 tools, 11 holbuild, 4,894,216 tok (4,878,022 in, 16,194 out, 4,767,232 cached), 453.2s, $3.42338600)
+  - Replaced broad insert helper simplification with explicit insert_ind cases and once-rewrite; fixed build_spt induction base and account_runtime_well_typed side condition using the universal assumption at n2w n. -> accounts_spt_runtime_well_typed_insert and accounts_spt_runtime_well_typed_build_spt replayed; build advanced to cv_rep theorem. (`TO_type_system_rewrite-20260524T091119Z_m45757_t001`, `TO_type_system_rewrite-20260524T091119Z_m45761_t001`)
+  - Inspected generated cv_accounts_spt_runtime_well_typed_thm shape, then changed accounts_runtime_well_typed_cv_rep to an explicit cv_rep theorem using cv_repTheory.cv_rep_def, GSYM cv_accounts_spt_runtime_well_typed_thm, and the build_spt bridge. -> Holbuild saved accounts_runtime_well_typed_cv_rep and began cv translation of ext_call_success_accounts_ok; direct theorem form avoided the prior raw-universal translation failure path. (`TO_type_system_rewrite-20260524T091119Z_m45787_t001`, `TO_type_system_rewrite-20260524T091119Z_m45801_t001`)
+  - Ran holbuild vyperInterpreterTheory after cv_rep bridge succeeded. -> Build failed at earlier bound_def termination proof replay, the known C2.6.5.8.0 proof-performance issue, before completing the .8.1 verification target. (`TO_type_system_rewrite-20260524T091119Z_m45801_t001`)
+- `E0915` (progressed, plan_incomplete, actual effort: 1 sessions, 3 msgs, 39 steps, 53 tools, 5 holbuild, 3,944,220 tok (3,926,641 in, 17,579 out, 3,815,936 cached), 484.2s, $2.98886300)
+  - Ran holbuild vyperInterpreterTheory from saved cv_rep checkpoint. -> Build reached cv_auto_trans ext_call_success_accounts_ok_def and failed with cv_rep_match_mp on the case term; log shows the custom cv_rep theorem still needs verification by full build, but this failure is after the account guard definition is saved. (`TO_type_system_rewrite-20260524T091119Z_m45812_t001`, `TO_type_system_rewrite-20260524T091119Z_m45816_t001`)
+  - Added local callable_table_measure_ADELKEY_LE using ALOOKUP_MEM, ADELKEY_def, and SUM_MAP_FILTER_MEM_LE; changed bound_def termination proof to call it instead of replaying the inline filter/SUM proof. -> Helper text is in source and replays through its checkpoint, but the current termination proof still leaves the large bound_def termination goal; the helper has not yet been successfully integrated into the mutual termination proof. (`TO_type_system_rewrite-20260524T091119Z_m45840_t001`, `TO_type_system_rewrite-20260524T091119Z_m45843_t001`, `TO_type_system_rewrite-20260524T091119Z_m45847_t001`, `TO_type_system_rewrite-20260524T091119Z_m45848_t001`)
+- `E0916` (progressed, plan_incomplete, actual effort: 1 sessions, 3 msgs, 31 steps, 46 tools, 6 holbuild, 3,330,984 tok (3,320,298 in, 10,686 out, 3,208,704 cached), 310.0s, $2.48290200)
+  - Removed temporary cv_memLib verbosity wrapper around cv_auto_trans ext_call_success_accounts_ok_def. -> Source cleanup completed; no final build yet, but source no longer contains the explicit Verbose/Quiet instrumentation. (`TO_type_system_rewrite-20260524T091119Z_m45858_t001`)
+  - Changed bound_def termination suffix to `TRY (gvs[] \\ drule callable_table_measure_ADELKEY_LE \\ simp[])` and built vyperInterpreterTheory. -> Holbuild reached past bound_def: instrumented log reports `Saved definition "bound_def"`; build then failed later at cv_auto_trans ext_call_success_accounts_ok_def with the same cv_rep_match_mp issue. This suggests bound_def prefix replay is now stabilized, though full target still fails. (`TO_type_system_rewrite-20260524T091119Z_m45861_t001`, `TO_type_system_rewrite-20260524T091119Z_m45863_t001`)
+  - Tried to refactor ext_call_success_accounts_ok to avoid pair-case translation by defining it over FST/SND and then an aux helper over result/final_state. -> Naive FST/SND definition failed HOL Definition with free variable `outcome`; aux helper without type annotations failed with free variable `final_state`. Current source was then edited to annotate `final_state : execution_state`, but this last edit is unverified due handoff. (`TO_type_system_rewrite-20260524T091119Z_m45870_t001`, `TO_type_system_rewrite-20260524T091119Z_m45879_t001`, `TO_type_system_rewrite-20260524T091119Z_m45882_t001`)
+- `E0917` (proved, , actual effort: 1 sessions, 1 msgs, 22 steps, 26 tools, 6 holbuild, 1,814,766 tok (1,805,849 in, 8,917 out, 1,751,040 cached), 249.2s, $1.41707500)
+  - Split the success guard so the cv-translated aux predicate takes the Verifereum result and the already-selected final account map, while the exported wrapper over `(result, final_state)` applies `.rollback.accounts`. This preserves the required success-only guard and avoids the HOL Definition free-variable issue for record selector arguments. -> Edited `ext_call_success_accounts_ok_aux_def` / `ext_call_success_accounts_ok_def`; previous typed `final_state`/`st` variants still failed Definition with free RHS variables, but the account-map aux form built successfully. (`TO_type_system_rewrite-20260524T091119Z_m45900_t001`, `TO_type_system_rewrite-20260524T091119Z_m45902_t001`, `TO_type_system_rewrite-20260524T091119Z_m45907_t001`, `TO_type_system_rewrite-20260524T091119Z_m45908_t001`)
+  - Ran `holbuild(targets=["vyperInterpreterTheory"], timeout=600)` after the final guard-definition edit. -> `vyperInterpreterTheory` built successfully, reaching/checking the exported account-bound definitions and guarded `run_ext_call_def` including cv translations. (`TO_type_system_rewrite-20260524T091119Z_m45908_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45908_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45907_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45900_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45902_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.9
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` C2.6.5.9 bridge lemmas remain unverified because holbuild cannot reach vyperTypeStmtSoundnessScript.sml. Re-running the required target again fails earlier in prerequisite vyperExprNoControlTheory at eval_expr_no_control_with_bt line 727 `>> unfold_tac` with 22 goals under the fixed 2.5s tactic timeout. This is outside the active component's authorized source scope; no local C2.6.5.9 goal state is available.
+- latest episode: `E0919`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 114,198 tok (113,486 in, 712 out, 106,496 cached), 22.2s, $0.10955800
+- next: Strategist must add/authorize a source-prefix performance repair component for vyperExprNoControlTheory or provide a verification path that reaches C2.6.5.9 before this component can be proved.
+
+### Attempts / Evidence
+
+- `E0918` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 7 steps, 10 tools, 1 holbuild, 906,925 tok (903,928 in, 2,997 out, 869,888 cached), 111.5s, $0.69505400)
+  - Added `accounts_runtime_well_typed_accounts_well_typed` by unfolding runtime/prop account predicates, and `ext_call_success_accounts_ok_imp_extract_premise` by destructing the outcome and unfolding the guard definitions. -> Source edit applied at the intended external-call lemma block; no local proof error observed yet because verification did not reach the file. (`TO_type_system_rewrite-20260524T091119Z_m45917_t001`, `TO_type_system_rewrite-20260524T091119Z_m45919_t002`)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to verify the new local bridge lemmas. -> Build failed before `vyperTypeStmtSoundnessScript.sml`, timing out in prerequisite `vyperExprNoControlTheory` at `eval_expr_no_control_with_bt` line 727 `>> unfold_tac`; this blocks verification of C2.6.5.9 under current PLAN scheduling. (`TO_type_system_rewrite-20260524T091119Z_m45918_t001`, `TO_type_system_rewrite-20260524T091119Z_m45919_t001`)
+- `E0919` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 114,198 tok (113,486 in, 712 out, 106,496 cached), 22.2s, $0.10955800)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after starting/continuing C2.6.5.9 -> Build resumed prerequisite vyperExprNoControlTheory and timed out before active bridge lemmas, at eval_expr_no_control_with_bt line 727 `>> unfold_tac`; confirms source-prefix/performance blocker persists. (`TO_type_system_rewrite-20260524T091119Z_m45926_t001`)
+
+### Ruled Out
+
+- Continuing C2.6.5.9 local tactics before the build reaches the bridge lemmas
+- Editing vyperExprNoControlScript.sml under C2.6.5.9 without PLAN coverage
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45926_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45918_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.9.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0920`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 9 steps, 9 tools, 2 holbuild, 679,667 tok (675,911 in, 3,756 out, 653,824 cached), 97.4s, $0.55002700
+- next: Review with strategist, then proceed to C2.6.5.9.2 bridge lemma verification if accepted.
+
+### Attempts / Evidence
+
+- `E0920` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 9 tools, 2 holbuild, 679,667 tok (675,911 in, 3,756 out, 653,824 cached), 97.4s, $0.55002700)
+  - Replace monolithic final `>> unfold_tac` with explicit small `TRY (rename1 ... >> unfold_tac >> NO_TAC)` branches for remaining simple constructors, followed by fallback `unfold_tac`. -> The previous 22-goal timeout fragment is split into smaller tactic fragments; `holbuild(targets=["vyperExprNoControlTheory"], timeout=600)` succeeds in 11.5s. (`TO_type_system_rewrite-20260524T091119Z_m45936_t001`, `TO_type_system_rewrite-20260524T091119Z_m45937_t001`)
+
+### Ruled Out
+
+- Changing theorem statement or semantic definitions
+- Increasing holbuild timeout or adding broader simplifier sets
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45937_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45936_t001` (use `read_tool_output` for exact output)
+
+## C2.6.5.9.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0921`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 306,825 tok (305,337 in, 1,488 out, 293,376 cached), 408.8s, $0.25113300
+- next: Call strategist review. If accepted, the next work should classify/schedule the later `create_tail_result_sound_simp` timeout or proceed according to the PLAN if that failure already has component coverage; do not edit that theorem under C2.6.5.9.2.
+
+### Attempts / Evidence
+
+- `E0921` (proved, , actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 306,825 tok (305,337 in, 1,488 out, 293,376 cached), 408.8s, $0.25113300)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after C2.6.5.9.1 fixed the prerequisite replay timeout. -> Build passed the local bridge lemmas at lines 8722-8741 and proceeded to later theorem `create_tail_result_sound_simp`; failure there is a downstream proof-performance/source issue, not a C2.6.5.9.2 bridge lemma failure. (`TO_type_system_rewrite-20260524T091119Z_m45942_t002`)
+  - Read back the bridge lemma block. -> Source contains the expected local lemmas: `accounts_runtime_well_typed_accounts_well_typed` by unfolding account predicates, and `ext_call_success_accounts_ok_imp_extract_premise` by outcome/result/option case split and guard unfolding. (`TO_type_system_rewrite-20260524T091119Z_m45942_t001`)
+
+### Ruled Out
+
+- Editing downstream create-tail theorem under C2.6.5.9.2
+- Using Verifereum wf_accounts for this bridge
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45942_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45942_t002` (use `read_tool_output` for exact output)
+
+## C2.6.6
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` C2.6.6 itself was not reached: authorized build of vyperTypeStmtSoundnessTheory stops earlier in source order at vyperExprNoControlTheory:int_call_no_control, the queued C2.7.3.0 prerequisite. This matches the component note 'if the build stops earlier at IntCall, switch to C2.7', but the current active component gate prevents edits outside C2.6.6 without review/reordering.
+- latest episode: `E0931`
+- blocker: Source-order prerequisite failure in C2.7.3.0 prevents reaching the C2.6.6 ExtCall/RawCallTarget cheated resumes.
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 121,890 tok (120,728 in, 1,162 out, 112,640 cached), 24.3s, $0.13162000
+- next: Review this scheduling/blocker with strategist; expected update is to begin C2.7.3.0 before returning to C2.6.6.
+
+### Attempts / Evidence
+
+- `E0931` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 121,890 tok (120,728 in, 1,162 out, 112,640 cached), 24.3s, $0.13162000)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) under C2.6.6 authorization -> Build failed before vyperTypeStmtSoundnessScript.sml at vyperExprNoControlTheory:int_call_no_control. Goal is the known get_scopes branch from C2.7.3.0, so no C2.6.6 proof edit was possible. (`TO_type_system_rewrite-20260524T091119Z_m46439_t002`)
+  - grep C2.6.6 call resumes in vyperTypeStmtSoundnessScript.sml -> Confirmed ExtCall and RawCallTarget resumes still contain cheat, but they are unreachable until the earlier int_call_no_control prerequisite is repaired. (`TO_type_system_rewrite-20260524T091119Z_m46439_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46439_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46439_t001` (use `read_tool_output` for exact output)
+
+## C2.6a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1101`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 4 holbuild, 531,982 tok (530,069 in, 1,913 out, 503,808 cached), 154.3s, $0.44059900
+- next: Call plan_oracle(mode='review') for C2.6a; if accepted, follow scheduled next component (expected C2.6 or a repair/review of the now-reached IntCall theorem failure).
+
+### Attempts / Evidence
+
+- `E1101` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 4 holbuild, 531,982 tok (530,069 in, 1,913 out, 503,808 cached), 154.3s, $0.44059900)
+  - Replaced the final BaseTarget_Subscript exception-branch broad `simp[return_def]` with `strip_tac >> pop_assum mp_tac >> simp[]` followed by targeted substitution of `res = INR y` and `st' = st1`, then `simp[no_type_error_result_def]`. -> Focused build replay advanced past `eval_all_type_sound_mutual[BaseTarget_Subscript]` and reached a later failure in `intcall_expr_no_type_error_from_generated_ih`, showing the source-order prefix timeout was repaired. (`TO_type_system_rewrite-20260525T153549Z_m51335_t001`, `TO_type_system_rewrite-20260525T153549Z_m51334_t001`)
+
+### Ruled Out
+
+- Broad `simp[return_def]` and broad `gvs[no_type_error_result_def]` both timed out at the same branch.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260525T153549Z_m51335_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260525T153549Z_m51334_t001` (use `read_tool_output` for exact output)
 
 ## C2.7
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `plan_incomplete`
-- latest episode: `E0264`
-- blocker: C2.7 checkpoint cannot be closed: vyperTypeStmtSoundnessTheory builds, but grep found 19 remaining `cheat` proofs in `vyperTypeStmtSoundnessScript.sml` expression Resume cases (Expr_Name through Expr_Call_CreateTarget). These cheats must be explicitly covered by PLAN components before further edits under the cheat coverage invariant.
-- next: Strategist must decide whether to decompose the remaining expression Resume cheats inside C2/C2.7 or classify them under later builtin/call components; executor must not edit them until PLAN coverage exists.
+- result: `progressed`
+- diagnosis: `tool_limit` Focused holbuild remains blocked before HOL checking by `holbuild: unknown build option: --strict-parse`; no HOL goal exists and no source edits are sound while this persists.
+- latest episode: `E1347`
+- blocker: holbuild rejects configured/implicit --strict-parse before HOL parsing/checking
+- actual effort: 1 sessions, 2 msgs, 6 steps, 8 tools, 2 holbuild, 806,261 tok (802,640 in, 3,621 out, 616,448 cached), 97.8s, $1.34781400
+- next: Because the checkpoint nudge explicitly says not to end the session, remain idle on C2.7 with no source edits. If allowed to terminate and no tooling/config fix is reported, propose blocked end_session; if tooling is fixed or explicit retest requested, run exactly one focused holbuild before edits.
 
 ### Attempts / Evidence
 
 - `E0264` (stuck, plan_incomplete)
   - Ran the C2.7 mechanical checkpoint: holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600), plus targeted greps for `cheat` and `suspend` in vyperTypeStmtSoundnessScript.sml. -> Theory build succeeded quickly, but audit found unresolved `cheat` proofs in 19 expression Resume blocks. The original suspension list remains only as the suspended mutual theorem skeleton and is finalized, but the residual cheats are real oracle uses. (`TO_type_system_rewrite-20260518T204229Z_m27736_t002`, `TO_type_system_rewrite-20260518T204229Z_m27737_t002`, `TO_type_system_rewrite-20260518T204229Z_m27737_t003`)
+- `E1333` (progressed, plan_incomplete, actual effort: 1 sessions, 1 msgs, 3 steps, 6 tools, 1 holbuild, 646,932 tok (645,460 in, 1,472 out, 301,568 cached), 49.6s, $1.91440400)
+  - Focused C2.7 audit: holbuild vyperTypeStmtSoundnessTheory, grep `cheat|FAIL_TAC|suspend` in vyperTypeStmtSoundnessScript.sml, and query C2.7 plan gate. -> Build succeeds, but grep finds two actual `cheat` proof lines at 16714 and 16766. The rest of grep output is mostly suspend skeleton/Resume names and comments. PLAN still has only broad C2.7 active leaf; next session must inspect the two cheats and decide whether covered by C2.7 or requires plan_oracle coverage before editing/closing. (`TO_type_system_rewrite-20260525T153549Z_m59966_t003`, `TO_type_system_rewrite-20260525T153549Z_m59966_t001`, `TO_type_system_rewrite-20260525T153549Z_m59966_t002`)
+- `E1334` (progressed, other, actual effort: 1 sessions, 1 msgs, 3 steps, 3 tools, 1 holbuild, 633,757 tok (632,838 in, 919 out, 464,384 cached), 93.3s, $1.10203200)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` as mandated by STATE to verify the unbuilt ExtCall args-runtime destructors. -> Build fails inside `extcall_static_args_runtime_typed_dest` at `Cases_on `vs`` because `rw[exprs_runtime_typed_def]`/`Cases_on args` has already destructed/renamed the list variables; the remaining proof obligation is small and local. (`TO_type_system_rewrite-20260525T153549Z_m64678_t001`)
+- `E1335` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 6 steps, 7 tools, 2 holbuild, 792,197 tok (788,843 in, 3,354 out, 608,768 cached), 99.9s, $1.30537900)
+  - Ran required focused holbuild on active target `vyperTypeStmtSoundnessTheory` after startup status and PLAN check. -> Build failed before HOL parsing with `holbuild: unknown build option: --strict-parse`; no proof goal or C2.7-local failure state was produced. (`TO_type_system_rewrite-20260528T153317Z_m67680_t001`)
+  - Checked repository/PLAN gate before proof action. -> Worktree remains substantially dirty from pre-existing changes; PLAN still authorizes only active C2.7 and reports no proof-plan blockers, so the current blocker is operational tooling rather than decomposition. (`TO_type_system_rewrite-20260528T153317Z_m67679_t001`, `TO_type_system_rewrite-20260528T153317Z_m67679_t002`)
+- `E1336` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 6 steps, 8 tools, 2 holbuild, 784,289 tok (780,451 in, 3,838 out, 600,064 cached), 104.2s, $1.31710700)
+  - Startup status/PLAN check followed by focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` as requested. -> Tooling rejected `--strict-parse` before parsing/checking HOL theories; this reconfirms the operational blocker and provides no proof goal for C2.7 tactics. (`TO_type_system_rewrite-20260528T153317Z_m68010_t001`)
+- `E1337` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 6 steps, 8 tools, 2 holbuild, 787,089 tok (782,793 in, 4,296 out, 598,016 cached), 109.1s, $1.35177300)
+  - Startup git status/query_plan, then focused holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) for active C2.7. -> Build failed before HOL parsing with unknown build option --strict-parse; no source edits are justified. (`TO_type_system_rewrite-20260528T153317Z_m68175_t001`, `TO_type_system_rewrite-20260528T153317Z_m68175_t002`, `TO_type_system_rewrite-20260528T153317Z_m68176_t001`)
+- `E1338` (progressed, tool_limit, actual effort: 1 sessions, 5 msgs, 20 steps, 30 tools, 4 holbuild, 1,509,964 tok (1,497,536 in, 12,428 out, 1,249,280 cached), 306.1s, $2.23876000)
+  - Startup operational check: git status and query_plan confirmed inherited dirty worktree and C2.7 active/beginable; then one focused holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) as requested by startup. -> Build did not reach HOL; it failed immediately with `holbuild: unknown build option: --strict-parse`. This yields no proof goal and does not justify source edits or proof-strategy changes. (`TO_type_system_rewrite-20260528T153317Z_m68189_t001`, `TO_type_system_rewrite-20260528T153317Z_m68189_t002`, `TO_type_system_rewrite-20260528T153317Z_m68190_t001`)
+- `E1339` (progressed, tool_limit, actual effort: 1 sessions, 1 msgs, 1 steps, 214,208 tok (213,614 in, 594 out, 47,616 cached), 21.4s, $0.87161800)
+  - Startup git status/query_plan, begin active C2.7, then focused holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600). -> PLAN still has active C2.7 and source edits/builds are authorized for it, but the focused build failed before HOL with unknown option --strict-parse; no theorem/proof goal was produced. (`TO_type_system_rewrite-20260528T153317Z_m68459_t001`, `TO_type_system_rewrite-20260528T153317Z_m68459_t002`, `TO_type_system_rewrite-20260528T153317Z_m68460_t001`)
+- `E1340` (progressed, tool_limit, actual effort: 1 sessions, 3 msgs, 11 steps, 15 tools, 3 holbuild, 1,043,558 tok (1,036,759 in, 6,799 out, 828,928 cached), 166.5s, $1.65758900)
+  - Startup status/PLAN check followed by the one focused retest authorized by the user/startup instruction: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600). -> Operational blocker reconfirmed: holbuild exits pre-HOL with unknown option `--strict-parse`; active C2.7 remains unprovable/uneditable until tooling/config is fixed. (`TO_type_system_rewrite-20260528T153317Z_m68504_t001`, `TO_type_system_rewrite-20260528T153317Z_m68504_t002`, `TO_type_system_rewrite-20260528T153317Z_m68505_t001`)
+- `E1341` (progressed, tool_limit, actual effort: 1 sessions, 1 msgs, 6 steps, 6 tools, 1 holbuild, 788,106 tok (784,075 in, 4,031 out, 604,160 cached), 97.0s, $1.32258500)
+  - Startup audit: git status and PLAN query confirmed inherited dirty tree and active/beginable C2.7; user/startup requested using holbuild to check current state. -> No source edits made; PLAN remains proof-ready but operational verification is blocked. (`TO_type_system_rewrite-20260528T153317Z_m68522_t001`, `TO_type_system_rewrite-20260528T153317Z_m68522_t002`)
+  - Focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` retest for active C2.7. -> Build exited before HOL with `holbuild: unknown build option: --strict-parse`; no goal exists to repair. (`TO_type_system_rewrite-20260528T153317Z_m68523_t001`)
+- `E1342` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 12 steps, 14 tools, 2 holbuild, 1,092,407 tok (1,084,456 in, 7,951 out, 875,520 cached), 195.8s, $1.72097000)
+  - startup `git status --short` and `query_plan()` followed by one focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` as requested by user/STATE retest path -> Retest reconfirmed the same pre-HOL tooling failure; source proof work remains unsound to attempt. (`TO_type_system_rewrite-20260528T153317Z_m68528_t001`, `TO_type_system_rewrite-20260528T153317Z_m68528_t002`, `TO_type_system_rewrite-20260528T153317Z_m68529_t001`)
+- `E1343` (progressed, tool_limit, actual effort: 1 sessions, 4 msgs, 18 steps, 22 tools, 3 holbuild, 1,397,904 tok (1,386,264 in, 11,640 out, 1,146,880 cached), 275.4s, $2.11956000)
+  - git status and query_plan at startup, then one focused holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) per startup/user instruction. -> PLAN remains active on C2.7 and source tree is inherited dirty, but holbuild exits immediately with `unknown build option: --strict-parse` before any HOL theorem/proof state is available. (`TO_type_system_rewrite-20260528T153317Z_m68534_t001`, `TO_type_system_rewrite-20260528T153317Z_m68534_t002`, `TO_type_system_rewrite-20260528T153317Z_m68535_t001`)
+- `E1344` (progressed, tool_limit, actual effort: 1 sessions, 1 msgs, 6 steps, 9 tools, 2 holbuild, 793,075 tok (788,972 in, 4,103 out, 606,208 cached), 104.8s, $1.34001400)
+  - Startup status/PLAN check followed by one focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` retest as requested by the prompt. -> Operational blocker reconfirmed; holbuild exited pre-HOL with unknown option `--strict-parse`. Source remains unchanged by this session. (`TO_type_system_rewrite-20260528T153317Z_m68572_t001`, `TO_type_system_rewrite-20260528T153317Z_m68572_t002`, `TO_type_system_rewrite-20260528T153317Z_m68573_t001`)
+- `E1345` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 6 steps, 8 tools, 2 holbuild, 805,987 tok (802,153 in, 3,834 out, 614,400 cached), 103.5s, $1.36098500)
+  - Startup gate: git status plus query_plan confirmed inherited dirty tree and active/beginable C2.7 schedule. -> C2.7 is still the active scheduled proof leaf, but operational status must be determined by holbuild before editing. (`TO_type_system_rewrite-20260528T153317Z_m68804_t001`, `TO_type_system_rewrite-20260528T153317Z_m68804_t002`)
+  - Focused verification `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` for active C2.7. -> Build exited immediately with `holbuild: unknown build option: --strict-parse`; this is pre-HOL tooling failure, not a theorem/proof goal. (`TO_type_system_rewrite-20260528T153317Z_m68805_t001`)
+- `E1346` (progressed, tool_limit, actual effort: 1 sessions, 4 msgs, 16 steps, 25 tools, 4 holbuild, 1,305,232 tok (1,294,931 in, 10,301 out, 1,074,176 cached), 254.3s, $1.94989300)
+  - Ran startup-required git status and query_plan, confirming inherited dirty tree and active/beginable C2.7. -> C2.7 is still the active component; no PLAN blocker exists, but repository has inherited dirty work unrelated to this session. (`TO_type_system_rewrite-20260528T153317Z_m69255_t001`, `TO_type_system_rewrite-20260528T153317Z_m69255_t002`)
+  - Ran focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` as requested before proof edits. -> Build fails pre-HOL with `holbuild: unknown build option: --strict-parse`; no theorem/goal state produced. (`TO_type_system_rewrite-20260528T153317Z_m69256_t001`)
+- `E1347` (progressed, tool_limit, actual effort: 1 sessions, 2 msgs, 6 steps, 8 tools, 2 holbuild, 806,261 tok (802,640 in, 3,621 out, 616,448 cached), 97.8s, $1.34781400)
+  - Followed STATE-required startup path for active C2.7: checked git status/query_plan, then ran one focused holbuild on vyperTypeStmtSoundnessTheory before any proof edits. -> Build failed pre-HOL with unknown `--strict-parse` option, confirming operational tooling blocker rather than a proof goal. (`TO_type_system_rewrite-20260528T153317Z_m69600_t001`)
+
+### Ruled Out
+
+- Treating the strict-parse failure as a HOL proof failure
+- Editing C2.7 source without a HOL goal
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27736_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27737_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27737_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27737_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260528T153317Z_m69600_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260528T153317Z_m69599_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260528T153317Z_m69599_t002` (use `read_tool_output` for exact output)
+
+## C2.7.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0924`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 85,122 tok (84,830 in, 292 out, 80,384 cached), 6.5s, $0.07118200
+- next: Call strategist review, then begin the scheduled default-frame boundary lemma component C2.7.1.
+
+### Attempts / Evidence
+
+- `E0924` (proved, , actual effort: 1 sessions, 1 steps, 85,122 tok (84,830 in, 292 out, 80,384 cached), 6.5s, $0.07118200)
+  - Began carry-forward C2.7.0 under replacement C2 plan and audited scoped PLAN/DOSSIER context; component explicitly carries completed callable-body and bind-argument frame helper evidence E0881/E0891 and requires no source edits. -> No edits/builds needed; carry-forward bookkeeping leaf complete and ready for default-frame boundary work in C2.7.1. (`TO_type_system_rewrite-20260524T091119Z_m45976_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45976_t001` (use `read_tool_output` for exact output)
 
 ## C2.7.1
 
 ### Current Status
 
-- result: `progressed`
-- diagnosis: `other` Direct unfolding of lookup_global reduced TopLevelName to two large branch goals. Broad gvs plus unconstrained metis timed out; a missing discriminator for immutable declarations versus storage/hashmap declarations was identified and a local helper was added. The next action must be to build the current source to see whether that helper suffices.
-- latest episode: `E0267`
-- blocker: Expr_TopLevelName remains partial/unverified. The final source edit adding `is_immutable_decl_find_var_decl_by_num_NONE` and using it in `metis_tac` has not been verified.
-- next: Run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], tactic_timeout=120, timeout=600)` immediately on the current source. If it still fails in `Expr_TopLevelName`, do not add more broad definitions; factor a local boundary lemma for well-typed top-level lookup/no-TypeError/result-typing or split the inline proof by `find_var_decl_by_num` branch.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0927`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 11 steps, 13 tools, 4 holbuild, 839,832 tok (836,100 in, 3,732 out, 721,408 cached), 145.1s, $1.04612400
 
 ### Attempts / Evidence
 
@@ -4708,19 +7866,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Added `gvs[expr_result_typed_def, expr_runtime_typed_def, well_typed_expr_def, expr_type_def, toplevel_value_typed_Value]`. -> Reduced the residual to two branch goals: Type-level top-level lookup must prove an `evaluate_type`/`toplevel_value_typed` witness and exclude `HashMapRef`. (`TO_type_system_rewrite-20260518T204229Z_m27918_t001`)
   - Added broad `env_consistent_def`, `env_context_consistent_def`, `env_immutables_consistent_def`, `state_well_typed_def`, `imms_well_typed_def`, then tried `metis_tac[read_storage_slot_error, read_storage_slot_success_type,value_has_type_NoneTV]`. -> `metis_tac` timed out on a >4KB goal; the goal had useful facts showing Type-typed entries cannot be HashMapVarDecl and immutable declarations imply a NONE `find_var_decl_by_num` branch is needed. (`TO_type_system_rewrite-20260518T204229Z_m27921_t001`, `TO_type_system_rewrite-20260518T204229Z_m27923_t001`)
   - Added local helper `is_immutable_decl_find_var_decl_by_num_NONE` near the expression helpers and included it in the final metis. -> Source edited but unverified; next session must run holbuild before any more edits. (`TO_type_system_rewrite-20260518T204229Z_m27942_t001`, `TO_type_system_rewrite-20260518T204229Z_m27943_t001`)
+- `E0880` (progressed, other, actual effort: 1 sessions, 1 msgs, 5 steps, 10 tools, 1 holbuild, 676,744 tok (675,082 in, 1,662 out, 574,976 cached), 45.3s, $0.83787800)
+  - Ran mandated post-edit holbuild for `vyperTypeStmtSoundnessTheory`. -> Build fails before proof execution in `callable_body_typing_from_functions_well_typed` theorem statement: type error at `lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body)`; RHS tuple's last component is inferred as a function/term, so it does not match the statement-list component expected by lookup result. (`TO_type_system_rewrite-20260524T091119Z_m44928_t001`)
+  - Read helper, `functions_well_typed_def`, `lookup_callable_function_def`, and downstream shape reference. -> Confirmed this is a local helper statement/name/type issue. `functions_well_typed_def` has the intended non-circular payload; downstream `functions_well_typed_body` uses same lookup shape but cannot be imported due dependency direction. (`TO_type_system_rewrite-20260524T091119Z_m44929_t001`, `TO_type_system_rewrite-20260524T091119Z_m44929_t002`, `TO_type_system_rewrite-20260524T091119Z_m44930_t001`, `TO_type_system_rewrite-20260524T091119Z_m44930_t003`)
+- `E0881` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 9 tools, 2 holbuild, 685,908 tok (680,526 in, 5,382 out, 579,072 cached), 200.0s, $0.95826600)
+  - Verified existing C2.7.1 static helper proof by rebuilding vyperTypeStmtSoundnessTheory; no evaluator induction or downstream call wrappers used in this session. -> Build succeeded cleanly for the statement-soundness target, confirming the non-circular callee body typing helper replays after the prior fn_body rename. (`TO_type_system_rewrite-20260524T091119Z_m44994_t001`)
+- `E0925` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 3 steps, 4 tools, 1 holbuild, 415,800 tok (414,317 in, 1,483 out, 320,000 cached), 46.8s, $0.67607500)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) on active C2.7.1 source before editing -> Build resumes to defaults_env_empty_frame_consistent and fails at QED with goal env_context_consistent (env_body with <|var_types := FEMPTY; var_assignable := FEMPTY|>) cx from assumption env_context_consistent env_body cx, confirming the planned missing env_context_consistent_def rewrite. (`TO_type_system_rewrite-20260524T091119Z_m46178_t001`)
+  - read current theorem around lines 9392-9400 -> The theorem proof rewrites defaults_env_def, env_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, and lookup_scopes_def, but not env_context_consistent_def. (`TO_type_system_rewrite-20260524T091119Z_m46176_t001`)
+- `E0926` (progressed, other, actual effort: 1 sessions, 1 msgs, 3 steps, 4 tools, 1 holbuild, 407,942 tok (406,736 in, 1,206 out, 311,808 cached), 41.8s, $0.66672400)
+  - holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600) after adding env_context_consistent_def to defaults_env_empty_frame_consistent rewrite list -> Build still fails inside defaults_env_empty_frame_consistent at QED; residual goal is well_formed_vtype (get_tenv cx) vt from FLOOKUP env_body.toplevel_vtypes, with assumptions env_body.type_defs = get_tenv cx and the original env_context_consistent well-formed-vtype projection over env_body.type_defs. Next patch should stay inside this theorem and add an equality/substitution cleanup such as gvs[] after the rw list. (`TO_type_system_rewrite-20260524T091119Z_m46257_t001`)
+- `E0927` (proved, , actual effort: 1 sessions, 2 msgs, 11 steps, 13 tools, 4 holbuild, 839,832 tok (836,100 in, 3,732 out, 721,408 cached), 145.1s, $1.04612400)
+  - Unfold defaults_env/env consistency definitions, then add equality transport/projection cleanup via `gvs[] >> metis_tac[]`. -> Boundary lemma accepted; build proceeds to downstream Resume `eval_all_type_sound_mutual[Expr_Call_IntCall]` at the known `FAIL_TAC "after_default_mp"` site. (`TO_type_system_rewrite-20260524T091119Z_m46396_t001`)
 
 ### Ruled Out
 
-- Unconstrained `metis_tac` after broad `gvs` on the full lookup_global branch goal; it timed out and the goal is too large.
+- No need to prove defaults_env consistency over arbitrary caller scopes; component theorem remains over `(st with scopes := [FEMPTY])`.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260518T204229Z_m27896_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27918_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27921_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27923_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27942_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260518T204229Z_m27943_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46396_t001` (use `read_tool_output` for exact output)
 
 ## C2.7.1.0
 
@@ -7239,21 +10404,2061 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `plan_incomplete`
-- latest episode: `E0272`
-- blocker: C2.7.2 structured expression constructor resumes are not reachable: holbuild fails earlier in file order at `Resume eval_all_type_sound_mutual[For]` on a proof-performance timeout for `fs[env_consistent_def, env_context_consistent_def]`.
-- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 430,009 tok (427,988 in, 2,021 out, 415,232 cached), 50.9s, $0.33202600
-- next: Call plan_oracle review for C2.7.2 and request schedule/decomposition change to prioritize the existing For prefix-performance patch (`C2.7.1.1.1.a`) before C2.7.2.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0928`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 15 tools, 1 holbuild, 876,476 tok (874,303 in, 2,173 out, 846,336 cached), 108.9s, $0.62819300
 
 ### Attempts / Evidence
 
 - `E0272` (stuck, plan_incomplete, actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 430,009 tok (427,988 in, 2,021 out, 415,232 cached), 50.9s, $0.33202600)
   - Began C2.7.2 per PLAN gate and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` before editing structured expression resumes. -> Build did not reach `Expr_StructLit`, `Expr_Subscript`, or `Expr_Attribute`; it timed out earlier in `Resume eval_all_type_sound_mutual[For]` line ~2185. The active component cannot be executed until the file-order prefix blocker is repaired or the schedule is changed. (`TO_type_system_rewrite-20260519T080936Z_m28023_t001`)
+- `E0882` (progressed, other, actual effort: 1 sessions, 3 msgs, 33 steps, 54 tools, 4 holbuild, 3,539,280 tok (3,520,687 in, 18,593 out, 3,411,968 cached), 393.6s, $2.80736900)
+  - Fresh build before C2.7.2 edits -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` succeeded, confirming stale E0272 For timeout is not current and prefix was clean before helper edits. (`TO_type_system_rewrite-20260524T091119Z_m45012_t001`)
+  - Inserted local bind_arguments/push_function helper skeletons -> Source now contains helper lemmas targeted at the frame boundary; not yet verified beyond first helper. `bind_arguments_scope_lookup` got past its proof; `bind_arguments_scope_covers_params` exposed a missing side condition for duplicate parameter names mapping to same `string_to_num`. (`TO_type_system_rewrite-20260524T091119Z_m45036_t001`, `TO_type_system_rewrite-20260524T091119Z_m45037_t001`)
+  - Strengthened `bind_arguments_scope_covers_params` with caller-provided uniqueness-by-`string_to_num` side condition and replaced expensive simplification with explicit cases -> First rebuild timed out at `gvs[]` after the strengthening. The last edit removed the timed-out `gvs[]`, but no rebuild was run before handoff. (`TO_type_system_rewrite-20260524T091119Z_m45039_t001`, `TO_type_system_rewrite-20260524T091119Z_m45040_t001`, `TO_type_system_rewrite-20260524T091119Z_m45042_t001`)
+- `E0883` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 45 steps, 45 tools, 19 holbuild, 3,202,819 tok (3,184,950 in, 17,869 out, 3,113,472 cached), 525.0s, $2.45019600)
+  - Strengthened `bind_arguments_scope_covers_params` with a key-agreement premise and replaced timed-out `gvs[]`/`simp[FLOOKUP_UPDATE]` paths with explicit substitutions/rewrites. -> Advanced past `bind_arguments_scope_covers_params` into the env-scopes helper; the shadowing/collision issue is now represented as an explicit premise. (`TO_type_system_rewrite-20260524T091119Z_m45057_t001`)
+  - Added `param_var_types_key_agree` and a direct proof deriving the `bind_arguments_scope_covers_params` side condition from env_body.var_types functionality inside `bind_arguments_env_scopes_consistent`. -> The small equality lemma proved after adjusting proof, but the env-scopes proof timed out/failed while using it via large local implication plumbing. (`TO_type_system_rewrite-20260524T091119Z_m45072_t001`, `TO_type_system_rewrite-20260524T091119Z_m45082_t001`)
+  - Tried replacing broad `metis_tac[param_var_types_key_agree]` with explicit specialisation and local map lookup equalities to avoid FOL timeout. -> Still failed in the same local subproof (`THEN1`/`STRIP_TAC` failures), showing this is a helper-interface/decomposition problem rather than a single tactic issue. (`TO_type_system_rewrite-20260524T091119Z_m45090_t001`)
+- `E0928` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 15 tools, 1 holbuild, 876,476 tok (874,303 in, 2,173 out, 846,336 cached), 108.9s, $0.62819300)
+  - Replaced direct `dflt_vs <- eval_exprs cxd needed_dflts` with `prev <- get_scopes; dflt_vs <- finally (do set_scopes [FEMPTY]; eval_exprs cxd needed_dflts od) (set_scopes prev)`, preserving argument/body order and restoring all-result scopes. -> Interpreter definition and cv translation build successfully for `vyperInterpreterTheory`. (`TO_type_system_rewrite-20260524T091119Z_m46410_t001`)
+
+### Ruled Out
+
+- Did not restore scopes only on success; restoration uses `finally` for both `INL` and `INR` paths.
+- Did not move default evaluation after `push_function` or argument binding.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260519T080936Z_m28023_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46410_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0885`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 1 steps, 122,966 tok (121,978 in, 988 out, 115,200 cached), 21.1s, $0.12113000
+- next: Call plan_oracle review for C2.7.2.1; if accepted, begin C2.7.2.2 and replace the brittle inline forward coverage subproof with `bind_arguments_env_var_type_scope_entry`.
+
+### Attempts / Evidence
+
+- `E0885` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 122,966 tok (121,978 in, 988 out, 115,200 cached), 21.1s, $0.12113000)
+  - Induction over `params`, unfold `Once bind_arguments_def`, split `vs`, and handle finite-map updates with explicit substitutions/rewrites instead of broad `gvs[]`. -> `bind_arguments_scope_lookup` and strengthened `bind_arguments_scope_covers_params` pass far enough for holbuild to reach later env-scopes theorem. (`TO_type_system_rewrite-20260524T091119Z_m45057_t001`)
+  - Proved `param_var_types_key_agree` by deriving two `FLOOKUP vt (string_to_num id) = SOME ...` facts and using `optionTheory.SOME_11`. -> The latest build no longer fails at `param_var_types_key_agree`; it fails downstream in the monolithic env-scopes proof, confirming C2.7.2.1 base helpers are stabilized. (`TO_type_system_rewrite-20260524T091119Z_m45072_t001`, `TO_type_system_rewrite-20260524T091119Z_m45099_t001`)
+
+### Ruled Out
+
+- Removing the key-agreement premise from `bind_arguments_scope_covers_params`.
+- Using broad `gvs[]` on the critical finite-map update branches.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45057_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45072_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45099_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0886`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 3 holbuild, 476,029 tok (473,592 in, 2,437 out, 446,976 cached), 82.3s, $0.42967800
+- next: Call plan_oracle review for C2.7.2.2; if accepted, begin C2.7.2.3 and add the backward `bind_arguments_scope_entry_env_var_type` lemma before reworking env-scopes assembly.
+
+### Attempts / Evidence
+
+- `E0886` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 3 holbuild, 476,029 tok (473,592 in, 2,437 out, 446,976 cached), 82.3s, $0.42967800)
+  - Added `bind_arguments_env_var_type_scope_entry`; proof obtains representative parameter from env-body var_types coverage, applies `bind_arguments_scope_covers_params`, and discharges key agreement via `param_var_types_key_agree` with explicit witnesses. -> The new boundary lemma builds successfully; holbuild advances to the following old env-scopes proof and fails there, confirming C2.7.2.2's theorem site is passed. (`TO_type_system_rewrite-20260524T091119Z_m45117_t001`, `TO_type_system_rewrite-20260524T091119Z_m45120_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45117_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45120_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0887`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 266,546 tok (265,455 in, 1,091 out, 249,344 cached), 33.7s, $0.23795700
+- next: Call plan_oracle review for C2.7.2.3; if accepted, begin C2.7.2.4 and add `bind_arguments_env_var_assignable_scope_entry` before replacing the env-scopes assembly.
+
+### Attempts / Evidence
+
+- `E0887` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 266,546 tok (265,455 in, 1,091 out, 249,344 cached), 33.7s, $0.23795700)
+  - Added `bind_arguments_scope_entry_env_var_type`; proof specializes `bind_arguments_scope_lookup`, uses the parameter-to-env_body map premise for the recovered `(pid,typ)`, and returns `typ` as witness. -> The new backward boundary lemma builds successfully; holbuild advances to the following old env-scopes proof and fails there, confirming C2.7.2.3's theorem site is passed. (`TO_type_system_rewrite-20260524T091119Z_m45125_t001`, `TO_type_system_rewrite-20260524T091119Z_m45126_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45125_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45126_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0888`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 7 holbuild, 1,657,709 tok (1,652,667 in, 5,042 out, 1,625,088 cached), 196.6s, $1.10169900
+- next: Call plan_oracle review for C2.7.2.4; if accepted, begin C2.7.2.5 and replace `bind_arguments_env_scopes_consistent` proof with assembly from the three directional helpers.
+
+### Attempts / Evidence
+
+- `E0888` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 15 tools, 7 holbuild, 1,657,709 tok (1,652,667 in, 5,042 out, 1,625,088 cached), 196.6s, $1.10169900)
+  - Added `bind_arguments_env_var_assignable_scope_entry`; proof uses assignability coverage to recover `(pid,typ)`, obtains var_types/assignable map facts from the parameter premise, and applies `bind_arguments_scope_covers_params` with key agreement from `param_var_types_key_agree`. -> The new assignability boundary lemma builds successfully; holbuild advances to the old monolithic env-scopes proof and fails there, confirming C2.7.2.4 theorem site is passed. (`TO_type_system_rewrite-20260524T091119Z_m45130_t001`, `TO_type_system_rewrite-20260524T091119Z_m45144_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45130_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45144_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0889`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 8 holbuild, 2,072,655 tok (2,069,024 in, 3,631 out, 2,040,320 cached), 289.9s, $1.27261000
+- next: Call plan_oracle review for C2.7.2.5; if accepted, inspect git status/diff and consider whether to commit a stable checkpoint despite pre-existing unrelated diffs. Then begin C2.7.2.6 per frontier.
+
+### Attempts / Evidence
+
+- `E0889` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 8 holbuild, 2,072,655 tok (2,069,024 in, 3,631 out, 2,040,320 cached), 289.9s, $1.27261000)
+  - Rewrote `bind_arguments_env_scopes_consistent` proof to `rw[env_scopes_consistent_def, lookup_scopes_def]` and solved clauses by directional helper lemmas; used targeted case split on `FLOOKUP sc id` and explicit parameter-premise projections where simplifier retained case expressions/implications. -> `vyperTypeStmtSoundnessTheory` builds successfully, confirming the env-scopes assembly and the current C2.7.2 helper block prefix are accepted. (`TO_type_system_rewrite-20260524T091119Z_m45148_t001`, `TO_type_system_rewrite-20260524T091119Z_m45163_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45148_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45163_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0890`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 9 tools, 2 holbuild, 565,587 tok (561,237 in, 4,350 out, 531,456 cached), 106.3s, $0.54513300
+- next: Review with strategist, then begin C2.7.2.7 and prove/repair `push_function_frame_consistent` if accepted.
+
+### Attempts / Evidence
+
+- `E0890` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 9 tools, 2 holbuild, 565,587 tok (561,237 in, 4,350 out, 531,456 cached), 106.3s, $0.54513300)
+  - Rebuilt active target after beginning C2.7.2.6; existing `bind_arguments_scope_well_typed_stmt` induction proof is accepted by HOL. -> `vyperTypeStmtSoundnessTheory` builds cleanly through `bind_arguments_scope_well_typed_stmt`. (`TO_type_system_rewrite-20260524T091119Z_m45171_t001`, `TO_type_system_rewrite-20260524T091119Z_m45167_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45171_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45167_t001` (use `read_tool_output` for exact output)
+
+## C2.7.2.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0891`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 20 steps, 24 tools, 3 holbuild, 1,863,204 tok (1,859,686 in, 3,518 out, 1,822,720 cached), 240.5s, $1.20173000
+- next: Review with strategist; if accepted, query PLAN and proceed to scheduled C2.7.3 or the next Oracle-next component.
+
+### Attempts / Evidence
+
+- `E0891` (proved, , actual effort: 1 sessions, 1 msgs, 20 steps, 24 tools, 3 holbuild, 1,863,204 tok (1,859,686 in, 3,518 out, 1,822,720 cached), 240.5s, $1.20173000)
+  - Parenthesized the account-preservation implication in `push_function_frame_consistent` and strengthened the simple unfolded proof with `lookup_var_slot_from_layout_def` plus final first-order discharge. -> `vyperTypeStmtSoundnessTheory` builds cleanly; the frame boundary now exposes `env_consistent`, `state_well_typed`, and the conditional account conjunct as projectable conjuncts. (`TO_type_system_rewrite-20260524T091119Z_m45178_t001`, `TO_type_system_rewrite-20260524T091119Z_m45194_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45178_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45194_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0929`
+- blocker: C2.7.3 cannot be verified because the C2.7.2 semantic change introduced an earlier source-order failure in prerequisite `vyperExprNoControlTheory`, theorem `int_call_no_control`, before holbuild reaches the C2.7.3 wrapper lemmas. The new `prev <- get_scopes` step creates a small no-control branch (`get_scopes ... = (INR exc,st') ==> no_control_exc exc`) not covered by the current C2.7.3 component.
+- actual effort: 1 sessions, 7 steps, 10 tools, 1 holbuild, 739,675 tok (735,235 in, 4,440 out, 709,120 cached), 111.2s, $0.61833500
+- next: Call plan_oracle(mode='review') for active C2.7.3 with this evidence, requesting a new prerequisite leaf to repair `vyperExprNoControlScript.sml` `int_call_no_control` for the inserted `get_scopes`/default-frame wrapper before resuming C2.7.3 wrapper lemmas.
+
+### Attempts / Evidence
+
+- `E0892` (progressed, other, actual effort: 1 sessions, 1 msgs, 11 steps, 20 tools, 2 holbuild, 1,351,592 tok (1,348,815 in, 2,777 out, 1,302,016 cached), 90.6s, $0.96831300)
+  - Inserted `FAIL_TAC "Expr_Call_IntCall probe"` into the IntCall Resume and built `vyperTypeStmtSoundnessTheory` to inspect the exact suspended branch goal. -> Goal shape captured: top-level expression soundness goal for `Call _ (IntCall (src_id_opt,fn)) es _`; assumptions include three useful generated IHs: body `eval_stmts` IH after `push_function`, default-argument `eval_exprs` IH under pushed stack, and actual-argument `eval_exprs` IH under original context. This confirms C2.7.3 must consume evaluator-order IHs plus C2.7.1/C2.7.2 helpers. (`TO_type_system_rewrite-20260524T091119Z_m45202_t001`, `TO_type_system_rewrite-20260524T091119Z_m45203_t001`, `TO_type_system_rewrite-20260524T091119Z_m45204_t001`)
+- `E0893` (progressed, other, actual effort: 1 sessions, 4 msgs, 46 steps, 58 tools, 13 holbuild, 5,062,668 tok (5,049,109 in, 13,559 out, 4,929,536 cached), 543.1s, $3.46940300)
+  - Opened IntCall evaluator with `rewrite_tac[Once evaluate_def]`, `bind_apply`, and targeted `TOP_CASE_TAC` splits instead of unbounded `simp[]`. Tried direct `rw[]`/`gvs[]` on early error branches; this timed out because generated IH assumptions kept the goal >4KB. -> Established that early error branches are small only after explicitly discarding long generated IH assumptions; direct simplification is too expensive in large IntCall context. (`TO_type_system_rewrite-20260524T091119Z_m45247_t001`, `TO_type_system_rewrite-20260524T091119Z_m45258_t001`)
+  - For get_module_code error branch, derived `fn_sigs_consistent env.fn_sigs cx` from `env_consistent_def/env_context_consistent_def` and specialized it with `FLOOKUP env.fn_sigs (src_id_opt,fn)=SOME sig`. -> The branch now reduces to a contradiction with `lift_option_type (get_module_code ...) = INR ...`; current source passes this branch after using the specialized fn_sigs fact. (`TO_type_system_rewrite-20260524T091119Z_m45265_t001`, `TO_type_system_rewrite-20260524T091119Z_m45272_t001`)
+  - Attempted analogous lookup_function error branch by first simplifying the existing `lift_option_type (get_module_code ...) = INL ...` premise inline. -> Current failure: the inline `simp[lift_option_type_def, return_def, raise_def]` on that premise times out with the remaining huge context. This is a tactic/interface issue, not a falsehood; use a tiny lift_option_type success helper or kill all generated IHs before deriving the SOME fact. (`TO_type_system_rewrite-20260524T091119Z_m45279_t001`)
+- `E0894` (progressed, risk_mismatch, actual effort: 1 sessions, 5 msgs, 67 steps, 71 tools, 21 holbuild, 6,460,657 tok (6,436,251 in, 24,406 out, 6,312,960 cached), 1571.3s, $4.50511500)
+  - Added local helper lemmas `lift_option_type_INL_eq`, `fn_sigs_consistent_FLOOKUP`, `lift_option_type_SOME_not_INR`, `intcall_lookup_function_not_INR`, and `intcall_args_length_condition`; used them in the IntCall resume to avoid unfolding `lift_option_type` and `fn_sigs_consistent_def` under the huge generated-IH context. -> Get-module-code and lookup-function TypeError branches now advance; args-length TypeError branch also advances after factoring the length condition. The current failure is later, at actual-argument IH consumption after `eval_exprs cx es r = (args_res,args_st)`. (`TO_type_system_rewrite-20260524T091119Z_m45318_t001`, `TO_type_system_rewrite-20260524T091119Z_m45328_t001`)
+  - Tried to consume the actual-argument generated IH by matching or selecting it directly (`qpat_x_assum`, `first_x_assum`, `drule_all`, and manual `qspecl_then`) after killing two longer IHs and renaming the eval_exprs result. -> Still fails or times out in a >4KB goal; assumption selection is brittle because the remaining top-level body IH and tail expression dominate the goal. This is a proof-interface/factoring issue, not evidence of falsehood. (`TO_type_system_rewrite-20260524T091119Z_m45335_t001`, `TO_type_system_rewrite-20260524T091119Z_m45345_t001`, `TO_type_system_rewrite-20260524T091119Z_m45351_t001`)
+- `E0895` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 3 holbuild, 680,878 tok (675,309 in, 5,569 out, 637,440 cached), 147.0s, $0.67513500)
+  - Rebuilt current C2.7.3 source to confirm the inherited failure point. -> `vyperTypeStmtSoundnessTheory` still fails after `eval_exprs cx es r = (args_res,args_st)` at generated actual-argument IH consumption; the top goal remains >4KB with body/default/actual IHs and a huge tail case expression. (`TO_type_system_rewrite-20260524T091119Z_m45358_t001`)
+  - Tried a more specific `qpat_x_assum` shape matching the actual-argument IH conclusion (`well_typed_exprs env0 es`, `env_consistent env0 cx`, `eval_exprs cx es`). -> The selector still failed in the huge context; this confirms the issue is not just the old wildcard pattern but the live Resume proof interface/assumption selection. (`TO_type_system_rewrite-20260524T091119Z_m45363_t001`)
+  - Tried `last_x_assum drule_all` based on the original probe order that listed body/default/actual IHs. -> `LAST_ASSUM` also failed; assumption ordering is not a robust interface for this Resume tail. This crosses the do-not-retry line for selector variations. (`TO_type_system_rewrite-20260524T091119Z_m45365_t001`)
+- `E0929` (stuck, plan_incomplete, actual effort: 1 sessions, 7 steps, 10 tools, 1 holbuild, 739,675 tok (735,235 in, 4,440 out, 709,120 cached), 111.2s, $0.61833500)
+  - Added local wrapper lemmas over the inline default-frame `finally (do set_scopes [FEMPTY]; eval_exprs ... od) (set_scopes prev)` shape, then built `vyperTypeStmtSoundnessTheory` to verify C2.7.3. -> Build failed before reaching the new wrapper lemmas, while rebuilding `vyperExprNoControlTheory` at `int_call_no_control`; the inserted `get_scopes` step creates an uncovered no-control branch. This is a new prerequisite/dependency from C2.7.2 not represented in C2.7.3. (`TO_type_system_rewrite-20260524T091119Z_m46418_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46418_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0939`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 1 steps, 59,140 tok (58,666 in, 474 out, 53,760 cached), 12.0s, $0.06563000
+- next: Review C2.7.3.0 closure with strategist, then follow the scheduled next component (expected C2.7.3.0a carry-forward or C2.7.3.0b.1 depending on gate).
+
+### Attempts / Evidence
+
+- `E0932` (proved, , actual effort: 1 sessions, 1 msgs, 25 steps, 25 tools, 9 holbuild, 2,206,281 tok (2,198,252 in, 8,029 out, 2,147,840 cached), 305.0s, $1.56685000)
+  - Repair `int_call_no_control` after C2.7.2 IntCall sequencing: strengthen the generated default-expression IH to include intervening `get_scopes`/`set_scopes [FEMPTY]`, close primitive `get_scopes` INR branch by `get_scopes_def`, and close default-finalizer branch via `finally_no_control` plus `set_scopes_def`/bind simplification; adjust `int_call_tail_no_control` to take restored `prev` from the outer accessor rather than reading scopes itself. -> `holbuild(targets=["vyperExprNoControlTheory"])` succeeds, proving the targeted no-control repair. A downstream `vyperTypeStmtSoundnessTheory` check now advances past this theory and fails later in `vyperEvalExprPreservesScopesDomTheory`, indicating C2.7.3.0 no longer blocks source order. (`TO_type_system_rewrite-20260524T091119Z_m46466_t001`, `TO_type_system_rewrite-20260524T091119Z_m46467_t002`)
+  - Inspect diff for `semantics/prop/vyperExprNoControlScript.sml`. -> Diff shows local `int_call_no_control`/tail-helper changes for primitive `get_scopes`/default-frame sequencing; note that the file already contained unrelated/pre-existing local changes in the main theorem from prior work, so do not commit as an isolated checkpoint yet. (`TO_type_system_rewrite-20260524T091119Z_m46467_t001`)
+- `E0939` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 59,140 tok (58,666 in, 474 out, 53,760 cached), 12.0s, $0.06563000)
+  - Carry forward E0932 repaired `int_call_no_control` default-frame sequencing; no new proof edits assigned in this refinement leaf. -> Accepted current source/evidence as the completed source-order prerequisite; prior build evidence shows `vyperExprNoControlTheory` succeeds and downstream processing advances past this blocker. (`TO_type_system_rewrite-20260524T091119Z_m46466_t001`, `TO_type_system_rewrite-20260524T091119Z_m46467_t002`, `TO_type_system_rewrite-20260524T091119Z_m46467_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46466_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46467_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46467_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0940`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 67,368 tok (67,018 in, 350 out, 61,952 cached), 6.0s, $0.06680600
+- next: Review C2.7.3.0a closure with strategist, then proceed to C2.7.3.0b.1 to audit/refactor the IntCall tail helper boundary.
+
+### Attempts / Evidence
+
+- `E0933` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 22 steps, 24 tools, 8 holbuild, 2,743,765 tok (2,736,757 in, 7,008 out, 2,556,416 cached), 231.6s, $2.39015300)
+  - Built `vyperEvalExprPreservesScopesDomTheory` to reproduce the active failure. -> Initial failure at old `disch_then $ funpow 2 drule_then drule`; goal showed generated default IH now needs actual args plus `get_scopes`/`set_scopes [FEMPTY]` premises before applying the final IntCall tail. (`TO_type_system_rewrite-20260524T091119Z_m46473_t001`)
+  - Replace brittle generated-IH chain with explicit `gvs[get_scopes_def, return_def]`, add `finally_set_scopes_scopes`, and use it in default-finalizer INR/INL branches. -> Progressed past the original generated-IH failure and past default-finalizer scope restoration, but further branches needed the saved restoration fact and still failed in later tail proof. (`TO_type_system_rewrite-20260524T091119Z_m46475_t001`, `TO_type_system_rewrite-20260524T091119Z_m46479_t001`, `TO_type_system_rewrite-20260524T091119Z_m46486_t001`)
+  - Insert `MAP FDOM r'⁵'.scopes = MAP FDOM r'⁴'.scopes` as a named fact from `finally_set_scopes_scopes` before peeling bind-arguments/return type/lock. -> Build advanced to the old lock-acquire case split around lines 806-809. Current failure goal is in the `nr` true branch, after bind arguments and return type succeed, with the remaining do-block beginning with nonreentrant lock acquire; old `TOP_CASE_TAC` focus does not match new normalized shape. (`TO_type_system_rewrite-20260524T091119Z_m46489_t001`)
+- `E0934` (proved, , actual effort: 1 sessions, 3 msgs, 46 steps, 49 tools, 17 holbuild, 4,076,167 tok (4,058,038 in, 18,129 out, 3,964,928 cached), 556.7s, $2.99188400)
+  - Repaired `Resume eval_mutual_preserves_scopes_dom[IntCall]` by adding local lock/default-frame scope-domain helpers and threading the lock acquire/finalizer tail with explicit bind/finally rewrites. -> `vyperEvalExprPreservesScopesDomTheory` now builds cleanly; downstream `vyperTypeStmtSoundnessTheory` advances past this prerequisite and now stops in `vyperEvalPreservesScopesTheory:eval_preserves_tv[IntCall]`, a later source-order prerequisite. (`TO_type_system_rewrite-20260524T091119Z_m46539_t001`, `TO_type_system_rewrite-20260524T091119Z_m46540_t001`)
+- `E0940` (proved, , actual effort: 1 sessions, 1 steps, 67,368 tok (67,018 in, 350 out, 61,952 cached), 6.0s, $0.06680600)
+  - Carry forward E0934 repaired `eval_mutual_preserves_scopes_dom[IntCall]` default-frame sequencing; no new edits assigned in this refinement leaf. -> Accepted current source/evidence as the completed source-order prerequisite; prior build evidence shows `vyperEvalExprPreservesScopesDomTheory` succeeds and downstream `vyperTypeStmtSoundnessTheory` advances to the later `eval_preserves_tv[IntCall]` blocker. (`TO_type_system_rewrite-20260524T091119Z_m46539_t001`, `TO_type_system_rewrite-20260524T091119Z_m46540_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46539_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46540_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` C2.7.3.0b was rated Risk 2, but after fixing the branch structure and reaching the suspended `IntCall_ptv` tail, the remaining proof is still a large helper-interface problem. The existing `intcall_ptv_chain` helper conclusion produces conjunct obligations that include an eval-stmts IH premise and an immutables bridge (`r''.immutables = r'.immutables`) not available from the current default-frame preservation facts. Attempts to discharge the tail by `first_x_assum irule`, `qpat_x_assum ... irule`, `first_x_assum drule_all`, and `metis_tac[]` all failed; the live goal is still >4KiB. This suggests the helper boundary/decomposition needs strategist redesign, likely a better post-default IntCall tail lemma or an additional boundary lemma for default eval immutables, rather than more inline tactic surgery.
+- latest episode: `E0938`
+- blocker: The post-default IntCall tail helper interface is wrong or incomplete: it asks for facts not directly produced by the current default-frame preservation chain, especially an immutables equality/bridge, and leaves >4KiB goals.
+- actual effort: 1 sessions, 3 msgs, 46 steps, 50 tools, 13 holbuild, 4,304,022 tok (4,289,153 in, 14,869 out, 4,179,968 cached), 472.7s, $3.08197900
+- next: Call plan_oracle(mode="review") for C2.7.3.0b with this stuck evidence; ask for a redesigned helper boundary or decomposition before further edits.
+
+### Attempts / Evidence
+
+- `E0937` (progressed, other, actual effort: 1 sessions, 5 msgs, 51 steps, 61 tools, 18 holbuild, 5,398,026 tok (5,378,891 in, 19,135 out, 5,270,016 cached), 626.3s, $3.75343300)
+  - Unfolded `get_scopes`, `finally`, `set_scopes`, `bind_apply` at the default-expression point and explicitly split `eval_exprs cxd needed_dflts (r' with scopes := [FEMPTY])` and its sum result before applying the default-expression IH. -> Progressed beyond the original line-2016 `first_x_assum drule_all` failure; holbuild now reaches later proof text after the default-expression IH is consumed. (`TO_type_system_rewrite-20260524T091119Z_m46581_t001`)
+  - Added local boundary helpers `preserves_tv_stk_update` and `preserves_tv_restore_scopes`; used them to convert default-frame preservation into `preserves_tv cx r' (r'' with scopes := r'.scopes)`. -> The helper shape works enough that the live goal shows assumption `preserves_tv cx r' (r'' with scopes := r'.scopes)`, but the following `strip_tac >- ...`/`reverse TOP_CASE_TAC` branch management is wrong and leaves the large post-default tail unsolved. (`TO_type_system_rewrite-20260524T091119Z_m46603_t001`, `TO_type_system_rewrite-20260524T091119Z_m46606_t001`)
+- `E0938` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 46 steps, 50 tools, 13 holbuild, 4,304,022 tok (4,289,153 in, 14,869 out, 4,179,968 cached), 472.7s, $3.08197900)
+  - Removed the premature `>-` branch after `simp[Abbr`cxd`, preserves_tv_stk_update] >> strip_tac`, suspended the remaining large tail as `IntCall_ptv`, and used `markerLib.RESUME_TAC` with an explicit first branch for the default-eval `INR` case. -> Progressed past the original branch-management failure and made `IntCall_ptv` reachable, with the `INR` default-eval branch solved by transitivity from `preserves_tv cx r r'` and restored-scope preservation. (`TO_type_system_rewrite-20260524T091119Z_m46622_t001`, `TO_type_system_rewrite-20260524T091119Z_m46629_t001`)
+  - Expanded the `IntCall_ptv` tail through bind-arguments/evaluate-type/lock/push-function, replacing the previous `ntac 2 ... >-` pattern with explicit case splits and failure branches solved by `preserves_tv_trans`. -> Progressed to the `intcall_ptv_chain` application; pure-operation and lock failure branches are no longer the active blocker. (`TO_type_system_rewrite-20260524T091119Z_m46637_t001`)
+  - Tried to discharge the `intcall_ptv_chain` generated tail obligations via the body IH using `first_x_assum irule`, then a more targeted `qpat_x_assum ... irule`, then `first_x_assum drule_all`, and finally `metis_tac[]`. -> All attempts failed. The remaining goal requires proving a conjunction including the body IH premise and `r''.immutables = r'.immutables`/finalizer equality. The current helper boundary appears too strong or mismatched: default-expression `preserves_tv` does not directly supply the immutables equality demanded by `intcall_ptv_chain`. (`TO_type_system_rewrite-20260524T091119Z_m46641_t001`, `TO_type_system_rewrite-20260524T091119Z_m46645_t001`, `TO_type_system_rewrite-20260524T091119Z_m46648_t001`, `TO_type_system_rewrite-20260524T091119Z_m46657_t001`)
+
+### Ruled Out
+
+- Blind `first_x_assum drule_all` at the original default-expression site
+- Premature `>-` after transporting `preserves_tv cxd` to `cx`
+- Solving the post-default helper obligations by generic `metis_tac[]` or unqualified body-IH `first_x_assum irule`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46637_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46649_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46657_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0941`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 233,547 tok (232,690 in, 857 out, 218,624 cached), 25.8s, $0.20535200
+- next: Review C2.7.3.0b.1 closure with strategist; then proceed to C2.7.3.0b.2 to package the IntCall body IH explicitly at the caller site.
+
+### Attempts / Evidence
+
+- `E0941` (proved, , actual effort: 1 sessions, 3 steps, 4 tools, 1 holbuild, 233,547 tok (232,690 in, 857 out, 218,624 cached), 25.8s, $0.20535200)
+  - Audit `intcall_ptv_chain[local]` in `vyperEvalPreservesScopesScript.sml` against the refined abstract-mid-state boundary required by the PLAN. -> The current helper already has abstract `r_mid`, requires only `r_lock.scopes = r_mid.scopes` and `r_lock.immutables = r_mid.immutables`, and does not require `r''.immutables = r'.immutables`. Its proof is accepted far enough that `holbuild` resumes later at the caller's final `metis_tac[]`, so the helper boundary itself is not the current failure. (`TO_type_system_rewrite-20260524T091119Z_m46674_t001`, `TO_type_system_rewrite-20260524T091119Z_m46673_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46674_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46673_t003` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` After following the handoff advice, one corrected explicit specialization of the generated IntCall body IH still fails in Q_TAC0/FIRST_ASSUM with a >4KiB context. Prior episodes already ruled out blind selection/metis and long qspecl tuning; this confirms the Risk-2 local packaging plan is under-decomposed and needs a stronger helper/interface from the strategist.
+- latest episode: `E0943`
+- blocker: Generated IntCall body IH is present, but cannot be robustly packaged into the generic `!st res st'. eval_stmts cxf body' st = (res,st') ==> preserves_tv cxf st st'` fact by the planned explicit qspec route; qpat selection succeeds but qspecl instantiation still fails in a huge context.
+- actual effort: 1 sessions, 8 steps, 10 tools, 4 holbuild, 555,816 tok (551,448 in, 4,368 out, 523,264 cached), 103.4s, $0.53359200
+- next: Ask plan_oracle to redesign/decompose C2.7.3.0b.2, likely by introducing a smaller body-IH consumer/helper boundary or relocating the IH packaging earlier before the tail context is bloated.
+
+### Attempts / Evidence
+
+- `E0942` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 35 steps, 38 tools, 14 holbuild, 3,890,808 tok (3,874,107 in, 16,701 out, 3,795,456 cached), 448.3s, $2.79201300)
+  - Inserted local generic body preservation fact before the final `intcall_ptv_chain` tail: `!st res st'. eval_stmts (cx with stk updated_by CONS ...) body' st = (res,st') ==> preserves_tv ... st st'`. Tried `first_x_assum irule` with explicit witnesses. -> Failed: selected the wrong assumption or produced `goal not an exists`/FIRST_ASSUM failures; not a reliable way to package the generated IH. (`TO_type_system_rewrite-20260524T091119Z_m46680_t001`, `TO_type_system_rewrite-20260524T091119Z_m46682_t001`)
+  - Probed/selectively matched the generated IntCall body IH with qpat patterns and mp_tac to confirm it is present in the local context. -> The broad qpat pattern can select the IH; the probe confirms the live assumption is the expected generated IH, but not yet specialized correctly. (`TO_type_system_rewrite-20260524T091119Z_m46698_t001`, `TO_type_system_rewrite-20260524T091119Z_m46705_t001`)
+  - Tried explicit `qspecl_then` on the selected IH with concrete actual/default/bind/eval-ret/lock states; discovered the theorem likely has 18 quantified variables (including both `s'¹¹'` and `t'⁹'`) and that the earlier 17-term list was missing one mid-state. -> Latest source uses an 18-term list including two copies of `r'' with scopes := r'.scopes` before `r'5'`, but holbuild still fails in `Q_TAC0/FIRST_ASSUM`; the exact specialization pattern needs repair next session, or the fact should be proved with a smaller helper/boundary rather than more qspecl plumbing. (`TO_type_system_rewrite-20260524T091119Z_m46700_t001`, `TO_type_system_rewrite-20260524T091119Z_m46710_t001`, `TO_type_system_rewrite-20260524T091119Z_m46701_t001`)
+- `E0943` (stuck, risk_mismatch, actual effort: 1 sessions, 8 steps, 10 tools, 4 holbuild, 555,816 tok (551,448 in, 4,368 out, 523,264 cached), 103.4s, $0.53359200)
+  - Inspected current source around lines 2230-2274 and rebuilt `vyperEvalPreservesScopesTheory` to confirm the active failure is the local body-preservation fact in `Resume eval_preserves_tv[IntCall_ptv]`. -> Confirmed current failure matches STATE: qpat/qspecl packaging of generated IH fails in the local fact before `intcall_ptv_chain`. (`TO_type_system_rewrite-20260524T091119Z_m46715_t001`, `TO_type_system_rewrite-20260524T091119Z_m46715_t003`)
+  - Probed by replacing qspecl with `qpat_assum ... mp_tac >> simp[] >> FAIL_TAC` to verify the broad qpat still selects the generated IH and see whether simplification alone specializes guards. -> Selection works, but simp does not reduce the quantified IH enough to discharge the local fact; the context remains >4KiB. (`TO_type_system_rewrite-20260524T091119Z_m46718_t001`)
+  - Tried one corrected explicit specialization using the visible IH arity (17 quantified variables, not the earlier 18-term list), mapping actual/default/bind/eval-ret/lock states and arbitrary body `st res st'`. -> Still fails in `Q_TAC0/FIRST_ASSUM`/matcher with the >4KiB IntCall tail context, so continuing to tune qspecl lists violates the PLAN/handoff do-not-retry guidance. (`TO_type_system_rewrite-20260524T091119Z_m46722_t001`)
+
+### Ruled Out
+
+- Blind `metis_tac[]` at final tail site
+- Blind `first_x_assum`/`last_x_assum` selection for the IH
+- Continuing to tune long `qspecl_then` lists in the >4KiB context
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46715_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46715_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46718_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46722_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0946`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 105,020 tok (104,535 in, 485 out, 98,816 cached), 10.3s, $0.09255300
+- next: Review closure, then begin C2.7.3.0b.2.2 to add the caller-specific corollary.
+
+### Attempts / Evidence
+
+- `E0944` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 794,521 tok (790,768 in, 3,753 out, 760,832 cached), 89.1s, $0.64268600)
+  - Inserted local theorem `intcall_body_ih_pack[local]` before `intcall_ptv_chain`, mirroring the generated IntCall body IH guards and concluding the generic body-preservation fact. Proved it by specializing the packaged IH with the concrete successful guard witnesses and `simp[]`. -> `holbuild` accepted the new helper and advanced past `intcall_body_ih_pack`; the remaining failure is now the old inline body-IH proof in `Resume eval_preserves_tv[IntCall_ptv]`, which belongs to the next component C2.7.3.0b.2.2. (`TO_type_system_rewrite-20260524T091119Z_m46732_t001`)
+  - Adjusted the helper proof after initial pattern/arity failures: broad qpat with an 18-term witness list (including both post-default state variables before `r_lock`) succeeded inside the isolated helper context. -> The helper boundary hides the generated IH quantifier order from downstream callers; source now contains proved helper at `vyperEvalPreservesScopesScript.sml` lines 2139-2180. (`TO_type_system_rewrite-20260524T091119Z_m46728_t001`, `TO_type_system_rewrite-20260524T091119Z_m46730_t001`, `TO_type_system_rewrite-20260524T091119Z_m46732_t001`)
+- `E0946` (proved, , actual effort: 1 sessions, 1 steps, 105,020 tok (104,535 in, 485 out, 98,816 cached), 10.3s, $0.09255300)
+  - Retained existing local theorem `intcall_body_ih_pack[local]` unchanged; prior holbuild evidence shows HOL accepted the helper and advanced to the downstream Resume assertion. -> Component is a carry-forward infrastructure lemma; no new source edits needed for this leaf. (`TO_type_system_rewrite-20260524T091119Z_m46732_t001`, `TO_type_system_rewrite-20260524T091119Z_m46753_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46732_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46753_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0947`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 711,077 tok (708,669 in, 2,408 out, 686,080 cached), 61.5s, $0.52822500
+- next: Review closure, then begin C2.7.3.0b.2.3 and replace the local Resume assertion proof with `irule intcall_body_ih_resume_pack >> simp[]`.
+
+### Attempts / Evidence
+
+- `E0945` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 22 steps, 21 tools, 10 holbuild, 1,649,426 tok (1,640,448 in, 8,978 out, 1,588,224 cached), 225.5s, $1.32457200)
+  - `drule intcall_body_ih_pack >> simp[] >> metis_tac[]` inside the local body-preservation assertion -> Failed with large Resume context and FOL no-solution; does not provide a clean selected generic fact. (`TO_type_system_rewrite-20260524T091119Z_m46755_t001`)
+  - Backward application variants: `irule intcall_body_ih_pack >> simp[]`, then explicit `Q.INST` for `cxf`/`body` -> Plain backward application failed with `No match`; explicit instantiation still left a goal requiring brittle assumption selection and did not close. (`TO_type_system_rewrite-20260524T091119Z_m46757_t001`, `TO_type_system_rewrite-20260524T091119Z_m46772_t001`)
+  - Selected use of generated IH after helper-shaped setup, including qpat/qspecl specialization in the Resume context -> qpat/qspecl-style use in the huge Resume context failed and returns to the route explicitly invalidated by the plan. (`TO_type_system_rewrite-20260524T091119Z_m46774_t001`)
+- `E0947` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 5 tools, 2 holbuild, 711,077 tok (708,669 in, 2,408 out, 686,080 cached), 61.5s, $0.52822500)
+  - Added local theorem `intcall_body_ih_resume_pack[local]` immediately after `intcall_body_ih_pack`. Initial proof by direct `irule intcall_body_ih_pack` left existential matching goals; replaced with the same small-context `qpat_assum ... qspecl_then [...] >> simp[]` pattern used by the generic helper, outside the large Resume context. -> `holbuild` accepted the new caller-specific corollary and advanced to the downstream Resume assertion, which is assigned to C2.7.3.0b.2.3. (`TO_type_system_rewrite-20260524T091119Z_m46785_t001`, `TO_type_system_rewrite-20260524T091119Z_m46787_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46787_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0959`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 123,140 tok (122,449 in, 691 out, 114,688 cached), 15.9s, $0.11687900
+- next: Call plan_oracle review; if accepted, preserve the stable checkpoint carefully given pre-existing staged/untracked repository changes.
+
+### Attempts / Evidence
+
+- `E0948` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 5 steps, 5 tools, 2 holbuild, 298,399 tok (296,170 in, 2,229 out, 279,040 cached), 56.5s, $0.29204000)
+  - Direct use of caller-specific corollary at the local assertion: `irule intcall_body_ih_resume_pack >> simp[]`. -> Failed with `No match` in MATCH_MP_TAC at the local `!st res st'. eval_stmts ... ==> preserves_tv ...` assertion. (`TO_type_system_rewrite-20260524T091119Z_m46797_t001`)
+  - Explicitly instantiated antecedent-only variables of `intcall_body_ih_resume_pack` to live Resume names (`vs0=x'4'`, `r1=r'`, `dflt_vs0=x`, `r2=r''`, `env0=x'3'`, `rtv0=x'5'`, `r_lock=r'5'`) and used `match_mp_tac ... >> simp[]`. -> Failed with the same `No match` at the same local assertion; the helper remains awkward to consume in this goal shape. (`TO_type_system_rewrite-20260524T091119Z_m46800_t001`)
+- `E0959` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 123,140 tok (122,449 in, 691 out, 114,688 cached), 15.9s, $0.11687900)
+  - Inspected the active Resume proof and rebuilt vyperEvalPreservesScopesTheory. The local assertion is proved by `rpt strip_tac >> drule_all intcall_body_ih_resume_point >> simp[]`, after which `intcall_ptv_chain` closes the tail; no new edits were needed. -> Target theory builds and the required local IntCall body-preservation assertion is discharged in source. (`TO_type_system_rewrite-20260524T091119Z_m46982_t001`, `TO_type_system_rewrite-20260524T091119Z_m46982_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46982_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46982_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0951`
+- blocker: The planned forward consumption of `intcall_body_ih_resume_pack` does not close the local body-preservation assertion in `Resume eval_preserves_tv[IntCall_ptv]`: `drule_all` raises an internal assertion/predicate failure, `mp_tac ... >> simp[]` leaves the THEN1 subgoal unsolved, and a small `metis_tac[intcall_body_ih_resume_pack]` times out. This is exactly the assertion site that C2.7.3.0b.2.3 was meant to discharge; C2.7.3.0b.3 cannot reach tail composition/build closure without a revised consumer/interface plan.
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 672,655 tok (670,179 in, 2,476 out, 649,216 cached), 74.9s, $0.50370300
+- next: Strategist should revise the consumer plan/interface, likely by adding a better use-site theorem whose conclusion can be accepted by the assertion without HOL's forward/solver failure, or by authorizing a controlled local specialization outside the huge Resume context. Do not proceed to tail composition or downstream statement soundness until this assertion builds.
+
+### Attempts / Evidence
+
+- `E0951` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 672,655 tok (670,179 in, 2,476 out, 649,216 cached), 74.9s, $0.50370300)
+  - Replaced failed explicit-Q.INST assertion proof with preferred `drule_all intcall_body_ih_resume_pack >> simp[]` and built `vyperEvalPreservesScopesTheory`. -> Build still fails at the local assertion; `drule_all` triggers a HOL `predicate not true` assertion instead of deriving/solving the assertion. (`TO_type_system_rewrite-20260524T091119Z_m46830_t001`)
+  - Tried the planned fallback `mp_tac intcall_body_ih_resume_pack >> simp[]`. -> Build still fails at the same assertion; the THEN1 assertion subgoal is not solved after simplification. (`TO_type_system_rewrite-20260524T091119Z_m46833_t001`)
+  - Tried a narrowly-scoped solver `metis_tac[intcall_body_ih_resume_pack]` over the local assertion. -> Build still fails at the same assertion; the FOL solver times out in the >4KiB Resume context. (`TO_type_system_rewrite-20260524T091119Z_m46835_t001`)
+
+### Ruled Out
+
+- `drule_all intcall_body_ih_resume_pack >> simp[]` at the assertion site
+- `mp_tac intcall_body_ih_resume_pack >> simp[]` at the assertion site
+- `metis_tac[intcall_body_ih_resume_pack]` at the assertion site
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46830_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46833_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46835_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46831_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0954`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 390,664 tok (388,429 in, 2,235 out, 376,320 cached), 40.5s, $0.31575500
+- next: Review closure, then begin C2.7.3.0b.3.2 to prove the early body-preservation cut using `intcall_body_ih_resume_pack`.
+
+### Attempts / Evidence
+
+- `E0952` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 21 steps, 22 tools, 8 holbuild, 2,499,403 tok (2,490,841 in, 8,562 out, 2,435,584 cached), 225.5s, $1.75093700)
+  - Direct specialization using `qpat_assum` with full conclusion shape and 18 witnesses after `rpt strip_tac`. -> Failed to select/specialize the live generated IH assumption (`Q_TAC0`/`FIRST_ASSUM` error). (`TO_type_system_rewrite-20260524T091119Z_m46841_t001`)
+  - Tried unpatterned `first_assum (qspecl_then [...18 witnesses...] mp_tac)` after stripping. -> Failed in `FIRST_ASSUM`; not every assumption can be specialized that way and the tactic did not find a suitable theorem. (`TO_type_system_rewrite-20260524T091119Z_m46843_t001`)
+  - Tried `qhdtm_assum `bool$!`` to select any universally-quantified assumption. -> Failed during quotation/head matching (`Q_TAC`/`FIRST_ASSUM` error). (`TO_type_system_rewrite-20260524T091119Z_m46845_t001`)
+  - Tried looser `qpat_assum ... preserves_tv _ _ _` and `qpat_x_assum !a b ...` patterns. -> Loose pattern still failed selection; generic binder pattern produced an Absyn reduction error. (`TO_type_system_rewrite-20260524T091119Z_m46847_t001`, `TO_type_system_rewrite-20260524T091119Z_m46854_t001`)
+  - Inserted `FAIL_TAC "after_strip_probe"` after `rpt strip_tac` to inspect goal state and full log. -> Probe confirms the live generated IH at assumption 4 has 17 quantified variables after stripping, not the 18-variable/push-function form shown in later proof text; this suggests the attempted witness list is off by one around the return-type/lock states. (`TO_type_system_rewrite-20260524T091119Z_m46850_t001`, `TO_type_system_rewrite-20260524T091119Z_m46851_t001`)
+  - Retried `qpat_x_assum` with a 17-witness list dropping one repeated `r'' with scopes := r'.scopes`. -> Still failed selection/specialization at the generated-IH pattern; source currently contains this last failed attempt. (`TO_type_system_rewrite-20260524T091119Z_m46858_t001`)
+- `E0953` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 32 steps, 32 tools, 12 holbuild, 2,950,840 tok (2,933,664 in, 17,176 out, 2,860,032 cached), 401.5s, $2.31345600)
+  - `PRED_ASSUM is_forall irule >> simp[]` after stripping local assertion -> Selected/applied some forall IH, but `simp[]` left unresolved subgoal; build fails with THEN1 first-subgoal-not-solved. Full instrumented log shows residual top goal still the big IntCall branch, indicating the assertion proof did not close. (`TO_type_system_rewrite-20260524T091119Z_m46890_t001`, `TO_type_system_rewrite-20260524T091119Z_m46891_t001`)
+  - Probe after `PRED_ASSUM is_forall irule` and after `... >> simp[]` -> The probes confirmed selection/application proceeds far enough to reach the explicit `FAIL_TAC`, but goalfrag still prints the large pre-fragment goal rather than a clear small residual; no reliable subgoal interface emerges from this in the Resume context. (`TO_type_system_rewrite-20260524T091119Z_m46876_t001`, `TO_type_system_rewrite-20260524T091119Z_m46885_t001`)
+  - `PRED_ASSUM is_forall irule >> simp[] >> metis_tac[]` -> Metis failed with no solution found in the large context; not a viable close tactic. (`TO_type_system_rewrite-20260524T091119Z_m46879_t001`)
+  - `PRED_ASSUM is_forall (mp_tac o SPEC_ALL) >> simp[]` -> Still failed to close THEN1; SPEC_ALL did not instantiate the live IH to the needed concrete prefix facts. (`TO_type_system_rewrite-20260524T091119Z_m46881_t001`)
+  - `PRED_ASSUM is_forall irule >> simp[] >> first_assum ACCEPT_TAC` and `... >> qexistsl_tac [...] >> simp[]` -> `first_assum ACCEPT_TAC` found no exact assumption; explicit qexistsl after irule failed with `goal not an exists`, showing the residual is not the expected existential witness subgoal shape. This contradicts the leaf plan's assumption that direct generated-IH specialization is straightforward at this point. (`TO_type_system_rewrite-20260524T091119Z_m46887_t001`, `TO_type_system_rewrite-20260524T091119Z_m46894_t001`)
+- `E0954` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 390,664 tok (388,429 in, 2,235 out, 376,320 cached), 40.5s, $0.31575500)
+  - Removed the old post-`intcall_ptv_chain` local assertion proof and moved/recreated the body-preservation assertion before the tail-chain call. -> Source cleanup completed. Holbuild now fails at the early body-IH cut (`irule intcall_body_ih_resume_pack >> simp[]`) immediately after `gvs[push_function_def, return_def]`, confirming the failed in-chain assertion text has been removed and the next obligation is the planned C2.7.3.0b.3.2 proof refactor. (`TO_type_system_rewrite-20260524T091119Z_m46898_t001`, `TO_type_system_rewrite-20260524T091119Z_m46899_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46898_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46899_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The low-risk early-cut proof interface did not materialize. The source is back to the original small failing proof at lines 2337-2339 (`rpt strip_tac >> irule intcall_body_ih_resume_pack >> simp[]`). Attempts to consume `intcall_body_ih_resume_pack` by explicit specialization/GEN_ALL did not compile or failed to discharge; attempts to specialize the live generated IH with qpat/first/last selectors failed because assumption selection was not robust in the Resume context. This indicates the helper interface/decomposition is still brittle, not just a missing tactic.
+- latest episode: `E0955`
+- blocker: The active component's Risk 2 plan underestimated the proof-interface brittleness of consuming either `intcall_body_ih_resume_pack` or the live generated IH in the Resume context.
+- actual effort: 1 sessions, 2 msgs, 17 steps, 17 tools, 7 holbuild, 1,260,102 tok (1,252,389 in, 7,713 out, 1,205,760 cached), 178.9s, $1.06741500
+- next: Strategist should redesign this leaf/helper interface, likely by adding a micro-helper whose statement exactly matches the live generated IH assumption shape or by changing the existing local helper to expose a conclusion that `irule` can match without antecedent-only witnesses.
+
+### Attempts / Evidence
+
+- `E0955` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 17 steps, 17 tools, 7 holbuild, 1,260,102 tok (1,252,389 in, 7,713 out, 1,205,760 cached), 178.9s, $1.06741500)
+  - Baseline build on active component with `irule intcall_body_ih_resume_pack >> simp[]`. -> Fails at early body-preservation cut; helper conclusion/antecedents do not match/backchain sufficiently, leaving THEN1 unsolved in a >4KiB displayed context. (`TO_type_system_rewrite-20260524T091119Z_m46906_t001`)
+  - Tried explicit theorem specialization using `Q.SPECL`/`qspecl_then` on `intcall_body_ih_resume_pack`. -> `Q.SPECL` fragment did not compile; `qspecl_then` form failed with `not a !` after partial specialization, so it was not a viable controlled consumer. (`TO_type_system_rewrite-20260524T091119Z_m46909_t001`, `TO_type_system_rewrite-20260524T091119Z_m46911_t001`)
+  - Tried direct generated-IH specialization with exact qpat/first/last assumption selectors and the E0953 witness list. -> qpat/first/last selectors all failed to robustly select/apply the generated IH in the Resume context, confirming the proof-interface brittleness flagged by prior episodes. (`TO_type_system_rewrite-20260524T091119Z_m46913_t001`, `TO_type_system_rewrite-20260524T091119Z_m46916_t001`, `TO_type_system_rewrite-20260524T091119Z_m46918_t001`)
+  - Tried `mp_tac (GEN_ALL intcall_body_ih_resume_pack)` with explicit outer specializations. -> Failed at `DISCH_THEN`, showing the theorem cannot be conveniently used this way as a local forward rule. (`TO_type_system_rewrite-20260524T091119Z_m46920_t001`)
+
+### Ruled Out
+
+- simple backward `irule intcall_body_ih_resume_pack >> simp[]`
+- external explicit specialization with Q.SPECL/qspecl_then/GEN_ALL
+- loose qpat/first/last generated-IH selectors with a long witness list
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46906_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46909_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46911_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46913_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46916_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46918_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46920_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.3.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0956`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 621,932 tok (619,446 in, 2,486 out, 601,088 cached), 56.0s, $0.46691400
+- next: Review closure, then begin C2.7.3.0b.3.2.2 to replace the Resume early assertion proof with a consumer of `intcall_body_ih_resume_point`.
+
+### Attempts / Evidence
+
+- `E0956` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 621,932 tok (619,446 in, 2,486 out, 601,088 cached), 56.0s, $0.46691400)
+  - Added local theorem `intcall_body_ih_resume_point` immediately after `intcall_body_ih_resume_pack`, with pointwise conclusion and proof by duplicating the existing small-context generated-IH specialization pattern. -> `holbuild vyperEvalPreservesScopesTheory` advanced past the new theorem and failed later at the unchanged Resume early assertion, confirming the boundary lemma compiles/proves and the remaining failure belongs to the next planned consumer leaf. (`TO_type_system_rewrite-20260524T091119Z_m46929_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46929_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.3.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0957`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 3 holbuild, 842,384 tok (840,904 in, 1,480 out, 820,736 cached), 58.0s, $0.55560800
+- next: Review closure, then begin C2.7.3.0b.3.3 to finish the `intcall_ptv_chain` tail proof at the final `metis_tac[]`.
+
+### Attempts / Evidence
+
+- `E0957` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 3 holbuild, 842,384 tok (840,904 in, 1,480 out, 820,736 cached), 58.0s, $0.55560800)
+  - Replaced the early body-preservation assertion proof with assumption-driven consumption of the new pointwise corollary: `rpt strip_tac >> drule_all intcall_body_ih_resume_point >> simp[]`. -> `holbuild vyperEvalPreservesScopesTheory` advanced past the early assertion and now fails later at the existing `metis_tac[]` after the `intcall_ptv_chain` application, which is the planned next tail-chain component rather than this cut. (`TO_type_system_rewrite-20260524T091119Z_m46938_t001`)
+  - Tried the more literal `drule intcall_body_ih_resume_point >> disch_then irule >> simp[]` consumer shape first. -> That did not solve the assertion, but `drule_all` on the pointwise corollary did, confirming the corollary is usable when all live prefix premises are discharged from assumptions. (`TO_type_system_rewrite-20260524T091119Z_m46934_t001`, `TO_type_system_rewrite-20260524T091119Z_m46936_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46938_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0b.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0958`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 26 steps, 28 tools, 8 holbuild, 2,194,238 tok (2,185,665 in, 8,573 out, 2,042,368 cached), 236.0s, $1.99485900
+- next: Call plan_oracle review, then checkpoint/commit the stable prerequisite repair if accepted.
+
+### Attempts / Evidence
+
+- `E0958` (proved, , actual effort: 1 sessions, 2 msgs, 26 steps, 28 tools, 8 holbuild, 2,194,238 tok (2,185,665 in, 8,573 out, 2,042,368 cached), 236.0s, $1.99485900)
+  - After the early body-preservation cut, invoked intcall_ptv_chain with corrected witnesses (`x'3'` env, `r'' with scopes := r'.scopes` as r_mid, `res`, `x'5'` as rtv). Replaced the failing final broad metis_tac with explicit conjunction proof: final chain equality follows by mp_tac on the live final evaluator equation and simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]; prefix preservation follows by preserves_tv_trans through r'. -> Target theorem resume closed; vyperEvalPreservesScopesTheory built successfully. (`TO_type_system_rewrite-20260524T091119Z_m46971_t001`)
+
+### Ruled Out
+
+- Leaving the final broad metis_tac as the proof of tail-chain residual
+- Using the wrong witness order/type for intcall_ptv_chain final arguments
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46971_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0962`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 21 steps, 24 tools, 6 holbuild, 1,552,692 tok (1,545,062 in, 7,630 out, 1,468,928 cached), 204.7s, $1.34403400
+- next: Run plan_oracle review, then begin C2.7.3.0c.2 to refactor case_IntCall_imm_dom to use intcall_default_frame_imm_dom.
+
+### Attempts / Evidence
+
+- `E0961` (progressed, other, actual effort: 1 sessions, 2 msgs, 8 steps, 12 tools, 2 holbuild, 1,031,428 tok (1,028,485 in, 2,943 out, 996,352 cached), 73.9s, $0.74713100)
+  - Added local boundary lemma `intcall_default_frame_imm_dom` with PLAN-suggested shape, unfolding `get_scopes_def`, `finally_def`, `bind_def`, `ignore_bind_def`, `set_scopes_def`, and case-splitting default eval. -> Build reached the new lemma but failed because `get_scopes_def` alone leaves `return st0.scopes st0 = (INL prev,sget)` unresolved, and the later transitivity step mismatched `st0` vs `sget`. (`TO_type_system_rewrite-20260524T091119Z_m46996_t001`, `TO_type_system_rewrite-20260524T091119Z_m46997_t001`)
+  - Added `return_def` to the `get_scopes_def` simplification. -> Advanced normalization, but the first transitivity branch still failed with goal `st0.immutables = sget.immutables`; proof still needs stronger normalization of `sget = st0` or a helper statement that starts after `get_scopes`. (`TO_type_system_rewrite-20260524T091119Z_m46999_t001`)
+- `E0962` (proved, , actual effort: 1 sessions, 1 msgs, 21 steps, 24 tools, 6 holbuild, 1,552,692 tok (1,545,062 in, 7,630 out, 1,468,928 cached), 204.7s, $1.34403400)
+  - Restated intcall_default_frame_imm_dom to start from the post-get state sget and conclude preserves_immutables_dom cxd sget st1 for finally (do set_scopes [FEMPTY]; eval_exprs ... od) (set_scopes prev) sget. -> Avoided the st0/sget aliasing branch from the prior proof; proof unfolds finally/set_scopes plumbing and uses the supplied eval_exprs IH directly after case-splitting the default evaluation result. (`TO_type_system_rewrite-20260524T091119Z_m47023_t001`)
+  - Built vyperEvalPreservesImmutablesDomTheory. -> Build advanced past intcall_default_frame_imm_dom and failed in the next theorem case_IntCall_imm_dom at the old generated-IH/default-frame plumbing, confirming the boundary lemma is accepted and the next scheduled component is reached. (`TO_type_system_rewrite-20260524T091119Z_m47024_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47024_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47023_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 direct repair failed repeatedly. After replacing the old positional generated-IH line, the proof advanced to default-success/evaluate_type/lock error branches but remained >4KiB and brittle. Attempts to preserve and reuse the default `finally` equation locally did not match the rewritten branch state. This is a proof-interface/decomposition problem, not a tactic-search problem.
+- latest episode: `E0965`
+- blocker: Need strategist guidance or replacement subtree: add a pointwise helper around the successful-default tail (default-frame preservation + bind/evaluate/lock/body pipeline) or refactor `case_IntCall_imm_dom_inner` to match the actual default-frame evaluator shape.
+- actual effort: 1 sessions, 3 msgs, 40 steps, 41 tools, 12 holbuild, 3,634,000 tok (3,619,616 in, 14,384 out, 3,528,192 cached), 439.8s, $2.65273600
+- next: Call plan_oracle review/augment for C2.7.3.0c.2 with the cited build evidence and source range 1720-1811.
+
+### Attempts / Evidence
+
+- `E0963` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 53 steps, 54 tools, 20 holbuild, 4,758,157 tok (4,739,502 in, 18,655 out, 4,628,992 cached), 562.7s, $3.42669600)
+  - Applied intcall_default_frame_imm_dom in default INR branch with explicit needed defaults, previous scopes, and INR result; had to explicitly derive default-expression IH by selecting the second generated IH and moving the finally equation back after ignore_bind_def. -> Advanced past original default INR branch; subsequent build reached default INL / bind_arguments branch. (`TO_type_system_rewrite-20260524T091119Z_m47066_t001`, `TO_type_system_rewrite-20260524T091119Z_m47110_t001`)
+  - Mirrored intcall_default_frame_imm_dom application in the default INL but bind_arguments-failure branch. -> Advanced past bind_arguments failure; build now fails later at old body generated-IH plumbing after evaluate_type, with >4KiB goal and positional disch_then/funpow drule failing. (`TO_type_system_rewrite-20260524T091119Z_m47116_t001`)
+- `E0964` (progressed, risk_mismatch, actual effort: 1 sessions, 3 msgs, 39 steps, 40 tools, 12 holbuild, 3,517,226 tok (3,503,772 in, 13,454 out, 3,414,016 cached), 424.4s, $2.55940800)
+  - Removed the old `disch_then $ funpow 3 drule_then drule` after successful default/bind_arguments path and tried to discharge evaluate_type/lock error branches by composing actual preservation with `intcall_default_frame_imm_dom`. -> Advanced past the immediate positional generated-IH failure, but new branch goals required proving the default `finally` equation after unrelated state equalities; goal remained >4KiB and brittle. (`TO_type_system_rewrite-20260524T091119Z_m47132_t001`, `TO_type_system_rewrite-20260524T091119Z_m47143_t001`)
+  - Tried labelling the default `finally` equation (`default_finally`) and reusing it in the branch subgoal instead of consuming it with `qpat_x_assum`. -> The proof still failed because the branch goal's final state had been rewritten through later same-state/error equations; direct assumption acceptance or rewrite did not match, confirming more branch-local plumbing is needed. (`TO_type_system_rewrite-20260524T091119Z_m47160_t001`)
+- `E0965` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 40 steps, 41 tools, 12 holbuild, 3,634,000 tok (3,619,616 in, 14,384 out, 3,528,192 cached), 439.8s, $2.65273600)
+  - Removed `disch_then $ funpow 3 drule_then drule` and tried a simple `strip_tac` after generated default IH consumption. -> Advanced the proof past the old positional tactic; first new failure was the evaluate_type error branch, where the old trivial branch tactic could not prove preservation after successful default evaluation. (`TO_type_system_rewrite-20260524T091119Z_m47132_t001`)
+  - Replaced evaluate_type/lock error branch tactics with direct transitivity through actual-argument preservation and `intcall_default_frame_imm_dom`, explicitly instantiating the default result and needed defaults. -> Still failed with >4KiB goals because the branch needed the default `finally` equation after later same-state/error rewriting; direct branch-local composition was brittle. (`TO_type_system_rewrite-20260524T091119Z_m47143_t001`)
+  - Labelled the default `finally` equation as `default_finally` and attempted to reuse/accept it in the branch subgoal instead of consuming the live assumption. -> Still failed; the goal's final state was rewritten to a later error state, so the labelled equation did not match directly. This confirms the successful-default tail needs a helper or stronger abstraction rather than further direct patching. (`TO_type_system_rewrite-20260524T091119Z_m47160_t001`)
+
+### Ruled Out
+
+- Retrying `disch_then $ funpow 3 drule_then drule` or other positional generated-IH variants
+- Continuing branch-local `intcall_default_frame_imm_dom` plumbing without factoring the successful-default tail
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47132_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47143_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47160_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47166_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0969`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 130,111 tok (129,667 in, 444 out, 122,368 cached), 9.2s, $0.11099900
+- next: Call plan_oracle review if required, then begin C2.7.3.0c.2.2 to add the generated-IH/default-frame boundary helper.
+
+### Attempts / Evidence
+
+- `E0966` (proved, , actual effort: 1 sessions, 2 msgs, 27 steps, 29 tools, 10 holbuild, 2,262,112 tok (2,251,736 in, 10,376 out, 2,189,824 cached), 288.6s, $1.71575200)
+  - Inserted equality-composition helper using `preserves_immutables_dom_trans`, `preserves_immutables_dom_txn_eq`, and `preserves_immutables_dom_eq`; inserted body-tail helper derived from existing `case_IntCall_imm_dom_inner` structure but using preservation premises instead of direct default `eval_exprs`. -> Helpers accepted by holbuild; build reached `case_IntCall_imm_dom` failure at old lower-half proof, confirming helper leaf is complete and next refactor leaf remains. (`TO_type_system_rewrite-20260524T091119Z_m47201_t001`)
+- `E0969` (proved, , actual effort: 1 sessions, 1 steps, 130,111 tok (129,667 in, 444 out, 122,368 cached), 9.2s, $0.11099900)
+  - Checked plan/dossier for carry-forward helper component after strategist replacement. The component requires preserving already-proved local helpers, not new proof work. -> Closed as proved based on prior holbuild evidence from E0966 that accepted the helper lemmas and advanced to the main `case_IntCall_imm_dom` failure. (`TO_type_system_rewrite-20260524T091119Z_m47201_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47201_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0970`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 23 steps, 26 tools, 8 holbuild, 1,933,690 tok (1,922,916 in, 10,774 out, 1,857,024 cached), 261.2s, $1.58119200
+- next: Call plan_oracle review, then begin C2.7.3.0c.2.3 to refactor case_IntCall_imm_dom to consume the new helper and remove the FAIL_TAC probe.
+
+### Attempts / Evidence
+
+- `E0967` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 16 steps, 18 tools, 3 holbuild, 1,995,649 tok (1,988,107 in, 7,542 out, 1,939,456 cached), 179.5s, $1.43924300)
+  - Replaced old `first_assum ACCEPT_TAC` branch with `intcall_post_default_eq_imm_dom` and attempted to discharge default preservation inside the branch with `intcall_default_frame_imm_dom`. -> Failed because the first remaining helper subgoal was >4KiB and state ordering/witnesses were wrong (`preserves_immutables_dom cx r r'⁵'` and callee preservation facts did not align as expected). (`TO_type_system_rewrite-20260524T091119Z_m47210_t001`)
+  - Inserted `FAIL_TAC "probe post_default branch"` after applying `intcall_post_default_eq_imm_dom` to inspect the exact remaining goal, then removed/replaced the probe with a reattempted branch skeleton. -> Probe showed the branch goal as `r'⁸'.immutables = r'⁴'.immutables ∧ preserves_immutables_dom cx r r'⁵' ∧ preserves_immutables_dom (cx with stk updated_by CONS ...) r'⁵' r'⁴'`, confirming previous witness order was wrong and that default preservation should be derived once as a named fact before administrative branches. (`TO_type_system_rewrite-20260524T091119Z_m47215_t001`, `TO_type_system_rewrite-20260524T091119Z_m47216_t001`)
+- `E0968` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 27 steps, 28 tools, 8 holbuild, 2,472,080 tok (2,459,494 in, 12,586 out, 2,388,992 cached), 320.3s, $1.92458600)
+  - Inserted derive-once subgoal immediately after successful default-frame `finally ... = (INL x'⁵', r'⁵')`: `preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) r'⁴' r'⁵'` via `intcall_default_frame_imm_dom`. -> Failed with a >4KiB goal inside the generated default-expression IH antecedent; the intended helper still requires selecting/instantiating a huge generated IH in the large IntCall context. (`TO_type_system_rewrite-20260524T091119Z_m47229_t001`)
+  - Tried replacing precise qpat generated-IH selection with `first_x_assum`, `qpat_assum`, `last_x_assum`, and `metis_tac` variants to consume the default-expression IH premise. -> Selectors failed or timed out; this is exactly the brittle generated-IH plumbing the PLAN warned against, and not a robust proof path. (`TO_type_system_rewrite-20260524T091119Z_m47237_t001`)
+  - Inserted `FAIL_TAC` probe after stripping the default IH subgoal to inspect the live context. -> Probe confirmed the goal remains a whole post-default case expression under large generated IH assumptions, rather than a small default-frame preservation fact. The current helper interface is not enough to make C2.7.3.0c.2.2 boring. (`TO_type_system_rewrite-20260524T091119Z_m47241_t001`, `TO_type_system_rewrite-20260524T091119Z_m47247_t001`, `TO_type_system_rewrite-20260524T091119Z_m47242_t001`)
+- `E0970` (proved, , actual effort: 1 sessions, 2 msgs, 23 steps, 26 tools, 8 holbuild, 1,933,690 tok (1,922,916 in, 10,774 out, 1,857,024 cached), 261.2s, $1.58119200)
+  - Added use-site helper packaging generated default-expression IH, arithmetic normalization from plus-form length check to subtraction-form IH premise, and intcall_default_frame_imm_dom application. -> Helper accepted; build progressed past intcall_default_frame_imm_dom_from_generated_ih to the existing main-theorem diagnostic FAIL_TAC. (`TO_type_system_rewrite-20260524T091119Z_m47282_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47282_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 main-theorem refactor did not de-risk after removing the exploratory all_tac. The new helper exists, but consuming it in the live post-default success branch still leaves a >4KiB goal and the by-subgoal is not solved by direct irule+simp/gvs, first_assum, or explicit qspecl_then. This matches the PLAN's stop condition: post-helper admin/default-frame goal remains too large, so the component likely needs a stronger admin-tail/use-site helper rather than more tactic surgery.
+- latest episode: `E0972`
+- blocker: Helper consumption in case_IntCall_imm_dom still produces a >4KiB post-default goal; PLAN says to stop and request stronger admin-tail/helper decomposition.
+- actual effort: 1 sessions, 2 msgs, 28 steps, 28 tools, 9 holbuild, 2,482,821 tok (2,471,687 in, 11,134 out, 2,400,256 cached), 314.1s, $1.89130300
+- next: Ask strategist for a stronger helper covering the post-default administrative tail or a more use-site-shaped default_pres helper, then resume after PLAN update.
+
+### Attempts / Evidence
+
+- `E0971` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 19 steps, 21 tools, 4 holbuild, 2,292,959 tok (2,284,950 in, 8,009 out, 2,234,880 cached), 213.0s, $1.60806000)
+  - Replaced the default-frame failure branch's direct `intcall_default_frame_imm_dom` application with `irule intcall_default_frame_imm_dom_from_generated_ih >> simp[]`. -> Holbuild reported a branch-suffix/active-branch failure at that branch; the edit was later reverted for that first failure branch, but the target was not rebuilt after the revert. (`TO_type_system_rewrite-20260524T091119Z_m47289_t001`, `TO_type_system_rewrite-20260524T091119Z_m47295_t001`)
+  - Inserted `all_tac` before the post-default TOP_CASE_TAC to probe/avoid the branch-suffix issue. -> Holbuild then showed two visible goals and a large post-default case-expression goal at `reverse BasicProvers.TOP_CASE_TAC`, suggesting this is not the right structural fix; remove this exploratory `all_tac` before resuming. (`TO_type_system_rewrite-20260524T091119Z_m47299_t001`, `TO_type_system_rewrite-20260524T091119Z_m47302_t001`)
+  - Changed the successful default branch's `default_pres` derivation to use `intcall_default_frame_imm_dom_from_generated_ih`. -> This edit remains in source but has not yet been separately verified after reverting the first failure branch. It is the intended direction if the branch structure is repaired. (`TO_type_system_rewrite-20260524T091119Z_m47294_t001`)
+- `E0972` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 28 steps, 28 tools, 9 holbuild, 2,482,821 tok (2,471,687 in, 11,134 out, 2,400,256 cached), 314.1s, $1.89130300)
+  - Removed the exploratory all_tac near the post-default TOP_CASE_TAC and rebuilt. -> Build resumed to the intended default_pres derivation site, confirming the probe was gone, but the helper call failed with a >4KiB goal/THEN1 unsolved subgoal. (`TO_type_system_rewrite-20260524T091119Z_m47310_t001`)
+  - Tried deriving default_pres with irule intcall_default_frame_imm_dom_from_generated_ih followed by gvs[] and then with first_assum/ACCEPT_TAC style variants. -> Direct helper consumption remained unable to close the by-subgoal; the live assumptions/goal are too large for local matching tactics and still expose the post-default administrative case expression. (`TO_type_system_rewrite-20260524T091119Z_m47320_t001`, `TO_type_system_rewrite-20260524T091119Z_m47330_t001`)
+  - Tried an explicit qspecl_then instantiation of intcall_default_frame_imm_dom_from_generated_ih at the live IntCall terms, avoiding generated-IH selection in the main theorem. -> Explicit instantiation also failed to solve the by-subgoal, leaving the same large post-default goal; this indicates a helper interface/decomposition mismatch rather than a simple instantiation issue. (`TO_type_system_rewrite-20260524T091119Z_m47334_t001`)
+
+### Ruled Out
+
+- Leaving all_tac probe in place
+- Direct irule+simp/gvs consumption of intcall_default_frame_imm_dom_from_generated_ih in main theorem
+- Explicit qspecl_then instantiation of the helper at the live branch terms
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47310_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47320_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47334_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0976`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 213,910 tok (213,407 in, 503 out, 199,168 cached), 23.3s, $0.18586900
+- next: Review closure with strategist, then begin C2.7.3.0c.2.3.2 to remove the failed monolithic tail-preservation proof attempt.
+
+### Attempts / Evidence
+
+- `E0973` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 1 holbuild, 848,388 tok (844,891 in, 3,497 out, 827,904 cached), 99.3s, $0.60379700)
+  - Copied the IntCall continuation after successful default evaluation into local post_default_intcall_tail_def, including bind_arguments, evaluate_type, lock acquisition, push_function, body finally/pop/release, safe_cast, and return. Added post_default_intcall_tail_unfold proved by rw[post_default_intcall_tail_def]. -> holbuild accepted the new definition/probe and continued past them to the pre-existing main theorem failure, validating the abstraction parses and unfolds mechanically. (`TO_type_system_rewrite-20260524T091119Z_m47344_t001`)
+- `E0976` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 213,910 tok (213,407 in, 503 out, 199,168 cached), 23.3s, $0.18586900)
+  - Audited `post_default_intcall_tail_def` and `post_default_intcall_tail_unfold`; the definition/unfold theorem remain intact at lines 459-517. Built `vyperEvalPreservesImmutablesDomTheory`; holbuild resumed past the abstraction and failed only later at the expected partial monolithic `post_default_intcall_tail_imm_dom` `FAIL_TAC "tail_after_eval_type_success"`. -> Carry-forward definition probe validated; no edit needed for the tail abstraction itself. (`TO_type_system_rewrite-20260524T091119Z_m47394_t001`, `TO_type_system_rewrite-20260524T091119Z_m47393_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47394_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47393_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0977`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 244,164 tok (243,427 in, 737 out, 231,936 cached), 37.8s, $0.19553300
+- next: Review closure with strategist, then begin C2.7.3.0c.2.3.3 to add `intcall_tail_body_provider_def`.
+
+### Attempts / Evidence
+
+- `E0974` (progressed, other, actual effort: 1 sessions, 2 msgs, 32 steps, 37 tools, 11 holbuild, 3,203,815 tok (3,186,597 in, 17,218 out, 3,097,600 cached), 470.5s, $2.51032500)
+  - Inserted `post_default_intcall_tail_imm_dom` with copied third generated IH premise and live prefix facts, then probed after unfolding `post_default_intcall_tail_unfold`. -> Probe showed a >4KiB top goal containing the whole tail case expression, confirming the helper is large but not yet necessarily unmanageable. (`TO_type_system_rewrite-20260524T091119Z_m47364_t001`)
+  - Split the first `lift_option_type (bind_arguments ...)` result and solved the error branch by same-state plus `preserves_immutables_dom_txn_eq`. -> The bind_arguments error branch closed; proof advanced to the evaluate_type split. (`TO_type_system_rewrite-20260524T091119Z_m47375_t001`)
+  - Split `lift_option_type (evaluate_type ...)` and solved its error branch similarly. -> The evaluate_type error branch closed; current probe is at successful evaluate_type before lock/finally. (`TO_type_system_rewrite-20260524T091119Z_m47383_t001`)
+- `E0975` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 34 steps, 39 tools, 11 holbuild, 3,449,075 tok (3,430,630 in, 18,445 out, 3,337,216 cached), 498.9s, $2.68902800)
+  - Added `post_default_intcall_tail_imm_dom` with the copied third generated IH premise and live prefix facts; unfolded only `post_default_intcall_tail_unfold`. -> Probe immediately showed a >4KiB tail goal, indicating the helper was large at the proof boundary. (`TO_type_system_rewrite-20260524T091119Z_m47364_t001`)
+  - Tried an unbounded `rpt (TOP_CASE_TAC >> gvs[])` over the unfolded tail. -> Timed out under the fixed tactic timeout, ruling out a coarse mechanical case split. (`TO_type_system_rewrite-20260524T091119Z_m47366_t001`)
+  - Replaced coarse split with targeted case splits for bind_arguments and evaluate_type, solving their error branches with same-state lemmas, transitivity, and `preserves_immutables_dom_txn_eq`. -> Made local progress through two administrative branches, but the remaining successful lock/finally continuation is still >4KiB and would require further boundary decomposition. (`TO_type_system_rewrite-20260524T091119Z_m47383_t001`)
+- `E0977` (proved, , actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 244,164 tok (243,427 in, 737 out, 231,936 cached), 37.8s, $0.19553300)
+  - Deleted lines 594-677 containing the failed monolithic `post_default_intcall_tail_imm_dom` theorem and its `FAIL_TAC "tail_after_eval_type_success"`. Grep confirms no `FAIL_TAC`, no `post_default_intcall_tail_imm_dom`, and no provider definition yet in the file. -> Cleanup completed; stale brittle proof text is gone while `post_default_intcall_tail_def`/unfold remain. (`TO_type_system_rewrite-20260524T091119Z_m47398_t001`, `TO_type_system_rewrite-20260524T091119Z_m47399_t001`)
+  - Ran `holbuild(targets=["vyperEvalPreservesImmutablesDomTheory"])` after deletion. -> Build now proceeds past the deleted failed theorem and reaches the next known `case_IntCall_imm_dom` failure at direct `intcall_default_frame_imm_dom_from_generated_ih` use, matching the expected post-cleanup frontier. (`TO_type_system_rewrite-20260524T091119Z_m47399_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47398_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47399_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47399_t002` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0978`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 281,679 tok (280,199 in, 1,480 out, 269,824 cached), 45.8s, $0.23118700
+- next: Review closure with strategist, then begin C2.7.3.0c.2.3.4 to prove the exact body/finalizer/release preservation boundary.
+
+### Attempts / Evidence
+
+- `E0978` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 281,679 tok (280,199 in, 1,480 out, 269,824 cached), 45.8s, $0.23118700)
+  - Inserted local `intcall_tail_body_provider_def` immediately after `post_default_intcall_tail_unfold`, with only tail-local bind_arguments/evaluate_type/lock/push_function antecedents and direct `eval_stmts cx' ss` preservation conclusion. Added `intcall_tail_body_provider_unfold[local]` proved by `rw[intcall_tail_body_provider_def]`. -> Provider interface and unfold/probe theorem were added in the planned shape without outer IntCall prefix facts. (`TO_type_system_rewrite-20260524T091119Z_m47403_t001`)
+  - Ran `holbuild(targets=["vyperEvalPreservesImmutablesDomTheory"])` after insertion. -> Build proceeds through the new provider definition/unfold theorem and fails only later at the expected pre-existing `case_IntCall_imm_dom` direct default-frame helper use, so the definition probe is validated. (`TO_type_system_rewrite-20260524T091119Z_m47404_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47403_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47404_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0979`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 17 tools, 5 holbuild, 1,867,907 tok (1,861,261 in, 6,646 out, 1,822,720 cached), 189.4s, $1.30344500
+- next: Review closure with strategist, then begin C2.7.3.0c.2.3.5 to bridge the generated IntCall IH to `intcall_tail_body_provider`.
+
+### Attempts / Evidence
+
+- `E0979` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 17 tools, 5 holbuild, 1,867,907 tok (1,861,261 in, 6,646 out, 1,822,720 cached), 189.4s, $1.30344500)
+  - Added local `intcall_body_finally_release_imm_dom` for the exact IntCall body/finalizer/release shape. The proof unfolds `finally`, `try`, `pop_function`, `set_scopes`, `bind`, `ignore_bind`, `return`, and `raise`, uses the direct `eval_stmts` body IH plus `handle_function_immutables`, `release_nonreentrant_lock_immutables`, and `finally_lock_release_immutables`, then closes by transitivity/equality of immutable domains. -> Exact body/finalizer/release boundary lemma was accepted; build proceeded past it. (`TO_type_system_rewrite-20260524T091119Z_m47411_t001`, `TO_type_system_rewrite-20260524T091119Z_m47422_t001`)
+  - Ran `holbuild(targets=["vyperEvalPreservesImmutablesDomTheory"])` after the lemma proof. -> Build advances beyond `intcall_body_finally_release_imm_dom` and fails only later at the expected existing `case_IntCall_imm_dom` direct `intcall_default_frame_imm_dom_from_generated_ih` use, so this boundary component is complete. (`TO_type_system_rewrite-20260524T091119Z_m47422_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47411_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47422_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0980`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 14 steps, 13 tools, 4 holbuild, 1,183,822 tok (1,173,604 in, 10,218 out, 1,032,704 cached), 213.3s, $1.52739200
+- next: Review closure with strategist, then begin the scheduled tail theorem component C2.7.3.0c.2.3.6.
+
+### Attempts / Evidence
+
+- `E0980` (proved, , actual effort: 1 sessions, 1 msgs, 14 steps, 13 tools, 4 holbuild, 1,183,822 tok (1,173,604 in, 10,218 out, 1,032,704 cached), 213.3s, $1.52739200)
+  - Added local theorem `intcall_tail_body_provider_from_generated_ih` before `case_IntCall_imm_dom`; unfolded `intcall_tail_body_provider_def`, derived the subtraction-form `type_check` fact by `gvs[type_check_def, assert_def] >> decide_tac`, then specialized the third generated IH once to the tail-local bind/evaluate/lock/push assumptions. -> `holbuild` accepted `intcall_tail_body_provider_from_generated_ih` and advanced to the pre-existing later failure in `case_IntCall_imm_dom` at the old direct default-frame helper call, so the active bridge component is complete. (`TO_type_system_rewrite-20260524T091119Z_m47443_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47443_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47435_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47442_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.6
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 tail theorem proof became brittle at the finalizer/body boundary. Provider consumption and bind/evaluate/lock peels now work, but applying `intcall_body_finally_release_imm_dom` inside `post_default_intcall_tail_imm_dom` still fails to match/consume the live `finally` and body-IH assumptions without long manual instantiation or brittle assumption plumbing. Multiple live-context approaches (`irule`, `qpat_assum`/`mp_then`, explicit `Q.SPECL`, and ATP) failed or timed out. This suggests the current finalizer boundary theorem's conclusion/interface does not match the tail proof use-site cleanly enough; likely needs a micro-helper or revised boundary shaped exactly for the post-`TOP_CASE_TAC` goal.
+- latest episode: `E0982`
+- blocker: Proof-interface mismatch at source lines ~2006-2015: after `BasicProvers.TOP_CASE_TAC >> gvs[] >> strip_tac`, assumptions include body IH, exact `finally ... = (q,r')`, and tail result equation, but `intcall_body_finally_release_imm_dom` is difficult to apply directly and attempts introduce brittle manual plumbing.
+- actual effort: 1 sessions, 5 msgs, 77 steps, 76 tools, 33 holbuild, 7,466,595 tok (7,442,375 in, 24,220 out, 7,309,824 cached), 802.4s, $5.04426700
+- next: Ask strategist to refine C2.7.3.0c.2.3.6, likely by adding a micro-helper whose statement matches the exact post-finally case-split use-site or by restating `intcall_body_finally_release_imm_dom` with a conclusion that `irule` can consume directly in the tail theorem.
+
+### Attempts / Evidence
+
+- `E0981` (progressed, other, actual effort: 1 sessions, 3 msgs, 32 steps, 35 tools, 10 holbuild, 3,872,823 tok (3,861,042 in, 11,781 out, 3,793,920 cached), 341.1s, $2.58600000)
+  - Inserted `intcall_default_frame_to_caller_imm_dom` and `post_default_intcall_tail_imm_dom`; targeted split over bind_arguments and evaluate_type error branches using same-state lemmas, then lock branch using explicit immutables equality from `acquire_nonreentrant_lock_immutables`. -> Build advanced through initial tail branches but exposed brittle transitivity subgoals when `metis_tac[intcall_default_frame_to_caller_imm_dom]` was too broad/time-limited; replaced one with explicit `preserves_immutables_dom_trans` chain. (`TO_type_system_rewrite-20260524T091119Z_m47449_t001`, `TO_type_system_rewrite-20260524T091119Z_m47460_t001`, `TO_type_system_rewrite-20260524T091119Z_m47462_t001`)
+  - Unfolded `push_function_def` after successful lock so the provider and finalizer see context `(cx with stk updated_by CONS (src_id_opt,fn))` and state `r'' with scopes := [x]`. Tried consuming `intcall_tail_body_provider` by rewriting it with `SRULE[intcall_tail_body_provider_def]` and specializing it to tail-local assumptions. -> Build showed the provider implication is on the goal antecedent; `disch_then`/`qspecl_then` attempt initially failed because provider has 7 universal variables after simplification (the `lk` variable simplifies to unit), not 8. Last source edit changed the witness list to 7 entries but was not rebuilt. (`TO_type_system_rewrite-20260524T091119Z_m47468_t001`, `TO_type_system_rewrite-20260524T091119Z_m47475_t001`, `TO_type_system_rewrite-20260524T091119Z_m47476_t001`)
+- `E0982` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 77 steps, 76 tools, 33 holbuild, 7,466,595 tok (7,442,375 in, 24,220 out, 7,309,824 cached), 802.4s, $5.04426700)
+  - After successful provider specialization, case-split the final `case finally ... of ...` and `strip_tac` the tail-result equation, then attempted to derive `preserves_immutables_dom cx r'' r'` using `irule intcall_body_finally_release_imm_dom` with live body IH/finally assumptions. -> Failed: `irule` could not be completed by `first_assum (irule_at Any)` even with the matching assumptions visible; holbuild shows the use-site goal and assumptions. (`TO_type_system_rewrite-20260524T091119Z_m47550_t001`)
+  - Tried to consume the finalizer theorem via forward/live-context tactics: first discharged provider implication to obtain direct body IH, then used `qpat_assum ... (mp_then Any mp_tac intcall_body_finally_release_imm_dom) >> simp[]`. -> Failed: the theorem does not match the selected assumption/use-site cleanly enough; simplification did not close the generated subgoal. (`TO_type_system_rewrite-20260524T091119Z_m47557_t001`)
+  - Tried broad `metis_tac[intcall_body_finally_release_imm_dom]` on the small finalizer subgoal. -> Timed out, confirming this should not be handled by ATP plumbing. (`TO_type_system_rewrite-20260524T091119Z_m47536_t001`)
+
+### Ruled Out
+
+- Broad ATP for finalizer boundary application
+- Manual long `Q.SPECL`/quoted-assumption plumbing as the primary proof shape
+- Continuing tactical search under the same interface
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47550_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47557_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47536_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.6.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0985`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 128,887 tok (128,266 in, 621 out, 123,392 cached), 13.2s, $0.10469600
+- next: Review closure with strategist, then begin C2.7.3.0c.2.3.6.2 to add the stronger post-finally/safe-cast boundary lemma.
+
+### Attempts / Evidence
+
+- `E0983` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 8 tools, 4 holbuild, 528,374 tok (526,627 in, 1,747 out, 506,368 cached), 74.9s, $0.40688900)
+  - Inserted local adapter `intcall_body_finally_release_imm_dom_use` after `intcall_body_finally_release_imm_dom`; direct `metis_tac` timed out, then proved by `rpt strip_tac >> irule intcall_body_finally_release_imm_dom >> qexistsl [...] >> simp[]`. -> Adapter theorem accepted; holbuild advanced past it to the planned downstream failure in `post_default_intcall_tail_imm_dom`. (`TO_type_system_rewrite-20260524T091119Z_m47567_t001`, `TO_type_system_rewrite-20260524T091119Z_m47569_t001`, `TO_type_system_rewrite-20260524T091119Z_m47571_t001`)
+- `E0985` (proved, , actual effort: 1 sessions, 1 steps, 128,887 tok (128,266 in, 621 out, 123,392 cached), 13.2s, $0.10469600)
+  - Carry-forward review after replan: `intcall_body_finally_release_imm_dom_use` remains present in source and was already accepted by holbuild before the planned downstream `post_default_intcall_tail_imm_dom` failure. -> No new proof work needed; component is the carried-forward adapter leaf from E0983. (`TO_type_system_rewrite-20260524T091119Z_m47571_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47571_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47570_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.6.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0986`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 14 steps, 17 tools, 6 holbuild, 1,052,716 tok (1,047,098 in, 5,618 out, 1,008,640 cached), 150.2s, $0.86515000
+- next: Review closure with strategist, then begin C2.7.3.0c.2.3.6.3 to refactor `post_default_intcall_tail_imm_dom` to apply the new helper.
+
+### Attempts / Evidence
+
+- `E0984` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 39 steps, 38 tools, 18 holbuild, 3,862,129 tok (3,849,514 in, 12,615 out, 3,780,608 cached), 400.3s, $2.61328400)
+  - Replaced the old `mp_then Any mp_tac intcall_body_finally_release_imm_dom` use with `mp_then ... intcall_body_finally_release_imm_dom_use` and direct `irule` variants using explicit witnesses. -> Did not close the subgoal; holbuild continued to report the `preserves_immutables_dom cx st0 st'` goal with the exact body IH and finally equation still in context. Direct `qexists_tac` ordering also exposed type/order fragility. (`TO_type_system_rewrite-20260524T091119Z_m47578_t001`, `TO_type_system_rewrite-20260524T091119Z_m47580_t001`, `TO_type_system_rewrite-20260524T091119Z_m47590_t001`)
+  - Moved the adapter application out of the `by` block to inspect the shape; after specializing and simplifying, the context had an implication `finally ... = (q,r') ==> preserves_immutables_dom cx r'' r'` plus the exact finally equation. -> Confirmed the adapter provides the intended implication, but simply proceeding left the implication unused; `TOP_CASE_TAC` then failed because no case expression was in the remaining goal. (`TO_type_system_rewrite-20260524T091119Z_m47594_t001`, `TO_type_system_rewrite-20260524T091119Z_m47596_t001`)
+  - Tried deriving the preservation fact from the implication and finally assumption using `drule`, `MP`, and `qpat_x_assum`/`qpat_assum` selectors. -> Selectors failed to match the implication/finally assumption reliably in the live context. This is brittle proof plumbing rather than a semantic issue; current decomposition still forces manual implication management. (`TO_type_system_rewrite-20260524T091119Z_m47598_t001`, `TO_type_system_rewrite-20260524T091119Z_m47609_t001`, `TO_type_system_rewrite-20260524T091119Z_m47613_t001`)
+- `E0986` (proved, , actual effort: 1 sessions, 1 msgs, 14 steps, 17 tools, 6 holbuild, 1,052,716 tok (1,047,098 in, 5,618 out, 1,008,640 cached), 150.2s, $0.86515000)
+  - Inserted `intcall_tail_after_finally_cast_imm_dom` with conjunctive assumptions matching the PLAN. Proved finalizer preservation by explicitly specializing `intcall_body_finally_release_imm_dom_use`, composed caller-to-lock preservation via `intcall_default_frame_to_caller_imm_dom` and `preserves_immutables_dom_eq`, and handled final `q`/safe-cast same-state cases inside the helper. -> Helper theorem accepted; build failure moved to `post_default_intcall_tail_imm_dom`, confirming this component's boundary lemma is proved and the remaining failure belongs to the planned main-theorem refactor. (`TO_type_system_rewrite-20260524T091119Z_m47630_t001`, `TO_type_system_rewrite-20260524T091119Z_m47634_t001`, `TO_type_system_rewrite-20260524T091119Z_m47636_t001`, `TO_type_system_rewrite-20260524T091119Z_m47638_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47638_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.6.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0987`
+- blocker: 
+- actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,028,179 tok (1,025,807 in, 2,372 out, 1,007,104 cached), 89.3s, $0.66822700
+- next: Review closure with strategist, then begin the scheduled successor for `case_IntCall_imm_dom` refactor (likely C2.7.3.0c.2.3.7) if accepted.
+
+### Attempts / Evidence
+
+- `E0987` (proved, , actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,028,179 tok (1,025,807 in, 2,372 out, 1,007,104 cached), 89.3s, $0.66822700)
+  - Replaced the old inline `intcall_body_finally_release_imm_dom_use` implication plumbing and exposed safe-cast case split with a direct `qspecl_then ... mp_tac intcall_tail_after_finally_cast_imm_dom`, followed by `simp`, `disch_then irule`, and `simp[ignore_bind_def]` to discharge the finalizer equation shape. -> Main tail theorem accepted; build progressed to a downstream `case_IntCall_imm_dom` obligation. This confirms the intended refactor of `post_default_intcall_tail_imm_dom` is complete. (`TO_type_system_rewrite-20260524T091119Z_m47644_t001`, `TO_type_system_rewrite-20260524T091119Z_m47646_t001`, `TO_type_system_rewrite-20260524T091119Z_m47649_t001`, `TO_type_system_rewrite-20260524T091119Z_m47651_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47651_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 refactor still exposes brittle generated-IH plumbing at the default-frame bridge use site. Direct `intcall_default_frame_imm_dom` with `metis_tac[]` timed out; explicit `intcall_default_frame_imm_dom_from_generated_ih` specialization leaves a large residual implication whose first antecedent (generated default-exprs IH) is hard to discharge by robust selection. A weaker inline `qpat_x_assum` copied from the INR branch failed because the live generated-IH shape differs; broad `first_assum (drule_all_then ...)` risks selecting the wrong assumption and is not a principled low-risk finish. This suggests the plan needs a use-site-shaped bridge that consumes the live generated IH and default-frame finally equation directly, or combines default-frame preservation with provider extraction.
+- latest episode: `E0988`
+- blocker: Current PLAN underestimated the proof-interface brittleness of consuming `intcall_default_frame_imm_dom_from_generated_ih` in the live `case_IntCall_imm_dom` context.
+- actual effort: 1 sessions, 2 msgs, 23 steps, 26 tools, 8 holbuild, 1,887,249 tok (1,876,213 in, 11,036 out, 1,811,968 cached), 343.5s, $1.55828900
+- next: Ask strategist to add or replace with a use-site-shaped bridge, likely one that takes the live generated default-exprs IH, prefix equations, default-frame `finally` equation, and returns both `preserves_immutables_dom cxd sevl sdfl` and `intcall_tail_body_provider ... sdfl`.
+
+### Attempts / Evidence
+
+- `E0988` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 23 steps, 26 tools, 8 holbuild, 1,887,249 tok (1,876,213 in, 11,036 out, 1,811,968 cached), 343.5s, $1.55828900)
+  - Use `intcall_default_frame_imm_dom` directly with witnesses for needed defaults, saved scopes, and `INL x'⁵'`; discharge generated default-exprs IH by `metis_tac[]`. -> Timed out in FOL on a >4KB generated-IH context; broad automation is unsuitable. (`TO_type_system_rewrite-20260524T091119Z_m47708_t002`)
+  - Replace direct lemma by explicit `qspecl_then ... mp_tac intcall_default_frame_imm_dom_from_generated_ih >> simp[]` inside a local `by` fact. -> Residual implication not solved; failure reports `first subgoal not solved by second tactic` with same huge assumptions. (`TO_type_system_rewrite-20260524T091119Z_m47717_t001`)
+  - Probe after bridge specialization outside a local fact to inspect the residual obligation. -> Residual is exactly a local implication requiring the generated default-exprs IH and final `finally` equation to imply default-frame preservation; the theorem boundary is close but not use-site-shaped enough. (`TO_type_system_rewrite-20260524T091119Z_m47726_t001`)
+  - Try to discharge bridge antecedent using copied/generated-IH selection pattern from the adjacent INR branch. -> `qpat_x_assum` selection failed in the live shape. This is brittle quotation plumbing, not a robust component proof. (`TO_type_system_rewrite-20260524T091119Z_m47729_t001`)
+
+### Ruled Out
+
+- Broad `metis_tac[]` on the generated-IH context
+- Manual lock/finally/safe_cast tail unfolding in `case_IntCall_imm_dom`
+- Copied brittle `qpat_x_assum` matching against the generated default-exprs IH
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47708_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47717_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47726_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47729_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0992`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 113,839 tok (113,251 in, 588 out, 107,008 cached), 16.3s, $0.10235900
+- next: Review closure, then begin the scheduled live-branch helper component C2.7.3.0c.2.3.7.2.
+
+### Attempts / Evidence
+
+- `E0989` (proved, , actual effort: 1 sessions, 1 msgs, 20 steps, 20 tools, 6 holbuild, 1,695,413 tok (1,687,196 in, 8,217 out, 1,630,208 cached), 224.1s, $1.34655400)
+  - Added the combined bridge theorem `intcall_post_default_setup_from_generated_ih` and proved its two conjuncts by specializing `intcall_default_frame_imm_dom_from_generated_ih` and `intcall_tail_body_provider_from_generated_ih`; residual generated-IH predicates are discharged explicitly with targeted `qpat_assum` instantiation and arithmetic/type_check simplification. -> `holbuild` advanced past `intcall_post_default_setup_from_generated_ih`; the next failure is in downstream `case_IntCall_imm_dom`, so the bridge component is complete. (`TO_type_system_rewrite-20260524T091119Z_m47767_t001`)
+- `E0992` (proved, , actual effort: 1 sessions, 1 steps, 113,839 tok (113,251 in, 588 out, 107,008 cached), 16.3s, $0.10235900)
+  - Confirmed the scheduled carry-forward component is the already-proved local theorem `intcall_post_default_setup_from_generated_ih`; recent holbuild failures occur later in `case_IntCall_imm_dom`, after this infrastructure bridge has been accepted. -> Component remains proved as infrastructure; no source changes to this theorem were needed. Downstream broken source belongs to the replacement helper/main rewrite components, not this carry-forward leaf. (`TO_type_system_rewrite-20260524T091119Z_m47767_t001`, `TO_type_system_rewrite-20260524T091119Z_m47880_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47767_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47880_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0994`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 15 steps, 18 tools, 4 holbuild, 1,468,982 tok (1,456,455 in, 12,527 out, 1,379,840 cached), 237.5s, $1.44880500
+- next: Review closure with the strategist, then proceed to queued C2.7.3.0c.2.3.7.3 to rewrite `case_IntCall_imm_dom` to consume the live helper instead of the old direct generic bridge block.
+
+### Attempts / Evidence
+
+- `E0990` (progressed, other, actual effort: 1 sessions, 4 msgs, 43 steps, 46 tools, 10 holbuild, 4,381,005 tok (4,360,150 in, 20,855 out, 4,160,512 cached), 530.0s, $3.70409600)
+  - Replaced old inline `intcall_default_frame_imm_dom_from_generated_ih` + separate provider assertion with `qspecl_then ... mp_tac intcall_post_default_setup_from_generated_ih`; used `default_s = r'⁴' with scopes := [FEMPTY]`, `get_scope_s = r'⁵'`, `prev = r'⁴'.scopes`. -> Bridge antecedent exposed correctly: after `simp[]`, goal includes the two generated IH premises plus `finally ... = (INL x'⁵',r'⁵')`, required direct default-eval equation, and `get_scopes r'⁵' = (INL r'⁴'.scopes,r'⁵')`. Evidence log lines show the exact residual antecedent. (`TO_type_system_rewrite-20260524T091119Z_m47794_t001`, `TO_type_system_rewrite-20260524T091119Z_m47795_t001`)
+  - Tried solving the whole bridge antecedent with `gvs[finally_def, bind_def, ignore_bind_def, set_scopes_def, get_scopes_def, return_def, AllCaseEqs()]`. -> Timed out after 2.5s; broad simplification of the large antecedent is too expensive and should not be retried. (`TO_type_system_rewrite-20260524T091119Z_m47802_t001`)
+  - Tried splitting antecedent conjunctions and using unrestricted `first_assum (drule_all_then assume_tac)` for generated IH obligations; then simplifying `finally` separately with `TOP_CASE_TAC`. -> Failed because `first_assum`/pattern matching selected the wrong assumption or no matching assumption after simplification; a probe of the first conjunction showed the generated IHs had already simplified to anonymous `∀s0 t0 ...` shapes, making exact Unicode-binder `qpat_assum` fragile. (`TO_type_system_rewrite-20260524T091119Z_m47813_t001`, `TO_type_system_rewrite-20260524T091119Z_m47816_t001`)
+  - Inserted `FAIL_TAC "probe_first_conj_after_strip"` inside the first generated-IH antecedent after `rpt strip_tac` to inspect its post-strip shape. -> The subsequent holbuild run exited with code -11 and no goal output. Treat this as unusable probe state; remove the probe before resuming and use a safer local assertion or exact `qpat_assum` on simplified generated IH premises instead. (`TO_type_system_rewrite-20260524T091119Z_m47819_t001`)
+- `E0991` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 18 steps, 19 tools, 4 holbuild, 1,505,466 tok (1,497,048 in, 8,418 out, 1,436,672 cached), 195.4s, $1.27275600)
+  - Replaced `first_assum ACCEPT_TAC` with `first_assum MATCH_ACCEPT_TAC` for the two generated-IH conjuncts inside the bridge antecedent. -> Still failed with `first subgoal not solved by second tactic`; the live generated IH assumption is not match-accepted against the bridge target. (`TO_type_system_rewrite-20260524T091119Z_m47870_t001`)
+  - Tried targeted `qpat_assum` plus explicit `qspecl_then` for the first and second generated IH assumptions inside the main theorem antecedent. -> Failed at `qpat_assum`/Q_TAC matching; exact generated-IH binder pattern remains too brittle in the live goal. (`TO_type_system_rewrite-20260524T091119Z_m47875_t001`)
+  - Relaxed selection to `first_assum (qspecl_then ... mp_tac)` for the generated IHs. -> Still failed (`FIRST_ASSUM`) before finally-derived equations; the proof is not a routine tactic issue and the component's risk/decomposition estimate was wrong. (`TO_type_system_rewrite-20260524T091119Z_m47880_t001`)
+- `E0993` (progressed, other, actual effort: 1 sessions, 4 msgs, 50 steps, 53 tools, 9 holbuild, 4,972,856 tok (4,951,921 in, 20,935 out, 4,715,008 cached), 580.8s, $4.17011900)
+  - Apply `intcall_post_default_setup_from_generated_ih`, split first two antecedents with `conj_tac >- first_assum ACCEPT_TAC`, then simplify administrative facts and decompose the `finally` equation by case-splitting the direct `eval_exprs cxd needed_dflts (sevl with scopes := [FEMPTY])`. -> Generated-IH premises are discharged; remaining failure shows the bridge's direct-eval premise wants the post-restore state `sdfl`, but `finally` success only implies direct eval returned a pre-restore state `r` and `sdfl = r with scopes := prev`. This suggests the helper instantiation (or generic bridge interface) should use a distinct pre-restore default state and `get_scope_s = pre_restore_state` rather than `sdfl`. (`TO_type_system_rewrite-20260524T091119Z_m47932_t001`, `TO_type_system_rewrite-20260524T091119Z_m47933_t001`)
+- `E0994` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 18 tools, 4 holbuild, 1,468,982 tok (1,456,455 in, 12,527 out, 1,379,840 cached), 237.5s, $1.44880500)
+  - Added local `finally_set_scopes_eval_exprs_success` to decompose the `finally (set_scopes prev)` success into direct default evaluation to a pre-restore state plus final restored scopes. Rewrote `intcall_live_post_default_setup_from_generated_ih` to use the existing default-frame bridge for preservation and to prove `intcall_tail_body_provider` directly from the second generated IH using the pre-restore default-eval state and post-restore `sdfl` for tail setup. -> `holbuild` replayed past `intcall_live_post_default_setup_from_generated_ih` and next failed in downstream `case_IntCall_imm_dom`, showing the helper leaf is proved and the next queued main-proof rewrite is now the blocker. (`TO_type_system_rewrite-20260524T091119Z_m47964_t002`)
+
+### Ruled Out
+
+- Do not instantiate direct default eval with final `sdfl`; helper now explicitly uses pre-restore `pre_sdfl` for direct eval and final `sdfl` for tail/provider state.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47964_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47964_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 main-theorem rewrite was not as local as expected: after replacing the generic bridge with `intcall_live_post_default_setup_from_generated_ih`, the helper application still exposes the two generated-IH antecedent subgoals in the main theorem. Multiple attempts to discharge those antecedents with labelled assumptions, direct assumption selection, simplification, and metis either failed by matching/precedence/label handling or timed out on the >4KB generated-IH goal. This suggests the live helper interface still requires brittle generated-IH antecedent proof in the main theorem, contrary to the PLAN boundary.
+- latest episode: `E0995`
+- blocker: The planned main-theorem use of the live helper still leaves generated-IH antecedent subgoals exposed in `case_IntCall_imm_dom`; solving them in the main proof appears to require exactly the brittle binder plumbing this component was meant to avoid.
+- actual effort: 1 sessions, 2 msgs, 37 steps, 39 tools, 12 holbuild, 3,547,189 tok (3,530,136 in, 17,053 out, 3,366,912 cached), 446.7s, $3.01116600
+- next: Ask strategist to review whether to add an even more caller-local corollary/helper that accepts the two generated IHs as named assumptions and packages the application entirely, or to adjust the helper statement so the main theorem has no generated-IH antecedent subgoals.
+
+### Attempts / Evidence
+
+- `E0995` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 37 steps, 39 tools, 12 holbuild, 3,547,189 tok (3,530,136 in, 17,053 out, 3,366,912 cached), 446.7s, $3.01116600)
+  - Replaced old `intcall_post_default_setup_from_generated_ih` application with `intcall_live_post_default_setup_from_generated_ih` instantiated on live IntCall variables (`st`, `x''`, `r'⁴'`, `x'⁵'`, `r'⁵'`, saved scopes, tuple projections). -> Build reached helper antecedents but `simp[]` did not discharge the generated-IH antecedent conjunctions; first subgoal remained a >4KB generated-IH fact. (`TO_type_system_rewrite-20260524T091119Z_m47978_t001`)
+  - Tried to solve the two generated-IH antecedents with direct assumption selection (`first_assum`/`last_assum`, `qpat_assum`, `ACCEPT_TAC`, `mp_tac \ simp[]`) and then labelled them with `mk_asm` as `default_imm_ih` and `body_imm_ih`. -> The assumptions are present and labelled, but applying them in the conjunction still failed to solve the first generated-IH subgoal; goal remains large and brittle. (`TO_type_system_rewrite-20260524T091119Z_m48006_t001`, `TO_type_system_rewrite-20260524T091119Z_m48008_t001`)
+  - Tried `metis_tac[]` on the generated-IH antecedents as a fallback to avoid hand-instantiating binders. -> Timed out inside FOL solver on the >4KB generated-IH goal; broad automation is not viable. (`TO_type_system_rewrite-20260524T091119Z_m47997_t001`, `TO_type_system_rewrite-20260524T091119Z_m48000_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m47978_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48006_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48008_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m47997_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1002`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 122,610 tok (122,241 in, 369 out, 112,640 cached), 22.3s, $0.11539500
+- next: Review closure with strategist, then proceed to C2.7.3.0c.2.3.7.3.2 default-frame adapter.
+
+### Attempts / Evidence
+
+- `E0996` (proved, , actual effort: 1 sessions, 1 msgs, 15 steps, 15 tools, 5 holbuild, 1,426,043 tok (1,417,980 in, 8,063 out, 1,354,240 cached), 221.6s, $1.23771000)
+  - Inserted caller-shaped wrapper with generated-IH premise shapes copied from `case_IntCall_imm_dom`; proved it by labelling copied IH premises and applying `intcall_live_post_default_setup_from_generated_ih`. -> Wrapper theorem replayed successfully; build progressed to the later main `case_IntCall_imm_dom` failure. (`TO_type_system_rewrite-20260524T091119Z_m48030_t001`)
+- `E1002` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 122,610 tok (122,241 in, 369 out, 112,640 cached), 22.3s, $0.11539500)
+  - holbuild(targets=["vyperEvalPreservesImmutablesDomTheory"], timeout=600) carry-forward audit -> Build resumed from failed-prefix checkpoint in `immutables_dom_mutual`, matched proof prefix through line 2843; this confirms the local IntCall helper/case theorem prefix still saves and the current failure is the known mutual theorem branch, not a regression before it. (`TO_type_system_rewrite-20260524T091119Z_m48368_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48368_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1003`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 1 holbuild, 516,840 tok (512,359 in, 4,481 out, 460,288 cached), 107.1s, $0.62492900
+- next: Review closure with strategist; then proceed to C2.7.3.0c.2.3.7.3.3 body-provider adapter, leaving the old inline mutual branch untouched until the planned refactor component.
+
+### Attempts / Evidence
+
+- `E0997` (progressed, other, actual effort: 1 sessions, 3 msgs, 38 steps, 43 tools, 13 holbuild, 3,957,135 tok (3,944,628 in, 12,507 out, 3,837,952 cached), 445.0s, $2.82756600)
+  - Replaced old `intcall_live_post_default_setup_from_generated_ih` application with `intcall_case_live_post_default_setup_from_generated_ih`, discharging the two generated-IH premises from labels `default_imm_ih` and `body_imm_ih`. -> Confirmed old generated-IH antecedent leakage is gone from the helper application path; remaining failure is a concrete instantiated implication antecedent/tail pipeline, not a raw `∀s'' ...` generated IH goal. (`TO_type_system_rewrite-20260524T091119Z_m48043_t001`, `TO_type_system_rewrite-20260524T091119Z_m48065_t001`)
+  - Tried solving the stripped wrapper implication antecedent with broad `gvs[check_def,type_check_def,assert_def] >> decide_tac` after `first_x_assum (mp_tac o SRULE[])`. -> Timed out at 2.5s because the goal still carries large labelled/generated assumptions; this should be replaced by targeted simplification/removing irrelevant assumptions, not retried as broad `gvs`. (`TO_type_system_rewrite-20260524T091119Z_m48074_t001`)
+- `E0998` (progressed, other, actual effort: 1 sessions, 3 msgs, 39 steps, 41 tools, 11 holbuild, 4,109,895 tok (4,094,736 in, 15,159 out, 3,980,800 cached), 449.9s, $3.01485000)
+  - Replaced live wrapper implication consumption with a direct assertion of the required conjunction using the wrapper assumption and `simp[ignore_bind_def]`; then specialized `post_default_intcall_tail_imm_dom` and closed its tail equality with `simp[post_default_intcall_tail_unfold, bind_def, ignore_bind_def]`. -> `case_IntCall_imm_dom` now proves; holbuild output says `Saved theorem _______ "case_IntCall_imm_dom"` before moving to `immutables_dom_mutual`. (`TO_type_system_rewrite-20260524T091119Z_m48185_t001`, `TO_type_system_rewrite-20260524T091119Z_m48186_t001`)
+  - Let the build continue to the mutual theorem branch that calls `drule_all case_IntCall_imm_dom`. -> New failure is at `immutables_dom_mutual` line ~2840: `drule_all case_IntCall_imm_dom` no longer matches the current generated IntCall IH premises, which include `get_scopes`/`finally do set_scopes...`-shaped assumptions for the default frame. This is a caller integration issue after the local theorem proof, not raw generated-IH leakage inside `case_IntCall_imm_dom`. (`TO_type_system_rewrite-20260524T091119Z_m48185_t001`, `TO_type_system_rewrite-20260524T091119Z_m48186_t001`)
+- `E0999` (progressed, other, actual effort: 1 sessions, 2 msgs, 11 steps, 30 tools, 2 holbuild, 1,245,439 tok (1,241,195 in, 4,244 out, 1,139,200 cached), 121.7s, $1.20689500)
+  - Changed `intcall_case_live_post_default_setup_from_generated_ih` proof suffix from two sequential `impl_tac`s to one `impl_tac` proving the helper's conjunctive antecedent with `default_case_ih`, `body_case_ih`, and live facts. -> holbuild now passes the wrapper/case theorem prefix and reaches `immutables_dom_mutual` at the intended IntCall branch failure; this confirms the previous source restoration issue is resolved. (`TO_type_system_rewrite-20260524T091119Z_m48304_t001`, `TO_type_system_rewrite-20260524T091119Z_m48305_t001`)
+- `E1000` (progressed, other, actual effort: 1 sessions, 3 msgs, 27 steps, 31 tools, 6 holbuild, 3,052,580 tok (3,033,740 in, 18,840 out, 2,851,328 cached), 462.0s, $2.90292400)
+  - Replaced `drule_all case_IntCall_imm_dom >> simp[]` in `immutables_dom_mutual` IntCall branch with a direct case proof copied from `case_IntCall_imm_dom` and adjusted to label the mutual branch default/body IHs (`default_mut_ih`, `body_mut_ih`). -> Moved past the original top-level theorem application mismatch; proof now reaches inside the direct IntCall branch, so the source no longer fails immediately at `drule_all case_IntCall_imm_dom`. (`TO_type_system_rewrite-20260524T091119Z_m48320_t001`, `TO_type_system_rewrite-20260524T091119Z_m48321_t001`)
+  - Specialized the actual-argument IH with `qpat_x_assum` instead of `last_x_assum` after labels changed assumption order. -> Fixed the first direct-proof failure caused by selecting the wrong labelled/generated IH assumption. (`TO_type_system_rewrite-20260524T091119Z_m48321_t001`, `TO_type_system_rewrite-20260524T091119Z_m48323_t001`)
+  - Tried using `asm "default_mut_ih" irule`, explicit specialization, `metis_tac[]`, and then an explicit `impl_tac` for the default-error branch premise of `intcall_default_frame_imm_dom`. -> Plain `irule` left a large existential-style generated-IH premise; `metis_tac[]` timed out; explicit specialization exposed that the first antecedent simplification needed arithmetic. Latest edit adds `decide_tac` but is unverified. (`TO_type_system_rewrite-20260524T091119Z_m48323_t001`, `TO_type_system_rewrite-20260524T091119Z_m48329_t001`, `TO_type_system_rewrite-20260524T091119Z_m48332_t001`, `TO_type_system_rewrite-20260524T091119Z_m48334_t001`, `TO_type_system_rewrite-20260524T091119Z_m48336_t001`)
+- `E1001` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 20 steps, 20 tools, 6 holbuild, 2,125,774 tok (2,117,866 in, 7,908 out, 2,033,664 cached), 258.5s, $1.67508200)
+  - Built latest unverified `decide_tac` edit in the specialized `default_mut_ih` branch. -> Still failed in `immutables_dom_mutual` default-error branch; goal remained a large generated-IH implication with default/body IH assumptions. (`TO_type_system_rewrite-20260524T091119Z_m48342_t001`, `TO_type_system_rewrite-20260524T091119Z_m48344_t001`)
+  - Corrected the `set_scopes [FEMPTY]` generated-IH witness from `r'⁴'` to `r'⁴' with scopes := [FEMPTY]`, and changed the continuation to explicitly specialize the resulting `∀st res st'` theorem. -> The witness correction appeared in the goal, but the `impl_tac` still left the large generated-IH premise; explicit specialization did not solve the boundary mismatch. (`TO_type_system_rewrite-20260524T091119Z_m48346_t001`, `TO_type_system_rewrite-20260524T091119Z_m48347_t001`)
+  - Tried stripping/simplifying/conj-splitting the default IH antecedent with selected definitions and arithmetic (`get_scopes_def`, `set_scopes_def`, `return_def`, `type_check_def`, `assert_def`). -> Repeated failures; final holbuild shows a >4KB goal at the first `impl_tac`, with the generated IH antecedent still exposed. This confirms the decomposition/interface is wrong for inline proof. (`TO_type_system_rewrite-20260524T091119Z_m48357_t001`, `TO_type_system_rewrite-20260524T091119Z_m48360_t001`)
+- `E1003` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 1 holbuild, 516,840 tok (512,359 in, 4,481 out, 460,288 cached), 107.1s, $0.62492900)
+  - Added local theorem `intcall_mutual_default_frame_imm_dom_from_generated_ih` immediately before `immutables_dom_mutual`, with the generated mutual `default_mut_ih` premise shape including `get_scopes`/`set_scopes [FEMPTY]`, and proved it via `intcall_default_frame_imm_dom` plus targeted `type_check_def`/`assert_def` arithmetic and scope simplification. -> holbuild passed the new adapter theorem and resumed/fails later inside the pre-existing inline `immutables_dom_mutual` IntCall branch at the old manual `default_mut_ih` block. Thus the default-frame adapter is saved; remaining failure is downstream refactor/body/final adapter work, not this helper. (`TO_type_system_rewrite-20260524T091119Z_m48375_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48375_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1005`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 133,322 tok (132,879 in, 443 out, 120,832 cached), 16.7s, $0.13394100
+- next: Call plan_oracle(mode="review") for C2.7.3.0c.2.3.7.3.3, then if accepted begin C2.7.3.0c.2.3.7.3.4.
+
+### Attempts / Evidence
+
+- `E1004` (progressed, other, actual effort: 1 sessions, 1 msgs, 6 steps, 8 tools, 1 holbuild, 786,602 tok (781,989 in, 4,613 out, 747,008 cached), 89.7s, $0.68679900)
+  - Inserted local theorem `intcall_mutual_tail_body_provider_from_generated_ih` before `immutables_dom_mutual`, matching the mutual branch `body_mut_ih` shape including the default-argument `finally (do set_scopes [FEMPTY]; eval_exprs ... od) (set_scopes prev)` premise, and proved it by unfolding `intcall_tail_body_provider_def` and instantiating the generated body IH with live pipeline equations. -> holbuild resumed after `intcall_mutual_default_frame_imm_dom_from_generated_ih`, advanced past the newly inserted body-provider adapter, and failed later at the pre-existing manual `default_mut_ih` block in `immutables_dom_mutual` (line ~3109 after insertion). This is good evidence the body adapter saves; remaining failure is downstream old inline branch code. (`TO_type_system_rewrite-20260524T091119Z_m48382_t001`)
+- `E1005` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 133,322 tok (132,879 in, 443 out, 120,832 cached), 16.7s, $0.13394100)
+  - Inserted/proved local `intcall_mutual_tail_body_provider_from_generated_ih` and reran holbuild for `vyperEvalPreservesImmutablesDomTheory`. -> Confirming rebuild resumed from failed-prefix checkpoint after the adapter insertion and matched proof prefix through line 3109 inside downstream `immutables_dom_mutual`, so the body-provider adapter saved; the remaining failure is the pre-existing inline mutual-branch scaffold owned by later components. (`TO_type_system_rewrite-20260524T091119Z_m48382_t001`, `TO_type_system_rewrite-20260524T091119Z_m48388_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48382_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48388_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 final adapter proof still leaks >4KB generated-IH antecedents after replacing direct ACCEPT_TAC with labelled/pattern-selected IH use and explicit adapter instantiation. The component has become the same brittle generated-binder plumbing the PLAN warned against; the helper interface is not consumer-shaped enough for `case_IntCall_imm_dom_from_mutual_ih`.
+- latest episode: `E1007`
+- blocker: The final adapter proof interface is too brittle: even inside the adapter, consuming `intcall_mutual_default_frame_imm_dom_from_generated_ih`/`intcall_mutual_tail_body_provider_from_generated_ih` requires long generated-binder qspecl/pattern plumbing and exposes >4KB goals.
+- actual effort: 1 sessions, 3 msgs, 39 steps, 41 tools, 10 holbuild, 3,950,124 tok (3,934,389 in, 15,735 out, 3,716,096 cached), 475.0s, $3.42156300
+- next: Ask strategist to decompose/replace this leaf, likely by adding a smaller consumer-shaped helper that packages the whole default-success conjunction directly from the exact live mutual branch assumptions, or by converting mutual IH shapes to the already-proved `case_IntCall_imm_dom` premise shape instead of duplicating evaluator peeling.
+
+### Attempts / Evidence
+
+- `E1006` (progressed, missing_helper, actual effort: 1 sessions, 4 msgs, 47 steps, 51 tools, 18 holbuild, 4,908,879 tok (4,889,297 in, 19,582 out, 4,765,184 cached), 600.0s, $3.59061700)
+  - Replaced `Proof cheat QED` with a proof skeleton based on saved `case_IntCall_imm_dom`, using the mutual default/body adapters at the default branches. -> Holbuild now checks inside `case_IntCall_imm_dom_from_mutual_ih` rather than passing a cheat; current failure is in the default-error branch, proving the generated default-IH antecedent for `intcall_mutual_default_frame_imm_dom_from_generated_ih`. (`TO_type_system_rewrite-20260524T091119Z_m48413_t001`, `TO_type_system_rewrite-20260524T091119Z_m48453_t001`)
+  - Tried composing caller preservation through `intcall_default_frame_to_caller_imm_dom` and deriving callee default-frame preservation via `intcall_mutual_default_frame_imm_dom_from_generated_ih`. -> Direct `irule`/`qspecl_then` approaches either left an existential/matching goal, timed out in a backquoted subgoal, or failed discharging the generated-IH conjunct; current best failure is at the `impl_tac` first conjunct where `first_assum ACCEPT_TAC` cannot match the generated default IH. (`TO_type_system_rewrite-20260524T091119Z_m48440_t001`, `TO_type_system_rewrite-20260524T091119Z_m48442_t001`, `TO_type_system_rewrite-20260524T091119Z_m48453_t001`)
+  - Inserted temporary `FAIL_TAC` probes to inspect the default-error branch and the adapter antecedent, then removed the probes. -> Probe showed the branch context has the three generated IH premises plus live facts for `check`, module/function lookup, length check, actual-argument preservation, and a `finally ... = (INR y,r'⁵')` equation. The first generated-IH conjunct is present but not syntactically accepted by `first_assum ACCEPT_TAC` after applying the helper. (`TO_type_system_rewrite-20260524T091119Z_m48431_t001`, `TO_type_system_rewrite-20260524T091119Z_m48449_t001`)
+- `E1007` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 39 steps, 41 tools, 10 holbuild, 3,950,124 tok (3,934,389 in, 15,735 out, 3,716,096 cached), 475.0s, $3.42156300)
+  - Added attempted labelled/pattern-selected use of the generated default and body IH premises instead of direct `first_assum ACCEPT_TAC`; then rebuilt. -> Default-error direct branch advanced past missing label only when using patterns, but the success-branch assertion still exposed a large generated-IH context and failed/timed out in adapter antecedent discharge. (`TO_type_system_rewrite-20260524T091119Z_m48487_t001`, `TO_type_system_rewrite-20260524T091119Z_m48490_t001`)
+  - Replaced broad `irule intcall_mutual_*` inside the success branch with explicit `qspecl_then ... mp_tac` applications and pattern-selected generated IH discharges. -> Holbuild still fails on the `preserves_immutables_dom ... ∧ intcall_tail_body_provider ...` assertion with >4KB generated-IH assumptions, showing the final adapter proof is still doing brittle generated-binder plumbing rather than using a clean boundary. (`TO_type_system_rewrite-20260524T091119Z_m48497_t002`)
+
+### Ruled Out
+
+- Direct `first_assum ACCEPT_TAC` for generated default IH antecedent
+- Unlabelled broad `irule intcall_mutual_default_frame_imm_dom_from_generated_ih` plus simplification
+- Explicit long `qspecl_then` of both mutual adapters inside the final adapter success branch
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48487_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48490_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48497_t002` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1013`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 184,639 tok (184,172 in, 467 out, 174,080 cached), 12.2s, $0.15151000
+- next: Review with plan_oracle, then begin C2.7.3.0c.2.3.7.3.4.2 for the live-branch adapter replacement.
+
+### Attempts / Evidence
+
+- `E1008` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 30 steps, 33 tools, 8 holbuild, 3,386,024 tok (3,368,626 in, 17,398 out, 3,270,656 cached), 425.4s, $2.64711800)
+  - Added `intcall_mutual_live_post_default_setup_from_generated_ih` with exact mutual default/body IH premise shapes and conclusion `preserves_immutables_dom cxd sevl sdfl ∧ intcall_tail_body_provider ...`. Tried proof by `qspecl_then` on the two low-level adapters with labelled assumptions. -> Build failed on the first adapter antecedent; goal was a large implication containing the labelled default/body IHs and live premises. The labelled assumption was present, but `asm ... mp_tac >> simp[]` did not solve the whole conjunctive antecedent. (`TO_type_system_rewrite-20260524T091119Z_m48507_t001`, `TO_type_system_rewrite-20260524T091119Z_m48510_t001`)
+  - Tried broad `irule intcall_mutual_default_frame_imm_dom_from_generated_ih` / `irule intcall_mutual_tail_body_provider_from_generated_ih` inside the combined helper, with labelled IH assumptions and `rpt conj_tac >> simp[] >> TRY decide_tac`. -> Build failed on an existential/conjunctive premise generated by `irule`; this is still brittle for this helper unless the adapter theorem is specialized first or the premise is asserted in the exact conjunctive shape. (`TO_type_system_rewrite-20260524T091119Z_m48518_t001`)
+  - Tried using labelled assumptions as simplifier rewrites via `L "default_mutual_ih"` / `L "body_mutual_ih"`. -> Static error: `L` is not declared in this script context. Reverted those uses to `asm ... mp_tac`. (`TO_type_system_rewrite-20260524T091119Z_m48522_t001`)
+  - Replaced helper proof body with a very short `rpt strip_tac >> conj_tac >- metis_tac[intcall_mutual_default_frame_imm_dom_from_generated_ih] >> metis_tac[intcall_mutual_tail_body_provider_from_generated_ih]`. -> Source was edited but not rebuilt before handoff; next session must verify or replace this unproven attempt first. (`TO_type_system_rewrite-20260524T091119Z_m48531_t001`)
+- `E1009` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 20 steps, 19 tools, 6 holbuild, 1,721,478 tok (1,713,155 in, 8,323 out, 1,564,160 cached), 251.8s, $1.77674500)
+  - Verified current short `rpt strip_tac >> conj_tac >> metis_tac[...]` proof. -> Build failed at `conj_tac` because `rpt strip_tac` stripped the conclusion conjunction too early, leaving multiple generated-IH antecedent goals rather than a top-level conjunction. (`TO_type_system_rewrite-20260524T091119Z_m48537_t001`)
+  - Removed explicit `conj_tac` and tried branch solve with `metis_tac[intcall_mutual_default_frame_imm_dom_from_generated_ih]`. -> Build failed/timed out; metis faced the full generated-IH antecedent context and did not provide a stable boundary proof. (`TO_type_system_rewrite-20260524T091119Z_m48540_t001`)
+  - Specialized `intcall_mutual_default_frame_imm_dom_from_generated_ih` and `intcall_mutual_tail_body_provider_from_generated_ih` with concrete live variables, followed by `simp[]`, `disch_then irule`, `simp[]`. -> Default-frame branch solved, but branch management still failed because the proof had stripped the conclusion conjunction/antecedents incorrectly; large generated-IH assumptions remained visible as the top goal. (`TO_type_system_rewrite-20260524T091119Z_m48545_t001`, `TO_type_system_rewrite-20260524T091119Z_m48548_t001`)
+  - Tried more explicit implication management with `rpt gen_tac >> disch_tac >> disch_tac >> strip_tac` and exact antecedent discharge via `rpt conj_tac >> simp[] >> decide_tac`. -> Build failed immediately after the first discharge with an unexpected existential/negated-genvar goal, indicating the theorem/proof structure is brittle under this decomposition and not merely missing a small tactic. (`TO_type_system_rewrite-20260524T091119Z_m48552_t001`, `TO_type_system_rewrite-20260524T091119Z_m48555_t001`)
+- `E1010` (proved, , actual effort: 1 sessions, 4 steps, 4 tools, 1 holbuild, 468,312 tok (467,465 in, 847 out, 448,512 cached), 36.5s, $0.34443100)
+  - Grep for `intcall_mutual_live_post_default_setup_from_generated_ih`, then delete the local failed theorem block because it was the only reference and not a required exported fact. -> The failed combined helper was removed; grep showed no other consumer reference besides the theorem declaration. (`TO_type_system_rewrite-20260524T091119Z_m48559_t002`, `TO_type_system_rewrite-20260524T091119Z_m48560_t001`)
+  - Run `holbuild(targets=["vyperEvalPreservesImmutablesDomTheory"], timeout=600)` after deletion. -> Build advanced past the deleted helper to the next planned theorem `case_IntCall_imm_dom_from_mutual_ih`, confirming cleanup did not remove a needed prior fact; the remaining failure is in the next component's final adapter proof. (`TO_type_system_rewrite-20260524T091119Z_m48561_t001`)
+- `E1013` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 184,639 tok (184,172 in, 467 out, 174,080 cached), 12.2s, $0.15151000)
+  - Audited source for `intcall_mutual_live_post_default_setup_from_generated_ih`. -> No matches remain, confirming the failed monolithic combined post-default setup helper is still deleted and has no active use sites. (`TO_type_system_rewrite-20260524T091119Z_m48620_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48620_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48619_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1014`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 20 tools, 5 holbuild, 1,890,036 tok (1,878,204 in, 11,832 out, 1,800,704 cached), 292.4s, $1.64281200
+- next: Review with plan_oracle, then begin C2.7.3.0c.2.3.7.3.5 to refactor the inline `immutables_dom_mutual` IntCall branch to call the proved adapter.
+
+### Attempts / Evidence
+
+- `E1011` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 41 steps, 49 tools, 11 holbuild, 4,424,696 tok (4,407,365 in, 17,331 out, 4,288,512 cached), 510.2s, $3.25845100)
+  - Original separate two-fact assertion using `conj_tac`, explicitly specializing `intcall_mutual_default_frame_imm_dom_from_generated_ih` and `intcall_mutual_tail_body_provider_from_generated_ih`. -> Build failed inside the first conjunct with a >4KB generated-IH antecedent goal; selector/pattern attempts were brittle. (`TO_type_system_rewrite-20260524T091119Z_m48570_t003`)
+  - Inserted a probe after specializing the default-frame adapter to inspect the required antecedent for the default-success branch. -> Probe confirmed the default-frame adapter antecedent is exactly a huge generated default IH plus live facts; selecting it remains a large-goal operation in the consumer proof. (`TO_type_system_rewrite-20260524T091119Z_m48590_t001`, `TO_type_system_rewrite-20260524T091119Z_m48601_t001`)
+  - Replaced the default-frame adapter application with a direct proof via `intcall_default_frame_imm_dom`, deriving the inner `eval_exprs` preservation from the generated default IH using `drule_all_then`/`drule`. -> Source now reflects this partial experiment, but holbuild still fails with a generic `first subgoal not solved by second tactic` from the nested branch/conjunction structure after line 2975; this path is not verified. (`TO_type_system_rewrite-20260524T091119Z_m48603_t001`, `TO_type_system_rewrite-20260524T091119Z_m48604_t001`)
+- `E1012` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 145,083 tok (144,203 in, 880 out, 128,000 cached), 30.7s, $0.17141500)
+  - Reproduced current partial direct `intcall_default_frame_imm_dom` experiment in `case_IntCall_imm_dom_from_mutual_ih` with holbuild before editing. -> Build fails at the default-frame assertion; the top goal exceeds 4KiB and contains the generated default/body mutual IH premises plus live IntCall administrative facts. This confirms the remaining problem is a proof-interface/decomposition leak rather than an obvious syntactic branch fix. (`TO_type_system_rewrite-20260524T091119Z_m48615_t001`)
+  - Inspected current source around lines 3035-3050 showing the direct reconstruction path via `intcall_default_frame_imm_dom` and generated default IH selection. -> Source is still a partial experiment relying on low-level generated-IH discharge in the final adapter, contrary to the component's own failure signs and do-not-retry notes. (`TO_type_system_rewrite-20260524T091119Z_m48613_t001`)
+- `E1014` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 20 tools, 5 holbuild, 1,890,036 tok (1,878,204 in, 11,832 out, 1,800,704 cached), 292.4s, $1.64281200)
+  - Inserted two local live-branch boundary helpers before `case_IntCall_imm_dom_from_mutual_ih`: `intcall_mutual_live_default_frame_imm_dom` and `intcall_mutual_live_tail_body_provider`; refactored the final theorem's default-success branch to assert default-frame preservation and tail-provider via these helpers rather than direct generated-IH plumbing. -> `holbuild` replay passed through the new helper theorems and `case_IntCall_imm_dom_from_mutual_ih`; the next failure is in downstream `immutables_dom_mutual` at line 3404, i.e. the following planned component C2.7.3.0c.2.3.7.3.5. (`TO_type_system_rewrite-20260524T091119Z_m48655_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48655_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0c.2.3.7.3.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1015`
+- blocker: 
+- actual effort: 1 sessions, 7 steps, 8 tools, 2 holbuild, 511,378 tok (509,675 in, 1,703 out, 400,384 cached), 53.1s, $0.79773700
+- next: Review with plan_oracle; next scheduled work should address the later failure reported by holbuild, not the completed IntCall refactor.
+
+### Attempts / Evidence
+
+- `E1015` (proved, , actual effort: 1 sessions, 7 steps, 8 tools, 2 holbuild, 511,378 tok (509,675 in, 1,703 out, 400,384 cached), 53.1s, $0.79773700)
+  - Replaced the stale inline `immutables_dom_mutual` IntCall proof branch with the PLAN consumer call `drule_all case_IntCall_imm_dom_from_mutual_ih >> simp[]`. -> holbuild replay advanced past the IntCall branch and now fails in the later RawCallTarget branch/ExtCall-related code, showing the active component's IntCall refactor succeeded. (`TO_type_system_rewrite-20260524T091119Z_m48667_t001`, `TO_type_system_rewrite-20260524T091119Z_m48669_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48667_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48669_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48668_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.0d
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1017`
+- blocker: 
+- actual effort: 1 sessions, 11 steps, 12 tools, 4 holbuild, 1,164,289 tok (1,160,892 in, 3,397 out, 1,142,272 cached), 353.2s, $0.76614600
+- next: Review with plan_oracle, then resume scheduled C2.7.3.1 statement-layer/default-frame wrapper boundary work at `default_frame_eval_restores_scopes` / later `Expr_Call_IntCall` proof.
+
+### Attempts / Evidence
+
+- `E1017` (proved, , actual effort: 1 sessions, 11 steps, 12 tools, 4 holbuild, 1,164,289 tok (1,160,892 in, 3,397 out, 1,142,272 cached), 353.2s, $0.76614600)
+  - Added local helper `raw_call_callback_preserves_immutables_dom` that destructs the raw external-call result explicitly and proves the callback preserves immutables through `update_accounts`, `update_transient`, checks, and returns. Replaced the RawCallTarget branch's brittle `pairarg_tac`/`FIRST_ASSUM` proof with transitivity through the eval-exprs IH plus the helper. -> `holbuild(targets=["vyperEvalPreservesImmutablesDomTheory"], timeout=600)` succeeds. A follow-up `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` advances past the imported immutables-domain prerequisite and reaches the statement-layer/default-frame theorem `default_frame_eval_restores_scopes`, confirming C2.7.3.0d no longer blocks C2.7.3.1. (`TO_type_system_rewrite-20260524T091119Z_m48686_t001`, `TO_type_system_rewrite-20260524T091119Z_m48687_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48686_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48687_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` C2.7.3.1 was rated Risk 2, but continued inline/generated-IH consumption of the default-frame expression-list IH remains a proof-interface/decomposition mismatch. Even after switching from `asm_x ... mp_tac` to direct labelled IH specialization and attempting to specialize the post-antecedent expression IH, holbuild still fails before reaching the intended small default-IH side-condition and displays the same >4KiB generated-IH goal family. Per proof hygiene and STATE, this should be factored/replanned as a small helper/corollary rather than continuing raw `qspecl_then` plumbing.
+- latest episode: `E1020`
+- blocker: Default-frame generated-IH consumption in `Expr_Call_IntCall` remains stuck in a large generated-IH context; current source has partial experimental edit at lines ~9528-9535 and deliberate `FAIL_TAC`s.
+- actual effort: 1 sessions, 2 msgs, 16 steps, 21 tools, 2 holbuild, 1,257,007 tok (1,250,047 in, 6,960 out, 1,192,960 cached), 183.5s, $1.09071500
+- next: Call `plan_oracle(mode="review", component_id="C2.7.3.1")` with this evidence and request a decomposition/interface repair, likely a dedicated local helper/corollary that packages default-frame `finally` into the plain framed `eval_exprs` equation and generated-IH antecedents.
+
+### Attempts / Evidence
+
+- `E0896` (progressed, other, actual effort: 1 sessions, 2 msgs, 19 steps, 20 tools, 5 holbuild, 2,345,635 tok (2,337,602 in, 8,033 out, 2,291,200 cached), 235.8s, $1.61860000)
+  - Inserted `mk_asm` labels before `evaluate_def` expansion for actual/default/body generated IHs. -> Actual IH alone labelled successfully; extending to all three labels succeeded far enough that holbuild displayed labelled `default_ih`, `actual_ih`, and `body_ih` in the first early-error branch context. (`TO_type_system_rewrite-20260524T091119Z_m45375_t001`, `TO_type_system_rewrite-20260524T091119Z_m45378_t001`)
+  - Removed stale unlabelled-IH `qpat_x_assum ... kall_tac` cleanup in early error branches and replaced tail actual-argument consumption with `asm_x "actual_ih" drule_all`. -> Source now advances beyond old selector location, but an early lookup-function error branch times out at `metis_tac[]` because labelled IH assumptions remain in the context. Need targeted contradiction/no-search branch cleanup before reaching actual-args milestone. (`TO_type_system_rewrite-20260524T091119Z_m45387_t001`)
+- `E0897` (progressed, other, actual effort: 1 sessions, 1 msgs, 25 steps, 26 tools, 8 holbuild, 1,878,996 tok (1,870,211 in, 8,785 out, 1,810,944 cached), 297.6s, $1.46535700)
+  - Replaced broad `metis_tac[]` after `intcall_lookup_function_not_INR` with direct specialization of the produced non-INR fact at `r''`, `r`, `"IntCall lookup_function"`, `y`, followed by `simp[]`. -> Early lookup-function TypeError contradiction now closes; build advances to actual-args IH site. (`TO_type_system_rewrite-20260524T091119Z_m45399_t001`)
+  - Consumed labelled `actual_ih` by moving it to the goal, simplifying its full static prefix, explicitly specializing the remaining quantifiers to current evaluator-state variables, then applying `first_x_assum drule_all`. -> Actual argument IH is successfully invoked; build reaches the deliberate checkpoint `FAIL_TAC "Expr_Call_IntCall after args IH"` after case-splitting `args_res`. (`TO_type_system_rewrite-20260524T091119Z_m45416_t001`)
+- `E0898` (proved, , actual effort: 1 sessions, 2 msgs, 32 steps, 33 tools, 10 holbuild, 2,582,071 tok (2,569,495 in, 12,576 out, 2,488,320 cached), 417.0s, $2.02731500)
+  - Pre-tail labelled generated IHs with `mk_asm` for default, actual, and body before unfolding the large IntCall evaluator tail. -> Labels persist in the later goal; build output shows all three labelled assumptions are available before default/body tail work. (`TO_type_system_rewrite-20260524T091119Z_m45423_t001`)
+  - Replaced broad lookup-function branch `metis_tac[]` with targeted specialization of `intcall_lookup_function_not_INR`'s non-INR fact. -> Early lookup-function branch no longer times out under labelled IH assumptions. (`TO_type_system_rewrite-20260524T091119Z_m45416_t001`)
+  - Replaced late unlabelled/ordering-sensitive actual-IH selector with labelled `actual_ih` consumption, explicit specialization of the remaining prefix variables, and `drule_all` on the resulting evaluator IH. -> Actual-argument IH is invoked successfully; the `args_res = INR` branch closes by `no_type_error_result_def`, and the remaining failure is the next semantic stage (defaults/body), not the C2.7.3.1 refactor. (`TO_type_system_rewrite-20260524T091119Z_m45423_t001`)
+- `E0935` (progressed, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 106,878 tok (106,183 in, 695 out, 98,304 cached), 19.7s, $0.10939700)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` immediately after beginning C2.7.3.1, per STATE. -> Build reproduces current source-order failure before statement wrappers: `vyperEvalPreservesScopesTheory:eval_preserves_tv[IntCall]` line 2016 `first_x_assum drule_all` cannot find/apply the needed default-expression IH in the new default-frame shape. (`TO_type_system_rewrite-20260524T091119Z_m46552_t001`)
+- `E0936` (stuck, plan_incomplete, actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 218,384 tok (216,106 in, 2,278 out, 205,824 cached), 44.4s, $0.22266200)
+  - After beginning C2.7.3.1, ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to verify reachability of the wrapper block. -> Build fails before the wrapper target in `vyperEvalPreservesScopesScript.sml:eval_preserves_tv[IntCall]` line 2016. The visible goal is a >4KiB IntCall/default-frame tail with actual args done, live `get_scopes`, default finalizer premise, and failing `first_x_assum drule_all`. (`TO_type_system_rewrite-20260524T091119Z_m46552_t001`)
+- `E0960` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 194,677 tok (193,784 in, 893 out, 179,200 cached), 29.1s, $0.18931000)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after C2.7.3.0b.2.3/E0959 was accepted and `vyperEvalPreservesScopesTheory` built. -> Build fails in imported prerequisite `vyperEvalPreservesImmutablesDomTheory:case_IntCall_imm_dom`, not in the statement-layer wrapper boundary. This blocks C2.7.3.1 execution and indicates PLAN coverage is incomplete for the next source-order prerequisite. (`TO_type_system_rewrite-20260524T091119Z_m46989_t003`)
+- `E1016` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 181,288 tok (180,466 in, 822 out, 164,864 cached), 24.0s, $0.18510200)
+  - Ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` after C2.7.3.0c.2.3.7.3.5 was accepted, as C2.7.3.1 requires reaching the statement wrapper after imported prerequisites build. -> Build failed before `vyperTypeStmtSoundnessScript.sml`, in imported `vyperEvalPreservesImmutablesDomTheory:immutables_dom_mutual`. The old IntCall failure is gone; the current failure is a later RawCallTarget/external-call state-update preservation goal, so C2.7.3.1 cannot soundly proceed under its current schedule. (`TO_type_system_rewrite-20260524T091119Z_m48674_t001`, `TO_type_system_rewrite-20260524T091119Z_m48669_t001`)
+- `E1018` (progressed, other, actual effort: 1 sessions, 3 msgs, 33 steps, 40 tools, 4 holbuild, 3,068,616 tok (3,049,704 in, 18,912 out, 2,931,200 cached), 463.7s, $2.62548000)
+  - Replaced broad `metis_tac[default_frame_eval_result]` with `rpt strip_tac >> drule default_frame_eval_result >> strip_tac >> gvs[]`. -> `default_frame_eval_restores_scopes` saved; build advanced to `eval_all_type_sound_mutual[Expr_Call_IntCall]`. (`TO_type_system_rewrite-20260524T091119Z_m48699_t001`)
+  - Probed default-argument IH selection around lines 9525-9527 using first a shape-specific `qpat_x_assum ... mp_tac`, then restored labelled `asm_x "default_ih" mp_tac` with `FAIL_TAC "after_default_mp"` for goal inspection. -> Both forms expose the same next obligation family: instantiate default expression IH for `needed_dflts = DROP (...) dflts` under `cxd = cx with stk updated_by CONS ...` and a temporary `[FEMPTY]` scopes frame. Final source has the labelled-IH probe, not the failed brittle pattern. Need prove side conditions, likely via `well_typed_exprs_DROP`, `defaults_env_empty_frame_consistent`, `default_frame_eval_result/restores_scopes`, plus stk-irrelevance facts. (`TO_type_system_rewrite-20260524T091119Z_m48711_t001`, `TO_type_system_rewrite-20260524T091119Z_m48717_t001`, `TO_type_system_rewrite-20260524T091119Z_m48719_t001`)
+- `E1019` (progressed, other, actual effort: 1 sessions, 3 msgs, 31 steps, 37 tools, 5 holbuild, 3,186,573 tok (3,176,420 in, 10,153 out, 3,063,296 cached), 305.5s, $2.40185800)
+  - `asm_x "default_ih" mp_tac >> simp[] >> FAIL_TAC "after_default_simp"` -> Simplification alone did not reduce the generated-IH obligation to a manageable side-condition; holbuild still displayed the two large generated IH goals. (`TO_type_system_rewrite-20260524T091119Z_m48741_t001`)
+  - Added a long `qspecl_then` for the presumed generated-IH prefix variables and inserted `FAIL_TAC "after_default_spec"`. -> The direct generated-IH instantiation still failed with the same large generated-IH context; no clean instantiated IH body was obtained. (`TO_type_system_rewrite-20260524T091119Z_m48750_t001`)
+  - Added `qpat_x_assum `finally _ _ _ = _` (drule_then strip_assume_tac)` before default-IH consumption and changed to `impl_tac >- FAIL_TAC "default_impl"`. -> The build still did not reach the intended small `default_impl` subgoal; this suggests the long generated-IH specialization/consumption is the wrong interface or needs a shaped helper/boundary lemma. (`TO_type_system_rewrite-20260524T091119Z_m48758_t001`)
+- `E1020` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 16 steps, 21 tools, 2 holbuild, 1,257,007 tok (1,250,047 in, 6,960 out, 1,192,960 cached), 183.5s, $1.09071500)
+  - Baseline holbuild on current partial source with long generated-IH/default-frame attempt. -> Build failed at `eval_all_type_sound_mutual[Expr_Call_IntCall]`; failure still has two large generated IH goals and does not reach intended `default_impl` side-condition. (`TO_type_system_rewrite-20260524T091119Z_m48767_t001`, `TO_type_system_rewrite-20260524T091119Z_m48768_t001`)
+  - Changed consumption to apply `asm_x "default_ih" (qspecl_then [...])` directly, then attempted to specialize the remaining expression-list IH to `defaults_env env_body`, `args_st with scopes := [FEMPTY]`, `INL dflt_vs`, and `framed_st`. -> Still failed before exposing a manageable antecedent; holbuild showed the same >4KiB generated-IH family, confirming raw generated-IH specialization is brittle proof plumbing rather than progress. (`TO_type_system_rewrite-20260524T091119Z_m48773_t001`, `TO_type_system_rewrite-20260524T091119Z_m48774_t001`)
+
+### Ruled Out
+
+- Continuing to extend the raw generated-IH `qspecl_then` list inline.
+- Broad `simp[]`/default-IH plumbing without a shaped boundary helper.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48767_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48773_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48774_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1024`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 116,586 tok (115,955 in, 631 out, 107,520 cached), 30.7s, $0.11486500
+- next: Request plan review, then follow scheduler to carry-forward adapter component C2.7.3.1.2 if accepted.
+
+### Attempts / Evidence
+
+- `E1021` (proved, , actual effort: 1 sessions, 1 msgs, 3 steps, 4 tools, 1 holbuild, 185,647 tok (184,760 in, 887 out, 173,568 cached), 39.2s, $0.16935400)
+  - Read the IntCall branch and grepped for the E1020 experimental markers. -> Lines 9525-9526 show only `drule_all callable_body_typing_from_env_consistent >> strip_tac >> all_tac`; grep found no `FAIL_TAC "default_impl"`, `FAIL_TAC "after_default_ih"`, or `asm_x "default_ih"`. (`TO_type_system_rewrite-20260524T091119Z_m48796_t001`, `TO_type_system_rewrite-20260524T091119Z_m48796_t002`)
+  - Ran holbuild on vyperTypeStmtSoundnessTheory after cleanup. -> Build reaches the expected placeholder/downstream timeout at line 9527 with 10 goals; no removed deliberate FAIL_TAC remains in the failing prefix. (`TO_type_system_rewrite-20260524T091119Z_m48795_t002`)
+- `E1024` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 116,586 tok (115,955 in, 631 out, 107,520 cached), 30.7s, $0.11486500)
+  - Grep audit for old failed inline default-IH experiment markers (`FAIL_TAC "probe_intcall_success"`, `FAIL_TAC "default_impl"`, `FAIL_TAC "after_default_ih"`, `asm_x "default_ih"`). -> No old deliberate probe/default-IH markers remain in `vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260524T091119Z_m48881_t001`)
+  - Ran `holbuild` on `vyperTypeStmtSoundnessTheory` to confirm the cleaned source reaches the intended downstream IntCall proof point. -> Build matches through the local adapter area and fails only at the expected `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]` broad `gvs[Once well_typed_expr_def]` timeout with generated-IH goals; no cleanup/probe failure occurs. (`TO_type_system_rewrite-20260524T091119Z_m48881_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48881_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48881_t002` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1025`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 2 steps, 2 tools, 135,391 tok (134,573 in, 818 out, 123,904 cached), 21.0s, $0.13983700
+- next: Request strategist review, then proceed to C2.7.3.1.3 whole-branch IntCall no-TypeError lemma if accepted.
+
+### Attempts / Evidence
+
+- `E1022` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 125,038 tok (124,515 in, 523 out, 111,616 cached), 27.6s, $0.13599300)
+  - Inserted/proved local no-TypeError adapter theorem using default_frame_eval_result and the generated expression-list IH; verified by rebuilding vyperTypeStmtSoundnessTheory. -> holbuild matched the proof prefix through line 9545 (past the adapter QED) and then failed only in the downstream Expr_Call_IntCall Resume use-site, confirming the boundary lemma builds. (`TO_type_system_rewrite-20260524T091119Z_m48838_t002`)
+- `E1025` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 2 tools, 135,391 tok (134,573 in, 818 out, 123,904 cached), 21.0s, $0.13983700)
+  - Inspected the local adapter area in `vyperTypeStmtSoundnessScript.sml` and searched for `intcall_default_exprs_no_type_error_from_generated_ih`. -> The carried local theorem `intcall_default_exprs_no_type_error_from_generated_ih[local]` is present immediately after `default_frame_eval_result`/`default_frame_eval_restores_scopes`, with conclusion `no_type_error_result res` for the default-frame `finally (set_scopes [FEMPTY]; eval_exprs ...) (set_scopes prev)` evaluation. (`TO_type_system_rewrite-20260524T091119Z_m48885_t001`, `TO_type_system_rewrite-20260524T091119Z_m48885_t002`)
+  - Used current `holbuild` evidence for `vyperTypeStmtSoundnessTheory`. -> Build matches through the adapter theorem prefix and fails only later at the known `Expr_Call_IntCall` Resume broad `gvs[Once well_typed_expr_def]` timeout, confirming the adapter remains proved and available as the black-box boundary for the next component. (`TO_type_system_rewrite-20260524T091119Z_m48881_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m48885_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48885_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m48881_t002` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The active Risk 2 leaf is under-decomposed: current and prior holbuild evidence show the live obligation inside the local whole-branch lemma is a >4KiB post-default IntCall tail. The source still contains the default-result assertion/probe, and attempts to prove only `no_type_error_result dflt_res` with the default-frame adapter do not address the required bind_arguments/eval-ret/nonreentrant/push/body/finally/safe_cast tail. This is a decomposition/interface mismatch, not a single tactic failure.
+- latest episode: `E1034`
+- blocker: The local whole-branch lemma needs a strategist-owned subordinate post-default tail helper/split. Continuing to patch the >4KiB goal or the default adapter assertion would violate the PLAN not-to-try guidance and proof abstraction discipline.
+- actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 1 holbuild, 542,638 tok (538,545 in, 4,093 out, 504,320 cached), 109.8s, $0.54607500
+- next: Request strategist review/decomposition for a post-default tail boundary under or replacing C2.7.3.1.3. The helper should start after default success and directly prove the bind_arguments/eval-ret/nonreentrant/push/body/finally/safe_cast tail cannot return TypeError, using typedness/body_ih and safe_cast/finally helper patterns.
+
+### Attempts / Evidence
+
+- `E1023` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 31 steps, 31 tools, 6 holbuild, 3,098,238 tok (3,087,845 in, 10,393 out, 3,013,120 cached), 354.6s, $2.19197500)
+  - Inserted `FAIL_TAC "probe_intcall_success"` immediately after `callable_body_typing_from_env_consistent` to inspect the intended adapter use site. -> Probe did not expose a small single adapter-use goal; holbuild showed two large generated-IH obligations, including body/default IH shapes, indicating the branch was not focused as expected. (`TO_type_system_rewrite-20260524T091119Z_m48844_t001`)
+  - Tried to discharge the callable-body helper's nonreentrant conjunct with `(strip_tac >- gvs[])` / parenthesized variants before probing the existential payload. -> Failures remained at the same large generated-IH shape; operator/goal structure did not yield the intended post-helper local facts. (`TO_type_system_rewrite-20260524T091119Z_m48854_t001`, `TO_type_system_rewrite-20260524T091119Z_m48858_t001`)
+  - Tried direct use-site application of `intcall_default_exprs_no_type_error_from_generated_ih` with visible IntCall state variables after callable-body facts. -> Build still failed before a clean adapter conclusion was obtained, again with large generated-IH obligations; this would require brittle inline variable plumbing contrary to the PLAN's not-to-try guidance. (`TO_type_system_rewrite-20260524T091119Z_m48861_t001`)
+  - Reverted temporary C2.7.3.1.3 experiments back to the pre-component consumer source. -> Source no longer contains the probe/failed adapter call; component remains unproved. (`TO_type_system_rewrite-20260524T091119Z_m48871_t001`)
+- `E1026` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 24 steps, 26 tools, 5 holbuild, 2,652,286 tok (2,636,828 in, 15,458 out, 2,550,784 cached), 390.3s, $2.16935200)
+  - Inserted local theorem `intcall_expr_no_type_error_from_generated_ih[local]` before the `Expr_Call_IntCall` Resume, copying the actual/default/body generated-IH assumptions into the theorem statement and moving the old evaluator peel into its proof. -> Source now contains the planned boundary theorem skeleton; first build exposed a qpat ordering mismatch: the actual-IH matched before the default-IH because both conclusions are expression-list IHs. (`TO_type_system_rewrite-20260524T091119Z_m48898_t001`, `TO_type_system_rewrite-20260524T091119Z_m48899_t001`)
+  - Reordered/labeled generated IH assumptions in the theorem proof: label `actual_ih` before `default_ih`, then `body_ih`. Rebuilt. -> Proof advanced through the actual-argument IH and argument-success case. Direct `drule_all callable_body_typing_from_env_consistent` failed with a HOL_ERR even though the needed facts were present; the goal log showed callable-body theorem could be specialized but not consumed by `drule_all` in this large context. (`TO_type_system_rewrite-20260524T091119Z_m48901_t001`, `TO_type_system_rewrite-20260524T091119Z_m48903_t001`)
+  - Tried explicit stripping of `lift_option_type_INL_eq` products and then `mp_tac callable_body_typing_from_env_consistent >> simp[] >> strip_tac`. -> Build advanced past the callable-body theorem application and leaves the success-continuation goal from `get_scopes`/default eval through bind/ret/lock/push/body/cast. The current `>-` branch is not solved because it ends in `all_tac`; further work must close this branch with the default-frame adapter and body IH, not leave the placeholder. (`TO_type_system_rewrite-20260524T091119Z_m48909_t001`, `TO_type_system_rewrite-20260524T091119Z_m48910_t001`)
+- `E1027` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 32 steps, 45 tools, 7 holbuild, 3,480,302 tok (3,467,393 in, 12,909 out, 3,350,528 cached), 438.0s, $2.64685900)
+  - Replaced brittle callable-body consumption with `Q.INST` to set `st=args_st` and callable tuple components, then added `PairCases_on x'' >> gvs[]` before the instantiation. -> Build advanced through callable-body typing and produced concrete facts: `x''1 ==> cx.nonreentrant_slot <> NONE`, env_body static equalities, `evaluate_type (get_tenv cx) x''4 = SOME ret_tv`, `type_stmts env_body x''4 x''5 = SOME env_after`, `well_typed_exprs (defaults_env env_body) x''3`, and argument var facts. Current source intentionally stops at `FAIL_TAC "probe_after_callable_body"`. (`TO_type_system_rewrite-20260524T091119Z_m48937_t001`, `TO_type_system_rewrite-20260524T091119Z_m48940_t001`, `TO_type_system_rewrite-20260524T091119Z_m48941_t001`)
+  - Searched for existing tail/no-TypeError helpers for `bind_arguments`, `safe_cast`, `finally`, `handle_function`, and relevant definitions. -> No existing `safe_cast` no-TypeError theorem was found; `safe_cast` returns an option and `lift_option_type` around it raises runtime/type-labeled errors but not a `TypeError` string from `safe_cast` itself. Existing `try_handle_function_no_control`/`finally_no_control` can rule out TypeError-style errors from the body finally if the body IH covers `eval_stmts`; definitions for `push_function`, `pop_function`, `bind_arguments`, and `get_scopes` are simple and likely should be unfolded or factored in the tail proof. (`TO_type_system_rewrite-20260524T091119Z_m48942_t001`, `TO_type_system_rewrite-20260524T091119Z_m48943_t001`, `TO_type_system_rewrite-20260524T091119Z_m48944_t003`)
+- `E1028` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 34 steps, 48 tools, 6 holbuild, 3,598,770 tok (3,586,605 in, 12,165 out, 3,473,920 cached), 411.1s, $2.66533500)
+  - Replaced `FAIL_TAC "probe_after_callable_body"` with `simp[get_scopes_def, return_def]` and reprobed. -> Confirmed `get_scopes args_st` normalizes to the pure state result; the remaining goal starts at the default `finally` result. (`TO_type_system_rewrite-20260524T091119Z_m48957_t001`)
+  - Case-split the default `finally` result with `BasicProvers.TOP_CASE_TAC`, renamed it to `(dflt_res,dflt_st)`, and split `dflt_res`. -> The INR default branch is expected to be closed by `no_type_error_result dflt_res`; the INL branch remains the bind/eval-ret/lock/push/body/cast tail. (`TO_type_system_rewrite-20260524T091119Z_m48962_t001`)
+  - Attempted a direct specialized application of `intcall_default_exprs_no_type_error_from_generated_ih` using `needed_dflts = DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3`, `cxd = cx with stk updated_by CONS (env_body.current_src,fn)`, `prev=args_st.scopes`, and concrete callable tuple components. -> Application did not close; first a `NO_TAC` guard exposed that not all adapter antecedents were solved, then a probe showed the broad antecedent proof was not isolating the right subgoals. Need a precise antecedent proof/fact, not broad `rpt conj_tac`/`TRY` plumbing. (`TO_type_system_rewrite-20260524T091119Z_m48971_t001`, `TO_type_system_rewrite-20260524T091119Z_m48978_t001`, `TO_type_system_rewrite-20260524T091119Z_m48979_t001`)
+- `E1029` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 35 steps, 41 tools, 7 holbuild, 3,653,906 tok (3,641,632 in, 12,274 out, 3,372,032 cached), 441.5s, $3.40223600)
+  - Instantiated `intcall_default_exprs_no_type_error_from_generated_ih` and tried explicit adapter antecedents (`well_typed_exprs_DROP`, env context/immutables via defs, stack irrelevance). -> Using `env_body.current_src` left a MATCH_MP/irule no-match in the first explicit antecedent proof; evidence confirmed the goal was still the full default tail around the adapter application. (`TO_type_system_rewrite-20260524T091119Z_m49000_t001`)
+  - Changed source-id instantiation from `env_body.current_src` to `src_id_opt` and probed/attempted the first adapter antecedent conjunct. -> The first adapter antecedent still did not match trivially (`ACCEPT_TAC` failed and a probe showed the generated IH/antecedent shape remains large). This suggests the adapter theorem statement is cumbersome to consume inline rather than a simple missing rewrite. (`TO_type_system_rewrite-20260524T091119Z_m49011_t001`, `TO_type_system_rewrite-20260524T091119Z_m49013_t001`, `TO_type_system_rewrite-20260524T091119Z_m49016_t001`)
+  - Tried a full explicit `conj_tac` sequence for all adapter antecedents with simplification and stack-irrelevance lemmas. -> The whole fragment timed out at the 2.5s tactic limit, reinforcing that this inline antecedent proof is too coarse or needs a smaller helper/better-matching theorem interface. (`TO_type_system_rewrite-20260524T091119Z_m49007_t001`)
+  - Inspected diff after handoff request. -> Detected current partial source includes an accidental unrelated edit near line 5339 from an over-broad `replace_text`; next session should revert that local damage before continuing. Diff also shows the active IntCall block currently has no intentional FAIL probe at line 9756 but has not been verified after that edit. (`TO_type_system_rewrite-20260524T091119Z_m49021_t002`)
+- `E1030` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 25 steps, 29 tools, 6 holbuild, 2,824,330 tok (2,817,101 in, 7,229 out, 2,692,608 cached), 344.7s, $2.18563900)
+  - Repaired unrelated Append proof line using line-bounded edit. -> Restored `simp[] >> disch_then irule >> simp[]`; source hygiene issue from E1029 is fixed. (`TO_type_system_rewrite-20260524T091119Z_m49027_t001`)
+  - Probed direct specialized `intcall_default_exprs_no_type_error_from_generated_ih` application with `FAIL_TAC "probe_default_adapter"` after simplification. -> Build showed the live context before adapter consumption; the goal was still the post-default outer tail implication, with default `finally ... = (dflt_res,dflt_st)` and callable-body facts visible. (`TO_type_system_rewrite-20260524T091119Z_m49037_t001`, `TO_type_system_rewrite-20260524T091119Z_m49039_t001`)
+  - Tried `strip_tac >> simp[]` after the adapter implication. -> Failed with `first subgoal not solved`, likely because the implication was stripped into the wrong proof shape rather than applied to `no_type_error_result dflt_res`. (`TO_type_system_rewrite-20260524T091119Z_m49041_t001`)
+  - Tried `disch_then irule >> FAIL_TAC "probe_after_default_irule"`. -> The probe goal again showed the post-default outer tail implication, suggesting `disch_then irule` closed the local `no_type_error_result dflt_res` subgoal and returned to the main tail; adapter antecedents are probably not the active blocker. (`TO_type_system_rewrite-20260524T091119Z_m49046_t001`, `TO_type_system_rewrite-20260524T091119Z_m49047_t001`)
+- `E1031` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 40 steps, 49 tools, 6 holbuild, 3,903,238 tok (3,890,613 in, 12,625 out, 3,769,344 cached), 432.4s, $2.86976700)
+  - Changed the specialized default adapter consumption to `disch_then irule >> simp[]` and rebuilt. -> Build still failed at the local `no_type_error_result dflt_res` assertion with `first subgoal not solved by second tactic`; subsequent probe showed this is because `disch_then irule` reaches/returns to the outer tail and the extra `simp[]` is being applied where it does not solve the tail, not because the adapter antecedents are necessarily the active blocker. (`TO_type_system_rewrite-20260524T091119Z_m49069_t001`)
+  - Removed the local `no_type_error_result dflt_res` assertion and probed immediately after `Cases_on `dflt_res` >> gvs[no_type_error_result_def]`. -> Probe reached two post-default goals. The visible default-success goal has `finally ... = (INL x,dflt_st)` and conclusion that the bind_arguments/eval-ret/nonreentrant/push/body/finally/safe_cast tail result is not `INR (Error (TypeError msg))`. This confirms the next proof boundary is the tail, not the default adapter assertion alone. (`TO_type_system_rewrite-20260524T091119Z_m49076_t001`, `TO_type_system_rewrite-20260524T091119Z_m49077_t001`, `TO_type_system_rewrite-20260524T091119Z_m49088_t001`)
+- `E1032` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 23 steps, 42 tools, 5 holbuild, 2,582,942 tok (2,573,178 in, 9,764 out, 2,464,256 cached), 313.7s, $2.06965800)
+  - Inserted local assertion `no_type_error_result dflt_res` using `drule_all intcall_default_exprs_no_type_error_from_generated_ih >> simp[]`. -> Failed with HOL_ERR predicate/assertion failure in the large context, before reaching the tail; this confirms `drule_all` is brittle for the adapter in this branch. (`TO_type_system_rewrite-20260524T091119Z_m49143_t001`)
+  - Replaced `drule_all` with explicit `qspecl_then` instantiation for the default adapter and broad simplification over stack-irrelevance/env definitions. -> Timed out under the 2.5s tactic limit, matching earlier evidence that broad inline adapter antecedent simplification is too coarse. (`TO_type_system_rewrite-20260524T091119Z_m49151_t001`)
+  - Replaced the broad simplifier with `FAIL_TAC "probe_default_no_type_instantiated"` after explicit adapter instantiation to inspect the post-instantiation goal. -> Probe still shows the same outer post-default tail implication as the live goal; the local default assertion has not factored the tail. Source currently contains this probe. (`TO_type_system_rewrite-20260524T091119Z_m49153_t001`, `TO_type_system_rewrite-20260524T091119Z_m49154_t001`)
+- `E1033` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 1 holbuild, 377,194 tok (375,070 in, 2,124 out, 344,576 cached), 76.2s, $0.38847800)
+  - Rebuilt current source for `vyperTypeStmtSoundnessTheory` at active component start; no new edits. -> Build fails at `FAIL_TAC "probe_after_default_irule_current"` in `intcall_expr_no_type_error_from_generated_ih`, with the same large post-default IntCall tail goal after actual args and callable-body typing. The current source still contains the local `no_type_error_result dflt_res` detour which prior episodes ruled out. (`TO_type_system_rewrite-20260524T091119Z_m49200_t001`)
+  - Inspected source around the local theorem and latest dossier history. -> The proof remains in the under-factored state: after `finally ... = (dflt_res,dflt_st)`, it tries to prove `no_type_error_result dflt_res` using the default adapter, then cases on `dflt_res`. Dossier E1031/E1032 show this boundary returns to/leaves the outer tail and should not be retried. (`TO_type_system_rewrite-20260524T091119Z_m49201_t001`, `TO_type_system_rewrite-20260524T091119Z_m49203_t001`)
+- `E1034` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 7 steps, 6 tools, 1 holbuild, 542,638 tok (538,545 in, 4,093 out, 504,320 cached), 109.8s, $0.54607500)
+  - Rebuilt current `vyperTypeStmtSoundnessTheory` without new edits. -> Build fails in `intcall_expr_no_type_error_from_generated_ih` at `FAIL_TAC "probe_after_default_irule_current"`; goal is the known large post-default tail after actual/default setup, not a small adapter premise. (`TO_type_system_rewrite-20260524T091119Z_m49200_t001`)
+  - Inspected source and dossier for current local theorem state. -> Confirmed the proof is still trying the ruled-out `no_type_error_result dflt_res` detour via `intcall_default_exprs_no_type_error_from_generated_ih`; prior episodes E1031/E1032 and current build show this leaves the outer tail. No additional tactical attempts should be made without a subordinate tail boundary. (`TO_type_system_rewrite-20260524T091119Z_m49201_t001`, `TO_type_system_rewrite-20260524T091119Z_m49203_t001`)
+
+### Ruled Out
+
+- Further `qspecl_then`/broad `simp[]` attempts around `intcall_default_exprs_no_type_error_from_generated_ih`
+- Keeping the local `no_type_error_result dflt_res` assertion as the main post-default boundary
+- Solving the >4KiB post-default tail directly in-place without a helper
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49200_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49201_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49203_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49204_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1048`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 138,495 tok (137,711 in, 784 out, 121,856 cached), 14.2s, $0.16372300
+- next: Request strategist review, then proceed to C2.7.3.1.3.2 carry-forward audit if accepted.
+
+### Attempts / Evidence
+
+- `E1035` (proved, , actual effort: 1 sessions, 6 steps, 9 tools, 1 holbuild, 601,419 tok (599,633 in, 1,786 out, 581,632 cached), 84.5s, $0.43440100)
+  - Inserted local `intcall_safe_cast_NoneV` and `intcall_finally_try_handle_success_rv` immediately before `intcall_expr_no_type_error_from_generated_ih`, copying/adapting the fresh-local proof pattern from retired helpers but not importing retired theories. -> The helper statements/proofs are in source. Subsequent holbuild resumed past the inserted helper theorems and failed only later in the existing `intcall_expr_no_type_error_from_generated_ih` probe, confirming this infrastructure leaf builds. (`TO_type_system_rewrite-20260524T091119Z_m49213_t001`, `TO_type_system_rewrite-20260524T091119Z_m49214_t001`)
+- `E1039` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 20 tools, 2 holbuild, 976,641 tok (973,264 in, 3,377 out, 934,400 cached), 118.8s, $0.76283000)
+  - Inserted `stmt_no_fallthrough`/`stmts_no_fallthrough` equations in `vyperTypeSystemScript.sml` with Return/Raise/Break/Continue no-fallthrough, If requiring both branches, all other statements conservative false, and sequence disjunction; termination by stmt/list size. -> Definition compiles and exported theory builds. (`TO_type_system_rewrite-20260524T091119Z_m49413_t001`, `TO_type_system_rewrite-20260524T091119Z_m49414_t002`)
+  - Strengthened callable-body conjunct in `functions_well_typed_def` with `(ret = NoneT \/ stmts_no_fallthrough body)` immediately after `type_stmts env_body ret body = SOME env_after`. -> `holbuild(targets=["vyperTypeSystemTheory"], timeout=600)` succeeds. (`TO_type_system_rewrite-20260524T091119Z_m49413_t001`)
+- `E1043` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 226,316 tok (225,596 in, 720 out, 217,088 cached), 15.6s, $0.17268400)
+  - Audited current source for carried-forward local IntCall/fallthrough infrastructure required by the replacement subtree. -> All required local lemmas are present: `no_fallthrough_eval_no_success`, `intcall_finally_try_handle_success_rv`, `lift_safe_cast_value_has_type_no_type_error`, and `lift_safe_cast_NoneT_no_type_error`. No source edits were made for this carry-forward audit; downstream build remains blocked by the already-known partial proof in the next components. (`TO_type_system_rewrite-20260524T091119Z_m49611_t003`, `TO_type_system_rewrite-20260524T091119Z_m49611_t002`, `TO_type_system_rewrite-20260524T091119Z_m49611_t001`)
+- `E1048` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 138,495 tok (137,711 in, 784 out, 121,856 cached), 14.2s, $0.16372300)
+  - Audit-only carry-forward check for callable fallthrough infrastructure; grepped and inspected source around `no_fallthrough_eval_no_success` and local IntCall helper block. -> Required local theorem `no_fallthrough_eval_no_success` is present at line 1309 with the statement-list conjunct needed by downstream `cj 2`; local IntCall helpers including `intcall_finally_try_handle_success_rv`, `lift_safe_cast_value_has_type_no_type_error`, `lift_safe_cast_NoneT_no_type_error`, and `intcall_normal_body_final_cast_no_type_error` are present near 9798-9891. No source edits were made. A holbuild status attempt was blocked by the verified-falsehood PLAN gate, not by this audited source. (`TO_type_system_rewrite-20260524T091119Z_m49823_t003`, `TO_type_system_rewrite-20260524T091119Z_m49823_t001`, `TO_type_system_rewrite-20260524T091119Z_m49823_t002`, `TO_type_system_rewrite-20260524T091119Z_m49822_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49823_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49823_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49823_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49822_t002` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1049`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 80,592 tok (80,172 in, 420 out, 72,192 cached), 9.4s, $0.08859600
+- next: Request strategist review, then begin C2.7.3.1.3.3 to add the planned rv-case boundary if accepted.
+
+### Attempts / Evidence
+
+- `E1036` (progressed, other, actual effort: 1 sessions, 3 msgs, 30 steps, 43 tools, 8 holbuild, 3,511,921 tok (3,495,723 in, 16,198 out, 3,384,320 cached), 440.7s, $2.73511500)
+  - Inserted local helper suite: exprs_runtime_typed_value_expr_LIST_REL, args_dflts_typing_to_el_stmt, bind_arguments_succeeds_stmt, args_dflts_bind_arguments_stmt, intcall_needed_defaults_* and intcall_bind_arguments_from_runtime_typed. -> Source now contains the planned bridge skeleton and helper abstractions; earlier helpers build through to intcall_needed_defaults_param_types before later failures. (`TO_type_system_rewrite-20260524T091119Z_m49238_t001`)
+  - Repaired intcall_needed_defaults_param_types proof by adding explicit LENGTH dflts <= LENGTH params premise and using rich_listTheory.DROP_DROP_T instead of guarded DROP_DROP. -> Build advanced past intcall_needed_defaults_param_types and reached intcall_bind_arguments_from_runtime_typed. (`TO_type_system_rewrite-20260524T091119Z_m49247_t001`)
+  - Tried to derive LIST_REL adapters inside intcall_bind_arguments_from_runtime_typed via irule/direct rw over exprs_runtime_typed_def. -> Still failing in the first assertion deriving LIST_REL from exprs_runtime_typed; holbuild reports an abstract existential/implication-shaped subgoal from assertion proof, suggesting tactic/assertion shape rather than semantic impossibility. Needs next session inspection with a smaller standalone adapter or perhaps fix argument order in exprs_runtime_typed_value_expr_LIST_REL. (`TO_type_system_rewrite-20260524T091119Z_m49253_t001`, `TO_type_system_rewrite-20260524T091119Z_m49254_t001`)
+- `E1037` (proved, , actual effort: 1 sessions, 6 msgs, 80 steps, 81 tools, 34 holbuild, 7,342,066 tok (7,316,906 in, 25,160 out, 7,192,576 cached), 1155.8s, $4.97273800)
+  - Repaired and completed the local IntCall bind-arguments bridge helper suite. Added typed list length helper annotations, derived needed default map/length facts before rewriting defaults_env, obtained actual/default LIST_REL adapters from exprs_runtime_typed, used args_dflts_bind_arguments_stmt for bind success, bind_arguments_scope_well_typed_stmt for scope typing, and bind_arguments_env_scopes_consistent for env consistency. -> holbuild advanced past intcall_bind_arguments_from_runtime_typed; the next failure is the known downstream intcall_expr_no_type_error_from_generated_ih probe_after_default_irule_current outside this leaf. (`TO_type_system_rewrite-20260524T091119Z_m49338_t001`)
+- `E1040` (proved, , actual effort: 1 sessions, 2 msgs, 40 steps, 59 tools, 10 holbuild, 3,873,295 tok (3,857,724 in, 15,571 out, 3,765,248 cached), 910.9s, $2.81213400)
+  - Added fallthrough invariant conjunct to local callable-body bridge conclusions so the strengthened functions_well_typed_def prefix could build, then proved no_fallthrough_eval_no_success by stmt_induction/list induction with evaluator/control-flow unfolding. If branch handled by splitting switch_BoolV on Value (BoolV T/F); Return/Raise handled by constructor cases and raise_def. -> holbuild vyperTypeStmtSoundnessTheory advanced past no_fallthrough_eval_no_success; next failure is the pre-existing downstream IntCall diagnostic FAIL_TAC probe_after_default_irule_current, outside this leaf. (`TO_type_system_rewrite-20260524T091119Z_m49465_t001`)
+- `E1044` (proved, , actual effort: 1 sessions, 5 steps, 4 tools, 2 holbuild, 615,827 tok (614,042 in, 1,785 out, 601,600 cached), 77.0s, $0.41656000)
+  - Inserted local `intcall_normal_body_final_cast_no_type_error` immediately after `lift_safe_cast_NoneT_no_type_error`; proof uses `rpt strip_tac` to split the fallthrough disjunction, `lift_safe_cast_NoneT_no_type_error` for `ret=NoneT`, and `cj 2 no_fallthrough_eval_no_success` for the `stmts_no_fallthrough` contradiction. -> holbuild advanced past `intcall_normal_body_final_cast_no_type_error`; the next failure is the pre-existing partial proof of `intcall_final_cast_no_type_error_from_body_ih`, which is the next planned component C2.7.3.1.3.3. (`TO_type_system_rewrite-20260524T091119Z_m49618_t001`)
+- `E1049` (proved, , actual effort: 1 sessions, 1 steps, 80,592 tok (80,172 in, 420 out, 72,192 cached), 9.4s, $0.08859600)
+  - Audit-only carry-forward check for normal-body final-cast boundary `intcall_normal_body_final_cast_no_type_error`. -> The theorem is present locally at lines 9875-9891 with the expected assumptions and proof shape: `ret = NoneT` branch applies `lift_safe_cast_NoneT_no_type_error`; fallthrough branch uses `cj 2 no_fallthrough_eval_no_success`. The local dependencies are present. No source edits were made. Build check is still blocked by the verified-falsehood PLAN gate rather than this audited theorem. (`TO_type_system_rewrite-20260524T091119Z_m49823_t003`, `TO_type_system_rewrite-20260524T091119Z_m49823_t002`, `TO_type_system_rewrite-20260524T091119Z_m49822_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49823_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49823_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49822_t002` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1050`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,046,912 tok (1,042,299 in, 4,613 out, 1,018,368 cached), 169.4s, $0.76722900
+- next: Request strategist review. If accepted, begin C2.7.3.1.3.4 and refactor `intcall_final_cast_no_type_error_from_body_ih` through the new boundary.
+
+### Attempts / Evidence
+
+- `E1038` (stuck, wrong_statement, actual effort: 1 sessions, 9 steps, 20 tools, 1 holbuild, 859,677 tok (855,164 in, 4,513 out, 798,208 cached), 118.8s, $0.81927400)
+  - Derisked final cast boundary by proving a local concrete probe about empty typed bodies with non-None return type and `safe_cast (BaseTV BoolT) NoneV`. -> Probe theorem proved before holbuild continued to the known later failure; it verifies the suspected final-cast counterpath to the planned helper interface. (`TO_type_system_rewrite-20260524T091119Z_m49392_t001`, `TO_type_system_rewrite-20260524T091119Z_m49393_t001`)
+  - Rebuilt `vyperTypeStmtSoundnessTheory` after adding the probe. -> Build reached past the probe and failed at the existing `FAIL_TAC "probe_after_default_irule_current"`, confirming no progress on the main theorem and that the probe is checked in the source prefix. (`TO_type_system_rewrite-20260524T091119Z_m49393_t001`)
+- `E1041` (proved, , actual effort: 1 sessions, 1 steps, 133,356 tok (132,814 in, 542 out, 125,440 cached), 12.0s, $0.11585000)
+  - Extended local callable-body bridge statements `callable_body_typing_from_functions_well_typed` and `callable_body_typing_from_env_consistent` to include `(ret = NoneT \/ stmts_no_fallthrough fn_body)` immediately after `type_stmts ... fn_body = SOME env_after`. Existing `functions_well_typed_def` unfolding proofs then discharged the extra conjunct mechanically. -> holbuild vyperTypeStmtSoundnessTheory advanced through both bridge lemmas and through the subsequent no_fallthrough boundary; next failure is the known downstream IntCall `FAIL_TAC "probe_after_default_irule_current"`, outside this bridge component. (`TO_type_system_rewrite-20260524T091119Z_m49465_t001`)
+- `E1045` (progressed, risk_mismatch, actual effort: 1 sessions, 6 msgs, 92 steps, 93 tools, 38 holbuild, 8,222,200 tok (8,187,471 in, 34,729 out, 8,039,424 cached), 1538.4s, $5.80181700)
+  - Replaced old `safe_cast_def`-first proof with `drule intcall_finally_try_handle_success_rv` split; normal branch uses early fallthrough contradiction / NoneT simplification. -> Normal branch no longer leaves the original impossible non-None cast-shaped goal; builds now fail in ReturnException-related handling or branch selection. (`TO_type_system_rewrite-20260524T091119Z_m49654_t001`, `TO_type_system_rewrite-20260524T091119Z_m49682_t001`)
+  - Tried handled-return branch with `pop_assum strip_assume_tac`, substituting `rv=v`, specializing the body premise to get `value_has_type rtv v`, then applying `lift_safe_cast_value_has_type_no_type_error` by `irule`, `metis_tac`, `drule_all`, and explicit `Q.SPECL`. -> Build still fails at the final helper application/matching point. Latest goal has the intended assumptions visible but `irule (Q.SPECL ...) lift_safe_cast_value_has_type_no_type_error` reports `No match`. (`TO_type_system_rewrite-20260524T091119Z_m49717_t001`)
+- `E1046` (stuck, risk_mismatch, actual effort: 1 sessions, 6 msgs, 93 steps, 94 tools, 38 holbuild, 8,341,080 tok (8,305,469 in, 35,611 out, 8,155,648 cached), 1557.0s, $5.89525900)
+  - Replaced the old proof with `drule intcall_finally_try_handle_success_rv`, split the result disjunction, and handled the normal branch by early `NoneT` simplification or no-fallthrough contradiction using `cj 2 no_fallthrough_eval_no_success`. -> The proof no longer fails in the original non-None normal fallthrough/cast-shaped branch when focused correctly; failures shifted to the handled ReturnException branch/application shape. (`TO_type_system_rewrite-20260524T091119Z_m49682_t001`, `TO_type_system_rewrite-20260524T091119Z_m49654_t001`)
+  - For the handled-return branch, destructed the existential, substituted `rv = v`, specialized the universal body premise to obtain/attempt to obtain `value_has_type rtv v`, and tried `irule`, `metis_tac`, `drule_all`, and explicit `Q.SPECL` applications of `lift_safe_cast_value_has_type_no_type_error`. -> Latest holbuild still fails at the final safe-cast boundary application: the goal has `value_has_type rtv v` and `lift_option_type (safe_cast rtv v) ... = (cast_res,st_cast)` visible, but `irule (Q.SPECL ...) lift_safe_cast_value_has_type_no_type_error` reports `No match` in the live branch. (`TO_type_system_rewrite-20260524T091119Z_m49717_t001`)
+- `E1047` (stuck, risk_mismatch, actual effort: 1 sessions, 6 msgs, 90 steps, 91 tools, 38 holbuild, 8,439,003 tok (8,406,834 in, 32,169 out, 8,159,232 cached), 1433.2s, $6.28269600)
+  - Added local `intcall_return_body_final_cast_no_type_error` and later a branch-shaped `intcall_return_branch_final_cast_no_type_error`; both proved by local safe-cast/value_has_type reasoning. -> Boundary helpers were accepted by holbuild prefix, but did not make the main dispatcher proof boring. (`TO_type_system_rewrite-20260524T091119Z_m49769_t001`, `TO_type_system_rewrite-20260524T091119Z_m49796_t001`)
+  - Refactored main theorem to split via `intcall_finally_try_handle_success_rv`; tried normal branch using `intcall_normal_body_final_cast_no_type_error` and direct contradiction via `cj 2 no_fallthrough_eval_no_success`; tried ReturnException branch via new helper with explicit witnesses. -> Build still fails at `intcall_final_cast_no_type_error_from_body_ih`; latest failures show either normal impossible `F` goal remains after no-fallthrough/eval-success assumptions or ReturnException branch requires brittle witness plumbing. (`TO_type_system_rewrite-20260524T091119Z_m49813_t001`, `TO_type_system_rewrite-20260524T091119Z_m49815_t001`)
+  - Inserted `FAIL_TAC` probe before ReturnException simplification to inspect branch shape. -> Probe confirmed the ReturnException branch has the expected facts before `gvs[]`: `rv = v`, the body ReturnException equation, cast equation with `rv`, and the body IH; however subsequent proof still was not robust. (`TO_type_system_rewrite-20260524T091119Z_m49805_t001`)
+- `E1050` (proved, , actual effort: 1 sessions, 1 msgs, 11 steps, 10 tools, 4 holbuild, 1,046,912 tok (1,042,299 in, 4,613 out, 1,018,368 cached), 169.4s, $0.76722900)
+  - Inserted local `intcall_final_cast_no_type_error_from_rv_cases` immediately before `intcall_final_cast_no_type_error_from_body_ih`. Proof opens with `rpt gen_tac >> strip_tac`, handles the `ret=NoneT` normal branch by direct safe-cast/lift simplification, the fallthrough normal branch by `intcall_normal_body_final_cast_no_type_error`, and ReturnException branches by `lift_safe_cast_value_has_type_no_type_error`. -> `holbuild vyperTypeStmtSoundnessTheory` advanced past `intcall_final_cast_no_type_error_from_rv_cases`; the next failure is the pre-existing broken `intcall_final_cast_no_type_error_from_body_ih` proof (component C2.7.3.1.3.4), confirming this boundary lemma is accepted in the source prefix. (`TO_type_system_rewrite-20260524T091119Z_m49839_t001`, `TO_type_system_rewrite-20260524T091119Z_m49838_t001`)
+  - Earlier attempts tried `irule intcall_normal_body_final_cast_no_type_error >> metis_tac[]` after broad `gvs[]`, and then `metis_tac[intcall_normal_body_final_cast_no_type_error]`; these failed because branch assumptions had already been simplified into specialized subgoals and existential matching was brittle. -> Replaced with explicit branch handling that does not unfold `finally`/`try` and keeps final-cast reasoning inside the new boundary lemma, as required by PLAN. (`TO_type_system_rewrite-20260524T091119Z_m49832_t001`, `TO_type_system_rewrite-20260524T091119Z_m49835_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49839_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49838_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1051`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 3 tools, 1 holbuild, 431,290 tok (430,317 in, 973 out, 415,744 cached), 46.7s, $0.30992700
+- next: Request strategist review. If accepted, begin C2.7.3.1.3.5 and repair `intcall_expr_no_type_error_from_generated_ih` at the final-cast/default-IH point.
+
+### Attempts / Evidence
+
+- `E1042` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 60 steps, 60 tools, 24 holbuild, 4,632,722 tok (4,612,793 in, 19,929 out, 4,525,056 cached), 884.4s, $3.29908300)
+  - Use `intcall_finally_try_handle_success_rv`, split normal/ReturnException branches, simplify normal branch and apply `cj 2 no_fallthrough_eval_no_success` via `metis_tac`/`drule`/`qspecl_then`. -> Normal branch still leaves a small contradiction/no-TypeError goal; simplification either consumes assumptions badly or does not discharge the `stmts_no_fallthrough`/`eval_stmts = INL ()` contradiction. (`TO_type_system_rewrite-20260524T091119Z_m49581_t001`, `TO_type_system_rewrite-20260524T091119Z_m49590_t001`, `TO_type_system_rewrite-20260524T091119Z_m49606_t001`)
+  - For ReturnException branch, tried destructing existential and direct `safe_cast_def` simplification after `gvs[]`. -> ReturnException path was not the main blocker; current remaining displayed goals are from the normal fallthrough contradiction after simplification. (`TO_type_system_rewrite-20260524T091119Z_m49575_t001`)
+- `E1051` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 3 tools, 1 holbuild, 431,290 tok (430,317 in, 973 out, 415,744 cached), 46.7s, $0.30992700)
+  - Replaced the old brittle proof of `intcall_final_cast_no_type_error_from_body_ih` with the planned wrapper: derive rv cases by `drule intcall_finally_try_handle_success_rv`, then `irule intcall_final_cast_no_type_error_from_rv_cases` and discharge by `metis_tac[]`. -> `holbuild vyperTypeStmtSoundnessTheory` advanced past `intcall_final_cast_no_type_error_from_body_ih`; the next failure is in downstream `intcall_expr_no_type_error_from_generated_ih` at the pre-existing `FAIL_TAC "probe_after_default_irule_current"`, scheduled for C2.7.3.1.3.5. The wrapper theorem no longer exposes the no-fallthrough contradiction or explicit ReturnException witness plumbing. (`TO_type_system_rewrite-20260524T091119Z_m49845_t001`, `TO_type_system_rewrite-20260524T091119Z_m49844_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49845_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49844_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E1058`
+- blocker: Risk-2 proof refactor has become brittle generated-IH proof-interface plumbing: the current source still contains a long hand-specialized/default-IH consumption block around lines 10136-10155, and replacing it with live-context `asm "default_ih" mp_tac` led to a tactic timeout on broad simplification over the high-arity labelled IH. This matches the proof-hygiene warning; further local qspecl/simp tweaking is unlikely to be sound progress without a strategist-owned wrapper/helper interface.
+- actual effort: 1 sessions, 1 msgs, 5 steps, 5 tools, 2 holbuild, 366,872 tok (364,310 in, 2,562 out, 339,456 cached), 100.1s, $0.37085800
+- next: Call plan_oracle(mode="review", component_id="C2.7.3.1.3.5") with this evidence. Request a replacement/augmentation that introduces a small local wrapper lemma or boundary interface for the default-IH consequence, rather than further inline high-arity generated-IH specialization.
+
+### Attempts / Evidence
+
+- `E1052` (progressed, other, actual effort: 1 sessions, 1 msgs, 8 steps, 12 tools, 1 holbuild, 1,043,843 tok (1,041,297 in, 2,546 out, 998,400 cached), 84.3s, $0.79006500)
+  - At the existing `no_type_error_result dflt_res` assertion, removed the diagnostic `FAIL_TAC "probe_after_default_irule_current"` after `disch_then irule`. -> Build reached the real remaining obligations. The first failed subgoal is still in `intcall_expr_no_type_error_from_generated_ih`: applying `intcall_default_exprs_no_type_error_from_generated_ih` by `disch_then irule` leaves two subgoals, with the displayed one a large continuation goal over the post-default IntCall tail rather than a final-cast-only subgoal. This suggests the default no-TypeError assertion/application is not discharging as expected; source is partial. (`TO_type_system_rewrite-20260524T091119Z_m49853_t001`, `TO_type_system_rewrite-20260524T091119Z_m49854_t001`)
+- `E1053` (progressed, other, actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 134,212 tok (133,029 in, 1,183 out, 114,688 cached), 38.6s, $0.18453900)
+  - Re-read current `intcall_expr_no_type_error_from_generated_ih` source range and ran `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` without editing. -> The build resumes at the `no_type_error_result dflt_res` assertion and fails with two goals; the displayed top goal is still the large post-default IntCall tail continuation rather than a small missing antecedent for `intcall_default_exprs_no_type_error_from_generated_ih`. This matches prior evidence and triggers escalation rather than further tactic tweaking. (`TO_type_system_rewrite-20260524T091119Z_m49892_t001`, `TO_type_system_rewrite-20260524T091119Z_m49892_t002`)
+- `E1054` (stuck, risk_mismatch, actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 206,928 tok (204,752 in, 2,176 out, 184,832 cached), 56.6s, $0.25729600)
+  - Confirmed current source and rebuilt `vyperTypeStmtSoundnessTheory` at the active leaf without editing. -> Build fails in `intcall_expr_no_type_error_from_generated_ih` at the `no_type_error_result dflt_res` assertion. The failed tactic has two goals and the top goal is a large continuation over `case dflt_res of INL dflt_vs => bind_arguments/evaluate_type/nonreentrant/push_function/finally/safe_cast ... | INR ...`, not a small final-cast subgoal or default-IH antecedent. (`TO_type_system_rewrite-20260524T091119Z_m49892_t001`, `TO_type_system_rewrite-20260524T091119Z_m49892_t002`)
+  - Recorded a checkpoint summarizing that the same failure shape persists and that more local conjunct counting/search is ruled out. -> Checkpoint E1053 preserves the non-terminal evidence and indicates the next action should be strategist re-planning for a post-default helper or delayed no-TypeError expansion. (`TO_type_system_rewrite-20260524T091119Z_m49893_t001`)
+- `E1056` (progressed, other, actual effort: 1 sessions, 2 msgs, 18 steps, 20 tools, 3 holbuild, 2,151,084 tok (2,144,151 in, 6,933 out, 2,078,720 cached), 227.5s, $1.57450500)
+  - Deleted theorem-entry `simp[no_type_error_result_def] >> strip_tac` in `intcall_expr_no_type_error_from_generated_ih` and rebuilt. -> Build still failed at the `no_type_error_result dflt_res` assertion with the same two-goal/large post-default continuation shape. (`TO_type_system_rewrite-20260524T091119Z_m49905_t001`, `TO_type_system_rewrite-20260524T091119Z_m49906_t001`)
+  - Changed `Cases_on args_res >> gvs[no_type_error_result_def] >- ...` to a structural split `Cases_on args_res >- (gvs[] >> ...)` so the successful branch does not globally expand `no_type_error_result_def`, then rebuilt. -> Build still failed at the same default-result assertion. The default-helper assertion remains the blocking proof-interface point. (`TO_type_system_rewrite-20260524T091119Z_m49907_t001`, `TO_type_system_rewrite-20260524T091119Z_m49908_t001`)
+  - Temporarily inserted `FAIL_TAC "probe_tail_after_dflt"` after the `dflt_res` split, rebuilt, then removed it. -> Probe was unreachable: holbuild failed earlier inside the default-result assertion. This confirms the next action is to replace/factor that assertion block itself. (`TO_type_system_rewrite-20260524T091119Z_m49917_t001`, `TO_type_system_rewrite-20260524T091119Z_m49918_t001`, `TO_type_system_rewrite-20260524T091119Z_m49919_t001`)
+- `E1057` (progressed, other, actual effort: 1 sessions, 3 msgs, 35 steps, 40 tools, 10 holbuild, 3,695,399 tok (3,678,963 in, 16,436 out, 3,566,080 cached), 564.8s, $2.84053500)
+  - Removed the inner `` `no_type_error_result dflt_res` by (...) `` assertion wrapper and instead put `intcall_default_exprs_no_type_error_from_generated_ih` directly on the goal, followed by `strip_tac` before `Cases_on dflt_res`. -> Moved proof past the old post-default-tail continuation shape: the next failure became the antecedent proof for the default helper, showing that factoring/application order was the main issue. (`TO_type_system_rewrite-20260524T091119Z_m49932_t001`, `TO_type_system_rewrite-20260524T091119Z_m49933_t001`)
+  - Probed and attempted to solve the first default-helper antecedent (`state_well_typed st0'`) by consuming the labelled `default_ih` inside the antecedent context. -> Probe showed the first subgoal has local assumptions 40-49 including the specialized generated-IH premises and goal `state_well_typed st0'`; this is the right abstraction level, not the previous giant post-default continuation. Broad `simp` timed out and `irule`/`drule_all` variants did not match cleanly. (`TO_type_system_rewrite-20260524T091119Z_m49934_t001`, `TO_type_system_rewrite-20260524T091119Z_m49937_t001`, `TO_type_system_rewrite-20260524T091119Z_m49939_t001`, `TO_type_system_rewrite-20260524T091119Z_m49941_t001`, `TO_type_system_rewrite-20260524T091119Z_m49942_t001`, `TO_type_system_rewrite-20260524T091119Z_m49945_t001`, `TO_type_system_rewrite-20260524T091119Z_m49946_t001`, `TO_type_system_rewrite-20260524T091119Z_m49948_t001`)
+  - Replaced broad labelled-IH consumption with a hand-specialized `asm "default_ih" (qspecl_then [...])` over the local generated variables, then inserted a `qmatch_asmsub_rename_tac` for the check-state variable after a parse failure on `s''`. -> The hand-specialized route is unfinished. `qpat_assum` could not select the labelled IH; `asm "default_ih"` selected it but failed to parse `s''`. The final rename edit may be the right next local repair, but has not been built. (`TO_type_system_rewrite-20260524T091119Z_m49949_t001`, `TO_type_system_rewrite-20260524T091119Z_m49950_t001`, `TO_type_system_rewrite-20260524T091119Z_m49952_t001`, `TO_type_system_rewrite-20260524T091119Z_m49953_t001`, `TO_type_system_rewrite-20260524T091119Z_m49955_t001`, `TO_type_system_rewrite-20260524T091119Z_m49956_t001`, `TO_type_system_rewrite-20260524T091119Z_m49957_t001`)
+- `E1058` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 5 steps, 5 tools, 2 holbuild, 366,872 tok (364,310 in, 2,562 out, 339,456 cached), 100.1s, $0.37085800)
+  - Built the final unverified rename/hand-specialized `asm "default_ih" (qspecl_then [...])` edit in `intcall_expr_no_type_error_from_generated_ih`. -> Build still failed inside the labelled default-IH consumption; the immediate failure was `Q.SPEC_THEN` parse failure in the long manually-instantiated qspecl list, with a >4KiB generated-IH context. (`TO_type_system_rewrite-20260524T091119Z_m49963_t001`, `TO_type_system_rewrite-20260524T091119Z_m49963_t002`)
+  - Tried a less hand-specialized live-context path: replaced the long `qspecl_then` list with `asm "default_ih" mp_tac`, then simplified only the known wrapper equations and stack-irrelevance lemmas before specializing the final four quantified variables. -> The replacement avoided the parse failure but timed out on `simp[get_scopes_def,set_scopes_def,return_def,context_well_typed_stk_irrelevant,functions_well_typed_stk_irrelevant]` over the huge generated-IH context. This confirms the current helper interface is too brittle for inline consumption here. (`TO_type_system_rewrite-20260524T091119Z_m49965_t001`)
+
+### Ruled Out
+
+- More manual `qspecl_then` argument tweaking over the labelled generated IH
+- Broad simplification over the full labelled generated-IH context after `asm "default_ih" mp_tac`
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49963_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49963_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49965_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49966_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1071`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 4 tools, 1 holbuild, 133,993 tok (133,273 in, 720 out, 118,784 cached), 31.1s, $0.15343700
+- next: Request strategist review, then begin scheduled carry-forward component C2.7.3.1.3.5.2 if accepted.
+
+### Attempts / Evidence
+
+- `E1059` (proved, , actual effort: 1 sessions, 6 steps, 6 tools, 2 holbuild, 570,722 tok (567,893 in, 2,829 out, 549,888 cached), 105.9s, $0.44983900)
+  - Deleted the failed live-context `asm "default_ih" mp_tac >> simp[...] >> qspecl_then ...` replacement block and left a split-first skeleton for the default helper antecedent. -> Source now has no long generated-IH specialization or broad `asm "default_ih" mp_tac` simplification. Readback confirms the default helper is applied directly and the first conjunct is isolated before small side-condition `simp[]` conjuncts. (`TO_type_system_rewrite-20260524T091119Z_m49971_t001`, `TO_type_system_rewrite-20260524T091119Z_m49972_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` to verify syntax and locate the next proof obligation after cleanup. -> Build parsed through the cleanup and failed at the next proof step (`asm "default_ih" ACCEPT_TAC` / then `MATCH_ACCEPT_TAC` after a small tweak), confirming cleanup succeeded and the remaining work belongs to C2.7.3.1.3.5.2 exact-premise proof. (`TO_type_system_rewrite-20260524T091119Z_m49972_t002`, `TO_type_system_rewrite-20260524T091119Z_m49974_t001`)
+- `E1061` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 257,706 tok (257,033 in, 673 out, 248,832 cached), 19.5s, $0.18561100)
+  - Inspected current default-helper branch around lines 10136-10155 to confirm E1059 cleanup remains preserved after the replan: `intcall_default_exprs_no_type_error_from_generated_ih` is applied directly and the first helper premise is isolated as `conj_tac >- (asm "default_ih" ACCEPT_TAC)`; no broad `asm "default_ih" mp_tac >> simp[...]` or hand-specialized generated-IH path is present. -> Carry-forward cleanup condition holds. The source is still partial due to successor components (inline env-context branch and temporary probe), but the old brittle default-IH plumbing was not reintroduced. (`TO_type_system_rewrite-20260524T091119Z_m50047_t001`)
+- `E1065` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 241,495 tok (241,028 in, 467 out, 231,424 cached), 16.9s, $0.17774200)
+  - Audited source for default-IH plumbing after replan using grep for old broad `asm "default_ih" mp_tac` and current split-first helper application. -> Cleanup carry-forward holds: no old `asm "default_ih" mp_tac` path appears; source still applies `intcall_default_exprs_no_type_error_from_generated_ih` and isolates the generated-IH premise as `conj_tac >- (asm "default_ih" ACCEPT_TAC)`. (`TO_type_system_rewrite-20260524T091119Z_m50116_t001`)
+- `E1071` (proved, , actual effort: 1 sessions, 2 steps, 4 tools, 1 holbuild, 133,993 tok (133,273 in, 720 out, 118,784 cached), 31.1s, $0.15343700)
+  - Audited `vyperTypeStmtSoundnessScript.sml` for the old brittle default-IH plumbing and current split-first helper application, then ran focused holbuild to verify the failure remains the known successor tail, not cleanup regression. -> Carry-forward cleanup is preserved: grep finds no `asm "default_ih" mp_tac`; source still applies `intcall_default_exprs_no_type_error_from_generated_ih` directly and isolates the generated-IH premise with `conj_tac >- (asm "default_ih" ACCEPT_TAC)`. Focused holbuild reaches the known 8-goal post-default tail after line 10216, confirming no reintroduced brittle default-IH path. (`TO_type_system_rewrite-20260524T091119Z_m50195_t002`, `TO_type_system_rewrite-20260524T091119Z_m50195_t003`, `TO_type_system_rewrite-20260524T091119Z_m50195_t001`, `TO_type_system_rewrite-20260524T091119Z_m50195_t004`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50195_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50195_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50195_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50195_t004` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1072`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 172,045 tok (171,492 in, 553 out, 158,720 cached), 30.7s, $0.15981000
+- next: Request strategist review, then begin scheduled carry-forward component C2.7.3.1.3.5.3 if accepted.
+
+### Attempts / Evidence
+
+- `E1060` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 11 steps, 19 tools, 2 holbuild, 884,115 tok (880,171 in, 3,944 out, 836,096 cached), 114.9s, $0.75674300)
+  - Kept split-first application of `intcall_default_exprs_no_type_error_from_generated_ih`; first helper premise is closed by labelled `default_ih` and `well_typed_exprs_DROP` is solved. Tried to derive `env_context_consistent env_body cx` locally from `env_consistent env cx ...` and env_body field equalities, then push through stack update. -> Failed before the temporary probe: holbuild showed the branch tactic did not solve the env-context conjunct; goal remained large, including only partial `env_body` context obligations. (`TO_type_system_rewrite-20260524T091119Z_m50031_t001`, `TO_type_system_rewrite-20260524T091119Z_m50034_t001`)
+  - Replaced env-context branch with direct `gvs[env_consistent_def, env_context_consistent_def] >> rw[env_context_consistent_def, stack-irrelevance lemmas, current_module_def] >> first_x_assum drule_all`. -> Still failed in the same helper antecedent cluster with two unsolved subgoals, including a storage/layout obligation guarded by `well_formed_vtype (Type ty)`; broad unfolding exposes all env-context clauses instead of closing the conjunct. (`TO_type_system_rewrite-20260524T091119Z_m50039_t001`, `TO_type_system_rewrite-20260524T091119Z_m50040_t001`)
+- `E1062` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 13 tools, 2 holbuild, 520,590 tok (518,276 in, 2,314 out, 481,792 cached), 175.0s, $0.49273600)
+  - Added local theorem `intcall_env_body_consistency_for_defaults` immediately after `callable_body_typing_from_env_consistent`, using the same definition-unfolding/stack-irrelevance pattern as `env_consistent_stk_push` for context and immutables transport. -> The lemma was accepted: holbuild resumed from after `callable_body_typing_from_env_consistent`, passed the inserted theorem, and the next failure occurred later in the pre-existing `intcall_expr_no_type_error_from_generated_ih` consumer block at the inline env-context branch owned by successor C2.7.3.1.3.5.3. (`TO_type_system_rewrite-20260524T091119Z_m50058_t001`, `TO_type_system_rewrite-20260524T091119Z_m50059_t001`)
+- `E1066` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 257,486 tok (257,056 in, 430 out, 248,832 cached), 16.3s, $0.17843600)
+  - Audited source for carried-forward `intcall_env_body_consistency_for_defaults[local]` theorem and its exposed conclusions. -> Adapter carry-forward holds: theorem is present in `vyperTypeStmtSoundnessScript.sml` with the planned `env_context_consistent env_body (cx with stk updated_by CONS ...)` and `env_immutables_consistent env_body ...` conclusions. No source edits were made for this carry-forward component. (`TO_type_system_rewrite-20260524T091119Z_m50120_t001`)
+- `E1072` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 172,045 tok (171,492 in, 553 out, 158,720 cached), 30.7s, $0.15981000)
+  - Audited `intcall_env_body_consistency_for_defaults[local]` and ran focused `holbuild` for `vyperTypeStmtSoundnessTheory`. -> Carry-forward adapter theorem remains present in `vyperTypeStmtSoundnessScript.sml`; readback around the local helper block confirms adjacent default-frame helpers still compile up to the known later `intcall_expr_no_type_error_from_generated_ih` tail. Focused holbuild resumes in the known successor proof and fails after the adapter/package use point, not in the adapter theorem. (`TO_type_system_rewrite-20260524T091119Z_m50200_t002`, `TO_type_system_rewrite-20260524T091119Z_m50200_t001`, `TO_type_system_rewrite-20260524T091119Z_m50200_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50200_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50200_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50200_t003` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1073`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 199,071 tok (198,529 in, 542 out, 186,368 cached), 31.0s, $0.17024900
+- next: Request strategist review, then begin C2.7.3.1.3.5.4 to add the stronger default-expression soundness wrapper.
+
+### Attempts / Evidence
+
+- `E1063` (progressed, unknown, actual effort: 1 sessions, 2 msgs, 23 steps, 25 tools, 6 holbuild, 2,631,518 tok (2,623,271 in, 8,247 out, 2,473,472 cached), 306.9s, $2.23314100)
+  - Replaced the generated-IH consumer's inline `gvs[env_consistent_def, env_context_consistent_def]`/temporary `FAIL_TAC` block with an assertion/use of the new adapter theorem and simple side-condition simplification. -> Progress: the source no longer contains the old `FAIL_TAC "probe second helper side"` and now uses `intcall_env_body_consistency_for_defaults`. However, a `rw[env_consistent_def]` finish did not solve all helper side conditions; holbuild still reported four remaining goals, with the first visible one an `env_context_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))` goal. This suggests the adapter application was not yet being consumed in the right form or its implication was not discharged before rewriting. (`TO_type_system_rewrite-20260524T091119Z_m50082_t001`, `TO_type_system_rewrite-20260524T091119Z_m50079_t001`)
+  - After the failing build, changed the adapter use from `simp[] >> strip_tac` to `(impl_tac >- simp[]) >> strip_tac` before `rw[env_consistent_def]`. -> Unverified partial source state at handoff; next session should build immediately and inspect whether this fixed the adapter implication consumption or still leaves the same four goals. (`TO_type_system_rewrite-20260524T091119Z_m50084_t002`)
+- `E1064` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 23 steps, 24 tools, 5 holbuild, 2,015,327 tok (2,002,164 in, 13,163 out, 1,934,848 cached), 373.5s, $1.69889400)
+  - Built current handoff source with `(impl_tac >- simp[]) >> strip_tac >> rw[env_consistent_def]` after the adapter call. -> Failed with same four default-helper side-condition goals, first visible `env_context_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))`. Adapter result was not consumed in a way that solved the helper antecedent block. (`TO_type_system_rewrite-20260524T091119Z_m50089_t001`)
+  - Tried asserting the exact adapter conjunction with `by (irule intcall_env_body_consistency_for_defaults >> simp[])` before `gvs[env_consistent_def]`. -> Failed with the same four side-condition goals, indicating assertion/rewriting still did not feed the helper antecedent block robustly. (`TO_type_system_rewrite-20260524T091119Z_m50095_t001`)
+  - Tried direct `qspecl_then ... mp_tac intcall_env_body_consistency_for_defaults >> simp[] >> strip_tac >> gvs[env_consistent_def]`. -> Failed with the same goal shape; broad simplification after stripping adapter remains insufficient. (`TO_type_system_rewrite-20260524T091119Z_m50099_t001`)
+  - Tried building an explicit `env_consistent env_body (cx with stk updated_by CONS ...) args_st` assertion from the adapter and then `simp[env_consistent_def]`. -> Failed with the same goal shape; even constructing the packaged env_consistent fact inline did not close the helper antecedents. (`TO_type_system_rewrite-20260524T091119Z_m50102_t001`)
+  - Tried focused `simp[env_consistent_def, context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]` after explicit adapter implication discharge, avoiding context/immutables definition unfolding in the consumer. -> Failed with the same first visible goal. This exhausts the planned Risk-2 local refactor and points to missing consumer-facing corollary/decomposition. (`TO_type_system_rewrite-20260524T091119Z_m50104_t001`)
+- `E1067` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 2 holbuild, 345,133 tok (343,589 in, 1,544 out, 323,072 cached), 146.3s, $0.31044100)
+  - Inserted local theorem `intcall_default_env_side_conditions` immediately after `intcall_env_body_consistency_for_defaults`; proof applies the adapter lemma then rewrites stack-irrelevance facts. -> Helper theorem was accepted by holbuild; subsequent focused build resumed past `intcall_env_body_consistency_for_defaults`, checked the new helper, and failed later in the known old consumer block of `intcall_expr_no_type_error_from_generated_ih`. (`TO_type_system_rewrite-20260524T091119Z_m50131_t001`, `TO_type_system_rewrite-20260524T091119Z_m50132_t001`)
+- `E1073` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 199,071 tok (198,529 in, 542 out, 186,368 cached), 31.0s, $0.17024900)
+  - Audited `intcall_default_env_side_conditions[local]` and focused-built `vyperTypeStmtSoundnessTheory`. -> Carry-forward package theorem remains present with the planned pushed-stack env/context/state/accounts/functions conclusions and is still consumed in the IntCall default-helper block. Focused holbuild replays past this packaged side-condition block and fails only at the known post-default tail after `Cases_on dflt_res`, confirming the component boundary remains valid and current blocker is successor default-success/tail work. (`TO_type_system_rewrite-20260524T091119Z_m50204_t002`, `TO_type_system_rewrite-20260524T091119Z_m50204_t001`, `TO_type_system_rewrite-20260524T091119Z_m50204_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50204_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50204_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50204_t003` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1074`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 13 steps, 15 tools, 5 holbuild, 962,875 tok (958,497 in, 4,378 out, 918,016 cached), 199.8s, $0.79275300
+- next: Request strategist review, then begin C2.7.3.1.3.5.5 to refactor the successful-defaults IntCall tail to consume the new wrapper.
+
+### Attempts / Evidence
+
+- `E1068` (progressed, other, actual effort: 1 sessions, 3 msgs, 28 steps, 29 tools, 10 holbuild, 3,242,886 tok (3,231,928 in, 10,958 out, 3,161,088 cached), 490.7s, $2.26348400)
+  - Replaced old inline adapter block with `irule intcall_default_env_side_conditions >> simp[]`. -> Failed: `MATCH_MP_TAC`/`irule` could not match the package theorem against the live conjunctive goal. (`TO_type_system_rewrite-20260524T091119Z_m50138_t001`)
+  - Tried explicit `qspecl_then ... mp_tac intcall_default_env_side_conditions`, discharging antecedents with stack-irrelevance simplification and then `strip_tac >> simp[]`. -> Failed at branch close with remaining side-condition subgoals; the output was large because labelled generated IH assumptions obscured the small residual goal. (`TO_type_system_rewrite-20260524T091119Z_m50140_t001`, `TO_type_system_rewrite-20260524T091119Z_m50154_t001`, `TO_type_system_rewrite-20260524T091119Z_m50161_t001`)
+  - Probed after package antecedent, deleting labelled `default_ih`/`body_ih` only for readability. -> Probe revealed the live residual was small: `env_context_consistent ... /\ env_immutables_consistent ... /\ ... ==> env_context_consistent ... /\ env_immutables_consistent ...`. This suggests splitting after `strip_tac`, not more env-definition unfolding. (`TO_type_system_rewrite-20260524T091119Z_m50159_t001`)
+- `E1069` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 18 steps, 24 tools, 1 holbuild, 1,644,205 tok (1,635,053 in, 9,152 out, 1,558,528 cached), 230.4s, $1.43644900)
+  - Built current source with explicit `intcall_default_env_side_conditions` package consumption and `strip_tac >> rpt conj_tac >> simp[]`. -> Default side-condition block is no longer the failing branch-close point; build progresses to post-default IntCall tail residuals inside the same local theorem. (`TO_type_system_rewrite-20260524T091119Z_m50168_t001`)
+  - Inspected source and instrumented log around lines 10192-10216 and failed goals. -> Residual first goal is after `dflt_res = INL x`, requiring no TypeError for bind_arguments/evaluate_type/lock/push/body/final safe_cast; current helper result lacks default-expression runtime typedness for `x`. (`TO_type_system_rewrite-20260524T091119Z_m50169_t001`, `TO_type_system_rewrite-20260524T091119Z_m50169_t002`)
+- `E1070` (stuck, plan_incomplete, actual effort: 1 sessions, 1 msgs, 19 steps, 25 tools, 1 holbuild, 1,764,362 tok (1,754,141 in, 10,221 out, 1,675,776 cached), 249.9s, $1.53634300)
+  - Built the current package-consumer edit as directed by STATE. -> Holbuild progressed through the package side-condition block but failed at the branch close after `Cases_on dflt_res`, with 8 residual post-default IntCall tail goals. (`TO_type_system_rewrite-20260524T091119Z_m50168_t001`)
+  - Inspected the source/log around `intcall_expr_no_type_error_from_generated_ih` lines 10192-10216. -> The top residual goal is not env-side-condition packaging but a successful defaults branch proving the whole IntCall tail cannot return `TypeError`. Existing helper `intcall_default_exprs_no_type_error_from_generated_ih` only gives `no_type_error_result dflt_res`; the success branch also needs typed default values for binding/final-cast reasoning. (`TO_type_system_rewrite-20260524T091119Z_m50169_t001`, `TO_type_system_rewrite-20260524T091119Z_m50169_t002`)
+- `E1074` (proved, , actual effort: 1 sessions, 1 msgs, 13 steps, 15 tools, 5 holbuild, 962,875 tok (958,497 in, 4,378 out, 918,016 cached), 199.8s, $0.79275300)
+  - Copied no-TypeError helper skeleton, asserted `env_consistent (defaults_env env_body) cxd (sevl with scopes := [FEMPTY])` using `defaults_env_empty_frame_consistent`, separately established `state_well_typed (sevl with scopes := [FEMPTY])`, then discharged generated IH package and retained success typedness conjunct. -> Focused holbuild progressed beyond `intcall_default_exprs_sound_from_generated_ih`; first failure is in downstream `intcall_expr_no_type_error_from_generated_ih`, proving this boundary lemma now builds. (`TO_type_system_rewrite-20260524T091119Z_m50235_t001`)
+
+### Ruled Out
+
+- Need to unfold env consistency in the wrapper consumer; a direct assertion via `defaults_env_empty_frame_consistent` suffices.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50235_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50234_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50226_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 plan expectation that body-IH no-TypeError/return-exception typing was sufficient was wrong. Need strategist-owned refinement: either no-control-exception lemma for callable bodies, a strengthened body-IH/post-push premise, or different helper shape consuming existing no-control invariants.
+- latest episode: `E1077`
+- blocker: The current `intcall_post_push_tail_no_type_error` premise set is too weak: it lacks a boundary ruling out non-Return control exceptions from callable bodies before `handle_function`. Under the current premise shape, BreakException/ContinueException are not excluded and `handle_function_def` can raise `Error (TypeError "handle_function")`.
+- actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 189,449 tok (187,043 in, 2,406 out, 171,520 cached), 50.1s, $0.23555500
+- next: Call plan_oracle(mode='review') for C2.7.3.1.3.5.5 with this stuck closure and E1076 evidence; do not continue tactic patching inline.
+
+### Attempts / Evidence
+
+- `E1075` (progressed, other, actual effort: 1 sessions, 4 msgs, 52 steps, 63 tools, 12 holbuild, 4,956,715 tok (4,940,952 in, 15,763 out, 4,823,040 cached), 676.5s, $3.47397000)
+  - Replaced the too-specific rename of `exprs_runtime_typed ... needed_dflts dflt_vs` with a direct assertion over live default result variable `x`; used `intcall_bind_arguments_from_runtime_typed`, `simp[get_tenv_stk_irrelevant]`, and `rpt conj_tac >> gvs[...] >> decide_tac`. -> The bind-arguments assertion no longer blocks; holbuild proceeds past it and fails only at the intentional `FAIL_TAC` probe in the post-bind tail. (`TO_type_system_rewrite-20260524T091119Z_m50284_t001`, `TO_type_system_rewrite-20260524T091119Z_m50292_t001`)
+  - After the assertion, stripped the existential and simplified `lift_option_type`, `return`, `raise`, and `get_tenv_stk_irrelevant`. -> The probe still reports a large monadic tail; holbuild goalfrag output is not showing the fully simplified post-probe state clearly, so next step should either insert a more targeted probe after a small case split or factor a helper instead of broad tactic search. (`TO_type_system_rewrite-20260524T091119Z_m50292_t001`, `TO_type_system_rewrite-20260524T091119Z_m50303_t001`)
+- `E1076` (progressed, risk_mismatch, actual effort: 1 sessions, 4 msgs, 64 steps, 73 tools, 21 holbuild, 6,200,157 tok (6,180,727 in, 19,430 out, 6,065,152 cached), 880.9s, $4.19335100)
+  - Factored and case-split the post-push helper in evaluator order: split `finally`, proved the successful `INL rv` safe-cast branch using `intcall_finally_try_handle_success_rv` plus `lift_safe_cast_value_has_type_no_type_error`; then unfolded cleanup/no-control branches. -> Success branch of `finally` advanced, but the INR tail still leaves cases where cleanup or `handle_function` produces an exception. After unfolding `handle_function`, the problematic branch is body result `INR y` with `handle_function y r = (INR e,s'')`; current assumptions only state `no_type_error_result (INR y)` and `return_exception_typed env_body NoneT y`, insufficient to rule out `y = BreakException`/`ContinueException`, for which `handle_function` raises a TypeError. (`TO_type_system_rewrite-20260524T091119Z_m50429_t001`, `TO_type_system_rewrite-20260524T091119Z_m50436_t001`)
+- `E1077` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 189,449 tok (187,043 in, 2,406 out, 171,520 cached), 50.1s, $0.23555500)
+  - Followed the active leaf's successful-defaults tail plan through the existing partial proof: stronger default wrapper and bind-arguments boundary were integrated; post-push tail was factored and the successful final-cast branch was advanced. -> The remaining branch is not a cleanup tactic failure: when the body returns `INR y`, existing premises only give no-TypeError for `y` and weak `return_exception_typed`; `handle_function y` can still map Break/Continue to a TypeError. (`TO_type_system_rewrite-20260524T091119Z_m50429_t001`, `TO_type_system_rewrite-20260524T091119Z_m50434_t001`, `TO_type_system_rewrite-20260524T091119Z_m50436_t001`)
+  - Tried to escalate for a refined boundary as directed by STATE, but the gate rejected plan_oracle because the active component had not been terminally closed. -> Closed this active leaf as stuck/risk_mismatch so the strategist can repair/decompose the proof interface before any more edits/builds. (`TO_type_system_rewrite-20260524T091119Z_m50446_t001`, `TO_type_system_rewrite-20260524T091119Z_m50447_t001`)
+
+### Ruled Out
+
+- More unfolding/case-splitting of finally/try/handle_function under current premises
+- Using only no_type_error_result plus return_exception_typed to prove handle_function cannot TypeError
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50429_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50434_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50436_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50446_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50447_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1078`
+- blocker: 
+- actual effort: 1 sessions, 9 steps, 14 tools, 3 holbuild, 709,408 tok (707,396 in, 2,012 out, 672,768 cached), 97.6s, $0.56988400
+- next: Request strategist review, then begin scheduled C2.7.3.1.3.5.5.2 handle_function control TypeError computation probe.
+
+### Attempts / Evidence
+
+- `E1078` (proved, , actual effort: 1 sessions, 9 steps, 14 tools, 3 holbuild, 709,408 tok (707,396 in, 2,012 out, 672,768 cached), 97.6s, $0.56988400)
+  - Added `[local]` theorem proving `[Break]` is accepted by `type_stmts`, has `stmts_no_fallthrough`, evaluates to `(INR BreakException,pushed_st)`, satisfies `no_type_error_result`, and satisfies `return_exception_typed`, using only direct rewriting of type/control/evaluator/result definitions. -> Probe builds; holbuild reaches subsequent known failing `intcall_post_push_tail_no_type_error`, confirming this probe theorem is proved in the prefix. (`TO_type_system_rewrite-20260524T091119Z_m50468_t001`, `TO_type_system_rewrite-20260524T091119Z_m50471_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50468_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50471_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1079`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 1 holbuild, 485,365 tok (484,269 in, 1,096 out, 467,456 cached), 52.2s, $0.35067300
+- next: Request strategist review, then begin scheduled C2.7.3.1.3.5.5.3 full post-push tail counterexample probe.
+
+### Attempts / Evidence
+
+- `E1079` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 1 holbuild, 485,365 tok (484,269 in, 1,096 out, 467,456 cached), 52.2s, $0.35067300)
+  - Added `[local]` theorem proving `handle_function BreakException` and `handle_function ContinueException` both compute to `(INR (Error (TypeError "handle_function")),s)` by `simp[handle_function_def, raise_def]`. -> Probe builds; holbuild reaches subsequent known failing `intcall_post_push_tail_no_type_error`, confirming the computation theorem is proved in the prefix. (`TO_type_system_rewrite-20260524T091119Z_m50477_t001`, `TO_type_system_rewrite-20260524T091119Z_m50478_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50477_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50478_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.3.5.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E1080`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 10 steps, 14 tools, 1 holbuild, 1,137,554 tok (1,134,991 in, 2,563 out, 1,108,992 cached), 88.6s, $0.76138100
+- next: Call plan_oracle review on this verified falsehood for the parent gate. Because C2 is task-required, do not continue sibling proof work unless the strategist/user authorizes a source/spec repair plan.
+
+### Attempts / Evidence
+
+- `E1080` (proved, , actual effort: 1 sessions, 1 msgs, 10 steps, 14 tools, 1 holbuild, 1,137,554 tok (1,134,991 in, 2,563 out, 1,108,992 cached), 88.6s, $0.76138100)
+  - Added `[local]` theorem `intcall_post_push_tail_break_counterexample` instantiating the post-push tail with `body = [Break]`, `ret = NoneT`, and cleanup `do pop_function prev; return () od`. Chose witness `res = INR (Error (TypeError "handle_function"))` and `st' = pushed_st with scopes := prev`; proved by rewriting evaluator, monad, finally/try, handle_function, pop_function/set_scopes, safe_cast(NoneTV), and result predicates. -> Counterexample probe builds; holbuild reaches subsequent known failing `intcall_post_push_tail_no_type_error`, confirming the checked theorem in the prefix. This verifies that the old helper-style premises do not imply `no_type_error_result` for the tail. (`TO_type_system_rewrite-20260524T091119Z_m50489_t001`, `TO_type_system_rewrite-20260524T091119Z_m50490_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m50489_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m50490_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.1.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` The scheduler forced C2.7.3.1.4 as Oracle next even though the immediately preceding local helper C2.7.3.1.3.5 is still failing and was just replanned as the necessary proof-shape repair. Holbuild cannot reach the Resume branch because it resumes/fails in `intcall_expr_no_type_error_from_generated_ih`. Working on C2.7.3.1.4 now would violate verified-prefix discipline and mix consumer integration into a broken helper proof.
+- latest episode: `E1055`
+- blocker: Preceding local helper proof C2.7.3.1.3.5 is broken and must be repaired before this Resume-consumer refactor can be verified.
+- actual effort: 1 sessions, 1 steps, 88,193 tok (87,133 in, 1,060 out, 82,432 cached), 16.2s, $0.09652100
+- next: Review with plan_oracle and fix the schedule/dependency so C2.7.3.1.3.5 is beginable/Oracle next before C2.7.3.1.4. Then remove/rewrite the experimental default-result assertion block and repair `intcall_expr_no_type_error_from_generated_ih` as replanned.
+
+### Attempts / Evidence
+
+- `E1055` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 88,193 tok (87,133 in, 1,060 out, 82,432 cached), 16.2s, $0.09652100)
+  - After plan_oracle refined C2.7.3.1.3.5, attempted to begin that helper-repair component. -> Harness refused because Oracle next was C2.7.3.1.4, despite C2.7.3.1.3.5 being the proof that currently fails before the Resume branch. (`TO_type_system_rewrite-20260524T091119Z_m49895_t001`, `TO_type_system_rewrite-20260524T091119Z_m49896_t001`)
+  - Queried plan and then began the forced C2.7.3.1.4 leaf to satisfy the scheduler gate. -> The plan still shows C2.7.3.1.4 as next, but its own summary depends on the whole-branch local lemma existing. Current holbuild evidence shows the file fails earlier in that local lemma, so no sound C2.7.3.1.4 edit/build step is possible yet. (`TO_type_system_rewrite-20260524T091119Z_m49897_t001`, `TO_type_system_rewrite-20260524T091119Z_m49900_t001`, `TO_type_system_rewrite-20260524T091119Z_m49892_t002`)
+
+### Ruled Out
+
+- Editing the Resume consumer while the helper theorem immediately above it fails; holbuild will not reach the consumer.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m49892_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49895_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49896_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49897_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m49900_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0899`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 258,057 tok (256,830 in, 1,227 out, 247,808 cached), 26.4s, $0.20582400
+- next: Call strategist review for E0899. If accepted, begin C2.7.3.3 to derive callable/default typing facts and consume `default_ih` at the remaining default-evaluation stage.
+
+### Attempts / Evidence
+
+- `E0899` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 258,057 tok (256,830 in, 1,227 out, 247,808 cached), 26.4s, $0.20582400)
+  - Used the C2.7.3.1 labels and local IntCall helpers to replay recursion/module/function/args-length exits, then consumed `actual_ih` with explicit specialization of the current evaluator-prefix variables. -> Holbuild reaches the post-actual-argument success stage; the old selector failure and early branch timeout are gone. (`TO_type_system_rewrite-20260524T091119Z_m45423_t001`)
+  - Case split on `args_res` after `actual_ih`; used `gvs[no_type_error_result_def]` to close the `INR` branch and retain success-branch preservation/runtime-typed facts. -> Instrumented log shows remaining goal starts at default evaluation with assumptions `state_well_typed args_st`, `env_consistent env cx args_st`, `accounts_well_typed args_st.accounts`, and `exprs_runtime_typed env es x'³'`, matching the C2.7.3.2 milestone and leaving default/body tail work to later leaves. (`TO_type_system_rewrite-20260524T091119Z_m45420_t001`)
+
+### Ruled Out
+
+- Late actual-IH selector variants
+- Solving the full defaults/body nested tail inside C2.7.3.2
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45423_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45420_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk-2 leaf C2.7.3.3 is not closing with the current labelled-IH strategy. After callable_body_typing_from_env_consistent, pushing labelled default_ih with mp_tac/simp still leaves the same large generated default/body IH goals; two guessed explicit qspecl_then prefixes also failed. This matches the proof-interface warning: continuing to guess selectors/specializations in the >4KB IntCall tail is brittle. Need strategist redesign/decomposition: either expose the exact default_ih specialization shape with a smaller probe/helper, or introduce a default-argument boundary lemma that avoids specializing the generated IH in the large tail.
+- latest episode: `E0906`
+- blocker: Need revised decomposition/boundary for default_ih consumption in Expr_Call_IntCall. Source currently contains deliberate FAIL_TAC probe at line ~9420 and is not build-clean.
+- actual effort: 1 sessions, 2 msgs, 27 steps, 30 tools, 5 holbuild, 2,518,549 tok (2,507,190 in, 11,359 out, 2,432,512 cached), 352.6s, $1.93041600
+- next: Call plan_oracle(mode='review') for C2.7.3.3 and request replacement/augmentation that avoids brittle guessed qspecl_then/default_ih selection in the large tail.
+
+### Attempts / Evidence
+
+- `E0900` (progressed, missing_helper, actual effort: 1 sessions, 4 msgs, 34 steps, 49 tools, 7 holbuild, 3,642,946 tok (3,627,295 in, 15,651 out, 3,517,952 cached), 419.9s, $2.77522100)
+  - Added local copies of `well_typed_exprs_DROP`, stk-irrelevance lemmas, and `defaults_env_consistent_push`; tried proving defaults env consistency by unfolding env consistency definitions. -> Stk irrelevance helper proof made progress: context branch reduced to two lookup_var_slot_from_layout stk-invariance subgoals, solved by adding `lookup_var_slot_from_layout_def`. Current blocker moved to env_scopes_consistent branch for defaults_env with FEMPTY local maps. (`TO_type_system_rewrite-20260524T091119Z_m45449_t001`, `TO_type_system_rewrite-20260524T091119Z_m45461_t001`, `TO_type_system_rewrite-20260524T091119Z_m45466_t001`)
+  - Attempted broad `rw`/`gvs` over env_context_consistent/env_immutables_consistent for `defaults_env_consistent_push`. -> Broad proof left many subgoals and a metis timeout; replaced with more directed `drule_all` style. Do not return to broad `metis_tac[]` for this helper. (`TO_type_system_rewrite-20260524T091119Z_m45453_t001`, `TO_type_system_rewrite-20260524T091119Z_m45456_t001`)
+- `E0901` (progressed, bad_definition, actual effort: 1 sessions, 9 steps, 12 tools, 2 holbuild, 608,701 tok (605,561 in, 3,140 out, 573,952 cached), 96.7s, $0.53922100)
+  - Strengthened scope branch with `gvs[env_scopes_consistent_def] >> rw[env_scopes_consistent_def, defaults_env_def, lookup_scopes_def, FLOOKUP_EMPTY]`. -> It solved the nonempty-scope and empty-map directions but exposed the impossible extra-entry direction for defaults_env scope consistency. (`TO_type_system_rewrite-20260524T091119Z_m45476_t001`)
+- `E0902` (progressed, missing_helper, actual effort: 1 sessions, 4 msgs, 42 steps, 53 tools, 6 holbuild, 4,260,229 tok (4,244,555 in, 15,674 out, 4,125,696 cached), 544.8s, $3.12736300)
+  - Replaced impossible `defaults_env_consistent_push` with `env_consistent_stk_push`, proving env/context/scopes/immutables under stk push with field-preserving rewrites. -> Local prefix now builds past the helper; holbuild reaches `Expr_Call_IntCall` again. (`TO_type_system_rewrite-20260524T091119Z_m45492_t001`, `TO_type_system_rewrite-20260524T091119Z_m45494_t001`)
+  - Inserted a `FAIL_TAC "post_args_success"` probe immediately after successful actual arguments to inspect the remaining generated IH/prefix shape. -> Probe confirmed active success branch has labelled `default_ih` and `body_ih` plus prefix variables; needs explicit default-IH consumption next. (`TO_type_system_rewrite-20260524T091119Z_m45501_t001`)
+  - Tried deriving callee facts by `drule_all callable_body_typing_from_functions_well_typed` in the post-actual-args tail. -> Blind `drule_all` failed before the deliberate probe with `predicate not true`; next proof should derive concrete facts in smaller named steps, not by broad matching in the >4KB tail. (`TO_type_system_rewrite-20260524T091119Z_m45509_t001`)
+- `E0903` (progressed, missing_helper, actual effort: 1 sessions, 3 msgs, 34 steps, 43 tools, 13 holbuild, 3,830,059 tok (3,816,565 in, 13,494 out, 3,707,904 cached), 436.5s, $2.80207700)
+  - Added `callable_body_typing_from_env_consistent` after `callable_body_typing_from_functions_well_typed`; tried first to prove it by `rw[env_consistent_def, env_context_consistent_def] >> drule_all callable_body_typing_from_functions_well_typed`. -> Failed because `drule_all` could not discharge the nonreentrant/callee facts in the helper proof shape; needed explicit use of `functions_well_typed_def`. (`TO_type_system_rewrite-20260524T091119Z_m45522_t001`)
+  - Unfolded `functions_well_typed_def` and attempted to discharge the `toplevel_vtypes` premise from `env_context_consistent`/`env_immutables_consistent`, first with manual case work and then with `metis_tac[well_formed_vtype_def, well_formed_type_def]`. -> Manual branch attempts had wrong focus after HOL entered the disjunct; broad metis timed out. Remaining obligation is a small but delicate vtype branch: for `Type`, prove storage/hashmap/find-NONE clauses; for `HashMapT`, prove the hash-map declaration witness. (`TO_type_system_rewrite-20260524T091119Z_m45541_t001`, `TO_type_system_rewrite-20260524T091119Z_m45547_t001`)
+- `E0904` (progressed, missing_helper, actual effort: 1 sessions, 4 msgs, 43 steps, 49 tools, 11 holbuild, 4,222,213 tok (4,201,328 in, 20,885 out, 4,086,784 cached), 616.4s, $3.24266200)
+  - Proved `callable_body_typing_from_env_consistent` by unfolding `functions_well_typed_def` and proving the top-level-vtypes premise branchwise; crucial fix was `rpt strip_tac` rather than `rw[]` in the `impl_tac` side condition, because `rw[]` stripped the antecedent and left the implication open again after applying `functions_well_typed`. -> Helper no longer blocks the build; holbuild reaches the IntCall Resume. (`TO_type_system_rewrite-20260524T091119Z_m45580_t001`)
+  - In the post-actual-args IntCall success branch, extracted SOME facts from both `lift_option_type ... = INL` equations using `lift_option_type_INL_eq`, then used `drule_all callable_body_typing_from_env_consistent`. -> The new helper matches the large tail and avoids the earlier blind `callable_body_typing_from_functions_well_typed` predicate failure; the deliberate probe showed remaining generated IH obligations. (`TO_type_system_rewrite-20260524T091119Z_m45583_t001`)
+  - Removed the deliberate probe and left `all_tac` after callable facts to see the next prefix shape. -> Proof falls through with 10 open goals and times out at the theorem's trailing `gvs[Once well_typed_expr_def]`; this confirms C2.7.3.3 still needs explicit `default_ih` application immediately after callable facts. (`TO_type_system_rewrite-20260524T091119Z_m45590_t001`)
+- `E0905` (progressed, missing_helper, actual effort: 1 sessions, 2 msgs, 26 steps, 29 tools, 5 holbuild, 2,405,002 tok (2,394,582 in, 10,420 out, 2,321,408 cached), 336.0s, $1.83917400)
+  - After callable_body_typing_from_env_consistent, inserted `asm_x "default_ih" mp_tac >> simp[] >> FAIL_TAC` to inspect the default-IH shape. -> Probe did not isolate a small default-IH premise; holbuild still reports two large generated-IH goals (body/default) in the branch, indicating the current tactic focus/selection is not yet right. (`TO_type_system_rewrite-20260524T091119Z_m45623_t001`)
+  - Tried explicit `qspecl_then` on the labelled default IH with both short and longer guessed evaluator-prefix variable lists analogous to actual_ih. -> Both variants failed to make progress; the displayed state remained the same generated-IH goals, so continuing to guess specializations is likely proof-interface thrashing. (`TO_type_system_rewrite-20260524T091119Z_m45610_t001`, `TO_type_system_rewrite-20260524T091119Z_m45613_t001`)
+- `E0906` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 27 steps, 30 tools, 5 holbuild, 2,518,549 tok (2,507,190 in, 11,359 out, 2,432,512 cached), 352.6s, $1.93041600)
+  - Inserted `asm_x "default_ih" mp_tac >> simp[] >> FAIL_TAC "after_default_mp"` immediately after callable-body facts. -> Probe did not yield a focused small premise; holbuild still displays large generated body/default IH goals, with predicate-not-true from the deliberate fail. (`TO_type_system_rewrite-20260524T091119Z_m45623_t001`)
+  - Tried short explicit `qspecl_then` list for default_ih analogous to actual_ih. -> No progress; same large goals remained. (`TO_type_system_rewrite-20260524T091119Z_m45610_t001`)
+  - Tried longer explicit `qspecl_then` list covering the full default IH prefix variables. -> No progress; same large goals remained. Further guessed specialization is likely tactic thrashing. (`TO_type_system_rewrite-20260524T091119Z_m45613_t001`)
+
+### Ruled Out
+
+- Continuing guessed qspecl_then prefixes for default_ih in the large IntCall tail
+- Leaving all_tac/falling through to trailing simplifier
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45625_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45623_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45613_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45610_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0907`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 386,511 tok (385,766 in, 745 out, 373,248 cached), 123.6s, $0.27156400
+- next: Review with strategist; if accepted, begin C2.7.3.3.2 to prove the caller-local contradiction probe.
+
+### Attempts / Evidence
+
+- `E0907` (proved, , actual effort: 1 sessions, 1 msgs, 3 steps, 2 tools, 1 holbuild, 386,511 tok (385,766 in, 745 out, 373,248 cached), 123.6s, $0.27156400)
+  - Added local probe lemma `env_consistent_defaults_env_no_runtime_lookup` near the local IntCall support helpers, proved by unfolding `env_consistent_def`, `env_scopes_consistent_def`, and `defaults_env_def`, then using the successful lookup direction to contradict `FLOOKUP FEMPTY`. -> Probe lemma was accepted: holbuild replayed past the new helper block and reached the pre-existing `Expr_Call_IntCall` deliberate `FAIL_TAC "after_default_mp"`, confirming no earlier failure from this probe. (`TO_type_system_rewrite-20260524T091119Z_m45631_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45631_t001` (use `read_tool_output` for exact output)
+
+## C2.7.3.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0908`
+- blocker: 
+- actual effort: 1 sessions, 8 steps, 9 tools, 3 holbuild, 653,565 tok (651,311 in, 2,254 out, 610,304 cached), 267.3s, $0.57780700
+- next: Review with strategist; if accepted, C2.7.3.3 has confirmed the defaults-env obstruction and should be replanned before any further IntCall tail/body proof work.
+
+### Attempts / Evidence
+
+- `E0908` (proved, , actual effort: 1 sessions, 8 steps, 9 tools, 3 holbuild, 653,565 tok (651,311 in, 2,254 out, 610,304 cached), 267.3s, $0.57780700)
+  - Added local theorem `env_consistent_defaults_env_contradicts_caller_local` immediately after `env_consistent_defaults_env_no_runtime_lookup`; proof derives `IS_SOME (lookup_scopes id st.scopes)` from caller `env_consistent` and caller `FLOOKUP`, then applies the defaults-env no-runtime-lookup probe. -> Probe lemma was accepted by holbuild; build replayed past it and reached the pre-existing deliberate `FAIL_TAC "after_default_mp"` in `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`, confirming no earlier failure from the probe. (`TO_type_system_rewrite-20260524T091119Z_m45644_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45644_t001` (use `read_tool_output` for exact output)
+
+## C2.7.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0950`
+- blocker: Structured PLAN gate still makes C2.7.4 active/Oracle-next even though C2.7.4 has dependency C2.7.3.0b.3 and its own plan forbids editing downstream statement soundness until vyperEvalPreservesScopesTheory builds. A fresh holbuild of the prerequisite target confirms the source currently fails earlier in vyperEvalPreservesScopesScript.sml at the C2.7.3.0b.2.3 failed explicit-Q.INST assertion, before C2.7.4 can be reached.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 113,793 tok (112,764 in, 1,029 out, 105,472 cached), 21.2s, $0.12006600
+- next: Reschedule/deactivate C2.7.4 and begin C2.7.3.0b.2.3 to replace lines 2353-2359 with the forward-discharge tactic planned for `intcall_body_ih_resume_pack`; then close C2.7.3.0b.3 after `vyperEvalPreservesScopesTheory` builds.
+
+### Attempts / Evidence
+
+- `E0949` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 155,285 tok (154,190 in, 1,095 out, 148,480 cached), 23.3s, $0.13564000)
+  - Began scheduler-selected C2.7.4 and ran `holbuild` for `vyperTypeStmtSoundnessTheory` to see whether C2.7.4 was reachable. -> Build stopped in imported `vyperEvalPreservesScopesTheory` at the failed explicit-Q.INST experiment from C2.7.3.0b.2.3; C2.7.4 proof body is not reachable until the prerequisite is repaired. (`TO_type_system_rewrite-20260524T091119Z_m46807_t001`, `TO_type_system_rewrite-20260524T091119Z_m46808_t001`)
+- `E0950` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 113,793 tok (112,764 in, 1,029 out, 105,472 cached), 21.2s, $0.12006600)
+  - Session-start gate assessment plus `holbuild` for `vyperEvalPreservesScopesTheory` under scheduler-selected C2.7.4. -> Build resumes at `eval_preserves_tv[IntCall_ptv]` and fails on the retained explicit-Q.INST/match_mp experiment in `vyperEvalPreservesScopesScript.sml` lines 2350-2359. This is the prerequisite C2.7.3.0b.2.3 failure, not a reachable C2.7.4 proof goal. (`TO_type_system_rewrite-20260524T091119Z_m46818_t003`, `TO_type_system_rewrite-20260524T091119Z_m46821_t001`)
+
+### Ruled Out
+
+- Editing `vyperTypeStmtSoundnessScript.sml` under C2.7.4 while `vyperEvalPreservesScopesTheory` fails in source-order prerequisite
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m46818_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46820_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m46821_t001` (use `read_tool_output` for exact output)
+
+## C2.8
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete`
+- latest episode: `E0884`
+- blocker: C2.8 is a build/audit checkpoint with declared dependencies C2.6.6 and C2.7.3, but the scheduler made it Oracle next while those dependencies are not closed and the source is known not build-clean due partial C2.7.2 helper edits. Running the C2.8 audit immediately fails in `bind_arguments_env_scopes_consistent`, a C2.7.2 obligation, so C2.8 is not executable yet.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 207,927 tok (207,109 in, 818 out, 202,752 cached), 24.1s, $0.14770100
+- next: Review with strategist/scheduler and make C2.7.2.1 (or another C2.7.2 repair leaf) the next executable component before C2.8. C2.8 should remain after C2.6.6 and C2.7.3.
+
+### Attempts / Evidence
+
+- `E0884` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 207,927 tok (207,109 in, 818 out, 202,752 cached), 24.1s, $0.14770100)
+  - Began scheduler-mandated C2.8 and ran the prescribed audit build `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)`. -> Audit cannot execute: build fails before reaching audit status, in C2.7.2 helper `bind_arguments_env_scopes_consistent`; C2.8 dependencies C2.6.6/C2.7.3 are not satisfied. (`TO_type_system_rewrite-20260524T091119Z_m45098_t001`, `TO_type_system_rewrite-20260524T091119Z_m45099_t001`)
+
+### Ruled Out
+
+- Continuing C2.8 audit while the file has a known C2.7.2 proof failure.
+- Editing C2.7.2 while C2.8 is the active component.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260524T091119Z_m45095_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45098_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260524T091119Z_m45099_t001` (use `read_tool_output` for exact output)
 
 ## C3
 

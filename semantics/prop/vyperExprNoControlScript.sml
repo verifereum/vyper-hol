@@ -584,11 +584,10 @@ QED
 
 (* Sub-helper: tail after both eval_exprs calls *)
 Theorem int_call_tail_no_control[local]:
-  ∀all_tenv args vs dflt_vs ret is_view nr src_id_opt fn cx body s exc st'.
+  ∀all_tenv args vs dflt_vs ret is_view nr src_id_opt fn cx body prev s exc st'.
   (do
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
              "IntCall bind_arguments";
-    prev <- get_scopes;
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
     (if nr then
        case cx.nonreentrant_slot of
@@ -626,7 +625,8 @@ QED
 
 Theorem int_call_no_control[local]:
   ∀cx v16 src_id_opt fn es v17.
-  (∀s'' x t s'3 ts t' s'4 tup t'' s'5 x' t'3 s'6 vs t'4.
+  (∀s'' x t s'3 ts t' s'4 tup t'' s'5 x' t'3 s'6 vs t'4
+      s'7 prev t'5 s'8 x'' t'6.
      check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
      lift_option_type (get_module_code cx src_id_opt)
        "IntCall get_module_code" s'3 = (INL ts,t') ∧
@@ -637,7 +637,9 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ∧
-     eval_exprs cx es s'6 = (INL vs,t'4) ⇒
+     eval_exprs cx es s'6 = (INL vs,t'4) ∧
+     get_scopes s'7 = (INL prev,t'5) ∧
+     set_scopes [FEMPTY] s'8 = (INL x'',t'6) ⇒
      ∀s exc st'.
        eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
          (DROP
@@ -669,7 +671,17 @@ Proof
   >> step_tac >- helper_close
   >> step_tac >- helper_close
   >> step_tac >- (res_tac >> gvs[no_control_exc_def])
-  >> step_tac >- (res_tac >> gvs[no_control_exc_def])
+  >> step_tac >- (
+       qpat_x_assum `get_scopes _ = (INR _, _)` mp_tac
+       >> simp[get_scopes_def, return_def, no_control_exc_def])
+  >> TRY (qpat_x_assum `get_scopes _ = (INR _, _)` mp_tac
+          >> simp[get_scopes_def, return_def, no_control_exc_def] >> NO_TAC)
+  >> step_tac >- (
+       drule finally_no_control >> disch_then irule >> rpt strip_tac
+       >- gvs[set_scopes_def, return_def, no_control_exc_def]
+       >> gvs[ignore_bind_def, bind_def, set_scopes_def, return_def,
+              prod_CASE_rator, sum_CASE_rator]
+       >> res_tac >> gvs[no_control_exc_def])
   >> pop_assum mp_tac
   >> PURE_ONCE_REWRITE_TAC[GSYM DE_MORGAN_THM]
   >> strip_tac >> drule int_call_tail_no_control >> simp[]
@@ -724,6 +736,26 @@ Proof
           PairCases_on`x` >>
           gvs[bind_def, return_def, AllCaseEqs()] >>
           resolve_tac)
+  >> TRY (rename1`NameTarget` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`BareGlobalNameTarget` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`TopLevelNameTarget` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`AttributeTarget` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`Name _ _` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`BareGlobalName _ _` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`TopLevelName _ _` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`FlagMember` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`IfExp` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`Literal` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`StructLit` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`Subscript` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`Attribute` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`Builtin` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`TypeBuiltin` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`Send` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`RawLog` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`RawRevert` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`SelfDestructTarget` >> unfold_tac >> NO_TAC)
+  >> TRY (rename1`CreateTarget` >> unfold_tac >> NO_TAC)
   >> unfold_tac
 QED
 

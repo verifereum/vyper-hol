@@ -72,664 +72,1464 @@ The proof interface exported to downstream statement soundness is the strengthen
 #### Code structure
 Keep assignment target semantic proofs in `semantics/prop/vyperTypeStatePreservationScript.sml` and compatibility wrappers in `semantics/prop/vyperTypeAssignSoundnessScript.sml`. Statement proofs in `vyperTypeStmtSoundnessScript.sml` should consume these theorems, not duplicate assignment evaluator case analysis.
 
-### C2: Fresh statement/type soundness proof completion
+### C2: Fresh Vyper type-system soundness stack
 - Kind: `proof_group`
 - Risk: 2
-- Work priority: 20
+- Work priority: 0
 - Work units: 0
-- Rationale: This merge does not change the existing C2 strategy; it only supplies an explicit low-risk child for a newly exposed local FAIL_TAC. Parent risk is kept executable for the currently authorized local subtree.
+- Rationale: Structural parent included only to satisfy dotted component validation. This scoped update does not change C2's sibling obligations; the prior high-risk flag was inherited from the now-refined IntCall wrapper subtree, whose remaining local work is low-risk audit.
 - Required for completion: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0803
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2 plan, episode:E1327
 
 #### Progress note
-Parent included only because dotted components require explicit parents in this PLAN update; prior C2 progress and obligations are preserved by merge_subtree.
+Validation parent only for this scoped merge. No sibling scheduling or whole-task roadmap is changed here.
 
 #### Summary
-- Top-level fresh-stack soundness completion remains task-required.
-- This update only affects the `Expr_Builtin` statement-soundness subtree.
-- Existing sibling components and prior completed work are preserved.
-- The new work item is the non-Len branch exposed after the accepted Len-branch proof.
+Structural parent for the fresh soundness stack. This update only unblocks the completed IntCall wrapper subtree by adding a focused audit leaf. Other C2 obligations remain governed by their existing components.
+
+#### Approach
+Do not begin work at this parent. Use the leaf under C2.6.4.2.5.6.4 only.
+
+#### Not to try
+Do not treat this validation parent as permission to re-plan or edit unrelated C2 siblings.
 
 #### Argument
-The fresh-stack statement soundness proof follows evaluator recursion and proves a joint invariant: state/env/account preservation, no `TypeError`, and result typing for successful expression evaluation. In the `Expr_Builtin` case, the evaluator first checks argument length, then either uses the special `Len` path or evaluates all arguments and calls `evaluate_builtin`. C2.4.1.5 has closed the special Len path. The remaining non-Len path should be discharged by the already available expression-list IH plus builtin-layer soundness boundaries, preserving the architecture that statement soundness consumes builtin facts rather than re-proving builtin case analysis.
+This scoped parent is not being redesigned. The only relevant argument carried through this update is that the former high-risk IntCall sub-branch has had all semantic children proved/reviewed, so its local residual work can be reduced to mechanical audit.
 
 #### Definition design
-No new definitions are introduced by this update. The proof interface boundary is: statement soundness may use `well_typed_builtin_app`, `exprs_runtime_typed`, `env.type_defs = get_tenv cx`, and existing or newly requested builtin soundness/no-TypeError lemmas for `evaluate_builtin`. If those boundary lemmas do not match the non-Len use site, escalate for a local boundary lemma instead of unfolding builtin implementations in `vyperTypeStmtSoundnessScript.sml`.
+No definition changes are authorized by this parent entry.
 
 #### Code structure
-All proof integration for this update stays in `semantics/prop/vyperTypeStmtSoundnessScript.sml` inside `Resume eval_all_type_sound_mutual[Expr_Builtin]`, replacing only the explicit non-Len `FAIL_TAC`. Any missing reusable builtin boundary should be proved in `semantics/prop/vyperTypeBuiltinsScript.sml`, not inline by duplicating `evaluate_builtin` case analysis in the statement proof.
+No repository-wide file organization changes are authorized by this parent entry.
 
-### C2.0: Carry forward completed statement-assignment and structural expression work
+### C2.0: Carry forward completed C2 semantic repair and helper evidence
 - Kind: `carried_evidence`
 - Risk: 1
 - Work priority: 0
 - Work units: 0
-- Rationale: Accepted evidence already proves the prior statement-assignment repairs and structural expression cases; retaining them as a single carry-forward leaf avoids stale over-decomposition.
+- Rationale: These components have already closed and are unaffected by flattening the later source-prefix repair. They establish the semantic and boundary infrastructure consumed by the remaining C2 leaves.
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: C2.0, C2.1, C2.1.0, C2.1.1, C2.1.1.*, E0616, E0665, E0666, E0670, E0671, E0672, E0678, E0680, E0685, E0708
+- Carries progress/evidence from: C2.0, C2.1, C2.2, C2.3, C2.4, C2.5, C2.5.1, C2.5.2, C2.5.3, E1081, E1082, E1083, E1084, E1085, E1091, E1098, E1099
 
 #### Progress note
-Fine-grained completed C2.1 descendants are intentionally collapsed here. Their proof progress still counts; no executor work remains.
+This leaf records that the earlier C2 proof products remain valid after the ancestor rebase. No executor work is required unless a later build proves source drift invalidated them.
 
 #### Summary
-- Carries forward completed AnnAssign/Assign/AugAssign side-condition work and structural expression cases.
-- Includes prior Subscript, IfExp, StructLit, FlagMember, TopLevelName/BareGlobalName, iterator, and related proof-order repairs.
-- No work remains in this component.
-- Later C2 leaves may depend on it as the mutual-proof prefix context.
-
-#### Statement
-Already-proved source regions of `eval_all_type_sound_mutual` before the remaining builtin/type-builtin/call resumes.
-
-#### Approach
-No proof action. If a build regression appears in these regions, escalate with exact failing theorem rather than reopening this collapsed component.
-
-#### Not to try
-Do not reintroduce the old fine-grained components or rely on their stale scheduling metadata.
-
-### C2.2: Carry forward completed Expr_Attribute soundness
-- Kind: `carried_evidence`
-- Risk: 1
-- Work priority: 5
-- Work units: 0
-- Rationale: Expr_Attribute helper and integration evidence is complete and remains valid under the rebase.
-- Dependencies: C2.0
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: C2.2, C2.2.1, C2.2.2, C2.2.3, E0709, E0710, E0711
-
-#### Progress note
-The completed attribute boundary lemmas and resume integration are preserved without re-execution.
-
-#### Summary
-- Carries forward completed `Expr_Attribute` proof.
-- The attribute evaluation boundary remains available as pattern evidence.
-- No executor work remains.
-
-#### Statement
-`Resume eval_all_type_sound_mutual[Expr_Attribute]` is already proved in current source.
-
-#### Approach
-No action required. Later expression branches should imitate the boundary-helper pattern rather than inline semantic case splits.
-
-#### Not to try
-Do not unfold attribute evaluation again unless current source has regressed.
-
-### C2.3: Carry forward completed Expr_Pop repair and soundness proof
-- Kind: `carried_evidence`
-- Risk: 2
-- Work priority: 10
-- Work units: 0
-- Rationale: The dynamic-array/assignability Pop typing repair and proof integration are completed and must be preserved as stable progress. It may still transitively depend on C3 cheats for final warning elimination, but the Pop source proof itself is done.
-- Dependencies: C2.0, C1
-- Supersedes: old Pop unprovability gate
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: C2.3, C2.3.1, C2.3.2, C2.3.3, C2.3.4, C2.3.5, C2.3.6, E0719, E0720, E0721, E0722, E0727, E0729
-
-#### Progress note
-Completed Pop work is preserved. The old fixed-array Pop counterexample is superseded by the current source-authoritative dynamic-array and assignability typing repair.
-
-#### Summary
-- Carries forward the repaired `Expr_Pop` typing rule and proof.
-- The source now requires dynamic-array Pop and assignment assignability, resolving the earlier false fixed-array path.
-- No executor proof work remains in Pop.
-- Any remaining CHEAT warning in assignment/update helpers belongs to C3, not this component.
+- Carry forward the callable-body no-escaping-control definition repair.
+- Carry forward projection, semantic no-escape, tail-helper, body-IH packaging, and local IntCall helper proofs.
+- These are prerequisites for the remaining consumer refactor but require no new edits in this rebase.
 
 #### Description
-This component preserves the handover-sensitive Pop repair while acknowledging that final zero-CHEAT validation still requires closing the inherited update-binop path under C3.
+The executor should not reopen these proofs proactively. If holbuild later reports a failure inside one of the carried helper statements, report that exact source failure; otherwise treat the helper interface as available.
 
 #### Statement
-`Resume eval_all_type_sound_mutual[Expr_Pop]` and its helper lemmas are already proved in current source.
+Carried interfaces include the strengthened `functions_well_typed`/`stmts_no_control_escape` facts and local IntCall helper lemmas already proved in the prior C2.1--C2.5 episodes.
 
 #### Approach
-No work remains. Downstream proofs may use the strong Pop extraction and assignment success typing lemmas introduced by this repair.
+No action. Use these facts as opaque boundaries in later leaves.
 
 #### Not to try
-Do not weaken Pop back to allowing fixed arrays. Do not reopen the earlier counterexample unless source reverts the dynamic-array/assignability preconditions.
+Do not duplicate the generated evaluator induction or reprove the carried helper bodies inside the consumer branch.
 
-### C2.4: Close `Expr_Builtin` statement-soundness case after local prefix cleanup
+### C2.6: Statement soundness obligations
 - Kind: `proof_group`
 - Risk: 2
-- Work priority: 40
+- Work priority: 0
 - Work units: 0
-- Rationale: The old Len-specific risk has been discharged by C2.4.1.5. The remaining visible failure is an explicit non-Len branch marker with a standard proof shape: expression-list IH followed by builtin boundaries.
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0803, TO_type_system_rewrite-20260522T073012Z_m42958_t001
+- Rationale: Structural parent included only to satisfy dotted component validation. The scoped IntCall child now has a low-risk audit frontier; no other statement-soundness sibling is modified by this update.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.6 plan, episode:E1327
 
 #### Progress note
-C2.4 is refined to include the newly exposed non-Len branch under the same local `Expr_Builtin` resume. Existing children are preserved by merge_subtree.
+Validation parent only. Prior progress on statement soundness is carried forward; this update changes only the requested IntCall subtree.
 
 #### Summary
-- `Expr_Builtin` is not finished merely because the Len branch closed.
-- The build now reaches the non-Len explicit FAIL marker in the same resume.
-- Add C2.4.1.6 before allowing later suspended expression cases.
-- The proof should remain at the statement/builtin boundary and avoid inline builtin semantics expansion.
+Statement-soundness grouping parent. The only active change is under the IntCall wrapper verification subtree. Existing ready/done siblings are not rescheduled here.
+
+#### Approach
+Executor should descend to C2.6.4.2.5.6.4.4 for the authorized work.
+
+#### Not to try
+Do not use this parent as permission to work on AnnAssign/Assign/AugAssign or other statement cases.
 
 #### Argument
-After argument-length checking, the `Expr_Builtin` evaluator has two structurally separate paths. The Len path evaluates only `HD es` and then calls `toplevel_array_length`; C2.4.1.5 proves that path using `Len_toplevel_array_length_no_type_error` and `Len_builtin_sound`. The non-Len path evaluates all arguments with `eval_exprs`; the expression-list IH gives preservation, no-TypeError, and `exprs_runtime_typed` for successful values. Combined with `well_typed_builtin_app` and builtin-layer soundness, this yields the joint expression invariant for `Builtin ty bt es`.
+No new statement-level induction argument is introduced here. The relevant child argument is that the IntCall wrapper proof has been factored into branch-tail helper interfaces and proved through E1327.
 
 #### Definition design
-The relevant boundary is not a new Len boundary but the ordinary builtin application interface. Required consumer facts should look like: from `well_typed_builtin_app ty bt (MAP expr_type es)`, `exprs_runtime_typed env es vs`, `env.type_defs = get_tenv cx`, and `evaluate_builtin cx accounts ty bt vs`, infer no `TypeError` and value typing for successful builtin results. If existing builtin lemmas require slightly different runtime type phrasing, prove a small adapter lemma rather than destructing every builtin here.
+No statement-level typing/evaluator definitions change in this update.
 
 #### Code structure
-Keep C2.4 proof edits localized to the `Expr_Builtin` resume in `vyperTypeStmtSoundnessScript.sml`. Boundary lemma additions, if needed, belong in `vyperTypeBuiltinsScript.sml` near the existing builtin soundness facts. Do not alter the completed Len code except for harmless cleanup needed to sequence into the non-Len proof.
+All scoped edits remain in `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
 
-### C2.4.0: Finish local prefix type-namespace/source annotations in `vyperTypeStmtSoundnessScript.sml`
+### C2.6.0: Refactor `create_tail_result_sound_simp` to avoid whole-create-tail simplification
+- Kind: `proof_refactor`
+- Risk: 1
+- Work priority: 0
+- Work units: 2
+- Rationale: The failing block already has the two facts needed to derive the post-state invariant: an exact result equality for the explicit create-tail case expression and a `runtime_consistent` fact over the `SND` of the corresponding monadic do-expression from `create_tail_sound`. Prior holbuild evidence shows only a tactic-timeout from broad rewriting, not a missing semantic invariant. The repair is a local proof refactor with no theorem-statement or architecture change.
+- Checkpoint: yes
+- Supersedes: C2.6.0
+- Progress transition: `refinement`
+- Carries progress/evidence from: TO_type_system_rewrite-20260525T153549Z_m56407_t001, TO_type_system_rewrite-20260525T153549Z_m56418_t002, STATE_type_system_rewrite.md lines 8-19
+
+#### Summary
+Replace the timeout-prone proof block at `semantics/prop/vyperTypeStmtSoundnessScript.sml` lines 9875--9880. The target theorem is `create_tail_result_sound_simp`; its statement and `create_tail_sound` must remain unchanged. Derive `runtime_consistent env cx st'` from the existing result equality and the existing `runtime_consistent env cx (SND (... do ... st))` assumption by proving/reusing a small equality between the two result-state expressions. This component is a checkpoint because the build must pass this prefix theorem before queued IntCall continuation work can be verified.
+
+#### Description
+Current holbuild stops before the IntCall continuation area because the proof of `create_tail_result_sound_simp` unfolds the full create-tail monadic computation with `rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def, lift_option_type_def, get_accounts_def, update_accounts_def] >> gvs[]`, producing a >4KB goal and timing out. The theorem has just invoked `create_tail_sound`, so after `gvs[]` the context contains both the expanded case-expression equality `(case check ... st of ...) = (res,st')` and a preservation assumption for `SND ((do ... od) st)`. Refactor only the local derivation of `runtime_consistent env cx st'`. If the later no-TypeError subproof also times out with the same pattern, apply the same equality-bridge idea there, but do not begin the separate IntCall helper/integration work under this component.
+
+#### Statement
+In `create_tail_result_sound_simp`, prove the local assertion:
+
+```sml
+`runtime_consistent env cx st'`
+```
+
+from the already available assumptions shaped like:
+
+```sml
+(case check (vs <> []) "create no args" st of ... ) = (res,st')
+runtime_consistent env cx (SND ((do
+  check (vs <> []) "create no args";
+  amount' <- lift_option_type (SOME amount) "create value";
+  target_addr' <- lift_option_type (SOME target_addr) "create target";
+  accounts <- get_accounts;
+  check (amount' <= (lookup_account cx.txn.target accounts).balance)
+    "create insufficient balance";
+  check (~account_already_created (... accounts)) "address collision";
+  if amount' > 0 then transfer_value ... else return ();
+  update_accounts (increment_nonce cx.txn.target);
+  return (Value (AddressV ...))
+od) st))
+```
+
+The theorem statement, `create_tail_sound`, and downstream IntCall theorem statements are not to be changed.
+
+#### Approach
+Use the exact result equality as a state-projection bridge, not as an invitation to simplify the whole create-tail computation. Preferred shape: assert a local claim such as `SND ((do ... od) st) = st'`, prove that claim from the result equality by a targeted monadic skeleton simplification, then rewrite the `runtime_consistent` assumption with it. Keep the simplifier list minimal and branch locally with `TOP_CASE_TAC`/small `Cases_on` only if the equality proof requires distinguishing the few `check`/`transfer_value` outcomes; close impossible branches directly from the pair equality instead of calling broad `gvs[]` on the entire monadic term. After the edit, run `holbuild build vyperTypeStmtSoundnessTheory` with the normal timeout and record whether it advances past `create_tail_result_sound_simp` to the queued IntCall area or later.
+
+#### Not to try
+Do not retry the old broad block `qpat_x_assum ... mp_tac >> qpat_x_assum ... mp_tac >> rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def, lift_option_type_def, get_accounts_def, update_accounts_def] >> gvs[]`; that exact shape has timed out. Do not weaken or restate `create_tail_result_sound_simp`, do not edit `create_tail_sound`, and do not touch the final `Expr_Call_IntCall` resume or the `intcall_successful_defaults_continuation_sound_general` plan here. Do not add further dotted tactical children under this component; if this focused equality bridge still times out, close the component with evidence and request an ancestor C2.6 proof-interface rebase.
+
+### C2.6.1: Normalize and audit the IntCall proof source after failed probes
 - Kind: `source_cleanup`
 - Risk: 1
 - Work priority: 0
 - Work units: 1
-- Rationale: The remaining failure is a mechanical HOL type-resolution issue, not a theorem-design or proof-strategy issue: `eval_stmts cx` requires a `stmt list`, while the free name `body` has been inferred/resolved as an unrelated word64 function type. The prior evidence already shows the explicit `+ exception` ambiguity is gone and the build advanced to this next local annotation problem.
-- Checkpoint: yes
+- Rationale: E1115 says the temporary probe was removed and the failed TRY experiment was reverted, but this must be confirmed before further proof edits. The audit is mechanical and local.
 - Progress transition: `refinement`
-- Carries progress/evidence from: C2.4.0, E0790, TO_type_system_rewrite-20260522T073012Z_m42546_t001, TO_type_system_rewrite-20260522T073012Z_m42548_t001, TO_type_system_rewrite-20260522T073012Z_m42549_t001, TO_type_system_rewrite-20260522T073012Z_m42549_t003
+- Carries progress/evidence from: E1115
 
 #### Progress note
-E0790 is accepted as partial progress: grep found no remaining textual `+ exception` in the file, and holbuild passed the original `vfmExecution$exception`/`vyperState$exception` unification blocker. The component is refined, not closed, because the same prefix still fails to type-check at a local ambiguous `body` variable before downstream components can run.
+Carries forward E1115's cleanup claim but requires a local source check so subsequent proof work starts from a known branch shape.
 
 #### Summary
-- Keep the completed `exception` qualification edits from E0790.
-- Repair the newly exposed local HOL source type ambiguity around `for_cons_body_exception_typed_from_body_soundness`.
-- Make every theorem/proof occurrence that uses `eval_stmts cx body` force `body : stmt list`, preferably by annotating the theorem statement binder/use site rather than by large proof rewrites.
-- Re-run `holbuild build vyperTypeStmtSoundnessTheory` and stop this component only when the build advances past these prefix/source type errors to the next real proof obligation or completes.
+- Inspect `vyperTypeStmtSoundnessScript.sml` around the helper block and the failing IntCall region.
+- Confirm there is no `FAIL_TAC "live_precond_residual"`, `FAIL_TAC "precond_rw_probe"`, or temporary `TRY (... >> NO_TAC)` experiment.
+- Confirm `intcall_pushed_body_preconditions_live_from_defaults` is still present and saved before adding the new corollary.
+- If cleanup edits are needed, keep them anchored to the exact source range, not generic text replacement.
 
 #### Description
-This component remains a local source-cleanup gate for the statement soundness prefix. The explicit exception namespace cleanup is complete, but the theory still does not type-check because HOL resolves the free identifier `body` in a helper theorem as an unrelated word64-valued function instead of a statement list. Fix only the local annotation/name-resolution issue needed to let the source prefix elaborate. If similar adjacent helper theorems in the same for-cons block use `eval_stmts cx body`, annotate them consistently when holbuild exposes the same issue.
+This component prevents stale probe edits from confusing the refactor. It should not attempt to prove the main theorem. If a build is run, it is acceptable for it to fail later at the known IntCall assertion; the closure criterion is source normalization plus no accidental probe fragments.
 
 #### Statement
-Target build check for this cleanup gate:
+No theorem statement. Source cleanup/audit only.
+
+#### Approach
+Read the source ranges around lines ~2052-2149, ~8250-8265, and ~10930-11005. Remove only confirmed temporary probe/experiment text. Prefer exact line/range edits over global replacement.
+
+#### Not to try
+Do not use a generic `replace_text` snippet such as `(impl_tac >- simp[]) >> simp[]) >>`; prior evidence shows it can match the wrong occurrence.
+
+### C2.6.2: Prove an exact live pushed-body precondition corollary
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 10
+- Work units: 2
+- Rationale: This is a direct corollary of the accepted `intcall_pushed_body_preconditions_live_from_defaults`, with `src_id_opt` instantiated to `env_body.current_src`. Its conclusion exactly matches the failing pushed-body triple.
+- Dependencies: C2.6.1
+- Progress transition: `refinement`
+- Carries progress/evidence from: E1114, E1115
+
+#### Progress note
+Refines the accepted helper into a consumer-shaped interface; the previous helper proof remains valid but should no longer be applied directly in the giant main theorem.
+
+#### Summary
+- Add a local theorem immediately after `intcall_pushed_body_preconditions_live_from_defaults`.
+- The theorem should take `env_body.current_src` directly in the pushed stack, avoiding a separate `src_id_opt` premise.
+- It should assume exactly the live facts listed by the failed goal: env consistency for `env cx args_st`, env_body field equalities, default-state immutables/scopes consistency, state/accounts/scope well-typedness, and the lock equation.
+- It should conclude the three preconditions needed for the body IH at `(lock_st with scopes := [call_env])`.
+
+#### Statement
+```sml
+Theorem intcall_live_pushed_body_preconditions[local]:
+  !env env_body cx args_st dflt_st lock_st call_env fn nr is_view.
+    env_consistent env cx args_st /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    env_scopes_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (dflt_st with scopes := [call_env]) /\
+    state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    scope_well_typed call_env /\
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts
+```
+
+#### Approach
+Prove by applying `intcall_pushed_body_preconditions_live_from_defaults` with `src_id_opt = env_body.current_src`. The premise `env_body.current_src = src_id_opt` then simplifies by reflexivity; all other assumptions are identical after simplification. Keep this proof small and separate from the generated-IH context.
+
+#### Not to try
+Do not restate or unfold `intcall_pushed_body_preconditions_from_lock`, `intcall_env_body_consistency_for_defaults`, or `acquire_nonreentrant_lock` in the main IntCall theorem. Do not add extra assumptions about `sig`, `x''2`, or body typing; this corollary is only about the frame/precondition triple.
+
+### C2.6.3: Flattened IntCall helper closure and downstream handoff
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 50
+- Work units: 0
+- Rationale: The only live uncertainty in this subtree was resolved by the reviewed E1232 proof: `intcall_expr_no_type_error_from_generated_ih` now builds through using the general actual-args helper. The remaining direct work in this subtree is a mechanical focused build audit; downstream proof obligations remain outside this subtree in the existing C2.6.4 component.
+- Dependencies: C2.6.2
+- Supersedes: C2.6.3.1, C2.6.3.2, C2.6.3.3, C2.6.3.3.1, C2.6.3.3.2, C2.6.3.3.2.4, C2.6.3.3.2.4.6
+- Progress transition: `replacement`
+- Carries progress/evidence from: C2.6.3.3.2.4.6, episode:E1232, tool_output:TO_type_system_rewrite-20260525T153549Z_m56129_t001, tool_output:TO_type_system_rewrite-20260525T153549Z_m56132_t001
+
+#### Progress note
+This replacement deliberately collapses the old deep helper-chain descendants into one carried-forward subtree fact. Prior proof work still counts: the source contains the accepted helper proof, and the focused build evidence reaches the downstream `eval_all_type_sound_mutual[Expr_Call_IntCall]` resume. The old fine-grained children should no longer drive scheduling.
+
+#### Summary
+- Collapse the over-deep IntCall helper-history subtree into one carried-forward proof group.
+- Treat `intcall_expr_no_type_error_from_generated_ih` as a stable boundary theorem, backed by E1232.
+- Keep C2.6.3.4 as the only executable leaf in this subtree: a focused build audit and handoff.
+- Do not add more tactical descendants under the old generated-IH helper chain.
+- Downstream `eval_all_type_sound_mutual[Expr_Call_IntCall]` integration remains the next semantic proof phase outside this flattened subtree.
+
+#### Description
+This subtree no longer owns the full downstream `Expr_Call_IntCall` proof. Its job is to preserve the completed local IntCall no-TypeError helper stack as a stable boundary and verify, by focused build, that the current source has advanced past that helper to the downstream resume. If the build again stops inside `intcall_expr_no_type_error_from_generated_ih`, that is a regression in the carried-forward boundary and should be escalated. If the build stops at `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`, this subtree is done and the executor should move to the existing downstream integration component.
+
+#### Approach
+Use the current proved source as a boundary. The executor should not edit first; begin the leaf audit, run the focused build, and classify the stopping point. If the build reaches `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`, close this subtree as done/progressed and proceed to the existing downstream component.
+
+#### Not to try
+Do not reopen the old NoneT-only helper path, do not add more descendants under C2.6.3.3.2.4.*, and do not tune the tail of `intcall_expr_no_type_error_from_generated_ih`. The prior failure was caused by destructing away the arbitrary return component; E1232 fixed that boundary.
+
+#### Argument
+The mathematical boundary now available is: after the IntCall evaluator has successfully looked up the module/function, evaluated actual arguments, obtained callable-body typing facts, and preserved the arbitrary return component `ret`, the helper `intcall_actual_args_success_no_type_error_from_generated_ih_general` proves the no-TypeError result for the actual-argument-success path without requiring `ret = NoneT`. The accepted proof of `intcall_expr_no_type_error_from_generated_ih` preserves the existential package from `callable_body_typing_from_env_consistent` long enough to instantiate that general helper. Therefore the remaining work inside C2.6.3 is not another induction or semantic helper: it is only to confirm the source passes this theorem and exposes the downstream mutual-theorem branch.
+
+#### Definition design
+No definitions should be changed in this subtree. The proof interface is the local helper boundary around `intcall_expr_no_type_error_from_generated_ih` and `intcall_actual_args_success_no_type_error_from_generated_ih_general`. Failure signs are: a reappearance of an obligation forcing `x''4 = NoneT`; a proof that destructs callable-body facts with broad `strip_tac`/`gvs[]` before helper application; or a focused build stopping before line 13650 in the local helper rather than at the downstream resume.
+
+#### Code structure
+All source work, if any regression is found, is local to `semantics/prop/vyperTypeStmtSoundnessScript.sml` near the IntCall helper block around lines 13214--13650. Do not move these helpers to another theory during this subtree. The focused build target is `vyperTypeStmtSoundnessTheory`; the whole-task `vyperSemanticsHolTheory` build is not the first audit here because statement soundness is the immediate failing theory.
+
+### C2.6.3.4: Focused build-audit and handoff after the closed IntCall helper
+- Kind: `build_audit`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: This is a mechanical audit of already-reviewed proof progress. The expected build failure is downstream at `eval_all_type_sound_mutual[Expr_Call_IntCall]`, not inside the local helper; no new semantic case analysis is required for this leaf.
+- Checkpoint: yes
+- Supersedes: C2.6.3.4
+- Progress transition: `refinement`
+- Carries progress/evidence from: C2.6.3.3.2.4.6, episode:E1232, tool_output:TO_type_system_rewrite-20260525T153549Z_m56129_t001
+
+#### Progress note
+The old C2.6.3.4 was a build audit but was blocked by decomposition pressure. This refined leaf keeps the same audit obligation while making the expected downstream handoff explicit and flattening away the stale helper-chain children.
+
+#### Summary
+- Begin this component before any further build/edit work on the IntCall path.
+- Run `holbuild build vyperTypeStmtSoundnessTheory`.
+- Success criterion for this leaf is that `intcall_expr_no_type_error_from_generated_ih` is accepted and the build either succeeds or stops later at the downstream `Expr_Call_IntCall` mutual-theorem resume.
+- If the old `x''4 = NoneT` failure reappears, stop and escalate as a regression.
+- Do not modify source unless the audit proves the carried-forward helper was overwritten/regressed.
+
+#### Description
+This leaf exists to unblock the PLAN gate and confirm the stable boundary after E1232. The expected focused-build transcript should match the prior evidence: the helper theorem is replayed, and holbuild resumes/fails at `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]` around line 13650, with large generated-IH assumptions. That downstream failure belongs to the next integration component, not this audit.
+
+#### Statement
+Audit obligation:
+```sh
+holbuild build vyperTypeStmtSoundnessTheory
+```
+The audit passes for this component if the build gets past `intcall_expr_no_type_error_from_generated_ih` and reaches the downstream `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]` integration point (or succeeds further).
+
+#### Approach
+Run the focused build without editing. Inspect the first failure location. If it is at line ~13650 in `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`, close this component with the build evidence and proceed to the existing downstream integration component. If it is inside `intcall_expr_no_type_error_from_generated_ih`, compare the source around lines 13619--13636 with the E1232-controlled destruct/application pattern before making changes; escalate if the source has drifted.
+
+#### Not to try
+Do not attempt to prove the downstream `Expr_Call_IntCall` branch under this audit leaf. Do not use broad `gvs[]` or `strip_tac` rewrites in the local helper, do not prove `x''4 = NoneT`, and do not reintroduce the old `intcall_actual_args_success_no_type_error_from_generated_ih` call.
+
+### C2.6.4: Call-expression statement soundness obligations
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Structural parent included only to satisfy dotted component validation. The local IntCall wrapper subtree has been de-risked to audit-only after E1327.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.6.4 plan, episode:E1327
+
+#### Progress note
+Validation parent only; no sibling call-expression obligations are changed.
+
+#### Summary
+Call-expression grouping parent. This update only concerns the live IntCall wrapper verification branch. Other call-expression work remains outside this augment scope.
+
+#### Approach
+Proceed only to the new audit leaf under C2.6.4.2.5.6.4.
+
+#### Not to try
+Do not re-open external call/special call work from this parent.
+
+#### Argument
+The relevant mathematical argument is localized in the IntCall wrapper child: branch-specific helper theorems avoid duplicating evaluator case analysis and transport generated IHs into the call-body context.
+
+#### Definition design
+No call-expression definitions change here.
+
+#### Code structure
+Keep local helper theorems near the IntCall proof in `vyperTypeStmtSoundnessScript.sml`.
+
+### C2.6.4.1: Add an all-result default-argument frame package for IntCall
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: This is a strengthening of the already-proved default-result package, using the same default generated IH plus `finally` scope-restoration/frame facts. It is standard preservation plumbing and local to the default-evaluation phase.
+- Carries progress/evidence from: E1237
+
+#### Progress note
+Builds on the repaired default-IH selector from E1237/E1238 but proves a stronger consumer-shaped package instead of only success/no-TypeError facts.
+
+#### Summary
+- Prove a local helper for default-argument `finally` evaluation.
+- Conclusion must include `state_well_typed dflt_st`, caller-frame `env_consistent env cx dflt_st`, `accounts_well_typed dflt_st.accounts`, and `no_type_error_result dflt_res` for both success and failure.
+- In the success case, preserve existing package facts needed later: default values runtime typed, `call_env`, `scope_well_typed call_env`, `env_scopes_consistent`, and immutable consistency.
+- The helper should hide default `finally`/scope manipulation from later proofs.
+
+#### Statement
+Suggested local theorem: `intcall_defaults_result_frame_package_from_generated_ih_general[local]`. Use the exact side-condition block from `intcall_defaults_result_package_from_generated_ih_general`, but strengthen the conclusion to:
+
+```sml
+state_well_typed dflt_st /\
+env_consistent env cx dflt_st /\
+accounts_well_typed dflt_st.accounts /\
+no_type_error_result dflt_res /\
+case dflt_res of
+| INL dflt_vs =>
+    exprs_runtime_typed (defaults_env env_body)
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) dflt_vs /\
+    ?call_env.
+      bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+      scope_well_typed call_env /\
+      env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+      env_immutables_consistent env_body
+        (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st
+| INR _ => T
+```
+
+#### Approach
+Start from the proof of `intcall_defaults_result_package_from_generated_ih_general` and keep its call to `intcall_default_exprs_sound_from_generated_ih`. After destructing that result, add caller-frame preservation facts using the same scope-restoration facts already used by default soundness helpers; the default `finally` restores `args_st.scopes`, and context/function well-typedness are stack-insensitive. In the `INL` branch, reuse `intcall_bind_arguments_from_runtime_typed` rather than rebuilding list-rel facts from scratch.
+
+#### Not to try
+Do not expose only `env_immutables_consistent`/`env_scopes_consistent`; downstream needs caller `env_consistent env cx dflt_st` even when defaults fail. Do not move this proof into the final resume. Do not change evaluator or default typing definitions.
+
+### C2.6.4.2: Internal-call expression soundness
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Structural parent included only to satisfy dotted component validation. The specific live IntCall wrapper branch has no remaining semantic proof blocker; audit remains.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.6.4.2 plan, episode:E1327
+
+#### Progress note
+Validation parent only. The scoped update does not alter sibling internal-call components.
+
+#### Summary
+Internal-call grouping parent. The completed descendants established the generated-IH transport and default-failure-tail wrapper for the live IntCall case. The only new executable work is final audit.
+
+#### Approach
+Use the child audit leaf; do not add new helpers unless the audit exposes a genuine regression.
+
+#### Not to try
+Do not duplicate the IntCall evaluator split in a new proof tree.
+
+#### Argument
+The internal-call proof follows evaluator recursion once: actual args, defaults, binding, return-type evaluation, lock/push/body/finally/cast. The scoped child has already proved the difficult default-failure/live wrapper interface; this parent adds no new case analysis.
+
+#### Definition design
+The proof interface remains helper-theorem based rather than definition-changing.
+
+#### Code structure
+No file split changes; helper theorems stay local to `vyperTypeStmtSoundnessScript.sml`.
+
+### C2.6.4.2.1: Repair the prefix no-TypeError consumer via a post-push body-IH boundary
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: The stuck evidence identifies a proof-interface mismatch, not a false statement. The replacement decomposes the large theorem into statement-preserving adapters whose premises match the live assumptions.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E1247, TO_type_system_rewrite-20260525T153549Z_m56721_t001, TO_type_system_rewrite-20260525T153549Z_m56728_t001, TO_type_system_rewrite-20260525T153549Z_m56730_t001, TO_type_system_rewrite-20260525T153549Z_m56737_t001, TO_type_system_rewrite-20260525T153549Z_m56739_t001
+
+#### Progress note
+E1247's stuck evidence is accepted and used to refine the same local obligation. Prior failed tactic attempts justify replacing the proof interface with local adapters.
+
+#### Summary
+Keep the statement of `intcall_default_success_general_post_lock_consumer_no_type_error` unchanged. Stop proving generated-IH premises inside the large theorem. Extract the generated six-setup body-IH premise into a simple post-push body-IH lemma, prove a post-lock no-TypeError consumer over that boundary, then reprove the general consumer by lock-result cases.
+
+#### Approach
+Treat this as a proof-interface refactor. First restore the large theorem to a simple skeleton, then add the adapter and tail helper so the theorem no longer constructs existential/conjunction packages or generated-IH setup premises inline.
+
+#### Not to try
+Do not tune `qpat_x_assum`, `first_assum`, `metis_tac`, or broad `gvs` inside the large theorem. Do not use the contradiction helper. Do not introduce another `ret=NoneT` shortcut through the existing NoneT consumer; E1247 shows it exposes a huge package and can time out.
+
+#### Argument
+The body IH supplied by the generated IntCall case is stronger than the post-lock tail needs. After concrete successful default binding, return-type evaluation, lock acquisition, and `push_function`, the tail only needs a post-push premise quantified over `cxf` and `pushed_st`. E1247 shows that reconstructing this inside the large theorem causes brittle setup goals. Isolate that implication in an adapter, prove the tail over the adapter interface, and leave the large theorem as phase composition.
+
+#### Definition design
+No definitions change. The proof interface boundary is the post-push body-IH predicate, abstracting away `bind_arguments`, `evaluate_type`, and lock acquisition while preserving the `push_function` point where `eval_stmts` runs. If a child proof again needs `state_well_typed st0'` from a full generated setup implication inside the large theorem, the interface is being bypassed.
+
+#### Code structure
+All work stays in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near `intcall_default_success_post_lock_no_type_error_from_body_ih` and `intcall_default_success_general_post_lock_consumer_no_type_error`. Add local theorems immediately before the general consumer. Remove the experimental `ret=NoneT` split if present; replace it with the lock-result split using the new helpers.
+
+### C2.6.4.2.1.1: Clean up the experimental general-consumer proof body
+- Kind: `proof_refactor`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: Mechanical cleanup guided by E1247: remove unbuilt experimental branches before adding boundary lemmas.
+- Carries progress/evidence from: E1247
+
+#### Summary
+Replace the current partial proof of `intcall_default_success_general_post_lock_consumer_no_type_error` with a simple skeleton or temporary sketch while adding helpers. The final subtree must have no cheat here. Remove the experimental `ret=NoneT` consumer shortcut and any contradiction-helper delegation.
+
+#### Statement
+Source cleanup only; theorem statement remains exactly the current source statement of `intcall_default_success_general_post_lock_consumer_no_type_error`.
+
+#### Approach
+Edit only the proof text around the general consumer. The desired final proof will case-split on `lock_res`; the successful branch calls the new post-push-tail helper, and the failure branch uses `intcall_lock_no_type_error_result`.
+
+#### Not to try
+Do not try to make the old proof pass before adding helpers. Do not unfold evaluator/monad definitions in the large theorem.
+
+### C2.6.4.2.1.2: Extract the generated setup IH to a post-push body IH
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: Pure implication plumbing over existing assumptions and equalities; all hard body-soundness facts come from the supplied generated IH.
+- Dependencies: C2.6.4.2.1.1
+- Carries progress/evidence from: E1247
+
+#### Summary
+Prove a local lemma that consumes the generated six-setup body-IH package and the concrete successful setup equalities, returning the two-argument post-push body-IH premise needed by the tail. The conclusion should quantify only `cxf' pushed_st'` and then the body evaluation variables.
+
+#### Statement
+Add a local theorem `intcall_generated_body_ih_to_post_push_body_ih` whose premises are: the generated six-setup body-IH implication, concrete successful `bind_arguments`, `evaluate_type`, and lock equalities. Its conclusion is `!cxf' pushed_st'. push_function (env_body.current_src,fn) call_env cx lock_st = (INL cxf',pushed_st') ==> !env1 ret_ty1 env2 st0 res0 st0'. ...body soundness conclusion...`. Use the exact body-soundness conclusion from `intcall_default_success_post_lock_no_type_error_from_body_ih`.
+
+#### Approach
+After `rpt strip_tac`, specialize the generated IH with `call_env`, `bind_st`, `ret_st`, `lock_st`, `cxf'`, and `pushed_st'`. Discharge its setup antecedent using the three concrete equalities and the post-push assumption, then specialize it to the body-evaluation variables.
+
+#### Not to try
+Do not include monadic continuation result assumptions or `res/st'` in this lemma. Do not unfold `bind_arguments`, `evaluate_type`, `push_function`, or `eval_stmts`; the lemma is only about using the supplied implication.
+
+### C2.6.4.2.1.3: Prove post-lock no-TypeError from the post-push body IH
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: This is the existing post-lock proof with the generated-setup premise already abstracted away. It should call the existing tail lemma directly.
+- Dependencies: C2.6.4.2.1.2
+- Checkpoint: yes
+- Carries progress/evidence from: E1247
+
+#### Summary
+Add a local theorem `intcall_default_success_post_lock_no_type_error_from_post_push_body_ih` with the same post-lock monadic no-TypeError conclusion as `intcall_default_success_post_lock_no_type_error_from_body_ih`, but with a simple post-push body-IH premise instead of the generated six-setup premise. Delegate to `intcall_default_success_lock_success_tail_no_type_error`.
+
+#### Statement
+The statement should match `intcall_default_success_post_lock_no_type_error_from_body_ih` after removing the bind/eval/lock setup premises and replacing the generated first premise with the post-push body-IH premise from C2.6.4.2.1.2. Use the same tail monadic equality and conclude `no_type_error_result res`.
+
+#### Approach
+Mirror the proof of `intcall_default_success_post_lock_no_type_error_from_body_ih` from its tail-lemma application onward, but skip `intcall_body_ih_after_setup_success` because the first premise already has the post-push shape. Discharge frame/environment assumptions by `first_assum ACCEPT_TAC` plus small existing rewrites such as `env_scopes_consistent_stk_irrelevant`.
+
+#### Not to try
+Do not call `intcall_default_success_post_lock_no_type_error_from_body_ih`; that reintroduces the six-setup premise. Do not prove safe-cast typing or full continuation preservation here.
+
+### C2.6.4.2.1.4: Finish the general post-lock consumer using the post-push boundary
+- Kind: `proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 3
+- Rationale: Once the adapter and post-push tail theorem exist, the original large theorem is a straightforward lock-result split with no generated-IH reconstruction in the theorem body.
+- Dependencies: C2.6.4.2.1.3
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E1247
+
+#### Summary
+Prove `intcall_default_success_general_post_lock_consumer_no_type_error` unchanged. In the `lock_res = INL ()` branch, derive the post-push body IH using `intcall_generated_body_ih_to_post_push_body_ih` and apply `intcall_default_success_post_lock_no_type_error_from_post_push_body_ih`. In the `lock_res = INR e` branch, use `intcall_lock_no_type_error_result`.
+
+#### Statement
+Current source theorem statement of `intcall_default_success_general_post_lock_consumer_no_type_error`; do not change it.
+
+#### Approach
+Start with `rpt gen_tac >> strip_tac >> Cases_on lock_res`. For `INL`, destruct unit if needed, obtain the post-push premise from C2.6.4.2.1.2 and apply the post-push tail theorem. For `INR`, use the existing lock no-TypeError result path as in the NoneT consumer lock-failure branch.
+
+#### Not to try
+Do not split on `ret = NoneT`; the post-push boundary is uniform. Do not reconstruct the first premise of `intcall_default_success_post_lock_no_type_error_from_body_ih` inline. Do not unfold the full monadic tail in this large theorem.
+
+### C2.6.4.2.2: Package lock-attempt frame and no-TypeError facts
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: Small case split over `nr`/`nonreentrant_slot`; existing lock no-TypeError and frame lemmas cover the hard facts.
+- Dependencies: C2.6.4.2.1
+- Carries progress/evidence from: E1240
+
+#### Progress note
+Packages existing local lock-frame progress for the full continuation theorem.
+
+#### Summary
+Add `intcall_lock_attempt_sound_frame[local]` consuming the lock equation once and returning `state_well_typed lock_st`, `accounts_well_typed lock_st.accounts`, `no_type_error_result lock_res`, and failure-branch caller env preservation. Strengthen to all-branch env preservation if easy.
+
+#### Statement
+Suggested theorem:
+
+```sml
+Theorem intcall_lock_attempt_sound_frame[local]:
+  !env cx nr is_view dflt_st lock_res lock_st.
+    env_consistent env cx dflt_st /\ state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    (if nr then case cx.nonreentrant_slot of NONE => raise (Error (RuntimeError "nonreentrant slot missing")) | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view else return ()) dflt_st = (lock_res,lock_st) ==>
+    state_well_typed lock_st /\ accounts_well_typed lock_st.accounts /\
+    no_type_error_result lock_res /\
+    (case lock_res of INL _ => T | INR _ => env_consistent env cx lock_st)
+```
+
+#### Approach
+Case split on `nr` and `cx.nonreentrant_slot`. Use `intcall_lock_no_type_error_result` for no-TypeError and `intcall_lock_state_preserves_frame`/related frame lemmas for success. Runtime-error branches should simplify to unchanged/frame-equivalent state.
+
+#### Not to try
+Do not unfold state/account well-typed definitions in the large continuation theorem; prove the package here.
+
+### C2.6.4.2.3: Prove IntCall safe-cast value result typing
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: Isolates a small definitional `expr_result_typed` fact using existing safe-cast typing lemmas.
+- Dependencies: C2.6.4.2.1
+
+#### Progress note
+Needed because no-TypeError-only helpers cannot solve the final full result-typing goal.
+
+#### Summary
+Add `intcall_safe_cast_expr_result_typed[local]` turning `safe_cast ret_tv rv = SOME crv` plus IntCall static return-type facts into `expr_result_typed env (Call ... IntCall ...) (Value crv)`. This hides `expr_result_typed_def`/`expr_runtime_typed_def` from larger proofs.
+
+#### Statement
+Suggested theorem:
+
+```sml
+Theorem intcall_safe_cast_expr_result_typed[local]:
+  !env loc src_id_opt fn es extra ret_ty ret_tv rv crv.
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret_ty /\
+    evaluate_type env.type_defs ret_ty = SOME ret_tv /\
+    safe_cast ret_tv rv = SOME crv ==>
+    expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) (Value crv)
+```
+
+#### Approach
+Unfold `expr_result_typed_def` and `expr_runtime_typed_def` only here. Use `safe_cast_well_typed`/safe-cast preservation to get `value_has_type ret_tv crv`; discharge hashmap-place side conditions by simplification or `well_typed_expr_not_hashmap_place`.
+
+#### Not to try
+Do not unfold result-typing definitions in the full continuation theorem. Keep explicit `expr_type`/`evaluate_type` premises that callers can supply.
+
+### C2.6.4.2.4: Frame restoration after internal-call finalization
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Carry-forward parent context only; the local proof now has a clear two-case argument.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: prior C2.6.4.2.4 plan
+
+#### Progress note
+Included only as explicit parent context. Omitted siblings remain unchanged.
+
+#### Summary
+Parent context for frame-restoration obligations around `finally` and cleanup. The repair targets the no-fallthrough outer-INR branch.
+
+#### Argument
+The finalizer can return `INR` either after normal body success plus cleanup failure, or after a body exception plus cleanup. No-fallthrough eliminates the normal-success case; the exception case is handled by the body IH and cleanup frame restoration.
+
+#### Definition design
+Keep finalizer case analysis inside local boundary helpers so consumers do not unfold monadic plumbing.
+
+#### Code structure
+Use the existing cleanup and environment restoration lemmas; do not move proofs between theory files.
+
+### C2.6.4.2.4.1: Wrap cleanup-after-pop frame restoration for an arbitrary cleanup result
+- Kind: `infrastructure_lemma`
+- Risk: 1
+- Work priority: 0
+- Work units: 0
+- Rationale: Already proved in E1262 and unaffected by the E1266 interface mismatch.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C2.6.4.2.4.1@E1262
+
+#### Progress note
+Carry forward the existing local theorem `intcall_cleanup_after_body_preserves_caller_frame`; no source changes are planned here.
+
+#### Summary
+Keep the cleanup wrapper lemma unchanged. It composes cleanup-after-pop preservation with caller-frame restoration. It is a prerequisite for both branches of the outer-INR helper.
+
+#### Statement
+Existing local theorem `intcall_cleanup_after_body_preserves_caller_frame[local]` in `vyperTypeStmtSoundnessScript.sml`.
+
+#### Approach
+No action unless the replacement edit accidentally breaks this theorem. If touched, restore the E1262 proof by composing `intcall_cleanup_after_pop_preserves_frame` and `intcall_cleanup_frame_restore_sound`.
+
+#### Not to try
+Do not inline this restoration argument in later consumers; this lemma is the intended boundary.
+
+### C2.6.4.2.4.2: Classify outer finally returning INR into body and cleanup equations
+- Kind: `infrastructure_lemma`
+- Risk: 1
+- Work priority: 10
+- Work units: 0
+- Rationale: Already proved in E1263; it is a pure definitional classifier and is independent of exception return typing.
+- Dependencies: C2.6.4.2.4.1
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C2.6.4.2.4.2@E1263
+
+#### Progress note
+Carry forward the classifier theorem unchanged; it remains the right proof boundary for the repaired helper.
+
+#### Summary
+Keep the outer-finally INR classifier unchanged. It splits the semantic equation into normal-body/cleanup-fails and body-exception/cleanup-after-body cases. The repaired preservation helper should still start by applying this classifier.
+
+#### Statement
+Use the existing local theorem `intcall_finally_try_handle_inr_body_cleanup_cases` in `vyperTypeStmtSoundnessScript.sml`.
+
+#### Approach
+No action expected. If a rebuild exposes drift, repair only by unfolding `finally_def`, `try_def`, `handle_function_def`, monad definitions, and case equations; do not introduce typing assumptions.
+
+#### Not to try
+Do not merge classification with preservation; keeping this pure avoids repeated monad case analysis.
+
+### C2.6.4.2.4.3: Repair outer-INR finally preservation helper to consume the ordinary generated body IH
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: The revised statement exactly matches the live IH in `intcall_default_success_post_push_sound`; the existing E1264 proof body already specializes that IH at `env_body,NoneT,env_after`, which is the correct way to obtain `NoneT` exception typing for this concrete body run.
+- Dependencies: C2.6.4.2.4.1, C2.6.4.2.4.2
+- Checkpoint: yes
+- Supersedes: C2.6.4.2.4.3-old, E1264-old-helper-interface
+- Progress transition: `replacement`
+- Carries progress/evidence from: C2.6.4.2.4.3@E1264 proof skeleton, C2.6.4.2.4.4@E1266 mismatch evidence
+- Invalidates prior progress/evidence: C2.6.4.2.4.3@E1264 as completed old statement
+
+#### Progress note
+This is a statement/interface replacement, not a new mathematical idea. Prior E1264 tactics remain useful but do not close the new component until rebuilt with the repaired statement.
+
+#### Summary
+Replace the first premise of `intcall_default_finally_inr_preserves_frame` with the ordinary generated IH. Its exceptional branch must conclude `return_exception_typed env_exn ret_ty1 exn`, not `return_exception_typed env_exn NoneT exn`, under arbitrary `ret_ty1`. Inside the proof, specialize the IH at `env_body`, `NoneT`, and `env_after` for the actual body evaluation. Keep the theorem name if possible to minimize consumer edits.
+
+#### Statement
+Preferred repaired local statement: keep the current `intcall_default_finally_inr_preserves_frame[local]` statement unchanged except in the first generated-IH premise, where the exceptional branch conclusion is:
+
+```sml
+return_exception_typed env_exn ret_ty1 exn
+```
+
+instead of:
+
+```sml
+return_exception_typed env_exn NoneT exn
+```
+
+All other premises/conclusion remain as in current source.
+
+#### Approach
+Edit the theorem statement first. Then reuse the current proof: apply `intcall_finally_try_handle_inr_body_cleanup_cases`; in both body cases invoke the first assumption with `env_body`, `NoneT`, `env_after`, `lock_st with scopes := [call_env]`, and the concrete body result/state. The exceptional branch will now still yield `return_exception_typed env_exn NoneT body_exn` because the specialization uses `ret_ty1 = NoneT`. Finish both branches with `intcall_cleanup_after_body_preserves_caller_frame` and static fields from `type_stmts_env_preserved_static` or `env_extends_def`.
+
+#### Not to try
+Do not keep the old helper premise and try to prove it in the consumer. Do not add a no-control precondition to this helper; the needed `NoneT` typing comes from specializing the IH with `NoneT`, and no-control does not rule out `ReturnException`. Do not change `intcall_default_success_post_push_sound`'s statement.
+
+### C2.6.4.2.4.4: Focused default-success outer-finalizer branches
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Carry-forward parent context only; E1282 narrowed the branch to a single frame triple.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: E1282
+
+#### Progress note
+Included as parent for the local replacement. The solved INL branch progress is carried forward.
+
+#### Summary
+Parent context for the final focused branches of `intcall_default_success_post_push_sound`. The INL/safe-cast branch is solved; the remaining work is the outer-INR frame triple.
+
+#### Argument
+The proof should preserve the solved INL branch and redirect only the remaining outer-INR frame obligation to a boundary lemma with the correct return-type interface.
+
+#### Definition design
+The boundary should be tested by whether the consumer no longer sees a `type_stmts ... NoneT ...` subgoal in the no-fallthrough branch.
+
+#### Code structure
+Edit only the local helper region and the final outer-INR branch of the theorem.
+
+### C2.6.4.2.4.4.1: Add a reordered outer-INR frame boundary lemma
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: This is a wrapper around an already-proved local theorem with the same mathematical conclusion. The only care is premise ordering and keeping the statement close to the live branch assumptions.
+- Checkpoint: yes
+- Carries progress/evidence from: E1274
+
+#### Progress note
+E1274 supplies the exact failed consumer goal and confirms `intcall_default_finally_inr_preserves_frame_from_caller_ctx` is available before the consumer theorem.
+
+#### Summary
+Introduce a local theorem for the outer-INR branch of `intcall_default_success_post_push_sound`. The lemma should conclude the exact frame triple for `fin_st`. It should be proved by applying `intcall_default_finally_inr_preserves_frame_from_caller_ctx`, not by unfolding `finally`. Its premise order should make the `finally ... = (INR y,fin_st)` equation and the live body IH easy to consume at the call site.
+
+#### Statement
+```sml
+Theorem intcall_default_success_post_push_outer_inr_frame[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after y fin_st.
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) /\
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    type_stmts env_body NoneT body = SOME env_after /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    context_well_typed cx /\
+    accounts_well_typed lock_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+```
+
+#### Approach
+After `rpt gen_tac >> strip_tac`, apply `intcall_default_finally_inr_preserves_frame_from_caller_ctx` with the same variable order as its theorem statement. Discharge the generated conjunction using the assumptions from the boundary lemma; for `context_well_typed`/`functions_well_typed` under the pushed stack, use the already-used stack-irrelevance rewrites if they appear. Keep the proof short; this theorem must not inspect the internals of `finally`.
+
+#### Not to try
+Do not unfold `finally_def`, `bind_def`, or `eval_stmts` in this lemma. Do not add premises such as `well_typed_expr` or `expr_type`; they are irrelevant to frame restoration and would only make the consumer harder. Do not prove a more general continuation/safe-cast theorem here unless this exact wrapper still fails.
+
+### C2.6.4.2.4.4.2: Outer-INR frame boundary repair
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: The previous high risk is resolved by decomposing into a boundary lemma plus a mechanical consumer refactor.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E1282
+
+#### Progress note
+E1282 is accepted as stuck evidence and reclassified into a concrete local repair plan.
+
+#### Summary
+Group for repairing the outer-INR frame proof interface. Prove the return-polymorphic boundary first, then replace the consumer's failed `_apply` call.
+
+#### Argument
+A return-polymorphic frame boundary is sufficient because the `NoneT` case delegates to the existing helper and the no-fallthrough case rules out normal success before using body-exception cleanup preservation.
+
+#### Definition design
+No definitions. One boundary theorem must match the live consumer assumptions exactly.
+
+#### Code structure
+All work remains in `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
+
+### C2.6.4.2.4.4.2.1: Repair `intcall_default_success_post_push_sound` outer-INR frame restoration with a return-polymorphic boundary
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 0
+- Work units: 8
+- Rationale: All required ingredients already exist in the local source: the body IH is return-polymorphic, `intcall_finally_try_handle_inr_body_cleanup_cases` classifies the failing finally result, and `intcall_cleanup_after_body_preserves_caller_frame` restores the caller frame after cleanup. The only failed part was using a `NoneT`-specific convenience wrapper where the consumer has arbitrary `ret`; a local boundary lemma with the main theorem's premises should be a standard proof by the same case split as the existing `NoneT` helper.
+- Checkpoint: yes
+- Supersedes: C2.6.4.2.4.4.2.1.a, C2.6.4.2.4.4.2.1.b
+- Progress transition: `replacement`
+- Carries progress/evidence from: TO_type_system_rewrite-20260525T153549Z_m58305_t001, TO_type_system_rewrite-20260525T153549Z_m58329_t001
+- Invalidates prior progress/evidence: TO_type_system_rewrite-20260525T153549Z_m58320_t001, TO_type_system_rewrite-20260525T153549Z_m58338_t001
+
+#### Progress note
+Carries forward the solved INL return-exception/safe-cast work and the current focused residual from `m58329`: only the outer-INR frame triple remains. Invalidates the old split where `.a` supplied a separate boundary and `.b` consumed it, because decomposition pressure blocks beginning `.a` and the split encouraged a stale `NoneT`-only helper interface.
+
+#### Summary
+- Replace the over-decomposed local split by one beginable proof-refactor component.
+- Add a local return-polymorphic outer-INR frame boundary for default internal calls.
+- The boundary must consume `type_stmts env_body ret body = SOME env_after` and `(ret = NoneT \/ stmts_no_fallthrough body)`, not require `type_stmts env_body NoneT body = SOME env_after`.
+- Use that boundary to close the remaining `finally ... = (INR y,fin_st)` residual in `intcall_default_success_post_push_sound`.
+- Preserve the already-solved INL/safe-cast branch; do not rework it unless holbuild shows regression.
+
+#### Description
+Work only in `semantics/prop/vyperTypeStmtSoundnessScript.sml` near the local internal-call helper cluster and theorem `intcall_default_success_post_push_sound`. The source currently has a focused residual after the INL branch: assumptions include the body IH, `type_stmts env_body (expr_type (Call ...)) body = SOME env_after`, `stmts_no_fallthrough body`, pushed-scope consistency, and `finally ... = (INR y,fin_st)`, with goal `state_well_typed fin_st /\ env_consistent env cx fin_st /\ accounts_well_typed fin_st.accounts`. The repair is to introduce/use a boundary lemma whose statement matches this arbitrary-return/no-fallthrough context, then replace the failed `_apply`/`NoneT` consumption in the outer-INR residual.
+
+#### Statement
+Add/prove a local helper with this shape, using exact variable names/types adjusted to source conventions:
+
+```sml
+Theorem intcall_default_success_post_push_outer_inr_frame_ret[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after ret y fin_st.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    env_consistent env cx args_st ==>
+    state_well_typed args_st ==>
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) ==>
+    state_well_typed (lock_st with scopes := [call_env]) ==>
+    context_well_typed cx ==>
+    accounts_well_typed lock_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+```
+
+Then close the remaining outer-INR branch of:
+
+```sml
+Theorem intcall_default_success_post_push_sound[local]: ...
+```
+
+#### Approach
+Prove the new helper by copying the structure of `intcall_default_finally_inr_preserves_frame_from_caller_ctx`, but do not specialize body typing to `NoneT`. First classify the failing `finally` result with `intcall_finally_try_handle_inr_body_cleanup_cases`. In the normal-body-success cleanup case, split the `(ret = NoneT \/ stmts_no_fallthrough body)` premise: if `ret = NoneT`, use the body IH at `ret`; if `stmts_no_fallthrough body`, derive contradiction from `no_fallthrough_eval_no_success` for the observed `eval_stmts ... = (INL (),st_bdy)`. In the body-exception case, use the body IH at the actual `ret`, obtain `env_exn` and `env_extends env_body env_exn`, then feed `intcall_cleanup_after_body_preserves_caller_frame` with `env_exn` just as the existing `NoneT` helper does.
+
+After the helper builds, the consumer branch in `intcall_default_success_post_push_sound` should be a short application: derive the local pushed preconditions from `intcall_live_pushed_body_preconditions` as already done, specialize the helper at `ret = expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)` (or use the existing `ret` variable if not rewritten by `gvs`), discharge static equalities and caller-context well-typedness using `context_well_typed_stk_irrelevant`/`functions_well_typed_stk_irrelevant`, and supply the `finally ... = (INR y,fin_st)` assumption. Keep the current selected branch style; the proof should not need broad unfolding of `finally` or monad definitions.
+
+#### Not to try
+Do not try to prove `type_stmts env_body NoneT body = SOME env_after` from `stmts_no_fallthrough body`; the previous failure shows no-fallthrough gives an evaluation contradiction for normal success, not a typing-ret equality. Do not append another duplicate selected `finally = INR` tail after QED residuals; repair the boundary and consume it once. Do not unfold `finally`, `try`, `handle_function`, `bind`, and all monadic definitions broadly in this theorem; it timed out and obscures the intended classifier-lemma proof. Do not disturb the already-solved INL return-exception/safe-cast branch unless holbuild reports a new regression.
+
+### C2.6.4.2.5: IntCall actual/default/body wrapper proof layer
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Structural parent included only to satisfy dotted component validation. Its live wrapper child has been closed by E1327; residual verification is mechanical.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.6.4.2.5 plan, episode:E1327
+
+#### Progress note
+Validation parent only. No siblings under this parent are revised in this scoped update.
+
+#### Summary
+Wrapper-proof grouping parent for IntCall actual/default/body phases. The live wrapper branch under .6.4 is now audit-only. Sibling obligations are not changed here.
+
+#### Approach
+Only the new audit leaf is executable in this scoped update.
+
+#### Not to try
+Do not add tactical descendants for already-proved helper applications.
+
+#### Argument
+The wrapper layer decomposes the generated evaluator context into reusable local premises so the main mutual proof does not manually reconstruct every call-body invariant. The completed child proves the live/default-failure interface needed at this point.
+
+#### Definition design
+No definition changes. Boundary helpers should match consumer branches rather than forcing broad `AllCaseEqs()` cleanup.
+
+#### Code structure
+Keep all local wrapper lemmas in `vyperTypeStmtSoundnessScript.sml` near the IntCall proof.
+
+### C2.6.4.2.5.1: Carry forward cleanup of the partial full-continuation draft
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 0
+- Work units: 0
+- Rationale: Already closed by E1286; no remaining executor work in the replacement subtree.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C2.6.4.2.5.1, E1286
+
+#### Progress note
+Prior cleanup remains valid and is retained so the replaced subtree preserves established progress.
+
+#### Summary
+Carry forward the completed cleanup that removed the earlier non-build-clean full-continuation draft. This component has no new work. It remains in the subtree only to preserve dependency history for later IntCall helpers.
+
+#### Description
+No edits required unless the executor discovers that E1291 reintroduced stale draft code; any such cleanup is owned by C2.6.4.2.5.3.
+
+#### Approach
+Treat as already discharged by E1286.
+
+#### Not to try
+Do not repeat this cleanup or broaden it to unrelated IntCall cases.
+
+### C2.6.4.2.5.2: Carry forward packaged generated body IH after function push
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 5
+- Work units: 0
+- Rationale: Already proved by E1287 and explicitly useful in E1291; its conclusion is the right premise shape for the direct success helper.
+- Dependencies: C2.6.4.2.5.1
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C2.6.4.2.5.2, E1287
+
+#### Progress note
+The stuck episode confirms this helper remains useful; only its downstream consumer interface changes.
+
+#### Summary
+Carry forward `intcall_generated_body_post_push_ih`. It packages the generated evaluator IH into the concrete post-push body premise used by successful IntCall body/tail soundness. No new proof work is required here.
+
+#### Statement
+Existing local theorem in `vyperTypeStmtSoundnessScript.sml`:
+
+```sml
+Theorem intcall_generated_body_post_push_ih[local]:
+  ... ==>
+  !env1 ret_ty1 env2 st0 res0 st0'.
+    type_stmts env1 ret_ty1 body0 = SOME env2 /\
+    env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+    context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+    functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+    state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+    no_type_error_result res0 /\
+    case res0 of
+    | INL v => env_consistent env2 cx0 st0'
+    | INR exn => ?env_exn. env_extends env1 env_exn /\
+        env_consistent env_exn cx0 st0' /\
+        return_exception_typed env_exn ret_ty1 exn
+```
+
+#### Approach
+Use this theorem only to cut a named body-IH fact in the success-case helper. Its conclusion should not appear as a large unsolved goal in the final continuation theorem.
+
+#### Not to try
+Do not inline the older `intcall_generated_body_ih_live_consumer_premise` in downstream proofs.
+
+### C2.6.4.2.5.3: Stabilize the helper cluster and stop using the over-broad generalized wrapper as the continuation boundary
+- Kind: `proof_refactor`
+- Risk: 1
+- Work priority: 10
+- Work units: 1
+- Rationale: The required edit is organizational: keep proved/useful local helpers, but remove or bypass the partial continuation proof shape that E1291 showed is brittle and non-build-clean.
+- Dependencies: C2.6.4.2.5.2
+- Supersedes: old C2.6.4.2.5.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: E1291, TO_type_system_rewrite-20260525T153549Z_m58580_t001
+- Invalidates prior progress/evidence: E1291 continuation proof attempt, direct application of `intcall_successful_defaults_lock_success_sound_general` in `intcall_successful_defaults_continuation_sound_general`
+
+#### Progress note
+E1291 showed that a one-line tail fix made `intcall_successful_defaults_lock_success_sound_general` pass, but the continuation proof still timed out. This component preserves the useful direct/body-IH work and removes the failed continuation application as the active proof boundary.
+
+#### Summary
+Edit `vyperTypeStmtSoundnessScript.sml` around the IntCall helper cluster. Retain `intcall_successful_defaults_lock_success_sound_from_body_ih` and the carried-forward `intcall_generated_body_post_push_ih`. Do not let the theorem `intcall_successful_defaults_continuation_sound_general` depend on a long direct application of `intcall_successful_defaults_lock_success_sound_general`. Prepare the source for a new lock-success branch helper immediately before the continuation theorem.
+
+#### Description
+If `intcall_successful_defaults_lock_success_sound_general` is already build-clean after the E1291 tail-equality fix, it may remain as a local helper, but it is not the consumer boundary for the continuation theorem. If it is still partial or only used by the failed continuation proof, delete it rather than repair it further. The stable boundary to rely on is the direct helper that assumes the concrete body IH.
+
+#### Approach
+Inspect the current source around lines 14685-15120. Ensure the direct helper is before the new branch theorem and that the continuation theorem is not left with the E1291 timeout script. This component may leave the theory temporarily non-build-clean until C2.6.4.2.5.4/C2.6.4.2.5.5 fill the replacement proof.
+
+#### Not to try
+Do not spend this component proving new semantic facts. Do not add another generalized theorem with all evaluator phase facts unless its conclusion exactly matches a downstream branch goal.
+
+### C2.6.4.2.5.4: Prove a consumer-shaped lock-success case for successful-defaults continuation soundness
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: All semantic ingredients are already proved; the new theorem changes the proof interface so the final continuation theorem consumes a branch-shaped result instead of replaying the generated-IH bundle.
+- Dependencies: C2.6.4.2.5.3
+- Checkpoint: yes
+- Supersedes: old C2.6.4.2.5.3
+- Progress transition: `reclassified`
+- Carries progress/evidence from: C2.6.4.2.5.2, E1287, E1291
+- Invalidates prior progress/evidence: E1291 direct continuation-success branch attempt
+
+#### Progress note
+This is the substantive replacement for the stuck portion of old C2.6.4.2.5.3. The old evidence carries forward by identifying the direct body-IH helper as useful and the final-theorem premise plumbing as the failure mode.
+
+#### Summary
+Add a local theorem immediately before `intcall_successful_defaults_continuation_sound_general`. Its hypotheses should be the same live assumptions as the continuation theorem, plus the success-branch fact `lock_res = INL ()` (or the equivalent branch after `Cases_on lock_res; Cases_on x`). Its conclusion should be exactly the final state/env/account/no-TypeError/result-typed conclusion of the continuation theorem. Prove it by deriving the concrete body IH with `intcall_generated_body_post_push_ih`, simplifying the lock-success case equation, and applying `intcall_successful_defaults_lock_success_sound_from_body_ih`.
+
+#### Statement
+Suggested local theorem shape; copy the full quantifier/hypothesis block from `intcall_successful_defaults_continuation_sound_general` to avoid variable/order drift:
+
+```sml
+Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    (* same generated-IH premise and phase/static/runtime hypotheses as
+       intcall_successful_defaults_continuation_sound_general *) /\
+    lock_res = INL () ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+```
+
+The copied hypotheses must include the continuation theorem's case expression:
+
+```sml
+(case lock_res of
+ | INL u => (do rv <- finally ...; crv <- lift_option_type ...; return (Value crv) od)
+              (lock_st with scopes := [call_env])
+ | INR e => (INR e,lock_st)) = (res,st')
+```
+
+Under `lock_res = INL ()`, this simplifies to the tail equality expected by the direct success helper.
+
+#### Approach
+Start with `rpt gen_tac >> strip_tac`, split/carry assumptions, and rewrite `lock_res = INL ()` so the case-expression assumption becomes the concrete post-lock tail equality. Cut the body IH once using `intcall_generated_body_post_push_ih`; keep it as a named assumption. Then apply `intcall_successful_defaults_lock_success_sound_from_body_ih`, discharging premises in small groups: generated body IH, expression/type/static hypotheses, runtime well-typedness hypotheses, `env_body.current_src = src_id_opt` rewrite for immutables, scope consistency, lock equality, and tail equality.
+
+#### Not to try
+Do not prove this theorem by first proving another generalized all-phase wrapper and then applying it with a long `Q.SPECL` list. Do not leave the generated-IH quantified formula as an unsolved subgoal after entering the final continuation theorem. Avoid a single huge tactic fragment; split the body-IH cut and the direct-helper application into separate `by` facts if holbuild's 2.5s tactic timeout appears.
+
+### C2.6.4.2.5.5: Prove full successful-defaults continuation soundness by lock-result case split
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 30
+- Work units: 2
+- Rationale: After the success-case theorem, the continuation proof is a straightforward case split: success delegates to C2.6.4.2.5.4 and failure uses the already-existing lock frame lemma.
+- Dependencies: C2.6.4.2.5.4
+- Checkpoint: yes
+- Supersedes: old C2.6.4.2.5.3
+- Progress transition: `reclassified`
+- Carries progress/evidence from: E1291, C2.6.4.2.5.4
+- Invalidates prior progress/evidence: old monolithic proof of `intcall_successful_defaults_continuation_sound_general`
+
+#### Progress note
+This closes the old C2.6.4.2.5.3 obligation through a lower-risk interface: the final theorem no longer performs generated-IH/body/tail premise plumbing itself.
+
+#### Summary
+Replace the body of `intcall_successful_defaults_continuation_sound_general`. Keep the two small preliminary `lift_option_type` facts if still useful. Then case-split on `lock_res`: in the `INL ()` branch, simplify the case expression and invoke `intcall_successful_defaults_continuation_lock_success_case`; in the `INR e` branch, reuse the existing `intcall_lock_attempt_sound_frame` argument. The theorem should build without exposing a >4KB generated-IH subgoal.
+
+#### Statement
+Existing theorem to prove build-clean:
+
+```sml
+Theorem intcall_successful_defaults_continuation_sound_general[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    ... ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+```
+
+#### Approach
+Use `Cases_on lock_res`; in the `INL x` branch, `Cases_on x` to get unit success, simplify the case equation, and apply the success-case theorem from C2.6.4.2.5.4 with live assumptions. In the `INR y` branch, simplify the case equation to `res = INR y`/`st'=lock_st` and apply `intcall_lock_attempt_sound_frame` as in the existing proof. Verify with `holbuild build vyperTypeStmtSoundnessTheory` if this theorem is the next failure point.
+
+#### Not to try
+Do not apply `intcall_successful_defaults_lock_success_sound_general` directly from this theorem. Do not derive the body IH here. Do not use a broad `rpt conj_tac` over all continuation hypotheses.
+
+### C2.6.4.2.5.6: Live IntCall return/default-failure wrapper layer
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Structural parent included only to satisfy dotted component validation. The direct child C2.6.4.2.5.6.4 is being refined from blocked to audit-only after all semantic leaves were proved/reviewed.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: existing C2.6.4.2.5.6 plan, episode:E1327
+
+#### Progress note
+Validation parent only. No sibling under .6 is revised here.
+
+#### Summary
+Live IntCall return/default-failure grouping parent. The hard wrapper proof under .6.4 is complete. This update authorizes final local verification only.
+
+#### Approach
+Descend to C2.6.4.2.5.6.4.4 for audit.
+
+#### Not to try
+Do not repair future premise mismatches by growing long theorem-plumbing chains without escalation.
+
+#### Argument
+The successful proof path splits default-failure from success-tail reasoning early, then uses generated-IH consumer premises in the success branch. This avoids the previous direct no-TypeError-result blocker for an exception/error tail.
+
+#### Definition design
+The interface is now stable: use branch-tail helpers and generated-IH consumer premises; do not unfold evaluator internals repeatedly in consumers.
+
+#### Code structure
+All changes are local to the IntCall helper/proof region in `vyperTypeStmtSoundnessScript.sml`.
+
+### C2.6.4.2.5.6.1: Retain the local default-failure tail helper
+- Kind: `infrastructure_lemma`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: E1300 evidence indicates `intcall_default_failure_tail` was already proved once by unfolding `no_type_error_result_def`; the remaining failure was in its consumer, not in this helper.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: TO_type_system_rewrite-20260525T153549Z_m58796_t001, E1300
+
+#### Progress note
+Carry forward the proved tail-helper idea. If current source already contains the helper, keep it; otherwise restore it with the same statement shape.
+
+#### Summary
+- Keep or restore `intcall_default_failure_tail[local]` before the main wrapper.
+- The helper should prove the final IntCall preservation package from frame facts and the fact that `INR` results are not TypeErrors.
+- Its proof should be tiny: split conjunctions and unfold `no_type_error_result_def`/sum case only as needed.
+- This helper is not the place to reason about generated IHs or defaults evaluation.
+
+#### Statement
+Keep the current local theorem if present. Equivalent intended shape:
+```sml
+Theorem intcall_default_failure_tail[local]:
+  !env cx dflt_st y loc src_id_opt fn es extra res st'.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    (INR y,dflt_st) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+```
+If the current source has the same conclusion with extra harmless premises, do not churn it.
+
+#### Approach
+Use only conjunction splitting, pair equality/substitution, `sum_case_def`, and `no_type_error_result_def`. The successful-result typing arm is unreachable after the `INR` substitution.
+
+#### Not to try
+Do not invoke the defaults package lemma or generated IHs here. Do not use `metis_tac[]`; prior evidence showed the extensional definition of `no_type_error_result` needs explicit unfolding.
+
+### C2.6.4.2.5.6.2: Add a consumer-shaped default-failure branch helper
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 2
+- Rationale: This is a direct wrapper around the frame facts produced by the defaults package plus the already-proved tail helper. It avoids applying the tail helper after destructive case rewrites in the giant theorem.
+- Dependencies: C2.6.4.2.5.6.1
+- Carries progress/evidence from: E1300
+
+#### Progress note
+New helper introduced because E1300 showed direct use of `intcall_default_failure_tail` inside the monolithic proof remains brittle.
+
+#### Summary
+- Prove a local helper for the `dflt_res = INR e` branch of the authoritative wrapper.
+- The helper should consume stable frame facts for `dflt_st` before any case-expression normalization.
+- Its conclusion is the same final preservation package for `(res,st')`.
+- The proof should rewrite the outer default-failure computation to `(INR e,dflt_st)` and call `intcall_default_failure_tail`.
+
+#### Statement
+Use a local theorem immediately before the main wrapper, preferably with this simple consumer shape:
+```sml
+Theorem intcall_actual_args_success_default_failure_branch[local]:
+  !cx env loc res st' src_id_opt fn es extra y dflt_st.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    (INR y,dflt_st) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+```
+If the main theorem applies it before simplifying the outer `case dflt_res`, use the equivalent premise `(case INR y of INL _ => continuation | INR e => (INR e,dflt_st)) = (res,st')`; the proof should immediately rewrite this to the pair equality above.
+
+#### Approach
+State the helper so the main theorem can call it immediately in the `dflt_res = INR y` branch with the frame facts from the defaults package. Normalize only `sum_case_def` and `PAIR_EQ`, then pass the resulting pair equality and frame facts to `intcall_default_failure_tail`; prove any remaining `no_type_error_result (INR y)` side goal by `rw[no_type_error_result_def]`.
+
+#### Not to try
+Do not discharge this branch by selecting assumptions after the main theorem has substituted both `res` and `st'` in a massive context. Do not include generated-IH premises in this helper; if they appear in the goal, the helper is being applied too late or its statement is too weak.
+
+### C2.6.4.2.5.6.3: Add a consumer-shaped default-success continuation helper
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: The success branch is already mathematically covered by `intcall_successful_defaults_continuation_sound_general`; the risk is only matching its many premises without replaying generated-IH plumbing in the final wrapper. A wrapper helper with the generated IHs and package facts as stable leading premises is standard.
+- Carries progress/evidence from: E1300
+
+#### Progress note
+New helper introduced to isolate the application of `intcall_successful_defaults_continuation_sound_general` from the final wrapper's huge case-split context.
+
+#### Summary
+- Prove a local helper for the `dflt_res = INL dflt_vs` branch.
+- The helper wraps `intcall_successful_defaults_continuation_sound_general` and has the same final preservation conclusion.
+- Include the body generated-IH premise and all package facts required by the continuation theorem as explicit leading premises.
+- The proof should be a single application of the continuation theorem with targeted premise discharge, not another monolithic semantic proof.
+
+#### Statement
+Introduce a local theorem whose conclusion is the same final preservation package as the main wrapper and whose premises are exactly the stable facts used at the current call site for the `INL dflt_vs` branch:
+```sml
+Theorem intcall_actual_args_success_default_success_branch[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    (* generated body-IH premise from the main theorem *) /\
+    (* evaluator prefix facts and package facts required by
+       intcall_successful_defaults_continuation_sound_general *) /\
+    (* final continuation computation for the INL-defaults branch equals (res,st') *) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+```
+Do not invent a weaker theorem: copy the exact premises required by `intcall_successful_defaults_continuation_sound_general` plus the one generated body-IH premise from the current source, using the current theorem's variable names.
+
+#### Approach
+Apply `intcall_successful_defaults_continuation_sound_general` directly. Discharge its first premise using the generated body-IH assumption by exact matching before any `rpt conj_tac`; discharge the rest using explicitly named package facts. If `env_body.current_src = src_id_opt` is used by the continuation theorem with `env_body.current_src`, rewrite once with that equality before matching the IH, rather than letting broad simplification rewrite the whole goal.
+
+#### Not to try
+Do not make the final authoritative theorem replay the continuation theorem's generated-IH premises. Do not use `rpt conj_tac >> first_assum ACCEPT_TAC` over the entire premise list; split the generated-IH premise(s) first and use exact assumptions, then handle ordinary scalar/package facts.
+
+### C2.6.4.2.5.6.4: Close the live IntCall wrapper verification checkpoint
+- Kind: `integration_audit`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: All semantic proof obligations in this IntCall wrapper subtree were already proved and reviewed, with `vyperTypeStmtSoundnessTheory` building in E1327. The only remaining obligation is mechanical verification of the current working tree against that stable checkpoint and repository hygiene; no new theorem or tactic design is required.
+- Checkpoint: yes
+- Supersedes: C2.6.4.2.5.6.4.1, C2.6.4.2.5.6.4.2, C2.6.4.2.5.6.4.3, C2.6.4.2.5.6.4.4
+- Progress transition: `reclassified`
+- Carries progress/evidence from: C2.6.4.2.5.6.4.1, C2.6.4.2.5.6.4.2, C2.6.4.2.5.6.4.3, episode:E1306, episode:E1307, episode:E1327, tool_output:TO_type_system_rewrite-20260525T153549Z_m59889_t001
+- Invalidates prior progress/evidence: C2.6.4.2.5.6.4.4
+
+#### Progress note
+The previous durable proof leaves under this subtree are reclassified as completed evidence carried by this single checkpoint component. The old audit child C2.6.4.2.5.6.4.4 is invalidated only as a PLAN artifact because the harness flagged it as over-decomposition; its intended audit work is now the direct work of C2.6.4.2.5.6.4.
+
+#### Summary
+- This leaf replaces the over-decomposed IntCall wrapper verification subtree with one beginable checkpoint.
+- Carry forward the proved NoneT generated-IH consumer, live generated-IH consumer, and default-failure-tail wrapper refactor from E1306/E1307/E1327.
+- Run a focused source/build audit to confirm `vyperTypeStmtSoundnessTheory` still builds in the current working tree.
+- Inspect `git status`/relevant diffs before any checkpointing because the repo contains unrelated tracked diffs and untracked scratch files.
+- If the focused build regresses inside the same IntCall tail, stop and escalate for a real compatibility-helper redesign; do not add more tactical audit children.
+
+#### Description
+This component is intentionally a leaf even though it carries the old subtree's completed semantic evidence. The old plan decomposed the last step into an audit child, but that child was not durable mathematical work and triggered decomposition pressure. The executor should perform only a focused verification checkpoint: inspect the working tree, run the authorized build, and report/close this component if the build and diff hygiene match the reviewed E1327 state.
+
+#### Statement
+No new HOL theorem statement. Checkpoint obligation:
 
 ```sh
 holbuild build vyperTypeStmtSoundnessTheory
 ```
 
-must advance past the local prefix type-analysis failures caused by unqualified exception sums and ambiguous `body` variables in the for-cons helper block of `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
+must succeed in the current working tree, and the executor must verify that any staged/checkpointed changes are limited to task-owned IntCall wrapper proof edits in `semantics/prop/vyperTypeStmtSoundnessScript.sml` plus strictly necessary generated/build artifacts if the project convention requires them.
 
 #### Approach
-At the failing helper theorem(s), force the intended type of the free variable by annotating the statement occurrence, e.g. use `(body : stmt list)` in `eval_stmts cx (body : stmt list) stp = ...`, or rename the variable to a fresh name such as `body_stmts` with a type annotation if that is cleaner. Apply the same small annotation to proof patterns (`qpat_x_assum`/quoted terms) only if they stop matching after the statement edit. Then rebuild the theory to confirm the source elaborator reaches the next obligation.
+First inspect `git status` and the relevant diff around `semantics/prop/vyperTypeStmtSoundnessScript.sml`, especially the IntCall helper/proof cluster around the E1327 edits. Then run `holbuild build vyperTypeStmtSoundnessTheory` with the normal timeout. If it succeeds, close this checkpoint and, only if committing/checkpointing is requested by the workflow, stage narrowly selected relevant files rather than using `git add -A`.
 
 #### Not to try
-Do not revisit or undo the completed `vyperState$exception` qualifications; the build evidence shows that blocker is past. Do not attempt semantic strengthening, evaluator induction changes, or statement-soundness proof repair under this component. Do not use broad rewrites or imports to influence name resolution; this should be fixed by local theorem statement/binder annotation or renaming.
+Do not begin by editing the accepted IntCall proof for style or by adding another child component. Do not reopen the explicit post-helper `CONJ_TAC` tail unless the build actually regresses. Do not use `git add -A`, and do not stage untracked `test_*` scratch files. If a new IntCall premise-tail failure appears, do not continue line-by-line `qpat_assum`/`FIRST_ASSUM` repairs; escalate for a local compatibility-helper interface that packages the whole downstream tail.
 
-### C2.4.1: Repair fixed-array `Len` runtime semantics and finish `Expr_Builtin` Len/non-Len soundness
-- Kind: `repair_subtree`
-- Risk: 2
+### C2.6.4.2.5.7: Build-audit the IntCall successful-defaults helper cluster
+- Kind: `build_audit`
+- Risk: 1
 - Work priority: 50
-- Work units: 0
-- Rationale: The Len repair and Len proof are now evidenced by E0803. The only added work is the ordinary non-Len builtin branch, whose structure follows existing evaluator IH and builtin boundaries.
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0803
-
-#### Progress note
-Subtree title/summary are refined because the build shows `Expr_Builtin` still contains a non-Len branch marker after the Len repair. Existing children under C2.4.1 remain preserved.
-
-#### Summary
-- Retain all completed Len repair and Len statement-soundness work.
-- Extend the subtree with explicit non-Len branch coverage.
-- The new child depends on C2.4.1.5 because its starting point is the source state after Len closes.
-- Completion checkpoint should show holbuild advancing beyond the whole `Expr_Builtin` resume.
-
-#### Argument
-The subtree now treats `Expr_Builtin` as a complete case split. Len-specific semantics are handled by the repaired `toplevel_array_length` facts. The non-Len branch does not use those facts; it follows the generic builtin evaluation pipeline and should close by composing the `eval_exprs` IH with builtin application soundness.
-
-#### Definition design
-Use Len-specific facts only inside the Len branch. For non-Len, the interface is generic builtin soundness; a failure to find such a lemma is a NEW_DEPENDENCY for a small builtin boundary, not a reason to reopen the Len repair.
-
-#### Code structure
-Preserve the current source sequence in `vyperTypeStmtSoundnessScript.sml`: Len branch first, then non-Len branch. Replace the non-Len `FAIL_TAC` with the proof. Add any missing generic builtin adapter in `vyperTypeBuiltinsScript.sml` and import it through the existing theory dependency path.
-
-### C2.4.1.1: Add `toplevel_array_length` support for materialized static arrays
-- Kind: `definition_repair`
-- Risk: 1
-- Work priority: 0
-- Work units: 0
-- Rationale: Already proved in E0797. The definition now returns `LENGTH sparse` for `Value (ArrayV (SArrayV sparse))`, matching intended array-like Len behavior.
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: E0797, C2.4.1.1
-
-#### Progress note
-Carry forward the closed proof episode that edited `semantics/vyperStateScript.sml` and verified the definition repair far enough to expose the downstream builtin proof failure.
-
-#### Summary
-- Keep the completed `toplevel_array_length` definition repair.
-- This is the prerequisite for all subsequent Len fixed-array soundness work.
-- No further executor work is requested for this leaf unless later builds show the committed edit was lost.
-
-### C2.4.1.2: Repair `Len_result_fits_uint256` for materialized static arrays
-- Kind: `boundary_lemma`
-- Risk: 2
-- Work priority: 10
-- Work units: 2
-- Rationale: The failing goal has exactly the assumptions needed for the existing theorem `sparse_has_type_length`: `sparse_has_type tv len sparse` and `SORTED $< (MAP FST sparse)`. The remaining proof is elementary natural-number transitivity using the existing fixed-array bound and slot positivity.
-- Dependencies: C2.4.1.1
-- Checkpoint: yes
-- Supersedes: old C2.4.1.2
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0798
-- Invalidates prior progress/evidence: old C2.4.1.2 cleanup leaf
-
-#### Progress note
-E0798 closes the old cleanup leaf as plan-incomplete and motivates replacing this ID with the newly exposed builtin repair. The old cleanup obligation is reclassified under C2.4.1.3.
-
-#### Summary
-- Patch `semantics/prop/vyperTypeBuiltinsScript.sml` theorem `Len_result_fits_uint256`.
-- In the fixed-array `SArrayV sparse` branch, use `sparse_has_type_length` to derive `LENGTH sparse <= len`.
-- Combine this with `0 < slot` and `len * slot < bound` to prove `LENGTH sparse < dimword(:256)`.
-- Verify with `holbuild build vyperTypeBuiltinsTheory` and preferably `holbuild build vyperTypeStmtSoundnessTheory` up to the next planned failure.
-
-#### Description
-The old proof branch split on `0 < len` and tried to prove the zero-length case by arithmetic alone. After `toplevel_array_length` succeeds on materialized static arrays, the returned value is `LENGTH sparse`, so the proof must use the sparse typing invariant to show the sparse representation cannot contain entries beyond the declared fixed length. The theorem `sparse_has_type_length` is already present in `vyperTypingScript.sml` and is visible in generated `vyperTypingTheory`; use it rather than creating an ad hoc local induction.
-
-#### Statement
-Repair existing theorem without changing its statement:
-```sml
-Theorem Len_result_fits_uint256:
-  well_typed_builtin_app ty Len [arg_ty] ∧
-  evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
-  well_formed_type_value arg_runtime_tv ∧
-  toplevel_value_typed arg_tv arg_runtime_tv ∧
-  toplevel_array_length cx arg_tv st = (INL n, st') ==>
-  n < dimword(:256)
-```
-Optional local helper shape if direct use is awkward:
-```sml
-Theorem sparse_fixed_array_length_lt_bound[local]:
-  SORTED $< (MAP FST sparse) ∧ sparse_has_type tv len sparse ∧
-  0 < slot ∧ len * slot < bound ==>
-  LENGTH sparse < bound
-```
-
-#### Approach
-In the failing fixed-array branch, after abbreviating `len`, `slot`, and `bound`, derive `LENGTH sparse <= len` by `drule_all sparse_has_type_length` (or `irule`/`metis_tac` with the two assumptions). Derive `len <= len * slot` from `0 < slot` using arithmetic, then chain `LENGTH sparse <= len`, `len <= len * slot`, and `len * slot < bound` with `LESS_EQ_TRANS`/`LESS_EQ_LESS_TRANS`. Avoid special-casing `len = 0` unless arithmetic automation needs it; the length bound handles zero cleanly.
-
-#### Not to try
-Do not restore the old contradiction/probe behavior where materialized `SArrayV` Len raises TypeError; C2.4.1.1 intentionally changed that semantics. Do not unfold `sparse_has_type` manually in `Len_result_fits_uint256`; the exported `sparse_has_type_length` theorem is the intended proof interface. Do not push this arithmetic into `vyperTypeStmtSoundnessScript.sml`; statement soundness should consume builtin boundary facts.
-
-### C2.4.1.3: Replace old counterexample probes with post-repair regression/audit
-- Kind: `source_cleanup`
-- Risk: 1
-- Work priority: 20
 - Work units: 1
-- Rationale: Once `Len_result_fits_uint256` builds, stale local probes in `vyperTypeStmtSoundnessScript.sml` that asserted TypeError for fixed `SArrayV` Len are mechanically obsolete. Cleanup is deletion or conversion to success-regression facts using the repaired definition.
-- Dependencies: C2.4.1.2
+- Rationale: After replacing a stuck local proof interface, a focused build is necessary and mechanical.
+- Dependencies: C2.6.4.2.5.6
+- Checkpoint: yes
+- Supersedes: C2.6.4.2.5.5@old
 - Progress transition: `reclassified`
-- Carries progress/evidence from: old C2.4.1.2, E0798
+- Carries progress/evidence from: C2.6.4.2.5.5@old plan
 
 #### Progress note
-This is the old C2.4.1.2 cleanup obligation moved after the builtin theorem repair that E0798 showed is a strict prerequisite for verifying `vyperTypeStmtSoundnessTheory`.
+Renumbered from the old build-audit component after inserting the success-case repair components.
 
 #### Summary
-- Remove or rewrite stale local counterexample probes around lines 7674-7757 of `vyperTypeStmtSoundnessScript.sml`.
-- The facts `len_fixed_array_value_typed_but_toplevel_array_length_type_error` and `len_fixed_array_well_typed_expr_type_error_probe` are no longer true after C2.4.1.1.
-- If keeping regression coverage, replace them with success/no-TypeError checks for `SArrayV` Len.
-- Verify that no local theorem still claims `TypeError "toplevel_array_length"` for a well-typed fixed array value.
-
-#### Description
-The current source context shows stale local probes immediately before `Resume eval_all_type_sound_mutual[Expr_Builtin]`. After the definition repair, `toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st` computes `(INL (&LENGTH sparse), st)`, so any theorem stating it returns `INR (Error (TypeError "toplevel_array_length"))` must be removed or changed. This cleanup should be small and should not attempt to solve the entire builtin branch.
-
-#### Statement
-No frozen theorem statement. Source cleanup target:
-```sml
-Theorem len_fixed_array_value_typed_but_toplevel_array_length_type_error[local]: ...
-Theorem well_typed_fixed_array_expr_can_eval_to_sarray_probe[local]: ...
-Theorem len_fixed_array_well_typed_expr_type_error_probe[local]: ...
-```
-Delete false probes or replace with local regression facts asserting successful length evaluation for materialized fixed arrays.
+Run `holbuild build vyperTypeStmtSoundnessTheory`. Confirm the helper cluster around the IntCall actual/default path is build-clean and that no new CHEATs or suspended fragments were introduced in this cluster. If the next failure is outside this subtree, close this checkpoint with the exact next theorem/location for downstream planning.
 
 #### Approach
-After C2.4.1.2, build will reach `vyperTypeStmtSoundnessScript.sml` again. Delete the false TypeError probes; keep `well_typed_fixed_array_expr_can_eval_to_sarray_probe` only if useful and true, otherwise remove it with its consumers. If replacing with a regression, state the direct computation of `toplevel_array_length` on `SArrayV []` and prove by `simp[toplevel_array_length_def, return_def]`.
+Use the task-required `holbuild` path, not direct HOL. Inspect warnings as well as errors; this task ultimately requires zero reachable CHEAT warnings. Record the next failing theorem if the build advances beyond the helper cluster.
 
 #### Not to try
-Do not leave false local theorems with `cheat` or weakened assumptions. Do not spend effort proving large env-consistency witnesses for a regression probe unless a downstream proof consumes it; direct computation regressions are sufficient.
+Do not treat a failed focused build as success because an earlier theorem compiled. Do not broaden into assignment/builtin/call sibling work from this audit component.
 
-### C2.4.1.4: Prove Len typed-runtime no-TypeError boundary
+### C2.6.4.3: Assemble a full `IntCall` expression-soundness helper from generated IHs
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 30
-- Work units: 3
-- Rationale: After the definition and builtin length-bound repairs, the prior fixed-array counterexample is gone. The boundary follows by case analysis on the typed Len argument/result shape and should isolate `toplevel_array_length_def` from statement consumers.
-- Dependencies: C2.4.1.2, C2.4.1.3
+- Work units: 5
+- Rationale: This helper is a consumer-shaped wrapper over the phase lemmas. Its proof follows the already-validated evaluator split from `intcall_expr_no_type_error_from_generated_ih`, with stronger conclusions delegated to C2.6.4.1 and C2.6.4.2.
+- Dependencies: C2.6.4.1, C2.6.4.2
 - Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: C2.4.1.3
+- Supersedes: intcall_expr_no_type_error_from_generated_ih
+- Carries progress/evidence from: E1236, E1237, E1238
 
 #### Progress note
-Same downstream boundary obligation as before, now explicitly dependent on the builtin repair and stale-probe cleanup.
+Carries forward the expanded evaluator proof and repaired IH selectors from prior episodes, but supersedes the no-TypeError-only helper as the boundary to be used by the resume.
 
 #### Summary
-- Establish the typed Len no-TypeError boundary needed by `Expr_Builtin`.
-- It should say that under well-typed Len application, evaluated typed argument value, and consistent runtime typing, `toplevel_array_length` cannot produce `Error (TypeError ...)`.
-- Use `Len_result_fits_uint256`/`Len_builtin_sound` for success typing and direct `toplevel_array_length` case analysis only inside this lemma.
-- This lemma is a checkpoint because it is the consumer-facing interface for statement soundness.
+- Prove a local theorem whose conclusion exactly matches the first conjunct of the live mutual `Expr_Call_IntCall` goal.
+- Hypotheses should be the same three generated IH assumptions already selected in the resume, plus ordinary well-typed/evaluation/context assumptions.
+- Prefix error and actual-argument failure branches are solved directly from state-unchanged facts or the actual generated IH.
+- Actual-argument success delegates defaults to C2.6.4.1 and successful continuation to C2.6.4.2.
 
 #### Statement
-Use the current source’s intended boundary statement if already present. If absent, introduce a local theorem in `vyperTypeStmtSoundnessScript.sml` or exported theorem in `vyperTypeBuiltinsScript.sml` with this shape:
+Add local theorem `intcall_expr_sound_from_generated_ih[local]` before the resume:
+
 ```sml
-well_typed_builtin_app ty Len [arg_ty] ∧
-evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
-toplevel_value_typed arg_tv arg_runtime_tv ∧
-well_formed_type_value arg_runtime_tv ==>
-∀cx st err st'.
-  toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==> F
+!cx env st res st' loc src_id_opt fn es extra.
+  <actual-args generated-IH assumption> /\
+  <defaults generated-IH assumption, including get_scopes/set_scopes binders> /\
+  <body generated-IH assumption> /\
+  env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+  accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  eval_expr cx (Call loc (IntCall (src_id_opt,fn)) es extra) st = (res,st') /\
+  well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) ==>
+  state_well_typed st' /\ env_consistent env cx st' /\
+  accounts_well_typed st'.accounts /\ no_type_error_result res /\
+  case res of
+  | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+  | INR _ => T
 ```
-Adjust quantifiers/names to match the `Expr_Builtin` use site.
 
 #### Approach
-Prove by cases on `arg_ty`, evaluated runtime type, and `arg_tv`, reusing the repaired `toplevel_array_length_def` cases. Keep all unfolding in this boundary lemma. For success branches, `Len_result_fits_uint256` and `Len_builtin_sound` should remain available to prove the uint256 result typing separately.
+Copy the top-level case structure from `intcall_expr_no_type_error_from_generated_ih`: strip `well_typed_expr`, name the three generated IHs, unfold `evaluate_def`, and handle prefix failures with the same check/lift/type-check state lemmas. On actual-argument failure, use the actual IH to obtain preservation and no-TypeError, with result-typing trivial because result is `INR`. On actual-argument success, derive callable body typing as in E1238, call C2.6.4.1 for defaults; if defaults fail, use its all-result frame package, and if defaults succeed, call C2.6.4.2.
 
 #### Not to try
-Do not duplicate this case split directly in `eval_all_type_sound_mutual[Expr_Builtin]`. Do not use the deleted fixed-array TypeError probe as a contradiction; the semantics now succeeds on `SArrayV`.
+Do not make this theorem conclude only `no_type_error_result res`; that is the E1238 mismatch. Do not require callers to manually pass `env_body`, `ret_tv`, `env_after`, `dflt_res`, or `dflt_st` unless unavoidable; the final resume should only pass generated IHs and live assumptions. Avoid a massive `Q.SPECL` in the resume by hiding evaluator intermediates inside this helper.
 
-### C2.4.1.5: Finish `eval_all_type_sound_mutual[Expr_Builtin]` Len branch
-- Kind: `proof`
-- Risk: 2
+### C2.6.4.4: Integrate the full helper into `eval_all_type_sound_mutual[Expr_Call_IntCall]`
+- Kind: `proof_integration`
+- Risk: 1
 - Work priority: 40
-- Work units: 3
-- Rationale: With the typed Len no-TypeError boundary in place, the remaining statement proof branch is proof integration rather than semantic design. The success branch can rely on `Len_builtin_sound`, and the TypeError branch is contradicted by C2.4.1.4.
-- Dependencies: C2.4.1.4
-- Progress transition: `refinement`
-- Carries progress/evidence from: C2.4.1.4
-
-#### Progress note
-This is the old C2.4.1.4 integration obligation shifted after the newly inserted builtin repair and cleanup.
-
-#### Summary
-- Complete the `Resume eval_all_type_sound_mutual[Expr_Builtin]` Len case in `vyperTypeStmtSoundnessScript.sml`.
-- Use the boundary lemma from C2.4.1.4 rather than unfolding `toplevel_array_length_def` in the mutual proof.
-- Use `Len_builtin_sound` for the successful value typing obligation.
-- Verify with `holbuild build vyperTypeStmtSoundnessTheory` before proceeding to broader statement soundness work.
-
-#### Statement
-Close the existing suspended/resumed proof branch:
-```sml
-Resume eval_all_type_sound_mutual[Expr_Builtin]:
-  ...
-QED
-```
-Do not change public theorem statements unless a later checked failure proves the current statement is false.
-
-#### Approach
-At the Len subcase, split on the result of `toplevel_array_length`. If it is a TypeError, invoke the C2.4.1.4 no-TypeError boundary with the typed argument facts already in the mutual proof context. If it succeeds, invoke `Len_builtin_sound` to obtain `value_has_type` for the returned uint256 length, then discharge the mutual invariant conjuncts by the existing expression proof framework.
-
-#### Not to try
-Do not start a second induction over expression evaluation. Do not inline all builtin typing cases in the statement proof; only the Len-specific boundary should be used here.
-
-### C2.4.1.6: Finish `eval_all_type_sound_mutual[Expr_Builtin]` non-Len branch
-- Kind: `proof`
-- Risk: 2
-- Work priority: 56
-- Work units: 5
-- Rationale: The failing goal shown by holbuild is the standard non-Len builtin path after argument-length checking. The branch should use the existing eval-expressions IH for `eval_exprs`, then builtin no-TypeError/success typing boundaries; this is proof integration, not semantic design. The Len-specific hard case is already closed by C2.4.1.5.
-- Dependencies: C2.4.1.5
+- Work units: 2
+- Rationale: Once C2.6.4.3 exists, the resume is mechanical: split the two conjuncts, select generated IHs, apply the full helper to the first conjunct, and use the place-expression impossibility lemma for the second conjunct.
+- Dependencies: C2.6.4.3
 - Checkpoint: yes
-- Carries progress/evidence from: E0803, TO_type_system_rewrite-20260522T073012Z_m42958_t001
+- Progress transition: `refinement`
+- Carries progress/evidence from: E1236, E1237, E1238
 
 #### Progress note
-E0803 is accepted as evidence that the Len branch advances; the new component records the separate non-Len failure exposed immediately afterward. Prior Len progress carries only as a dependency and source-position checkpoint, not as proof of the non-Len branch.
+Keeps the successful split and `type_place_expr_Call_IntCall_NONE` from prior episodes. Invalidates only the attempted `MATCH_MP_TAC` application of the no-TypeError-only helper, not surrounding integration work.
 
 #### Summary
-- Add explicit PLAN coverage for the remaining `FAIL_TAC "Expr_Builtin non-Len branch"` in `vyperTypeStmtSoundnessScript.sml`.
-- Work starts from the post-Len goal at lines 7745-7749: `bt <> Len`, `builtin_args_length_ok bt (LENGTH es)`, typed arguments, and `well_typed_builtin_app ty bt (MAP expr_type es)`.
-- Prove the branch by applying the expression-list IH to `eval_exprs cx es st`, then split on argument evaluation result.
-- For successful argument evaluation, use the builtin soundness/no-TypeError interface rather than unfolding builtin implementations in statement soundness.
-- This component is a checkpoint because completion should move the build to the next suspended branch (`Expr_TypeBuiltin`) or reveal any missing builtin boundary lemma.
-
-#### Description
-The build evidence after C2.4.1.5 shows the Len cases no longer fail and the proof reaches the explicit non-Len failure marker. This component is responsible only for replacing that marker with the ordinary builtin branch proof. It should not revisit the Len proof or unfold `toplevel_array_length_def`; Len-specific facts belong to C2.4.1.5 and `vyperTypeBuiltinsScript.sml`. If a needed non-Len builtin boundary is missing or too weak, escalate as NEW_DEPENDENCY with the exact goal shape rather than duplicating builtin case analysis inside `vyperTypeStmtSoundnessScript.sml`.
+- Replace the failing lines around 13759-13763 with an application of `intcall_expr_sound_from_generated_ih`.
+- Keep `reverse conj_tac`: second conjunct is solved by contradiction with `type_place_expr_Call_IntCall_NONE`.
+- The first conjunct should not unfold the entire continuation after the full helper is available.
+- Run focused `holbuild build vyperTypeStmtSoundnessTheory`; expected next failures, if any, should be later branches such as `Expr_Call_ExtCall`.
 
 #### Statement
-Resume eval_all_type_sound_mutual[Expr_Builtin]:
-  ...
-  (* in the `bt <> Len` branch after rewriting `builtin_args_length_ok bt (LENGTH es)` and simplifying evaluator plumbing *)
-  prove the remaining joint invariant:
-    state_well_typed st' ∧
-    env_consistent env cx st' ∧
-    accounts_well_typed st'.accounts ∧
-    no_type_error_result res ∧
-    case res of
-      INL tv => expr_result_typed env (Builtin ty bt es) tv
-    | INR _ => T
+Close the existing source obligation:
 
-#### Approach
-Use the available eval-expression-list IH exactly on `eval_exprs cx es st` with assumptions `well_typed_exprs env es`, `env_consistent env cx st`, `state_well_typed st`, `context_well_typed cx`, `accounts_well_typed st.accounts`, and `functions_well_typed cx`. Split on `eval_exprs`: if it returns `INR e`, the IH gives state/env/accounts preservation and `no_type_error_result`; the final result is the same exception. If it returns `INL vs`, use `exprs_runtime_typed env es vs`, `env.type_defs = get_tenv cx`, `well_typed_builtin_app ty bt (MAP expr_type es)`, and the non-Len builtin boundary lemmas for `evaluate_builtin` to prove both absence of `TypeError` and `value_has_type` for the successful `Value v` case.
-
-#### Not to try
-Do not unfold all `evaluate_builtin` cases in `vyperTypeStmtSoundnessScript.sml`; that duplicates the builtin layer and will make the resume brittle. Do not try to reuse `Len_builtin_sound` or `Len_toplevel_array_length_no_type_error` in the `bt <> Len` branch. Do not proceed to C2.5 while this explicit `FAIL_TAC` remains, because `vyperTypeStmtSoundnessTheory` still stops here before reaching later suspended branches.
-
-### C2.5: Close `Expr_TypeBuiltin` statement-soundness case using completed type-builtin boundaries
-- Kind: `proof`
-- Risk: 2
-- Work priority: 60
-- Work units: 5
-- Rationale: After C4.3/C4.4/C4.5 close, the type-builtin expression branch is the same consumer pattern as ordinary builtins.
-- Dependencies: C2.4, C4.3, C4.4, C4.5
-- Supersedes: C2.5
-- Progress transition: `replacement`
-- Invalidates prior progress/evidence: old C2.5 authorization before C4.3/C4.4/C4.5
-
-#### Progress note
-This component is rebased after the whole-plan review. Its previous local replacement attempt was correctly rejected because it could not reorder cross-top-level C4 dependencies.
-
-#### Summary
-- Replace `Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]: cheat QED`.
-- Consume C4.3 no-TypeError and C4.4 success typing.
-- Use C4.5 for raw-call/ABI/Env side facts if the type-builtin branch needs them.
-- Keep ABI encode/decode reasoning out of C2.
-
-#### Statement
 ```sml
-Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:
+Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
   ...
 QED
 ```
 
+The first conjunct must close through `intcall_expr_sound_from_generated_ih`; the second conjunct must close through `type_place_expr_Call_IntCall_NONE`.
+
 #### Approach
-Unfold the type-builtin expression typing and evaluator one step to expose argument evaluation and `evaluate_type_builtin`. Use the `eval_exprs` IH to obtain no-TypeError/preservation for arguments and runtime typed argument values; then invoke `well_typed_type_builtin_no_type_error` for TypeError exclusion and `well_typed_type_builtin_success_type` for successful result typing.
+Retain the repaired generated-IH selection patterns from E1238. For the first conjunct, use `MATCH_MP_TAC`/`irule` on `intcall_expr_sound_from_generated_ih` and discharge generated-IH premises by the named `actual_ih`, `default_ih`, and `body_ih`; ordinary assumptions should be solved by `first_assum ACCEPT_TAC` and already-unfolded well-typed facts. For the second conjunct, keep the current contradiction from `type_place_expr _ (Call _ (IntCall _) _ _) = SOME _` and `simp[type_place_expr_Call_IntCall_NONE]`.
 
 #### Not to try
-Do not locally prove ABI encode bounds, raw-call return-size facts, or MsgGas arithmetic in `vyperTypeStmtSoundnessScript.sml`; those are C4-owned facts. Do not start before C4.3/C4.4/C4.5 are cheat-free.
+Do not reintroduce the long `Q.SPECL` application of `intcall_actual_args_success_no_type_error_from_generated_ih_general`. Do not leave preservation/result-typing subgoals to a broad `rw` tail. If applying the full helper still needs many explicit intermediate arguments, stop and adjust C2.6.4.3's statement to hide those intermediates.
 
-### C2.6: Close external and special call-target expression resumes
+### C2.7: Close remaining non-internal call-target expression branches
 - Kind: `proof`
-- Risk: 2
-- Work priority: 70
-- Work units: 8
-- Rationale: These call targets do not evaluate a Vyper function body. After arguments/drivers are handled by IHs, target-specific no-TypeError and typing facts come from C4 boundaries.
-- Dependencies: C2.5, C4.5
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C2.6
-- Invalidates prior progress/evidence: old C2.6 scheduling before C4.5
-
-#### Progress note
-Rescheduled after C4.5 so raw/special-call facts are available before C2 consumers run.
-
-#### Summary
-- Replace cheats for `Expr_Call_ExtCall`, `Expr_Call_Send`, `Expr_Call_RawCallTarget`, `Expr_Call_RawLog`, `Expr_Call_RawRevert`, `Expr_Call_SelfDestructTarget`, and `Expr_Call_CreateTarget` as present in current source.
-- Use argument/driver IHs and C4 raw/special-call no-TypeError facts.
-- Prove only the mutual statement-theory obligations; public call wrappers remain C5.
-- Avoid importing or depending on `vyperTypeCallSoundness`.
-
-#### Statement
-Resume blocks in `semantics/prop/vyperTypeStmtSoundnessScript.sml` for external and special call expression cases, including:
-```sml
-Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]: ... QED
-Resume eval_all_type_sound_mutual[Expr_Call_Send]: ... QED
-Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]: ... QED
-Resume eval_all_type_sound_mutual[Expr_Call_RawLog]: ... QED
-Resume eval_all_type_sound_mutual[Expr_Call_RawRevert]: ... QED
-Resume eval_all_type_sound_mutual[Expr_Call_SelfDestructTarget]: ... QED
-Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]: ... QED
-```
-
-#### Approach
-For each call target, unfold `well_typed_expr_def` and `evaluate_def` only to the point where subexpressions/argument lists are evaluated. Apply IHs to subexpressions and `eval_exprs`; on successful arguments, use C4.5 raw/special-call facts to rule out TypeError and establish result typing. Group similar raw-call/log/revert cases only if the proof script remains readable; otherwise prove small branch helpers in the same file.
-
-#### Not to try
-Do not call the wrapper theorems in `vyperTypeCallSoundnessScript.sml`; that would create a cycle or duplicate the architecture. Do not unfold raw-call encoding/ABI internals in C2.
-
-### C2.7: Prove non-circular internal-call support and close `Expr_Call_IntCall`
-- Kind: `proof_group`
 - Risk: 2
 - Work priority: 80
-- Work units: 0
-- Rationale: Internal calls are the only remaining C2 case with recursive statement-body evaluation. Splitting callee typing, call-frame consistency, and resume integration gives low-risk leaves matching evaluator order.
-- Dependencies: C2.6
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C2.7
-
-#### Progress note
-Internal-call work remains downstream of builtin/type-builtin/special-call consumers so the mutual proof can be finalized cleanly.
-
-#### Summary
-- Add non-circular helpers for function body typing and call-frame environment consistency.
-- Close `Expr_Call_IntCall` using argument/default IHs and the statement-body IH.
-- Keep call wrapper public theorems in C5.
-- Avoid importing `vyperTypeCallSoundness` into statement soundness.
-
-#### Statement
-Close:
-```sml
-Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
-  ...
-QED
-```
-
-#### Approach
-First prove the two helpers C2.7.1 and C2.7.2. Then in the resume follow evaluator order: argument IH, default IH, function lookup/body typing helper, frame consistency helper, body statement IH, scope/pop restoration, and result typing/no-TypeError projection.
-
-#### Not to try
-Do not use `internal_call_no_type_error` or `internal_call_type_preservation` wrappers in the mutual proof. Do not duplicate `functions_well_typed_def` map projections in the final resume.
-
-#### Argument
-Internal call evaluation first evaluates explicit arguments and defaults, then constructs a callee frame, evaluates the callee body, and restores/pops scope. Static `functions_well_typed` and function signature consistency recover the body typing environment and return type. Runtime argument/default typedness plus env-extension/scope-push lemmas establish `env_consistent` for the callee frame. The mutual IH on the body gives no-TypeError and preservation; scope-pop restoration lemmas transfer preservation back to the caller frame.
-
-#### Definition design
-Helpers should expose exactly what the resume needs: callee body typing facts from `functions_well_typed`, and a frame-consistency lemma that consumes evaluated argument/default values plus `LIST_REL value_has_type`. Failure signs are manual reconstruction of large finite maps in the resume or theorem plumbing with quoted full assumptions. If needed, make the helper conclusion include the exact `env_consistent env_body cx st_call` and parameter assignability facts.
-
-#### Code structure
-Place helper lemmas before `Finalise eval_all_type_sound_mutual` in `vyperTypeStmtSoundnessScript.sml` unless doing so creates clutter; a separate prerequisite theory is acceptable only if it does not import `vyperTypeCallSoundness`. Public wrappers remain in `vyperTypeCallSoundnessScript.sml` under C5.
-
-### C2.7.1: Expose callee body typing facts in a non-circular helper
-- Kind: `boundary_lemma`
-- Risk: 2
-- Work priority: 0
 - Work units: 5
-- Rationale: A similar helper exists in the call wrapper layer, but C2 needs a non-circular version before statement soundness finalizes. The proof is map/projection work from `functions_well_typed_def`.
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C2.7.1
-
-#### Progress note
-Retained but scheduled after C2.6 through parent dependency.
-
-#### Summary
-- Prove a helper recovering callee body environment, return type evaluation, defaults typing, parameter types, and body `type_stmts` from function lookup and `functions_well_typed`.
-- Avoid depending on `vyperTypeCallSoundness`.
-- Match the `Expr_Call_IntCall` resume use site.
-
-#### Statement
-A non-circular analogue of `functions_well_typed_body` suitable for use before `vyperTypeCallSoundness`, with current source variables for `env`, `cx`, `src`, `fn`, signature maps, defaults, parameters, return type, and body.
-
-#### Approach
-Unfold `functions_well_typed_def` and function signature consistency only as needed, then project the existing body typing record. Include in the conclusion the exact environment fields and parameter assignability facts needed by the internal-call resume.
-
-#### Not to try
-Do not import or use the theorem from `vyperTypeCallSoundnessScript.sml` if that theory depends on statement soundness.
-
-### C2.7.2: Prove call-frame environment consistency from evaluated arguments/defaults
-- Kind: `boundary_lemma`
-- Risk: 2
-- Work priority: 10
-- Work units: 8
-- Rationale: This is frame/env consistency bookkeeping using existing env extension, scope push/pop, and expression-list runtime typing facts. The helper prevents brittle map reconstruction in the final resume.
-- Dependencies: C2.7.1
-- Progress transition: `refinement`
-- Carries progress/evidence from: old C2.7.2
-
-#### Progress note
-Retained with explicit dependency on the callee typing helper.
-
-#### Summary
-- Prove that evaluated typed arguments/defaults initialize a callee frame consistent with the callee body environment.
-- Consume `exprs_runtime_typed`/`LIST_REL value_has_type` and parameter typing facts.
-- Export a conclusion matching the internal-call resume.
-- Keep scope restoration facts separate unless they are already part of an existing helper.
-
-#### Statement
-Helper theorem shape:
-```sml
-... /\nexprs_runtime_typed env args arg_tvs /
-LIST_REL value_has_type param_tvs arg_values /
-callee_body_typing_facts ... ==>
-env_consistent env_body cx st_call /\ state_well_typed st_call /\ accounts_well_typed st_call.accounts
-```
-Use current source names and exact call-frame construction terms.
-
-#### Approach
-Use existing env-extension and scope-push lemmas rather than unfolding all finite maps. If the resume needs both explicit and default arguments, prove the helper over the combined parameter/value list so the conclusion directly feeds the body IH.
-
-#### Not to try
-Do not manually instantiate many `FLOOKUP` goals in the final resume. If the helper needs a stronger conclusion for `drule`, strengthen it here.
-
-### C2.7.3: Close the `Expr_Call_IntCall` mutual-proof resume
-- Kind: `proof`
-- Risk: 2
-- Work priority: 20
-- Work units: 8
-- Rationale: With callee body typing and call-frame consistency helpers, the resume follows evaluator order and uses the mutual IH for argument/default expressions and callee body statements.
-- Dependencies: C2.7.2
+- Rationale: This unrelated sibling remains valid but must be scheduled after the active C2.6 IntCall source repair because the current theory source is partial there.
+- Dependencies: C2.6.4
 - Checkpoint: yes
 - Progress transition: `refinement`
-- Carries progress/evidence from: old C2.7.3
 
 #### Progress note
-Checkpoint because this should allow finalizing `eval_all_type_sound_mutual` once C2.4-C2.6 are done.
+Priority/dependency refined to prevent C2.7 from becoming oracle-next while C2.6.3.3.1.e/d are still open.
 
 #### Summary
-- Replace `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]: cheat QED`.
-- Use C2.7.1/C2.7.2 helpers, argument/default IHs, and body statement IH.
-- Prove no-TypeError and result/state preservation for internal calls.
-- Do not call downstream C5 wrapper theorems.
+- Unchanged proof obligation, rescheduled after C2.6 IntCall repair.
+- Do not start this while the local IntCall continuation theorem remains partial.
 
-#### Statement
-```sml
-Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
-  ...
-QED
-```
-
-#### Approach
-Unfold the evaluator to expose function lookup, argument/default evaluation, frame setup, body evaluation, and restoration. Apply IHs in the semantic order; after successful setup, invoke the call-frame helper and then the statement-list/body IH. Finish by applying scope-pop/restoration preservation lemmas and projecting expression result typing for the call return value.
-
-#### Not to try
-Do not unfold all function/body maps inline. Do not use wrappers from `vyperTypeCallSoundnessScript.sml`.
-
-### C2.8: Audit `vyperTypeStmtSoundnessTheory` for build success and zero local cheats
+### C2.8: Focused statement-soundness build and C2 cheat audit
 - Kind: `build_audit`
 - Risk: 1
 - Work priority: 90
-- Work units: 2
-- Rationale: After all remaining resumes are proved, local validation is mechanical and catches forgotten `cheat`/`suspend` scaffolding before downstream wrapper work.
-- Dependencies: C2.7.3
-- Checkpoint: yes
+- Work units: 1
+- Rationale: The audit remains valid and should run after C2.6 and C2.7, not before the active repair path.
+- Dependencies: C2.7
 - Progress transition: `refinement`
-- Carries progress/evidence from: old C2.8
 
 #### Progress note
-Still required, but now scheduled after all rebased C2 leaves.
+Priority/dependency refined so the audit remains final within C2 after the proof leaves complete.
 
 #### Summary
-- Build `vyperTypeStmtSoundnessTheory`.
-- Grep `vyperTypeStmtSoundnessScript.sml` for remaining `cheat`/unexpected suspended resumes.
-- Report any reachable residual as a new focused dependency.
-- This is the checkpoint before C5 call wrappers and C6 public wrappers.
-
-#### Statement
-`holbuild build vyperTypeStmtSoundnessTheory` succeeds with no local CHEAT warnings from `vyperTypeStmtSoundnessScript.sml`.
-
-#### Approach
-Run the build and a scoped grep. If a remaining cheat is in an in-scope resume, escalate for a new component; if it is unreachable/retired, record evidence and do not expand scope.
-
-#### Not to try
-Do not broaden to repository-wide cleanup during this audit.
+- Final C2-focused build/cheat audit.
+- Unchanged obligation, rescheduled after the active IntCall and call-target proof leaves.
 
 ### C3: Update-binop and assignment-subscript runtime-typed path
 - Kind: `proof_group`

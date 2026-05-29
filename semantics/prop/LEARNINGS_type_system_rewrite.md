@@ -179,64 +179,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260518T204229Z_m25827_t003
 - tool_output:TO_type_system_rewrite-20260518T204229Z_m25801_t001
 
-## L1289 scope='C2.1.1' tags=Resume,well_typed_expr,type_place_expr,place_projection,adapter
-shape: Expression Resume goal has joint ordinary/place projections for a constructor.
-pattern: Split the expression Resume conclusion into ordinary and place projections before consuming constructor typing. In ordinary branches, strip/use only `well_typed_expr`; in place branches, strip/use `type_place_expr`. For place-capable constructors, use adapter/helper lemmas whose conclusions match the branch, rather than carrying monadic tail unfolding in the Resume.
-works_when: Applies to `eval_all_type_sound_mutual` expression Resume branches after the ordinary/place strengthened invariant, especially Subscript and TopLevelName-like place cases.
-evidence:
-- episode:E0663
-- episode:E0664
-- episode:E0695
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39727_t001
-
-## L1290 scope='C2.1.1' tags=Resume,adapter,guarded-IH,monadic-tail,proof-interface
-shape: Large expression Resume branch times out or leaves outer goals after applying a helper/adapter.
-pattern: Treat this as a helper-interface problem. Factor a small branch adapter that consumes the exact static split, guarded IHs, and evaluator-tail equality, then in the Resume project the needed IH and apply the adapter with explicit specialization if variables appear only in antecedents. Avoid broad `simp[]`/`metis_tac[]` and long inline tail rewrites.
-works_when: Applies in large mutual evaluator Resume proofs with guarded IHs and monadic tails, particularly Expr_Subscript ordinary/place adapters.
-evidence:
-- episode:E0688
-- episode:E0696
-- episode:E0699
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m39950_t001
-
-## L1291 scope='C2.3' tags=Expr_Pop,PopOp,assignable_type,definition_repair,boundary-lemma
-shape: Pop typing/static interface must supply dynamic-array assignability for assignment soundness.
-pattern: Do not derive Pop assignment side conditions from runtime `evaluate_type` facts. The source Pop typing rule should expose a dynamic target and `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))`; use extraction lemmas and the Pop result boundary rather than unfolding `assignable_type_def` or re-proving fixed-array counterexamples.
-works_when: Applies to Expr_Pop statement soundness and consumers of `PopOp` assignment soundness in the fresh stack.
-evidence:
-- episode:E0712
-- episode:E0713
-- episode:E0718
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40415_t001
-
-## L1292 scope='C2.3.6' tags=Expr_Pop,Resume,assign_target_pop_success_some_typed,assignable_type,boundary-lemma
-shape: Expr_Pop Resume needs assignment-success result typing after `assign_target ... PopOp` returns `INL popped`.
-pattern: Keep Expr_Pop at the statement-consumer level: use `well_typed_expr_Pop_dynamic_target_assignable` for dynamic target + assignability, build `target_runtime_typed`, derive `evaluate_type env.type_defs elem_ty = SOME elem_tv`, and use `assign_target_pop_success_some_typed` to rewrite the successful `lift_option_type popped` branch. Do not unfold `assign_target_def` or `assignable_type_def` in this Resume.
-works_when: Applies inside `Resume eval_all_type_sound_mutual[Expr_Pop]` after the base-target IH has produced `location_runtime_typed` and `target_path_type` facts and the proof has split `assign_target` result.
-evidence:
-- episode:E0727
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40688_t002
-- plan:C2.3.6
-
-## L1293 scope='C2.3.6' tags=HOL4,THEN1,conj_tac,Cases_on,precedence,Expr_Pop
-shape: A Resume proof uses `conj_tac >- (...) >> ...` or `Cases_on x >> simp[] >- ... >> ...` and holbuild shows the whole original conjunction or `GEN_TAC not a forall`.
-pattern: In suspended expression Resume proofs, parenthesize branch tacticals aggressively: use `(conj_tac >- ordinary_tac >> place_tac)` and `(Cases_on `tm` >- error_tac >> success_tac)` rather than relying on `>>`/`>-` precedence. Unparenthesized forms can route later tactics to the wrong subgoal and make semantic goals look unsolved even when the intended branch progressed.
-works_when: Applies when a proof has nested case splits inside the ordinary half of a joint ordinary/place expression soundness goal, especially around `Expr_Pop` and assignment-result splits.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40711_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40721_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40754_t001
-
-## L1294 scope='C2.3.6' tags=HOL4,suspend,Resume,Expr_Pop,branch-structure,THEN1
-shape: A statement Resume has a nested assignment-result split and inline tactics keep leaking or producing unreadable goals.
-pattern: Factor the nested split with `suspend` labels and prove each branch as a separate `Resume` block. For Expr_Pop, the main Resume suspends `Expr_Pop_assign_inl` and `Expr_Pop_assign_inr`; the INL Resume proves runtime consistency and `?v. popped = SOME v /\ value_has_type elem_tv v` via `assign_target_pop_success_some_typed`, while the INR Resume uses `assign_target_preserves_runtime_consistent_result` and `assign_target_no_type_error`. Do not add an early `Finalise`; leave finalisation at the existing end of the mutual proof after all labels are resumed.
-works_when: Use when an existing suspended mutual theorem already has many Resume blocks and a consumer proof needs two small post-case obligations with different boundary lemmas.
-evidence:
-- episode:E0729
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40813_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40810_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:7690-7760
-
 ## L1295 scope='global' tags=audit,source-authoritative,rebased-plan,holbuild
 shape: PLAN leaf names a theorem, but DOSSIER has stale stuck subepisodes while current source may already have `Proof ... QED`.
 pattern: Before editing a rebased leaf, grep/read the exact current-source theorem region and build the owning theory. If the named theorem and immediate corollaries have no `cheat` and the target builds, close the component with source+holbuild evidence instead of retrying stale tactic histories.
@@ -249,115 +191,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40856_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m40864_t001
 
-## L1296 scope='C4.2' tags=builtin,success-typing,boundary-helper,probe,not
-shape: Generic builtin success theorem has many residual constructor goals after replacing final cheat with FAIL_TAC; first goal is `Not`/`UintT n` value_has_type for computed complement.
-pattern: When a generic builtin success theorem stalls after no-TypeError helper work, do not try to close residuals by broad catch-all simplification. Use the FAIL_TAC probe to identify the first constructor/value shape, then add a focused local success-typing helper for that constructor and dispatch the generic theorem through helpers. No-TypeError helpers are not substitutes for success-typing helpers.
-works_when: The evaluator is non-recursive and the residual goal exposes a concrete builtin constructor with value/type assumptions (e.g. `evaluate_builtin ... Not [IntV i] = INL v` and a `value_has_type` conclusion).
-evidence:
-- episode:E0736
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40891_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2366-2410
-
-## L1297 scope='C4.2' tags=builtin,success-typing,constructor-dispatch,slice,LIST_REL_EL_EQN
-shape: Generic builtin success residual for a 3-argument builtin has MAP/evaluate_type equality plus `LIST_REL value_has_type tvs vs`, and goal needs result value typing.
-pattern: For 3-argument builtin success cases (e.g. Slice), derive stable argument facts via `LIST_REL_EL_EQN` or a length helper such as `list_el_decomp_3`; avoid nested tail destructs. Then call a small evaluator-boundary lemma (`evaluate_slice_BytesT_success_type` / `evaluate_slice_StringT_success_type`) that reasons at implementation level once.
-works_when: The static typing branch fixes a concrete argument list shape like `[arg_ty; BaseT (UintT 256); BaseT (UintT 256)]`, and `LIST_REL value_has_type tvs vs` connects evaluated type_values to runtime values.
-evidence:
-- episode:E0737
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40977_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1491-1526
-
-## L1298 scope='C4.2' tags=builtin,success-typing,concat,boundary-helper
-shape: Concat success residual: all static args are bytes or all strings, `evaluate_builtin ... (Concat n) vs = INL v`, goal is bounded Dynamic bytes/string value.
-pattern: Prove concat success through loop-boundary lemmas (`evaluate_concat_loop_bytes_success_type`, `evaluate_concat_loop_string_success_type`). In the dispatcher, use `LIST_REL_value_has_type_imp_combined` plus `list_rel_bytes_all_bytesv` / `list_rel_string_all_stringv`, unfold `evaluate_concat_def` only after establishing all runtime values have the expected constructor, then apply the loop success lemma.
-works_when: The `well_typed_builtin_app` branch gives `EVERY (λt. ∃bd. t = BaseT (BytesT bd)) ts` or `EVERY (λt. ∃m. t = BaseT (StringT m)) ts` and `2 <= LENGTH ts`.
-evidence:
-- episode:E0737
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m40971_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1253-1275
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2505-2527
-
-## L1299 scope='C4.2' tags=builtin,success-typing,MakeArray,boundary-helper,sparse_has_type,compatible_bound
-shape: MakeArray success residual: `well_typed_builtin_app ty (MakeArray o' bd) ts`, MAP/evaluate_type and LIST_REL value typing, evaluator returns `INL v`, goal `value_has_type tv v`.
-pattern: Factor MakeArray success into a local boundary helper instead of handling it in the generic dispatcher. Tuple/NONE case uses `evaluate_type_TupleT_cases` plus `values_have_types_LIST_REL`; Array/SOME case uses `evaluate_type_ArrayT_SOME`, combined LIST_REL over source types, `LIST_REL_every_same_type_EVERY_vht`, and then `sparse_has_type_enumerate` for fixed arrays or `all_have_type_EVERY` for dynamic arrays. For fixed arrays, prove the length bound explicitly from `compatible_bound (Fixed n) (LENGTH ts)` and `LIST_REL_LENGTH`; the naive `drule LIST_REL_LENGTH >> simp[compatible_bound_def]` left an implication unsolved.
-works_when: Static typing branch is the fresh `well_typed_builtin_app` MakeArray rule (`NONE` gives `ty = TupleT ts`; `SOME elem_ty` gives `ty = ArrayT elem_ty bd`, compatible bound, and `EVERY ($= elem_ty) ts`).
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41022_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41056_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1680-1728
-
-## L1300 scope='C4.2' tags=builtin,success-typing,Slice,boundary-helper,dispatcher
-shape: Generic Slice success residual under MAP/evaluate_type equality and LIST_REL value typing, goal bounded BytesV/StringV result.
-pattern: For Slice, a direct generic TRY can fail silently when length facts are hard to derive. A robust approach is to prove concrete boundary helpers `slice_bytes_builtin_success_type` and `slice_string_builtin_success_type` whose statements mirror the exact evaluated-type list shape produced by `evaluate_type_def`, then dispatch the generic theorem with `metis_tac` on the helper. This reduced residuals past both bytes and string Slice cases.
-works_when: The generic proof has already simplified `well_typed_builtin_app` and `evaluate_type_def`, so the first assumption is an exact 3-element `MAP SOME tvs` equality for bytes or string plus two Uint256 arguments.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41014_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41016_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1538-1583
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2624-2628
-
-## L1301 scope='C4.2' tags=builtin,success-typing,dispatcher,modular-arithmetic,metis-timeout
-shape: Generic success residual for AddMod/MulMod/PowMod256 has concrete Uint256 result existential after helper exists.
-pattern: For modular arithmetic builtin success residuals, prove a local helper with conclusion `value_has_type (BaseTV (UintT 256)) v`. In the generic dispatcher, avoid `metis_tac[helper,value_has_type_def]` directly because it can time out; instead assert `value_has_type (BaseTV (UintT 256)) v` by the helper and then simplify `value_has_type_def` to discharge the concrete existential.
-works_when: The residual has `MAP SOME tvs = [SOME (BaseTV (UintT 256)); ...]`, `LIST_REL value_has_type tvs vs`, and `evaluate_builtin ... AddMod/MulMod/PowMod256 vs = INL v`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41115_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41119_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1799-1843
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2771-2782
-
-## L1302 scope='C4.2' tags=builtin,success-typing,Bop,boundary-wrapper,get_tenv
-shape: Generic success residual for `evaluate_builtin cx acc ty (Bop b) vs = INL v` with two evaluated argument types and LIST_REL values.
-pattern: Wrap `well_typed_binop_success_type` in a builtin-facing helper whose statement uses `evaluate_builtin ... (Bop bop) vs` and `get_tenv cx` directly. After a small two-element list simplification, call `well_typed_binop_success_type` with `u = case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u`. This avoids brittle in-place qspec/qexists plumbing in the generic dispatcher.
-works_when: The generic proof has simplified `well_typed_builtin_app` enough to expose `well_typed_binop ty b h h'`, `[evaluate_type (get_tenv cx) h; evaluate_type (get_tenv cx) h'] = MAP SOME tvs`, and `evaluate_builtin ... (Bop b) vs = INL v`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41125_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41127_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41129_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1127-1142
-
-## L1303 scope='C4.2' tags=builtin,success-typing,BlockHash,BlobHash,retired-proof-pattern
-shape: After Bop residuals, next generic success goal for BlockHash: `evaluate_builtin ... (BaseT (BytesT (Fixed 32))) BlockHash [IntV i] = INL v` and goal `∃bs. v = BytesV bs ∧ LENGTH bs = 32`.
-pattern: For BlockHash/BlobHash success, mine retired `vyperBuiltinTypingScript.sml` before tactic search. BlockHash uses `evaluate_block_hash_def` plus a helper like `evaluate_block_hash_well_typed`; BlobHash uses `evaluate_blob_hash_def`. Both close the bytes32 typing goal with `LENGTH_word_to_bytes_be_32`.
-works_when: The residual is a bytes32 result for BlockHash/BlobHash under Uint256-typed index and an `INL` evaluator equation.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41129_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41130_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41131_t002
-- source:semantics/prop/vyperBuiltinTypingScript.sml:1168-1180
-
-## L1304 scope='C4.2' tags=builtin,success-typing,dispatcher,constructor-boundary,ECRecover,ECAdd,ECMul
-shape: Generic builtin success residual exposes concrete builtin evaluator equation and a `value_has_type`/existential result goal.
-pattern: For remaining non-recursive builtin success cases, prove a small evaluator-facing success helper whose conclusion is exactly `value_has_type expected_tv v` (or derive that conclusion before simplifying existential goals). BlockHash/BlobHash use bytes length helpers; Acc specializes `Acc_builtin_sound`; MethodId uses `LENGTH_TAKE` and `LENGTH_Keccak_256_w64`; ECRecover needs `evaluate_ecrecover_typed`; ECAdd/ECMul need `evaluate_ecadd_well_typed`/`evaluate_ecmul_well_typed` wrappers over bn254 result bounds. Dispatching by direct helper-to-`value_has_type_def` metis is less reliable than first deriving the `value_has_type` fact, then simplifying.
-works_when: The generic theorem has already inverted `well_typed_builtin_app` and `evaluate_type_def` enough to expose a concrete `evaluate_builtin ... BuiltinName ... = INL v` assumption and the expected runtime type is syntactically known.
-evidence:
-- episode:E0739
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41147_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41172_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41185_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:1936-1957
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2228-2420
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:2572-2620
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:3090-3106
-
-## L1305 scope='C4' tags=return_def,name-shadowing,vyperState,qualified-theorem
-shape: Goal/assumption involves Vyper state monad `return x st = (INL y, st')`, but simplification with unqualified `return_def` does not unfold it.
-pattern: In `vyperTypeBuiltinsScript.sml`, prefer `vyperStateTheory.return_def` (and `vyperStateTheory.bind_def` when needed) for state-monad proofs. Imports added for builtin/bn254/vfmExecution can make unqualified `return_def` refer to the wrong theory or fail to rewrite; a local helper like `return_INL_value` should be proved with `simp[vyperStateTheory.return_def, pairTheory.PAIR_EQ, sumTheory.INL_11]`.
-works_when: The term is the Vyper state monad `return` from `vyperState`, especially in theorems about `toplevel_array_length` or other state computations returning `(INL v, st')`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41220_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41227_t001
-- source:semantics/prop/vyperTypeBuiltinsScript.sml:3111-3115
-
-## L1306 scope='C4.3' tags=Extract32,type-builtin,static-predicate,counterexample,no-TypeError
-shape: No-TypeError theorem for `evaluate_type_builtin ... Extract32 (BaseT bt) [bytes; idx]` has no premise restricting `bt`.
-pattern: If Extract32 no-TypeError leaves an unrestricted target base type, stop and repair the static predicate. `evaluate_extract32` only avoids TypeError for fixed bytes, uint, int, and address; unsupported bases such as BoolT are a concrete counterexample under the old `well_typed_type_builtin_args` clause.
-works_when: Applies to C4.3/C4.4 type-builtin proofs where `well_typed_type_builtin_args Extract32` is used to justify runtime behavior. After repair, use/derive `extract32_result_base_ok bt` from the static predicate before simplifying `evaluate_extract32_def`.
-evidence:
-- episode:E0741
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41314_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41320_t001
-
 ## L1307 scope='C4.3' tags=Extract32,type-builtin,boundary-helper,no-TypeError
 shape: Main theorem branch has `well_typed_type_builtin_args Extract32 ...` and `evaluate_type_builtin ... Extract32 ... <> INR (TypeError msg)`.
 pattern: After the Extract32 static repair, derive/use `extract32_result_base_ok bt` from `well_typed_type_builtin_args_def` and apply `evaluate_extract32_supported_no_type_error` in consumers. Avoid unfolding `evaluate_extract32_def` in the main theorem; destruct typed byte/int arguments only inside the local helper.
@@ -367,72 +200,6 @@ evidence:
 - episode:E0745
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m41360_t001
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:evaluate_extract32_supported_no_type_error
-
-## L1311 scope='C4.4' tags=ABI,type-builtin,success-typing,boundary-lemma,enc,vyper_abi_size_bound,length-bound
-shape: After unfolding `evaluate_abi_encode` success and dynamic-bytes `value_has_type`, goal is `LENGTH (enc (vyper_to_abi_type tenv typ) av) <= n` with `vyper_to_abi tenv typ vin = SOME av` and `vyper_abi_size_bound tenv typ <= n`.
-pattern: For C4.4 ABI encode branches, prove a lower-level length boundary before touching resumes. A wrapper theorem `evaluate_abi_encode tenv typ vin = INL out ∧ evaluate_type tenv typ = SOME tv ∧ value_has_type tv vin ∧ evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME result_tv ∧ vyper_abi_size_bound tenv typ <= n ==> value_has_type result_tv out` reduces mechanically to the encoded-length lemma. The reusable missing lemma is `vyper_to_abi` success under Vyper typing implies `LENGTH (enc (vyper_to_abi_type tenv typ) av) <= vyper_abi_size_bound tenv typ`; prove it once (likely in `vyperTypeABIScript.sml`) and consume it in the wrapper/resumes.
-works_when: Use for `well_typed_type_builtin_success_type[abi_encode]`, `[encode_tuple]`, and `[encode_tuple_nowrap]`. For dynamic bytes/string cases expect to need monotonicity of `ceil32`; for tuple/array/struct cases expect recursion through `vyper_abi_size_bound_list`/`vyper_abi_embedded_size`. Do not use `enc_valid` until the length premise is available.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41466_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41465_t001
-- episode:E0752
-- plan:C4.4
-
-## L1312 scope='C4.4' tags=ABI,vyper_to_abi,contractABI.has_type,length-bound,helper-interface
-shape: A Vyper-to-ABI typing bridge using `contractABI$has_type` leaves tuple/array goals such as `LENGTH avs < dimword(:256)` even after element typing is proved.
-pattern: For C4.4, do not treat `vyper_to_abi_well_typed` as a pure element-typing theorem. `contractABI$has_type` includes `valid_length` for tuples/arrays, so any helper concluding `has_type (vyper_to_abi_type tenv typ) av` needs explicit length/bound facts from `evaluate_type`, `value_has_type`, and conversion length lemmas. If those bounds are not already in the statement, prove the direct encoded-length theorem instead of pushing `gvs` on the broad helper.
-works_when: Applies when a helper has conclusion `has_type (vyper_to_abi_type tenv typ) av` or `has_types (vyper_to_abi_types tenv ts) avs` and holbuild leaves `LENGTH avs < dimword(:256)` subgoals. Split the helper or add side conditions; do not solve by resume-level plumbing.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41492_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41493_t001
-
-## L1313 scope='C4.4' tags=ceil32,arithmetic,DIV_LE_MONOTONE,ABI
-shape: Need monotonicity of ABI `ceil32`: `m <= n ==> ceil32 m <= ceil32 n`.
-pattern: In `vyperTypeABI`, `ceil32_def` is not directly in scope as `ceil32_def`; use `contractABITheory.ceil32_def`. A simple proof shape is `rw[contractABITheory.ceil32_def] >> \`m + 31 <= n + 31\` by simp[] >> irule DIV_LE_MONOTONE >> simp[]`. `drule_all DIV_LE_MONOTONE` does not match the division goal reliably here.
-works_when: Use for dynamic bytes/string length cases, where `value_has_type` gives `LENGTH bs <= n` and the goal compares `32 + ceil32 (LENGTH bs)` with `32 + ceil32 n`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41485_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41487_t001
-- source:semantics/prop/vyperTypeABIScript.sml:139-145
-
-## L1314 scope='C4.4.1' tags=ABI,enc_tuple,length-bound,accumulator,MAP2,SUM
-shape: Need an upper bound for `LENGTH (enc_tuple hl tl ts vs hds tls)` or `LENGTH (enc (Tuple ts) (ListV vs))` under `has_types ts vs`.
-pattern: Hide `enc_tuple` accumulators behind a generic ABI length lemma before proving Vyper-specific ABI encode bounds. The desired accumulator theorem bounds length by existing head/tail accumulator lengths plus a `SUM (MAP2 ...)` per-element budget: dynamic elements contribute `32 + LENGTH (enc t v)`, static elements contribute `static_length t`. Tuple/dynamic-array/fixed-array wrappers should be the only lemmas consumed by Vyper proofs.
-works_when: Use before C4.4.4 `vyper_to_abi_enc_length_bound`; prove by induction on `ts` with cases on `vs`, `has_types` eliminating mismatches, `enc_def` unfolded once in the cons case, `LENGTH_enc_number` for dynamic heads, and `enc_has_static_length` for static heads.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41522_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41526_t001
-- plan:C4.4.1
-
-## L1315 scope='C2' tags=C2,Subscript,Pop,Attribute,boundary-helper,compacted
-shape: Subscript/Pop/Attribute statement-expression resumes require boundary helpers and immediate IH projections
-pattern: For future C2 resume repair, avoid replaying old long tactical histories from LEARNINGS. Query the dossier episodes cited here for the specific region, then use boundary helpers that return the whole evaluator suffix and immediately project strengthened IHs. Common subpatterns: Subscript place branches need the place-expression projection rather than coercion to ordinary well_typed_expr; Pop assignment paths should factor Pop result typing below assign_target; Attribute should use a field-ALOOKUP boundary helper.
-works_when: Returning to C2 statement/expression mutual soundness after C4/C5 prerequisites; use dossier evidence for exact old branch-specific tactics instead of keeping dozens of stale per-branch learning cards.
-evidence:
-- episode:E0637
-- episode:E0708
-- episode:E0723
-- episode:E0726
-- episode:E0710
-
-## L1316 scope='C4.4.1' tags=ABI,enc_tuple,length-bound,MAP2,SUM,boundary-lemma
-shape: Need generic upper bounds for ABI tuple/dynamic-array/fixed-array encodings before Vyper ABI length theorem
-pattern: Prove an accumulator `enc_tuple` bound once, then expose only clean wrappers: tuple wrapper over `enc (Tuple ts) (ListV vs)`, dynamic-array wrapper over `enc (Array NONE t)`, and fixed-array wrapper over `enc (Array (SOME n) t)`. Use `Once contractABITheory.enc_def`; dynamic heads need `byteTheory.LENGTH_word_to_bytes`; static heads need `cj 1 contractABITheory.enc_has_static_length`; repeated element budgets are handled by a small `SUM (MAP2 ... REPLICATE ...) <= LENGTH vs * embedded` helper. Keep accumulator instantiations inside these generic lemmas only.
-works_when: C4.4.4 or later proof needs to bound ABI encoding lengths from `has_types`/`have_type`/`has_type (Array ...)` without exposing `hl`, `tl`, `hds`, or `tls` to Vyper-specific consumers.
-evidence:
-- episode:E0754
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41583_t001
-- source:semantics/prop/vyperTypeABIScript.sml:154-266
-
-## L1317 scope='C4.4' tags=ABI,has_type,valid_int_bound,UintT,IntT,counterexample,encoded-length
-shape: A helper tries to prove `contractABI.has_type (vyper_to_abi_type tenv typ) av` from Vyper `evaluate_type` / `value_has_type`.
-pattern: Do not use ABI `has_type` as the main invariant for fresh Vyper ABI encode length proofs. Vyper permits unaligned integer widths (`UintT 1`, `IntT 2`, etc.) while `contractABI.has_type` requires `valid_int_bound n`, including byte alignment. Prove direct encoded-length facts using `enc_def`/`LENGTH_enc_number` and no-type tuple/array length wrappers instead.
-works_when: Applies to `default_to_abi`, `vyper_to_abi`, sparse static-array defaults, and any ABI encode helper whose consumer only needs `LENGTH (enc ...) <= ...`. If a goal asks for `n MOD 8 = 0` from `evaluate_type`, abandon the ABI-typing invariant and switch to direct length.
-evidence:
-- episode:E0755
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41625_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41626_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41628_t001
 
 ## L1318 scope='C4.4.3' tags=ABI,enc_tuple,actual-length,no-has_type,static-premise
 shape: Need an unconditional tuple encoder length bound without ABI typing assumptions.
@@ -470,25 +237,6 @@ evidence:
 - episode:E0764
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m41703_t001
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m41705_t001
-
-## L1322 scope='C4.4.4' tags=ABI,default_to_abi,fixed-array,enc_tuple,boundary-lemma
-shape: Fixed-array default branch after `enc_def`: `LENGTH (enc_tuple (head_lengths (REPLICATE n t) 0) 0 (REPLICATE n t) (REPLICATE n v) [] []) <= n * embedded`.
-pattern: For default fixed arrays, prove/apply a helper with the unfolded `enc_tuple (REPLICATE n ...)` conclusion. It should reduce to `enc_fixed_array_same_length_bound_static_premise` with `vs = REPLICATE n v`, an element encoded-length bound, a guarded static encoded-length bound, and `vyper_to_abi_embedded_head_bound`/`vyper_to_abi_type_dynamic` for the embedded size. This is more robust than matching the subterm inside the large `evaluate_type_ind` goal.
-works_when: The branch has `evaluate_type tenv typ = SOME tv` and an IH/assumption for `LENGTH (enc (vyper_to_abi_type tenv typ) (default_to_abi tv)) <= vyper_abi_size_bound tenv typ`. For static case use `vyper_to_abi_static_length_bound`; no ABI `has_type` required.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41760_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41785_t001
-- source:semantics/prop/vyperTypeABIScript.sml:509-595
-
-## L1324 scope='C4.4.4.2' tags=ABI,default_to_abi,tuple,LIST_REL,MAP2,length-bound
-shape: Need tuple encoded-length bound from `LIST_REL` element-good premises for `(vyper_to_abi_types tenv ts, MAP default_to_abi tvs)`.
-pattern: Split the tuple consumer into two proof obligations: a static ZIP premise discharged from LIST_REL element-good plus `vyper_to_abi_type_dynamic`, and a MAP2/SUM bound discharged by LIST_REL/list induction using each head `LENGTH (enc ...) <= vyper_abi_size_bound` and `vyper_to_abi_embedded_head_bound`. Then apply `enc_tuple_length_bound_static_premise` to obtain the public `enc (Tuple ...)` length conclusion. Keep `enc_tuple` accumulator parameters out of the theorem statement.
-works_when: Active C4.4.4.2 or later C4.4.4.4 compatibility derivation, after C4.4.3 static-premise tuple wrappers and C4.4.4.1 Vyper bridge helpers are available. If `evaluate_types` or arbitrary `hl/tl/hds/tls` appears in this consumer theorem, the abstraction boundary is wrong.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41879_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41881_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m41882_t004
-- episode:E0766
 
 ## L1325 scope='C4.4.4.2' tags=ABI,LIST_REL,SUM_MAP2,default_to_abi,proof-interface
 shape: Tuple default ABI bound from LIST_REL element premises; anonymous lambda causes brittle IH selection in MAP2/SUM induction.
@@ -533,14 +281,6 @@ evidence:
 - episode:E0779
 - source:semantics/prop/vyperTypeABIScript.sml:832-847
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42159_t001
-
-## L1330 scope='C4.4.5' tags=ABI,ceil32,enc,dynamic-bytes,arithmetic
-shape: Goal after unfolding `enc String (BytesV bs)` or `enc (Bytes NONE) (BytesV bs)`: `len + 32 + (ceil32 len - len) <= ceil32 n + 32`.
-pattern: Do not expect `decide_tac` alone to prove dynamic bytes/string encoded-length bounds. First derive `ceil32 len <= ceil32 n` using `ceil32_mono` from the Vyper length assumption, and derive `len <= ceil32 len` by simp (`le_ceil32`), then `decide_tac` closes the subtraction arithmetic.
-works_when: Applies when Vyper `value_has_type` gives `STRLEN s <= n` or `LENGTH bs <= n`, and the ABI bound is `ceil32 n + 32`.
-evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42219_t001
-- source:semantics/prop/vyperTypeABIScript.sml:873-893
 
 ## L1331 scope='C4.4.5' tags=ABI,sparse,boundary-relation,length-bound
 shape: Sparse ABI conversion proof needs bounds for both converted values and default ABI values.
@@ -623,75 +363,475 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260522T073012Z_m42491_t001
 - source:semantics/prop/vyperTypeBuiltinsScript.sml:3366-3378
 
-## L1340 scope='C2.4.0' tags=exception,namespace,type-annotation,vyperState,statement-soundness
-shape: HOL type error unifying `vfmExecution$exception` with `vyperState$exception` at a sum annotation like `(INR exn : unit + exception)`.
-pattern: In `vyperTypeStmtSoundnessScript.sml`, explicit evaluator-result sum annotations must qualify the exception type as `vyperState$exception` (e.g. `unit + vyperState$exception` or `value + vyperState$exception`). Unqualified `exception` can resolve to another imported theory's exception type before tactics run.
-works_when: Use for local helper theorem statements and quoted proof patterns that feed `return_exception_typed`, `stmt_error_ok`, `no_type_error_result`, or evaluator result cases in statement soundness.
+## L1365 scope='C4.4' tags=ABI,encoded-length,boundary-lemma,compacted
+shape: ABI encode proof histories from old C4.4 subcomponents are stale unless C4.4 is rescheduled
+pattern: If ABI/type-builtin work is later rescheduled, query dossier episodes for exact C4.4 evidence rather than relying on many stale per-branch learning cards. The stable strategic lesson is to prove encoded-length boundary lemmas directly (avoiding ABI `has_type` as the main invariant when Vyper integer widths are not ABI-valid) and consume those boundaries in builtin/type-builtin success proofs.
+works_when: Only for future C4.4 ABI encode/type-builtin proof repair; not needed during C2.1 Len audit.
 evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42539_t004
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42540_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:48-55
+- episode:E0752
+- episode:E0755
+- episode:E0766
 
-## L1342 scope='C2.4.0' tags=body,namespace,type-annotation,eval_stmts,type_stmts,eval_for,statement-soundness
-shape: HOL type error where `eval_stmts`, `type_stmts`, or `eval_for` expects a `stmt list` but bare `body` is inferred/resolved as a word64 function; or proof mismatch after renaming.
-pattern: In `vyperTypeStmtSoundnessScript.sml` statement/for-cons helper prefixes, avoid the bare theorem variable name `body` for statement-list evaluator bodies. Rename user-controlled binders to `body_stmts` and higher-order computation bodies to `body_fun`; update theorem statements, proof quotations, `Cases_on`, `qmatch_*`, `qspecl_then`, and `qexists_tac` witnesses consistently. If the live goal already contains HOL-generated `body'`, use `body'` in local proof text rather than forcing `body_stmts`. A mere `(body : stmt list)` annotation may not override the imported/resolved `body` identifier.
-works_when: Applies to source elaboration/name-resolution cleanup around evaluator bodies in C2.4.0-style statement-soundness prefix/helpers, especially before semantic resume obligations. Does not justify broad semantic changes once the theory builds.
+## L1604 scope='global' tags=replace_text,source-cleanup,proof-probe
+shape: Removing a temporary proof probe by replacing a short common tactic fragment.
+pattern: Do not remove temporary probes with a generic `replace_text` fragment that may occur many times. Read the local source range and use line-anchored `edit_lines` or a unique block containing the theorem/line context; otherwise an identical tactic elsewhere can be edited while the probe remains.
+works_when: Applies to cleanup of `FAIL_TAC`/probe fragments in large proof scripts with repeated `impl_tac >- simp[]` patterns.
 evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42558_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42647_t001
-- episode:E0791
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m51705_t001
 
-## L1343 scope='C2.4.1' tags=Expr_Builtin,Len,well_typed_builtin_app,eval_exprs,boundary-lemma
-shape: Suspended `Expr_Builtin` branch of `eval_all_type_sound_mutual` with generated IHs split into `bt <> Len`/`eval_exprs` and `bt = Len`/`eval_expr (HD es)`.
-pattern: For the fresh statement-soundness `Expr_Builtin` resume, exploit the induction-generated split instead of re-case-splitting blindly: non-Len branch should consume the `eval_exprs` IH and `well_typed_builtin_app_no_type_error`/`well_typed_builtin_app_success_type`; Len branch should consume the `eval_expr (HD es)` IH and `Len_builtin_sound` plus `toplevel_array_length_state`. The `type_place_expr` projection for `Builtin` should simplify away separately.
-works_when: Applies after unfolding the `Builtin` evaluator one step and assuming `well_typed_expr env (Builtin ty bt es)`. Non-Len needs side conditions from `well_typed_expr_def`/`well_typed_builtin_app_def`, including argument type map and Env MsgGas exclusion if present; Len needs singleton argument facts from the Len typing clause.
+## L1626 scope='global' tags=HOL4-editing,replace_text,large-file,proof-safety
+shape: Large HOL4 source contains repeated tactic fragments such as `conj_tac >- simp[]`; exact `replace_text` may hit an unintended occurrence.
+pattern: For proof edits in large files, prefer `edit_lines` on a read/verified line range or include unique surrounding context in `replace_text`. Immediately inspect the edited hunk before building; accidental unrelated source changes can mask proof failures.
+works_when: Any large `*Script.sml` file with repeated short tactic fragments.
 evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42675_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42674_t001
-- episode:E0792
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m52293_t001
 
-## L1344 scope='C2.4.1' tags=Expr_Builtin,Len,generated-IH,qpat_assum,proof-plumbing
-shape: Generated Len IH for `eval_all_type_sound_mutual[Expr_Builtin]` has antecedent `type_check (builtin_args_length_ok bt (LENGTH es)) ... ∧ bt = Len`.
-pattern: When applying the generated Len IH in the Expr_Builtin resume, do not consume `bt = Len` or the length-check fact before discharging the IH antecedent. Use `qpat_assum` to rewrite while preserving facts, or instantiate/strip the IH before destructive assumption rewrites. If this still needs many quoted instantiations, factor a local Len-tail adapter helper.
-works_when: Applies in the Len branch after unfolding one `evaluate_def`, deriving `builtin_args_length_ok` from `well_typed_builtin_app_length`, and destructing `eval_expr cx (HD es) st`. The same caution applies to any generated IH whose antecedent repeats branch discriminants.
+## L1729 scope='C2.6.4.1' tags=IntCall,defaults,finally,env_consistent,frame_package
+shape: Default `finally` evaluation gives `eval_exprs ... (base_st with scopes := [FEMPTY]) = (res,framed_st)` and final state `framed_st with scopes := base_st.scopes`; need caller-frame package for final state.
+pattern: Factor default-frame restoration into deterministic lemmas: `state_well_typed_restore_scopes` transfers `state_well_typed` from `framed_st` and the caller state's scopes; `env_consistent_restore_intcall_default_frame` combines caller `env_consistent env cx base_st` with defaults-env immutables preservation for `framed_st` to recover `env_consistent env cx (framed_st with scopes := base_st.scopes)`. Then the PLAN wrapper can be conjunction assembly plus existing bind-arguments success facts.
+works_when: Use for C2.6.4.1 and similar default-argument `finally` helpers where `defaults_env` has empty var maps and the final state restores caller scopes after evaluating defaults under pushed IntCall context.
 evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42723_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42725_t002
-- episode:E0793
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56311_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56321_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10308-10453
 
-## L1345 scope='C2.4.1' tags=Expr_Builtin,Len,toplevel_array_length,SArrayV,unprovability_probe
-shape: Len branch with `well_typed_builtin_app ty Len ...`, `expr_result_typed env e arg_tv`, and `toplevel_array_length cx arg_tv st = INR ...`.
-pattern: Do not use a boundary saying all typed `is_sized_type` values are accepted by `toplevel_array_length`. Fixed-array source types are sized, and typed materialized static-array values (`Value (ArrayV (SArrayV _))`) are rejected by `toplevel_array_length_def` with `TypeError "toplevel_array_length"`. First prove concrete mismatch/reachability probes, then use a precise runtime-shape invariant or repair semantics.
-works_when: Applies to the fresh statement-soundness `Expr_Builtin` Len branch and any helper about `toplevel_array_length` under static `is_sized_type` assumptions.
+## L1730 scope='C2.6.4.1' tags=IntCall,defaults,frame_package,sum_case,proof_factoring
+shape: Wrapper combines lower-level all-result frame helper with old success package; `case dflt_res` success branch has both frame and call_env facts.
+pattern: When strengthening an existing no-TypeError/success package to an all-result frame package, first prove a lower-level all-result frame helper, then combine it with the existing package. Avoid `Cases_on res >> gvs[]` over giant IntCall assumptions; push each `case INL ...` assumption with `mp_tac`, rewrite only `sum_case_def`, strip, and assemble the existential explicitly.
+works_when: Applies to IntCall/defaults helpers where one theorem supplies `state_well_typed/env_consistent/accounts/no_type_error_result` for all results and an older theorem supplies success-only `call_env`/scope facts.
 evidence:
-- episode:E0794
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42780_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42795_t001
+- episode:E1239
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56348_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:13247-13373
 
-## L1346 scope='C2.4.1' tags=Expr_Builtin,Len,Name,SArrayV,unprovability_probe,reachability
-shape: C2.4.1.b reachability probe for materialized fixed-array value via local `Name`.
-pattern: The simplest candidate source of `Value (ArrayV (SArrayV []))` is a local `Name`, not an array literal or storage read. `well_typed_expr env (Name ty id)` only checks `FLOOKUP env.var_types (string_to_num id) = SOME ty`; `eval_expr cx (Name _ id)` reads `lookup_scopes_val` from `st.scopes` and returns `Value v`. Use a singleton `var_types`/scope witness with `entry.type = ArrayTV ... (Fixed 1)` and `entry.value = ArrayV (SArrayV [])` to probe Len reachability.
-works_when: Use for C2.4.1.b before constructing contract/global machinery. Full invariants may require `env.type_defs = get_tenv cx`, `current_src = current_module cx`, empty globals/functions, and singleton `st.scopes`.
+## L1752 scope='C2.6.4.2.1' tags=IntCall,post-push,generated-IH,adapter,proof-interface
+shape: Generated IntCall body IH must be consumed after concrete setup success
+pattern: Factor the generated six-setup IH into a post-push adapter theorem before using tail/no-TypeError consumers. The adapter should have only setup equalities (`bind_arguments`, `evaluate_type`, lock equation) plus a `push_function ... = (INL cxf,pushed_st)` antecedent, and should return the quantified body soundness package. Large consumer theorems should call this boundary rather than specialize the generated IH directly.
+works_when: Use when IntCall proof goals expose `state_well_typed st0'` or body soundness obligations from a six-setup generated IH while proving post-lock or general no-TypeError consumers.
 evidence:
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42812_t003
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42813_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42818_t002
+- episode:E1247
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56741_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56771_t001
 
-## L1347 scope='C2.4.1' tags=Len,toplevel_array_length,SArrayV,definition_repair,boundary_lemma
-shape: Len soundness stuck on `toplevel_array_length cx arg_tv st = (INR (Error (TypeError ...)), st')` with `expr_result_typed` and fixed-array `is_sized_type` static type.
-pattern: If typed `Len` can see `Value (ArrayV (SArrayV sparse))`, do not try to exclude that runtime shape: it is reachable via a local `Name`. Repair `toplevel_array_length_def` with a materialized static-array case returning `(INL (&LENGTH sparse), st)`, then prove a typed runtime no-TypeError boundary and use that in the consumer proof.
-works_when: Applies after E0796-style evidence that `well_typed_expr` plus standard runtime invariants allow local fixed-array values represented as `SArrayV`.
+## L1755 scope='C2.6.4.2.1' tags=IntCall,post-push,boundary-lemma,no_type_error_result,conjunction-premise
+shape: Large IntCall post-lock no-TypeError consumer with generated setup/body-IH premise and concrete `case INL ()` tail equation
+pattern: For `intcall_default_success_general_post_lock_consumer_no_type_error`-style goals, introduce the theorem premise with `disch_then (fn th => map_every assume_tac (CONJUNCTS th))` so conjuncts are usable without splitting goals. In the success branch, instantiate `intcall_generated_body_ih_to_post_push_body_ih` explicitly with `qspecl_then`, normalize the concrete `case INL ()` tail equation by moving it to the goal and `simp[]`, then apply `intcall_default_success_post_lock_no_type_error_from_post_push_body_ih` and close its premise list with `asm_rewrite_tac[]`. Handle lock failure after simplifying `case INR e` and using `intcall_lock_no_type_error_result`.
+works_when: Use after C2.6.4.2.1.2/C2.6.4.2.1.3 exist and a general IntCall no-TypeError consumer has the generated setup IH, bind/evaluate/lock equalities, and the post-lock monadic tail equation in assumptions.
 evidence:
-- episode:E0796
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42855_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42857_t001
+- episode:E1252
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56946_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:12382-12409
 
-## L1348 scope='C2.4.1' tags=Len,SArrayV,sparse_has_type_length,Len_result_fits_uint256,toplevel_array_length
-shape: `Len_result_fits_uint256` or related Len bound goal with `Value (ArrayV (SArrayV sparse))`, assumptions `sparse_has_type tv len sparse`, `SORTED $< (MAP FST sparse)`, and `len * slot < bound`.
-pattern: For materialized static arrays, do not reason from the old TypeError catch-all. Use `sparse_has_type_length` to derive `LENGTH sparse <= len`, then chain `LENGTH sparse <= len <= len * slot < bound` with `LESS_EQ_LESS_TRANS`. Keep this arithmetic inside builtin Len boundary theorems, not statement soundness.
-works_when: Applies after `toplevel_array_length_def` has a `Value (ArrayV (SArrayV sparse))` success case returning `LENGTH sparse` and the static array typing facts expose `sparse_has_type` plus sorted sparse keys.
+## L1756 scope='C2.6.4.2.3' tags=IntCall,safe_cast,expr_result_typed,value_has_type,boundary-lemma
+shape: Safe-cast success needs typed input to prove `expr_result_typed ... (Value crv)`
+pattern: Do not try to derive `value_has_type ret_tv crv` from `safe_cast ret_tv rv = SOME crv` alone. State the IntCall safe-cast result boundary with an input `value_has_type ret_tv rv` premise, then use `safe_cast_preserves_well_typed`; unfold `expr_result_typed_def`, `expr_runtime_typed_def`, and `toplevel_value_typed_def` only in this local theorem and discharge the HashMapRef side condition using `well_typed_expr_not_hashmap_place`.
+works_when: Applies to C2.6.4.2.3 and later C2.6.4.2.4 successful-Value branch, where the body IH/return_exception_typed should supply the returned runtime value typing.
 evidence:
-- episode:E0800
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42893_t001
-- tool_output:TO_type_system_rewrite-20260522T073012Z_m42897_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56966_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m56974_t001
+- plan:C2.6.4.2.3
+
+## L1790 scope='C2.6.4.2.4.4.2.1' tags=IntCall,outer-INR,frame-restoration,return-polymorphic-boundary,no-fallthrough
+shape: Outer `finally ... = (INR y,fin_st)` frame goal under `type_stmts env_body ret body = SOME env_after` and `ret = NoneT \/ stmts_no_fallthrough body`
+pattern: Use a return-polymorphic frame boundary rather than a `NoneT`-specific helper. Split on `ret = NoneT`; delegate that case to the old `_apply` helper. In the no-fallthrough case, classify `finally` with `intcall_finally_try_handle_inr_body_cleanup_cases`; normal body success contradicts `cj 2 no_fallthrough_eval_no_success`, and body exception is handled by the body IH at the actual `ret` plus `intcall_cleanup_after_body_preserves_caller_frame`.
+works_when: Applies to default internal-call outer-INR frame restoration where result typing/cast is irrelevant and the live theorem premise has arbitrary return type with a no-fallthrough disjunct. Failure sign: a subgoal asking for `type_stmts env_body NoneT body = SOME env_after` means the wrong boundary is being used.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58336_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58346_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:11248-11326
+
+## L1799 scope='C2.6.4.2.5.5' tags=IntCall,sum_case,proof_performance,lock_failure,branch-boundary
+shape: Final IntCall continuation theorem failure branch has `lock_res = INR y` and an assumption `(case INR y of INL u => _ | INR e => _) = (res,st')` in a huge context
+pattern: After splitting `lock_res`, do not simplify the `INR y` branch with broad `simp[]`/`gvs[]`. Push or select the exact case-equality assumption and use a minimal sum-case rewrite (e.g. `rewrite_tac[sum_case_def]`) to obtain the concrete `(INR y,lock_st) = (res,st')`/`res = INR y` and `st' = lock_st` facts before invoking `intcall_lock_attempt_sound_frame`.
+works_when: Use in `intcall_successful_defaults_continuation_sound_general` and similar IntCall branch proofs where all phase assumptions are live and global simplification times out. Applies only after the success branch has been delegated to a boundary lemma and the remaining branch is `INR y`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58644_t001
+- episode:E1296
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:15270-15276
+
+## L1801 scope='C2.6.4.2.5.5' tags=IntCall,sum_case,PAIR_EQ,proof-performance,lock-failure
+shape: Lock-failure branch has `(case INR y of ...) = (res,st')` or beta-expanded `(\e. (INR e,lock_st)) y = (res,st')` in a huge context
+pattern: Avoid broad simplification. Select the exact equality, rewrite only `sum_case_def`, use `BETA_TAC` and `pure_rewrite_tac[PAIR_EQ]`, then substitute `st' = lock_st` and `res = INR y` explicitly. For the final `no_type_error_result (INR y)` goal, unfold/instantiate locally rather than invoking `gvs[]`.
+works_when: Use in IntCall continuation or similar branch proofs after `Cases_on lock_res` leaves the `INR` failure branch and `intcall_lock_attempt_sound_frame` has supplied state/account/no-TypeError/env facts.
+evidence:
+- episode:E1297
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58690_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:15270-15285
+
+## L1804 scope='C2.6.4.2.5.6' tags=IntCall,branch-helper,generated-IH,boundary-lemma,risk-mismatch
+shape: Full IntCall actual/default wrapper leaves generated-IH universal goals after direct continuation theorem application
+pattern: If applying a continuation boundary theorem inside the main actual/default wrapper leaves generated-IH universal premises as live goals, the helper interface is too broad/late. Split the default-result cases into consumer-shaped branch helpers: one default-failure helper consuming stable frame facts before substitutions, and one default-success helper wrapping the continuation theorem with generated IHs as explicit leading premises. The authoritative wrapper should only derive the defaults package, case-split, and call the branch helpers.
+works_when: Applies after `intcall_defaults_result_frame_package_from_generated_ih_general` is available and the wrapper goal has `dflt_res` cases. Do not use it to justify inlining lock/body/tail semantics; successful defaults should still delegate to `intcall_successful_defaults_continuation_sound_general`.
+evidence:
+- episode:E1300
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58835_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58842_t001
+
+## L1805 scope='C2.6.4.2' tags=IntCall,generated-IH,boundary-lemma,large-goal
+shape: Large IntCall generated-IH/full-continuation goals exceed 4KB or leave body-IH premises
+pattern: Keep IntCall proofs at phase-boundary level: package generated default/body IHs in small adapter lemmas, then compose defaults frame, lock-success/failure, post-push/body/cleanup/safe-cast, and actual/default wrapper helpers. Do not specialize generated IHs or unfold push/finally/cleanup/safe_cast inside the final consumer; if a helper leaves generated-IH premises in the main wrapper, add a consumer-shaped branch helper instead of selector tuning.
+works_when: Applies throughout C2.6.4.2 IntCall soundness after actual/default evaluation or post-push body execution, especially when holbuild shows >4KB goals or repeated generated-IH premise discharge failures.
+evidence:
+- episode:E1243
+- episode:E1285
+- episode:E1291
+- episode:E1300
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58839_t001
+
+## L1806 scope='C2.6.4.2.4' tags=IntCall,post-push,cleanup,safe_cast,expr_result_typed
+shape: Post-push IntCall full soundness after finally/cleanup/safe-cast split
+pattern: Use focused branch lemmas/classifiers for post-push soundness. Body IH supplies state/accounts/no-TypeError and return typing; cleanup lemmas restore caller state/env/accounts; safe-cast result typing should be factored into a tail lemma using value_has_type before lift_option_type/safe_cast simplification. Avoid broad env_consistent unfolding and avoid re-splitting cleanup in consumers.
+works_when: Applies after `finally ... cleanup` has been split in `intcall_default_success_post_push_sound` or descendants; residuals mention caller frame facts and `lift_option_type (safe_cast rtv x)` equations.
+evidence:
+- episode:E1255
+- episode:E1262
+- episode:E1274
+- episode:E1281
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m57786_t001
+
+## L1807 scope='C2.6.4.2.5.6' tags=IntCall,default-failure,default-success,wrapper-interface
+shape: Actual/default IntCall wrapper default-success/default-failure branch plumbing
+pattern: For `intcall_actual_args_success_sound_from_generated_ih_general`, first derive the defaults frame package, then case-split on `dflt_res` and delegate to branch helpers. Default failure should use a tiny tail helper with `no_type_error_result_def` and `sum_case_def`; default success should wrap `intcall_successful_defaults_continuation_sound_general` with stable generated-IH/package premises. Do not continue qpat/first_assum variants after destructive case/substitution churn.
+works_when: Applies in C2.6.4.2.5.6 and descendants when the wrapper has frame facts for `dflt_st` and an outer default-result case expression mapping `INR e` to `(INR e,dflt_st)` or `INL dflt_vs` to the continuation.
+evidence:
+- episode:E1299
+- episode:E1300
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58796_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58839_t001
+
+## L1808 scope='C2.6.4.2.5.6' tags=IntCall,default-failure,no_type_error_result,helper-interface
+shape: Default-failure helper for `(INR y,dflt_st) = (res,st')` leaves `no_type_error_result (INR y)`
+pattern: A default-failure branch helper cannot prove `no_type_error_result (INR y)` for arbitrary `y`; include `no_type_error_result (INR y)` as a stable premise from the defaults package. Then normalize the pair equality and use/unfold that assumption with `no_type_error_result_def` instead of trying to prove the disequation from constructors alone.
+works_when: Applies to IntCall/default-result helpers where an `INR` branch is returned unchanged and the final package includes `no_type_error_result res`. The premise is available from `intcall_defaults_result_frame_package_from_generated_ih_general`.
+evidence:
+- episode:E1302
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58860_t002
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58888_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58890_t001
+
+## L1809 scope='C2.6.4.2.5.6' tags=IntCall,wrapper-refactor,premise-discharge,tactic-timeout,branch-helper
+shape: Wrapper proof applies consumer-shaped branch helper but premise tail times out or leaves generated-IH goals
+pattern: After deriving the defaults package in `intcall_actual_args_success_sound_from_generated_ih_general`, keep the main wrapper at branch-helper level. Do not use a broad `ORELSE` tail to discharge the success helper's many premises; it can time out and hide the missing premise. Discharge generated-IH premises first with explicit `qpat_assum` patterns, then scalar/package facts one-by-one, and preserve the full branch continuation equality for the final helper premise.
+works_when: Applies to C2.6.4.2.5.6 wrapper refactors after `intcall_actual_args_success_default_success_branch` and `intcall_actual_args_success_default_failure_branch` are available. Especially useful when the success branch uses an abbreviation such as `lock_pair` to avoid destructing lock-result pairs.
+evidence:
+- episode:E1303
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58918_t001
+- plan:C2.6.4.2.5.6.4
+
+## L1810 scope='C2.6.4.2.5.6.4.1' tags=IntCall,generated-IH,tactic-timeout,specialization,simp
+shape: Generated body IH consumer theorem starts with `qhdtm_x_assum bool$! mp_tac >> simp[]` and times out on a large forall/implication goal
+pattern: For IntCall generated-IH consumer proofs, specialize the generated forall assumption directly with `qspecl_then` before simplification. Moving the whole generated IH to the goal and running broad `simp[]` can time out after checkpoint eviction because the simplifier traverses the entire >4KB implication context. Discharge the instantiated antecedent with targeted rewrites/gvs on the smaller goal instead.
+works_when: Applies to local IntCall helper theorems whose assumptions include a generated body/default IH and the proof only needs one concrete instantiation matching existing evaluator equalities.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m58968_t001
+- plan:C2.6.4.2.5.6.4.1
+
+## L1814 scope='C2.6.4.2.5.6.4.3' tags=IntCall,wrapper-refactor,pair-helper,lock-result,boundary-lemma
+shape: Wrapper success branch needs to pass a lock acquisition result written as `lp` to a helper expecting separate `lock_res`/`lock_st` or `(FST lp,SND lp)` equality
+pattern: When the final IntCall wrapper gets stuck proving `lock_call dflt_st = (FST lp,SND lp)` in a huge context, do not tune pair/abbrev tactics there. Add a local pair-shaped boundary helper around `intcall_actual_args_success_default_success_branch` that takes one `lock_pair` and internally bridges to the old separate lock result components; then the wrapper only discharges `lock_call dflt_st = lp` from the `Abbrev` assumption.
+works_when: Applies in `intcall_actual_args_success_sound_from_generated_ih_general` after default success and before body/lock continuation. The semantic success-branch theorem must already be proved; the helper is only proof-interface glue, not evaluator unfolding.
+evidence:
+- episode:E1309
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59057_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59060_t001
+
+## L1815 scope='C2.6.4.2.5.6.4.3' tags=IntCall,pair-helper,boundary-lemma,branch-normal-form,env_body.current_src
+shape: Pair helper around `intcall_actual_args_success_default_success_branch` leaves equality between branch expression using `env_body.current_src` and wrapper expression using `src_id_opt`
+pattern: When wrapping the IntCall success-branch theorem with a pair-shaped helper, make the helper branch expression syntactically match the wrapper's pair-case form, then solve the helper-internal residual by targeted rewriting with `env_body.current_src = src_id_opt` and pair-case simplification. Do not expose the wrapper to `FST lp`/`SND lp`, and do not use broad metis over the huge generated-IH context.
+works_when: Applies after `lock_pair` has been `PairCases_on` in the local helper and the old separate-lock theorem has been applied. The residual goal is a continuation equality, not a semantic obligation.
+evidence:
+- episode:E1310
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59103_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:15671-16006
+
+## L1818 scope='C2.6.4.2.5.6.4.3' tags=IntCall,generated-IH,boundary-lemma,post_push,timeout
+shape: Local IntCall helper theorem times out on `qhdtm_x_assum `bool$!` mp_tac >> simp[]` over a massive generated evaluator IH
+pattern: When a source-order IntCall bridge theorem such as `intcall_generated_body_post_push_ih` needs a body-IH continuation, do not simplify the raw generated IH. Use the already-proved consumer bridge (`intcall_generated_body_ih_live_consumer_premise`) to obtain the continuation, then instantiate the much smaller continuation with concrete bind/evaluate-ret/lock/push facts and solve only small operational rewrite subgoals.
+works_when: Applies in the local IntCall successful-defaults/live-wrapper cluster after recursion/module/function/default-evaluation premises are already assumptions and the goal is a post-push body soundness conclusion. It does not authorize unfolding evaluator internals or changing theorem statements.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59289_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59300_t001
+- episode:E1307
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:14587-14700
+
+## L1820 scope='C2.6.4.2.5.6.4.3' tags=IntCall,generated-IH,boundary-lemma,post_push,timeout
+shape: Local post-push theorem needs body soundness after defaults/bind/return/lock/push, but raw generated-IH simplification times out
+pattern: Derive a small continuation from `intcall_generated_body_ih_live_consumer_premise` first, then instantiate that continuation with `call_env`, `dflt_st`, `dflt_st`, `lock_st`, pushed context, and pushed state. This avoids simplifying the raw generated evaluator IH and keeps operational subgoals limited to `lift_option_type_def`, `evaluate_type_def`, `return_def`, and `push_function_def`.
+works_when: Applies in the IntCall successful-defaults/post-push cluster once recursion/module/function/args/defaults result facts are already assumptions and the desired conclusion is the generated body soundness package for `fn_body`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59317_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:14674-14718
+- episode:E1314
+
+## L1824 scope='C2.6.4.2.5.6.4.3' tags=IntCall,default-failure,boundary-lemma,large-context,no_type_error_result
+shape: Wrapper default-failure branch has unsplit `dflt_res`, frame facts, and full `(case dflt_res of ...)=...` equality, but post-split `no_type_error_result (INR y)` is unselectable in >4KB context
+pattern: Derive a pre-split case-valued boundary fact before `Cases_on dflt_res`: consume `no_type_error_result dflt_res` plus the full unsimplified default-result equality and conclude `case dflt_res of INL _ => T | INR _ => <final wrapper tail>`. Then the `INR` branch closes by simplifying the labelled case fact, not by selecting `no_type_error_result (INR y)` from the wrapper context.
+works_when: Use in `intcall_actual_args_success_sound_from_generated_ih_general` after `intcall_defaults_result_frame_package_from_generated_ih_general` supplies frame facts and `no_type_error_result dflt_res`, before splitting `dflt_res`. Helper must treat the success branch opaquely and prove nothing in the `INL` case.
+evidence:
+- episode:E1315
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59523_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59521_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:15535-16125
+
+## L1825 scope='C2.6.4.2.5.6.4.3' tags=IntCall,default-failure,boundary-lemma,large-context,no_type_error_result,sum_case
+shape: Pre-split `failure_tail` fact for `case dflt_res of INL _ => T | INR _ => <wrapper tail>` in large IntCall generated-IH context
+pattern: A pre-split case-valued helper can close the IntCall default-failure tail, but apply it with exact premise discharge and keep final use narrow: instantiate the opaque success-tail lambda explicitly, discharge frame/no-TypeError/full-case-equality premises with targeted assumptions, then in the `INR` branch use `asm "failure_tail" mp_tac >> rewrite_tac[sumTheory.sum_case_def] >> disch_then ACCEPT_TAC`. Avoid broad `simp` on the labelled fact in the huge wrapper context.
+works_when: Use after `intcall_defaults_result_frame_package_from_generated_ih_general` has supplied `state_well_typed dflt_st`, `env_consistent env cx dflt_st`, `accounts_well_typed dflt_st.accounts`, `no_type_error_result dflt_res`, and the full unsplit default-result equality; the success branch should be treated opaquely.
+evidence:
+- episode:E1316
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59551_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59549_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:15627-15648
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16056-16159
+
+## L1826 scope='C2.6.4.2.5.6.4.3' tags=IntCall,compatibility-wrapper,joint-theorem,MATCH_MP_TAC,projection
+shape: Downstream no-TypeError wrapper application fails with `MATCH_MP_TAC` no-match after joint soundness theorem passes
+pattern: When a stronger joint theorem has been refactored and now builds, stale no-TypeError helper/call sites may fail by theorem-shape mismatch rather than by a proof subgoal. Prefer repairing the no-TypeError wrapper as a projection from the joint theorem (`..._sound_from_generated_ih_general`) instead of duplicating IntCall evaluator/default-failure reasoning or continuing premise plumbing at the call site.
+works_when: Applies after focused build advances past the joint wrapper theorem and fails at `MATCH_MP_TAC ... intcall_actual_args_success_no_type_error_from_generated_ih_general` in `eval_all_type_sound_mutual[Expr_Call_IntCall]`.
+evidence:
+- episode:E1316
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59551_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59552_t002
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16499-16503
+
+## L1827 scope='C2.6.4.2.5.6.4.3' tags=IntCall,call-site,evaluator-shape,MATCH_MP_TAC,premise-discharge
+shape: Downstream `Expr_Call_IntCall` wrapper has a whole `(case get_scopes args_st of ... finally ... ) = (res,st') ==> ...` goal while helper expects exposed `finally ... = (dflt_res,dflt_st)` and package assumptions
+pattern: Before applying IntCall actual/default helper theorems at a downstream evaluator call site, normalize the evaluator tail to the helper interface: keep the successful `args_res` context, unpack `callable_body_typing_from_env_consistent` explicitly, simplify `get_scopes_def`/`return_def`, split `get_scopes`, split the default `finally` result, then apply the helper. Direct `MATCH_MP_TAC` on the unsplit case expression fails by shape mismatch.
+works_when: Use in `eval_all_type_sound_mutual[Expr_Call_IntCall]` after actual args have evaluated successfully and callable-body typing facts are available. After the helper matches, discharge premises explicitly; do not rely on generic `first_assum`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59559_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59580_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59594_t001
+
+## L1828 scope='C2.6.4.2.5.6.4.3' tags=IntCall,downstream-wrapper,premise-discharge,sig-param-types,generated-IH
+shape: Downstream `Expr_Call_IntCall` no-TypeError wrapper after helper matching still has stale `sig.param_types`/`sig.num_defaults` expressions in the evaluator tail
+pattern: Before applying `intcall_actual_args_success_no_type_error_from_generated_ih_general` in the downstream wrapper, derive `sig.param_types = MAP SND x''2 /\ sig.num_defaults = LENGTH x''3` from `fn_sigs_consistent_FLOOKUP` after `PairCases_on x''` and callable-body unpacking. This matches the successful local helper proof shape and prevents the tail from retaining `sig` fields where the helper expects tuple fields.
+works_when: Use in `eval_all_type_sound_mutual[Expr_Call_IntCall]` after successful lookup/function typing, `PairCases_on x''`, and before `simp[get_scopes_def, return_def]`/default-result splitting. It does not replace explicit premise discharge after the helper application.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59619_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59621_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16362-16376
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16502-16519
+
+## L1829 scope='C2.6.4.2.5.6.4.3' tags=IntCall,joint-wrapper,projection,no-TypeError,premise-discharge
+shape: Trying to prove a joint Resume goal with a helper whose conclusion is only `no_type_error_result res`
+pattern: Before replacing a joint soundness Resume tail with an existing no-TypeError helper, compare conclusions: `MATCH_MP_TAC` will fail if the live goal also requires state/env/account preservation and result typing. Use the no-TypeError helper only as a template for evaluator normalization, or wrap/strengthen it with a joint compatibility theorem.
+works_when: Applies in `eval_all_type_sound_mutual[Expr_Call_IntCall]` after the place-expression conjunct is discharged and the remaining expression branch conclusion is the joint preservation/no-TypeError/result-typed invariant.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59641_t001
+- episode:E1318
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16162-16262
+
+## L1830 scope='C2.6.4.2.5.6.4.3' tags=IntCall,normalized-tail,generated-IH,FIRST_ASSUM,helper-extraction
+shape: Normalized downstream IntCall evaluator tail after helper application still fails at broad `FIRST_ASSUM` premise discharge
+pattern: Once evaluator-tail normalization exposes the helper shape, do not use `rpt conj_tac >> first_assum ACCEPT_TAC` in the generated-IH context. Either discharge each premise with stable shape-specific tactics from the instrumented goal or extract a local compatibility helper matching the normalized tail; broad assumption search remains brittle even after the old `MATCH_MP_TAC No match` is fixed.
+works_when: Use after assumptions include `default_ih`, `body_ih`, lift/get_module/lookup/type_check/eval facts, callable-body package facts, and the conclusion is the full normalized `case get_scopes ... finally ... = (res,st') ==> joint tail`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59653_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59663_t001
+- episode:E1318
+
+## L1831 scope='C2.6.4.2.5.6.4.3' tags=IntCall,joint-helper,downstream-wrapper,implication,premise-discharge
+shape: Downstream Expr_Call_IntCall branch applies a joint helper to a normalized evaluator-tail implication
+pattern: When replacing a no-TypeError-only downstream helper with the stronger joint `intcall_actual_args_success_sound_from_generated_ih_general`, first expose the evaluator-tail equality by `strip_tac`; otherwise the helper is applied while the goal is still the whole implication. After `strip_tac`, use explicit premise discharge or a compatibility helper, not broad `first_assum`.
+works_when: Use after `get_scopes`/`finally` have been split in `eval_all_type_sound_mutual[Expr_Call_IntCall]` and the branch conclusion has shape `(case ...)= (res,st') ==> state_well_typed st' /\ env_consistent ... /\ no_type_error_result res /\ ...`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59680_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59683_t001
+- episode:E1319
+
+## L1832 scope='C2.6.4.2.5.6.4.3' tags=IntCall,generated-IH,qpat_assum,assumption-selection,large-context
+shape: Initial downstream Expr_Call_IntCall branch has labelled `default_ih`/`body_ih` plus concrete `lift_option_type ... "IntCall ..." r = ...` assumptions
+pattern: In a labelled generated-IH context, wildcard `qpat_assum` patterns for common evaluator facts can fail before the intended proof point because the generated IHs contain many similar subterms. Use exact message/state patterns (e.g. the literal `"IntCall get_module_code"` and state `r`) or package the extraction in a helper; a probe after the selection not being reached is evidence the selection itself is suspect.
+works_when: Use after `actual_ih` has been consumed and the proof is about the successful IntCall actual-args branch with labelled `default_ih`/`body_ih` still in assumptions. This does not solve later joint-helper premises; it only stabilizes early branch normalization.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59710_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59711_t001
+- episode:E1320
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16485-16488
+
+## L1833 scope='C2.6.4.2.5.6.4.3' tags=IntCall,downstream-wrapper,probe-localization,generated-IH,get_scopes,qpat_assum
+shape: Downstream Expr_Call_IntCall branch reaches probes after exact lift-option extraction, pair decomposition, callable-body unpack, sig-field derivation, and get_scopes TOP_CASE
+pattern: When localizing the downstream IntCall Resume branch, exact message/state lift-option extraction with `mp_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th) >> strip_tac` can advance through the early normalization steps. If a failure remains after `get_scopes` TOP_CASE, do not blame the initial lift-option qpat steps; inspect/factor the `scope_res`/finally/default branch or extract a compatibility helper.
+works_when: Use in `eval_all_type_sound_mutual[Expr_Call_IntCall]` after actual args evaluate to `INL` and labelled `default_ih`/`body_ih` remain in assumptions. The source currently has a probe after `BasicProvers.TOP_CASE_TAC`; remove it before continuing.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59727_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59732_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59739_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59742_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59745_t001
+- episode:E1321
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16485-16507
+
+## L1834 scope='C2.6.4.2.5.6.4.3' tags=IntCall,downstream-wrapper,boundary-lemma,get_scopes,finally,generated-IH,helper-extraction
+shape: Downstream Expr_Call_IntCall branch reaches after `get_scopes` TOP_CASE with a whole `(case get_scopes args_st of ... finally ... ) = (res,st') ==> joint tail` goal in a >4KB generated-IH context
+pattern: At this point, stop inline qpat/FIRST_ASSUM premise plumbing and extract a local compatibility helper for the downstream evaluator-tail branch. The helper should package `qmatch_asmsub_rename_tac`/`scope_res` splitting, default `finally` splitting, and the application of `intcall_actual_args_success_sound_from_generated_ih_general`, presenting the Resume proof with a small conclusion matching the joint tail. A reached probe immediately after get_scopes TOP_CASE is evidence the earlier lift-option/callable-body/sig-field steps are not the blocker.
+works_when: Use in `eval_all_type_sound_mutual[Expr_Call_IntCall]` after successful actual-args evaluation, exact lift-option extraction, `PairCases_on x''`, callable-body unpack, sig-field derivation, and `simp[get_scopes_def, return_def] >> BasicProvers.TOP_CASE_TAC` have succeeded; labelled `default_ih`/`body_ih` still pollute the context.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59775_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59777_t001
+- episode:E1322
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16485-16556
+
+## L1835 scope='C2.6.4.2.5.6.4.3' tags=IntCall,downstream-wrapper,generated-IH,probe,boundary-lemma,FIRST_ASSUM
+shape: After removing `probe_after_get_scopes_top_case_2`, downstream Expr_Call_IntCall still fails with FIRST_ASSUM-origin in the whole get_scopes/finally tail despite local `simp`/probe changes
+pattern: If the downstream IntCall Resume branch still reports FIRST_ASSUM-origin after the old get_scopes probe is removed, do not tune `Cases_on scope_res` or switch `gvs`/`simp` hoping to expose a smaller premise. This confirms the need for a use-site compatibility helper that packages the whole evaluator tail and applies the joint IntCall helper in a small proof context.
+works_when: Use after exact lift-option extraction, pair decomposition, callable-body unpack, sig-field derivation, and get_scopes TOP_CASE are known to succeed, and the remaining goal is the large whole evaluator-tail implication. Remove any temporary FAIL_TAC before applying this pattern.
+evidence:
+- episode:E1323
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59787_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59801_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59804_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16507-16556
+
+## L1836 scope='C2.6.4.2.5.6.4.3' tags=IntCall,downstream-wrapper,premise-discharge,lift_option_type,type_check,large-context
+shape: Expr_Call_IntCall downstream branch after applying `intcall_actual_args_success_sound_from_generated_ih_general` fails on explicit lift_option/type_check helper premises in a >4KB generated-IH context
+pattern: For the first two lift_option premises, avoid qpat/FIRST_ASSUM selection entirely; after successful branch normalization has rewritten the options to `SOME ...`, `simp[lift_option_type_def, return_def]` closes them. For the args-length/type_check premise, first push the existing checked length assumption (`type_check (LENGTH es <= LENGTH x''2 /\ LENGTH x''2 <= LENGTH es + LENGTH x''3) ... = (INL (),r)`) through `simp[type_check_def, assert_def, return_def, raise_def]` to obtain the arithmetic fact, then `simp[type_check_def, assert_def, return_def]` closes the helper premise with `tc_ok`.
+works_when: Use only after `PairCases_on x'' >> gvs[]`, `sig.param_types = MAP SND x''2`, `sig.num_defaults = LENGTH x''3`, `get_scopes` normalization, and direct application of `intcall_actual_args_success_sound_from_generated_ih_general`; it does not solve later MAP/default/result equality premises.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59821_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59828_t001
+- episode:E1324
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16518-16523
+
+## L1839 scope='C2.6.4.2.5.6.4.3' tags=IntCall,expr_type,fn_sigs_consistent,premise-discharge,boolean-equivalence
+shape: After `intcall_actual_args_success_sound_from_generated_ih_general`, tail needs `expr_type (Call sig.ret_ty ...) = x''4` and `∀n b. ... ==> ... (b <=> T)`
+pattern: Prove the call `expr_type` premise by deriving `fn_sigs_consistent env.fn_sigs cx` from `env_consistent`, applying `fn_sigs_consistent_FLOOKUP`, and then simplifying with `expr_type_def`; `simp[expr_type_def]` alone leaves the return-type equality. For the `var_assignable` premise, exact `ACCEPT_TAC` may fail because the helper expects `(b <=> T)` while the callable-body package gives `b = T`; use `rpt strip_tac`, specialize the forall on `n` and `b`, then `gvs[]`.
+works_when: In `eval_all_type_sound_mutual[Expr_Call_IntCall]` after successful actual-args/default-tail normalization and direct application of `intcall_actual_args_success_sound_from_generated_ih_general`, with assumptions containing `FLOOKUP env.fn_sigs ... = SOME sig`, `lookup_callable_function ... = SOME (...,x''4,...)`, callable-body package facts, and env consistency.
+evidence:
+- episode:E1327
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59883_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59884_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59888_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59889_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:16539-16555
+
+## L1840 scope='C2.6.4.3' tags=IntCall,generated-IH,boundary-lemma,joint-soundness
+shape: A no-TypeError helper over generated IntCall IHs exists, but the consumer Resume goal needs full joint preservation/result-typing.
+pattern: When upgrading an IntCall generated-IH helper from `no_type_error_result res` to full joint soundness, keep the same generated-IH selectors/evaluator split but make the helper conclusion match the Resume first conjunct exactly. Prefix and actual-args failure branches can reuse the old proof shape; actual-args success should delegate to the already-proved joint phase helper rather than exposing every intermediate at the Resume call site.
+works_when: Use inside `vyperTypeStmtSoundnessScript.sml` for `Expr_Call_IntCall`, after the phase helpers under C2.6.4.1/C2.6.4.2 and the default-failure-tail repair are build-clean.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59917_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59919_t001
+- episode:E1327
+
+## L1841 scope='C2.6.4.4' tags=IntCall,MATCH_MP_TAC,Q.SPECL,generated-IH,proof-integration
+shape: Applying a boundary helper in a Resume leaves an existential package for variables that occur only in helper antecedents.
+pattern: When integrating `intcall_expr_sound_from_generated_ih` into `Expr_Call_IntCall`, do not rely on bare `MATCH_MP_TAC`: explicitly specialize the helper with the live variables (`cx`, `env`, `st`, `res`, `st'`, `loc`, `src_id_opt`, `fn`, `es`, `extra`) before `MATCH_MP_TAC`. Otherwise HOL may leave a large `?st`/premise-package subgoal instead of matching the live assumptions.
+works_when: Use in `vyperTypeStmtSoundnessScript.sml` C2.6.4.4 after the three generated IH assumptions have been labelled and the goal is the first conjunct of the IntCall Resume.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59947_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59949_t001
+- episode:E1331
+
+## L1842 scope='C2.6.4.4' tags=IntCall,type_place_expr,strip_tac,generated-IH
+shape: Place-expression impossibility branch has many generated-IH antecedents before the actual `type_place_expr ... = SOME _` premise.
+pattern: In the second conjunct of `Resume eval_all_type_sound_mutual[Expr_Call_IntCall]`, open with `rpt gen_tac >> strip_tac`, not `rpt strip_tac`, before using `type_place_expr_Call_IntCall_NONE`. This preserves generated-IH assumptions as single antecedents and avoids splitting them into huge irrelevant goals.
+works_when: Use for the IntCall place-expression impossibility branch where the only real contradiction is `type_place_expr _ (Call _ (IntCall _) _ _) = SOME _` versus `type_place_expr_Call_IntCall_NONE`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59939_t001
+- episode:E1331
+
+## L1843 scope='C2.7' tags=audit,cheat,holbuild,theory-build,proof-integrity
+shape: A focused HOL theory target builds successfully while C2.7 remains active.
+pattern: For C2.7-style expression-resume cleanup, a successful `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` is not terminal proof evidence by itself. Follow it with a source/theory-index audit for `cheat`, `FAIL_TAC`, and suspended/unfinalized fragments, then compare any remaining obligations with structured PLAN coverage before closing the component.
+works_when: Use when a build/audit component or broad cleanup leaf is active and prior dossier shows build-through cheats were possible.
+evidence:
+- episode:E0264
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59961_t001
+
+## L1844 scope='C2.7' tags=audit,cheat,call-target,source-classification
+shape: C2.7 clean build plus two cheat lines near final call-target Resume blocks.
+pattern: When C2.7 audit reports cheats at `vyperTypeStmtSoundnessScript.sml` lines ~16714 and ~16766, source inspection identifies them as `Expr_Call_ExtCall` and `Expr_Call_RawCallTarget`. These are covered by the active non-internal call-target expression branch leaf; proceed to prove those exact Resume blocks rather than replanning coverage.
+works_when: Use after a clean `vyperTypeStmtSoundnessTheory` build still has exactly these two source-level cheats and C2.7 is active.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59972_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59972_t002
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59973_t003
+
+## L1845 scope='C2.7' tags=ExtCall,RawCallTarget,template,boundary-helper,call-target
+shape: Remaining C2.7 cheats are ExtCall/RawCallTarget Resume blocks after a clean focused build.
+pattern: For the final C2.7 call-target cheats, use the neighboring expression Resume templates as the proof interface: unfold one `evaluate_def`, apply the eval_exprs IH, case-split the args result, derive target-specific runtime facts, then call a tail/boundary helper. Avoid deep `run_ext_call`/raw-call unfolding in the Resume consumer; if no boundary helper exists, add/escalate a small helper rather than proving internals inline.
+works_when: Use when `vyperTypeStmtSoundnessTheory` builds but `vyperTypeStmtSoundnessScript.sml` still has cheats at `Expr_Call_ExtCall` and/or `Expr_Call_RawCallTarget`, and C2.7 is active.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59993_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59993_t002
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m59993_t003
+
+## L1847 scope='C2.7' tags=audit,grep,cheat,suspend,proof-integrity
+shape: Broad grep for `cheat|FAIL_TAC|suspend` returns only early suspend skeleton lines while real cheats are later in the file.
+pattern: For C2.7 final call-target audit, do not rely on a low-limit broad grep over `cheat|FAIL_TAC|suspend`: the suspend skeleton around lines 5557-5596 can consume the result budget before the actual ExtCall/RawCallTarget cheats. Use targeted reads/greps around `Expr_Call_ExtCall` and `Expr_Call_RawCallTarget`, or raise the grep limit and inspect the full output before closing.
+works_when: Use when auditing `vyperTypeStmtSoundnessScript.sml` after a focused build succeeds but C2.7 may still have build-through cheats.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m60085_t002
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m60082_t002
+
+## L1849 scope='C2.7' tags=ExtCall,boundary-helper,retired-reference,run_ext_call,proof-template
+shape: ExtCall tail proof needs guidance beyond existing local account-preservation helpers.
+pattern: Old retired `vyperTypeSoundnessHelpersScript.sml` contains a commented ExtCall chain proof skeleton and current `vyperEvalPreservesImmutablesDomScript.sml` contains live ExtCall pipeline factoring. Use these only as design references for a fresh local tail theorem in `vyperTypeStmtSoundnessScript.sml`: a current proof should compose local helpers such as `run_ext_call_accounts_well_typed` and should not depend on retired/commented theorems or copy old-stack assumptions wholesale.
+works_when: C2.7 ExtCall cheat is active and the Resume proof has reached the post-`eval_exprs` success tail involving `run_ext_call`/`extract_call_result`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m60265_t003
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m60265_t004
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m60264_t001
+
+## L1851 scope='C2.7' tags=ExtCall,call-target,boundary-helper,handoff,run_ext_call,account-preservation
+shape: C2.7 ExtCall Resume cheat remains after a clean focused build; helper block near lines 9417-9497 has account-preservation pieces.
+pattern: For C2.7 ExtCall, first prove/use a consumer-facing tail boundary rather than unfolding external-call internals in the Resume. Existing local helpers cover the account-preservation pieces: `run_ext_call_accounts_well_typed`, `extract_call_result_accounts_well_typed`, and `guarded_make_ext_call_state_accounts_well_typed`. The Resume should unfold one evaluator step, consume eval_exprs IH, derive `exprs_runtime_typed`/ExtCall static facts, and call the tail theorem. If this boundary theorem expands into `run_ext_call`/rollback/ABI internals or creates a >4KB goal, checkpoint and ask for boundary redesign.
+works_when: C2.7 active, source still has `Expr_Call_ExtCall` cheat, and the post-eval_exprs success branch reaches `run_ext_call`/`extract_call_result`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m63394_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m63394_t002
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m63394_t003
+- episode:E1333
+
+## L1852 scope='C2.7' tags=ExtCall,boundary-helper,pipeline,immutables-dom,proof-template
+shape: ExtCall statement-soundness tail boundary needs pipeline shape without inlining external-call internals in the Resume.
+pattern: A live proof reference for ExtCall pipeline factoring exists in `vyperEvalPreservesImmutablesDomScript.sml`: `extcall_inner_pipeline_imm_dom` and `extcall_pipeline_preserves_imm_dom` split the monadic ExtCall tail at get_self_code/build_calldata/run_ext_call and then delegate the post-run inner pipeline to a helper. For C2.7 ExtCall statement soundness, use this as the shape for a local consumer-facing tail theorem, combined with local account helpers (`run_ext_call_accounts_well_typed`, `extract_call_result_accounts_well_typed`, `guarded_make_ext_call_state_accounts_well_typed`), rather than unfolding `run_ext_call`/ABI/rollback directly in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]`.
+works_when: Use when proving the `Expr_Call_ExtCall` Resume cheat and the post-`eval_exprs` success branch reaches `run_ext_call`/`extract_call_result`; if the helper proof itself becomes >4KB or unfolds rollback/ABI internals, checkpoint and request boundary redesign.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m63832_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m63831_t002
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m63832_t004
+
+## L1853 scope='C2.7' tags=ExtCall,static-typing,tail-boundary,argument-shape
+shape: ExtCall tail theorem needs static argument/value extraction from `well_typed_expr_def`.
+pattern: For `Call ty (ExtCall is_static (_,arg_types,ret_ty)) args drv`, `well_typed_expr_def` gives `ty = ret_ty`, `well_typed_exprs env args`, optional driver result type, and `MAP expr_type args = BaseT AddressT :: arg_types` for static calls or `BaseT AddressT :: BaseT (UintT 256) :: arg_types` for non-static calls. Use this to prove small runtime-destination facts (`dest_AddressV` for target, and `dest_NumV` for value when non-static) before calling the ExtCall tail boundary; do not derive these facts by unfolding the whole evaluator tail.
+works_when: Use in C2.7 ExtCall Resume after eval_exprs IH yields `exprs_runtime_typed env args vs` and the static `well_typed_expr` clause has been stripped.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64510_t003
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64508_t001
+
+## L1854 scope='C2.7' tags=ExtCall,ABI,dependency,tail-boundary,decode-return
+shape: ExtCall tail theorem needs to type `lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData)` result.
+pattern: `vyperTypeStmtSoundnessScript.sml` does not currently list `vyperTypeABI` as an ancestor, but `vyperTypeABI` proves `evaluate_abi_decode_well_typed`. For C2.7 ExtCall, add/import the narrow ABI typing dependency as needed and prove a local `evaluate_abi_decode_return_well_typed` helper from `evaluate_abi_decode_return_def` before attacking the full tail theorem. This keeps ABI internals out of the Resume and tail proof.
+works_when: Use in the ExtCall success branch after `run_ext_call` returns success and the evaluator either decodes return data or delegates to the driver expression; `evaluate_type tenv ret_type = SOME tv` follows from `well_formed_type env.type_defs ty` plus `ty = ret_ty`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64611_t003
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64621_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64620_t001
+
+## L1855 scope='C2.7' tags=ExtCall,args-runtime,dest_AddressV,dest_NumV,well_typed_expr_def
+shape: After eval_exprs IH, ExtCall needs target/value extraction from `exprs_runtime_typed env args vs`.
+pattern: Mirror the local `send_args_runtime_typed_dest`, `selfdestruct_args_runtime_typed_dest`, and `create_args_runtime_typed_dest` lemmas: use `exprs_runtime_typed_def` plus the ExtCall `MAP expr_type` shape from `well_typed_expr_def` to prove `dest_AddressV (HD vs) = SOME target_addr` and, for non-static calls, `dest_NumV (HD (TL vs)) = SOME amount`. This should be a small helper and should not unfold the ExtCall evaluator tail.
+works_when: Use in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]` immediately after eval_exprs IH yields `exprs_runtime_typed env args vs` and the static/non-static argument-type equation has been stripped from `well_typed_expr_def`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64610_t001
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64611_t002
+
+## L1856 scope='C2.7' tags=ExtCall,args-runtime,LIST_REL,exprs_runtime_typed,dest_AddressV
+shape: ExtCall args-runtime destructor helper fails after `rw[exprs_runtime_typed_def]` because list variable names disappear.
+pattern: When proving ExtCall args destructors from `exprs_runtime_typed env args vs` plus `MAP expr_type args = BaseT AddressT :: ...`, do not destruct `vs` after a broad `rw[exprs_runtime_typed_def]` if the simplifier has already expanded and renamed the list. Either destruct `args`/`vs`/type lists before the broad rewrite, or use the live head facts produced by the rewrite: `evaluate_type ... (BaseT AddressT) = SOME tv` and `value_has_type tv y` close `∃target_addr. dest_AddressV y = SOME target_addr` by `evaluate_type_def`, `value_has_type_def`, and `dest_AddressV_def`.
+works_when: Use for `extcall_static_args_runtime_typed_dest` and analogous non-static ExtCall destructor proofs where holbuild shows live head variables such as `y`, `tv`, `h` instead of the original `vs`.
+evidence:
+- tool_output:TO_type_system_rewrite-20260525T153549Z_m64678_t001
+- episode:E1334
+
+## L1861 scope='C2.7' tags=holbuild,tooling,strict-parse,blocked
+shape: Pre-HOL holbuild option rejection: `holbuild: unknown build option: --strict-parse`
+pattern: When holbuild rejects `--strict-parse`, no HOL theory has been parsed and no verified-prefix proof state exists. Treat it as an operational tooling blocker: do not edit proofs, do not ask the strategist for proof decomposition, and propose a tooling_bug blocked outcome unless tooling changed or the operator explicitly requests one retest.
+works_when: Applies only to this exact pre-HOL option rejection, especially when PLAN remains active/beginable but holbuild produces no HOL goal state.
+evidence:
+- tool_output:TO_type_system_rewrite-20260528T153317Z_m68185_t001
+- tool_output:TO_type_system_rewrite-20260528T153317Z_m68176_t001
+- episode:E1337

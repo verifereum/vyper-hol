@@ -1217,6 +1217,19 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_stk_update[local]:
+  ∀cx f st st'.
+    preserves_tv (cx with stk updated_by f) st st' ⇔ preserves_tv cx st st'
+Proof
+  simp[preserves_tv_def]
+QED
+Theorem preserves_tv_restore_scopes[local]:
+  ∀cx st st' scopes.
+    preserves_tv cx (st with scopes := scopes) st' ⇒
+    preserves_tv cx st (st' with scopes := st.scopes)
+Proof
+  rw[preserves_tv_def]
+QED
 (* ===== Scope type value preservation ===== *)
 (* If id is not in the head scope before eval_stmts, and eval_stmts
    preserves scopes dom, and new head entries aren't in tail,
@@ -2013,17 +2026,17 @@ Proof
     simp_tac std_ss [bind_apply] >>
     (* eval_exprs cxd needed_dflts — consume IH *)
     BasicProvers.TOP_CASE_TAC >>
+    gvs[get_scopes_def, return_def, bind_apply, ignore_bind_apply,
+        finally_def, set_scopes_def, return_def] >>
+    Cases_on `eval_exprs cxd needed_dflts (r' with scopes := [FEMPTY])` >>
+    Cases_on `q` >> gvs[return_def, raise_def] >>
     first_x_assum drule_all >> strip_tac >>
     (* Derive preserves_tv cx from preserves_tv cxd via txn_eq *)
-    drule_at Any (iffRL preserves_tv_txn_eq) >>
-    disch_then (qspec_then `cx` mp_tac) >>
-    simp[Abbr`cxd`] >> strip_tac >>
-    reverse BasicProvers.TOP_CASE_TAC >- (
-      strip_tac >> gvs[] >>
-      irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-    (* INL from eval_exprs cxd: remaining bind chain *)
+    drule preserves_tv_restore_scopes >>
+    disch_then assume_tac >>
+    qpat_x_assum `preserves_tv cxd r' (r'' with scopes := r'.scopes)` mp_tac >>
+    simp[Abbr`cxd`, preserves_tv_stk_update] >> strip_tac >>
     suspend "IntCall_ptv") >>
-  (* === Chain builtins: eval_exprs then state-only ops === *)
   (* Shared approach: IH gives preserves_tv for eval_exprs.
      Remaining ops preserve scopes+immutables, so preserves_tv_eq +
      preserves_tv_trans finishes. *)
@@ -2123,6 +2136,142 @@ Proof
   Cases_on `f s` >> Cases_on `q` >> rw[]
 QED
 
+Theorem intcall_body_ih_pack[local]:
+  (!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st res st'.
+     ((eval_exprs cx es s6 = (INL vs,t4) /\
+       (case eval_exprs cxf needed_dflts (s8 with scopes := [FEMPTY]) of
+          (INL x,s'') => (INL x,s'' with scopes := s7.scopes)
+        | (INR e,s'') => (INR e,s'' with scopes := s7.scopes)) = (INL dflt_vs,t6) /\
+       lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+         "IntCall bind_arguments" s9 = (INL env,t7) /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" s10 = (INL rtv,t8) /\
+       (if nr then
+          case cx.nonreentrant_slot of
+            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        else return ()) s11 = (INL (),t9)) /\
+      eval_stmts cxf body st = (res,st')) ==>
+     preserves_tv cxf st st') ==>
+  eval_exprs cx es r = (INL vs0,r1) ==>
+  eval_exprs cxf needed_dflts (r1 with scopes := [FEMPTY]) = (INL dflt_vs0,r2) ==>
+  lift_option_type (bind_arguments (get_tenv cx) args (vs0 ++ dflt_vs0))
+    "IntCall bind_arguments" (r2 with scopes := r1.scopes) =
+    (INL env0,r2 with scopes := r1.scopes) ==>
+  lift_option_type (evaluate_type (get_tenv cx) ret)
+    "IntCall eval ret" (r2 with scopes := r1.scopes) =
+    (INL rtv0,r2 with scopes := r1.scopes) ==>
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
+  !st res st'. eval_stmts cxf body st = (res,st') ==> preserves_tv cxf st st'
+Proof
+  rpt strip_tac >>
+  qpat_assum `!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st0 res0 st1.
+    _ ==> preserves_tv cxf st0 st1`
+    (qspecl_then [`r`, `vs0`, `r1`, `r1`, `r1`, `dflt_vs0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `env0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `rtv0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `r_lock`,
+      `st`, `res`, `st'`] mp_tac) >>
+  simp[]
+QED
+
+Theorem intcall_body_ih_resume_pack[local]:
+  (!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st res st'.
+     ((eval_exprs cx es s6 = (INL vs,t4) /\
+       (case eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
+              (s8 with scopes := [FEMPTY]) of
+          (INL x,s'') => (INL x,s'' with scopes := s7.scopes)
+        | (INR e,s'') => (INR e,s'' with scopes := s7.scopes)) = (INL dflt_vs,t6) /\
+       lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+         "IntCall bind_arguments" s9 = (INL env,t7) /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" s10 = (INL rtv,t8) /\
+       (if nr then
+          case cx.nonreentrant_slot of
+            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        else return ()) s11 = (INL (),t9)) /\
+      eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st')) ==>
+     preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st') ==>
+  eval_exprs cx es r = (INL vs0,r1) ==>
+  eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
+    (r1 with scopes := [FEMPTY]) = (INL dflt_vs0,r2) ==>
+  lift_option_type (bind_arguments (get_tenv cx) args (vs0 ++ dflt_vs0))
+    "IntCall bind_arguments" (r2 with scopes := r1.scopes) =
+    (INL env0,r2 with scopes := r1.scopes) ==>
+  lift_option_type (evaluate_type (get_tenv cx) ret)
+    "IntCall eval ret" (r2 with scopes := r1.scopes) =
+    (INL rtv0,r2 with scopes := r1.scopes) ==>
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
+  !st res st'.
+    eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st') ==>
+    preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st'
+Proof
+  rpt strip_tac >>
+  qpat_assum `!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st0 res0 st1.
+    _ ==> preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1`
+    (qspecl_then [`r`, `vs0`, `r1`, `r1`, `r1`, `dflt_vs0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `env0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `rtv0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `r_lock`,
+      `st`, `res`, `st'`] mp_tac) >>
+  simp[]
+QED
+
+Theorem intcall_body_ih_resume_point[local]:
+  (!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st res st'.
+     ((eval_exprs cx es s6 = (INL vs,t4) /\
+       (case eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
+              (s8 with scopes := [FEMPTY]) of
+          (INL x,s'') => (INL x,s'' with scopes := s7.scopes)
+        | (INR e,s'') => (INR e,s'' with scopes := s7.scopes)) = (INL dflt_vs,t6) /\
+       lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+         "IntCall bind_arguments" s9 = (INL env,t7) /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" s10 = (INL rtv,t8) /\
+       (if nr then
+          case cx.nonreentrant_slot of
+            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        else return ()) s11 = (INL (),t9)) /\
+      eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st')) ==>
+     preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st') ==>
+  eval_exprs cx es r = (INL vs0,r1) ==>
+  eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
+    (r1 with scopes := [FEMPTY]) = (INL dflt_vs0,r2) ==>
+  lift_option_type (bind_arguments (get_tenv cx) args (vs0 ++ dflt_vs0))
+    "IntCall bind_arguments" (r2 with scopes := r1.scopes) =
+    (INL env0,r2 with scopes := r1.scopes) ==>
+  lift_option_type (evaluate_type (get_tenv cx) ret)
+    "IntCall eval ret" (r2 with scopes := r1.scopes) =
+    (INL rtv0,r2 with scopes := r1.scopes) ==>
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
+  eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st') ==>
+  preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st'
+Proof
+  rpt strip_tac >>
+  qpat_assum `!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st0 res0 st1.
+    _ ==> preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1`
+    (qspecl_then [`r`, `vs0`, `r1`, `r1`, `r1`, `dflt_vs0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `env0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `rtv0`,
+      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `r_lock`,
+      `st`, `res`, `st'`] mp_tac) >>
+  simp[]
+QED
+
 (* Standalone lemma: preserves_tv through the IntCall finally+safe_cast chain.
    Abstracts away variable names so we can prove it with hol_state_at. *)
 Theorem intcall_ptv_chain[local]:
@@ -2193,17 +2342,23 @@ Proof
 QED
 
 Resume eval_preserves_tv[IntCall_ptv]:
+  markerLib.RESUME_TAC >- (
+    strip_tac >> gvs[] >>
+    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
   strip_tac >>
-  `preserves_tv cx r r'` by (
-    irule preserves_tv_trans >>
-    qexists_tac `r''` >> simp[]) >>
   (* Unfold the do...od assumption *)
   qpat_x_assum `do _ od _ = _` mp_tac >>
   simp_tac std_ss [bind_apply, get_scopes_def, return_def] >>
-  (* Pure: bind_arguments, evaluate_type *)
-  ntac 2 (BasicProvers.TOP_CASE_TAC >>
-    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[])) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[] >>
+    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[] >>
+    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
   simp_tac std_ss [ignore_bind_apply, bind_apply] >>
   (* Reentrancy lock -- split pair, then INL/INR *)
   BasicProvers.TOP_CASE_TAC >>
@@ -2221,6 +2376,14 @@ Resume eval_preserves_tv[IntCall_ptv]:
     [bind_apply, push_function_def, return_def] >>
   strip_tac >>
   gvs[push_function_def, return_def] >>
+  (* Cut the body IH before entering the large tail-chain residual goal. *)
+  `!st res st'.
+     eval_stmts (cx with stk updated_by CONS (src_id_opt, fn)) body' st = (res,st') ==>
+     preserves_tv (cx with stk updated_by CONS (src_id_opt, fn)) st st'` by (
+    rpt strip_tac >>
+    drule_all intcall_body_ih_resume_point >>
+    simp[]
+  ) >>
   irule intcall_ptv_chain >>
   qexistsl_tac [`body'`,
     `if nr /\ mut <> View /\ mut <> Pure then
@@ -2228,7 +2391,7 @@ Resume eval_preserves_tv[IntCall_ptv]:
        | SOME slot => release_nonreentrant_lock cx.txn.target slot
      else return ()`,
     `cx with stk updated_by CONS (src_id_opt, fn)`,
-    `x'6'`, `"IntCall cast ret"`, `r'5'`, `r'`, `res`, `x'7'`] >>
+    `x'3'`, `"IntCall cast ret"`, `r'5'`, `r'' with scopes := r'.scopes`, `res`, `x'5'`] >>
   simp[] >> conj_tac >- (
     rpt gen_tac >>
     IF_CASES_TAC >> simp[return_def] >>
@@ -2237,10 +2400,11 @@ Resume eval_preserves_tv[IntCall_ptv]:
     imp_res_tac release_nonreentrant_lock_scopes >>
     imp_res_tac release_nonreentrant_lock_immutables >> simp[]
   ) >>
-  (* Conjunct 2: eval_stmts IH -- discharge existential guards *)
-  rpt gen_tac >> strip_tac >>
-  first_x_assum irule >> simp[get_scopes_def, return_def] >>
-  metis_tac[]
+  conj_tac >- (
+    qpat_x_assum `(case _ of (INL rv,s'') => _ | (INR e,s'') => _) = (res,st')` mp_tac >>
+    simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]
+  ) >>
+  irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
 QED
 
 Finalise eval_preserves_tv

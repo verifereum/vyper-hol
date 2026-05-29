@@ -76,6 +76,158 @@ Proof
   simp[no_type_error_result_def]
 QED
 
+Theorem lift_option_type_INL_eq[local]:
+  lift_option_type opt msg st = (INL v,st') <=> opt = SOME v /\ st' = st
+Proof
+  Cases_on `opt` >> simp[lift_option_type_def, return_def, raise_def] >>
+  metis_tac[]
+QED
+
+Theorem fn_sigs_consistent_FLOOKUP[local]:
+  fn_sigs_consistent fn_sigs cx /\
+  FLOOKUP fn_sigs (src_id_opt, fn) = SOME sig ==>
+  ?ts fm nr params dflts body.
+    get_module_code cx src_id_opt = SOME ts /\
+    lookup_callable_function cx.in_deploy fn ts =
+      SOME (fm, nr, params, dflts, sig.ret_ty, body) /\
+    sig.param_types = MAP SND params /\
+    sig.num_defaults = LENGTH dflts
+Proof
+  simp[fn_sigs_consistent_def]
+QED
+
+Theorem lift_option_type_SOME_not_INR[local]:
+  opt = SOME v ==> lift_option_type opt msg st <> (INR e,st')
+Proof
+  simp[lift_option_type_def, return_def]
+QED
+
+Theorem option_SOME_eq[local]:
+  SOME x = SOME y ==> x = y
+Proof
+  simp[]
+QED
+
+Theorem intcall_lookup_function_not_INR[local]:
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME v /\
+  get_module_code cx src_id_opt = SOME ts' ==>
+  lift_option_type (lookup_callable_function cx.in_deploy fn ts') msg st <> (INR e,st')
+Proof
+  rpt strip_tac >> gvs[lift_option_type_def, return_def]
+QED
+
+Theorem intcall_args_length_condition[local]:
+  fn_sigs_consistent fn_sigs cx /\
+  FLOOKUP fn_sigs (src_id_opt,fn) = SOME sig /\
+  lift_option_type (get_module_code cx src_id_opt) msg1 st1 = (INL ts,st1') /\
+  lift_option_type (lookup_callable_function cx.in_deploy fn ts) msg2 st2 = (INL tup,st2') /\
+  LENGTH es <= LENGTH sig.param_types /\
+  LENGTH sig.param_types - sig.num_defaults <= LENGTH es ==>
+  LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+  LENGTH (FST (SND (SND tup))) <=
+    LENGTH es + LENGTH (FST (SND (SND (SND tup))))
+Proof
+  rpt strip_tac >>
+  drule_all fn_sigs_consistent_FLOOKUP >> strip_tac >>
+  qpat_x_assum `lift_option_type (get_module_code cx src_id_opt) _ _ = _`
+    (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+  qpat_x_assum `lift_option_type (lookup_callable_function cx.in_deploy fn ts) _ _ = _`
+    (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+  gvs[]
+QED
+
+
+Theorem well_typed_exprs_DROP[local]:
+  !env es n. well_typed_exprs env es ==> well_typed_exprs env (DROP n es)
+Proof
+  gen_tac >> Induct >> simp[well_typed_expr_def] >>
+  rpt strip_tac >> Cases_on `n` >> simp[well_typed_expr_def]
+QED
+
+Theorem get_tenv_stk_irrelevant[local]:
+  !cx f. get_tenv (cx with stk updated_by f) = get_tenv cx
+Proof
+  simp[get_tenv_def]
+QED
+
+Theorem get_module_code_stk_irrelevant[local]:
+  !cx f src. get_module_code (cx with stk updated_by f) src = get_module_code cx src
+Proof
+  simp[get_module_code_def]
+QED
+
+Theorem fn_sigs_consistent_stk_irrelevant[local]:
+  !sigs cx f. fn_sigs_consistent sigs (cx with stk updated_by f) <=>
+              fn_sigs_consistent sigs cx
+Proof
+  simp[fn_sigs_consistent_def, get_module_code_def]
+QED
+
+Theorem functions_well_typed_stk_irrelevant[local]:
+  !cx f. functions_well_typed (cx with stk updated_by f) <=>
+         functions_well_typed cx
+Proof
+  simp[functions_well_typed_def, get_module_code_def,
+       get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant,
+       well_formed_type_def]
+QED
+
+Theorem context_well_typed_stk_irrelevant[local]:
+  !cx f. context_well_typed (cx with stk updated_by f) <=>
+         context_well_typed cx
+Proof
+  simp[context_well_typed_def]
+QED
+Theorem env_scopes_consistent_stk_irrelevant[local]:
+  !env cx f st.
+    env_scopes_consistent env (cx with stk updated_by f) st <=>
+    env_scopes_consistent env cx st
+Proof
+  simp[env_scopes_consistent_def, get_tenv_stk_irrelevant]
+QED
+
+Theorem env_consistent_stk_push[local]:
+  env_consistent env cx st ==>
+  env_consistent env (cx with stk updated_by CONS (env.current_src,fn)) st
+Proof
+  rw[env_consistent_def]
+  >- (gvs[env_context_consistent_def] >>
+      rw[env_context_consistent_def, get_tenv_stk_irrelevant,
+         fn_sigs_consistent_stk_irrelevant, get_module_code_stk_irrelevant,
+         current_module_def] >>
+      first_x_assum drule_all >> simp[lookup_var_slot_from_layout_def])
+  >- (gvs[env_scopes_consistent_def] >>
+      rw[env_scopes_consistent_def, get_tenv_stk_irrelevant] >>
+      metis_tac[])
+  >- (gvs[env_immutables_consistent_def] >>
+      rw[env_immutables_consistent_def, get_tenv_stk_irrelevant,
+         get_module_code_stk_irrelevant] >>
+      first_x_assum drule_all >> simp[])
+QED
+Theorem env_consistent_defaults_env_no_runtime_lookup[local]:
+  env_consistent (defaults_env env) cx st ==>
+  !id entry. lookup_scopes id st.scopes = SOME entry ==> F
+Proof
+  rw[env_consistent_def, env_scopes_consistent_def, defaults_env_def] >>
+  first_x_assum drule >>
+  simp[]
+QED
+
+Theorem env_consistent_defaults_env_contradicts_caller_local[local]:
+  env_consistent caller_env cx1 st /\
+  FLOOKUP caller_env.var_types id = SOME ty /\
+  env_consistent (defaults_env callee_env) cx2 st ==>
+  F
+Proof
+  rpt strip_tac >>
+  `IS_SOME (lookup_scopes id st.scopes)` by (
+    gvs[env_consistent_def, env_scopes_consistent_def] >>
+    first_x_assum drule >> simp[]) >>
+  gvs[IS_SOME_EXISTS] >>
+  metis_tac[env_consistent_defaults_env_no_runtime_lookup]
+QED
+
 Theorem no_control_exc_return_exception_typed:
   no_control_exc exn ==> return_exception_typed env ret_ty exn
 Proof
@@ -1004,7 +1156,1090 @@ Proof
   drule eval_expr_exception_return_typed >> rw[]
 QED
 
+Theorem callable_body_typing_from_functions_well_typed[local]:
+  functions_well_typed cx /\
+  fn_sigs_consistent fn_sigs cx /\
+  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+     ?ts. get_module_code cx src = SOME ts /\
+          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+          is_immutable_decl id ts /\
+          find_var_decl_by_num id ts = NONE /\
+          ty <> NoneT) /\
+  (!src id vt ts.
+     FLOOKUP toplevel_vtypes (src,id) = SOME vt /\
+     get_module_code cx src = SOME ts ==>
+     ((?ty. vt = Type ty /\
+         ((!is_transient typ id_str.
+             find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
+             typ = ty) /\
+          (!is_transient kt hv id_str.
+             find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt hv,id_str) ==>
+             F) /\
+          (find_var_decl_by_num id ts = NONE ==>
+           IS_SOME (evaluate_type (get_tenv cx) ty)))) \/
+      (?kt hv. vt = HashMapT kt hv /\
+         ?is_transient id_str.
+           find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt hv,id_str)))) /\
+  (!src fid ls.
+     FLOOKUP flag_members (src,fid) = SOME ls ==>
+     ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
+          FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls))) /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) ==>
+  (nr ==> cx.nonreentrant_slot <> NONE) /\
+  ?env_body ret_tv env_after.
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = fn_sigs /\
+    env_body.bare_globals = bare_globals /\
+    env_body.toplevel_vtypes = toplevel_vtypes /\
+    env_body.flag_members = flag_members /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    well_typed_exprs (defaults_env env_body) dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
+Proof
+  rw[functions_well_typed_def] >>
+  first_x_assum drule_all >>
+  rw[]
+QED
 
+Theorem callable_body_typing_from_env_consistent[local]:
+  functions_well_typed cx /\
+  env_consistent env cx st /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm,nr,args,dflts,ret,fn_body) ==>
+  (nr ==> cx.nonreentrant_slot <> NONE) /\
+  ?env_body ret_tv env_after.
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    well_typed_exprs (defaults_env env_body) dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
+Proof
+  rw[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def,
+     functions_well_typed_def] >>
+  first_x_assum
+    (qspecl_then [`env.fn_sigs`, `env.bare_globals`,
+                  `env.toplevel_vtypes`, `env.flag_members`] mp_tac) >>
+  simp[] >>
+  impl_tac
+  >- (rpt strip_tac >>
+      Cases_on `vt` >> gvs[]
+      >- (rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty)` >>
+          rename1 `get_module_code cx src = SOME ts0` >>
+          qpat_x_assum
+            `!src id ty ts. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ get_module_code cx src = SOME ts ==> _`
+            (qspecl_then [`src`,`id`,`ty`,`ts0`] mp_tac) >>
+          simp[] >> strip_tac >> simp[] >>
+          Cases_on `FLOOKUP env.bare_globals (src,id)`
+          >- (qpat_x_assum
+                `!src id ty. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP env.bare_globals (src,id) = NONE ==> _`
+                (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+              simp[] >> rw[] >> metis_tac[]) >>
+          rename1 `FLOOKUP env.bare_globals (src,id) = SOME bare_ty` >>
+          `bare_ty = ty` by (
+            qpat_x_assum
+              `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
+              (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
+            simp[] >> rw[]) >>
+          qpat_x_assum
+            `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+            (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
+          simp[IS_SOME_EXISTS] >> strip_tac >> PairCases_on `x` >>
+          qpat_x_assum
+            `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
+            (qspecl_then [`src`,`id`,`bare_ty`,`x0`,`x1`] mp_tac) >>
+          simp[]) >>
+      rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt hv)` >>
+      qpat_x_assum
+        `!src id kt vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==> _`
+        (qspecl_then [`src`,`id`,`kt`,`hv`] mp_tac) >>
+      simp[] >> rw[] >> metis_tac[]) >>
+  rw[] >>
+  first_x_assum drule_all >> simp[] >>
+  rpt strip_tac >>
+  Cases_on `vt` >> gvs[]
+  >- (rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty)` >>
+      rename1 `get_module_code cx src = SOME ts0` >>
+      qpat_x_assum
+        `!src id ty ts. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ get_module_code cx src = SOME ts ==> _`
+        (qspecl_then [`src`,`id`,`ty`,`ts0`] mp_tac) >>
+      simp[] >> strip_tac >> simp[] >>
+      Cases_on `FLOOKUP env.bare_globals (src,id)`
+      >- (qpat_x_assum
+            `!src id ty. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP env.bare_globals (src,id) = NONE ==> _`
+            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+          simp[] >> rw[] >> metis_tac[]) >>
+      rename1 `FLOOKUP env.bare_globals (src,id) = SOME bare_ty` >>
+      `bare_ty = ty` by (
+        qpat_x_assum
+          `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
+          (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
+        simp[] >> rw[]) >>
+      qpat_x_assum
+        `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+        (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
+      simp[IS_SOME_EXISTS] >> strip_tac >> PairCases_on `x` >>
+      qpat_x_assum
+        `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
+        (qspecl_then [`src`,`id`,`bare_ty`,`x0`,`x1`] mp_tac) >>
+      simp[]) >>
+  rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt hv)` >>
+  qpat_x_assum
+    `!src id kt vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==> _`
+    (qspecl_then [`src`,`id`,`kt`,`hv`] mp_tac) >>
+  simp[] >> rw[] >> metis_tac[]
+QED
+
+Theorem intcall_env_body_consistency_for_defaults[local]:
+  !env env_body cx st src_id_opt fn.
+    env_consistent env cx st /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members ==>
+    env_context_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) st
+Proof
+  rw[env_consistent_def]
+  >- (gvs[env_context_consistent_def] >>
+      rw[env_context_consistent_def, get_tenv_stk_irrelevant,
+         fn_sigs_consistent_stk_irrelevant, get_module_code_stk_irrelevant,
+         current_module_def] >>
+      first_x_assum drule_all >> simp[lookup_var_slot_from_layout_def])
+  >- (gvs[env_immutables_consistent_def] >>
+      rw[env_immutables_consistent_def, get_tenv_stk_irrelevant,
+         get_module_code_stk_irrelevant] >>
+      first_x_assum drule_all >> simp[])
+QED
+
+Theorem intcall_default_env_side_conditions[local]:
+  !env env_body cx st src_id_opt fn.
+    env_consistent env cx st /\
+    state_well_typed st /\
+    context_well_typed cx /\
+    accounts_well_typed st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members ==>
+    env_context_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) st /\
+    state_well_typed st /\
+    context_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+    accounts_well_typed st.accounts /\
+    functions_well_typed (cx with stk updated_by CONS (src_id_opt,fn))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`, `env_body`, `cx`, `st`, `src_id_opt`, `fn`] mp_tac
+    intcall_env_body_consistency_for_defaults >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]
+QED
+Theorem no_fallthrough_eval_no_success[local]:
+  (!s cx st st'.
+      stmt_no_fallthrough s ==>
+      eval_stmt cx s st <> (INL (), st')) /\
+  (!ss cx st st'.
+      stmts_no_fallthrough ss ==>
+      eval_stmts cx ss st <> (INL (), st'))
+Proof
+  ho_match_mp_tac stmt_induction >>
+  rw[stmt_no_fallthrough_def, evaluate_def, bind_def, return_def, raise_def,
+     pairTheory.UNCURRY, finally_def, ignore_bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  TRY (rename1 `eval_stmt cx (Raise reason) st <> _` >>
+       Cases_on `reason` >>
+       gvs[evaluate_def, bind_def, return_def, raise_def,
+           pairTheory.UNCURRY, AllCaseEqs()]) >>
+  TRY (rename1 `eval_stmt cx (Return opt_e) st <> _` >>
+       Cases_on `opt_e` >>
+       gvs[evaluate_def, bind_def, return_def, raise_def,
+           pairTheory.UNCURRY, AllCaseEqs()]) >>
+  TRY (rename1 `eval_expr cx e st = (INL tv,_)` >>
+       Cases_on `tv = Value (BoolV T)` >> gvs[] >>
+       Cases_on `tv = Value (BoolV F)` >> gvs[raise_def]) >>
+  metis_tac[]
+QED
+Theorem no_control_exc_no_loop_control[local]:
+  no_control_exc exn ==> exn <> BreakException /\ exn <> ContinueException
+Proof
+  Cases_on `exn` >> rw[no_control_exc_def]
+QED
+Theorem push_scope_no_control[local]:
+  push_scope st = (INR exn,st') ==> no_control_exc exn
+Proof
+  rw[push_scope_def, return_def, no_control_exc_def]
+QED
+
+Theorem pop_scope_no_control[local]:
+  pop_scope st = (INR exn,st') ==> no_control_exc exn
+Proof
+  Cases_on `st.scopes` >> rw[pop_scope_def, return_def, raise_def, no_control_exc_def]
+QED
+
+Theorem new_variable_no_control[local]:
+  new_variable id tv v st = (INR exn,st') ==> no_control_exc exn
+Proof
+  rw[new_variable_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+     get_scopes_def, AllCaseEqs()] >>
+  Cases_on `s''.scopes` >>
+  gvs[set_scopes_def, return_def, raise_def, no_control_exc_def]
+QED
+
+
+Theorem eval_for_no_loop_control[local]:
+  !vs cx tyv nm body st exn st'.
+    eval_for cx tyv nm body vs st = (INR exn,st') ==>
+    exn <> BreakException /\ exn <> ContinueException
+Proof
+  Induct >>
+  rw[Once evaluate_def, bind_def, ignore_bind_def, try_def, finally_def,
+     push_scope_with_var_def, pop_scope_def, handle_loop_exception_def,
+     return_def, raise_def, AllCaseEqs()] >>
+  gvs[return_def] >>
+  TRY (Cases_on `e` >> gvs[handle_loop_exception_def, return_def, raise_def]) >>
+  res_tac >>
+  gvs[]
+QED
+Theorem eval_stmt_assert_no_loop_control[local]:
+  !a e cx st exn st'.
+    eval_stmt cx (Assert e a) st = (INR exn,st') ==>
+    exn <> BreakException /\ exn <> ContinueException
+Proof
+  Cases >>
+  rw[Once evaluate_def, bind_def, switch_BoolV_def, return_def, raise_def,
+     AllCaseEqs(), no_control_exc_def] >>
+  TRY (drule (cj 1 eval_expr_no_control) >>
+       metis_tac[no_control_exc_no_loop_control]) >>
+  TRY (rename1 `(if tv = Value (BoolV T) then _ else _) _ = _` >>
+       Cases_on `tv = Value (BoolV T)` >>
+       gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+       Cases_on `tv = Value (BoolV F)` >>
+       gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+       TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+       TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+       TRY (drule (cj 1 eval_expr_no_control) >>
+            metis_tac[no_control_exc_no_loop_control]) >>
+       NO_TAC)
+QED
+Theorem eval_stmt_raise_no_loop_control[local]:
+  !r cx st exn st'.
+    eval_stmt cx (Raise r) st = (INR exn,st') ==>
+    exn <> BreakException /\ exn <> ContinueException
+Proof
+  Cases >>
+  rw[Once evaluate_def, bind_def, return_def, raise_def,
+     AllCaseEqs(), no_control_exc_def] >>
+  TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (drule (cj 1 eval_expr_no_control) >>
+       metis_tac[no_control_exc_no_loop_control])
+QED
+
+Theorem eval_stmt_return_no_loop_control[local]:
+  !opt_e cx st exn st'.
+    eval_stmt cx (Return opt_e) st = (INR exn,st') ==>
+    exn <> BreakException /\ exn <> ContinueException
+Proof
+  Cases >>
+  rw[Once evaluate_def, bind_def, return_def, raise_def,
+     AllCaseEqs(), no_control_exc_def] >>
+  TRY (imp_res_tac materialise_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (drule (cj 1 eval_expr_no_control) >>
+       metis_tac[no_control_exc_no_loop_control])
+QED
+
+
+
+Theorem stmt_no_control_escape_eval_no_loop_control:
+  (!s cx st exn st'.
+     stmt_no_control_escape s /\
+     eval_stmt cx s st = (INR exn,st') ==>
+     exn <> BreakException /\ exn <> ContinueException) /\
+  (!ss cx st exn st'.
+     stmts_no_control_escape ss /\
+     eval_stmts cx ss st = (INR exn,st') ==>
+     exn <> BreakException /\ exn <> ContinueException)
+Proof
+  ho_match_mp_tac stmt_induction >>
+  rw[stmt_no_control_escape_def, evaluate_def, bind_def, ignore_bind_def,
+     finally_def, try_def, switch_BoolV_def, return_def, raise_def,
+     pairTheory.UNCURRY, AllCaseEqs()] >>
+  TRY (imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
+  TRY (imp_res_tac check_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac type_check_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac lift_sum_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac push_scope_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac pop_scope_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac new_variable_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac materialise_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac push_log_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac assign_target_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac eval_iterator_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac eval_for_no_loop_control >> NO_TAC) >>
+  TRY (imp_res_tac eval_stmt_assert_no_loop_control >> NO_TAC) >>
+  TRY (imp_res_tac eval_stmt_raise_no_loop_control >> NO_TAC) >>
+  TRY (imp_res_tac eval_stmt_return_no_loop_control >> NO_TAC) >>
+  TRY (drule (cj 1 eval_expr_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
+  TRY (drule (cj 2 eval_expr_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
+  TRY (drule (cj 1 eval_target_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
+  TRY (drule (cj 3 eval_target_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
+  TRY (first_x_assum drule_all >> simp[] >> NO_TAC) >>
+  TRY (rename1 `if tv = Value (BoolV T) then _ else _` >>
+       Cases_on `tv = Value (BoolV T)` >> gvs[raise_def, no_control_exc_def] >>
+       Cases_on `tv = Value (BoolV F)` >> gvs[raise_def, no_control_exc_def] >>
+       res_tac >> gvs[] >> NO_TAC) >>
+  TRY (rename1 `eval_stmt cx (Assert e a) st = _` >>
+       Cases_on `a` >>
+       gvs[evaluate_def, bind_def, switch_BoolV_def, return_def, raise_def,
+           AllCaseEqs(), no_control_exc_def] >>
+       TRY (drule (cj 1 eval_expr_no_control) >> simp[no_control_exc_def] >> NO_TAC) >>
+       TRY (rename1 `(if tv = Value (BoolV T) then _ else _) _ = _` >>
+            Cases_on `tv = Value (BoolV T)` >> gvs[return_def, raise_def, no_control_exc_def] >>
+            Cases_on `tv = Value (BoolV F)` >> gvs[return_def, raise_def, no_control_exc_def] >>
+            NO_TAC) >>
+       NO_TAC) >>
+  TRY (res_tac >> gvs[] >> NO_TAC) >>
+  TRY (metis_tac[no_fallthrough_eval_no_success])
+QED
+
+Theorem stmts_no_control_escape_eval_stmts_no_loop_control:
+  stmts_no_control_escape ss /\ eval_stmts cx ss st = (INR exn,st') ==>
+  exn <> BreakException /\ exn <> ContinueException
+Proof
+  metis_tac[stmt_no_control_escape_eval_no_loop_control]
+QED
+
+
+
+Theorem bind_arguments_scope_lookup[local]:
+  !tenv params vs sc n entry.
+    bind_arguments tenv params vs = SOME sc /\
+    FLOOKUP sc n = SOME entry ==>
+    ?id typ. n = string_to_num id /\ MEM (id,typ) params /\
+             evaluate_type tenv typ = SOME entry.type /\ entry.assignable
+Proof
+  Induct_on `params` >> simp[Once bind_arguments_def] >>
+  Cases >> simp[Once bind_arguments_def] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
+  Cases_on `n = string_to_num q` >> gvs[]
+  >- (qexists_tac `q` >> qexists_tac `r` >> simp[]) >>
+  first_x_assum drule_all >> rw[] >>
+  qexists_tac `id` >> qexists_tac `typ` >> simp[]
+QED
+
+Theorem bind_arguments_scope_covers_params[local]:
+  !tenv params vs sc id typ.
+    bind_arguments tenv params vs = SOME sc /\ MEM (id,typ) params /\
+    (!id' typ'. MEM (id',typ') params /\ string_to_num id' = string_to_num id ==> typ' = typ) ==>
+    ?entry. FLOOKUP sc (string_to_num id) = SOME entry /\
+            evaluate_type tenv typ = SOME entry.type /\ entry.assignable
+Proof
+  Induct_on `params` >> simp[Once bind_arguments_def] >>
+  Cases >> simp[Once bind_arguments_def] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+      qpat_x_assum `id = q` SUBST_ALL_TAC >>
+      qpat_x_assum `typ = r` SUBST_ALL_TAC >>
+      rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
+  Cases_on `string_to_num q = string_to_num id`
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+      `r = typ` by metis_tac[] >>
+      qpat_x_assum `r = typ` SUBST_ALL_TAC >>
+      asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
+  first_x_assum (qspecl_then [`tenv`, `t`, `m`, `id`, `typ`] mp_tac) >>
+  impl_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!id'' typ''. _` (qspecl_then [`id'`, `typ'`] mp_tac) >>
+      simp[]) >>
+  strip_tac >>
+  qexists_tac `entry` >> asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]
+QED
+
+Theorem param_var_types_key_agree[local]:
+  !vt args id typ id' typ'.
+    (!x ty. MEM (x,ty) args ==> FLOOKUP vt (string_to_num x) = SOME ty) /\
+    MEM (id,typ) args /\ MEM (id',typ') args /\
+    string_to_num id' = string_to_num id ==>
+    typ' = typ
+Proof
+  rpt strip_tac >>
+  `FLOOKUP vt (string_to_num id) = SOME typ` by metis_tac[] >>
+  `FLOOKUP vt (string_to_num id) = SOME typ'` by metis_tac[] >>
+  metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem bind_arguments_env_var_type_scope_entry[local]:
+  !tenv args vs sc env_body n ty.
+    bind_arguments tenv args vs = SOME sc /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    FLOOKUP env_body.var_types n = SOME ty ==>
+    ?entry. FLOOKUP sc n = SOME entry /\
+            evaluate_type tenv ty = SOME entry.type /\ entry.assignable
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!n ty. FLOOKUP env_body.var_types n = SOME ty ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
+  rename1 `MEM (pid,ty) args` >>
+  qspecl_then [`tenv`, `args`, `vs`, `sc`, `pid`, `ty`] mp_tac
+    bind_arguments_scope_covers_params >>
+  simp[] >>
+  impl_tac
+  >- (rpt strip_tac >>
+      irule param_var_types_key_agree >>
+      qexists_tac `args` >>
+      qexists_tac `pid` >>
+      qexists_tac `id'` >>
+      qexists_tac `env_body.var_types` >>
+      simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
+        (qspecl_then [`x`, `ty'`] mp_tac) >>
+      simp[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem bind_arguments_scope_entry_env_var_type[local]:
+  !tenv args vs sc env_body n entry.
+    bind_arguments tenv args vs = SOME sc /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    FLOOKUP sc n = SOME entry ==>
+    ?ty. FLOOKUP env_body.var_types n = SOME ty /\
+         evaluate_type tenv ty = SOME entry.type /\ entry.assignable
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tenv`, `args`, `vs`, `sc`, `n`, `entry`] mp_tac
+    bind_arguments_scope_lookup >>
+  simp[] >>
+  strip_tac >> gvs[] >>
+  rename1 `MEM (pid,typ) args` >>
+  qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
+    (qspecl_then [`pid`, `typ`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `typ` >> simp[]
+QED
+
+Theorem bind_arguments_env_var_assignable_scope_entry[local]:
+  !tenv args vs sc env_body n.
+    bind_arguments tenv args vs = SOME sc /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    FLOOKUP env_body.var_assignable n = SOME T ==>
+    ?entry. FLOOKUP sc n = SOME entry /\ entry.assignable
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!n b. FLOOKUP env_body.var_assignable n = SOME b ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
+  rename1 `MEM (pid,typ) args` >>
+  qpat_assum `!id typ. MEM (id,typ) args ==> _`
+    (drule_then strip_assume_tac) >>
+  qspecl_then [`tenv`, `args`, `vs`, `sc`, `pid`, `typ`] mp_tac
+    bind_arguments_scope_covers_params >>
+  simp[] >>
+  impl_tac
+  >- (rpt strip_tac >>
+      irule param_var_types_key_agree >>
+      qexists_tac `args` >>
+      qexists_tac `pid` >>
+      qexists_tac `id'` >>
+      qexists_tac `env_body.var_types` >>
+      simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
+        (qspecl_then [`x`, `ty'`] mp_tac) >>
+      simp[]) >>
+  strip_tac >>
+  qexists_tac `entry` >> simp[]
+QED
+
+Theorem bind_arguments_env_scopes_consistent[local]:
+  !tenv args vs sc env_body cx.
+    bind_arguments tenv args vs = SOME sc /\ tenv = get_tenv cx /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) ==>
+    env_scopes_consistent env_body cx (st with scopes := [sc])
+Proof
+  rw[env_scopes_consistent_def, lookup_scopes_def]
+  >- (drule_all bind_arguments_env_var_type_scope_entry >>
+      strip_tac >> simp[IS_SOME_EXISTS])
+  >- (Cases_on `FLOOKUP sc id` >> gvs[] >>
+      drule_all bind_arguments_scope_entry_env_var_type >>
+      strip_tac >> simp[IS_SOME_EXISTS])
+  >- (Cases_on `FLOOKUP sc id` >> gvs[] >>
+      drule_all bind_arguments_scope_entry_env_var_type >>
+      strip_tac >> gvs[])
+  >- (qpat_x_assum `!n b. FLOOKUP env_body.var_assignable n = SOME b ==> _`
+        (drule_then strip_assume_tac) >>
+      gvs[] >>
+      qpat_assum `!id typ. MEM (id,typ) args ==> _`
+        (drule_then strip_assume_tac) >>
+      simp[IS_SOME_EXISTS]) >>
+  qspecl_then [`get_tenv cx`, `args`, `vs`, `sc`, `env_body`, `id`] mp_tac
+    bind_arguments_env_var_assignable_scope_entry >>
+  simp[] >>
+  impl_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!id typ. MEM (id,typ) args ==> _`
+        (qspecl_then [`id'`, `typ`] mp_tac) >>
+      simp[]) >>
+  strip_tac >>
+  qexists_tac `entry` >> gvs[]
+QED
+
+Theorem bind_arguments_scope_well_typed_stmt[local]:
+  !tenv params vs sc.
+    bind_arguments tenv params vs = SOME sc /\
+    (!i tv. i < LENGTH params /\ i < LENGTH vs /\
+            evaluate_type tenv (SND (EL i params)) = SOME tv ==>
+            value_has_type tv (EL i vs)) ==>
+    scope_well_typed sc
+Proof
+  MAP_EVERY qid_spec_tac [`sc`, `vs`, `params`, `tenv`] >>
+  Induct_on `params`
+  >- (rpt gen_tac >> Cases_on `vs` >>
+      simp[Once bind_arguments_def, scope_well_typed_def, FLOOKUP_DEF]) >>
+  simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rename1 `safe_cast tv0 hval = SOME v0` >>
+  rename1 `evaluate_type tenv _ = SOME tv0` >>
+  `value_has_type tv0 hval` by
+    (first_x_assum (qspecl_then [`0`, `tv0`] mp_tac) >> simp[]) >>
+  imp_res_tac safe_cast_preserves_well_typed >>
+  `well_formed_type_value tv0` by metis_tac[evaluate_type_well_formed] >>
+  rename1 `bind_arguments tenv params tl = SOME sc0` >>
+  `scope_well_typed sc0` by (
+    first_x_assum (qspecl_then [`tenv`, `tl`, `sc0`] mp_tac) >>
+    simp[] >> disch_then irule >>
+    rpt strip_tac >>
+    first_x_assum (qspecl_then [`SUC i`, `tv`] mp_tac) >> simp[]) >>
+  gvs[scope_well_typed_def, FLOOKUP_UPDATE] >>
+  rw[] >> gvs[] >> res_tac
+QED
+
+Theorem exprs_runtime_typed_value_expr_LIST_REL[local]:
+  !env es vs.
+    exprs_runtime_typed env es vs ==>
+    LIST_REL (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
+                         value_has_type tv v) vs es
+Proof
+  rw[exprs_runtime_typed_def, listTheory.LIST_REL_EL_EQN] >>
+  metis_tac[]
+QED
+
+Theorem args_dflts_typing_to_el_stmt[local]:
+  !tenv (params: (string # type) list) args vs dflt_vs needed_dflts.
+    LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                         value_has_type tv v) vs args /\
+    LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                         value_has_type tv v) dflt_vs needed_dflts /\
+    MAP expr_type args = TAKE (LENGTH args) (MAP SND params) /\
+    MAP expr_type needed_dflts = MAP SND (DROP (LENGTH args) params) /\
+    LENGTH args + LENGTH needed_dflts = LENGTH params ==>
+    !i tv. i < LENGTH params /\ i < LENGTH (vs ++ dflt_vs) /\
+           evaluate_type tenv (SND (EL i params)) = SOME tv ==>
+           value_has_type tv (EL i (vs ++ dflt_vs))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `LENGTH vs = LENGTH args` by
+    (qpat_x_assum `LIST_REL _ vs args` mp_tac >>
+     simp[listTheory.LIST_REL_EL_EQN]) >>
+  `LENGTH dflt_vs = LENGTH needed_dflts` by
+    (qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+     simp[listTheory.LIST_REL_EL_EQN]) >>
+  Cases_on `i < LENGTH args`
+  >- (simp[rich_listTheory.EL_APPEND1] >>
+      qpat_x_assum `LIST_REL _ vs args` mp_tac >>
+      simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      `expr_type (EL i args) = SND (EL i params)` by (
+        `EL i (MAP expr_type args) =
+         EL i (TAKE (LENGTH args) (MAP SND params))` by metis_tac[] >>
+        gvs[listTheory.EL_MAP, rich_listTheory.EL_TAKE]) >>
+      gvs[]) >>
+  `i >= LENGTH vs` by simp[] >>
+  `i - LENGTH vs < LENGTH dflt_vs` by decide_tac >>
+  simp[rich_listTheory.EL_APPEND2] >>
+  qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+  simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >> gvs[] >>
+  `expr_type (EL (i - LENGTH vs) needed_dflts) = SND (EL i params)` by (
+    `EL (i - LENGTH args) (MAP expr_type needed_dflts) =
+     EL (i - LENGTH args) (MAP SND (DROP (LENGTH args) params))` by
+      metis_tac[] >>
+    gvs[listTheory.EL_MAP, listTheory.EL_DROP]) >>
+  first_x_assum (qspec_then `i - LENGTH args` mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem bind_arguments_succeeds_stmt[local]:
+  !tenv params vs.
+    LENGTH params = LENGTH vs /\
+    (!i. i < LENGTH params ==>
+      ?tv. evaluate_type tenv (SND (EL i params)) = SOME tv /\
+           value_has_type tv (EL i vs)) ==>
+    ?sc. bind_arguments tenv params vs = SOME sc
+Proof
+  Induct_on `params`
+  >- (rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def]) >>
+  simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  strip_tac >>
+  `?tv. evaluate_type tenv p_2 = SOME tv /\ value_has_type tv h` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  imp_res_tac safe_cast_well_typed >> simp[] >>
+  first_assum irule >> simp[] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Theorem args_dflts_bind_arguments_stmt[local]:
+  !tenv (params: (string # type) list) args vs dflt_vs needed_dflts.
+    LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                         value_has_type tv v) vs args /\
+    LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                         value_has_type tv v) dflt_vs needed_dflts /\
+    MAP expr_type args = TAKE (LENGTH args) (MAP SND params) /\
+    MAP expr_type needed_dflts = MAP SND (DROP (LENGTH args) params) /\
+    LENGTH args + LENGTH needed_dflts = LENGTH params ==>
+    ?sc. bind_arguments tenv params (vs ++ dflt_vs) = SOME sc
+Proof
+  rpt strip_tac >>
+  imp_res_tac LIST_REL_LENGTH >>
+  irule bind_arguments_succeeds_stmt >>
+  reverse conj_tac >- simp[LENGTH_APPEND] >>
+  gen_tac >> strip_tac >>
+  Cases_on `i < LENGTH args`
+  >- (qpat_x_assum `LIST_REL _ vs args` mp_tac >>
+      simp[listTheory.LIST_REL_EL_EQN] >> disch_then drule >> strip_tac >>
+      `EL i (MAP expr_type args) = EL i (MAP SND params)` by
+        simp[rich_listTheory.EL_TAKE] >>
+      qexists_tac `tv` >>
+      gvs[listTheory.EL_MAP, rich_listTheory.EL_APPEND1]) >>
+  `i - LENGTH args < LENGTH needed_dflts` by decide_tac >>
+  qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+  simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `EL (i - LENGTH args) (MAP expr_type needed_dflts) =
+   EL (i - LENGTH args) (MAP SND (DROP (LENGTH args) params))` by simp[] >>
+  qexists_tac `tv` >>
+  gvs[listTheory.EL_MAP, listTheory.EL_DROP, rich_listTheory.EL_APPEND2]
+QED
+
+Theorem intcall_defaults_map_param_types_length_le[local]:
+  !(params: (string # type) list) (dflts: expr list).
+    MAP expr_type dflts = MAP SND (DROP (LENGTH params - LENGTH dflts) params) ==>
+    LENGTH dflts <= LENGTH params
+Proof
+  rpt strip_tac >>
+  `LENGTH (MAP expr_type dflts) =
+   LENGTH (MAP SND (DROP (LENGTH params - LENGTH dflts) params))` by metis_tac[] >>
+  gvs[listTheory.LENGTH_MAP, listTheory.LENGTH_DROP] >>
+  decide_tac
+QED
+
+Theorem intcall_needed_defaults_param_types[local]:
+  !(params: (string # type) list) (dflts: expr list) (es: expr list) (needed_dflts: expr list).
+    needed_dflts = DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts /\
+    LENGTH es <= LENGTH params /\ LENGTH params - LENGTH es <= LENGTH dflts /\
+    LENGTH dflts <= LENGTH params /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH params - LENGTH dflts) params) ==>
+    MAP expr_type needed_dflts = MAP SND (DROP (LENGTH es) params)
+Proof
+  rpt strip_tac >> gvs[listTheory.MAP_DROP] >>
+  rewrite_tac[rich_listTheory.DROP_DROP_T] >>
+  `LENGTH params - LENGTH dflts + (LENGTH dflts - (LENGTH params - LENGTH es)) = LENGTH es` by
+    decide_tac >>
+  simp[]
+QED
+
+Theorem intcall_needed_defaults_length[local]:
+  !(params: (string # type) list) (dflts: expr list) (es: expr list) (needed_dflts: expr list).
+    needed_dflts = DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts /\
+    LENGTH es <= LENGTH params /\ LENGTH params - LENGTH es <= LENGTH dflts ==>
+    LENGTH es + LENGTH needed_dflts = LENGTH params
+Proof
+  rw[listTheory.LENGTH_DROP] >> decide_tac
+QED
+
+Theorem intcall_bind_arguments_from_runtime_typed[local]:
+  !cx env env_body params dflts es actual_vs dflt_vs needed_dflts st.
+    exprs_runtime_typed env es actual_vs /\
+    exprs_runtime_typed (defaults_env env_body) needed_dflts dflt_vs /\
+    env.type_defs = get_tenv cx /\ env_body.type_defs = get_tenv cx /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND params) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH params - LENGTH dflts) params) /\
+    needed_dflts = DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts /\
+    LENGTH es <= LENGTH params /\ LENGTH params - LENGTH es <= LENGTH dflts /\
+    (!id typ. MEM (id,typ) params ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) params /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) params /\ n = string_to_num id /\ b = T) ==>
+    ?call_env.
+      bind_arguments (get_tenv cx) params (actual_vs ++ dflt_vs) = SOME call_env /\
+      scope_well_typed call_env /\
+      env_scopes_consistent env_body cx (st with scopes := [call_env])
+Proof
+  rpt strip_tac >>
+  `LENGTH dflts <= LENGTH params` by
+    metis_tac[intcall_defaults_map_param_types_length_le] >>
+  mp_tac (Q.SPECL [`params : (string # type) list`, `dflts : expr list`,
+                     `es : expr list`, `needed_dflts : expr list`]
+            intcall_needed_defaults_param_types) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  mp_tac (Q.SPECL [`params : (string # type) list`, `dflts : expr list`,
+                     `es : expr list`, `needed_dflts : expr list`]
+            intcall_needed_defaults_length) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `LIST_REL (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
+                       value_has_type tv v) actual_vs es` by
+    metis_tac[exprs_runtime_typed_value_expr_LIST_REL] >>
+  `LIST_REL (\v e. ?tv. evaluate_type (defaults_env env_body).type_defs (expr_type e) = SOME tv /\
+                       value_has_type tv v) dflt_vs needed_dflts` by
+    metis_tac[exprs_runtime_typed_value_expr_LIST_REL] >>
+  `LIST_REL (\v e. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                       value_has_type tv v) actual_vs es` by
+    metis_tac[] >>
+  `LIST_REL (\v e. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                       value_has_type tv v) dflt_vs needed_dflts` by (
+    qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+    simp[defaults_env_def]) >>
+  mp_tac (Q.SPECL [`get_tenv cx`, `params : (string # type) list`,
+                     `es : expr list`, `actual_vs`, `dflt_vs`,
+                     `needed_dflts : expr list`]
+            args_dflts_bind_arguments_stmt) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `sc` >> simp[] >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`get_tenv cx`, `params`, `actual_vs ++ dflt_vs`, `sc`]
+                bind_arguments_scope_well_typed_stmt) >>
+      simp[] >> disch_then irule >>
+      mp_tac (Q.SPECL [`get_tenv cx`, `params`, `es`, `actual_vs`, `dflt_vs`, `needed_dflts`]
+                args_dflts_typing_to_el_stmt) >>
+      (impl_tac >- simp[]) >> simp[]) >>
+  mp_tac (Q.SPECL [`get_tenv cx`, `params`, `actual_vs ++ dflt_vs`,
+                     `sc`, `env_body`, `cx`]
+            bind_arguments_env_scopes_consistent) >>
+  disch_then irule >> metis_tac[]
+QED
+
+Theorem push_function_frame_consistent[local]:
+  !env env_body cx st src fn sc cxf stf.
+    env_consistent env cx st /\ state_well_typed st /\
+    env_body.current_src = src /\ env_body.type_defs = env.type_defs /\
+    env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_scopes_consistent env_body (cx with stk updated_by CONS (src,fn)) (st with scopes := [sc]) /\
+    scope_well_typed sc /\
+    push_function (src,fn) sc cx st = (INL cxf,stf) ==>
+    env_consistent env_body cxf stf /\ state_well_typed stf /\
+    (accounts_well_typed st.accounts ==> accounts_well_typed stf.accounts)
+Proof
+  rw[push_function_def, return_def] >>
+  gvs[env_consistent_def, env_context_consistent_def,
+      env_immutables_consistent_def, state_well_typed_def,
+      current_module_def, get_tenv_def, get_module_code_def,
+      fn_sigs_consistent_def, lookup_var_slot_from_layout_def] >>
+  metis_tac[]
+QED
+Theorem intcall_pushed_body_preconditions[local]:
+  !env_body pushed_cx dflt_st lock_st call_env.
+    env_context_consistent env_body pushed_cx /\
+    env_immutables_consistent env_body pushed_cx dflt_st /\
+    env_scopes_consistent env_body pushed_cx (dflt_st with scopes := [call_env]) /\
+    state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    scope_well_typed call_env /\
+    lock_st.scopes = dflt_st.scopes /\
+    lock_st.immutables = dflt_st.immutables /\
+    lock_st.accounts = dflt_st.accounts ==>
+    env_consistent env_body pushed_cx (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts
+Proof
+  rw[env_consistent_def, state_well_typed_def] >>
+  gvs[env_scopes_consistent_def, env_immutables_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem acquire_nonreentrant_lock_accounts[local]:
+  !addr slot is_view st res st'.
+    acquire_nonreentrant_lock addr slot is_view st = (res, st') ==>
+    st'.accounts = st.accounts
+Proof
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+QED
+Theorem release_nonreentrant_lock_accounts[local]:
+  !addr slot st res st'.
+    release_nonreentrant_lock addr slot st = (res, st') ==>
+    st'.accounts = st.accounts
+Proof
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, LET_THM]
+  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
+QED
+
+Theorem intcall_unlock_state_preserves_frame[local]:
+  !cx nr is_view st res st'.
+    (if nr /\ ~is_view then
+       case cx.nonreentrant_slot of
+       | NONE => return ()
+       | SOME slot => release_nonreentrant_lock cx.txn.target slot
+     else return ()) st = (res,st') ==>
+    st'.scopes = st.scopes /\
+    st'.immutables = st.immutables /\
+    st'.accounts = st.accounts
+Proof
+  rpt strip_tac >>
+  Cases_on `nr` >> gvs[return_def] >>
+  Cases_on `is_view` >> gvs[return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+  imp_res_tac release_nonreentrant_lock_scopes >>
+  imp_res_tac release_nonreentrant_lock_immutables >>
+  imp_res_tac release_nonreentrant_lock_accounts >>
+  gvs[]
+QED
+
+Theorem intcall_cleanup_after_pop_preserves_frame[local]:
+  !cx nr is_view prev st res st'.
+    (do pop_function prev;
+        if nr /\ ~is_view then
+          case cx.nonreentrant_slot of
+          | NONE => return ()
+          | SOME slot => release_nonreentrant_lock cx.txn.target slot
+        else return ()
+     od) st = (res,st') ==>
+    st'.scopes = prev /\
+    st'.immutables = st.immutables /\
+    st'.accounts = st.accounts
+Proof
+  rpt strip_tac >>
+  gvs[pop_function_def, set_scopes_def, bind_def, ignore_bind_def,
+      return_def] >>
+  drule intcall_unlock_state_preserves_frame >>
+  simp[]
+QED
+
+Theorem intcall_lock_state_preserves_frame[local]:
+  !cx nr is_view st lock_st.
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) st = (INL (),lock_st) ==>
+    lock_st.scopes = st.scopes /\
+    lock_st.immutables = st.immutables /\
+    lock_st.accounts = st.accounts
+Proof
+  rpt strip_tac >>
+  Cases_on `nr` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  imp_res_tac acquire_nonreentrant_lock_immutables >>
+  imp_res_tac acquire_nonreentrant_lock_accounts >>
+  gvs[]
+QED
+
+Theorem intcall_pushed_body_preconditions_from_lock[local]:
+  !env_body cx pushed_cx dflt_st lock_st call_env nr is_view.
+    env_context_consistent env_body pushed_cx /\
+    env_immutables_consistent env_body pushed_cx dflt_st /\
+    env_scopes_consistent env_body pushed_cx (dflt_st with scopes := [call_env]) /\
+    state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    scope_well_typed call_env /\
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    env_consistent env_body pushed_cx (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts
+Proof
+  rpt strip_tac >>
+  qspecl_then [`cx`, `nr`, `is_view`, `dflt_st`, `lock_st`] mp_tac
+    intcall_lock_state_preserves_frame >>
+  simp[] >> strip_tac >>
+  qspecl_then [`env_body`, `pushed_cx`, `dflt_st`, `lock_st`, `call_env`] mp_tac
+    intcall_pushed_body_preconditions >>
+  (impl_tac >- simp[]) >>
+  simp[]
+QED
+Theorem intcall_pushed_body_preconditions_for_defaults_from_lock[local]:
+  !env_body cx dflt_st lock_st call_env src_id_opt fn nr is_view.
+    env_context_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn)) /\
+    env_immutables_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    env_scopes_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn))
+      (dflt_st with scopes := [call_env]) /\
+    state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    scope_well_typed call_env /\
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env_body`, `cx`, `cx with stk updated_by CONS (src_id_opt,fn)`,
+               `dflt_st`, `lock_st`, `call_env`, `nr`, `is_view`] mp_tac
+    intcall_pushed_body_preconditions_from_lock >>
+  (impl_tac >- simp[]) >>
+  simp[]
+QED
+
+
+
+
+
+
+
+Theorem intcall_pushed_body_preconditions_live_from_defaults[local]:
+  !env env_body cx args_st dflt_st lock_st call_env src_id_opt fn nr is_view.
+    env_consistent env cx args_st /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    env_scopes_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn))
+      (dflt_st with scopes := [call_env]) /\
+    state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    scope_well_typed call_env /\
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`, `env_body`, `cx`, `args_st`, `src_id_opt`, `fn`] mp_tac
+    intcall_env_body_consistency_for_defaults >>
+  (impl_tac >- simp[]) >>
+  strip_tac >>
+  qspecl_then [`env_body`, `cx`, `dflt_st`, `lock_st`, `call_env`,
+               `src_id_opt`, `fn`, `nr`, `is_view`] mp_tac
+    intcall_pushed_body_preconditions_for_defaults_from_lock >>
+  (impl_tac >- simp[]) >>
+  simp[]
+QED
+Theorem intcall_live_pushed_body_preconditions[local]:
+  !env env_body cx args_st dflt_st lock_st call_env fn nr is_view.
+    env_consistent env cx args_st /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    env_scopes_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (dflt_st with scopes := [call_env]) /\
+    state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    scope_well_typed call_env /\
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts
+Proof
+  rpt strip_tac >>
+  qspecl_then
+    [`env`, `env_body`, `cx`, `args_st`, `dflt_st`, `lock_st`, `call_env`,
+     `env_body.current_src`, `fn`, `nr`, `is_view`]
+    mp_tac intcall_pushed_body_preconditions_live_from_defaults >>
+  (impl_tac >- simp[]) >>
+  simp[]
+QED
 
 
 Theorem location_runtime_typed_rebuild[local]:
@@ -3726,7 +4961,9 @@ Theorem for_body_decompose:
       (!e. res = INR e ==> res_body = INR e)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  qpat_x_assum
+    `finally (try do eval_stmts cx body_stmts; return F od handle_loop_exception)
+       pop_scope (st with scopes updated_by CONS sc) = (res,st')` mp_tac >>
   simp_tac (srw_ss()) [finally_def, bind_apply, ignore_bind_apply,
     try_def, return_def, pop_scope_def, raise_def,
     handle_loop_exception_def] >>
@@ -6113,7 +7350,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
           qexistsl_tac [`vt'`, `e`, `expr_type e`, `st'`, `st'`, `Value v`] >>
           simp[get_Value_def, return_def]) >>
       strip_tac >> gvs[]) >>
-  strip_tac >> pop_assum mp_tac >> simp[return_def] >> strip_tac >>
+  strip_tac >> pop_assum mp_tac >> simp[] >> strip_tac >>
   qpat_x_assum `INR y = res` (fn th => SUBST_ALL_TAC (SYM th)) >>
   qpat_x_assum `st1 = st'` (fn th => SUBST_ALL_TAC (SYM th)) >>
   simp[no_type_error_result_def]
@@ -7671,6 +8908,178 @@ Resume eval_all_type_sound_mutual[Expr_Attribute]:
   gvs[Once well_typed_expr_def]
 QED
 
+Theorem return_value_case[local]:
+  ((case return x st of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+  res = INL (Value x) /\ st' = st
+Proof
+  simp[return_def] >> metis_tac[]
+QED
+
+Theorem nested_return_value_case[local]:
+  ((case (case INL x of INL v => return v | INR e => raise (Error e)) st of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+  res = INL (Value x) /\ st' = st
+Proof
+  simp[return_def] >> metis_tac[]
+QED
+
+Theorem nested_return_value_case_imp[local]:
+  ((case (case INL x of INL v => return v | INR e => raise (Error e)) st of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
+  res = INL (Value x) /\ st' = st
+Proof
+  simp[return_def] >> metis_tac[]
+QED
+
+Theorem nested_raise_error_case[local]:
+  ((case (case INR x of INL v => return v | INR e => raise (Error e)) st of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+  res = INR (Error x) /\ st' = st
+Proof
+  simp[raise_def] >> metis_tac[]
+QED
+
+Theorem nested_raise_error_case_imp[local]:
+  ((case (case INR x of INL v => return v | INR e => raise (Error e)) st of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
+  res = INR (Error x) /\ st' = st
+Proof
+  simp[nested_raise_error_case]
+QED
+
+Theorem eval_exprs_failure_builtin_case[local]:
+  ((case
+      case (INR x,st) of
+        (INL vs,s'') =>
+          (case evaluate_builtin cx s''.accounts ty bt vs of
+             INL v => return v
+           | INR e => raise (Error e)) s''
+      | (INR e,s'') => (INR e,s'')
+    of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+  res = INR x /\ st' = st
+Proof
+  simp[] >> metis_tac[]
+QED
+
+Theorem type_builtin_return_value_case[local]:
+  evaluate_type_builtin cx tb target_ty vs = INL v ==>
+  (((case
+       (case evaluate_type_builtin cx tb target_ty vs of
+          INL v => return v
+        | INR e => raise (Error e)) st
+     of
+       (INL v,s'') => (INL (Value v),s'')
+     | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+   res = INL (Value v) /\ st' = st)
+Proof
+  simp[return_def] >> metis_tac[]
+QED
+
+Theorem type_builtin_raise_error_case[local]:
+  evaluate_type_builtin cx tb target_ty vs = INR e ==>
+  (((case
+       (case evaluate_type_builtin cx tb target_ty vs of
+          INL v => return v
+        | INR e => raise (Error e)) st
+     of
+       (INL v,s'') => (INL (Value v),s'')
+     | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+   res = INR (Error e) /\ st' = st)
+Proof
+  simp[raise_def] >> metis_tac[]
+QED
+
+
+Theorem eval_exprs_failure_type_builtin_case[local]:
+  ((case (INR x,st) of
+      (INL vs,s'') =>
+        (case
+           (case evaluate_type_builtin cx tb target_ty vs of
+              INL v => return v
+            | INR e => raise (Error e)) s''
+         of
+           (INL v,s'') => (INL (Value v),s'')
+         | (INR e,s'') => (INR e,s''))
+    | (INR e,s'') => (INR e,s'')) = (res,st')) <=>
+  res = INR x /\ st' = st
+Proof
+  simp[] >> metis_tac[]
+QED
+
+
+Theorem type_builtin_exprs_runtime_no_type_error_stmt_adapter[local]:
+  env.type_defs = get_tenv cx /\
+  type_builtin_result_ok env.type_defs tb result_ty target_ty (MAP expr_type es) /\
+  well_typed_type_builtin_args tb target_ty (MAP expr_type es) /\
+  well_formed_type env.type_defs result_ty /\
+  exprs_runtime_typed env es vs /\
+  context_well_typed cx ==>
+  !msg. evaluate_type_builtin cx tb target_ty vs <> INR (TypeError msg)
+Proof
+  rw[exprs_runtime_typed_def] >>
+  `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
+    gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
+  `?result_tv. evaluate_type (get_tenv cx) result_ty = SOME result_tv` by
+    gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+  irule well_typed_type_builtin_no_type_error >>
+  simp[] >>
+  qexistsl_tac [`result_tv`, `result_ty`, `MAP expr_type es`, `tvs`] >>
+  gvs[]
+QED
+
+Theorem type_builtin_exprs_runtime_success_type_stmt_adapter[local]:
+  env.type_defs = get_tenv cx /\
+  type_builtin_result_ok env.type_defs tb result_ty target_ty (MAP expr_type es) /\
+  well_typed_type_builtin_args tb target_ty (MAP expr_type es) /\
+  well_formed_type env.type_defs result_ty /\
+  exprs_runtime_typed env es vs /\
+  context_well_typed cx /\
+  evaluate_type_builtin cx tb target_ty vs = INL v ==>
+  expr_result_typed env (TypeBuiltin result_ty tb target_ty es) (Value v)
+Proof
+  rw[exprs_runtime_typed_def, expr_result_typed_def, expr_runtime_typed_def,
+     expr_type_def, toplevel_value_typed_Value] >>
+  `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
+    gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
+  `?result_tv. evaluate_type (get_tenv cx) result_ty = SOME result_tv` by
+    gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+  qexists_tac `result_tv` >> simp[] >>
+  irule well_typed_type_builtin_success_type >>
+  qexistsl_tac [`cx`, `result_ty`, `target_ty`, `tb`, `MAP expr_type es`, `tvs`, `vs`] >>
+  gvs[]
+QED
+
+Theorem return_value_case_imp[local]:
+  ((case return x st of
+      (INL v,s'') => (INL (Value v),s'')
+    | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
+  res = INL (Value x) /\ st' = st
+Proof
+  simp[return_def] >> metis_tac[]
+QED
+
+Theorem well_typed_builtin_app_success_type_stmt_adapter[local]:
+  well_typed_builtin_app ty bt (MAP expr_type es) /\ bt <> Len /\
+  MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs /\
+  evaluate_type (get_tenv cx) ty = SOME ret_tv /\
+  LIST_REL value_has_type tvs vs /\ context_well_typed cx /\
+  accounts_well_typed (args_st:evaluation_state).accounts /\
+  evaluate_builtin cx args_st.accounts ty bt vs = INL builtin_v ==>
+  value_has_type ret_tv builtin_v
+Proof
+  rpt strip_tac >>
+  irule well_typed_builtin_app_success_type >>
+  qexistsl [`args_st.accounts`,`bt`,`cx`,`MAP expr_type es`,`tvs`,`ty`,`vs`] >>
+  simp[]
+QED
 
 Resume eval_all_type_sound_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
@@ -7742,15 +9151,99 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
                     Cases_on `es` >> simp[well_typed_builtin_app_def] >>
                     Cases_on `t` >> gvs[well_typed_expr_def])) >>
       strip_tac >> strip_tac >> gvs[]) >>
-  qpat_x_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
-  qpat_x_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  FAIL_TAC "Expr_Builtin non-Len branch"
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len ==> _`
+    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+  (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _`
+    (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `args_res`
+  >- (
+    rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+    qpat_x_assum `case INL vs of INL vs => exprs_runtime_typed env es vs | INR v1 => T`
+      mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
+    qpat_x_assum `exprs_runtime_typed env es vs` mp_tac >>
+    rewrite_tac[exprs_runtime_typed_def] >> strip_tac >>
+    `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
+      (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
+    `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
+      (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
+    Cases_on `evaluate_builtin cx args_st.accounts ty bt vs` >>
+    rename1 `evaluate_builtin cx args_st.accounts ty bt vs = builtin_res` >>
+    Cases_on `builtin_res` >>
+    FIRST [
+      rename1 `evaluate_builtin cx args_st.accounts ty bt vs = INL builtin_v` >>
+      strip_tac >>
+      gvs[nested_return_value_case, no_type_error_result_def] >>
+      gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+          toplevel_value_typed_Value] >>
+      mp_tac (Q.INST [`blt` |-> `bt`, `ts` |-> `MAP expr_type es`,
+                       `acc` |-> `(args_st:evaluation_state).accounts`,
+                       `tv` |-> `ret_tv`, `v` |-> `builtin_v`,
+                       `cx` |-> `cx`, `tvs` |-> `tvs`, `vs` |-> `vs`,
+                       `ty` |-> `ty`]
+                well_typed_builtin_app_success_type) >>
+      simp[],
+      strip_tac >>
+      gvs[nested_raise_error_case, no_type_error_result_def] >>
+      strip_tac >> spose_not_then assume_tac >> gvs[] >>
+      `!item. bt = Env item ==> item <> MsgGas` by
+        (rpt strip_tac >> gvs[well_typed_builtin_app_def]) >>
+      drule_all well_typed_builtin_app_no_type_error >>
+      disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
+  strip_tac >> gvs[eval_exprs_failure_builtin_case, no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (TypeBuiltin _ _ _ _) = SOME _` mp_tac >>
+      simp_tac(srw_ss())[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr env (TypeBuiltin result_ty tb target_ty es)` mp_tac >>
+  simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
+  `env.type_defs = get_tenv cx` by metis_tac[env_consistent_def, env_context_consistent_def] >>
+  `type_builtin_args_length_ok tb (LENGTH es)` by
+    (drule well_typed_type_builtin_args_length >> simp[]) >>
+  qpat_x_assum `eval_expr cx (TypeBuiltin result_ty tb target_ty es) st = (res,st')` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def,
+                       type_check_def, assert_def] >>
+  qpat_assum `type_builtin_args_length_ok tb (LENGTH es)` (fn th => rewrite_tac[th]) >>
+  simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
+                     type_check_def, assert_def] >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+  qpat_x_assum `!s'' x t. type_check _ _ _ = _ ==> _`
+    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+  (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _`
+    (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `args_res`
+  >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+      qpat_x_assum `case INL vs of INL vs => exprs_runtime_typed env es vs | INR v1 => T`
+        mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
+      Cases_on `evaluate_type_builtin cx tb typ vs`
+      >- (rename1 `evaluate_type_builtin cx tb typ vs = INL builtin_v` >>
+          strip_tac >>
+          gvs[lift_sum_def, return_def, no_type_error_result_def] >>
+          irule type_builtin_exprs_runtime_success_type_stmt_adapter >>
+          simp[] >>
+          qexistsl_tac [`cx`,`vs`] >>
+          simp[]) >>
+      rename1 `evaluate_type_builtin cx tb typ vs = INR type_exn` >>
+      strip_tac >>
+      gvs[lift_sum_def, raise_def, no_type_error_result_def] >>
+      strip_tac >> spose_not_then assume_tac >> gvs[] >>
+      metis_tac[type_builtin_exprs_runtime_no_type_error_stmt_adapter]) >>
+  strip_tac >> gvs[eval_exprs_failure_type_builtin_case, no_type_error_result_def]
 QED
 
 Theorem assign_subscripts_fixed_array_pop_type_error_probe[local]:
@@ -7833,8 +9326,7417 @@ Resume eval_all_type_sound_mutual[Expr_Pop_assign_inr]:
   simp[]
 QED
 
+
+Theorem transfer_value_recipient_overflow_regression[local]:
+  let from = (0w:address) in
+  let to = (1w:address) in
+  let sender = empty_account_state with balance := 1 in
+  let recipient = empty_account_state with balance := 2 ** 256 - 1 in
+  let st = empty_state with accounts :=
+             update_account from sender (update_account to recipient empty_accounts) in
+    accounts_well_typed st.accounts /\
+    FST (transfer_value from to 1 st) <> INL () /\
+    accounts_well_typed (SND (transfer_value from to 1 st)).accounts
+Proof
+  EVAL_TAC >> gen_tac >>
+  Cases_on `addr = 0w` >> gvs[] >>
+  Cases_on `addr = 1w` >> gvs[]
+QED
+
+Theorem make_ext_call_state_value_transfer_can_break_accounts_well_typed[local]:
+  let caller = (0w:address) in
+  let callee = (1w:address) in
+  let caller_acct = empty_account_state with balance := 1 in
+  let callee_acct = empty_account_state with balance := 2 ** 256 - 1 in
+  let accounts = update_account caller caller_acct
+                   (update_account callee callee_acct empty_accounts) in
+  let st0 = make_ext_call_state caller callee [] [] (SOME 1)
+              accounts empty_transient_storage (vyper_to_tx_params empty_call_txn) in
+    accounts_well_typed accounts /\
+    ~accounts_well_typed st0.rollback.accounts
+Proof
+  EVAL_TAC >> conj_tac
+  >- (gen_tac >>
+      Cases_on `addr = 0w` >> gvs[] >>
+      Cases_on `addr = 1w` >> gvs[]) >>
+  strip_tac >>
+  first_x_assum (qspec_then `1w:address` mp_tac) >> EVAL_TAC
+QED
+Theorem extract_call_result_success_exposes_bad_accounts[local]:
+  let caller = (0w:address) in
+  let callee = (1w:address) in
+  let caller_acct = empty_account_state with balance := 1 in
+  let callee_acct = empty_account_state with balance := 2 ** 256 - 1 in
+  let good_accounts = update_account caller caller_acct
+                        (update_account callee callee_acct empty_accounts) in
+  let bad_accounts = (make_ext_call_state caller callee [] [] (SOME 1)
+                        good_accounts empty_transient_storage
+                        (vyper_to_tx_params empty_call_txn)).rollback.accounts in
+  let final_state = (make_ext_call_state caller callee [] [] (SOME 1)
+                       good_accounts empty_transient_storage
+                       (vyper_to_tx_params empty_call_txn)) with
+                      rollback updated_by (\rb. rb with accounts := bad_accounts) in
+    accounts_well_typed good_accounts /\
+    ~accounts_well_typed bad_accounts /\
+    ?retData tStorage'.
+      extract_call_result good_accounts empty_transient_storage
+        (INR NONE, final_state) = SOME (T, retData, bad_accounts, tStorage')
+Proof
+  EVAL_TAC >> conj_tac
+  >- (gen_tac >>
+      Cases_on `addr = 0w` >> gvs[] >>
+      Cases_on `addr = 1w` >> gvs[]) >>
+  conj_tac
+  >- (strip_tac >>
+      first_x_assum (qspec_then `1w:address` mp_tac) >> EVAL_TAC) >>
+  qexists_tac `[]` >>
+  qexists_tac `empty_transient_storage` >>
+  EVAL_TAC
+QED
+
+Theorem run_ext_call_overflowing_value_transfer_rejected[local]:
+  let caller = (0w:address) in
+  let callee = (1w:address) in
+  let caller_acct = empty_account_state with balance := 1 in
+  let callee_acct = empty_account_state with balance := 2 ** 256 - 1 in
+  let accounts = update_account caller caller_acct
+                   (update_account callee callee_acct empty_accounts) in
+    run_ext_call caller callee [] (SOME 1) accounts empty_transient_storage
+      (vyper_to_tx_params empty_call_txn) = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem accounts_runtime_well_typed_accounts_well_typed[local]:
+  !acc. accounts_runtime_well_typed acc <=> accounts_well_typed acc
+Proof
+  simp[accounts_runtime_well_typed_def, accounts_well_typed_def,
+       account_runtime_well_typed_def, account_well_typed_def]
+QED
+
+Theorem ext_call_success_accounts_ok_imp_extract_premise[local]:
+  !outcome.
+    ext_call_success_accounts_ok outcome ==>
+    (case FST outcome of
+     | INR NONE => accounts_well_typed (SND outcome).rollback.accounts
+     | _ => T)
+Proof
+  Cases >> rename1 `(result, final_state)` >>
+  Cases_on `result` >>
+  simp[ext_call_success_accounts_ok_def, ext_call_success_accounts_ok_aux_def,
+       accounts_runtime_well_typed_accounts_well_typed] >>
+  Cases_on `y` >> simp[]
+QED
+
+Theorem extract_call_result_accounts_well_typed[local]:
+  !orig_accounts orig_tStorage result final_state
+   success retData accounts' tStorage'.
+    accounts_well_typed orig_accounts /\
+    (case result of
+     | INR NONE => accounts_well_typed final_state.rollback.accounts
+     | _ => T) /\
+    extract_call_result orig_accounts orig_tStorage (result, final_state) =
+      SOME (success, retData, accounts', tStorage') ==>
+    accounts_well_typed accounts'
+Proof
+  rw[extract_call_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem run_ext_call_accounts_well_typed[local]:
+  !caller callee calldata value_opt accounts tStorage txParams
+   success retData accounts' tStorage'.
+    accounts_well_typed accounts /\
+    run_ext_call caller callee calldata value_opt accounts tStorage txParams =
+      SOME (success, retData, accounts', tStorage') ==>
+    accounts_well_typed accounts'
+Proof
+  rw[run_ext_call_def] >>
+  gvs[AllCaseEqs()] >>
+  qmatch_asmsub_abbrev_tac `extract_call_result _ _ outcome = SOME _` >>
+  PairCases_on `outcome` >>
+  drule ext_call_success_accounts_ok_imp_extract_premise >>
+  strip_tac >>
+  qspecl_then [`accounts`, `tStorage`, `outcome0`, `outcome1`,
+               `success`, `retData`, `accounts'`, `tStorage'`]
+    mp_tac extract_call_result_accounts_well_typed >>
+  simp[] >>
+  gvs[]
+QED
+
+Theorem vfm_transfer_value_accounts_well_typed[local]:
+  !from to amount accounts.
+    accounts_well_typed accounts /\
+    amount <= (lookup_account from accounts).balance /\
+    (lookup_account to accounts).balance + amount < 2 ** 256 ==>
+    accounts_well_typed (vfmExecution$transfer_value from to amount accounts)
+Proof
+  rw[vfmExecutionTheory.transfer_value_def] >>
+  gvs[accounts_well_typed_def, account_well_typed_def,
+      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
+QED
+
+Theorem guarded_make_ext_call_state_accounts_well_typed[local]:
+  !caller callee code calldata value_opt accounts tStorage txParams.
+    accounts_well_typed accounts /\
+    ext_call_value_transfer_ok caller callee value_opt accounts ==>
+    accounts_well_typed
+      (make_ext_call_state caller callee code calldata value_opt
+         accounts tStorage txParams).rollback.accounts
+Proof
+  rw[make_ext_call_state_def, ext_call_value_transfer_ok_def] >>
+  Cases_on `value_opt` >> gvs[]
+  >- simp[vfmExecutionTheory.transfer_value_def] >>
+  irule vfm_transfer_value_accounts_well_typed >>
+  simp[] >>
+  decide_tac
+QED
+
+Theorem transfer_value_no_type_error[local]:
+  !from to amount st s.
+    FST (transfer_value from to amount st) <> INR (Error (TypeError s))
+Proof
+  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
+     check_def, assert_def, raise_def, update_accounts_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem transfer_value_accounts_well_typed[local]:
+  !from to amount st.
+    accounts_well_typed st.accounts ==>
+    accounts_well_typed (SND (transfer_value from to amount st)).accounts
+Proof
+  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
+     check_def, assert_def, raise_def, update_accounts_def] >>
+  gvs[accounts_well_typed_def, account_well_typed_def,
+      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
+QED
+
+Theorem transfer_value_runtime_consistent[local]:
+  !env cx fromAddr toAddr amount st.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx (SND (transfer_value fromAddr toAddr amount st))
+Proof
+  rpt strip_tac >>
+  Cases_on `transfer_value fromAddr toAddr amount st` >>
+  rename1 `transfer_value fromAddr toAddr amount st = (res,st')` >>
+  gvs[runtime_consistent_def] >>
+  `st'.scopes = st.scopes` by metis_tac[transfer_value_scopes] >>
+  `st'.immutables = st.immutables` by metis_tac[transfer_value_immutables] >>
+  gvs[env_consistent_def, env_scopes_consistent_def,
+      env_immutables_consistent_def, state_well_typed_def] >>
+  rpt conj_tac >- metis_tac[] >- metis_tac[] >- metis_tac[] >>
+  qspecl_then [`fromAddr`, `toAddr`, `amount`, `st`] mp_tac
+    transfer_value_accounts_well_typed >>
+  simp[]
+QED
+
+Theorem extcall_static_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env args vs /\
+  MAP expr_type args = BaseT AddressT :: arg_tys ==>
+  ?target_addr. dest_AddressV (HD vs) = SOME target_addr
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `args` >> gvs[evaluate_type_def] >>
+  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
+QED
+
+Theorem extcall_nonstatic_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env args vs /\
+  MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_tys ==>
+  ?target_addr amount. dest_AddressV (HD vs) = SOME target_addr /\
+                       dest_NumV (HD (TL vs)) = SOME amount
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `args` >> gvs[] >>
+  Cases_on `t` >> gvs[evaluate_type_def] >>
+  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
+  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
+  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >>
+  `~(i < 0:int)` by intLib.ARITH_TAC >>
+  qexists_tac `Num i` >> simp[]
+QED
+
+Theorem send_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env es vs /\
+  LENGTH es = 2 /\
+  HD (MAP expr_type es) = BaseT AddressT /\
+  EL 1 (MAP expr_type es) = BaseT (UintT 256) ==>
+  ?toAddr amount. dest_AddressV (HD vs) = SOME toAddr /\
+                  dest_NumV (EL 1 vs) = SOME amount
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `es` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  gvs[evaluate_type_def] >>
+  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
+  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
+  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >>
+  `~(i < 0:int)` by intLib.ARITH_TAC >>
+  qexists_tac `Num i` >> simp[]
+QED
+
+Theorem selfdestruct_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env es vs /\
+  LENGTH es = 1 /\
+  HD (MAP expr_type es) = BaseT AddressT ==>
+  ?target_addr. dest_AddressV (HD vs) = SOME target_addr
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `es` >> gvs[] >>
+  gvs[evaluate_type_def] >>
+  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
+QED
+
+Theorem create_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env es vs /\
+  LENGTH es >= 2 /\
+  HD (MAP expr_type es) = BaseT AddressT /\
+  LAST (MAP expr_type es) = BaseT (UintT 256) ==>
+  ?target_addr amount. dest_AddressV (HD vs) = SOME target_addr /\
+                       dest_NumV (LAST vs) = SOME amount
+Proof
+  rw[exprs_runtime_typed_def] >>
+  `LENGTH vs = LENGTH es` by metis_tac[LIST_REL_LENGTH] >>
+  `es <> [] /\ vs <> [] /\ tvs <> []` by (Cases_on `es` >> gvs[] >> metis_tac[LIST_REL_LENGTH]) >>
+  gvs[LIST_REL_EL_EQN] >>
+  `HD tvs = BaseTV AddressT` by (
+    qpat_x_assum `!n. n < LENGTH tvs ==> evaluate_type _ _ = SOME _`
+      (qspec_then `0` mp_tac) >>
+    Cases_on `es` >> Cases_on `tvs` >> gvs[evaluate_type_def]) >>
+  `value_has_type (HD tvs) (HD vs)` by (
+    qpat_x_assum `!n. n < LENGTH tvs ==> value_has_type _ _`
+      (qspec_then `0` mp_tac) >>
+    Cases_on `tvs` >> Cases_on `vs` >> gvs[]) >>
+  `LAST tvs = BaseTV (UintT 256)` by (
+    qpat_x_assum `!n. n < LENGTH tvs ==> evaluate_type _ _ = SOME _`
+      (qspec_then `PRE (LENGTH tvs)` mp_tac) >>
+    Cases_on `es` >> Cases_on `tvs` >> gvs[LAST_MAP, LAST_EL, evaluate_type_def]) >>
+  `value_has_type (LAST tvs) (LAST vs)` by (
+    qpat_x_assum `!n. n < LENGTH tvs ==> value_has_type _ _`
+      (qspec_then `PRE (LENGTH tvs)` mp_tac) >>
+    Cases_on `tvs` >> Cases_on `vs` >> gvs[LAST_EL]) >>
+  Cases_on `HD vs` >> gvs[value_has_type_def, dest_AddressV_def] >>
+  Cases_on `LAST vs` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >>
+  `~(i < 0:int)` by intLib.ARITH_TAC >>
+  qexists_tac `Num i` >> simp[]
+QED
+
+Theorem raw_log_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env es vs /\
+  LENGTH es = 2 /\
+  EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+  EL 1 (MAP expr_type es) = BaseT (BytesT bd') ==>
+  ?topics data. dest_ArrayV (EL 0 vs) = SOME topics /\
+                dest_BytesV (EL 1 vs) = SOME data
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `es` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  gvs[evaluate_type_def] >>
+  Cases_on `bd'` >> gvs[] >>
+  rename1 `value_has_type (ArrayTV (BaseTV (BytesT (Fixed 32))) bd) v_topics` >>
+  rename1 `value_has_type (BaseTV (BytesT bd_data)) v_data` >>
+  Cases_on `v_topics` >> gvs[value_has_type_def, dest_ArrayV_def] >>
+  Cases_on `v_data` >> gvs[value_has_type_def, dest_BytesV_def]
+QED
+
+Theorem accounts_well_typed_increment_nonce[local]:
+  !addr accounts.
+    accounts_well_typed accounts ==>
+    accounts_well_typed (vfmExecution$increment_nonce addr accounts)
+Proof
+  rw[accounts_well_typed_def, account_well_typed_def,
+     vfmExecutionTheory.increment_nonce_def,
+     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  IF_CASES_TAC >> gvs[]
+QED
+
+Theorem runtime_consistent_increment_nonce[local]:
+  !env cx st addr.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx (SND (update_accounts (vfmExecution$increment_nonce addr) st))
+Proof
+  rw[update_accounts_def, return_def, runtime_consistent_def,
+     env_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def, state_well_typed_def] >>
+  metis_tac[accounts_well_typed_increment_nonce]
+QED
+
+Theorem runtime_consistent_logs_updated_by[local]:
+  !env cx st f.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx (st with logs updated_by f)
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def, state_well_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem runtime_consistent_logs_cons[local]:
+  !env cx st l.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx (st with logs updated_by CONS l)
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def, state_well_typed_def] >>
+  metis_tac[]
+QED
+Theorem push_log_runtime_consistent[local]:
+  !env cx l st.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx (SND (push_log l st))
+Proof
+  rw[push_log_def, return_def] >>
+  metis_tac[runtime_consistent_logs_updated_by]
+QED
+
+Theorem selfdestruct_tail_sound[local]:
+  !env cx es vs st.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es = 1 /\
+    HD (MAP expr_type es) = BaseT AddressT ==>
+    runtime_consistent env cx
+      (SND ((do
+               check (LENGTH vs = 1) "selfdestruct args";
+               target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+               accounts <- get_accounts;
+               self_acct <<- lookup_account cx.txn.target accounts;
+               balance <<- self_acct.balance;
+               transfer_value cx.txn.target target_addr balance;
+               return (Value NoneV)
+             od) st)) /\
+    (!s. FST ((do
+                 check (LENGTH vs = 1) "selfdestruct args";
+                 target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+                 accounts <- get_accounts;
+                 self_acct <<- lookup_account cx.txn.target accounts;
+                 balance <<- self_acct.balance;
+                 transfer_value cx.txn.target target_addr balance;
+                 return (Value NoneV)
+               od) st) <> INR (Error (TypeError s)))
+Proof
+  rpt strip_tac >>
+  drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, get_accounts_def]
+  >- (Cases_on `transfer_value cx.txn.target target_addr
+          (lookup_account cx.txn.target st.accounts).balance st` >>
+      gvs[return_def] >> Cases_on `q` >> gvs[] >>
+      qspecl_then [`env`, `cx`, `cx.txn.target`, `target_addr`,
+                   `(lookup_account cx.txn.target st.accounts).balance`, `st`]
+        mp_tac transfer_value_runtime_consistent >> simp[])
+  >- (qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
+      rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+         lift_option_type_def, get_accounts_def] >>
+      Cases_on `transfer_value cx.txn.target target_addr
+          (lookup_account cx.txn.target st.accounts).balance st` >> gvs[return_def] >>
+      Cases_on `q` >> gvs[] >>
+      qspecl_then [`cx.txn.target`, `target_addr`,
+                   `(lookup_account cx.txn.target st.accounts).balance`, `st`, `s`]
+        mp_tac transfer_value_no_type_error >> simp[])
+QED
+
+Theorem selfdestruct_tail_result_sound_simp[local]:
+  !env cx es vs st res st'.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es = 1 /\
+    HD (MAP expr_type es) = BaseT AddressT /\
+    ((case check (LENGTH vs = 1) "selfdestruct args" st of
+        (INL x,s'') =>
+          (case
+             (case dest_AddressV (HD vs) of
+                NONE => raise (Error (TypeError "selfdestruct target"))
+              | SOME v => return v) s''
+           of
+             (INL target_addr,s'') =>
+               do
+                 x <-
+                   transfer_value cx.txn.target target_addr
+                     (lookup_account cx.txn.target s''.accounts).balance;
+                 return (Value NoneV)
+               od s''
+           | (INR e,s'') => (INR e,s''))
+      | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!msg. res <> INR (Error (TypeError msg))) /\
+    (case res of
+     | INL tv => expr_result_typed env (Call NoneT SelfDestructTarget es NONE) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`, `cx`, `es`, `vs`, `st`]
+    mp_tac selfdestruct_tail_sound >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, get_accounts_def, no_type_error_result_def,
+     expr_result_typed_def, expr_runtime_typed_def,
+     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     evaluate_type_def, is_HashMapRef_def] >>
+  qpat_x_assum `(case transfer_value _ _ _ _ of _ => _) = _` mp_tac >>
+  Cases_on `transfer_value cx.txn.target target_addr
+      (lookup_account cx.txn.target st.accounts).balance st` >>
+  Cases_on `q` >>
+  rw[return_def] >>
+  gvs[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+      lift_option_type_def, get_accounts_def, runtime_consistent_def,
+      toplevel_value_typed_def, value_has_type_def]
+QED
+
+Theorem create_tail_sound[local]:
+  !env cx es vs st kind rof ty.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es >= 2 /\
+    HD (MAP expr_type es) = BaseT AddressT /\
+    LAST (MAP expr_type es) = BaseT (UintT 256) ==>
+    runtime_consistent env cx
+      (SND ((do
+               check (vs <> []) "create no args";
+               amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
+               target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
+               accounts <- get_accounts;
+               self_acct <<- lookup_account cx.txn.target accounts;
+               check (amount <= self_acct.balance) "create insufficient balance";
+               new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+               existing <<- lookup_account new_addr accounts;
+               check (~vfmExecution$account_already_created existing) "address collision";
+               (if amount > 0 then transfer_value cx.txn.target new_addr amount else return ());
+               update_accounts (vfmExecution$increment_nonce cx.txn.target);
+               if rof then return (Value (AddressV new_addr))
+               else return (Value (AddressV new_addr))
+             od) st)) /\
+    (!s. FST ((do
+                 check (vs <> []) "create no args";
+                 amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
+                 target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
+                 accounts <- get_accounts;
+                 self_acct <<- lookup_account cx.txn.target accounts;
+                 check (amount <= self_acct.balance) "create insufficient balance";
+                 new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
+                 existing <<- lookup_account new_addr accounts;
+                 check (~vfmExecution$account_already_created existing) "address collision";
+                 (if amount > 0 then transfer_value cx.txn.target new_addr amount else return ());
+                 update_accounts (vfmExecution$increment_nonce cx.txn.target);
+                 if rof then return (Value (AddressV new_addr))
+                 else return (Value (AddressV new_addr))
+               od) st) <> INR (Error (TypeError s)))
+Proof
+  rpt strip_tac >>
+  drule_all create_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, get_accounts_def, update_accounts_def]
+  >- (Cases_on `transfer_value cx.txn.target
+          (vfmContext$address_for_create cx.txn.target
+             (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
+      gvs[return_def] >> Cases_on `q` >> gvs[] >>
+      qspecl_then [`env`, `cx`, `cx.txn.target`,
+                   `vfmContext$address_for_create cx.txn.target
+                      (lookup_account cx.txn.target st.accounts).nonce`,
+                   `amount`, `st`] mp_tac transfer_value_runtime_consistent >>
+      simp[] >> strip_tac >>
+      qspecl_then [`env`, `cx`, `r`, `cx.txn.target`] mp_tac
+        runtime_consistent_increment_nonce >> simp[update_accounts_def, return_def])
+  >- (qspecl_then [`env`, `cx`, `st`, `cx.txn.target`] mp_tac
+        runtime_consistent_increment_nonce >> simp[update_accounts_def, return_def])
+  >- (qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
+      rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+         lift_option_type_def, get_accounts_def, update_accounts_def] >>
+      Cases_on `amount > 0` >> gvs[return_def] >>
+      Cases_on `transfer_value cx.txn.target
+          (vfmContext$address_for_create cx.txn.target
+             (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
+      gvs[return_def] >> Cases_on `q` >> gvs[] >>
+      qspecl_then [`cx.txn.target`,
+                   `vfmContext$address_for_create cx.txn.target
+                      (lookup_account cx.txn.target st.accounts).nonce`,
+                   `amount`, `st`, `s`] mp_tac transfer_value_no_type_error >> simp[])
+QED
+
+Theorem create_tail_result_sound_simp[local]:
+  !env cx es vs st amount target_addr res st' kind rof.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es >= 2 /\
+    HD (MAP expr_type es) = BaseT AddressT /\
+    LAST (MAP expr_type es) = BaseT (UintT 256) /\
+    dest_AddressV (HD vs) = SOME target_addr /\
+    dest_NumV (LAST vs) = SOME amount /\
+    ((case check (vs <> []) "create no args" st of
+        (INL x,s'') =>
+          (case return amount s'' of
+             (INL amount',s'') =>
+               (case return target_addr s'' of
+                  (INL target_addr',s'') =>
+                    do
+                      x <- check (amount' <= (lookup_account cx.txn.target s''.accounts).balance)
+                        "create insufficient balance";
+                      x <- check
+                        (~vfmExecution$account_already_created
+                           (lookup_account
+                              (vfmContext$address_for_create cx.txn.target
+                                 (lookup_account cx.txn.target s''.accounts).nonce)
+                              s''.accounts)) "address collision";
+                      x <- if amount' > 0 then
+                             transfer_value cx.txn.target
+                               (vfmContext$address_for_create cx.txn.target
+                                  (lookup_account cx.txn.target s''.accounts).nonce) amount'
+                           else return ();
+                      x <- update_accounts (vfmExecution$increment_nonce cx.txn.target);
+                      return (Value (AddressV
+                        (vfmContext$address_for_create cx.txn.target
+                           (lookup_account cx.txn.target s''.accounts).nonce)))
+                    od s''
+                | (INR e,s'') => (INR e,s''))
+           | (INR e,s'') => (INR e,s''))
+      | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!msg. res <> INR (Error (TypeError msg))) /\
+    (case res of
+     | INL tv => expr_result_typed env (Call (BaseT AddressT) (CreateTarget kind rof) es NONE) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`, `cx`, `es`, `vs`, `st`, `kind`, `rof`, `BaseT AddressT`]
+    mp_tac create_tail_sound >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  gvs[] >>
+  `runtime_consistent env cx st'` by (
+    qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+    qpat_x_assum `runtime_consistent _ _ (SND _)` mp_tac >>
+    rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+       lift_option_type_def, get_accounts_def, update_accounts_def] >>
+    gvs[]) >>
+  `!msg. res <> INR (Error (TypeError msg))` by (
+    gen_tac >>
+    qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+    qpat_x_assum `!s. FST _ <> INR (Error (TypeError s))` (qspec_then `msg` mp_tac) >>
+    rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+       lift_option_type_def, get_accounts_def, update_accounts_def] >>
+    gvs[]) >>
+  gvs[runtime_consistent_def] >>
+  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, get_accounts_def, update_accounts_def,
+     no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def,
+     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     evaluate_type_def, is_HashMapRef_def] >>
+  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  gvs[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+      lift_option_type_def, get_accounts_def, update_accounts_def,
+      runtime_consistent_def, toplevel_value_typed_def, value_has_type_def] >>
+  TRY (Cases_on `transfer_value cx.txn.target
+          (vfmContext$address_for_create cx.txn.target
+             (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
+       Cases_on `q` >> gvs[return_def]) >>
+  strip_tac >> gvs[toplevel_value_typed_def, value_has_type_def,
+                   expr_result_typed_def, expr_runtime_typed_def,
+                   expr_type_def, is_HashMapRef_def]
+QED
+
+Theorem raw_revert_tail_sound[local]:
+  !env cx vs st.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx
+      (SND ((do
+               check (LENGTH vs = 1) "raw_revert args";
+               raise (Error (RuntimeError "raw_revert"))
+             od) st)) /\
+    (!s. FST ((do
+                 check (LENGTH vs = 1) "raw_revert args";
+                 raise (Error (RuntimeError "raw_revert"))
+               od) st) <> INR (Error (TypeError s)))
+Proof
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def] >>
+  gvs[runtime_consistent_def]
+QED
+
+Theorem raw_log_tail_sound[local]:
+  !env cx es vs st bd bd'.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es = 2 /\
+    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+    EL 1 (MAP expr_type es) = BaseT (BytesT bd') ==>
+    runtime_consistent env cx
+      (SND ((do
+               check (LENGTH vs = 2) "raw_log args";
+               topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+               data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+               topic_vals <<- (case topics of
+                  TupleV vs => vs | DynArrayV vs => vs | _ => []);
+               check (LENGTH topic_vals <= 4) "raw_log too many topics";
+               push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+               return (Value NoneV)
+             od) st)) /\
+    (!s. FST ((do
+                 check (LENGTH vs = 2) "raw_log args";
+                 topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+                 data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+                 topic_vals <<- (case topics of
+                    TupleV vs => vs | DynArrayV vs => vs | _ => []);
+                 check (LENGTH topic_vals <= 4) "raw_log too many topics";
+                 push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+                 return (Value NoneV)
+               od) st) <> INR (Error (TypeError s)))
+Proof
+  rpt strip_tac >>
+  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  Cases_on `topics` >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, push_log_def] >>
+  TRY (qmatch_goalsub_rename_tac `runtime_consistent env cx (st with logs updated_by CONS log)` >>
+       qspecl_then [`env`, `cx`, `st`] mp_tac runtime_consistent_logs_cons >>
+       simp[]) >>
+  qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, push_log_def]
+QED
+
+Theorem raw_log_tail_result_sound[local]:
+  !env cx es vs st res st' bd bd'.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    LENGTH es = 2 /\
+    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+    ((do
+        check (LENGTH vs = 2) "raw_log args";
+        topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
+        data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
+        topic_vals <<- (case topics of
+           TupleV vs => vs | DynArrayV vs => vs | _ => []);
+        check (LENGTH topic_vals <= 4) "raw_log too many topics";
+        push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+        return (Value NoneV)
+      od) st = (res, st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!msg. res <> INR (Error (TypeError msg))) /\
+    (case res of
+     | INL tv => expr_result_typed env (Call NoneT RawLog es NONE) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`env`, `cx`, `es`, `vs`, `st`, `bd`, `bd'`]
+    mp_tac raw_log_tail_sound >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+  Cases_on `topics` >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, push_log_def, no_type_error_result_def,
+     expr_result_typed_def, expr_runtime_typed_def,
+     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     evaluate_type_def, is_HashMapRef_def] >>
+  gvs[runtime_consistent_def]
+QED
+
+Theorem raw_log_tail_result_sound_simp[local]:
+  !env cx es vs st topics data res st' bd bd'.
+    runtime_consistent env cx st /\
+    LENGTH es = 2 /\
+    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+    ((case check (LENGTH vs = 2) "raw_log args" st of
+        (INL x,s'') =>
+          (case return topics s'' of
+             (INL topics',s'') =>
+               (case return data s'' of
+                  (INL data,s'') =>
+                    do
+                      x <- check
+                        (LENGTH
+                           (case topics' of
+                            | TupleV vs => vs
+                            | DynArrayV vs' => vs'
+                            | _ => []) <= 4) "raw_log too many topics";
+                      x <- push_log
+                        ((NONE,"raw_log"),
+                         (case topics' of
+                          | TupleV vs => vs
+                          | DynArrayV vs' => vs'
+                          | _ => []) ++ [BytesV data]);
+                      return (Value NoneV)
+                    od s''
+                | (INR e,s'') => (INR e,s''))
+           | (INR e,s'') => (INR e,s''))
+      | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    (!msg. res <> INR (Error (TypeError msg))) /\
+    (case res of
+     | INL tv => expr_result_typed env (Call NoneT RawLog es NONE) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  Cases_on `topics` >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, push_log_def, no_type_error_result_def,
+     expr_result_typed_def, expr_runtime_typed_def,
+     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     evaluate_type_def, is_HashMapRef_def] >>
+  TRY (qmatch_goalsub_rename_tac `st with logs updated_by CONS log` >>
+       qspecl_then [`env`, `cx`, `st`, `log`] mp_tac runtime_consistent_logs_cons >>
+       simp[runtime_consistent_def]) >>
+  gvs[runtime_consistent_def] >>
+  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+     lift_option_type_def, push_log_def]
+QED
+
+Theorem defaults_env_empty_frame_consistent[local]:
+  !env_body cx st.
+    env_context_consistent env_body cx /\
+    env_immutables_consistent env_body cx st ==>
+    env_consistent (defaults_env env_body) cx (st with scopes := [FEMPTY])
+Proof
+  rw[defaults_env_def, env_consistent_def, env_context_consistent_def,
+     env_scopes_consistent_def, env_immutables_consistent_def,
+     lookup_scopes_def] >>
+  gvs[] >>
+  metis_tac[]
+QED
+
+Theorem default_frame_eval_result[local]:
+  !cx es st prev res st'.
+    finally
+      (do set_scopes [FEMPTY]; eval_exprs cx es od)
+      (set_scopes prev) st = (res,st') ==>
+    ?framed_st.
+      eval_exprs cx es (st with scopes := [FEMPTY]) = (res,framed_st) /\
+      st' = (framed_st with scopes := prev)
+Proof
+  rw[finally_def, bind_def, ignore_bind_def, set_scopes_def,
+     return_def, raise_def] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  Cases_on `q` >>
+  gvs[ignore_bind_def, set_scopes_def, return_def, raise_def]
+QED
+
+Theorem default_frame_eval_restores_scopes[local]:
+  !cx es st prev res st'.
+    finally
+      (do set_scopes [FEMPTY]; eval_exprs cx es od)
+      (set_scopes prev) st = (res,st') ==>
+    st'.scopes = prev
+Proof
+  rpt strip_tac >>
+  drule default_frame_eval_result >>
+  strip_tac >>
+  gvs[]
+QED
+
+Theorem intcall_default_exprs_no_type_error_from_generated_ih[local]:
+  !cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+    xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd prev res sdfl
+    env_body.
+    (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
+        sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s4 = (INL tup0,t2) /\
+      mut = FST tup0 /\ stup = SND tup0 /\ (nr <=> FST stup) /\
+      stup2 = SND stup /\ args = FST stup2 /\ sstup = SND stup2 /\
+      dflts = FST sstup /\ sstup2 = SND sstup /\ ret = FST sstup2 /\
+      body = SND sstup2 /\
+      type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) /\
+    type_check
+      (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+       LENGTH (FST (SND (SND tup))) <=
+         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
+      "IntCall args length" ih_len_s = (INL xlen,slen) /\
+    eval_exprs cx es ih_args_s = (INL vs,sevl) /\
+    needed_dflts =
+      DROP (LENGTH (FST (SND (SND (SND tup)))) -
+            (LENGTH (FST (SND (SND tup))) - LENGTH es))
+           (FST (SND (SND (SND tup)))) /\
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
+    get_scopes sevl = (INL prev,sevl) /\
+    well_typed_exprs (defaults_env env_body) needed_dflts /\
+    env_context_consistent env_body cxd /\
+    env_immutables_consistent env_body cxd sevl /\
+    state_well_typed sevl /\
+    context_well_typed cxd /\
+    accounts_well_typed sevl.accounts /\
+    functions_well_typed cxd /\
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (res,sdfl) ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  drule default_frame_eval_result >>
+  strip_tac >>
+  `type_check
+     (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+      LENGTH (FST (SND (SND tup))) - LENGTH es <=
+        LENGTH (FST (SND (SND (SND tup)))))
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac >>
+     simp[type_check_def, assert_def] >>
+     IF_CASES_TAC >> simp[] >>
+     decide_tac) >>
+  first_assum (qspecl_then
+    [`ih_check_s`, `xrec`, `srec`,
+     `ih_mod_s`, `ts`, `smod`,
+     `ih_fun_s`, `tup`, `sfun`,
+     `FST tup`, `SND tup`, `FST (SND tup)`,
+     `SND (SND tup)`, `FST (SND (SND tup))`,
+     `SND (SND (SND tup))`, `FST (SND (SND (SND tup)))`,
+     `SND (SND (SND (SND tup)))`,
+     `FST (SND (SND (SND (SND tup))))`,
+     `SND (SND (SND (SND (SND tup))))`,
+     `ih_len_s`, `xlen`, `slen`,
+     `ih_args_s`, `vs`, `sevl`,
+     `needed_dflts`, `cxd`,
+     `sevl`, `prev`, `sevl`, `sevl`, `()`,
+     `sevl with scopes := [FEMPTY]`] mp_tac) >>
+  (impl_tac >- simp[get_scopes_def, set_scopes_def, return_def]) >>
+  disch_then drule >>
+  disch_then (qspecl_then
+    [`sevl with scopes := [FEMPTY]`, `res`, `framed_st`] mp_tac) >>
+  qpat_x_assum
+    `!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
+        sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8. _`
+    kall_tac >>
+  impl_tac >- (
+    conj_tac >- (irule defaults_env_empty_frame_consistent >> simp[]) >>
+    conj_tac >- (gvs[state_well_typed_def, scope_well_typed_def]) >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    simp[]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem intcall_default_exprs_sound_from_generated_ih[local]:
+  !cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+    xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd prev res sdfl
+    env_body.
+    (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
+        sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s4 = (INL tup0,t2) /\
+      mut = FST tup0 /\ stup = SND tup0 /\ (nr <=> FST stup) /\
+      stup2 = SND stup /\ args = FST stup2 /\ sstup = SND stup2 /\
+      dflts = FST sstup /\ sstup2 = SND sstup /\ ret = FST sstup2 /\
+      body = SND sstup2 /\
+      type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) /\
+    type_check
+      (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+       LENGTH (FST (SND (SND tup))) <=
+         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
+      "IntCall args length" ih_len_s = (INL xlen,slen) /\
+    eval_exprs cx es ih_args_s = (INL vs,sevl) /\
+    needed_dflts =
+      DROP (LENGTH (FST (SND (SND (SND tup)))) -
+            (LENGTH (FST (SND (SND tup))) - LENGTH es))
+           (FST (SND (SND (SND tup)))) /\
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
+    get_scopes sevl = (INL prev,sevl) /\
+    well_typed_exprs (defaults_env env_body) needed_dflts /\
+    env_context_consistent env_body cxd /\
+    env_immutables_consistent env_body cxd sevl /\
+    state_well_typed sevl /\
+    context_well_typed cxd /\
+    accounts_well_typed sevl.accounts /\
+    functions_well_typed cxd /\
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (res,sdfl) ==>
+    no_type_error_result res /\
+    (case res of
+       INL dflt_vs =>
+         state_well_typed sdfl /\
+         env_immutables_consistent env_body cxd sdfl /\
+         accounts_well_typed sdfl.accounts /\
+         exprs_runtime_typed (defaults_env env_body) needed_dflts dflt_vs
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  drule default_frame_eval_result >>
+  strip_tac >>
+  `type_check
+     (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+      LENGTH (FST (SND (SND tup))) - LENGTH es <=
+        LENGTH (FST (SND (SND (SND tup)))))
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac >>
+     simp[type_check_def, assert_def] >>
+     IF_CASES_TAC >> simp[] >>
+     decide_tac) >>
+  first_assum (qspecl_then
+    [`ih_check_s`, `xrec`, `srec`,
+     `ih_mod_s`, `ts`, `smod`,
+     `ih_fun_s`, `tup`, `sfun`,
+     `FST tup`, `SND tup`, `FST (SND tup)`,
+     `SND (SND tup)`, `FST (SND (SND tup))`,
+     `SND (SND (SND tup))`, `FST (SND (SND (SND tup)))`,
+     `SND (SND (SND (SND tup)))`,
+     `FST (SND (SND (SND (SND tup))))`,
+     `SND (SND (SND (SND (SND tup))))`,
+     `ih_len_s`, `xlen`, `slen`,
+     `ih_args_s`, `vs`, `sevl`,
+     `needed_dflts`, `cxd`,
+     `sevl`, `prev`, `sevl`, `sevl`, `()`,
+     `sevl with scopes := [FEMPTY]`] mp_tac) >>
+  (impl_tac >- (
+     simp[get_scopes_def, set_scopes_def, return_def])) >>
+  disch_then drule >>
+  disch_then (qspecl_then
+    [`sevl with scopes := [FEMPTY]`, `res`, `framed_st`] mp_tac) >>
+  qpat_x_assum
+    `!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
+        sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8. _`
+    kall_tac >>
+  `env_consistent (defaults_env env_body) cxd (sevl with scopes := [FEMPTY])` by
+    (irule defaults_env_empty_frame_consistent >> simp[]) >>
+  `state_well_typed (sevl with scopes := [FEMPTY])` by
+    (gvs[state_well_typed_def, scope_well_typed_def]) >>
+  impl_tac >- (
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    simp[]) >>
+  strip_tac >>
+  Cases_on `res` >>
+  gvs[get_scopes_def, return_def, env_consistent_def, defaults_env_def,
+      env_immutables_consistent_def, state_well_typed_def] >>
+  metis_tac[]
+QED
+
+
+Theorem state_well_typed_restore_scopes[local]:
+  !st scopes_src.
+    state_well_typed st /\ state_well_typed scopes_src ==>
+    state_well_typed (st with scopes := scopes_src.scopes)
+Proof
+  rw[state_well_typed_def]
+QED
+
+
+Theorem env_consistent_restore_intcall_default_frame[local]:
+  !env env_body cx src_id_opt fn base_st framed_st.
+    env_consistent env cx base_st /\
+    env_consistent (defaults_env env_body)
+      (cx with stk updated_by CONS (src_id_opt,fn)) framed_st /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_consistent env cx (framed_st with scopes := base_st.scopes)
+Proof
+  rw[env_consistent_def]
+  >- (qpat_x_assum `env_scopes_consistent env cx base_st` mp_tac >>
+      simp[env_scopes_consistent_def] >> metis_tac[]) >>
+  gvs[env_immutables_consistent_def, defaults_env_def,
+      get_tenv_stk_irrelevant, get_module_code_stk_irrelevant] >>
+  metis_tac[]
+QED
+
+Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
+  !cx env src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+    xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd prev res sdfl
+    env_body.
+    (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
+        sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s4 = (INL tup0,t2) /\
+      mut = FST tup0 /\ stup = SND tup0 /\ (nr <=> FST stup) /\
+      stup2 = SND stup /\ args = FST stup2 /\ sstup = SND stup2 /\
+      dflts = FST sstup /\ sstup2 = SND sstup /\ ret = FST sstup2 /\
+      body = SND sstup2 /\
+      type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) /\
+    type_check
+      (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+       LENGTH (FST (SND (SND tup))) <=
+         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
+      "IntCall args length" ih_len_s = (INL xlen,slen) /\
+    eval_exprs cx es ih_args_s = (INL vs,sevl) /\
+    needed_dflts =
+      DROP (LENGTH (FST (SND (SND (SND tup)))) -
+            (LENGTH (FST (SND (SND tup))) - LENGTH es))
+           (FST (SND (SND (SND tup)))) /\
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
+    get_scopes sevl = (INL prev,sevl) /\
+    well_typed_exprs (defaults_env env_body) needed_dflts /\
+    env_context_consistent env_body cxd /\
+    env_immutables_consistent env_body cxd sevl /\
+    env_consistent env cx sevl /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    state_well_typed sevl /\
+    context_well_typed cxd /\
+    accounts_well_typed sevl.accounts /\
+    functions_well_typed cxd /\
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (res,sdfl) ==>
+    state_well_typed sdfl /\
+    env_consistent env cx sdfl /\
+    accounts_well_typed sdfl.accounts /\
+    no_type_error_result res /\
+    (case res of
+       INL dflt_vs =>
+         env_immutables_consistent env_body cxd sdfl /\
+         exprs_runtime_typed (defaults_env env_body) needed_dflts dflt_vs
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  drule default_frame_eval_result >>
+  strip_tac >>
+  `type_check
+     (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+      LENGTH (FST (SND (SND tup))) - LENGTH es <=
+        LENGTH (FST (SND (SND (SND tup)))))
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac >>
+     simp[type_check_def, assert_def] >>
+     IF_CASES_TAC >> simp[] >>
+     decide_tac) >>
+  first_assum (qspecl_then
+    [`ih_check_s`, `xrec`, `srec`,
+     `ih_mod_s`, `ts`, `smod`,
+     `ih_fun_s`, `tup`, `sfun`,
+     `FST tup`, `SND tup`, `FST (SND tup)`,
+     `SND (SND tup)`, `FST (SND (SND tup))`,
+     `SND (SND (SND tup))`, `FST (SND (SND (SND tup)))`,
+     `SND (SND (SND (SND tup)))`,
+     `FST (SND (SND (SND (SND tup))))`,
+     `SND (SND (SND (SND (SND tup))))`,
+     `ih_len_s`, `xlen`, `slen`,
+     `ih_args_s`, `vs`, `sevl`,
+     `needed_dflts`, `cxd`,
+     `sevl`, `prev`, `sevl`, `sevl`, `()`,
+     `sevl with scopes := [FEMPTY]`] mp_tac) >>
+  (impl_tac >- simp[get_scopes_def, set_scopes_def, return_def]) >>
+  disch_then drule >>
+  disch_then (qspecl_then
+    [`sevl with scopes := [FEMPTY]`, `res`, `framed_st`] mp_tac) >>
+  qpat_x_assum
+    `!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
+        sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8. _`
+    kall_tac >>
+  `env_consistent (defaults_env env_body) cxd (sevl with scopes := [FEMPTY])` by
+    (irule defaults_env_empty_frame_consistent >> simp[]) >>
+  `state_well_typed (sevl with scopes := [FEMPTY])` by
+    (gvs[state_well_typed_def, scope_well_typed_def]) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  gvs[get_scopes_def, return_def] >>
+  `state_well_typed (framed_st with scopes := sevl.scopes)` by
+    (irule state_well_typed_restore_scopes >> simp[]) >>
+  `env_consistent env cx (framed_st with scopes := sevl.scopes)` by
+    (qspecl_then [`env`, `env_body`, `cx`, `env_body.current_src`, `fn`,
+                  `sevl`, `framed_st`] mp_tac
+       env_consistent_restore_intcall_default_frame >>
+     simp[]) >>
+  simp[] >>
+  Cases_on `res` >>
+  gvs[env_consistent_def, defaults_env_def, env_immutables_consistent_def,
+      get_tenv_stk_irrelevant, get_module_code_stk_irrelevant] >>
+  metis_tac[]
+QED
+
+Theorem intcall_safe_cast_NoneV[local]:
+  !tv crv. safe_cast tv NoneV = SOME crv ==> tv = NoneTV /\ crv = NoneV
+Proof
+  Cases >> simp[safe_cast_def] >>
+  TRY (Cases_on `b`) >> simp[] >>
+  TRY (Cases_on `b0`) >> simp[] >>
+  TRY (Cases_on `b'`) >> simp[]
+QED
+
+Theorem intcall_safe_cast_NoneTV_NoneV[local]:
+  safe_cast NoneTV NoneV = SOME NoneV
+Proof
+  simp[Once safe_cast_def]
+QED
+
+Theorem intcall_non_none_empty_body_fallthrough_probe[local]:
+  type_stmts env (BaseT BoolT) [] = SOME env /\
+  evaluate_type env.type_defs (BaseT BoolT) = SOME (BaseTV BoolT) /\
+  lift_option_type (safe_cast (BaseTV BoolT) NoneV) "IntCall cast ret" st =
+    (INR (Error (TypeError "IntCall cast ret")), st)
+Proof
+  simp[type_stmt_def, evaluate_type_def, safe_cast_def,
+       lift_option_type_def, raise_def]
+QED
+
+Theorem intcall_finally_try_handle_success_rv[local]:
+  !fn_m cleanup pushed_st rv st_final.
+    finally (try (do fn_m; return NoneV od) handle_function)
+      cleanup pushed_st = (INL rv,st_final) ==>
+    (rv = NoneV /\ (?st_bdy. fn_m pushed_st = (INL (),st_bdy))) \/
+    (?v st_bdy. rv = v /\ fn_m pushed_st = (INR (ReturnException v),st_bdy))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[finally_def] >>
+  Cases_on `try (do fn_m; return NoneV od) handle_function pushed_st` >>
+  rename1 `_ = (try_res,try_st)` >>
+  Cases_on `try_res` >> gvs[ignore_bind_apply] >>
+  Cases_on `cleanup try_st` >> rename1 `_ = (cl_res,cl_st)` >>
+  Cases_on `cl_res` >> gvs[return_def, raise_def] >>
+  gvs[try_def] >>
+  Cases_on `(do fn_m; return NoneV od) pushed_st` >>
+  rename1 `_ = (inner_res,inner_st)` >>
+  Cases_on `inner_res` >> gvs[return_def]
+  >- (gvs[ignore_bind_apply, return_def] >>
+      Cases_on `fn_m pushed_st` >> rename1 `_ = (fn_res,fn_st)` >>
+      Cases_on `fn_res` >> gvs[return_def, raise_def])
+  >- (Cases_on `y` >>
+      gvs[handle_function_def, return_def, raise_def] >>
+      Cases_on `fn_m pushed_st` >> Cases_on `q` >>
+      gvs[return_def, raise_def, ignore_bind_apply])
+QED
+
+Theorem intcall_finally_try_handle_success_cleanup[local]:
+  !fn_m cleanup pushed_st rv st_final.
+    finally (try (do fn_m; return NoneV od) handle_function)
+      cleanup pushed_st = (INL rv,st_final) ==>
+    (rv = NoneV /\
+     (?st_bdy. fn_m pushed_st = (INL (),st_bdy) /\
+               cleanup st_bdy = (INL (),st_final))) \/
+    (?v st_bdy. rv = v /\ fn_m pushed_st = (INR (ReturnException v),st_bdy) /\
+                cleanup st_bdy = (INL (),st_final))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[finally_def] >>
+  Cases_on `try (do fn_m; return NoneV od) handle_function pushed_st` >>
+  rename1 `_ = (try_res,try_st)` >>
+  Cases_on `try_res` >> gvs[ignore_bind_apply] >>
+  Cases_on `cleanup try_st` >> rename1 `_ = (cl_res,cl_st)` >>
+  Cases_on `cl_res` >> gvs[return_def, raise_def] >>
+  gvs[try_def] >>
+  Cases_on `(do fn_m; return NoneV od) pushed_st` >>
+  rename1 `_ = (inner_res,inner_st)` >>
+  Cases_on `inner_res` >> gvs[return_def]
+  >- (gvs[ignore_bind_apply, return_def] >>
+      Cases_on `fn_m pushed_st` >> rename1 `_ = (fn_res,fn_st)` >>
+      Cases_on `fn_res` >> gvs[return_def, raise_def])
+  >- (Cases_on `y` >>
+      gvs[handle_function_def, return_def, raise_def] >>
+      Cases_on `fn_m pushed_st` >> Cases_on `q` >>
+      gvs[return_def, raise_def, ignore_bind_apply])
+QED
+
+
+Theorem intcall_finally_try_handle_inr_body_cleanup_cases[local]:
+  !fn_m cleanup pushed_st y fin_st.
+    finally (try (do fn_m; return NoneV od) handle_function)
+      cleanup pushed_st = (INR y,fin_st) ==>
+    (?st_bdy.
+       fn_m pushed_st = (INL (),st_bdy) /\
+       cleanup st_bdy = (INR y,fin_st)) \/
+    (?body_exn st_bdy cleanup_res.
+       fn_m pushed_st = (INR body_exn,st_bdy) /\
+       cleanup st_bdy = (cleanup_res,fin_st))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[finally_def] >>
+  Cases_on `try (do fn_m; return NoneV od) handle_function pushed_st` >>
+  rename1 `_ = (try_res,try_st)` >>
+  Cases_on `try_res` >> gvs[ignore_bind_apply] >>
+  Cases_on `cleanup try_st` >> rename1 `_ = (cl_res,cl_st)` >>
+  Cases_on `cl_res` >> gvs[return_def, raise_def] >>
+  gvs[try_def] >>
+  Cases_on `(do fn_m; return NoneV od) pushed_st` >>
+  rename1 `_ = (inner_res,inner_st)` >>
+  Cases_on `inner_res` >> gvs[return_def]
+  >- (gvs[ignore_bind_apply, return_def] >>
+      Cases_on `fn_m pushed_st` >> rename1 `_ = (fn_res,fn_st)` >>
+      Cases_on `fn_res` >> gvs[return_def, raise_def]) >>
+  Cases_on `fn_m pushed_st` >> rename1 `_ = (fn_res,fn_st)` >>
+  Cases_on `fn_res` >>
+  gvs[bind_apply, bind_def, return_def, raise_def, ignore_bind_apply] >>
+  rename1 `handle_function body_exn _ = _` >>
+  Cases_on `body_exn` >>
+  gvs[handle_function_def, bind_apply, bind_def, return_def, raise_def,
+      ignore_bind_apply]
+QED
+Theorem intcall_try_handle_success_body_cases[local]:
+  !fn_m pushed_st x try_st.
+    try (do fn_m; return NoneV od) handle_function pushed_st = (INL x,try_st) ==>
+    (x = NoneV /\ fn_m pushed_st = (INL (),try_st)) \/
+    (?v. x = v /\ fn_m pushed_st = (INR (ReturnException v),try_st))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[try_def] >>
+  Cases_on `(do fn_m; return NoneV od) pushed_st` >>
+  rename1 `_ = (inner_res,inner_st)` >>
+  Cases_on `inner_res` >> gvs[return_def]
+  >- (gvs[ignore_bind_apply, return_def] >>
+      Cases_on `fn_m pushed_st` >> rename1 `_ = (fn_res,fn_st)` >>
+      Cases_on `fn_res` >> gvs[return_def, raise_def])
+  >- (Cases_on `y` >>
+      gvs[handle_function_def, return_def, raise_def] >>
+      Cases_on `fn_m pushed_st` >> Cases_on `q` >>
+      gvs[return_def, raise_def, ignore_bind_apply])
+QED
+
+Theorem intcall_try_handle_result_body_cases[local]:
+  !fn_m pushed_st res try_st.
+    try (do fn_m; return NoneV od) handle_function pushed_st = (res,try_st) ==>
+    (res = INL NoneV /\ fn_m pushed_st = (INL (),try_st)) \/
+    (?v. res = INL v /\ fn_m pushed_st = (INR (ReturnException v),try_st)) \/
+    (?exn body_exn. res = INR exn /\ fn_m pushed_st = (INR body_exn,try_st))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[try_def] >>
+  Cases_on `(do fn_m; return NoneV od) pushed_st` >>
+  rename1 `_ = (inner_res,inner_st)` >>
+  Cases_on `inner_res` >> gvs[return_def]
+  >- (gvs[ignore_bind_apply, return_def] >>
+      Cases_on `fn_m pushed_st` >> rename1 `_ = (fn_res,fn_st)` >>
+      Cases_on `fn_res` >> gvs[return_def, raise_def])
+  >- (Cases_on `y` >>
+      gvs[handle_function_def, return_def, raise_def] >>
+      Cases_on `fn_m pushed_st` >> Cases_on `q` >>
+      gvs[return_def, raise_def, ignore_bind_apply])
+QED
+
+Theorem lift_safe_cast_value_has_type_no_type_error[local]:
+  !tv v msg st res st'.
+    value_has_type tv v /\
+    lift_option_type (safe_cast tv v) msg st = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `safe_cast tv v = SOME v` by (irule safe_cast_well_typed >> simp[]) >>
+  gvs[lift_option_type_def, return_def, raise_def, no_type_error_result_def]
+QED
+
+Theorem intcall_return_body_final_cast_no_type_error[local]:
+  !rtv v st_final cast_res st_cast.
+    value_has_type rtv v /\
+    lift_option_type (safe_cast rtv v) "IntCall cast ret" st_final =
+      (cast_res, st_cast) ==>
+    no_type_error_result cast_res
+Proof
+  rpt strip_tac >>
+  `safe_cast rtv v = SOME v` by (irule safe_cast_well_typed >> simp[]) >>
+  gvs[lift_option_type_def, return_def, raise_def, no_type_error_result_def]
+QED
+
+Theorem intcall_return_branch_final_cast_no_type_error[local]:
+  !cxf body pushed_st rtv v st_bdy st_final cast_res st_cast.
+    (!v st_bdy. eval_stmts cxf body pushed_st = (INR (ReturnException v), st_bdy) ==>
+                value_has_type rtv v) /\
+    eval_stmts cxf body pushed_st = (INR (ReturnException v), st_bdy) /\
+    lift_option_type (safe_cast rtv v) "IntCall cast ret" st_final =
+      (cast_res, st_cast) ==>
+    no_type_error_result cast_res
+Proof
+  rpt strip_tac >>
+  irule intcall_return_body_final_cast_no_type_error >>
+  qexistsl [`rtv`, `st_cast`, `st_final`, `v`] >>
+  simp[]
+QED
+
+Theorem lift_safe_cast_NoneT_no_type_error[local]:
+  !tenv ret tv msg st res st'.
+    ret = NoneT /\ evaluate_type tenv ret = SOME tv /\
+    lift_option_type (safe_cast tv NoneV) msg st = (res,st') ==>
+    no_type_error_result res
+Proof
+  rw[evaluate_type_def, safe_cast_def, lift_option_type_def, return_def,
+     raise_def, no_type_error_result_def] >>
+  Cases_on `tv` >> gvs[evaluate_type_def, safe_cast_def, lift_option_type_def,
+                        return_def, raise_def, no_type_error_result_def]
+QED
+
+Theorem intcall_normal_body_final_cast_no_type_error[local]:
+  !cxf body pushed_st st_bdy tenv ret rtv env_body env_after
+    st_final cast_res st_cast.
+    evaluate_type tenv ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    eval_stmts cxf body pushed_st = (INL (), st_bdy) /\
+    lift_option_type (safe_cast rtv NoneV) "IntCall cast ret" st_final =
+      (cast_res, st_cast) ==>
+    no_type_error_result cast_res
+Proof
+  rpt strip_tac
+  >- (irule lift_safe_cast_NoneT_no_type_error >> metis_tac[]) >>
+  drule (cj 2 no_fallthrough_eval_no_success) >>
+  disch_then (qspecl_then [`cxf`, `pushed_st`, `st_bdy`] mp_tac) >>
+  simp[]
+QED
+
+Theorem intcall_final_cast_no_type_error_from_rv_cases[local]:
+  !cxf body pushed_st rv tenv ret rtv env_body env_after cast_res st_cast st_final.
+    ((rv = NoneV /\ (?st_bdy. eval_stmts cxf body pushed_st = (INL (), st_bdy))) \/
+     (?v st_bdy. rv = v /\
+                  eval_stmts cxf body pushed_st = (INR (ReturnException v), st_bdy))) /\
+    evaluate_type tenv ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    (!v st_bdy. eval_stmts cxf body pushed_st = (INR (ReturnException v), st_bdy) ==>
+                value_has_type rtv v) /\
+    lift_option_type (safe_cast rtv rv) "IntCall cast ret" st_final = (cast_res, st_cast) ==>
+    no_type_error_result cast_res
+Proof
+  rpt gen_tac >> strip_tac
+  >- (gvs[lift_option_type_def, safe_cast_def, return_def, raise_def,
+          no_type_error_result_def])
+  >- metis_tac[intcall_normal_body_final_cast_no_type_error]
+  >- metis_tac[lift_safe_cast_value_has_type_no_type_error]
+  >- metis_tac[lift_safe_cast_value_has_type_no_type_error]
+QED
+
+Theorem intcall_final_cast_no_type_error_from_body_ih[local]:
+  !cxf body cleanup pushed_st rv st_final tenv ret rtv env_body env_after
+    cast_res st_cast.
+    finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+      cleanup pushed_st = (INL rv, st_final) /\
+    evaluate_type tenv ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    (!v st_bdy. eval_stmts cxf body pushed_st = (INR (ReturnException v), st_bdy) ==>
+                value_has_type rtv v) /\
+    lift_option_type (safe_cast rtv rv) "IntCall cast ret" st_final = (cast_res, st_cast) ==>
+    no_type_error_result cast_res
+Proof
+  rpt strip_tac >>
+  drule intcall_finally_try_handle_success_rv >>
+  strip_tac >>
+  irule intcall_final_cast_no_type_error_from_rv_cases >>
+  metis_tac[]
+QED
+
+Theorem intcall_break_body_satisfies_post_push_body_premise[local]:
+  !env_body cxf pushed_st.
+    type_stmts env_body NoneT [Break] = SOME env_body /\
+    stmts_no_fallthrough [Break] /\
+    eval_stmts cxf [Break] pushed_st = (INR BreakException,pushed_st) /\
+    no_type_error_result (INR BreakException) /\
+    return_exception_typed env_body NoneT BreakException
+Proof
+  simp[type_stmt_def, stmt_no_fallthrough_def, evaluate_def,
+       bind_def, ignore_bind_def, return_def, raise_def, no_type_error_result_def,
+       return_exception_typed_def]
+QED
+
+Theorem handle_function_control_type_error[local]:
+  (!s. handle_function BreakException s =
+       (INR (Error (TypeError "handle_function")),s)) /\
+  (!s. handle_function ContinueException s =
+       (INR (Error (TypeError "handle_function")),s))
+Proof
+  simp[handle_function_def, raise_def]
+QED
+
+Theorem intcall_post_push_tail_break_counterexample[local]:
+  !env_body cxf pushed_st prev cx.
+    ?res st'.
+      evaluate_type env_body.type_defs NoneT = SOME NoneTV /\
+      type_stmts env_body NoneT [Break] = SOME env_body /\
+      stmts_no_fallthrough [Break] /\
+      (!res_body st_body.
+         eval_stmts cxf [Break] pushed_st = (res_body,st_body) ==>
+         no_type_error_result res_body /\
+         (case res_body of
+          | INL _ => T
+          | INR exn => return_exception_typed env_body NoneT exn)) /\
+      (do
+         rv <- finally
+           (try (do eval_stmts cxf [Break]; return NoneV od) handle_function)
+           (do pop_function prev; return () od);
+         crv <- lift_option_type (safe_cast NoneTV rv) "IntCall cast ret";
+         return (Value crv)
+       od) pushed_st = (res,st') /\
+      ~no_type_error_result res
+Proof
+  rpt strip_tac >>
+  qexists_tac `INR (Error (TypeError "handle_function"))` >>
+  qexists_tac `pushed_st with scopes := prev` >>
+  simp[evaluate_type_def, type_stmt_def, stmt_no_fallthrough_def,
+       evaluate_def, try_def, finally_def, handle_function_def,
+       pop_function_def, set_scopes_def, safe_cast_def,
+       bind_def, ignore_bind_def, return_def, raise_def,
+       no_type_error_result_def, return_exception_typed_def]
+QED
+
+Theorem env_consistent_restore_intcall_body_frame[local]:
+  !env env_body cx src_id_opt fn base_st framed_st.
+    env_consistent env cx base_st /\
+    env_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) framed_st /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_consistent env cx (framed_st with scopes := base_st.scopes)
+Proof
+  rw[env_consistent_def]
+  >- (qpat_x_assum `env_scopes_consistent env cx base_st` mp_tac >>
+      simp[env_scopes_consistent_def] >> metis_tac[]) >>
+  gvs[env_immutables_consistent_def, get_tenv_stk_irrelevant,
+      get_module_code_stk_irrelevant] >>
+  metis_tac[]
+QED
+
+Theorem env_consistent_same_scopes_immutables[local]:
+  !env cx st st'.
+    env_consistent env cx st /\
+    st'.scopes = st.scopes /\
+    st'.immutables = st.immutables ==>
+    env_consistent env cx st'
+Proof
+  rw[env_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def] >> metis_tac[]
+QED
+
+Theorem intcall_cleanup_frame_restore_sound[local]:
+  !env env_body cx src_id_opt fn args_st st_bdy fin_st.
+    env_consistent env cx args_st /\
+    env_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) st_bdy /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    state_well_typed args_st /\
+    state_well_typed st_bdy /\
+    accounts_well_typed st_bdy.accounts /\
+    fin_st.scopes = args_st.scopes /\
+    fin_st.immutables = st_bdy.immutables /\
+    fin_st.accounts = st_bdy.accounts ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt strip_tac >>
+  `state_well_typed fin_st` by gvs[state_well_typed_def] >>
+  `env_consistent env cx (st_bdy with scopes := args_st.scopes)` by
+    (qspecl_then [`env`, `env_body`, `cx`, `src_id_opt`, `fn`,
+                  `args_st`, `st_bdy`] mp_tac
+       env_consistent_restore_intcall_body_frame >> simp[]) >>
+  `env_consistent env cx fin_st` by
+    (qspecl_then [`env`, `cx`, `st_bdy with scopes := args_st.scopes`,
+                  `fin_st`] mp_tac env_consistent_same_scopes_immutables >>
+     simp[]) >>
+  simp[]
+QED
+
+Theorem intcall_cleanup_after_body_preserves_caller_frame[local]:
+  !env env_body cx src_id_opt fn args_st st_bdy cleanup_res fin_st nr is_view.
+    env_consistent env cx args_st /\
+    env_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) st_bdy /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    state_well_typed args_st /\
+    state_well_typed st_bdy /\
+    accounts_well_typed st_bdy.accounts /\
+    (do pop_function args_st.scopes;
+        if nr /\ ~is_view then
+          case cx.nonreentrant_slot of
+          | NONE => return ()
+          | SOME slot => release_nonreentrant_lock cx.txn.target slot
+        else return ()
+     od) st_bdy = (cleanup_res,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt strip_tac >>
+  drule intcall_cleanup_after_pop_preserves_frame >>
+  simp[] >> strip_tac >>
+  qspecl_then [`env`, `env_body`, `cx`, `src_id_opt`, `fn`,
+                `args_st`, `st_bdy`, `fin_st`] mp_tac
+    intcall_cleanup_frame_restore_sound >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
+QED
+
+
+Theorem intcall_default_finally_inr_preserves_frame[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after y fin_st.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    type_stmts env_body NoneT body = SOME env_after /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+    accounts_well_typed (lock_st with scopes := [call_env]).accounts /\
+    functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule intcall_finally_try_handle_inr_body_cleanup_cases >>
+  strip_tac
+  >- (
+    first_x_assum (qspecl_then [`env_body`, `NoneT`, `env_after`,
+                                 `lock_st with scopes := [call_env]`,
+                                 `INL ()`, `st_bdy`] mp_tac) >>
+    simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+    strip_tac >>
+    drule type_stmts_env_preserved_static >> strip_tac >>
+    qspecl_then [`env`, `env_after`, `cx`, `env_body.current_src`, `fn`,
+                  `args_st`, `st_bdy`, `INR y`, `fin_st`, `nr`,
+                  `fm = View \/ fm = Pure`] irule
+      intcall_cleanup_after_body_preserves_caller_frame >>
+    qexistsl [`args_st`, `env_after`, `env_body`, `fm`, `fn`, `nr`,
+              `st_bdy`, `y`] >>
+    gvs[]) >>
+  first_x_assum (qspecl_then [`env_body`, `NoneT`, `env_after`,
+                               `lock_st with scopes := [call_env]`,
+                               `INR body_exn`, `st_bdy`] mp_tac) >>
+  simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+  strip_tac >> gvs[] >>
+  qspecl_then [`env`, `env_exn`, `cx`, `env_body.current_src`, `fn`,
+                `args_st`, `st_bdy`, `cleanup_res`, `fin_st`, `nr`,
+                `fm = View \/ fm = Pure`] irule
+    intcall_cleanup_after_body_preserves_caller_frame >>
+  qexistsl [`args_st`, `cleanup_res`, `env_body`, `env_exn`, `fm`, `fn`,
+            `nr`, `st_bdy`] >>
+  gvs[env_extends_def]
+QED
+
+Theorem intcall_default_finally_inr_preserves_frame_from_caller_ctx[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after y fin_st.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    type_stmts env_body NoneT body = SOME env_after /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    context_well_typed cx /\
+    accounts_well_typed lock_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                `y`, `fin_st`] mp_tac
+    intcall_default_finally_inr_preserves_frame >>
+  impl_tac >-
+    (simp[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant] >>
+     rpt strip_tac >>
+     qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+       (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+     (impl_tac >-
+       (simp[context_well_typed_stk_irrelevant,
+             functions_well_typed_stk_irrelevant] >>
+        rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     simp[]) >>
+  simp[]
+QED
+
+Theorem intcall_default_success_post_push_outer_inr_frame[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after y fin_st.
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) /\
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    type_stmts env_body NoneT body = SOME env_after /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    context_well_typed cx /\
+    accounts_well_typed lock_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                `y`, `fin_st`] mp_tac
+    intcall_default_finally_inr_preserves_frame_from_caller_ctx >>
+  impl_tac >-
+    (simp[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant] >>
+     rpt strip_tac >>
+     qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+       (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+     (impl_tac >-
+       rw[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant]) >>
+     simp[]) >>
+  simp[]
+QED
+
+Theorem intcall_default_success_post_push_outer_inr_frame_live[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after y fin_st.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    type_stmts env_body NoneT body = SOME env_after /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) /\
+    state_well_typed (lock_st with scopes := [call_env]) /\
+    context_well_typed cx /\
+    accounts_well_typed lock_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                `y`, `fin_st`] mp_tac
+    intcall_default_success_post_push_outer_inr_frame >>
+  impl_tac >-
+    (simp[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant] >>
+     rpt strip_tac >>
+     qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+       (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+     simp[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant]) >>
+  simp[]
+QED
+
+Theorem intcall_default_success_post_push_outer_inr_frame_apply[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after y fin_st.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    type_stmts env_body NoneT body = SOME env_after ==>
+    env_consistent env cx args_st ==>
+    state_well_typed args_st ==>
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) ==>
+    state_well_typed (lock_st with scopes := [call_env]) ==>
+    context_well_typed cx ==>
+    accounts_well_typed lock_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt gen_tac >> ntac 13 strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                `y`, `fin_st`] mp_tac
+    intcall_default_success_post_push_outer_inr_frame_live >>
+  impl_tac >-
+    (simp[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant] >>
+     rpt strip_tac >>
+     qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+       (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+     simp[context_well_typed_stk_irrelevant,
+          functions_well_typed_stk_irrelevant]) >>
+  simp[]
+QED
+
+Theorem intcall_default_success_post_push_outer_inr_frame_ret[local]:
+  !cx env env_body args_st lock_st call_env fn fm nr body env_after ret y fin_st.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    env_consistent env cx args_st ==>
+    state_well_typed args_st ==>
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
+      (lock_st with scopes := [call_env]) ==>
+    state_well_typed (lock_st with scopes := [call_env]) ==>
+    context_well_typed cx ==>
+    accounts_well_typed lock_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+               return NoneV od) handle_function)
+      (do pop_function args_st.scopes;
+          if nr /\ ~(fm = View \/ fm = Pure) then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()
+       od)
+      (lock_st with scopes := [call_env]) = (INR y,fin_st) ==>
+    state_well_typed fin_st /\ env_consistent env cx fin_st /\
+    accounts_well_typed fin_st.accounts
+Proof
+  rpt gen_tac >> ntac 13 strip_tac >>
+  gvs[]
+  >- (
+    qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                  `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                  `y`, `fin_st`] mp_tac
+      intcall_default_success_post_push_outer_inr_frame_apply >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    rpt (impl_tac >- (first_assum ACCEPT_TAC ORELSE
+                      simp[context_well_typed_stk_irrelevant,
+                           functions_well_typed_stk_irrelevant])) >>
+    simp[]) >>
+  strip_tac >>
+  drule intcall_finally_try_handle_inr_body_cleanup_cases >>
+  strip_tac
+  >- (
+    drule (cj 2 no_fallthrough_eval_no_success) >>
+    disch_then (qspecl_then [`cx with stk updated_by CONS (env_body.current_src,fn)`,
+                             `lock_st with scopes := [call_env]`, `st_bdy`] mp_tac) >>
+    simp[]) >>
+  qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+    (qspecl_then [`env_body`, `ret`, `env_after`,
+                  `lock_st with scopes := [call_env]`,
+                  `INR body_exn`, `st_bdy`] mp_tac) >>
+  simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+  strip_tac >> gvs[] >>
+  qspecl_then [`env`, `env_exn`, `cx`, `env_body.current_src`, `fn`,
+                `args_st`, `st_bdy`, `cleanup_res`, `fin_st`, `nr`,
+                `fm = View \/ fm = Pure`] irule
+    intcall_cleanup_after_body_preserves_caller_frame >>
+  qexistsl [`args_st`, `cleanup_res`, `env_body`, `env_exn`, `fm`, `fn`,
+            `nr`, `st_bdy`] >>
+  gvs[env_extends_def]
+QED
+
+Theorem intcall_post_push_tail_no_type_error[local]:
+  !cxf body pushed_st prev nr is_view cx rtv ret env_body env_after res st'.
+    evaluate_type env_body.type_defs ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    (!res_body st_body.
+       eval_stmts cxf body pushed_st = (res_body,st_body) ==>
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL _ => T
+        | INR exn => return_exception_typed env_body ret exn)) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts cxf body; return NoneV od) handle_function)
+         (do pop_function prev;
+             if nr /\ ~is_view then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) pushed_st = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  gvs[bind_apply] >>
+  Cases_on
+    `finally (try (do eval_stmts cxf body'; return NoneV od) handle_function)
+       (do pop_function prev;
+           if nr /\ ~is_view then
+             case cx.nonreentrant_slot of
+             | NONE => return ()
+             | SOME slot => release_nonreentrant_lock cx.txn.target slot
+           else return ()
+        od) pushed_st` >>
+  rename1 `_ = (fin_res,fin_st)` >>
+  Cases_on `fin_res` >> gvs[]
+  >- (
+    rename1 `finally _ _ pushed_st = (INL rv,st_final)` >>
+    `!v st_bdy. eval_stmts cxf body' pushed_st = (INR (ReturnException v),st_bdy) ==>
+                value_has_type NoneTV v` by (
+      rpt strip_tac >>
+      qpat_x_assum `!res_body st_body. eval_stmts cxf body' pushed_st = (res_body,st_body) ==> _`
+        (qspecl_then [`INR (ReturnException v)`, `st_bdy`] mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (fn th => assume_tac (CONJUNCT2 th)) >>
+      gvs[return_exception_typed_def, value_runtime_typed_def]) >>
+    drule intcall_finally_try_handle_success_rv >>
+    strip_tac >>
+    `value_has_type NoneTV rv` by gvs[] >>
+    Cases_on `lift_option_type (safe_cast NoneTV rv) "IntCall cast ret" st_final` >>
+    rename1 `_ = (cast_res,cast_st)` >>
+    `no_type_error_result cast_res` by
+      metis_tac[lift_safe_cast_value_has_type_no_type_error] >>
+    Cases_on `cast_res` >> gvs[return_def, no_type_error_result_def]) >>
+  gvs[finally_def, ignore_bind_def, bind_def, return_def, raise_def,
+      prod_CASE_rator, sum_CASE_rator] >>
+  gvs[AllCaseEqs(), no_type_error_result_def] >>
+  Cases_on `eval_stmts cxf body' pushed_st` >>
+  Cases_on `q` >>
+  TRY (drule (cj 2 no_fallthrough_eval_no_success) >>
+       disch_then (qspecl_then [`cxf`, `pushed_st`, `r`] mp_tac) >>
+       simp[] >> NO_TAC) >>
+  TRY (rename1 `eval_stmts cxf body' pushed_st = (INR y,_)` >>
+       `y <> BreakException /\ y <> ContinueException` by
+         metis_tac[stmts_no_control_escape_eval_stmts_no_loop_control] >>
+       Cases_on `y`) >>
+  gvs[try_def, handle_function_def, pop_function_def, set_scopes_def,
+      release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
+      bind_def, return_def, raise_def, no_type_error_result_def, AllCaseEqs()] >>
+  Cases_on `nr /\ ~is_view` >>
+  gvs[release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
+      bind_def, return_def, raise_def, no_type_error_result_def, AllCaseEqs()] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
+      bind_def, return_def, raise_def, no_type_error_result_def, AllCaseEqs()] >>
+  `value_has_type rtv v` by
+    gvs[return_exception_typed_def, value_runtime_typed_def] >>
+  `safe_cast rtv v = SOME v` by
+    (irule safe_cast_well_typed >> simp[]) >>
+  gvs[lift_option_type_def, return_def, raise_def, no_type_error_result_def]
+QED
+
+Theorem intcall_post_push_fallthrough_tail_no_type_error[local]:
+  !cxf body pushed_st prev nr is_view cx rtv ret env_body env_after res st'.
+    evaluate_type env_body.type_defs ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    stmts_no_fallthrough body /\
+    stmts_no_control_escape body /\
+    (!res_body st_body.
+       eval_stmts cxf body pushed_st = (res_body,st_body) ==>
+       no_type_error_result res_body /\
+       (case res_body of
+        | INL _ => T
+        | INR exn => return_exception_typed env_body ret exn)) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts cxf body; return NoneV od) handle_function)
+         (do pop_function prev;
+             if nr /\ ~is_view then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) pushed_st = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule intcall_post_push_tail_no_type_error >>
+  qexistsl_tac [`body'`, `cx`, `cxf`, `env_after`, `env_body`, `is_view`, `nr`,
+                `prev`, `pushed_st`, `ret`, `rtv`, `st'`] >>
+  simp[]
+QED
+
+Theorem intcall_body_soundness_tail_premise[local]:
+  (!env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body0 = SOME env2 /\
+      env_consistent env1 cxf st0 /\ state_well_typed st0 /\
+      context_well_typed cxf /\ accounts_well_typed st0.accounts /\
+      functions_well_typed cxf /\ eval_stmts cxf body0 st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+        INL v => env_consistent env2 cxf st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\ env_consistent env_exn cxf st0' /\
+            return_exception_typed env_exn ret_ty1 exn) /\
+  type_stmts env ret_ty body0 = SOME env_after /\
+  env_consistent env cxf pushed_st /\ state_well_typed pushed_st /\
+  context_well_typed cxf /\ accounts_well_typed pushed_st.accounts /\
+  functions_well_typed cxf ==>
+  !res_body st_body.
+    eval_stmts cxf body0 pushed_st = (res_body,st_body) ==>
+    no_type_error_result res_body /\
+    case res_body of
+      INL _ => T
+    | INR exn => return_exception_typed env ret_ty exn
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspecl_then
+    [`env`, `ret_ty`, `env_after`, `pushed_st`, `res_body`, `st_body`] mp_tac) >>
+  simp[] >>
+  strip_tac >>
+  Cases_on `res_body` >> gvs[] >>
+  metis_tac[env_extends_return_exception_typed]
+QED
+
+Theorem intcall_body_soundness_from_generated_ih[local]:
+  !cx src_id_opt fn es pre_st ts fm nr args dflts fn_body actual_vs args_st
+     dflt_vs dflt_st call_env lock_st pushed_cx pushed_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" pre_st = (INL (),pre_st) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" pre_st =
+      (INL ts,pre_st) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" pre_st =
+      (INL (fm,nr,args,dflts,NoneT,fn_body),pre_st) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" pre_st = (INL (),pre_st) /\
+    eval_exprs cx es pre_st = (INL actual_vs,args_st) /\
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+           (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+       od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) NoneT) "IntCall eval ret" dflt_st =
+      (INL NoneTV,dflt_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    push_function (src_id_opt,fn) call_env cx lock_st = (INL pushed_cx,pushed_st) ==>
+    !env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 fn_body = SOME env2 /\
+      env_consistent env1 pushed_cx st0 /\ state_well_typed st0 /\
+      context_well_typed pushed_cx /\ accounts_well_typed st0.accounts /\
+      functions_well_typed pushed_cx /\ eval_stmts pushed_cx fn_body st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+        INL v => env_consistent env2 pushed_cx st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\ env_consistent env_exn pushed_cx st0' /\
+            return_exception_typed env_exn ret_ty1 exn
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`pre_st`, `()`, `pre_st`, `pre_st`, `ts`, `pre_st`, `pre_st`,
+     `(fm,nr,args,dflts,NoneT,fn_body)`, `pre_st`,
+     `fm`, `(nr,args,dflts,NoneT,fn_body)`, `nr`,
+     `(args,dflts,NoneT,fn_body)`, `args`, `(dflts,NoneT,fn_body)`,
+     `dflts`, `(NoneT,fn_body)`, `NoneT`, `fn_body`, `pre_st`, `()`, `pre_st`,
+     `pre_st`, `actual_vs`, `args_st`,
+     `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+     `cx with stk updated_by CONS (src_id_opt,fn)`,
+     `args_st`, `dflt_vs`, `args_st`, `get_tenv cx`,
+     `args_st`, `call_env`, `dflt_st`, `dflt_st`, `args_st.scopes`,
+     `dflt_st`, `dflt_st`, `NoneTV`, `dflt_st`,
+     `fm = View \/ fm = Pure`, `dflt_st`, `()`, `lock_st`,
+     `lock_st`, `pushed_cx`, `pushed_st`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> simp[get_scopes_def, return_def]) >>
+  strip_tac >>
+  last_x_assum (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  simp[]
+QED
+
+Theorem intcall_body_ih_current_src_adapter[local]:
+  !cx src_id_opt fn body env_body.
+    env_body.current_src = src_id_opt /\
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (src_id_opt,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+         INL v => env_consistent env2 (cx with stk updated_by CONS (src_id_opt,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (src_id_opt,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+         INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn)
+Proof
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem intcall_pushed_body_tail_no_type_error_from_body_ih[local]:
+  (!env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body0 = SOME env2 /\
+      env_consistent env1 cxf st0 /\ state_well_typed st0 /\
+      context_well_typed cxf /\ accounts_well_typed st0.accounts /\
+      functions_well_typed cxf /\ eval_stmts cxf body0 st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+        INL v => env_consistent env2 cxf st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\ env_consistent env_exn cxf st0' /\
+            return_exception_typed env_exn ret_ty1 exn) /\
+  evaluate_type env_body.type_defs ret = SOME rtv /\
+  type_stmts env_body ret body0 = SOME env_after /\
+  (ret = NoneT \/ stmts_no_fallthrough body0) /\
+  stmts_no_control_escape body0 /\
+  env_consistent env_body cxf pushed_st /\ state_well_typed pushed_st /\
+  context_well_typed cxf /\ accounts_well_typed pushed_st.accounts /\
+  functions_well_typed cxf /\
+  (do
+     rv <- finally
+       (try (do eval_stmts cxf body0; return NoneV od) handle_function)
+       (do pop_function prev;
+           if nr /\ ~is_view then
+             case cx.nonreentrant_slot of
+             | NONE => return ()
+             | SOME slot => release_nonreentrant_lock cx.txn.target slot
+           else return ()
+        od);
+     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+     return (Value crv)
+   od) pushed_st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule intcall_post_push_tail_no_type_error >>
+  qexistsl_tac [`body0`, `cx`, `cxf`, `env_after`, `env_body`, `is_view`,
+                `nr`, `prev`, `pushed_st`, `ret`, `rtv`, `st'`] >>
+  simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+    (qspecl_then [`env_body`, `ret`, `env_after`, `pushed_st`,
+                  `res_body`, `st_body`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `res_body` >> gvs[] >>
+  metis_tac[env_extends_return_exception_typed]
+QED
+
+
+Theorem intcall_current_src_pushed_body_tail_no_type_error[local]:
+  !cx env_body fn body ret rtv env_after pushed_st prev nr is_view res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body = SOME env2 /\
+      env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+      state_well_typed st0 /\
+      context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      accounts_well_typed st0.accounts /\
+      functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+        INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\
+            env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+            return_exception_typed env_exn ret_ty1 exn) /\
+  evaluate_type env_body.type_defs ret = SOME rtv /\
+  type_stmts env_body ret body = SOME env_after /\
+  (ret = NoneT \/ stmts_no_fallthrough body) /\
+  stmts_no_control_escape body /\
+  env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn)) pushed_st /\
+  state_well_typed pushed_st /\ context_well_typed cx /\
+  accounts_well_typed pushed_st.accounts /\ functions_well_typed cx /\
+  (do
+     rv <- finally
+       (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                return NoneV od) handle_function)
+       (do pop_function prev;
+           if nr /\ ~is_view then
+             case cx.nonreentrant_slot of
+             | NONE => return ()
+             | SOME slot => release_nonreentrant_lock cx.txn.target slot
+           else return ()
+        od);
+     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+     return (Value crv)
+   od) pushed_st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule intcall_pushed_body_tail_no_type_error_from_body_ih >>
+  qexistsl_tac [`body'`, `cx`, `cx with stk updated_by CONS (env_body.current_src,fn)`,
+                `env_after`, `env_body`, `is_view`, `nr`, `prev`,
+                `pushed_st`, `ret`, `rtv`, `st'`] >>
+  simp[context_well_typed_stk_irrelevant,
+       functions_well_typed_stk_irrelevant] >>
+  rpt strip_tac >>
+  qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+    (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  simp[context_well_typed_stk_irrelevant,
+       functions_well_typed_stk_irrelevant]
+QED
+
+Theorem intcall_current_src_pushed_body_tail_no_type_error_irule[local]:
+  !cx env_body fn body ret rtv env_after pushed_st prev nr is_view res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body = SOME env2 /\
+      env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+      state_well_typed st0 /\
+      context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      accounts_well_typed st0.accounts /\
+      functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+        INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\
+            env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+            return_exception_typed env_exn ret_ty1 exn) ==>
+    evaluate_type env_body.type_defs ret = SOME rtv ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    stmts_no_control_escape body ==>
+    env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn)) pushed_st ==>
+    state_well_typed pushed_st ==>
+    context_well_typed cx ==>
+    accounts_well_typed pushed_st.accounts ==>
+    functions_well_typed cx ==>
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function prev;
+             if nr /\ ~is_view then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) pushed_st = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt gen_tac >> disch_tac >>
+  rpt (disch_tac ORELSE gen_tac) >>
+  qspecl_then [`cx`, `env_body`, `fn`, `body'`, `ret`, `rtv`,
+                `env_after`, `pushed_st`, `prev`, `nr`, `is_view`,
+                `res`, `st'`] mp_tac
+    intcall_current_src_pushed_body_tail_no_type_error >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+  simp[]
+QED
+Theorem intcall_default_success_post_push_no_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+         INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    evaluate_type env_body.type_defs ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\ state_well_typed dflt_st /\
+    context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (dflt_st with scopes := [call_env]) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all intcall_live_pushed_body_preconditions >>
+  strip_tac >>
+  qspecl_then [`cx`, `env_body`, `fn`, `body'`, `ret`, `rtv`,
+                `env_after`, `lock_st with scopes := [call_env]`,
+                `args_st.scopes`, `nr`, `fm = View \/ fm = Pure`, `res`, `st'`]
+    mp_tac intcall_current_src_pushed_body_tail_no_type_error_irule >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- (first_assum ACCEPT_TAC ORELSE simp[])) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  first_x_assum irule >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+Theorem intcall_safe_cast_expr_result_typed[local]:
+  !env loc src_id_opt fn es extra ret_ty ret_tv rv crv.
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret_ty /\
+    evaluate_type env.type_defs ret_ty = SOME ret_tv /\
+    value_has_type ret_tv rv /\
+    safe_cast ret_tv rv = SOME crv ==>
+    expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) (Value crv)
+Proof
+  rpt strip_tac >>
+  `value_has_type ret_tv crv` by
+    (drule_all safe_cast_preserves_well_typed >> simp[]) >>
+  simp[expr_result_typed_def, expr_runtime_typed_def,
+       toplevel_value_typed_def] >>
+  metis_tac[well_typed_expr_not_hashmap_place]
+QED
+
+Theorem intcall_default_success_post_push_sound[local]:
+  !cx env loc src_id_opt es extra env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    evaluate_type env_body.type_defs ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (dflt_st with scopes := [call_env]) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  drule_all intcall_live_pushed_body_preconditions >>
+  strip_tac >>
+  `no_type_error_result res` by (
+    irule intcall_default_success_post_push_no_type_error >>
+    qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                  `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                  `ret`, `rtv`, `st'`] >>
+    simp[] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  gvs[bind_apply] >>
+  Cases_on
+    `finally
+       (try
+          do
+            eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body';
+            return NoneV
+          od handle_function)
+       do
+         pop_function args_st.scopes;
+         if nr /\ ~(fm = View \/ fm = Pure) then
+           (case cx.nonreentrant_slot of
+              NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot)
+         else return ()
+       od (lock_st with scopes := [call_env])` >>
+  rename1 `_ = (fin_res,fin_st)` >>
+  Cases_on `fin_res` >> gvs[]
+  >- (
+    rename1 `finally _ _ _ = (INL rv,fin_st)` >>
+    drule intcall_finally_try_handle_success_cleanup >>
+    disch_then strip_assume_tac >>
+    gvs[] >~ [`eval_stmts _ _ _ = (INL (),_)`] >- (
+      qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+        (qspecl_then [`env_body`, `NoneT`, `env_after`,
+                      `lock_st with scopes := [call_env]`, `INL ()`, `st_bdy`] mp_tac) >>
+      simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+      strip_tac >>
+      qpat_x_assum `do pop_function args_st.scopes; _ od st_bdy = (INL (),fin_st)` mp_tac >>
+      qspecl_then [`cx`, `nr`, `fm = View \/ fm = Pure`, `args_st.scopes`,
+                    `st_bdy`, `INL ()`, `fin_st`] mp_tac
+        intcall_cleanup_after_pop_preserves_frame >>
+      simp[] >> strip_tac >> strip_tac >>
+      `env_after.type_defs = get_tenv cx /\
+       env_after.bare_globals = env.bare_globals /\
+       env_after.toplevel_vtypes = env.toplevel_vtypes` by
+        (drule type_stmts_env_preserved_static >> simp[]) >>
+      `state_well_typed fin_st /\ env_consistent env cx fin_st /\
+       accounts_well_typed fin_st.accounts` by (
+        qspecl_then [`env`, `env_after`, `cx`, `env_body.current_src`, `fn`,
+                      `args_st`, `st_bdy`, `fin_st`] mp_tac
+          intcall_cleanup_frame_restore_sound >>
+        (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+        strip_tac >> simp[]) >>
+      gvs[intcall_safe_cast_NoneTV_NoneV, lift_option_type_def,
+          return_def, raise_def, expr_result_typed_def, expr_runtime_typed_def,
+          toplevel_value_typed_def, evaluate_type_def]) >>
+    qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+      (qspecl_then [`env_body`, `NoneT`, `env_after`,
+                    `lock_st with scopes := [call_env]`,
+                    `INR (ReturnException rv)`, `st_bdy`] mp_tac) >>
+    simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+    strip_tac >>
+    qpat_x_assum `do pop_function args_st.scopes; _ od st_bdy = (INL (),fin_st)` mp_tac >>
+    qspecl_then [`cx`, `nr`, `fm = View \/ fm = Pure`, `args_st.scopes`,
+                  `st_bdy`, `INL ()`, `fin_st`] mp_tac
+      intcall_cleanup_after_pop_preserves_frame >>
+    simp[] >> strip_tac >> strip_tac >>
+    gvs[] >>
+    `env_exn.type_defs = get_tenv cx /\
+     env_exn.bare_globals = env.bare_globals /\
+     env_exn.toplevel_vtypes = env.toplevel_vtypes` by
+      (gvs[env_extends_def]) >>
+    `state_well_typed fin_st /\ env_consistent env cx fin_st /\
+     accounts_well_typed fin_st.accounts` by (
+      qspecl_then [`env`, `env_exn`, `cx`, `env_body.current_src`, `fn`,
+                    `args_st`, `st_bdy`, `fin_st`] mp_tac
+        intcall_cleanup_frame_restore_sound >>
+      (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+      strip_tac >> simp[]) >>
+    `rv = NoneV` by
+      gvs[return_exception_typed_def, value_runtime_typed_def, evaluate_type_def] >>
+    gvs[intcall_safe_cast_NoneTV_NoneV, lift_option_type_def,
+        return_def, raise_def, expr_result_typed_def, expr_runtime_typed_def,
+        toplevel_value_typed_def, evaluate_type_def])
+  >- (
+    `(!env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body' = SOME env2 /\
+      env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+      state_well_typed st0 /\
+      context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      accounts_well_typed st0.accounts /\
+      functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body' st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+      case res0 of
+      | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\
+            env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+            return_exception_typed env_exn ret_ty1 exn)` by (
+      rpt strip_tac >>
+      qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+        (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+      simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]) >>
+    `state_well_typed fin_st /\ env_consistent env cx fin_st /\
+     accounts_well_typed fin_st.accounts` by
+      (qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                    `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                    `expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)`,
+                    `y`, `fin_st`] mp_tac
+         intcall_default_success_post_push_outer_inr_frame_ret >>
+       impl_tac >- first_assum ACCEPT_TAC >>
+       rpt (impl_tac >- (first_assum ACCEPT_TAC ORELSE
+                         simp[context_well_typed_stk_irrelevant,
+                              functions_well_typed_stk_irrelevant])) >>
+       simp[]) >>
+    gvs[] ) >>
+  all_tac >~ [`finally _ _ _ = (INL _,_)`] >- (
+    drule intcall_finally_try_handle_success_cleanup >>
+    disch_then strip_assume_tac >> gvs[]
+    >- (
+      drule (cj 2 no_fallthrough_eval_no_success) >>
+      disch_then (qspecl_then [`cx with stk updated_by CONS (env_body.current_src,fn)`,
+                               `lock_st with scopes := [call_env]`, `st_bdy`] mp_tac) >>
+      simp[]) >>
+    qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+      (qspecl_then [`env_body`, `expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)`, `env_after`,
+                    `lock_st with scopes := [call_env]`,
+                    `INR (ReturnException v)`, `st_bdy`] mp_tac) >>
+    simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+    strip_tac >>
+    qpat_x_assum `do pop_function args_st.scopes; _ od st_bdy = (INL (),fin_st)` mp_tac >>
+    qspecl_then [`cx`, `nr`, `fm = View \/ fm = Pure`, `args_st.scopes`,
+                  `st_bdy`, `INL ()`, `fin_st`] mp_tac
+      intcall_cleanup_after_pop_preserves_frame >>
+    simp[] >> strip_tac >> strip_tac >>
+    gvs[] >>
+    `env_exn.type_defs = get_tenv cx /\
+     env_exn.bare_globals = env.bare_globals /\
+     env_exn.toplevel_vtypes = env.toplevel_vtypes` by
+      (gvs[env_extends_def]) >>
+    `state_well_typed fin_st /\ env_consistent env cx fin_st /\
+     accounts_well_typed fin_st.accounts` by (
+      qspecl_then [`env`, `env_exn`, `cx`, `env_body.current_src`, `fn`,
+                    `args_st`, `st_bdy`, `fin_st`] mp_tac
+        intcall_cleanup_frame_restore_sound >>
+      (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+      strip_tac >> simp[]) >>
+    `value_has_type rtv v` by
+      gvs[return_exception_typed_def, value_runtime_typed_def] >>
+    `safe_cast rtv v = SOME v` by
+      (irule safe_cast_well_typed >> simp[]) >>
+    gvs[lift_option_type_def, return_def, raise_def] >>
+    `env.type_defs = get_tenv cx` by
+      gvs[env_consistent_def, env_context_consistent_def] >>
+    irule intcall_safe_cast_expr_result_typed >>
+    simp[] >>
+    qexists `v` >> simp[]) >>
+  all_tac >~ [`finally _ _ _ = (INR _,_)`] >- (
+    `(!env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body' = SOME env2 /\
+      env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+      state_well_typed st0 /\
+      context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      accounts_well_typed st0.accounts /\
+      functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body' st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+      case res0 of
+      | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\
+            env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+            return_exception_typed env_exn ret_ty1 exn)` by (
+      rpt strip_tac >>
+      qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
+        (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+      simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]) >>
+    qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
+                  `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
+                  `expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)`,
+                  `y`, `fin_st`] mp_tac
+      intcall_default_success_post_push_outer_inr_frame_ret >>
+    impl_tac >- first_assum ACCEPT_TAC >>
+    rpt (impl_tac >- (first_assum ACCEPT_TAC ORELSE
+                      simp[context_well_typed_stk_irrelevant,
+                           functions_well_typed_stk_irrelevant])) >>
+    simp[])
+QED
+
+
+Theorem bind_no_type_error_result[local]:
+  !m k s res st'.
+    no_type_error_result (FST (m s)) /\
+    (!x s1 res1 st1.
+       m s = (INL x,s1) /\ k x s1 = (res1,st1) ==>
+       no_type_error_result res1) /\
+    bind m k s = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  Cases_on `m s` >> gvs[bind_def] >>
+  Cases_on `q` >> gvs[bind_def, no_type_error_result_def]
+QED
+
+Theorem case_sum_no_type_error_result[local]:
+  !dflt_res dflt_st branch res st'.
+    no_type_error_result dflt_res /\
+    (!x res1 st1. dflt_res = INL x /\ branch x = (res1,st1) ==> no_type_error_result res1) /\
+    (case dflt_res of
+       INL x => branch x
+     | INR e => (INR e,dflt_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  Cases_on `dflt_res` >> gvs[no_type_error_result_def] >> metis_tac[]
+QED
+
+Theorem intcall_lock_no_type_error_result[local]:
+  !cx nr is_view st res st'.
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) st = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  Cases_on `nr` >> gvs[return_def, raise_def, no_type_error_result_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[raise_def, no_type_error_result_def, acquire_nonreentrant_lock_def,
+      get_transient_storage_def, update_transient_def, bind_def, ignore_bind_def,
+      return_def, raise_def] >>
+  Cases_on `lookup_storage (n2w x) (lookup_transient_storage cx.txn.target st.tStorage) = 1w` >>
+  gvs[raise_def, return_def, update_transient_def, no_type_error_result_def] >>
+  Cases_on `is_view` >>
+  gvs[raise_def, return_def, update_transient_def, no_type_error_result_def]
+QED
+
+Theorem intcall_lock_attempt_sound_frame[local]:
+  !env cx nr is_view dflt_st lock_res lock_st.
+    env_consistent env cx dflt_st /\ state_well_typed dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     else return ()) dflt_st = (lock_res,lock_st) ==>
+    state_well_typed lock_st /\ accounts_well_typed lock_st.accounts /\
+    no_type_error_result lock_res /\
+    (case lock_res of INL _ => T | INR _ => env_consistent env cx lock_st)
+Proof
+  rpt strip_tac >>
+  `no_type_error_result lock_res` by
+    (irule intcall_lock_no_type_error_result >> goal_assum drule) >>
+  Cases_on `lock_res`
+  >- (Cases_on `x` >>
+      drule intcall_lock_state_preserves_frame >>
+      strip_tac >>
+      gvs[state_well_typed_def]) >>
+  gvs[no_type_error_result_def] >>
+  Cases_on `nr` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[raise_def, acquire_nonreentrant_lock_def, get_transient_storage_def,
+      update_transient_def, bind_def, ignore_bind_def, return_def,
+      no_type_error_result_def] >>
+  Cases_on `lookup_storage (n2w x) (lookup_transient_storage cx.txn.target dflt_st.tStorage) = 1w` >>
+  gvs[raise_def, return_def, update_transient_def, state_well_typed_def] >>
+  Cases_on `is_view` >>
+  gvs[raise_def, return_def, update_transient_def, state_well_typed_def]
+QED
+
+
+Theorem intcall_default_success_lock_success_tail_no_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    evaluate_type (get_tenv cx) ret = SOME rtv ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    stmts_no_control_escape body ==>
+    env_consistent env cx args_st ==>
+    state_well_typed dflt_st ==>
+    context_well_typed cx ==>
+    accounts_well_typed dflt_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.fn_sigs = env.fn_sigs ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_body.flag_members = env.flag_members ==>
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st ==>
+    scope_well_typed call_env ==>
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) ==>
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule intcall_default_success_post_push_no_type_error >>
+  qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                `ret`, `rtv`, `st'`] >>
+  simp[env_scopes_consistent_stk_irrelevant, evaluate_type_NoneT] >>
+  rpt conj_tac >>
+  (qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` ACCEPT_TAC ORELSE
+   first_assum ACCEPT_TAC ORELSE
+   gvs[evaluate_type_def, evaluate_type_NoneT])
+QED
+
+Theorem intcall_default_success_lock_success_tail_not_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv msg st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    evaluate_type (get_tenv cx) ret = SOME rtv ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    stmts_no_control_escape body ==>
+    env_consistent env cx args_st ==>
+    state_well_typed dflt_st ==>
+    context_well_typed cx ==>
+    accounts_well_typed dflt_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.fn_sigs = env.fn_sigs ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_body.flag_members = env.flag_members ==>
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st ==>
+    scope_well_typed call_env ==>
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) ==>
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (INR (Error (TypeError msg)),st') ==>
+    F
+Proof
+  rpt strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args_st`, `dflt_st`,
+               `lock_st`, `call_env`, `fn`, `fm`, `nr`, `ret`, `body'`,
+               `env_after`, `rtv`, `INR (Error (TypeError msg))`, `st'`]
+    mp_tac intcall_default_success_lock_success_tail_no_type_error >>
+  rpt (impl_tac >-
+       (qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` ACCEPT_TAC ORELSE
+        first_assum ACCEPT_TAC ORELSE
+        gvs[env_scopes_consistent_stk_irrelevant, evaluate_type_NoneT,
+            evaluate_type_def])) >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem intcall_default_success_none_tail_no_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr body env_after res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    type_stmts env_body NoneT body = SOME env_after ==>
+    stmts_no_control_escape body ==>
+    env_consistent env cx args_st ==>
+    state_well_typed dflt_st ==>
+    context_well_typed cx ==>
+    accounts_well_typed dflt_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.fn_sigs = env.fn_sigs ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_body.flag_members = env.flag_members ==>
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st ==>
+    scope_well_typed call_env ==>
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) ==>
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- (case safe_cast NoneTV rv of
+               | NONE => raise (Error (TypeError "IntCall cast ret"))
+               | SOME v => return v);
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule intcall_default_success_lock_success_tail_no_type_error >>
+  qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                `NoneT`, `NoneTV`, `st'`] >>
+  simp[env_scopes_consistent_stk_irrelevant, evaluate_type_NoneT,
+       evaluate_type_def] >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+   (qpat_x_assum `(do rv <- finally _ _; crv <- _; return (Value crv) od _) = (res,st')` mp_tac >>
+    simp[lift_option_type_def, return_def, raise_def]))
+QED
+
+Theorem intcall_default_success_push_tail_no_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    evaluate_type (get_tenv cx) ret = SOME rtv ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    stmts_no_control_escape body ==>
+    env_consistent env cx args_st ==>
+    state_well_typed dflt_st ==>
+    context_well_typed cx ==>
+    accounts_well_typed dflt_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.fn_sigs = env.fn_sigs ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_body.flag_members = env.flag_members ==>
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st ==>
+    scope_well_typed call_env ==>
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) ==>
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    (case push_function (env_body.current_src,fn) call_env cx lock_st of
+       (INL cxf,pushed_st) =>
+         (do
+            rv <- finally
+              (try (do eval_stmts cxf body; return NoneV od) handle_function)
+              (do pop_function args_st.scopes;
+                  if nr /\ ~(fm = View \/ fm = Pure) then
+                    case cx.nonreentrant_slot of
+                    | NONE => return ()
+                    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+            crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+            return (Value crv)
+          od) pushed_st
+     | (INR e,push_st) => (INR e,push_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  simp[push_function_def, return_def] >>
+  irule intcall_default_success_lock_success_tail_no_type_error >>
+  qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                `ret`, `rtv`, `st'`] >>
+  simp[env_scopes_consistent_stk_irrelevant] >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+   (qpat_x_assum `(case push_function _ _ _ _ of _ => _ | _ => _) = _` mp_tac >>
+    simp[push_function_def, return_def]) ORELSE
+   (qpat_assum `evaluate_type (get_tenv cx) ret = SOME rtv` mp_tac >> simp[]) ORELSE
+   gvs[evaluate_type_def, evaluate_type_NoneT])
+QED
+
+Theorem intcall_default_success_bound_continuation_no_type_error[local]:
+  !cx env env_body args_st dflt_st call_env fn fm nr ret body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) ==>
+    evaluate_type (get_tenv cx) ret = SOME rtv ==>
+    type_stmts env_body ret body = SOME env_after ==>
+    (ret = NoneT \/ stmts_no_fallthrough body) ==>
+    stmts_no_control_escape body ==>
+    env_consistent env cx args_st ==>
+    state_well_typed dflt_st ==>
+    context_well_typed cx ==>
+    accounts_well_typed dflt_st.accounts ==>
+    functions_well_typed cx ==>
+    env_body.type_defs = get_tenv cx ==>
+    env_body.fn_sigs = env.fn_sigs ==>
+    env_body.bare_globals = env.bare_globals ==>
+    env_body.toplevel_vtypes = env.toplevel_vtypes ==>
+    env_body.flag_members = env.flag_members ==>
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st ==>
+    scope_well_typed call_env ==>
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) ==>
+    (case
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) dflt_st
+     of
+       (INL u,lock_st) =>
+         (case push_function (env_body.current_src,fn) call_env cx lock_st of
+            (INL cxf,pushed_st) =>
+              (do
+                 rv <- finally
+                   (try (do eval_stmts cxf body; return NoneV od) handle_function)
+                   (do pop_function args_st.scopes;
+                       if nr /\ ~(fm = View \/ fm = Pure) then
+                         case cx.nonreentrant_slot of
+                         | NONE => return ()
+                         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                       else return ()
+                    od);
+                 crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+                 return (Value crv)
+               od) pushed_st
+          | (INR e,push_st) => (INR e,push_st))
+     | (INR e,lock_st) => (INR e,lock_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  Cases_on
+    `(if nr then
+        case cx.nonreentrant_slot of
+        | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+      else return ()) dflt_st` >>
+  rename1 `_ = (lock_res,lock_st)` >>
+  Cases_on `lock_res`
+  >- (
+    simp[] >>
+    `(case push_function (env_body.current_src,fn) call_env cx lock_st of
+       | (INL cxf,pushed_st) =>
+           (do
+              rv <- finally
+                (try (do eval_stmts cxf body'; return NoneV od) handle_function)
+                (do pop_function args_st.scopes;
+                    if nr /\ ~(fm = View \/ fm = Pure) then
+                      case cx.nonreentrant_slot of
+                      | NONE => return ()
+                      | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                    else return ()
+                 od);
+              crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+              return (Value crv)
+            od) pushed_st
+       | (INR e,push_st) => (INR e,push_st)) = (res,st')` by (
+      qpat_x_assum `(case (INL x,lock_st) of _ => _ | _ => _) = (res,st')` mp_tac >>
+      simp[] >>
+      disch_then ACCEPT_TAC) >>
+    irule intcall_default_success_push_tail_no_type_error >>
+    qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                  `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                  `ret`, `rtv`, `st'`] >>
+    simp[env_scopes_consistent_stk_irrelevant, evaluate_type_NoneT,
+         evaluate_type_def] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` ACCEPT_TAC ORELSE
+     metis_tac[])) >>
+  TRY (
+    simp[] >>
+    `(case push_function (env_body.current_src,fn) call_env cx lock_st of
+       | (INL cxf,pushed_st) =>
+           (do
+              rv <- finally
+                (try (do eval_stmts cxf body'; return NoneV od) handle_function)
+                (do pop_function args_st.scopes;
+                    if nr /\ ~(fm = View \/ fm = Pure) then
+                      case cx.nonreentrant_slot of
+                      | NONE => return ()
+                      | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                    else return ()
+                 od);
+              crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+              return (Value crv)
+            od) pushed_st
+       | (INR e,push_st) => (INR e,push_st)) = (res,st')` by (
+      qpat_x_assum `(case (INL x,lock_st) of _ => _ | _ => _) = (res,st')` mp_tac >>
+      simp[] >>
+      disch_then ACCEPT_TAC) >>
+    irule intcall_default_success_push_tail_no_type_error >>
+    qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                  `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                  `ret`, `rtv`, `st'`] >>
+    simp[env_scopes_consistent_stk_irrelevant, evaluate_type_NoneT,
+         evaluate_type_def] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` ACCEPT_TAC ORELSE
+     metis_tac[])) >>
+  qpat_x_assum `(case (INR y,lock_st) of _ => _ | _ => _) = (res,st')` mp_tac >>
+  simp[] >>
+  strip_tac >>
+  drule intcall_lock_no_type_error_result >>
+  simp[] >>
+  strip_tac >>
+  gvs[no_type_error_result_def]
+QED
+Theorem intcall_default_success_continuation_no_type_error[local]:
+  !cx env env_body args_st dflt_st actual_vs dflt_vs es args dflts
+     needed_dflts src_id_opt fn fm nr ret body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (src_id_opt,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+         INL v => env_consistent env2 (cx with stk updated_by CONS (src_id_opt,fn)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (src_id_opt,fn)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    exprs_runtime_typed env es actual_vs /\
+    exprs_runtime_typed (defaults_env env_body) needed_dflts dflt_vs /\
+    env.type_defs = get_tenv cx /\ env_body.type_defs = get_tenv cx /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+    needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+    LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    evaluate_type (get_tenv cx) ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\ state_well_typed dflt_st /\
+    context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\ env_body.current_src = src_id_opt /\
+    env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    (case
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st
+     of
+       (INL call_env,bind_st) =>
+         (case lift_option_type (SOME rtv) "IntCall eval ret" bind_st of
+            (INL ret_v,ret_st) =>
+              (case
+                 (if nr then
+                    case cx.nonreentrant_slot of
+                    | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                    | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                                      (fm = View \/ fm = Pure)
+                  else return ()) ret_st
+               of
+                 (INL u,lock_st) =>
+                   (case push_function (src_id_opt,fn) call_env cx lock_st of
+                      (INL cxf,pushed_st) =>
+                        (do
+                           rv <- finally
+                             (try (do eval_stmts cxf body; return NoneV od) handle_function)
+                             (do pop_function args_st.scopes;
+                                 if nr /\ ~(fm = View \/ fm = Pure) then
+                                   case cx.nonreentrant_slot of
+                                   | NONE => return ()
+                                   | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                                 else return ()
+                              od);
+                           crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
+                           return (Value crv)
+                         od) pushed_st
+                    | (INR e,push_st) => (INR e,push_st))
+               | (INR e,lock_st) => (INR e,lock_st))
+          | (INR e,ret_st) => (INR e,ret_st))
+     | (INR e,bind_st) => (INR e,bind_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args`, `dflts`, `es`,
+               `actual_vs`, `dflt_vs`, `needed_dflts`, `dflt_st`] mp_tac
+    intcall_bind_arguments_from_runtime_typed >>
+  (impl_tac >- (rpt conj_tac >> simp[] >> metis_tac[])) >>
+  strip_tac >>
+  qpat_assum `evaluate_type (get_tenv cx) ret = SOME rtv` (mk_asm "eval_ret") >>
+  qpat_x_assum `(case lift_option_type (bind_arguments _ _ _) _ _ of _ => _ | _ => _) = (res,st')` mp_tac >>
+  simp[lift_option_type_def, return_def] >>
+  strip_tac >>
+  irule intcall_default_success_bound_continuation_no_type_error >>
+  qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                `env_after`, `env_body`, `fm`, `fn`, `nr`, `ret`, `rtv`, `st'`] >>
+  simp[env_scopes_consistent_stk_irrelevant] >>
+  (conj_tac >- (qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` mp_tac >> simp[])) >>
+  (simp[lift_option_type_def, return_def] ORELSE
+   first_assum ACCEPT_TAC ORELSE
+   asm "eval_ret" ACCEPT_TAC)
+QED
+
+Theorem intcall_body_ih_after_setup_success[local]:
+  !cx src_id_opt fn args actual_vs dflt_vs dflt_st bind_st ret ret_v ret_st
+    nr fm lock_st call_env cxf pushed_st body.
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" bind_st' = (INL ret_v,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (src_id_opt,fn) call_env' cx lock_st' = (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,bind_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) ret)
+      "IntCall eval ret" bind_st = (INL ret_v,ret_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) ret_st = (INL (),lock_st) /\
+    push_function (src_id_opt,fn) call_env cx lock_st = (INL cxf,pushed_st) ==>
+    !env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 body = SOME env2 /\
+      env_consistent env1 cxf st0 /\ state_well_typed st0 /\
+      context_well_typed cxf /\ accounts_well_typed st0.accounts /\
+      functions_well_typed cxf /\ eval_stmts cxf body st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+      | INL v => env_consistent env2 cxf st0'
+      | INR exn => ?env_exn.
+          env_extends env1 env_exn /\ env_consistent env_exn cxf st0' /\
+          return_exception_typed env_exn ret_ty1 exn
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'. _`
+    (qspecl_then [`call_env`, `bind_st`, `ret_st`, `lock_st`, `cxf`, `pushed_st`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
+QED
+
+Theorem intcall_generated_body_ih_to_post_push_body_ih[local]:
+  !cx env_body fn args actual_vs dflt_vs dflt_st bind_st ret ret_v ret_st
+    nr fm lock_st call_env body.
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" bind_st' = (INL ret_v,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' =
+         (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,bind_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) ret)
+      "IntCall eval ret" bind_st = (INL ret_v,ret_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) ret_st = (INL (),lock_st) ==>
+    !cxf pushed_st.
+      push_function (env_body.current_src,fn) call_env cx lock_st =
+        (INL cxf,pushed_st) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body = SOME env2 /\
+        env_consistent env1 cxf st0 /\ state_well_typed st0 /\
+        context_well_typed cxf /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cxf /\ eval_stmts cxf body st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+        | INL v => env_consistent env2 cxf st0'
+        | INR exn => ?env_exn.
+            env_extends env1 env_exn /\ env_consistent env_exn cxf st0' /\
+            return_exception_typed env_exn ret_ty1 exn
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'. _`
+    (qspecl_then [`call_env`, `bind_st`, `ret_st`, `lock_st`, `cxf`, `pushed_st`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[]
+QED
+
+Theorem lift_option_type_INL_SOME[local]:
+  !opt msg st v st'.
+    lift_option_type opt msg st = (INL v,st') ==> opt = SOME v
+Proof
+  Cases_on `opt` >> rw[lift_option_type_def, return_def, raise_def]
+QED
+
+
+Theorem intcall_default_success_post_lock_no_type_error_from_body_ih[local]:
+  !cx env env_body args_st dflt_st bind_st ret_st lock_st call_env fn fm nr ret
+     body env_after rtv actual_vs dflt_vs args res st'.
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" bind_st' = (INL rtv,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' = (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,bind_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) ret)
+      "IntCall eval ret" bind_st = (INL rtv,ret_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) ret_st = (INL (),lock_st) /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\
+    state_well_typed ret_st /\
+    context_well_typed cx /\
+    accounts_well_typed ret_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) ret_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (ret_st with scopes := [call_env]) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  qspecl_then
+    [`cx`, `env_body.current_src`, `fn`, `args`, `actual_vs`, `dflt_vs`,
+     `dflt_st`, `bind_st`, `ret`, `rtv`, `ret_st`, `nr`, `fm`, `lock_st`,
+     `call_env`, `cx with stk updated_by CONS (env_body.current_src,fn)`,
+     `lock_st with scopes := [call_env]`, `body'`] mp_tac
+    intcall_body_ih_after_setup_success >>
+  (impl_tac >- (
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE simp[push_function_def, return_def]))) >>
+  strip_tac >>
+  qpat_assum `lift_option_type (evaluate_type (get_tenv cx) ret) _ bind_st = (INL rtv,ret_st)`
+    (fn th => assume_tac (MATCH_MP lift_option_type_INL_SOME th)) >>
+  irule intcall_default_success_lock_success_tail_no_type_error >>
+  qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `ret_st`, `env`,
+                `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                `ret`, `rtv`, `st'`] >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+   qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` ACCEPT_TAC ORELSE
+   simp[env_scopes_consistent_stk_irrelevant, evaluate_type_NoneT,
+        evaluate_type_def])
+QED
+
+
+Theorem intcall_default_success_post_lock_no_type_error_from_post_push_body_ih[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret
+     body env_after rtv res st'.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+       | INR exn => ?env_exn.
+           env_extends env1 env_exn /\
+           env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+           return_exception_typed env_exn ret_ty1 exn) /\
+    evaluate_type (get_tenv cx) ret = SOME rtv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule intcall_default_success_lock_success_tail_no_type_error >>
+  qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                `ret`, `rtv`, `st'`] >>
+  simp[env_scopes_consistent_stk_irrelevant] >>
+  rpt conj_tac >>
+  (qpat_assum `!env1 ret_ty1 env2 st0 res0 st0'. _` ACCEPT_TAC ORELSE
+   first_assum ACCEPT_TAC)
+QED
+
+Theorem env_consistent_type_defs_get_tenv[local]:
+  !env cx st. env_consistent env cx st ==> env.type_defs = get_tenv cx
+Proof
+  simp[env_consistent_def, env_context_consistent_def]
+QED
+
+
+
+Theorem intcall_default_success_NoneT_post_lock_consumer_no_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr body env_after
+     actual_vs dflt_vs args res st' lock_res.
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) NoneT)
+         "IntCall eval ret" bind_st' = (INL NoneTV,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' = (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) NoneT)
+      "IntCall eval ret" dflt_st = (INL NoneTV,dflt_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    type_stmts env_body NoneT body = SOME env_after /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do
+            rv <- finally
+              (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                       return NoneV od) handle_function)
+              (do pop_function args_st.scopes;
+                  if nr /\ ~(fm = View \/ fm = Pure) then
+                    case cx.nonreentrant_slot of
+                    | NONE => return ()
+                    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+            crv <- lift_option_type (safe_cast NoneTV rv) "IntCall cast ret";
+            return (Value crv)
+          od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  Cases_on `lock_res`
+  >- (Cases_on `x` >> gvs[] >>
+      qspecl_then [`cx`, `env`, `env_body`, `args_st`, `dflt_st`,
+                   `dflt_st`, `dflt_st`, `lock_st`, `call_env`, `fn`,
+                   `fm`, `nr`, `NoneT`, `body'`, `env_after`, `NoneTV`,
+                   `actual_vs`, `dflt_vs`, `args`, `res`, `st'`] mp_tac
+        intcall_default_success_post_lock_no_type_error_from_body_ih >>
+      impl_tac >- (
+        conj_tac >- (
+          rpt strip_tac >>
+          qpat_x_assum `!cxf0 pushed0. _`
+            (qspecl_then [`cxf'`, `pushed_st'`] mp_tac) >>
+          (impl_tac >- gvs[lift_option_type_def, return_def]) >>
+          strip_tac >>
+          first_x_assum (qspecl_then [`env1`, `ret_ty1`, `env2`,
+                                      `st0`, `res0`, `st0'`] mp_tac) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          simp[]) >>
+        rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+      simp[]) >>
+  gvs[no_type_error_result_def] >>
+  drule intcall_lock_no_type_error_result >>
+  simp[no_type_error_result_def] >>
+  strip_tac >> strip_tac >> gvs[]
+QED
+
+Theorem intcall_default_success_general_post_lock_consumer_type_error_contradiction_from_body_ih[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv
+     actual_vs dflt_vs args st' msg.
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" bind_st' = (INL rtv,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' = (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) ret)
+      "IntCall eval ret" dflt_st = (INL rtv,dflt_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\ context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\ functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (do
+       rv <- finally
+         (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                  return NoneV od) handle_function)
+         (do pop_function args_st.scopes;
+             if nr /\ ~(fm = View \/ fm = Pure) then
+               case cx.nonreentrant_slot of
+               | NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) (lock_st with scopes := [call_env]) = (INR (Error (TypeError msg)),st') ==>
+    F
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `env`, `env_body`, `args_st`, `dflt_st`,
+               `dflt_st`, `dflt_st`, `lock_st`, `call_env`, `fn`,
+               `fm`, `nr`, `ret`, `body'`, `env_after`, `rtv`,
+               `actual_vs`, `dflt_vs`, `args`, `INR (Error (TypeError msg))`, `st'`] mp_tac
+    intcall_default_success_post_lock_no_type_error_from_body_ih >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+  strip_tac >>
+  fs[no_type_error_result_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem intcall_default_success_general_post_lock_consumer_no_type_error[local]:
+  !cx env env_body args_st dflt_st lock_st call_env fn fm nr ret body env_after rtv
+     actual_vs dflt_vs args res st' lock_res.
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" bind_st' = (INL rtv,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' = (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) ret)
+      "IntCall eval ret" dflt_st = (INL rtv,dflt_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do
+            rv <- finally
+              (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                       return NoneV od) handle_function)
+              (do pop_function args_st.scopes;
+                  if nr /\ ~(fm = View \/ fm = Pure) then
+                    case cx.nonreentrant_slot of
+                    | NONE => return ()
+                    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+            crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+            return (Value crv)
+          od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  Cases_on `lock_res`
+  >- (Cases_on `x` >> simp[] >>
+      qspecl_then [`cx`, `env_body`, `fn`, `args`, `actual_vs`, `dflt_vs`,
+                   `dflt_st`, `dflt_st`, `ret`, `rtv`, `dflt_st`,
+                   `nr`, `fm`, `lock_st`, `call_env`, `body'`] mp_tac
+        intcall_generated_body_ih_to_post_push_body_ih >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+      disch_then (qspecl_then
+        [`cx with stk updated_by CONS (env_body.current_src,fn)`,
+         `lock_st with scopes := [call_env]`] mp_tac) >>
+      (impl_tac >- simp[push_function_def, return_def]) >>
+      strip_tac >>
+      qpat_assum `lift_option_type (evaluate_type (get_tenv cx) _) _ _ = (INL rtv,_)`
+        (fn th => assume_tac (MATCH_MP lift_option_type_INL_SOME th)) >>
+      qpat_x_assum `(case INL () of INL u => _ | INR e => _) = (res,st')` mp_tac >>
+      simp[] >>
+      strip_tac >>
+      irule intcall_default_success_post_lock_no_type_error_from_post_push_body_ih >>
+      qexistsl_tac [`args_st`, `body'`, `call_env`, `cx`, `dflt_st`, `env`,
+                    `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
+                    `ret`, `rtv`, `st'`] >>
+      asm_rewrite_tac[] >> simp[]) >>
+  qpat_x_assum `(case INR y of INL u => _ | INR e => _) = (res,st')` mp_tac >>
+  simp[] >> strip_tac >>
+  drule intcall_lock_no_type_error_result >>
+  simp[no_type_error_result_def] >>
+  strip_tac >> gvs[]
+QED
+Theorem intcall_generated_body_ih_NoneT_consumer_premise[local]:
+  !cx src_id_opt fn es actual_vs dflt_vs args dflts body env_body fm nr
+     dflt_st s0 x0 t0 s1 ts0 t1 s2 t2 s5 x5 t5 s6 t6 s7 prev0 t7 s8.
+    env_body.current_src = src_id_opt /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+      (INL ts0,t1) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+      "IntCall lookup_function" s2 = (INL (fm,nr,args,dflts,NoneT,body),t2) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" s5 = (INL x5,t5) /\
+    eval_exprs cx es s6 = (INL actual_vs,t6) /\
+    get_scopes s7 = (INL prev0,t7) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes prev0) s8 = (INL dflt_vs,dflt_st) ==>
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) NoneT)
+         "IntCall eval ret" bind_st' = (INL NoneTV,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' =
+         (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12. _` mp_tac >>
+  disch_then (qspecl_then [`s0`, `x0`, `t0`, `s1`, `ts0`, `t1`, `s2`,
+                           `(fm,nr,args,dflts,NoneT,body')`, `t2`,
+                           `fm`, `(nr,args,dflts,NoneT,body')`, `nr`,
+                           `(args,dflts,NoneT,body')`, `args`,
+                           `(dflts,NoneT,body')`, `dflts`, `(NoneT,body')`,
+                           `NoneT`, `body'`, `s5`, `x5`, `t5`, `s6`,
+                           `actual_vs`, `t6`,
+                           `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+                           `cx with stk updated_by CONS (src_id_opt,fn)`,
+                           `s7`, `dflt_vs`, `t7`, `get_tenv cx`, `s8`,
+                           `call_env'`, `dflt_st`, `dflt_st`, `prev0`,
+                           `bind_st'`, `bind_st'`, `NoneTV`, `ret_st'`,
+                           `fm = View \/ fm = Pure`, `ret_st'`, `()`,
+                           `lock_st'`, `lock_st'`, `cxf'`, `pushed_st'`] mp_tac) >>
+  impl_tac >- (gvs[]) >>
+  disch_then (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  impl_tac >- (gvs[]) >>
+  simp[]
+QED
+
+Theorem intcall_generated_body_ih_NoneT_live_consumer_premise[local]:
+  !cx src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts fn_body env_body dflt_vs dflt_st.
+    env_body.current_src = src_id_opt /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,NoneT,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) ==>
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) NoneT)
+         "IntCall eval ret" bind_st' = (INL NoneTV,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' =
+         (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 fn_body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' fn_body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `src_id_opt`, `fn`, `es`, `actual_vs`, `dflt_vs`,
+               `args`, `dflts`, `fn_body`, `env_body`, `fm`, `nr`,
+               `dflt_st`, `r`, `()`, `r`, `r`, `ts`, `r`, `r`, `r`,
+               `r`, `tc_ok`, `r`, `r`, `args_st`, `args_st`,
+               `args_st.scopes`, `args_st`, `args_st`] mp_tac
+    intcall_generated_body_ih_NoneT_consumer_premise >>
+  impl_tac >- (
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def])) >>
+  simp[]
+QED
+
+Theorem intcall_actual_args_success_post_lock_no_type_error[local]:
+  !cx env res st' src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts fn_body env_body env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    env_body.current_src = src_id_opt /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,NoneT,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) NoneT)
+      "IntCall eval ret" dflt_st = (INL NoneTV,dflt_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    type_stmts env_body NoneT fn_body = SOME env_after /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do
+            rv <- finally
+              (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                       return NoneV od) handle_function)
+              (do pop_function args_st.scopes;
+                  if nr /\ ~(fm = View \/ fm = Pure) then
+                    case cx.nonreentrant_slot of
+                    | NONE => return ()
+                    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+            crv <- lift_option_type (safe_cast NoneTV rv) "IntCall cast ret";
+            return (Value crv)
+          od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `env_body`, `args_st`, `dflt_st`,
+                         `lock_st`, `call_env`, `fn`, `fm`, `nr`, `fn_body`,
+                         `env_after`, `actual_vs`, `dflt_vs`, `args`, `res`,
+                         `st'`, `lock_res`]
+    intcall_default_success_NoneT_post_lock_consumer_no_type_error) >>
+  conj_tac >- (
+    ho_match_mp_tac intcall_generated_body_ih_NoneT_live_consumer_premise >>
+    qexistsl_tac [`src_id_opt`, `es`, `r`, `ts`, `tc_ok`, `args_st`, `dflts`] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def,
+          lift_option_type_def, evaluate_type_def])) >>
+  rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])
+QED
+Theorem intcall_generated_body_ih_live_consumer_premise[local]:
+  !cx src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body dflt_vs dflt_st ret_tv.
+    env_body.current_src = src_id_opt /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+        | INL v => env_consistent env2 cx0 st0'
+        | INR exn => ?env_exn.
+            env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+            return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) ==>
+    (!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+       lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+         "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+       lift_option_type (evaluate_type (get_tenv cx) ret)
+         "IntCall eval ret" bind_st' = (INL ret_tv,ret_st') /\
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+        else return ()) ret_st' = (INL (),lock_st') /\
+       push_function (env_body.current_src,fn) call_env' cx lock_st' =
+         (INL cxf',pushed_st') ==>
+       !env1 ret_ty1 env2 st0 res0 st0'.
+         type_stmts env1 ret_ty1 fn_body = SOME env2 /\
+         env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+         context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+         functions_well_typed cxf' /\ eval_stmts cxf' fn_body st0 = (res0,st0') ==>
+         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+         no_type_error_result res0 /\
+         case res0 of
+         | INL v => env_consistent env2 cxf' st0'
+         | INR exn => ?env_exn.
+             env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+             return_exception_typed env_exn ret_ty1 exn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12. _` mp_tac >>
+  disch_then (qspecl_then [`r`, `()`, `r`, `r`, `ts`, `r`, `r`,
+                           `(fm,nr,args,dflts,ret,fn_body)`, `r`,
+                           `fm`, `(nr,args,dflts,ret,fn_body)`, `nr`,
+                           `(args,dflts,ret,fn_body)`, `args`,
+                           `(dflts,ret,fn_body)`, `dflts`, `(ret,fn_body)`,
+                           `ret`, `fn_body`, `r`, `tc_ok`, `r`, `r`,
+                           `actual_vs`, `args_st`,
+                           `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+                           `cx with stk updated_by CONS (src_id_opt,fn)`,
+                           `args_st`, `dflt_vs`, `args_st`, `get_tenv cx`,
+                           `args_st`, `call_env'`, `dflt_st`, `dflt_st`,
+                           `args_st.scopes`, `bind_st'`, `bind_st'`, `ret_tv`,
+                           `ret_st'`, `fm = View \/ fm = Pure`, `ret_st'`,
+                           `()`, `lock_st'`, `lock_st'`, `cxf'`,
+                           `pushed_st'`] mp_tac) >>
+  impl_tac >- (
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+      simp[type_check_def, assert_def] >> IF_CASES_TAC >> gvs[] >> decide_tac) ORELSE
+     gvs[get_scopes_def, set_scopes_def, return_def])) >>
+  disch_then (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE gvs[])) >>
+  simp[]
+QED
+
+Theorem intcall_actual_args_success_post_lock_no_type_error_general[local]:
+  !cx env res st' src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    env_body.current_src = src_id_opt /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+      "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st) /\
+    lift_option_type (evaluate_type (get_tenv cx) ret)
+      "IntCall eval ret" dflt_st = (INL ret_tv,dflt_st) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do
+            rv <- finally
+              (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                       return NoneV od) handle_function)
+              (do pop_function args_st.scopes;
+                  if nr /\ ~(fm = View \/ fm = Pure) then
+                    case cx.nonreentrant_slot of
+                    | NONE => return ()
+                    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+            crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+            return (Value crv)
+          od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `env_body`, `args_st`, `dflt_st`,
+                         `lock_st`, `call_env`, `fn`, `fm`, `nr`, `ret`,
+                         `fn_body`, `env_after`, `ret_tv`, `actual_vs`,
+                         `dflt_vs`, `args`, `res`, `st'`, `lock_res`]
+    intcall_default_success_general_post_lock_consumer_no_type_error) >>
+  (CONJ_TAC THEN1 (
+    ho_match_mp_tac intcall_generated_body_ih_live_consumer_premise >>
+    qexistsl_tac [`src_id_opt`, `es`, `r`, `ts`, `tc_ok`, `args_st`, `dflts`] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def,
+          lift_option_type_def, evaluate_type_def]))) >>
+  (CONJ_TAC THEN1 (qpat_assum `lift_option_type (bind_arguments _ _ _) _ _ = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `lift_option_type (evaluate_type _ _) _ _ = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `(if _ then _ else _) _ = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 ((qpat_assum `ret = NoneT` (fn th => disj1_tac >> ACCEPT_TAC th)) ORELSE
+                   (qpat_assum `stmts_no_fallthrough _` (fn th => disj2_tac >> ACCEPT_TAC th)))) >>
+  (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_consistent _ _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `context_well_typed _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `functions_well_typed _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `_.type_defs = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `_.fn_sigs = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `_.bare_globals = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `_.toplevel_vtypes = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `_.flag_members = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `scope_well_typed _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent _ _ _` ACCEPT_TAC)) >>
+  qpat_assum `(case _ of INL _ => _ | INR _ => _) = _` ACCEPT_TAC
+QED
+
+Theorem no_type_error_result_eq[local]:
+  !a b. a = b ==> no_type_error_result a ==> no_type_error_result b
+Proof
+  rw[]
+QED
+
+Theorem no_type_error_result_INR_eq[local]:
+  !y res. INR y = res ==> no_type_error_result (INR y) ==> no_type_error_result res
+Proof
+  rw[no_type_error_result_def]
+QED
+
+Theorem intcall_actual_args_success_no_type_error_from_generated_ih[local]:
+  !cx env res st' src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts fn_body env_body env_after dflt_res dflt_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,NoneT,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    context_well_typed cx /\ accounts_well_typed args_st.accounts /\
+    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (dflt_res,dflt_st) /\
+    (case dflt_res of
+     | INL dflt_vs =>
+         (case lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+                 "IntCall bind_arguments" dflt_st of
+          | (INL call_env,bind_st) =>
+              (case lift_option_type (evaluate_type (get_tenv cx) NoneT)
+                      "IntCall eval ret" bind_st of
+               | (INL ret_v,ret_st) =>
+                   (case (if nr then
+                            case cx.nonreentrant_slot of
+                            | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                            | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+                          else return ()) ret_st of
+                    | (INL u,lock_st) =>
+                        (case push_function (src_id_opt,fn) call_env cx lock_st of
+                         | (INL cxf,pushed_st) =>
+                             (do rv <- finally
+                                   (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
+                                   (do pop_function args_st.scopes;
+                                       if nr /\ ~(fm = View \/ fm = Pure) then
+                                         case cx.nonreentrant_slot of
+                                         | NONE => return ()
+                                         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                                       else return () od);
+                                 crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
+                                 return (Value crv) od) pushed_st
+                         | (INR e,push_st) => (INR e,push_st))
+                    | (INR e,lock_st) => (INR e,lock_st))
+               | (INR e,ret_st) => (INR e,ret_st))
+          | (INR e,bind_st) => (INR e,bind_st))
+     | INR e => (INR e,dflt_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  imp_res_tac lift_option_type_INL_SOME >>
+  mp_tac (Q.INST [`st` |-> `args_st`, `ts` |-> `ts`,
+                  `fm` |-> `fm`, `nr` |-> `nr`, `args` |-> `args`,
+                  `dflts` |-> `dflts`, `ret` |-> `NoneT`,
+                  `fn_body` |-> `fn_body`]
+           callable_body_typing_from_env_consistent) >>
+  simp[] >>
+  strip_tac >>
+  qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
+    (mk_asm "args_forward") >>
+  qpat_x_assum `!n ty. FLOOKUP _.var_types n = SOME ty ==> _`
+    (mk_asm "args_var_types") >>
+  qpat_x_assum `!n b. FLOOKUP env_body.var_assignable n = SOME b ==> _`
+    (mk_asm "args_var_assignable") >>
+  `type_check (LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts)
+     "IntCall args length" r = (INL (),r)` by
+    (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+     simp[type_check_def, assert_def] >>
+     IF_CASES_TAC >> simp[] >> decide_tac) >>
+  qspecl_then [`cx`, `src_id_opt`, `fn`, `es`,
+               `r`, `r`, `r`, `r`, `r`,
+               `()`, `r`, `ts`, `r`, `(fm,nr,args,dflts,NoneT,fn_body)`, `r`,
+               `tc_ok`, `r`, `actual_vs`, `args_st`,
+               `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+               `cx with stk updated_by CONS (src_id_opt,fn)`,
+               `args_st.scopes`, `dflt_res`, `dflt_st`, `env_body`]
+    mp_tac intcall_default_exprs_sound_from_generated_ih >>
+  impl_tac >- (
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    simp[get_scopes_def, set_scopes_def, return_def, lift_option_type_def,
+         context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
+    conj_tac >- (once_rewrite_tac[ADD_COMM] >> first_assum ACCEPT_TAC) >>
+    conj_tac >- (irule well_typed_exprs_DROP >> first_assum ACCEPT_TAC) >>
+    qspecl_then [`env`, `env_body`, `cx`, `args_st`,
+                 `src_id_opt`, `fn`] mp_tac
+      intcall_default_env_side_conditions >>
+    impl_tac >- simp[
+      context_well_typed_stk_irrelevant,
+      functions_well_typed_stk_irrelevant] >>
+    strip_tac >>
+    rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
+  strip_tac >>
+  Cases_on `dflt_res` >- (
+    simp[] >>
+    qpat_x_assum `case INL x of _ => _ | _ => _` mp_tac >> simp[NoAsms, sum_case_def] >> strip_tac >>
+    drule env_consistent_type_defs_get_tenv >> strip_tac >>
+    `LENGTH args - LENGTH es <= LENGTH dflts` by
+      (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+       simp[type_check_def, assert_def] >>
+       IF_CASES_TAC >> gvs[] >> decide_tac) >>
+    `LENGTH es <= LENGTH args` by
+      (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+       simp[type_check_def, assert_def] >>
+       IF_CASES_TAC >> gvs[] >> decide_tac) >>
+    qspecl_then [`cx`, `env`, `env_body`, `args`, `dflts`, `es`,
+                 `actual_vs`, `x`,
+                 `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+                 `dflt_st`] mp_tac
+      intcall_bind_arguments_from_runtime_typed >>
+    impl_tac >- (
+      rpt conj_tac >>
+      (first_assum ACCEPT_TAC ORELSE
+       asm "args_forward" ACCEPT_TAC ORELSE
+       asm "args_var_types" ACCEPT_TAC ORELSE
+       asm "args_var_assignable" ACCEPT_TAC ORELSE
+       (asm "args_var_assignable" mp_tac >> simp[]) ORELSE
+       simp[])) >>
+    strip_tac >>
+    Cases_on `(if nr then
+                 case cx.nonreentrant_slot of
+                 | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                 | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+               else return ()) dflt_st` >>
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `res`, `st'`, `src_id_opt`, `fn`,
+                           `es`, `r`, `ts`, `tc_ok`, `actual_vs`, `args_st`,
+                           `fm`, `nr`, `args`, `dflts`, `fn_body`, `env_body`,
+                           `env_after`, `x`, `dflt_st`, `call_env`]
+      intcall_actual_args_success_post_lock_no_type_error) >>
+    qexistsl_tac [`q`, `r'`] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     asm "args_forward" ACCEPT_TAC ORELSE
+     asm "args_var_types" ACCEPT_TAC ORELSE
+     asm "args_var_assignable" ACCEPT_TAC ORELSE
+     (qpat_x_assum `(case INL x of _ => _ | _ => _) = (res,st')` mp_tac >>
+      simp[lift_option_type_def, evaluate_type_def, return_def,
+           bind_apply, push_function_def]) ORELSE
+     simp[lift_option_type_def, evaluate_type_def, return_def,
+          bind_apply, push_function_def]) ) >-
+  (qpat_x_assum `(case INR y of _ => _ | _ => _) = (res,st')` mp_tac >>
+   simp[] >> strip_tac >>
+   qpat_x_assum `INR y = res` (fn eq =>
+     qpat_x_assum `no_type_error_result (INR y)` (fn nte =>
+       ACCEPT_TAC (MATCH_MP (MATCH_MP (Q.SPECL [`y`, `res`] no_type_error_result_INR_eq) eq) nte))))
+QED
+
+Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
+  !cx env src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_res dflt_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    context_well_typed cx /\ accounts_well_typed args_st.accounts /\
+    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    well_typed_exprs (defaults_env env_body) dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (dflt_res,dflt_st) ==>
+    no_type_error_result dflt_res /\
+    case dflt_res of
+    | INL dflt_vs =>
+        state_well_typed dflt_st /\
+        env_immutables_consistent env_body
+          (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+        accounts_well_typed dflt_st.accounts /\
+        exprs_runtime_typed (defaults_env env_body)
+          (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) dflt_vs /\
+        ?call_env.
+          bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+          scope_well_typed call_env /\
+          env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  imp_res_tac lift_option_type_INL_SOME >>
+  qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
+    (mk_asm "args_forward") >>
+  qpat_x_assum `!n ty. FLOOKUP _.var_types n = SOME ty ==> _`
+    (mk_asm "args_var_types") >>
+  qpat_x_assum `!n b. FLOOKUP _.var_assignable n = SOME b ==> _`
+    (mk_asm "args_var_assignable") >>
+  `LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts` by
+    (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+     simp[type_check_def, assert_def] >>
+     IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  `type_check (LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts)
+     "IntCall args length" r = (INL (),r)` by
+    simp[type_check_def, assert_def] >>
+  qspecl_then [`cx`, `src_id_opt`, `fn`, `es`,
+               `r`, `r`, `r`, `r`, `r`,
+               `()`, `r`, `ts`, `r`, `(fm,nr,args,dflts,ret,fn_body)`, `r`,
+               `tc_ok`, `r`, `actual_vs`, `args_st`,
+               `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+               `cx with stk updated_by CONS (src_id_opt,fn)`,
+               `args_st.scopes`, `dflt_res`, `dflt_st`, `env_body`]
+    mp_tac intcall_default_exprs_sound_from_generated_ih >>
+  (impl_tac >- (
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    conj_tac >- (
+      qpat_assum `type_check (LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es + LENGTH dflts) "IntCall args length" r = (INL (),r)` mp_tac >>
+      simp[type_check_def, assert_def] >> decide_tac) >>
+    conj_tac >- (first_assum ACCEPT_TAC) >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[] >>
+    conj_tac >- simp[get_scopes_def, return_def] >>
+    conj_tac >- (irule well_typed_exprs_DROP >> first_assum ACCEPT_TAC) >>
+    qspecl_then [`env`, `env_body`, `cx`, `args_st`,
+                 `src_id_opt`, `fn`] mp_tac
+      intcall_default_env_side_conditions >>
+    (impl_tac >- simp[
+      context_well_typed_stk_irrelevant,
+      functions_well_typed_stk_irrelevant]) >>
+    strip_tac >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def, lift_option_type_def,
+          context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]))) >>
+  disch_then strip_assume_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `dflt_res` >- (
+    qpat_x_assum `case INL x of _ => _ | _ => _` mp_tac >>
+    pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    drule env_consistent_type_defs_get_tenv >> strip_tac >>
+    `LENGTH args - LENGTH es <= LENGTH dflts` by
+      (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+       simp[type_check_def, assert_def] >>
+       IF_CASES_TAC >> gvs[] >> decide_tac) >>
+    `LENGTH es <= LENGTH args` by
+      (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+       simp[type_check_def, assert_def] >>
+       IF_CASES_TAC >> gvs[] >> decide_tac) >>
+    qspecl_then [`cx`, `env`, `env_body`, `args`, `dflts`, `es`,
+                 `actual_vs`, `x`,
+                 `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+                 `dflt_st`] mp_tac
+      intcall_bind_arguments_from_runtime_typed >>
+    (impl_tac >- (
+      rpt conj_tac >>
+      (first_assum ACCEPT_TAC ORELSE
+       asm "args_forward" ACCEPT_TAC ORELSE
+       asm "args_var_types" ACCEPT_TAC ORELSE
+       asm "args_var_assignable" ACCEPT_TAC ORELSE
+       (asm "args_var_assignable" mp_tac >> simp[]) ORELSE
+       simp[]))) >>
+    strip_tac >>
+    conj_tac >- (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC) >>
+    conj_tac >- (qpat_assum `env_immutables_consistent env_body _ dflt_st` ACCEPT_TAC) >>
+    conj_tac >- (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC) >>
+    conj_tac >- (qpat_assum `exprs_runtime_typed (defaults_env env_body) _ x` ACCEPT_TAC) >>
+    qexists_tac `call_env` >>
+    conj_tac >- (qpat_assum `bind_arguments _ _ _ = SOME call_env` ACCEPT_TAC) >>
+    conj_tac >- (qpat_assum `scope_well_typed call_env` ACCEPT_TAC) >>
+    qpat_assum `env_scopes_consistent env_body cx _` ACCEPT_TAC) >>
+  simp[NoAsms]
+QED
+
+Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
+  !cx env src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_res dflt_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    context_well_typed cx /\ accounts_well_typed args_st.accounts /\
+    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    well_typed_exprs (defaults_env env_body) dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (dflt_res,dflt_st) ==>
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    no_type_error_result dflt_res /\
+    case dflt_res of
+    | INL dflt_vs =>
+        exprs_runtime_typed (defaults_env env_body)
+          (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) dflt_vs /\
+        ?call_env.
+          bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+          scope_well_typed call_env /\
+          env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+          env_immutables_consistent env_body
+            (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH dflts + LENGTH es` by
+    (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+     simp[type_check_def, assert_def] >>
+     IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  `type_check (LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH dflts + LENGTH es)
+     "IntCall args length" r = (INL (),r)` by
+    simp[type_check_def, assert_def] >>
+  qspecl_then [`cx`, `env`, `src_id_opt`, `fn`, `es`,
+               `r`, `r`, `r`, `r`, `r`,
+               `()`, `r`, `ts`, `r`, `(fm,nr,args,dflts,ret,fn_body)`, `r`,
+               `tc_ok`, `r`, `actual_vs`, `args_st`,
+               `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+               `cx with stk updated_by CONS (src_id_opt,fn)`,
+               `args_st.scopes`, `dflt_res`, `dflt_st`, `env_body`]
+    mp_tac intcall_default_exprs_frame_sound_from_generated_ih >>
+  impl_tac >- (
+    qspecl_then [`env`, `env_body`, `cx`, `args_st`,
+                 `src_id_opt`, `fn`] mp_tac
+      intcall_default_env_side_conditions >>
+    impl_tac >- simp[] >>
+    strip_tac >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     (irule well_typed_exprs_DROP >> first_assum ACCEPT_TAC) ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def, lift_option_type_def,
+          type_check_def, assert_def,
+          context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant])) >>
+  strip_tac >>
+  qspecl_then [`cx`, `env`, `src_id_opt`, `fn`, `es`, `r`, `ts`, `tc_ok`,
+               `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`, `ret`,
+               `fn_body`, `env_body`, `ret_tv`, `env_after`, `dflt_res`, `dflt_st`]
+    mp_tac intcall_defaults_result_package_from_generated_ih_general >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >-
+    first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+  Cases_on `dflt_res` >- (
+    qpat_x_assum `case INL x of _ => _ | _ => _` mp_tac >>
+    pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    qpat_x_assum `case INL x of _ => _ | _ => _` mp_tac >>
+    pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists_tac `call_env` >> simp[]) >>
+  simp[sumTheory.sum_case_def]
+QED
+
+Theorem intcall_successful_defaults_continuation_no_type_error_general[local]:
+  !cx env res st' src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do rv <- finally
+               (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                        return NoneV od) handle_function)
+               (do pop_function args_st.scopes;
+                   if nr /\ ~(fm = View \/ fm = Pure) then
+                     case cx.nonreentrant_slot of
+                     | NONE => return ()
+                     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                   else return () od);
+             crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+             return (Value crv) od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+     "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st)` by
+    simp[lift_option_type_def, return_def] >>
+  `lift_option_type (evaluate_type (get_tenv cx) ret)
+     "IntCall eval ret" dflt_st = (INL ret_tv,dflt_st)` by
+    simp[lift_option_type_def, return_def] >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `env_body`, `args_st`, `dflt_st`,
+                         `lock_st`, `call_env`, `fn`, `fm`, `nr`, `ret`, `fn_body`,
+                         `env_after`, `ret_tv`, `actual_vs`, `dflt_vs`, `args`,
+                         `res`, `st'`, `lock_res`]
+    intcall_default_success_general_post_lock_consumer_no_type_error) >>
+  (CONJ_TAC THEN1 (
+    ho_match_mp_tac intcall_generated_body_ih_live_consumer_premise >>
+    qexistsl_tac [`src_id_opt`, `es`, `r`, `ts`, `tc_ok`, `args_st`, `dflts`] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def,
+          lift_option_type_def, evaluate_type_def]))) >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+   qpat_assum `env_body.current_src = src_id_opt` (fn th =>
+     simp[th] >> first_assum ACCEPT_TAC))
+QED
+
+
+Theorem intcall_generated_body_post_push_ih[local]:
+  !cx src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv dflt_vs dflt_st
+     call_env lock_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    env_body.current_src = src_id_opt /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) ==>
+    !env1 ret_ty1 env2 st0 res0 st0'.
+      type_stmts env1 ret_ty1 fn_body = SOME env2 /\
+      env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+      state_well_typed st0 /\
+      context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      accounts_well_typed st0.accounts /\
+      functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body st0 = (res0,st0') ==>
+      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+      no_type_error_result res0 /\
+      case res0 of
+      | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+      | INR exn =>
+          ?env_exn.
+            env_extends env1 env_exn /\
+            env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+            return_exception_typed env_exn ret_ty1 exn
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `!call_env' bind_st' ret_st' lock_st' cxf' pushed_st'.
+     lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+       "IntCall bind_arguments" dflt_st = (INL call_env',bind_st') /\
+     lift_option_type (evaluate_type (get_tenv cx) ret)
+       "IntCall eval ret" bind_st' = (INL ret_tv,ret_st') /\
+     (if nr then
+        case cx.nonreentrant_slot of
+        | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+      else return ()) ret_st' = (INL (),lock_st') /\
+     push_function (env_body.current_src,fn) call_env' cx lock_st' =
+       (INL cxf',pushed_st') ==>
+     !env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 fn_body = SOME env2 /\
+       env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
+       context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
+       functions_well_typed cxf' /\ eval_stmts cxf' fn_body st0 = (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 cxf' st0'
+       | INR exn => ?env_exn.
+           env_extends env1 env_exn /\ env_consistent env_exn cxf' st0' /\
+           return_exception_typed env_exn ret_ty1 exn` by (
+    ho_match_mp_tac intcall_generated_body_ih_live_consumer_premise >>
+    qexistsl_tac [`src_id_opt`, `es`, `r`, `ts`, `tc_ok`, `args_st`, `dflts`] >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def,
+          lift_option_type_def, evaluate_type_def])) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`call_env`, `dflt_st`, `dflt_st`, `lock_st`,
+                              `cx with stk updated_by CONS (env_body.current_src,fn)`,
+                              `lock_st with scopes := [call_env]`] mp_tac) >>
+  impl_tac >- (
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     qpat_assum `env_body.current_src = src_id_opt` (fn th =>
+       simp[th, push_function_def, return_def, lift_option_type_def,
+            evaluate_type_def]))) >>
+  disch_then (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE gvs[])) >>
+  simp[]
+QED
+
+Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
+  !cx env loc res st' src_id_opt fn es extra env_body args_st dflt_st lock_st
+     call_env fn_name fm nr ret body env_after ret_tv.
+    (!env1 ret_ty1 env2 st0 res0 st0'.
+       type_stmts env1 ret_ty1 body = SOME env2 /\
+       env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn_name)) st0 /\
+       state_well_typed st0 /\
+       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn_name)) /\
+       accounts_well_typed st0.accounts /\
+       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn_name)) /\
+       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn_name)) body st0 =
+         (res0,st0') ==>
+       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+       no_type_error_result res0 /\
+       case res0 of
+       | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn_name)) st0'
+       | INR exn =>
+           ?env_exn.
+             env_extends env1 env_exn /\
+             env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn_name)) st0' /\
+             return_exception_typed env_exn ret_ty1 exn) /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn_name)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn_name)) es extra) = ret /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    stmts_no_control_escape body /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (env_body.current_src,fn_name)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    (do rv <- finally
+          (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn_name)) body;
+                   return NoneV od) handle_function)
+          (do pop_function args_st.scopes;
+              if nr /\ ~(fm = View \/ fm = Pure) then
+                case cx.nonreentrant_slot of
+                | NONE => return ()
+                | SOME slot => release_nonreentrant_lock cx.txn.target slot
+              else return () od);
+        crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+        return (Value crv) od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn_name)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `src_id_opt`, `es`, `extra`,
+                         `env_body`, `args_st`, `dflt_st`, `lock_st`,
+                         `call_env`, `fn_name`, `fm`, `nr`, `ret`, `body'`,
+                         `env_after`, `ret_tv`, `res`, `st'`]
+    intcall_default_success_post_push_sound) >>
+  (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+  (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (
+    qpat_assum `env_body.type_defs = get_tenv cx` (fn th =>
+      simp[th] >> qpat_assum `evaluate_type (get_tenv cx) ret = SOME ret_tv` ACCEPT_TAC))) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+  (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx args_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed args_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (
+    qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` mp_tac >>
+    simp[env_scopes_consistent_stk_irrelevant])) >>
+  (CONJ_TAC THEN1 (qpat_assum `(if _ then _ else _) dflt_st = _` mp_tac >> simp[])) >>
+  first_assum ACCEPT_TAC
+QED
+
+
+Theorem intcall_successful_defaults_lock_success_sound_general[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (INL (),lock_st) /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (do rv <- finally
+          (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                   return NoneV od) handle_function)
+          (do pop_function args_st.scopes;
+              if nr /\ ~(fm = View \/ fm = Pure) then
+                case cx.nonreentrant_slot of
+                | NONE => return ()
+                | SOME slot => release_nonreentrant_lock cx.txn.target slot
+              else return () od);
+        crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+        return (Value crv) od) (lock_st with scopes := [call_env]) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `!env1 ret_ty1 env2 st0 res0 st0'.
+     type_stmts env1 ret_ty1 fn_body = SOME env2 /\
+     env_consistent env1 (cx with stk updated_by CONS (env_body.current_src,fn)) st0 /\
+     state_well_typed st0 /\
+     context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+     accounts_well_typed st0.accounts /\
+     functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+     eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body st0 = (res0,st0') ==>
+     state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+     no_type_error_result res0 /\
+     case res0 of
+     | INL v => env_consistent env2 (cx with stk updated_by CONS (env_body.current_src,fn)) st0'
+     | INR exn =>
+         ?env_exn.
+           env_extends env1 env_exn /\
+           env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
+           return_exception_typed env_exn ret_ty1 exn` by (
+    MATCH_MP_TAC (Q.SPECL [`cx`, `src_id_opt`, `fn`, `es`, `r`, `ts`, `tc_ok`,
+                           `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`,
+                           `ret`, `fn_body`, `env_body`, `ret_tv`, `dflt_vs`,
+                           `dflt_st`, `call_env`, `lock_st`]
+      intcall_generated_body_post_push_ih) >>
+    (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `eval_exprs cx es r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `finally _ _ args_st = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `bind_arguments _ _ _ = SOME _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `evaluate_type _ _ = SOME _` ACCEPT_TAC)) >>
+    qpat_assum `(if _ then _ else _) dflt_st = _` ACCEPT_TAC) >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`,
+                         `fn`, `es`, `extra`, `env_body`, `args_st`, `dflt_st`,
+                         `lock_st`, `call_env`, `fn`, `fm`, `nr`, `ret`,
+                         `fn_body`, `env_after`, `ret_tv`]
+    intcall_successful_defaults_lock_success_sound_from_body_ih) >>
+  (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+  (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `evaluate_type (get_tenv cx) ret = SOME ret_tv` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+  (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx args_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed args_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (
+    qpat_assum `env_body.current_src = src_id_opt` (fn th =>
+      simp[th] >> qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC))) >>
+  (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` ACCEPT_TAC)) >>
+  conj_tac >- (qpat_assum `(if _ then _ else _) dflt_st = _` ACCEPT_TAC) >>
+  qpat_assum `(do rv <- finally _ _; crv <- lift_option_type _ _; return (Value crv) od) _ = _` ACCEPT_TAC
+QED
+
+
+Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    lock_res = INL () /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env cx dflt_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do rv <- finally
+               (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                        return NoneV od) handle_function)
+               (do pop_function args_st.scopes;
+                   if nr /\ ~(fm = View \/ fm = Pure) then
+                     case cx.nonreentrant_slot of
+                     | NONE => return ()
+                     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                   else return () od);
+             crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+             return (Value crv) od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  qpat_x_assum `lock_res = INL ()` SUBST_ALL_TAC >>
+  qpat_x_assum `(case INL () of INL u => _ | INR e => _) = (res,st')` mp_tac >>
+  rewrite_tac[sum_case_def] >> strip_tac >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`,
+                         `fn`, `es`, `extra`, `r`, `ts`, `tc_ok`,
+                         `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`,
+                         `ret`, `fn_body`, `env_body`, `ret_tv`, `env_after`,
+                         `dflt_vs`, `dflt_st`, `call_env`, `lock_st`]
+    intcall_successful_defaults_lock_success_sound_general) >>
+  (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `eval_exprs cx es r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `finally _ _ args_st = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `bind_arguments _ _ _ = SOME _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `evaluate_type _ _ = SOME _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `(if _ then _ else _) dflt_st = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+  (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx args_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed args_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` ACCEPT_TAC)) >>
+  first_assum ACCEPT_TAC
+QED
+
+
+Theorem intcall_successful_defaults_continuation_sound_general[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env cx dflt_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do rv <- finally
+               (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                        return NoneV od) handle_function)
+               (do pop_function args_st.scopes;
+                   if nr /\ ~(fm = View \/ fm = Pure) then
+                     case cx.nonreentrant_slot of
+                     | NONE => return ()
+                     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                   else return () od);
+             crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+             return (Value crv) od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+     "IntCall bind_arguments" dflt_st = (INL call_env,dflt_st)` by
+    simp[lift_option_type_def, return_def] >>
+  `lift_option_type (evaluate_type (get_tenv cx) ret)
+     "IntCall eval ret" dflt_st = (INL ret_tv,dflt_st)` by
+    simp[lift_option_type_def, return_def] >>
+  (Cases_on `lock_res` >- (
+    Cases_on `x` >>
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`,
+                           `fn`, `es`, `extra`, `r`, `ts`, `tc_ok`,
+                           `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`,
+                           `ret`, `fn_body`, `env_body`, `ret_tv`, `env_after`,
+                           `dflt_vs`, `dflt_st`, `call_env`, `INL ()`, `lock_st`]
+      intcall_successful_defaults_continuation_lock_success_case) >>
+    (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `eval_exprs cx es r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `finally _ _ args_st = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `bind_arguments _ _ _ = SOME _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `evaluate_type _ _ = SOME _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `(if _ then _ else _) dflt_st = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 simp[]) >>
+    (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx args_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `state_well_typed args_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` ACCEPT_TAC)) >>
+    first_assum ACCEPT_TAC)) >>
+  qpat_x_assum `(case INR y of INL u => _ | INR e => _) = (res,st')` mp_tac >>
+  rewrite_tac[sum_case_def] >> strip_tac >>
+  qspecl_then [`env`, `cx`, `nr`, `fm = View \/ fm = Pure`,
+               `dflt_st`, `INR y`, `lock_st`] mp_tac intcall_lock_attempt_sound_frame >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  qpat_x_assum `(\e. (INR e,lock_st)) y = (res,st')` mp_tac >>
+  BETA_TAC >> pure_rewrite_tac[PAIR_EQ] >> strip_tac >>
+  qpat_x_assum `lock_st = st'` (fn th => SUBST1_TAC (SYM th)) >>
+  qpat_x_assum `INR y = res` (fn th => SUBST1_TAC (SYM th)) >>
+  qpat_x_assum `case INR y of INL v => T | INR v1 => env_consistent env cx lock_st` mp_tac >>
+  rewrite_tac[sum_case_def] >> strip_tac >>
+  conj_tac >- (qpat_assum `state_well_typed lock_st` ACCEPT_TAC) >>
+  conj_tac >- (qpat_assum `env_consistent env cx lock_st` ACCEPT_TAC) >>
+  conj_tac >- (qpat_assum `accounts_well_typed lock_st.accounts` ACCEPT_TAC) >>
+  pop_assum kall_tac >>
+  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
+  rewrite_tac[no_type_error_result_def] >> strip_tac >> strip_tac >>
+  first_x_assum (qspec_then `msg` mp_tac) >> simp[]
+QED
+
+Theorem intcall_actual_args_success_no_type_error_from_generated_ih_general[local]:
+  !cx env res st' src_id_opt fn es r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_res dflt_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    context_well_typed cx /\ accounts_well_typed args_st.accounts /\
+    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    well_typed_exprs (defaults_env env_body) dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (dflt_res,dflt_st) /\
+    (case dflt_res of
+     | INL dflt_vs =>
+         (case lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+                 "IntCall bind_arguments" dflt_st of
+          | (INL call_env,bind_st) =>
+              (case lift_option_type (evaluate_type (get_tenv cx) ret)
+                      "IntCall eval ret" bind_st of
+               | (INL ret_v,ret_st) =>
+                   (case (if nr then
+                            case cx.nonreentrant_slot of
+                            | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                            | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+                          else return ()) ret_st of
+                    | (INL u,lock_st) =>
+                        (case push_function (src_id_opt,fn) call_env cx lock_st of
+                         | (INL cxf,pushed_st) =>
+                             (do rv <- finally
+                                   (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
+                                   (do pop_function args_st.scopes;
+                                       if nr /\ ~(fm = View \/ fm = Pure) then
+                                         case cx.nonreentrant_slot of
+                                         | NONE => return ()
+                                         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                                       else return () od);
+                                 crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
+                                 return (Value crv) od) pushed_st
+                         | (INR e,push_st) => (INR e,push_st))
+                    | (INR e,lock_st) => (INR e,lock_st))
+               | (INR e,ret_st) => (INR e,ret_st))
+          | (INR e,bind_st) => (INR e,bind_st))
+     | INR e => (INR e,dflt_st)) = (res,st') ==>
+    no_type_error_result res
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  mp_tac (Q.SPECL [`cx`, `env`, `src_id_opt`, `fn`, `es`, `r`, `ts`, `tc_ok`,
+                   `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`, `ret`,
+                   `fn_body`, `env_body`, `ret_tv`, `env_after`, `dflt_res`,
+                   `dflt_st`]
+    intcall_defaults_result_package_from_generated_ih_general) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then strip_assume_tac >>
+  Cases_on `dflt_res` >- (
+    simp[] >>
+    qpat_x_assum `case INL x of _ => _ | _ => _` mp_tac >>
+    pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    Cases_on `(if nr then
+                 case cx.nonreentrant_slot of
+                 | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                 | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+               else return ()) dflt_st` >>
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `res`, `st'`, `src_id_opt`, `fn`,
+                           `es`, `r`, `ts`, `tc_ok`, `actual_vs`, `args_st`,
+                           `fm`, `nr`, `args`, `dflts`, `ret`, `fn_body`,
+                           `env_body`, `ret_tv`, `env_after`, `x`, `dflt_st`,
+                           `call_env`, `q`, `r'`]
+      intcall_successful_defaults_continuation_no_type_error_general) >>
+    (CONJ_TAC THEN1 (qpat_assum
+       `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+          sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+          s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+          is_view0 s11 x11 t11 s12 cx0 t12. _`
+       ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `evaluate_type (get_tenv cx) ret = SOME ret_tv` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` ACCEPT_TAC)) >>
+    qpat_x_assum `(case INL x of _ => _ | _ => _) = (res,st')` mp_tac >>
+    simp[lift_option_type_def, return_def, bind_apply, push_function_def]) >-
+  (qpat_x_assum `(case INR y of _ => _ | _ => _) = (res,st')` mp_tac >>
+   simp[] >> strip_tac >>
+   qpat_x_assum `INR y = res` (fn eq =>
+     qpat_x_assum `no_type_error_result (INR y)` (fn nte =>
+       ACCEPT_TAC (MATCH_MP (MATCH_MP (Q.SPECL [`y`, `res`] no_type_error_result_INR_eq) eq) nte))))
+QED
+
+Theorem intcall_default_failure_tail[local]:
+  !cx env loc src_id_opt fn es extra y dflt_st.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    no_type_error_result (INR y) ==>
+    state_well_typed dflt_st /\ env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\ no_type_error_result (INR y) /\
+    case INR y of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rw[no_type_error_result_def, sumTheory.sum_case_def]
+QED
+
+Theorem intcall_actual_args_success_default_failure_branch[local]:
+  !cx env loc res st' src_id_opt fn es extra y dflt_st.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    no_type_error_result (INR y) /\
+    (INR y,dflt_st) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt strip_tac >>
+  gvs[pairTheory.PAIR_EQ, sumTheory.sum_case_def] >>
+  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
+  rewrite_tac[no_type_error_result_def] >> simp[]
+QED
+Theorem intcall_actual_args_success_default_failure_branch_case[local]:
+  !cx env loc res st' src_id_opt fn es extra y dflt_st z.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    no_type_error_result (INR y) /\
+    (case INR y of
+     | INL tv => z
+     | INR e => (INR e,dflt_st)) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt strip_tac >>
+  gvs[pairTheory.PAIR_EQ, sumTheory.sum_case_def] >>
+  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
+  rewrite_tac[no_type_error_result_def] >> simp[]
+QED
+
+Theorem intcall_actual_args_success_default_failure_branch_lambda[local]:
+  !cx env loc res st' src_id_opt fn es extra y dflt_st.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    no_type_error_result (INR y) /\
+    ((\e. (INR e,dflt_st)) y = (res,st')) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt strip_tac >>
+  gvs[pairTheory.PAIR_EQ, sumTheory.sum_case_def] >>
+  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
+  rewrite_tac[no_type_error_result_def] >> simp[]
+QED
+
+Theorem intcall_actual_args_success_default_failure_branch_lambda_imp[local]:
+  !cx env loc res st' src_id_opt fn es extra y dflt_st.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    ((\e. (INR e,dflt_st)) y = (res,st')) ==>
+    no_type_error_result (INR y) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  MATCH_MP_TAC intcall_actual_args_success_default_failure_branch_lambda >>
+  qexists_tac `y` >> qexists_tac `dflt_st` >>
+  simp[]
+QED
+
+Theorem intcall_default_failure_tail_case_from_result[local]:
+  !cx env loc res st' src_id_opt fn es extra dflt_res dflt_st success_tail.
+    state_well_typed dflt_st /\
+    env_consistent env cx dflt_st /\
+    accounts_well_typed dflt_st.accounts /\
+    no_type_error_result dflt_res /\
+    (case dflt_res of
+     | INL dflt_vs => success_tail dflt_vs
+     | INR e => (INR e,dflt_st)) = (res,st') ==>
+    (case dflt_res of
+     | INL _ => T
+     | INR _ =>
+         state_well_typed st' /\ env_consistent env cx st' /\
+         accounts_well_typed st'.accounts /\ no_type_error_result res /\
+         case res of
+         | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+         | INR _ => T)
+Proof
+  rpt strip_tac >>
+  Cases_on `dflt_res` >>
+  gvs[sumTheory.sum_case_def, pairTheory.PAIR_EQ, no_type_error_result_def]
+QED
+
+Theorem intcall_actual_args_success_default_success_branch[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_res lock_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = (lock_res,lock_st) /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env cx dflt_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_res of
+     | INL u =>
+         (do rv <- finally
+               (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                        return NoneV od) handle_function)
+               (do pop_function args_st.scopes;
+                   if nr /\ ~(fm = View \/ fm = Pure) then
+                     case cx.nonreentrant_slot of
+                     | NONE => return ()
+                     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                   else return () od);
+             crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+             return (Value crv) od) (lock_st with scopes := [call_env])
+     | INR e => (INR e,lock_st)) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_tac >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`,
+                         `fn`, `es`, `extra`, `r`, `ts`, `tc_ok`,
+                         `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`,
+                         `ret`, `fn_body`, `env_body`, `ret_tv`, `env_after`,
+                         `dflt_vs`, `dflt_st`, `call_env`, `lock_res`, `lock_st`]
+    intcall_successful_defaults_continuation_sound_general) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem intcall_actual_args_success_default_success_branch_pair[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_vs dflt_st
+     call_env lock_pair.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (INL dflt_vs,dflt_st) /\
+    bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs) = SOME call_env /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    (if nr then
+       case cx.nonreentrant_slot of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+     else return ()) dflt_st = lock_pair /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    env_consistent env cx args_st /\
+    state_well_typed args_st /\
+    env_consistent env cx dflt_st /\
+    state_well_typed dflt_st /\
+    context_well_typed cx /\
+    accounts_well_typed dflt_st.accounts /\
+    functions_well_typed cx /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    env_immutables_consistent env_body
+      (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st /\
+    scope_well_typed call_env /\
+    env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
+    (case lock_pair of
+     | (INL u,lock_st) =>
+         (do rv <- finally
+               (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body;
+                        return NoneV od) handle_function)
+               (do pop_function args_st.scopes;
+                   if nr /\ ~(fm = View \/ fm = Pure) then
+                     case cx.nonreentrant_slot of
+                     | NONE => return ()
+                     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                   else return () od);
+             crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+             return (Value crv) od) (lock_st with scopes := [call_env])
+     | (INR e,lock_st) => (INR e,lock_st)) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> PairCases_on `lock_pair` >>
+  rewrite_tac[pairTheory.FST, pairTheory.SND] >>
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`, `fn`,
+                         `es`, `extra`, `r`, `ts`, `tc_ok`, `actual_vs`, `args_st`,
+                         `fm`, `nr`, `args`, `dflts`, `ret`, `fn_body`,
+                         `env_body`, `ret_tv`, `env_after`, `dflt_vs`, `dflt_st`,
+                         `call_env`, `lock_pair0`, `lock_pair1`]
+    intcall_actual_args_success_default_success_branch) >>
+  rpt conj_tac >>
+  (first_assum ACCEPT_TAC ORELSE
+   qpat_x_assum `(case (lock_pair0,lock_pair1) of _ => _ | _ => _) = (res,st')` mp_tac >>
+   simp[])
+QED
+
+
+Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
+  !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
+     fm nr args dflts ret fn_body env_body ret_tv env_after dflt_res dflt_st.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
+      (INL ts,r) /\
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" r = (INL (fm,nr,args,dflts,ret,fn_body),r) /\
+    type_check (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+      "IntCall args length" r = (INL tc_ok,r) /\
+    eval_exprs cx es r = (INL actual_vs,args_st) /\
+    env_consistent env cx args_st /\ state_well_typed args_st /\
+    context_well_typed cx /\ accounts_well_typed args_st.accounts /\
+    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    env_body.current_src = src_id_opt /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = env.fn_sigs /\
+    env_body.bare_globals = env.bare_globals /\
+    env_body.toplevel_vtypes = env.toplevel_vtypes /\
+    env_body.flag_members = env.flag_members /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
+    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
+    well_typed_exprs (defaults_env env_body) dflts /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+    MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
+    finally (do set_scopes [FEMPTY];
+                eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+                  (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+             od) (set_scopes args_st.scopes) args_st = (dflt_res,dflt_st) /\
+    (case dflt_res of
+     | INL dflt_vs =>
+         (case lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+                 "IntCall bind_arguments" dflt_st of
+          | (INL call_env,bind_st) =>
+              (case lift_option_type (evaluate_type (get_tenv cx) ret)
+                      "IntCall eval ret" bind_st of
+               | (INL ret_v,ret_st) =>
+                   (case (if nr then
+                            case cx.nonreentrant_slot of
+                            | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                            | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+                          else return ()) ret_st of
+                    | (INL u,lock_st) =>
+                        (case push_function (src_id_opt,fn) call_env cx lock_st of
+                         | (INL cxf,pushed_st) =>
+                             (do rv <- finally
+                                   (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
+                                   (do pop_function args_st.scopes;
+                                       if nr /\ ~(fm = View \/ fm = Pure) then
+                                         case cx.nonreentrant_slot of
+                                         | NONE => return ()
+                                         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                                       else return () od);
+                                 crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
+                                 return (Value crv) od) pushed_st
+                         | (INR e,push_st) => (INR e,push_st))
+                    | (INR e,lock_st) => (INR e,lock_st))
+               | (INR e,ret_st) => (INR e,ret_st))
+          | (INR e,bind_st) => (INR e,bind_st))
+     | INR e => (INR e,dflt_st)) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  mp_tac (Q.SPECL [`cx`, `env`, `src_id_opt`, `fn`, `es`, `r`, `ts`, `tc_ok`,
+                   `actual_vs`, `args_st`, `fm`, `nr`, `args`, `dflts`, `ret`,
+                   `fn_body`, `env_body`, `ret_tv`, `env_after`, `dflt_res`, `dflt_st`]
+    intcall_defaults_result_frame_package_from_generated_ih_general) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then strip_assume_tac >>
+  qpat_assum `no_type_error_result dflt_res` (mk_asm "dflt_nte") >>
+  `case dflt_res of
+   | INL _ => T
+   | INR _ =>
+       state_well_typed st' /\ env_consistent env cx st' /\
+       accounts_well_typed st'.accounts /\ no_type_error_result res /\
+       case res of
+       | INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+       | INR _ => T` by (
+    MATCH_MP_TAC intcall_default_failure_tail_case_from_result >>
+    qexists_tac `dflt_st` >>
+    qexists_tac `(\dflt_vs.
+      (case lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
+              "IntCall bind_arguments" dflt_st of
+       | (INL call_env,bind_st) =>
+           (case lift_option_type (evaluate_type (get_tenv cx) ret)
+                   "IntCall eval ret" bind_st of
+            | (INL ret_v,ret_st) =>
+                (case (if nr then
+                         case cx.nonreentrant_slot of
+                         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+                       else return ()) ret_st of
+                 | (INL u,lock_st) =>
+                     (case push_function (src_id_opt,fn) call_env cx lock_st of
+                      | (INL cxf,pushed_st) =>
+                          (do rv <- finally
+                                (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
+                                (do pop_function args_st.scopes;
+                                    if nr /\ ~(fm = View \/ fm = Pure) then
+                                      case cx.nonreentrant_slot of
+                                      | NONE => return ()
+                                      | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                                    else return () od);
+                              crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
+                              return (Value crv) od) pushed_st
+                      | (INR e,push_st) => (INR e,push_st))
+                 | (INR e,lock_st) => (INR e,lock_st))
+            | (INR e,ret_st) => (INR e,ret_st))
+       | (INR e,bind_st) => (INR e,bind_st)))` >>
+    (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (asm "dflt_nte" ACCEPT_TAC)) >>
+    qpat_x_assum `(case dflt_res of INL dflt_vs => _ | INR e => (INR e,dflt_st)) = (res,st')` mp_tac >>
+    BETA_TAC >> simp[]) >>
+  pop_assum $ mk_asm "failure_tail" >>
+  Cases_on `dflt_res` >- (
+    qpat_x_assum `case INL x of INL dflt_vs => _ | INR _ => T` mp_tac >>
+    rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    qabbrev_tac `lp =
+      (if nr then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+       else return ()) dflt_st` >>
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`, `fn`,
+                           `es`, `extra`, `r`, `ts`, `tc_ok`, `actual_vs`, `args_st`,
+                           `fm`, `nr`, `args`, `dflts`, `ret`, `fn_body`,
+                           `env_body`, `ret_tv`, `env_after`, `x`, `dflt_st`,
+                           `call_env`, `lp`]
+      intcall_actual_args_success_default_success_branch_pair) >>
+    (CONJ_TAC THEN1 (qpat_assum
+       `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+          sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+          s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+          is_view0 s11 x11 t11 s12 cx0 t12. _`
+       ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 (qpat_x_assum `Abbrev (lp = _)` mp_tac >>
+                      simp[markerTheory.Abbrev_def])) >>
+    (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_stmts env_body ret fn_body = SOME env_after` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
+    (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx args_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `state_well_typed args_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` ACCEPT_TAC)) >>
+    qpat_x_assum `(case INL x of _ => _ | _ => _) = (res,st')` mp_tac >>
+    simp[Abbr `lp`, lift_option_type_def, return_def, bind_apply,
+         push_function_def, pairTheory.PAIR]) >>
+  asm "failure_tail" mp_tac >>
+  rewrite_tac[sumTheory.sum_case_def] >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem intcall_expr_no_type_error_from_generated_ih[local]:
+  !cx env st res st' loc src_id_opt fn es extra.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
+        state_well_typed st0 /\ context_well_typed cx /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        eval_exprs cx es st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+    accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    eval_expr cx (Call loc (IntCall (src_id_opt,fn)) es extra) st = (res,st') /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) ==>
+    no_type_error_result res
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `well_typed_expr env (Call _ (IntCall _) _ _)` mp_tac >>
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
+        _ ==>
+        !env0 st0 res0 st0'.
+          well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
+          state_well_typed st0 /\ context_well_typed cx /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+          eval_exprs cx es st0 = (res0,st0') ==> _`
+    (mk_asm "actual_ih") >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
+        _ ==>
+        !env0 st0 res0 st0'.
+          well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+          state_well_typed st0 /\ context_well_typed cx0 /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+          eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
+    (mk_asm "default_ih") >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+        _ ==>
+        !env1 ret_ty1 env2 st0 res0 st0'.
+          type_stmts env1 ret_ty1 body0 = SOME env2 /\
+          env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+          context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+          functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
+    (mk_asm "body_ih") >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac[Once evaluate_def] >>
+  simp_tac(srw_ss())[bind_apply, ignore_bind_apply, LET_THM] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      gvs[check_def, type_check_def, assert_def, no_type_error_result_def]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      qpat_x_assum `fn_sigs_consistent env.fn_sigs cx` mp_tac >>
+      simp[fn_sigs_consistent_def] >>
+      disch_then (qspecl_then [`src_id_opt`, `fn`, `sig`] mp_tac) >>
+      simp[] >> strip_tac >>
+      gvs[lift_option_type_def, return_def, raise_def, no_type_error_result_def]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      qpat_x_assum `lift_option_type (get_module_code cx src_id_opt) _ r = (INL x',r)`
+        (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+      drule_all fn_sigs_consistent_FLOOKUP >> strip_tac >>
+      qpat_x_assum `get_module_code cx src_id_opt = SOME x' /\ _` strip_assume_tac >>
+      drule_all intcall_lookup_function_not_INR >> strip_tac >>
+      qpat_x_assum `!st' st msg e. lift_option_type (lookup_callable_function cx.in_deploy fn x') msg st <> (INR e,st')`
+        (qspecl_then [`r''`, `r`, `"IntCall lookup_function"`, `y`] mp_tac) >>
+      simp[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      drule_all intcall_args_length_condition >> strip_tac >>
+      gvs[type_check_def, assert_def, return_def, raise_def,
+          no_type_error_result_def]) >>
+  simp_tac(srw_ss())[bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  qmatch_asmsub_rename_tac `eval_exprs cx es r = (args_res,args_st)` >>
+  qmatch_asmsub_rename_tac `type_check _ _ r = (INL tc_ok,r)` >>
+  asm_x "actual_ih" mp_tac >> simp[] >>
+  disch_then (qspecl_then [`r`, `r`, `r`, `x'`, `r`, `r`, `x''`, `r''`, `r`, `r`] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `args_res`
+  >- (gvs[] >>
+    qpat_x_assum `lift_option_type (get_module_code cx src_id_opt) _ r = (INL x',r)`
+      (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+    qpat_x_assum `lift_option_type (lookup_callable_function cx.in_deploy fn x') _ r = (INL x'',r)`
+      (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+    qpat_x_assum `get_module_code cx src_id_opt = SOME _ /\ _` strip_assume_tac >>
+    qpat_x_assum `lookup_callable_function cx.in_deploy fn _ = SOME _ /\ _` strip_assume_tac >>
+    PairCases_on `x''` >> gvs[] >>
+    mp_tac (Q.INST [`st` |-> `args_st`, `ts` |-> `x'`,
+                    `fm` |-> `x''0`, `nr` |-> `x''1`,
+                    `args` |-> `x''2`, `dflts` |-> `x''3`,
+                    `ret` |-> `x''4`, `fn_body` |-> `x''5`]
+             callable_body_typing_from_env_consistent) >>
+    simp[] >>
+    disch_then (CONJUNCTS_THEN2 assume_tac
+      (qx_choose_then `env_body` (qx_choose_then `ret_tv` (qx_choose_then `env_after`
+        (fn th => map_every assume_tac (CONJUNCTS th)))))) >>
+    `sig.param_types = MAP SND x''2 /\ sig.num_defaults = LENGTH x''3` by (
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      drule_all fn_sigs_consistent_FLOOKUP >> strip_tac >> gvs[]) >>
+    simp[get_scopes_def, return_def] >>
+    BasicProvers.TOP_CASE_TAC >>
+    qmatch_asmsub_rename_tac `finally _ _ args_st = (dflt_res,dflt_st)` >>
+    qmatch_asmsub_rename_tac `eval_exprs cx es r = (INL actual_vs,args_st)` >>
+    strip_tac >>
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `res`, `st'`, `src_id_opt`, `fn`,
+                           `es`, `r`, `x'`, `tc_ok`, `actual_vs`, `args_st`,
+                           `x''0`, `x''1`, `x''2`, `x''3`, `x''4`, `x''5`,
+                           `env_body`, `ret_tv`, `env_after`, `dflt_res`, `dflt_st`]
+      intcall_actual_args_success_no_type_error_from_generated_ih_general) >>
+    (conj_tac >- (asm "default_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
+    (conj_tac >- (asm "body_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
+    rpt conj_tac >>
+    (first_assum ACCEPT_TAC ORELSE
+     (qpat_x_assum `(case dflt_res of INL _ => _ | INR _ => _) = (res,st')` mp_tac >>
+      simp[get_scopes_def, set_scopes_def, return_def, lift_option_type_def,
+           evaluate_type_def, bind_apply]) ORELSE
+     simp[get_scopes_def, set_scopes_def, return_def, lift_option_type_def,
+          evaluate_type_def, bind_apply]))
+  >- (strip_tac >> gvs[no_type_error_result_def])
+QED
+
+
+Theorem intcall_expr_sound_from_generated_ih[local]:
+  !cx env st res st' loc src_id_opt fn es extra.
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
+        state_well_typed st0 /\ context_well_typed cx /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        eval_exprs cx es st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
+        s7 prev0 t7 s8 x8 t8.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      es0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      set_scopes [FEMPTY] s8 = (INL x8,t8) ==>
+      !env0 st0 res0 st0'.
+        well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+        state_well_typed st0 /\ context_well_typed cx0 /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        eval_exprs cx0 es0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
+    (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) /\
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) /\
+      mut0 = FST tup0 /\ stup0 = SND tup0 /\ (nr0 <=> FST stup0) /\
+      stup20 = SND stup0 /\ args0 = FST stup20 /\ sstup0 = SND stup20 /\
+      dflts0 = FST sstup0 /\ sstup20 = SND sstup0 /\ ret0 = FST sstup20 /\
+      body0 = SND sstup20 /\
+      type_check (LENGTH es <= LENGTH args0 /\ LENGTH args0 - LENGTH es <= LENGTH dflts0)
+        "IntCall args length" s5 = (INL x5,t5) /\
+      eval_exprs cx es s6 = (INL vs0,t6) /\
+      needed0 = DROP (LENGTH dflts0 - (LENGTH args0 - LENGTH es)) dflts0 /\
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) /\
+      get_scopes s7 = (INL prev0,t7) /\
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed0 od) (set_scopes prev0) s8 =
+        (INL dflt_vs0,t8) /\
+      all_tenv0 = get_tenv cx /\
+      lift_option_type (bind_arguments all_tenv0 args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s9 = (INL env0,t9) /\
+      lift_option_type (evaluate_type all_tenv0 ret0) "IntCall eval ret" s10 =
+        (INL rtv0,t10) /\
+      (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
+      (if nr0 then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
+       else return ()) s11 = (INL x11,t11) /\
+      push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
+      !env1 ret_ty1 env2 st0 res0 st0'.
+        type_stmts env1 ret_ty1 body0 = SOME env2 /\
+        env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+        context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
+        no_type_error_result res0 /\
+        case res0 of
+          INL v => env_consistent env2 cx0 st0'
+        | INR exn =>
+            ?env_exn.
+              env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
+              return_exception_typed env_exn ret_ty1 exn) /\
+    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+    accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    eval_expr cx (Call loc (IntCall (src_id_opt,fn)) es extra) st = (res,st') /\
+    well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+      INL tv => expr_result_typed env (Call loc (IntCall (src_id_opt,fn)) es extra) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_expr env (Call _ (IntCall _) _ _)` mp_tac >>
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
+        _ ==>
+        !env0 st0 res0 st0'.
+          well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
+          state_well_typed st0 /\ context_well_typed cx /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+          eval_exprs cx es st0 = (res0,st0') ==> _`
+    (mk_asm "actual_ih") >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
+        _ ==>
+        !env0 st0 res0 st0'.
+          well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+          state_well_typed st0 /\ context_well_typed cx0 /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+          eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
+    (mk_asm "default_ih") >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+        _ ==>
+        !env1 ret_ty1 env2 st0 res0 st0'.
+          type_stmts env1 ret_ty1 body0 = SOME env2 /\
+          env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+          context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+          functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
+    (mk_asm "body_ih") >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  rewrite_tac[Once evaluate_def] >>
+  simp_tac(srw_ss())[bind_apply, ignore_bind_apply, LET_THM] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      gvs[check_def, type_check_def, assert_def, no_type_error_result_def]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      qpat_x_assum `fn_sigs_consistent env.fn_sigs cx` mp_tac >>
+      simp[fn_sigs_consistent_def] >>
+      disch_then (qspecl_then [`src_id_opt`, `fn`, `sig`] mp_tac) >>
+      simp[] >> strip_tac >>
+      gvs[lift_option_type_def, return_def, raise_def, no_type_error_result_def]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      qpat_x_assum `lift_option_type (get_module_code cx src_id_opt) _ r = (INL x',r)`
+        (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+      drule_all fn_sigs_consistent_FLOOKUP >> strip_tac >>
+      qpat_x_assum `get_module_code cx src_id_opt = SOME x' /\ _` strip_assume_tac >>
+      drule_all intcall_lookup_function_not_INR >> strip_tac >>
+      qpat_x_assum `!st' st msg e. lift_option_type (lookup_callable_function cx.in_deploy fn x') msg st <> (INR e,st')`
+        (qspecl_then [`r''`, `r`, `"IntCall lookup_function"`, `y`] mp_tac) >>
+      simp[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      drule_all intcall_args_length_condition >> strip_tac >>
+      gvs[type_check_def, assert_def, return_def, raise_def,
+          no_type_error_result_def]) >>
+  simp_tac(srw_ss())[bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  qmatch_asmsub_rename_tac `eval_exprs cx es r = (args_res,args_st)` >>
+  qmatch_asmsub_rename_tac `type_check _ _ r = (INL tc_ok,r)` >>
+  asm_x "actual_ih" mp_tac >> simp[] >>
+  disch_then (qspecl_then [`r`, `r`, `r`, `x'`, `r`, `r`, `x''`, `r''`, `r`, `r`] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `args_res` >> gvs[]
+  >- (
+    qpat_assum `lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r = (INL x',r)`
+      (fn th => mp_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+    strip_tac >>
+    qpat_assum `lift_option_type (lookup_callable_function cx.in_deploy fn x') "IntCall lookup_function" r = (INL x'',r)`
+      (fn th => mp_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
+    strip_tac >>
+    PairCases_on `x''` >> gvs[] >>
+    mp_tac (Q.INST [`st` |-> `args_st`, `ts` |-> `x'`,
+                    `fm` |-> `x''0`, `nr` |-> `x''1`,
+                    `args` |-> `x''2`, `dflts` |-> `x''3`,
+                    `ret` |-> `x''4`, `fn_body` |-> `x''5`]
+             callable_body_typing_from_env_consistent) >>
+    simp[] >>
+    disch_then (CONJUNCTS_THEN2 assume_tac
+      (qx_choose_then `env_body` (qx_choose_then `ret_tv` (qx_choose_then `env_after`
+        (fn th => map_every assume_tac (CONJUNCTS th)))))) >>
+    `sig.param_types = MAP SND x''2 /\ sig.num_defaults = LENGTH x''3` by (
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      drule_all fn_sigs_consistent_FLOOKUP >> strip_tac >> gvs[]) >>
+    simp[get_scopes_def, return_def] >>
+    BasicProvers.TOP_CASE_TAC >>
+    qmatch_asmsub_rename_tac `finally _ _ args_st = (dflt_res,dflt_st)` >>
+    qmatch_asmsub_rename_tac `eval_exprs cx es r = (INL actual_vs,args_st)` >>
+    strip_tac >>
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `sig.ret_ty`, `res`, `st'`, `src_id_opt`, `fn`,
+                           `es`, `v17`, `r`, `x'`, `tc_ok`, `actual_vs`, `args_st`,
+                           `x''0`, `x''1`, `x''2`, `x''3`, `x''4`, `x''5`,
+                           `env_body`, `ret_tv`, `env_after`, `dflt_res`, `dflt_st`]
+      intcall_actual_args_success_sound_from_generated_ih_general) >>
+    (CONJ_TAC THEN1 (asm "default_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
+    (CONJ_TAC THEN1 (asm "body_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
+    (CONJ_TAC THEN1 (qpat_assum `check _ _ r = (INL (),r)` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 simp[lift_option_type_def, return_def]) >>
+    (CONJ_TAC THEN1 simp[lift_option_type_def, return_def]) >>
+    (CONJ_TAC THEN1 (
+      qpat_x_assum `type_check (LENGTH es <= LENGTH x''2 /\ LENGTH x''2 <= LENGTH es + LENGTH x''3) "IntCall args length" r = (INL (),r)` mp_tac >>
+      simp[type_check_def, assert_def, return_def, raise_def] >> strip_tac >>
+      simp[type_check_def, assert_def, return_def])) >>
+    (CONJ_TAC THEN1 (qpat_assum `eval_exprs cx es r = (INL actual_vs,args_st)` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx args_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `state_well_typed args_st` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed args_st.accounts` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `exprs_runtime_typed env es actual_vs` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 simp[]) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (simp[Once well_typed_expr_def] >> qexists `sig` >> simp[])) >>
+    (CONJ_TAC THEN1 (
+      `fn_sigs_consistent env.fn_sigs cx` by
+        gvs[env_consistent_def, env_context_consistent_def] >>
+      drule_all fn_sigs_consistent_FLOOKUP >> strip_tac >>
+      gvs[expr_type_def])) >>
+    (CONJ_TAC THEN1 (qpat_assum `evaluate_type (get_tenv cx) x''4 = SOME ret_tv` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_stmts env_body x''4 x''5 = SOME env_after` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `x''4 = NoneT \/ stmts_no_fallthrough x''5` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape x''5` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `well_typed_exprs (defaults_env env_body) x''3` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `!id typ. MEM (id,typ) x''2 ==> _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `!n ty. FLOOKUP env_body.var_types n = SOME ty ==> _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (
+      rpt strip_tac >>
+      qpat_x_assum `!n b. FLOOKUP env_body.var_assignable n = SOME b ==> _`
+        (qspecl_then [`n`, `b`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[])) >>
+    (CONJ_TAC THEN1 (qpat_assum `MAP expr_type x''3 = MAP SND (DROP (LENGTH x''2 - LENGTH x''3) x''2)` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `finally _ _ args_st = (dflt_res,dflt_st)` ACCEPT_TAC)) >>
+    qpat_x_assum `(case dflt_res of INL _ => _ | INR _ => _) = (res,st')` mp_tac >>
+    simp[get_scopes_def, set_scopes_def, return_def, lift_option_type_def,
+         evaluate_type_def, bind_apply])
+  >- (strip_tac >> gvs[no_type_error_result_def])
+QED
+Theorem type_place_expr_Call_IntCall_NONE[local]:
+  !env ty src_id_opt fn es drv.
+    type_place_expr env (Call ty (IntCall (src_id_opt,fn)) es drv) = NONE
+Proof
+  simp[Once well_typed_expr_def]
+QED
+
 Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- (
+    rpt gen_tac >> strip_tac >>
+    qpat_x_assum `type_place_expr _ (Call _ (IntCall _) _ _) = SOME _` mp_tac >>
+    simp[type_place_expr_Call_IntCall_NONE]) >>
+  strip_tac >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
+        _ ==>
+        !env0 st0 res0 st0'.
+          well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
+          state_well_typed st0 /\ context_well_typed cx /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+          eval_exprs cx es st0 = (res0,st0') ==> _`
+    (mk_asm "actual_ih") >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
+        _ ==>
+        !env0 st0 res0 st0'.
+          well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
+          state_well_typed st0 /\ context_well_typed cx0 /\
+          accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+          eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
+    (mk_asm "default_ih") >>
+  qpat_x_assum
+    `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
+        sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
+        s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
+        is_view0 s11 x11 t11 s12 cx0 t12.
+        _ ==>
+        !env1 ret_ty1 env2 st0 res0 st0'.
+          type_stmts env1 ret_ty1 body0 = SOME env2 /\
+          env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
+          context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
+          functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
+    (mk_asm "body_ih") >>
+  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `st`, `res`, `st'`, `v16`,
+                         `src_id_opt`, `fn`, `es`, `v17`]
+    intcall_expr_sound_from_generated_ih) >>
+  rpt conj_tac >>
+  (asm "actual_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
+   asm "default_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
+   asm "body_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
+   first_assum ACCEPT_TAC)
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]:
@@ -7842,7 +16744,51 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_Send]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ Send _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, raise_def,
+                         lift_option_type_def] >>
+    simp[] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    qpat_x_assum `!s'' x t. type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ==> _` mp_tac >>
+    simp[type_check_def, assert_def] >>
+    disch_then (qspecl_then [`env`, `st`, `args_res`, `args_st`] mp_tac) >>
+    simp[] >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `exprs_runtime_typed env es vs` >>
+      drule_all send_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+      Cases_on `transfer_value cx.txn.target toAddr amount args_st` >>
+      rename1 `transfer_value cx.txn.target toAddr amount args_st = (transfer_res,transfer_st)` >>
+      Cases_on `transfer_res` >> gvs[return_def, no_type_error_result_def]
+      >- (
+        `runtime_consistent env cx transfer_st` by (
+          qspecl_then [`env`, `cx`, `cx.txn.target`, `toAddr`, `amount`, `args_st`]
+            mp_tac transfer_value_runtime_consistent >>
+          simp[runtime_consistent_def]) >>
+        strip_tac >>
+        gvs[runtime_consistent_def, expr_result_typed_def, expr_runtime_typed_def,
+            expr_type_def, toplevel_value_typed_def, value_has_type_def,
+            evaluate_type_def, is_HashMapRef_def]) >>
+      `runtime_consistent env cx transfer_st` by (
+        qspecl_then [`env`, `cx`, `cx.txn.target`, `toAddr`, `amount`, `args_st`]
+          mp_tac transfer_value_runtime_consistent >>
+        simp[runtime_consistent_def]) >>
+      `!s. y <> Error (TypeError s)` by (
+        gen_tac >>
+        qspecl_then [`cx.txn.target`, `toAddr`, `amount`, `args_st`, `s`]
+          mp_tac transfer_value_no_type_error >>
+        simp[]) >>
+      strip_tac >> gvs[runtime_consistent_def]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
@@ -7850,19 +16796,111 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawLog]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ RawLog _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, raise_def,
+                         lift_option_type_def, push_log_def] >>
+    simp[] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `exprs_runtime_typed env es vs` >>
+      mp_tac raw_log_args_runtime_typed_dest >> simp[] >> strip_tac >> gvs[] >>
+      strip_tac >>
+      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `topics`, `data`, `res`, `st'`, `bd`, `bd'`]
+        mp_tac raw_log_tail_result_sound_simp >>
+      simp[runtime_consistent_def]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawRevert]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ RawRevert _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, raise_def,
+                         lift_option_type_def] >>
+    simp[] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `exprs_runtime_typed env es vs` >>
+      qspecl_then [`env`, `cx`, `vs`, `args_st`] mp_tac raw_revert_tail_sound >>
+      simp[runtime_consistent_def] >> strip_tac >>
+      Cases_on `LENGTH vs = 1` >>
+      rw[bind_def, check_def, assert_def, raise_def, no_type_error_result_def,
+         runtime_consistent_def] >> metis_tac[]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_SelfDestructTarget]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ SelfDestructTarget _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, raise_def,
+                         lift_option_type_def, get_accounts_def] >>
+    simp[] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `exprs_runtime_typed env es vs` >>
+      strip_tac >>
+      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`]
+        mp_tac selfdestruct_tail_result_sound_simp >>
+      simp[runtime_consistent_def]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _) _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, raise_def,
+                         lift_option_type_def, get_accounts_def, update_accounts_def] >>
+    simp[] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `exprs_runtime_typed env es vs` >>
+      drule_all create_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+      strip_tac >>
+      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `amount`, `target_addr`,
+                   `res`, `st'`, `kind`, `rof`]
+        mp_tac create_tail_result_sound_simp >>
+      simp[runtime_consistent_def]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Exprs_nil]:
@@ -8052,4 +17090,14 @@ Theorem function_body_type_sound:
 Proof
   metis_tac[eval_stmts_no_type_error]
 QED
+
+
+
+
+
+
+
+
+
+
 
