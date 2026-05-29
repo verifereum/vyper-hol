@@ -1068,10 +1068,10 @@ Proof
   >- (rewrite_tac[FOLDL, FST] >> rpt strip_tac >> metis_tac[])
   >> rpt gen_tac >> strip_tac >>
   rename1 `h :: suffix'` >>
-  simp[Once FOLDL] >>
+  PURE_ONCE_REWRITE_TAC[FOLDL] >>
   Cases_on `is_barrier h`
-  >- suspend "barrier"
-  >> suspend "non_barrier"
+  >- (ASM_REWRITE_TAC[] >> suspend "barrier")
+  >> ASM_REWRITE_TAC[] >> suspend "non_barrier"
 QED
 
 Resume add_deps_on_barrier_foldl_backward[barrier]:

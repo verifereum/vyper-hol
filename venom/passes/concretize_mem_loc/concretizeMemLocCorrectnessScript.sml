@@ -4,9 +4,16 @@
  * Three components:
  * 1. Allocator soundness: non-overlapping for simultaneously-live allocas.
  * 2. Liveness + allocator: compute_alloc_map satisfies live_non_overlapping.
- * 3. Simulation: given live_non_overlapping + memory safety + pointer
- *    confinement, the transformed program preserves semantics under
- *    the liveness-aware concretize_rel.
+ * 3. Simulation: given well-formedness (venom_wf, inst_wf, ssa_form,
+ *    distinct IDs), alloca mapping and invariants (all_allocas_mapped,
+ *    overflow-safe, write-before-read, safe access, non-overlapping,
+ *    sizes match), pointer safety (confined, affine ops, no OOB
+ *    arithmetic, phi-preserve variables), preservation of invariants
+ *    across eval_phis/exec_block/step_inst, excluded opcodes (no
+ *    INVOKE/NOP/MEMTOP/LOG/MCOPY/EXTCODECOPY/ext_call),
+ *    all_mem_via_pointer, mem_size_non_pv, mem_write_tail_non_pv,
+ *    and concretize_rel on initial states, the transformed program
+ *    preserves semantics under the liveness-aware concretize_rel.
  *)
 
 Theory concretizeMemLocCorrectness
@@ -30,6 +37,46 @@ Theorem concretize_function_correct:
     phi_pv_all_var fn (FDOM amap) /\
     alloca_write_before_read fn (FDOM amap) livesets init s1 /\
     alloca_safe_access fn (FDOM amap) s1 /\
+    (!bb s s' n.
+       MEM bb fn.fn_blocks /\ eval_phis s bb.bb_instructions = OK s' /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) (s' with vs_inst_idx := n)) /\
+    (!fuel ctx bb s s'.
+       MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) s') /\
+    (!fuel ctx bb s s' init0 init1.
+       MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+       alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+       alloca_write_before_read fn (FDOM amap) livesets init1 s') /\
+    (!fuel ctx bb s s'.
+       MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+       concrete_allocas_non_overlapping amap fn s ==>
+       concrete_allocas_non_overlapping amap fn s') /\
+    (!fuel0 ctx0 bb inst0 s s'.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_overflow_safe fn amap s ==>
+       alloca_overflow_safe fn amap s') /\
+    (!fuel0 ctx0 bb inst0 s s' init0 init1.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+       alloca_write_before_read fn (FDOM amap) livesets init1 s') /\
+    (!fuel0 ctx0 bb inst0 s s'.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) s') /\
+    (!fuel0 ctx0 bb inst0 s s'.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       concrete_allocas_non_overlapping amap fn s ==>
+       concrete_allocas_non_overlapping amap fn s') /\
     all_mem_via_pointer fn (FDOM amap) /\
     mem_size_non_pv fn (FDOM amap) /\
     mem_write_tail_non_pv fn (FDOM amap) /\
@@ -38,7 +85,11 @@ Theorem concretize_function_correct:
     live_non_overlapping livesets amap fn /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
                 EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-                EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions)
+                EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
+                EVERY (\i. i.inst_opcode <> LOG) bb.bb_instructions /\
+                EVERY (\i. i.inst_opcode <> MCOPY) bb.bb_instructions /\
+                EVERY (\i. i.inst_opcode <> EXTCODECOPY) bb.bb_instructions /\
+                EVERY (\i. ~is_ext_call_op i.inst_opcode) bb.bb_instructions)
       fn.fn_blocks /\
     concretize_rel amap fn livesets init s1 s2 ==>
     ?init'.
@@ -123,7 +174,7 @@ QED
 (* ===== Obligations ===== *)
 
 Theorem concretize_preserves_wf_function:
-  ∀amap fn. wf_function fn ⇒ wf_function (concretize_function amap fn)
+  !amap fn. wf_function fn ==> wf_function (concretize_function amap fn)
 Proof
   rpt strip_tac >> simp[concretize_function_def] >>
   irule clear_nops_function_preserves_wf >>
@@ -133,7 +184,7 @@ Proof
 QED
 
 Theorem concretize_preserves_ssa_form:
-  ∀amap fn. wf_function fn ∧ ssa_form fn ⇒ ssa_form (concretize_function amap fn)
+  !amap fn. wf_function fn /\ ssa_form fn ==> ssa_form (concretize_function amap fn)
 Proof
   rpt strip_tac >> simp[concretize_function_def] >>
   irule clear_nops_function_preserves_ssa >>

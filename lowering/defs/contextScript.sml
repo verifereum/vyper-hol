@@ -628,7 +628,7 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
   compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty count =
     (let dst_elem_sz = type_memory_bytes cenv dst_elem_ty in
     let src_elem_sz = type_memory_bytes cenv src_elem_ty in
-    if dst_elem_sz = src_elem_sz ∧ ¬is_abi_dynamic (cenv_sft cenv) dst_elem_ty then
+    if dst_elem_sz = src_elem_sz ∧ ¬is_abi_dynamic cenv.ce_struct_fields dst_elem_ty then
       compile_copy_memory dst src (count * dst_elem_sz)
     else
       do cond_lbl <- fresh_label "typed_sa_cond";

@@ -860,20 +860,83 @@ Proof
   simp[]
 QED
 
+Theorem get_module_code_stk[local]:
+  ∀cx s mid. get_module_code (cx with stk := s) mid = get_module_code cx mid
+Proof
+  simp[get_module_code_def]
+QED
+
+Theorem get_tenv_stk[local]:
+  ∀cx s. get_tenv (cx with stk := s) = get_tenv cx
+Proof
+  simp[get_tenv_def]
+QED
+
+Theorem lookup_var_slot_from_layout_stk[local]:
+  ∀cx s is_transient mid id.
+    lookup_var_slot_from_layout (cx with stk := s) is_transient mid id =
+    lookup_var_slot_from_layout cx is_transient mid id
+Proof
+  simp[lookup_var_slot_from_layout_def]
+QED
+
+Theorem get_address_immutables_stk[local]:
+  ∀cx s st.
+    get_address_immutables (cx with stk := s) st = get_address_immutables cx st
+Proof
+  simp[get_address_immutables_def]
+QED
+
+Theorem get_immutables_stk[local]:
+  ∀cx s mid st. get_immutables (cx with stk := s) mid st = get_immutables cx mid st
+Proof
+  simp[get_immutables_def, bind_def, get_address_immutables_stk]
+QED
+
+Theorem get_immutables_stk_fun[local]:
+  ∀cx s mid. get_immutables (cx with stk := s) mid = get_immutables cx mid
+Proof
+  simp[FUN_EQ_THM, get_immutables_stk]
+QED
+
+Theorem get_storage_backend_stk[local]:
+  ∀cx s is_transient st.
+    get_storage_backend (cx with stk := s) is_transient st =
+    get_storage_backend cx is_transient st
+Proof
+  Cases_on `is_transient` >> simp[get_storage_backend_def]
+QED
+
+Theorem read_storage_slot_stk[local]:
+  ∀cx s is_transient slot tv st.
+    read_storage_slot (cx with stk := s) is_transient slot tv st =
+    read_storage_slot cx is_transient slot tv st
+Proof
+  simp[read_storage_slot_def, bind_def, get_storage_backend_stk]
+QED
+
+Theorem read_storage_slot_stk_fun[local]:
+  ∀cx s is_transient slot tv.
+    read_storage_slot (cx with stk := s) is_transient slot tv =
+    read_storage_slot cx is_transient slot tv
+Proof
+  simp[FUN_EQ_THM, read_storage_slot_stk]
+QED
+
 Theorem lookup_global_stk[local]:
   ∀cx s mid id st.
     lookup_global (cx with stk := s) mid id st =
     lookup_global cx mid id st
 Proof
   rpt gen_tac >>
-  simp[lookup_global_def, bind_def, get_module_code_def,
-       lift_option_type_def, return_def, raise_def, ignore_bind_def,
-       get_immutables_def, get_address_immutables_def,
-       lookup_var_slot_from_layout_def, get_tenv_def,
-       read_storage_slot_def, get_storage_backend_def,
-       get_accounts_def, get_transient_storage_def, lift_option_def] >>
+  simp[lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, ignore_bind_def,
+       get_module_code_stk, get_tenv_stk,
+       lookup_var_slot_from_layout_stk, get_immutables_stk_fun,
+       read_storage_slot_stk_fun] >>
   rpt BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-  simp[get_storage_backend_def, get_address_immutables_def,
+  simp[get_immutables_stk_fun, read_storage_slot_stk_fun,
+       get_storage_backend_def, get_address_immutables_def,
        bind_def, get_accounts_def, get_transient_storage_def,
        lift_option_def, return_def, raise_def]
 QED

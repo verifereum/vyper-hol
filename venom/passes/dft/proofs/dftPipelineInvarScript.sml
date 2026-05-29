@@ -586,12 +586,12 @@ QED
    and the map entry for that instruction is []. *)
 Triviality eda_fold_eff_free_snd:
   !insts acc et.
-    EVERY (\i. write_effects i.inst_opcode = {} /\
-               read_effects i.inst_opcode = {}) insts ==>
+    EVERY ($~ o has_effects) insts ==>
     SND (FOLDL eda_fold_step (acc, et) insts) = et
 Proof
   Induct >> simp[FOLDL, eda_fold_step_def, LET_THM] >>
-  rpt strip_tac >> imp_res_tac compute_effect_deps_eff_free >> simp[]
+  rpt strip_tac >> fs[has_effects_def] >>
+  imp_res_tac compute_effect_deps_eff_free >> simp[]
 QED
 
 (* Interleaving effect-free instructions preserves the tracking state
@@ -607,16 +607,14 @@ Triviality eda_fold_snd_filter:
   !insts acc et.
     SND (FOLDL eda_fold_step (acc, et) insts) =
     SND (FOLDL eda_fold_step (acc, et)
-      (FILTER (\i. write_effects i.inst_opcode <> {} \/
-                    read_effects i.inst_opcode <> {}) insts))
+      (FILTER has_effects insts))
 Proof
   Induct >- simp[] >>
   rpt gen_tac >>
   ONCE_REWRITE_TAC[rich_listTheory.FOLDL] >>
   ONCE_REWRITE_TAC[FILTER] >>
   BETA_TAC >>
-  Cases_on `write_effects h.inst_opcode <> {} \/ read_effects h.inst_opcode <> {}` >>
-  fs[] >| [
+  Cases_on `has_effects h` >> fs[has_effects_def] >| [
     (* h has effects — IH applies directly after splitting the pair *)
     Cases_on `eda_fold_step (acc,et) h` >> simp[],
     (* h is effect-free — eda_fold_step changes only acc, not et *)
@@ -779,39 +777,35 @@ Proof
   Induct >- simp[FOLDL] >>
   rpt strip_tac >>
   fs[ALL_DISTINCT, MAP] >>
-  Cases_on `has_effects h`
-  >- (
-    (* h has effects: it stays in both FILTERs *)
-    simp[FILTER] >>
-    ONCE_REWRITE_TAC[FOLDL] >>
-    Cases_on `eda_fold_step (acc, et) h` >>
-    rename1 `_ = (acc2, et2)` >> simp[] >>
-    (* IH: the fold over tl decomposes *)
-    first_x_assum (qspecl_then [`acc2`, `et2`] mp_tac) >> simp[]
-  )
-  >- (
-    (* h is effect-free: adds (h.inst_id, []) to map, tracking state unchanged *)
-    simp[FILTER] >>
-    `eda_fold_step (acc, et) h = (acc |+ (h.inst_id, ([] : instruction list)), et)` by
-      metis_tac[eda_fold_step_eff_free] >>
-    ONCE_REWRITE_TAC[FOLDL] >> simp[] >>
-    (* Apply IH to the tail with updated accumulator *)
-    first_x_assum (qspecl_then [`acc |+ (h.inst_id, [])`, `et`] mp_tac) >>
-    simp[] >> strip_tac >>
-    (* Need: FST(FOLDL ... (acc |+ (h.inst_id,[]), et) (FILTER has_effects insts))
-             = FST(FOLDL ... (acc, et) (FILTER has_effects insts)) |+ (h.inst_id, []) *)
-    `~MEM h.inst_id (MAP (\i. i.inst_id) (FILTER has_effects insts))` by (
-      CCONTR_TAC >> fs[] >>
-      `MEM h.inst_id (MAP (\i. i.inst_id) insts)` suffices_by fs[] >>
-      fs[MEM_MAP, MEM_FILTER] >> metis_tac[]
-    ) >>
-    `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER has_effects insts))` by
-      metis_tac[all_distinct_map_filter] >>
-    drule_all eda_foldl_fst_acc_update >> strip_tac >>
-    simp[] >>
-    (* RHS: FOLDL f base (h.inst_id :: rest) = FOLDL f (base |+ (h.inst_id, [])) rest *)
-    ONCE_REWRITE_TAC[FOLDL] >> simp[]
-  )
+  Cases_on `has_effects h` >|
+  [(* h has effects: it stays in both FILTERs *)
+   simp[FILTER] >>
+   ONCE_REWRITE_TAC[FOLDL] >>
+   Cases_on `eda_fold_step (acc, et) h` >>
+   rename1 `_ = (acc2, et2)` >> simp[] >>
+   (* IH: the fold over tl decomposes *)
+   first_x_assum (qspecl_then [`acc2`, `et2`] mp_tac) >> simp[],
+   (* h is effect-free: adds (h.inst_id, []) to map, tracking state unchanged *)
+   simp[FILTER] >>
+   `eda_fold_step (acc, et) h = (acc |+ (h.inst_id, ([] : instruction list)), et)` by
+     metis_tac[eda_fold_step_eff_free] >>
+   ONCE_REWRITE_TAC[FOLDL] >> simp[] >>
+   (* Apply IH to the tail with updated accumulator *)
+   first_x_assum (qspecl_then [`acc |+ (h.inst_id, [])`, `et`] mp_tac) >>
+   simp[] >> strip_tac >>
+   (* Need: FST(FOLDL ... (acc |+ (h.inst_id,[]), et) (FILTER has_effects insts))
+            = FST(FOLDL ... (acc, et) (FILTER has_effects insts)) |+ (h.inst_id, []) *)
+   `~MEM h.inst_id (MAP (\i. i.inst_id) (FILTER has_effects insts))` by (
+     CCONTR_TAC >> fs[] >>
+     `MEM h.inst_id (MAP (\i. i.inst_id) insts)` suffices_by fs[] >>
+     fs[MEM_MAP, MEM_FILTER] >> metis_tac[]
+   ) >>
+   `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER has_effects insts))` by
+     metis_tac[all_distinct_map_filter] >>
+   drule_all eda_foldl_fst_acc_update >> strip_tac >>
+   simp[] >>
+   (* RHS: FOLDL f base (h.inst_id :: rest) = FOLDL f (base |+ (h.inst_id, [])) rest *)
+   ONCE_REWRITE_TAC[FOLDL] >> simp[]]
 QED
 
 (* ===== FUPDATE_LIST order independence ===== *)
@@ -981,5 +975,3 @@ Proof
     simp[add_alloca_deps_def, add_chain_deps_def, LET_THM] >>
   simp[build_full_eda_def, LET_THM]
 QED
-
-

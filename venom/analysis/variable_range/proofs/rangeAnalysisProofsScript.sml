@@ -8,7 +8,7 @@
 Theory rangeAnalysisProofs
 Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
-  venomExecSemantics venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
+  venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenProps cfgAnalysisProps
   dfgAnalysisProps dfgCorrectnessProof
 
@@ -1181,6 +1181,219 @@ Proof
   simp[]
 QED
 
+(* ===== PHI-prefix range soundness ===== *)
+
+(* Intra-block transfer: df_widen_at at SUC idx = transfer applied to idx. *)
+Theorem range_intra_transfer:
+  !fn lbl bb idx.
+    wf_function fn /\
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    SUC idx <= LENGTH bb.bb_instructions ==>
+    df_widen_at NONE (range_analyze fn) lbl (SUC idx) =
+    range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
+      (EL idx bb.bb_instructions)
+      (df_widen_at NONE (range_analyze fn) lbl idx)
+Proof
+  rpt strip_tac >>
+  mp_tac (SIMP_RULE std_ss [LET_THM]
+    (REWRITE_RULE [GSYM (SIMP_RULE std_ss [LET_THM] range_analyze_def)]
+    (ISPECL [
+      ``Forward``,
+      ``NONE : (string |-> value_range) option``,
+      ``range_join_opt``,
+      ``range_widen_opt : (string |-> value_range) option
+          -> (string |-> value_range) option
+          -> (string |-> value_range) option``,
+      ``WIDEN_THRESHOLD``,
+      ``range_transfer_opt``,
+      ``range_edge_transfer_opt``,
+      ``(dfg_build_function fn, fn.fn_blocks)``,
+      ``OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : string |-> value_range)))
+          (fn_entry_label fn)``,
+      ``fn : ir_function``,
+      ``lbl : string``,
+      ``bb : basic_block``,
+      ``idx : num``]
+    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
+  impl_tac >- (
+    conj_tac >- first_assum ACCEPT_TAC >>
+    mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
+  simp[]
+QED
+
+Triviality range_transfer_phi_sound_same_state[local]:
+  !ctx inst v s.
+    inst.inst_opcode = PHI /\ range_sound v s ==>
+    range_sound (range_transfer_opt ctx inst v) s
+Proof
+  rw[range_transfer_opt_def, range_evaluate_inst_def,
+     range_sound_def, in_range_state_def,
+     finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  Cases_on `v` >> gvs[range_sound_def, in_range_state_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[range_sound_def, in_range_state_def] >>
+  Cases_on `t` >> gvs[range_sound_def, in_range_state_def,
+    finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  metis_tac[]
+QED
+
+Triviality range_transfer_phi_flookup[local]:
+  !ctx inst v rs x r.
+    inst.inst_opcode = PHI /\
+    range_transfer_opt ctx inst v = SOME rs /\
+    FLOOKUP rs x = SOME r ==>
+    ~MEM x inst.inst_outputs /\ ?rs0. v = SOME rs0 /\ FLOOKUP rs0 x = SOME r
+Proof
+  rpt gen_tac >> Cases_on `v`
+  >- (
+    simp[range_transfer_opt_def, range_evaluate_inst_def,
+         finite_mapTheory.FLOOKUP_EMPTY] >>
+    Cases_on `inst.inst_outputs` >- (rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_EMPTY]) >>
+    Cases_on `t` >> gvs[finite_mapTheory.FLOOKUP_EMPTY]
+  )
+  >- (
+    simp[range_transfer_opt_def, range_evaluate_inst_def,
+         finite_mapTheory.DOMSUB_FLOOKUP_THM,
+         finite_mapTheory.FLOOKUP_EMPTY] >>
+    Cases_on `inst.inst_outputs` >- (rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_EMPTY]) >>
+    Cases_on `t` >> gvs[finite_mapTheory.FLOOKUP_EMPTY,
+      finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+    rpt strip_tac >> gvs[finite_mapTheory.DOMSUB_FLOOKUP_THM]
+  )
+QED
+
+Triviality range_sound_flookup_preserve[local]:
+  !v s s'.
+    range_sound v s /\
+    (!rs x r. v = SOME rs /\ FLOOKUP rs x = SOME r ==>
+       FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x) ==>
+    range_sound v s'
+Proof
+  Cases >> simp[range_sound_def, in_range_state_def] >>
+  rpt strip_tac >> res_tac >> gvs[]
+QED
+
+Triviality eval_phis_flookup_idx[local]:
+  !s insts x.
+    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
+    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
+Proof
+  Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
+  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
+    rpt strip_tac >>
+    first_x_assum (qspec_then `SUC i` mp_tac) >>
+    simp[phi_prefix_length_def]) >>
+  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by
+    (first_x_assum drule >> simp[]) >>
+  `~MEM x h.inst_outputs` by
+    (last_x_assum (qspec_then `0` mp_tac) >> simp[phi_prefix_length_def]) >>
+  `MEM out h.inst_outputs` by
+    (drule venomExecProofsTheory.eval_one_phi_output_mem >> simp[]) >>
+  `out <> x` by (CCONTR_TAC >> fs[]) >>
+  gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem phi_prefix_length_el_phi:
+  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
+Proof
+  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
+  Cases_on `i` >> simp[phi_prefix_length_def]
+QED
+
+Theorem range_sound_phi_prefix_on_s:
+  !fn bb s k.
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    k <= phi_prefix_length bb.bb_instructions /\
+    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label 0) s ==>
+    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label k) s
+Proof
+  Induct_on `k` >- simp[] >>
+  rpt strip_tac >>
+  `k <= phi_prefix_length bb.bb_instructions` by decide_tac >>
+  `range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label k) s` by
+    metis_tac[] >>
+  `k < phi_prefix_length bb.bb_instructions` by decide_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `SUC k <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le,
+              arithmeticTheory.LESS_EQ_TRANS] >>
+  `df_widen_at NONE (range_analyze fn) bb.bb_label (SUC k) =
+   range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
+     (EL k bb.bb_instructions)
+     (df_widen_at NONE (range_analyze fn) bb.bb_label k)` by
+    (irule range_intra_transfer >> simp[]) >>
+  simp[] >>
+  irule range_transfer_phi_sound_same_state >> simp[]
+QED
+
+Theorem df_at_phi_prefix_no_range_output:
+  !fn bb k rs x r.
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    k <= phi_prefix_length bb.bb_instructions /\
+    df_widen_at NONE (range_analyze fn) bb.bb_label k = SOME rs /\
+    FLOOKUP rs x = SOME r ==>
+    !i. i < k ==> ~MEM x (EL i bb.bb_instructions).inst_outputs
+Proof
+  Induct_on `k` >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `k < phi_prefix_length bb.bb_instructions` by decide_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `SUC k <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le,
+              arithmeticTheory.LESS_EQ_TRANS] >>
+  `df_widen_at NONE (range_analyze fn) bb.bb_label (SUC k) =
+   range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
+     (EL k bb.bb_instructions)
+     (df_widen_at NONE (range_analyze fn) bb.bb_label k)` by
+    (irule range_intra_transfer >> simp[]) >>
+  `~MEM x (EL k bb.bb_instructions).inst_outputs /\
+   ?rs0. df_widen_at NONE (range_analyze fn) bb.bb_label k = SOME rs0 /\
+         FLOOKUP rs0 x = SOME r` by
+    metis_tac[range_transfer_phi_flookup] >>
+  rpt strip_tac >>
+  Cases_on `i = k` >> gvs[] >>
+  `i < k` by decide_tac >>
+  first_x_assum (qspecl_then [`fn`, `bb`, `rs0`, `x`, `r`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem eval_phis_range_sound:
+  !fn bb s s_phi.
+    wf_function fn /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK s_phi /\
+    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label 0) s ==>
+    range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label
+                  (phi_prefix_length bb.bb_instructions))
+      (s_phi with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >>
+  sg `range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label
+                  (phi_prefix_length bb.bb_instructions)) s`
+  >- (
+    mp_tac (Q.SPECL [`fn`, `bb`, `s`,
+      `phi_prefix_length bb.bb_instructions`] range_sound_phi_prefix_on_s) >>
+    simp[]
+  ) >>
+  irule range_sound_flookup_preserve >>
+  qexists_tac `s` >> simp[] >>
+  rpt strip_tac >>
+  irule eval_phis_flookup_idx >> simp[] >>
+  rpt strip_tac >>
+  qspecl_then [`fn`, `bb`, `phi_prefix_length bb.bb_instructions`,
+    `rs`, `x`, `r`] mp_tac df_at_phi_prefix_no_range_output >>
+  simp[] >> metis_tac[]
+QED
+
 (* ===== in_range_state monotonicity ===== *)
 
 Triviality in_range_state_weaken:
@@ -1262,17 +1475,17 @@ QED
  *)
 
 (* Terminators returning OK preserve vs_vars (JMP/JNZ/DJMP use jump_to). *)
-Triviality step_terminator_preserves_vars[local]:
+Triviality step_terminator_preserves_vs_vars[local]:
   ∀fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' ∧
     is_terminator inst.inst_opcode ⇒
     s'.vs_vars = s.vs_vars
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  rpt (pop_assum mp_tac) >> simp[is_terminator_def] >>
-  rpt strip_tac >> fs[step_inst_def, step_inst_base_def] >>
-  BasicProvers.every_case_tac >> gvs[jump_to_def]
+  rpt strip_tac >>
+  rw[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+  drule_all venomExecPropsTheory.step_terminator_preserves_vars >>
+  disch_then (qspec_then `x` mp_tac) >>
+  simp[lookup_var_def]
 QED
 (* For any instruction where step_inst returns OK:
    range_evaluate_inst preserves in_range_state, given appropriate
@@ -1298,7 +1511,7 @@ Proof
   >- (mp_tac step_preserves_non_output_vars >>
       disch_then drule >> simp[] >>
       disch_then (qspec_then `v` mp_tac) >> simp[lookup_var_def])
-  >> drule_all step_terminator_preserves_vars >> simp[]
+  >> drule_all step_terminator_preserves_vs_vars >> simp[]
 QED
 
 (* range_unwrap distributes through range_transfer_opt *)
@@ -1972,6 +2185,46 @@ val list_case_const_vr = prove(
       mk_var("c", ``:value_range``))),
   Cases_on `l` >> simp[]);
 
+val range_pure2_opcodes = [
+  ``ADD``, ``SUB``, ``MUL``, ``Div``, ``Mod``, ``SDIV``, ``SMOD``,
+  ``AND``, ``OR``, ``XOR``, ``SHR``, ``SHL``, ``SAR``,
+  ``LT``, ``GT``, ``SLT``, ``SGT``, ``EQ``, ``BYTE``];
+
+val range_pure1_opcodes = [``ISZERO``, ``NOT``];
+val range_assign_opcodes = [``ASSIGN``];
+val range_all_opcodes = TypeBase.constructors_of ``:opcode``;
+
+fun range_op_mem opc opcs = List.exists (aconv opc) opcs;
+
+fun pick_range_opcode tm =
+  case total dest_eq tm of
+    SOME (lhs, rhs) =>
+      List.find (fn opc => aconv lhs opc orelse aconv rhs opc) range_all_opcodes
+  | NONE => NONE;
+
+val range_top_tac =
+  rpt strip_tac >>
+  simp[eval_range_def, eval_range_signextend_def, list_case_const_vr,
+       in_range_top];
+
+val range_non_invoke_base_tac =
+  `step_inst_base inst s = OK r` by fs[step_inst_non_invoke] >>
+  rpt strip_tac;
+
+fun range_eval_tac_for opc =
+  if range_op_mem opc range_pure2_opcodes then
+    range_non_invoke_base_tac >> exec_pure2_range_tac
+  else if range_op_mem opc range_pure1_opcodes then
+    range_non_invoke_base_tac >> exec_pure1_range_tac
+  else if range_op_mem opc range_assign_opcodes then
+    range_non_invoke_base_tac >> assign_range_tac
+  else range_top_tac;
+
+fun range_eval_dispatch_tac (asl, w) =
+  case List.find (fn asm => isSome (pick_range_opcode asm)) asl of
+    SOME asm => range_eval_tac_for (valOf (pick_range_opcode asm)) (asl, w)
+  | NONE => failwith "range_eval_dispatch_tac: no opcode assumption";
+
 (* Per-instruction range soundness for non-PHI single-output opcodes.
    Connects step_inst execution to eval_range abstraction. *)
 Triviality step_eval_range_sound[local]:
@@ -1986,23 +2239,34 @@ Triviality step_eval_range_sound[local]:
         (MAP operand_lit inst.inst_operands)) w
 Proof
   rpt gen_tac \\ strip_tac
-  \\ Cases_on `inst.inst_opcode` \\ fs[]
-  (* INVOKE: separate handling *)
-  \\ TRY (rpt strip_tac >> simp[eval_range_def]
-           >> BasicProvers.CASE_TAC >> simp[in_range_top] >> NO_TAC)
-  (* Non-INVOKE: get step_inst_base *)
-  \\ `step_inst_base inst s = OK r` by fs[step_inst_non_invoke]
-  \\ rpt strip_tac
-  (* VR_Top opcodes *)
-  \\ TRY (simp[eval_range_def, eval_range_signextend_def,
-               list_case_const_vr, in_range_top]
-           >> NO_TAC)
-  (* exec_pure2 opcodes *)
-  \\ TRY (exec_pure2_range_tac >> NO_TAC)
-  (* exec_pure1 opcodes *)
-  \\ TRY (exec_pure1_range_tac >> NO_TAC)
-  (* ASSIGN *)
-  \\ TRY (assign_range_tac >> NO_TAC)
+  \\ Cases_on `eval_range inst.inst_opcode
+        (MAP (operand_range rs) inst.inst_operands)
+        (MAP operand_lit inst.inst_operands) = VR_Top`
+  >- (rpt strip_tac \\ ASM_REWRITE_TAC[] \\ simp[in_range_top])
+  \\ Cases_on `inst.inst_opcode` \\
+     fs[eval_range_def, eval_range_signextend_def, list_case_const_vr]
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* ADD *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SUB *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* MUL *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* Div *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SDIV *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* Mod *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SMOD *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* EQ *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* LT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* GT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SLT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SGT *)
+  >- (range_non_invoke_base_tac >> exec_pure1_range_tac) (* ISZERO *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* AND *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* OR *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* XOR *)
+  >- (range_non_invoke_base_tac >> exec_pure1_range_tac) (* NOT *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SHL *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SHR *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* SAR *)
+  >- (range_non_invoke_base_tac >> exec_pure2_range_tac) (* BYTE *)
+  >- (range_non_invoke_base_tac >> assign_range_tac) (* ASSIGN *)
 QED
 
 (* Per-instruction soundness: wraps step_range_sound + step_eval_range_sound

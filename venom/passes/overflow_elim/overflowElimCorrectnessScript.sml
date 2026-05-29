@@ -159,6 +159,8 @@ QED
 Theorem overflow_elim_preserves_ssa_form:
   ∀fn. wf_function fn ∧ ssa_form fn ⇒ ssa_form (overflow_elim_function fn)
 Proof
+  (* FIXME: Proof is non-trivial for a statement file — should be ACCEPT_TAC referencing
+     a proof theorem in overflowElimProofs. Requires adding the proof theorem there (cross-file). *)
   rpt strip_tac >>
   ONCE_REWRITE_TAC[overflow_elim_function_eq_fmt] >>
   irule clear_nops_function_preserves_ssa >>
@@ -172,6 +174,8 @@ QED
 Theorem overflow_elim_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (overflow_elim_function fn)
 Proof
+  (* FIXME: Proof is non-trivial for a statement file — should be ACCEPT_TAC referencing
+     a proof theorem in overflowElimProofs. Requires adding the proof theorem there (cross-file). *)
   rpt strip_tac >>
   ONCE_REWRITE_TAC[overflow_elim_function_eq_fmt] >>
   irule clear_nops_function_preserves_wf >>

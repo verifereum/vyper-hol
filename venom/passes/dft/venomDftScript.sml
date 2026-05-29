@@ -1,5 +1,5 @@
 (* DFT pass — public API *)
-Theory dft
+Theory venomDft
 Ancestors
   dftDefs dftCorrectness
 

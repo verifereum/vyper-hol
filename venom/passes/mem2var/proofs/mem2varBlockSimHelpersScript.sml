@@ -512,7 +512,7 @@ Proof
   metis_tac[]
 QED
 
-(* D5 helper: IS_SOME (lookup_var pvar s) from pvars_set + stores_dominate.
+(* IS_SOME (lookup_var pvar s) from pvars_set + stores_dominate.
    Works for any opcode covered by m2v_stores_dominate_loads (MLOAD or RETURN). *)
 Theorem m2v_pvars_set_use_is_some:
   !fn bb i s ao pvar.
@@ -701,6 +701,7 @@ Proof
   `~MEM ao inst.inst_outputs` by
     (strip_tac >>
      `inst_wf inst` by metis_tac[fn_inst_wf_MEM] >>
+     `inst.inst_opcode ≠ PHI` by metis_tac[step_inst_ok_imp_not_phi] >>
      drule_all step_inst_fdom >> strip_tac >>
      `ao IN FDOM v1.vs_vars` by simp[EXTENSION] >>
      gvs[lookup_var_def, FLOOKUP_DEF]) >>
@@ -780,7 +781,7 @@ Proof
   every_case_tac >> gvs[]
 QED
 
-(*  m2v_non32_ok ignores its first state arg (L502).
+(* m2v_non32_ok ignores its first state arg.
     Conclusion avoids mentioning it so callers don't hit type issues. *)
 Theorem m2v_non32_ok_preserved_step:
   !fn inst s2 v2 fuel ctx.
@@ -841,19 +842,17 @@ Theorem step_inst_base_preserves_allocas:
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_alloca_next = s.vs_alloca_next
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def,
-     lookup_var_def, FLOOKUP_UPDATE]
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (
+    CCONTR_TAC >> gvs[] >>
+    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+    ASM_REWRITE_TAC[step_inst_base_def] >> simp[]) >>
+  `inst.inst_opcode <> ALLOCA` by (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
+  conj_tac
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
+        venomMemProofsTheory.step_inst_base_preserves_allocas >> simp[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
+        venomMemProofsTheory.step_inst_base_preserves_alloca_next >> simp[])
 QED
 
 (* Lift to step_inst *)
@@ -1081,8 +1080,10 @@ Resume m2v_inv_noix_step_nonpromoted[g1]:
   Cases_on `MEM v inst.inst_outputs`
   >- (Cases_on `is_effect_free_op inst.inst_opcode`
       >- (Cases_on `inst.inst_opcode = NOP`
-          >- gvs[step_inst_base_def, AllCaseEqs()]
-          >> metis_tac[])
+          >- gvs[step_inst_base_def, AllCaseEqs()] >>
+          Cases_on `inst.inst_opcode = PHI`
+          >- gvs[step_inst_base_def, AllCaseEqs()] >>
+          metis_tac[])
       >> gvs[])
   >> metis_tac[]
 QED
@@ -2799,6 +2800,13 @@ Proof
 QED
 
 (* step_inst_base wrapper: dispatch all 5 ext_call opcodes *)
+val ext_call_step_tac =
+  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  every_case_tac >> gvs[] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  every_case_tac >> gvs[];
+
 Triviality m2v_step_ext_call:
   m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
   is_ext_call_op inst.inst_opcode /\
@@ -2816,17 +2824,12 @@ Triviality m2v_step_ext_call:
   ?v2. step_inst_base inst s2 = OK v2 /\ m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def] >>
-  qpat_x_assum `step_inst_base _ s1 = _`
-    (strip_assume_tac o ONCE_REWRITE_RULE[step_inst_base_def]) >>
-  gvs[AllCaseEqs()] >>
-  simp[Once step_inst_base_def] >>
-  gvs[AllCaseEqs()]
-  >- suspend "call"
-  >- suspend "static"
-  >- suspend "deleg"
-  >- suspend "create"
-  >> suspend "create2"
+  (Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def])
+  >- (ext_call_step_tac >> suspend "call")
+  >- (ext_call_step_tac >> suspend "static")
+  >- (ext_call_step_tac >> suspend "deleg")
+  >- (ext_call_step_tac >> suspend "create") >>
+  ext_call_step_tac >> suspend "create2"
 QED
 
 (* Shared tactic for all 5 ext_call Resume blocks:
@@ -2836,6 +2839,7 @@ fun m2v_inv_call_ctx th =
   List.nth (CONJUNCTS (REWRITE_RULE [m2v_inv_noix_def] th), 7);
 
 val m2v_ext_call_tac =
+  strip_tac >>
   FIRST [match_mp_tac exec_ext_call_m2v_inv,
          match_mp_tac exec_delegatecall_m2v_inv,
          match_mp_tac exec_create_m2v_inv] >>
@@ -3910,26 +3914,43 @@ Proof
   SUBGOAL_THEN ``eval_operands inst.inst_operands s1 =
     eval_operands inst.inst_operands s2`` assume_tac
   >- (irule eval_operands_agrees >> simp[]) >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  simp[step_inst_base_def, GSYM jump_to_def, GSYM halt_state_def,
-       GSYM set_returndata_def] >>
-  (* SELFDESTRUCT: extract call_ctx/accounts agreement before case split *)
-  TRY (rename1 `SELFDESTRUCT` >>
-    SUBGOAL_THEN ``s1.vs_call_ctx = s2.vs_call_ctx /\
-      s1.vs_accounts = s2.vs_accounts`` strip_assume_tac
-    >- gvs[m2v_inv_noix_def] >>
-    every_case_tac >> gvs[lift_result_def] >>
-    metis_tac[m2v_inv_noix_update_accounts, m2v_inv_noix_halt_state,
-              m2v_non32_ok_update_accounts, m2v_non32_ok_halt_state,
-              m2v_ao_undef_sync_update_accounts, m2v_ao_undef_sync_halt_state]
-    >> NO_TAC) >>
-  (* All other terminators: operand case split + preservation lemmas *)
-  every_case_tac >> gvs[lift_result_def] >>
-  metis_tac[m2v_inv_noix_halt_state, m2v_non32_ok_halt_state,
-            m2v_inv_noix_jump_to, m2v_non32_ok_jump_to,
-            m2v_inv_noix_set_returndata, m2v_non32_ok_set_returndata,
-            m2v_ao_undef_sync_halt_state, m2v_ao_undef_sync_jump_to,
-            m2v_ao_undef_sync_set_returndata]
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      every_case_tac >> gvs[lift_result_def] >>
+      metis_tac[m2v_inv_noix_jump_to, m2v_non32_ok_jump_to,
+                m2v_ao_undef_sync_jump_to])
+  >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      every_case_tac >> gvs[lift_result_def] >>
+      metis_tac[m2v_inv_noix_jump_to, m2v_non32_ok_jump_to,
+                m2v_ao_undef_sync_jump_to])
+  >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      every_case_tac >> gvs[lift_result_def] >>
+      metis_tac[m2v_inv_noix_jump_to, m2v_non32_ok_jump_to,
+                m2v_ao_undef_sync_jump_to])
+  >- (ASM_REWRITE_TAC[step_inst_base_def] >>
+      Cases_on `eval_operands inst.inst_operands s2` >>
+      gvs[lift_result_def])
+  >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
+      metis_tac[m2v_inv_noix_halt_state, m2v_non32_ok_halt_state,
+                m2v_ao_undef_sync_halt_state])
+  >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
+      metis_tac[m2v_inv_noix_halt_state, m2v_non32_ok_halt_state,
+                m2v_ao_undef_sync_halt_state])
+  (* SELFDESTRUCT: extract call_ctx/accounts agreement before case split. *)
+  >- (SUBGOAL_THEN ``s1.vs_call_ctx = s2.vs_call_ctx /\
+        s1.vs_accounts = s2.vs_accounts`` strip_assume_tac
+      >- gvs[m2v_inv_noix_def] >>
+      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      every_case_tac >> gvs[lift_result_def] >>
+      metis_tac[m2v_inv_noix_update_accounts, m2v_inv_noix_halt_state,
+                m2v_non32_ok_update_accounts, m2v_non32_ok_halt_state,
+                m2v_ao_undef_sync_update_accounts,
+                m2v_ao_undef_sync_halt_state]) >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
+  metis_tac[m2v_inv_noix_set_returndata, m2v_inv_noix_halt_state,
+            m2v_non32_ok_set_returndata, m2v_non32_ok_halt_state,
+            m2v_ao_undef_sync_set_returndata,
+            m2v_ao_undef_sync_halt_state]
 QED
 
 (* ================================================================== *)
@@ -3999,6 +4020,44 @@ Proof
 QED
 
 (* RETURN/REVERT with FIND=NONE: same inst both sides, memory reads agree *)
+val return_revert_find_none_tac =
+  simp[step_inst_non_invoke] >>
+  `?off_op sz_op. inst.inst_operands = [off_op; sz_op]` by (
+    qpat_x_assum `inst_wf _` mp_tac >> simp[Once inst_wf_def] >>
+    Cases_on `inst.inst_operands` >> simp[] >>
+    Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[]) >>
+  `eval_operand off_op s1 = eval_operand off_op s2` by
+    (mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`off_op`]
+       m2v_inv_noix_eval_agrees) >> simp[MEM]) >>
+  `eval_operand sz_op s1 = eval_operand sz_op s2` by
+    (mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`sz_op`]
+       m2v_inv_noix_eval_agrees) >> simp[MEM]) >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  Cases_on `eval_operand off_op s2` >> gvs[] >>
+  Cases_on `eval_operand sz_op s2` >> gvs[] >>
+  rename1 `eval_operand off_op s2 = SOME off_val` >>
+  rename1 `eval_operand sz_op s2 = SOME sz_val` >>
+  `TAKE (w2n sz_val) (DROP (w2n off_val) s1.vs_memory ++
+     REPLICATE (w2n sz_val) 0w) =
+   TAKE (w2n sz_val) (DROP (w2n off_val) s2.vs_memory ++
+     REPLICATE (w2n sz_val) 0w)` by (
+    irule mem_byte_agrees_take_drop >> rpt strip_tac >>
+    qpat_x_assum `m2v_inv_noix _ _ _`
+      (strip_assume_tac o REWRITE_RULE[m2v_inv_noix_def]) >>
+    first_x_assum irule >>
+    qpat_x_assum `m2v_nonpromoted_access_safe _ _`
+      (mp_tac o REWRITE_RULE[m2v_nonpromoted_access_safe_def]) >>
+    disch_then (qspecl_then [`bb`, `inst`, `<| iao_ofst := off_op;
+      iao_size := SOME sz_op; iao_max_size := SOME sz_op |>`,
+      `off_val`, `sz_val`, `sz_op`] mp_tac) >>
+    simp[mem_read_ops_def, is_immutable_op_def]) >>
+  simp[lift_result_def] >>
+  mp_tac m2v_terminal_inv_preserved >>
+  disch_then (qspecl_then [`fn`,`s1`,`s2`,
+    `TAKE (w2n sz_val) (DROP (w2n off_val) s1.vs_memory ++
+       REPLICATE (w2n sz_val) 0w)`] mp_tac) >>
+  simp[];
+
 Theorem m2v_step_return_revert_find_none:
   !fn bb inst s1 s2 fuel ctx.
     (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
@@ -4028,51 +4087,10 @@ Theorem m2v_step_return_revert_find_none:
       (step_inst fuel ctx inst s1)
       (step_inst fuel ctx inst s2)
 Proof
-  let
-    val shared_tac =
-      simp[step_inst_non_invoke] >>
-      `?off_op sz_op. inst.inst_operands = [off_op; sz_op]` by (
-        qpat_x_assum `inst_wf _` mp_tac >> simp[Once inst_wf_def] >>
-        Cases_on `inst.inst_operands` >> simp[] >>
-        Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[]) >>
-      `eval_operand off_op s1 = eval_operand off_op s2` by
-        (mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`off_op`]
-           m2v_inv_noix_eval_agrees) >> simp[MEM]) >>
-      `eval_operand sz_op s1 = eval_operand sz_op s2` by
-        (mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`sz_op`]
-           m2v_inv_noix_eval_agrees) >> simp[MEM]) >>
-      simp[step_inst_base_def] >>
-      (* gvs solves Error cases; SOME/SOME case remains without disjunction *)
-      Cases_on `eval_operand off_op s2` >> gvs[] >>
-      Cases_on `eval_operand sz_op s2` >> gvs[] >>
-      rename1 `eval_operand off_op s2 = SOME off_val` >>
-      rename1 `eval_operand sz_op s2 = SOME sz_val` >>
-      `TAKE (w2n sz_val) (DROP (w2n off_val) s1.vs_memory ++
-         REPLICATE (w2n sz_val) 0w) =
-       TAKE (w2n sz_val) (DROP (w2n off_val) s2.vs_memory ++
-         REPLICATE (w2n sz_val) 0w)` by (
-        irule mem_byte_agrees_take_drop >> rpt strip_tac >>
-        qpat_x_assum `m2v_inv_noix _ _ _`
-          (strip_assume_tac o REWRITE_RULE[m2v_inv_noix_def]) >>
-        first_x_assum irule >>
-        qpat_x_assum `m2v_nonpromoted_access_safe _ _`
-          (mp_tac o REWRITE_RULE[m2v_nonpromoted_access_safe_def]) >>
-        disch_then (qspecl_then [`bb`, `inst`, `<| iao_ofst := off_op;
-          iao_size := SOME sz_op; iao_max_size := SOME sz_op |>`,
-          `off_val`, `sz_val`, `sz_op`] mp_tac) >>
-        simp[mem_read_ops_def, is_immutable_op_def]) >>
-      simp[lift_result_def] >>
-      mp_tac m2v_terminal_inv_preserved >>
-      disch_then (qspecl_then [`fn`,`s1`,`s2`,
-        `TAKE (w2n sz_val) (DROP (w2n off_val) s1.vs_memory ++
-           REPLICATE (w2n sz_val) 0w)`] mp_tac) >>
-      simp[]
-  in
-    rpt gen_tac >> strip_tac >>
-    Cases_on `inst.inst_opcode` >> gvs[]
-    >- shared_tac
-    >> shared_tac
-  end
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = RETURN` >> gvs[]
+  >- return_revert_find_none_tac >>
+  return_revert_find_none_tac
 QED
 
 Theorem nao_jump_to:
@@ -4102,16 +4120,14 @@ Theorem nao_easy_terminator:
 Proof
   rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
-  SUBGOAL_THEN ``eval_operands inst.inst_operands s1 =
-    eval_operands inst.inst_operands s2`` assume_tac
-  >- (irule eval_operands_agrees >>
-      rpt strip_tac >>
-      mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`op`]
-        m2v_inv_noix_eval_agrees) >> simp[]) >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  gvs[step_inst_base_def, GSYM jump_to_def, GSYM halt_state_def,
-      GSYM set_returndata_def] >>
-  every_case_tac >> gvs[nao_halt_revert, nao_jump_to]
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+  qspecl_then [`inst`, `s1`, `s1'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_next >>
+  simp[] >> strip_tac >>
+  qspecl_then [`inst`, `s2`, `s2'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_next >>
+  simp[]
 QED
 
 (* MAX a (MAX L1 d) = MAX a (MAX L2 d) when MAX a L1 = MAX a L2.
@@ -4315,25 +4331,25 @@ Theorem return_data_mstore_roundtrip:
 Proof
   rpt strip_tac >>
   (* Both sides = TAKE k (word_to_bytes pval T).
-     Step 1: word_to_bytes inverts mload *)
+     word_to_bytes inverts mload *)
   qabbrev_tac `bytes = word_to_bytes pval T` >>
   `bytes = TAKE 32 (DROP off s1.vs_memory ++ REPLICATE 32 0w)` by (
     simp[Abbr `bytes`, mload_def, LET_THM] >>
     irule word_bytes_roundtrip_256 >> simp[LENGTH_TAKE_EQ]) >>
-  (* Step 2: mstore writes bytes at [off..off+32) *)
+  (* mstore writes bytes at [off..off+32) *)
   `TAKE 32 (DROP off (mstore off pval s2).vs_memory) = bytes` by
     simp[DROP_mstore_prefix, Abbr `bytes`] >>
-  (* Step 3: DROP off after mstore has >= 32 elements *)
+  (* DROP off after mstore has >= 32 elements *)
   qabbrev_tac `mem2 = DROP off (mstore off pval s2).vs_memory` >>
   `32 <= LENGTH mem2` by (
     simp[Abbr `mem2`, LENGTH_DROP] >>
     mp_tac (Q.SPECL [`off`,`pval`,`s2`] LENGTH_mstore_mem) >> simp[]) >>
-  (* Step 4: LHS = TAKE k bytes *)
+  (* LHS = TAKE k bytes *)
   `TAKE k (mem2 ++ REPLICATE k 0w) = TAKE k mem2` by
     (irule TAKE_APPEND1 >> simp[]) >>
   `TAKE k mem2 = TAKE k bytes` by
     metis_tac[TAKE_TAKE_T] >>
-  (* Step 5: RHS = TAKE k bytes *)
+  (* RHS = TAKE k bytes *)
   qabbrev_tac `mem1 = DROP off s1.vs_memory` >>
   `TAKE k (mem1 ++ REPLICATE k 0w) =
    TAKE k (mem1 ++ REPLICATE 32 0w)` by
@@ -4414,16 +4430,78 @@ QED
    allowing pvars_set derivation for IH application. *)
 
 (* step_inst_base can't Halt or IntRet for non-terminators *)
+Triviality exec_result_helpers_no_halt_abort[simp]:
+  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
+  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
+  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_result_helpers_not_intret[simp]:
+  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
+  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_call_helpers_not_intret[simp]:
+  (!inst s g a v ao as_ ro rs is_s vs s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
+  (!inst s g a ao as_ ro rs vs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
+  (!inst s v off sz salt vs s'.
+     exec_create inst s v off sz salt <> IntRet vs s')
+Proof
+  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_call_helpers_no_halt_abort[simp]:
+  (!inst s g a v ao as_ ro rs is_s s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
+  (!inst s g a v ao as_ ro rs is_s ab s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
+  (!inst s g a ao as_ ro rs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
+  (!inst s g a ao as_ ro rs ab s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
+  (!inst s v off sz salt s'.
+     exec_create inst s v off sz salt <> Halt s') /\
+  (!inst s v off sz salt ab s'.
+     exec_create inst s v off sz salt <> Abort ab s')
+Proof
+  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 val step_base_result_tac =
   rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])));
+  gvs[AllCaseEqs(), is_terminator_def];
 
 Theorem step_inst_base_no_halt:
   !inst s s'.
@@ -5109,59 +5187,17 @@ Theorem step_inst_ext_call_nao:
     s1'.vs_alloca_next = s2'.vs_alloca_next
 Proof
   rpt strip_tac >>
-  `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
-  `s1.vs_accounts = s2.vs_accounts /\ s1.vs_call_ctx = s2.vs_call_ctx /\
-   s1.vs_transient = s2.vs_transient /\ s1.vs_tx_ctx = s2.vs_tx_ctx /\
-   s1.vs_block_ctx = s2.vs_block_ctx /\
-   s1.vs_prev_hashes = s2.vs_prev_hashes` by gvs[m2v_inv_noix_def] >>
-  `venom_to_tx_params s1 = venom_to_tx_params s2` by
-    simp[venom_to_tx_params_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def] >>
-  qpat_x_assum `step_inst_base _ s1 = _`
-    (strip_assume_tac o ONCE_REWRITE_RULE[step_inst_base_def]) >>
-  gvs[AllCaseEqs()] >>
-  qpat_x_assum `step_inst_base _ s2 = _`
-    (strip_assume_tac o ONCE_REWRITE_RULE[step_inst_base_def]) >>
-  gvs[AllCaseEqs()] >>
-  TRY (rename1 `exec_ext_call` >> suspend "call") >>
-  TRY (rename1 `exec_delegatecall` >> suspend "deleg") >>
-  TRY (rename1 `exec_create` >> suspend "create")
+  `inst.inst_opcode <> INVOKE` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def]) >>
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def]) >>
+  qspecl_then [`inst`, `s1`, `s1'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_next >>
+  simp[] >> strip_tac >>
+  qspecl_then [`inst`, `s2`, `s2'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_next >>
+  simp[]
 QED
-
-(* Per-opcode Resume blocks for step_inst_ext_call_nao.
-   Pattern: establish read_memory agreement via NAS,
-   then drule_all *_same_D, then nao_preserved_same_expansion. *)
-Resume step_inst_ext_call_nao[call]:
-  RESUME_TAC >> rpt strip_tac >>
-  mp_tac read_memory_nas_agrees >>
-  disch_then (qspecl_then [`fn`,`s1`,`s2`,`bb`,`inst`] mp_tac) >>
-  simp[mem_read_ops_def, is_immutable_op_def] >>
-  strip_tac >>
-  drule_all exec_ext_call_same_D >> strip_tac >>
-  irule nao_preserved_same_expansion >> simp[] >> metis_tac[]
-QED
-
-Resume step_inst_ext_call_nao[deleg]:
-  RESUME_TAC >> rpt strip_tac >>
-  mp_tac read_memory_nas_agrees >>
-  disch_then (qspecl_then [`fn`,`s1`,`s2`,`bb`,`inst`] mp_tac) >>
-  simp[mem_read_ops_def, is_immutable_op_def] >>
-  strip_tac >>
-  drule_all exec_delegatecall_same_D >> strip_tac >>
-  irule nao_preserved_same_expansion >> simp[] >> metis_tac[]
-QED
-
-Resume step_inst_ext_call_nao[create]:
-  RESUME_TAC >> rpt strip_tac >>
-  mp_tac read_memory_nas_agrees >>
-  disch_then (qspecl_then [`fn`,`s1`,`s2`,`bb`,`inst`] mp_tac) >>
-  simp[mem_read_ops_def, is_immutable_op_def] >>
-  strip_tac >>
-  drule_all exec_create_same_D >> strip_tac >>
-  irule nao_preserved_same_expansion >> simp[] >> metis_tac[]
-QED
-
-Finalise step_inst_ext_call_nao
 
 (* Standalone nao preservation theorem *)
 Theorem nao_dispatch_preserved:
@@ -5251,6 +5287,22 @@ QED
 
 (* Combined easy terminator: 4-conjunct lift_result including nao.
    Avoids expensive 5x5 case split in caller. *)
+Theorem step_inst_result_preserves_alloca_next:
+  !fuel ctx inst s s'.
+    inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
+    (step_inst fuel ctx inst s = OK s' \/
+     step_inst fuel ctx inst s = Halt s' \/
+     (?a. step_inst fuel ctx inst s = Abort a s') \/
+     (?vs. step_inst fuel ctx inst s = IntRet vs s')) ==>
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  qspecl_then [`inst`, `s`, `s'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_next >>
+  simp[]
+QED
+
 Theorem m2v_step_easy_terminator_full:
   !fn inst s1 s2 fuel ctx.
     m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
@@ -5275,22 +5327,16 @@ Theorem m2v_step_easy_terminator_full:
       (step_inst fuel ctx inst s2)
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
   mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`fuel`,`ctx`]
     m2v_step_easy_terminator) >> simp[] >> strip_tac >>
   Cases_on `step_inst fuel ctx inst s1` >>
   Cases_on `step_inst fuel ctx inst s2` >>
   gvs[lift_result_def]
-  (* OK/OK: nao from existing nao_easy_terminator *)
   >- (mp_tac (Q.SPECL [`fn`,`inst`,`s1`,`s2`,`fuel`,`ctx`]
-        nao_easy_terminator) >> simp[])
-  (* Halt/Halt, Abort/Abort, IntRet/IntRet: nao preserved because
-     easy terminators only apply halt_state/jump_to/set_returndata/
-     update_accounts — none change vs_alloca_next or vs_memory. *)
-  >> (gvs[step_inst_non_invoke] >>
-      Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-      gvs[step_inst_base_def] >> every_case_tac >>
-      gvs[nao_halt_revert, nao_jump_to,
-          halt_state_def])
+        nao_easy_terminator) >> simp[]) >>
+  metis_tac[step_inst_result_preserves_alloca_next]
 QED
 
 (* nao preserved through mstore on s2 followed by halt_state + set_returndata.

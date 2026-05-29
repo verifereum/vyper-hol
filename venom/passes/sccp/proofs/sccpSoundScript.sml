@@ -17,6 +17,8 @@ Ancestors
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   venomExecSemantics venomExecProofs passSharedDefs
   finite_map list pred_set dfAnalyzeDefs
+Libs
+  BasicProvers
 
 (* ===== const_sound properties ===== *)
 
@@ -61,7 +63,7 @@ Proof
   rpt strip_tac >> Cases_on `v' = v` >> gvs[]
 QED
 
-(* After step_inst, non-output vars are preserved *)
+(* Bottom-marking output vars in FLOOKUP preserves constants for non-member vars *)
 Theorem foldl_bottom_preserves_const[local]:
   !outs st v c.
     FLOOKUP (FOLDL (\l v. l |+ (v, CL_Bottom)) st outs) v =
@@ -92,6 +94,7 @@ QED
 
 (* ===== const_subst_op correctness ===== *)
 
+(* Constant substitution preserves operand evaluation under sound lattice *)
 Theorem const_subst_op_correct:
   !st s op.
     const_sound st s ==>
@@ -225,10 +228,11 @@ Proof
     CASE_TAC >> gvs[] >>
     CASE_TAC >> gvs[] >>
     CASE_TAC >> gvs[] >>
-    TRY (CASE_TAC >> gvs[] >> CASE_TAC >> gvs[] >> NO_TAC) >>
-    CASE_TAC >> gvs[] >>
-    CASE_TAC >> gvs[] >>
-    simp[jnz_const_fold_correct])
+    Cases_on `h` >> gvs[] >>
+    TRY (Cases_on `h'` >> gvs[]) >>
+    simp[jnz_const_fold_correct] >>
+    first_x_assum (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+    simp[])
   >>
   Cases_on `inst.inst_opcode = ASSERT \/
             inst.inst_opcode = ASSERT_UNREACHABLE`
@@ -246,45 +250,52 @@ Proof
   simp[]
 QED
 
-(* ===== inst_transform_structural ===== *)
+(* ===== analysis_inst_simulates via 1:1 corollary ===== *)
 
-Theorem sccp_inst_structural[local]:
-  inst_transform_structural (\lat inst. [sccp_inst lat.sl_vals inst])
+(* MERGE NOTE: kept eval-phis branch's 1:1 simulation theorem because
+   sccp_inst_simulates below still derives from analysis_inst_simulates_from_1.
+   origin/main instead introduced local structural lemmas; if this proof fails,
+   consider porting those lemmas and rewriting sccp_inst_simulates directly. *)
+(* sccp_inst provides 1:1 per-instruction simulation under sound lattice *)
+Theorem sccp_inst_simulates_1:
+  analysis_inst_simulates_1 (state_equiv {}) (execution_equiv {})
+    (\lat. const_sound lat.sl_vals)
+    (\lat inst. sccp_inst lat.sl_vals inst)
 Proof
-  rw[inst_transform_structural_def] >> rpt conj_tac >> rpt gen_tac >>
-  rw[sccp_inst_def, LET_THM, mk_nop_inst_def] >> rpt strip_tac >> (
-    TRY (fs[is_terminator_def] >> NO_TAC) >>
-    TRY (
-      `~is_terminator (mk_nop_inst inst).inst_opcode /\
-       (mk_nop_inst inst).inst_opcode <> INVOKE` by EVAL_TAC >>
-      fs[]) >>
-    rpt (CASE_TAC >> gvs[is_terminator_def]) >>
-    rpt (IF_CASES_TAC >> gvs[is_terminator_def]) >>
-    (* Remaining ASSERT/ASSERT_UNREACHABLE goals: case expr in asms *)
-    TRY (qpat_x_assum `is_terminator _` mp_tac) >>
-    TRY (qpat_x_assum `_ = INVOKE` mp_tac) >>
-    simp_tac (srw_ss()) [] >>
-    CASE_TAC >> gvs[is_terminator_def] >>
-    rpt (CASE_TAC >> gvs[is_terminator_def]))
+  simp[analysis_inst_simulates_1_def, inst_transform_structural_1_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `step_inst fuel ctx (sccp_inst lat.sl_vals inst) s =
+       step_inst fuel ctx inst s`
+        by metis_tac[sccp_inst_step_correct] >>
+      simp[] >>
+      Cases_on `step_inst fuel ctx inst s` >>
+      simp[lift_result_def, state_equiv_refl, execution_equiv_refl]) >>
+  rpt conj_tac >> rpt gen_tac >>
+  rw[sccp_inst_def, LET_THM, mk_nop_inst_def] >> rpt strip_tac >>
+  TRY (fs[is_terminator_def] >> NO_TAC) >>
+  TRY (
+    `~is_terminator (mk_nop_inst inst).inst_opcode /\
+     (mk_nop_inst inst).inst_opcode <> INVOKE /\
+     (mk_nop_inst inst).inst_opcode <> PHI` by EVAL_TAC >>
+    fs[] >> NO_TAC) >>
+  rpt (CASE_TAC >> gvs[is_terminator_def]) >>
+  rpt (IF_CASES_TAC >> gvs[is_terminator_def]) >>
+  TRY (qpat_x_assum `is_terminator _` mp_tac) >>
+  TRY (qpat_x_assum `_ = INVOKE` mp_tac) >>
+  TRY (qpat_x_assum `_ = PHI` mp_tac) >>
+  simp_tac (srw_ss()) [] >>
+  CASE_TAC >> gvs[is_terminator_def] >>
+  rpt (CASE_TAC >> gvs[is_terminator_def])
 QED
-
-(* ===== analysis_inst_simulates ===== *)
 
 Theorem sccp_inst_simulates:
   analysis_inst_simulates (state_equiv {}) (execution_equiv {})
     (\lat. const_sound lat.sl_vals)
     (\lat inst. [sccp_inst lat.sl_vals inst])
 Proof
-  simp[analysis_inst_simulates_def] >>
-  conj_tac
-  >- (rpt strip_tac >> simp[run_insts_sing] >>
-      `step_inst fuel ctx (sccp_inst lat.sl_vals inst) s =
-       step_inst fuel ctx inst s`
-        by metis_tac[sccp_inst_step_correct] >>
-      simp[] >>
-      Cases_on `step_inst fuel ctx inst s` >>
-      simp[lift_result_def, state_equiv_refl, execution_equiv_refl])
-  >- ACCEPT_TAC sccp_inst_structural
+  ho_match_mp_tac analysis_inst_simulates_from_1 >>
+  ACCEPT_TAC sccp_inst_simulates_1
 QED
 
 (* ===== Transfer soundness ===== *)
@@ -453,7 +464,7 @@ Proof
          drule exec_pure3_map_result >> simp[] >> NO_TAC))
 QED
 
-(* Helper: const_try_fold soundness *)
+(* If const_try_fold produces a constant, the output variable holds that value after execution *)
 Theorem const_try_fold_sound:
   !st s fuel ctx inst out c s'.
     const_sound st s /\

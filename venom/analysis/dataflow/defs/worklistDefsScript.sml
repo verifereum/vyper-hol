@@ -20,6 +20,7 @@
  * TOP-LEVEL:
  *   wl_step           — single worklist step
  *   wl_iterate        — iterate to fixpoint via WHILE
+ *   wl_iterate_fuel   — bounded worklist iteration for evaluator use
  *   wl_deps_complete  — deps cover all affected labels
  *   is_fixpoint       — no label changes state
  *)
@@ -45,6 +46,15 @@ Definition wl_iterate_def:
     WHILE (\p. FST p <> [])
           (wl_step changed process deps)
           (wl0, st0)
+End
+
+Definition wl_iterate_fuel_def:
+  wl_iterate_fuel 0 changed process deps wl st = (wl, st) ∧
+  wl_iterate_fuel (SUC fuel) changed process deps [] st = ([], st) ∧
+  wl_iterate_fuel (SUC fuel) changed process deps (lbl :: rest) st =
+    let (wl', st') =
+      wl_step changed process deps (lbl :: rest, st) in
+    wl_iterate_fuel fuel changed process deps wl' st'
 End
 
 (* Deps are complete: after processing lbl reports a change, every label

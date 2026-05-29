@@ -43,7 +43,7 @@ Ancestors
   (* interprocedural *)
   functionInliner
   (* dead function traversal *)
-  dft
+  venomDft
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs

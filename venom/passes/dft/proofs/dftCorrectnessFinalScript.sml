@@ -19,12 +19,14 @@ Libs
 
 (* ===== Small helpers ===== *)
 
+(* If P holds for every element of l, then P holds for any member of l *)
 Theorem EVERY_MEM_imp:
   !P l x. EVERY P l /\ MEM x l ==> P x
 Proof
   Induct_on `l` >> simp[] >> metis_tac[]
 QED
 
+(* An instruction in the body filter of a block originates from that block *)
 Theorem from_block_MEM_body_filter:
   !bi x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) bi) ==>
          from_block bi x
@@ -35,6 +37,7 @@ Proof
   qexists_tac `x` >> simp[]
 QED
 
+(* Body-filtered (non-pseudo, non-terminator) instructions are a subset of pseudo-filtered (non-pseudo) ones *)
 Theorem MEM_body_filter_imp_pseudo_filter:
   !l x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode /\ ~is_terminator i.inst_opcode) l) ==>
          MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) l)
@@ -42,6 +45,7 @@ Proof
   rpt strip_tac >> fs[MEM_FILTER]
 QED
 
+(* Every non-pseudo instruction in a block originates from that block *)
 Theorem from_block_MEM_filter:
   !bi. EVERY (\i. from_block bi i) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)
 Proof
@@ -50,6 +54,7 @@ Proof
   qexists_tac `i` >> simp[]
 QED
 
+(* If all non-pseudo instructions of bi' originate from bi, so does any body instruction of bi' *)
 Theorem from_block_every_cross_bi:
   !bi bi' x.
     EVERY (\i. from_block bi i) (FILTER (\i. ~is_pseudo i.inst_opcode) bi') /\
@@ -62,6 +67,7 @@ Proof
   metis_tac[EVERY_MEM_imp]
 QED
 
+(* If all non-pseudo instructions of bi originate from bi, so does any body instruction of bi *)
 Theorem from_block_every_body_bi:
   !bi x.
     EVERY (\i. from_block bi i) (FILTER (\i. ~is_pseudo i.inst_opcode) bi) /\
@@ -74,7 +80,9 @@ Proof
   metis_tac[EVERY_MEM_imp]
 QED
 
-(* Cross-bi inst_id equivalence for canonical_dep *)
+(* canonical_dep depends only on inst_id when all instructions originate from the same
+   block: two pairs from different block representations with matching inst_ids have the
+   same canonical_dep relationship *)
 Theorem canonical_dep_cross_bi_equiv:
   !bi bi' x y x' y'.
     ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) bi)) /\
@@ -108,7 +116,8 @@ Proof
   simp[]
 QED
 
-(* Unpack canonical_topo_inv *)
+(* Each output block of canonical_topo_inv corresponds to an original block, and its
+   non-pseudo instructions are topologically sorted by canonical_dep of the original *)
 Theorem canonical_topo_inv_mem:
   !fn blocks bb.
     canonical_topo_inv fn blocks /\ MEM bb blocks ==>
@@ -146,7 +155,7 @@ Proof
   match_mp_tac topo_sorted_FILTER >> simp[]
 QED
 
-(* Applying topo_sorted_FILTER_conj to block_body *)
+(* Excluding terminators from a topo-sorted non-pseudo list preserves topo-sortedness *)
 Theorem topo_sorted_block_body_filter:
   !dep bb. topo_sorted dep (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) ==>
     topo_sorted dep (block_body bb)
@@ -159,6 +168,8 @@ QED
 
 (* ===== dft_fn_output_topo_sorted ===== *)
 
+(* DFT output blocks are topologically sorted by canonical_dep of the original block,
+   with instructions mapped back to originals via choose_original *)
 Theorem dft_fn_output_topo_sorted:
   !fn bb bb'.
     wf_ssa fn /\ wf_function fn /\
@@ -237,6 +248,8 @@ QED
 
 (* ===== Per-block simulation ===== *)
 
+(* Two block bodies related by canonical_dep topo-ordering and perm produce equivalent
+   execution results (modulo simultaneous divergence to Error) *)
 Theorem block_body_canonical_equiv:
   !fn bb bb' fuel ctx s.
     wf_ssa fn /\ wf_function fn /\
@@ -349,7 +362,8 @@ Proof
   simp[Abbr `l2_raw`]
 QED
 
-(* front_full_equiv with canonical_dep precondition *)
+(* Under canonical_dep topo-ordering and block_perm_of, executing the non-terminator
+   prefix of two related blocks gives lift_result-equivalent results *)
 Theorem front_full_equiv_canonical:
   !fn bb bb' fuel ctx s.
     wf_ssa fn /\ wf_function fn /\
@@ -376,7 +390,8 @@ Proof
   >- simp[execution_equiv_refl]
 QED
 
-(* Per-block lift using canonical_dep *)
+(* If block_perm_of and canonical_dep topo-ordering hold, exec_block results are either
+   both errors or lift_result-equivalent *)
 Theorem block_perm_of_exec_block_lift_canonical:
   !fn bb bb' fuel ctx s.
     wf_ssa fn /\ wf_function fn /\
@@ -406,6 +421,7 @@ QED
 
 (* ===== DFT preserves fn_pseudos_prefix ===== *)
 
+(* A block whose instructions are pseudos-then-nonpseudos satisfies pseudos_prefix *)
 Theorem pseudos_prefix_filter_append:
   !l1 l2 bb.
     (!x. MEM x l1 ==> is_pseudo x.inst_opcode) /\
@@ -425,6 +441,7 @@ Proof
   metis_tac[]
 QED
 
+(* dft_block always produces a pseudos_prefix block *)
 Theorem dft_block_pseudos_prefix:
   !order bb. pseudos_prefix (dft_block order bb)
 Proof
@@ -440,6 +457,7 @@ Proof
   imp_res_tac schedule_output_from_block
 QED
 
+(* Processing one DFT block preserves pseudos_prefix across all blocks in state *)
 Theorem dft_process_one_preserves_pseudos_prefix:
   !cfg lr fn st lbl.
     EVERY pseudos_prefix st.dls_blocks ==>
@@ -453,6 +471,7 @@ Proof
   irule dft_block_pseudos_prefix
 QED
 
+(* One step of the DFT loop preserves pseudos_prefix across all blocks *)
 Theorem dft_loop_step_preserves_pseudos_prefix:
   !cfg lr fn trip.
     EVERY pseudos_prefix (FST trip).dls_blocks ==>
@@ -470,6 +489,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
+(* Repeated DFT loop steps preserve pseudos_prefix across all blocks *)
 Theorem funpow_dft_loop_preserves_pseudos_prefix:
   !n cfg lr fn trip.
     EVERY pseudos_prefix (FST trip).dls_blocks ==>
@@ -480,6 +500,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+(* DFT preserves fn_pseudos_prefix: if the input function has it, so does the output *)
 Theorem dft_fn_pseudos_prefix:
   !fn. fn_pseudos_prefix fn ==> fn_pseudos_prefix (dft_fn fn)
 Proof
@@ -496,6 +517,7 @@ QED
 
 (* ===== Function-level: run_blocks lift_result ===== *)
 
+(* Unfold run_blocks for SUC fuel *)
 val run_blocks_SUC = let
   val rb = run_blocks_def
   val (vars, _) = strip_forall (concl rb)
@@ -503,6 +525,7 @@ val run_blocks_SUC = let
   val inst = SPECL [sv, mk_comb(``SUC``, fv), fnv, cv] rb
 in SIMP_RULE (srw_ss()) [] inst |> GENL [sv, fv, fnv, cv] end;
 
+(* DFT preserves run_blocks results up to lift_result equivalence *)
 Theorem dft_fn_run_blocks_lift:
   !fuel ctx fn s.
     wf_ssa fn /\ wf_function fn ==>
@@ -556,6 +579,7 @@ QED
 
 (* ===== Function-level: run_function lift_result ===== *)
 
+(* DFT preserves the function entry label *)
 Theorem dft_fn_entry_label:
   !fn. fn_entry_label (dft_fn fn) = fn_entry_label fn
 Proof
@@ -572,6 +596,7 @@ Proof
   assume_tac (Q.SPEC `fn` dft_fn_labels_map) >> gvs[]
 QED
 
+(* DFT preserves run_function results up to lift_result equivalence *)
 Theorem dft_fn_run_function_lift:
   !fuel ctx fn s.
     wf_ssa fn /\ wf_function fn /\
@@ -591,6 +616,7 @@ QED
 
 (* ===== Fuel determinism ===== *)
 
+(* run_function is deterministic across different fuel values when both terminate *)
 Theorem run_function_fuel_determ:
   !fuel fuel' ctx fn s.
     terminates (run_function fuel ctx fn s) /\
@@ -619,6 +645,7 @@ QED
 
 (* ===== Pass-level correctness ===== *)
 
+(* The DFT pass is correct: it preserves the observable behavior of run_function *)
 Theorem dft_pass_correct:
   !fn ctx s.
     wf_ssa fn /\ wf_function fn /\
@@ -634,5 +661,3 @@ Proof
   conj_tac >- metis_tac[run_function_fuel_determ] >>
   metis_tac[run_function_fuel_determ]
 QED
-
-

@@ -1,0 +1,66 @@
+name: 'Setup holbuild'
+description: 'Checks out holbuild, exposes its HOL4 pin, and optionally builds it'
+
+inputs:
+  holbuild-repo:
+    required: false
+    default: 'https://github.com/charles-cooper/holbuild.git'
+    description: 'holbuild repository URL'
+  build:
+    required: false
+    default: 'true'
+    description: 'Whether to build holbuild and add it to PATH'
+
+outputs:
+  holbuild-rev:
+    description: 'Resolved holbuild revision'
+    value: ${{ steps.version.outputs.holbuild-rev }}
+  hol4-rev:
+    description: 'HOL4 revision pinned by holbuild'
+    value: ${{ steps.hol4-pin.outputs.hol4-rev }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Read holbuild pin from Verifereum
+      id: version
+      shell: bash
+      run: echo "holbuild-rev=$(tr -d '[:space:]' < $VFMDIR/PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache holbuild checkout/build
+      uses: actions/cache@v5
+      id: cache-holbuild
+      with:
+        path: ~/holbuild
+        key: holbuild-tool-${{ runner.os }}-${{ steps.version.outputs.holbuild-rev }}
+
+    - name: Clone holbuild
+      shell: bash
+      run: |
+        if [ ! -d "$HOME/holbuild/.git" ]; then
+          git clone "${{ inputs.holbuild-repo }}" "$HOME/holbuild"
+        fi
+
+    - name: Checkout holbuild revision
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        git fetch origin "${{ steps.version.outputs.holbuild-rev }}"
+        git checkout --detach "${{ steps.version.outputs.holbuild-rev }}"
+
+    - name: Read HOL4 pin from holbuild
+      id: hol4-pin
+      shell: bash
+      run: echo "hol4-rev=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
+
+    - name: Build holbuild
+      if: inputs.build == 'true'
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        make HOLDIR="$HOLDIR"
+
+    - name: Add holbuild to PATH
+      if: inputs.build == 'true'
+      shell: bash
+      run: echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"

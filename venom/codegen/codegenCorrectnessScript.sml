@@ -73,6 +73,65 @@ Ancestors
 Libs
   BasicProvers
 
+(* ===== Context Correspondence Helpers ===== *)
+
+(* Call context correspondence: Venom call context matches EVM message params *)
+Definition call_ctx_rel_def:
+  call_ctx_rel cc mp ⇔
+    cc.cc_caller = mp.caller ∧
+    cc.cc_address = mp.callee ∧
+    cc.cc_callvalue = n2w mp.value ∧
+    cc.cc_calldata = mp.data ∧
+    cc.cc_static = mp.static
+End
+
+(* Tx context correspondence: Venom tx context matches EVM tx parameters *)
+Definition tx_ctx_rel_def:
+  tx_ctx_rel tc tp ⇔
+    tc.tc_origin = tp.origin ∧
+    tc.tc_gasprice = n2w tp.gasPrice ∧
+    tc.tc_chainid = n2w tp.chainId ∧
+    tc.tc_blobhashes = tp.blobHashes
+End
+
+(* Block context correspondence: Venom block context matches EVM block parameters *)
+Definition block_ctx_rel_def:
+  block_ctx_rel bc tp ⇔
+    bc.bc_coinbase = tp.blockCoinBase ∧
+    bc.bc_timestamp = n2w tp.blockTimeStamp ∧
+    bc.bc_number = n2w tp.blockNumber ∧
+    bc.bc_prevrandao = tp.prevRandao ∧
+    bc.bc_gaslimit = n2w tp.blockGasLimit ∧
+    bc.bc_basefee = n2w tp.baseFeePerGas ∧
+    bc.bc_blobbasefee = n2w tp.baseFeePerBlobGas
+End
+
+(* Blockhash correspondence: Venom blockhash lookup matches EVM prevHashes.
+   Requires blockNumber < dimword(:256) for well-formed n2w conversion. *)
+Definition blockhash_rel_def:
+  blockhash_rel vs tp ⇔
+    vs.vs_prev_hashes = tp.prevHashes ∧
+    tp.blockNumber < dimword (:256) ∧
+    ∀n. vs.vs_block_ctx.bc_blockhash n =
+      let bn = w2n vs.vs_block_ctx.bc_number in
+      let idx = bn - n - 1 in
+      if n < bn ∧ bn − 256 ≤ n ∧
+         idx < LENGTH vs.vs_prev_hashes
+      then EL idx vs.vs_prev_hashes
+      else 0w
+End
+
+(* Stack parameter correspondence: function PARAM variables match EVM stack.
+   First param deepest, last param TOS. *)
+Definition stack_params_rel_def:
+  stack_params_rel fn vs stack ⇔
+    let params = get_params (HD fn.fn_blocks).bb_instructions in
+    LENGTH params = LENGTH stack ∧
+    ∀i. i < LENGTH params ⇒
+      FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
+        SOME (EL i (REVERSE stack))
+End
+
 (* ===== Initial State Correspondence ===== *)
 
 (* At function entry: Venom state and EVM state agree on shared fields,
@@ -82,13 +141,7 @@ Definition initial_state_rel_def:
   initial_state_rel fn vs es ⇔
     (case es.contexts of
        (ctxt, rb) :: _ =>
-         (* Stack has function arguments matching PARAM variables.
-            First param deepest, last param TOS. *)
-         let params = get_params (HD fn.fn_blocks).bb_instructions in
-         LENGTH params = LENGTH ctxt.stack ∧
-         (∀i. i < LENGTH params ⇒
-            FLOOKUP vs.vs_vars (HD (EL i params).inst_outputs) =
-              SOME (EL i (REVERSE ctxt.stack))) ∧
+         stack_params_rel fn vs ctxt.stack ∧
          (* Live accounts and transient storage *)
          es.rollback.accounts = vs.vs_accounts ∧
          es.rollback.tStorage = vs.vs_transient ∧
@@ -103,38 +156,11 @@ Definition initial_state_rel_def:
          (* Venom state: not halted, at instruction 0 *)
          vs.vs_halted = F ∧
          vs.vs_inst_idx = 0 ∧
-         (* Call context *)
-         vs.vs_call_ctx.cc_caller = ctxt.msgParams.caller ∧
-         vs.vs_call_ctx.cc_address = ctxt.msgParams.callee ∧
-         vs.vs_call_ctx.cc_callvalue = n2w ctxt.msgParams.value ∧
-         vs.vs_call_ctx.cc_calldata = ctxt.msgParams.data ∧
-         vs.vs_call_ctx.cc_static = ctxt.msgParams.static ∧
-         (* Tx context *)
-         vs.vs_tx_ctx.tc_origin = es.txParams.origin ∧
-         vs.vs_tx_ctx.tc_gasprice = n2w es.txParams.gasPrice ∧
-         vs.vs_tx_ctx.tc_chainid = n2w es.txParams.chainId ∧
-         vs.vs_tx_ctx.tc_blobhashes = es.txParams.blobHashes ∧
-         (* Block context *)
-         vs.vs_block_ctx.bc_coinbase = es.txParams.blockCoinBase ∧
-         vs.vs_block_ctx.bc_timestamp = n2w es.txParams.blockTimeStamp ∧
-         vs.vs_block_ctx.bc_number = n2w es.txParams.blockNumber ∧
-         vs.vs_block_ctx.bc_prevrandao = es.txParams.prevRandao ∧
-         vs.vs_block_ctx.bc_gaslimit = n2w es.txParams.blockGasLimit ∧
-         vs.vs_block_ctx.bc_basefee = n2w es.txParams.baseFeePerGas ∧
-         vs.vs_block_ctx.bc_blobbasefee = n2w es.txParams.baseFeePerBlobGas ∧
-         (* Blockhash *)
-         vs.vs_prev_hashes = es.txParams.prevHashes ∧
-         es.txParams.blockNumber < dimword (:256) ∧
-         (∀n. vs.vs_block_ctx.bc_blockhash n =
-           let bn = w2n vs.vs_block_ctx.bc_number in
-           let idx = bn - n - 1 in
-           if n < bn ∧ bn − 256 ≤ n ∧
-              idx < LENGTH vs.vs_prev_hashes
-           then EL idx vs.vs_prev_hashes
-           else 0w) ∧
-         (* Code *)
+         call_ctx_rel vs.vs_call_ctx ctxt.msgParams ∧
+         tx_ctx_rel vs.vs_tx_ctx es.txParams ∧
+         block_ctx_rel vs.vs_block_ctx es.txParams ∧
+         blockhash_rel vs es.txParams ∧
          vs.vs_code = ctxt.msgParams.code ∧
-         (* Single-context execution (non-Create) *)
          (∀a. ctxt.msgParams.outputTo ≠ Code a)
      | [] => F)
 End
@@ -247,7 +273,9 @@ Proof
                    as_block_ctx := vs.vs_block_ctx;
                    as_code := vs.vs_code;
                    as_prev_hashes := vs.vs_prev_hashes |>` >>
-  gvs[initial_state_rel_def, venom_asm_rel_def, fn_init_ps_def,
+  gvs[initial_state_rel_def, call_ctx_rel_def, tx_ctx_rel_def,
+      block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
+      venom_asm_rel_def, fn_init_ps_def,
       init_plan_state_def, init_spill_alloc_def, LET_THM,
       plan_spill_rel_def, FLOOKUP_DEF, memory_rel_def,
       asm_evm_rel_def, asm_pc_to_offset_def] >>
@@ -277,7 +305,8 @@ Finalise initial_state_bridge
 Theorem run_blocks_never_ok[local]:
   !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
 Proof
-  Induct >> simp[Once run_blocks_def] >>
+  Induct >- simp[Once run_blocks_def] >>
+  simp[Once run_blocks_unfold] >>
   rpt gen_tac >> every_case_tac
 QED
 

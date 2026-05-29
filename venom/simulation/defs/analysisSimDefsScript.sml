@@ -7,7 +7,7 @@
  *
  * TOP-LEVEL:
  *   run_insts                       — sequential step_inst over a list
- *   inst_transform_structural       — structural constraints (term/INVOKE/safe)
+ *   inst_transform_structural       — structural constraints (term/PHI/INVOKE/safe)
  *   analysis_inst_simulates         — per-instruction simulation (error ∨ lift_result)
  *   analysis_block_transform        — block transform using FLAT ∘ MAPi
  *   analysis_function_transform     — function transform
@@ -17,6 +17,7 @@
  *   edge_transfer_sound  — inter-block: edge transfer sound for states on that edge
  *
  * Helper:
+ *   inst_transform_structural_1     — structural constraints for 1:1 transforms
  *   analysis_inst_simulates_1       — per-instruction sim (1:1, for corollary)
  *)
 
@@ -24,12 +25,29 @@ Theory analysisSimDefs
 Ancestors
   dfAnalyzeDefs dfAnalyzeWidenDefs passSimulationDefs indexedLists venomWf
 
+(* Structural constraints for 1:1 instruction transform functions.
+   Analogous to inst_transform_structural for 1:N transforms.
+   See inst_transform_structural_def for rationale on each clause. *)
+Definition inst_transform_structural_1_def:
+  inst_transform_structural_1 (f : 'a -> instruction -> instruction) <=>
+    (!v inst. is_terminator inst.inst_opcode ==>
+       is_terminator (f v inst).inst_opcode) /\
+    (!v inst. inst.inst_opcode = INVOKE ==>
+       (f v inst).inst_opcode = INVOKE) /\
+    (!v inst. inst.inst_opcode = PHI ==>
+       f v inst = inst) /\
+    (!v inst.
+       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+       inst.inst_opcode <> PHI ==>
+       ~is_terminator (f v inst).inst_opcode /\
+       (f v inst).inst_opcode <> INVOKE /\
+       (f v inst).inst_opcode <> PHI)
+End
+
 (* 1:1 simulation helper (used by analysis_inst_simulates_from_1 corollary).
    f : 'a → inst → inst maps each instruction to a single replacement.
    Passes satisfying this automatically satisfy analysis_inst_simulates
-   via the corollary (\v inst. [g v inst]).
-   Terminators may be transformed (e.g. JNZ→JMP) but must remain
-   terminators. INVOKE may be transformed but must remain INVOKE. *)
+   via the corollary (\v inst. [g v inst]). *)
 Definition analysis_inst_simulates_1_def:
   analysis_inst_simulates_1 R_ok R_term
     (sound : 'a -> venom_state -> bool)
@@ -39,14 +57,7 @@ Definition analysis_inst_simulates_1_def:
        (?e. step_inst fuel ctx inst s = Error e) \/
        lift_result R_ok R_term R_term
          (step_inst fuel ctx inst s) (step_inst fuel ctx (f v inst) s)) /\
-    (!v inst. is_terminator inst.inst_opcode ==>
-       is_terminator (f v inst).inst_opcode) /\
-    (!v inst. inst.inst_opcode = INVOKE ==>
-       (f v inst).inst_opcode = INVOKE) /\
-    (!v inst.
-       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-       ~is_terminator (f v inst).inst_opcode /\
-       (f v inst).inst_opcode <> INVOKE)
+    inst_transform_structural_1 f
 End
 
 (* Analysis soundness: abstract lattice values describe reachable concrete
@@ -139,16 +150,23 @@ End
    Ensures the transformed block is well-formed for exec_block:
    - Terminators map to a single terminator (may change opcode, e.g. JNZ→JMP)
    - INVOKE maps to a single INVOKE (may change operands)
-   - Non-term non-INVOKE expand to only non-term non-INVOKE *)
+   - PHI maps to itself (f v inst = [inst]) — required for parallel eval_phis:
+     eval_one_phi reads inst_outputs and inst_operands, so PHI must be
+     preserved exactly to guarantee eval_phis agreement between
+     original and transformed blocks.
+   - Non-term non-INVOKE non-PHI expand to only non-term non-INVOKE non-PHI *)
 Definition inst_transform_structural_def:
   inst_transform_structural (f : 'a -> instruction -> instruction list) <=>
     (!v inst. is_terminator inst.inst_opcode ==>
        ?inst'. f v inst = [inst'] /\ is_terminator inst'.inst_opcode) /\
     (!v inst. inst.inst_opcode = INVOKE ==>
        ?inst'. f v inst = [inst'] /\ inst'.inst_opcode = INVOKE) /\
+    (!v inst. inst.inst_opcode = PHI ==>
+       f v inst = [inst]) /\
     (!v inst.
-       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-       EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+       ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+       inst.inst_opcode <> PHI ==>
+       EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> PHI)
              (f v inst))
 End
 
@@ -219,10 +237,13 @@ Definition analysis_block_transform_prepend_def:
   analysis_block_transform_prepend (bottom : 'a) (result : 'a df_state)
                                    (prepend : string -> instruction list)
                                    f bb =
-    bb with bb_instructions :=
-      prepend bb.bb_label ++
-      FLAT (MAPi (\idx inst. f (df_at bottom result bb.bb_label idx) inst)
-                  bb.bb_instructions)
+    let bt_insts = FLAT (MAPi (\idx inst. f (df_at bottom result bb.bb_label idx) inst)
+                              bb.bb_instructions) in
+    let pplen = phi_prefix_length bt_insts in
+      bb with bb_instructions :=
+        TAKE pplen bt_insts ++
+        prepend bb.bb_label ++
+        DROP pplen bt_insts
 End
 
 Definition analysis_function_transform_prepend_def:
