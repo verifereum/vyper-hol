@@ -71,13 +71,14 @@ Current fresh theory stack:
 - `vyperTypeBuiltinsScript.sml` — clean replacement for builtin/type-builtin/binop facts.
 - `vyperTypeExprSoundnessScript.sml` — expression/iterator/target no-TypeError and preservation theorem layer.
 - `vyperTypeStatePreservationScript.sml` — state-update, scope, materialisation, assignment preservation lemmas.
+- `vyperTypeAssignSoundnessScript.sml` — assignment-target error-shape, context, and no-TypeError helpers.
 - `vyperTypeStmtSoundnessScript.sml` — statement/statement-list no-TypeError and preservation theorem layer.
 - `vyperTypeCallSoundnessScript.sml` — call-entry and internal/external/special call theorem layer.
 - `vyperTypeSoundnessNewScript.sml` — final public theorem surface.
 
 The aggregator `vyperSemanticsHolScript.sml` has been switched to import `vyperTypeSoundnessNew` rather than the old final theory.
 
-## Assignment target soundness progress update (2026-05-13)
+## Assignment target soundness progress update (2026-05-29)
 
 This section records the current state of the focused assignment-target no-TypeError work in
 `semantics/prop/vyperTypeStatePreservationScript.sml`, especially the `TopLevelVar` case of
@@ -93,7 +94,7 @@ For this proof, broad cleanup after case explosion is not workable. In particula
 - Prefer branch helper lemmas that exactly match semantic branches.
 - When asking for/providing the mathematical proof of a branch, give the exact sequence of lemmas to use and the subgoals to establish; avoid extra prose.
 
-The successful pattern used by the human for storage `Value` branches was:
+The successful pattern used for storage `Value` branches is:
 
 ```sml
 strip_tac >>
@@ -124,13 +125,21 @@ evaluate_type_not_NoneT_imp_not_NoneTV
 assignable_type_evaluate_not_NoneTV
 ```
 
-Recursive assignment no-TypeError and preservation support:
+Recursive assignment no-TypeError and preservation support (all proved, no inherited cheats):
 
 ```sml
 assign_subscripts_no_type_error_from_leaf
-assign_operation_runtime_typed_leaf_no_type_error      (* currently inherits update-binop cheat *)
-assign_subscripts_no_type_error_runtime_typed          (* currently inherits update-binop cheat *)
-assign_subscripts_preserves_type_runtime_typed          (* currently inherits update-binop cheat through update path *)
+assign_operation_runtime_typed_leaf_no_type_error
+assign_subscripts_no_type_error_runtime_typed
+assign_subscripts_preserves_type_runtime_typed
+```
+
+The update-binop chain that was previously cheated is now fully proved:
+
+```sml
+well_typed_binop_no_type_error                         (* proved, in vyperTypeBuiltinsScript.sml *)
+well_typed_update_binop_no_type_error                  (* derived from above via metis_tac *)
+assign_subscripts_update_leaf_no_type_error            (* derived via well_typed_update_binop_no_type_error *)
 ```
 
 Storage/top-level helpers:
@@ -153,6 +162,19 @@ top_level_storage_value_assign_success_no_type_error
 top_level_storage_value_assign_subscripts_no_type_error
 ```
 
+Top-level HashMapRef / ArrayRef helpers (proved for the completed TopLevelVar branches):
+
+```sml
+assign_target_HashMapRef_branch_no_type_error
+lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef
+assign_target_TopLevelVar_ArrayRef_branch_no_type_error
+assign_target_TopLevelVar_ArrayRef_AppendOp_dynamic_no_type_error
+assign_target_TopLevelVar_ArrayRef_PopOp_dynamic_no_type_error
+assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error
+top_level_HashMapRef_assign_no_type_error
+lookup_global_HashMapRef
+```
+
 Notes:
 
 - `lookup_global_top_level_assignable_no_type_error` rules out a TypeError result from `lookup_global` using only `assign_target_assignable_context`; this works because `read_storage_slot_error` says storage read errors are `RuntimeError`, not `TypeError`.
@@ -165,144 +187,58 @@ evaluate_type env.type_defs ty = SOME (leaf_type root_tv (REVERSE sbs))
 - `top_level_storage_value_assign_success_no_type_error` closes the storage `Value` branch where `assign_subscripts` succeeds but `set_global` allegedly returns a TypeError.
 - `top_level_storage_value_assign_subscripts_no_type_error` closes the storage `Value` branch where `assign_subscripts` allegedly returns `INR (TypeError msg)`.
 
-### Current status of `assign_target_sound_mutual[sound_TopLevelVar]`
+### Current status of `assign_target_sound_mutual`
 
-The proof currently has this structure:
+**All branches of `assign_target_sound_mutual` are proved with no cheats.**
 
-```sml
-Resume assign_target_sound_mutual[sound_TopLevelVar]:
-  ...
-  conj_tac >- preservation theorem ...
-  reverse $ gvs[assign_target_def, bind_apply, AllCaseEqs()]
-  >- (lookup_global TypeError branch closed by lookup_global_top_level_assignable_no_type_error)
-  >- (successful lookup gives module code by lookup_global_success_get_module_code)
-  ...
-  Cases_on `tv` >- (Value branch)
-  ...
-  >- cheat (* HashMapRef case *)
-  >> cheat (* ArrayRef case *)
-QED
-```
-
-The `Value` branch is now handled by the human proof and follows this lemma sequence:
-
-1. In `Value v` branch, use:
-   ```sml
-   lookup_global_Value_not_HashMapVarDecl
-   ```
-   to eliminate `HashMapVarDecl` declaration subcase early.
-2. Destruct the declaration pair:
-   ```sml
-   PairCases_on `p` >> Cases_on `p0` >> gvs[IS_SOME_EXISTS]
-   ```
-   exposing storage declaration, evaluated type, and slot.
-3. If `assign_subscripts ... = INR (TypeError msg)`, close with:
-   ```sml
-   top_level_storage_value_assign_subscripts_no_type_error
-   ```
-4. If `assign_subscripts ... = INL new_v` but `set_global ... new_v` returns TypeError, close with:
-   ```sml
-   top_level_storage_value_assign_success_no_type_error
-   ```
-5. If write-back succeeds, close with:
-   ```sml
-   assign_result_no_type_error_from_successful_assign
-   ```
-
-Only two branches remain cheated in this `TopLevelVar` case:
+This includes:
 
 ```sml
->- cheat (* HashMapRef case *)
->> cheat (* ArrayRef case *)
+assign_target_sound_mutual[sound_ScopedVar]      (* proved *)
+assign_target_sound_mutual[sound_TopLevelVar]     (* proved, including Type/Value, Type/ArrayRef,
+                                                      HashMapT/HashMapRef cases *)
+assign_target_sound_mutual[sound_ImmutableVar]     (* proved *)
+assign_target_sound_mutual[sound_TupleTargetV]     (* proved *)
+assign_target_sound_mutual[sound_assign_targets_cons] (* proved *)
 ```
 
-### Current build-through / handover status
+The `sound_TopLevelVar` proof dispatches by `vt` (Type vs HashMapT):
 
-For handover, the development is being kept buildable with localized cheats rather than weakening the strengthened assignment invariants.
+- **`Type t` case:** Uses `assign_target_assignable_context` to derive declaration facts.
+  Dispatches by `root_tv` after `evaluate_type`:
+  - Non-`ArrayTV` roots (BaseTV, TupleTV, StructTV, FlagTV, NoneTV): closed by
+    `assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error`.
+  - `ArrayTV` root: derives `ArrayRef` via
+    `lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef`, then closed by
+    `assign_target_TopLevelVar_ArrayRef_branch_no_type_error` (which handles
+    `AppendOp`/`PopOp`/resolve/assignment subcases).
+  - `HashMapVarDecl` sub-elimination via `top_level_Type_not_hashmap_decl`.
 
-`vyperTypeStatePreservationTheory` builds through the new top-level lookup and storage `Value` helper lemmas and the proved `Value` branch of `sound_TopLevelVar`. The following assignment mutual branches are intentionally still cheated/build-through scaffolding:
+- **`HashMapT kt vt` case:** Uses `assign_target_assignable_context` to derive declaration facts.
+  - `StorageVarDecl` sub-elimination via `top_level_HashMapT_not_storage_decl`.
+  - `HashMapVarDecl`: derives slot and well-formedness, then closed by
+    `top_level_HashMapRef_assign_no_type_error` (which delegates to
+    `assign_target_HashMapRef_branch_no_type_error`).
+
+### Statement assignment branches
+
+The previously cheated assignment statement branches are now all proved:
 
 ```sml
-assign_target_sound_mutual[sound_TopLevelVar]:
-  HashMapRef case
-  ArrayRef case
-assign_target_sound_mutual[sound_ImmutableVar]
-assign_target_sound_mutual[sound_TupleTargetV]
-assign_target_sound_mutual[sound_assign_targets_cons]
+eval_all_type_sound_mutual[AnnAssign]    (* proved *)
+eval_all_type_sound_mutual[Assign]       (* proved *)
+eval_all_type_sound_mutual[AugAssign]    (* proved *)
 ```
 
-The latter three were cheated to keep the strengthened mutual theorem available to downstream theories while preserving the useful proved work in `sound_ScopedVar` and the top-level `Value` branch.
+The strengthened runtime assignment side conditions are derived in each branch:
 
-`vyperTypeStmtSoundnessScript.sml` also has temporary build-through cheats in assignment statement cases after strengthening assignment preservation to require:
-
-```sml
-assign_operation_matches_target_shape gv op
-assign_target_assignable_context cx gv st
-```
-
-Currently affected statement branches include:
-
-```sml
-eval_all_type_sound_mutual[AnnAssign]
-eval_all_type_sound_mutual[Assign]
-eval_all_type_sound_mutual[AugAssign]
-```
-
-The missing statement-level obligations are to derive the strengthened runtime assignment side conditions from statement typing/evaluation:
-
-1. `assign_operation_matches_target_shape` for the operation being performed.
-2. `assign_target_assignable_context` for the evaluated target, including scoped assignability and top-level storage/hashmap writability.
-3. For `AnnAssign`, use `assignable_type` to derive the old non-`NoneT` side conditions instead of local cheats.
-4. For tuple/list assignment, use `target_assignment_values_assignable` to feed both typedness and assignability/context side conditions.
-
-These cheats should be removed by proving the statement-level side-condition lemmas, not by weakening `assign_target_sound_mutual` or dropping `assign_target_assignable_context`.
-
-Known inherited cheats remain in the update-binop path:
-
-```sml
-well_typed_binop_no_type_error                         (* in vyperTypeBuiltinsScript.sml *)
-well_typed_update_binop_no_type_error
-assign_subscripts_update_leaf_no_type_error
-assign_operation_runtime_typed_leaf_no_type_error
-assign_subscripts_no_type_error_runtime_typed
-assign_subscripts_preserves_type_runtime_typed          (* through update leaf helper *)
-```
-
-### Next mathematical branch: `HashMapRef`
-
-The next branch to prove is:
-
-```sml
-lookup_global ... = INL (HashMapRef is_transient base_slot kt vt)
-```
-
-Expected lemma sequence / facts to use:
-
-1. Use context assignability to get `sbs <> []` and slot availability for the top-level hashmap declaration.
-2. Use successful lookup/consistency facts (`lookup_global_HashMapRef` or local equivalent, plus `top_level_HashMap_decl` if needed) to connect the returned `HashMapRef` to the declaration and `HashMapT kt vt` target vtype.
-3. Use strengthened `target_path_type` hashmap key invariant to justify hashmap prefix traversal / `compute_hashmap_slot` cannot fail with TypeError. Hashmap key typing is represented statically by `target_path_step_type` requiring `ValueSubscript key`, evaluated key type, and `value_has_type`.
-4. After hashmap prefix is consumed, the remaining suffix assignment should reduce to the same recursive assignment no-TypeError theorem:
-   ```sml
-   assign_subscripts_no_type_error_runtime_typed
-   ```
-   using a leaf bridge analogous to `top_level_storage_value_leaf_evaluate_type`, but rooted at the hashmap value type after `split_hashmap_subscripts`.
-5. Storage write/read failures for the final hashmap value should be ruled out with the same storage-read/write facts (`read_storage_slot_error` for no TypeError on read; `write_storage_slot_no_type_error_from_value_has_type` or a final set/write helper for writes).
-
-No proof script should be attempted for this branch until a focused helper lemma for the `HashMapRef` branch is stated and build-failed with `NO_TAC` for inspection.
-
-### Next mathematical branch after that: `ArrayRef`
-
-The `ArrayRef` branch must handle storage-array assignment:
-
-1. Special storage-array `AppendOp` / `PopOp` branches.
-2. Ordinary element/path assignment via `resolve_array_element` or equivalent array-reference traversal.
-3. Recursive suffix assignment no-TypeError via `assign_subscripts_no_type_error_runtime_typed`.
-4. Typed storage write-back no-TypeError via existing storage write helpers.
-
-Again, do not prove inline in `sound_TopLevelVar`; first state exact branch helper lemmas.
+1. `assign_operation_matches_target_shape` — derived from typing/evaluation facts.
+2. `assign_target_assignable_context` — derived from `target_runtime_typed_imp_assignable_context` or direct construction.
+3. `assignable_type` used to derive non-`NoneT` side conditions for `AnnAssign`.
+4. Tuple/list assignment uses `target_assignment_values_assignable` and rebuild lemmas.
 
 
-## Current status (2026-05-12)
+## Current status (2026-05-29)
 
 ### Completion scope
 
@@ -326,61 +262,37 @@ holbuild build vyperTypeStmtSoundnessTheory      # succeeds, through the proved 
 holbuild build vyperSemanticsHolTheory           # succeeds
 ```
 
-Reachable fresh-stack cheat inventory at the latest audit, after proving
-scope-pop and item-2 assignability preservation:
+Reachable fresh-stack cheat inventory (source audit, 2026-05-29):
 
 ```text
-semantics/prop/vyperTypeAssignSoundnessScript.sml     3
-semantics/prop/vyperTypeBuiltinsScript.sml           19
-semantics/prop/vyperTypeStmtSoundnessScript.sml      39
-semantics/prop/vyperTypeCallSoundnessScript.sml       4
+semantics/prop/vyperTypeBuiltinsScript.sml             1
+  - raw_call_return_type_well_formed (localized arithmetic)
+
+semantics/prop/vyperTypeStmtSoundnessScript.sml         2
+  - eval_all_type_sound_mutual[Expr_Call_ExtCall]
+  - eval_all_type_sound_mutual[Expr_Call_RawCallTarget]
+
+semantics/prop/vyperTypeCallSoundnessScript.sml         4
+  - internal_call_no_type_error
+  - internal_call_soundness (result + state typing)
+  - external_call_no_type_error
+  - call_no_type_error (generic)
 --------------------------------------------------------
-Total reachable fresh-stack cheats                    65
+Total reachable fresh-stack cheats                    7
 ```
 
-`vyperTypeEnvPreservationScript.sml` now has no cheats.
+For comparison, previous audit was 65 cheats. The reduction was achieved by:
+- Proving all assignment target mutual branches (TopLevelVar Type/Value,
+  Type/ArrayRef, HashMapT/HashMapRef, ImmutableVar, TupleTargetV,
+  assign_targets_cons)
+- Proving all assignment statement branches (AnnAssign, Assign, AugAssign)
+- Proving the update-binop no-TypeError chain (well_typed_binop_no_type_error,
+  well_typed_update_binop_no_type_error, assign_subscripts_update_leaf_no_type_error)
+- Proving many individual builtin/structural statement cases
 
-Recent progress:
-
-- Removed the false/suspicious `expr_runtime_typed_hashmap_ref_place` theorem.
-  Successful expression results now use `expr_result_typed`, which strengthens
-  `expr_runtime_typed` with the required hashmap-reference/place invariant.
-- Strengthened assignment preservation from success-only to all-result mutual
-  preservation over `assign_target` / `assign_targets`.
-- Proved the formerly cheated all-result assignment preservation corollary
-  `assign_target_preserves_runtime_consistent_result`.
-- `vyperTypeStatePreservationScript.sml` currently has no cheats in the latest
-  audit.
-- Created `vyperTypeEnvExtensionScript.sml`, moved static env-extension and
-  env-map well-formedness facts into it, and verified:
-  `holbuild build vyperTypeEnvExtensionTheory`.
-- Updated `vyperTypeEnvPreservationScript.sml` to import the static extension
-  layer and removed the old in-place `scope_bracket_preserves_ec`; verified:
-  `holbuild build vyperTypeEnvPreservationTheory`.
-- Created `vyperTypeScopePopScript.sml`, moved/factored generic scope-pop
-  infrastructure into it, proved `scope_bracket_preserves_ec` with the final
-  strengthened precondition `env_consistent env cx st`, and verified:
-  `holbuild build vyperTypeScopePopTheory`.
-- Updated `vyperTypeStmtSoundnessScript.sml` to import `vyperTypeScopePop`,
-  removed duplicate moved static/scope-pop facts, strengthened
-  `scope_bracket_preserves` with pre-state `env_consistent env cx st`, and
-  verified: `holbuild build vyperTypeStmtSoundnessTheory`.
-- Rebuilt the public stack after the scope-pop proof:
-  `holbuild build vyperSemanticsHolTheory` succeeds.
-- Completed item-2 assignability preservation without a new evaluator mutual
-  induction by strengthening `preserves_tv_def` in
-  `vyperEvalPreservesScopesScript.sml` so preserved scope entries also preserve
-  `entry.assignable`.  The existing `eval_preserves_tv` mutual theorem now
-  carries assignability preservation.  In `vyperTypeEnvPreservationScript.sml`,
-  the exported evaluator assignability corollaries
-  `eval_base_target_preserves_assignable_lookup`,
-  `eval_expr_preserves_assignable_lookup`, and
-  `eval_exprs_preserves_assignable_lookup` are proved from `eval_preserves_tv`
-  plus existing scope-domain preservation.  Verified:
-  `holbuild build vyperEvalPreservesScopesTheory`,
-  `holbuild build vyperTypeEnvPreservationTheory`,
-  `holbuild build vyperTypeStmtSoundnessTheory`, and
-  `holbuild build vyperSemanticsHolTheory`.
+`vyperTypeEnvPreservationScript.sml` has no cheats.
+`vyperTypeStatePreservationScript.sml` has no cheats.
+`vyperTypeAssignSoundnessScript.sml` has no cheats.
 
 No reachable cheats were found in:
 
@@ -394,6 +306,11 @@ vyperTypeConversionsScript.sml
 vyperTypeABIScript.sml
 vyperTypeExprSoundnessScript.sml
 vyperTypeSoundnessNewScript.sml
+vyperTypeStatePreservationScript.sml
+vyperTypeEnvPreservationScript.sml
+vyperTypeEnvExtensionScript.sml
+vyperTypeScopePopScript.sml
+vyperTypeAssignSoundnessScript.sml
 ```
 
 ### Completed architecture items
@@ -402,7 +319,7 @@ The following major plan items are already implemented/proved in the current
 fresh stack:
 
 - Runtime subscript refactor to value-preserving paths:
-  `ValueSubscript value | AttrSubscript identifier`.
+  `ValueSubscript value | AttrSubscript identifier` — **implemented in semantics**.
 - Static hashmap key restriction via `hashmap_key_type`.
 - `well_formed_vtype` for `Type ty` and nested `HashMapT kt vt`.
 - `subscript_vtype` for arrays and hashmaps.
@@ -420,26 +337,35 @@ fresh stack:
   - `assign_target_preserves_runtime_consistent`
   - `assign_targets_preserves_runtime_consistent`
   - `assign_target_preserves_runtime_consistent_result`
+- Full `assign_target_sound_mutual` (all branches proved, no cheats):
+  - `sound_ScopedVar`, `sound_TopLevelVar`, `sound_ImmutableVar`,
+    `sound_TupleTargetV`, `sound_assign_targets_cons`
+- Top-level assignment branch helpers for `HashMapRef` and `ArrayRef` paths
+- Assignment statement branches (AnnAssign, Assign, AugAssign) proved
+- Update-binop no-TypeError chain fully proved
 - Immutable update preservation helpers factored out of the assignment proof:
   - `set_immutable_preserves_env_consistent`
   - all-result `set_immutable_preserves_state_well_typed`
 
 ### Current priority order
 
-Before clearing large numbers of statement cases, validate theorem statements
-that are currently suspicious or known incomplete:
+Completed foundational checkpoints:
 
-Completed foundational checkpoint:
-
-- Assignability preservation is now proved as part of the strengthened
-  `preserves_tv` frame invariant.  The old warning not to derive assignability
-  from the previous `preserves_tv` remains historically relevant: the definition
-  first had to be strengthened to preserve `entry.assignable`.
+- Assignability preservation proved as part of the strengthened
+  `preserves_tv` frame invariant.
+- Assignment target joint soundness (`assign_target_sound_mutual`) fully proved.
+- Update-binop no-TypeError chain fully proved.
+- Assignment statement branches (AnnAssign, Assign, AugAssign) fully proved.
+- Scope-pop/env-extension reorganisation complete.
 
 Remaining priorities:
 
-The current tactical priority is to derisk the non-self-contained structure and
-avoid churn.  Do **not** spend time first on the known self-contained builtin
+The remaining cheats are concentrated in **call soundness** (4 in
+`vyperTypeCallSoundnessScript.sml`) and **expression-call branches in statement
+soundness** (2 in `vyperTypeStmtSoundnessScript.sml`), plus 1 localized builtin
+arithmetic cheat.  This is a much narrower surface than before.
+
+Do **not** spend time first on the known self-contained builtin
 issues unless they block another proof.  In particular, for now it is acceptable
 to leave informal comments and cheats around:
 
@@ -448,63 +374,33 @@ to leave informal comments and cheats around:
 - other isolated/self-contained builtin lemmas.
 
 These are still part of final completion and must eventually be proved or fixed;
-they are deferred only because they appear localized and should not determine the
-shape of the statement/call/assignment proof architecture.  The goal of the next
-phase is to find hidden architecture problems before investing in localized
-builtin arithmetic/encoding proofs.
+they are deferred only because they appear localized and should not determine
+the shape of the call proof architecture.
 
 Priority order for the next phase:
 
-1. **Problem-finding / architecture audit.**  Before proving many cases, inspect
-   the remaining cheated theorem statements and their dependencies for possible
-   false or underspecified claims.  Prefer identifying definition-level gaps over
-   pushing through brittle proof scripts.  Apply the strongest-joint-invariant
-   principle above: if two cheats follow the same evaluator recursion, replace
-   them by a single stronger theorem rather than proving them separately.
-2. **Refactor assignment soundness around a joint invariant, not standalone
-   no-TypeError helpers.**  The old priority list named:
-   - `assign_target_no_type_error`
-   - `assign_target_update_no_type_error`
-   - `assign_target_append_no_type_error`
-
-   These are now treated as compatibility corollaries only.  The actual target
-   should be a combined assignment theorem, roughly:
-
-   ```sml
-   runtime_consistent env cx st /\
-   target_runtime_typed env cx st tgt ty gv /\
-   assign_operation_runtime_typed env ty op /\
-   assign_target cx gv op st = (res, st')
-   ==>
-   no_type_error_result res /\
-   state_well_typed st' /\
-   env_consistent env cx st' /\
-   accounts_well_typed st'.accounts /\
-   ... result-specific typing facts ...
-   ```
-
-   Then derive any old `assign_target_*_no_type_error` theorem needed by current
-   callers from this joint theorem, or update callers to use the joint theorem
-   directly.
-3. Prove/evaluate target and expression structural cases that exercise the place,
-   hashmap, materialisation, and env-consistency architecture.  Keep target
-   no-TypeError and target runtime typing in the same mutual theorem.
-4. Then discharge statement and call soundness cheats in dependency order, but
-   avoid separate call no-TypeError/type-preservation proof trees; calls should
-   use a joint call/expression soundness theorem and expose split wrappers only at
-   the public API.
-5. Return to the deferred self-contained builtin issues before claiming final
-   no-cheat `vyperSemanticsHolTheory` soundness.
-
-Eventually replace:
-
-- `vyperTypeSoundnessDefsScript.sml`
-- `vyperTypeSoundnessHelpersScript.sml`
-- `vyperTypeSoundnessScript.sml`
+1. **Call soundness.**  Prove the joint call no-TypeError / preservation theorem
+   in `vyperTypeCallSoundnessScript.sml`.  This should follow the strongest-joint-
+   invariant principle: a single combined call theorem covering both no-TypeError
+   and state/env/accounts/result preservation, not separate parallel proof trees.
+   The 4 call cheats should be discharged by proving this joint theorem.
+2. **Expression-call statement branches.**  The 2 cheats in
+   `eval_all_type_sound_mutual[Expr_Call_ExtCall]` and
+   `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` should be discharged
+   once call soundness provides the needed facts.
+3. **Builtin localized cheat: `raw_call_return_type_well_formed`.**  This is a
+   localized arithmetic/type-slot-size issue.  Discharge it when convenient.
+4. **Audit remaining deferred builtin gaps** (ABI encode bound, `MsgGas`, etc.)
+   for definition-level risks before claiming final no-cheat soundness.
+5. **Retire old theories.**  Once the fresh stack is complete with zero cheats,
+   delete or archive `vyperTypeSoundnessDefsScript.sml`,
+   `vyperTypeSoundnessHelpersScript.sml`, and
+   `vyperTypeSoundnessScript.sml`.
 
 Also eventually update/replace:
 
 - `vyperBuiltinTypingScript.sml` — currently depends on old defs/helpers. For now, mine it for reusable lemmas where appropriate, but avoid making the new final stack depend on the old soundness definitions long-term.
+
 
 ## Core type-system design
 
@@ -570,48 +466,9 @@ Static typing should match:
 
 ## Hashmaps, subscripts, and places
 
-### High-level decision: start with a subscript refactor
+### Completed subscript refactor
 
-Before finishing the type-soundness proof, fix the runtime representation of target path subscripts. The current interpreter has an important inconsistency:
-
-- expression reads of hashmap keys use the actual runtime key value directly:
-
-  ```sml
-  evaluate_subscript tenv _ (HashMapRef is_transient slot kt vt) kv =
-    let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in ...
-  ```
-
-  Therefore expression reads such as `hm[True]` can work, because `encode_hashmap_key` handles `BoolV`.
-
-- assignment targets first convert the key value to the `subscript` datatype:
-
-  ```sml
-  v <- get_Value tv;
-  k <- lift_option_type (value_to_key v) "SubscriptTarget value_to_key";
-  return (loc, k :: sbs)
-  ```
-
-  But the current `value_to_key` has no bool case:
-
-  ```sml
-  value_to_key (IntV i) = SOME (IntSubscript i)
-  value_to_key (StringV s) = SOME (StrSubscript s)
-  value_to_key (BytesV bs) = SOME (BytesSubscript bs)
-  value_to_key (FlagV n) = SOME (IntSubscript (&n))
-  value_to_key _ = NONE
-  ```
-
-  and the current path representation has no bool constructor:
-
-  ```sml
-  subscript = IntSubscript int | StrSubscript string | BytesSubscript (word8 list) | AttrSubscript identifier
-  ```
-
-So the current interpreter accepts bool hashmap keys for reads but rejects bool hashmap keys for assignment targets. It is also lossy for flags: `FlagV n` is stored as `IntSubscript (&n)` and later reconstructed as `IntV (&n)` by `subscript_to_value`.
-
-The correct long-term design is to make path subscripts preserve runtime key values instead of re-encoding them into a partial ad-hoc datatype.
-
-Recommended semantic refactor:
+The runtime representation of target path subscripts has been refactored to value-preserving paths. The old inconsistent design (where `value_to_key` had no bool case and `subscript` used `IntSubscript`/`StrSubscript`/`BytesSubscript`) has been replaced with:
 
 ```sml
 Datatype:
@@ -619,45 +476,30 @@ Datatype:
 End
 ```
 
-Then:
+With:
 
 ```sml
-value_to_key v = SOME (ValueSubscript v)
 subscript_to_value (ValueSubscript v) = SOME v
 subscript_to_value (AttrSubscript _) = NONE
 ```
 
 Array paths use `ValueSubscript (IntV i)`. Struct field paths use `AttrSubscript id`. Hashmap paths keep the actual key value, including bool and flags.
 
-This is an interpreter change, not just a proof refactor. Update the executable semantics first, then repair proofs around the cleaner representation. Do **not** finish the old proof architecture by adding brittle workarounds around `IntSubscript`/`StrSubscript`/`BytesSubscript` unless explicitly choosing a short-term compatibility path.
+The `value_to_key` function has been eliminated from the fresh stack. The interpreter and proof files were updated accordingly in `semantics/vyperStateScript.sml` (`compute_hashmap_slot`, `leaf_type`, `evaluate_subscripts`, `assign_subscripts`, `resolve_array_element`, `assign_target`) and downstream proof files.
 
-Expected files affected by the semantic refactor include at least:
-
-- `semantics/vyperStateScript.sml`
-  - `subscript` datatype
-  - `value_to_key`
-  - `subscript_to_value`
-  - `compute_hashmap_slot`
-  - `leaf_type`
-  - `evaluate_subscripts`
-  - `assign_subscripts`
-  - `resolve_array_element`
-  - `assign_target`
-- `semantics/vyperInterpreterScript.sml`
-  - target and expression subscript users indirectly through shared helpers
-- proof files mentioning concrete subscript constructors or target paths.
+Historical note: The old inconsistent design accepted bool hashmap keys for reads but rejected them for assignment targets (because `value_to_key` had no `BoolV` case), and was lossy for flags. The new design preserves the actual runtime key value.
 
 ### Hashmap key-type restriction
 
-Even after preserving key values, static typing must still restrict hashmap key types to source types that are valid hashmap keys. Add an executable predicate, for example:
+Static typing restricts hashmap key types to source types that are valid hashmap keys using the executable predicate:
 
 ```sml
 hashmap_key_type : type -> bool
 ```
 
-The exact allowed set should match Vyper and the executable encoder. With value-preserving subscripts, bool keys can and should be supported if Vyper allows them. Arrays, tuples, structs, and `NoneT` should not be accepted as hashmap key types unless the runtime semantics intentionally supports them.
+The exact allowed set matches Vyper and the executable encoder. With value-preserving subscripts, bool keys are supported. Arrays, tuples, structs, and `NoneT` are not accepted as hashmap key types.
 
-Strengthen value-type well-formedness:
+Value-type well-formedness is strengthened:
 
 ```sml
 well_formed_vtype tenv (Type ty) = well_formed_type tenv ty
@@ -667,7 +509,7 @@ well_formed_vtype tenv (HashMapT kt vt) =
   well_formed_vtype tenv vt
 ```
 
-and strengthen static subscript typing:
+and static subscript typing is strengthened:
 
 ```sml
 subscript_vtype (HashMapT kt vt) idx_ty =
@@ -675,6 +517,8 @@ subscript_vtype (HashMapT kt vt) idx_ty =
 ```
 
 This prevents well-typed programs from constructing hashmap targets whose key expressions cannot be represented/encoded at runtime.
+
+Both `hashmap_key_type` and the strengthened `well_formed_vtype`/`subscript_vtype` are implemented and used in the fresh stack.
 
 ### Place typing helpers
 
@@ -1006,10 +850,11 @@ target_assignment_values_typed_rebuild
 
 These rebuild target typing in a later state from `runtime_consistent`; they are essential for tuple assignment tails.
 
-## Assignment preservation status and proof engineering lessons
+## Assignment preservation (completed) and proof engineering lessons
 
 The assignment preservation theorem has been strengthened to the all-result
-mutual statement:
+mutual statement and all branches of `assign_target_sound_mutual` are proved.
+The update-binop no-TypeError chain is also fully proved.
 
 ```sml
 assign_target_preserves_state_well_typed_mutual
@@ -1078,11 +923,10 @@ assign_operation_leaf_update
 ty = ArrayT elem_ty (Dynamic n)
 ```
 
-## Scope-pop/env-extension reorganisation plan
+## Scope-pop/env-extension reorganisation (completed)
 
-The immediate foundational blocker is `scope_bracket_preserves_ec`.  The final
-organisation should not patch this theorem in place with ad-hoc local lemmas.
-The clean split is:
+The foundational blocker `scope_bracket_preserves_ec` has been proved and the
+clean split is in place.  The final organisation is:
 
 ```text
 vyperTypeEnvExtension
