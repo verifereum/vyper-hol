@@ -1,3 +1,4 @@
+
 (*
  * Expression Lowering: Vyper expressions → Venom IR instructions
  *
@@ -68,7 +69,18 @@ Definition infer_array_location_def:
      | SOME (TransientLoc _) => LocTransient
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
-  infer_array_location cenv _ = LocMemory
+  (* Computed expressions: no declaration context, always in memory *)
+  infer_array_location cenv (IfExp _ _ _ _) = LocMemory ∧
+  infer_array_location cenv (Literal _ _) = LocMemory ∧
+  infer_array_location cenv (StructLit _ _ _) = LocMemory ∧
+  infer_array_location cenv (Subscript _ _ _) = LocMemory ∧
+  infer_array_location cenv (Builtin _ _ _) = LocMemory ∧
+  infer_array_location cenv (TypeBuiltin _ _ _ _) = LocMemory ∧
+  infer_array_location cenv (Pop _ _) = LocMemory ∧
+  infer_array_location cenv (Call _ _ _ _) = LocMemory ∧
+  infer_array_location cenv (FlagMember _ _ _) = LocMemory ∧
+  infer_array_location cenv (BareGlobalName _ _) = LocMemory ∧
+  infer_array_location cenv (TopLevelName _ _) = LocMemory
 End
 
 (* Infer whether an array is dynamic (DynArray) or static (SArray).
@@ -82,7 +94,18 @@ Definition infer_array_is_dynamic_def:
     (case cenv.ce_var_type field_name of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
-  infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
+  (* Computed expressions: no compile-time type info, default to dynamic for safety *)
+  infer_array_is_dynamic cenv (IfExp _ _ _ _) = T ∧
+  infer_array_is_dynamic cenv (Literal _ _) = T ∧
+  infer_array_is_dynamic cenv (StructLit _ _ _) = T ∧
+  infer_array_is_dynamic cenv (Subscript _ _ _) = T ∧
+  infer_array_is_dynamic cenv (Builtin _ _ _) = T ∧
+  infer_array_is_dynamic cenv (TypeBuiltin _ _ _ _) = T ∧
+  infer_array_is_dynamic cenv (Pop _ _) = T ∧
+  infer_array_is_dynamic cenv (Call _ _ _ _) = T ∧
+  infer_array_is_dynamic cenv (FlagMember _ _ _) = T ∧
+  infer_array_is_dynamic cenv (BareGlobalName _ _) = T ∧
+  infer_array_is_dynamic cenv (TopLevelName _ _) = T
 End
 
 (* Compute memory_bytes_required for an AST type.
@@ -414,10 +437,10 @@ Definition compile_binop_def:
         do inter <- emit_op AND [x; y];
            emit_op ISZERO [inter]
         od
-    (* Remaining ops: emit INVALID (unreachable if type-correct) *)
-    | _ => do emit_inst INVALID [] [];
-              return (Lit 0w)
-           od
+    (* ExpMod: unreachable in type-correct programs (no ExpMod expression form) *)
+    | ExpMod => do emit_inst INVALID [] [];
+                    return (Lit 0w)
+                 od
 End
 
 (* ===== Bytestring Hash ===== *)
@@ -910,10 +933,17 @@ Definition type_to_abi_clamp_def:
   type_to_abi_clamp (BaseT DecimalT) = IntClamp 168 T ∧
   type_to_abi_clamp (BaseT (BytesT (Fixed n))) =
     (if n = 32 then NoClamp else BytesMClamp n) ∧
-  (* FlagT needs cenv for n_members — handled by type_to_abi_dec_info directly.
-     This catch-all is conservative; callers with cenv should use type_to_abi_dec_info. *)
+  (* FlagT: cenv needed for n_members — handled by type_to_abi_dec_info directly.
+     This case is conservative; callers with cenv should use type_to_abi_dec_info. *)
   type_to_abi_clamp (FlagT _) = NoClamp ∧
-  type_to_abi_clamp _ = NoClamp
+  (* Compound types: no individual value clamping (structural checks in decoder) *)
+  type_to_abi_clamp (ArrayT _ _) = NoClamp ∧
+  type_to_abi_clamp (TupleT _) = NoClamp ∧
+  type_to_abi_clamp (StructT _) = NoClamp ∧
+  type_to_abi_clamp NoneT = NoClamp ∧
+  (* Dynamic bytestrings: length checked by decoder, no value clamp *)
+  type_to_abi_clamp (BaseT (BytesT (Dynamic _))) = NoClamp ∧
+  type_to_abi_clamp (BaseT (StringT _)) = NoClamp
 End
 
 (* Convert a Vyper type to ABI decoding info.

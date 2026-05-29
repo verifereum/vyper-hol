@@ -135,6 +135,19 @@ Definition extract_labels_def:
   extract_labels _ = NONE
 End
 
+(* Resolve a dynamic jump destination back to one of the statically declared
+   target labels.  Python Venom's djmp compiles to a raw EVM JUMP; the operand
+   is a bytecode destination, not an index into the label list.  The label list
+   is the static over-approximation of valid destinations. *)
+Definition find_label_by_offset_def:
+  find_label_by_offset target s [] = NONE /\
+  find_label_by_offset target s (lbl :: rest) =
+    (case eval_operand (Label lbl) s of
+       SOME off => if off = target then SOME lbl
+                   else find_label_by_offset target s rest
+     | NONE => NONE)
+End
+
 (* --------------------------------------------------------------------------
    Instruction Semantics
    -------------------------------------------------------------------------- *)
@@ -555,16 +568,18 @@ Definition step_inst_base_def:
             | NONE => Error "undefined condition")
         | _ => Error "jnz requires cond and 2 labels")
 
-    (* Control flow - DJMP (dynamic jump / jump table) *)
+    (* Control flow - DJMP (dynamic jump / jump table).
+       The dynamic operand is a bytecode destination.  We execute at the IR
+       level by resolving that destination through vs_labels and requiring it
+       to be one of the statically listed target labels. *)
     | DJMP =>
         (case inst.inst_operands of
-          selector_op :: label_ops =>
-            (case (eval_operand selector_op s, extract_labels label_ops) of
-              (SOME idx, SOME labels) =>
-                let i = w2n idx in
-                if i < LENGTH labels then
-                  OK (jump_to (EL i labels) s)
-                else Error "djmp: index out of range"
+          target_op :: label_ops =>
+            (case (eval_operand target_op s, extract_labels label_ops) of
+              (SOME target, SOME labels) =>
+                (case find_label_by_offset target s labels of
+                   SOME lbl => OK (jump_to lbl s)
+                 | NONE => Error "djmp: target not in label set")
             | _ => Error "djmp: undefined operand or invalid labels")
         | _ => Error "djmp requires selector and labels")
 
@@ -1016,7 +1031,9 @@ End
    (memory, transient storage, accounts, returndata, logs, immutables)
    propagates from callee to caller.  vs_alloca_next propagates too
    (global bump pointer).  vs_allocas stays as caller's (per-frame).
-   Caller-local fields (vars, params, control flow, contexts) are kept. *)
+   Caller-local fields are retained: vs_vars, vs_params, vs_current_bb,
+   vs_inst_idx, vs_prev_bb, vs_halted, and context fields
+   (call/tx/block/code/data/labels/hashes). *)
 Definition merge_callee_state_def:
   merge_callee_state caller callee =
     caller with <|
