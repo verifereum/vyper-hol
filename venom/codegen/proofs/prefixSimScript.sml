@@ -45,6 +45,14 @@ val all_handler_defs = dispatch_ss @
   [asm_pop_def, asm_mstore_def, asm_mload_def,
    asm_dup_def, asm_swap_def, LET_THM, asm_next_def];
 
+val prefix_swap_tac =
+  rw(dispatch_ss @ [asm_swap_def, LET_THM, asm_next_def]) >>
+  gvs[];
+
+val prefix_dup_tac =
+  rw(dispatch_ss @ [asm_dup_def, asm_next_def]) >>
+  gvs[];
+
 Theorem prefix_push_preserves[local]:
   !bs lo o2pc st st'.
     asm_step lo o2pc (AsmPush bs) st = AsmOK st' ==> ^side_fields
@@ -107,10 +115,25 @@ Theorem prefix_swap_preserves[local]:
     asm_step lo o2pc (AsmOp (swap_name n)) st = AsmOK st' ==> ^side_fields
 Proof
   rpt gen_tac \\
-  simp[Once swap_name_def] \\ rpt IF_CASES_TAC \\ gvs[] \\
-  simp(dispatch_ss @ [asm_swap_def, LET_THM]) \\
-  IF_CASES_TAC \\ simp[asm_next_def] \\
-  strip_tac \\ gvs[]
+  PURE_ONCE_REWRITE_TAC[swap_name_def] \\
+  rpt IF_CASES_TAC
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
+  >- prefix_swap_tac
 QED
 
 Theorem prefix_dup_preserves[local]:
@@ -118,10 +141,25 @@ Theorem prefix_dup_preserves[local]:
     asm_step lo o2pc (AsmOp (dup_name n)) st = AsmOK st' ==> ^side_fields
 Proof
   rpt gen_tac \\
-  simp[Once dup_name_def] \\ rpt IF_CASES_TAC \\ gvs[] \\
-  simp(dispatch_ss @ [asm_dup_def]) \\
-  IF_CASES_TAC \\ simp[asm_next_def] \\
-  strip_tac \\ gvs[]
+  PURE_ONCE_REWRITE_TAC[dup_name_def] \\
+  rpt IF_CASES_TAC
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
+  >- prefix_dup_tac
 QED
 
 Theorem exec_prefix_step_preserves:
@@ -150,6 +188,27 @@ QED
 
 (* ===== Multi-step field preservation ===== *)
 
+Theorem asm_steps_first_side_preserves[local]:
+  !n lo o2pc prog (st:asm_state) s1.
+    (!i si si'.
+       i < SUC n /\
+       asm_steps lo o2pc prog i st = AsmOK si /\
+       asm_step lo o2pc (EL si.as_pc prog) si = AsmOK si' ==>
+       si'.as_accounts = si.as_accounts /\
+       si'.as_transient = si.as_transient /\
+       si'.as_returndata = si.as_returndata /\
+       si'.as_logs = si.as_logs) /\
+    asm_step lo o2pc (EL st.as_pc prog) st = AsmOK s1 ==>
+    s1.as_accounts = st.as_accounts /\
+    s1.as_transient = st.as_transient /\
+    s1.as_returndata = st.as_returndata /\
+    s1.as_logs = st.as_logs
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`0`, `st`, `s1`] mp_tac) >>
+  simp[asm_steps_zero]
+QED
+
 Theorem asm_steps_side_preserves:
   !n lo o2pc prog (st:asm_state) st'.
     asm_steps lo o2pc prog n st = AsmOK st' /\
@@ -167,17 +226,25 @@ Theorem asm_steps_side_preserves:
     st'.as_logs = st.as_logs
 Proof
   Induct_on `n` >- simp[asm_steps_def]
-  \\ simp[Once asm_steps_def]
+  \\ PURE_ONCE_REWRITE_TAC[asm_steps_def]
   \\ rpt gen_tac \\ strip_tac
-  \\ Cases_on `st.as_pc < LENGTH prog` \\ gvs[]
-  \\ Cases_on `asm_step lo o2pc (EL st.as_pc prog) st` \\ gvs[]
+  \\ reverse (Cases_on `st.as_pc < LENGTH prog`) >- fs[]
+  \\ reverse (Cases_on `asm_step lo o2pc (EL st.as_pc prog) st`) >- fs[]
+  >- fs[]
+  >- fs[]
+  >- fs[]
   \\ rename1 `AsmOK s1`
   \\ `s1.as_accounts = st.as_accounts /\
       s1.as_transient = st.as_transient /\
       s1.as_returndata = st.as_returndata /\
       s1.as_logs = st.as_logs`
-       by (qpat_assum `!i si si'. _` (qspec_then `0` mp_tac)
-           \\ simp[asm_steps_def])
+       by (mp_tac (Q.SPECL [`n`, `lo`, `o2pc`, `prog`, `st`, `s1`]
+             asm_steps_first_side_preserves) \\
+           impl_tac >- (
+             conj_tac >-
+               qpat_x_assum `!i si si'. i < SUC n /\ _ ==> _` ACCEPT_TAC \\
+             first_assum ACCEPT_TAC) \\
+           strip_tac \\ ASM_REWRITE_TAC[])
   \\ first_x_assum (qspecl_then [`lo`, `o2pc`, `prog`, `s1`, `st'`] mp_tac)
   \\ impl_tac
   >- (conj_tac >- gvs[]

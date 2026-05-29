@@ -159,14 +159,21 @@ End
    the alloca size (struct field offsets, array index * 32, etc.).
    This is needed because the displacement invariant (clause 2b) requires
    values to stay in their alloca region; otherwise, a value could "jump"
-   to a different alloca region after remapping. *)
+   to a different alloca region after remapping.
+
+   For non-PHI ops (ADD/SUB/ASSIGN): step_inst_base writes the output
+   variable, so the containment is expressed through step_inst_base.
+   For PHI: step_inst_base is a no-op (parallel PHI semantics), so
+   containment is expressed through eval_one_phi instead. *)
 Definition pointer_arith_in_region_def:
   pointer_arith_in_region fn (roots : string set) <=>
     let pv = pointer_derived_vars fn roots in
-    !bb inst s v out w_out inp w_in aid off asz.
+    (* Non-PHI pointer-preserving ops: step_inst_base writes output *)
+    (!bb inst s v out w_out inp w_in aid off asz.
       MEM bb fn.fn_blocks /\
       MEM inst bb.bb_instructions /\
       is_pointer_preserving_op inst.inst_opcode /\
+      inst.inst_opcode <> PHI /\
       step_inst_base inst s = OK v /\
       inst.inst_outputs = [out] /\
       out IN pv /\
@@ -176,7 +183,20 @@ Definition pointer_arith_in_region_def:
       lookup_var inp s = SOME w_in /\
       FLOOKUP s.vs_allocas aid = SOME (off, asz) /\
       off <= w2n w_in /\ w2n w_in < off + asz ==>
-      off <= w2n w_out /\ w2n w_out < off + asz
+      off <= w2n w_out /\ w2n w_out < off + asz) /\
+    (* PHI: eval_one_phi determines the output *)
+    (!bb inst s out w_out inp w_in aid off asz.
+      MEM bb fn.fn_blocks /\
+      MEM inst bb.bb_instructions /\
+      inst.inst_opcode = PHI /\
+      eval_one_phi s inst = SOME (out, w_out) /\
+      out IN pv /\
+      MEM (Var inp) inst.inst_operands /\
+      inp IN pv /\
+      lookup_var inp s = SOME w_in /\
+      FLOOKUP s.vs_allocas aid = SOME (off, asz) /\
+      off <= w2n w_in /\ w2n w_in < off + asz ==>
+      off <= w2n w_out /\ w2n w_out < off + asz)
 End
 
 (* ===== Alloca Remap ===== *)

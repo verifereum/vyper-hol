@@ -860,49 +860,85 @@ Proof
   simp[]
 QED
 
+Theorem get_module_code_stk[local]:
+  ∀cx s mid. get_module_code (cx with stk := s) mid = get_module_code cx mid
+Proof
+  simp[get_module_code_def]
+QED
+
+Theorem get_tenv_stk[local]:
+  ∀cx s. get_tenv (cx with stk := s) = get_tenv cx
+Proof
+  simp[get_tenv_def]
+QED
+
+Theorem lookup_var_slot_from_layout_stk[local]:
+  ∀cx s is_transient mid id.
+    lookup_var_slot_from_layout (cx with stk := s) is_transient mid id =
+    lookup_var_slot_from_layout cx is_transient mid id
+Proof
+  simp[lookup_var_slot_from_layout_def]
+QED
+
+Theorem get_address_immutables_stk[local]:
+  ∀cx s st.
+    get_address_immutables (cx with stk := s) st = get_address_immutables cx st
+Proof
+  simp[get_address_immutables_def]
+QED
+
+Theorem get_immutables_stk[local]:
+  ∀cx s mid st. get_immutables (cx with stk := s) mid st = get_immutables cx mid st
+Proof
+  simp[get_immutables_def, bind_def, get_address_immutables_stk]
+QED
+
+Theorem get_immutables_stk_fun[local]:
+  ∀cx s mid. get_immutables (cx with stk := s) mid = get_immutables cx mid
+Proof
+  simp[FUN_EQ_THM, get_immutables_stk]
+QED
+
+Theorem get_storage_backend_stk[local]:
+  ∀cx s is_transient st.
+    get_storage_backend (cx with stk := s) is_transient st =
+    get_storage_backend cx is_transient st
+Proof
+  Cases_on `is_transient` >> simp[get_storage_backend_def]
+QED
+
+Theorem read_storage_slot_stk[local]:
+  ∀cx s is_transient slot tv st.
+    read_storage_slot (cx with stk := s) is_transient slot tv st =
+    read_storage_slot cx is_transient slot tv st
+Proof
+  simp[read_storage_slot_def, bind_def, get_storage_backend_stk]
+QED
+
+Theorem read_storage_slot_stk_fun[local]:
+  ∀cx s is_transient slot tv.
+    read_storage_slot (cx with stk := s) is_transient slot tv =
+    read_storage_slot cx is_transient slot tv
+Proof
+  simp[FUN_EQ_THM, read_storage_slot_stk]
+QED
+
 Theorem lookup_global_stk[local]:
   ∀cx s mid id st.
     lookup_global (cx with stk := s) mid id st =
     lookup_global cx mid id st
 Proof
   rpt gen_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def, return_def,
-       raise_def, ignore_bind_def] >>
-  `(cx with stk := s).txn.target = cx.txn.target` by simp[] >>
-  `(cx with stk := s).sources = cx.sources` by simp[] >>
-  `(cx with stk := s).layouts = cx.layouts` by simp[] >>
-  `get_module_code (cx with stk := s) mid = get_module_code cx mid` by
-    simp[get_module_code_def] >>
-  `get_tenv (cx with stk := s) = get_tenv cx` by simp[get_tenv_def] >>
-  Cases_on `get_module_code cx mid` >> simp[return_def, raise_def] >>
-  rename1 `SOME modcode` >>
-  Cases_on `find_var_decl_by_num id modcode` >> simp[] >- (
-    (* immutable branch *)
-    simp[bind_def, get_immutables_def, get_address_immutables_def,
-         lift_option_def] >>
-    Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
-    Cases_on `FLOOKUP x' id` >> simp[return_def, raise_def]
-  ) >>
-  rename1 `SOME found` >> PairCases_on `found` >>
-  Cases_on `found0` >> simp[bind_def] >- (
-    (* StorageVarDecl *)
-    simp[lookup_var_slot_from_layout_def] >>
-    Cases_on `lookup_var_slot_from_layout cx b mid found1` >>
-    simp[return_def, raise_def] >>
-    Cases_on `evaluate_type (get_tenv cx) t` >>
-    simp[return_def, raise_def] >>
-    rename1 `SOME tv` >> Cases_on `tv` >>
-    `∀st'. get_storage_backend (cx with stk := s) b st' = get_storage_backend cx b st'` by (
-      gen_tac >> Cases_on `b` >> simp[get_storage_backend_def, get_transient_storage_def,
-                                      get_accounts_def, bind_def, return_def]) >>
-    simp[bind_def, return_def, raise_def, read_storage_slot_def,
-         get_storage_backend_def, get_transient_storage_def,
-         get_accounts_def, lift_option_def]
-  ) >>
-  (* HashMapVarDecl *)
-  simp[lookup_var_slot_from_layout_def] >>
-  Cases_on `lookup_var_slot_from_layout cx b' mid found1` >>
-  simp[return_def, raise_def]
+  simp[lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, ignore_bind_def,
+       get_module_code_stk, get_tenv_stk,
+       lookup_var_slot_from_layout_stk, get_immutables_stk_fun,
+       read_storage_slot_stk_fun] >>
+  rpt BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  simp[get_immutables_stk_fun, read_storage_slot_stk_fun,
+       get_storage_backend_def, get_address_immutables_def,
+       bind_def, get_accounts_def, get_transient_storage_def,
+       lift_option_def, return_def, raise_def]
 QED
 
 (* lookup_toplevel_name is independent of cx.stk *)

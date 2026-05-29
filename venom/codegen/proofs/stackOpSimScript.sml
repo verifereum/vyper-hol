@@ -33,9 +33,10 @@ Theorem swap_table_lookup:
     ALOOKUP swap_table (swap_name n) = SOME n
 Proof
   rpt strip_tac >>
-  `n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/ n = 5 \/ n = 6 \/
-   n = 7 \/ n = 8 \/ n = 9 \/ n = 10 \/ n = 11 \/ n = 12 \/
-   n = 13 \/ n = 14 \/ n = 15 \/ n = 16` by decide_tac >>
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (0)))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  PURE_REWRITE_TAC[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >>
   gvs[swap_name_def, swap_table_def]
 QED
 
@@ -47,9 +48,10 @@ Theorem dup_table_lookup:
     ALOOKUP dup_table (dup_name (n + 1)) = SOME n
 Proof
   rpt strip_tac >>
-  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/ n = 5 \/
-   n = 6 \/ n = 7 \/ n = 8 \/ n = 9 \/ n = 10 \/ n = 11 \/
-   n = 12 \/ n = 13 \/ n = 14 \/ n = 15` by decide_tac >>
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (0))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  PURE_REWRITE_TAC[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >>
   gvs[dup_name_def, dup_table_def]
 QED
 
@@ -421,18 +423,28 @@ Proof
   strip_tac
   (* AsmOp: dispatch through asm_step_op *)
   >- (fs[asm_step_op_def] >>
-      every_case_tac >> gvs[] >>
-      imp_res_tac asm_step_arith_pc >>
-      imp_res_tac asm_step_compare_pc >>
-      imp_res_tac asm_step_bitwise_pc >>
-      imp_res_tac asm_step_memory_pc >>
-      imp_res_tac asm_step_control_pc >>
-      imp_res_tac asm_step_extcall_pc >>
-      imp_res_tac asm_step_copy_pc >>
-      imp_res_tac asm_step_context_pc >>
-      imp_res_tac asm_dup_pc >>
-      imp_res_tac asm_swap_pc >>
-      imp_res_tac asm_log_pc >>
+      reverse (Cases_on `asm_step_arith s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_arith_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_compare s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_compare_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_bitwise s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_bitwise_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_memory s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_memory_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_control o2pc s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_control_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_extcall s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_extcall_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_copy s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_copy_pc >> gvs[]) >>
+      reverse (Cases_on `asm_step_context s s1`) >-
+        (gvs[] >> imp_res_tac asm_step_context_pc >> gvs[]) >>
+      reverse (Cases_on `ALOOKUP dup_table s`) >-
+        (gvs[] >> imp_res_tac asm_dup_pc >> gvs[]) >>
+      reverse (Cases_on `ALOOKUP swap_table s`) >-
+        (gvs[] >> imp_res_tac asm_swap_pc >> gvs[]) >>
+      reverse (Cases_on `ALOOKUP log_table s`) >-
+        (gvs[] >> imp_res_tac asm_log_pc >> gvs[]) >>
       gvs[])
   (* Non-AsmOp cases: FLOOKUP + asm_next *)
   >> every_case_tac >> gvs[]

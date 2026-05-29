@@ -6,9 +6,7 @@ name = "vyper-hol"
 version = "0.1.0"
 
 [build]
-members = ["."]
 roots = ["vyperHolScript.sml"]
-exclude = ["tests/generated/*", "test_*.sml", "semantics/prop/test_*.sml"]
 
 [dependencies.verifereum]
-manifest = "verifereum.manifest.toml"
+path = "$VFMDIR" # set env dir, or override in .holconfig.toml

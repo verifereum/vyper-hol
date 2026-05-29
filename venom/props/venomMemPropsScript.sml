@@ -74,6 +74,18 @@ Theorem alloca_inv_run_function:
 Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_function_proof
 QED
 
+Theorem step_inst_base_preserves_allocas:
+  ∀inst s s'.
+    (step_inst_base inst s = OK s' ∨
+     step_inst_base inst s = Halt s' ∨
+     (∃a. step_inst_base inst s = Abort a s') ∨
+     (∃v. step_inst_base inst s = IntRet v s')) ∧
+    inst.inst_opcode ≠ INVOKE ∧
+    inst.inst_opcode ≠ ALLOCA ⇒
+    s'.vs_allocas = s.vs_allocas
+Proof ACCEPT_TAC venomMemProofsTheory.step_inst_base_preserves_allocas
+QED
+
 Theorem allocas_non_overlapping_step_inst:
   ∀fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' ∧

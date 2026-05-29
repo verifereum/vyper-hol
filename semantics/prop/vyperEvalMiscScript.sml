@@ -1,6 +1,6 @@
 Theory vyperEvalMisc
 Ancestors
-  vyperMisc vyperContext vyperState vyperInterpreter
+  vyperAST vyperMisc vyperContext vyperState vyperInterpreter
   vyperArray vyperBareGlobalName vyperValue vyperValueOperation
 Libs
   intLib
@@ -137,6 +137,16 @@ Theorem evaluate_binop_add_int128:
 Proof
   rpt strip_tac >>
   simp[evaluate_binop_def, bounded_int_op_def]
+QED
+
+(* Unary negation first validates the already-evaluated operand against the
+   annotation bounds. This matches lowering: an out-of-range positive literal
+   such as 2^255 for int256 is not reinterpreted as a valid negative literal. *)
+Theorem evaluate_builtin_neg_int256_positive_signed_min_rejected:
+  evaluate_builtin cx msg (BaseT (IntT 256)) Neg [IntV (&(2 ** 255))] =
+  INR (RuntimeError "Neg operand bound")
+Proof
+  simp[evaluate_builtin_def, type_to_int_bound_def, within_int_bound_def]
 QED
 
 (* ===== For Loop Boundedness ===== *)

@@ -814,5 +814,3 @@ Proof
   \\ MAP_EVERY qexists_tac [`bc`, `fmb`, `db`, `ei`]
   \\ gvs[]
 QED
-
-

@@ -50,6 +50,8 @@ Ancestors
   dfIterateDefs finite_map basePtrDefs
   venomExecSemantics allocaRemapDefs pointerConfinedDefs
   venomEffects
+Libs
+  BasicProvers
 
 (* ===== dse_equiv / dse_all_equiv properties ===== *)
 
@@ -176,6 +178,7 @@ QED
 
 Theorem clear_nops_function_dse_equiv:
   !space fuel ctx fn s.
+    wf_function fn /\
     s.vs_inst_idx = 0 ==>
     lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
       (run_blocks fuel ctx fn s)
@@ -418,8 +421,9 @@ QED
 Triviality run_blocks_never_ok:
   !fuel ctx fn s s'. run_blocks fuel ctx fn s <> OK s'
 Proof
-  completeInduct_on `fuel` >> rw[Once run_blocks_def] >>
-  rpt (CASE_TAC >> fs[])
+  Induct >- simp[Once run_blocks_def] >>
+  simp[Once run_blocks_unfold] >>
+  rpt gen_tac >> rpt (CASE_TAC >> fs[])
 QED
 
 (* ================================================================== *)
@@ -472,13 +476,6 @@ Proof
   Cases_on `dse_iterate (analysis_fn space) space fn` >>
   simp[clear_nops_preserves_entry_label] >>
   imp_res_tac dse_iterate_preserves_entry_label
-QED
-
-Triviality memloc_within_alloca_empty_allocas:
-  !ml s. s.vs_allocas = FEMPTY ==> memloc_within_alloca ml s
-Proof
-  rpt strip_tac >> Cases_on `ml.ml_alloca` >> gvs[memloc_within_alloca_def] >>
-  Cases_on `ml.ml_offset` >> Cases_on `ml.ml_size` >> simp[] >> Cases_on `x` >> simp[]
 QED
 
 (* When vs_allocas = FEMPTY, any mem_loc satisfies memloc_within_alloca:
@@ -1011,12 +1008,7 @@ Proof
   ACCEPT_TAC alloca_inv_empty
 QED
 
-Triviality bp_ptrs_bounded_empty_allocas:
-  !bp fn s. s.vs_allocas = FEMPTY ==> bp_ptrs_bounded bp fn s
-Proof
-  rw[bp_ptrs_bounded_def] >>
-  irule memloc_within_alloca_empty_allocas >> simp[]
-QED
+
 
 (* ===== Per-block simulation for DSE ===== *)
 
@@ -1083,11 +1075,11 @@ Triviality block_sim_function_lift:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        R_ok s1 s2 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
         lift_result R_ok R_term R_term
-          (exec_block fuel ctx bb s1)
-          (exec_block fuel ctx (bt bb) s2)) /\
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2)) /\
     s.vs_inst_idx = 0 ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result R_ok R_term R_term
@@ -1698,7 +1690,7 @@ Proof
   qexistsl [`cex_analysis_fn`, `AddrSp_Memory`, `2`, `ARB`, `cex_fn`, `cex_entry_state`] >>
   `cex_entry_state.vs_allocas = FEMPTY`
     by (simp[cex_entry_state_def, cex_state_def]) >>
-  gvs[alloca_inv_empty_allocas, bp_ptrs_bounded_empty_allocas] >>
+  gvs[alloca_inv_empty_allocas, bp_ptrs_bounded_empty_alloca] >>
   simp[cex_precondition] >>
   simp[cex_function_space] >>
   strip_assume_tac cex_orig_is_halt >>

@@ -535,42 +535,35 @@ val update_storage_eta =
   prove(``update_storage k v = (k =+ v)``,
   simp[FUN_EQ_THM, update_storage_def]);
 
-val gas_close_tac : tactic =
-  FIRST [
-    (* Non-abort errors: try common exceptions *)
-    DISJ1_TAC >>
-    FIRST (map (fn exc =>
-      match_mp_tac (Q.SPEC exc handle_step_single_context |>
-        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-      simp[])
-    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]),
-    (* Abort errors (OutsideDomain etc.): handle_step returns (INR, es) directly *)
-    DISJ1_TAC >>
-    (fn (asl, g) =>
-      if can (find_term (can (match_term ``handle_step (SOME exc) es``))) g
-      then ALL_TAC (asl, g)
-      else raise (mk_HOL_ERR "" "" "no handle_step")) >>
+val common_handle_step_exception_tac : tactic =
+  DISJ1_TAC THEN1
+  FIRST (map (fn exc =>
+    match_mp_tac (Q.SPEC exc handle_step_single_context |>
+      SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
+    simp[])
+  [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]);
+
+val copy_handle_step_exception_tac : tactic =
+  DISJ1_TAC THEN1
+  FIRST (map (fn exc =>
+    match_mp_tac (Q.SPEC exc handle_step_single_context |>
+      SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
+    simp[])
+  [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`,
+   `OutOfBoundsRead`]);
+
+val direct_abort_exception_tac : tactic =
+  DISJ1_TAC THEN1 (
     simp[handle_step_def, reraise_def, vfm_abort_def] >>
-    simp[exception_distinct, exception_11],
-    (* Gas OK: full correspondence *)
-    DISJ2_TAC >>
-    simp[inc_pc_or_jump_def, LET_THM, opcode_def,
-         bind_def, get_current_context_def, return_def,
-         set_current_context_def, is_call_def] >>
-    qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-    simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
-    gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
-        account_state_component_equality] >>
-    ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-    simp[asm_pc_to_offset_suc, asm_inst_size_def]
-  ];
+    simp[exception_distinct, exception_11]);
 
 (* Fast opname identification:
    1. EVAL the encode_inst RHS to get concrete byte
    2. Use pre-proved byte-to-opname theorem *)
 val identify_evm_op_tac : tactic =
-  qpat_x_assum `opcode _ = encode_inst _ _` (fn th =>
-    assume_tac (CONV_RULE (RAND_CONV EVAL) th)) >>
+  qpat_x_assum `opcode _ = encode_inst _ _` mp_tac >>
+  ASM_REWRITE_TAC[] >>
+  DISCH_THEN (fn th => assume_tac (CONV_RULE (RAND_CONV EVAL) th)) >>
   FIRST (map (fn th =>
     SUBGOAL_THEN (snd(dest_imp(concl th))) SUBST_ALL_TAC >-
     (mp_tac th >> ASM_REWRITE_TAC[]))
@@ -598,6 +591,341 @@ val category_setup_tac : tactic =
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac;
 
+Triviality asm_evm_rel_next:
+  !prog as es ctxt rb gas.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog (asm_next as)
+      (es with contexts :=
+         [(ctxt with <|pc := asm_pc_to_offset prog as.as_pc + 1;
+                      gasUsed := gas|>, rb)])
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_stack_memory:
+  !prog as es ctxt rb stk mem gas.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog
+      (asm_next (as with <|as_stack := stk; as_memory := mem|>))
+      (es with contexts :=
+         [(ctxt with <|stack := stk; memory := mem;
+                      pc := asm_pc_to_offset prog as.as_pc + 1;
+                      gasUsed := gas|>, rb)])
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_stack:
+  !prog as es ctxt rb stk gas.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog (asm_next (as with as_stack := stk))
+      (es with contexts :=
+         [(ctxt with <|stack := stk;
+                      pc := asm_pc_to_offset prog as.as_pc + 1;
+                      gasUsed := gas|>, rb)])
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_stack_unfolded:
+  !prog as es ctxt rb stk gas.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog (as with <|as_stack := stk; as_pc := as.as_pc + 1|>)
+      (es with contexts :=
+         [(ctxt with <|stack := stk;
+                      pc := asm_pc_to_offset prog as.as_pc + 1;
+                      gasUsed := gas|>, rb)])
+Proof
+  rpt strip_tac >>
+  drule_all asm_evm_rel_next_stack >>
+  simp[asm_next_def]
+QED
+
+Triviality asm_evm_rel_next_stack_storage_access:
+  !prog as es ctxt rb stk gas sk.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog (asm_next (as with as_stack := stk))
+      (es with
+       <|contexts :=
+           [(ctxt with <|stack := stk;
+                        pc := asm_pc_to_offset prog as.as_pc + 1;
+                        gasUsed := gas|>, rb)];
+         rollback :=
+           es.rollback with
+           accesses :=
+             es.rollback.accesses with
+             storageKeys := fINSERT sk es.rollback.accesses.storageKeys|>)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_stack_storage_access_domain:
+  !prog as es ctxt rb stk gas sk md.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog (asm_next (as with as_stack := stk))
+      (es with
+       <|contexts :=
+           [(ctxt with <|stack := stk;
+                        pc := asm_pc_to_offset prog as.as_pc + 1;
+                        gasUsed := gas|>, rb)];
+         rollback :=
+           es.rollback with
+           accesses :=
+             es.rollback.accesses with
+             storageKeys := fINSERT sk es.rollback.accesses.storageKeys;
+         msdomain := md|>)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_sstore:
+  !prog as es ctxt rb ctxt1 rbstate stk asm_accounts.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
+    ctxt1.msgParams = ctxt.msgParams /\
+    ctxt1.stack = stk /\
+    ctxt1.memory = as.as_memory /\
+    ctxt1.pc = asm_pc_to_offset prog as.as_pc + 1 /\
+    ctxt1.jumpDest = NONE /\
+    ctxt1.returnData = as.as_returndata /\
+    ctxt1.logs = as.as_logs /\
+    rbstate.accounts = asm_accounts /\
+    rbstate.tStorage = as.as_transient ==>
+    asm_evm_rel prog
+      (asm_next (as with <|as_stack := stk; as_accounts := asm_accounts|>))
+      (es with <|contexts := [(ctxt1, rb)]; rollback := rbstate|>)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_sstore_domain:
+  !prog as es ctxt rb ctxt1 rbstate stk asm_accounts md.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
+    ctxt1.msgParams = ctxt.msgParams /\
+    ctxt1.stack = stk /\
+    ctxt1.memory = as.as_memory /\
+    ctxt1.pc = asm_pc_to_offset prog as.as_pc + 1 /\
+    ctxt1.jumpDest = NONE /\
+    ctxt1.returnData = as.as_returndata /\
+    ctxt1.logs = as.as_logs /\
+    rbstate.accounts = asm_accounts /\
+    rbstate.tStorage = as.as_transient ==>
+    asm_evm_rel prog
+      (asm_next (as with <|as_stack := stk; as_accounts := asm_accounts|>))
+      (es with <|contexts := [(ctxt1, rb)]; rollback := rbstate; msdomain := md|>)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_next_stack_memory_logs:
+  !prog as es ctxt rb stk mem logs gas.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    asm_evm_rel prog
+      (asm_next (as with <|as_stack := stk; as_memory := mem;
+                           as_logs := logs|>))
+      (es with contexts :=
+         [(ctxt with <|stack := stk; memory := mem; logs := logs;
+                      pc := asm_pc_to_offset prog as.as_pc + 1;
+                      gasUsed := gas|>, rb)])
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
+Triviality asm_evm_rel_calldata:
+  !prog as es ctxt rb.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] ==>
+    ctxt.msgParams.data = as.as_call_ctx.cc_calldata
+Proof
+  rpt strip_tac >> gvs[asm_evm_rel_def]
+QED
+
+Triviality asm_evm_rel_callee:
+  !prog as es ctxt rb.
+    asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] ==>
+    ctxt.msgParams.callee = as.as_call_ctx.cc_address
+Proof
+  rpt strip_tac >> gvs[asm_evm_rel_def]
+QED
+
+Triviality asm_evm_rel_code:
+  !prog as es.
+    asm_evm_rel prog as es ==> as.as_code = assemble prog
+Proof
+  rpt gen_tac >>
+  Cases_on `es.contexts` >> simp[asm_evm_rel_def] >>
+  Cases_on `h` >> simp[]
+QED
+
+val gas_close_tac : tactic =
+  FIRST [
+    (* Non-abort errors: try common exceptions *)
+    DISJ1_TAC >>
+    FIRST (map (fn exc =>
+      match_mp_tac (Q.SPEC exc handle_step_single_context |>
+        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
+      simp[])
+    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]),
+    (* Abort errors (OutsideDomain etc.): handle_step returns (INR, es) directly *)
+    DISJ1_TAC >>
+    (fn (asl, g) =>
+      if can (find_term (can (match_term ``handle_step (SOME exc) es``))) g
+      then ALL_TAC (asl, g)
+      else raise (mk_HOL_ERR "" "" "no handle_step")) >>
+    simp[handle_step_def, reraise_def, vfm_abort_def] >>
+    simp[exception_distinct, exception_11],
+    (* Gas OK: full correspondence *)
+    DISJ2_TAC >>
+    simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+         bind_def, get_current_context_def, return_def,
+         set_current_context_def, is_call_def] >>
+    FIRST [
+      irule asm_evm_rel_next_stack >> simp[asm_inst_size_def, update_storage_eta],
+      irule asm_evm_rel_next_stack_memory >> simp[asm_inst_size_def, update_storage_eta],
+      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+      simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+      gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+          account_state_component_equality] >>
+      ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+      simp[asm_pc_to_offset_suc, asm_inst_size_def]
+    ]
+  ];
+
+val simple_stack_ok_tac : tactic =
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  irule asm_evm_rel_next_stack_unfolded >>
+  simp[asm_inst_size_def, update_storage_eta];
+
+val simple_stack_error_tac : tactic =
+  DISJ1_TAC >>
+  FIRST (map (fn exc =>
+    match_mp_tac (Q.SPEC exc handle_step_single_context |>
+      SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
+    simp[])
+  [`OutOfGas`, `StackUnderflow`]);
+
+val simple_stack_evm_step_tac : tactic =
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_binop_def, step_monop_def, step_modop_def,
+       step_exp_def, pop_stack_def, consume_gas_def, push_stack_def,
+       assert_def, LET_THM, with_zero_def] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  FIRST [simple_stack_ok_tac, simple_stack_error_tac];
+
+val mcopy_inner_step_tac : tactic =
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]);
+
+val focused_if_cases_tac : tactic =
+  rpt (IF_CASES_TAC >> gvs[]);
+
+val sha3_finish_tac : tactic =
+  DISJ2_TAC >>
+  simp[step_inst_def, step_keccak256_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.keccak256_per_word_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >> strip_tac >>
+  gvs[asm_expand_memory_def, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def];
+
+val sload_ok_tac : tactic =
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def];
+
+val sstore_expand_refund_tac : tactic =
+  simp[update_gas_refund_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def];
+
+val sstore_ok_tac : tactic =
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality]);
+
+val sstore_finish_after_refund_tac : tactic =
+  IF_CASES_TAC >> gvs[]
+  >- (IF_CASES_TAC >> gvs[] >| [sstore_ok_tac, gas_close_tac]) >>
+  gas_close_tac;
+
+val sstore_finish_tac : tactic =
+  sstore_expand_refund_tac >> sstore_finish_after_refund_tac;
+
 Theorem asm_evm_step_compare_dispatch[local]:
   !prog as es name r.
     asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
@@ -622,14 +950,13 @@ Proof
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >>
   simp[asm_binop_def, asm_unop_def, asm_next_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  simp[step_def, handle_def, bind_def, ignore_bind_def,
-       get_current_context_def, return_def, set_current_context_def,
-       step_inst_def, step_binop_def, step_monop_def,
-       pop_stack_def, consume_gas_def, push_stack_def,
-       assert_def, LET_THM] >>
-  fs[] >> IF_CASES_TAC >> simp[] >>
-  gas_close_tac
+  BasicProvers.every_case_tac >> gvs[]
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >> simple_stack_evm_step_tac
 QED
 
 Theorem asm_evm_step_bitwise_dispatch[local]:
@@ -656,14 +983,17 @@ Proof
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >>
   simp[asm_binop_def, asm_unop_def, asm_next_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  simp[step_def, handle_def, bind_def, ignore_bind_def,
-       get_current_context_def, return_def, set_current_context_def,
-       step_inst_def, step_binop_def, step_monop_def,
-       pop_stack_def, consume_gas_def, push_stack_def,
-       assert_def, LET_THM] >>
-  fs[] >> IF_CASES_TAC >> simp[] >>
-  gas_close_tac
+  BasicProvers.every_case_tac >> gvs[]
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >> simple_stack_evm_step_tac
 QED
 
 Theorem asm_evm_step_arith_dispatch[local]:
@@ -690,14 +1020,41 @@ Proof
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >>
   simp[asm_binop_def, asm_ternop_def, asm_next_def, with_zero_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  simp[step_def, handle_def, bind_def, ignore_bind_def,
-       get_current_context_def, return_def, set_current_context_def,
-       step_inst_def, step_binop_def, step_modop_def, step_exp_def,
-       pop_stack_def, consume_gas_def, push_stack_def,
-       assert_def, LET_THM, with_zero_def] >>
-  fs[] >> IF_CASES_TAC >> simp[] >>
-  gas_close_tac
+  BasicProvers.every_case_tac >> gvs[]
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- simple_stack_evm_step_tac
+  >- (simp[step_def, handle_def] >>
+      simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+           set_current_context_def, step_inst_def, step_binop_def,
+           step_monop_def, step_modop_def, step_exp_def, pop_stack_def,
+           consume_gas_def, push_stack_def, assert_def, LET_THM,
+           with_zero_def] >>
+      fs[] >> IF_CASES_TAC >> simp[] >> gas_close_tac)
+  >- (simp[step_def, handle_def] >>
+      simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+           set_current_context_def, step_inst_def, step_binop_def,
+           step_monop_def, step_modop_def, step_exp_def, pop_stack_def,
+           consume_gas_def, push_stack_def, assert_def, LET_THM,
+           with_zero_def] >>
+      fs[] >> IF_CASES_TAC >> simp[] >> gas_close_tac)
+  >> (simp[step_def, handle_def] >>
+      simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+           set_current_context_def, step_inst_def, step_binop_def,
+           step_monop_def, step_modop_def, step_exp_def, pop_stack_def,
+           consume_gas_def, push_stack_def, assert_def, LET_THM,
+           with_zero_def] >>
+      fs[] >> IF_CASES_TAC >> simp[] >> gas_close_tac)
 QED
 
 (* ===== Memory expansion helpers ===== *)
@@ -830,6 +1187,25 @@ Proof
   simp[]
 QED
 
+Theorem sha3_expand_memory_eq[local]:
+  !off sz (mem:byte list).
+    0 < sz ==>
+    mem ++ REPLICATE
+      (MAX (LENGTH mem) (32 * ((off + (sz + 31)) DIV 32)) - LENGTH mem) 0w =
+    asm_expand_memory (off + sz) mem
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `rounded = ((off + sz + 31) DIV 32) * 32` >>
+  `32 * ((off + (sz + 31)) DIV 32) = rounded`
+    by (simp[Abbr`rounded`, arithmeticTheory.MULT_COMM] >> DECIDE_TAC) >>
+  `((off + sz + 31) DIV 32) * 32 = rounded` by simp[Abbr`rounded`] >>
+  ASM_REWRITE_TAC[asm_expand_memory_def, LET_THM] >>
+  Cases_on `rounded <= LENGTH mem`
+  >- (`MAX (LENGTH mem) rounded = LENGTH mem` by simp[MAX_DEF] >> simp[]) >>
+  `MAX (LENGTH mem) rounded = rounded` by simp[MAX_DEF] >>
+  simp[]
+QED
+
 Theorem asm_evm_step_memory_dispatch[local]:
   !prog as es name r.
     asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
@@ -851,7 +1227,7 @@ Proof
   category_setup_tac >>
   qpat_x_assum `asm_step_memory _ _ = _` mp_tac >>
   simp[asm_step_memory_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[]
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac
   (* 11 cases: POP, MLOAD, MSTORE, MSTORE8, MCOPY, MEMTOP,
                SLOAD, SSTORE, TLOAD, TSTORE, SHA3 *)
   (* === POP === *)
@@ -873,13 +1249,14 @@ Proof
     simp[asm_mload_def, LET_THM] >>
     Cases_on `as.as_stack` >> gvs[] >>
     simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         set_current_context_def,
-         step_inst_def, step_mload_def, pop_stack_def,
-         consume_gas_def, push_stack_def,
+         get_current_context_def, return_def, set_current_context_def,
+         step_inst_def, step_mload_def, pop_stack_def, LET_THM] >>
+    simp[consume_gas_def, push_stack_def,
          memory_expansion_info_def, expand_memory_def,
          read_memory_def, vfmConstantsTheory.word_size_def,
-         assert_def, fail_def, LET_THM] >>
+         assert_def, fail_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def,
+         set_current_context_def, LET_THM] >>
     IF_CASES_TAC >> gvs[]
     (* Gas OK *)
     >- (
@@ -887,32 +1264,26 @@ Proof
       simp[inc_pc_or_jump_def, LET_THM, opcode_def,
            bind_def, get_current_context_def, return_def,
            set_current_context_def, is_call_def] >>
-      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-      simp[asm_evm_rel_def] >> strip_tac >>
-      gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
-      ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-      simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
-      (* Memory equality: EVM expanded form = asm_expand_memory *)
-      conj_tac
-      >- (
-        `as.as_memory ++ REPLICATE
-           (MAX (LENGTH as.as_memory)
-                (32 * ((w2n h + 63) DIV 32)) -
+      qmatch_goalsub_abbrev_tac `word_of_bytes F 0w (REVERSE bs)` >>
+      `bs = TAKE 32 (DROP (w2n h) (asm_expand_memory (w2n h + 32) as.as_memory))` by (
+        simp[Abbr`bs`, asm_expand_memory_def, LET_THM, MAX_DEF] >>
+        IF_CASES_TAC >> simp[]) >>
+      pop_assum SUBST_ALL_TAC >>
+      `LENGTH (TAKE 32 (DROP (w2n h)
+         (asm_expand_memory (w2n h + 32) as.as_memory))) = 32` by
+        simp[take_drop_expand_len] >>
+      imp_res_tac word_of_bytes_be_le_256 >>
+      pop_assum (fn th => REWRITE_TAC[th]) >>
+      `as.as_memory ++
+         REPLICATE
+           (MAX (LENGTH as.as_memory) (32 * ((w2n h + 63) DIV 32)) -
             LENGTH as.as_memory) (0w:byte) =
-         asm_expand_memory (w2n h + 32) as.as_memory`
-        by (simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-            IF_CASES_TAC >> simp[]) >>
-        simp[] >>
-        `LENGTH (TAKE 32 (DROP (w2n h)
-           (asm_expand_memory (w2n h + 32) as.as_memory))) = 32`
-        by (simp[LENGTH_TAKE_EQ] >>
-            `w2n h + 32 <= LENGTH (asm_expand_memory (w2n h + 32) as.as_memory)`
-            by simp[asm_expand_memory_length] >> simp[]) >>
-        imp_res_tac word_of_bytes_be_le_256 >>
-        pop_assum (fn th => REWRITE_TAC[th])
-      ) >>
-      simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-      IF_CASES_TAC >> simp[]
+       asm_expand_memory (w2n h + 32) as.as_memory` by (
+        simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+        IF_CASES_TAC >> simp[]) >>
+      pop_assum SUBST_ALL_TAC >>
+      irule asm_evm_rel_next_stack_memory >>
+      simp[asm_inst_size_def]
     ) >>
     (* Gas fail *)
     gas_close_tac
@@ -924,13 +1295,18 @@ Proof
     Cases_on `as.as_stack` >> gvs[] >>
     Cases_on `t` >> gvs[] >>
     simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         set_current_context_def,
-         step_inst_def, step_mstore_def, pop_stack_def,
-         consume_gas_def,
-         memory_expansion_info_def, expand_memory_def,
-         write_memory_def, vfmConstantsTheory.word_size_def,
+         get_current_context_def, return_def, set_current_context_def] >>
+    gvs[step_inst_def, step_mstore_def, pop_stack_def, consume_gas_def] >>
+    simp[memory_expansion_info_def, vfmConstantsTheory.word_size_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         return_def, set_current_context_def,
          assert_def, fail_def, LET_THM] >>
+    simp[expand_memory_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def,
+         set_current_context_def, LET_THM] >>
+    simp[write_memory_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def,
+         set_current_context_def, LET_THM] >>
     IF_CASES_TAC >> gvs[]
     (* Gas OK *)
     >- (
@@ -938,15 +1314,12 @@ Proof
       simp[inc_pc_or_jump_def, LET_THM, opcode_def,
            bind_def, get_current_context_def, return_def,
            set_current_context_def, is_call_def] >>
-      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-      simp[asm_evm_rel_def] >> strip_tac >>
-      gvs[asm_evm_rel_def, asm_next_def, LET_THM,
-          word_to_bytes_be_reverse_le,
-          asm_expand_memory_def, MAX_DEF] >>
+      simp[word_to_bytes_be_reverse_le] >>
       REWRITE_TAC[dim256] >>
+      gvs[asm_expand_memory_def, MAX_DEF] >>
       rpt (IF_CASES_TAC >> gvs[]) >>
-      ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-      simp[asm_pc_to_offset_suc, asm_inst_size_def]
+      irule asm_evm_rel_next_stack_memory >>
+      simp[asm_inst_size_def]
     ) >>
     (* Gas fail *)
     gas_close_tac
@@ -958,13 +1331,18 @@ Proof
     Cases_on `as.as_stack` >> gvs[] >>
     Cases_on `t` >> gvs[] >>
     simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         set_current_context_def,
-         step_inst_def, step_mstore_def, pop_stack_def,
-         consume_gas_def,
-         memory_expansion_info_def, expand_memory_def,
-         write_memory_def, vfmConstantsTheory.word_size_def,
+         get_current_context_def, return_def, set_current_context_def] >>
+    gvs[step_inst_def, step_mstore_def, pop_stack_def, consume_gas_def] >>
+    simp[memory_expansion_info_def, vfmConstantsTheory.word_size_def,
+         bind_def, ignore_bind_def, get_current_context_def,
+         return_def, set_current_context_def,
          assert_def, fail_def, LET_THM] >>
+    simp[expand_memory_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def,
+         set_current_context_def, LET_THM] >>
+    simp[write_memory_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def,
+         set_current_context_def, LET_THM] >>
     IF_CASES_TAC >> gvs[]
     (* Gas OK *)
     >- (
@@ -972,85 +1350,22 @@ Proof
       simp[inc_pc_or_jump_def, LET_THM, opcode_def,
            bind_def, get_current_context_def, return_def,
            set_current_context_def, is_call_def] >>
-      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-      simp[asm_evm_rel_def] >> strip_tac >>
-      gvs[asm_evm_rel_def, asm_next_def, LET_THM,
-          asm_expand_memory_def, MAX_DEF] >>
-      rpt (IF_CASES_TAC >> gvs[]) >>
-      ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-      simp[asm_pc_to_offset_suc, asm_inst_size_def]
+      `as.as_memory ++
+         REPLICATE
+           (MAX (LENGTH as.as_memory) (32 * ((w2n h + 32) DIV 32)) -
+            LENGTH as.as_memory) (0w:byte) =
+       asm_expand_memory (w2n h + 1) as.as_memory` by (
+        simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+        IF_CASES_TAC >> simp[]) >>
+      pop_assum SUBST_ALL_TAC >>
+      irule asm_evm_rel_next_stack_memory >>
+      simp[asm_inst_size_def]
     ) >>
     (* Gas fail *)
     gas_close_tac
   )
   (* === MCOPY === *)
-  >- (
-    identify_evm_op_tac >> gvs[] >>
-    simp[asm_mcopy_def, LET_THM] >>
-    Cases_on `as.as_stack` >> gvs[] >>
-    Cases_on `t` >> gvs[] >>
-    Cases_on `t'` >> gvs[] >>
-    (* Unfold the EVM step. Partially evaluates but leaves
-       (lambda(xOffset,xSize). do...od) (if cond then p1 else p2)
-       unapplied because the lambda arg is a COND (from max_expansion_range). *)
-    simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         set_current_context_def, step_inst_def, step_copy_to_memory_def,
-         copy_to_memory_def, pop_stack_def,
-         consume_gas_def, memory_expansion_info_def,
-         expand_memory_def, read_memory_def, write_memory_def,
-         max_expansion_range_def,
-         vfmConstantsTheory.word_size_def,
-         vfmConstantsTheory.memory_copy_cost_def,
-         assert_def, fail_def, LET_THM] >>
-    (* Split on max_expansion_range IFs to resolve COND in lambda arg.
-       gvs beta-reduces the lambda. Then re-simp to unfold inner bind chain. *)
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
-         set_current_context_def, assert_def, fail_def, LET_THM] >>
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    (* Gas-fail *)
-    TRY (
-      DISJ1_TAC >>
-      FIRST (map (fn exc =>
-        match_mp_tac (Q.SPEC exc handle_step_single_context |>
-          SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-        simp[])
-      [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]) >> NO_TAC
-    ) >>
-    (* Gas-OK: MCOPY *)
-    DISJ2_TAC >>
-    simp[inc_pc_or_jump_def, LET_THM, opcode_def,
-         bind_def, get_current_context_def, return_def,
-         set_current_context_def, is_call_def] >>
-    qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-    simp[asm_evm_rel_def] >> strip_tac >>
-    gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
-    ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-    simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
-    (* Substitute w2n terms with fresh variables everywhere (goal +
-       assumptions). SUBST_ALL_TAC updates both, unlike qabbrev_tac
-       which only updates the goal. This lets OMEGA close contradictory
-       branches since all arithmetic is on pure numeric variables. *)
-    `?mcpy_d. mcpy_d = w2n h` by (qexists_tac `w2n h` >> simp[]) >>
-    pop_assum (SUBST_ALL_TAC o SYM) >>
-    `?mcpy_s. mcpy_s = w2n h'` by (qexists_tac `w2n h'` >> simp[]) >>
-    pop_assum (SUBST_ALL_TAC o SYM) >>
-    `?mcpy_z. mcpy_z = w2n h''` by (qexists_tac `w2n h''` >> simp[]) >>
-    pop_assum (SUBST_ALL_TAC o SYM) >>
-    (* Fold EVM expanded memory back to asm_expand_memory.
-       PURE_REWRITE_TAC avoids simp normalizing <= to < in MAX_DEF.
-       IF_CASES_TAC splits; matching branches close via
-       take_drop_expand_len, contradictory ones via OMEGA. *)
-    simp[asm_expand_eq_evm_norm] >>
-    PURE_REWRITE_TAC[MAX_DEF] >>
-    IF_CASES_TAC >> gvs[take_drop_expand_len] >>
-    (* The remaining goals have mcpy_s = mcpy_d (from antisymmetric
-       ¬(mcpy_s < mcpy_d) and ¬(mcpy_d < mcpy_s)) but gvs doesn't
-       derive equality from paired negated strict inequalities.
-       DECIDE_TAC proves the equality, then gvs substitutes. *)
-    `mcpy_s = mcpy_d` by DECIDE_TAC >> gvs[take_drop_expand_len]
-  )
+  >- suspend "mcopy"
   (* === MEMTOP === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
@@ -1083,51 +1398,14 @@ Proof
     >- ((* Enforce *)
       IF_CASES_TAC >> gvs[]
       >- ((* slot in domain *)
-        rpt (IF_CASES_TAC >> gvs[]) >>
-        gas_close_tac) >>
+        suspend "sload_enforce_domain") >>
       (* slot not in domain — OutsideDomain abort *)
       gas_close_tac)
     >> (* Collect *)
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    gas_close_tac
+    suspend "sload_collect"
   )
   (* === SSTORE === *)
-  >- (
-    identify_evm_op_tac >> gvs[] >>
-    simp[asm_sstore_def, LET_THM] >>
-    Cases_on `as.as_stack` >> gvs[] >>
-    Cases_on `t` >> gvs[] >>
-    (* Expand everything EXCEPT update_gas_refund *)
-    simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         set_current_context_def,
-         step_inst_def, step_sstore_def, pop_stack_def,
-         step_sstore_gas_consumption_def,
-         get_gas_left_def, get_accounts_def, get_original_def,
-         get_callee_def, get_static_def,
-         access_slot_def, domain_check_def, set_domain_def,
-         zero_warm_def,
-         (* NO update_gas_refund_def here *)
-         consume_gas_def,
-         assert_not_static_def,
-         write_storage_def, update_accounts_def,
-         lookup_storage_def, lookup_account_def,
-         update_storage_def, update_account_def,
-         assert_def, fail_def, LET_THM] >>
-    Cases_on `es.msdomain` >> gvs[] >>
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    (* Expand update_gas_refund — pair args now resolved *)
-    simp[update_gas_refund_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def, set_current_context_def] >>
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    TRY gas_close_tac >>
-    TRY (DISJ1_TAC >>
-      simp[handle_step_def, reraise_def, vfm_abort_def] >>
-      simp[exception_distinct, exception_11]) >>
-    (* Record equalities from write_storage updated_by vs := *)
-    AP_THM_TAC >> AP_TERM_TAC >>
-    simp[account_state_component_equality]
-  )
+  >- suspend "sstore"
   (* === TLOAD === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
@@ -1165,39 +1443,656 @@ Proof
     gas_close_tac
   )
   (* === SHA3 === *)
-  >- (
-    identify_evm_op_tac >> gvs[] >>
-    simp[asm_sha3_def, LET_THM] >>
-    Cases_on `as.as_stack` >> gvs[] >>
-    Cases_on `t` >> gvs[] >>
-    simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         set_current_context_def,
-         step_inst_def, step_keccak256_def, pop_stack_def,
-         consume_gas_def, push_stack_def,
-         memory_expansion_info_def, expand_memory_def,
-         read_memory_def, vfmConstantsTheory.word_size_def,
-         vfmConstantsTheory.keccak256_per_word_cost_def,
-         assert_def, fail_def, LET_THM] >>
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    TRY (
-      DISJ2_TAC >>
+  >- suspend "sha3"
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_enforce_domain]:
+  rpt (IF_CASES_TAC >> gvs[]) >|
+  [suspend "sload_enforce_warm_ok",
+   suspend "sload_enforce_cold_ok",
+   suspend "sload_enforce_oog"]
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_enforce_warm_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[] >>
+  irule asm_evm_rel_next_stack_storage_access >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_enforce_cold_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[] >>
+  irule asm_evm_rel_next_stack_storage_access >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_enforce_oog]:
+  gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_collect]:
+  rpt (IF_CASES_TAC >> gvs[]) >|
+  [suspend "sload_collect_warm_ok",
+   suspend "sload_collect_cold_ok",
+   suspend "sload_collect_oog"]
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_collect_warm_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[] >>
+  irule asm_evm_rel_next_stack_storage_access_domain >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_collect_cold_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[] >>
+  irule asm_evm_rel_next_stack_storage_access_domain >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_memory_dispatch[sload_collect_oog]:
+  gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sha3]:
+  identify_evm_op_tac >> gvs[] >>
+  simp[asm_sha3_def, LET_THM] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  simp[step_def, handle_def, step_inst_def, step_keccak256_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, pop_stack_def, consume_gas_def,
+       push_stack_def, memory_expansion_info_def, expand_memory_def,
+       read_memory_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.keccak256_per_word_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[])
+  >- suspend "sha3_zero"
+  >> suspend "sha3_nonzero"
+QED
+
+Resume asm_evm_step_memory_dispatch[sha3_zero]:
+  simp[step_inst_def, step_keccak256_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, pop_stack_def, consume_gas_def,
+       push_stack_def, memory_expansion_info_def, expand_memory_def,
+       read_memory_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.keccak256_per_word_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  IF_CASES_TAC >> gvs[]
+  >- (DISJ2_TAC >>
       simp[inc_pc_or_jump_def, LET_THM, opcode_def,
            bind_def, get_current_context_def, return_def,
            set_current_context_def, is_call_def] >>
-      qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-      simp[asm_evm_rel_def] >> strip_tac >>
-      gvs[asm_evm_rel_def, asm_next_def, LET_THM,
-          asm_expand_memory_def, MAX_DEF] >>
-      rpt (IF_CASES_TAC >> gvs[]) >>
-      ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-      simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
-      NO_TAC
-    ) >>
-    (* Gas fail *)
-    gas_close_tac
-  )
+      irule asm_evm_rel_next_stack_memory >> simp[asm_inst_size_def])
+  >> DISJ1_TAC >>
+  match_mp_tac (Q.SPEC `OutOfGas` handle_step_single_context |>
+    SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
+  simp[]
 QED
+
+Resume asm_evm_step_memory_dispatch[sha3_nonzero]:
+  simp[step_inst_def, step_keccak256_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       pop_stack_def, fail_def, LET_THM] >>
+  simp[memory_expansion_info_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.keccak256_per_word_cost_def, LET_THM] >>
+  simp[consume_gas_def, set_current_context_def, assert_def, fail_def,
+       bind_def, ignore_bind_def, get_current_context_def, return_def,
+       expand_memory_def, read_memory_def, push_stack_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (ASM_REWRITE_TAC[] >>
+      DISJ2_TAC >>
+      `0 < w2n h'` by (CCONTR_TAC >> gvs[wordsTheory.w2n_eq_0]) >>
+      simp[bind_def, ignore_bind_def, get_current_context_def,
+           return_def, set_current_context_def, LET_THM] >>
+      simp[inc_pc_or_jump_def, LET_THM, opcode_def] >>
+      simp[bind_def, get_current_context_def, return_def,
+           set_current_context_def, is_call_def] >>
+      qmatch_goalsub_abbrev_tac `as.as_memory ++ REPLICATE evm_pad (0w:byte)` >>
+      `as.as_memory ++ REPLICATE evm_pad (0w:byte) =
+       asm_expand_memory (w2n h + w2n h') as.as_memory`
+        by simp[Abbr`evm_pad`, sha3_expand_memory_eq] >>
+      pop_assum SUBST_ALL_TAC >>
+      irule asm_evm_rel_next_stack_memory >>
+      simp[asm_inst_size_def])
+  >> ASM_REWRITE_TAC[] >>
+  simp[] >>
+  DISJ1_TAC >>
+  match_mp_tac (Q.SPEC `OutOfGas` handle_step_single_context |>
+    SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
+  simp[]
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore]:
+  identify_evm_op_tac >> gvs[] >>
+  simp[asm_sstore_def, LET_THM] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  (* Expand everything EXCEPT update_gas_refund *)
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_sstore_def, pop_stack_def, LET_THM] >>
+  simp[step_sstore_gas_consumption_def,
+       get_gas_left_def, get_accounts_def, get_original_def,
+       get_callee_def, get_static_def,
+       access_slot_def, domain_check_def, set_domain_def,
+       zero_warm_def, consume_gas_def,
+       assert_not_static_def, assert_def, fail_def, LET_THM] >>
+  simp[write_storage_def, update_accounts_def,
+       lookup_storage_def, lookup_account_def,
+       update_storage_def, update_account_def,
+       bind_def, ignore_bind_def, get_current_context_def,
+       return_def, set_current_context_def, LET_THM] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def,
+       return_def, set_current_context_def, get_accounts_def,
+       get_original_def, get_callee_def, get_static_def,
+       access_slot_def, domain_check_def, set_domain_def,
+       assert_def, fail_def, LET_THM] >>
+  Cases_on `es.msdomain` >> gvs[]
+  >- suspend "sstore_enforce"
+  >> suspend "sstore_collect"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_stipend_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_stipend_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_domain_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_domain_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm"
+  >> suspend "sstore_enforce_cold"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm]:
+  suspend "sstore_enforce_warm_refund"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_clear"
+  >> suspend "sstore_enforce_warm_refund_other"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_other]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_restore"
+  >> suspend "sstore_enforce_warm_refund_none"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_clear]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_clear_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_clear_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_clear_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_clear_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_enforce_warm_refund_clear_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_clear_rel]:
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  gvs[update_storage_eta, account_state_component_equality] >>
+  irule asm_evm_rel_next_sstore >>
+  simp[asm_inst_size_def, update_storage_eta, account_state_component_equality] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_restore]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_restore_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_restore_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_restore_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_restore_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_enforce_warm_refund_restore_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_restore_rel]:
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  gvs[update_storage_eta, account_state_component_equality] >>
+  irule asm_evm_rel_next_sstore >>
+  simp[asm_inst_size_def, update_storage_eta, account_state_component_equality] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_none]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_none_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_none_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_warm_refund_none_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_none_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_enforce_warm_refund_none_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_warm_refund_none_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold]:
+  suspend "sstore_enforce_cold_refund"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_cold_refund_clear"
+  >> suspend "sstore_enforce_cold_refund_other"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_other]:
+  suspend "sstore_enforce_cold_refund_none"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_clear]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_cold_refund_clear_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_clear_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_cold_refund_clear_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_clear_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_enforce_cold_refund_clear_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_clear_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_none]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_cold_refund_none_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_none_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_enforce_cold_refund_none_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_none_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_enforce_cold_refund_none_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_enforce_cold_refund_none_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_stipend_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_stipend_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_clear"
+  >> suspend "sstore_collect_refund_other"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_other]:
+  suspend "sstore_collect_refund_same"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_same]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_same_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_same_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_same_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_same_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_collect_refund_same_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_same_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_clear]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_clear_actual"
+  >> suspend "sstore_collect_refund_diff_other"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_diff_other]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_restore"
+  >> suspend "sstore_collect_refund_none"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_clear_actual]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_clear_actual_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_clear_actual_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_clear_actual_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_clear_actual_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_collect_refund_clear_actual_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_clear_actual_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_restore]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_restore_gas_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_restore_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_restore_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_restore_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_collect_refund_restore_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_restore_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_none]:
+  sstore_expand_refund_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_none_gas_ok"
+  >> rpt strip_tac >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_none_gas_ok]:
+  IF_CASES_TAC >> gvs[]
+  >- suspend "sstore_collect_refund_none_static_ok"
+  >> gas_close_tac
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_none_static_ok]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  suspend "sstore_collect_refund_none_rel"
+QED
+
+Resume asm_evm_step_memory_dispatch[sstore_collect_refund_none_rel]:
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, update_storage_eta] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM, update_storage_eta,
+      account_state_component_equality] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  TRY (AP_THM_TAC >> AP_TERM_TAC >> simp[account_state_component_equality])
+QED
+
+Resume asm_evm_step_memory_dispatch[mcopy]:
+  identify_evm_op_tac >> gvs[] >>
+  simp[asm_mcopy_def, LET_THM] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  (* Unfold the EVM step. Partially evaluates but leaves
+     (lambda(xOffset,xSize). do...od) (if cond then p1 else p2)
+     unapplied because the lambda arg is a COND (from max_expansion_range). *)
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_copy_to_memory_def] >>
+  simp[copy_to_memory_def, pop_stack_def, consume_gas_def,
+       memory_expansion_info_def, max_expansion_range_def,
+       vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.memory_copy_cost_def, LET_THM] >>
+  simp[expand_memory_def, read_memory_def, write_memory_def,
+       assert_def, fail_def, LET_THM] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  (* Split on max_expansion_range IFs to resolve COND in lambda arg.
+     gvs beta-reduces the lambda. Then re-simp to unfold inner bind chain. *)
+  IF_CASES_TAC >> gvs[]
+  >- suspend "mcopy_dst_before_src" >>
+  IF_CASES_TAC >> gvs[] >|
+  [suspend "mcopy_src_before_dst",
+   suspend "mcopy_same_start"]
+QED
+
+Resume asm_evm_step_memory_dispatch[mcopy_dst_before_src]:
+  simp[bind_def, ignore_bind_def, LET_THM] >>
+  simp[get_current_context_def, return_def] >>
+  simp[set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[return_def, bind_def, get_current_context_def,
+       set_current_context_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac
+    `TAKE (w2n h) evm_expanded ++
+     TAKE (w2n h'') (DROP (w2n h') evm_expanded) ++
+     DROP evm_drop evm_expanded` >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `w2n h + w2n h'' < w2n h' + w2n h''` by DECIDE_TAC >>
+  `MAX (w2n h' + w2n h'') (w2n h + w2n h'') =
+   w2n h' + w2n h''` by simp[MAX_DEF] >>
+  `evm_expanded =
+   asm_expand_memory (MAX (w2n h' + w2n h'') (w2n h + w2n h''))
+     as.as_memory`
+    by simp[Abbr`evm_expanded`, asm_expand_eq_evm_norm] >>
+  `evm_drop = w2n h + w2n h''`
+    by (simp[Abbr`evm_drop`] >> simp[take_drop_expand_len]) >>
+  gvs[] >>
+  irule asm_evm_rel_next_stack_memory >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_memory_dispatch[mcopy_src_before_dst]:
+  simp[bind_def, ignore_bind_def, LET_THM] >>
+  simp[get_current_context_def, return_def] >>
+  simp[set_current_context_def, assert_def, fail_def, LET_THM] >>
+  suspend "mcopy_src_before_dst_unfolded"
+QED
+
+Resume asm_evm_step_memory_dispatch[mcopy_src_before_dst_unfolded]:
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[return_def, bind_def, get_current_context_def,
+       set_current_context_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac
+    `TAKE (w2n h) evm_expanded ++
+     TAKE (w2n h'') (DROP (w2n h') evm_expanded) ++
+     DROP evm_drop evm_expanded` >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `MAX (w2n h' + w2n h'') (w2n h + w2n h'') =
+   w2n h + w2n h''` by simp[MAX_DEF] >>
+  `evm_expanded =
+   asm_expand_memory (MAX (w2n h' + w2n h'') (w2n h + w2n h''))
+     as.as_memory`
+    by simp[Abbr`evm_expanded`, asm_expand_eq_evm_norm] >>
+  `evm_drop = w2n h + w2n h''`
+    by (simp[Abbr`evm_drop`] >> simp[take_drop_expand_len]) >>
+  gvs[] >>
+  irule asm_evm_rel_next_stack_memory >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_memory_dispatch[mcopy_same_start]:
+  simp[bind_def, ignore_bind_def, LET_THM] >>
+  simp[get_current_context_def, return_def] >>
+  simp[set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[return_def, bind_def, get_current_context_def,
+       set_current_context_def, LET_THM] >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  `?mcpy_d. mcpy_d = w2n h` by (qexists_tac `w2n h` >> simp[]) >>
+  pop_assum (SUBST_ALL_TAC o SYM) >>
+  `?mcpy_s. mcpy_s = w2n h'` by (qexists_tac `w2n h'` >> simp[]) >>
+  pop_assum (SUBST_ALL_TAC o SYM) >>
+  `?mcpy_z. mcpy_z = w2n h''` by (qexists_tac `w2n h''` >> simp[]) >>
+  pop_assum (SUBST_ALL_TAC o SYM) >>
+  simp[asm_expand_eq_evm_norm] >>
+  PURE_REWRITE_TAC[MAX_DEF] >>
+  IF_CASES_TAC >> gvs[take_drop_expand_len] >>
+  `mcpy_s = mcpy_d` by DECIDE_TAC >> gvs[take_drop_expand_len]
+QED
+
+Finalise asm_evm_step_memory_dispatch
 
 Theorem asm_evm_step_control_dispatch[local]:
   !prog as es name r.
@@ -1347,12 +2242,19 @@ Proof
   (* === JUMPDEST === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
-    simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def,
-         step_inst_def, static_gas_def, consume_gas_def,
-         set_current_context_def, assert_def] >>
-    fs[] >> IF_CASES_TAC >> simp[] >>
-    gas_close_tac
+    simp[step_def, handle_def] >>
+    simp[bind_def, ignore_bind_def, get_current_context_def, return_def] >>
+    simp[step_inst_def, static_gas_def] >>
+    mp_tac (Q.SPECL [`1`, `es`, `ctxt`, `rb`, `[]`] consume_gas_cases) >>
+    impl_tac >- simp[] >>
+    strip_tac >> simp[]
+    >- (simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+             bind_def, get_current_context_def, return_def,
+             set_current_context_def, is_call_def] >>
+        irule asm_evm_rel_next >> simp[asm_inst_size_def])
+    >> DISJ1_TAC >>
+       mp_tac (Q.SPECL [`OutOfGas`, `es`] handle_step_single_context) >>
+       simp[exception_distinct]
   )
   (* === STOP === *)
   >- (
@@ -1523,6 +2425,22 @@ Proof
   ]
 QED
 
+val extcodecopy_ok_tac : tactic =
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[]);
+
 Theorem asm_evm_step_copy_dispatch[local]:
   !prog as es name r.
     asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
@@ -1546,7 +2464,13 @@ Proof
   simp[asm_step_copy_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >|
-  [
+  [suspend "calldatacopy",
+   suspend "returndatacopy",
+   suspend "codecopy",
+   suspend "extcodecopy"]
+QED
+
+Resume asm_evm_step_copy_dispatch[calldatacopy]:
   (* === CALLDATACOPY === *)
   simp[asm_copy_to_mem_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
@@ -1566,15 +2490,30 @@ Proof
        assert_def, fail_def, LET_THM] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   (* gas-fail: handle_step resolves *)
-  TRY (
-    DISJ1_TAC >>
-    FIRST (map (fn exc =>
-      match_mp_tac (Q.SPEC exc handle_step_single_context |>
-        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-      simp[])
-    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]) >> NO_TAC
-  ) >>
+  TRY common_handle_step_exception_tac >>
   (* Gas-OK: prove asm_evm_rel *)
+  ALL_TAC >| [suspend "calldatacopy_ok_nonzero", suspend "calldatacopy_ok_zero"]
+QED
+
+Resume asm_evm_step_copy_dispatch[calldatacopy_ok_nonzero]:
+  DISJ2_TAC >>
+  qmatch_goalsub_abbrev_tac
+    `TAKE (w2n h) evm_dst ++
+     take_pad_0 (w2n h'') (DROP (w2n h') ctxt.msgParams.data) ++
+     DROP (w2n h + w2n h'') evm_dst` >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `evm_dst = asm_expand_memory (w2n h + w2n h'') as.as_memory`
+    by simp[Abbr`evm_dst`, asm_expand_eq_evm_norm] >>
+  sg `ctxt.msgParams.data = as.as_call_ctx.cc_calldata`
+  >- (drule_all asm_evm_rel_calldata >> simp[]) >>
+  gvs[take_drop_expand_eq_pad] >>
+  irule asm_evm_rel_next_stack_memory >>
+  simp[asm_inst_size_def]
+QED
+
+Resume asm_evm_step_copy_dispatch[calldatacopy_ok_zero]:
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
@@ -1584,12 +2523,13 @@ Proof
   gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
   ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
   simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
-  (* Memory and source bytes equivalence *)
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0, vfmTypesTheory.LENGTH_take_pad_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
   rpt (IF_CASES_TAC >> gvs[])
-  ,
+QED
+
+Resume asm_evm_step_copy_dispatch[returndatacopy]:
   (* === RETURNDATACOPY === *)
   simp[asm_returndatacopy_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
@@ -1636,32 +2576,26 @@ Proof
        get_return_data_check_def, get_return_data_def,
        assert_def, fail_def, LET_THM] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY (
-    DISJ1_TAC >>
-    FIRST (map (fn exc =>
-      match_mp_tac (Q.SPEC exc handle_step_single_context |>
-        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-      simp[])
-    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`,
-     `OutOfBoundsRead`]) >> NO_TAC
-  ) >>
+  TRY copy_handle_step_exception_tac >>
   (* Gas-OK, in-bounds: bytes match exactly *)
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
-  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-  simp[asm_evm_rel_def] >> strip_tac >>
-  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
-       vfmTypesTheory.LENGTH_take_pad_0] >>
-  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  gvs[asm_expand_eq_evm_norm, vfmTypesTheory.LENGTH_take_pad_0] >>
   simp[vfmTypesTheory.take_pad_0_def, PAD_RIGHT,
        GSYM rich_listTheory.REPLICATE_GENLIST,
        LENGTH_TAKE_EQ, LENGTH_DROP] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
-  ,
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+QED
+
+Resume asm_evm_step_copy_dispatch[codecopy]:
   (* === CODECOPY === same pattern as CALLDATACOPY *)
   simp[asm_copy_to_mem_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
@@ -1680,28 +2614,25 @@ Proof
        get_current_code_def,
        assert_def, fail_def, LET_THM] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  TRY (
-    DISJ1_TAC >>
-    FIRST (map (fn exc =>
-      match_mp_tac (Q.SPEC exc handle_step_single_context |>
-        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-      simp[])
-    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]) >> NO_TAC
-  ) >>
+  TRY common_handle_step_exception_tac >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
-  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-  simp[asm_evm_rel_def] >> strip_tac >>
-  gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
-  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
-  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
-       vfmTypesTheory.take_pad_0_0, vfmTypesTheory.LENGTH_take_pad_0] >>
+  sg `as.as_code = assemble prog`
+  >- (drule asm_evm_rel_code >> simp[]) >>
+  gvs[take_drop_expand_eq_pad, asm_expand_eq_evm_norm,
+      vfmTypesTheory.take_pad_0_0, vfmTypesTheory.LENGTH_take_pad_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
-  ,
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy]:
   (* === EXTCODECOPY === 4 stack args + access_address *)
   simp[asm_extcodecopy_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
@@ -1728,20 +2659,16 @@ Proof
   TRY (Cases_on `es.msdomain` >> simp[]) >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   (* gas-fail + abort errors *)
-  TRY (
-    DISJ1_TAC >>
-    FIRST (map (fn exc =>
-      match_mp_tac (Q.SPEC exc handle_step_single_context |>
-        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-      simp[])
-    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]) >> NO_TAC
-  ) >>
-  TRY (
-    DISJ1_TAC >>
-    simp[handle_step_def, reraise_def, vfm_abort_def] >>
-    simp[exception_distinct, exception_11] >> NO_TAC
-  ) >>
+  TRY common_handle_step_exception_tac >>
+  TRY direct_abort_exception_tac >>
   (* Gas-OK *)
+  ALL_TAC >| [suspend "extcodecopy_ok1", suspend "extcodecopy_ok2",
+      suspend "extcodecopy_ok3", suspend "extcodecopy_ok4",
+      suspend "extcodecopy_ok5", suspend "extcodecopy_ok6",
+      suspend "extcodecopy_ok7", suspend "extcodecopy_ok8"]
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok1]:
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
@@ -1756,8 +2683,196 @@ Proof
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
   rpt (IF_CASES_TAC >> gvs[])
-  ]
 QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok2]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok3]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok4]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok5]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok6]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok7]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Resume asm_evm_step_copy_dispatch[extcodecopy_ok8]:
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >>
+  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
+       vfmTypesTheory.LENGTH_take_pad_0] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
+       vfmTypesTheory.take_pad_0_0] >>
+  simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
+  rpt (IF_CASES_TAC >> gvs[])
+QED
+
+Finalise asm_evm_step_copy_dispatch
+
+val context_finish_tac : tactic =
+  FIRST [
+    (fn (asl, g) =>
+      if can (find_term (can (match_term ``asm_push_val v s = r``))) g
+      then ALL_TAC (asl, g)
+      else raise (mk_HOL_ERR "" "" "not push_val")) >>
+    gvs[] >>
+    simp[asm_push_val_def, asm_next_def] >>
+    simp[step_def, handle_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def, set_current_context_def,
+         step_inst_def, step_msgParams_def, step_context_def,
+         step_txParams_def, get_tx_params_def,
+         step_self_balance_def, get_accounts_def, get_callee_def,
+         push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+    fs[] >> IF_CASES_TAC >> simp[] >>
+    gas_close_tac,
+    (fn (asl, g) =>
+      if can (find_term (can (match_term ``asm_state_unop f s = r``))) g
+      then ALL_TAC (asl, g)
+      else raise (mk_HOL_ERR "" "" "not state_unop")) >>
+    gvs[] >>
+    simp[asm_state_unop_def, asm_next_def] >>
+    Cases_on `as.as_stack` >> gvs[] >>
+    simp[step_def, handle_def, bind_def, ignore_bind_def,
+         get_current_context_def, return_def, set_current_context_def,
+         step_inst_def, step_call_data_load_def,
+         step_block_hash_def, step_blob_hash_def,
+         step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+         pop_stack_def, push_stack_def, consume_gas_def,
+         get_accounts_def, get_call_data_def, get_tx_params_def,
+         access_address_def, domain_check_def, set_domain_def,
+         get_callee_def, fail_def,
+         assert_def, LET_THM] >>
+    TRY (Cases_on `es.msdomain` >> simp[]) >>
+    fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+    gas_close_tac
+  ];
+
+val context_push_finish_tac : tactic =
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac;
+
+val context_state_finish_tac : tactic =
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac;
 
 Theorem asm_evm_step_context_dispatch[local]:
   !prog as es name r.
@@ -1780,50 +2895,334 @@ Proof
   category_setup_tac >>
   qpat_x_assum `asm_step_context _ _ = SOME _` mp_tac >>
   simp[asm_step_context_def] >>
-  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
-  identify_evm_op_tac >> gvs[] >>
-  FIRST [
-    (* push_val ops: guard on asm_push_val in goal *)
-    (fn (asl, g) =>
-      if can (find_term (can (match_term ``asm_push_val v s``))) g
-      then ALL_TAC (asl, g)
-      else raise (mk_HOL_ERR "" "" "not push_val")) >>
-    simp[asm_push_val_def, asm_next_def] >>
-    simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def, set_current_context_def,
-         step_inst_def, step_msgParams_def, step_context_def,
-         step_txParams_def, get_tx_params_def,
-         step_self_balance_def, get_accounts_def, get_callee_def,
-         push_stack_def, consume_gas_def, assert_def, LET_THM] >>
-    fs[] >> IF_CASES_TAC >> simp[] >>
-    gas_close_tac,
-    (* state_unop ops: guard on asm_state_unop in goal *)
-    (fn (asl, g) =>
-      if can (find_term (can (match_term ``asm_state_unop f s``))) g
-      then ALL_TAC (asl, g)
-      else raise (mk_HOL_ERR "" "" "not state_unop")) >>
-    simp[asm_state_unop_def, asm_next_def] >>
-    Cases_on `as.as_stack` >> gvs[] >>
-    simp[step_def, handle_def, bind_def, ignore_bind_def,
-         get_current_context_def, return_def, set_current_context_def,
-         step_inst_def, step_call_data_load_def,
-         step_block_hash_def, step_blob_hash_def,
-         step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
-         pop_stack_def, push_stack_def, consume_gas_def,
-         get_accounts_def, get_call_data_def, get_tx_params_def,
-         access_address_def, domain_check_def, set_domain_def,
-         get_callee_def, fail_def,
-         assert_def, LET_THM] >>
-    (* For access_address ops: split on domain type first *)
-    TRY (Cases_on `es.msdomain` >> simp[]) >>
-    (* Resolve all if-then-else, preserving disjunction for gas_close_tac *)
-    fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
-    (* gas_close_tac handles: gas-fail, abort errors, gas-OK.
-       For inconsistent IF splits (blobhash/blockhash conditions),
-       gas-OK branch detects contradiction after asm_evm_rel unfold. *)
-    gas_close_tac
-  ]
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >>
+  qpat_x_assum `name = _` SUBST_ALL_TAC >>
+  identify_evm_op_tac >>
+  ALL_TAC >|
+  [suspend "context_01", suspend "context_02", suspend "context_03",
+   suspend "context_04", suspend "context_05", suspend "context_06",
+   suspend "context_07", suspend "context_08", suspend "context_09",
+   suspend "context_10", suspend "context_11", suspend "context_12",
+   suspend "context_13", suspend "context_14", suspend "context_15",
+   suspend "context_16", suspend "context_17", suspend "context_18",
+   suspend "context_19", suspend "context_20", suspend "context_21",
+   suspend "context_22", suspend "context_23"]
 QED
+
+Resume asm_evm_step_context_dispatch[context_01]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_02]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_03]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_04]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_05]:
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_06]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_07]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_08]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_09]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_10]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_11]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_12]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_13]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_14]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_15]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_16]:
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_17]:
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_18]:
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_19]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_20]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_21]:
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_22]:
+  gvs[] >>
+  simp[asm_state_unop_def, asm_next_def] >>
+  Cases_on `as.as_stack` >> gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_call_data_load_def,
+       step_block_hash_def, step_blob_hash_def,
+       step_balance_def, step_ext_code_size_def, step_ext_code_hash_def,
+       pop_stack_def, push_stack_def, consume_gas_def,
+       get_accounts_def, get_call_data_def, get_tx_params_def,
+       access_address_def, domain_check_def, set_domain_def,
+       get_callee_def, fail_def,
+       assert_def, LET_THM] >>
+  TRY (Cases_on `es.msdomain` >> simp[]) >>
+  fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
+  gas_close_tac
+QED
+Resume asm_evm_step_context_dispatch[context_23]:
+  gvs[] >>
+  simp[asm_push_val_def, asm_next_def] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def, set_current_context_def,
+       step_inst_def, step_msgParams_def, step_context_def,
+       step_txParams_def, get_tx_params_def,
+       step_self_balance_def, get_accounts_def, get_callee_def,
+       push_stack_def, consume_gas_def, assert_def, LET_THM] >>
+  fs[] >> IF_CASES_TAC >> simp[] >>
+  gas_close_tac
+QED
+
+Finalise asm_evm_step_context_dispatch
 
 Theorem asm_evm_step_dup_dispatch[local]:
   !prog as es name n r.
@@ -1856,7 +3255,7 @@ Proof
        step_inst_def, step_dup_def,
        consume_gas_def, push_stack_def, assert_def, LET_THM] >>
   fs[] >> IF_CASES_TAC >> simp[] >>
-  gas_close_tac
+  FIRST [simple_stack_ok_tac, simple_stack_error_tac]
 QED
 
 (* Helper: LUPDATE as TAKE/DROP *)
@@ -1908,8 +3307,39 @@ Proof
        step_inst_def, step_swap_def,
        consume_gas_def, assert_def, LET_THM] >>
   fs[] >> IF_CASES_TAC >> simp[] >>
-  gas_close_tac
+  FIRST [simple_stack_ok_tac, simple_stack_error_tac]
 QED
+
+val log_finish_tac : tactic =
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_log_def] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       push_logs_def, get_callee_def, get_static_def,
+       assert_not_static_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.log_topic_cost_def,
+       vfmConstantsTheory.log_data_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[asm_expand_eq_evm_norm, asm_expand_memory_def, LET_THM,
+      MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE, wordsTheory.w2n_eq_0] >>
+  rpt (IF_CASES_TAC >> gvs[EL_TAKE, HD_TAKE, DROP_TAKE]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def];
 
 Theorem asm_evm_step_log_dispatch[local]:
   !prog as es name n r.
@@ -1937,42 +3367,183 @@ Proof
   identify_evm_op_tac >> gvs[] >>
   simp[asm_log_def, LET_THM] >>
   IF_CASES_TAC >> gvs[] >>
-  simp[step_def, handle_def, bind_def, ignore_bind_def,
-       get_current_context_def, return_def,
-       set_current_context_def,
-       step_inst_def, step_log_def, pop_stack_def,
-       consume_gas_def, push_stack_def,
-       memory_expansion_info_def, expand_memory_def,
-       read_memory_def, push_logs_def,
-       get_callee_def, get_static_def,
-       assert_not_static_def,
-       vfmConstantsTheory.word_size_def,
+  ALL_TAC >| [suspend "log_0", suspend "log_1", suspend "log_2",
+              suspend "log_3", suspend "log_4"]
+QED
+
+Resume asm_evm_step_log_dispatch[log_0]:
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_log_def] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       push_logs_def, get_callee_def, get_static_def,
+       assert_not_static_def, vfmConstantsTheory.word_size_def,
        vfmConstantsTheory.log_topic_cost_def,
        vfmConstantsTheory.log_data_cost_def,
        assert_def, fail_def, LET_THM] >>
+  suspend "log_0_unfolded"
+QED
+
+Resume asm_evm_step_log_dispatch[log_0_unfolded]:
   rpt (IF_CASES_TAC >> gvs[]) >>
-  (* gas-fail / static-fail: handle_step resolves *)
-  TRY (
-    DISJ1_TAC >>
-    FIRST (map (fn exc =>
-      match_mp_tac (Q.SPEC exc handle_step_single_context |>
-        SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
-      simp[])
-    [`OutOfGas`, `WriteInStaticContext`, `StackUnderflow`]) >> NO_TAC
-  ) >>
-  (* gas-OK: inc_pc_or_jump resolves, then asm_evm_rel *)
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
-  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-  simp[asm_evm_rel_def] >> strip_tac >>
-  gvs[asm_evm_rel_def, asm_next_def, LET_THM,
-      asm_expand_memory_def, MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[asm_expand_eq_evm_norm, asm_expand_memory_def, LET_THM,
+      MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE, wordsTheory.w2n_eq_0] >>
   rpt (IF_CASES_TAC >> gvs[EL_TAKE, HD_TAKE, DROP_TAKE]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
   ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
   simp[asm_pc_to_offset_suc, asm_inst_size_def]
 QED
+Resume asm_evm_step_log_dispatch[log_1]:
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_log_def] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       push_logs_def, get_callee_def, get_static_def,
+       assert_not_static_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.log_topic_cost_def,
+       vfmConstantsTheory.log_data_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  suspend "log_1_unfolded"
+QED
+Resume asm_evm_step_log_dispatch[log_1_unfolded]:
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[asm_expand_eq_evm_norm, asm_expand_memory_def, LET_THM,
+      MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE, wordsTheory.w2n_eq_0] >>
+  rpt (IF_CASES_TAC >> gvs[EL_TAKE, HD_TAKE, DROP_TAKE]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+QED
+Resume asm_evm_step_log_dispatch[log_2]:
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_log_def] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       push_logs_def, get_callee_def, get_static_def,
+       assert_not_static_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.log_topic_cost_def,
+       vfmConstantsTheory.log_data_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  suspend "log_2_unfolded"
+QED
+Resume asm_evm_step_log_dispatch[log_2_unfolded]:
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[asm_expand_eq_evm_norm, asm_expand_memory_def, LET_THM,
+      MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE, wordsTheory.w2n_eq_0] >>
+  rpt (IF_CASES_TAC >> gvs[EL_TAKE, HD_TAKE, DROP_TAKE]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+QED
+Resume asm_evm_step_log_dispatch[log_3]:
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_log_def] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       push_logs_def, get_callee_def, get_static_def,
+       assert_not_static_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.log_topic_cost_def,
+       vfmConstantsTheory.log_data_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  suspend "log_3_unfolded"
+QED
+Resume asm_evm_step_log_dispatch[log_3_unfolded]:
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[asm_expand_eq_evm_norm, asm_expand_memory_def, LET_THM,
+      MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE, wordsTheory.w2n_eq_0] >>
+  rpt (IF_CASES_TAC >> gvs[EL_TAKE, HD_TAKE, DROP_TAKE]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+QED
+Resume asm_evm_step_log_dispatch[log_4]:
+  simp[step_def, handle_def] >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, step_inst_def, step_log_def] >>
+  simp[pop_stack_def, consume_gas_def, push_stack_def,
+       memory_expansion_info_def, expand_memory_def, read_memory_def,
+       push_logs_def, get_callee_def, get_static_def,
+       assert_not_static_def, vfmConstantsTheory.word_size_def,
+       vfmConstantsTheory.log_topic_cost_def,
+       vfmConstantsTheory.log_data_cost_def,
+       assert_def, fail_def, LET_THM] >>
+  suspend "log_4_unfolded"
+QED
+Resume asm_evm_step_log_dispatch[log_4_unfolded]:
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  simp[bind_def, ignore_bind_def, get_current_context_def, return_def,
+       set_current_context_def, assert_def, fail_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY common_handle_step_exception_tac >>
+  DISJ2_TAC >>
+  simp[inc_pc_or_jump_def, LET_THM, opcode_def,
+       bind_def, get_current_context_def, return_def,
+       set_current_context_def, is_call_def] >>
+  `ctxt.msgParams.callee = as.as_call_ctx.cc_address` by
+    (drule_all asm_evm_rel_callee >> simp[]) >>
+  gvs[asm_expand_eq_evm_norm, asm_expand_memory_def, LET_THM,
+      MAX_DEF, EL_TAKE, HD_TAKE, DROP_TAKE, wordsTheory.w2n_eq_0] >>
+  rpt (IF_CASES_TAC >> gvs[EL_TAKE, HD_TAKE, DROP_TAKE]) >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+QED
+
+Finalise asm_evm_step_log_dispatch
 
 (* ===== Push-style helpers (AsmPush, AsmPushLabel, AsmPushOfst) ===== *)
 
@@ -2050,9 +3621,14 @@ Proof
        (REVERSE (pad_bytes symbol_size (encode_num_bytes off)))`,
     `3`] evm_push_step) >>
   impl_tac
-  >- simp[encode_inst_def, opcode_def, step_inst_def, step_push_def,
-          wf_opname_def, is_call_def, static_gas_def, symbol_size_def,
-          pad_bytes_length, LET_THM, wordsTheory.word_add_n2w]
+  >- (simp[] >>
+      conj_tac
+      >- simp[encode_inst_def, opcode_def, symbol_size_def,
+              pad_bytes_length, wordsTheory.word_add_n2w] >>
+      conj_tac >- simp[wf_opname_def, symbol_size_def, pad_bytes_length] >>
+      conj_tac >- simp[is_call_def] >>
+      simp[step_inst_def, step_push_def, static_gas_def, symbol_size_def,
+           LET_THM])
   >> simp[pad_encode_bytes32]
 QED
 
@@ -2088,9 +3664,16 @@ Proof
        (REVERSE (pad_bytes symbol_size (encode_num_bytes (off + delta))))`,
     `3`] evm_push_step) >>
   impl_tac
-  >- simp[encode_inst_def, opcode_def, step_inst_def, step_push_def,
-          wf_opname_def, is_call_def, static_gas_def, symbol_size_def,
-          pad_bytes_length, LET_THM, wordsTheory.word_add_n2w]
+  >- (simp[] >>
+      conj_tac
+      >- simp[encode_inst_def, opcode_def, symbol_size_def,
+              pad_bytes_length, wordsTheory.word_add_n2w] >>
+      conj_tac
+      >- (ONCE_REWRITE_TAC[arithmeticTheory.ADD_COMM] >>
+          simp[wf_opname_def, symbol_size_def, pad_bytes_length]) >>
+      conj_tac >- simp[is_call_def] >>
+      simp[step_inst_def, step_push_def, static_gas_def, symbol_size_def,
+           LET_THM])
   >> simp[pad_encode_bytes32]
 QED
 
