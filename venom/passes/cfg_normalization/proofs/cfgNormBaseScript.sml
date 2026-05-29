@@ -57,11 +57,12 @@ Proof
   conj_tac >- EVAL_TAC >>
   conj_tac >- (
     rpt strip_tac >> gvs[] >>
-    rw[bb_well_formed_def, is_terminator_def, listTheory.LAST_DEF] >>
-    TRY (Cases_on `i` >> gvs[is_terminator_def] >>
-         TRY (Cases_on `n` >> gvs[is_terminator_def]) >> NO_TAC) >>
-    TRY (Cases_on `j` >> gvs[is_terminator_def] >>
-         TRY (Cases_on `n` >> gvs[is_terminator_def]) >> NO_TAC)
+    rw[bb_well_formed_def, pseudos_prefix_def, is_terminator_def, is_pseudo_def,
+       listTheory.LAST_DEF] >>
+    TRY (Cases_on `i` >> gvs[is_terminator_def, is_pseudo_def] >>
+         TRY (Cases_on `n` >> gvs[is_terminator_def, is_pseudo_def])) >>
+    TRY (Cases_on `j` >> gvs[is_terminator_def, is_pseudo_def] >>
+         TRY (Cases_on `n` >> gvs[is_terminator_def, is_pseudo_def]))
   ) >>
   conj_tac >- (
     rw[fn_succs_closed_def, fn_labels_def, cx_func_def] >>
@@ -212,11 +213,12 @@ Proof
   conj_tac >- EVAL_TAC >>
   conj_tac >- (
     rpt strip_tac >> gvs[] >>
-    rw[bb_well_formed_def, is_terminator_def, listTheory.LAST_DEF] >>
-    TRY (Cases_on `i` >> gvs[is_terminator_def] >>
-         TRY (Cases_on `n` >> gvs[is_terminator_def]) >> NO_TAC) >>
-    TRY (Cases_on `j` >> gvs[is_terminator_def] >>
-         TRY (Cases_on `n` >> gvs[is_terminator_def]) >> NO_TAC)
+    rw[bb_well_formed_def, pseudos_prefix_def, is_terminator_def, is_pseudo_def,
+       listTheory.LAST_DEF] >>
+    TRY (Cases_on `i` >> gvs[is_terminator_def, is_pseudo_def] >>
+         TRY (Cases_on `n` >> gvs[is_terminator_def, is_pseudo_def])) >>
+    TRY (Cases_on `j` >> gvs[is_terminator_def, is_pseudo_def] >>
+         TRY (Cases_on `n` >> gvs[is_terminator_def, is_pseudo_def]))
   ) >>
   conj_tac >- (
     rw[fn_succs_closed_def, fn_labels_def, cx2_func_def] >>

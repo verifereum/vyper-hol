@@ -105,6 +105,26 @@ Proof
   simp[mk_nop_inst_def]
 QED
 
+Theorem overflow_elim_inst_pseudo[local]:
+  !dfg ra lbl idx inst.
+    is_pseudo inst.inst_opcode ==>
+    is_pseudo (overflow_elim_inst dfg ra lbl idx inst).inst_opcode
+Proof
+  rpt strip_tac >> simp[overflow_elim_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_pseudo_def]
+QED
+
+Theorem overflow_elim_inst_not_pseudo[local]:
+  !dfg ra lbl idx inst.
+    ~is_pseudo inst.inst_opcode ==>
+    ~is_pseudo (overflow_elim_inst dfg ra lbl idx inst).inst_opcode
+Proof
+  rpt gen_tac >> strip_tac >>
+  strip_assume_tac (Q.SPECL [`dfg`, `ra`, `lbl`, `idx`, `inst`]
+    overflow_elim_inst_cases) >>
+  simp[mk_nop_inst_def, is_pseudo_def]
+QED
+
 Theorem overflow_elim_inst_outputs[local]:
   !dfg ra lbl idx inst.
     (overflow_elim_inst dfg ra lbl idx inst).inst_outputs = inst.inst_outputs \/
@@ -165,5 +185,6 @@ Proof
      `fn`] mapi_transform_preserves_wf_bb) >>
   simp[overflow_elim_inst_id, overflow_elim_inst_terminator,
        overflow_elim_inst_not_terminator, overflow_elim_inst_phi,
-       overflow_elim_inst_not_phi]
+       overflow_elim_inst_not_phi, overflow_elim_inst_pseudo,
+       overflow_elim_inst_not_pseudo]
 QED

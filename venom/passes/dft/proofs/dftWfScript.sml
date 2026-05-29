@@ -784,6 +784,15 @@ QED
 
 Finalise filter_el_mono
 
+(* EL of FILTER at valid index satisfies the filter predicate *)
+Theorem el_filter_sat:
+  !P (l:'a list) i. i < LENGTH (FILTER P l) ==> P (EL i (FILTER P l))
+Proof
+  gen_tac >> Induct >- simp[] >>
+  rpt strip_tac >> Cases_on `P h` >> gvs[] >>
+  Cases_on `i` >> gvs[]
+QED
+
 (* If p is in the prefix and h follows it in FILTER P non_phis,
    then p appears before h in non_phis (by filter_el_mono). *)
 Triviality filter_last_prefix_before:

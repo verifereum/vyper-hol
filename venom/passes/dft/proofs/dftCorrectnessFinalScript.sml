@@ -528,12 +528,53 @@ in SIMP_RULE (srw_ss()) [] inst |> GENL [sv, fv, fnv, cv] end;
 (* DFT preserves run_blocks results up to lift_result equivalence *)
 Theorem dft_fn_run_blocks_lift:
   !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
+    wf_ssa fn /\ wf_function fn ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dft_fn fn) s)
 Proof
-  ACCEPT_TAC dftCorrectnessTheory.dft_fn_run_blocks_lift
+  MAP_EVERY qid_spec_tac [`s`, `fn`] >>
+  Induct_on `fuel`
+  >- (rpt strip_tac >> simp[run_blocks_def, lift_result_def])
+  >> rpt strip_tac >>
+  ONCE_REWRITE_TAC [run_blocks_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- (* NONE: both NONE *)
+    (`lookup_block s.vs_current_bb (dft_fn fn).fn_blocks = NONE` by
+       metis_tac[dft_fn_lookup_block_none] >>
+     simp[lift_result_def])
+  >> (* SOME bb *)
+  simp[] >> rename1 `SOME bb` >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `?bb'. lookup_block s.vs_current_bb (dft_fn fn).fn_blocks = SOME bb'` by
+    metis_tac[dft_fn_lookup_block] >>
+  `MEM bb' (dft_fn fn).fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb'.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `bb.bb_label = bb'.bb_label` by simp[] >>
+  `block_perm_of fn bb'` by metis_tac[dft_fn_lookup_perm_of] >>
+  `bb_well_formed bb` by
+    (qpat_assum `wf_function fn`
+       (strip_assume_tac o REWRITE_RULE[wf_function_def]) >>
+     res_tac) >>
+  `bb_well_formed bb'` by metis_tac[dft_fn_blocks_well_formed] >>
+  `pseudos_prefix bb` by metis_tac[bb_well_formed_imp_pseudos_prefix] >>
+  `pseudos_prefix bb'` by metis_tac[bb_well_formed_imp_pseudos_prefix] >>
+  `topo_sorted (canonical_dep bb.bb_instructions)
+    (MAP (choose_original (block_body bb)) (block_body bb'))` by
+    metis_tac[dft_fn_output_topo_sorted] >>
+  drule_all block_perm_of_exec_block_lift_canonical >> simp[] >>
+  strip_tac >>
+  Cases_on `exec_block fuel ctx bb (s with vs_inst_idx := 0)` >>
+  Cases_on `exec_block fuel ctx bb' (s with vs_inst_idx := 0)` >>
+  (* Use the universally-quantified disjunction: instantiate s'' = s *)
+  first_x_assum (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  simp[] >>
+  rpt strip_tac >>
+  gvs[lift_result_def, exec_result_distinct] >>
+  imp_res_tac state_equiv_empty_eq >> gvs[] >>
+  IF_CASES_TAC >> gvs[lift_result_def, execution_equiv_refl, revert_equiv_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* ===== Function-level: run_function lift_result ===== *)
@@ -558,7 +599,7 @@ QED
 (* DFT preserves run_function results up to lift_result equivalence *)
 Theorem dft_fn_run_function_lift:
   !fuel ctx fn s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
+    wf_ssa fn /\ wf_function fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_function fuel ctx fn s)
@@ -607,7 +648,7 @@ QED
 (* The DFT pass is correct: it preserves the observable behavior of run_function *)
 Theorem dft_pass_correct:
   !fn ctx s.
-    wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
+    wf_ssa fn /\ wf_function fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv
       (\fuel. run_function fuel ctx fn s)

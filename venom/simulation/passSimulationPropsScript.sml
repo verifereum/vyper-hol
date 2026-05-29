@@ -1,5 +1,5 @@
 (*
- * Pass Simulation Framework — Correctness (Statements Only)
+ * Pass Simulation Framework - Correctness (Statements Only)
  *
  * Re-exports from proofs/passSimulationProofsScript.sml via ACCEPT_TAC.
  *)
@@ -790,6 +790,26 @@ Proof
   first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[]
 QED
 
+Triviality mapi_bb_pseudos_prefix[local]:
+  !(f:num -> instruction -> instruction) l.
+    (!i j. i < j /\ j < LENGTH l /\ is_pseudo (EL j l).inst_opcode ==>
+           is_pseudo (EL i l).inst_opcode) /\
+    (!i. i < LENGTH l /\ is_pseudo (EL i l).inst_opcode ==>
+         is_pseudo (f i (EL i l)).inst_opcode) /\
+    (!i. i < LENGTH l /\ ~is_pseudo (EL i l).inst_opcode ==>
+         ~is_pseudo (f i (EL i l)).inst_opcode)
+    ==>
+    pseudos_prefix (bb with bb_instructions := MAPi f l)
+Proof
+  simp[pseudos_prefix_def, LENGTH_MAPi] >> rpt strip_tac >>
+  gvs[EL_MAPi] >>
+  `is_pseudo (EL j l).inst_opcode`
+    by (CCONTR_TAC >> first_x_assum (qspecl_then [`j`] mp_tac) >> simp[]) >>
+  `is_pseudo (EL i l).inst_opcode`
+    by (first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`i`] mp_tac) >> simp[]
+QED
+
 (* bb_well_formed preservation for MAPi instruction transforms *)
 Theorem mapi_transform_bb_well_formed:
   !f bb.
@@ -805,16 +825,27 @@ Theorem mapi_transform_bb_well_formed:
          (f i (EL i bb.bb_instructions)).inst_opcode = PHI) /\
     (!i. i < LENGTH bb.bb_instructions /\
          (EL i bb.bb_instructions).inst_opcode <> PHI ==>
-         (f i (EL i bb.bb_instructions)).inst_opcode <> PHI)
+         (f i (EL i bb.bb_instructions)).inst_opcode <> PHI) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         is_pseudo (EL i bb.bb_instructions).inst_opcode ==>
+         is_pseudo (f i (EL i bb.bb_instructions)).inst_opcode) /\
+    (!i. i < LENGTH bb.bb_instructions /\
+         ~is_pseudo (EL i bb.bb_instructions).inst_opcode ==>
+         ~is_pseudo (f i (EL i bb.bb_instructions)).inst_opcode)
     ==>
     bb_well_formed (bb with bb_instructions := MAPi f bb.bb_instructions)
 Proof
-  rpt strip_tac >> fs[bb_well_formed_def, LENGTH_MAPi] >>
+  rpt strip_tac >>
+  `!i' j'. i' < j' /\ j' < LENGTH bb.bb_instructions /\ is_pseudo (EL j' bb.bb_instructions).inst_opcode
+           ==> is_pseudo (EL i' bb.bb_instructions).inst_opcode`
+    by metis_tac[bb_well_formed_imp_pseudos_prefix, pseudos_prefix_def] >>
+  fs[bb_well_formed_def, LENGTH_MAPi] >>
   rpt conj_tac
   >- (Cases_on `bb.bb_instructions` >> fs[MAPi_def])
   >- (irule mapi_bb_last_term >> metis_tac[])
   >- (match_mp_tac (SPEC_ALL mapi_bb_only_last_term) >> metis_tac[])
   >- (match_mp_tac (SPEC_ALL mapi_bb_phi_prefix) >> metis_tac[])
+  >- (match_mp_tac (SPEC_ALL mapi_bb_pseudos_prefix) >> metis_tac[])
 QED
 
 (* bb_succs preserved when terminators are unchanged and
@@ -910,7 +941,11 @@ Theorem mapi_transform_preserves_wf_bb:
     (!bb i inst. ~is_terminator inst.inst_opcode ==>
                  ~is_terminator (g bb i inst).inst_opcode) /\
     (!bb i inst. inst.inst_opcode = PHI ==> (g bb i inst).inst_opcode = PHI) /\
-    (!bb i inst. inst.inst_opcode <> PHI ==> (g bb i inst).inst_opcode <> PHI)
+    (!bb i inst. inst.inst_opcode <> PHI ==> (g bb i inst).inst_opcode <> PHI) /\
+    (!bb i inst. is_pseudo inst.inst_opcode ==>
+                 is_pseudo (g bb i inst).inst_opcode) /\
+    (!bb i inst. ~is_pseudo inst.inst_opcode ==>
+                 ~is_pseudo (g bb i inst).inst_opcode)
     ==>
     wf_function fn ==>
     wf_function (function_map_transform
@@ -918,13 +953,16 @@ Theorem mapi_transform_preserves_wf_bb:
 Proof
   rpt strip_tac >>
   irule fmt_preserves_wf_function >> simp[] >>
-  metis_tac[mapi_transform_bb_succs, mapi_transform_bb_well_formed,
-            mapi_transform_fn_inst_ids_bb, wf_function_def]
+  rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
+      metis_tac[wf_function_def])
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[])
+  >- (irule mapi_transform_fn_inst_ids_bb >> metis_tac[wf_function_def])
 QED
 
 (* Combined: MAPi transform preserves wf_function.
    Conditions: inst_id preserved, terminators unchanged (identity),
-   non-terminators stay non-terminators, PHI/non-PHI preserved. *)
+   non-terminators stay non-terminators, PHI/non-PHI and pseudo/non-pseudo preserved. *)
 Theorem mapi_transform_preserves_wf:
   !f fn.
     (!i inst. (f i inst).inst_id = inst.inst_id) /\
@@ -932,7 +970,11 @@ Theorem mapi_transform_preserves_wf:
     (!i inst. ~is_terminator inst.inst_opcode ==>
               ~is_terminator (f i inst).inst_opcode) /\
     (!i inst. inst.inst_opcode = PHI ==> (f i inst).inst_opcode = PHI) /\
-    (!i inst. inst.inst_opcode <> PHI ==> (f i inst).inst_opcode <> PHI)
+    (!i inst. inst.inst_opcode <> PHI ==> (f i inst).inst_opcode <> PHI) /\
+    (!i inst. is_pseudo inst.inst_opcode ==>
+              is_pseudo (f i inst).inst_opcode) /\
+    (!i inst. ~is_pseudo inst.inst_opcode ==>
+              ~is_pseudo (f i inst).inst_opcode)
     ==>
     wf_function fn ==>
     wf_function (function_map_transform
@@ -940,8 +982,11 @@ Theorem mapi_transform_preserves_wf:
 Proof
   rpt strip_tac >>
   irule fmt_preserves_wf_function >> simp[] >>
-  metis_tac[mapi_transform_bb_succs, mapi_transform_bb_well_formed,
-            mapi_transform_fn_inst_ids, wf_function_def]
+  rpt conj_tac
+  >- (rpt strip_tac >> irule mapi_transform_bb_well_formed >> simp[] >>
+      metis_tac[wf_function_def])
+  >- (rpt strip_tac >> irule mapi_transform_bb_succs >> simp[])
+  >- (irule mapi_transform_fn_inst_ids >> metis_tac[wf_function_def])
 QED
 
 (* SSA preservation for block-dependent MAPi transform *)
@@ -1023,6 +1068,8 @@ Theorem aft_singleton_preserves_wf:
               ~is_terminator (f v inst).inst_opcode) /\
     (!v inst. inst.inst_opcode = PHI ==> (f v inst).inst_opcode = PHI) /\
     (!v inst. inst.inst_opcode <> PHI ==> (f v inst).inst_opcode <> PHI) /\
+    (!v inst. is_pseudo inst.inst_opcode ==> is_pseudo (f v inst).inst_opcode) /\
+    (!v inst. ~is_pseudo inst.inst_opcode ==> ~is_pseudo (f v inst).inst_opcode) /\
     wf_function fn ==>
     wf_function (analysis_function_transform bottom result
                    (\v inst. [f v inst]) fn)
@@ -1056,6 +1103,8 @@ Theorem aft_singleton_preserves_wf_weak:
               ~is_terminator (f v inst).inst_opcode) /\
     (!v inst. inst.inst_opcode = PHI ==> (f v inst).inst_opcode = PHI) /\
     (!v inst. inst.inst_opcode <> PHI ==> (f v inst).inst_opcode <> PHI) /\
+    (!v inst. is_pseudo inst.inst_opcode ==> is_pseudo (f v inst).inst_opcode) /\
+    (!v inst. ~is_pseudo inst.inst_opcode ==> ~is_pseudo (f v inst).inst_opcode) /\
     wf_function fn ==>
     wf_function (analysis_function_transform bottom result
                    (\v inst. [f v inst]) fn)
@@ -1113,7 +1162,7 @@ Proof
   simp[analysis_block_transform_def]
 QED
 
-(* wf_function implies non-terminator prefix — useful across all passes *)
+(* wf_function implies non-terminator prefix - useful across all passes *)
 Theorem wf_non_terminator_prefix:
   !fn. wf_function fn ==>
     !bb. MEM bb fn.fn_blocks ==>
@@ -1144,6 +1193,8 @@ Theorem map_transform_preserves_wf:
             ~is_terminator (f inst).inst_opcode) /\
     (!inst. inst.inst_opcode = PHI ==> (f inst).inst_opcode = PHI) /\
     (!inst. inst.inst_opcode <> PHI ==> (f inst).inst_opcode <> PHI) /\
+    (!inst. is_pseudo inst.inst_opcode ==> is_pseudo (f inst).inst_opcode) /\
+    (!inst. ~is_pseudo inst.inst_opcode ==> ~is_pseudo (f inst).inst_opcode) /\
     wf_function fn ==>
     wf_function (function_map_transform (block_map_transform f) fn)
 Proof

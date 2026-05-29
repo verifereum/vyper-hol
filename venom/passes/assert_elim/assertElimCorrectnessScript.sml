@@ -135,6 +135,24 @@ Proof
   simp[mk_nop_inst_def]
 QED
 
+Theorem assert_elim_inst_pseudo[local]:
+  !v inst. is_pseudo inst.inst_opcode ==>
+           is_pseudo (assert_elim_inst v inst).inst_opcode
+Proof
+  rpt strip_tac >> simp[assert_elim_inst_def] >>
+  Cases_on `inst.inst_opcode` >> fs[is_pseudo_def]
+QED
+
+Theorem assert_elim_inst_not_pseudo[local]:
+  !v inst. ~is_pseudo inst.inst_opcode ==>
+           ~is_pseudo (assert_elim_inst v inst).inst_opcode
+Proof
+  rpt gen_tac >> strip_tac >>
+  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
+                        assert_elim_inst_cases) >>
+  simp[mk_nop_inst_def, is_pseudo_def]
+QED
+
 Theorem assert_elim_inst_outputs[local]:
   !v inst. (assert_elim_inst v inst).inst_outputs = inst.inst_outputs \/
            (assert_elim_inst v inst).inst_outputs = []
@@ -190,5 +208,6 @@ Proof
      `fn`] mapi_transform_preserves_wf_bb) >>
   simp[assert_elim_inst_id, assert_elim_inst_terminator,
        assert_elim_inst_not_terminator, assert_elim_inst_phi,
-       assert_elim_inst_not_phi]
+       assert_elim_inst_not_phi, assert_elim_inst_pseudo,
+       assert_elim_inst_not_pseudo]
 QED

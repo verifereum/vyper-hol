@@ -730,12 +730,18 @@ local
   val x = mk_var("x", ``:instruction``)
   val opcode = #1 (dest_comb ``(z:instruction).inst_opcode``)
   val phi_check = mk_abs(x, mk_eq(mk_comb(opcode, x), ``PHI``))
+  val pseudo_check = mk_abs(x, mk_comb(``is_pseudo : opcode -> bool``, mk_comb(opcode, x)))
   val nop_check = mk_abs(x, mk_neg(mk_eq(mk_comb(opcode, x), ``NOP``)))
 in
   val filter_preserves_phi_prefix = filter_preserves_prefix
     |> INST_TYPE [alpha |-> ``:instruction``]
     |> ISPECL [nop_check, phi_check]
     |> SIMP_RULE (srw_ss()) []
+
+  val filter_preserves_pseudos_prefix = filter_preserves_prefix
+    |> INST_TYPE [alpha |-> ``:instruction``]
+    |> ISPECL [nop_check, pseudo_check]
+    |> BETA_RULE
 end;
 
 (* General: bb_well_formed preserved by length-preserving transforms
@@ -748,19 +754,46 @@ Theorem bb_well_formed_transfer:
         is_terminator (EL i insts).inst_opcode)) /\
     (!i. i < LENGTH insts ==>
        ((EL i insts').inst_opcode = PHI <=>
-        (EL i insts).inst_opcode = PHI))
+        (EL i insts).inst_opcode = PHI)) /\
+    (!i. i < LENGTH insts ==>
+       (is_pseudo (EL i insts').inst_opcode <=>
+        is_pseudo (EL i insts).inst_opcode))
     ==>
     bb_well_formed (bb with bb_instructions := insts) ==>
     bb_well_formed (bb with bb_instructions := insts')
 Proof
   rpt strip_tac >>
-  fs[bb_well_formed_def] >>
-  sg `insts' <> []` >- (Cases_on `insts'` >> fs[]) >>
-  sg `PRE (LENGTH insts) < LENGTH insts`
-  >- (Cases_on `insts` >> fs[]) >>
-  sg `LAST insts = EL (PRE (LENGTH insts)) insts` >- fs[LAST_EL] >>
-  sg `LAST insts' = EL (PRE (LENGTH insts)) insts'` >- fs[LAST_EL] >>
-  rpt conj_tac >> rpt strip_tac >> res_tac >> fs[]
+  `pseudos_prefix (bb with bb_instructions := insts)`
+    by metis_tac[bb_well_formed_imp_pseudos_prefix] >>
+  `insts' <> []` by (fs[bb_well_formed_def] >> metis_tac[LENGTH_NIL]) >>
+  `is_terminator (LAST insts).inst_opcode` by fs[bb_well_formed_def] >>
+  `!i. i < LENGTH insts /\ is_terminator (EL i insts).inst_opcode ==> i = PRE (LENGTH insts)`
+    by fs[bb_well_formed_def] >>
+  `!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==> (EL i insts).inst_opcode = PHI`
+    by fs[bb_well_formed_def] >>
+  `!i j. i < j /\ j < LENGTH insts /\ is_pseudo (EL j insts).inst_opcode ==> is_pseudo (EL i insts).inst_opcode`
+    by fs[pseudos_prefix_def] >>
+  PURE_ONCE_REWRITE_TAC[bb_well_formed_def] >>
+  PURE_ONCE_REWRITE_TAC[pseudos_prefix_def] >>
+  simp[listTheory.LAST_EL] >>
+  rpt conj_tac
+  >- (`LENGTH insts ≠ 0` by metis_tac[LENGTH_NIL] >>
+      `PRE (LENGTH insts) < LENGTH insts` by decide_tac >>
+      qpat_x_assum `!i:num. _ ==> (is_terminator _ <=> is_terminator _)`
+        (qspecl_then [`PRE (LENGTH insts)`] mp_tac) >>
+      simp[] >> fs[listTheory.LAST_EL])
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i:num. _ ==> (is_terminator _ <=> is_terminator _)`
+        (qspecl_then [`i`] mp_tac) >>
+      impl_tac >- simp[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i:num. _ ==> (_ = PHI <=> _ = PHI)`
+        (qspecl_then [`j`] mp_tac) >>
+      impl_tac >- simp[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i:num. _ ==> (is_pseudo _ <=> is_pseudo _)`
+        (qspecl_then [`j`] mp_tac) >>
+      impl_tac >- simp[] >> metis_tac[])
 QED
 
 Theorem clear_nops_block_preserves_wf:
@@ -806,6 +839,14 @@ Proof
   (* 4. PHI prefix *)
   >- (simp_tac std_ss [Abbr `filt`, Abbr `P`, Abbr `insts`] >>
       match_mp_tac filter_preserves_phi_prefix >> fs[])
+  (* 5. pseudos_prefix *)
+  >- (PURE_ONCE_REWRITE_TAC[pseudos_prefix_def] >>
+      simp_tac std_ss [Abbr `filt`, Abbr `P`, Abbr `insts`,
+        EVAL ``(bb:basic_block with bb_instructions := (x:instruction list)).bb_instructions``] >>
+      match_mp_tac filter_preserves_pseudos_prefix >>
+      conj_tac
+      >- (rpt strip_tac >> CCONTR_TAC >> fs[is_pseudo_def])
+      >- fs[pseudos_prefix_def])
 QED
 
 (* clear_nops_block preserves bb_succs *)
