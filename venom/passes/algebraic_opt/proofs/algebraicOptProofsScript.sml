@@ -18,7 +18,7 @@ Ancestors
   aoBlockSim aoCmpFlipSim
   aoResolveObligation aoRangeObligation aoCmpFlipObligation
   aoStepInvObligation aoBlockInvObligation
-  aoWf
+  aoWf aoPhase1Wf aoPhase3Wf aoPreservation
   passSimulationProps passSimulationDefs passSharedDefs passSharedSubst venomExecSemantics stateEquiv
   venomInst venomState venomExecProofs stateEquivProps
   execEquivProps execEquivParamProps

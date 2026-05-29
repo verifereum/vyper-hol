@@ -184,7 +184,8 @@ Definition ao_resolve_iszero_op_def:
                    depth MOD 2
                  else
                    2 - depth MOD 2 in
-               if keep < depth /\ keep < LENGTH chain then
+               if keep < depth /\ keep < LENGTH chain /\
+                  get_label (EL keep chain) = NONE then
                  EL keep chain
                else op)
     | _ => op
