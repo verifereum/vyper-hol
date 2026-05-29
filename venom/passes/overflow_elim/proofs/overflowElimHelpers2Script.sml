@@ -84,7 +84,7 @@ Definition dfg_prefix_sound_def:
                 else w2n w1 > w2n w2))))
 End
 
-(* dfg_prefix_sound at 0: trivially true (no entries at negative positions) *)
+(* dfg_prefix_sound at 0: trivially true since no position k < 0 exists for naturals *)
 Theorem dfg_prefix_sound_0:
   !dfg bb env. dfg_prefix_sound dfg bb env 0
 Proof
@@ -295,7 +295,7 @@ QED
 
 (* ================================================================
    LT/GT contradiction helpers — each takes only the facts needed
-   for its branch, avoiding the 40+ assumption accumulation issue.
+   for its branch.
    ================================================================ *)
 
 (* LT case: ADD overflow can't produce a true comparison *)
@@ -1028,6 +1028,21 @@ QED
 
 (* For tracked opcodes, if step_inst_base succeeds with single output,
    then every operand evaluates in the pre-state. *)
+val tracked_assign_eval_tac =
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  fs[step_inst_base_def] >>
+  BasicProvers.every_case_tac >> gvs[] >> metis_tac[];
+
+val tracked_pure1_eval_tac =
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  fs[step_inst_base_def] >> strip_tac >>
+  imp_res_tac exec_pure1_flookup >> gvs[];
+
+val tracked_pure2_eval_tac =
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  fs[step_inst_base_def] >> strip_tac >>
+  imp_res_tac exec_pure2_flookup >> gvs[];
+
 Theorem tracked_step_operand_evaluable:
   !inst s s' v op.
     dfg_tracked_opcode inst.inst_opcode /\
@@ -1038,12 +1053,16 @@ Theorem tracked_step_operand_evaluable:
 Proof
   rpt strip_tac >>
   qpat_x_assum `dfg_tracked_opcode _`
-    (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >> gvs[] >>
-  gvs[step_inst_base_def]
-  >- (gvs[AllCaseEqs()] >> Cases_on `inst.inst_operands` >> gvs[] >>
-      Cases_on `t` >> gvs[])
-  >- (imp_res_tac exec_pure1_flookup >> gvs[])
-  >> (imp_res_tac exec_pure2_flookup >> gvs[])
+    (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >> gvs[]
+  >- tracked_assign_eval_tac
+  >- tracked_pure1_eval_tac
+  >- tracked_pure2_eval_tac
+  >- tracked_pure2_eval_tac
+  >- tracked_pure2_eval_tac
+  >- tracked_pure2_eval_tac
+  >- tracked_pure2_eval_tac
+  >- tracked_pure2_eval_tac
+  >- tracked_pure2_eval_tac
 QED
 
 (* Derive step_inst_base from tracked opcode + step_inst *)
@@ -1216,4 +1235,3 @@ Proof
     >> gvs[dfg_tracked_opcode_def]
   )
 QED
-

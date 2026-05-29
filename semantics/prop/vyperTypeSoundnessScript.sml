@@ -2135,8 +2135,14 @@ Resume eval_preserves_swt[StructLit]:
   tp_p7_prefix_tac wte_StructLit ev_StructLit >>
   (* eval: vs <- eval_exprs cx (MAP SND kes); return (Value (StructV ...)) *)
   Cases_on `eval_exprs cx (MAP SND kes) st` >>
-  reverse (Cases_on `q`) >> simp_tac (srw_ss()) [] >>
-  TRY (tp_bind_err_tac >> not_return_tac >> NO_TAC) >>
+  reverse (Cases_on `q`) >> simp_tac (srw_ss()) []
+  >- (strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      first_x_assum (qspec_then `MAP FST kes` mp_tac) >>
+      simp_tac std_ss [] >>
+      `well_typed_exprs env (MAP SND kes)` by
+        (irule well_typed_named_exprs_MAP_SND >> first_assum ACCEPT_TAC) >>
+      disch_then drule_all >> strip_tac >>
+      ASM_REWRITE_TAC[] >> not_return_tac) >>
   simp_tac (srw_ss()) [return_def] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   (* Apply P8 IH — guarded by ks = MAP FST kes (trivially true) *)
@@ -3762,7 +3768,20 @@ QED
 
 Resume eval_preserves_swt[RawCallTarget]:
   tp_chain_prefix_tac ev_RawCallTarget wte_RawCallTarget >>
-  tp_chain_tail_tac default_chain_value_tac
+  strip_tac >>
+  `st'.scopes = st1.scopes /\ st'.immutables = st1.immutables` by
+    chain_scopes_imm_tac () >>
+  `state_well_typed st' /\ env_consistent env cx st'` by (
+    irule tp_preserved_scopes_immutables >>
+    qexists_tac `st1` >> gvs[]) >>
+  simp[] >>
+  rpt strip_tac >>
+  gvs[bind_apply, ignore_bind_apply, AllCaseEqs(),
+      return_def, raise_def, COND_RATOR, LET_THM, UNCURRY,
+      materialise_def, expr_type_def, evaluate_type_def,
+      value_has_type_def, raw_call_return_type_def,
+      toplevel_value_typed_def] >>
+  default_chain_value_tac
 QED
 
 Resume eval_preserves_swt[RawLog]:

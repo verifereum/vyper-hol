@@ -9,12 +9,30 @@
  * Each pass keeps its own R_ok/R_term pair; no UNION of variable sets.
  *
  * TOP-LEVEL:
- *   pass_correct_trans             -- binary transitivity (relational composition)
- *   apply_ctx_fn_transform_correct -- lift per-block dual-ctx sim to ctx_pass_correct
- *   compose_passes_correct         -- N-ary pipeline composition via list induction
- *   venom_pipeline_correct         -- 5-phase pipeline composition
- *   pass_correct_implies_observable -- pass_correct to observable_result_equiv
- *   rel_seq_preserves_observable   -- rel_seq of obs-preserving rels preserves obs
+ *   pass_correct_trans             -- if exec1~exec2 (R1) and exec2~exec3 (R2),
+ *                                     then exec1~exec3 (relational composition R1;R2)
+ *   apply_ctx_fn_transform_correct -- applying a name-preserving, block-corresponding
+ *                                     per-fn transform to every fn in a context
+ *                                     preserves semantics (given bidirectional
+ *                                     per-block simulation and callee IH)
+ *   compose_passes_correct         -- a sequence of individually-correct ctx passes
+ *                                     composes into a single pass_correct, with
+ *                                     relations composed via rel_seq
+ *   venom_pipeline_correct         -- the 5-phase pipeline (simplify_cfg, ircf, ricf,
+ *                                     function_inliner, fn_pipeline) preserves
+ *                                     semantics when each phase is individually
+ *                                     correct and alloca pointers are confined
+ *   pass_correct_implies_observable -- pass_correct with relations that each imply
+ *                                     observable_equiv / revert_equiv yields
+ *                                     observable_result_equiv for terminating
+ *                                     executions
+ *   rel_seq_preserves_observable   -- relational sequencing of two
+ *                                     observable-equiv-preserving relations
+ *                                     preserves observable equivalence (via
+ *                                     transitivity)
+ *   foldl_rel_seq_preserves_observable -- FOLDL rel_seq of
+ *                                     observable-equiv-preserving relations
+ *                                     preserves observable equivalence
  *)
 
 Theory venomPipelineCorrect
@@ -164,28 +182,28 @@ Triviality ctx_fn_transform_module_sim:
     (!fn. MEM fn ctx.ctx_functions ==>
       !lbl. IS_SOME (lookup_block lbl fn.fn_blocks) <=>
             IS_SOME (lookup_block lbl (f fn).fn_blocks)) /\
-    (!fn lbl bb1 bb2 fuel s1 s2.
-      MEM fn ctx.ctx_functions /\
-      lookup_block lbl fn.fn_blocks = SOME bb1 /\
-      lookup_block lbl (f fn).fn_blocks = SOME bb2 /\
-      R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
-      (!callee_name cfn cs1 cs2.
-        lookup_function callee_name ctx.ctx_functions = SOME cfn /\
-        R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
-        ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
-         (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
-                 (f cfn) cs2 = Error e2)) \/
-        lift_result R_ok R_term R_term
-          (run_blocks fuel ctx cfn cs1)
-          (run_blocks fuel (apply_ctx_fn_transform f ctx)
-            (f cfn) cs2))
-      ==>
-      ((?e1. exec_block fuel ctx bb1 s1 = Error e1) /\
-       (?e2. exec_block fuel (apply_ctx_fn_transform f ctx)
-               bb2 s2 = Error e2)) \/
-      lift_result R_ok R_term R_term
-        (exec_block fuel ctx bb1 s1)
-        (exec_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
+	    (!fn lbl bb1 bb2 fuel s1 s2.
+	      MEM fn ctx.ctx_functions /\
+	      lookup_block lbl fn.fn_blocks = SOME bb1 /\
+	      lookup_block lbl (f fn).fn_blocks = SOME bb2 /\
+	      R_ok s1 s2 /\
+	      (!callee_name cfn cs1 cs2.
+	        lookup_function callee_name ctx.ctx_functions = SOME cfn /\
+	        R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
+	        ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
+	         (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
+	                 (f cfn) cs2 = Error e2)) \/
+	        lift_result R_ok R_term R_term
+	          (run_blocks fuel ctx cfn cs1)
+	          (run_blocks fuel (apply_ctx_fn_transform f ctx)
+	            (f cfn) cs2))
+	      ==>
+	      ((?e1. run_block fuel ctx bb1 s1 = Error e1) /\
+	       (?e2. run_block fuel (apply_ctx_fn_transform f ctx)
+	               bb2 s2 = Error e2)) \/
+	      lift_result R_ok R_term R_term
+	        (run_block fuel ctx bb1 s1)
+	        (run_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
   ==>
     !fn_name fn1 fn2 fuel s1 s2.
       lookup_function fn_name ctx.ctx_functions = SOME fn1 /\
@@ -267,29 +285,29 @@ Theorem apply_ctx_fn_transform_correct:
       (f fn).fn_blocks <> [] /\
       (HD (f fn).fn_blocks).bb_label = (HD fn.fn_blocks).bb_label) /\
     (* Per-block bidirectional simulation *)
-    (!fn lbl bb1 bb2 fuel s1 s2.
-      MEM fn ctx.ctx_functions /\
-      lookup_block lbl fn.fn_blocks = SOME bb1 /\
-      lookup_block lbl (f fn).fn_blocks = SOME bb2 /\
-      R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
-      (* Callee IH *)
-      (!callee_name cfn cs1 cs2.
-        lookup_function callee_name ctx.ctx_functions = SOME cfn /\
-        R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
-        ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
-         (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
-                 (f cfn) cs2 = Error e2)) \/
-        lift_result R_ok R_term R_term
-          (run_blocks fuel ctx cfn cs1)
-          (run_blocks fuel (apply_ctx_fn_transform f ctx)
-            (f cfn) cs2))
-      ==>
-      ((?e1. exec_block fuel ctx bb1 s1 = Error e1) /\
-       (?e2. exec_block fuel (apply_ctx_fn_transform f ctx)
-               bb2 s2 = Error e2)) \/
-      lift_result R_ok R_term R_term
-        (exec_block fuel ctx bb1 s1)
-        (exec_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
+	    (!fn lbl bb1 bb2 fuel s1 s2.
+	      MEM fn ctx.ctx_functions /\
+	      lookup_block lbl fn.fn_blocks = SOME bb1 /\
+	      lookup_block lbl (f fn).fn_blocks = SOME bb2 /\
+	      R_ok s1 s2 /\
+	      (* Callee IH *)
+	      (!callee_name cfn cs1 cs2.
+	        lookup_function callee_name ctx.ctx_functions = SOME cfn /\
+	        R_ok cs1 cs2 /\ cs1.vs_inst_idx = 0 ==>
+	        ((?e1. run_blocks fuel ctx cfn cs1 = Error e1) /\
+	         (?e2. run_blocks fuel (apply_ctx_fn_transform f ctx)
+	                 (f cfn) cs2 = Error e2)) \/
+	        lift_result R_ok R_term R_term
+	          (run_blocks fuel ctx cfn cs1)
+	          (run_blocks fuel (apply_ctx_fn_transform f ctx)
+	            (f cfn) cs2))
+	      ==>
+	      ((?e1. run_block fuel ctx bb1 s1 = Error e1) /\
+	       (?e2. run_block fuel (apply_ctx_fn_transform f ctx)
+	               bb2 s2 = Error e2)) \/
+	      lift_result R_ok R_term R_term
+	        (run_block fuel ctx bb1 s1)
+	        (run_block fuel (apply_ctx_fn_transform f ctx) bb2 s2))
   ==>
     ctx_pass_correct (apply_ctx_fn_transform f) R_ok R_term ctx s
 Proof

@@ -23,11 +23,13 @@ Ancestors
   memoryCopyElisionDefs analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomInstProps venomState venomExecSemantics
-  venomEffects venomMemDefs
+  venomEffects venomMemDefs venomMemProofs
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   dfgAnalysisProps dfgDefs dfAnalyzeDefs
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
   finite_map list pred_set
+Libs
+  pairLib fcpLib
 
 (* ===== Soundness predicate ===== *)
 
@@ -615,6 +617,21 @@ Proof
   Cases >> simp[is_copy_opcode_def]
 QED
 
+Triviality copy_opcode_not_phi[local]:
+  !op. is_copy_opcode op ==> op <> PHI
+Proof
+  Cases >> simp[is_copy_opcode_def]
+QED
+
+Triviality copy_opcode_cases[local]:
+  !op.
+    is_copy_opcode op ==>
+    op = MCOPY \/ op = CALLDATACOPY \/ op = CODECOPY \/
+    op = DLOADBYTES \/ op = RETURNDATACOPY
+Proof
+  Cases >> simp[is_copy_opcode_def]
+QED
+
 (* write_memory_with_expansion is identity when bytes already match *)
 Theorem write_mem_identity[local]:
   !dst data s. dst + LENGTH data <= LENGTH s.vs_memory /\
@@ -667,9 +684,16 @@ Proof
   simp[copy_elision_inst_def, LET_THM] >>
   TRY (Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >> NO_TAC) >>
   TRY (fs[] >> NO_TAC) >>
+  TRY (
+    qexists `inst` >> simp[] >>
+    Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >> NO_TAC) >>
+  TRY (
+    qexists `inst` >> simp[] >>
+    Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
   rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
   rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
   imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
+  imp_res_tac copy_opcode_not_phi >>
   fs[]
 QED
 
@@ -814,9 +838,17 @@ Triviality step_copy_opcode_ok[local]:
                               REPLICATE (w2n sz_val) 0w)) s)
 Proof
   rpt strip_tac >>
-  Cases_on `opc` >>
-  gvs[is_copy_opcode_def, step_inst_non_invoke, step_inst_base_def,
-      cf_source_data_def, mcopy_def, LET_THM] >>
+  drule copy_opcode_cases >> strip_tac >> gvs[]
+  >- gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+         mcopy_def, LET_THM]
+  >- gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+         LET_THM]
+  >- gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+         LET_THM]
+  >- gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+         LET_THM] >>
+  gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+      LET_THM] >>
   (* RETURNDATACOPY: in-bounds, so TAKE without padding = TAKE with padding *)
   `TAKE (w2n sz_val) (DROP (w2n src_val) s.vs_returndata ++ REPLICATE (w2n sz_val) 0w) =
    TAKE (w2n sz_val) (DROP (w2n src_val) s.vs_returndata)` by
@@ -842,9 +874,21 @@ Triviality step_is_copy_eq_wmwe[local]:
                  REPLICATE (w2n sz_val) 0w)) s
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_copy_opcode_def, step_inst_non_invoke, step_inst_base_def,
-      cf_source_data_def, mcopy_def, LET_THM] >>
+  drule copy_opcode_cases >> strip_tac >> gvs[]
+  >- (gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+          mcopy_def, LET_THM] >>
+      BasicProvers.every_case_tac >> gvs[])
+  >- (gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+          LET_THM] >>
+      BasicProvers.every_case_tac >> gvs[])
+  >- (gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+          LET_THM] >>
+      BasicProvers.every_case_tac >> gvs[])
+  >- (gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+          LET_THM] >>
+      BasicProvers.every_case_tac >> gvs[]) >>
+  gvs[step_inst_non_invoke, step_inst_base_def, cf_source_data_def,
+      LET_THM] >>
   BasicProvers.every_case_tac >> gvs[] >>
   `TAKE (w2n x) (DROP (w2n x') s.vs_returndata ++ REPLICATE (w2n x) 0w) =
    TAKE (w2n x) (DROP (w2n x') s.vs_returndata)` by
@@ -1153,6 +1197,47 @@ QED
 (* Terminators that return OK preserve memory, call_ctx, data_section, code, returndata.
    JMP/JNZ/DJMP go through jump_to which only modifies control flow.
    STOP/REVERT return non-OK (Halt/Revert), so don't appear here. *)
+Triviality terminator_opcode_cases[local]:
+  !op.
+    is_terminator op ==>
+    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
+    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
+    op = SELFDESTRUCT \/ op = INVALID
+Proof
+  Cases >> simp[is_terminator_def]
+QED
+
+val terminator_tuple_tac =
+  fs[venomExecSemanticsTheory.step_inst_base_def, jump_to_def,
+     halt_state_def, revert_state_def, set_returndata_def, LET_THM] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       fs[jump_to_def, halt_state_def, revert_state_def,
+          set_returndata_def]) >>
+  gvs[];
+
+Triviality step_inst_base_terminator_ok_field_tuple[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\
+    is_terminator inst.inst_opcode ==>
+    (s'.vs_memory, s'.vs_allocas, s'.vs_call_ctx,
+     s'.vs_data_section, s'.vs_code, s'.vs_returndata) =
+    (s.vs_memory, s.vs_allocas, s.vs_call_ctx,
+     s.vs_data_section, s.vs_code, s.vs_returndata)
+Proof
+  rpt strip_tac >>
+  drule terminator_opcode_cases >> strip_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+  >- terminator_tuple_tac
+QED
+
 Triviality step_terminator_preserves_fields[local]:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
@@ -1167,12 +1252,10 @@ Proof
   rpt strip_tac >>
   `inst.inst_opcode <> INVOKE` by (
     Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  fs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  fs[venomExecSemanticsTheory.step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       fs[jump_to_def, halt_state_def, revert_state_def,
-          set_returndata_def]) >> gvs[]
+  `step_inst_base inst s = OK s'` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  drule_all step_inst_base_terminator_ok_field_tuple >>
+  simp[]
 QED
 
 (* allocas preserved by non-ALLOCA non-INVOKE instructions.
@@ -1185,35 +1268,12 @@ Triviality step_preserves_allocas[local]:
     s'.vs_allocas = s.vs_allocas
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> ALLOCA` by (
-    Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
+  `inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
   `step_inst_base inst s = OK s'` by
     metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  fs[venomExecSemanticsTheory.step_inst_base_def, AllCaseEqs()] >>
-  gvs[AllCaseEqs(),
-      venomExecSemanticsTheory.exec_pure1_def,
-      venomExecSemanticsTheory.exec_pure2_def,
-      venomExecSemanticsTheory.exec_pure3_def,
-      venomExecSemanticsTheory.exec_read0_def,
-      venomExecSemanticsTheory.exec_read1_def,
-      venomExecSemanticsTheory.exec_write2_def,
-      venomExecSemanticsTheory.exec_ext_call_def,
-      venomExecSemanticsTheory.exec_delegatecall_def,
-      venomExecSemanticsTheory.exec_create_def,
-      venomExecSemanticsTheory.extract_venom_result_def,
-      venomExecSemanticsTheory.exec_alloca_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  gvs[venomStateTheory.update_var_def, venomStateTheory.mstore_def,
-      venomStateTheory.mstore8_def, venomStateTheory.sstore_def,
-      venomStateTheory.tstore_def,
-      venomStateTheory.write_memory_with_expansion_def,
-      venomExecSemanticsTheory.mcopy_def,
-      venomStateTheory.revert_state_def,
-      venomStateTheory.eval_operands_def,
-      venomStateTheory.jump_to_def,
-      venomStateTheory.lookup_var_def, FLOOKUP_UPDATE,
-      venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def]
+  irule venomMemProofsTheory.step_inst_base_preserves_allocas >>
+  qexists_tac `inst` >> simp[]
 QED
 
 (* cf_sound is preserved by DRESTRICT (subset of entries) *)

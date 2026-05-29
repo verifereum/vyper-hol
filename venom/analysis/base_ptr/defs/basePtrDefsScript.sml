@@ -131,11 +131,8 @@ Definition bp_handle_inst_def:
                      result |+ (out, MAP (λp. offset_by p NONE) p_lhs)
                    else result
                | _ => result)
-            (* phi: union of all operand pointer sets *)
-          | PHI =>
-              let vars = MAP SND (phi_pairs inst.inst_operands) in
-              let all_ptrs = nub (FLAT (MAP (bp_get_ptrs result) vars)) in
-              result |+ (out, all_ptrs)
+            (* phi: no-op per-instruction (PHI evaluated at block entry) *)
+          | PHI => result
             (* assign: propagate pointers from source variable *)
           | ASSIGN =>
               (case inst.inst_operands of
@@ -342,7 +339,11 @@ Definition bp_get_write_location_def:
         else if inst.inst_opcode ∈ {CALL; DELEGATECALL; STATICCALL;
                                      INVOKE; CREATE; CREATE2} then ml_undefined
         else ml_empty
-    | _ => ml_empty  (* read-only address spaces have no writes *)
+    | AddrSp_Calldata => ml_empty     (* read-only: no writes *)
+    | AddrSp_Immutables => ml_empty  (* read-only: set during construction *)
+    | AddrSp_Data => ml_empty         (* read-only: no writes *)
+    | AddrSp_Code => ml_empty         (* read-only: no writes *)
+    | AddrSp_Returndata => ml_empty   (* read-only: populated by CALL *)
 End
 
 (* ===== Read Location ===== *)
@@ -446,6 +447,6 @@ Definition bp_get_read_location_def:
                     iao_max_size := SOME sz |>
            | _ => ml_empty)
         else ml_empty
-    | _ => ml_empty  (* Immutables handled by Memory case *)
+    | AddrSp_Immutables => ml_empty  (* ILOAD reads via Memory case *)
 End
 

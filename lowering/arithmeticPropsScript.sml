@@ -397,6 +397,20 @@ Definition in_type_range_def:
       0 ≤ v ∧ v < &(2 ** bits)
 End
 
+Theorem unsigned_in_range_not_gt_hi[local]:
+  ∀ty v lo hi.
+    in_type_range ty (math_val ty v) ∧
+    type_bits ty ≤ 256 ∧
+    type_bounds ty = (lo, hi) ∧
+    ¬is_signed_type ty ⇒
+    ¬(w2n v > w2n hi)
+Proof
+  rw[type_bounds_def, in_type_range_def, math_val_def, LET_THM] >>
+  `2 ** type_bits ty ≤ 2 ** 256` by simp[bitTheory.TWOEXP_MONO2] >>
+  `2 ** type_bits ty − 1 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  simp[wordsTheory.w2n_n2w]
+QED
+
 (* bool_to_word simplification *)
 Theorem bool_to_word_T[simp]:
   bool_to_word T = 1w
@@ -877,11 +891,9 @@ Resume compile_clamp_ok[unsigned]:
   forward_all_evals >>
   (* Show ¬(w2n v > w2n hi) from in_type_range *)
   `¬(w2n v > w2n hi)` by (
-    gvs[type_bounds_def, in_type_range_def, math_val_def, LET_THM] >>
-    `2 ** type_bits ty ≤ 2 ** 256` by simp[bitTheory.TWOEXP_MONO2] >>
-    `2 ** type_bits ty − 1 < dimword (:256)`
-      by simp[wordsTheory.dimword_def] >>
-    simp[wordsTheory.w2n_n2w]) >>
+    qspecl_then [`ty`, `v`, `lo`, `hi`] mp_tac unsigned_in_range_not_gt_hi >>
+    impl_tac >- asm_rewrite_tac[] >>
+    simp[]) >>
   `bool_to_word (bool_to_word (w2n v > w2n hi) = 0w) ≠ 0w` by gvs[] >>
   `same_blocks st cs''` by metis_tac[same_blocks_trans] >>
   `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss'' = SOME w`

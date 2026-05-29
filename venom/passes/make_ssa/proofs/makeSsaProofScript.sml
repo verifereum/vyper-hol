@@ -74,7 +74,8 @@ QED
 
 (* Single PHI step: execute one PHI instruction, updating ssa_sim.
    The PHI reads via resolve_phi, evaluates in s2, writes to fresh output.
-   After: ssa_sim sigma' s1 s2' where sigma'(bv) = out, rest unchanged. *)
+   After: ssa_sim sigma' s1 s2' where sigma'(bv) = out, rest unchanged.
+   Also: exec_block errors because PHI is not in the non-PHI suffix. *)
 Triviality phi_step_sim[local]:
   !bb' fuel ctx s1 s2 sigma bv out w prev_bb.
     s2.vs_inst_idx < LENGTH bb'.bb_instructions /\
@@ -93,36 +94,20 @@ Triviality phi_step_sim[local]:
     (s2'.vs_halted <=> s2.vs_halted) /\
     s2'.vs_current_bb = s2.vs_current_bb /\
     s2'.vs_prev_bb = s2.vs_prev_bb /\
-    exec_block fuel ctx bb' s2 =
-      exec_block fuel ctx bb'
-        (s2' with vs_inst_idx := SUC s2.vs_inst_idx)
+    exec_block fuel ctx bb' s2 = Error "phi outside prefix"
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  conj_tac >- suspend "ssa_upd" >>
-  suspend "rest"
-QED
-
-Resume phi_step_sim[ssa_upd]:
-  irule ssa_sim_update_fresh >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Resume phi_step_sim[rest]:
+  conj_tac >- (
+    irule ssa_sim_update_fresh >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
   (conj_tac >- (simp[update_var_def])) >>
   (conj_tac >- (simp[update_var_def])) >>
   (conj_tac >- (simp[update_var_def])) >>
-  mp_tac (SIMP_RULE std_ss [] exec_block_step_non_term) >>
-  disch_then (qspecl_then [`bb'`, `fuel`, `ctx`, `s2`,
-    `update_var out w s2`] mp_tac) >>
-  (impl_tac >- (
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-    >- (simp[is_terminator_def])
-    >- (simp[])
-    >> simp[step_inst_base_def, eval_operand_def])) >>
-  simp[]
+  qpat_x_assum `(EL s2.vs_inst_idx bb'.bb_instructions).inst_opcode = PHI`
+    mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
+  gvs[get_instruction_def, step_inst_def, step_inst_base_def]
 QED
-
-Finalise phi_step_sim;
 
 (* The root of the dom tree maps to the initial rename state *)
 Triviality block_rename_states_root:
@@ -137,6 +122,10 @@ Proof
   Cases_on `rename_block_insts rs x.bb_instructions` >> simp[]
 QED
 
+(* SSA construction preserves program behavior: under well-formedness,
+   dominator tree, CFG, and liveness preconditions, plus pipeline-derivable
+   PHI structural properties, running the original function and its
+   SSA-transformed version produce equivalent results. *)
 Theorem make_ssa_fn_correct:
   !dom_frontiers dtree dom_post_order pred_map succ_map live_in
    func s fuel ctx.
@@ -208,7 +197,7 @@ Proof
   Cases_on `?e. run_blocks fuel ctx func s = Error e`
   >- (
     qexistsl_tac [`UNIV`, `0`] >>
-    gvs[] >> simp[run_blocks_def, result_equiv_def])
+    gvs[] >> simp[Once run_blocks_def, result_equiv_def])
   >>
   gvs[] >>
   (* Non-Error: apply run_blocks_ssa_sim *)

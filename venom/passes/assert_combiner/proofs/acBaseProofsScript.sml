@@ -45,21 +45,21 @@ Theorem safe_between_wf_step_ok:
     ?s'. step_inst fuel ctx inst s = OK s'
 Proof
   rpt strip_tac >>
-  Cases_on `inst` >> rename1 `instruction iid opc ops outs` >>
-  fs[ac_is_safe_between_def] >>
-  `opc <> INVOKE` by
-    (strip_tac >> gvs[ac_is_volatile_def,
-       venomEffectsTheory.write_effects_def,
-       venomEffectsTheory.all_effects_def,
-       venomEffectsTheory.empty_effects_def,
-       pred_setTheory.NOT_INSERT_EMPTY]) >>
-  fs[step_inst_non_invoke] >>
-  Cases_on `opc` >> gvs safe_between_simp >>
-  gvs[inst_wf_def, LENGTH_EQ_NUM,
-      step_inst_base_def, exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  metis_tac[optionTheory.IS_SOME_DEF, optionTheory.NOT_SOME_NONE]
+  `is_effect_free_op inst.inst_opcode` by
+    metis_tac[ac_safe_between_effect_free] >>
+  `inst.inst_opcode <> INVOKE` by (
+    strip_tac >> gvs[ac_is_safe_between_def,
+      venomEffectsTheory.write_effects_def,
+      venomEffectsTheory.all_effects_def,
+      venomEffectsTheory.empty_effects_def,
+      pred_setTheory.NOT_INSERT_EMPTY]) >>
+  `inst.inst_opcode <> PHI /\ inst.inst_opcode <> PARAM` by
+    gvs[ac_is_safe_between_def] >>
+  `?s'. step_inst_base inst s = OK s'` by (
+    irule effect_free_step_inst_base_ok >> gvs[] >>
+    metis_tac[optionTheory.IS_SOME_DEF, optionTheory.NOT_SOME_NONE]) >>
+  qexists_tac `s'` >>
+  gvs[step_inst_non_invoke]
 QED
 
 (* IS_SOME(lookup_var) monotone through safe_between steps.
@@ -75,32 +75,6 @@ Theorem safe_between_step_is_some_mono:
     IS_SOME (lookup_var v s')
 Proof
   rpt strip_tac >>
-  Cases_on `MEM v inst.inst_outputs`
-  >- (
-    Cases_on `inst` >> rename1 `instruction iid opc ops outs` >>
-    fs[ac_is_safe_between_def] >>
-    Cases_on `opc = NOP` >- gvs[step_inst_non_invoke, step_inst_base_def] >>
-    Cases_on `opc = ASSERT` >- (
-      gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute,
-          step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]) >>
-    Cases_on `opc = ASSERT_UNREACHABLE` >- (
-      gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute,
-          step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]) >>
-    `opc <> INVOKE` by
-      (strip_tac >> gvs[ac_is_volatile_def,
-         venomEffectsTheory.write_effects_def,
-         venomEffectsTheory.all_effects_def,
-         venomEffectsTheory.empty_effects_def,
-         pred_setTheory.NOT_INSERT_EMPTY]) >>
-    fs[step_inst_non_invoke] >>
-    Cases_on `opc` >> gvs safe_between_simp >>
-    gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute,
-        step_inst_base_def, exec_pure1_def, exec_pure2_def, exec_pure3_def,
-        exec_read0_def, exec_read1_def, AllCaseEqs(),
-        update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE])
-  >- (
-    `~is_terminator inst.inst_opcode` by fs[ac_is_safe_between_def] >>
-    `lookup_var v s' = lookup_var v s` by
-      metis_tac[step_preserves_non_output_vars] >>
-    fs[])
+  `inst.inst_opcode <> PHI` by gvs[ac_is_safe_between_def] >>
+  metis_tac[step_inst_lookup_mono]
 QED

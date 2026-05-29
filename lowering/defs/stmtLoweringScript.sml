@@ -143,7 +143,7 @@ Definition compile_revert_with_reason_def:
        Mirrors Python: wrapped_typ = TupleT((msg_typ,)) *)
     let wrapped_type = TupleT [msg_type] in
     let wrapped_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv wrapped_type in
-    let wrapped_abi_size = abi_size_bound (cenv_sft cenv) wrapped_type in
+    let wrapped_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_type in
     (* Allocate buffer: 32 (selector word) + encoded payload *)
     let buf_size = 32 + wrapped_abi_size in
     do buf_op_alloc <- compile_alloc_buffer buf_size;
@@ -895,7 +895,7 @@ Definition compile_stmt_def:
               do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
                  data_buf <- return data_buf_alloc.buf_operand;
                  compile_log_store_data cenv data_ops data_buf 0;
-                 abi_size <- return (abi_size_bound (cenv_sft cenv) data_tuple_t);
+                 abi_size <- return (abi_size_bound cenv.ce_struct_fields data_tuple_t);
                  data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
                  abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
                  abi_buf <- return abi_buf_alloc.buf_operand;
