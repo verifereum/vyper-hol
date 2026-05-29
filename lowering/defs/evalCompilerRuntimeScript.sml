@@ -1,6 +1,7 @@
 Theory evalCompilerRuntime
 Ancestors
-  byte finite_map finite_set list option pair words
+  byte contractABI finite_map finite_set integer list option pair
+  vyperABI vyperAST vyperContext vyperInterpreter vyperValue words
   vfmConstants vfmContext vfmExecution vfmOperation vfmState vfmTransaction
   vfmTypes vfmCompute[ignore_grammar]
 Libs
@@ -11,6 +12,8 @@ Libs
  *   run_runtime_steps_from  -- same, with an explicit initial program counter
  *   direct_return_arg_runtime_call
  *                           -- parametric calldata-to-return runtime check
+ *   direct_return_arg_source_runtime_equiv
+ *                           -- source fixture agrees with runtime
  *)
 
 Definition runtime_caller_def:
@@ -369,4 +372,114 @@ Proof
        runtime_state_at_0] >>
   simp[direct_return_arg_run_steps] >>
   simp[runtime_state_with_def, runtime_context_with_def]
+QED
+
+Definition return_arg_source_program_def:
+  return_arg_source_program =
+    [FunctionDecl External Nonpayable F F "foo"
+       [("x", BaseT (UintT 256))] ([] : expr list) (BaseT (UintT 256))
+       [Return (SOME (Name (BaseT (UintT 256)) "x"))]]
+End
+
+Definition return_arg_source_machine_def:
+  return_arg_source_machine =
+    initial_machine_state with
+      sources := [(0w, [(NONE, return_arg_source_program)])]
+End
+
+Definition return_arg_source_tx_def:
+  return_arg_source_tx (w : bytes32) =
+    empty_call_txn with
+      <| target := 0w;
+         function_name := "foo";
+         args := [vyperValue$IntV (&w2n w)] |>
+End
+
+Definition return_arg_source_return_data_def:
+  return_arg_source_return_data (w : bytes32) =
+    case call_external return_arg_source_machine (return_arg_source_tx w) of
+    | (INL v, _) =>
+        (case vyper_to_abi (type_env return_arg_source_program)
+                (BaseT (UintT 256)) v of
+         | NONE => NONE
+         | SOME abi_v => SOME (enc (Uint 256) abi_v))
+    | (INR _, _) => NONE
+End
+
+Definition runtime_success_return_data_def:
+  runtime_success_return_data res =
+    case res of
+    | SOME (NONE, bs) => SOME bs
+    | _ => NONE
+End
+
+Theorem within_int_bound_uint256_w2n:
+  within_int_bound (Unsigned 256) (&w2n (w : bytes32))
+Proof
+  simp[within_int_bound_def, integerTheory.NUM_OF_INT] >>
+  PURE_REWRITE_TAC[GSYM (EVAL ``dimword (:256)``)] >>
+  simp[wordsTheory.w2n_lt]
+QED
+
+Theorem enc_uint256_w2n:
+  enc (Uint 256) (NumV (w2n (w : bytes32))) = word_to_bytes_be w
+Proof
+  simp[enc_def, enc_number_def, word_to_bytes_be_def]
+QED
+
+Theorem return_arg_source_call:
+  call_external return_arg_source_machine (return_arg_source_tx w) =
+    (INL (vyperValue$IntV (&w2n (w : bytes32))),
+     return_arg_source_machine)
+Proof
+  simp[return_arg_source_program_def,
+       return_arg_source_machine_def, return_arg_source_tx_def,
+       vyperContextTheory.empty_call_txn_def,
+       vyperInterpreterTheory.call_external_def,
+       vyperInterpreterTheory.find_function_module_def,
+       vyperInterpreterTheory.lookup_exported_function_def,
+       vyperInterpreterTheory.call_external_function_def,
+       vyperInterpreterTheory.lookup_function_def,
+       vyperInterpreterTheory.initial_machine_state_def,
+       vyperInterpreterTheory.lookup_nonreentrant_slot_def,
+       vyperInterpreterTheory.bind_arguments_def,
+       vyperInterpreterTheory.evaluate_defaults_def,
+       vyperInterpreterTheory.send_call_value_def,
+       vyperInterpreterTheory.initial_evaluation_context_def,
+       vyperInterpreterTheory.abstract_machine_from_state_def,
+       vyperValueTheory.evaluate_type_def,
+       vyperValueOperationTheory.safe_cast_def,
+       within_int_bound_uint256_w2n,
+       vyperInterpreterTheory.initial_state_def,
+       vyperInterpreterTheory.evaluate_def,
+       vyperStateTheory.get_scopes_def,
+       vyperStateTheory.lookup_scopes_val_def,
+       vyperStateTheory.materialise_def,
+       vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.return_def,
+       vyperStateTheory.raise_def,
+       vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def,
+       vyperContextTheory.get_self_code_def,
+       vyperContextTheory.get_module_code_def,
+       vyperContextTheory.type_env_all_modules_def,
+       FLOOKUP_UPDATE]
+QED
+
+Theorem return_arg_source_return_data_bytes:
+  return_arg_source_return_data (w : bytes32) = SOME (word_to_bytes_be w)
+Proof
+  simp[return_arg_source_return_data_def, return_arg_source_call,
+       enc_uint256_w2n, integerTheory.NUM_OF_INT]
+QED
+
+Theorem direct_return_arg_source_runtime_equiv:
+  ∀w.
+    return_arg_source_return_data w =
+      runtime_success_return_data
+        (run_runtime_steps 16 direct_return_arg_runtime_code
+          (word_to_bytes_be (w : bytes32)))
+Proof
+  simp[return_arg_source_return_data_bytes,
+       direct_return_arg_runtime_call, runtime_success_return_data_def]
 QED
