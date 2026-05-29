@@ -480,6 +480,87 @@ Proof
   fs[imms_well_typed_def] >> res_tac
 QED
 
+(* ===== Internal callable enumeration / fn_sigs witness ===== *)
+
+(* A successful Internal lookup means the name is among the declared internal
+ * function names.  (No ([],[]) escape hatch: this is purely about names.) *)
+Theorem lookup_function_Internal_MEM_names:
+  !src_id_opt fn vis ts x.
+    lookup_function src_id_opt fn vis ts = SOME x /\ vis = Internal ==>
+    MEM fn (internal_fn_names ts)
+Proof
+  ho_match_mp_tac lookup_function_ind >>
+  rw[lookup_function_def, internal_fn_names_def, dest_Internal_Fn_def] >>
+  gvs[dest_Internal_Fn_def] >>
+  rename1 `FunctionDecl fv _ _ _ _ _ _ _ _` >>
+  Cases_on `fv` >> gvs[dest_Internal_Fn_def]
+QED
+
+(* icallable_keys is contained in the concrete list, hence finite. *)
+Theorem icallable_keys_SUBSET:
+  icallable_keys cx SUBSET set (internal_key_list cx)
+Proof
+  simp[SUBSET_DEF, icallable_keys_def, icallable_def, internal_key_list_def] >>
+  rpt strip_tac >>
+  rename1 `get_module_code cx (FST key) = SOME _` >>
+  Cases_on `key` >> fs[] >>
+  fs[get_module_code_def] >>
+  Cases_on `ALOOKUP cx.sources cx.txn.target` >> fs[] >>
+  drule lookup_function_Internal_MEM_names >> simp[] >> strip_tac >>
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS, EXISTS_PROD] >>
+  qpat_x_assum `ALOOKUP x q = SOME ts` (assume_tac o MATCH_MP alistTheory.ALOOKUP_MEM) >>
+  qexists_tac `ts` >> simp[] >>
+  first_assum (irule_at Any)
+QED
+
+Theorem FINITE_icallable_keys:
+  FINITE (icallable_keys cx)
+Proof
+  irule SUBSET_FINITE >>
+  qexists_tac `set (internal_key_list cx)` >>
+  simp[FINITE_LIST_TO_SET, icallable_keys_SUBSET]
+QED
+
+(* The FUN_FMAP witness over the finite key set is consistent and complete. *)
+Theorem fn_sigs_consistent_complete_exists:
+  !cx. ?fn_sigs.
+    fn_sigs_consistent fn_sigs cx /\ fn_sigs_complete fn_sigs cx
+Proof
+  gen_tac >>
+  qexists_tac `FUN_FMAP (icallable_sig cx) (icallable_keys cx)` >>
+  conj_tac
+  >- (
+    simp[fn_sigs_consistent_def] >> rpt strip_tac >>
+    `(src_id_opt, fn) IN icallable_keys cx` by (
+      pop_assum mp_tac >>
+      simp[FLOOKUP_FUN_FMAP, FINITE_icallable_keys] >>
+      IF_CASES_TAC >> simp[]) >>
+    `icallable_sig cx (src_id_opt, fn) = (param_types, ret_ty)` by (
+      qpat_x_assum `FLOOKUP _ _ = SOME (param_types, ret_ty)` mp_tac >>
+      simp[FLOOKUP_FUN_FMAP, FINITE_icallable_keys]) >>
+    fs[icallable_keys_def, icallable_def] >>
+    (* lookup_function NONE fn Internal ts = SOME x ==> lookup_callable_function ... *)
+    `lookup_callable_function cx.in_deploy fn ts = SOME x` by
+      simp[lookup_callable_function_def] >>
+    qpat_x_assum `icallable_sig _ _ = _` mp_tac >>
+    PairCases_on `x` >>
+    simp[icallable_sig_def] >>
+    SELECT_ELIM_TAC >>
+    rpt strip_tac >> gvs[] >>
+    rpt (first_assum (irule_at Any)) >> gvs[])
+  >- (
+    simp[fn_sigs_complete_def] >> rpt strip_tac >>
+    `(src_id_opt, fn) IN icallable_keys cx` by (
+      simp[icallable_keys_def, icallable_def] >>
+      rpt (first_assum (irule_at Any))) >>
+    simp[FLOOKUP_FUN_FMAP, FINITE_icallable_keys] >>
+    PairCases_on `x` >>
+    simp[icallable_sig_def] >>
+    SELECT_ELIM_TAC >>
+    rpt strip_tac >>
+    rpt (first_assum (irule_at Any)) >> simp[])
+QED
+
 (* Extract well_typed_stmts for function body from functions_well_typed.
  * Simple version: uses FEMPTY fn_sigs (no function signatures needed). *)
 Theorem functions_well_typed_body:
@@ -6873,4 +6954,53 @@ Proof
            vfmExecutionTheory.lookup_transient_storage_def] >>
       Cases_on `is_view` >> simp[return_def, update_transient_def]) >>
   qexists `ARB` >> simp[return_def]
+QED
+
+(* ===== PoC smoke test: HashMap-write AugAssign is well-typed under the
+   widened well_typed_stmt definition.
+
+   Pattern: balanceOf[_from] -= _value, where balanceOf is a
+   HashMap[address, uint256] and _from/_value are local variables.
+
+   This is the AST shape generated for the inner-call body of ERC-20
+   _transfer / _burnFrom in stableswap-ng.
+
+   The PoC fixes a typing environment with:
+   - hashmap_types entry  (NONE, "balanceOf") -> (BaseT AddressT, Type (BaseT (UintT 256)))
+   - var_types entries    "_from"  -> BaseT AddressT
+                         "_value" -> BaseT (UintT 256)
+
+   and shows the well_typed_stmt clause for the AugAssign branch is
+   discharged via the new HashMap-write disjunct. *)
+Theorem poc_balanceOf_AugAssign_well_typed:
+  let
+    env = <| var_types :=
+               FEMPTY |+ (string_to_num "_from", BaseT AddressT)
+                     |+ (string_to_num "_value", BaseT (UintT 256));
+             global_types := FEMPTY;
+             toplevel_types := FEMPTY;
+             type_defs := FEMPTY;
+             fn_sigs := FEMPTY;
+             flag_members := FEMPTY;
+             hashmap_types :=
+               FEMPTY |+ ((NONE, string_to_num "balanceOf"),
+                          (BaseT AddressT, Type (BaseT (UintT 256))))
+          |> ;
+    stmt = AugAssign (BaseT (UintT 256))
+             (SubscriptTarget (TopLevelNameTarget (NONE, "balanceOf"))
+                              (Name (BaseT AddressT) "_from"))
+             Sub
+             (Name (BaseT (UintT 256)) "_value")
+  in
+    well_typed_stmt env NoneT stmt
+Proof
+  simp[well_typed_stmt_def] >>
+  disj2_tac >>
+  simp[well_typed_hashmap_write_target_def,
+       well_typed_expr_def, well_formed_type_def,
+       expr_type_def, well_typed_binop_def, is_int_type_def,
+       evaluate_type_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `string_to_num "_value" <> string_to_num "_from"` by EVAL_TAC >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  qexists_tac `BaseT AddressT` >> simp[]
 QED
