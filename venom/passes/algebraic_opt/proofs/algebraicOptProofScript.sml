@@ -22,7 +22,7 @@ val _ = delsimps ["ao_iszero_chain_inv_def",
 Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv' = ao_fn_total_fresh_vars fn in
-    wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+    wf_function fn /\ wf_ssa fn /\ EVERY inst_wf (fn_insts fn) /\
     FDOM s.vs_vars = {} /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
@@ -31,6 +31,7 @@ Theorem ao_transform_function_correct:
       (run_blocks fuel ctx (ao_transform_function fn) s)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
+  `ssa_form fn` by fs[wf_ssa_def] >>
   qabbrev_tac `fn0 = fn with fn_blocks :=
     MAP (\bb. bb with bb_instructions :=
       MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks` >>

@@ -65,7 +65,8 @@ Theorem ao_phase3_correct:
     let fn1 = fn0 with fn_blocks :=
       MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     let fv = ao_fn_fresh_vars fn in
-    wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+    wf_function fn /\ wf_ssa fn /\ EVERY inst_wf (fn_insts fn) /\
+    ao_fresh_names_disjoint fn /\
     FDOM s.vs_vars = {} /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn0 s = Error e) \/
@@ -93,6 +94,14 @@ Proof
     simp[function_map_transform_def, Abbr `fn1`] >>
   pop_assum SUBST1_TAC >>
   ONCE_REWRITE_TAC[run_blocks_inst_idx_irrel] >>
+  (* Fresh-var disjointness facts derived from ao_fresh_names_disjoint. *)
+  `(!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+             v NOTIN fv) /\
+   (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+             v NOTIN fv)` by
+    (fs[Abbr `fv`, ao_fresh_names_disjoint_def] >> metis_tac[]) >>
+  `ao_targets_wf targets` by
+    simp[Abbr `targets`, ao_compute_fn_iszero_targets_wf] >>
   qspecl_then [`state_equiv fv`, `execution_equiv fv`,
     `block_inv`, `bt`, `fn0`] mp_tac block_sim_function_error_bb >>
   impl_tac >- (
@@ -105,11 +114,32 @@ Proof
        cheat
     >- (* CHEATED: block_inv preserved through exec_block *)
        cheat
-    >- (* CHEATED: block_inv compat with state_equiv fv
-          — needs ao_fn_fresh_vars freshness derivation *)
-       cheat
+    >- (* block_inv compat with state_equiv fv *)
+       (rpt gen_tac >> simp[Abbr `block_inv`] >> strip_tac >>
+        `s1.vs_current_bb = s2.vs_current_bb` by
+          fs[state_equiv_def, execution_equiv_def] >>
+        `ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
+         ao_iszero_chain_inv targets s2 /\
+         ao_chain_defined_prefix targets s2` by
+          (irule ao_sinv_state_equiv_compat >>
+           rpt conj_tac >>
+           gvs[Abbr `dfg`, Abbr `targets`, Abbr `fv`, Abbr `fn0`] >>
+           metis_tac[]) >>
+        `range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2` by
+          (`range_sound (df_widen_at NONE ra s1.vs_current_bb 0) s2`
+             suffices_by gvs[] >>
+           irule ao_range_sound_state_equiv_compat >>
+           rpt conj_tac >>
+           gvs[Abbr `ra`, Abbr `fv`, Abbr `fn0`] >>
+           metis_tac[]) >>
+        gvs[])
     >- (* operand lookup under state_equiv *)
-       cheat)
+       (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+        `x NOTIN fv` by
+          (irule ao_fn0_operand_not_in_fv >>
+           rpt conj_tac >>
+           gvs[Abbr `fn0`, Abbr `fv`] >> metis_tac[]) >>
+        fs[state_equiv_def, execution_equiv_def]))
   >>
   disch_then (qspecl_then [`fuel`, `ctx`,
     `s with vs_inst_idx := 0`] mp_tac) >>

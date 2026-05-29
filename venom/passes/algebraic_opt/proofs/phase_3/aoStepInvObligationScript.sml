@@ -203,6 +203,69 @@ Proof
   simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts_blocks]
 QED
 
+(* A Var operand of a (handle-offset) block instruction in fn0 is a Var
+   operand of the corresponding source instruction in fn, hence not fresh. *)
+Theorem ao_fn0_operand_not_in_fv:
+  !fn fn0 fv bb inst x.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    fv = ao_fn_fresh_vars fn /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
+    MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
+    MEM (Var x) inst.inst_operands ==>
+    x NOTIN fv
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `MEM bb _` mp_tac >>
+  simp[listTheory.MEM_MAP] >> strip_tac >> gvs[] >>
+  qpat_x_assum `MEM inst _` mp_tac >>
+  simp[listTheory.MEM_MAP] >> strip_tac >> gvs[] >>
+  rename1 `MEM inst_orig bb0.bb_instructions` >>
+  qspecl_then [`inst_orig`] strip_assume_tac handle_offset_preserves_operands >>
+  gvs[] >>
+  first_x_assum irule >> qexists_tac `inst_orig` >>
+  simp[] >> irule mem_block_mem_fn_insts >>
+  qexists_tac `bb0` >> simp[]
+QED
+
+Triviality handle_offset_preserves_outputs[local]:
+  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
+Proof
+  gen_tac >> simp[ao_handle_offset_inst_def] >>
+  Cases_on `inst.inst_opcode = ADD` >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  Cases_on `h'` >> simp[] >>
+  Cases_on `t'` >> simp[]
+QED
+
+Theorem ao_fn0_output_not_in_fv:
+  !fn fn0 fv bb inst x.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    fv = ao_fn_fresh_vars fn /\
+    (!inst v. MEM inst (fn_insts fn) /\
+              MEM v inst.inst_outputs ==> v NOTIN fv) /\
+    MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
+    MEM x inst.inst_outputs ==>
+    x NOTIN fv
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `MEM bb _` mp_tac >>
+  simp[listTheory.MEM_MAP] >> strip_tac >> gvs[] >>
+  qpat_x_assum `MEM inst _` mp_tac >>
+  simp[listTheory.MEM_MAP] >> strip_tac >> gvs[] >>
+  rename1 `MEM inst_orig bb0.bb_instructions` >>
+  gvs[handle_offset_preserves_outputs] >>
+  first_x_assum irule >> qexists_tac `inst_orig` >>
+  simp[] >> irule mem_block_mem_fn_insts >>
+  qexists_tac `bb0` >> simp[]
+QED
+
 Triviality mem_flat_map_intro:
   !x f b ls. MEM b ls /\ MEM x (f b) ==> MEM x (FLAT (MAP f ls))
 Proof
@@ -334,7 +397,7 @@ Proof
     metis_tac[])
 QED
 
-Triviality ao_dfg_inv_step_any:
+Theorem ao_dfg_inv_step_any:
   !dfg fn0 bb inst fuel ctx s s'.
     ssa_form fn0 /\ dfg = dfg_build_function fn0 /\
     MEM bb fn0.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -587,6 +650,78 @@ Proof
                 step_inst_preserves_labels_always])
 QED
 
+(* Exported loop-robust version: ao_chain_defined_prefix is preserved
+   through a non-terminator step WITHOUT requiring output-undefinedness.
+   The proof derives definedness either from step success (ISZERO operand
+   read) or from eval_operand_step_preserved (non-output element). *)
+Theorem ao_chain_defined_prefix_step_non_term:
+  !fn0 targets inst fuel ctx s s'.
+    Abbrev (targets = ao_compute_fn_iszero_targets fn0) /\
+    ssa_form fn0 /\
+    MEM inst (fn_insts fn0) /\
+    inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\
+    ao_chain_defined_prefix targets s /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ao_chain_defined_prefix targets s'
+Proof
+  rpt strip_tac >>
+  simp_tac std_ss [ao_chain_defined_prefix_def] >>
+  rpt strip_tac >>
+  rename1 `ALOOKUP targets v' = SOME chain'` >>
+  rename1 `j1 <= j2` >>
+  Cases_on `?x. EL j2 chain' = Var x /\ MEM x inst.inst_outputs`
+  >- (gvs[] >>
+      rename1 `MEM y inst.inst_outputs` >>
+      Cases_on `j1 = j2` >- metis_tac[] >>
+      `j1 < j2 /\ 0 < j2` by DECIDE_TAC >>
+      qspecl_then [`fn0`, `targets`, `v'`, `chain'`,
+        `j2`, `y`] mp_tac chain_var_is_iszero_output >>
+      impl_tac >- (gvs[markerTheory.Abbrev_def] >> DECIDE_TAC) >>
+      strip_tac >>
+      `inst' = inst` by
+        (qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
+                      `inst'`, `inst`, `y`]
+           mp_tac all_distinct_flat_map_unique >>
+         impl_tac >- gvs[ssa_form_def] >>
+         simp[]) >>
+      gvs[] >>
+      `j1 <= j2 - 1 /\ j2 - 1 < LENGTH chain'` by DECIDE_TAC >>
+      `?w1. eval_operand (EL j1 chain') s = SOME w1` by
+        (qpat_x_assum `ao_chain_defined_prefix _ _`
+           (mp_tac o SIMP_RULE std_ss
+             [ao_chain_defined_prefix_def]) >>
+         disch_then (qspecl_then [`v'`, `chain'`, `j1`, `j2 - 1`]
+           mp_tac) >>
+         impl_tac >- (simp[] >>
+           fs[step_inst_non_invoke, is_terminator_def] >>
+           qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+           simp[Once step_inst_base_def, exec_pure1_def] >>
+           `j2 - 1 + 1 = j2` by DECIDE_TAC >> gvs[] >>
+           every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+           metis_tac[]) >>
+         simp[]) >>
+      metis_tac[eval_operand_fdom_mono,
+                step_inst_fdom_subset,
+                step_inst_preserves_labels_always])
+  >- (`eval_operand (EL j2 chain') s' =
+       eval_operand (EL j2 chain') s` by
+        (irule eval_operand_step_preserved >> metis_tac[]) >>
+      `?w2. eval_operand (EL j2 chain') s = SOME w2` by
+        metis_tac[] >>
+      `j1 < LENGTH chain'` by DECIDE_TAC >>
+      `?w1. eval_operand (EL j1 chain') s = SOME w1` by
+        (qpat_x_assum `ao_chain_defined_prefix _ _`
+           (mp_tac o SIMP_RULE std_ss
+             [ao_chain_defined_prefix_def]) >>
+         disch_then (qspecl_then [`v'`, `chain'`, `j1`, `j2`]
+           mp_tac) >>
+         simp[]) >>
+      metis_tac[eval_operand_fdom_mono,
+                step_inst_fdom_subset,
+                step_inst_preserves_labels_always])
+QED
+
 (* Helper: terminator step preserves all chain operands *)
 Triviality chain_operands_terminator_preserved[local]:
   !fuel ctx inst s s' targets v chain k.
@@ -660,7 +795,7 @@ QED
 
 (* ===== sinv state_equiv compatibility ===== *)
 
-Triviality ao_dfg_inv_state_equiv_compat:
+Theorem ao_dfg_inv_state_equiv_compat:
   !dfg fv s1 s2.
     state_equiv fv s1 s2 /\ ao_dfg_inv dfg s1 /\
     (!x inst. dfg_get_def dfg x = SOME inst ==> x NOTIN fv) ==>

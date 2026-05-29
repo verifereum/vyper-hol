@@ -1093,3 +1093,220 @@ Proof
     TRY (disch_then irule >> simp[] >> NO_TAC) >>
     fs[ao_iszero_chain_inv_def] >> res_tac)
 QED
+
+(* ===== PHI resolution sim (loop-robust) ===== *)
+
+Theorem eval_operands_mem_defined:
+  !ops s vals. eval_operands ops s = SOME vals ==>
+    !op. MEM op ops ==> ?w. eval_operand op s = SOME w
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  BasicProvers.EVERY_CASE_TAC >> simp[] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality ao_resolve_iszero_op_not_label[local]:
+  !targets op lbl.
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+      0 < k /\ k < LENGTH chain ==> ?w. EL k chain = Var w) ==>
+    ao_resolve_iszero_op targets PHI op = Label lbl ==>
+    op = Label lbl
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
+  rename1 `ALOOKUP targets vn` >>
+  Cases_on `ALOOKUP targets vn` >> simp[] >>
+  rename1 `SOME chain` >>
+  simp[LET_THM] >>
+  qabbrev_tac `keep = 2 - (LENGTH chain - 1) MOD 2` >>
+  COND_CASES_TAC >> simp[] >>
+  strip_tac >>
+  `0 < keep /\ keep < LENGTH chain` by
+    (qunabbrev_tac `keep` >> fs[] >>
+     `(LENGTH chain - 1) MOD 2 < 2` by simp[] >> DECIDE_TAC) >>
+  first_x_assum (qspecl_then [`vn`, `chain`, `keep`] mp_tac) >>
+  simp[] >> strip_tac >> fs[operand_distinct]
+QED
+
+Triviality resolve_phi_map_label_pres[local]:
+  !prev ops g.
+    (!lbl. g (Label lbl) = Label lbl) /\
+    (!op lbl. g op = Label lbl ==> op = Label lbl) ==>
+    resolve_phi prev (MAP g ops) = OPTION_MAP g (resolve_phi prev ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qid_spec_tac `ops` >> qid_spec_tac `prev` >>
+  ho_match_mp_tac resolve_phi_ind >> rw[resolve_phi_def] >| [
+    `!lbl. g (Lit v8) <> Label lbl` by
+      (rpt strip_tac >> `Lit v8 = Label lbl` by metis_tac[] >>
+       gvs[operand_distinct]) >>
+    Cases_on `g (Lit v8)` >> gvs[resolve_phi_def],
+    `!lbl. g (Var v9) <> Label lbl` by
+      (rpt strip_tac >> `Var v9 = Label lbl` by metis_tac[] >>
+       gvs[operand_distinct]) >>
+    Cases_on `g (Var v9)` >> gvs[resolve_phi_def]
+  ]
+QED
+
+(* PHI resolution sim using global chain invariant. *)
+Theorem ao_resolve_phi_sim:
+  !targets inst s fuel ctx.
+    inst.inst_opcode = PHI /\
+    ao_iszero_chain_inv targets s /\
+    ao_chains_defined_at targets s /\
+    ao_targets_wf targets /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+      0 < k /\ k < LENGTH chain ==> ?w. EL k chain = Var w) /\
+    ~(?e. step_inst fuel ctx inst s = Error e) ==>
+    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+    step_inst fuel ctx inst s
+Proof
+  rpt strip_tac >>
+  `step_inst fuel ctx inst s = step_inst_base inst s` by
+    simp[step_inst_non_invoke] >>
+  `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
+   step_inst_base (ao_resolve_iszero_inst targets inst) s` by
+    simp[step_inst_non_invoke, ao_resolve_iszero_inst_def] >>
+  simp[] >>
+  simp[Once step_inst_base_def, SimpRHS] >>
+  simp[Once step_inst_base_def, ao_resolve_iszero_inst_def] >>
+  qabbrev_tac `g = ao_resolve_iszero_op targets PHI` >>
+  `!lbl. g (Label lbl) = Label lbl` by
+    simp[Abbr `g`, ao_resolve_iszero_op_def] >>
+  `!op lbl. g op = Label lbl ==> op = Label lbl` by
+    metis_tac[ao_resolve_iszero_op_not_label] >>
+  `!prev. resolve_phi prev (MAP g inst.inst_operands) =
+   OPTION_MAP g (resolve_phi prev inst.inst_operands)` by
+    (gen_tac >> irule resolve_phi_map_label_pres >> simp[]) >>
+  Cases_on `s.vs_prev_bb` >> simp[] >>
+  rename1 `SOME prev` >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
+  rename1 `resolve_phi prev _ = SOME val_op` >>
+  simp[] >>
+  `eval_operand (g val_op) s = eval_operand val_op s` by
+    (qunabbrev_tac `g` >>
+     irule resolve_op_eval_eq_at >> simp[] >>
+     qpat_x_assum `~_` mp_tac >> simp[Once step_inst_def] >>
+     simp[Once step_inst_base_def] >>
+     BasicProvers.EVERY_CASE_TAC >> simp[]) >>
+  simp[]
+QED
+
+(* PHI resolution sim with per-operand (loop-robust) hypotheses. Mirrors
+   ao_resolve_iszero_inst_sim_local: filters targets to the PHI's operand
+   keys, on which the global chain invariant holds, then reduces to
+   ao_resolve_phi_sim. *)
+Theorem ao_resolve_phi_sim_local:
+  !targets inst fuel ctx st.
+    inst.inst_opcode = PHI /\
+    ao_targets_wf targets /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\
+      0 < k /\ k < LENGTH chain ==> ?w. EL k chain = Var w) /\
+    (!v chain k. MEM (Var v) inst.inst_operands /\
+                 ALOOKUP targets v = SOME chain /\
+                 (?w0. eval_operand (Var v) st = SOME w0) /\
+                 k < LENGTH chain ==>
+                 ?w. eval_operand (EL k chain) st = SOME w) /\
+    (!v chain k. MEM (Var v) inst.inst_operands /\
+                 ALOOKUP targets v = SOME chain /\ k + 1 < LENGTH chain ==>
+                 !val_k val_k1.
+                   eval_operand (EL k chain) st = SOME val_k /\
+                   eval_operand (EL (k + 1) chain) st = SOME val_k1 ==>
+                   val_k1 = bool_to_word (val_k = 0w)) /\
+    ~(?e. step_inst fuel ctx inst st = Error e) ==>
+    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) st =
+    step_inst fuel ctx inst st
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `P = \v:string. MEM (Var v) inst.inst_operands` >>
+  qabbrev_tac `rt = FILTER (\(v, chain). P v) targets` >>
+  `!v. P v ==> ALOOKUP rt v = ALOOKUP targets v` by
+    simp[Abbr `rt`, alistTheory.ALOOKUP_FILTER] >>
+  `!v. ~P v ==> ALOOKUP rt v = NONE` by
+    simp[Abbr `rt`, alistTheory.ALOOKUP_FILTER] >>
+  `ao_resolve_iszero_inst targets inst =
+   ao_resolve_iszero_inst rt inst` by
+    (simp[ao_resolve_iszero_inst_def, instruction_component_equality] >>
+     irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+     Cases_on `x` >> simp[ao_resolve_iszero_op_def] >>
+     rename1 `Var vn` >>
+     `P vn` by simp[Abbr `P`] >>
+     first_x_assum drule >> simp[]) >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  `ao_targets_wf rt` by
+    (rw[ao_targets_wf_def] >> rpt strip_tac >> (
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     metis_tac[ao_targets_wf_def])) >>
+  `!v chain k. ALOOKUP rt v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
+     ?w. EL k chain = Var w` by
+    (rpt strip_tac >>
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     metis_tac[]) >>
+  `ao_iszero_chain_inv rt st` by
+    (rw[ao_iszero_chain_inv_def] >> rpt strip_tac >>
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     `MEM (Var v) inst.inst_operands` by fs[Abbr `P`] >>
+     qpat_x_assum `!v chain k. MEM _ _ /\ _ /\ k + 1 < _ ==> _`
+       (qspecl_then [`v`, `chain`, `k`] mp_tac) >> simp[]) >>
+  `ao_chains_defined_at rt st` by
+    (rw[ao_chains_defined_at_def] >> rpt strip_tac >>
+     `P v` by
+       (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     `MEM (Var v) inst.inst_operands` by fs[Abbr `P`] >>
+     qpat_x_assum `!v chain k. _ /\ _ /\ _ /\ k < _ ==> ?w. _`
+       (qspecl_then [`v`, `chain`, `k`] mp_tac) >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  irule ao_resolve_phi_sim >> simp[] >>
+  conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (qpat_x_assum `~(?e. _)` mp_tac >> simp[])
+QED
+
+(* ===== Small step helpers (loop-robust per-inst sim support) ===== *)
+
+Theorem ao_resolve_iszero_op_iszero:
+  !targets op. ao_resolve_iszero_op targets ISZERO op = op
+Proof
+  rpt gen_tac >> Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
+  BasicProvers.EVERY_CASE_TAC >> simp[]
+QED
+
+Theorem invoke_operand_defined:
+  !fuel ctx inst s v.
+    inst.inst_opcode = INVOKE /\
+    ~(?e. step_inst fuel ctx inst s = Error e) /\
+    MEM (Var v) inst.inst_operands ==>
+    v IN FDOM s.vs_vars
+Proof
+  rpt strip_tac >>
+  Cases_on `step_inst fuel ctx inst s` >> gvs[] >>
+  gvs[Once step_inst_def, decode_invoke_def, AllCaseEqs()] >>
+  drule eval_operands_mem_defined >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
+Theorem step_inst_base_zero_eval_op_irrel:
+  !inst ops s.
+    MEM inst.inst_opcode [NOP; STOP; SINK; INVALID;
+      CALLER; ADDRESS; CALLVALUE; GAS; GASLIMIT;
+      ORIGIN; GASPRICE; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; CHAINID;
+      SELFBALANCE; BASEFEE; BLOBBASEFEE; CALLDATASIZE; RETURNDATASIZE;
+      CODESIZE; MEMTOP] ==>
+    step_inst_base (inst with inst_operands := ops) s =
+    step_inst_base inst s
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM _ _` mp_tac >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  gvs[step_inst_base_def, exec_read0_def]
+QED

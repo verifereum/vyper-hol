@@ -898,6 +898,19 @@ Definition ao_fn_fresh_vars_def:
          v = ao_fresh_var id "xor") }
 End
 
+(* Fresh-var disjointness: no name synthesized by the pass collides with a
+   source operand or output.  Not derivable from wf_function (which imposes no
+   naming constraint); carried as an explicit precondition, matching the
+   convention of every other insertion pass (m2v_fresh_names_disjoint,
+   branch_opt's bo_fresh_vars_fn).  Satisfiable because real Venom variable
+   names never use the synthetic "ao_<id>_<suffix>" scheme. *)
+Definition ao_fresh_names_disjoint_def:
+  ao_fresh_names_disjoint fn <=>
+    !v. v IN ao_fn_fresh_vars fn ==>
+      !inst. MEM inst (fn_insts fn) ==>
+        ~MEM v inst.inst_outputs /\ ~MEM (Var v) inst.inst_operands
+End
+
 Definition ao_cmp_fresh_vars_def:
   ao_cmp_fresh_vars fn =
     { v | ?id.

@@ -8,9 +8,9 @@
 
 Theory aoWf
 Ancestors
-  algebraicOptDefs aoPeepholeSim
+  algebraicOptDefs aoPeepholeSim aoResolveSim
   venomState venomWf venomInst passSimulationProps passSimulationDefs
-  passSharedDefs
+  passSharedDefs analysisSimDefs
 Libs
   pairLib BasicProvers
 
@@ -690,7 +690,7 @@ QED
 
 (* ao_resolve_iszero_inst preserves inst_wf for non-PHI opcodes.
    resolve only changes operand VALUES (not LENGTH), and preserves Labels. *)
-Triviality ao_resolve_iszero_inst_wf[local]:
+Theorem ao_resolve_iszero_inst_wf:
   !targets inst.
     inst_wf inst /\ inst.inst_opcode <> PHI ==>
     inst_wf (ao_resolve_iszero_inst targets inst)
@@ -889,6 +889,156 @@ Proof
         drule ao_opt_producer_non_phi >>
         simp[ao_resolve_iszero_inst_opcode]) >>
       fs[listTheory.EVERY_MEM] >> res_tac >> simp[ao_post_flip_opcode])
+QED
+
+(* ===== ao_transform_inst structural property (wf-free) ===== *)
+
+(* terminators are not ASSIGN/PHI/PARAM/INVOKE *)
+Triviality terminator_not_ssa[local]:
+  !opc. is_terminator opc ==>
+    opc <> ASSIGN /\ opc <> PHI /\ opc <> PARAM /\ opc <> INVOKE
+Proof
+  Cases >> simp[is_terminator_def]
+QED
+
+(* ao_opt_producer always returns NONE for terminators and INVOKE *)
+Triviality ao_opt_producer_non_special[local]:
+  !dfg inst.
+    is_terminator inst.inst_opcode \/ inst.inst_opcode = INVOKE ==>
+    ao_opt_producer dfg inst = NONE
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[ao_opt_producer_def, is_terminator_def]
+QED
+
+(* ao_opt_producer results are non-terminator non-INVOKE *)
+Triviality ao_opt_producer_every_non_special[local]:
+  !dfg inst result.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    ao_opt_producer dfg inst = SOME result ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) result
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `ao_opt_producer _ _ = _` mp_tac >>
+  simp[ao_opt_producer_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt (CASE_TAC >> gvs[]) >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  rpt strip_tac >> gvs[listTheory.EVERY_DEF, is_terminator_def]
+QED
+
+(* MAP ao_post_flip_inst preserves non-terminator non-INVOKE *)
+Triviality map_post_flip_every_non_special[local]:
+  !insts.
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) insts ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+          (MAP ao_post_flip_inst insts)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[ao_post_flip_opcode]
+QED
+
+(* Comparator output is always non-terminator non-INVOKE (wf-free) *)
+Triviality ao_opt_comparator_non_special[local]:
+  !mid dfg ra lbl idx inst.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+      (ao_opt_comparator mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_opt_comparator_def, LET_THM,
+       ao_unsigned_boundaries_def, ao_signed_boundaries_def] >>
+  Cases_on `inst.inst_operands` >> gvs[listTheory.EVERY_DEF] >>
+  Cases_on `t` >> gvs[listTheory.EVERY_DEF] >>
+  Cases_on `t'` >> gvs[listTheory.EVERY_DEF] >>
+  IF_CASES_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
+  CASE_TAC >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
+  rpt IF_CASES_TAC >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def,
+      ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+      ao_cmp_prefer_iz_general_def] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def]
+QED
+
+(* Peephole output is always non-terminator non-INVOKE (wf-free) *)
+Triviality ao_peephole_inst_non_special[local]:
+  !mid dfg ra lbl idx inst.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+      (ao_peephole_inst mid dfg ra lbl idx inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ao_peephole_inst_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> simp[listTheory.EVERY_DEF]) >>
+  gvs[] >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def,
+       ao_opt_or_def, ao_opt_eq_def, LET_THM] >>
+  rpt (FIRST [CASE_TAC, IF_CASES_TAC]) >>
+  gvs[listTheory.EVERY_DEF, is_terminator_def] >>
+  irule ao_opt_comparator_non_special >> simp[is_terminator_def]
+QED
+
+(* ao_transform_inst is structural: preserves terminator/INVOKE/other class *)
+Theorem ao_transform_inst_structural:
+  !mid dfg ra lbl targets.
+    inst_transform_structural
+      (\(v:num) inst. ao_transform_inst mid dfg ra lbl v targets inst)
+Proof
+  rpt gen_tac >> simp[inst_transform_structural_def] >> rpt conj_tac
+  >- (* Terminators: singleton terminator *)
+     (rpt gen_tac >> strip_tac >>
+      Cases_on `inst.inst_outputs = []`
+      >- (qexists_tac `ao_resolve_iszero_inst targets inst` >>
+          simp[ao_transform_inst_def, LET_THM,
+               ao_resolve_iszero_inst_outputs,
+               ao_resolve_iszero_inst_opcode])
+      >- (imp_res_tac terminator_not_ssa >>
+          `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) = NONE` by
+            (irule ao_opt_producer_non_special >>
+             simp[ao_resolve_iszero_inst_opcode]) >>
+          `ao_peephole_inst mid dfg ra lbl v
+             (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)) =
+           [ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)]` by
+            (irule ao_peephole_inst_terminator >>
+             simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode]) >>
+          qexists_tac
+            `ao_post_flip_inst
+               (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst))` >>
+          gvs[ao_transform_inst_def, LET_THM,
+              ao_resolve_iszero_inst_opcode,
+              ao_resolve_iszero_inst_outputs,
+              ao_post_flip_opcode, ao_pre_flip_opcode]))
+  >- (* INVOKE: singleton INVOKE *)
+     (rpt gen_tac >> strip_tac >>
+      qspecl_then [`mid`, `dfg`, `ra`, `lbl`, `v`, `targets`, `inst`]
+        strip_assume_tac ao_transform_inst_invoke >>
+      gvs[] >> qexists_tac `inst'` >> simp[])
+  >- (* Non-term non-INVOKE: EVERY non-term non-INVOKE *)
+     (rpt gen_tac >> strip_tac >>
+      simp[ao_transform_inst_def, LET_THM,
+           ao_resolve_iszero_inst_opcode,
+           ao_resolve_iszero_inst_outputs] >>
+      Cases_on `inst.inst_outputs = []`
+      >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def]
+      >- (simp[] >>
+          Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
+                    inst.inst_opcode = PARAM`
+          >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def]
+          >- (simp[ao_resolve_iszero_inst_opcode] >>
+              Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)`
+              >- (simp[] >>
+                  irule map_post_flip_every_non_special >>
+                  irule ao_peephole_inst_non_special >>
+                  simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode])
+              >- (`~is_terminator
+                      (ao_resolve_iszero_inst targets inst).inst_opcode`
+                      by simp[ao_resolve_iszero_inst_opcode] >>
+                  `(ao_resolve_iszero_inst targets inst).inst_opcode <> INVOKE`
+                      by simp[ao_resolve_iszero_inst_opcode] >>
+                  simp[] >>
+                  imp_res_tac ao_opt_producer_every_non_special >>
+                  irule map_post_flip_every_non_special >> simp[]))))
 QED
 
 (* ===== Phase 3: ao_transform_block helpers ===== *)
