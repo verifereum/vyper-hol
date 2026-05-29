@@ -184,7 +184,8 @@ Definition ao_resolve_iszero_op_def:
                    depth MOD 2
                  else
                    2 - depth MOD 2 in
-               if keep < depth /\ keep < LENGTH chain then
+               if keep < depth /\ keep < LENGTH chain /\
+                  get_label (EL keep chain) = NONE then
                  EL keep chain
                else op)
     | _ => op
@@ -903,7 +904,10 @@ End
    naming constraint); carried as an explicit precondition, matching the
    convention of every other insertion pass (m2v_fresh_names_disjoint,
    branch_opt's bo_fresh_vars_fn).  Satisfiable because real Venom variable
-   names never use the synthetic "ao_<id>_<suffix>" scheme. *)
+   names never use the synthetic "ao_<id>_<suffix>" scheme.
+   Stronger than output-only disjointness (the operand clause is needed by
+   the phase-3 simulation proof); implies the output-only fact used by the
+   WF/SSA preservation proofs. *)
 Definition ao_fresh_names_disjoint_def:
   ao_fresh_names_disjoint fn <=>
     !v. v IN ao_fn_fresh_vars fn ==>

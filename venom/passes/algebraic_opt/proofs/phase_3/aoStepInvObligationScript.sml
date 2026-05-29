@@ -13,7 +13,7 @@
 Theory aoStepInvObligation
 Ancestors
   algebraicOptDefs aoResolveObligation aoRangeObligation
-  aoTargetProps aoBlockInvObligation aoWf
+  aoTargetProps aoBlockInvObligation aoPhase1Wf aoPhase3Wf
   stateEquiv venomWf venomExecSemantics venomExecProofs venomState
   venomInst venomInstProofs venomInstProps
   analysisSimDefs rangeAnalysisProofs rangeAnalysisDefs rangeEvalDefs

@@ -23,6 +23,7 @@ Theorem ao_transform_function_correct:
   !fuel ctx fn s.
     let fv' = ao_fn_total_fresh_vars fn in
     wf_function fn /\ wf_ssa fn /\ EVERY inst_wf (fn_insts fn) /\
+    ao_fresh_names_disjoint fn /\
     FDOM s.vs_vars = {} /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
@@ -58,12 +59,17 @@ Proof
           Abbr `ra`, Abbr `mid`] >>
      disch_then match_mp_tac >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  (* WF preservation + fresh vars *)
-  `wf_function fn1 /\ ssa_form fn1 /\
-   EVERY inst_wf (fn_insts fn1) /\
-   (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-     v NOTIN ao_cmp_fresh_vars fn1)` by
+  (* WF preservation (phases 1-3) *)
+  `wf_function fn1 /\ ssa_form fn1 /\ EVERY inst_wf (fn_insts fn1)` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases123_preserve_wf) >>
+     disch_then (qspec_then `fn` mp_tac) >>
+     simp[Abbr `fn0`, Abbr `fn1`, Abbr `targets`, Abbr `dfg`,
+          Abbr `ra`, Abbr `mid`] >>
+     metis_tac[]) >>
+  (* cmp iszero fresh-var operand disjointness (phases 1-3) *)
+  `!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
+     v NOTIN ao_cmp_fresh_vars fn1` by
+    (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases123_cmp_fresh_disjoint) >>
      disch_then (qspec_then `fn` mp_tac) >>
      simp[Abbr `fn0`, Abbr `fn1`, Abbr `targets`, Abbr `dfg`,
           Abbr `ra`, Abbr `mid`] >>
