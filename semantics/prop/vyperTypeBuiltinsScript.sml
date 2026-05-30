@@ -2523,13 +2523,15 @@ Theorem neg_no_type_error[local]:
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `is_numeric_type _` mp_tac >>
-  REWRITE_TAC[is_numeric_type_inv] >> strip_tac
-  >> TRY (
+  REWRITE_TAC[is_numeric_type_inv] >>
+  strip_tac >- (
     qpat_x_assum `is_int_type _` mp_tac >>
     REWRITE_TAC[is_int_type_inv] >> strip_tac >>
     gvs[] >>
     imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
-    simp[evaluate_builtin_def, type_to_int_bound_def, bounded_int_op_def] >> NO_TAC) >>
+    simp[evaluate_builtin_def, type_to_int_bound_def, bounded_int_op_def] >>
+    rw[] >>
+    NO_TAC) >>
   TRY (
     gvs[] >>
     imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
@@ -2987,13 +2989,23 @@ Proof
        Cases_on `x` >> gvs[] >>
        gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
        rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
-       simp[w2n_and_low_mask_lt] >> NO_TAC) >>
+       simp[w2n_and_low_mask_lt] >> NO_TAC)
+  >>~[`Neg`] >-
   (* Neg: INL from bounded_int_op/decimal op carries the result bounds. *)
-  TRY (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
-       gvs[evaluate_builtin_def, type_to_int_bound_def] >>
-       TRY (imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC) >>
-       TRY (imp_res_tac bounded_decimal_op_INL >> gvs[] >> NO_TAC) >>
-       NO_TAC) >>
+  (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
+   gvs[evaluate_builtin_def, type_to_int_bound_def] >>
+   pop_assum mp_tac >> rw[] >>
+   imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC)
+  >- (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
+   gvs[evaluate_builtin_def, type_to_int_bound_def] >>
+   pop_assum mp_tac >> rw[] >>
+   imp_res_tac bounded_decimal_op_INL >> gvs[] >>
+   imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC)
+  >- (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
+   gvs[evaluate_builtin_def, type_to_int_bound_def] >>
+   pop_assum mp_tac >> rw[] >>
+   imp_res_tac bounded_decimal_op_INL >> gvs[] >>
+   imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC) >>
   (* Hash builtins return fixed 32-byte values. *)
   TRY (rename1 `evaluate_builtin _ _ _ Keccak256 [arg] = INL _` >>
        Cases_on `arg` >>
@@ -3108,6 +3120,7 @@ Proof
   (* Arithmetic cleanup *)
   TRY (intLib.ARITH_TAC)
 QED
+
 Theorem return_INL_value[local]:
   return x st = (INL y, st') ==> y = x
 Proof
