@@ -92,7 +92,12 @@ Theorem internal_call_no_type_error:
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
   no_type_error_eval (eval_expr cx (Call ty (IntCall (src,fn)) args drv) st)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty (IntCall (src,fn)) args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
+  disch_then drule >> simp[] >>
+  rpt strip_tac >> gvs[no_type_error_result_def]
 QED
 
 Theorem internal_call_type_preservation:
@@ -102,24 +107,36 @@ Theorem internal_call_type_preservation:
   eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL tvl, st') ==>
   state_well_typed st' /\ expr_runtime_typed env (Call ty (IntCall (src,fn)) args drv) tvl
 Proof
-  cheat
+  strip_tac >>
+  drule_all (cj 8 eval_all_type_sound_mutual) >>
+  simp[expr_result_typed_def]
 QED
 
 Theorem external_call_no_type_error:
   well_typed_expr env (Call ty (ExtCall stat fsig) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts ==>
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
   no_type_error_eval (eval_expr cx (Call ty (ExtCall stat fsig) args drv) st)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty (ExtCall stat fsig) args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
+  disch_then drule >> simp[] >>
+  rpt strip_tac >> gvs[no_type_error_result_def]
 QED
 
 Theorem special_call_no_type_error:
   well_typed_expr env (Call ty target args drv) /\
   target <> IntCall (src,fn) /\ (!stat fsig. target <> ExtCall stat fsig) /\
   env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts ==>
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
   no_type_error_eval (eval_expr cx (Call ty target args drv) st)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty target args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
+  disch_then drule >> simp[] >>
+  rpt strip_tac >> gvs[no_type_error_result_def]
 QED

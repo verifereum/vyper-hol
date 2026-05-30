@@ -10,6 +10,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
+  vyperTypeABI
   vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
@@ -9539,6 +9540,79 @@ Proof
   simp[]
 QED
 
+Theorem evaluate_abi_decode_return_well_typed[local]:
+  !tenv ret_type bs v tv.
+    evaluate_abi_decode_return tenv ret_type bs = INL v /\
+    evaluate_type tenv ret_type = SOME tv ==>
+    value_has_type tv v
+Proof
+  rpt strip_tac >>
+  gvs[evaluate_abi_decode_return_def, AllCaseEqs(), LET_THM] >>
+  TRY (metis_tac[evaluate_abi_decode_well_typed]) >>
+  `evaluate_type tenv (TupleT [ret_type]) = SOME (TupleTV [tv])` by (
+    imp_res_tac (cj 1 evaluate_type_well_formed) >>
+    imp_res_tac well_formed_type_value_slot_size >>
+    gvs[evaluate_type_def, OPT_MMAP_def, type_slot_size_def,
+        wordsTheory.dimword_def]) >>
+  drule_all evaluate_abi_decode_well_typed >> strip_tac >>
+  gvs[value_has_type_inv, value_has_type_def]
+QED
+
+Theorem update_accounts_transient_runtime_consistent[local]:
+  runtime_consistent env cx st /\ accounts_well_typed accounts' ==>
+  runtime_consistent env cx (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  rw[runtime_consistent_def, state_well_typed_def, env_consistent_def] >>
+  gvs[env_scopes_consistent_def, env_immutables_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem extcall_return_tail_sound[local]:
+  !env cx es drv ret_type ret_tv returnData st res st'.
+    runtime_consistent env cx st /\ functions_well_typed cx /\
+    well_typed_opt env drv /\
+    evaluate_type env.type_defs ret_type = SOME ret_tv /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (!env0 st0 res0 st0'.
+       env_consistent env0 cx st0 /\ state_well_typed st0 /\
+       context_well_typed cx /\ accounts_well_typed st0.accounts /\
+       functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
+       (well_typed_expr env0 (THE drv) ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T)) /\
+    (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+     else do
+       ret_val <- lift_sum_runtime (evaluate_abi_decode_return env.type_defs ret_type returnData);
+       return (Value ret_val)
+     od) st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call ret_type (ExtCall stat fsig) es drv) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `returnData = [] /\ IS_SOME drv` >> gvs[]
+  >- (
+    Cases_on `drv` >> gvs[Once well_typed_expr_def, runtime_consistent_def] >>
+    qpat_x_assum `!env0 st0 res0 st0'. _`
+      (qspecl_then [`env`, `st`, `res`, `st'`] mp_tac) >>
+    simp[] >> strip_tac >>
+    Cases_on `res` >> gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def] >>
+    metis_tac[well_typed_expr_not_hashmap_place]) >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
+  Cases_on `evaluate_abi_decode_return env.type_defs ret_type returnData` >>
+  gvs[return_def, raise_def, no_type_error_result_def,
+      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+      toplevel_value_typed_def, is_HashMapRef_def] >>
+  strip_tac >> gvs[is_HashMapRef_def, runtime_consistent_def] >>
+  qspecl_then [`env.type_defs`, `ret_type`, `returnData`, `x`, `ret_tv`]
+    mp_tac evaluate_abi_decode_return_well_typed >>
+  simp[toplevel_value_typed_def]
+QED
+
 Theorem extcall_static_args_runtime_typed_dest[local]:
   exprs_runtime_typed env args vs /\
   MAP expr_type args = BaseT AddressT :: arg_tys ==>
@@ -16761,7 +16835,6 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def] >>
-    simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!s'' x t. type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ==> _` mp_tac >>
@@ -16795,7 +16868,9 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
         simp[]) >>
       strip_tac >> gvs[runtime_consistent_def]) >>
     strip_tac >> gvs[]) >>
-  rpt strip_tac >> gvs[Once well_typed_expr_def]
+  rpt strip_tac >>
+  qpat_x_assum `type_place_expr env (Call _ Send _ _) = SOME vt` mp_tac >>
+  simp[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
@@ -16927,11 +17002,11 @@ Resume eval_all_type_sound_mutual[Exprs_cons]:
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (r1,st1)` >>
   first_x_assum drule_all >> strip_tac >>
-  Cases_on `r1` >> gvs[no_type_error_result_def]
+  Cases_on `r1`
   >- (
     Cases_on `materialise cx x st1` >>
     rename1 `materialise cx x st1 = (mr,stm)` >>
-    Cases_on `mr` >> gvs[no_type_error_result_def]
+    Cases_on `mr`
     >- (
       `stm = st1` by metis_tac[materialise_state] >> gvs[] >>
       Cases_on `eval_exprs cx es st1` >>
@@ -16948,8 +17023,11 @@ Resume eval_all_type_sound_mutual[Exprs_cons]:
       strip_tac >> gvs[]) >>
     strip_tac >> gvs[] >>
     `st' = st1` by metis_tac[materialise_state] >> gvs[] >>
-    metis_tac[expr_result_typed_materialise_no_type_error]) >>
-  strip_tac >> gvs[]
+    rw[no_type_error_result_def] >>
+    drule_all expr_result_typed_materialise_no_type_error >> simp[]) >>
+  strip_tac >> gvs[] >>
+  rpt (pop_assum mp_tac) >> rpt strip_tac >>
+  fs[no_type_error_result_def]
 QED
 
 Finalise eval_all_type_sound_mutual
