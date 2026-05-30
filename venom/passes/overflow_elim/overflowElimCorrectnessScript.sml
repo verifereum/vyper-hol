@@ -25,11 +25,6 @@ Theorem overflow_elim_function_correct:
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-      (LAST bb.bb_instructions).inst_opcode = JNZ /\
-      (LAST bb.bb_instructions).inst_operands =
-        [cond; Label true_lbl; Label false_lbl] ==>
-      true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_ext_sound (dfg_build_function fn) s.vs_vars /\

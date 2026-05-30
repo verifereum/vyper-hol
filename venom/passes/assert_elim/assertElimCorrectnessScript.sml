@@ -28,12 +28,6 @@ Theorem assert_elim_function_correct:
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    (!bb cond true_lbl false_lbl.
-      MEM bb fn.fn_blocks /\
-      (LAST bb.bb_instructions).inst_opcode = JNZ /\
-      (LAST bb.bb_instructions).inst_operands =
-        [cond; Label true_lbl; Label false_lbl] ==>
-      true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_sound (dfg_build_function fn) s.vs_vars /\
@@ -51,7 +45,7 @@ Proof
   rpt strip_tac >>
   `fn.fn_blocks <> []` by fs[wf_function_def, fn_has_entry_def] >>
   `fn_entry_label (assert_elim_function fn) = fn_entry_label fn` by
-    (pop_assum mp_tac >> ntac 12 (pop_assum kall_tac) >>
+    (pop_assum mp_tac >> ntac 11 (pop_assum kall_tac) >>
      simp[fn_entry_label_def, entry_block_def, assert_elim_function_def,
           clear_nops_function_def, analysis_function_transform_widen_def,
           function_map_transform_def, clear_nops_block_def,

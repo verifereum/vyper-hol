@@ -3095,13 +3095,16 @@ Theorem range_branch_refine_sound:
   !dfg bbs pred succ rs env.
     in_range_state rs env /\
     dfg_sound dfg env /\
-    (* JNZ condition matches the branch direction *)
+    (* JNZ condition matches the branch direction. Only required for
+       non-degenerate JNZ (true_lbl <> false_lbl); the degenerate case is
+       handled soundly by range_branch_refine without refining. *)
     (!bb cond_op true_lbl false_lbl.
        lookup_block pred bbs = SOME bb /\
        bb.bb_instructions <> [] /\
        (LAST bb.bb_instructions).inst_opcode = JNZ /\
        (LAST bb.bb_instructions).inst_operands =
-         [cond_op; Label true_lbl; Label false_lbl] ==>
+         [cond_op; Label true_lbl; Label false_lbl] /\
+       true_lbl <> false_lbl ==>
        (!v. cond_op = Var v ==>
             ?w. FLOOKUP env v = SOME w /\
                 ((succ = true_lbl) ==> w <> 0w) /\
@@ -3120,7 +3123,9 @@ Proof
   Cases_on `h'` >> simp[] >>
   Cases_on `h''` >> simp[] >>
   Cases_on `t` >> simp[] >>
-  (* Instantiate the JNZ hypothesis *)
+  (* Degenerate JNZ cond, L, L: no refinement, rs is already sound. *)
+  IF_CASES_TAC >- simp[] >>
+  (* Instantiate the JNZ hypothesis (now have true_lbl <> false_lbl) *)
   first_x_assum (qspecl_then [`x`, `h`, `s`, `s'`] mp_tac) >>
   simp[] >> strip_tac >>
   IF_CASES_TAC >> gvs[]

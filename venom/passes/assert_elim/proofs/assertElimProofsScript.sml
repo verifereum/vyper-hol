@@ -922,8 +922,11 @@ Proof
 QED
 
 (* Helper: JNZ branch condition for range_branch_refine_sound.
-   When JNZ always has distinct labels, we can derive the branch condition
-   from run_block_jnz_condition. *)
+   The branch condition is derived from run_block_jnz_condition, which needs
+   distinct JNZ targets. We carry true_lbl <> false_lbl as a local antecedent
+   (degenerate JNZ cond, L, L cannot occur in a realizable function and is
+   handled soundly by range_branch_refine without refining), so no global
+   JNZ-distinct precondition is required. *)
 Theorem jnz_branch_condition_from_run_block:
   !fn bb fuel run_ctx s v succ.
     run_block fuel run_ctx bb s = OK v /\
@@ -934,18 +937,14 @@ Theorem jnz_branch_condition_from_run_block:
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     MEM bb fn.fn_blocks /\
-    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-      (LAST bb.bb_instructions).inst_opcode = JNZ /\
-      (LAST bb.bb_instructions).inst_operands =
-        [cond; Label true_lbl; Label false_lbl] ==>
-      true_lbl <> false_lbl) ==>
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb ==>
     !bb' cond_op true_lbl false_lbl.
       lookup_block bb.bb_label fn.fn_blocks = SOME bb' /\
       bb'.bb_instructions <> [] /\
       (LAST bb'.bb_instructions).inst_opcode = JNZ /\
       (LAST bb'.bb_instructions).inst_operands =
-        [cond_op; Label true_lbl; Label false_lbl] ==>
+        [cond_op; Label true_lbl; Label false_lbl] /\
+      true_lbl <> false_lbl ==>
       !var. cond_op = Var var ==>
         ?w. FLOOKUP v.vs_vars var = SOME w /\
             (succ = true_lbl ==> w <> 0w) /\
@@ -953,8 +952,6 @@ Theorem jnz_branch_condition_from_run_block:
 Proof
   rpt strip_tac >> BasicProvers.VAR_EQ_TAC >>
   `bb' = bb` by fs[] >> BasicProvers.VAR_EQ_TAC >>
-  `true_lbl <> false_lbl` by (
-    CCONTR_TAC >> fs[] >> res_tac) >>
   mp_tac run_block_jnz_condition >>
   disch_then (qspecl_then [`fuel`, `run_ctx`, `bb`, `s`, `v`,
     `var`, `true_lbl`, `false_lbl`] mp_tac) >>
@@ -975,11 +972,6 @@ Theorem range_branch_refine_after_run_block:
       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     MEM bb fn.fn_blocks /\
     lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-      (LAST bb.bb_instructions).inst_opcode = JNZ /\
-      (LAST bb.bb_instructions).inst_operands =
-        [cond; Label true_lbl; Label false_lbl] ==>
-      true_lbl <> false_lbl) /\
     in_range_state boundary_rs v.vs_vars /\
     dfg_sound (dfg_build_function fn) v.vs_vars ==>
     in_range_state (range_branch_refine (dfg_build_function fn)
@@ -994,7 +986,8 @@ Proof
       bb'.bb_instructions <> [] /\
       (LAST bb'.bb_instructions).inst_opcode = JNZ /\
       (LAST bb'.bb_instructions).inst_operands =
-        [cond_op; Label true_lbl; Label false_lbl] ==>
+        [cond_op; Label true_lbl; Label false_lbl] /\
+      true_lbl <> false_lbl ==>
       !var. cond_op = Var var ==>
         ?w. FLOOKUP v.vs_vars var = SOME w /\
             (succ = true_lbl ==> w <> 0w) /\
@@ -1032,11 +1025,6 @@ Theorem range_sound_at_successor:
       (!bb. MEM bb fn.fn_blocks ==>
         !i. i < LENGTH bb.bb_instructions - 1 ==>
           ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-      (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-        (LAST bb.bb_instructions).inst_opcode = JNZ /\
-        (LAST bb.bb_instructions).inst_operands =
-          [cond; Label true_lbl; Label false_lbl] ==>
-        true_lbl <> false_lbl) /\
       MEM bb fn.fn_blocks /\
       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
       s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
@@ -1160,15 +1148,6 @@ Proof
     qexists_tac `bb.bb_label` >>
     conj_tac >- (BETA_TAC >> REFL_TAC) >>
     first_assum ACCEPT_TAC)
-  (* Step 12: Re-derive JNZ distinct-labels in original form *)
-  \\ `!bb' cond true_lbl false_lbl. MEM bb' fn.fn_blocks /\
-        (LAST bb'.bb_instructions).inst_opcode = JNZ /\
-        (LAST bb'.bb_instructions).inst_operands =
-          [cond; Label true_lbl; Label false_lbl] ==>
-        true_lbl <> false_lbl` by (
-    rpt gen_tac >> strip_tac >> CCONTR_TAC >>
-    `true_lbl = false_lbl` by (pop_assum mp_tac >> REWRITE_TAC[]) >>
-    BasicProvers.VAR_EQ_TAC >> res_tac)
   (* Step 13: specialize non-terminator hypothesis for bb *)
   \\ `!i. i < LENGTH bb.bb_instructions - 1 ==>
       ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
@@ -1207,11 +1186,6 @@ Theorem range_successor_sound:
       (!bb. MEM bb fn.fn_blocks ==>
         !i. i < LENGTH bb.bb_instructions - 1 ==>
           ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-      (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-        (LAST bb.bb_instructions).inst_opcode = JNZ /\
-        (LAST bb.bb_instructions).inst_operands =
-          [cond; Label true_lbl; Label false_lbl] ==>
-        true_lbl <> false_lbl) /\
       MEM bb fn.fn_blocks /\
       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
       s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
@@ -1277,28 +1251,10 @@ Proof
   rpt strip_tac >> imp_res_tac state_equiv_empty_vars_eq >> fs[]
 QED
 
-(* Re-derive original JNZ distinct-labels from HOL-simplified form.
-   HOL simplifies (!bb cond tl fl. ... ==> tl <> fl) to
-   (!bb cond fl. JNZ ==> ops=[...fl;fl] ==> ~MEM bb bbs).
-   range_successor_sound needs the original form. *)
-Theorem jnz_distinct_labels_from_simplified:
-  (!bb cond false_lbl.
-     (LAST bb.bb_instructions).inst_opcode = JNZ ==>
-     (LAST bb.bb_instructions).inst_operands =
-       [cond; Label false_lbl; Label false_lbl] ==>
-     ~MEM bb bbs) ==>
-  (!bb cond true_lbl false_lbl.
-     MEM bb bbs /\
-     (LAST bb.bb_instructions).inst_opcode = JNZ /\
-     (LAST bb.bb_instructions).inst_operands =
-       [cond; Label true_lbl; Label false_lbl] ==>
-     true_lbl <> false_lbl)
-Proof
-  rpt strip_tac >> CCONTR_TAC >> gvs[]
-QED
-
 (* Successor obligation adapted for the framework call context.
-   Uses range_successor_sound but handles the JNZ hypothesis form mismatch. *)
+   Uses range_successor_sound. JNZ distinct-target soundness is handled
+   internally by range_branch_refine (degenerate JNZ cond, L, L cannot occur
+   in a realizable function), so no JNZ-distinct precondition is needed. *)
 Theorem range_successor_obligation:
   wf_function fn /\ fn_inst_wf fn /\
   (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
@@ -1307,12 +1263,7 @@ Theorem range_successor_obligation:
   dfg_block_local fn /\
   (!bb. MEM bb fn.fn_blocks ==>
     !i. i < LENGTH bb.bb_instructions - 1 ==>
-      ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-  (!bb cond false_lbl.
-     (LAST bb.bb_instructions).inst_opcode = JNZ ==>
-     (LAST bb.bb_instructions).inst_operands =
-       [cond; Label false_lbl; Label false_lbl] ==>
-     ~MEM bb fn.fn_blocks) ==>
+      ~is_terminator (EL i bb.bb_instructions).inst_opcode) ==>
   !bb fuel run_ctx s v.
     MEM bb fn.fn_blocks /\
     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
@@ -1333,7 +1284,6 @@ Theorem range_successor_obligation:
        u IN FDOM v.vs_vars)
 Proof
   strip_tac
-  >> imp_res_tac jnz_distinct_labels_from_simplified
   >> rpt gen_tac >> strip_tac
   >> `run_block fuel run_ctx bb s = OK v` by
        metis_tac[run_block_is_exec_block]
@@ -1354,11 +1304,6 @@ Theorem assert_elim_function_correct_proof:
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
-    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
-      (LAST bb.bb_instructions).inst_opcode = JNZ /\
-      (LAST bb.bb_instructions).inst_operands =
-        [cond; Label true_lbl; Label false_lbl] ==>
-      true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_sound (dfg_build_function fn) s.vs_vars /\
