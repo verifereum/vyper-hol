@@ -416,29 +416,6 @@ Proof
   simp[rich_listTheory.LAST_APPEND_NOT_NIL]
 QED
 
-Triviality flat_map_split_last[local]:
-  !(f:'a -> 'b list) l.
-    l <> [] /\ (!x. MEM x l ==> f x <> []) ==>
-    FLAT (MAP f l) = FLAT (MAP f (FRONT l)) ++ f (LAST l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  Cases_on `l`
-  >- simp[]
-  >> rename1 `h1::h2::t` >>
-  `h2::t <> []` by simp[] >>
-  `FLAT (MAP f (h2::t)) =
-   FLAT (MAP f (FRONT (h2::t))) ++ f (LAST (h2::t))` by
-    (first_x_assum irule >> simp[]) >>
-  simp[listTheory.FRONT_CONS]
-QED
-
-Triviality every_flat[local]:
-  !P ls. EVERY P (FLAT ls) <=> EVERY (EVERY P) ls
-Proof
-  Induct_on `ls` >>
-  simp[listTheory.EVERY_APPEND]
-QED
-
 Triviality fn_insts_blocks_mem[local]:
   !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
     MEM inst (fn_insts_blocks bbs)
@@ -489,249 +466,6 @@ Proof
   metis_tac[]
 QED
 
-Triviality term_untouched[local]:
-  !dfg all_insts flips removes inserts mid inst.
-    ao_cmp_flip_scan dfg all_insts = (flips, removes, inserts) /\
-    MEM inst all_insts /\
-    is_terminator inst.inst_opcode /\
-    ALL_DISTINCT (MAP (\i. i.inst_id) all_insts) /\
-    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i all_insts) ==>
-    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
-Proof
-  rpt strip_tac >>
-  `ALOOKUP flips inst.inst_id = NONE /\
-   ~MEM inst.inst_id removes /\
-   ALOOKUP inserts inst.inst_id = NONE` by
-    metis_tac[ao_cmp_flip_scan_no_term] >>
-  simp[ao_cmp_flip_apply_inst_def] >> gvs[]
-QED
-
-Triviality phi_untouched[local]:
-  !dfg all_insts flips removes inserts mid inst.
-    ao_cmp_flip_scan dfg all_insts = (flips, removes, inserts) /\
-    MEM inst all_insts /\
-    inst.inst_opcode = PHI /\
-    ALL_DISTINCT (MAP (\i. i.inst_id) all_insts) /\
-    (!v i. MEM i (dfg_get_uses dfg v) ==> MEM i all_insts) ==>
-    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
-Proof
-  rpt strip_tac >>
-  `ALOOKUP flips inst.inst_id = NONE /\
-   ~MEM inst.inst_id removes /\
-   ALOOKUP inserts inst.inst_id = NONE` by
-    metis_tac[ao_cmp_flip_scan_no_phi] >>
-  simp[ao_cmp_flip_apply_inst_def] >> gvs[]
-QED
-
-Triviality every_non_term_flat_map[local]:
-  !(f:instruction -> instruction list) insts flips.
-    (!inst. MEM inst insts ==> ~is_terminator inst.inst_opcode ==>
-       EVERY (\r. ~is_terminator r.inst_opcode) (f inst)) /\
-    (!inst. MEM inst insts ==> is_terminator inst.inst_opcode ==>
-       f inst = [inst]) /\
-    EVERY (\inst. ~is_terminator inst.inst_opcode) insts ==>
-    EVERY (\inst. ~is_terminator inst.inst_opcode) (FLAT (MAP f insts))
-Proof
-  Induct_on `insts` >> simp[listTheory.EVERY_APPEND] >> rpt strip_tac >>
-  first_x_assum irule >> metis_tac[]
-QED
-
-Triviality every_non_phi_flat_map[local]:
-  !(f:instruction -> instruction list) insts flips.
-    (!inst. MEM inst insts ==> inst.inst_opcode <> PHI ==>
-       EVERY (\r. r.inst_opcode <> PHI) (f inst)) /\
-    (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==>
-       f inst = [inst]) /\
-    EVERY (\inst. inst.inst_opcode <> PHI) insts ==>
-    EVERY (\inst. inst.inst_opcode <> PHI) (FLAT (MAP f insts))
-Proof
-  Induct_on `insts` >> simp[listTheory.EVERY_APPEND] >> rpt strip_tac >>
-  first_x_assum irule >> metis_tac[]
-QED
-
-(* FRONT elements of a well-formed block are non-terminators *)
-Triviality bb_wf_front_non_term[local]:
-  !bb. bb_well_formed bb ==>
-    EVERY (\inst. ~is_terminator inst.inst_opcode) (FRONT bb.bb_instructions)
-Proof
-  rpt strip_tac >> fs[bb_well_formed_def] >>
-  simp[listTheory.EVERY_EL] >> rpt strip_tac >>
-  CCONTR_TAC >> gvs[] >>
-  `LENGTH (FRONT bb.bb_instructions) = PRE (LENGTH bb.bb_instructions)`
-    by (Cases_on `bb.bb_instructions` >> gvs[rich_listTheory.LENGTH_FRONT]) >>
-  `n < LENGTH bb.bb_instructions` by simp[] >>
-  `EL n (FRONT bb.bb_instructions) = EL n bb.bb_instructions` by
-    (irule rich_listTheory.EL_FRONT >>
-     Cases_on `bb.bb_instructions` >> gvs[]) >>
-  `is_terminator (EL n bb.bb_instructions).inst_opcode` by gvs[] >>
-  `n = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
-  gvs[]
-QED
-
-(* flat-map of EVERY non-term inputs gives non-term outputs *)
-Triviality flat_map_every_non_term[local]:
-  !(ap:instruction -> instruction list) insts.
-    EVERY (\inst. ~is_terminator inst.inst_opcode) insts /\
-    (!inst. MEM inst insts ==>
-       EVERY (\r. ~is_terminator r.inst_opcode) (ap inst)) ==>
-    EVERY (\r. ~is_terminator r.inst_opcode) (FLAT (MAP ap insts))
-Proof
-  Induct_on `insts` >>
-  simp[listTheory.EVERY_APPEND] >> metis_tac[]
-QED
-
-(* flat-map of EVERY non-phi inputs gives non-phi outputs *)
-Triviality flat_map_every_non_phi[local]:
-  !(ap:instruction -> instruction list) insts.
-    EVERY (\inst. inst.inst_opcode <> PHI) insts /\
-    (!inst. MEM inst insts ==>
-       EVERY (\r. r.inst_opcode <> PHI) (ap inst)) ==>
-    EVERY (\r. r.inst_opcode <> PHI) (FLAT (MAP ap insts))
-Proof
-  Induct_on `insts` >>
-  simp[listTheory.EVERY_APPEND] >> metis_tac[]
-QED
-
-Triviality phi_prefix_cons[local]:
-  !h insts.
-    h.inst_opcode = PHI /\
-    (!i j. i < j /\ j < LENGTH (h::insts) /\
-           (EL j (h::insts)).inst_opcode = PHI ==>
-           (EL i (h::insts)).inst_opcode = PHI) ==>
-    (!i j. i < j /\ j < LENGTH insts /\
-           (EL j insts).inst_opcode = PHI ==>
-           (EL i insts).inst_opcode = PHI)
-Proof
-  rpt strip_tac >>
-  `SUC i < SUC j` by simp[] >>
-  `SUC j < LENGTH (h::insts)` by simp[] >>
-  `(EL (SUC j) (h::insts)).inst_opcode = PHI` by simp[] >>
-  `(EL (SUC i) (h::insts)).inst_opcode = PHI` by metis_tac[] >>
-  gvs[]
-QED
-
-Triviality phi_prefix_non_phi_tl[local]:
-  !h insts.
-    h.inst_opcode <> PHI /\
-    (!i j. i < j /\ j < LENGTH (h::insts) /\
-           (EL j (h::insts)).inst_opcode = PHI ==>
-           (EL i (h::insts)).inst_opcode = PHI) ==>
-    (!i j. i < j /\ j < LENGTH insts /\
-           (EL j insts).inst_opcode = PHI ==>
-           (EL i insts).inst_opcode = PHI)
-Proof
-  rpt strip_tac >>
-  `SUC i < SUC j` by simp[] >>
-  `SUC j < LENGTH (h::insts)` by simp[] >>
-  `(EL (SUC j) (h::insts)).inst_opcode = PHI` by simp[] >>
-  `(EL (SUC i) (h::insts)).inst_opcode = PHI` by metis_tac[] >>
-  gvs[]
-QED
-
-(* PHI prefix via EVERY split *)
-Triviality phi_prefix_from_split[local]:
-  !(phis:instruction list) rest.
-    EVERY (\i. i.inst_opcode = PHI) phis /\
-    EVERY (\i. i.inst_opcode <> PHI) rest ==>
-    !i j. i < j /\ j < LENGTH (phis ++ rest) /\
-      (EL j (phis ++ rest)).inst_opcode = PHI ==>
-      (EL i (phis ++ rest)).inst_opcode = PHI
-Proof
-  rpt strip_tac >>
-  `j < LENGTH phis` by
-    (CCONTR_TAC >> gvs[] >>
-     `LENGTH phis <= j` by simp[] >>
-     `j - LENGTH phis < LENGTH rest` by simp[] >>
-     `MEM (EL (j - LENGTH phis) rest) rest` by
-       (simp[listTheory.MEM_EL] >>
-        qexists_tac `j - LENGTH phis` >> simp[]) >>
-     `(EL (j - LENGTH phis) rest).inst_opcode <> PHI` by
-       (qpat_x_assum `EVERY _ rest`
-          (strip_assume_tac o SIMP_RULE std_ss [listTheory.EVERY_MEM]) >>
-        res_tac) >>
-     qpat_x_assum `_ .inst_opcode = PHI` mp_tac >>
-     simp[rich_listTheory.EL_APPEND2]) >>
-  `i < LENGTH phis` by simp[] >>
-  `MEM (EL i phis) phis` by
-    (simp[listTheory.MEM_EL] >> qexists_tac `i` >> simp[]) >>
-  simp[rich_listTheory.EL_APPEND1] >>
-  qpat_x_assum `EVERY _ phis`
-    (strip_assume_tac o SIMP_RULE std_ss [listTheory.EVERY_MEM]) >>
-  res_tac
-QED
-
-Triviality flat_map_phi_split[local]:
-  !(phis:instruction list) (ap:instruction -> instruction list) rest.
-    (!inst. MEM inst phis ==> ap inst = [inst]) ==>
-    FLAT (MAP ap (phis ++ rest)) =
-      phis ++ FLAT (MAP ap rest)
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  `ap h = [h]` by metis_tac[] >>
-  `FLAT (MAP ap (phis ++ rest)) = phis ++ FLAT (MAP ap rest)` by
-    (first_x_assum irule >> metis_tac[]) >>
-  gvs[]
-QED
-
-(* PHI prefix preserved by FLAT MAP *)
-Triviality phi_split_exists[local]:
-  !insts.
-    (!i j. i < j /\ j < LENGTH insts /\
-           (EL j insts).inst_opcode = PHI ==>
-           (EL i insts).inst_opcode = PHI) ==>
-    ?phis rest.
-      insts = phis ++ rest /\
-      EVERY (\i. i.inst_opcode = PHI) phis /\
-      EVERY (\i. i.inst_opcode <> PHI) rest
-Proof
-  Induct >- (rpt strip_tac >> qexistsl_tac [`[]`, `[]`] >> simp[]) >>
-  rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI`
-  >- (`!i j. i < j /\ j < LENGTH insts /\
-             (EL j insts).inst_opcode = PHI ==>
-             (EL i insts).inst_opcode = PHI` by
-       metis_tac[phi_prefix_cons] >>
-      first_x_assum drule >> strip_tac >>
-      qexistsl_tac [`h::phis`, `rest`] >> simp[])
-  >> qexistsl_tac [`[]`, `h::insts`] >> simp[] >>
-  simp[listTheory.EVERY_EL] >> rpt strip_tac >>
-  spose_not_then strip_assume_tac >>
-  `(EL (SUC n) (h::insts)).inst_opcode = PHI` by simp[] >>
-  `SUC n < LENGTH (h::insts)` by simp[] >>
-  `0 < SUC n` by simp[] >>
-  first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]
-QED
-
-Triviality phi_prefix_flat_map[local]:
-  !(ap:instruction -> instruction list) insts.
-    (!i j. i < j /\ j < LENGTH insts /\
-           (EL j insts).inst_opcode = PHI ==>
-           (EL i insts).inst_opcode = PHI) /\
-    (!inst. MEM inst insts /\ inst.inst_opcode = PHI ==>
-       ap inst = [inst]) /\
-    (!inst. MEM inst insts /\ inst.inst_opcode <> PHI ==>
-       EVERY (\r. r.inst_opcode <> PHI) (ap inst)) /\
-    (!inst. MEM inst insts ==> ap inst <> []) ==>
-    (!i j. i < j /\ j < LENGTH (FLAT (MAP ap insts)) /\
-           (EL j (FLAT (MAP ap insts))).inst_opcode = PHI ==>
-           (EL i (FLAT (MAP ap insts))).inst_opcode = PHI)
-Proof
-  rpt strip_tac >>
-  drule phi_split_exists >> strip_tac >> gvs[] >>
-  `FLAT (MAP ap (phis ++ rest)) = phis ++ FLAT (MAP ap rest)` by
-    (irule flat_map_phi_split >> rpt strip_tac >>
-     first_x_assum irule >> simp[] >>
-     fs[listTheory.EVERY_MEM] >> res_tac) >>
-  `EVERY (\i. i.inst_opcode <> PHI) (FLAT (MAP ap rest))` by
-    (irule flat_map_every_non_phi >> simp[] >>
-     rpt strip_tac >> res_tac >>
-     fs[listTheory.EVERY_MEM]) >>
-  gvs[] >>
-  drule phi_prefix_from_split >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[]
-QED
-
 (* Main helper: flat-map preserves bb_well_formed *)
 Triviality phase4_bb_wf_preserved[local]:
   !all_insts flips removes inserts dfg mid bb.
@@ -749,71 +483,34 @@ Triviality phase4_bb_wf_preserved[local]:
                 bb.bb_instructions))
 Proof
   rpt strip_tac >>
-  qabbrev_tac `ap = ao_cmp_flip_apply_inst mid flips removes inserts` >>
-  fs[bb_well_formed_def] >>
-  `bb.bb_instructions <> []` by simp[] >>
-  `MEM (LAST bb.bb_instructions) bb.bb_instructions` by
-    metis_tac[rich_listTheory.MEM_LAST_NOT_NIL] >>
-  `MEM (LAST bb.bb_instructions) all_insts` by metis_tac[] >>
-  `!inst. ap inst <> []` by simp[Abbr `ap`, ao_cmp_flip_apply_ne] >>
-  `ap (LAST bb.bb_instructions) = [LAST bb.bb_instructions]` by
-    (simp[Abbr `ap`] >> irule ao_cmp_flip_apply_untouched >>
-     metis_tac[ao_cmp_flip_scan_no_term]) >>
-  `bb_well_formed bb` by
-    (simp[bb_well_formed_def] >> metis_tac[]) >>
-  `EVERY (\inst. ~is_terminator inst.inst_opcode) (FRONT bb.bb_instructions)` by
-    (irule bb_wf_front_non_term >> simp[]) >>
+  irule flat_map_preserves_bb_wf >>
   rpt conj_tac
-  (* non-empty *)
-  >- (simp[Abbr `ap`] >> irule flat_map_ne >> simp[ao_cmp_flip_apply_ne])
-  (* LAST is terminator *)
-  >- (`LAST (FLAT (MAP ap bb.bb_instructions)) =
-       LAST bb.bb_instructions` by
-        (irule flat_map_last_singleton >> simp[]) >>
-      simp[])
-  (* only LAST is terminator *)
+  (* non-terminator outputs stay non-terminators *)
   >- (rpt strip_tac >>
-      `FLAT (MAP ap bb.bb_instructions) =
-       FLAT (MAP ap (FRONT bb.bb_instructions)) ++
-       ap (LAST bb.bb_instructions)` by
-        (irule flat_map_split_last >> simp[]) >>
-      `EVERY (\inst. ~is_terminator inst.inst_opcode)
-         (FLAT (MAP ap (FRONT bb.bb_instructions)))` by
-        (irule flat_map_every_non_term >> simp[] >>
-         rpt gen_tac >> strip_tac >>
-         rename1 `MEM inst0 (FRONT _)` >>
-         `~is_terminator inst0.inst_opcode` by
-           (fs[listTheory.EVERY_MEM] >> res_tac) >>
-         fs[Abbr `ap`] >>
-         irule ao_cmp_flip_apply_non_term >> simp[] >>
-         rpt strip_tac >> res_tac) >>
-      gvs[] >>
-      Cases_on `i < LENGTH (FLAT (MAP ap (FRONT bb.bb_instructions)))`
-      >- (fs[rich_listTheory.EL_APPEND1] >>
-          fs[listTheory.EVERY_EL] >>
-          first_x_assum drule >> simp[])
-      >> fs[rich_listTheory.EL_APPEND2] >>
-      `i - LENGTH (FLAT (MAP ap (FRONT bb.bb_instructions))) = 0` by simp[] >>
-      simp[])
-  (* phi prefix *)
-  >- (`(!i j. i < j /\ j < LENGTH (FLAT (MAP ap bb.bb_instructions)) /\
-           (EL j (FLAT (MAP ap bb.bb_instructions))).inst_opcode = PHI ==>
-           (EL i (FLAT (MAP ap bb.bb_instructions))).inst_opcode = PHI)` by
-       (`(!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
-           ap inst = [inst])` by
-          (rpt strip_tac >> simp[Abbr `ap`] >>
-           irule ao_cmp_flip_apply_untouched >>
-           `MEM inst all_insts` by metis_tac[] >>
-           metis_tac[ao_cmp_flip_scan_no_phi]) >>
-        `(!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI ==>
-           EVERY (\r. r.inst_opcode <> PHI) (ap inst))` by
-          (rpt strip_tac >> simp[Abbr `ap`] >>
-           irule ao_cmp_flip_apply_non_phi >> simp[] >>
-           rpt strip_tac >> res_tac) >>
-        `!inst. MEM inst bb.bb_instructions ==> ap inst <> []` by
-           simp[] >>
-        metis_tac[phi_prefix_flat_map]) >>
-      simp[])
+      `EVERY (\r. ~is_terminator r.inst_opcode)
+         (ao_cmp_flip_apply_inst mid flips removes inserts inst)` by
+        (irule ao_cmp_flip_apply_non_term >> simp[] >> metis_tac[]) >>
+      fs[listTheory.EVERY_MEM] >> res_tac)
+  (* non-PHI outputs stay non-PHI *)
+  >- (rpt strip_tac >>
+      `EVERY (\r. r.inst_opcode <> PHI)
+         (ao_cmp_flip_apply_inst mid flips removes inserts inst)` by
+        (irule ao_cmp_flip_apply_non_phi >> simp[] >> metis_tac[]) >>
+      fs[listTheory.EVERY_MEM] >> res_tac)
+  (* terminator maps to itself *)
+  >- (rpt strip_tac >>
+      irule ao_cmp_flip_apply_untouched >>
+      `MEM inst all_insts` by metis_tac[] >>
+      metis_tac[ao_cmp_flip_scan_no_term])
+  (* PHI maps to itself *)
+  >- (rpt strip_tac >>
+      irule ao_cmp_flip_apply_untouched >>
+      `MEM inst all_insts` by metis_tac[] >>
+      metis_tac[ao_cmp_flip_scan_no_phi])
+  (* f inst <> [] *)
+  >- simp[ao_cmp_flip_apply_ne]
+  (* bb_well_formed bb *)
+  >- simp[]
 QED
 
 (* bb_succs preserved: terminators are untouched so successors don't change *)
