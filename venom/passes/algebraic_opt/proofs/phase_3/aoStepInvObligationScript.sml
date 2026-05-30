@@ -340,6 +340,14 @@ Proof
   simp[ao_dfg_inv_def, lookup_var_def]
 QED
 
+Triviality ao_chain_defined_prefix_inst_idx_irrel:
+  !targets s n.
+    ao_chain_defined_prefix targets (s with vs_inst_idx := n) =
+    ao_chain_defined_prefix targets s
+Proof
+  simp[ao_chain_defined_prefix_def, eval_operand_inst_idx_irrel]
+QED
+
 Triviality ao_dfg_inv_step_non_output:
   !dfg inst fuel ctx s s' y inst_def val.
     ao_dfg_inv dfg s /\
@@ -791,6 +799,73 @@ Proof
       >- (qspecl_then [`fn0`, `targets`, `inst`, `fuel`, `ctx`, `s`, `s'`]
             mp_tac prefix_inv_step_non_term >>
           simp[]))
+QED
+
+(* Block-level preservation of ao_dfg_inv and ao_chain_defined_prefix across a
+   whole exec_block.  ao_iszero_chain_inv / freshness are NOT needed for these
+   two conjuncts, so this avoids the baggage of ao_sinv_step_preserved. *)
+Theorem ao_dc_exec_block:
+  !fn0 dfg targets bb fuel ctx s v.
+    ssa_form fn0 /\
+    dfg = dfg_build_function fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    MEM bb fn0.fn_blocks /\ EVERY inst_wf bb.bb_instructions /\
+    ao_dfg_inv dfg s /\ ao_chain_defined_prefix targets s /\
+    exec_block fuel ctx bb s = OK v ==>
+    ao_dfg_inv dfg v /\ ao_chain_defined_prefix targets v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n f c st st'.
+     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
+     ao_dfg_inv dfg st /\ ao_chain_defined_prefix targets st /\
+     exec_block f c bb st = OK st' ==>
+     ao_dfg_inv dfg st' /\ ao_chain_defined_prefix targets st'`
+    suffices_by (
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions - s.vs_inst_idx`, `fuel`, `ctx`, `s`, `v`]
+        mp_tac) >> simp[]) >>
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `idx = st.vs_inst_idx` >>
+  Cases_on `idx >= LENGTH bb.bb_instructions`
+  >- (qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+      ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def]) >>
+  `idx < LENGTH bb.bb_instructions` by fs[] >>
+  `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
+    (irule listTheory.EL_MEM >> simp[]) >>
+  `MEM (EL idx bb.bb_instructions) (fn_insts fn0)` by
+    metis_tac[mem_block_mem_fn_insts] >>
+  `inst_wf (EL idx bb.bb_instructions)` by fs[listTheory.EVERY_EL] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>
+  Cases_on `step_inst f c (EL idx bb.bb_instructions) st` >> simp[] >>
+  rename1 `step_inst f c _ st = OK s2` >>
+  `ao_dfg_inv dfg s2` by metis_tac[ao_dfg_inv_step_any] >>
+  `ao_chain_defined_prefix targets s2` by (
+    Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode`
+    >- (qspecl_then
+          [`targets`, `EL idx bb.bb_instructions`, `f`, `c`, `st`, `s2`]
+          mp_tac ao_chain_defined_prefix_step_preserved >>
+        impl_tac
+        >- (simp[] >> rpt strip_tac >>
+            metis_tac[chain_operands_terminator_preserved]) >>
+        simp[])
+    >- (qspecl_then
+          [`fn0`, `targets`, `EL idx bb.bb_instructions`, `f`, `c`, `st`, `s2`]
+          mp_tac ao_chain_defined_prefix_step_non_term >>
+        impl_tac >- simp[markerTheory.Abbrev_def] >>
+        simp[])) >>
+  Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> simp[]
+  >- (Cases_on `s2.vs_halted` >> simp[] >> strip_tac >> gvs[]) >>
+  strip_tac >>
+  first_x_assum (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
+  impl_tac >- simp[Abbr `idx`] >>
+  disch_then (qspecl_then
+    [`f`, `c`, `s2 with vs_inst_idx := SUC idx`, `st'`] mp_tac) >>
+  `ao_dfg_inv dfg (s2 with vs_inst_idx := SUC idx)` by
+    metis_tac[ao_dfg_inv_inst_idx_irrel] >>
+  `ao_chain_defined_prefix targets (s2 with vs_inst_idx := SUC idx)` by
+    metis_tac[ao_chain_defined_prefix_inst_idx_irrel] >>
+  simp[]
 QED
 
 (* ===== sinv state_equiv compatibility ===== *)

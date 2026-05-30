@@ -24,7 +24,7 @@ Ancestors
   stateEquiv stateEquivProps execEquivParamProps
   venomExecSemantics venomExecProofs venomExecProps
   venomState venomInst venomInstProofs venomInstProps venomWf
-  dfgAnalysisProps rangeAnalysisDefs dfAnalyzeDefs
+  dfgAnalysisProps rangeAnalysisDefs rangeAnalysisProofs dfgSoundStep dfAnalyzeDefs
   indexedLists finite_map
 Libs
   pairLib BasicProvers
@@ -422,6 +422,143 @@ Proof
     >- (rpt strip_tac >> `MEM (Var op) inst.inst_operands` by simp[] >>
         drule_all dfg_def_iszero_operand_not_in_fv >> simp[])) >>
   simp[]
+QED
+
+(* dfg_sound transfers across state_equiv (ao_fn_fresh_vars fn): all DFG-def
+   vars and their operands are non-fresh, so FLOOKUP agrees between s1 and s2. *)
+Theorem ao_dfg_sound_state_equiv_compat:
+  !fn fn0 dfg s1 s2.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    state_equiv (ao_fn_fresh_vars fn) s1 s2 /\
+    dfg_sound dfg s1.vs_vars ==>
+    dfg_sound dfg s2.vs_vars
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!w. (?inst. dfg_get_def dfg w = SOME inst) ==>
+       FLOOKUP s2.vs_vars w = FLOOKUP s1.vs_vars w` by
+    (rpt strip_tac >>
+     `w NOTIN ao_fn_fresh_vars fn` by (drule_all dfg_def_var_not_in_fv >> simp[]) >>
+     fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+  `!w inst u. dfg_get_def dfg w = SOME inst /\ MEM (Var u) inst.inst_operands ==>
+       FLOOKUP s2.vs_vars u = FLOOKUP s1.vs_vars u` by
+    (rpt strip_tac >>
+     `u NOTIN ao_fn_fresh_vars fn` by
+       (`MEM (Var u) inst.inst_operands` by simp[] >>
+        drule_all dfg_def_iszero_operand_not_in_fv >> simp[]) >>
+     fs[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+  `dfg_assign_sound dfg s1.vs_vars /\ dfg_iszero_sound dfg s1.vs_vars /\
+   dfg_eq_sound dfg s1.vs_vars /\ dfg_compare_sound dfg s1.vs_vars`
+    by fs[dfg_sound_def] >>
+  simp[dfg_sound_def] >> rpt conj_tac
+  >- ((* assign *)
+      simp[dfg_assign_sound_def] >> rpt gen_tac >> strip_tac >>
+      `FLOOKUP s2.vs_vars v = FLOOKUP s1.vs_vars v` by metis_tac[] >>
+      `FLOOKUP s2.vs_vars u = FLOOKUP s1.vs_vars u` by metis_tac[listTheory.MEM] >>
+      `v IN FDOM s1.vs_vars` by
+        (Cases_on `FLOOKUP s1.vs_vars v` >> fs[finite_mapTheory.FLOOKUP_DEF]) >>
+      `FLOOKUP s1.vs_vars v = FLOOKUP s1.vs_vars u` suffices_by gvs[] >>
+      qpat_x_assum `dfg_assign_sound dfg s1.vs_vars`
+        (strip_assume_tac o SIMP_RULE std_ss [dfg_assign_sound_def]) >>
+      metis_tac[])
+  >- ((* iszero *)
+      simp[dfg_iszero_sound_def] >> rpt gen_tac >> strip_tac >> gen_tac >>
+      strip_tac >>
+      `FLOOKUP s2.vs_vars v = FLOOKUP s1.vs_vars v` by metis_tac[] >>
+      `FLOOKUP s2.vs_vars tv = FLOOKUP s1.vs_vars tv` by metis_tac[listTheory.MEM] >>
+      `FLOOKUP s1.vs_vars v = SOME w` by gvs[] >>
+      `(w <> 0w ==> FLOOKUP s1.vs_vars tv = SOME 0w) /\
+       (w = 0w ==> !w'. FLOOKUP s1.vs_vars tv = SOME w' ==> w' <> 0w)`
+        suffices_by gvs[] >>
+      qpat_x_assum `dfg_iszero_sound dfg s1.vs_vars`
+        (strip_assume_tac o SIMP_RULE std_ss [dfg_iszero_sound_def]) >>
+      metis_tac[])
+  >- ((* eq *)
+      simp[dfg_eq_sound_def] >> rpt gen_tac >> strip_tac >> gen_tac >>
+      strip_tac >> strip_tac >>
+      `FLOOKUP s2.vs_vars v = FLOOKUP s1.vs_vars v` by metis_tac[] >>
+      `!u. (lhs = Var u \/ rhs = Var u) ==>
+           FLOOKUP s2.vs_vars u = FLOOKUP s1.vs_vars u` by
+        (rpt strip_tac >> metis_tac[listTheory.MEM]) >>
+      `FLOOKUP s1.vs_vars v = SOME w` by gvs[] >>
+      `(!u. lhs = Var u ==> ?wu. FLOOKUP s1.vs_vars u = SOME wu) /\
+       (!u. rhs = Var u ==> ?wu. FLOOKUP s1.vs_vars u = SOME wu) /\
+       (!u wu wl. lhs = Var u /\ rhs = Lit wl /\
+                  FLOOKUP s1.vs_vars u = SOME wu ==> wu = wl) /\
+       (!u wu wl. rhs = Var u /\ lhs = Lit wl /\
+                  FLOOKUP s1.vs_vars u = SOME wu ==> wu = wl) /\
+       (!u1 u2 w1 w2. lhs = Var u1 /\ rhs = Var u2 /\
+          FLOOKUP s1.vs_vars u1 = SOME w1 /\ FLOOKUP s1.vs_vars u2 = SOME w2 ==>
+          w1 = w2)` suffices_by
+        (strip_tac >> rpt conj_tac >> rpt strip_tac >> metis_tac[]) >>
+      qpat_x_assum `dfg_eq_sound dfg s1.vs_vars`
+        (strip_assume_tac o SIMP_RULE std_ss [dfg_eq_sound_def]) >>
+      metis_tac[])
+  >- ((* compare *)
+      simp[dfg_compare_sound_def] >> rpt gen_tac >> strip_tac >> gen_tac >>
+      strip_tac >>
+      `FLOOKUP s2.vs_vars v = FLOOKUP s1.vs_vars v` by metis_tac[] >>
+      `!u. (lhs = Var u \/ rhs = Var u) ==>
+           FLOOKUP s2.vs_vars u = FLOOKUP s1.vs_vars u` by
+        (rpt strip_tac >> metis_tac[listTheory.MEM]) >>
+      `FLOOKUP s1.vs_vars v = SOME w` by gvs[] >>
+      `(!u wl wu. lhs = Var u /\ rhs = Lit wl /\
+          FLOOKUP s1.vs_vars u = SOME wu ==>
+          ((w <> 0w) =
+            (if inst.inst_opcode = LT then w2n wu < w2n wl
+             else if inst.inst_opcode = GT then w2n wu > w2n wl
+             else if inst.inst_opcode = SLT then w2i wu < w2i wl
+             else w2i wu > w2i wl))) /\
+       (!u wl wu. rhs = Var u /\ lhs = Lit wl /\
+          FLOOKUP s1.vs_vars u = SOME wu ==>
+          ((w <> 0w) =
+            (if inst.inst_opcode = LT then w2n wl < w2n wu
+             else if inst.inst_opcode = GT then w2n wl > w2n wu
+             else if inst.inst_opcode = SLT then w2i wl < w2i wu
+             else w2i wl > w2i wu)))` suffices_by
+        (strip_tac >> rpt conj_tac >> rpt strip_tac >> metis_tac[]) >>
+      qpat_x_assum `dfg_compare_sound dfg s1.vs_vars`
+        (strip_assume_tac o SIMP_RULE std_ss [dfg_compare_sound_def]) >>
+      metis_tac[])
+QED
+
+(* The ops-defined invariant transfers across state_equiv: DFG-def vars and
+   their tracked operands are non-fresh, so FDOM membership agrees. *)
+Theorem ao_ops_defined_state_equiv_compat:
+  !fn fn0 dfg s1 s2.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    state_equiv (ao_fn_fresh_vars fn) s1 s2 /\
+    (!vv dinst u. dfg_get_def dfg vv = SOME dinst /\ vv IN FDOM s1.vs_vars /\
+       dfg_tracked_opcode dinst.inst_opcode /\ MEM (Var u) dinst.inst_operands ==>
+       u IN FDOM s1.vs_vars) ==>
+    (!vv dinst u. dfg_get_def dfg vv = SOME dinst /\ vv IN FDOM s2.vs_vars /\
+       dfg_tracked_opcode dinst.inst_opcode /\ MEM (Var u) dinst.inst_operands ==>
+       u IN FDOM s2.vs_vars)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `vv NOTIN ao_fn_fresh_vars fn` by (drule_all dfg_def_var_not_in_fv >> simp[]) >>
+  `u NOTIN ao_fn_fresh_vars fn` by
+    (drule_all dfg_def_iszero_operand_not_in_fv >> simp[]) >>
+  `FLOOKUP s1.vs_vars vv = FLOOKUP s2.vs_vars vv /\
+   FLOOKUP s1.vs_vars u = FLOOKUP s2.vs_vars u` by
+    fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
+  `vv IN FDOM s1.vs_vars` by
+    (Cases_on `FLOOKUP s1.vs_vars vv` >> fs[finite_mapTheory.FLOOKUP_DEF]) >>
+  `u IN FDOM s1.vs_vars` by metis_tac[] >>
+  Cases_on `FLOOKUP s2.vs_vars u` >> fs[finite_mapTheory.FLOOKUP_DEF]
 QED
 
 (* Combined block_inv state_equiv compatibility: all four invariant

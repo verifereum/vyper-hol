@@ -1039,4 +1039,657 @@ Proof
   simp[]
 QED
 
+(* ===== no_cmp_operand_iz: phase-3 never references, as an OPERAND, a fresh
+   "iz" var named after a comparator that survives in fn1.  Operand-dual of
+   ao_phase3_no_cmp_iz.  Needs the targets-chain entries to be clean because
+   ao_resolve_iszero_op can substitute a chain entry for an operand. ===== *)
+
+(* inok: every fresh-var OPERAND in the pieces is ao_fresh_var id s. *)
+Definition inok_def:
+  inok fv id (pieces:instruction list) <=>
+    !q w. MEM q pieces /\ MEM (Var w) q.inst_operands /\ w IN fv ==>
+          ?s. (s = "not" \/ s = "iz" \/ s = "xor") /\ w = ao_fresh_var id s
+End
+
+(* cmpinok: if the expansion contains a comparator, ALL its operands are clean.
+   Mirrors cmpok (output side): a surviving comparator forces the whole piece to
+   be a clean unchanged original, since phase 3 only keeps a comparator in the
+   [inst] fall-through branch (every rewrite changes the opcode to ISZERO/etc). *)
+Definition cmpinok_def:
+  cmpinok fv (pieces:instruction list) <=>
+    (?p. MEM p pieces /\ is_comparator p.inst_opcode) ==>
+    !q w. MEM q pieces /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+End
+
+(* ===== inok / cmpinok builders ===== *)
+
+Triviality inok_clean[local]:
+  !fv id l.
+    (!q w. MEM q l /\ MEM (Var w) q.inst_operands ==> w NOTIN fv) ==>
+    inok fv id l
+Proof
+  rw[inok_def] >> metis_tac[]
+QED
+
+Triviality cmpinok_no_comp[local]:
+  !fv l. (!p. MEM p l ==> ~is_comparator p.inst_opcode) ==> cmpinok fv l
+Proof
+  rw[cmpinok_def] >> metis_tac[]
+QED
+
+Triviality cmpinok_clean[local]:
+  !fv l.
+    (!q w. MEM q l /\ MEM (Var w) q.inst_operands ==> w NOTIN fv) ==>
+    cmpinok fv l
+Proof
+  rw[cmpinok_def] >> metis_tac[]
+QED
+
+(* A single instruction with clean operands satisfies both. *)
+Triviality okin_single_clean[local]:
+  !fv id i.
+    (!w. MEM (Var w) i.inst_operands ==> w NOTIN fv) ==>
+    inok fv id [i] /\ cmpinok fv [i]
+Proof
+  rw[inok_def, cmpinok_def] >> metis_tac[]
+QED
+
+(* targets chain entries are operands/outputs of the source instructions. *)
+Triviality iszero_step_acc[local]:
+  !acc h (P:string->bool).
+    (!ch w. MEM ch (MAP SND acc) /\ MEM (Var w) ch ==> P w) /\
+    (!w. MEM (Var w) h.inst_operands ==> P w) /\
+    (!w. MEM w h.inst_outputs ==> P w) ==>
+    !ch w. MEM ch (MAP SND (ao_compute_iszero_step acc h)) /\
+           MEM (Var w) ch ==> P w
+Proof
+  rw[ao_compute_iszero_step_def] >> every_case_tac >>
+  gvs[listTheory.MEM_SNOC] >> TRY (metis_tac[]) >>
+  rename1 `ALOOKUP acc vv = SOME chain` >>
+  `MEM (vv, chain) acc` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  `MEM chain (MAP SND acc)` by
+    (simp[listTheory.MEM_MAP] >> qexists_tac `(vv, chain)` >> simp[]) >>
+  metis_tac[]
+QED
+
+Triviality iszero_step_entries[local]:
+  !insts acc (P:string->bool).
+    (!ch w. MEM ch (MAP SND acc) /\ MEM (Var w) ch ==> P w) /\
+    (!inst w. MEM inst insts /\
+       (MEM (Var w) inst.inst_operands \/ MEM w inst.inst_outputs) ==> P w) ==>
+    !ch w. MEM ch (MAP SND (FOLDL ao_compute_iszero_step acc insts)) /\
+           MEM (Var w) ch ==> P w
+Proof
+  Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`ao_compute_iszero_step acc h`, `P`] mp_tac) >>
+  impl_tac >- (
+    conj_tac
+    >- (qspecl_then [`acc`, `h`, `P`] mp_tac iszero_step_acc >>
+        impl_tac >- (rpt conj_tac >> rpt strip_tac >> metis_tac[]) >>
+        simp[])
+    >- (rpt strip_tac >> metis_tac[])) >>
+  simp[]
+QED
+
+(* resolve substitutes either the original operand or a chain entry. *)
+Triviality resolve_op_cases[local]:
+  !targets opc op.
+    ao_resolve_iszero_op targets opc op = op \/
+    ?vv chain. op = Var vv /\ ALOOKUP targets vv = SOME chain /\
+               MEM (ao_resolve_iszero_op targets opc op) chain
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  PURE_REWRITE_TAC[ao_resolve_iszero_op_def] >> simp[] >>
+  Cases_on `ALOOKUP targets s` >> simp[] >>
+  rename1 `ALOOKUP targets s = SOME chain` >>
+  IF_CASES_TAC >> simp[] >>
+  simp[LET_THM] >>
+  IF_CASES_TAC
+  >- (DISJ2_TAC >> irule listTheory.EL_MEM >> fs[]) >>
+  simp[]
+QED
+
+Triviality resolve_op_clean[local]:
+  !targets opc op fv.
+    (!w. op = Var w ==> w NOTIN fv) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==> w NOTIN fv) ==>
+    !w. ao_resolve_iszero_op targets opc op = Var w ==> w NOTIN fv
+Proof
+  rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  qspecl_then [`targets`, `opc`, `op`] strip_assume_tac resolve_op_cases
+  >- (gvs[] >> metis_tac[]) >>
+  gvs[] >>
+  `MEM chain (MAP SND targets)` by
+    (drule alistTheory.ALOOKUP_MEM >> rw[listTheory.MEM_MAP] >>
+     qexists_tac `(vv, chain)` >> simp[]) >>
+  metis_tac[]
+QED
+
+Triviality resolve_inst_opnds_clean[local]:
+  !targets inst fv.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==> w NOTIN fv) ==>
+    !w. MEM (Var w) (ao_resolve_iszero_inst targets inst).inst_operands ==>
+        w NOTIN fv
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ao_resolve_iszero_inst_def, listTheory.MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >>
+  rename1 `Var w = ao_resolve_iszero_op targets inst.inst_opcode op` >>
+  qspecl_then [`targets`, `inst.inst_opcode`, `op`, `fv`] mp_tac
+    resolve_op_clean >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> gvs[] >> metis_tac[])
+      >- first_assum ACCEPT_TAC) >>
+  disch_then (qspec_then `w` mp_tac) >> simp[]
+QED
+
+(* ===== flip operand membership / map preservation ===== *)
+
+Triviality pre_flip_operand_mem[local]:
+  !x inst. MEM x (ao_pre_flip_inst inst).inst_operands ==> MEM x inst.inst_operands
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality post_flip_operand_mem[local]:
+  !x inst. MEM x (ao_post_flip_inst inst).inst_operands ==> MEM x inst.inst_operands
+Proof
+  rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality inok_map_post_flip[local]:
+  !fv id l. inok fv id l ==> inok fv id (MAP ao_post_flip_inst l)
+Proof
+  rw[inok_def, listTheory.MEM_MAP] >>
+  drule post_flip_operand_mem >> rw[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Triviality cmpinok_map_post_flip[local]:
+  !fv l. cmpinok fv l ==> cmpinok fv (MAP ao_post_flip_inst l)
+Proof
+  rw[cmpinok_def] >>
+  `?p. MEM p l /\ is_comparator p.inst_opcode` by
+    (gvs[listTheory.MEM_MAP] >> metis_tac[post_flip_opcode]) >>
+  `!q w. MEM q l /\ MEM (Var w) q.inst_operands ==> w NOTIN fv` by
+    metis_tac[] >>
+  gvs[listTheory.MEM_MAP] >>
+  metis_tac[post_flip_operand_mem]
+QED
+
+(* ===== per-opt operand cleanliness (simple opts) ===== *)
+
+Triviality opt_shift_opnds_clean[local]:
+  !fv inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_shift inst) /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_shift_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_signextend_opnds_clean[local]:
+  !fv ra lbl idx inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_signextend ra lbl idx inst) /\
+          MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_signextend_def, LET_THM] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_exp_opnds_clean[local]:
+  !fv inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_exp inst) /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_exp_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_addsub_opnds_clean[local]:
+  !fv inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_addsub inst) /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_addsub_def, LET_THM] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_and_opnds_clean[local]:
+  !fv inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_and inst) /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_and_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_muldiv_opnds_clean[local]:
+  !fv inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_muldiv inst) /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_muldiv_def, LET_THM] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_or_opnds_clean[local]:
+  !fv dfg inst. (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    !q w. MEM q (ao_opt_or dfg inst) /\ MEM (Var w) q.inst_operands ==> w NOTIN fv
+Proof
+  rw[ao_opt_or_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+(* ===== eq / comparator inok & cmpinok ===== *)
+
+Triviality cmp_range_lit[local]:
+  !ra lbl idx inst is_gt signed r.
+    ao_opt_cmp_range ra lbl idx inst is_gt signed = SOME r ==> ?w. r = Lit w
+Proof
+  rw[ao_opt_cmp_range_def, LET_THM] >> every_case_tac >> gvs[]
+QED
+
+(* structural: every Var-operand of the eq expansion is either an original
+   operand or one of the named fresh helpers ("not"/"xor"). *)
+Triviality opt_eq_opnds[local]:
+  !mid dfg inst q w.
+    MEM q (ao_opt_eq mid dfg inst) /\ MEM (Var w) q.inst_operands ==>
+    MEM (Var w) inst.inst_operands \/
+    w = ao_fresh_var inst.inst_id "not" \/
+    w = ao_fresh_var inst.inst_id "xor"
+Proof
+  rw[ao_opt_eq_def, LET_THM] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality opt_eq_inok[local]:
+  !fv mid dfg inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    inok fv inst.inst_id (ao_opt_eq mid dfg inst)
+Proof
+  rw[inok_def] >>
+  `MEM (Var w) inst.inst_operands \/
+   w = ao_fresh_var inst.inst_id "not" \/
+   w = ao_fresh_var inst.inst_id "xor"` by
+    (irule opt_eq_opnds >> metis_tac[]) >>
+  pop_assum strip_assume_tac
+  >- metis_tac[]
+  >- (qexists_tac `"not"` >> simp[])
+  >- (qexists_tac `"xor"` >> simp[])
+QED
+
+Triviality opt_eq_cmpinok[local]:
+  !fv mid dfg inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    cmpinok fv (ao_opt_eq mid dfg inst)
+Proof
+  rw[ao_opt_eq_def, LET_THM] >> every_case_tac >> gvs[] >>
+  TRY (irule cmpinok_no_comp >> rw[] >> gvs[is_comparator_def] >> NO_TAC) >>
+  irule cmpinok_clean >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality cmp_prefer_iz_zero_cmpinok[local]:
+  !fv mid id op1 inst. cmpinok fv (ao_cmp_prefer_iz_zero mid id op1 inst)
+Proof
+  rw[ao_cmp_prefer_iz_zero_def] >> irule cmpinok_no_comp >> rw[] >>
+  gvs[is_comparator_def]
+QED
+
+Triviality cmp_prefer_iz_max_cmpinok[local]:
+  !fv mid id op1 inst. cmpinok fv (ao_cmp_prefer_iz_max mid id op1 inst)
+Proof
+  rw[ao_cmp_prefer_iz_max_def] >> irule cmpinok_no_comp >> rw[] >>
+  gvs[is_comparator_def]
+QED
+
+Triviality cmp_prefer_iz_general_cmpinok[local]:
+  !fv mid id op1 op2 inst.
+    cmpinok fv (ao_cmp_prefer_iz_general mid id op1 op2 inst)
+Proof
+  rw[ao_cmp_prefer_iz_general_def] >> irule cmpinok_no_comp >> rw[] >>
+  gvs[is_comparator_def]
+QED
+
+(* inok builder: every Var-operand is clean or one of the named fresh helpers. *)
+Triviality inok_named[local]:
+  !fv id l.
+    (!q w. MEM q l /\ MEM (Var w) q.inst_operands ==>
+       w NOTIN fv \/ w = ao_fresh_var id "not" \/
+       w = ao_fresh_var id "iz" \/ w = ao_fresh_var id "xor") ==>
+    inok fv id l
+Proof
+  rw[inok_def] >>
+  `w NOTIN fv \/ w = ao_fresh_var id "not" \/ w = ao_fresh_var id "iz" \/
+   w = ao_fresh_var id "xor"` by metis_tac[] >>
+  pop_assum strip_assume_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality cmp_prefer_iz_zero_inok[local]:
+  !fv mid id op1 inst.
+    (!w. op1 = Var w ==> w NOTIN fv) ==>
+    inok fv id (ao_cmp_prefer_iz_zero mid id op1 inst)
+Proof
+  rw[ao_cmp_prefer_iz_zero_def, inok_def] >>
+  qpat_x_assum `MEM q _` (strip_assume_tac o SIMP_RULE (srw_ss())[listTheory.MEM]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Triviality cmp_prefer_iz_max_inok[local]:
+  !fv mid id op1 inst.
+    (!w. op1 = Var w ==> w NOTIN fv) ==>
+    inok fv id (ao_cmp_prefer_iz_max mid id op1 inst)
+Proof
+  rw[ao_cmp_prefer_iz_max_def, inok_def] >>
+  qpat_x_assum `MEM q _` (strip_assume_tac o SIMP_RULE (srw_ss())[listTheory.MEM]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Triviality cmp_prefer_iz_general_inok[local]:
+  !fv mid id op1 op2 inst.
+    (!w. op1 = Var w ==> w NOTIN fv) /\ (!w. op2 = Var w ==> w NOTIN fv) ==>
+    inok fv id (ao_cmp_prefer_iz_general mid id op1 op2 inst)
+Proof
+  rw[ao_cmp_prefer_iz_general_def, inok_def] >>
+  qpat_x_assum `MEM q _` (strip_assume_tac o SIMP_RULE (srw_ss())[listTheory.MEM]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Triviality opt_comparator_inok[local]:
+  !fv mid dfg ra lbl idx inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    inok fv inst.inst_id (ao_opt_comparator mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_opt_comparator_def, LET_THM] >>
+  rpt (FIRST [CASE_TAC, IF_CASES_TAC, pairarg_tac] >> simp[]) >>
+  TRY (drule cmp_range_lit >> strip_tac >> gvs[]) >>
+  FIRST [
+    (irule cmp_prefer_iz_zero_inok >> rw[] >> gvs[listTheory.MEM] >> metis_tac[]),
+    (irule cmp_prefer_iz_max_inok >> rw[] >> gvs[listTheory.MEM] >> metis_tac[]),
+    (irule cmp_prefer_iz_general_inok >> rw[] >> gvs[listTheory.MEM] >> metis_tac[]),
+    (irule inok_named >> rpt strip_tac >>
+     qpat_x_assum `MEM q _`
+       (strip_assume_tac o SIMP_RULE (srw_ss())[listTheory.MEM]) >>
+     gvs[listTheory.MEM] >> metis_tac[])
+  ]
+QED
+
+Triviality opt_comparator_cmpinok[local]:
+  !fv mid dfg ra lbl idx inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    cmpinok fv (ao_opt_comparator mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >>
+  simp[ao_opt_comparator_def, LET_THM] >>
+  rpt (FIRST [CASE_TAC, IF_CASES_TAC, pairarg_tac] >> simp[]) >>
+  FIRST [
+    (irule cmp_prefer_iz_zero_cmpinok),
+    (irule cmp_prefer_iz_max_cmpinok),
+    (irule cmp_prefer_iz_general_cmpinok),
+    (irule cmpinok_no_comp >> rw[] >> gvs[is_comparator_def] >> NO_TAC),
+    (irule cmpinok_clean >> rpt strip_tac >> gvs[] >> metis_tac[])
+  ]
+QED
+
+(* ===== peephole / producer / transform ===== *)
+
+Triviality peephole_inok[local]:
+  !fv mid dfg ra lbl idx inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    inok fv inst.inst_id (ao_peephole_inst mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >> rw[ao_peephole_inst_def] >>
+  FIRST [
+    (irule opt_eq_inok >> fs[]),
+    (irule opt_comparator_inok >> fs[]),
+    (irule inok_clean >>
+     FIRST [match_mp_tac opt_shift_opnds_clean,
+            match_mp_tac opt_signextend_opnds_clean,
+            match_mp_tac opt_exp_opnds_clean,
+            match_mp_tac opt_addsub_opnds_clean,
+            match_mp_tac opt_and_opnds_clean,
+            match_mp_tac opt_muldiv_opnds_clean,
+            match_mp_tac opt_or_opnds_clean] >> fs[]),
+    (irule inok_clean >> rpt strip_tac >> gvs[] >> metis_tac[])
+  ]
+QED
+
+Triviality peephole_cmpinok[local]:
+  !fv mid dfg ra lbl idx inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) ==>
+    cmpinok fv (ao_peephole_inst mid dfg ra lbl idx inst)
+Proof
+  rpt strip_tac >> rw[ao_peephole_inst_def] >>
+  FIRST [
+    (irule opt_eq_cmpinok >> fs[]),
+    (irule opt_comparator_cmpinok >> fs[]),
+    (irule cmpinok_clean >>
+     FIRST [match_mp_tac opt_shift_opnds_clean,
+            match_mp_tac opt_signextend_opnds_clean,
+            match_mp_tac opt_exp_opnds_clean,
+            match_mp_tac opt_addsub_opnds_clean,
+            match_mp_tac opt_and_opnds_clean,
+            match_mp_tac opt_muldiv_opnds_clean,
+            match_mp_tac opt_or_opnds_clean] >> fs[]),
+    (irule cmpinok_clean >> rpt strip_tac >> gvs[] >> metis_tac[])
+  ]
+QED
+
+Triviality producer_opnds[local]:
+  !dfg inst r.
+    ao_opt_producer dfg inst = SOME r ==>
+    !q w. MEM q r /\ MEM (Var w) q.inst_operands ==>
+          MEM (Var w) inst.inst_operands
+Proof
+  rw[ao_opt_producer_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+Triviality transform_inst_inok[local]:
+  !fv mid dfg ra lbl idx targets inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==> w NOTIN fv) ==>
+    inok fv inst.inst_id (ao_transform_inst mid dfg ra lbl idx targets inst)
+Proof
+  rpt strip_tac >>
+  `!w. MEM (Var w) (ao_resolve_iszero_inst targets inst).inst_operands ==>
+       w NOTIN fv` by
+    (match_mp_tac resolve_inst_opnds_clean >> conj_tac >> metis_tac[]) >>
+  simp[ao_transform_inst_def, LET_THM] >>
+  rpt (FIRST [CASE_TAC, IF_CASES_TAC] >> simp[]) >>
+  TRY (irule inok_clean >> rpt strip_tac >> gvs[] >> metis_tac[] >> NO_TAC) >>
+  FIRST [
+    (irule inok_map_post_flip >> irule inok_clean >> rpt strip_tac >>
+     drule_all producer_opnds >> metis_tac[]),
+    (irule inok_map_post_flip >>
+     qspecl_then [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
+       `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
+       mp_tac peephole_inok >>
+     impl_tac
+     >- (rpt strip_tac >> drule pre_flip_operand_mem >> metis_tac[])
+     >- simp[pre_flip_id, resolve_id])
+  ]
+QED
+
+Triviality transform_inst_cmpinok[local]:
+  !fv mid dfg ra lbl idx targets inst.
+    (!w. MEM (Var w) inst.inst_operands ==> w NOTIN fv) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==> w NOTIN fv) ==>
+    cmpinok fv (ao_transform_inst mid dfg ra lbl idx targets inst)
+Proof
+  rpt strip_tac >>
+  `!w. MEM (Var w) (ao_resolve_iszero_inst targets inst).inst_operands ==>
+       w NOTIN fv` by
+    (match_mp_tac resolve_inst_opnds_clean >> conj_tac >> metis_tac[]) >>
+  simp[ao_transform_inst_def, LET_THM] >>
+  rpt (FIRST [CASE_TAC, IF_CASES_TAC] >> simp[]) >>
+  TRY (irule cmpinok_clean >> rpt strip_tac >> gvs[] >> metis_tac[] >> NO_TAC) >>
+  FIRST [
+    (irule cmpinok_no_comp >> rw[listTheory.MEM_MAP] >>
+     gvs[post_flip_opcode] >>
+     drule producer_no_comp >> simp[listTheory.EVERY_MEM] >>
+     rpt strip_tac >> first_x_assum drule >> simp[]),
+    (irule cmpinok_map_post_flip >>
+     qspecl_then [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
+       `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
+       mp_tac peephole_cmpinok >>
+     impl_tac
+     >- (rpt strip_tac >> drule pre_flip_operand_mem >> metis_tac[])
+     >- simp[])
+  ]
+QED
+
+(* ===== all_cmppieces operand invariants ===== *)
+
+Triviality all_cmppieces_inok[local]:
+  !mid dfg ra targets fn.
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==>
+            w NOTIN ao_fn_fresh_vars fn) ==>
+    EVERY (\p. inok (ao_fn_fresh_vars fn) (FST p) (SND (SND p)))
+      (all_cmppieces mid dfg ra targets fn)
+Proof
+  rw[all_cmppieces_def, listTheory.EVERY_MEM, listTheory.MEM_FLAT,
+     listTheory.MEM_MAP] >>
+  gvs[block_cmppieces_def, indexedListsTheory.MEM_MAPi] >>
+  qmatch_goalsub_abbrev_tac `ao_transform_inst _ _ _ _ _ _ inst` >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
+     qpat_x_assum `MEM _ fn.fn_blocks` (irule_at Any) >>
+     simp[listTheory.MEM_EL, Abbr`inst`] >> metis_tac[]) >>
+  irule transform_inst_inok >>
+  simp[listTheory.MEM_MAP, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Triviality all_cmppieces_cmpinok[local]:
+  !mid dfg ra targets fn.
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==>
+            w NOTIN ao_fn_fresh_vars fn) ==>
+    EVERY (\p. cmpinok (ao_fn_fresh_vars fn) (SND (SND p)))
+      (all_cmppieces mid dfg ra targets fn)
+Proof
+  rw[all_cmppieces_def, listTheory.EVERY_MEM, listTheory.MEM_FLAT,
+     listTheory.MEM_MAP] >>
+  gvs[block_cmppieces_def, indexedListsTheory.MEM_MAPi] >>
+  qmatch_goalsub_abbrev_tac `ao_transform_inst _ _ _ _ _ _ inst` >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
+     qpat_x_assum `MEM _ fn.fn_blocks` (irule_at Any) >>
+     simp[listTheory.MEM_EL, Abbr`inst`] >> metis_tac[]) >>
+  irule transform_inst_cmpinok >>
+  simp[listTheory.MEM_MAP, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+(* ===== core list lemma + top-level ===== *)
+
+Triviality flat_operands_flat[local]:
+  !pieces.
+    FLAT (MAP (\q. q.inst_operands) (FLAT (MAP (\p. SND (SND p)) pieces))) =
+    FLAT (MAP (\p. FLAT (MAP (\q. q.inst_operands) (SND (SND p)))) pieces)
+Proof
+  Induct >> simp[listTheory.FLAT_APPEND]
+QED
+
+Triviality cmppieces_no_cmp_operand_iz[local]:
+  !fv pieces i0.
+    ALL_DISTINCT (MAP FST pieces) /\
+    EVERY (\p. cmpok fv (FST p) (SND (SND p))) pieces /\
+    EVERY (\p. cmpinok fv (SND (SND p))) pieces /\
+    EVERY (\p. inok fv (FST p) (SND (SND p))) pieces /\
+    (!p. MEM p pieces ==> ao_fresh_var (FST p) "iz" IN fv) /\
+    MEM i0 (FLAT (MAP (\p. SND (SND p)) pieces)) /\
+    is_comparator i0.inst_opcode ==>
+    ~MEM (Var (ao_fresh_var i0.inst_id "iz"))
+         (FLAT (MAP (\q. q.inst_operands)
+            (FLAT (MAP (\p. SND (SND p)) pieces))))
+Proof
+  rpt strip_tac >>
+  `?p0. MEM p0 pieces /\ MEM i0 (SND (SND p0))` by
+    (qpat_x_assum `MEM i0 (FLAT _)` mp_tac >>
+     simp[listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
+     metis_tac[]) >>
+  `cmpok fv (FST p0) (SND (SND p0))` by
+    (qpat_x_assum `EVERY (\p. cmpok _ _ _) _` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `i0.inst_id = FST p0` by (fs[cmpok_def] >> metis_tac[]) >>
+  `?p1 q1. MEM p1 pieces /\ MEM q1 (SND (SND p1)) /\
+           MEM (Var (ao_fresh_var i0.inst_id "iz")) q1.inst_operands` by
+    (qpat_x_assum `MEM (Var _) (FLAT _)` mp_tac >>
+     simp[flat_operands_flat, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+          PULL_EXISTS] >> metis_tac[]) >>
+  `ao_fresh_var i0.inst_id "iz" IN fv` by metis_tac[] >>
+  `inok fv (FST p1) (SND (SND p1))` by
+    (qpat_x_assum `EVERY (\p. inok _ _ _) _` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `?s. (s = "not" \/ s = "iz" \/ s = "xor") /\
+       ao_fresh_var i0.inst_id "iz" = ao_fresh_var (FST p1) s` by
+    (fs[inok_def] >> metis_tac[]) >>
+  `FST p0 = FST p1` by metis_tac[ao_fresh_var_full_inj] >>
+  `p0 = p1` by metis_tac[all_distinct_fst_inj] >>
+  `cmpinok fv (SND (SND p1))` by
+    (qpat_x_assum `EVERY (\p. cmpinok _ _) _` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `?p. MEM p (SND (SND p1)) /\ is_comparator p.inst_opcode` by
+    (qexists_tac `i0` >> gvs[]) >>
+  fs[cmpinok_def] >>
+  `ao_fresh_var i0.inst_id "iz" NOTIN fv` by metis_tac[] >>
+  metis_tac[]
+QED
+
+Theorem ao_phase3_no_cmp_operand_iz:
+  !mid dfg ra targets fn c.
+    fn_inst_ids_distinct fn /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==>
+            w NOTIN ao_fn_fresh_vars fn) /\
+    (?i. MEM i (fn_insts (function_map_transform
+                  (ao_transform_block mid dfg ra targets) fn)) /\
+         i.inst_id = c /\ is_comparator i.inst_opcode) ==>
+    ~MEM (Var (ao_fresh_var c "iz"))
+       (FLAT (MAP (\i. i.inst_operands)
+         (fn_insts (function_map_transform
+            (ao_transform_block mid dfg ra targets) fn))))
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `pieces = all_cmppieces mid dfg ra targets fn` >>
+  `fn_insts (function_map_transform (ao_transform_block mid dfg ra targets) fn) =
+   FLAT (MAP (\p. SND (SND p)) pieces)` by
+    simp[Abbr `pieces`, all_cmppieces_insts] >>
+  qpat_x_assum `i.inst_id = c` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `fn_insts _ = FLAT _` SUBST_ALL_TAC >>
+  qspecl_then [`ao_fn_fresh_vars fn`, `pieces`, `i`]
+    mp_tac cmppieces_no_cmp_operand_iz >>
+  impl_tac
+  >- (rpt conj_tac
+      >- (simp[Abbr `pieces`, all_cmppieces_fst, map_inst_id_fn_insts] >>
+          fs[fn_inst_ids_distinct_def])
+      >- (simp[Abbr `pieces`] >> irule all_cmppieces_cmpok >>
+          rpt strip_tac >> metis_tac[])
+      >- (simp[Abbr `pieces`] >> irule all_cmppieces_cmpinok >>
+          rpt strip_tac >> metis_tac[])
+      >- (simp[Abbr `pieces`] >> irule all_cmppieces_inok >>
+          rpt strip_tac >> metis_tac[])
+      >- (rpt strip_tac >>
+          `MEM (FST p) (MAP FST pieces)` by
+            (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+          `MAP FST pieces = MAP (\i. i.inst_id) (fn_insts fn)` by
+            simp[Abbr `pieces`, all_cmppieces_fst] >>
+          irule fresh_mem >> gvs[])
+      >> gvs[]) >>
+  simp[]
+QED
+
+(* chains of the iszero targets only reference operands/outputs of source insts *)
+Theorem ao_fn_iszero_targets_clean:
+  !fn P.
+    (!inst w. MEM inst (fn_insts fn) /\
+       (MEM (Var w) inst.inst_operands \/ MEM w inst.inst_outputs) ==> P w) ==>
+    !ch w. MEM ch (MAP SND (ao_compute_fn_iszero_targets fn)) /\
+           MEM (Var w) ch ==> P w
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
+  qspecl_then [`fn_insts fn`, `[]`, `P`] mp_tac iszero_step_entries >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  simp[]
+QED
+
 val _ = export_theory();

@@ -247,6 +247,30 @@ Proof
   metis_tac[]
 QED
 
+(* phase 1 introduces no new Var operand: it only reorders ADD's [Label;Lit] *)
+Triviality ao_handle_offset_inst_operand_var[local]:
+  !inst w. MEM (Var w) (ao_handle_offset_inst inst).inst_operands ==>
+           MEM (Var w) inst.inst_operands
+Proof
+  rw[ao_handle_offset_inst_def] >> every_case_tac >> gvs[]
+QED
+
+Triviality phase1_operand_freshness[local]:
+  !fn.
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) ==>
+    (!inst v.
+       MEM inst (fn_insts
+         (function_map_transform (block_map_transform ao_handle_offset_inst) fn)) /\
+       MEM (Var v) inst.inst_operands ==>
+       v NOTIN ao_fn_fresh_vars
+         (function_map_transform (block_map_transform ao_handle_offset_inst) fn))
+Proof
+  rpt strip_tac >>
+  gvs[fn_insts_block_map, listTheory.MEM_MAP, phase1_fresh_vars] >>
+  drule ao_handle_offset_inst_operand_var >> metis_tac[]
+QED
+
 (* function_map_transform of a 1:1 block map, in record-with form *)
 Triviality fmt_block_map[local]:
   !f fn.
@@ -397,11 +421,10 @@ QED
    namespace of fn1.  Consumed by the phase-4 simulation lemma
    (ao_phase4_correct) in the main composition.  Requires
    ao_fresh_names_disjoint fn since the fact is false if the source program
-   already references an ao_<id>_iz name. *)
-(* TODO(close-cheat): real proof of cmp-iszero freshness preservation
-   through phases 1-3.  Cheated on the simulation track pre-merge; the
-   WF/SSA track proved the other three conjuncts (ao_phases123_preserve_wf)
-   but not this one.  Isolated here so the rest stays cheat-free. *)
+   already references an ao_<id>_iz name.
+   Proved via ao_phase3_no_cmp_operand_iz applied to the phase-1 result fn0,
+   whose operand/output/target cleanliness is inherited from
+   ao_fresh_names_disjoint fn (phase 1 introduces no new Var operands). *)
 Theorem ao_phases123_cmp_fresh_disjoint:
   !fn.
     let fn0 = fn with fn_blocks :=
@@ -418,7 +441,49 @@ Theorem ao_phases123_cmp_fresh_disjoint:
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
       v NOTIN ao_cmp_fresh_vars fn1)
 Proof
-  cheat
+  gen_tac >> simp[LET_THM] >> strip_tac >>
+  `fn_inst_ids_distinct fn` by fs[wf_function_def] >>
+  qmatch_goalsub_abbrev_tac `fn_max_inst_id fn0` >>
+  `fn0 = function_map_transform
+     (block_map_transform ao_handle_offset_inst) fn` by
+    simp[Abbr `fn0`, fmt_block_map] >>
+  (* phase 1 facts about fn0 *)
+  `fn_inst_ids_distinct fn0` by
+    (qpat_x_assum `fn0 = _` SUBST1_TAC >> metis_tac[phase1_inst_ids]) >>
+  `!inst v. MEM inst (fn_insts fn0) /\ MEM (Var v) inst.inst_operands ==>
+            v NOTIN ao_fn_fresh_vars fn0` by
+    (fs[ao_fresh_names_disjoint_def] >> qpat_x_assum `fn0 = _` SUBST1_TAC >>
+     metis_tac[phase1_operand_freshness]) >>
+  `!inst v. MEM inst (fn_insts fn0) /\ MEM v inst.inst_outputs ==>
+            v NOTIN ao_fn_fresh_vars fn0` by
+    (fs[ao_fresh_names_disjoint_def] >> qpat_x_assum `fn0 = _` SUBST1_TAC >>
+     metis_tac[phase1_freshness]) >>
+  (* drop the unfolding equality so later simps keep fn0 folded *)
+  qpat_x_assum `fn0 = function_map_transform _ _` kall_tac >>
+  qmatch_goalsub_abbrev_tac `ao_transform_block mid dfg ra targets` >>
+  (* targets chains only reference source operands/outputs, hence are clean *)
+  `!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==>
+          w NOTIN ao_fn_fresh_vars fn0` by
+    (simp[Abbr `targets`] >> ho_match_mp_tac ao_fn_iszero_targets_clean >>
+     rpt strip_tac >> metis_tac[]) >>
+  (* the goal body is the record-reduced form of this function_map_transform;
+     prove the latter, which matches ao_phase3_no_cmp_operand_iz directly *)
+  `!inst v.
+     MEM inst (fn_insts
+       (function_map_transform (ao_transform_block mid dfg ra targets) fn0)) /\
+     MEM (Var v) inst.inst_operands ==>
+     v NOTIN ao_cmp_fresh_vars
+       (function_map_transform (ao_transform_block mid dfg ra targets) fn0)`
+    suffices_by simp[function_map_transform_def, Abbr `fn0`] >>
+  rpt strip_tac >> fs[ao_cmp_fresh_vars_def] >>
+  qspecl_then [`mid`,`dfg`,`ra`,`targets`,`fn0`,`i.inst_id`] mp_tac
+    ao_phase3_no_cmp_operand_iz >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  `MEM (Var v) (FLAT (MAP (\i. i.inst_operands)
+     (fn_insts (function_map_transform
+        (ao_transform_block mid dfg ra targets) fn0))))` by
+    (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  gvs[]
 QED
 
 val _ = export_theory();
