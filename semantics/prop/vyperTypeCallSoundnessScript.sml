@@ -41,10 +41,13 @@ QED
 Theorem functions_well_typed_body:
   functions_well_typed cx /\ fn_sigs_consistent fn_sigs cx /\
   get_module_code cx src = SOME ts /\
-  lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body) /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
   (* Concrete maps supplied by caller must satisfy the consistency side-condition. *)
-  (!src id ty ts. FLOOKUP bare_globals (src,id) = SOME ty /\ get_module_code cx src = SOME ts ==>
-     FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\ is_immutable_decl id ts /\ ty <> NoneT) /\
+  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+     ?ts. get_module_code cx src = SOME ts /\
+          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+          is_immutable_decl id ts /\ find_var_decl_by_num id ts = NONE /\
+          ty <> NoneT) /\
   (!src id vt ts.
      FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
      ((?ty. vt = Type ty /\
@@ -68,9 +71,9 @@ Theorem functions_well_typed_body:
     env_body.toplevel_vtypes = toplevel_vtypes /\
     env_body.flag_members = flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
-    type_stmts env_body ret body = SOME env_after /\
-    (ret = NoneT \/ stmts_no_fallthrough body) /\
-    stmts_no_control_escape body /\
+    type_stmts env_body ret fn_body = SOME env_after /\
+    (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
+    stmts_no_control_escape fn_body /\
     well_typed_exprs (defaults_env env_body) dflts /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\

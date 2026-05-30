@@ -14136,9 +14136,14 @@ Proof
     strip_tac >>
     rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
   strip_tac >>
+  qpat_x_assum `case dflt_res of INL _ => _ | INR _ => T`
+    (mk_asm "dflt_sound") >>
+  qpat_x_assum `(case dflt_res of INL _ => _ | INR _ => _) = (res,st')`
+    (mk_asm "dflt_case_eq") >>
   Cases_on `dflt_res` >- (
     simp[] >>
-    qpat_x_assum `case INL x of _ => _ | _ => _` mp_tac >> simp[NoAsms, sum_case_def] >> strip_tac >>
+    asm "dflt_case_eq" mp_tac >> simp[NoAsms, sum_case_def] >> strip_tac >>
+    asm "dflt_sound" mp_tac >> simp[NoAsms, sum_case_def] >> strip_tac >>
     drule env_consistent_type_defs_get_tenv >> strip_tac >>
     `LENGTH args - LENGTH es <= LENGTH dflts` by
       (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
@@ -14148,6 +14153,8 @@ Proof
       (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
        simp[type_check_def, assert_def] >>
        IF_CASES_TAC >> gvs[] >> decide_tac) >>
+    `LENGTH dflts + LENGTH es - LENGTH args =
+     LENGTH dflts - (LENGTH args - LENGTH es)` by decide_tac >>
     qspecl_then [`cx`, `env`, `env_body`, `args`, `dflts`, `es`,
                  `actual_vs`, `x`,
                  `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
@@ -14178,12 +14185,12 @@ Proof
      asm "args_forward" ACCEPT_TAC ORELSE
      asm "args_var_types" ACCEPT_TAC ORELSE
      asm "args_var_assignable" ACCEPT_TAC ORELSE
-     (qpat_x_assum `(case INL x of _ => _ | _ => _) = (res,st')` mp_tac >>
+     (asm "dflt_case_eq" mp_tac >>
       simp[lift_option_type_def, evaluate_type_def, return_def,
            bind_apply, push_function_def]) ORELSE
      simp[lift_option_type_def, evaluate_type_def, return_def,
           bind_apply, push_function_def]) ) >-
-  (qpat_x_assum `(case INR y of _ => _ | _ => _) = (res,st')` mp_tac >>
+  (asm "dflt_case_eq" mp_tac >>
    simp[] >> strip_tac >>
    qpat_x_assum `INR y = res` (fn eq =>
      qpat_x_assum `no_type_error_result (INR y)` (fn nte =>

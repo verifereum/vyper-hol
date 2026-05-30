@@ -376,6 +376,16 @@ val at_mono = [bind_def, ignore_bind_def, return_def, raise_def,
   COND_RATOR, LET_THM, get_scopes_def, set_scopes_def,
   no_control_exc_def];
 
+(* Fast resolution for common assign_target branches before the broader search. *)
+val at_resolve_quick = FIRST [
+  imp_res_tac assign_result_no_control >> gvs[no_control_exc_def] >> NO_TAC,
+  imp_res_tac lift_sum_no_control >> gvs[no_control_exc_def] >> NO_TAC,
+  imp_res_tac read_storage_slot_no_control >> gvs[no_control_exc_def] >> NO_TAC,
+  imp_res_tac write_storage_slot_no_control >> gvs[no_control_exc_def] >> NO_TAC,
+  imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC,
+  imp_res_tac lookup_global_no_control >> gvs[no_control_exc_def] >> NO_TAC
+];
+
 (* Resolution: try each helper, closing the goal completely *)
 val at_resolve = FIRST (
   map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC) at_helpers
@@ -394,13 +404,13 @@ val assign_target_no_control_tac =
     val step =
       gvs[pairTheory.ELIM_UNCURRY]
       >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
-      >> TRY at_resolve >> TRY gsb_contra
+      >> TRY at_resolve_quick >> TRY at_resolve >> TRY gsb_contra
   in
     rpt gen_tac
     >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
     >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
     >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
-    >> TRY at_resolve >> step >> step
+    >> TRY at_resolve_quick >> TRY at_resolve >> step >> step
   end;
 
 Theorem assign_target_no_control:
@@ -416,10 +426,10 @@ Proof
     >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
     >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
     >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
-    >> TRY at_resolve
+    >> TRY at_resolve_quick >> TRY at_resolve
     >> gvs[pairTheory.ELIM_UNCURRY]
     >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
-    >> TRY at_resolve
+    >> TRY at_resolve_quick >> TRY at_resolve
     >> TRY (qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
         (fn th => let val b = th |> concl |> lhs |> rator |> rand
           in assume_tac th >> Cases_on [ANTIQUOTE b]
@@ -428,7 +438,7 @@ Proof
           end))
     >> gvs[pairTheory.ELIM_UNCURRY]
     >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
-    >> TRY at_resolve
+    >> TRY at_resolve_quick >> TRY at_resolve
     >> TRY (qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
         (fn th => let val b = th |> concl |> lhs |> rator |> rand
           in assume_tac th >> Cases_on [ANTIQUOTE b]
@@ -504,13 +514,13 @@ val ibind_step_tac =
 val step_tac = FIRST [bind_step_tac, ibind_step_tac];
 
 val helper_close = FIRST [
-  FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC)
-    helpers),
-  gvs[no_control_exc_def, return_def, raise_def] >> NO_TAC,
   gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def,
       get_accounts_def, get_transient_storage_def,
       update_accounts_def, update_transient_def,
-      get_scopes_def, push_function_def] >> NO_TAC
+      get_scopes_def, push_function_def] >> NO_TAC,
+  gvs[no_control_exc_def, return_def, raise_def] >> NO_TAC,
+  FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC)
+    helpers)
 ];
 
 (* Lean step tactics: decompose monadic binds without gvs *)
@@ -549,11 +559,10 @@ QED
 
 (* Sub-helper: tail after both eval_exprs calls *)
 Theorem int_call_tail_no_control[local]:
-  ∀all_tenv args vs dflt_vs ret is_view nr src_id_opt fn cx body s exc st'.
+  ∀all_tenv args vs dflt_vs ret prev is_view nr src_id_opt fn cx body s exc st'.
   (do
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
              "IntCall bind_arguments";
-    prev <- get_scopes;
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
     (if nr then
        case cx.nonreentrant_slot of
@@ -591,7 +600,8 @@ QED
 
 Theorem int_call_no_control[local]:
   ∀cx v16 src_id_opt fn es v17.
-  (∀s'' x t s'3 ts t' s'4 tup t'' s'5 x' t'3 s'6 vs t'4.
+  (∀s'' x t s'3 ts t' s'4 tup t'' s'5 x' t'3 s'6 vs t'4
+      s'7 prev t'5 s'8 x'' t'6.
      check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
      lift_option_type (get_module_code cx src_id_opt)
        "IntCall get_module_code" s'3 = (INL ts,t') ∧
@@ -602,7 +612,9 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ∧
-     eval_exprs cx es s'6 = (INL vs,t'4) ⇒
+     eval_exprs cx es s'6 = (INL vs,t'4) ∧
+     get_scopes s'7 = (INL prev,t'5) ∧
+     set_scopes [FEMPTY] s'8 = (INL x'',t'6) ⇒
      ∀s exc st'.
        eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
          (DROP
@@ -634,7 +646,14 @@ Proof
   >> step_tac >- helper_close
   >> step_tac >- helper_close
   >> step_tac >- (res_tac >> gvs[no_control_exc_def])
-  >> step_tac >- (res_tac >> gvs[no_control_exc_def])
+  >> step_tac >- helper_close
+  >> step_tac >- (
+    drule finally_no_control >>
+    disch_then irule >>
+    conj_tac >- simp at_mono >>
+    rpt gen_tac >> strip_tac >>
+    step_tac >- (gvs at_mono) >>
+    metis_tac[])
   >> pop_assum mp_tac
   >> PURE_ONCE_REWRITE_TAC[GSYM DE_MORGAN_THM]
   >> strip_tac >> drule int_call_tail_no_control >> simp[]
@@ -680,16 +699,42 @@ Theorem eval_expr_no_control_with_bt:
     eval_exprs cx es s = (INR exc, st') ⇒
     no_control_exc exc)
 Proof
-  ho_match_mp_tac eval_expr_bt_ind >> rpt conj_tac >> rpt gen_tac
-  >> TRY (rpt strip_tac >> drule_all int_call_no_control >> simp[] >> NO_TAC)
-  >> TRY (rpt strip_tac >> drule_all raw_call_no_control >> simp[] >> NO_TAC)
-  >> TRY (rename1`ExtCall` >> suspend"ExtCall")
-  >> TRY ((rename1`SubscriptTarget` ORELSE rename1`Pop`) >>
-          unfold_tac >>
-          PairCases_on`x` >>
-          gvs[bind_def, return_def, AllCaseEqs()] >>
-          resolve_tac)
-  >> unfold_tac
+  ho_match_mp_tac eval_expr_bt_ind >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- (
+    rename1`SubscriptTarget` >>
+    unfold_tac >>
+    PairCases_on`x` >>
+    gvs[bind_def, return_def, AllCaseEqs()] >>
+    resolve_tac) >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- (
+    rename1`Pop` >>
+    unfold_tac >>
+    PairCases_on`x` >>
+    gvs[bind_def, return_def, AllCaseEqs()] >>
+    resolve_tac) >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- (rename1`ExtCall` >> suspend "ExtCall") >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    match_mp_tac int_call_no_control >>
+    metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
+  conj_tac >- unfold_tac >>
+  rpt conj_tac >> unfold_tac
 QED
 
 Resume eval_expr_no_control_with_bt[ExtCall]:

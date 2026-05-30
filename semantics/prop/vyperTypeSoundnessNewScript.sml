@@ -75,9 +75,9 @@ Theorem typed_callable_body_no_type_error:
   functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
   state_well_typed st /\ env_consistent env_body cx st /\
   get_module_code cx src = SOME ts /\
-  lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body) /\
-  type_stmts env_body ret body = SOME env_after ==>
-  no_type_error_eval (eval_stmts cx body st)
+  lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
+  type_stmts env_body ret fn_body = SOME env_after ==>
+  no_type_error_eval (eval_stmts cx fn_body st)
 Proof
   metis_tac[eval_stmts_no_type_error]
 QED
