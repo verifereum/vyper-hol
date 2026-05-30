@@ -11,11 +11,12 @@ Theory aoPhase3Proof
 Ancestors
   algebraicOptDefs aoBlockSim aoTargetProps
   aoResolveObligation aoRangeObligation
-  aoStepInvObligation aoBlockInvObligation
+  aoStepInvObligation aoBlockInvObligation aoPhase1Wf
+  aoBlockSimLocal aoStrictDomObligation
   venomExecSemantics venomWf venomState venomInst
   stateEquiv stateEquivProps execEquivProps
   passSimulationProps passSimulationDefs
-  analysisSimDefs rangeAnalysisDefs rangeAnalysisProofs
+  analysisSimDefs rangeAnalysisDefs rangeAnalysisProofs rangeEvalDefs
 Libs
   pairLib BasicProvers
 
@@ -53,6 +54,18 @@ Proof
   simp[ao_transform_block_def]
 QED
 
+Triviality range_sound_in_range_at_inst[local]:
+  !ra lbl s.
+    range_sound (df_widen_at NONE ra lbl 0) s ==>
+    in_range_state (range_at_inst ra lbl 0) s.vs_vars
+Proof
+  rw[range_at_inst_def] >>
+  Cases_on `df_widen_at NONE ra lbl 0` >>
+  fs[range_sound_def, range_unwrap_def, in_range_state_def,
+     finite_mapTheory.FLOOKUP_EMPTY] >>
+  metis_tac[]
+QED
+
 Theorem ao_phase3_correct:
   !fuel ctx fn s.
     let fn0 = fn with fn_blocks :=
@@ -86,7 +99,7 @@ Proof
   qabbrev_tac `fn1 = fn0 with fn_blocks := MAP bt fn0.fn_blocks` >>
   qabbrev_tac `block_inv = \s:venom_state.
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s /\
+    strict_dom_iszero_inv fn0 dfg s /\
     ao_chain_defined_prefix targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre` >>
@@ -102,6 +115,16 @@ Proof
     (fs[Abbr `fv`, ao_fresh_names_disjoint_def] >> metis_tac[]) >>
   `ao_targets_wf targets` by
     simp[Abbr `targets`, ao_compute_fn_iszero_targets_wf] >>
+  `wf_function fn0 /\ wf_ssa fn0` by (
+    `block_map_transform ao_handle_offset_inst =
+     \bb. bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions`
+      by simp[FUN_EQ_THM, block_map_transform_def] >>
+    `fn0 = function_map_transform (block_map_transform ao_handle_offset_inst) fn`
+      by asm_simp_tac std_ss [function_map_transform_def, Abbr `fn0`] >>
+    pop_assum SUBST1_TAC >>
+    conj_tac
+    >- (irule ao_phase1_preserves_wf >> simp[])
+    >- (irule ao_phase1_preserves_wf_ssa >> simp[])) >>
   qspecl_then [`state_equiv fv`, `execution_equiv fv`,
     `block_inv`, `bt`, `fn0`] mp_tac block_sim_function_error_bb >>
   impl_tac >- (
@@ -110,8 +133,25 @@ Proof
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
     >- (qunabbrev_tac `bt` >> simp[ao_transform_block_label])
-    >- (* CHEATED: per-block sim — needs ao_block_sim_range *)
-       cheat
+    >- (* per-block sim via ao_block_sim_local *)
+       (qx_gen_tac `bb` >> strip_tac >>
+        qx_genl_tac [`fl`, `cx`, `st`] >> strip_tac >>
+        `st.vs_current_bb = bb.bb_label` by fs[] >>
+        qpat_x_assum `block_inv st` mp_tac >> simp[Abbr `block_inv`] >>
+        strip_tac >>
+        `range_sound (df_widen_at NONE ra bb.bb_label 0) st` by
+          (qpat_x_assum `range_sound _ st` mp_tac >> fs[]) >>
+        `in_range_state (range_at_inst ra bb.bb_label 0) st.vs_vars` by
+          (irule range_sound_in_range_at_inst >> first_assum ACCEPT_TAC) >>
+        qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`, `bb`]
+          mp_tac ao_block_sim_local >>
+        impl_tac
+        >- (simp[Abbr `fn0`, Abbr `mid`, Abbr `dfg`, Abbr `ra`,
+                 Abbr `targets`, Abbr `fv`] >>
+            rpt conj_tac >> simp[] >> metis_tac[]) >>
+        disch_then (qspecl_then [`fl`, `cx`, `st`] mp_tac) >>
+        impl_tac >- gvs[] >>
+        simp[Abbr `bt`, Abbr `fv`])
     >- (* CHEATED: block_inv preserved through exec_block *)
        cheat
     >- (* block_inv compat with state_equiv fv *)
@@ -119,19 +159,13 @@ Proof
         `s1.vs_current_bb = s2.vs_current_bb` by
           fs[state_equiv_def, execution_equiv_def] >>
         `ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
-         ao_iszero_chain_inv targets s2 /\
-         ao_chain_defined_prefix targets s2` by
-          (irule ao_sinv_state_equiv_compat >>
-           rpt conj_tac >>
-           gvs[Abbr `dfg`, Abbr `targets`, Abbr `fv`, Abbr `fn0`] >>
-           metis_tac[]) >>
-        `range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2` by
-          (`range_sound (df_widen_at NONE ra s1.vs_current_bb 0) s2`
-             suffices_by gvs[] >>
-           irule ao_range_sound_state_equiv_compat >>
-           rpt conj_tac >>
-           gvs[Abbr `ra`, Abbr `fv`, Abbr `fn0`] >>
-           metis_tac[]) >>
+         strict_dom_iszero_inv fn0 dfg s2 /\
+         ao_chain_defined_prefix targets s2 /\
+         range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2` by
+          (qspecl_then [`fn`, `fn0`, `dfg`, `ra`, `targets`, `s1`, `s2`]
+             mp_tac ao_block_inv_state_equiv_compat >>
+           simp[Abbr `dfg`, Abbr `ra`, Abbr `targets`, Abbr `fn0`,
+                Abbr `fv`] >> disch_then irule >> metis_tac[]) >>
         gvs[])
     >- (* operand lookup under state_equiv *)
        (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -144,7 +178,37 @@ Proof
   disch_then (qspecl_then [`fuel`, `ctx`,
     `s with vs_inst_idx := 0`] mp_tac) >>
   simp[Abbr `block_inv`] >>
-  impl_tac >- cheat >>
+  impl_tac >-
+   ((* Initial block_inv at the entry state s with vs_inst_idx := 0. *)
+    `block_map_transform ao_handle_offset_inst =
+     \bb. bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions`
+      by simp[FUN_EQ_THM, block_map_transform_def] >>
+    `fn0 = function_map_transform (block_map_transform ao_handle_offset_inst) fn`
+      by asm_simp_tac std_ss [function_map_transform_def, Abbr `fn0`] >>
+    `wf_function fn0` by
+      (pop_assum SUBST1_TAC >> irule ao_phase1_preserves_wf >> simp[]) >>
+    `!x. lookup_var x (s with vs_inst_idx := 0) = NONE` by
+      fs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF] >>
+    `ssa_form fn` by fs[wf_ssa_def] >>
+    rpt conj_tac
+    >- (* ao_dfg_inv (vacuous: no vars defined yet) *)
+       (simp[ao_dfg_inv_def] >> rpt strip_tac >> fs[])
+    >- (* strict_dom_iszero_inv *)
+       (irule strict_dom_iszero_inv_initial >>
+        `fn_entry_label fn0 = SOME s.vs_current_bb` by
+          (simp[Abbr `fn0`, fn0_entry_label] >> fs[]) >>
+        simp[])
+    >- (* ao_chain_defined_prefix *)
+       (irule ao_chain_defined_prefix_initial >> qexistsl_tac [`fn`, `fn0`] >>
+        rpt conj_tac >> simp[Abbr `targets`, Abbr `fn0`] >> fs[])
+    >- (* range_sound (vacuous: vs_vars empty) *)
+       (simp[range_sound_def] >>
+        Cases_on `df_widen_at NONE ra s.vs_current_bb 0` >>
+        fs[in_range_state_def, finite_mapTheory.FLOOKUP_DEF])
+    >- (* cfg membership at entry *)
+       (`fn_entry_label fn0 = SOME s.vs_current_bb` by
+          (simp[Abbr `fn0`, fn0_entry_label] >> fs[]) >>
+        irule ao_cfg_initial >> fs[])) >>
   disch_then ACCEPT_TAC
 QED
 

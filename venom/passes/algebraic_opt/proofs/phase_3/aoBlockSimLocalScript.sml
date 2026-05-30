@@ -395,6 +395,98 @@ Proof
   simp[fn_insts_def]
 QED
 
+(* Clean-context wrapper for strict_dom_iszero_inv_state_equiv_compat:
+   discharges the dfg-def freshness obligations via the bridging lemmas. *)
+Triviality strict_dom_state_equiv_fv[local]:
+  !fn fn0 dfg s1 s2.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    strict_dom_iszero_inv fn0 dfg s1 /\
+    state_equiv (ao_fn_fresh_vars fn) s1 s2 ==>
+    strict_dom_iszero_inv fn0 dfg s2
+Proof
+  rpt strip_tac >>
+  qspecl_then [`fn0`, `dfg`, `ao_fn_fresh_vars fn`, `s1`, `s2`] mp_tac
+    strict_dom_iszero_inv_state_equiv_compat >>
+  impl_tac >- (
+    rpt conj_tac
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- (rpt strip_tac >> drule_all dfg_def_var_not_in_fv >> simp[])
+    >- (rpt strip_tac >> `MEM (Var op) inst.inst_operands` by simp[] >>
+        drule_all dfg_def_iszero_operand_not_in_fv >> simp[])) >>
+  simp[]
+QED
+
+(* Combined block_inv state_equiv compatibility: all four invariant
+   components transfer across state_equiv (ao_fn_fresh_vars fn). Used by
+   the phase-3 block_inv compat obligation. *)
+Theorem ao_block_inv_state_equiv_compat:
+  !fn fn0 dfg ra targets s1 s2.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    ra = range_analyze fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ao_targets_wf targets /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    state_equiv (ao_fn_fresh_vars fn) s1 s2 /\
+    ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
+    strict_dom_iszero_inv fn0 dfg s1 /\
+    ao_chain_defined_prefix targets s1 /\
+    range_sound (df_widen_at NONE ra s1.vs_current_bb 0) s1 ==>
+    ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
+    strict_dom_iszero_inv fn0 dfg s2 /\
+    ao_chain_defined_prefix targets s2 /\
+    range_sound (df_widen_at NONE ra s2.vs_current_bb 0) s2
+Proof
+  rpt gen_tac >> strip_tac >>
+  `s1.vs_current_bb = s2.vs_current_bb` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  rpt conj_tac
+  >- ((* ao_dfg_inv *)
+      `state_equiv (ao_fn_fresh_vars fn) (s1 with vs_inst_idx := 0)
+                   (s2 with vs_inst_idx := 0)` by
+        (qpat_x_assum `state_equiv _ _ _` mp_tac >>
+         simp[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+      qspecl_then [`dfg`, `ao_fn_fresh_vars fn`,
+                   `s1 with vs_inst_idx := 0`, `s2 with vs_inst_idx := 0`]
+        mp_tac ao_dfg_inv_state_equiv_compat >>
+      impl_tac >- (
+        rpt conj_tac
+        >- first_assum ACCEPT_TAC
+        >- first_assum ACCEPT_TAC
+        >- (rpt strip_tac >> drule_all dfg_def_var_not_in_fv >> simp[])) >>
+      simp[])
+  >- ((* strict_dom_iszero_inv *)
+      qspecl_then [`fn`, `fn0`, `dfg`, `s1`, `s2`] mp_tac
+        strict_dom_state_equiv_fv >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[])
+  >- ((* ao_chain_defined_prefix *)
+      irule ao_chain_defined_prefix_state_equiv_compat >>
+      qexistsl_tac [`ao_fn_fresh_vars fn`, `s1`] >> simp[] >>
+      rpt strip_tac >>
+      metis_tac[ao_chain_vars_not_in_fv])
+  >- ((* range_sound *)
+      `range_sound (df_widen_at NONE ra s1.vs_current_bb 0) s2`
+        suffices_by gvs[] >>
+      qspecl_then [`fn`, `fn0`, `ra`, `ao_fn_fresh_vars fn`,
+                   `s1.vs_current_bb`, `s1`, `s2`] mp_tac
+        ao_range_sound_state_equiv_compat >>
+      impl_tac
+      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >> simp[])
+QED
+
 (* ===== Loop-robust per-block simulation ===== *)
 
 Triviality bb_not_terminator_before_last[local]:
@@ -532,25 +624,22 @@ Proof
             metis_tac[mem_block_mem_fn_insts] >>
           rpt conj_tac
           >- metis_tac[wbiz_step_any]
-          >- (qspecl_then [`fn0`, `bb`, `idx`, `fl`, `cx`, `sp`, `sp'`]
-                mp_tac ao_local_transfer_sound >> simp[])
+          >- (qpat_x_assum `ra = _` SUBST_ALL_TAC >>
+              drule_all ao_local_transfer_sound >> simp[])
           >- (irule strict_dom_iszero_inv_step_preserved_local >>
-              qexistsl_tac [`EL idx bb.bb_instructions`, `bb`, `cx`, `fl`,
-                `fn0`, `sp`] >> simp[] >>
-              fs[listTheory.EVERY_EL] >> rfs[])
-          >- (irule ao_chain_defined_prefix_step_non_term >>
-              qexistsl_tac [`EL idx bb.bb_instructions`, `cx`, `fn0`,
-                `fl`, `sp`] >> simp[] >>
-              `ssa_form fn0` by fs[wf_ssa_def] >> simp[] >>
-              fs[listTheory.EVERY_EL] >> rfs[] >>
-              simp[markerTheory.Abbrev_def])
-          >- (`ao_dfg_inv dfg sp'` by
-                (irule ao_dfg_inv_step_any >>
-                 qexistsl_tac [`EL idx bb.bb_instructions`, `bb`, `cx`, `fl`,
-                   `fn0`, `sp`] >> simp[] >>
-                 `ssa_form fn0` by fs[wf_ssa_def] >> simp[] >>
-                 metis_tac[ao_dfg_inv_idx0]) >>
-              metis_tac[ao_dfg_inv_idx0])
+              simp[] >> rfs[] >> fs[listTheory.EVERY_EL] >> rfs[] >>
+              metis_tac[])
+          >- (`ssa_form fn0` by fs[wf_ssa_def] >>
+              qpat_x_assum `targets = _` SUBST_ALL_TAC >>
+              irule ao_chain_defined_prefix_step_non_term >>
+              simp[markerTheory.Abbrev_def] >>
+              fs[listTheory.EVERY_EL] >> rfs[] >> metis_tac[])
+          >- (`ssa_form fn0` by fs[wf_ssa_def] >>
+              `inst_wf (EL idx bb.bb_instructions)` by
+                (fs[listTheory.EVERY_EL] >> rfs[]) >>
+              `ao_dfg_inv dfg sp` by fs[ao_dfg_inv_idx0] >>
+              simp[ao_dfg_inv_idx0] >>
+              drule_all ao_dfg_inv_step_any >> simp[])
           >- metis_tac[step_preserves_control_flow])
       (* sound preserved by R_ok *)
       >- (rpt gen_tac >> strip_tac >>
@@ -566,27 +655,32 @@ Proof
           simp[Abbr `sound`] >>
           `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
           rpt conj_tac
-          >- (irule wbiz_state_equiv_compat >>
-              qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac
-              >- (`MEM (EL j bb.bb_instructions) bb.bb_instructions` by
-                    (irule listTheory.EL_MEM >> simp[]) >>
-                  irule ao_fn0_output_not_in_fv >>
-                  qexistsl_tac [`EL j bb.bb_instructions`, `bb`, `fn`, `fn0`] >>
-                  gvs[Abbr `fv`] >> metis_tac[])
-              >- (`MEM (EL j bb.bb_instructions) bb.bb_instructions` by
-                    (irule listTheory.EL_MEM >> simp[]) >>
-                  irule ao_fn0_operand_not_in_fv >>
-                  qexistsl_tac [`EL j bb.bb_instructions`, `bb`, `fn`, `fn0`] >>
-                  gvs[Abbr `fv`] >> metis_tac[]))
+          >- (qspecl_then [`fn0`, `bb`, `v`, `fv`, `s1`, `s2`] mp_tac
+                wbiz_state_equiv_compat >>
+              impl_tac >- (rpt conj_tac
+                >- first_assum ACCEPT_TAC
+                >- gvs[]
+                >- (rpt strip_tac >>
+                    `MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+                      (irule listTheory.EL_MEM >> simp[]) >>
+                    qspecl_then [`fn`, `fn0`, `fv`, `bb`,
+                      `EL j bb.bb_instructions`, `x`] mp_tac
+                      ao_fn0_output_not_in_fv >>
+                    impl_tac >- (gvs[Abbr `fv`] >> metis_tac[]) >> simp[])
+                >- (rpt strip_tac >>
+                    `MEM (EL j bb.bb_instructions) bb.bb_instructions` by
+                      (irule listTheory.EL_MEM >> simp[]) >>
+                    qspecl_then [`fn`, `fn0`, `fv`, `bb`,
+                      `EL j bb.bb_instructions`, `op`] mp_tac
+                      ao_fn0_operand_not_in_fv >>
+                    impl_tac >- (gvs[Abbr `fv`] >> metis_tac[]) >> simp[])) >>
+              simp[])
           >- (irule ao_in_range_state_equiv_compat >>
               qexistsl_tac [`fn`, `fn0`, `fv`, `s1`] >> gvs[Abbr `fv`] >>
               metis_tac[])
-          >- (irule strict_dom_iszero_inv_state_equiv_compat >>
-              qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt conj_tac
-              >- metis_tac[dfg_def_var_not_in_fv]
-              >- (rpt strip_tac >>
-                  `MEM (Var op) inst.inst_operands` by simp[] >>
-                  metis_tac[dfg_def_iszero_operand_not_in_fv]))
+          >- (qspecl_then [`fn`, `fn0`, `dfg`, `s1`, `s2`] mp_tac
+                strict_dom_state_equiv_fv >>
+              impl_tac >- (gvs[Abbr `fv`] >> metis_tac[]) >> simp[])
           >- (irule ao_chain_defined_prefix_state_equiv_compat >>
               qexistsl_tac [`fv`, `s1`] >> simp[] >> rpt strip_tac >>
               metis_tac[ao_chain_vars_not_in_fv])
