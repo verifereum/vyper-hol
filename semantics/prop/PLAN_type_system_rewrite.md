@@ -30,58 +30,55 @@ Do not edit under C0. Use current source/build failures, not stale historical un
 #### Not to try
 Do not broad-grep unrelated retired-theory cheats and add them as task obligations. Do not reopen the completed IntCall helper chain for style or historical cleanup.
 
-### C1: Statement soundness: remaining non-internal call-target expression branches
+### C1: Type-system rewrite proof obligations in statement soundness
 - Kind: `proof_group`
 - Risk: 2
-- Work priority: 10
+- Work priority: 0
 - Work units: 0
-- Rationale: Carried forward unchanged as the required parent context for updating C1.2. The local C1.2 scheduling repair does not alter the broader C1 strategy.
+- Rationale: Risk is lowered insofar as this update only repairs the blocked ExtCall helper path under C1.1; no evidence here invalidates the top-level strategy.
 - Required for completion: yes
 - Progress transition: `carry_forward`
 - Carries progress/evidence from: C1
 
 #### Progress note
-Included solely because the PLAN schema requires explicit parents for dotted components. No executable work or sibling scheduling under C1 is changed by this C1.2-scoped update.
+Parent carried forward; only C1.1.2 is repaired.
 
 #### Summary
-- Parent context carried forward only to satisfy dotted component structure.
-- The substantive update is confined to C1.2 and C1.2.1.
-- C1 remains the statement-soundness group for remaining non-internal call-target expression branches.
-- No sibling strategy is changed by this merge.
+Carry forward the existing top-level task strategy. This update is scoped to the ExtCall helper subtree under C1.1. The previously proved C1.1.1 bridge remains valid. No sibling/cousin obligations are changed by E0006.
+
+#### Argument
+The top-level proof still proceeds by extracting local boundary lemmas that match generated induction hypotheses and then integrating them into the statement soundness resume proof. E0006 shows only that one helper proof needs a better boundary at the ExtCall success suffix; it does not challenge the semantic invariant or type soundness statement.
+
+#### Definition design
+No semantic definitions change. Continue using local proof-boundary lemmas in `vyperTypeStmtSoundnessScript.sml` rather than unfolding interpreter internals at final integration sites.
+
+#### Code structure
+All edits remain in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. This update adds/replaces only local ExtCall lemmas near the existing ExtCall proof infrastructure.
 
 ### C1.1: ExtCall expression soundness via standalone helper boundaries
 - Kind: `proof_group`
 - Risk: 2
-- Work priority: 10
+- Work priority: 1
 - Work units: 0
-- Rationale: The prior risk was caused by the arbitrary `loc` annotation in C1.1.1. Source facts show ExtCall well-typedness enforces `ty = ret_ty`, and `extcall_return_tail_sound` already concludes typing for `Call ret_type ...`; after aligning the helper interface to that invariant, the subtree is standard helper composition.
-- Progress transition: `refinement`
-- Carries progress/evidence from: C1.1, E0002, E0003
+- Rationale: The stuck monolithic helper is decomposed into low-risk cleanup, successful-continuation boundary, and final helper leaves. C1.1.1 remains done and C1.1.3 remains the downstream consumer.
+- Progress transition: `replacement`
+- Carries progress/evidence from: C1.1.1, E0006
+- Invalidates prior progress/evidence: old C1.1.2 monolithic proof route
 
 #### Progress note
-E0002 still supports standalone helpers. E0003 is accepted as evidence that the first helper statement was too general; this refinement repairs the annotation invariant while preserving the strategy.
+C1.1 is not abandoned; it is repaired by decomposing the failed C1.1.2 proof interface.
 
 #### Summary
-- Prove the ExtCall Resume through standalone local helpers, not by unfolding the evaluator inside the Resume.
-- The key interface invariant is: for `ExtCall _ (_,arg_types,ret_type)`, the call expression annotation is the same `ret_type`.
-- C1.1.1 bridges post-external-call account/storage updates into `extcall_return_tail_sound`.
-- C1.1.2 packages the generated argument-IH and optional-driver-IH context into a standalone ExtCall expression soundness helper.
-- C1.1.3 should then be a short Resume refactor applying C1.1.2.
-
-#### Approach
-Rebase the subtree around the source invariant `ty = ret_ty` for ExtCall. The standalone helper statements should use the return type from the external function signature as both the ABI decode type and the expression annotation. This avoids arbitrary-annotation side conditions and lets `irule extcall_return_tail_sound` solve the tail result typing directly.
-
-#### Not to try
-Do not prove or assume `loc = ret_type` after the fact for an arbitrary `loc`; the failed episode showed HOL correctly generates that impossible obligation. Do not unfold the full ExtCall evaluator inside the Resume again; prior evidence showed that route creates timeout-prone large goals.
+Repair the ExtCall helper path locally. Keep the proved update/tail bridge C1.1.1. Replace the old C1.1.2 monolithic proof with a successful-continuation boundary followed by the same final generated-IH helper. Preserve C1.1.3 as the later integration step once the final helper is proved.
 
 #### Argument
-The ExtCall well-typedness definition has `well_typed_expr env (Call ty (ExtCall _ (_,arg_types,ret_ty)) args drv)` requiring `ty = ret_ty`. Therefore every soundness conclusion for an ExtCall result should mention `Call ret_type (ExtCall stat (func_name,arg_types,ret_type)) es drv`, not `Call loc ...` for an unrelated annotation. The existing local lemma `extcall_return_tail_sound` is exactly the tail boundary: once the post-call tail computation is run from a runtime-consistent state, it proves state/env/accounts preservation, no type error, and result typing for `Call ret_type (ExtCall stat fsig) es drv`.
+The ExtCall evaluator splits into a prefix that evaluates arguments and checks calldata/account/run-call conditions, and a suffix that updates accounts/transient storage and handles return data or driver evaluation. Prefix failure branches are runtime errors and therefore type-sound immediately. Prefix success produces well-typed updated accounts via `run_ext_call_accounts_well_typed`; the argument IH gives a well-typed, env-consistent intermediate state. The common suffix is exactly the situation handled by the already proved C1.1.1 bridge once `get_tenv cx` is rewritten to `env.type_defs` and a return type value is obtained from `well_formed_type`.
 
 #### Definition design
-No new definitions are needed. Use two boundary facts: `update_accounts_transient_runtime_consistent`, already present, and the repaired C1.1.1 bridge whose conclusion uses `Call ret_type ...`. Failure sign: any remaining goal demanding `ret_type = loc`, `evaluate_type ... loc`, or ABI decoding at `loc` means the statement still has the wrong annotation variable.
+No new definitions. The proof interface for C1.1.2 must expose a lemma for the successful suffix after `run_ext_call`, hiding update simplification, `get_tenv` rewriting, `runtime_consistent` packaging, and the call to C1.1.1. Failure sign: if the final helper still manually instantiates C1.1.1 in static and nonstatic branches, the boundary is too weak.
 
 #### Code structure
-All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place C1.1.1 immediately after `extcall_return_tail_sound` and before the ExtCall argument destination helpers, so C1.1.2 can use it locally. Do not change `well_typed_expr_def`; the required equality is already in the imported definition.
+Keep all local ExtCall lemmas together in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, near `update_accounts_transient_runtime_consistent`, `extcall_return_tail_sound`, `extcall_after_state_update_tail_sound`, and the argument-destination lemmas. Add the successful-continuation lemma before reintroducing `extcall_expr_sound_from_generated_ih`.
 
 ### C1.1.1: Bridge returned external-call state updates to the existing return-tail lemma
 - Kind: `boundary_lemma`
@@ -134,31 +131,147 @@ Start with `rpt gen_tac >> strip_tac`. First establish `runtime_consistent env c
 #### Not to try
 Do not keep the old conclusion `Call loc ...`; the accepted stuck evidence proves that requires unavailable side conditions `ret_type = loc` and type evaluation at `loc`. Do not unfold `extcall_return_tail_sound` or the ABI decoder in this wrapper; if direct application does not line up, recheck the statement rather than doing evaluator-level proof search.
 
-### C1.1.2: Prove the standalone ExtCall expression helper from generated IHs
-- Kind: `infrastructure_lemma`
+### C1.1.2: ExtCall generated-IH helper via successful-continuation boundary
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 10
-- Work units: 5
-- Rationale: The helper remains standard once it depends on the corrected tail bridge. Its final result typing must also use the external return type as the call annotation, matching ExtCall well-typedness.
+- Work priority: 1
+- Work units: 0
+- Rationale: The old standalone helper proof required brittle low-level evaluator-tail plumbing. Splitting the successful continuation into its own lemma makes the final helper routine prefix case analysis plus two boundary applications.
 - Dependencies: C1.1.1
-- Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: C1.1.2, E0002, E0003
+- Supersedes: C1.1.2@E0006
+- Progress transition: `replacement`
+- Carries progress/evidence from: C1.1.1, E0006
+- Invalidates prior progress/evidence: C1.1.2 previous monolithic proof attempt
 
 #### Progress note
-This is the same standalone-helper obligation planned after E0002, refined to consume the corrected C1.1.1 interface and avoid the wrong arbitrary annotation.
+E0006's prefix exploration may guide case splits, but its monolithic tail proof is invalidated.
 
 #### Summary
-Package the live ExtCall Resume context into a standalone helper. Use the argument-IH to obtain runtime-typed evaluated arguments and no type errors, and use the optional-driver IH only in the return-tail branch. The helper conclusion should type `Call ret_type (ExtCall stat (func_name,arg_types,ret_type)) es drv`, not an arbitrary annotation. C1.1.1 supplies the tail bridge after account/transient-storage updates.
+Replace the failed monolithic `extcall_expr_sound_from_generated_ih` proof with staged leaves. First remove the partial failed theorem block. Then prove one generic `extcall_success_continuation_sound` lemma for the common suffix after successful `run_ext_call`. Finally prove the original helper statement using evaluator prefix case analysis and the new continuation lemma. The final theorem name and statement stay unchanged for C1.1.3.
+
+#### Description
+E0006 is accepted as evidence that the old C1.1.2 proof interface was too coarse. The repair keeps the mathematical obligation but moves the fragile update/get_tenv/tail packaging into a small boundary lemma that matches both static and nonstatic success branches.
 
 #### Statement
-State the standalone ExtCall expression soundness helper with the same parameters and assumptions needed by the live Resume context, but ensure the ExtCall expression in the conclusion is `Call ret_type (ExtCall stat (func_name,arg_types,ret_type)) es drv`. Include the usual runtime/context/functions consistency assumptions, `well_typed_expr env (Call ret_type (ExtCall stat (func_name,arg_types,ret_type)) es drv)`, the generated expression-list IH for `es`, and the optional-driver IH for `drv`. The conclusion should match the expression-soundness shape needed by the Resume: preservation of state/env/accounts, no type error, and `expr_result_typed` for successful results.
+Final output remains the local theorem `extcall_expr_sound_from_generated_ih` with the same statement used in the failed attempt: it consumes the generated IH for `eval_exprs` on `es`, the generated IH for `eval_expr` on `THE drv`, and proves state/env/account/no-type-error plus typed result for `Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv`.
 
 #### Approach
-Prove this outside the Resume by case-splitting the evaluated arguments and static/nonstatic ExtCall shape only as much as necessary to obtain `returnData`, updated accounts, and updated transient storage. After the external-call step, invoke C1.1.1 for the return tail. Use `well_typed_expr_def` only to extract `ty = ret_type`, `MAP expr_type es = arg_types`, and the driver type condition; do not leave a separate call-annotation variable in the theorem.
+Do not resume the failed proof at the C1.1.1 application site. Prove the continuation boundary first, then in the final helper step the evaluator only to the successful run-call branches and apply that boundary. Static/nonstatic branch-specific work should stop after extracting target/value and selecting `NONE` or `SOME amount`; all tail reasoning belongs to the continuation lemma.
 
 #### Not to try
-Do not resurrect the inline Resume proof or broad `gvs[]` over evaluator internals; that was the source of the earlier risk mismatch. Do not formulate this helper with `Call loc ...` unless there is an explicit hypothesis `loc = ret_type` from the live context; current source indicates the cleaner statement is to use `ret_type` directly.
+Do not continue adding manual `qexistsl`, `rewrite_tac[GSYM no_type_error_result_def]`, or broad `metis_tac` at the tail bridge site. Do not duplicate update/get_tenv/tail reasoning in static and nonstatic branches.
+
+#### Argument
+The final helper is true because the prefix and suffix obligations are separable. The prefix uses the args IH to type runtime argument values and preserve the intermediate state; argument-destination lemmas extract the concrete address/value needed by the evaluator. Failed prefix branches produce runtime errors. Successful prefix branches obtain well-typed updated accounts from `run_ext_call_accounts_well_typed` and then delegate the shared suffix to `extcall_success_continuation_sound`, which itself delegates to C1.1.1.
+
+#### Definition design
+The key proof interface is `extcall_success_continuation_sound`: its premises must match the evaluator fragment immediately after `run_ext_call` returned success. It should internally simplify `assert T`, account/transient updates, rewrite `get_tenv`, derive `evaluate_type ... = SOME ...` from `well_formed_type`, and apply `extcall_after_state_update_tail_sound`.
+
+#### Code structure
+All code goes in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Keep `env_consistent_get_tenv` if it already builds. Add `extcall_success_continuation_sound` before `extcall_expr_sound_from_generated_ih`; then add the final helper with the unchanged name.
+
+### C1.1.2.0: Remove or revert the partial failed monolithic helper proof
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: The source is not build-clean because the failed theorem proof is partial; removing it is mechanical.
+- Carries progress/evidence from: E0006
+- Invalidates prior progress/evidence: partial source edits from E0006 for extcall_expr_sound_from_generated_ih
+
+#### Progress note
+The failed source edits are evidence for cleanup and redesign, not proof progress to preserve.
+
+#### Summary
+Restore `vyperTypeStmtSoundnessScript.sml` around `extcall_expr_sound_from_generated_ih` so no unfinished failed proof remains. Keep already proved useful local helpers such as `env_consistent_get_tenv` if they build. Do not add cheats. This cleanup gates all new C1.1.2 proof work.
+
+#### Description
+Delete the failed theorem block from E0006 or replace it only when adding the new staged proof. The point is to stop trying to patch the non-closing monolithic script.
+
+#### Approach
+Edit only `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Remove the partial `extcall_expr_sound_from_generated_ih` proof body from the E0006 attempt before beginning the new proof structure. Run a targeted check if available to catch syntax or unfinished-proof leftovers.
+
+#### Not to try
+Do not resume from line 9757 of the failed proof. Do not leave a `cheat`, `admit`, or unfinished theorem.
+
+### C1.1.2.1: Boundary lemma for successful ExtCall suffix after account/transient updates
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 1
+- Work units: 3
+- Rationale: This isolates the formerly brittle tail-packaging fragment. The proof should be a small simplification of the suffix evaluator fragment followed by `env_consistent_get_tenv`, `evaluate_type_well_formed`, and C1.1.1.
+- Dependencies: C1.1.1, C1.1.2.0
+- Carries progress/evidence from: C1.1.1, E0006
+
+#### Progress note
+This extracts the exact tail-packaging subproblem identified by E0006 while reusing the proved C1.1.1 bridge.
+
+#### Summary
+Prove local lemma `extcall_success_continuation_sound`. It consumes the successful suffix evaluator equality after `run_ext_call` has returned `(T, returnData, accounts', tStorage')`. It proves the same state/env/account/no-type-error/typed-result conclusion for the ExtCall expression. It owns all update simplification, `get_tenv` rewriting, `runtime_consistent` packaging, and application of `extcall_after_state_update_tail_sound`.
+
+#### Statement
+Use this statement shape, adjusting bind syntax to what HOL accepts:
+```sml
+Theorem extcall_success_continuation_sound[local]:
+  !env cx args_st accounts' tStorage' returnData res st'
+    is_static func_name arg_types ret_type es drv.
+    runtime_consistent env cx args_st /\ functions_well_typed cx /\
+    accounts_well_typed accounts' /\ well_typed_opt env drv /\
+    well_formed_type env.type_defs ret_type /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (* same driver IH as in extcall_after_state_update_tail_sound *) /\
+    (do
+       _ <- assert T (Error (RuntimeError "ExtCall reverted"));
+       _ <- update_accounts (K accounts');
+       _ <- update_transient (K tStorage');
+       if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+       else do
+         ret_val <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+         return (Value ret_val)
+       od
+     od) args_st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) tv
+    | INR _ => T
+```
+
+#### Approach
+Simplify the `do` fragment with `assert_def`, `bind_def`, `return_def`, `update_accounts_def`, and `update_transient_def` until the premise is the exact tail expression evaluated at `args_st with <| accounts := accounts'; tStorage := tStorage' |>` except for `get_tenv cx`. From `runtime_consistent env cx args_st`, derive `env_consistent env cx args_st`; use `env_consistent_get_tenv` to rewrite `get_tenv cx` to `env.type_defs`. Use `evaluate_type_well_formed` on `well_formed_type env.type_defs ret_type` to obtain the `ret_tv` existential and then apply `extcall_after_state_update_tail_sound`.
+
+#### Not to try
+Do not include `run_ext_call`, target address, calldata, or static/nonstatic argument decoding in this lemma. Do not prove separate static and nonstatic suffix lemmas; the suffix is identical.
+
+### C1.1.2.2: Reprove `extcall_expr_sound_from_generated_ih` using the continuation boundary
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 2
+- Work units: 5
+- Rationale: With the continuation boundary available, the remaining proof is evaluator prefix case analysis. Failure branches are runtime errors; success branches use `run_ext_call_accounts_well_typed` and then the boundary.
+- Dependencies: C1.1.2.1
+- Checkpoint: yes
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0006, C1.1.2.1
+- Invalidates prior progress/evidence: C1.1.2 previous monolithic proof attempt
+
+#### Progress note
+The obligation is unchanged, but the proof route is replaced; E0006's successful prefix exploration remains useful.
+
+#### Summary
+Prove the original standalone helper expected by C1.1.3. Reuse the failed attempt's prefix structure only: unfold `well_typed_expr` once, unfold `evaluate_def` once, split `eval_exprs`, apply args IH, split static/nonstatic and operational checks. In each successful branch, call `extcall_success_continuation_sound`. This checkpoint should leave C1.1.3 as a small integration step.
+
+#### Description
+The theorem name and statement must match the old planned helper so downstream integration does not change. This component should close C1.1.2 and unblock C1.1.3.
+
+#### Statement
+Same full statement as the failed attempt's `extcall_expr_sound_from_generated_ih`: it assumes runtime consistency premises, `functions_well_typed cx`, `well_typed_expr env (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv)`, the generated args IH, the generated driver IH, and the call evaluation equality; it concludes state/env/account preservation, `no_type_error_result res`, and typed result for the ExtCall expression.
+
+#### Approach
+Follow the prefix of E0006's proof until reaching `run_ext_call` success. Use `extcall_static_args_runtime_typed_dest` or `extcall_nonstatic_args_runtime_typed_dest` after the args IH gives `exprs_runtime_typed env es vs`. In success, prove `accounts_well_typed accounts'` by `run_ext_call_accounts_well_typed`; package `runtime_consistent env cx args_st` from `state_well_typed args_st`, `env_consistent env cx args_st`, and `context_well_typed cx`; then `irule extcall_success_continuation_sound`.
+
+#### Not to try
+Do not unfold the suffix updates or call C1.1.1 directly here. Avoid broad FOL/metis calls over the whole context; use the continuation boundary with small explicit premises. Do not split into separate final static/nonstatic helpers unless this revised component gets stuck again.
 
 ### C1.1.3: Integrate ExtCall Resume by applying the standalone helper
 - Kind: `proof_refactor`
@@ -194,58 +307,49 @@ Do not unfold `evaluate_def` in this Resume. Do not repeat the failed prefix-ste
 - Risk: 2
 - Work priority: 10
 - Work units: 0
-- Rationale: The proof remains standard once its strict prerequisites are available, but C1.2 must not be a directly executable leaf while C1.1 and C2.1 are still queued. The subtree is now decomposed so the only executable RawCallTarget proof leaf depends explicitly on those prerequisites.
-- Dependencies: C1.1, C2.1
-- Checkpoint: yes
-- Progress transition: `refinement`
+- Rationale: Carried forward as the parent for C1.2.1. The subtree remains standard once its strict prerequisites are available; the current repair ensures the only RawCallTarget proof leaf cannot be scheduled before those prerequisites close.
+- Progress transition: `carry_forward`
 - Carries progress/evidence from: C1.2
 
 #### Progress note
-This is a scheduling/decomposition refinement of the same RawCallTarget obligation. No proof progress is invalidated because no C1.2 edits were made; the update only prevents premature execution before C1.1 and C2.1.
+Included only to satisfy dotted-component parent requirements; the C1.2 strategy is unchanged except for the child dependency repair.
 
 #### Summary
-- C1.2 is a gated proof group, not an immediately editable leaf.
-- Do not work on RawCallTarget statement soundness until the repaired C1.1 helper stack and C2.1 `raw_call_return_type_well_formed` are proved.
-- After those prerequisites, prove a local `raw_call_target_expr_sound` boundary theorem and use it to close `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`.
-- The RawCallTarget branch should use existing raw-call/builtin boundaries, not duplicate C2.1 arithmetic.
-- This update repairs only C1.2 scheduling/dependency metadata; it does not re-plan C1.1 or C2.1.
-
-#### Description
-The earlier C1.2 leaf was beginable even though its own plan declared dependencies on C1.1 and C2.1. That was unsafe because the RawCallTarget proof needs the raw-call return type well-formedness boundary and should not reproduce its arithmetic locally. Treat C1.2 as a grouping/checkpoint node and place the actual proof work in C1.2.1, which is dependency-gated on the external prerequisites.
-
-#### Approach
-Wait for C1.1 and C2.1 to close before editing the RawCallTarget Resume. Once available, prove the local helper first, then replace the Resume cheat with a short application of that helper and simplification for the place-expression conjunct.
-
-#### Not to try
-Do not start editing `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` while `raw_call_return_type_well_formed` still contains a cheat. Do not inline or reprove the raw-call return-type arithmetic in `vyperTypeStmtSoundnessScript.sml`; that proof belongs to C2.1 in `vyperTypeBuiltinsScript.sml`. Do not use this scheduling repair as a reason to modify C1.1 or C2.1 from inside the C1.2 subtree.
+Parent context for the RawCallTarget expression-soundness helper and Resume integration. The substantive work remains in C1.2.1. The dependency repair below makes `C1.2.1` wait for the concrete ExtCall terminal checkpoint and C2.1.
 
 #### Argument
-For RawCallTarget, `well_typed_expr env (Call ty (RawCallTarget flags) args drv)` supplies the exact return annotation `ty = raw_call_return_type flags`, `drv = NONE`, `LENGTH args = 3`, argument types `(address, bytes bd, uint256)`, and the bound `flags.rcf_max_outsize < dimword(:256)`. The expression-soundness proof first uses the generated IH for `eval_exprs` to obtain runtime typing and preservation after argument evaluation. In the successful argument path, raw-call target argument destructors and tail/result lemmas establish state preservation, absence of `TypeError`, and result typing for the call. The return value type is well-formed only via `raw_call_return_type_well_formed`, so that theorem is a strict prerequisite rather than something to unfold in the statement-soundness script.
+RawCallTarget soundness should mirror the other call-expression branches: first prove a local expression helper using the generated argument-evaluation IH, raw-call branch facts, and the well-formedness theorem for `raw_call_return_type`; then make the Resume proof a short wrapper. The well-formedness arithmetic for return types is not part of this subtree and is imported from C2.1.
 
 #### Definition design
-No definition changes are planned. The proof interface for this subtree is a single local boundary helper whose assumptions match the live Resume context after unfolding `well_typed_expr_def` once and `evaluate_def` once for the RawCallTarget branch. Failure signs: the helper goal asks to prove arithmetic facts about `word_size`/`dimword`; the proof repeatedly unfolds `raw_call_return_type_def`; or the Resume grows evaluator-tail reasoning instead of just applying the helper.
+No definition changes are expected. The proof interface boundary is `raw_call_target_expr_sound[local]`: it should consume the live Resume assumptions and return the exact preservation/no-type-error/result-typing facts needed by the mutual theorem branch. A failure sign is needing to unfold `raw_call_return_type_def` or word-size arithmetic here, which means C2.1 has not supplied the intended boundary theorem.
 
 #### Code structure
-All C1.2 edits, after dependencies close, belong in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Put `raw_call_target_expr_sound[local]` near analogous expression-call helpers and before `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`. Do not edit `vyperTypeBuiltinsScript.sml` under C1.2; that file is owned by C2.1 for this prerequisite.
+Place `raw_call_target_expr_sound[local]` in `semantics/prop/vyperTypeStmtSoundnessScript.sml` immediately before `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`. Replace only the RawCallTarget Resume cheat in this component; do not edit builtin return-type proof code here.
 
-### C1.2.1: Prove `raw_call_target_expr_sound` and close the RawCallTarget Resume
+### C1.2.1: Prove `raw_call_target_expr_sound` and close the RawCallTarget Resume after ExtCall and return-type prerequisites
 - Kind: `proof`
 - Risk: 2
-- Work priority: 0
+- Work priority: 90
 - Work units: 3
-- Rationale: After C1.1 and C2.1 are available, this is local expression-branch proof work mirroring established call-branch structure. The only nonlocal arithmetic/type-formation obligation is explicitly imported through C2.1.
-- Dependencies: C1.1, C2.1
+- Rationale: The proof obligation is unchanged and remains standard local expression-branch work once its real prerequisites are available. The previous metadata-only dependency repair did not affect the scheduler frontier, so this replacement additionally gives the leaf a late local work priority. This is a scheduling repair, not a proof-strategy change: C1.2.1 must not be selected until the ExtCall terminal branch and raw-call return type well-formedness are closed.
+- Dependencies: C1.1.3, C2.1
 - Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: C1.2.1, TO_type_system_rewrite-20260531T201607Z_m0074_t001, TO_type_system_rewrite-20260531T201607Z_m0075_t001
 
 #### Progress note
-New child leaf created to make the existing C1.2 obligation dependency-gated and non-leaf at the parent level.
+Same RawCallTarget proof obligation as before; no proof progress is discarded. This refinement repairs a PLAN/frontier contradiction by combining the intended semantic dependencies with a late priority so C1.2.1 is not selected ahead of its queued prerequisites.
 
 #### Summary
 - Add local helper `raw_call_target_expr_sound[local]` before the RawCallTarget Resume.
-- Use generated IHs for argument evaluation and existing raw-call argument/tail lemmas.
+- This leaf is intentionally scheduled late (`work_priority=90`) because dependency metadata alone did not stop premature selection in the current harness.
+- Do not begin this component while `C1.1.2`, `C1.1.3`, or `C2.1` remain queued/not done; the next valid frontier work should be one of those prerequisite leaves.
+- Use generated IHs for raw-call argument evaluation and existing raw-call argument/tail lemmas.
 - Use `raw_call_return_type_well_formed` from C2.1 when result typing/well-formedness of the raw-call return type is needed.
-- Replace the `cheat` in `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` with a short wrapper proof.
-- Close the place-expression conjunct by simplification from `well_typed_expr_def`.
+- Replace the `cheat` in `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` with a short wrapper proof, and close the place-expression conjunct by simplification from `well_typed_expr_def`.
+
+#### Description
+This component owns only the RawCallTarget expression helper and the corresponding suspended mutual-theorem branch. It must not absorb ExtCall work or the arithmetic/type-formation proof for raw-call return types. The scheduler repair is part of this replacement: semantic dependencies remain `C1.1.3` and `C2.1`, and the local priority is now deliberately later than the prerequisite call-expression leaves so the executor is not instructed to begin RawCallTarget prematurely.
 
 #### Statement
 Suggested local theorem shape, to be specialized to the actual Resume assumptions:
@@ -264,10 +368,10 @@ Theorem raw_call_target_expr_sound[local]:
 If the actual mutual theorem uses a location/type variable `loc`, extract `loc = raw_call_return_type flags` from `well_typed_expr_def` before invoking the helper rather than adding a second annotation parameter.
 
 #### Approach
-Unfold `well_typed_expr_def` once to extract `drv = NONE`, the return-type equality, argument length/types, and `flags.rcf_max_outsize < dimword(:256)`. Unfold `evaluate_def` once for the RawCallTarget branch, split on `eval_exprs cx es st`, and apply the generated IH to the argument evaluation result; error branches close via `no_type_error_result_def`. In the successful path, use raw-call argument destructors/tail soundness lemmas already available in the script, and invoke `raw_call_return_type_well_formed` rather than unfolding its definition.
+Only after `C1.1.3` and `C2.1` are done, unfold `well_typed_expr_def` once to extract `drv = NONE`, the return-type equality, argument length/types, and `flags.rcf_max_outsize < dimword(:256)`. Unfold `evaluate_def` once for the RawCallTarget branch, split on `eval_exprs cx es st`, and apply the generated IH to the argument evaluation result; error branches close via `no_type_error_result_def`. In the successful path, use raw-call argument destructors/tail soundness lemmas already available in the script, and invoke `raw_call_return_type_well_formed` rather than unfolding its definition.
 
 #### Not to try
-Do not prove this before C2.1 is closed. Do not unfold `raw_call_return_type_def`, `type_slot_size_def`, or `word_size` arithmetic in this component. Do not write a long inline Resume proof; if the wrapper needs extensive evaluator/tail reasoning, move that reasoning into `raw_call_target_expr_sound` with a conclusion matching the Resume use site.
+Do not begin this component while `C1.1.2`, `C1.1.3`, or `C2.1` is queued. Do not rely on the scheduler's dependency enforcement alone for this leaf; if it is still Oracle-next before those prerequisites close after this replacement, stop again and request ancestor-level frontier repair. Do not unfold `raw_call_return_type_def`, `type_slot_size_def`, or `word_size` arithmetic in this component; that obligation belongs to C2.1. Do not write a long inline Resume proof; if the wrapper needs extensive evaluator/tail reasoning, move that reasoning into `raw_call_target_expr_sound` with a conclusion matching the Resume use site.
 
 ### C1.3: Focused statement-soundness build and cheat audit
 - Kind: `build_audit`

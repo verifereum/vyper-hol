@@ -9647,6 +9647,13 @@ Proof
   metis_tac[]
 QED
 
+Theorem env_consistent_get_tenv[local]:
+  env_consistent env cx st ==> get_tenv cx = env.type_defs
+Proof
+  rw[env_consistent_def, env_context_consistent_def]
+QED
+
+
 Theorem extcall_static_args_runtime_typed_dest[local]:
   exprs_runtime_typed env args vs /\
   MAP expr_type args = BaseT AddressT :: arg_tys ==>
@@ -9675,6 +9682,7 @@ Proof
   `~(i < 0:int)` by intLib.ARITH_TAC >>
   qexists_tac `Num i` >> simp[]
 QED
+
 
 Theorem send_args_runtime_typed_dest[local]:
   exprs_runtime_typed env es vs /\

@@ -9,6 +9,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0 | proved |  | E0001 |  |
 | C1.1 | stuck | risk_mismatch | E0002 | Ask strategist to replace/augment C1.1 with an explicit standalone `extcall_expr_sound` theorem statement copied from the live generated-IH context, plus a small tail bridge helper if needed. |
 | C1.1.1 | proved |  | E0004 |  |
+| C1.1.2 | stuck | risk_mismatch | E0006 | Call plan_oracle review for C1.1.2 with the failure evidence; request decomposition around a smaller tail/evaluator-prefix boundary or permission to revert the partial helper. |
+| C1.1.2.0 | proved |  | E0007 |  |
 
 ## C0
 
@@ -80,3 +82,50 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260531T201607Z_m0065_t001` (use `read_tool_output` for exact output)
+
+## C1.1.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The plan expected a standard helper composition, but the proof needs additional factoring or a different helper interface around the post-run_ext_call tail equality/no-type-error packaging.
+- latest episode: `E0006`
+- blocker: Standalone helper proof requires brittle low-level evaluator-tail plumbing; current C1.1.2 decomposition/interface is not straightforward enough for the task contract.
+- actual effort: 1 sessions, 4 msgs, 53 steps, 68 tools, 15 holbuild, 5,470,012 tok (5,455,465 in, 14,547 out, 5,277,056 cached), 625.3s, $3.966983
+- next: Call plan_oracle review for C1.1.2 with the failure evidence; request decomposition around a smaller tail/evaluator-prefix boundary or permission to revert the partial helper.
+
+### Attempts / Evidence
+
+- `E0005` (progressed, other, actual effort: 1 sessions, 9 steps, 14 tools, 2 holbuild, 1,212,028 tok (1,210,034 in, 1,994 out, 1,180,032 cached), 122.9s, $0.799846)
+  - Temporarily replaced the ExtCall Resume cheat with `FAIL_TAC "probe_extcall_c112"` to inspect the live generated IH shapes needed by the standalone helper, then restored the cheat and rebuilt. -> Probe confirmed the Resume has exactly two relevant IH assumptions: driver IH (including expression and place branches for `THE drv`, guarded by `returnData = [] ∧ IS_SOME drv`) and argument-list IH for `eval_exprs cx es`. The top goal is >4KiB, reinforcing that C1.1.2 should introduce a helper rather than prove inside the Resume. Source was restored and focused build is clean. (`TO_type_system_rewrite-20260531T201607Z_m0084_t001`, `TO_type_system_rewrite-20260531T201607Z_m0086_t001`)
+- `E0006` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 53 steps, 68 tools, 15 holbuild, 5,470,012 tok (5,455,465 in, 14,547 out, 5,277,056 cached), 625.3s, $3.966983)
+  - Added standalone `extcall_expr_sound_from_generated_ih` with return-type annotation, consuming args IH and driver IH, then stepped ExtCall evaluator prefix to call `extcall_after_state_update_tail_sound`. -> The proof did not remain straightforward: after several refinements, applying the tail bridge required brittle manual case plumbing and produced matching/timeouts/FOL-solver failures in the static success branch. This violates the component's Risk-2 expectation and the task instruction to stop on unexpected design/proof issues. (`TO_type_system_rewrite-20260531T201607Z_m0112_t001`, `TO_type_system_rewrite-20260531T201607Z_m0129_t001`, `TO_type_system_rewrite-20260531T201607Z_m0149_t001`, `TO_type_system_rewrite-20260531T201607Z_m0151_t001`)
+
+### Ruled Out
+
+- Inline ExtCall Resume proof remains ruled out by prior >4KiB probe.
+- Direct broad evaluator stepping inside the standalone helper led to repeated non-straightforward obligations and timeout/matching failures.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260531T201607Z_m0151_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260531T201607Z_m0152_t002` (use `read_tool_output` for exact output)
+
+## C1.1.2.0
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0007`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 569,970 tok (569,517 in, 453 out, 562,176 cached), 111.9s, $0.331383
+
+### Attempts / Evidence
+
+- `E0007` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 569,970 tok (569,517 in, 453 out, 562,176 cached), 111.9s, $0.331383)
+  - Deleted the failed partial `extcall_expr_sound_from_generated_ih` block from E0006 while keeping the small `env_consistent_get_tenv` helper, then rebuilt `vyperTypeStmtSoundnessTheory`. -> Focused build succeeded, confirming no unfinished failed proof remains and the cleanup gate is complete. The only source change left for this component is the build-clean local helper `env_consistent_get_tenv`. (`TO_type_system_rewrite-20260531T201607Z_m0158_t001`, `TO_type_system_rewrite-20260531T201607Z_m0159_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260531T201607Z_m0159_t001` (use `read_tool_output` for exact output)
